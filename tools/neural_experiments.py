@@ -46,9 +46,9 @@ EXPERIMENTS = {
     "baseline": {},
     "no_retain_weights": {"MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS": "0",
                           "MOJOLEARN_MAMBA3_RETAIN_WEIGHTS": "0"},
-    "legacy_fresh_entry": {"MOJOLEARN_TRANSFORMER_SESSION_FRESH": "0"},
-    "legacy_everything": {"MOJOLEARN_TRANSFORMER_LEGACY_SETUP": "1",
-                          "MOJOLEARN_MAMBA3_LEGACY_SETUP": "1"},
+    # lane x4: MOJOLEARN_TRANSFORMER_SESSION_FRESH / _LEGACY_SETUP removed
+    # (the block always runs on its session); their arms went with them.
+    "legacy_everything": {"MOJOLEARN_MAMBA3_LEGACY_SETUP": "1"},
     "no_stage_reset": {"MOJOLEARN_TRANSFORMER_STAGE_RESET": "0"},
     "speculative_attn": {"MOJOLEARN_ATTN_SPECULATIVE": "1"},
     "swiglu_fused": {"MOJOLEARN_SWIGLU_FUSED": "1"},
@@ -87,7 +87,7 @@ SETS = {
     "optimizer": ["baseline", "opt_host"],
     "default": ["baseline", "no_retain_weights", "no_stage_reset", "speculative_attn",
                 "swiglu_fused", "no_layer_sync", "all_on"],
-    "nvidia": ["baseline", "no_retain_weights", "legacy_fresh_entry", "no_stage_reset",
+    "nvidia": ["baseline", "no_retain_weights", "no_stage_reset",
                "speculative_attn", "swiglu_fused", "no_layer_sync", "all_on"],
     "amd": ["baseline", "legacy_everything", "no_retain_weights", "no_stage_reset",
             "speculative_attn", "swiglu_fused", "no_layer_sync", "all_on"],

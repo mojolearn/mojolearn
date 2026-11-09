@@ -98,6 +98,7 @@ from transformer.transformer_host_binding_impl import (
     _opt_read,
     _host_weights_from,
     _run_forward,
+    _run_decode_steps,
     HostTransformerSession,
 )
 
@@ -297,6 +298,26 @@ def transformer_decode_step_binding(
     return PythonObject(out_len)
 
 
+def transformer_decode_steps_binding(
+    addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`n` decode tokens per row in one call (lane x4). `addrs`: the
+    thirteen of `transformer_forward`, x and y_out (B, n, d_model).
+    `params`: `transformer_forward`'s ten with L = n: 0 B, 1 n, 2 d_model,
+    3 n_heads, 4 n_kv_heads, 5 head_dim, 6 intermediate, 7 max_tokens,
+    8 cached_tokens, 9 window, optionally the block options tail. Bytes
+    equal n `transformer_decode_step` calls. Returns the post-call
+    cached_tokens."""
+    var what = String("transformer_decode_steps")
+    var a = _addrs_tail(addrs, 13, 7, what)
+    var p = _params_tail(params, 10, what)
+    var opts = BlockOptions.from_params(p, 10)
+    var out_len = 0
+    with GILReleased(Python()):
+        out_len = _run_decode_steps(a, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts)
+    return PythonObject(out_len)
+
+
 def transformer_backward_binding(
     addrs: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
@@ -470,6 +491,7 @@ def build__mojolearn_transformer_host() -> PythonObject:
         module.def_function[transformer_forward_binding]("transformer_forward")
         module.def_function[transformer_forward_fresh_binding]("transformer_forward_fresh")
         module.def_function[transformer_decode_step_binding]("transformer_decode_step")
+        module.def_function[transformer_decode_steps_binding]("transformer_decode_steps")
         module.def_function[transformer_backward_binding]("transformer_backward")
         return module.finalize()
     except e:

@@ -225,6 +225,7 @@ from transformer.impl.llama.afn_apple_fast import AFN_ATTN_ARENA, afn_flash_call
 from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
 from transformer.session_native_dispatch import TRANSFORMER_NATIVE_API, transformer_session_forward_native
 
+from transformer.lean_stages import transformer_lean_stages, _lean_for
 # Typed kernel side of this shell (thin-shell move, pure, no bit change).
 from transformer.transformer_binding_impl import (
     _session_forward_tape_run,
@@ -237,11 +238,9 @@ from transformer.transformer_binding_impl import (
     _upload_addr,
     _download_addr,
     _btick,
-    transformer_lean_stages,
     _load_transformer_weights,
     _tail_of,
     _check_base_addrs,
-    _lean_for,
     _lean_for_w,
     _workspace_key,
     TransformerWorkspace,
@@ -712,61 +711,14 @@ def _transformer_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
     return _read_addrs_tail(addrs, 13, what)
 
 
-def transformer_forward_fresh_binding(
-    addrs: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """Stateless prefill: original zero device cache, only y is returned.
-
-    Eleven pointers: x, nine weights, y. Eight scalars: B, L, d_model,
-    n_heads, n_kv_heads, head_dim, intermediate, window. Capacity remains
-    L (or a window-sized ring), exactly as Python allocate_state(B, L).
-    The zero sentinel cache pointers never reach a transfer in this arm.
-
-    lane/block-options: or 11 + 11 pointers and 8 + 17 scalars, the two
-    option tails appended (this file's tail section, word for word). The
-    gate_proj.weight pointer (slot 7) is 0 under an ungated MLP.
-    """
-    var what = String("transformer_forward_fresh")
-    var raw = _read_addrs_tail(addrs, 11, what)
-    var p = _read_params(params, 8, what)
-    var opts = BlockOptions.from_params(p, 8)
-    # Into `transformer_forward`'s 13 + 11 layout: x, nine weights, the
-    # two absent cache slots, y, then the tail.
-    var a = List[Int]()
-    for i in range(10):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
-        a.append(raw[i])
-    a.append(0)
-    a.append(0)
-    a.append(raw[10])
-    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
-        a.append(raw[11 + i])
-    _check_base_addrs(a, [0, 1, 2, 3, 4, 5, 6, 8, 9], what)
-    _ = a  # keep the Python object alive through the native call above
-    if a[12] == 0:
-        raise Error("transformer_forward_fresh: null output address")
-    var b = p[0]
-    var l = p[1]
-    var dm = p[2]
-    var nh = p[3]
-    var nkv = p[4]
-    var hd = p[5]
-    var it = p[6]
-    var window = p[7]
-    if b <= 0 or l <= 0:
-        raise Error("transformer_forward_fresh: B and L must be positive")
-    var out_len = 0
-    with GILReleased(Python()):
-        out_len = _transformer_run[True](a, b, l, dm, nh, nkv, hd, it, l, 0, window, opts)
-    return PythonObject(out_len)
-
-
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_FRESH_PREFILL / MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (the device per-call transformer_forward_fresh entry, SUPERSEDED by the session's transformer_session_forward_fresh, reached only under MOJOLEARN_TRANSFORMER_SESSION_FRESH=0 or MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
+# Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch
 # Lane ne3-c-blocks-embedding (row N114): a VERIFICATION AND LEGACY entry on
 # this GPU binding. TransformerBlock decodes and prefills through
 # `transformer_session_forward` (weights, cache and RoPE retained by the
-# block's session) whenever the binding exports it; this per-call entry,
-# which uploads the nine weights and both caches per call, is reached only
-# under MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1 (the A arm) and by direct callers
-# of the extension. CPU host bindings export their own host entry.
+# block's session); this per-call entry, which uploads the nine weights and
+# both caches per call, is reached only by direct callers of the extension
+# (lane x4 removed MOJOLEARN_TRANSFORMER_LEGACY_SETUP, its A arm). CPU host bindings export their own host entry.
 def transformer_forward_binding(
     addrs: PythonObject,
     params: PythonObject,
@@ -864,10 +816,9 @@ def transformer_forward_binding(
 # Lane ne3-c-blocks-embedding (row N114): a VERIFICATION AND LEGACY entry on
 # this GPU binding. TransformerBlock decodes and prefills through
 # `transformer_session_forward` (weights, cache and RoPE retained by the
-# block's session) whenever the binding exports it; this per-call entry,
-# which uploads the nine weights and both caches per call, is reached only
-# under MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1 (the A arm) and by direct callers
-# of the extension. CPU host bindings export their own host entry.
+# block's session); this per-call entry, which uploads the nine weights and
+# both caches per call, is reached only by direct callers of the extension
+# (lane x4 removed MOJOLEARN_TRANSFORMER_LEGACY_SETUP, its A arm). CPU host bindings export their own host entry.
 def transformer_decode_step_binding(
     addrs: PythonObject,
     params: PythonObject,
@@ -1043,6 +994,57 @@ def transformer_decode_session_open_int15_binding(
     return PythonObject(out_len)
 
 
+def transformer_decode_session_open_step_op_binding(
+    session: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`transformer_decode_session_open` for the public decode session (lane
+    x4-transformer-on-executor): the same ELEVEN addresses and NINE scalars,
+    each optionally followed by its block options tail, but the session runs
+    on the attention step op (`OPS_ATTN_STEP`): the weights packed into its
+    one weight buffer, the caches into its one state buffer, the position
+    into its state word. Every later step, forward, decode, export, load and
+    close is this binding's own entry. Returns cached_tokens."""
+    var owner = session.downcast_value_ptr[TransformerDecodeSession]()
+    var what = String("transformer_decode_session_open_step_op")
+    if (len(addrs) != 11 and len(addrs) != 11 + BLOCK_OPTION_ADDRS) or (
+        len(params) != 9 and len(params) != 9 + BLOCK_OPTION_PARAMS
+    ):
+        raise Error(what + ": expected 11 addresses and 9 scalars, each optionally followed by its block options tail")
+    if owner[].busy:
+        raise Error("transformer decode session: busy")
+    if owner[].is_open():
+        raise Error("transformer decode session: already open; close it first")
+    var raw = _read_addrs_tail(addrs, 11, what)
+    var a = List[Int]()
+    a.append(0)
+    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
+        a.append(raw[i])
+    a.append(0)
+    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
+        a.append(raw[11 + i])
+    _check_base_addrs(a, [1, 2, 3, 4, 5, 6, 8, 9, 10, 11], what)
+    var p = _read_params(params, 9, what)
+    var opts = BlockOptions.from_params(p, 9)
+    if p[0] <= 0:
+        raise Error(what + ": B must be positive")
+    owner[].busy = True
+    owner[].usable = False
+    var out_len = 0
+    try:
+        with GILReleased(Python()):
+            # Lane x4b: every decode session opens on the step op; this entry
+            # and `transformer_decode_session_open` share the one open.
+            out_len = _session_open_run(
+                owner[], a, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], opts)
+    except error:
+        owner[].busy = False
+        owner[].release()
+        raise error
+    owner[].busy = False
+    owner[].usable = True
+    return PythonObject(out_len)
+
+
 def transformer_decode_session_step_binding(
     session: PythonObject, addrs: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
@@ -1060,10 +1062,10 @@ def transformer_decode_session_step_binding(
         raise Error("transformer_decode_session_step: null buffer address")
     var claimed = Int(py=params[0])
     _require_session_open(owner[])
-    if owner[].kv.value().s != claimed:
+    if owner[].cached() != claimed:
         raise Error(
             String("transformer decode session: the caller believes cached_tokens = ") + String(claimed)
-            + " but the resident cache holds " + String(owner[].kv.value().s))
+            + " but the resident cache holds " + String(owner[].cached()))
     owner[].busy = True
     var out_len = 0
     try:
@@ -1095,10 +1097,10 @@ def transformer_decode_session_decode_binding(
     var n = Int(py=params[0])
     var claimed = Int(py=params[1])
     _require_session_open(owner[])
-    if owner[].kv.value().s != claimed:
+    if owner[].cached() != claimed:
         raise Error(
             String("transformer decode session: the caller believes cached_tokens = ") + String(claimed)
-            + " but the resident cache holds " + String(owner[].kv.value().s))
+            + " but the resident cache holds " + String(owner[].cached()))
     owner[].busy = True
     var out_len = 0
     try:
@@ -1131,10 +1133,10 @@ def transformer_decode_session_forward_binding(
     if l <= 0:
         raise Error("transformer_decode_session_forward: L must be positive")
     _require_session_open(owner[])
-    if owner[].kv.value().s != claimed:
+    if owner[].cached() != claimed:
         raise Error(
             String("transformer decode session: the caller believes cached_tokens = ") + String(claimed)
-            + " but the resident cache holds " + String(owner[].kv.value().s))
+            + " but the resident cache holds " + String(owner[].cached()))
     owner[].busy = True
     var out_len = 0
     try:
@@ -1347,10 +1349,10 @@ def causal_lm_session_run_binding(
             raise Error("causal_lm_session_run: layer " + String(i) + " holds B = " + String(sp[].b)
                 + ", d_model = " + String(sp[].dm) + "; the session has B = " + String(owner[].b)
                 + ", d_model = " + String(owner[].d))
-        if sp[].kv.value().s != claimed:
+        if sp[].cached() != claimed:
             raise Error(String("transformer decode session: the caller believes cached_tokens = ")
-                + String(claimed) + " but layer " + String(i) + " holds " + String(sp[].kv.value().s))
-        if sp[].kv.value().s + l + n_steps - 1 > sp[].smax:
+                + String(claimed) + " but layer " + String(i) + " holds " + String(sp[].cached()))
+        if sp[].cached() + l + n_steps - 1 > sp[].smax:
             raise Error("causal_lm_session_run: " + String(l + n_steps - 1) + " more positions do not fit the "
                 + String(sp[].smax) + "-token cache")
         ptrs.append(Int(sp))
@@ -1373,7 +1375,7 @@ def causal_lm_session_run_binding(
     for i in range(n_layers):  # driver-loop: over decoder layers of the model
         var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
         sp[].busy = False
-        result = sp[].kv.value().s
+        result = sp[].cached()
     owner[].busy = False
     return PythonObject(result)
 
@@ -1416,10 +1418,10 @@ def causal_lm_session_forward_binding(
                 + ", d_model = " + String(sp[].dm) + "; the session has B = " + String(owner[].b)
                 + ", d_model = " + String(owner[].d))
         if held < 0:
-            held = sp[].kv.value().s
-        elif sp[].kv.value().s != held:
+            held = sp[].cached()
+        elif sp[].cached() != held:
             raise Error("causal_lm_session_forward: the layers hold different cached lengths")
-        if sp[].kv.value().s + l > sp[].smax:
+        if sp[].cached() + l > sp[].smax:
             raise Error("causal_lm_session_forward: " + String(l) + " more positions do not fit the "
                 + String(sp[].smax) + "-token cache")
         ptrs.append(Int(sp))
@@ -1442,7 +1444,7 @@ def causal_lm_session_forward_binding(
     for i in range(n_layers):  # driver-loop: over decoder layers of the model
         var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
         sp[].busy = False
-        result = sp[].kv.value().s
+        result = sp[].cached()
     owner[].busy = False
     return PythonObject(result)
 
@@ -1681,11 +1683,6 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[transformer_session_backward_binding]("transformer_session_backward")
         # lane/lowbit-blocks: numeric_profile="fixed15_v1".
         m.def_function[transformer_session_forward_int15_binding]("transformer_session_forward_int15")
-        # NVIDIA's full public A/B gate admits discarded-cache prefill.
-        # Apple retains its prior default until separately priced; the explicit
-        # force flag remains available for its completed arithmetic gate.
-        comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and (is_defined["MOJOLEARN_TRANSFORMER_FRESH_PREFILL"]() or (TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"]())):
-            m.def_function[transformer_forward_fresh_binding]("transformer_forward_fresh")
         m.def_function[transformer_decode_step_binding](
             "transformer_decode_step"
         )
@@ -1702,6 +1699,7 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[transformer_decode_session_create_binding]("transformer_decode_session_create")
         m.def_function[transformer_decode_native_handle_binding]("transformer_decode_native_handle_v1")
         m.def_function[transformer_decode_session_open_binding]("transformer_decode_session_open")
+        m.def_function[transformer_decode_session_open_step_op_binding]("transformer_decode_session_open_step_op")
         # lane/lowbit-default: the resident sessions under numeric_profile="fixed15_v1".
         m.def_function[transformer_decode_session_open_int15_binding]("transformer_decode_session_open_int15")
         m.def_function[transformer_decode_session_step_binding]("transformer_decode_session_step")

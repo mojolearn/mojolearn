@@ -70,7 +70,7 @@ def _lm_group_reserve(group: NativeSessionGroup) raises:
         _require_session_open(layer[])
         if layer[].b != owner[].b or layer[].dm != owner[].d:
             raise Error("causal lm resident: decoder dimensions differ from the model")
-        var cached = layer[].kv.value().s
+        var cached = layer[].cached()
         if run:
             if cached != group.parameters[2]:
                 raise Error("causal lm resident: caller and decoder cached lengths differ")
@@ -114,7 +114,7 @@ def _lm_group_execute(group: NativeSessionGroup) raises -> Int:
         raise problem
     var result = 0
     for address in group.layers:  # driver-loop: original last-layer cached-length return
-        result = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=address)[].kv.value().s
+        result = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=address)[].cached()
     return result
 
 

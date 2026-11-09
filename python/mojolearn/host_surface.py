@@ -3429,7 +3429,7 @@ FAMILIES = (
             "transformer_host_column", "transformer_host_sabotage",
             "transformer_vendor", "transformer_numeric_mode",
             "transformer_forward", "transformer_forward_fresh",
-            "transformer_decode_step", "transformer_backward",
+            "transformer_decode_step", "transformer_decode_steps", "transformer_backward",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "transformer_arithmetic_profile_changed", "transformer_arithmetic_profile", "transformer_session_create",
             "transformer_session_close", "transformer_session_discard_tape", "transformer_session_invalidate_tape",

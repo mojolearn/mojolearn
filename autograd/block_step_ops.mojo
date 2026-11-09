@@ -77,7 +77,7 @@ from transformer.impl.llama.modeling_llama import (
     LlamaDims, LlamaDeviceWeights, LlamaKVCache, LlamaRopeTable, LlamaDeviceStages, llama_decoder_layer_forward,
 )
 from transformer.block_options import BlockOptions, BLOCK_OPTION_PARAMS
-from transformer.transformer_binding_impl import _lean_for
+from transformer.lean_stages import _lean_for
 
 # Session operation codes (autograd/ops_api.mojo OPS_*; autograd/program.mojo
 # PROGRAM_MAX_CODE covers them, record version 3).
@@ -342,13 +342,14 @@ def _m3_check_words(words: List[Int]) raises:
 
 
 def _write_words(mut ex: DeviceExec, p: FP, words: List[Int]) raises:
-    """Queue the carried state's host integers into their int32 words (the
-    executor stages the bytes at once; no wait)."""
-    var host = List[Float32](length=len(words), fill=Float32(0))
+    """Queue the carried state's host integers into their int32 words: one
+    device fill of each word's bit pattern (lane x4b: was an executor
+    upload, which stages a host buffer per call that only the executor's
+    next `sync` frees; a decode stack that never syncs its layers' own
+    executors grew one per token per layer). No wait, no host staging."""
     for i in range(len(words)):  # small-loop(words: at most two state words): word encode, no data
-        host[i] = bitcast[DType.float32](Int32(words[i]))
-    ex.upload(p, FP(unsafe_from_address=Int(host.unsafe_ptr())), len(words))
-    _ = len(host)  # keep-alive past the staging copy
+        var cell = _view(ex, p + i, 1)
+        cell.enqueue_fill(bitcast[DType.float32](Int32(words[i])))
 
 
 # ---------------------------------------------------------------- resident entries
@@ -486,6 +487,10 @@ struct _AttnBlock(Movable):
     var stages: LlamaDeviceStages
     var dx: DeviceBuffer[DType.float32]
     var lean: Bool
+    #: lane x4b: built over weights the caller handed in (`attn_step_adopt`,
+    #: the fixed15_v1 planes), not over views of the weights tensor; the
+    #: weights operand is then a one-float placeholder the op never reads.
+    var adopted: Bool
 
     def __init__(out self, ctx: DeviceContext, mut ex: DeviceExec, w: FP, nw: Int, s: FP, ns: Int, q: FP,
                  ints: List[Int]) raises:
@@ -508,12 +513,7 @@ struct _AttnBlock(Movable):
             v[6].copy(), v[7].copy(), v[8].copy(), v[9].copy(), v[10].copy(), v[11].copy(), v[12].copy(),
             v[13].copy(), v[14].copy(), v[15].copy(), v[16].copy(), v[17].copy(), v[18].copy(), v[19].copy(),
         )
-        var cache_n = _attn_cache_floats(ints)
-        var kv = LlamaKVCache(ctx, b, dims, smax, window, opts.max_positions)
-        kv.k = _view(ex, s, cache_n)
-        kv.v = _view(ex, s + cache_n, cache_n)
-        kv.s = words[0]
-        self.kv = kv^
+        self.kv = _attn_kv_views(ctx, ex, s, ints, dims, opts, words[0])
         self.rope = LlamaRopeTable(ctx, dims, opts, smax)
         # `_lean_for_w` with no fixed15 planes (these weights never carry them).
         var lean = _lean_for(dims.head_dim, opts)
@@ -524,7 +524,49 @@ struct _AttnBlock(Movable):
         self.s_addr = Int(s)
         self.q_addr = Int(q)
         self.ints = ints.copy()
+        self.adopted = False
         _ = ns
+
+    def __init__(out self, ctx: DeviceContext, mut ex: DeviceExec, var weights: LlamaDeviceWeights, w: FP, s: FP,
+                 q: FP, ints: List[Int], s0: Int, lean: Bool) raises:
+        """Lane x4b: the entry over weights built by the caller (the
+        fixed15_v1 decode session's profile constructor: norms, biases and
+        the seven projection planes), keyed by the placeholder weights
+        tensor `w`; the caches and the word are the op's usual state
+        operands. `lean` is the caller's (`_lean_for_w`: never lean over
+        planes)."""
+        var dims = _attn_dims(ints)
+        var opts = _attn_opts(ints)
+        var smax = ints[6]
+        if s0 < 0 or s0 > smax:
+            raise Error("ValueError: ops: attention_step: cached tokens must be in [0, " + String(smax)
+                        + "], got " + String(s0))
+        self.w = weights^
+        self.kv = _attn_kv_views(ctx, ex, s, ints, dims, opts, s0)
+        self.rope = LlamaRopeTable(ctx, dims, opts, smax)
+        self.lean = lean
+        self.stages = LlamaDeviceStages(ctx, ints[0], 1, smax, dims, ints[7], lean=lean)
+        self.dx = ctx.enqueue_create_buffer[DType.float32](ints[0] * dims.d_model)
+        self.w_addr = Int(w)
+        self.s_addr = Int(s)
+        self.q_addr = Int(q)
+        self.ints = ints.copy()
+        self.adopted = True
+
+
+def _attn_kv_views(ctx: DeviceContext, ex: DeviceExec, s: FP, ints: List[Int], dims: LlamaDims,
+                   opts: BlockOptions, s0: Int) raises -> LlamaKVCache:
+    """The KV cache struct over the state tensor's two pieces at their
+    `block_offsets` starts (lane x4b: the value cache started at `s +
+    cache_n`, which is the packed layout only when cache_n is a whole
+    256-byte slot; `AttnStepArm` and `upload_block` pack at the slot)."""
+    var ssz = block_state_sizes(OPS_ATTN_STEP, ints)
+    var sat = block_offsets(ssz, block_guard(OPS_ATTN_STEP))
+    var kv = LlamaKVCache(ctx, ints[0], dims, ints[6], ints[7], opts.max_positions)
+    kv.k = _view(ex, s + sat[0], ssz[0])
+    kv.v = _view(ex, s + sat[1], ssz[1])
+    kv.s = s0
+    return kv^
 
 
 struct BlockStepScratch(Movable):
@@ -784,23 +826,125 @@ def _same_ints(a: List[Int], b: List[Int]) -> Bool:
     return a == b
 
 
-def _run_attn(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
-              y_out: FP) raises:
-    var ctx = ex.ctx.copy()
-    var b = ints[0]
-    var dm = ints[1]
-    var l = _tokens(OPS_ATTN_STEP, counts[0], b, dm)
-    _expect(OPS_ATTN_STEP, "weights", counts[1], block_part_floats(OPS_ATTN_STEP, ints, BLOCK_PART_WEIGHTS))
-    _expect(OPS_ATTN_STEP, "kv", counts[2], block_part_floats(OPS_ATTN_STEP, ints, BLOCK_PART_STATE))
-    _expect(OPS_ATTN_STEP, "state words", counts[3], 1)
+struct AttnPrefill(Movable):
+    """The L > 1 stages and input buffer of attention step runs (lane x4b).
+    A run handed one keeps them across runs and reuses them for the next
+    compatible shape (reset to the constructor's zeros first, as the block
+    session and the CausalLM prefill did); the op's own table run passes a
+    fresh one, so its stages live for that run alone, as before. The
+    backward reads the forward's stages and input from here."""
+    var stages: Optional[LlamaDeviceStages]
+    var dx: Optional[DeviceBuffer[DType.float32]]
+    var lean: Bool
+    #: the shape of the last forward these stages hold (for the backward)
+    var b: Int
+    var l: Int
+    var pos0: Int
+
+    def __init__(out self):
+        self.stages = Optional[LlamaDeviceStages]()
+        self.dx = Optional[DeviceBuffer[DType.float32]]()
+        self.lean = False
+        self.b = 0
+        self.l = 0
+        self.pos0 = -1
+
+    def clear(mut self):
+        self.stages = None
+        self.dx = None
+        self.l = 0
+        self.pos0 = -1
+
+    def prepare(mut self, ctx: DeviceContext, b: Int, l: Int, smax: Int, dims: LlamaDims, window: Int,
+                lean: Bool) raises:
+        var reused = False
+        if self.stages:
+            ref st = self.stages.value()
+            reused = (st.b == b and st.l == l and st.s_max == smax and st.window == window
+                      and st.dims.d_model == dims.d_model and st.dims.n_heads == dims.n_heads
+                      and st.dims.n_kv == dims.n_kv and st.dims.head_dim == dims.head_dim
+                      and st.dims.intermediate == dims.intermediate and self.lean == lean)
+        if reused:
+            # Every constructor zero and route flag back before the next run.
+            self.stages.value().reset(ctx)
+            self.stages.value().int15_on = False
+        else:
+            # Drop an incompatible owner before allocating its replacement.
+            self.stages = None
+            self.stages = LlamaDeviceStages(ctx, b, l, smax, dims, window, lean=lean)
+            self.lean = lean
+        var n = b * l * dims.d_model
+        if not self.dx or len(self.dx.value()) != n:
+            self.dx = ctx.enqueue_create_buffer[DType.float32](n)
+        self.b = b
+        self.l = l
+
+
+def attn_step_entry(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int],
+                    ints: List[Int]) raises -> Int:
+    """The index in `sc.attn` of the resident entry over these operands,
+    built at the triple's first run (lane x4b: shared by the runs and the
+    session arms that read the entry's structs)."""
     var e = -1
     for i in range(len(sc.attn)):  # driver-loop: over resident attention blocks
         if (sc.attn[i].w_addr == Int(bufs[1]) and sc.attn[i].s_addr == Int(bufs[2])
                 and sc.attn[i].q_addr == Int(bufs[3]) and _same_ints(sc.attn[i].ints, ints)):
             e = i
+    if e >= 0 and sc.attn[e].adopted:
+        _expect(OPS_ATTN_STEP, "kv", counts[2], block_part_floats(OPS_ATTN_STEP, ints, BLOCK_PART_STATE))
+        _expect(OPS_ATTN_STEP, "state words", counts[3], 1)
+        return e
+    _expect(OPS_ATTN_STEP, "weights", counts[1], block_part_floats(OPS_ATTN_STEP, ints, BLOCK_PART_WEIGHTS))
+    _expect(OPS_ATTN_STEP, "kv", counts[2], block_part_floats(OPS_ATTN_STEP, ints, BLOCK_PART_STATE))
+    _expect(OPS_ATTN_STEP, "state words", counts[3], 1)
     if e < 0:
+        var ctx = ex.ctx.copy()
         sc.attn.append(_AttnBlock(ctx, ex, bufs[1], counts[1], bufs[2], counts[2], bufs[3], ints))
         e = len(sc.attn) - 1
+    return e
+
+
+def attn_step_adopt(mut ex: DeviceExec, mut sc: BlockStepScratch, var weights: LlamaDeviceWeights, w: FP, s: FP,
+                    q: FP, ints: List[Int], s0: Int, lean: Bool) raises:
+    """Lane x4b: register the entry of the triple (w, s, q) over weights the
+    caller built (the fixed15_v1 planes), so the op runs them; the word at
+    q is written to s0."""
+    _check_ints(OPS_ATTN_STEP, ints)
+    sc.forget(Int(w))
+    sc.forget(Int(s))
+    var ctx = ex.ctx.copy()
+    sc.attn.append(_AttnBlock(ctx, ex, weights^, w, s, q, ints, s0, lean))
+    var words: List[Int] = [s0]
+    _write_words(ex, q, words)
+
+
+def attn_step_restart(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int],
+                      ints: List[Int], s0: Int, zero: Bool) raises:
+    """Lane x4b: set the carried position to s0 (and, with `zero`, the two
+    caches to the zeros a fresh `LlamaKVCache` holds, on the device) without
+    rebuilding the resident entry: the entry's cache struct and the state
+    word move together. The caller's own host bytes, when it loads caches,
+    go into the state tensor before this call (same stream order)."""
+    if s0 < 0 or s0 > ints[6]:
+        raise Error("ValueError: ops: attention_step: cached tokens must be in [0, " + String(ints[6])
+                    + "], got " + String(s0))
+    if zero:
+        var view = _view(ex, bufs[2], counts[2])
+        view.enqueue_fill(Float32(0.0))
+    for i in range(len(sc.attn)):  # driver-loop: over resident attention blocks
+        if sc.attn[i].s_addr == Int(bufs[2]) and sc.attn[i].q_addr == Int(bufs[3]):
+            sc.attn[i].kv.s = s0
+    var words: List[Int] = [s0]
+    _write_words(ex, bufs[3], words)
+
+
+def _run_attn_on(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
+                 y_out: FP, mut pre: AttnPrefill, forward_only: Bool) raises:
+    var ctx = ex.ctx.copy()
+    var b = ints[0]
+    var dm = ints[1]
+    var l = _tokens(OPS_ATTN_STEP, counts[0], b, dm)
+    var e = attn_step_entry(ex, sc, bufs, counts, ints)
     ref blk = sc.attn[e]
     var n = b * l * dm
     var x = _view(ex, bufs[0], n)
@@ -813,25 +957,33 @@ def _run_attn(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], coun
         _d2d(ctx, blk.dx, x, n)
         llama_decoder_layer_forward(
             ctx, blk.stages, blk.kv, blk.rope, blk.w, blk.dx,
-            b, 1, pos0, trace, String("ops.step"))
+            b, 1, pos0, trace, String("ops.step"), forward_only=forward_only)
         if n != len(blk.stages.residual2):
             raise Error("ops: attention_step: the L = 1 stages hold a different output length")
         _d2d(ctx, y, blk.stages.residual2, n)
     else:
-        # `_session_forward_run`: call-shaped stages for this call alone.
+        # `_session_forward_run`: L-shaped stages, the caller's (kept) or
+        # this run's own.
         var dims = _attn_dims(ints)
-        var stages = LlamaDeviceStages(ctx, b, l, ints[6], dims, ints[7], lean=blk.lean)
-        var dx = ctx.enqueue_create_buffer[DType.float32](n)
-        _d2d(ctx, dx, x, n)
+        pre.prepare(ctx, b, l, ints[6], dims, ints[7], blk.lean)
+        _d2d(ctx, pre.dx.value(), x, n)
         llama_decoder_layer_forward(
-            ctx, stages, blk.kv, blk.rope, blk.w, dx, b, l, pos0, trace,
-            String("ops.step.forward"))
-        _d2d(ctx, y, stages.residual2, n)
-        ctx.synchronize()
-        _ = stages^
-        _ = dx^
+            ctx, pre.stages.value(), blk.kv, blk.rope, blk.w, pre.dx.value(), b, l, pos0, trace,
+            String("ops.step.forward"), forward_only=forward_only)
+        _d2d(ctx, y, pre.stages.value().residual2, n)
+        pre.pos0 = pos0
     var words: List[Int] = [blk.kv.s]
     _write_words(ex, bufs[3], words)
+
+
+def _run_attn(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
+              y_out: FP) raises:
+    var pre = AttnPrefill()
+    _run_attn_on(ex, sc, bufs, counts, ints, y_out, pre, False)
+    if pre.stages:
+        # The run's own L-shaped stages go at return (as before).
+        ex.ctx.synchronize()
+    _ = pre^
 
 
 def _step_run[CODE: Int](
@@ -846,6 +998,47 @@ def _step_run[CODE: Int](
         _run_m3(ex, sc, bufs, counts, ints, y_out)
     else:
         _run_attn(ex, sc, bufs, counts, ints, y_out)
+
+
+def attn_step_run(
+    mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int], y_out: FP,
+) raises:
+    """`block_step_run` of OPS_ATTN_STEP alone (lane x4-transformer-on-
+    executor): the transformer binding's decode session runs the step op
+    through this, so that binding instantiates the attention body only, not
+    the Mamba bodies of the table. Same checks, same body, same eviction of
+    the pair's entry on a failed run."""
+    _check_ints(OPS_ATTN_STEP, ints)
+    if len(bufs) != 4 or len(counts) != 4:
+        raise Error("ops: attention_step takes four tensors (x, weights, kv, words)")
+    try:
+        _run_attn(ex, sc, bufs, counts, ints, y_out)
+    except err:
+        for k in range(1, len(bufs)):  # small-loop(bufs: the op's four operands): entry eviction, no data
+            sc.forget(Int(bufs[k]))
+        raise err
+
+
+def attn_step_run_kept(
+    mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int], y_out: FP,
+    mut pre: AttnPrefill, forward_only: Bool,
+) raises:
+    """`attn_step_run` with the caller's L > 1 stages (lane x4b): the block
+    session keeps them across calls and its backward reads them; the
+    CausalLM stack shares one across its layers. `forward_only` is the
+    block forward's promise that no backward reads this run's stages
+    (`llama_decoder_layer_forward`'s forward-only fusions). Same body, same
+    eviction on a failed run (the kept stages are dropped too)."""
+    _check_ints(OPS_ATTN_STEP, ints)
+    if len(bufs) != 4 or len(counts) != 4:
+        raise Error("ops: attention_step takes four tensors (x, weights, kv, words)")
+    try:
+        _run_attn_on(ex, sc, bufs, counts, ints, y_out, pre, forward_only)
+    except err:
+        pre.clear()
+        for k in range(1, len(bufs)):  # small-loop(bufs: the op's four operands): entry eviction, no data
+            sc.forget(Int(bufs[k]))
+        raise err
 
 
 def block_step_check(code: Int, n_tensors: Int, ints: List[Int], fs: List[Float32]) raises -> StepOpInfo:

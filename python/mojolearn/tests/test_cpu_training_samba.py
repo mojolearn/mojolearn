@@ -120,7 +120,8 @@ def test_every_entry_samba_reaches_is_on_the_host():
                 | {"mamba3_forward_tape", "mamba3_backward_tape", "mamba3_close_tape"},
             "transformer": {"transformer_session_" + name for name in ("create", "forward", "close")}
                 | {"transformer_decode_session_" + name for name in
-                   ("create", "open", "step", "forward", "export_state", "load_state", "close")}
+                   ("create", "open", "open_step_op", "step", "forward", "decode", "export_state",
+                    "load_state", "close")}
                 # numeric_profile="fixed15_v1": the GPU sessions' profile entries
                 # (lane/lowbit-blocks, lane/lowbit-default); the host route takes
                 # `transformer_forward_int15`, and a host session under the

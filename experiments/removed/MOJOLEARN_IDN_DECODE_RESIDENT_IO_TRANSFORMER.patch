@@ -1,0 +1,260 @@
+diff --git a/transformer/transformer_binding_impl.mojo b/transformer/transformer_binding_impl.mojo
+index fc11f00e91..a1783cb5b6 100644
+--- a/transformer/transformer_binding_impl.mojo
++++ b/transformer/transformer_binding_impl.mojo
+@@ -63,9 +63,11 @@ from transformer.checks.transformer_fixture import RMS_EPS, ROPE_THETA
+ 
+ # `_upload`/`_download` by their underscore names is DEVIATION 1112's
+ # settled pattern (`transformer_check.mojo` imports the same pair).
+-from transformer.impl.llama.fused_attention import fused_forward_supported_head_dim
+-# Lane x4: the public decode session runs the attention step op.
+-from transformer.attn_step_session import AttnStepArm
++from transformer.impl.llama.fused_attention import (
++    IDN_DECODE_RESIDENT_IO,
++    LlamaDeferredChecks,
++    fused_forward_supported_head_dim,
++)
+ from transformer.impl.llama.modeling_llama import (
+     ATTN_PATH_EAGER,
+     BLOCK_ANY_SABOTAGE,
+@@ -1437,13 +1439,13 @@ struct TransformerDecodeSession(Movable, Writable):
+     var rope: Optional[LlamaRopeTable]
+     var stages: Optional[LlamaDeviceStages]
+     var dx: Optional[DeviceBuffer[DType.float32]]
+-    # TOMBSTONE: MOJOLEARN_IDN_DECODE_RESIDENT_IO (session arm SUPERSEDED, never measured) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
+-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_DECODE_RESIDENT_IO_TRANSFORMER.patch
+-    var op: Optional[AttnStepArm]
+-    """Lane x4: a session the public door opens runs on the attention step
+-    op (transformer/attn_step_session.mojo); its block structs are the op's.
+-    None for a CausalLM layer session and under fixed15_v1, which keep the
+-    structs above."""
++    var defer: Optional[LlamaDeferredChecks]
++    """IDN_DECODE_RESIDENT_IO: the step's deferred check window; None on a
++    build without the define (nothing allocated)."""
++    var snap_k: Optional[DeviceBuffer[DType.float32]]
++    """IDN_DECODE_RESIDENT_IO: the key cache as it stood before the current
++    step, restored when the step replays."""
++    var snap_v: Optional[DeviceBuffer[DType.float32]]
+     var b: Int
+     var dm: Int
+     var nh: Int
+@@ -1462,7 +1464,9 @@ struct TransformerDecodeSession(Movable, Writable):
+         self.rope = Optional[LlamaRopeTable]()
+         self.stages = Optional[LlamaDeviceStages]()
+         self.dx = Optional[DeviceBuffer[DType.float32]]()
+-        self.op = Optional[AttnStepArm]()
++        self.defer = Optional[LlamaDeferredChecks]()
++        self.snap_k = Optional[DeviceBuffer[DType.float32]]()
++        self.snap_v = Optional[DeviceBuffer[DType.float32]]()
+         self.b = 0
+         self.dm = 0
+         self.nh = 0
+@@ -1481,21 +1485,16 @@ struct TransformerDecodeSession(Movable, Writable):
+         writer.write("TransformerDecodeSession")
+ 
+     def is_open(self) -> Bool:
+-        return Bool(self.ctx) and (Bool(self.kv) or Bool(self.op))
+-
+-    def cached(self) -> Int:
+-        """The position the session holds (the op arm's mirror of its state
+-        word, or the structs' cache)."""
+-        if self.op:
+-            return self.op.value().cached
+-        return self.kv.value().s
++        return Bool(self.ctx) and Bool(self.kv)
+ 
+     def release(mut self):
+         """Buffers die before their context, and the frees they enqueue
+         drain before the context goes (DEVIATION 2520's ordering)."""
+-        self.op = None
+         self.stages = None
+         self.dx = None
++        self.defer = None
++        self.snap_k = None
++        self.snap_v = None
+         self.rope = None
+         self.kv = None
+         self.w = None
+@@ -1558,6 +1557,8 @@ def _session_open_run(
+     s.rope = LlamaRopeTable(s.ctx.value(), dims, opts, smax)
+     s.stages = LlamaDeviceStages(s.ctx.value(), b, 1, smax, dims, window, lean=_lean_for_w(hd, s.w.value()))
+     s.dx = s.ctx.value().enqueue_create_buffer[DType.float32](b * dm)
++    comptime if IDN_DECODE_RESIDENT_IO:
++        _session_resident_io_open(s, b, nh, smax)
+     s.ctx.value().synchronize()
+     s.b = b
+     s.dm = dm
+@@ -1632,6 +1633,8 @@ def _session_open_run_int15(
+     s.rope = LlamaRopeTable(ctx, dims, opts, smax)
+     s.stages = LlamaDeviceStages(ctx, b, 1, smax, dims, window, lean=False)
+     s.dx = ctx.enqueue_create_buffer[DType.float32](b * dm)
++    comptime if IDN_DECODE_RESIDENT_IO:
++        _session_resident_io_open(s, b, nh, smax)
+     ctx.synchronize()
+     s.b = b
+     s.dm = dm
+@@ -1645,47 +1648,89 @@ def _session_open_run_int15(
+ 
+ 
+ 
+-def _session_open_step_op(
+-    mut s: TransformerDecodeSession, a: List[Int], b: Int, dm: Int, nh: Int, nkv: Int,
+-    hd: Int, it: Int, smax: Int, s0: Int, window: Int, opts: BlockOptions, option_words: List[Int],
+-) raises -> Int:
+-    """Lane x4: the GIL-free half of `transformer_decode_session_open_step_op`,
+-    the public decode session's open: the weights packed into the attention
+-    step op's one weight buffer, the caches into its one state buffer and
+-    the position into its state word (transformer/attn_step_session.mojo).
+-    `a` is the `transformer_forward` 13 + 11 layout with slots 0 and 12
+-    unused. Every later step, forward, decode, export and load runs on the
+-    op's operands."""
+-    var dims = LlamaDims(dm, nh, nkv, hd, it)
+-    dims.validate()
+-    opts.validate(hd)
+-    s.ctx = neural_ctx[_NEURAL_CTX]()
+-    s.op = AttnStepArm(s.ctx.value(), a, b, dm, nh, nkv, hd, it, smax, s0, window, opts, option_words)
+-    s.b = b
+-    s.dm = dm
+-    s.nh = nh
+-    s.nkv = nkv
+-    s.hd = hd
+-    s.it = it
+-    s.smax = smax
+-    s.window = window
+-    return s0
++def _session_resident_io_open(mut s: TransformerDecodeSession, b: Int, nh: Int, smax: Int) raises:
++    """IDN_DECODE_RESIDENT_IO, at session open (no wait here; the open's
++    own wait follows): the deferred check window, the two cache snapshot
++    buffers, and the fused forward's exp stash (`stages.aexp`) sized for
++    the session's longest L = 1 call, `b * n_heads * smax` cells, so the
++    `_estash` forward never grows it (a growth is an allocation and a wait
++    per token, the stash growing by one key a step). Sizing is capacity
++    only: the forward writes the same cells either way."""
++    ref ctx = s.ctx.value()
++    s.defer = LlamaDeferredChecks(ctx, True, True)
++    s.snap_k = ctx.enqueue_create_buffer[DType.float32](len(s.kv.value().k))
++    s.snap_v = ctx.enqueue_create_buffer[DType.float32](len(s.kv.value().v))
++    var cells = b * nh * smax
++    if len(s.stages.value().aexp) < cells:
++        s.stages.value().aexp = ctx.enqueue_create_buffer[DType.float32](cells)
++        s.stages.value().aexp.enqueue_fill(Float32(0.0))
+ 
+ 
+ 
+ def _session_step_run(mut s: TransformerDecodeSession, px: Int, py: Int) raises -> Int:
+-    """One decode token: on the step op for a session the public door
+-    opened, else on the session's structs (fixed15_v1). ONE completion
+-    wait; the caller's x stays live for the call."""
+-    if s.op:
+-        return s.op.value().run(px, py, 1)
++    """One decode token on the resident structs: x in, the block output
++    out, the cache advanced on the device. ONE completion wait, after the
++    output copy is enqueued; the caller's x stays live for the call."""
++    comptime if IDN_DECODE_RESIDENT_IO:
++        if s.defer and s.snap_k and s.snap_v:
++            return _session_step_run_deferred(s, px, py)
++    return _session_step_run_sync(s, px, py)
++
++
++
++def _session_step_run_deferred(mut s: TransformerDecodeSession, px: Int, py: Int) raises -> Int:
++    """IDN_DECODE_RESIDENT_IO (lane decode-resident, 2026-10-28): the step
++    with ONE wait. Enqueued in order: x in, a device copy of both caches
++    (the snapshot), the block with the session's deferred window armed (its
++    call refusal scans and the fused forward's regime scan and corner flag
++    go into the window instead of being read), y out, the window's words
++    home; then the one wait. A clean window means the same kernels ran on
++    the same inputs as `_session_step_run_sync`, so y and the cache hold its
++    bytes. Otherwise (a refusal hit, a refused regime, a corner, or any
++    error raised inside the armed call) the snapshot goes back, the position
++    goes back, and the step runs again through `_session_step_run_sync`,
++    which raises today's message or takes today's eager path. Arithmetic is
++    untouched on every path: no bit moves."""
++    ref ctx = s.ctx.value()
++    var n = s.b * s.dm
++    if (n != len(s.stages.value().residual2)
++            or len(s.snap_k.value()) != len(s.kv.value().k)
++            or len(s.snap_v.value()) != len(s.kv.value().v)):
++        return _session_step_run_sync(s, px, py)
++    var pos0 = s.kv.value().s
++    ctx.enqueue_copy(dst_buf=s.dx.value(), src_ptr=_f32_ptr(px))
++    ctx.enqueue_copy(dst_buf=s.snap_k.value(), src_buf=s.kv.value().k)
++    ctx.enqueue_copy(dst_buf=s.snap_v.value(), src_buf=s.kv.value().v)
++    s.defer.value().begin()
++    var addr = Int(MutPointer(to=s.defer.value()).unsafe_origin_cast[MutAnyOrigin]())
++    var clean = False
++    try:
++        s.stages.value().defer_addr = addr
++        var trace = IdentityTrace.disabled()
++        llama_decoder_layer_forward(
++            ctx, s.stages.value(), s.kv.value(), s.rope.value(), s.w.value(), s.dx.value(),
++            s.b, 1, pos0, trace, String("py.session"))
++        s.stages.value().defer_addr = 0
++        ctx.enqueue_copy(dst_ptr=_f32_ptr(py), src_buf=s.stages.value().residual2)
++        s.defer.value().enqueue_readback(ctx)
++        ctx.synchronize()
++        clean = s.defer.value().clean_after_wait()
++    except:
++        # Drain what the armed call enqueued before the snapshot goes back.
++        s.stages.value().defer_addr = 0
++        ctx.synchronize()
++        clean = False
++    if clean:
++        return s.kv.value().s
++    ctx.enqueue_copy(dst_buf=s.kv.value().k, src_buf=s.snap_k.value())
++    ctx.enqueue_copy(dst_buf=s.kv.value().v, src_buf=s.snap_v.value())
++    s.kv.value().s = pos0
+     return _session_step_run_sync(s, px, py)
+ 
+ 
+ 
+ def _session_step_run_sync(mut s: TransformerDecodeSession, px: Int, py: Int) raises -> Int:
+-    """`_session_step_run` on the session's structs (fixed15_v1 sessions):
+-    every check read where it runs."""
++    """`_session_step_run` as shipped: every check read where it runs."""
+     ref ctx = s.ctx.value()
+     var n = s.b * s.dm
+     ctx.enqueue_copy(dst_buf=s.dx.value(), src_ptr=_f32_ptr(px))
+@@ -1708,11 +1753,7 @@ def _session_decode_run(mut s: TransformerDecodeSession, px: Int, py: Int, steps
+     `_session_step_run_sync` once per token (L = 1 at the advancing position)
+     with token t moved on the device, and the (B, N, d_model) output in one
+     download behind one wait. Same kernels, same order, same bytes as N
+-    `_session_step_run_sync` calls; the cache ends where they leave it.
+-    Lane x4: a session on the step op decodes on the op (`AttnStepArm.decode`);
+-    this body is the fixed15_v1 sessions'."""
+-    if s.op:
+-        return s.op.value().decode(px, py, steps)
++    `_session_step_run_sync` calls; the cache ends where they leave it."""
+     decode_slab_check(s.b, steps, s.dm, "transformer decode session decode")
+     ref ctx = s.ctx.value()
+     var row = s.b * s.dm
+@@ -1741,10 +1782,7 @@ def _session_decode_run(mut s: TransformerDecodeSession, px: Int, py: Int, steps
+ def _session_forward_run(mut s: TransformerDecodeSession, px: Int, py: Int, l: Int) raises -> Int:
+     """`l` tokens per row on the resident weights and cache (a prefill or a
+     chunked continuation), with call-shaped stages built for this call
+-    alone. The same entry point at `l`, so the bytes are `transformer_forward`'s.
+-    Lane x4: on the step op for a session the public door opened."""
+-    if s.op:
+-        return s.op.value().run(px, py, l)
++    alone. The same entry point at `l`, so the bytes are `transformer_forward`'s."""
+     ref ctx = s.ctx.value()
+     var dims = LlamaDims(s.dm, s.nh, s.nkv, s.hd, s.it)
+     var n = s.b * l * s.dm
+@@ -1763,8 +1801,6 @@ def _session_forward_run(mut s: TransformerDecodeSession, px: Int, py: Int, l: I
+ 
+ 
+ def _session_export_run(mut s: TransformerDecodeSession, pk: Int, pv: Int) raises -> Int:
+-    if s.op:
+-        return s.op.value().export(pk, pv)
+     ref ctx = s.ctx.value()
+     var cap = s.smax
+     if s.window > 0:
+@@ -1781,8 +1817,6 @@ def _session_load_run(mut s: TransformerDecodeSession, pk: Int, pv: Int, s0: Int
+         raise Error(
+             String("transformer decode session: cached_tokens must be in [0, ") + String(s.smax)
+             + "], got " + String(s0))
+-    if s.op:
+-        return s.op.value().load(pk, pv, s0)
+     ref ctx = s.ctx.value()
+     var cap = s.smax
+     if s.window > 0:
