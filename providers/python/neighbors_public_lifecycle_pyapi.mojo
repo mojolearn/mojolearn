@@ -5,6 +5,7 @@
 from std.math import isfinite, floor
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_meta, admit_family_owned
+from bindings.admitted_input import admitted_finite_wording
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native import _fields, _fitted
@@ -185,8 +186,14 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
     # The test rides in the admission (the cast's own verdict, or one
     # parallel scan of a borrowed X): no second pass over X.
     var scan = not operation.startswith("family_xn_loc_imp_") and not operation.startswith("family_xn_kde_")
+    # Lane a7b-device-x-neighbors: the k-NN doors test a borrowed X where
+    # their kernel entries read it (the status word behind the GPU upload;
+    # one parallel host scan on the CPU column: bindings/neighbors_knn_native.mojo
+    # `knn_admit_x`), so this admission defers it: no host pass over a
+    # float32 X here. A cast X is still refused from the cast's verdict.
+    var defer = operation.startswith("family_xn_knn_")
     var snapshot = admit_family_meta(source, 2, "X", context, True, finite=scan,
-                                     refusal="Input X contains NaN or infinity (" + name + ").")
+                                     refusal=admitted_finite_wording(name, "X"), defer_finite=defer)
     var rows = snapshot.shape[0]
     var columns = snapshot.shape[1]
     if not fitting and Int(py=depth) == 0:
