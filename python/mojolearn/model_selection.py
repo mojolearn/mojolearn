@@ -15,8 +15,9 @@ In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GP
 
 Behavior to know:
 
-* Fits run serially, one fold at a time. ``n_jobs`` must be ``1`` (or
-  ``None`` where scikit-learn accepts it).
+* Independent fits (each fold, each candidate and fold) run at once on
+  several threads, at most ``n_jobs``; the results are the same for any
+  ``n_jobs``.
 * Splitters yield ``(train, test)`` pairs of int64 row-index arrays.
 * Shuffled splits draw from mojolearn's own counter-based random generator,
   so a given ``random_state`` gives a reproducible split, but not the same
@@ -408,11 +409,12 @@ def split_descriptor(X, y, *, estimator=None, cv=None, groups=None):
 
 
 def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
-                    n_jobs=1, error_score='raise'):
+                    n_jobs=None, error_score='raise'):
     """Evaluate an estimator by cross-validation and return one score per fold.
 
     For each fold, a fresh clone of ``estimator`` is fit on the training rows
-    and scored on the held-out rows. Folds run one after another. Every fold
+    and scored on the held-out rows. Folds run at once, at most ``n_jobs``
+    of them. Every fold
     is checked before the first fit: each side must be nonempty, have no
     repeated rows, and not overlap the other side. A row may be held out in
     more than one fold.
@@ -447,8 +449,10 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
         Group labels for a splitter that reads them. Passing ``groups`` with
         an integer or default ``cv`` raises ``ValueError``, because the
         default folds would ignore them.
-    n_jobs : int, default 1
-        Only ``1`` is supported; other values raise ``NotImplementedError``.
+    n_jobs : int or None, default None
+        The most fits that run at once. ``None`` uses every core; ``-1``
+        every core, ``-k`` every core but ``k - 1``. The results do not
+        depend on it.
     error_score : 'raise', default 'raise'
         Only ``'raise'`` is supported: an error in a fit or score propagates.
 
@@ -1593,7 +1597,7 @@ def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None, 
 
     Follows scikit-learn's ``cross_validate``. For each fold, a fresh clone
     of ``estimator`` is fit on the training rows and scored on the held-out
-    rows. Folds run one after another.
+    rows. Folds run at once, at most ``n_jobs`` of them.
 
     Parameters
     ----------
@@ -1615,8 +1619,9 @@ def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None, 
         As in ``check_cv``: None means five folds, stratified for a
         classifier.
     n_jobs : int or None, default None
-        Only None or 1 is supported; other values raise
-        ``NotImplementedError``.
+        The most fits that run at once. ``None`` uses every core; ``-1``
+        every core, ``-k`` every core but ``k - 1``. The results do not
+        depend on it.
     return_train_score : bool, default False
         Also score each fold's training rows (``train_<name>``).
     return_estimator : bool, default False
@@ -1674,7 +1679,9 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None, n_jobs=None
         As in ``check_cv``: None means five folds, stratified for a
         classifier.
     n_jobs : int or None, default None
-        Only None or 1 is supported.
+        The most fits that run at once. ``None`` uses every core; ``-1``
+        every core, ``-k`` every core but ``k - 1``. The results do not
+        depend on it.
     method : str, default 'predict'
         Estimator method to call, for example ``'predict_proba'``.
 
@@ -1798,7 +1805,8 @@ class _BaseSearch:
         """Cross-validate every candidate and, with ``refit``, fit the best one.
 
         The folds are drawn once and every candidate is scored on the same
-        folds. Fits run serially.
+        folds. Each candidate and fold is fit at once, at most ``n_jobs``
+        fits together.
 
         Parameters
         ----------
@@ -1873,8 +1881,9 @@ class GridSearchCV(_BaseSearch):
     scoring : str, scorer, list, tuple, set, dict or None, default None
         As in ``cross_validate``. None uses the estimator's ``score``.
     n_jobs : int or None, default None
-        Only None or 1 is supported; other values raise
-        ``NotImplementedError``.
+        The most fits that run at once. ``None`` uses every core; ``-1``
+        every core, ``-k`` every core but ``k - 1``. The results do not
+        depend on it.
     refit : bool or str, default True
         True refits the best candidate on all the data after single-metric
         scoring; False skips refitting. With several metrics, supply the
@@ -1960,7 +1969,9 @@ class RandomizedSearchCV(_BaseSearch):
     scoring : str, scorer, list, tuple, set, dict or None, default None
         As in ``cross_validate``.
     n_jobs : int or None, default None
-        Only None or 1 is supported.
+        The most fits that run at once. ``None`` uses every core; ``-1``
+        every core, ``-k`` every core but ``k - 1``. The results do not
+        depend on it.
     refit : bool or str, default True
         As in ``GridSearchCV``.
     cv : int, mojolearn splitter, list, tuple or None, default None
@@ -2030,7 +2041,9 @@ def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, c
     scoring : str, scorer or None, default None
         As in ``cross_val_score``.
     n_jobs : int or None, default None
-        Only None or 1 is supported.
+        The most fits that run at once. ``None`` uses every core; ``-1``
+        every core, ``-k`` every core but ``k - 1``. The results do not
+        depend on it.
     error_score : 'raise' or float, default nan
         ``'raise'`` propagates a fit error; a number is recorded instead.
 
@@ -2084,7 +2097,9 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
     scoring : str, scorer or None, default None
         As in ``cross_val_score``.
     n_jobs : int or None, default None
-        Only None or 1 is supported; fits run serially.
+        The most fits that run at once. ``None`` uses every core; ``-1``
+        every core, ``-k`` every core but ``k - 1``. The results do not
+        depend on it.
     shuffle : bool, default False
         Shuffle each fold's training rows once before taking the prefixes.
     random_state : int or None, default None
@@ -2145,7 +2160,9 @@ def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutati
     n_permutations : int, default 100
         Number of permutations.
     n_jobs : int or None, default None
-        Accepted for compatibility; fits run serially.
+        The most fits that run at once. ``None`` uses every core; ``-1``
+        every core, ``-k`` every core but ``k - 1``. The results do not
+        depend on it.
     random_state : int or None, default 0
         Seed for the permutations.
     verbose : int, default 0

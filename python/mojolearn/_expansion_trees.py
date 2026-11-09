@@ -2563,8 +2563,9 @@ class CalibratedClassifierCV(_MetaClassifierScore, ClassifierScoreMixin, _TreesW
         means 5. A splitter from ``mojolearn.model_selection`` or a list of
         (train, test) index pairs is used as given; with ``ensemble=False`` their test sets must
         cover every row exactly once, else ``ValueError``.
-    n_jobs : None
-        Only None is accepted; any other value raises ``NotImplementedError``.
+    n_jobs : int or None, default None
+        The most folds fitted at once. ``None`` uses every core; ``-1`` every
+        core, ``-k`` every core but ``k - 1``. The result does not depend on it.
     ensemble : bool, default True
         True: one (classifier, calibrators) pair per fold, the classifier fitted
         on the fold's training rows and calibrated on its test rows;
