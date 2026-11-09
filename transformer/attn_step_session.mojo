@@ -514,9 +514,10 @@ struct AttnStepArm(Movable):
         ctx.enqueue_copy(dst_buf=self._view(self.xio, n), src_ptr=f32_ptr(a[0]))
         self._run(l, False)
         var dims = LlamaDims(ints[1], ints[2], ints[3], ints[4], ints[5])
+        var e = attn_step_entry(self.ex, self.sc, self._operands(self.xio), self._counts(n), self.ints)
         # the forward stages' own choice (the op's `_lean_for`; default
         # options, so `transformer_lean_stages(head_dim)` as before)
-        var lean = self.pre.lean
+        var lean = self.sc.attn[e].lean
         var key: List[Int] = [b, l, ints[1], ints[2], ints[3], ints[4], ints[5], ints[7], Int(lean)]
         if not self.bst or not (key == self.bkey):
             self.bst = None
@@ -525,13 +526,18 @@ struct AttnStepArm(Movable):
             self.dout = ctx.enqueue_create_buffer[DType.float32](n)
             self.bkey = key^
         ctx.enqueue_copy(dst_buf=self.dout.value(), src_ptr=f32_ptr(a[10]))
-        var e = attn_step_entry(self.ex, self.sc, self._operands(self.xio), self._counts(n), self.ints)
         ref blk = self.sc.attn[e]
         ref bst = self.bst.value()
         var off = IdentityTrace.disabled()
-        llama_decoder_layer_backward_autograd(
-            ctx, bst, self.pre.stages.value(), blk.w, blk.rope.cos, blk.rope.sin, self.pre.dx.value(),
-            self.dout.value(), b, l, 0, off, String("pyb"))
+        if l == 1:
+            # L = 1 ran on the entry's resident stages and input buffer.
+            llama_decoder_layer_backward_autograd(
+                ctx, bst, blk.stages, blk.w, blk.rope.cos, blk.rope.sin, blk.dx,
+                self.dout.value(), b, l, 0, off, String("pyb"))
+        else:
+            llama_decoder_layer_backward_autograd(
+                ctx, bst, self.pre.stages.value(), blk.w, blk.rope.cos, blk.rope.sin, self.pre.dx.value(),
+                self.dout.value(), b, l, 0, off, String("pyb"))
         var qw = dims.q_width()
         var kw = dims.kv_width()
         var it = ints[5]
