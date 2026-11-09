@@ -3,7 +3,7 @@
 from std.ffi import _Global
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, MAMBA_STATE_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
-from mamba.impl.mamba_shell_impl import _mamba1_run, _mamba2_run, _mamba3_run
+from mamba.impl.mamba_block_program import mamba_block_call_abi
 
 
 def mamba_state_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -12,14 +12,15 @@ def mamba_state_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64])
     var l = 1 if step else p[1]
     var dm = p[1] if step else p[2]
     var tail = 2 if step else 3
+    # Lane x5-mamba-on-executor: every family is the block step op on the
+    # cached block program (weights kept on the device while their bytes are
+    # unchanged), not a per-call body that re-uploaded every weight.
     if op < 2:
-        var position = 0
-        _mamba1_run(a, b, l, dm, step, position)
-        return 0
+        return mamba_block_call_abi(1, a, b, l, dm, 0, 0, Float32(0), Float32(0))
     if op < 4:
-        return _mamba2_run(a, b, l, dm, p[tail], Float32(f[0]), Float32(f[1]))
+        return mamba_block_call_abi(2, a, b, l, dm, p[tail], 0, Float32(f[0]), Float32(f[1]))
     if op < 6:
-        return _mamba3_run(a, b, l, dm, p[tail], p[tail + 1])
+        return mamba_block_call_abi(3, a, b, l, dm, p[tail], p[tail + 1], Float32(0), Float32(0))
     raise Error("Mamba native ABI: unknown operation")
 
 

@@ -549,3 +549,47 @@ def mamba_block_cache_clear() raises:
     _unlock(c)
     for i in range(len(drop)):  # driver-loop: over dropped Mamba programs
         _destroy(_ProgramPtr(unsafe_from_address=drop[i]))
+
+
+def mamba_block_call_abi(kind: Int, a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int,
+                         dt_lo: Float32, dt_hi: Float32, fresh: Bool = False) raises -> Int:
+    """`mamba_block_call` over the per-call ABI's one address list (the
+    order every `mamba{1,2,3}_forward` / `_decode_step` docstring gives):
+
+    - Mamba-1, 14: x, ten weights, conv_window, h, y_out;
+    - Mamba-2, 16: x, nine weights, conv_window, h, buffer_xbc, buffer_dtraw,
+      y_out, h_last_out;
+    - Mamba-3, 25: x, nine weights, the ten state pieces, y_out, h_last_out,
+      k_last_out, v_last_out, theta_last_out.
+
+    Returns the post-call buf_len (Mamba-2/3; 0 for Mamba-1). `fresh` runs
+    from a zero state and leaves the state slots unread and unwritten (the
+    discard-state prefill)."""
+    var code = mamba_step_code(kind)
+    var nw = 10 if kind == 1 else 9
+    var ns = 2 if kind == 1 else (4 if kind == 2 else 10)
+    var nr = mamba_report_count(code)
+    if len(a) != 1 + nw + ns + 1 + nr:
+        raise Error("mamba" + String(kind) + ": expected " + String(1 + nw + ns + 1 + nr) + " addresses, got "
+                    + String(len(a)))
+    var weights = List[Int](capacity=nw)
+    for i in range(nw):  # small-loop(the block's weight addresses)
+        weights.append(a[1 + i])
+    var state = List[Int](capacity=ns)
+    for i in range(ns):  # small-loop(the block's state addresses)
+        state.append(a[1 + nw + i])
+    var y = a[1 + nw + ns]
+    var reports = List[Int](capacity=nr)
+    for i in range(nr):  # small-loop(the block's report addresses)
+        reports.append(a[2 + nw + ns + i])
+    var words = List[Int]()
+    var fs = List[Float32]()
+    if kind == 2:
+        words.append(q0)
+        fs.append(dt_lo)
+        fs.append(dt_hi)
+    elif kind == 3:
+        words.append(q0)
+        words.append(pend)
+    var out = mamba_block_call(code, weights, state, words, a[0], y, reports, b, l, dm, fs, fresh)
+    return out[0] if len(out) > 0 else 0
