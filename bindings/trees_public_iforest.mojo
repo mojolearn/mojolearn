@@ -30,6 +30,8 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
 from bindings.py_typed_call import py_call_typed
+from bindings.p3nc_fitted_freeze import fitted_freeze_sole_owner
+from core.host_parallel_copy import host_parallel_copy_bytes
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.trees_public_inputs import (
     TreesMatrix, trees_builtins, trees_table, trees_entry, trees_vector, trees_empty, trees_address, trees_f32,
@@ -331,13 +333,22 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     # save() and pickle. The fit now owns its training matrix: one native
     # copy of the same float32 bytes (the forest and the scores keep their
     # bits). `input_copied_` still reports whether the conversion copied.
+    # 0.8.66 regression C3 (iforest fit 39.6x on istella, with C1): 0.8.55
+    # kept the caller's matrix. It is kept again, without the 1.8 GB copy,
+    # where the read-only rule (lesson 10) holds it: the caller's matrix is
+    # frozen when it owns its memory (fitted_freeze_sole_owner), so an
+    # in-place edit after fit raises instead of diverging from the device
+    # forest. A view, a foreign exporter or a buffer that cannot be frozen
+    # keeps the owned copy, now one parallel copy across host cores.
+    var borrowed = False
     if not copied:
+        borrowed = fitted_freeze_sole_owner(X if copy_source is None else copy_source)
+    if not copied and not borrowed:
         var count = x.rows * x.cols
         var owned = trees_empty(Python.tuple(x.rows, x.cols), "<f4", context)
         var dst = trees_address(owned)
         if count > 0:
-            memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst),
-                   src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x.addr), count=count)
+            host_parallel_copy_bytes(dst, x.addr, count * 4)
         _ = x  # keep the caller's buffer alive through the copy above
         x = TreesMatrix(owned, dst, x.rows, x.cols, True)
     var had = Python.dict()
@@ -347,6 +358,10 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
             py_setitem(had, kept[i], fields[kept[i]])
     _release(model, fields)
     var train = _as_array(x, context)
+    if borrowed:
+        # The view of the caller's buffer was exported before the freeze
+        # above; the fitted Array is read-only like the matrix it views.
+        py_setattr(train, "_readonly", PythonObject(True))
     py_setitem(fields, "_x", train)
     py_setitem(fields, "n_features_in_", PythonObject(x.cols))
     # `fit` scores the training matrix's first row (the Python `x[:1]`
