@@ -126,20 +126,10 @@ from x_decomp.exec_trait import Exec
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
 from x_decomp.jacobi2 import dev_barrier
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
-from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
-from x_decomp.rr_batch import rr_batch_kernel, rrb_cs_len, rrb_part_len
-from x_decomp.rr_block import RB_B, RB_W, rb_blocks, rb_tol, rb_use
-from x_decomp.rr_block_device import (
-    rb_bad_kernel,
-    rb_embed_kernel,
-    rb_gather_kernel,
-    rb_left_kernel,
-    rb_pad_kernel,
-    rb_rank_kernel,
-    rb_right_kernel,
-    rb_scatter_kernel,
-    rb_v_kernel,
-)
+from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB
+# TOMBSTONE: MOJOLEARN_IDN_EIGH_BLOCK_ON (quarantined: observed convergence failure) device arm deleted 2026-11-09 by
+# lane n9-decomp-eigh-families (`DevExec._eigh_block_on`, x_decomp/rr_block_device.mojo); the op refuses the define.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch
 from x_decomp.rr_svd import RS_TPB
 from x_decomp.rr_svd_device import rs_norm_kernel, rs_round_kernel
 from x_decomp.lle_local import hessian_ncy
@@ -173,19 +163,11 @@ from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from core.identity_trace import IdentityTrace
 from x_decomp.jacobi_par import (
     PJ_TPB,
-    eigh_par_cs_kernel,
-    eigh_par_off_fold_kernel,
-    eigh_par_off_part_kernel,
-    eigh_par_update_kernel,
     pj_identity_kernel,
     pj_transpose_kernel,
     sym_from_triangle_kernel,
 )
 from core.device_zero import enqueue_fill
-from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
-from decomposition.spectrum_order_device import enqueue_eigh_ascending
-from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
-from x_decomp.eigh_tridiag import EIGH_TRIDIAG_ROUTE, td_copy_kernel
 from x_decomp.eigh_ops import eigh_op_dense, eigh_op_sym
 from core.step_gate import step_gate_open_word
 from x_decomp.eigh_tridiag_cells import TD_MIN_N
@@ -279,36 +261,6 @@ def xd_first_where_kernel(v: F32Ptr, count: Int32, stride: Int32, mode: Int32, f
             hit = x != x
         if hit:
             _ = Atomic.min(first, Int32(t))
-
-
-def xd_first_where2_kernel(v: F32Ptr, count: Int32, stride: Int32, first: I32Ptr):
-    """`xd_first_where_kernel`'s modes 0 (< 0) and 1 (== 0) on the same words
-    in one pass: first[0] and first[1] (lane idn-regress)."""
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if t < Int(count):
-        var x = v.unsafe_load(t * Int(stride))
-        if x < Float32(0.0):
-            _ = Atomic.min(first, Int32(t))
-        if x == Float32(0.0):
-            _ = Atomic.min(first.unsafe_offset(1), Int32(t))
-
-
-def xd_first_where2_enq(
-    ctx: DeviceContext, buf: DeviceBuffer[DType.float32], count: Int, stride: Int,
-    mut output: HostBuffer[DType.int32],
-) raises:
-    """`xd_first_where` modes 0 and 1 together, ENQUEUED: output[0], output[1] are
-    the first t (XD_NO_FLAG for none) after the caller's next sync. One
-    launch and no wait of its own."""
-    var dfirst = ctx.enqueue_create_buffer[DType.int32](2)
-    enqueue_fill(ctx, dfirst, XD_NO_FLAG)
-    if count > 0:
-        ctx.enqueue_function[xd_first_where2_kernel](
-            _p(buf), Int32(count), Int32(stride), dfirst.unsafe_ptr(),
-            grid_dim=_blocks(count), block_dim=TPB,
-        )
-    ctx.enqueue_copy(dst_buf=output, src_buf=dfirst)
-    _ = dfirst^
 
 
 def xd_first_where(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], count: Int, stride: Int, mode: Int) raises -> Int:
