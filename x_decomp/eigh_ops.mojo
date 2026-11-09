@@ -56,7 +56,7 @@ from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
 from decomposition.spectrum_order_device import enqueue_eigh_ascending
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale
-from x_decomp.eigh_tridiag import TD_EIG_TPB, td_bisect_kernel, td_gap_kernel, td_vec_kernel
+from x_decomp.eigh_tridiag import td_solve_enqueue
 from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB
 from x_decomp.rr_batch import rr_batch_gated_kernel, rrb_cs_len, rrb_part_len
 
@@ -288,28 +288,7 @@ def eigh_op_tridiag(
     var wl = ctx.enqueue_create_buffer[DType.float32](n)
     var wt = ctx.enqueue_create_buffer[DType.float32](n)
     var zt = ctx.enqueue_create_buffer[DType.float32](nn)
-    var dph = ctx.enqueue_create_buffer[DType.float32](nn)
-    var dpl = ctx.enqueue_create_buffer[DType.float32](nn)
-    var dmh = ctx.enqueue_create_buffer[DType.float32](nn)
-    var dml = ctx.enqueue_create_buffer[DType.float32](nn)
-    var eg = (n + TD_EIG_TPB - 1) // TD_EIG_TPB
-    ctx.enqueue_function[td_bisect_kernel](
-        dd.unsafe_ptr(), ee.unsafe_ptr(), td_info.unsafe_ptr(), wh.unsafe_ptr(), wl.unsafe_ptr(), Int32(n),
-        grid_dim=eg, block_dim=TD_EIG_TPB,
-    )
-    ctx.enqueue_function[td_gap_kernel](
-        wh.unsafe_ptr(), wl.unsafe_ptr(), td_info.unsafe_ptr(), wt.unsafe_ptr(), Int32(n),
-        grid_dim=eg, block_dim=TD_EIG_TPB,
-    )
-    ctx.enqueue_function[td_vec_kernel](
-        dd.unsafe_ptr(), ee.unsafe_ptr(), td_info.unsafe_ptr(), wh.unsafe_ptr(), wl.unsafe_ptr(),
-        dph.unsafe_ptr(), dpl.unsafe_ptr(), dmh.unsafe_ptr(), dml.unsafe_ptr(), zt.unsafe_ptr(), Int32(n),
-        grid_dim=eg, block_dim=TD_EIG_TPB,
-    )
-    _ = dph^
-    _ = dpl^
-    _ = dmh^
-    _ = dml^
+    td_solve_enqueue(ctx, dd, ee, td_info, wh, wl, wt, zt, n)
     _ = wh^
     _ = wl^
     # the tail every eigh route shares: the sign flip, the ascending order
