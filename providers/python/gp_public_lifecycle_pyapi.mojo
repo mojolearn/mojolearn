@@ -11,7 +11,9 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.mode_metadata_native import _fields, _class_fields, _plan, _configuration_value
 from bindings.classical_attributes import _type_mro, classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_width, classical_estimator_name
+from bindings.classical_validate import classical_check_y, classical_check_width, classical_estimator_name
+from bindings.admitted_input import admit_x_unrecorded
+from bindings.device_rows_door import door_is_device_rows
 from bindings.classical_labels import _flatten_labels, labels_shape_of
 from bindings.label_integer_storage import labels_integer_storage
 from bindings.label_input_sources import labels_storage_source, labels_list_integer_storage
@@ -236,6 +238,14 @@ def _gp_public_arguments(mut call: AdmittedCall, model: PythonObject, fields: Py
         _ = py_call(prepared.append, args[i])
     return py_call(b.tuple, prepared)
 
+def _gp_query_operation(operation: String) -> Bool:
+    """The public queries whose owner admits X through gp_query (lane a7a):
+    their kernel entries test the query (or the owner does)."""
+    return (operation == "family_gp_gpr_predict" or operation == "family_gp_gpr_score"
+            or operation == "family_gp_gpc_predict" or operation == "family_gp_gpc_predict_proba"
+            or operation == "family_gp_gpc_score")
+
+
 def gp_public_operation(model: PythonObject, operation: String, args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
@@ -265,13 +275,34 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
     var columns = 0
     var input_copied = False
     var admitted_x = PythonObject(None)
+    var deferred = False
     if guarded:
-        var x = classical_check_x(source, name, context)
-        admitted_x = x
-        input_copied = not (x is source)
-        rows = Int(py=x.shape[0])
-        columns = Int(py=x.shape[1])
-        py_setitem(values, x_index, x)
+        # Lane a7a: a predict / score defers the finite test of a borrowed
+        # X to its kernel entry (defer_finite: the entry tests the words it
+        # uploads and returns the status word; an owner whose route returns
+        # none tests it itself, bindings/gp_query_x.mojo), and a
+        # cross-validation fold stays on the device (device_x: the owner
+        # hands its store ids to the entry, which gathers the rows). A fit
+        # keeps the scan here: it keeps X as X_train_.
+        var query = not fitting and _gp_query_operation(operation)
+        if query and door_is_device_rows(source, context):
+            var fx = admit_x_unrecorded(source, name, context, device_x=True, finite=False)
+            rows = fx.rows
+            columns = fx.cols
+            if not fx.store.active():
+                # (an active store: values[x_index] stays the DeviceRows and
+                # the owner resolves its store ids; no host words exist)
+                admitted_x = fx.array
+                deferred = True
+                py_setitem(values, x_index, fx.array)
+        else:
+            var ax = admit_x_unrecorded(source, name, context, defer_finite=query)
+            admitted_x = ax.array
+            deferred = not ax.finite
+            input_copied = not (ax.array is source)
+            rows = ax.rows
+            columns = ax.cols
+            py_setitem(values, x_index, ax.array)
         if not nested:
             if fitting:
                 var target = _gp_classifier_target(args[x_index + 1], rows, name, context) if classifier else classical_check_y(args[x_index + 1], rows, name, context)
@@ -305,8 +336,10 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
     var result = PythonObject(None)
     if admitted_x is not None:
         # The owner reuses this admitted C-order float32 X instead of
-        # converting it a second time (bindings/gp_svm_records.mojo).
-        gp_x_mark(admitted_x)
+        # converting it a second time (bindings/gp_svm_records.mojo), and
+        # tests it when its finite test was deferred and its entry returns
+        # no status word.
+        gp_x_mark(admitted_x, deferred)
     try:
         if classifier:
             result = gp_classifier_operation(model, operation, prepared, context)

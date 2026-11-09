@@ -110,6 +110,7 @@ from svm.estimator import (
 
 from providers.python.svm_impl_scale_gamma_device_pyapi import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
 from svm.estimator import _family_ctx as _sg_family_ctx
+from core.device_query_x import QueryFold
 from svm.svm_resident_state import (
     SvmResidentLease,
     svm_resident_lease_open,
@@ -539,6 +540,13 @@ def svm_resident_stats_binding() raises -> PythonObject:
                         PythonObject(words[3]), PythonObject(words[4]))
 
 
+def _svm_query_fold(params: PythonObject, at: Int) raises -> QueryFold:
+    """The fold's store ids at `params[at:at + 3]` (lane a7a), or none."""
+    if len(params) < at + 3:
+        return QueryFold.none()
+    return QueryFold(Int(py=params[at]), Int(py=params[at + 1]), Int(py=params[at + 2]))
+
+
 def svc_predict_resident_binding(
     x_addr: PythonObject,
     dual_addr: PythonObject,
@@ -548,12 +556,16 @@ def svc_predict_resident_binding(
 ) raises -> PythonObject:
     """`svc_predict` with the same arguments and `params` = its 12 values
     followed by two words: the lease (`svm_resident_lease`; 0 = this call
-    only) and the machine's slot. Writes `n_rows` float32 to `out_addr` and
-    returns `n_rows`."""
-    if len(params) != 14:
+    only) and the machine's slot, then optionally three more: a
+    cross-validation fold's store ids [base id, base rows, index id]
+    (bindings/device_rows_door.mojo door_rows_store; `x_addr` is then 0 and
+    the rows are gathered on the device). Writes `n_rows` float32 to
+    `out_addr` and returns [finite word, range word] of the query (0, 0:
+    finite and in range; the door refuses otherwise, lane a7a)."""
+    if len(params) != 14 and len(params) != 17:
         raise Error(
-            "svc_predict_resident: params must contain 14 values (svc_predict's 12, lease, slot), got "
-            + String(len(params))
+            "svc_predict_resident: params must contain 14 values (svc_predict's 12, lease, slot) or 17"
+            " (and the fold's base id, base rows, index id), got " + String(len(params))
         )
     var x = Int(py=x_addr)
     var out_word = Int(py=out_addr)
@@ -577,12 +589,14 @@ def svc_predict_resident_binding(
         raise Error("svc_predict: n_support cannot be negative")
     var dual = Int(py=dual_addr) if n_support > 0 else 0
     var support = Int(py=support_matrix_addr) if n_support > 0 and kernel != 4 else 0
+    var fold = _svm_query_fold(params, 14)
+    var words: Tuple[Int32, Int32]
     with GILReleased(Python()):
-        svc_predict_resident_host(
+        words = svc_predict_resident_host(
             lease, slot, x, n_rows, n_cols, support, dual, n_support, b, label0, label1,
-            kernel, gamma, predict_class, buffer_mib, degree, coef0, out_word,
+            kernel, gamma, predict_class, buffer_mib, degree, coef0, out_word, fold,
         )
-    return PythonObject(n_rows)
+    return Python.list(Int(words[0]), Int(words[1]))
 
 
 def svr_predict_resident_binding(
@@ -594,11 +608,13 @@ def svr_predict_resident_binding(
 ) raises -> PythonObject:
     """`svr_predict` with the same arguments and `params` = its 9 values
     (degree and coef0 included) followed by two words: the lease and the
-    slot. Writes `n_rows` float32 to `out_addr` and returns `n_rows`."""
-    if len(params) != 11:
+    slot, then optionally a fold's three store ids (as
+    `svc_predict_resident`). Writes `n_rows` float32 to `out_addr` and
+    returns [finite word, range word] of the query (lane a7a)."""
+    if len(params) != 11 and len(params) != 14:
         raise Error(
-            "svr_predict_resident: params must contain 11 values (svr_predict's 9, lease, slot), got "
-            + String(len(params))
+            "svr_predict_resident: params must contain 11 values (svr_predict's 9, lease, slot) or 14"
+            " (and the fold's base id, base rows, index id), got " + String(len(params))
         )
     var x = Int(py=x_addr)
     var out_word = Int(py=out_addr)
@@ -619,12 +635,14 @@ def svr_predict_resident_binding(
         raise Error("svr_predict: n_support cannot be negative")
     var dual = Int(py=dual_addr) if n_support > 0 else 0
     var support = Int(py=support_matrix_addr) if n_support > 0 and kernel != 4 else 0
+    var fold = _svm_query_fold(params, 11)
+    var words: Tuple[Int32, Int32]
     with GILReleased(Python()):
-        svr_predict_resident_host(
+        words = svr_predict_resident_host(
             lease, slot, x, n_rows, n_cols, support, dual, n_support, b, kernel, gamma,
-            buffer_mib, degree, coef0, out_word,
+            buffer_mib, degree, coef0, out_word, fold,
         )
-    return PythonObject(n_rows)
+    return Python.list(Int(words[0]), Int(words[1]))
 
 
 def iforest_run_binding(

@@ -48,6 +48,7 @@ from checks.soft_f64 import SF64_ONE, sf64_sub
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from core.device_zero import enqueue_fill
+from core.device_query_x import DeviceQueryX, QueryFold, query_context
 from core.identity_trace import IdentityTrace
 from gaussian_process.checks.gp_sabotage import GP_SAB_NONE
 from gaussian_process.checks.kernels import (
@@ -373,7 +374,8 @@ def gpc_predict_all_device(
     out_kind: Int,
     out_addr: Int,
     lease: Int = -1,
-) raises:
+    fold: QueryFold = QueryFold.none(),
+) raises -> Tuple[Int32, Int32]:
     """`predict` (`out_kind` 1: n_star int64 class codes at `out_addr`) or
     `predict_proba` (`out_kind` 2: n_star x max(k, 2) float64, row-major)
     of a fitted classifier with k = len(y_addrs) binary fits, against ONE
@@ -388,7 +390,15 @@ def gpc_predict_all_device(
     the GP store's copies for that lease (gaussian_process/gp_resident_store.mojo;
     0 uploads them for this call only): slot 0 X_train, slot 1 + 2c the
     fit's y and pi, slot 2 + 2c its W_sr and L (only when the variance is
-    needed). The same bytes reach the same launches: the bits are the same."""
+    needed). The same bytes reach the same launches: the bits are the same.
+
+    The query (lane a7a-device-x-svm-gp-krr) is a `DeviceQueryX`: host
+    words at `xs_addr`, or the cross-validation fold `fold` gathered on the
+    device (then the entry runs on the fold store's context and a resident
+    lease reads as 0). Returns the query's (finite word, range word); the
+    door refuses a flagged query and discards `out_addr`'s words. The
+    synchronising `_gpc_upload_checked` scan of X_star (DEVIATION 1768
+    text) is gone from this entry."""
     var k = len(y_addrs)
     if k <= 0:
         raise Error("gpc_predict_all: needs at least one binary fit, got " + String(k))
@@ -406,8 +416,11 @@ def gpc_predict_all_device(
     var want_proba = not (binary and out_kind == GPC_ALL_CODES)
 
     var trace = IdentityTrace()
-    var ctx = _family_ctx()
+    var ctx = query_context(fold, _family_ctx())
     var resident = lease >= 0
+    # A fold runs on the fold store's context: its fresh model is uploaded
+    # for this call (lease 0), never kept under the family context's lease.
+    var use_lease = 0 if (resident and fold.active()) else lease
     var store = gp_resident_store()
     var dx: DeviceBuffer[DType.float32]
     if resident:
@@ -417,7 +430,7 @@ def gpc_predict_all_device(
             raise Error("gpr: X_train must have at least one feature, got " + String(n_features))
         if xt_addr == 0:
             raise Error("gpc: X_train has a null address")
-        var held = fitted_resident_view(store, ctx, lease, 0, [xt_addr], [n_train * n_features])
+        var held = fitted_resident_view(store, ctx, use_lease, 0, [xt_addr], [n_train * n_features])
         dx = held.bufs[0].copy()
         if held.fresh:
             # The refusal `_gpc_upload_checked` makes, once per upload.
@@ -425,18 +438,21 @@ def gpc_predict_all_device(
         _ = held^
     else:
         dx = _gpc_upload_checked(ctx, xt_addr, n_train, n_features, String("X_train"))
-    var dxs = _gpc_upload_checked(ctx, xs_addr, n_star, n_features, String("X_star"))
+    # TOMBSTONE: _gpc_upload_checked on X_star (synchronising scan, DEVIATION 1768 text) removed 2026-11-09 by lane a7a-device-x-svm-gp-krr; recoverable at 5b5490960d (docs/TOMBSTONES.md).
+    var qx = DeviceQueryX(ctx, xs_addr, n_star, n_features, fold)
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dkc = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)
     var dstack = ctx.enqueue_create_buffer[DType.float32](gp_kernel_stack_floats(n_train, n_star))
     ctx.synchronize()
     gp_kernel_matrix(
-        ctx, dkc, dx, dxs, dls, dstack, n_train, n_star, n_features, kernel, False, trace,
+        ctx, dkc, dx, qx.x, dls, dstack, n_train, n_star, n_features, kernel, False, trace,
         "gpc.kcross", GP_ELEM_TPB, GP_SAB_NONE,
     )
     ctx.synchronize()
+    # The query's status words were copied before the synchronisation above.
+    var words = (qx.finite_word(), qx.range_word())
     _ = dx^
-    _ = dxs^
+    _ = qx^
     _ = dls^
     _ = dstack^
 
@@ -460,7 +476,7 @@ def gpc_predict_all_device(
         if resident:
             _gpc_addr_check(y_addrs[c], String("y"))
             _gpc_addr_check(pi_addrs[c], String("pi"))
-            var fit = fitted_resident_view(store, ctx, lease, 1 + 2 * c, [y_addrs[c], pi_addrs[c]],
+            var fit = fitted_resident_view(store, ctx, use_lease, 1 + 2 * c, [y_addrs[c], pi_addrs[c]],
                                            [n_train, n_train])
             dyt = fit.bufs[0].copy()
             dpit = fit.bufs[1].copy()
@@ -476,7 +492,7 @@ def gpc_predict_all_device(
             if resident:
                 _gpc_addr_check(wsr_addrs[c], String("W_sr"))
                 _gpc_addr_check(l_addrs[c], String("L"))
-                var var_fit = fitted_resident_view(store, ctx, lease, 2 + 2 * c, [wsr_addrs[c], l_addrs[c]],
+                var var_fit = fitted_resident_view(store, ctx, use_lease, 2 + 2 * c, [wsr_addrs[c], l_addrs[c]],
                                                    [n_train, n_train * n_train])
                 dwv = var_fit.bufs[0].copy()
                 dl2 = var_fit.bufs[1].copy()
@@ -543,3 +559,4 @@ def gpc_predict_all_device(
     _ = dcodes64^
     # DEVIATION 1946: the context dies LAST.
     _ = ctx^
+    return words

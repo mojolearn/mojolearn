@@ -25,6 +25,7 @@ from core.hotpath_impl import reduce_stat, cast_elements, HP_F64, HP_SUM, HP_I32
 from bindings.gp_common_native import gp_extension, gp_caps, gp_entry, gp_kernel_arrays, gp_f32, gp_fit_owned
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
 from bindings.gp_svm_gp_state import gp_kernel_arrays_reused, gp_x_known
+from bindings.gp_query_x import GpQuery, gp_query, gp_query_address, gp_query_refuse, gp_query_scan
 from bindings.fitted_resident_door import fitted_resident_lease, fitted_resident_drop
 from bindings.mcls_classify import mcls_accuracy_fraction
 from bindings.mcls_common import mc_shape_of
@@ -289,18 +290,23 @@ def _gpc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     _ = codes^
 
 
-def _gpc_query(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_query(X)`."""
+def _gpc_query(fields: PythonObject, source: PythonObject, context: PythonObject,
+               entry_tests: Bool = False) raises -> GpQuery:
+    """`_query(X)` as a GpQuery (bindings/gp_query_x.mojo; lane a7a):
+    `entry_tests` (the gpc_predict_all entries, which return the query's
+    status words) keeps a cross-validation fold on the device; any other
+    route tests the query first (gp_query_scan)."""
     if not py_contains(fields, PythonObject("estimators_")):
         raise Error(String(_NAME) + ": call fit() or load() first")
     # The public door already admitted this X as C-order float32 and
     # registered it (bindings/gp_svm_records.mojo): no second snapshot.
-    var q = source if gp_x_known(source, context) else admit_family(source, 2, "X", context).array
-    var d = Int(py=q.shape[1])
+    var q = gp_query(source, "GaussianProcessClassifier", context, entry_tests)
     var fitted = Int(py=fields["n_features_in_"])
-    if d != fitted:
-        raise Error(String(_NAME) + ": X has " + String(d) + " features, fit saw " + String(fitted))
-    return q
+    if q.cols != fitted:
+        raise Error(String(_NAME) + ": X has " + String(q.cols) + " features, fit saw " + String(fitted))
+    if not entry_tests:
+        gp_query_scan(q, "GaussianProcessClassifier", context)
+    return q^
 
 
 def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: PythonObject, want_proba: Bool,
@@ -385,12 +391,14 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
     return Python.tuple(mean, var_out, proba)
 
 
-def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObject, q: PythonObject, out_kind: Int,
+def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObject, gq: GpQuery, out_kind: Int,
                      context: PythonObject, kernel_arrays: PythonObject) raises -> PythonObject:
     """`_predict_all`: every binary fit against one cross kernel in one
     `gpc_predict_all` session; int64 codes (1) or float64 rows (2).
-    `kernel_arrays`: `gp_kernel_arrays(fields["_kernel"])`."""
-    var n_star = Int(py=q.shape[0])
+    `kernel_arrays`: `gp_kernel_arrays(fields["_kernel"])`. The query `gq`
+    is host words or a device fold; the entry returns its status words and
+    a flagged query is refused here (lane a7a)."""
+    var n_star = gq.rows
     var xt = gp_f32(fields, "X_train_", 2, context)
     var n_train = Int(py=xt.shape[0])
     var n_features = Int(py=xt.shape[1])
@@ -403,7 +411,7 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
     else:
         out = family_array(Python.tuple(n_star, max(k, 2)), "<f8", context)
     # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpc_predict_all_binding.
-    var addrs = Python.list(classical_address(xt), classical_address(q), classical_address(arrays[0]),
+    var addrs = Python.list(classical_address(xt), gp_query_address(gq), classical_address(arrays[0]),
                             classical_address(arrays[1]), classical_address(arrays[2]), classical_address(arrays[3]),
                             classical_address(out))
     _ = xt  # keep the Python object alive through the native call above
@@ -441,7 +449,13 @@ def _gpc_predict_all(model: PythonObject, ext: PythonObject, fields: PythonObjec
             fitted_resident_drop(model, _GPC_RESIDENT_SLOT)
         _ = py_call(params.append, PythonObject(lease))
         name = String("gpc_predict_all_resident")
-    _ = family_call(gp_entry(ext, name), addrs, params)
+    if gq.store.active():
+        # then the fold's store ids (the entry gathers the rows on the device)
+        _ = py_call(addrs.append, PythonObject(gq.store.base_id))
+        _ = py_call(addrs.append, PythonObject(gq.store.base_rows))
+        _ = py_call(addrs.append, PythonObject(gq.store.index_id))
+    var words = family_call(gp_entry(ext, name), addrs, params)
+    gp_query_refuse(Int(py=words[0]), Int(py=words[1]), gq, "GaussianProcessClassifier")
     _ = xt  # keep the Python object alive through the native call above
     _ = kept^
     _ = xt^
@@ -483,12 +497,14 @@ def _gpc_predict_proba(model: PythonObject, args: PythonObject, context: PythonO
     """`predict_proba(X)`; args = (binding, X)."""
     classical_connect_numpy(context)
     var fields = py_fields(model)
-    var q = _gpc_query(fields, args[1], context)
     var ext = _gpc_ext(model, args[0], context)
+    var all_entry = (gp_caps(ext) & 1) == 1
+    var gq = _gpc_query(fields, args[1], context, all_entry)
     # Packed once per kernel state of this model (bindings/gp_svm_records.mojo).
     var arrays = gp_kernel_arrays_reused(model, fields["_kernel"], context)
-    if (gp_caps(ext) & 1) == 1:
-        return _gpc_predict_all(model, ext, fields, q, 2, context, arrays)
+    if all_entry:
+        return _gpc_predict_all(model, ext, fields, gq, 2, context, arrays)
+    var q = gq.q
     if Int(py=fields["n_classes_"]) == 2:
         # `[1 - p, p]` from the binding (`gpc_binary_out`)
         return _gpc_latent(ext, fields, fields["estimators_"][0], q, True, 2, context, arrays)[3]
@@ -500,13 +516,15 @@ def _gpc_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     """`predict(X)`; args = (binding, base binding, X)."""
     classical_connect_numpy(context)
     var fields = py_fields(model)
-    var q = _gpc_query(fields, args[2], context)
     var ext = _gpc_ext(model, args[0], context)
+    var all_entry = (gp_caps(ext) & 1) == 1
+    var gq = _gpc_query(fields, args[2], context, all_entry)
+    var q = gq.q
     # Packed once per kernel state of this model (bindings/gp_svm_records.mojo).
     var arrays = gp_kernel_arrays_reused(model, fields["_kernel"], context)
     var codes: PythonObject
-    if (gp_caps(ext) & 1) == 1:
-        codes = _gpc_predict_all(model, ext, fields, q, 1, context, arrays)
+    if all_entry:
+        codes = _gpc_predict_all(model, ext, fields, gq, 1, context, arrays)
     elif Int(py=fields["n_classes_"]) == 2:
         # `mean > 0` codes from the binding (`gpc_binary_out`)
         codes = _gpc_latent(ext, fields, fields["estimators_"][0], q, False, 1, context, arrays)[3]
@@ -527,7 +545,7 @@ def _gpc_latent_mean_and_variance(model: PythonObject, args: PythonObject, conte
     """`latent_mean_and_variance(X)`; args = (binding, X)."""
     classical_connect_numpy(context)
     var fields = py_fields(model)
-    var q = _gpc_query(fields, args[1], context)
+    var q = _gpc_query(fields, args[1], context).q
     var n_classes = Int(py=fields["n_classes_"])
     if n_classes > 2:
         raise Error("Returning the mean and variance of the latent function f is "

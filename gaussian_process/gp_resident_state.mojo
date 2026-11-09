@@ -24,6 +24,13 @@ WHAT DOES NOT CHANGE. The resident predict runs `gpr_predict_dev`
 its own uploads, over copies of the same bytes: the same launches in the
 same order, so the bits are the same, in both numeric tiers (the host-list
 route `gpr_predict_host` runs the same launches too).
+
+THE QUERY (lane a7a-device-x-svm-gp-krr, 2026-11-09): a `DeviceQueryX`
+(core/device_query_x.mojo), host words copied once or a cross-validation
+fold gathered on the device, its finite and range words returned with the
+clamp count; the door refuses in scikit-learn's wording. The synchronising
+`_gpc_upload_checked` scan (DEVIATION 1768 text) is gone from this route.
+A fold runs on the fold store's context with lease 0.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.fitted_resident_store import (
@@ -34,7 +41,8 @@ from core.fitted_resident_store import (
 )
 from gaussian_process.checks.kernels import GPKernelSpec, gp_kernel_diag, gp_validate_kernel
 from gaussian_process.estimator import _family_ctx
-from gaussian_process.gpc_ovr import _gpc_upload_checked
+# TOMBSTONE: _gpc_upload_checked on the resident GPR query (the synchronising first-non-finite scan, DEVIATION 1768 text) removed 2026-11-09 by lane a7a-device-x-svm-gp-krr: the query's finite word rides back with the result (core/device_query_x.mojo). Never reached main: recoverable at 5b5490960d.
+from core.device_query_x import DeviceQueryX, QueryFold, query_context
 from gaussian_process.gpr_resident import gpr_predict_dev
 from gaussian_process.gp_resident_store import gp_resident_store
 
@@ -89,11 +97,15 @@ def gpr_predict_resident_device(
     var_addr: Int,
     std_addr: Int,
     clamped_addr: Int,
-) raises -> Int:
+    fold: QueryFold = QueryFold.none(),
+) raises -> Tuple[Int, Int32, Int32]:
     """`gpr_predict_ptr_device` with X_train_, alpha_ and L_ read from the
     lease's device copies (uploaded from these addresses at the first call
-    of the lease, and again only when one of them changed). The refusals
-    are the pointer route's, in its order. Returns the clamp count."""
+    of the lease, and again only when one of them changed). The query is
+    host words at `xs_addr` or the device fold `fold`. The refusals are the
+    pointer route's, in its order, except the query's finite test: returns
+    (clamp count, finite word, range word), the door refusing a flagged
+    query and discarding the outputs."""
     if info != 0:
         raise Error(
             "gpr_predict_host: refusing to predict from a FAILED fit"
@@ -112,32 +124,40 @@ def gpr_predict_resident_device(
         raise Error("gpr_predict: a model or output address is null")
     if return_std and (l_addr == 0 or var_addr == 0 or std_addr == 0 or clamped_addr == 0):
         raise Error("gpr_predict: return_std needs the factor and the three variance outputs")
+    if n_features <= 0:
+        raise Error("gpr: X_star must have at least one feature, got " + String(n_features))
     gp_validate_kernel(kernel, n_features)
     var kss = gp_kernel_diag(kernel)
 
     var store = gp_resident_store()
-    var ctx = _family_ctx()
-    # The query is checked before any model copy is taken.
-    var dxs = _gpc_upload_checked(ctx, xs_addr, n_star, n_features, String("X_star"))
-    var model = fitted_resident_view(store, ctx, lease, 0, [xt_addr, dual_addr], [n_train * n_features, n_train])
+    var ctx = query_context(fold, _family_ctx())
+    var qx = DeviceQueryX(ctx, xs_addr, n_star, n_features, fold)
+    # A fold runs on the fold store's context: its fresh model is uploaded
+    # for this call (lease 0), never kept under the family context's lease.
+    var use_lease = 0 if fold.active() else lease
+    var model = fitted_resident_view(store, ctx, use_lease, 0, [xt_addr, dual_addr], [n_train * n_features, n_train])
     var dx = model.bufs[0].copy()
     var ddual = model.bufs[1].copy()
     var dl: DeviceBuffer[DType.float32]
     if return_std:
-        var factor = fitted_resident_view(store, ctx, lease, 1, [l_addr], [n_train * n_train])
+        var factor = fitted_resident_view(store, ctx, use_lease, 1, [l_addr], [n_train * n_train])
         dl = factor.bufs[0].copy()
         _ = factor^
     else:
         dl = ctx.enqueue_create_buffer[DType.float32](1)
+    # gpr_predict_dev synchronises before it returns: the status words
+    # copied after the query are valid below.
     var n_clamped = gpr_predict_dev(
-        ctx, dx, ddual, dl, dxs, n_train, n_features, n_star, kernel, kss,
+        ctx, dx, ddual, dl, qx.x, n_train, n_features, n_star, kernel, kss,
         return_std, unnorm, y_std, y_mean, mean_addr, var_addr, std_addr, clamped_addr,
     )
+    var finite = qx.finite_word()
+    var in_range = qx.range_word()
     _ = dx^
     _ = ddual^
     _ = dl^
-    _ = dxs^
+    _ = qx^
     _ = model^
     # DEVIATION 1946: the context dies LAST.
     _ = ctx^
-    return n_clamped
+    return (n_clamped, finite, in_range)

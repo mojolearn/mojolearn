@@ -77,6 +77,7 @@ from cholesky.checks.potrf import (
 from cholesky.checks.trsm import CHOL_SOLVE_TPB
 from core.device_plan import device_plan_current
 from core.identity_trace import IdentityTrace
+from core.device_query_x import DeviceQueryX, QueryFold, query_context
 from decomposition.checks.jacobi_eigh_device import (
     JACOBI_SWEEPS,
     JACOBI_TOL,
@@ -1048,29 +1049,38 @@ def kernel_ridge_predict_ptr_into[out_origin: MutOrigin, //](
     n_query: Int,
     output: MutPointer[Float32, out_origin],
     mut trace: IdentityTrace,
-) raises:
+    fold: QueryFold = QueryFold.none(),
+) raises -> Tuple[Int32, Int32]:
     """KRR_IDN_PTR_IN: `kernel_ridge_predict_host` with the fit's X and dual
-    and the query X read from the caller's addresses on the device (the
-    query scanned there, `_upload_checked`; the fitted arrays unchecked as
-    on the list route) and the n_query x t predictions copied into
-    `output`. The same launches as the list route."""
-    if xfit_addr == 0 or dual_addr == 0 or xnew_addr == 0:
+    read from the caller's addresses on the device (unchecked, as on the
+    list route) and the n_query x t predictions copied into `output`. The
+    same launches as the list route. The query (lane a7a) is a
+    `DeviceQueryX` (core/device_query_x.mojo): host words at `xnew_addr`, or
+    the cross-validation fold `fold` gathered on the device (then the call
+    runs on the fold store's context). Returns the query's (finite word,
+    range word); the door refuses a flagged query and discards `output`."""
+    if xfit_addr == 0 or dual_addr == 0 or (xnew_addr == 0 and not fold.active()):
         raise Error("kernel_ridge_predict: null X_fit, dual or X address")
     if n <= 0 or d <= 0 or t <= 0:
         raise Error(
             "kernel_ridge_predict: the model needs positive n, d and n_targets, got "
             + String(n) + ", " + String(d) + ", " + String(t)
         )
-    var ctx = _family_ctx()
-    var dq = _upload_checked(ctx, xnew_addr, n_query, d, "predict X")
+    var ctx = query_context(fold, _family_ctx())
+    # TOMBSTONE: _upload_checked on the predict query (synchronising scan, DEVIATION 1686 text) removed 2026-11-09 by lane a7a-device-x-svm-gp-krr; recoverable at 5b5490960d (docs/TOMBSTONES.md).
+    var qx = DeviceQueryX(ctx, xnew_addr, n_query, d, fold)
     var dfit = _upload_ptr(ctx, xfit_addr, n * d)
     var ddual = _upload_ptr(ctx, dual_addr, n * t)
-    kernel_ridge_predict_dev(ctx, dq, dfit, ddual, n, d, t, kp, n_query, output, trace)
-    _ = dq^
+    # kernel_ridge_predict_dev synchronises before its read-back: the status
+    # words copied after the query are valid below.
+    kernel_ridge_predict_dev(ctx, qx.x, dfit, ddual, n, d, t, kp, n_query, output, trace)
+    var words = (qx.finite_word(), qx.range_word())
+    _ = qx^
     _ = dfit^
     _ = ddual^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
+    return words
 
 
 def kernel_ridge_predict_dev[out_origin: MutOrigin, //](

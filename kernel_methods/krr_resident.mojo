@@ -38,6 +38,7 @@ from std.atomic import Atomic, Ordering
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.identity_trace import IdentityTrace
+from core.device_query_x import DeviceQueryX, QueryFold
 from svm.impl.svm_parameter import KernelParams
 from kernel_methods.estimator import (
     _family_ctx,
@@ -219,10 +220,13 @@ def kernel_ridge_predict_resident[out_origin: MutOrigin, //](
     n_query: Int,
     output: MutPointer[Float32, out_origin],
     mut trace: IdentityTrace,
-) raises:
+) raises -> Tuple[Int32, Int32]:
     """`kernel_ridge_predict_ptr_into` over the handle's fitted arrays: the
-    query checked and uploaded (`_upload_checked`), then
-    `kernel_ridge_predict_dev`."""
+    query uploaded with its finite status (core/device_query_x.mojo, lane
+    a7a), then `kernel_ridge_predict_dev`. Returns the query's (finite word,
+    range word); the door refuses a flagged query. A cross-validation fold
+    takes `kernel_ridge_predict_ptr_into` (its context is the fold store's,
+    not the handle's)."""
     if xnew_addr == 0:
         raise Error("kernel_ridge_predict: null X_fit, dual or X address")
     if n <= 0 or d <= 0 or t <= 0:
@@ -238,7 +242,12 @@ def kernel_ridge_predict_resident[out_origin: MutOrigin, //](
             + " fit with " + String(view.t) + " targets, the call names " + String(n) + " x "
             + String(d) + " with " + String(t)
         )
-    var dq = _upload_checked(view.ctx, xnew_addr, n_query, d, "predict X")
-    kernel_ridge_predict_dev(view.ctx, dq, view.x_fit, view.dual, n, d, t, kp, n_query, output, trace)
-    _ = dq^
+    # TOMBSTONE: _upload_checked on the predict query (synchronising scan, DEVIATION 1686 text) removed 2026-11-09 by lane a7a-device-x-svm-gp-krr; recoverable at 5b5490960d (docs/TOMBSTONES.md).
+    var qx = DeviceQueryX(view.ctx, xnew_addr, n_query, d, QueryFold.none())
+    # kernel_ridge_predict_dev synchronises before its read-back: the status
+    # words copied after the query are valid below.
+    kernel_ridge_predict_dev(view.ctx, qx.x, view.x_fit, view.dual, n, d, t, kp, n_query, output, trace)
+    var words = (qx.finite_word(), qx.range_word())
+    _ = qx^
     _ = view^
+    return words
