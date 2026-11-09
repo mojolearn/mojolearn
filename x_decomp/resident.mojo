@@ -686,6 +686,61 @@ def dev_eigh_run(ia: Int, pw: F32Ptr, pv: F32Ptr, n: Int, uplo: Int) raises -> I
     return n
 
 
+comptime _EIGH_REV_TPB = 256
+
+
+def eigh_rev_kernel(w_asc: F32Ptr, v_asc: F32Ptr, w_out: F32Ptr, v_out: F32Ptr, n_in: Int32):
+    """Cell t of the descending answer (copies): v_out[i, j] = v_asc[i,
+    n - 1 - j], and for t < n w_out[t] = w_asc[n - 1 - t]
+    (`A.take_cols(range(c - 1, -1, -1))` of both)."""
+    var n = Int(n_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= n * n:
+        return
+    var i = t // n
+    var j = t - i * n
+    v_out.unsafe_store(t, v_asc.unsafe_load(i * n + (n - 1 - j)))
+    if t < n:
+        w_out.unsafe_store(t, w_asc.unsafe_load(n - 1 - t))
+
+
+def dev_eigh_desc_run(ia: Int, iw: Int, iv: Int, n: Int) raises:
+    """The n x n device matrix a (left as it is) into the device matrices w
+    (1 x n, eigenvalues DESCENDING) and v (n x n, the matching vectors in
+    columns): `eigh_op_sym` (`DevExec.eigh_enq`) on a device copy, then
+    `eigh_rev_kernel` (the column reversal the owners' host
+    `_reversed_columns` copied). One wait, for the status word (lane
+    n9-decomp-eigh-families: IncrementalPCA, FastICA's whitening and
+    FactorAnalysis's owner; was w and V home, reversed, uploaded again)."""
+    if n < 1:
+        raise Error("x_decomp: the resident eigh needs n >= 1")
+    var cells = n * n
+    if cells > 2147483647:
+        raise Error("x_decomp: eigh exceeds the Int32 index bound")
+    _ = _ptr(ia, cells)
+    var pw = _ptr(iw, n)
+    var pv = _ptr(iv, cells)
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    var da = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    var dw = ctx.enqueue_create_buffer[DType.float32](n)
+    var dv = ctx.enqueue_create_buffer[DType.float32](cells)
+    var status = DevExec.eigh_enq(ctx, da, dw, dv, n)
+    ctx.enqueue_function[eigh_rev_kernel](
+        F32Ptr(unsafe_from_address=Int(dw.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(dv.unsafe_ptr())),
+        pw, pv, Int32(n), grid_dim=(cells + _EIGH_REV_TPB - 1) // _EIGH_REV_TPB, block_dim=_EIGH_REV_TPB,
+    )
+    var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
+    ctx.synchronize()
+    _ = da^
+    _ = dw^
+    _ = dv^
+    _ = status^
+    DevExec.eigh_status_check(hs, n)
+
+
 def dev_eigh_to_run(ia: Int, iw: Int, iv: Int, n: Int, uplo: Int) raises -> Int:
     """`x_decomp_eigh` of the device matrix a (n x n, left as it is) into the
     device matrices w (n) and v (n x n, vectors in columns): the executor op
