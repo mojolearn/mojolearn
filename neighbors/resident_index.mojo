@@ -52,6 +52,8 @@ from std.atomic import Atomic, Ordering
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx, neural_device_plan
+from core.ctx_key import ctx_cache_key
+from core.msel_device_x import msel_store_context
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
@@ -384,6 +386,22 @@ def knn_index_prepare(
     return _locked_insert(state, entry^)
 
 
+def knn_fold_ready() raises -> Bool:
+    """Whether a resident search can gather a model-selection fold's queries
+    on the device (lane a8b-device-x-neighbors-rest): the folds live in the
+    IDENTICAL store (core/msel_device_x.mojo `msel_fold_store`), so this
+    build must be the identical one (its own store, `msel_store()`, IS the
+    fold store) and the context a resident index of the calling thread lives
+    on (this slot on the device plan's root) must be `msel_store_context()`,
+    the context the store's buffers belong to. Otherwise (a `fast` build, or
+    a plan bound to another device) the door gathers the fold on the host."""
+    comptime if _DEVCTX_MODE == _DEVCTX_IDENTICAL:
+        var ctx = process_ctx[_DEVCTX_SLOT](neural_device_plan())
+        return ctx_cache_key(ctx) == ctx_cache_key(msel_store_context())
+    else:
+        return False
+
+
 def knn_index_release(handle: Int) raises:
     """Drop the device copy; a released handle is refused by every later call."""
     var state = _registry()
@@ -485,9 +503,14 @@ def knn_index_classify(
     metric_arg: Float32 = Float32(2.0),
     weights: Int = WEIGHTS_UNIFORM,
     status_addr: Int = 0,
+    fold_base: Int = -1,
+    fold_base_rows: Int = 0,
+    fold_index: Int = -1,
 ) raises -> Int:
     """`knn_classifier_predict_resident` over the handle's index and
-    context (DEVIATION 3002)."""
+    context (DEVIATION 3002). `fold_*` (lane a8b-device-x-neighbors-rest):
+    the queries are a model-selection fold gathered on the device out of
+    the store (`knn_fold_ready`: the handle's context is the store's)."""
     var state = _registry()
     var view = _knn_resident_view(handle, n_index, n_features, "knn resident predict")
     var cache = _locked_take_cache(state, handle)
@@ -499,7 +522,7 @@ def knn_index_classify(
         metric, metric_arg, weights,
         MutPointer(to=cache).unsafe_origin_cast[MutAnyOrigin](),
         MutPointer(to=vote).unsafe_origin_cast[MutAnyOrigin](),
-        status_addr,
+        status_addr, fold_base, fold_base_rows, fold_index,
     )
     _locked_put_vote(state, handle, view.serial, vote^)
     _locked_put_cache(state, handle, view.serial, cache^)
@@ -523,9 +546,12 @@ def knn_index_regress(
     metric_arg: Float32 = Float32(2.0),
     weights: Int = WEIGHTS_UNIFORM,
     status_addr: Int = 0,
+    fold_base: Int = -1,
+    fold_base_rows: Int = 0,
+    fold_index: Int = -1,
 ) raises -> Int:
     """`knn_regressor_predict_resident` over the handle's index and
-    context (DEVIATION 3002)."""
+    context (DEVIATION 3002); `fold_*` as in `knn_index_classify`."""
     var state = _registry()
     var view = _knn_resident_view(handle, n_index, n_features, "knn resident predict")
     var cache = _locked_take_cache(state, handle)
@@ -534,7 +560,7 @@ def knn_index_regress(
         n_features, k, y_ptr, n_outputs, out_ptr, requested_query_tile,
         metric, metric_arg, weights,
         MutPointer(to=cache).unsafe_origin_cast[MutAnyOrigin](),
-        status_addr,
+        status_addr, fold_base, fold_base_rows, fold_index,
     )
     _locked_put_cache(state, handle, view.serial, cache^)
     _ = view^

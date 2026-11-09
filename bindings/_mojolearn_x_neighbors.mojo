@@ -77,8 +77,9 @@ def sqdist_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises 
     var v_n = _n(i_, 0)
     var v_m = _n(i_, 1)
     var v_d = _n(i_, 2)
+    var v_status = _n(i_, 3) if len(i_) > 3 else 0
     with GILReleased(Python()):
-        op_sqdist(v_x, v_y, v_res, v_n, v_m, v_d)
+        op_sqdist(v_x, v_y, v_res, v_n, v_m, v_d, v_status)
     return PythonObject(None)
 
 
@@ -105,8 +106,9 @@ def kernel_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises 
     var v_gamma = _f(f_, 0)
     var v_coef0 = _f(f_, 1)
     var v_degree = _n(i_, 4)
+    var v_status = _n(i_, 5) if len(i_) > 5 else 0
     with GILReleased(Python()):
-        op_kernel(v_x, v_y, v_res, v_n, v_m, v_d, v_kind, v_gamma, v_coef0, v_degree)
+        op_kernel(v_x, v_y, v_res, v_n, v_m, v_d, v_kind, v_gamma, v_coef0, v_degree, v_status)
     return PythonObject(None)
 
 
@@ -177,8 +179,9 @@ def knn_sq_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises 
     var v_d = _n(i_, 2)
     var v_k = _n(i_, 3)
     var v_exclude_self = _n(i_, 4)
+    var v_status = _n(i_, 5) if len(i_) > 5 else 0
     with GILReleased(Python()):
-        op_knn_sq(v_x, v_y, v_dist, v_idx, v_n, v_m, v_d, v_k, v_exclude_self)
+        op_knn_sq(v_x, v_y, v_dist, v_idx, v_n, v_m, v_d, v_k, v_exclude_self, v_status)
     return PythonObject(None)
 
 
@@ -296,8 +299,9 @@ def nc_std_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises 
     var v_n = _n(i_, 0)
     var v_d = _n(i_, 1)
     var v_n_classes = _n(i_, 2)
+    var v_status = _n(i_, 3) if len(i_) > 3 else 0
     with GILReleased(Python()):
-        op_nc_std(v_x, v_lab, v_cent, v_std, v_n, v_d, v_n_classes)
+        op_nc_std(v_x, v_lab, v_cent, v_std, v_n, v_d, v_n_classes, v_status)
     return PythonObject(None)
 
 
@@ -346,8 +350,9 @@ def nc_decision_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) ra
     var v_n = _n(i_, 0)
     var v_d = _n(i_, 1)
     var v_n_classes = _n(i_, 2)
+    var v_status = _n(i_, 3) if len(i_) > 3 else 0
     with GILReleased(Python()):
-        op_nc_decision(v_q, v_cent, v_std, v_prior, v_res, v_n, v_d, v_n_classes)
+        op_nc_decision(v_q, v_cent, v_std, v_prior, v_res, v_n, v_d, v_n_classes, v_status)
     return PythonObject(None)
 
 
@@ -757,8 +762,9 @@ def nc_stats_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raise
     var v_n = _n(i_, 0)
     var v_d = _n(i_, 1)
     var v_n_classes = _n(i_, 2)
+    var v_status = _n(i_, 3) if len(i_) > 3 else 0
     with GILReleased(Python()):
-        op_nc_stats(v_x, v_lab, v_nk, v_cent, v_std, v_dsc, v_n, v_d, v_n_classes)
+        op_nc_stats(v_x, v_lab, v_nk, v_cent, v_std, v_dsc, v_n, v_d, v_n_classes, v_status)
     return PythonObject(None)
 
 
@@ -856,8 +862,9 @@ def knn_sq_tiled_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) r
     var v_d = _n(i_, 2)
     var v_k = _n(i_, 3)
     var v_exclude_self = _n(i_, 4)
+    var v_status = _n(i_, 5) if len(i_) > 5 else 0
     with GILReleased(Python()):
-        op_knn_sq_tiled(v_x, v_y, v_dist, v_idx, v_n, v_m, v_d, v_k, v_exclude_self)
+        op_knn_sq_tiled(v_x, v_y, v_dist, v_idx, v_n, v_m, v_d, v_k, v_exclude_self, v_status)
     return PythonObject(None)
 
 

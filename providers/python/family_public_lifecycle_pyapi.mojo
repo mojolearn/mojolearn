@@ -52,11 +52,15 @@ struct FamilyLifecycle(Copyable, Movable):
     # whose store ids resolve reaches it as the DeviceRows itself (no host
     # gather here); its entry gathers the rows on the device.
     var device_x: Bool
+    # The owner's first x_neighbors op tests a borrowed X behind its upload
+    # (its status slot, lane a8b-device-x-neighbors-rest): the scan is
+    # deferred to it; a cast X is still refused by its cast.
+    var defer: Bool
 
     def __init__(out self, method: String, requires_fit: Bool = True, scan: Bool = False,
                  replace: Bool = True, graph: Bool = False, target: Int = -1,
                  classifier: Bool = False, required: Bool = False, widen: Bool = False,
-                 device_x: Bool = False):
+                 device_x: Bool = False, defer: Bool = False):
         self.method = method
         self.requires_fit = requires_fit
         self.scan = scan
@@ -67,6 +71,7 @@ struct FamilyLifecycle(Copyable, Movable):
         self.required = required
         self.widen = widen
         self.device_x = device_x
+        self.defer = defer
 
 
 def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
@@ -98,14 +103,16 @@ def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
     if operation == "family_xn_semi_schi2_fit_transform":
         return FamilyLifecycle("fit_transform", scan=True)
     # LabelPropagation / LabelSpreading: y (-1 marks unlabeled) at position 2.
+    # Lane a8b-device-x-neighbors-rest: X's finite test rides behind the
+    # owner's first op upload (bindings/neighbors_semi_native.mojo).
     if operation == "family_xn_semi_lp_fit":
-        return FamilyLifecycle("fit", scan=True, target=2, classifier=True, required=True)
+        return FamilyLifecycle("fit", scan=True, target=2, classifier=True, required=True, defer=True)
     if operation == "family_xn_semi_lp_predict_proba":
-        return FamilyLifecycle("predict_proba", scan=True)
+        return FamilyLifecycle("predict_proba", scan=True, defer=True)
     if operation == "family_xn_semi_lp_predict":
-        return FamilyLifecycle("predict", scan=True)
+        return FamilyLifecycle("predict", scan=True, defer=True)
     if operation == "family_xn_semi_lp_score":
-        return FamilyLifecycle("score", scan=True)
+        return FamilyLifecycle("score", scan=True, defer=True)
     # PageRank / Louvain take an adjacency (dense, scipy.sparse or a CSR tuple).
     if operation == "family_xn_graph_pagerank_fit" or operation == "family_xn_graph_louvain_fit":
         return FamilyLifecycle("fit", replace=False, graph=True)
@@ -252,7 +259,8 @@ def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, oper
         # The finiteness test rides in the admission (the cast's own verdict,
         # or one parallel scan of a borrowed X): no second pass over X.
         var snapshot = admit_family_meta(source, 2, "X", context, True, finite=spec.scan,
-                                         refusal=admitted_finite_wording(name, "X"))
+                                         refusal=admitted_finite_wording(name, "X"),
+                                         defer_finite=spec.defer)
         rows = snapshot.shape[0]
         columns = snapshot.shape[1]
         # The snapshot's buffer and owner, recorded before any refusal below

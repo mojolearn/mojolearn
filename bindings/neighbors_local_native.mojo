@@ -45,6 +45,7 @@ from bindings.classical_labels import (
     classical_decode_labels, classical_accuracy,
 )
 from bindings.admitted_input import admitted_array, admitted_vector, admit_c_view, admitted_dtype
+from bindings.admitted_input import admitted_finite_refuse
 from checks.numerics import pinned_mul_f64
 
 # x_neighbors/items.mojo's unary codes (`_U_SQRT`, `_U_IDENTITY`).
@@ -244,14 +245,19 @@ def _copy_f32(x: PythonObject, context: PythonObject) raises -> PythonObject:
     return out
 
 
-def _sqdist(binding: PythonObject, a: PythonObject, b: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_XNeighbors._sqdist(A, B)`."""
+def _sqdist(binding: PythonObject, a: PythonObject, b: PythonObject, context: PythonObject,
+            status: Int = 0) raises -> PythonObject:
+    """`_XNeighbors._sqdist(A, B)`; `status`: A's finite status word (its
+    status slot; 0 not asked)."""
     var n = _rows(a)
     var d = _cols(a)
     var m = _rows(b)
     var out = _out(Python.tuple(n, m), "<f4", context)
+    var ints = Python.list(_i(n), _i(m), _i(d))
+    if status != 0:
+        _ = py_call(ints.append, _i(status))
     _op(binding, "sqdist", Python.list(classical_address(a), classical_address(b), classical_address(out)),
-        Python.list(_i(n), _i(m), _i(d)), Python.list(), context)
+        ints, Python.list(), context)
     _ = a  # keep the Python object alive through the native call above
     _ = b  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
@@ -299,14 +305,17 @@ def _unary(binding: PythonObject, x: PythonObject, code: Int, a: Float64, bias: 
 
 
 def _knn(binding: PythonObject, q: PythonObject, r: PythonObject, k: Int, exclude_self: Bool,
-         context: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
+         context: PythonObject, status: Int = 0) raises -> Tuple[PythonObject, PythonObject]:
     """`_XNeighbors._knn(Q, R, k, exclude_self)`: `_knn_sq` (the fused
     `knn_sq_tiled`, `knn_sq` under MOJOLEARN_XN_OLD_ITEMS, sqdist +
-    knn_select under MOJOLEARN_XN_UNFUSED_KNN), then the square root."""
+    knn_select under MOJOLEARN_XN_UNFUSED_KNN), then the square root.
+    `status` (lane a8b-device-x-neighbors-rest; 0: not asked): the host
+    address of the int32 word that receives Q's finite status, from the
+    first op that uploads Q (its status slot)."""
     var sq: PythonObject
     var idx: PythonObject
     if _flag(context, "unfused_knn"):
-        var pair = _knn_select(binding, _sqdist(binding, q, r, context), k, exclude_self, context)
+        var pair = _knn_select(binding, _sqdist(binding, q, r, context, status), k, exclude_self, context)
         sq = pair[0]
         idx = pair[1]
     else:
@@ -315,9 +324,12 @@ def _knn(binding: PythonObject, q: PythonObject, r: PythonObject, k: Int, exclud
         var m = _rows(r)
         sq = _out(Python.tuple(n, k), "<f4", context)
         idx = _out(Python.tuple(n, k), "<i4", context)
+        var ints = Python.list(_i(n), _i(m), _i(d), _i(k), _i(1 if exclude_self else 0))
+        if status != 0:
+            _ = py_call(ints.append, _i(status))
         _op(binding, "knn_sq" if _flag(context, "old_items") else "knn_sq_tiled",
             Python.list(classical_address(q), classical_address(r), classical_address(sq), classical_address(idx)),
-            Python.list(_i(n), _i(m), _i(d), _i(k), _i(1 if exclude_self else 0)), Python.list(), context)
+            ints, Python.list(), context)
         _ = q  # keep the Python object alive through the native call above
         _ = r  # keep the Python object alive through the native call above
     var root = _unary(binding, sq, _U_SQRT, 1.0, 0.0, context)
@@ -405,7 +417,13 @@ def _lof_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(d)
                     + ")) while a minimum of 2 is required.")
     var k = min(Int(py=family_call(b.int, family_field(fields, "n_neighbors"))), n - 1)
-    var pair = _knn(binding, x, x, k, True, context)
+    # Lane a8b-device-x-neighbors-rest: X's finite test rides behind the
+    # k-NN op's upload (the public admission deferred it; a cast X was
+    # refused by its cast).
+    var status = List[Int32](length=1, fill=Int32(0))
+    var pair = _knn(binding, x, x, k, True, context, Int(status.unsafe_ptr()))
+    admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
+    _ = status^
     var dist = pair[0]
     var idx = pair[1]
     var lrd = _out(Python.tuple(n), "<f4", context)
@@ -460,13 +478,18 @@ def _lof_novelty(fields: PythonObject, what: String) raises:
 
 
 def _lof_score_samples(binding: PythonObject, fields: PythonObject, source: PythonObject,
-                       context: PythonObject) raises -> PythonObject:
-    """`LocalOutlierFactor.score_samples(X)` after its novelty check."""
+                       context: PythonObject, name: String) raises -> PythonObject:
+    """`LocalOutlierFactor.score_samples(X)` after its novelty check. The
+    queries' finite test rides behind the k-NN op's upload; `name` words
+    its refusal."""
     var q = _f32(source, context)
     var k = _int_word(family_field(fields, "n_neighbors_"))
     var nf = _int_word(family_field(fields, "n_samples_fit_"))
     var fit_x = family_field(fields, "_fit_X")
-    var pair = _knn(binding, q, fit_x, k, False, context)
+    var status = List[Int32](length=1, fill=Int32(0))
+    var pair = _knn(binding, q, fit_x, k, False, context, Int(status.unsafe_ptr()))
+    admitted_finite_refuse(Int(status[0]), name)
+    _ = status^
     var dist = pair[0]
     var idx = pair[1]
     var nq = _rows(q)
@@ -494,7 +517,7 @@ def _lof_decision(model: PythonObject, args: PythonObject, context: PythonObject
     through the identity unary."""
     var fields = py_fields(model)
     _lof_novelty(fields, "decision_function")
-    var score = _lof_score_samples(args[0], fields, args[1], context)
+    var score = _lof_score_samples(args[0], fields, args[1], context, String(py_type(model).__name__))
     var offset = family_field(fields, "offset_")
     var shift: Float64
     if py_type(offset) is _b().float:
@@ -667,17 +690,24 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     var new_cent = _out(Python.tuple(C, d), "<f4", context)
     var devs = _out(Python.tuple(C, d), "<f4", context)
     var dsc = PythonObject(None)
+    # Lane a8b-device-x-neighbors-rest: X's finite test rides behind the
+    # upload of nc_stats / nc_std (their status slot; the public admission
+    # deferred it, a cast X was refused by its cast).
+    var status = List[Int32](length=1, fill=Int32(0))
+    var stat_ints = Python.list(_i(n), _i(d), _i(C), _i(Int(status.unsafe_ptr())))
     if euclidean and not split:
         # the class means, the within-class std and the dataset centroid in
         # one op (nc_stats_item)
         dsc = _out(Python.tuple(d), "<f4", context)
         _op(binding, "nc_stats", Python.list(classical_address(x), classical_address(lab), classical_address(nk),
                                              classical_address(cent), classical_address(stats), classical_address(dsc)),
-            Python.list(_i(n), _i(d), _i(C)), Python.list(), context)
+            stat_ints, Python.list(), context)
     else:
         _op(binding, "nc_std", Python.list(classical_address(x), classical_address(lab), classical_address(cent),
                                            classical_address(stats)),
-            Python.list(_i(n), _i(d), _i(C)), Python.list(), context)
+            stat_ints, Python.list(), context)
+    admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
+    _ = status^
     # the median of the d stds and the all-zero test on the device (nc_med_std)
     var dsteps = _pow2_steps(d)
     var ms = _out(Python.tuple(2), "<f4", context)
@@ -751,8 +781,10 @@ def _nc_fused_available(binding: PythonObject) raises -> Bool:
 
 
 def _nc_decision_matrix(binding: PythonObject, fields: PythonObject, source: PythonObject,
-                        context: PythonObject) raises -> PythonObject:
-    """`NearestCentroid._decision_matrix(X)`."""
+                        context: PythonObject, status: Int = 0) raises -> PythonObject:
+    """`NearestCentroid._decision_matrix(X)`; `status` (lane
+    a8b-device-x-neighbors-rest; 0 not asked): the queries' finite status
+    word, from nc_decision's status slot."""
     var inputs = _nc_decision_inputs(fields, source, context)
     var q = inputs[0]
     var cent = inputs[1]
@@ -761,9 +793,12 @@ def _nc_decision_matrix(binding: PythonObject, fields: PythonObject, source: Pyt
     var nq = _rows(q)
     var C = _size(prior)
     var out = _out(Python.tuple(nq, C), "<f4", context)
+    var ints = Python.list(_i(nq), _i(_cols(q)), _i(C))
+    if status != 0:
+        _ = py_call(ints.append, _i(status))
     _op(binding, "nc_decision", Python.list(classical_address(q), classical_address(cent), classical_address(std),
                                             classical_address(prior), classical_address(out)),
-        Python.list(_i(nq), _i(_cols(q)), _i(C)), Python.list(), context)
+        ints, Python.list(), context)
     _ = q  # keep the Python object alive through the native call above
     _ = cent  # keep the Python object alive through the native call above
     _ = std  # keep the Python object alive through the native call above
@@ -773,14 +808,20 @@ def _nc_decision_matrix(binding: PythonObject, fields: PythonObject, source: Pyt
 
 
 def _nc_fused(binding: PythonObject, name: String, q: PythonObject, cent: PythonObject, std: PythonObject,
-              prior: PythonObject, dest: PythonObject, C: Int, mode: Int, context: PythonObject) raises:
+              prior: PythonObject, dest: PythonObject, C: Int, mode: Int, context: PythonObject,
+              est: String) raises:
     """One fused NearestCentroid session (`nc_labels` / `nc_proba`, lane
     ne3-g-svc-gp-neighbors, N327): the distance or decision matrix stays on
     the device. `std` and `prior` are only read by the decision modes; the
-    caller passes live arrays for both."""
+    caller passes live arrays for both. The queries' finite test rides
+    behind the session's upload (its status slot, lane
+    a8b-device-x-neighbors-rest), refused in `est`'s wording."""
+    var status = List[Int32](length=1, fill=Int32(0))
     _op(binding, name, Python.list(classical_address(q), classical_address(cent), classical_address(std),
                                    classical_address(prior), classical_address(dest)),
-        Python.list(_i(_rows(q)), _i(_cols(q)), _i(C), _i(mode)), Python.list(), context)
+        Python.list(_i(_rows(q)), _i(_cols(q)), _i(C), _i(mode), _i(Int(status.unsafe_ptr()))), Python.list(), context)
+    admitted_finite_refuse(Int(status[0]), est)
+    _ = status^
     _ = q  # keep the Python object alive through the native call above
     _ = cent  # keep the Python object alive through the native call above
     _ = std  # keep the Python object alive through the native call above
@@ -825,7 +866,8 @@ def _nc_predict(model: PythonObject, args: PythonObject, context: PythonObject,
             var fcodes = _out(Python.tuple(_rows(q)), "<i4", context)
             # std and prior are not read by the distance modes: q stands in.
             _nc_fused(binding, "nc_labels", q, cent, q, q, fcodes, C,
-                      0 if _eq(family_field(fields, "metric"), PythonObject("euclidean")) else 1, context)
+                      0 if _eq(family_field(fields, "metric"), PythonObject("euclidean")) else 1, context,
+                      String(py_type(model).__name__))
             return _class_array(classes, fcodes, context)
         var dmat: PythonObject
         if _eq(family_field(fields, "metric"), PythonObject("euclidean")):
@@ -844,7 +886,8 @@ def _nc_predict(model: PythonObject, args: PythonObject, context: PythonObject,
         var inputs = _nc_decision_inputs(fields, q, context)
         var C = _size(inputs[3])
         var fcodes = _out(Python.tuple(_rows(inputs[0])), "<i4", context)
-        _nc_fused(binding, "nc_labels", inputs[0], inputs[1], inputs[2], inputs[3], fcodes, C, 2, context)
+        _nc_fused(binding, "nc_labels", inputs[0], inputs[1], inputs[2], inputs[3], fcodes, C, 2, context,
+                  String(py_type(model).__name__))
         return _class_array(classes, fcodes, context)
     var mat = _nc_decision_matrix(binding, fields, q, context)
     var n = _rows(mat)
@@ -861,7 +904,11 @@ def _nc_decision(model: PythonObject, args: PythonObject, context: PythonObject)
     """`NearestCentroid.decision_function(X)`: the score matrix, or for two
     classes `scores[:, 1] - scores[:, 0]` as one product with (-1, 1)."""
     var binding = args[0]
-    var dec = _nc_decision_matrix(binding, py_fields(model), args[1], context)
+    # The queries' finite test behind nc_decision's upload (lane a8b-device-x-neighbors-rest).
+    var status = List[Int32](length=1, fill=Int32(0))
+    var dec = _nc_decision_matrix(binding, py_fields(model), args[1], context, Int(status.unsafe_ptr()))
+    admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
+    _ = status^
     if _cols(dec) != 2:
         return dec
     var signs = admitted_vector(2, "<f4", context)
@@ -889,7 +936,7 @@ def _nc_predict_proba(model: PythonObject, args: PythonObject, context: PythonOb
     var wide = neural_descriptor_entry(xn_module(binding), "xn_softmax64", False) is not None
     if _nc_fused_available(binding):
         var fused = _nc_proba_fused(binding, py_fields(model), args[1], 2 if wide else 0, "<f8" if wide else "<f4",
-                                    context)
+                                    context, String(py_type(model).__name__))
         if fused is not None:
             return fused
     var dec = _nc_decision_matrix(binding, py_fields(model), args[1], context)
@@ -903,7 +950,7 @@ def _nc_predict_proba(model: PythonObject, args: PythonObject, context: PythonOb
 
 
 def _nc_proba_fused(binding: PythonObject, fields: PythonObject, source: PythonObject, mode: Int, typestr: String,
-                    context: PythonObject) raises -> PythonObject:
+                    context: PythonObject, est: String) raises -> PythonObject:
     """predict_proba / predict_log_proba through `nc_proba`: the decision
     matrix and its softmax in one session, the (n, C) result downloaded once."""
     var inputs = _nc_decision_inputs(fields, source, context)
@@ -911,7 +958,7 @@ def _nc_proba_fused(binding: PythonObject, fields: PythonObject, source: PythonO
     if _rows(inputs[0]) == 0:
         return PythonObject(None)  # an empty query: the caller takes the op chain
     var out = _out(Python.tuple(_rows(inputs[0]), C), typestr, context)
-    _nc_fused(binding, "nc_proba", inputs[0], inputs[1], inputs[2], inputs[3], out, C, mode, context)
+    _nc_fused(binding, "nc_proba", inputs[0], inputs[1], inputs[2], inputs[3], out, C, mode, context, est)
     return out
 
 
@@ -920,7 +967,8 @@ def _nc_predict_log_proba(model: PythonObject, args: PythonObject, context: Pyth
     # metric/fitted checks and native decision matrix preparation.
     var binding = args[0]
     if _nc_fused_available(binding):
-        var fused = _nc_proba_fused(binding, py_fields(model), args[1], 1, "<f4", context)
+        var fused = _nc_proba_fused(binding, py_fields(model), args[1], 1, "<f4", context,
+                                    String(py_type(model).__name__))
         if fused is not None:
             return fused
     var dec = _nc_decision_matrix(binding, py_fields(model), args[1], context)
@@ -1133,7 +1181,7 @@ def _neighbors_local_operation(model: PythonObject, operation: String, var args:
     if operation == "family_xn_loc_lof_score_samples":
         var fields = py_fields(model)
         _lof_novelty(fields, "score_samples")
-        return _lof_score_samples(args[0], fields, args[1], context)
+        return _lof_score_samples(args[0], fields, args[1], context, String(py_type(model).__name__))
     if operation == "family_xn_loc_lof_decision_function":
         return _lof_decision(model, args, context)
     if operation == "family_xn_loc_lof_predict":

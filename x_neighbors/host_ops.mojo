@@ -5,6 +5,7 @@
 from std.sys.compile import is_defined
 from std.os import getenv
 from core.host_parallel import host_parallelize
+from core.host_finite_scan import host_finite_status
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count_work
 from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item, row_argmax_item
 from x_neighbors.proba64_nc import softmax64_item
@@ -75,7 +76,9 @@ def _i(addr: Int) -> IP:
     return IP(unsafe_from_address=addr)
 
 
-def op_sqdist(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int) raises:
+def op_sqdist(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, status: Int = 0) raises:
+    if not xn_host_status(x, n * d, status):
+        return
     var p_x = _f(x)
     var p_y = _f(y)
     var p_res = _f(res)
@@ -111,7 +114,28 @@ def op_l1dist(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int) raises:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
 
 
-def op_kernel(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, kind: Int, gamma: Float32, coef0: Float32, degree: Int) raises:
+def xn_host_status(x: Int, count: Int, status: Int) raises -> Bool:
+    """The CPU column's answer to an op's status slot (lane
+    a8b-device-x-neighbors-rest; the GPU column tests the words behind its
+    upload, x_neighbors/device_ops.mojo `xn_finite_behind`): when `status` (a
+    host int32 address) is not 0, one parallel SIMD scan of the `count`
+    words at `x` (core/host_finite_scan.mojo) is written to it, 0 finite, 1
+    a NaN or an infinity. True when the op may run (no word asked, or every
+    word finite); a flagged op returns at once and the door refuses."""
+    if status == 0 or count <= 0:
+        return True
+    if status < 0 or status % 4 != 0:
+        raise Error("x_neighbors: the status address must be a positive int32-aligned address")
+    # parallel: host_finite_status splits the words across the host's cores
+    var word = host_finite_status(x, count)
+    IP(unsafe_from_address=status).unsafe_store(0, word)
+    return word == 0
+
+
+def op_kernel(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, kind: Int, gamma: Float32, coef0: Float32, degree: Int,
+              status: Int = 0) raises:
+    if not xn_host_status(x, n * d, status):
+        return
     var p_x = _f(x)
     var p_y = _f(y)
     var p_res = _f(res)
@@ -180,7 +204,10 @@ def op_knn_select(dmat: Int, dist: Int, idx: Int, n: Int, m: Int, k: Int, exclud
             _f(dist).unsafe_store(0, _f(dist).unsafe_load(0) + Float32(1e-3))
 
 
-def op_knn_sq(x: Int, y: Int, dist: Int, idx: Int, n: Int, m: Int, d: Int, k: Int, exclude_self: Int) raises:
+def op_knn_sq(x: Int, y: Int, dist: Int, idx: Int, n: Int, m: Int, d: Int, k: Int, exclude_self: Int,
+              status: Int = 0) raises:
+    if not xn_host_status(x, n * d, status):
+        return
     var p_x = _f(x)
     var p_y = _f(y)
     var p_dist = _f(dist)
@@ -314,7 +341,9 @@ def op_kpca_alpha_scale(v: Int, w: Int, res: Int, n: Int, c: Int, divide: Int) r
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
 
 
-def op_nc_std(x: Int, lab: Int, cent: Int, std: Int, n: Int, d: Int, n_classes: Int) raises:
+def op_nc_std(x: Int, lab: Int, cent: Int, std: Int, n: Int, d: Int, n_classes: Int, status: Int = 0) raises:
+    if not xn_host_status(x, n * d, status):
+        return
     for t in range(d):
         nc_std_item(t, _f(x), _i(lab), _f(cent), _f(std), n, d, n_classes)
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
@@ -352,7 +381,10 @@ def op_nc_shrink(x: Int, cent: Int, nk: Int, std: Int, res: Int, devs: Int, n: I
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
 
 
-def op_nc_decision(q: Int, cent: Int, std: Int, prior: Int, res: Int, n: Int, d: Int, n_classes: Int) raises:
+def op_nc_decision(q: Int, cent: Int, std: Int, prior: Int, res: Int, n: Int, d: Int, n_classes: Int,
+                   status: Int = 0) raises:
+    if not xn_host_status(q, n * d, status):
+        return
     var p_q = _f(q)
     var p_cent = _f(cent)
     var p_std = _f(std)
@@ -841,7 +873,10 @@ comptime XN_NC_LOG_SOFTMAX = 1
 comptime XN_NC_SOFTMAX64 = 2
 
 
-def op_nc_labels(q: Int, cent: Int, std: Int, prior: Int, codes: Int, n: Int, d: Int, c: Int, mode: Int) raises:
+def op_nc_labels(q: Int, cent: Int, std: Int, prior: Int, codes: Int, n: Int, d: Int, c: Int, mode: Int,
+                 status: Int = 0) raises:
+    if not xn_host_status(q, n * d, status):
+        return
     var mat = List[Float32](length=max(n * c, 1), fill=Float32(0))
     var mp = Int(mat.unsafe_ptr())
     if mode == XN_NC_DECISION:
@@ -859,7 +894,10 @@ def op_nc_labels(q: Int, cent: Int, std: Int, prior: Int, codes: Int, n: Int, d:
     _ = mat^
 
 
-def op_nc_proba(q: Int, cent: Int, std: Int, prior: Int, res: Int, n: Int, d: Int, c: Int, mode: Int) raises:
+def op_nc_proba(q: Int, cent: Int, std: Int, prior: Int, res: Int, n: Int, d: Int, c: Int, mode: Int,
+                status: Int = 0) raises:
+    if not xn_host_status(q, n * d, status):
+        return
     var mat = List[Float32](length=max(n * c, 1), fill=Float32(0))
     var mp = Int(mat.unsafe_ptr())
     op_nc_decision(q, cent, std, prior, mp, n, d, c)
@@ -874,11 +912,13 @@ def op_nc_proba(q: Int, cent: Int, std: Int, prior: Int, res: Int, n: Int, d: In
 
 # ------------------------------------------- label propagation dense queries
 def op_lp_dense_proba(q: Int, xfit: Int, dist: Int, res: Int, codes: Int, nq: Int, n: Int, d: Int, c: Int,
-                      kind: Int, gamma: Float32, coef0: Float32, want_codes: Int) raises:
+                      kind: Int, gamma: Float32, coef0: Float32, want_codes: Int, status: Int = 0) raises:
     """The host column of the device op (lane ne3-g-svc-gp-neighbors, N324):
     op_kernel, op_matmul, op_row_normalize (and op_row_argmax with
     `want_codes`) in that order over scratch buffers, the ops the caller ran
     one by one (sabotage hooks included): the same bits."""
+    if not xn_host_status(q, nq * d, status):
+        return
     var kb = List[Float32](length=max(nq * n, 1), fill=Float32(0))
     var pb = List[Float32](length=max(nq * c, 1), fill=Float32(0))
     var rb = List[Float32](length=max(nq * c, 1), fill=Float32(0))

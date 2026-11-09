@@ -94,17 +94,20 @@ def xn_aux_execute(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises
         for k in range(4):  # small-loop(four admitted dimension words)
             if p[k] < 0:
                 raise Error("x_neighbors: a negative size was passed")
+        # The optional fifth int (lane a8b-device-x-neighbors-rest): the host
+        # address of q's finite status word (0: not asked).
+        var status = p[4] if len(p) > 4 else 0
         if op == 6:
             if p[3] > 2:
                 raise Error("x_neighbors nc_labels: unknown mode")
-            op_nc_labels(a[0], a[1], a[2], a[3], a[4], p[0], p[1], p[2], p[3])
+            op_nc_labels(a[0], a[1], a[2], a[3], a[4], p[0], p[1], p[2], p[3], status)
             return 0
         if p[3] > XN_NC_SOFTMAX64:
             raise Error("x_neighbors nc_proba: unknown mode")
         if p[3] == XN_NC_SOFTMAX64:
             comptime if not NC_PROBA64:
                 raise Error("AttributeError: xn_softmax64 is not exported by this binding")
-        op_nc_proba(a[0], a[1], a[2], a[3], a[4], p[0], p[1], p[2], p[3])
+        op_nc_proba(a[0], a[1], a[2], a[3], a[4], p[0], p[1], p[2], p[3], status)
         return 0
     if op == 8:
         # lp_dense_proba (lane ne3-g-svc-gp-neighbors, N324): addresses
@@ -117,7 +120,10 @@ def xn_aux_execute(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises
         for k in range(6):  # small-loop(six admitted dimension words)
             if p[k] < 0:
                 raise Error("x_neighbors: a negative size was passed")
+        # The optional seventh int (lane a8b-device-x-neighbors-rest): the
+        # host address of q's finite status word (0: not asked).
+        var status = p[6] if len(p) > 6 else 0
         op_lp_dense_proba(a[0], a[1], a[2], a[3], a[4], p[0], p[1], p[2], p[3], p[4], Float32(f[0]), Float32(f[1]),
-                          p[5])
+                          p[5], status)
         return 0
     raise Error("x_neighbors auxiliary native ABI: unknown operation")

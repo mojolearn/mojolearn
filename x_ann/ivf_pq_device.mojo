@@ -30,7 +30,7 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_build import IvfFlatBuildDevice, ivf_t
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import ivf_explicit_train_rows, ivf_explicit_train_stride
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add, identical_sqrt
 from std.sys.compile import is_defined
-from x_ann.io import upload_f32, upload_i32, download_f32, download_i32
+from x_ann.io import upload_f32, upload_i32, download_f32, download_i32, enqueue_query_status
 from x_ann.refine_core import refine_cell
 from x_ann.ivf_rabitq_core import rq_encode_cell, rq_pow2, rq_scale
 from x_ann.ivf_sq_core import sq_encode_cell, sq_hi_takes, sq_lo_takes, sq_range_finish
@@ -515,6 +515,7 @@ def ivf_pq_search_device(
     codes: List[Int32], mask: List[Int32], n_lists: Int, dim: Int, pq_dim: Int, pq_bits: Int,
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
+    status_addr: Int = 0,
 ) raises:
     var sst = AnnStages("ivf_search")
     var ctx = x_ann_ctx()
@@ -528,7 +529,7 @@ def ivf_pq_search_device(
     ivf_pq_search_on(
         ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dcb), _dp(dcodes), _dp(dmask), offsets, n_lists, dim,
         pq_dim, pq_bits, queries, m, k, n_probes, out_d, out_i, out_n,
-        False, _dp(dcodes), _dp(dc), _dp(dc), False,
+        False, _dp(dcodes), _dp(dc), _dp(dc), False, status_addr,
     )
     _ = dmask^
     _ = dcb^
@@ -545,6 +546,7 @@ def ivf_pq_search_on(
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
     have_pre: Bool, pre_codes: I32P, pre_a: F32P, pre_b: F32P, mask_pre: Bool,
+    status_addr: Int = 0,
 ) raises:
     """The search over an index already on the device (`ivf_pq_search_device`
     uploads it first; `x_ann/resident.mojo` holds it): the queries up, the
@@ -554,6 +556,9 @@ def ivf_pq_search_on(
     var pq_len = pq_len_of(dim, pq_dim)
     var n_codes = 1 << pq_bits
     var dq = upload_f32(ctx, queries)
+    # Lane a8b-device-x-neighbors-rest: the queries' finite status behind
+    # their upload, read back by the downloads below (no new sync).
+    var dst = enqueue_query_status(ctx, dq, m * dim, status_addr)
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
@@ -571,6 +576,7 @@ def ivf_pq_search_on(
     _ = di^
     _ = dd^
     _ = dq^
+    _ = dst^
 
 
 #: rows per partial of the SQ range (lane ann-apple)
@@ -761,6 +767,7 @@ def ivf_sq_search_device(
     delta: List[Float32], codes: List[Int32], mask: List[Int32], n_lists: Int, dim: Int,
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
+    status_addr: Int = 0,
 ) raises:
     var sst = AnnStages("ivf_search")
     var ctx = x_ann_ctx()
@@ -775,7 +782,7 @@ def ivf_sq_search_device(
     ivf_sq_search_on(
         ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dvmin), _dp(ddelta), _dp(dcodes), _dp(dmask), offsets,
         n_lists, dim, queries, m, k, n_probes, out_d, out_i, out_n,
-        False, _dp(dcodes), _dp(dc), _dp(dc), False,
+        False, _dp(dcodes), _dp(dc), _dp(dc), False, status_addr,
     )
     _ = dmask^
     _ = ddelta^
@@ -793,9 +800,13 @@ def ivf_sq_search_on(
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
     have_pre: Bool, pre_codes: I32P, pre_a: F32P, pre_b: F32P, mask_pre: Bool,
+    status_addr: Int = 0,
 ) raises:
     """`ivf_pq_search_on`'s SQ twin: the index already on the device."""
     var dq = upload_f32(ctx, queries)
+    # Lane a8b-device-x-neighbors-rest: the queries' finite status behind
+    # their upload, read back by the downloads below (no new sync).
+    var dst = enqueue_query_status(ctx, dq, m * dim, status_addr)
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
@@ -811,6 +822,7 @@ def ivf_sq_search_on(
     _ = di^
     _ = dd^
     _ = dq^
+    _ = dst^
 
 
 def refine_kernel(m: Int32, x: F32P, n: Int32, d: Int32, queries: F32P, cand: I32P, k0: Int32, k: Int32,
@@ -827,11 +839,14 @@ def refine_kernel(m: Int32, x: F32P, n: Int32, d: Int32, queries: F32P, cand: I3
 
 def refine_device(
     x: List[Float32], n: Int, d: Int, queries: List[Float32], m: Int, cand: List[Int32], k0: Int, k: Int,
-    mut out_d: List[Float32], mut out_i: List[Int32], root: Bool = False,
+    mut out_d: List[Float32], mut out_i: List[Int32], root: Bool = False, status_addr: Int = 0,
 ) raises:
     var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
     var dq = upload_f32(ctx, queries)
+    # Lane a8b-device-x-neighbors-rest: the dataset's and the queries'
+    # finite status behind their uploads, read back by the downloads below.
+    var dst = enqueue_query_status(ctx, dx, n * d, dq, m * d, status_addr)
     var dcand = upload_i32(ctx, cand)
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
@@ -846,6 +861,7 @@ def refine_device(
     _ = dcand^
     _ = dq^
     _ = dx^
+    _ = dst^
     _ = ctx^
 
 
@@ -904,6 +920,7 @@ def ivf_rabitq_search_device(
     norms: List[Float32], ips: List[Float32], mask: List[Int32], n_lists: Int, dim: Int, seed: Int,
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
+    status_addr: Int = 0,
 ) raises:
     var sst = AnnStages("ivf_search")
     var ctx = x_ann_ctx()
@@ -918,7 +935,7 @@ def ivf_rabitq_search_device(
     ivf_rabitq_search_on(
         ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dcodes), _dp(dnorm), _dp(dip), _dp(dmask), offsets,
         n_lists, dim, seed, queries, m, k, n_probes, out_d, out_i, out_n,
-        False, _dp(dcodes), _dp(dnorm), _dp(dip), False,
+        False, _dp(dcodes), _dp(dnorm), _dp(dip), False, status_addr,
     )
     _ = dmask^
     _ = dip^
@@ -936,12 +953,16 @@ def ivf_rabitq_search_on(
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
     have_pre: Bool, pre_codes: I32P, pre_a: F32P, pre_b: F32P, mask_pre: Bool,
+    status_addr: Int = 0,
 ) raises:
     """`ivf_pq_search_on`'s RaBitQ twin: the index already on the device."""
     var D = rq_pow2(dim)
     var words = (D + 31) // 32
     var scale = rq_scale(D)
     var dq = upload_f32(ctx, queries)
+    # Lane a8b-device-x-neighbors-rest: the queries' finite status behind
+    # their upload, read back by the downloads below (no new sync).
+    var dst = enqueue_query_status(ctx, dq, m * dim, status_addr)
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
@@ -957,6 +978,7 @@ def ivf_rabitq_search_on(
     _ = di^
     _ = dd^
     _ = dq^
+    _ = dst^
 
 
 def pq_encode_device(

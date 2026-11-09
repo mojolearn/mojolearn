@@ -8,6 +8,8 @@
 from std.memory import MutPointer
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_meta
+from bindings.admitted_input import admitted_finite_refuse
+from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
@@ -379,7 +381,15 @@ def neighbors_ann_search(model: PythonObject, kind: Int, args: PythonObject,
     var k = _int(fields, "n_neighbors", owner)
     if n < 1 or dim < 1 or k < 1:
         raise Error("ValueError: ANN rows, features and n_neighbors must be positive")
-    var q = admit_family_meta(args[1], 2, "queries", context)
+    # Lane a8b-device-x-neighbors-rest: the queries are refused when they hold
+    # a NaN or an infinity (they were not tested at all before). A cast is
+    # refused by its own verdict; borrowed float32 queries are tested by the
+    # search entry behind its query upload on the GPU binding, by one parallel
+    # host scan on the CPU column, and the word comes back with the result.
+    var q = admit_family_meta(args[1], 2, "queries", context, False, True,
+                              refusal=admitted_finite_wording(owner, "queries"), defer_finite=True)
+    var status = List[Int32](length=1, fill=Int32(0))
+    var status_word = PythonObject(0) if q.copied else PythonObject(Int(status.unsafe_ptr()))
     var m = q.shape[0]
     if q.shape[1] != dim:
         raise Error("ValueError: mojolearn " + owner + ": queries have " + String(q.shape[1]) + " features, the index has " + String(dim))
@@ -412,8 +422,9 @@ def neighbors_ann_search(model: PythonObject, kind: Int, args: PythonObject,
         _want(names, shapes, floating, "dataset_", [n, dim], True)
         _want(names, shapes, floating, "graph_", [n, graph_degree], False)
         prepare_params = Python.list(n, dim, graph_degree)
-        search_params = Python.list(m, selected, length, width, iterations, seeds, seed)
-        full_params = Python.list(n, dim, graph_degree, m, selected, length, width, iterations, seeds, seed)
+        search_params = Python.list(m, selected, length, width, iterations, seeds, seed, status_word)
+        full_params = Python.list(n, dim, graph_degree, m, selected, length, width, iterations, seeds, seed,
+                                  status_word)
     else:
         n_lists = _int(fields, "n_lists_", owner)
         var probes = _int(fields, "n_probes", owner)
@@ -432,13 +443,13 @@ def neighbors_ann_search(model: PythonObject, kind: Int, args: PythonObject,
             if not device_codes:
                 _want(names, shapes, floating, "codes_", [n, pq_dim], False)
             prepare_params = Python.list(n, dim, n_lists, pq_dim, bits)
-            full_params = Python.list(n, dim, n_lists, pq_dim, bits, m, k, probes)
+            full_params = Python.list(n, dim, n_lists, pq_dim, bits, m, k, probes, status_word)
         elif kind == 1:
             _want(names, shapes, floating, "sq_vmin_", [dim], True)
             _want(names, shapes, floating, "sq_delta_", [dim], True)
             _want(names, shapes, floating, "codes_", [n, dim], False)
             prepare_params = Python.list(n, dim, n_lists)
-            full_params = Python.list(n, dim, n_lists, m, k, probes)
+            full_params = Python.list(n, dim, n_lists, m, k, probes, status_word)
         else:
             var seed = _int(fields, "seed_", owner)
             var rotated = 1
@@ -448,8 +459,8 @@ def neighbors_ann_search(model: PythonObject, kind: Int, args: PythonObject,
             _want(names, shapes, floating, "norms_", [n], True)
             _want(names, shapes, floating, "ip_factors_", [n], True)
             prepare_params = Python.list(n, dim, n_lists, seed)
-            full_params = Python.list(n, dim, n_lists, seed, m, k, probes)
-        search_params = Python.list(m, k, probes)
+            full_params = Python.list(n, dim, n_lists, seed, m, k, probes, status_word)
+        search_params = Python.list(m, k, probes, status_word)
     var arrays = _stored_all(model, fields, names, shapes, floating, context)
     var distances = family_array(Python.tuple(m, selected), "<f4", context)
     var indices = family_array(Python.tuple(m, selected), "<i4", context)
@@ -477,6 +488,9 @@ def neighbors_ann_search(model: PythonObject, kind: Int, args: PythonObject,
             _ = py_call(addrs.append, classical_address(mask))
         var entry = String("x_ann_ivf_pq_search") if kind == 0 else (String("x_ann_ivf_sq_search") if kind == 1 else (String("x_ann_ivf_rabitq_search") if kind == 2 else String("x_ann_cagra_search")))
         _ = py_call(neural_descriptor_entry(binding, entry), addrs, full_params)
+    # The queries' finite status word (0 when a cast tested them already).
+    admitted_finite_refuse(Int(status[0]), owner, "queries")
+    _ = status^
     if filtered:
         var filtered_distances = family_array(Python.tuple(m, k), "<f4", context)
         var filtered_indices = family_array(Python.tuple(m, k), "<i4", context)

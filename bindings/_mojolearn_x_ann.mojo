@@ -138,7 +138,8 @@ def ivf_pq_build_resident_binding(addrs: PythonObject, params: PythonObject) rai
 def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: centers, offsets, list_indices, codebooks, codes, queries, out_d, out_i, out_n, mask
     (int32 per row, 0 removes the row: the sample filter).
-    params: n, dim, n_lists, pq_dim, pq_bits, m, k, n_probes."""
+    params: n, dim, n_lists, pq_dim, pq_bits, m, k, n_probes[, status] (status: the host
+    address of the int32 word that receives the queries' finite status)."""
     var n = p_int(params, 0)
     var dim = p_int(params, 1)
     var n_lists = p_int(params, 2)
@@ -147,6 +148,7 @@ def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
     var m = p_int(params, 5)
     var k = p_int(params, 6)
     var n_probes = p_int(params, 7)
+    var status = p_int(params, 8) if len(params) > 8 else 0
     check_search(n_lists, m, k, n_probes)
     var pq_len = pq_len_of(dim, pq_dim)
     var centers = in_f32(addrs, 0, n_lists * dim)
@@ -161,7 +163,7 @@ def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
     var on = List[Int32]()
     with GILReleased(Python()):
         ivf_pq_search_device(centers, offsets, list_indices, cb, codes, mask, n_lists, dim, pq_dim, pq_bits,
-                             queries, m, k, n_probes, od, oi, on)
+                             queries, m, k, n_probes, od, oi, on, status)
     out_f32(od, addrs, 6)
     out_i32(oi, addrs, 7)
     out_i32(on, addrs, 8)
@@ -220,8 +222,9 @@ def cagra_build_binding(addrs: PythonObject, params: PythonObject) raises -> Pyt
 
 def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: x, graph, queries, out_d, out_i.
-    params: n, d, graph_degree, m, k, itopk_size, search_width, max_iterations, n_seeds[, rs]
-    (rs: 0 the evenly spaced seeds, > 0 random_state's, x_ann/cagra_core.mojo cg_seed_node)."""
+    params: n, d, graph_degree, m, k, itopk_size, search_width, max_iterations, n_seeds[, rs[, status]]
+    (rs: 0 the evenly spaced seeds, > 0 random_state's, x_ann/cagra_core.mojo cg_seed_node;
+    status: the host address of the int32 word that receives the queries' finite status)."""
     var n = p_int(params, 0)
     var d = p_int(params, 1)
     var deg = p_int(params, 2)
@@ -232,6 +235,7 @@ def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     var max_iter = p_int(params, 7)
     var n_seeds = p_int(params, 8)
     var rs = p_int(params, 9) if len(params) > 9 else 0
+    var status = p_int(params, 10) if len(params) > 10 else 0
     if rs < 0:
         raise Error("CAGRA search: rs must be >= 0")
     if m <= 0 or k <= 0 or L < k or width < 1 or max_iter < 1 or n_seeds < 1 or n_seeds > n:
@@ -253,7 +257,7 @@ def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> Py
         cagra_search_on(
             ctx, dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n, d,
             dg.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), deg, q, m, k, L, width,
-            max_iter, n_seeds, od, oi, rs,
+            max_iter, n_seeds, od, oi, rs, status,
         )
         _ = dg^
         _ = dx^
@@ -301,13 +305,14 @@ def ivf_sq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
 
 def ivf_sq_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: centers, offsets, list_indices, vmin, delta, codes, mask, queries, out_d, out_i, out_n.
-    params: n, dim, n_lists, m, k, n_probes."""
+    params: n, dim, n_lists, m, k, n_probes[, status] (the queries' finite status word)."""
     var n = p_int(params, 0)
     var dim = p_int(params, 1)
     var n_lists = p_int(params, 2)
     var m = p_int(params, 3)
     var k = p_int(params, 4)
     var n_probes = p_int(params, 5)
+    var status = p_int(params, 6) if len(params) > 6 else 0
     check_search(n_lists, m, k, n_probes)
     var centers = in_f32(addrs, 0, n_lists * dim)
     var offsets = in_i32(addrs, 1, n_lists + 1)
@@ -322,7 +327,7 @@ def ivf_sq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
     var on = List[Int32]()
     with GILReleased(Python()):
         ivf_sq_search_device(centers, offsets, list_indices, vmin, delta, codes, mask, n_lists, dim, queries, m, k,
-                             n_probes, od, oi, on)
+                             n_probes, od, oi, on, status)
     out_f32(od, addrs, 8)
     out_i32(oi, addrs, 9)
     out_i32(on, addrs, 10)
@@ -331,14 +336,17 @@ def ivf_sq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
 
 def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: dataset, queries, candidates (int32 m x k0, < 0 = padding), out_d, out_i.
-    params: n, d, m, k0, k[, root] (root 1: the euclidean metric's square
-    roots of the kept distances, lane apple-fast-py2mojo-cluster)."""
+    params: n, d, m, k0, k[, root[, status]] (root 1: the euclidean metric's square
+    roots of the kept distances, lane apple-fast-py2mojo-cluster; status: the
+    host address of the int32 word that receives the dataset's and queries'
+    finite status)."""
     var n = p_int(params, 0)
     var d = p_int(params, 1)
     var m = p_int(params, 2)
     var k0 = p_int(params, 3)
     var k = p_int(params, 4)
     var root = len(params) > 5 and p_int(params, 5) != 0
+    var status = p_int(params, 6) if len(params) > 6 else 0
     if n <= 0 or d <= 0 or m <= 0 or k0 <= 0 or k <= 0 or k > k0:
         raise Error("refine: need positive shapes and 1 <= k <= n_candidates")
     var x = in_f32(addrs, 0, n * d)
@@ -347,7 +355,7 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
     var od = List[Float32]()
     var oi = List[Int32]()
     with GILReleased(Python()):
-        refine_device(x, n, d, q, m, cand, k0, k, od, oi, root)
+        refine_device(x, n, d, q, m, cand, k0, k, od, oi, root, status)
     out_f32(od, addrs, 3)
     out_i32(oi, addrs, 4)
     return PythonObject(m)
@@ -385,7 +393,7 @@ def ivf_rabitq_build_binding(addrs: PythonObject, params: PythonObject) raises -
 
 def ivf_rabitq_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: centers, offsets, list_indices, codes, norms, ips, mask, queries, out_d, out_i, out_n.
-    params: n, dim, n_lists, seed, m, k, n_probes."""
+    params: n, dim, n_lists, seed, m, k, n_probes[, status] (the queries' finite status word)."""
     var n = p_int(params, 0)
     var dim = p_int(params, 1)
     var n_lists = p_int(params, 2)
@@ -393,6 +401,7 @@ def ivf_rabitq_search_binding(addrs: PythonObject, params: PythonObject) raises 
     var m = p_int(params, 4)
     var k = p_int(params, 5)
     var n_probes = p_int(params, 6)
+    var status = p_int(params, 7) if len(params) > 7 else 0
     check_search(n_lists, m, k, n_probes)
     var D = rabitq_padded_dim(dim)
     var words = (D + 31) // 32
@@ -409,7 +418,7 @@ def ivf_rabitq_search_binding(addrs: PythonObject, params: PythonObject) raises 
     var on = List[Int32]()
     with GILReleased(Python()):
         ivf_rabitq_search_device(centers, offsets, list_indices, codes, norms, ips, mask, n_lists, dim, seed,
-                                 queries, m, k, n_probes, od, oi, on)
+                                 queries, m, k, n_probes, od, oi, on, status)
     out_f32(od, addrs, 8)
     out_i32(oi, addrs, 9)
     out_i32(on, addrs, 10)
