@@ -503,6 +503,7 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
                         # at the bound the tick has stopped the loop: read it
                         # rather than enqueue a body past max_iterations
                         s[].ex.download(mirror_p, words, LOOP_WORDS)
+                        s[].steps.release_parked()
                         iterations = Int(mirror[LOOP_ITER])
                         _lap(s[], timers, "read_flag")
                         if mirror[LOOP_DONE] != Float32(0.0):

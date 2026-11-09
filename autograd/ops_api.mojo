@@ -763,6 +763,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 continue
             self.ex.download_async(FP(unsafe_from_address=dsts[i]), buf + offs[i], sizes[i])
         self.ex.sync()
+        self.steps.release_parked()
 
     def download(mut self, h: Int, dst: FP) raises:
         """The tensor's rows x cols floats (row-major) into the caller's memory."""
@@ -771,6 +772,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var src = self.tape.value_of(self.ex, src_t)
         var count = self.rows[slot] * self.cols[slot]
         self.ex.download(dst, src, count)
+        # lane x45c: the stream drained; step ops' parked stages can go
+        self.steps.release_parked()
 
     def scalar(mut self, h: Int) raises -> Float32:
         """The one value of a (1, 1) tensor, read back to the caller."""
@@ -781,6 +784,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var src = self.tape.value_of(self.ex, src_t)
         var out = List[Float32](length=1, fill=Float32(0))
         self.ex.download(FP(unsafe_from_address=Int(out.unsafe_ptr())), src, 1)
+        self.steps.release_parked()
         return out[0]
 
     def free(mut self, h: Int) raises:
@@ -816,6 +820,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     def close(mut self) raises:
         """Return every buffer to the executor and wait for its queue."""
         # the resident block structs view session buffers: drop them first
+        # (lane x45c: after the queue drained, with the parked run stages)
+        if self.steps.parked() > 0:
+            self.ex.sync()
+            self.steps.release_parked()
         self.steps.clear()
         self.buffer_kind.clear()
         self.tape.release(self.ex)

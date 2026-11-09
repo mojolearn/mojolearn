@@ -295,6 +295,7 @@ struct MambaBlockProgram(Movable):
         computed tensors (the uploads, the state and the resident structs
         stay)."""
         self.s.ex.sync()
+        self.s.steps.release_parked()
         self.s.reset()
 
     def finish_with_state(mut self, pieces: List[Int]) raises:

@@ -569,19 +569,59 @@ def _attn_kv_views(ctx: DeviceContext, ex: DeviceExec, s: FP, ints: List[Int], d
     return kv^
 
 
+# Lane x45c: a run's call-shaped stages (and x copy) are parked here instead
+# of a wait inside the op (the per-layer synchronize X6 measured on every
+# L > 1 run, and on every Mamba-2/3 run); a caller that drains the stream
+# (a download, a loop's status read) releases them. A session that never
+# drains holds at most STEP_PARK_CAP parked runs: the next run past it waits
+# once and releases them all (bounded memory, one wait per that many runs).
+comptime STEP_PARK_CAP = 64
+
+
 struct BlockStepScratch(Movable):
     """The resident block structs of one session's step ops, one entry per
-    (weights, state) pair, built at the pair's first run."""
+    (weights, state) pair, built at the pair's first run, and the parked
+    stages of runs the stream may still be executing."""
     var m1: List[_M1Block]
     var m2: List[_M2Block]
     var m3: List[_M3Block]
     var attn: List[_AttnBlock]
+    var parked_m1: List[MambaDeviceStages]
+    var parked_m2: List[Mamba2DeviceStages]
+    var parked_m3: List[Mamba3DeviceStages]
+    var parked_attn: List[AttnPrefill]
+    var parked_x: List[DeviceBuffer[DType.float32]]
 
     def __init__(out self):
         self.m1 = List[_M1Block]()
         self.m2 = List[_M2Block]()
         self.m3 = List[_M3Block]()
         self.attn = List[_AttnBlock]()
+        self.parked_m1 = List[MambaDeviceStages]()
+        self.parked_m2 = List[Mamba2DeviceStages]()
+        self.parked_m3 = List[Mamba3DeviceStages]()
+        self.parked_attn = List[AttnPrefill]()
+        self.parked_x = List[DeviceBuffer[DType.float32]]()
+
+    def parked(self) -> Int:
+        return (len(self.parked_m1) + len(self.parked_m2) + len(self.parked_m3) + len(self.parked_attn)
+                + len(self.parked_x))
+
+    def release_parked(mut self):
+        """Free the parked stages. Only after the stream drained (a download
+        or a synchronize the caller made)."""
+        self.parked_m1.clear()
+        self.parked_m2.clear()
+        self.parked_m3.clear()
+        self.parked_attn.clear()
+        self.parked_x.clear()
+
+    def make_room(mut self, ctx: DeviceContext) raises:
+        """Before a run that parks: past STEP_PARK_CAP parked runs, one wait
+        and release."""
+        if self.parked() >= STEP_PARK_CAP:
+            ctx.synchronize()
+            self.release_parked()
 
     def count(self) -> Int:
         return len(self.m1) + len(self.m2) + len(self.m3) + len(self.attn)
@@ -710,9 +750,10 @@ def _run_m1(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
         _d2d(ctx, dx, x, n)
         mamba_block_forward(ctx, stages, blk.st, blk.w, dx, b, l, trace, String("ops.step"))
         _d2d(ctx, y, stages.residual_out, n)
-        ctx.synchronize()  # the call-shaped stages and x go at return
-        _ = stages^
-        _ = dx^
+        # lane x45c: parked, no wait (the stream may still read them)
+        sc.make_room(ctx)
+        sc.parked_m1.append(stages^)
+        sc.parked_x.append(dx^)
 
 
 def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
@@ -747,7 +788,6 @@ def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
                              String("ops.step"))
         _d2d(ctx, y, stages.residual_out, n)
         _d2d(ctx, blk.h_last, stages.h_last, h_n)
-        ctx.synchronize()  # the call-shaped stages go at return
     else:
         var dx = mamba_zeros(ctx, n)
         _d2d(ctx, dx, x, n)
@@ -755,11 +795,12 @@ def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
                              String("ops.step"))
         _d2d(ctx, y, stages.residual_out, n)
         _d2d(ctx, blk.h_last, stages.h_last, h_n)
-        ctx.synchronize()
-        _ = dx^
-    _ = stages^
+        sc.parked_x.append(dx^)
     var words: List[Int] = [blk.st.buf_len]
     _write_words(ex, bufs[3], words)
+    # lane x45c: the call-shaped stages parked, no wait
+    sc.make_room(ctx)
+    sc.parked_m2.append(stages^)
 
 
 def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
@@ -811,23 +852,21 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
         _d2d(ctx, dx, x, n)
         mamba3_block_forward(ctx, stages, blk.st, blk.w, dx, b, l, trace, String("ops.step"))
         _d2d(ctx, y, stages.residual_out, n)
-        ctx.synchronize()
-        _ = dx^
+        sc.parked_x.append(dx^)
     _d2d(ctx, blk.reports[0], stages.h_last, report_n[0])
     _d2d(ctx, blk.reports[1], stages.k_last, report_n[1])
     _d2d(ctx, blk.reports[2], stages.v_last, report_n[2])
     _d2d(ctx, blk.reports[3], stages.theta_last, report_n[3])
-    ctx.synchronize()
-    comptime if IDN_M3_DECODE_WINDOW_REUSE:
-        if l == 1:
-            # Every report copy above completed before capacity is retained.
-            blk.decode_stages = stages^
-        else:
-            _ = stages^
-    else:
-        _ = stages^
     var words: List[Int] = [blk.st.buf_len, 1 if blk.st.pending else 0]
     _write_words(ex, bufs[3], words)
+    # lane x45c: no wait; the stages stay with the entry (reuse, kept by the
+    # entry and only re-windowed in stream order) or are parked
+    comptime if IDN_M3_DECODE_WINDOW_REUSE:
+        if l == 1:
+            sc.m3[e].decode_stages = stages^
+            return
+    sc.make_room(ctx)
+    sc.parked_m3.append(stages^)
 
 
 def _same_ints(a: List[Int], b: List[Int]) -> Bool:
@@ -989,9 +1028,11 @@ def _run_attn(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], coun
     var pre = AttnPrefill()
     _run_attn_on(ex, sc, bufs, counts, ints, y_out, pre, False)
     if pre.stages:
-        # The run's own L-shaped stages go at return (as before).
-        ex.ctx.synchronize()
-    _ = pre^
+        # lane x45c: the run's own L-shaped stages parked, no wait
+        sc.make_room(ex.ctx)
+        sc.parked_attn.append(pre^)
+    else:
+        _ = pre^
 
 
 def _step_run[CODE: Int](
