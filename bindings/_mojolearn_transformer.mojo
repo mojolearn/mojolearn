@@ -1214,16 +1214,8 @@ def transformer_decode_session_close_binding(session: PythonObject) raises -> Py
     return PythonObject(0)
 
 
-def causal_lm_resident_read_version_binding() -> PythonObject:
-    # Capability for native group operation 2. Older images retain their
-    # existing per-call route; admission never probes by executing a read.
-    return PythonObject(1)
-
-
-def causal_lm_resident_sampling_version_binding() -> PythonObject:
-    # Capability only: public policy opt-in stays default-off. Group3 uses the
-    # common compensated-FP32 sampler and committed checkpoint publication.
-    return PythonObject(1)
+# TOMBSTONE: causal_lm_resident_read_v1 / causal_lm_resident_sampling_v1 capability entries (REFACTORED: reads run as the decode program, causal_lm_program_read_v1) deleted 2026-11-09 by lane/x45c-causal-generate-program-decode; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch; record in docs/TOMBSTONES.md.
 
 
 def causal_lm_native_handle_binding(session: PythonObject) raises -> PythonObject:
@@ -1718,8 +1710,6 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[causal_lm_session_open_binding]("causal_lm_session_open")
         m.def_function[causal_lm_session_open_int15_binding]("causal_lm_session_open_int15")
         m.def_function[causal_lm_session_run_binding]("causal_lm_session_run")
-        m.def_function[causal_lm_resident_read_version_binding]("causal_lm_resident_read_v1")
-        m.def_function[causal_lm_resident_sampling_version_binding]("causal_lm_resident_sampling_v1")
         m.def_function[causal_lm_session_forward_binding]("causal_lm_session_forward")
         m.def_function[causal_lm_session_close_binding]("causal_lm_session_close")
         # Lane x45c: CausalLM.generate as one Program.decode (the decode program).

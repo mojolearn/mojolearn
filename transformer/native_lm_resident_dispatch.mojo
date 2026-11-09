@@ -3,20 +3,14 @@
 # Transformer session owners. Group admission/release is GIL-held; numerical
 # execution is GIL-released by the common provider, as in the public binding.
 from core.native_session_group import NativeSessionGroup
-from core.resident_generation_read import ResidentGreedyRead
-from core.resident_sampling_read import ResidentSamplingRead
-from std.math import isfinite
 from transformer.transformer_binding_impl import (
     CausalLMSession, TransformerDecodeSession, _require_session_open,
     _lm_open_run, _lm_open_run_int15, _lm_run, _lm_forward_run, LM_RESIDENT_GENERATE,
 )
 
 
-def _lm_group_progress(group: NativeSessionGroup) -> MutPointer[ResidentGreedyRead, MutUntrackedOrigin]:
-    if group.operation == 3:
-        var sampling = MutPointer[ResidentSamplingRead, MutUntrackedOrigin](unsafe_from_address=group.addresses[3])
-        return MutPointer[ResidentGreedyRead, MutUntrackedOrigin](unsafe_from_address=Int(Pointer(to=sampling[].progress)))
-    return MutPointer[ResidentGreedyRead, MutUntrackedOrigin](unsafe_from_address=group.addresses[3])
+# TOMBSTONE: operations 2 and 3 (the resident greedy and sampling reads) of the resident group (REFACTORED: CausalLM reads run as the decode program) deleted 2026-11-09 by lane/x45c-causal-generate-program-decode; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch; record in docs/TOMBSTONES.md.
 
 
 def _lm_group_reserve(group: NativeSessionGroup) raises:
@@ -25,9 +19,8 @@ def _lm_group_reserve(group: NativeSessionGroup) raises:
     var owner = MutPointer[CausalLMSession, MutUntrackedOrigin](unsafe_from_address=group.owner)
     if owner[].busy or not owner[].is_open() or not owner[].usable:
         raise Error("causal lm session: busy, not open or lost after a failed call")
-    var read = group.operation == 2 or group.operation == 3
-    var run = group.operation == 1 or read
-    if (not run and group.operation != 0) or len(group.addresses) != (4 if read else (3 if run else 2)) or len(group.parameters) != (3 if run else 1):
+    var run = group.operation == 1
+    if (not run and group.operation != 0) or len(group.addresses) != (3 if run else 2) or len(group.parameters) != (3 if run else 1):
         raise Error("causal lm resident: invalid native group descriptor")
     if group.addresses[0] == 0 or group.addresses[1] == 0:
         raise Error("causal lm resident: null input or output")
@@ -35,33 +28,6 @@ def _lm_group_reserve(group: NativeSessionGroup) raises:
     var steps = group.parameters[1] if run else 1
     if length < 1 or steps < 1:
         raise Error("causal lm resident: positive length and step count required")
-    if read:
-        if group.addresses[3] == 0:
-            raise Error("causal lm resident: missing read progress")
-        var progress = _lm_group_progress(group)
-        if len(progress[].finished) != owner[].b or len(progress[].lengths) != owner[].b:
-            raise Error("causal lm resident: read row counts differ from the model")
-        if progress[].pad < 0 or progress[].pad >= owner[].v:
-            raise Error("causal lm resident: pad token is outside the vocabulary")
-        for token in progress[].eos:  # driver-loop: admitted generation policy token ids
-            if token < 0 or Int(token) >= owner[].v:
-                raise Error("causal lm resident: EOS token is outside the vocabulary")
-    if group.operation == 3:
-        var sampling = MutPointer[ResidentSamplingRead, MutUntrackedOrigin](unsafe_from_address=group.addresses[3])
-        if sampling[].temperature <= 0 or not isfinite(sampling[].temperature):
-            raise Error("generation: temperature must be finite and positive")
-        # A strictly positive admitted Float64 top_p may round to FP32 zero.
-        if sampling[].top_k < 0 or sampling[].top_k > owner[].v or sampling[].top_p < 0 or sampling[].top_p > 1 or not isfinite(sampling[].top_p):
-            raise Error("generation: native FP32 sampling parameters are invalid")
-        if owner[].v < 1 or owner[].v > 2147483647 or owner[].b > 2147483647 // owner[].v:
-            raise Error("generation: sampling workspace exceeds native indexing")
-        if sampling[].output_position < 0 or sampling[].output_position > 9223372036854775807 - steps:
-            raise Error("generation: output position exceeds native counter range")
-        if len(sampling[].cache_keys) != len(group.layers) or len(sampling[].cache_values) != len(group.layers):
-            raise Error("causal lm sampling: committed cache destinations differ from layers")
-        for i in range(len(group.layers)):  # driver-loop: admitted retained host cache destinations
-            if sampling[].cache_keys[i] == 0 or sampling[].cache_values[i] == 0:
-                raise Error("causal lm sampling: null committed cache destination")
     var held = -1
     for i in range(len(group.layers)):  # driver-loop: validate every original layer before setting any busy flag
         if group.layers[i] == 0:
@@ -77,14 +43,8 @@ def _lm_group_reserve(group: NativeSessionGroup) raises:
         elif held >= 0 and held != cached:
             raise Error("causal_lm_session_forward: the layers hold different cached lengths")
         held = cached
-        if cached + length + (0 if read else steps - 1) > layer[].smax:
+        if cached + length + steps - 1 > layer[].smax:
             raise Error("causal lm resident: additional positions do not fit the cache")
-        if read:
-            # EOS may stop before the requested capacity is exhausted. Capture
-            # the tightest layer limit once; enforce it at each actual step.
-            var progress = _lm_group_progress(group)
-            var remaining = layer[].smax - cached
-            progress[].cache_remaining = remaining if i == 0 else min(progress[].cache_remaining, remaining)
     for address in group.layers:  # driver-loop: original whole-model session reservation, no layer locks acquired
         MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=address)[].busy = True
     owner[].busy = True
@@ -101,10 +61,9 @@ def _lm_group_execute(group: NativeSessionGroup) raises -> Int:
     if not owner[].busy:
         raise Error("causal lm resident: execution requires a reserved group")
     try:
-        if group.operation == 1 or group.operation == 2 or group.operation == 3:
+        if group.operation == 1:
             _lm_run(owner[], group.layers, group.addresses[0], group.addresses[1], group.addresses[2],
-                group.parameters[0], group.parameters[1], group.addresses[3] if group.operation == 2 or group.operation == 3 else 0,
-                group.addresses[3] if group.operation == 3 else 0)
+                group.parameters[0], group.parameters[1])
         else:
             _lm_forward_run(owner[], group.layers, group.addresses[0], group.addresses[1], group.parameters[0])
     except problem:

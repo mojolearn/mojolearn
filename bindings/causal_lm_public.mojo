@@ -283,12 +283,6 @@ def causal_lm_admit_binding(mut mods: NativeModules,
                          String("transformer_arithmetic_profile_changed")]:
                 if _native_has_entry(mods, block_binding, name):
                     py_setitem(entries, name, _native_function(mods, block_binding, name))
-            if _native_has_entry(mods, block_binding, "causal_lm_resident_read_v1"):
-                py_setitem(entries, "resident_read_v1", Int(py=_native_function(mods, block_binding, "causal_lm_resident_read_v1")()) == 1)
-                mods.released()
-            if _native_has_entry(mods, block_binding, "causal_lm_resident_sampling_v1"):
-                py_setitem(entries, "resident_sampling_v1", Int(py=_native_function(mods, block_binding, "causal_lm_resident_sampling_v1")()) == 1)
-                mods.released()
             if model._head_int15 is not None:
                 py_setitem(entries, "transformer_decode_session_open_int15", _native_function(mods, block_binding, "transformer_decode_session_open_int15"))
                 py_setitem(entries, "causal_lm_session_open_int15", _native_function(mods, block_binding, "causal_lm_session_open_int15"))
