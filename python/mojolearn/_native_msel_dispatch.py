@@ -108,10 +108,10 @@ def connect(context, package):
     from .neighbors import KNeighborsClassifier
     registry[KNeighborsClassifier]["classes_kind"] = "knn"  # glue: native form of the connected class-label property
     # glue: the DeviceRows door (bindings/device_rows_door.mojo) reads these
-    # three connected identities from the owner context a door receives; a
-    # context without them treats no argument as DeviceRows.
-    door = dict(door_rows_class=_arena_io.DeviceRows, door_rows_call=_arena_io._ROWS_CALL,
-                door_rows_context=_arena_io._ROWS_CONTEXT)
+    # two connected identities from the owner context a door receives; a
+    # context without them treats no argument as DeviceRows. (door_rows_call
+    # went with door_rows_host, lane A5: no door reads it.)
+    door = dict(door_rows_class=_arena_io.DeviceRows, door_rows_context=_arena_io._ROWS_CONTEXT)
     for plan in registry.values():  # glue: import-time connection of fixed identities into each owner context
         if type(plan['context']) is dict:
             plan['context'].update(door)

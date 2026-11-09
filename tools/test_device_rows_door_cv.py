@@ -91,7 +91,6 @@ def test_device_rows_door_recognizes_only_the_exact_class():
     plan = _plan(linear_model.LinearRegression)
     context = plan["context"]
     assert context["door_rows_class"] is _arena_io.DeviceRows
-    assert context["door_rows_call"] is _arena_io._ROWS_CALL
     assert context["door_rows_context"] is _arena_io._ROWS_CONTEXT
 
 

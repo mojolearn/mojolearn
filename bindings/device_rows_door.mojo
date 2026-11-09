@@ -23,11 +23,9 @@
 #
 # The connected names (import-time glue, `_native_msel_dispatch.connect`, into
 # every owner context model selection calls): `door_rows_class`
-# (`_arena_io.DeviceRows`), `door_rows_call` (`_arena_io._ROWS_CALL`, the
-# compiled DeviceRows owner) and `door_rows_context` (`_arena_io._ROWS_CONTEXT`).
-# This module reads `door_rows_class` and `door_rows_context` only; the
-# `door_rows_call` connection went with door_rows_host (remove it from the
-# glue once no door calls materialize).
+# (`_arena_io.DeviceRows`) and `door_rows_context` (`_arena_io._ROWS_CONTEXT`).
+# The `door_rows_call` connection went with door_rows_host (removed from the
+# glue by integ/pre-0867-w2: no door reads it).
 #
 # Numerics: none. The rows a DeviceRows names are the rows model selection's
 # host path gathers (the same device gather, the same order), so a fit or a
