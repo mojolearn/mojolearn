@@ -92,8 +92,9 @@ def sklearn_tags(est, preserves_dtype=None):
                 requires_fit=getattr(cls, "_sklearn_requires_fit", True))
     if callable(getattr(est, "transform", None)):
         tags.transformer_tags = TransformerTags(
-            preserves_dtype=list(getattr(cls, "_sklearn_preserves_dtype", ()) if preserves_dtype is None
-                                 else preserves_dtype))
+            preserves_dtype=list(getattr(cls, "_sklearn_preserves_dtype", ())))
+        if preserves_dtype is not None:
+            tags.transformer_tags.preserves_dtype = preserves_dtype
     from ._sk_validate import input_tag_overrides
     for name, value in input_tag_overrides(cls).items():  # glue: sklearn tag field overrides by name
         setattr(tags.input_tags, name, value)

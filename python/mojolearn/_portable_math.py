@@ -259,7 +259,7 @@ def nsum(values):
     if not vals:
         return 0.0
     from ._buffer import _native
-    return float(_native("nsum_f64")(vals.buffer_info()[0], len(vals)))  # glue: pack addresses for one native call; array('d') of the scalars read once by nsum_f64
+    return float(_native("nsum_f64")(vals.buffer_info()[0], len(vals)))  # cpu-route: array('d') of the scalars read once by nsum_f64
 
 
 def _cut(value, shift, bits, up):

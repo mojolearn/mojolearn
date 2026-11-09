@@ -36,7 +36,8 @@ def connect():
     call = _binding()._module.arena_rows_native_call
     if type(call) is not BuiltinFunctionType:
         raise TypeError("DeviceRows requires its compiled metadata entry")
-    entries = {name: _native(name) for name in ('msel_put', 'msel_free', 'msel_take_rows', 'msel_free_bytes')}  # glue: fixed model-selection snapshot entries, preserving the established identical base binding
+    entries = {name: _native(name) for name in ('msel_put', 'msel_free', 'msel_take_rows')}  # glue: fixed model-selection snapshot entries, preserving the established identical base binding
+    entries['msel_free_bytes'] = _native('msel_free_bytes')
     entries['cast'] = _native('cast_elements')
     if any(type(entry) is not BuiltinFunctionType for entry in entries.values()):  # glue: only connected native entries may own row preparation and gathering
         raise TypeError("DeviceRows requires compiled resident and cast entries")

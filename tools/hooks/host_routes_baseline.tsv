@@ -1065,7 +1065,6 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_mode.py	0	return [_
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_mode.py	0	return tuple(_ndarray(v, np) for v in value) # glue: converts the members of a result tuple
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_mode.py	0	params = list(sig.parameters.values())
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_mode.py	0	preserves_dtype=list(getattr(cls, "_sklearn_preserves_dtype", ()) if preserves_dtype is None
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/_mode.py	0	return sorted(names) # glue: sklearn get_params parameter names
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_mode.py	0	depth = state.get("_mojolearn_fitting", 1) - 1
@@ -1088,7 +1087,6 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_arena_prog.p
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_arena_prog.py	0	if any(not isinstance(entry, BuiltinFunctionType) for entry in (call, gather, finite32, finite64)): # glue: fixed native ABI identity
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_arena_rows.py	0	entries = {name: _native(name) for name in ('msel_put', 'msel_free', 'msel_take_rows', 'msel_free_bytes')} # glue: fixed model-selection snapshot entries, preserving the established identical base binding
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_arena_rows.py	0	for basename in (markers[3], None)) # glue: the two fixed host/missing-family refusal templates
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -2274,7 +2272,6 @@ py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_sk_validate.py	0	pa
 py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/_sk_validate.py	0	if a.dtype not in ("<f4", "<f8") or a.size == 0 or a.size != max(a.shape): # glue: largest axis of the shape
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_sk_validate.py	0	args = args[:index] + (value,) + args[index + 1:]
 py-while-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_sk_validate.py	0	while isinstance(item, (list, tuple)): # glue: walks the nesting depth through first elements (rank-sized)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_spectral_impl.py	0	nnz = int(_native("nonzero_f32_count")(src, n_r * n_c)) if n_r * n_c else 0 # glue: pack addresses for one native call; float32 host matrix read once by nonzero_f32_count on a CPU-only install
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_training_impl.py	0	% (where, ", ".join(k for k in named))) # glue: argument names for the message
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
