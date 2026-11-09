@@ -38,6 +38,29 @@
 - Order: all code in, one compile, measure, fix, measure again until clean,
   freeze, the one verification, publish.
 
+## Mojo rules that cost a build round (Andrew, 2026-11-09)
+
+Each of these compiled badly or hung during the pre-0.8.67 integration. Follow
+them when writing Mojo; lanes do not compile, so the compiler will not catch
+them for you.
+
+- Never name a parameter `out`. It is a reserved word (an argument
+  convention), and the compiler reports "expected argument name". Use `dst`
+  or `y_out`.
+- A function launched as a kernel must not also be called from another
+  kernel. The build fails with "compile offload result missing kernelId" and
+  no source location. Put the body in an `@always_inline` helper and have
+  both kernels call it.
+- No mutual recursion across admission helpers (or any helpers on the host
+  bindings' import path). The compiler deadlocks at 0% CPU instead of
+  reporting it.
+- Hold a device buffer or view in a `var` before taking a pointer for a
+  kernel. A pointer from a temporary or an immutable borrow is not mutable
+  and the launch is refused.
+- No call as a default argument value (for example
+  `binding: PythonObject = PythonObject(None)`). Defaults are evaluated at
+  compile time. Pass the value at the call site.
+
 ## Verify once, before the release, at the very end (Andrew, 2026-11-05)
 
 - Verification happens before a release only, once: one global verify of
