@@ -1209,14 +1209,26 @@ def _scan_all(tree, paths):
         return
     if hasattr(tree, "host_exports"):
         tree.host_exports()  # once, before the fork: every worker shares it
-    for p, r in _pool_map(tree, _scan_one, need):
+    keys = {}
+    todo = []
+    for p in need:
+        ck = scan_file(tree, p, key_only=True)
+        if ck is not None and ck in _SCAN_CACHE:
+            done[p] = _SCAN_CACHE[ck]
+            continue
+        keys[p] = ck
+        todo.append(p)
+    for p, r in _pool_map(tree, _scan_one, todo):
         done[p] = r
+        if keys[p] is not None:
+            _SCAN_CACHE[keys[p]] = r
 
 
-def scan_file(tree, path, with_driver=False):
+def scan_file(tree, path, with_driver=False, key_only=False):
     """[(rule, line_no, code_text)] for one scoped file; with_driver: also the
-    accepted driver-loop tags, as (findings, [(line_no, text)])."""
-    hit = getattr(tree, "__dict__", {}).get("_scanned", {}).get(path)
+    accepted driver-loop tags, as (findings, [(line_no, text)]). key_only:
+    only the scan cache key (None for an uncommitted file)."""
+    hit = None if key_only else getattr(tree, "__dict__", {}).get("_scanned", {}).get(path)
     if hit is not None:
         return hit if with_driver else hit[0]
     lang = "py" if path.endswith(".py") else "mojo"
@@ -1248,6 +1260,8 @@ def scan_file(tree, path, with_driver=False):
     ck = (path, sha, frozenset(host_thread_names), frozenset(host_syms),
           tuple(sorted((k, tuple(v)) for k, v in import_of.items())), frozenset(local_host),
           native, impl)
+    if key_only:
+        return ck if sha is not None else None
     if sha is not None and ck in _SCAN_CACHE:
         res, acc = _SCAN_CACHE[ck]
         return (res, acc) if with_driver else res
