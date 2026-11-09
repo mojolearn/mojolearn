@@ -39,5 +39,17 @@ allowed; each one is a device sync, so at most one per outer iteration.
 
 `tools/hooks/no_host_routes.py` keeps `mojo-host-loop` as the owed rule for
 classes 2 and 3. Tagged driver loops are a reported count, never debt. The
-baseline only shrinks. The triage of the 98 sites found on 2026-10-17 is in
+baseline only shrinks.
+
+Since 2026-11-09 the tag is judged against the loop, in Mojo and in Python, for
+`for` and `while` alike: the LOOP-TAG VOCABULARY at the top of
+`no_host_routes.py` and `no_compute_in_shells.py` reads the iterable (or
+`range` bound, or `while` condition), then the loop variables, then the tag
+text. A data word (rows, samples, labels, values, tokens, `X`, `y`,
+`.shape[0]`, ...) makes the tag false; a structure word (layers, blocks,
+heads, estimators, folds, devices, fields, params, trees, ...) makes it true;
+neither is kept and counted as "could not judge". The tag sits on the loop
+line or the comment-only line above. `# glue:` and `# cpu-route:` notes
+exempt nothing, and `# small-loop(<bound>)` holds only for a literal or
+UPPER_CASE constant bound. The triage of the 98 sites found on 2026-10-17 is in
 `docs/plans/HOST_LOOPS_TRIAGE.md`.
