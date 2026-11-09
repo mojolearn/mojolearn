@@ -683,24 +683,65 @@ def qn_fit_host(
     weights, uploaded here and installed into the objective; unset, `sw_ptr`
     is never read (any valid pointer will do)."""
     qn_check_loss_args(loss, n_classes, svr_eps)
-    var n_targets = 1 if n_classes == 2 else n_classes
-    var n_param = (n_features + (1 if fit_intercept else 0)) * n_targets
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var y = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var w = ctx.enqueue_create_buffer[DType.float32](n_param)
     # TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by 47a3af928; code recoverable at 47a3af928^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch; record in docs/TOMBSTONES.md.
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     # `status` (lane a7c): the host address of the deferred finite status
     # word of X (core/admitted_finite_status.mojo; 0 when the door tested X
     # itself): the words just uploaded are tested on the device and the
-    # word comes back under the synchronize below. A non-finite X fits
-    # nothing (0 iterations, coef_ptr untouched); the door refuses.
+    # word comes back under qn_fit_resident's first synchronize. A
+    # non-finite X fits nothing (0 iterations, coef_ptr untouched); the
+    # door refuses.
     var dstat = ctx.enqueue_create_buffer[DType.int32](1)
     if status != 0:
         dstat.enqueue_fill(Int32(0))
         enqueue_finite_status(ctx, x.unsafe_ptr(), n_rows * n_features, dstat.unsafe_ptr(), 0)
         ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status), src_buf=dstat)
+    var iters = qn_fit_resident(
+        ctx, x^, y_ptr, coef_ptr, info_ptr, n_rows, n_features, n_classes, penalty_l1, penalty_l2,
+        grad_tol, change_tol, max_iter, linesearch_max_iter, lbfgs_memory, fit_intercept,
+        penalty_normalized, has_sample_weight, sw_ptr, loss, svr_eps, status, 1,
+    )
+    _ = dstat^
+    return iters
+
+
+def qn_fit_resident(
+    ctx: DeviceContext,
+    var x: DeviceBuffer[DType.float32],
+    y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    info_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_classes: Int,
+    penalty_l1: Float64,
+    penalty_l2: Float64,
+    grad_tol: Float64,
+    change_tol: Float64,
+    max_iter: Int,
+    linesearch_max_iter: Int,
+    lbfgs_memory: Int,
+    fit_intercept: Bool,
+    penalty_normalized: Bool,
+    has_sample_weight: Bool,
+    sw_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    loss: Int,
+    svr_eps: Float64,
+    status: Int,
+    n_status: Int,
+) raises -> Int:
+    """`qn_fit_host` over an X already on the device (`x`, n_rows x
+    n_features, C order: its upload, or a model-selection fold gathered by
+    `qn_fit_fold`; lane a7c): uploads y and the weights, ONE synchronize,
+    then `n_status` int32 status words at host address `status` (0: none)
+    are read: any nonzero word fits nothing (returns 0, coef_ptr untouched).
+    Otherwise the solver as before; the same kernels on the same words."""
+    var n_targets = 1 if n_classes == 2 else n_classes
+    var n_param = (n_features + (1 if fit_intercept else 0)) * n_targets
+    var y = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var w = ctx.enqueue_create_buffer[DType.float32](n_param)
     ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
     ctx.enqueue_memset(w, Float32(0.0))
     var sw = Optional[DeviceBuffer[DType.float32]]()
@@ -709,9 +750,11 @@ def qn_fit_host(
         ctx.enqueue_copy(dst_buf=swb, src_ptr=sw_ptr)
         sw = Optional[DeviceBuffer[DType.float32]](swb^)
     ctx.synchronize()
-    _ = dstat^
-    if status != 0 and MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status).unsafe_load(0) != 0:
-        return 0
+    if status != 0:
+        var words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status)
+        for k in range(n_status):  # small-loop(status words): at most two
+            if words.unsafe_load(k) != 0:
+                return 0
     var pams = QNParams.default()
     pams.loss = loss
     pams.penalty_l1 = penalty_l1
