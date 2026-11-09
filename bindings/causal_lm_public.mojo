@@ -915,7 +915,7 @@ def _causal_layer_run_bound(mut mods: NativeModules,
         # Fixed public Mamba ABI words, plus the optional Mamba1 affine tail.
         # Reserve once so the input/weights/state/report vector does not grow
         # through multiple allocations during every public decode step.
-        # TOMBSTONE: the Mamba-2 public-step workspace (MAMBA2_WORKSPACE_STEP route) (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by X5SHA; code recoverable at 25e5650c14.
+        # TOMBSTONE: the Mamba-2 public-step workspace (MAMBA2_WORKSPACE_STEP route) (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by 08332f3665; code recoverable at 25e5650c14.
         # Restore: git apply experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch
         var m_addresses = List[Int](capacity=len(layer.weights.addresses) + 7)
         m_addresses.append(_addr(x, keep))

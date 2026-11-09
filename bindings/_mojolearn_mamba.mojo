@@ -373,7 +373,7 @@ def mamba_block_api_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
-# TOMBSTONE: mamba2_workspace_api_v1 (the Mamba-2 public-step workspace descriptor) (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by X5SHA; code recoverable at 25e5650c14.
+# TOMBSTONE: mamba2_workspace_api_v1 (the Mamba-2 public-step workspace descriptor) (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by 08332f3665; code recoverable at 25e5650c14.
 # Restore: git apply experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch
 
 

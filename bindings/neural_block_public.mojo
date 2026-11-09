@@ -409,7 +409,7 @@ def _neural_allocate(mut mods: NativeModules, owner: NativeBlockExecution, b: In
 
 
 def _neural_layer_run(mut mods: NativeModules, owner: NativeBlockExecution, x: PythonObject, state: PythonObject, step: Bool) raises -> PythonObject:
-    # TOMBSTONE: the Mamba-2 public-step workspace owner (Mamba2PublicWorkspace, mamba2_workspace_api_v1) (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by X5SHA; code recoverable at 25e5650c14.
+    # TOMBSTONE: the Mamba-2 public-step workspace owner (Mamba2PublicWorkspace, mamba2_workspace_api_v1) (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by 08332f3665; code recoverable at 25e5650c14.
     # Restore: git apply experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch
     # Every Mamba step and forward reaches the cached block program through
     # the one native Mamba descriptor (mamba/native_state_dispatch.mojo).

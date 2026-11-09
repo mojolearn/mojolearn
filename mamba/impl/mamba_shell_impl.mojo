@@ -194,7 +194,7 @@ def _m3_download_addr[wait: Bool = True](ctx: DeviceContext, mut buf: DeviceBuff
 
 
 
-# TOMBSTONE: _mamba1_run, _mamba1_run_arena (the per-call Mamba-1 body: ten weight and two state uploads per call) (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by X5SHA; code recoverable at 25e5650c14.
+# TOMBSTONE: _mamba1_run, _mamba1_run_arena (the per-call Mamba-1 body: ten weight and two state uploads per call) (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by 844ea17a80; code recoverable at 25e5650c14.
 # Restore: git apply experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch
 # The per-call Mamba-1 forward/step is `mamba_block_call(OPS_M1_STEP, ...)`
 # (mamba/impl/mamba_block_program.mojo): the step op's body on a cached
@@ -348,7 +348,7 @@ def _m1_session_load_run(mut s: Mamba1DecodeSession, pw: Int, ph: Int) raises:
 # ===========================================================================
 
 
-# TOMBSTONE: _mamba2_run, _mamba2_run_arena, _mamba2_arena_execute, _mamba2_arena_execute_prepared, Mamba2PublicWorkspace, _mamba2_workspace_step (the per-call Mamba-2 bodies and the public-step workspace), the Mamba-2 decode session body and its IDN_DECODE_RESIDENT_IO_M2 site, _m2_session_download_direct (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by X5SHA; code recoverable at 25e5650c14.
+# TOMBSTONE: _mamba2_run, _mamba2_run_arena, _mamba2_arena_execute, _mamba2_arena_execute_prepared, Mamba2PublicWorkspace, _mamba2_workspace_step (the per-call Mamba-2 bodies and the public-step workspace), the Mamba-2 decode session body and its IDN_DECODE_RESIDENT_IO_M2 site, _m2_session_download_direct (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by 844ea17a80; code recoverable at 25e5650c14.
 # Restore: git apply experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch
 # The per-call Mamba-2 forward/step is `mamba_block_call(OPS_M2_STEP, ...)`;
 # the public step's workspace (storage kept across steps, every weight
@@ -483,7 +483,7 @@ def _m3_load_weights[wait: Bool = True](ctx: DeviceContext, a: List[Int], dims: 
         return Mamba3DeviceWeights(ctx, w)
 
 
-# TOMBSTONE: _mamba3_run, _mamba3_check_state_words, _mamba3_run_on, _mamba3_run_arena (the per-call Mamba-3 body: nine weight and ten state uploads, fifteen downloads per call) and the Mamba-3 decode session body (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by X5SHA; code recoverable at 25e5650c14.
+# TOMBSTONE: _mamba3_run, _mamba3_check_state_words, _mamba3_run_on, _mamba3_run_arena (the per-call Mamba-3 body: nine weight and ten state uploads, fifteen downloads per call) and the Mamba-3 decode session body (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by 844ea17a80; code recoverable at 25e5650c14.
 # Restore: git apply experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch
 # The per-call Mamba-3 forward/step is `mamba_block_call(OPS_M3_STEP, ...)`;
 # the discard-state prefill (`mamba3_forward_fresh`'s fallback) is the same
