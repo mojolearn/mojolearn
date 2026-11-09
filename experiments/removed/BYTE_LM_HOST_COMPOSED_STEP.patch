@@ -986,7 +986,7 @@ index 9c84e7ee49..23da66fb83 100644
          raise Error("byte LM host: expected 3 addresses")
      var dims: List[Int] = [words[12], words[13]]
 diff --git a/training/byte_lm_host_execution.mojo b/training/byte_lm_host_execution.mojo
-index cef63189db..390306b1c8 100644
+index 5826836660..390306b1c8 100644
 --- a/training/byte_lm_host_execution.mojo
 +++ b/training/byte_lm_host_execution.mojo
 @@ -1,45 +1,37 @@
@@ -1004,9 +1004,9 @@ index cef63189db..390306b1c8 100644
  from training.byte_lm_host_io import byte_host_store_f32, byte_host_store_i32
 -from training.byte_lm_host import byte_host_logits, byte_host_logits_threaded, byte_host_next_threaded
 -from training.checks.optimizer_contract import OPT_ADAMW, OptimizerConfig
--from training.byte_lm_program import (
--    ByteHostProgram, byte_host_program_open, byte_host_program_load, byte_host_program_load_params,
--    byte_host_program_store, byte_program_fit, byte_program_eval,
+-from training.byte_lm_program import byte_program_fit, byte_program_eval
+-from training.byte_lm_host_program import (
+-    byte_host_program_open, byte_host_program_load, byte_host_program_load_params, byte_host_program_store,
 -)
 +from training.byte_lm_host import byte_host_logits, byte_host_logits_threaded, byte_host_next_threaded, byte_host_loss
 +from training.byte_lm_host_backward import byte_host_adamw, byte_host_train_step
@@ -1199,7 +1199,7 @@ index 9144f9d804..a138c5602f 100644
 +    var divisor = ce_divisor(cfg.reduction, ce_count(targets, cfg.ignore_index), cfg.num_items)
 +    return ftz(identical_div(ftz(total[0]), divisor))
 diff --git a/training/byte_lm_host_session.mojo b/training/byte_lm_host_session.mojo
-index 8246b25ccc..540f656b81 100644
+index f6d5a6b96e..540f656b81 100644
 --- a/training/byte_lm_host_session.mojo
 +++ b/training/byte_lm_host_session.mojo
 @@ -1,21 +1,12 @@
@@ -1219,9 +1219,9 @@ index 8246b25ccc..540f656b81 100644
  from training.byte_lm_config import ByteConfig
  from training.byte_lm_host_io import all_finite_f32_scan
 -from training.byte_lm_host_execution import byte_host_logits_native, byte_host_next_native, byte_host_optimizer
--from training.byte_lm_program import (
--    ByteHostProgram, byte_host_program_open, byte_host_program_load, byte_host_program_store, byte_program_fit,
--    byte_program_eval,
+-from training.byte_lm_program import byte_program_fit, byte_program_eval
+-from training.byte_lm_host_program import (
+-    ByteHostProgram, byte_host_program_open, byte_host_program_load, byte_host_program_store,
 -)
 +from training.byte_lm_host_execution import byte_host_train_native, byte_host_loss_native, byte_host_logits_native, byte_host_next_native
  from core.training_state_validation import training_admit_moments_and_flags
