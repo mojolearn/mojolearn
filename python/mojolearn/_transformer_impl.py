@@ -486,25 +486,9 @@ class TransformerState:
             _native_neural_bridge.CONTEXT)
 
 
-class TransformerForwardTape:
-    """Opaque, single-use native forward ticket returned by a transformer block."""
-
-    def __init__(self, block, session, binding, token, shape, configuration, profile):
-        return _native_neural_bridge.RUNTIME.transformer_public_call(
-            "tape_init", (self, (block, session, binding, token, shape,
-                                 configuration, profile)),
-            _TRANSFORMER_PUBLIC_CONTEXT, _native_neural_bridge.CONTEXT)
-
-    def __reduce__(self):
-        return _native_neural_bridge.RUNTIME.transformer_public_call(
-            "tape_reduce", (self,), _TRANSFORMER_PUBLIC_CONTEXT,
-            _native_neural_bridge.CONTEXT)
-
-    def close(self):
-        """Explicitly discard this ticket and its saved native buffers."""
-        return _native_neural_bridge.RUNTIME.transformer_public_call(
-            "tape_close", (self,), _TRANSFORMER_PUBLIC_CONTEXT,
-            _native_neural_bridge.CONTEXT)
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (`TransformerForwardTape`, the opaque single-use forward ticket.)
 
 
 # Profile mojolearn.identical.transformer.fp32.v1 (transformer/IDENTICAL_TRANSFORMER_CONTRACT.md),
@@ -808,65 +792,10 @@ class TransformerBlock(NumericModeMixin, _native_constructor=True):
         return _native_neural_bridge.RUNTIME.neural_block_forward(
             self, x, state, True, None, _native_neural_bridge.CONTEXT)
 
-    # NN32 retains native forward stages; NN31 uses the activation byte budget and optional
-    # replay cost threshold. A budget miss or switches off selects native replay. The budget
-    # covers retained forward stages, excluding input/weight snapshots and transient
-    # forward/backward work. No compilation, identity, quality or timing admission is implied.
-    def forward_with_tape(self, x, *, activation_budget_bytes=536870912,
-                          minimum_replay_ops_per_byte=0):
-        """Training forward that returns ``(output, tape)`` for a later `backward_from_tape`.
-
-        Runs a zero-state forward and keeps what the backward needs. The input and weights
-        are snapshotted, so editing your arrays afterwards does not change the backward. A
-        tape is single-use, cannot be serialized, and is invalidated by any later call on
-        this block. Requires the identical mode and the default float32 block options;
-        otherwise `NotImplementedError`.
-
-        Parameters
-        ----------
-        x : buffer of float32, shape (B, L, d_model)
-            Input activations.
-        activation_budget_bytes : int, default 536870912
-            Bytes of forward activations to keep for the backward; when they do not fit,
-            the backward recomputes the forward instead. Must be >= 0.
-        minimum_replay_ops_per_byte : int, default 0
-            Recompute rather than keep stages whose cost per byte is below this threshold.
-            Must be >= 0.
-
-        Returns
-        -------
-        output : mojolearn.Array of float32, shape (B, L, d_model)
-        tape : object
-            Ticket for `backward_from_tape`.
-        """
-        return _native_neural_bridge.RUNTIME.transformer_public_call(
-            "forward_tape", (self, x, activation_budget_bytes,
-                             minimum_replay_ops_per_byte),
-            _TRANSFORMER_PUBLIC_CONTEXT, _native_neural_bridge.CONTEXT)
-
-    def backward_from_tape(self, tape, grad_output):
-        """Gradients for the forward recorded in `tape`.
-
-        Consumes the tape. A tape from another block, an already used tape, or one made
-        before the block's configuration changed raises `ValueError`.
-
-        Parameters
-        ----------
-        tape : object
-            The tape returned by `forward_with_tape`.
-        grad_output : buffer of float32
-            Gradient of the loss with respect to the block output, the output's shape.
-
-        Returns
-        -------
-        dict
-            float32 gradients keyed ``"x"`` plus the nine weight names, each in its
-            tensor's shape.
-        """
-        return _native_neural_bridge.RUNTIME.transformer_public_call(
-            "backward_tape", (self, tape, grad_output),
-            _TRANSFORMER_PUBLIC_CONTEXT, _native_neural_bridge.CONTEXT)
-
+    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+    # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+    # (`TransformerBlock.forward_with_tape` / `backward_from_tape`; `backward` is the
+    # training path.)
     def backward(self, x, grad_output):
         """Gradients of a zero-state prefill with respect to the input and the weights.
 
@@ -1084,9 +1013,6 @@ _TRANSFORMER_PUBLIC_CONTEXT = {
     "state_class": TransformerState,
     "state_fields": ("batch_size", "n_kv_heads", "head_dim", "max_tokens",
                      "cached_tokens", "window", "k_cache", "v_cache"),
-    "tape_class": TransformerForwardTape,
-    "tape_fields": ("_native_owner", "_block", "_session", "_binding", "_token",
-                    "retained", "stage_bytes", "shape", "profile", "_consumed"),
     "weight_names": TransformerBlock._W_NAMES,
     "array_class": _Array,
     "array_slots": {name: vars(_Array)[name] for name in _Array.__slots__},
