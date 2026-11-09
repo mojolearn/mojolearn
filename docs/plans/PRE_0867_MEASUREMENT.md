@@ -52,6 +52,10 @@ owed. Our arms only. Opponents are never rerun; the compare reuses the paper's s
    Add `-D MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF` as its own B set once a `.mojo` file of the measured commit reads
    it; none does at measure-prep 3d67f6c437. The tool refuses any define that no `.mojo` or `bindings/` file of
    the commit names, because such a B set would be byte-identical to the A set.
+   Lane t3-gbdt-greedy-on-device-loop adds `-D MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF` (read by
+   `gbdt/methods/doc_parallel_boosting.mojo`): its own B set, label `greedyoff`, for the greedy-searcher
+   (default) SymmetricTree GBDT rows; the pointwise rows stay on `MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF`, which turns
+   both arms off.
 
    A B set recompiles only the bindings that can read its define. The reuse plan builds every row whose closure
    names the define (`release_reuse.apply_defines`). The binding cache keys and builds every other binding without

@@ -80,6 +80,49 @@ def add_model_value_kernel(
     model in place; ours does not, because nothing here serialises a model
     yet and an unscaled leaf is the more useful thing to inspect.
     """
+    _add_model_value_body(
+        part_offset, part_size, row_index, leaf_values, learning_rate, cursor,
+        dim_count_in, cursor_stride_in,
+    )
+
+
+def add_model_value_gated_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    part_offset: MutPointer[UInt32, MutAnyOrigin],
+    part_size: MutPointer[UInt32, MutAnyOrigin],
+    row_index: MutPointer[UInt32, MutAnyOrigin],
+    leaf_values: MutPointer[Float32, MutAnyOrigin],
+    learning_rate: Float32,
+    cursor: MutPointer[Float32, MutAnyOrigin],
+    dim_count_in: Int32,
+    cursor_stride_in: Int32,
+):
+    """`add_model_value_kernel` behind a device loop's gate (lane
+    t3-gbdt-greedy-on-device-loop, tree op TREE_OP_SEARCHER_APPLY): while
+    word 0 of `gate` is 0 the same body, statement for statement (the
+    greedy searcher's learn cursor add, same bits); past the loop's stop it
+    writes nothing (the cursor is carried state). Block-uniform test."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    _add_model_value_body(
+        part_offset, part_size, row_index, leaf_values, learning_rate, cursor,
+        dim_count_in, cursor_stride_in,
+    )
+
+
+@always_inline
+def _add_model_value_body(
+    part_offset: MutPointer[UInt32, MutAnyOrigin],
+    part_size: MutPointer[UInt32, MutAnyOrigin],
+    row_index: MutPointer[UInt32, MutAnyOrigin],
+    leaf_values: MutPointer[Float32, MutAnyOrigin],
+    learning_rate: Float32,
+    cursor: MutPointer[Float32, MutAnyOrigin],
+    dim_count_in: Int32,
+    cursor_stride_in: Int32,
+):
+    """The body of `add_model_value_kernel` and its gated wrapper (one
+    helper, so no launched kernel is also called from another kernel)."""
     var leaf = Int(block_idx.y)
     var dim = Int(block_idx.z)
     var dim_count = Int(dim_count_in)

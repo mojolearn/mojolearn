@@ -18,7 +18,10 @@ from gbdt.methods.leaves_estimation.bin_keyed_stats import (
 )
 from gbdt.methods.leaves_estimation.tree_t26_device import t26_estimate_apply
 from std.sys.info import has_apple_gpu_accelerator
-from gbdt.methods.kernel_add_model_value import add_model_value_kernel
+from gbdt.methods.kernel_add_model_value import (
+    add_model_value_gated_kernel,
+    add_model_value_kernel,
+)
 from gbdt.metrics.optimal_const_device import optimum_const_approx_device
 
 from gbdt.gpu_lib.gpu_manager import TCudaManager
@@ -217,6 +220,11 @@ from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
 )
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     enqueue_snap_plane_dev,
+)
+from gbdt.methods.greedy_subsets_searcher.kernel.greedy_gate_walk import (
+    GREEDY_STATUS_COVERAGE,
+    GREEDY_STATUS_NO_FEATURE,
+    greedy_bin_feature_table,
 )
 from gbdt.methods.kernel.tree_gate_walk import (
     TREE_STRUCT_DEPTH,
@@ -2886,9 +2894,7 @@ def _launch_querywise_pointwise_target(
 # sampling (`feature_fraction < 1`: the projection drains), `random_strength
 # != 0` (the score std dev is a host reduction), an identity trace (per-round
 # host records), a multi-device plan (the shards take the scale as a launch
-# value), the greedy searcher (the DEFAULT SymmetricTree arm
-# `run_tree_layout`, which has no enqueue-only op yet), Depthwise /
-# Lossguide, and the FAST + Apple build (no leaf-op arm there: its own
+# value), Depthwise / Lossguide, and the FAST + Apple build (no leaf-op arm there: its own
 # estimator `apple_fast_est`, the SYM_ITER pool and the fused eval stay).
 #
 # A/B: `-D MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF` restores the host loop for these
@@ -2910,6 +2916,40 @@ comptime GBDT_DEVICE_ROUNDS_BUILD = (
 #: a failure or a host-tail round (rare: the walk accepted none of its first
 #: `leaf_estimation_iterations` steps), so C = 128. Both under the 1024 bound
 #: of the fused FAST eval (EXECUTOR_T1_TREE_OPS.md section 3).
+# ===========================================================================
+# lane t3-gbdt-greedy-on-device-loop (2026-11-09): THE GREEDY ARM. The
+# default SymmetricTree searcher (`run_tree_layout_traced`, CatBoost's
+# `TGreedySubsetsSearcher`) runs the same round step (`SymDeviceRounds` with
+# `use_greedy`), through TREE_OP_GREEDY_SEARCH: the level loop was already
+# blind (DEVIATION 94); its one drain per tree, the host gate walk, the
+# rollback merge and the coverage check now run on the device
+# (`kernel/greedy_gate_walk.mojo`). The round then estimates on the
+# SEARCHER'S partition (as the host loop does): the Simple leaves
+# (`need_estimation` False: Simple, and RMSE + Newton at one iteration,
+# DEVIATION 64) are the searcher's `compute_leaf_values_kernel` over every
+# slot, the walked leaves are TREE_OP_LEAF_ESTIMATE over the searcher's
+# partition words; the learn cursor add is `add_model_value_kernel`'s body
+# behind the gate (TREE_OP_SEARCHER_APPLY), the held-out apply, loss and
+# detector are the pointwise arm's ops.
+#
+# Bits: the greedy symmetric GBDT lanes keep today's bits (the same
+# kernels on the same partition in the same order: the walk's two
+# bit-inert differences, section 4 of EXECUTOR_T1_TREE_OPS.md, and leaf
+# slots past the kept depth that hold no rows). What a round no longer does
+# per tree: the drain, the canary (DEVIATION 2002 leg 1 is a witness for
+# that drain), the host gate walk, the offsets drain of the estimation arm,
+# the estimator's host pack, its two uploads, its walk drains and tail
+# drain, the held-out host packing and six uploads, the held-out loss drain
+# and the host detector.
+#
+# A/B: `-D MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF` restores the host loop for
+# the greedy fits only (RUN OWED on NVIDIA + AMD); the pointwise arm keeps
+# `MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF`, which turns both off.
+# ===========================================================================
+comptime GBDT_GREEDY_DEVICE_ROUNDS = GBDT_DEVICE_ROUNDS_BUILD and not is_defined[
+    "MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF"
+]()
+
 comptime GBDT_ROUNDS_CHUNK_STOPPING = 16
 comptime GBDT_ROUNDS_CHUNK_FREE = 128
 
@@ -2997,30 +3037,47 @@ def sym_device_rounds_eligible(
     approx_dim: Int,
     multi_device: Bool,
     n_estimators: Int,
+    need_estimation: Bool,
 ) -> Bool:
     """True when the fit's rounds run as one device loop
-    (`fit_sym_rounds_on_device`); the refusals are listed in the block
+    (`fit_sym_rounds_on_device`); the refusals are listed in the blocks
     above. A build switch and the fit's options, not a shape: no row,
-    feature or round count decides it."""
+    feature or round count decides it. The pointwise searcher needs a loss
+    TREE_OP_LEAF_ESTIMATE covers; the greedy searcher (lane t3) a
+    single-dimensional pointwise loss whose leaves are the searcher's own
+    (`need_estimation` False) or TREE_OP_LEAF_ESTIMATE's."""
     comptime if not GBDT_DEVICE_ROUNDS_BUILD:
         return False
-    return (
-        use_pointwise_searcher
-        and not non_symmetric
+    var common = (
+        not non_symmetric
         and perm_count == 1
         and not sampled_features
         and random_strength == Float32(0.0)
         and not trace_enabled
         and not multi_device
         and n_estimators > 0
-        and tree_op_leaf_estimate_supported(objective, leaf_estimation_method, approx_dim)
+    )
+    if not common:
+        return False
+    if use_pointwise_searcher:
+        return tree_op_leaf_estimate_supported(objective, leaf_estimation_method, approx_dim)
+    comptime if not GBDT_GREEDY_DEVICE_ROUNDS:
+        return False
+    return (
+        approx_dim == 1
+        and sym_objective_is_pointwise(objective)
+        and (
+            not need_estimation
+            or tree_op_leaf_estimate_supported(objective, leaf_estimation_method, approx_dim)
+        )
     )
 
 
 @fieldwise_init
 struct SymDeviceRounds(LoopStep, Movable):
-    """One pointwise SymmetricTree boosting round as a step of the
-    executor's bounded loop (the block above). The buffers are handle copies
+    """One SymmetricTree boosting round as a step of the executor's bounded
+    loop (the blocks above): the pointwise searcher's round, or with
+    `use_greedy` the greedy searcher's (lane t3). The buffers are handle copies
     of the fit's (`DeviceBuffer.copy()` shares the memory) or buffers owned
     for the loop's span; every call below passes at most one `mut` field of
     `self`, the rest as local handles."""
@@ -3098,6 +3155,114 @@ struct SymDeviceRounds(LoopStep, Movable):
     var est_ws: List[TEstimationWorkspace]
     var cursor_scratch: DeviceBuffer[DType.float32]
     var not_pd_total: Int
+    # ---- lane t3-gbdt-greedy-on-device-loop: the greedy searcher's arm ----
+    #: the round searches with `run_tree_layout_traced(enqueue_only=True)`
+    #: and estimates on the searcher's partition (the block above)
+    var use_greedy: Bool
+    #: the leaves are the searcher's own Newton step (`need_estimation`
+    #: False); otherwise TREE_OP_LEAF_ESTIMATE walks them
+    var simple_leaves: Bool
+    var use_subtraction: Bool
+    var fold_counts: List[Int]
+    #: the searcher's row order (`launch_make_sequence` each round)
+    var row_index: DeviceBuffer[DType.uint32]
+    #: the searcher's pool of one (built on round 1's call)
+    var tree_ws: List[TTreeWorkspace]
+    #: `greedy_bin_feature_table` of the searcher layout, once per fit
+    var bf_table: DeviceBuffer[DType.uint32]
+    #: the round's structure record (TREE_OP_GREEDY_SEARCH's output)
+    var g_structure: DeviceBuffer[DType.int32]
+    #: the searcher's final partition as `DeviceLeafPartitioner.d_part` words
+    var g_words: DeviceBuffer[DType.int64]
+
+    def _structure(self) raises -> DeviceBuffer[DType.int32]:
+        """The round's structure record: the greedy op's, or the pointwise
+        searcher pool's."""
+        if self.use_greedy:
+            return self.g_structure.copy()
+        return self.pw_pool[0].d_structure.copy()
+
+    def _part_rows(self) raises -> DeviceBuffer[DType.uint32]:
+        """The rows of the round's partition, leaf by leaf: the greedy
+        searcher's row order, or TREE_OP_PARTITION's."""
+        if self.use_greedy:
+            return self.row_index.copy()
+        return self.parts.vals.copy()
+
+    def _part_words(self) raises -> DeviceBuffer[DType.int64]:
+        """The round's partition words (offsets, sizes, total, flag)."""
+        if self.use_greedy:
+            return self.g_words.copy()
+        return self.parts.d_part.copy()
+
+    def _search_greedy(mut self, ctx: DeviceContext, mut gate: DeviceBuffer[DType.int32], it: Int) raises:
+        """Round `it`'s TREE_OP_GREEDY_SEARCH, as the host loop's greedy
+        arm calls the searcher (the row index restarts each tree, their
+        `MakeSequence`; the scale from `mags` on the device, DEVIATION 95),
+        with the gates, rollback, coverage check and (Simple) leaves on the
+        device; then its refusals joined to the loop and the record into the
+        round's slab slot. Round-local scratch only, behind the gate's
+        status words."""
+        var n = self.n_rows
+        var stats = self.stats.copy()
+        var row_index = self.row_index.copy()
+        var cursor = self.cursor.copy()
+        var cindex = self.cindex.copy()
+        launch_make_sequence(ctx, UInt32(0), row_index, n)
+        var mags_opt = Optional[DeviceBuffer[DType.float32]]()
+        if self.needs_mags:
+            mags_opt = Optional(self.mags.copy())
+        var no_trace = IdentityTrace.disabled()
+        var no_times = StageTimes()
+        no_times.enabled = False
+        var splits = List[TBinarySplit]()
+        var leaf_values = List[Float32]()
+        var leaf_offsets = List[Int]()
+        var plan = self.device_plan.copy()
+        var folds = self.fold_counts.copy()
+        var one_hot = self.one_hot.copy()
+        var max_depth = self.max_depth
+        var use_subtraction = self.use_subtraction
+        var simple = self.simple_leaves
+        var rate = self.learning_rate
+        var l2 = self.l2_leaf_reg
+        var score_function = self.score_function
+        var tree_seed = self.tree_seeds[it - 1]
+        var gate_h = gate.copy()
+        var table = self.bf_table.copy()
+        var structure = self.g_structure.copy()
+        var words = self.g_words.copy()
+        _ = run_tree_layout_traced(
+            plan, ctx, n, folds, max_depth,
+            cindex, stats, row_index, cursor,
+            Float32(0.0), Float32(0.0),
+            splits, leaf_values, leaf_offsets, self.tree_ws,
+            no_trace, no_times, _tree_tag(it - 1),
+            export_offsets=False,
+            use_subtraction=use_subtraction,
+            apply_to_cursor=simple,
+            learning_rate=rate,
+            l2_leaf_reg=l2,
+            one_hot=one_hot^,
+            score_function=score_function,
+            approx_dim=1,
+            mags_dev=mags_opt^,
+            multiclass_optimization=False,
+            random_strength=Float32(0.0),
+            random_seed=tree_seed,
+            enqueue_only=True,
+            gate=Optional(gate_h^),
+            bf_table=Optional(table^),
+            structure_out=Optional(structure.copy()),
+            words_out=Optional(words^),
+        )
+        step_fail_joins_loop(ctx, gate, structure, it)
+        var sw = self.struct_words
+        ctx.enqueue_function[_rounds_copy_i32_kernel](  # small-launch(struct_words: the round's structure record): model structure
+            structure.unsafe_ptr(), Int32(sw),
+            self.struct_slab.unsafe_ptr() + (it - 1) * sw,
+            grid_dim=(_rounds_blocks(sw), 1, 1), block_dim=(256, 1, 1),
+        )
 
     def _front(mut self, ctx: DeviceContext, mut gate: DeviceBuffer[DType.int32], it: Int) raises:
         """Round `it` up to and including TREE_OP_PARTITION: the gradient
@@ -3164,6 +3329,9 @@ struct SymDeviceRounds(LoopStep, Movable):
                     mags.unsafe_ptr(),
                     grid_dim=1, block_dim=256,
                 )
+        if self.use_greedy:
+            self._search_greedy(ctx, gate, it)
+            return
         var w_plane = self.w_plane.copy()
         var t_plane = self.t_plane.copy()
         launch_split_planes_f32(ctx, w_plane, t_plane, stats, n, n)
@@ -3239,12 +3407,24 @@ struct SymDeviceRounds(LoopStep, Movable):
         var nl = self.n_leaves
         var leaf_out = self.leaf_slab.create_sub_buffer[DType.float32]((it - 1) * nl, nl)
         var leaf_scaled = self.leaf_scaled.copy()
+        if self.use_greedy and self.simple_leaves:
+            # the greedy searcher's Simple leaves (its `leaf_values`, every
+            # slot) into the round's slot and the scaled leaves, behind the
+            # gate: the drained arm's `h_leaf_values` and the model's
+            # rescale, the same words
+            var est = self.tree_ws[0].leaf_values.copy()
+            ctx.enqueue_function[_leaf_out_gated_kernel](
+                gate.unsafe_ptr(), est.unsafe_ptr(), Int32(nl), self.learning_rate,
+                leaf_out.unsafe_ptr(), leaf_scaled.unsafe_ptr(),
+                grid_dim=((nl + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+            )
+            return
         var l_status = self.l_status.copy()
         var targets = self.targets.copy()
         var weights = self.weights.copy()
         var cursor = self.cursor.copy()
-        var rows = self.parts.vals.copy()
-        var words = self.parts.d_part.copy()
+        var rows = self._part_rows()
+        var words = self._part_words()
         var has_weights = self.has_weights
         var objective = self.objective
         var alpha = self.alpha
@@ -3269,15 +3449,35 @@ struct SymDeviceRounds(LoopStep, Movable):
         """The round after its leaves: TREE_OP_APPLY on the learn cursor, then
         (with a held-out set) the held-out records and apply,
         TREE_OP_HELDOUT_LOSS and TREE_OP_OD_STEP, the criterion."""
-        var structure = self.pw_pool[0].d_structure.copy()
+        var structure = self._structure()
         var cindex = self.cindex.copy()
         var cursor = self.cursor.copy()
         var leaf_scaled = self.leaf_scaled.copy()
         var n = self.n_rows
-        tree_op_apply(
-            ctx, gate, structure, self.records_learn, cindex, leaf_scaled,
-            n, cursor, 1, 0, root_adds=True,
-        )
+        if self.use_greedy:
+            # TREE_OP_SEARCHER_APPLY: the host loop's learn cursor add on the
+            # searcher's partition (`add_model_value_kernel`, the unscaled
+            # leaves and the rate in the kernel), behind the gate; slots past
+            # the kept leaves hold no rows
+            var nl = self.n_leaves
+            var p_off = self.tree_ws[0].p_off.copy()
+            var p_sz = self.tree_ws[0].p_sz.copy()
+            var rows = self.row_index.copy()
+            var leaf = self.leaf_slab.create_sub_buffer[DType.float32]((it - 1) * nl, nl)
+            var gx = 2 * self.sm
+            if gx < 1:
+                gx = 1
+            ctx.enqueue_function[add_model_value_gated_kernel](
+                gate.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
+                rows.unsafe_ptr(), leaf.unsafe_ptr(), self.learning_rate,
+                cursor.unsafe_ptr(), Int32(1), Int32(0),
+                grid_dim=(gx, nl, 1), block_dim=(256, 1, 1),
+            )
+        else:
+            tree_op_apply(
+                ctx, gate, structure, self.records_learn, cindex, leaf_scaled,
+                n, cursor, 1, 0, root_adds=True,
+            )
         if not self.has_test:
             return
         var feat_test = self.feat_test.copy()
@@ -3316,12 +3516,41 @@ struct SymDeviceRounds(LoopStep, Movable):
         var nl = self.n_leaves
         var h_struct = ctx.enqueue_create_host_buffer[DType.int32](sw)
         var h_part = ctx.enqueue_create_host_buffer[DType.int64](2 * nl + 2)
-        var structure = self.pw_pool[0].d_structure.copy()
-        var words = self.parts.d_part.copy()
+        var structure = self._structure()
+        var words = self._part_words()
         ctx.enqueue_copy(dst_buf=h_struct, src_buf=structure)
         ctx.enqueue_copy(dst_buf=h_part, src_buf=words)
         ctx.synchronize()
         var status = Int(h_struct.unsafe_ptr().unsafe_load(TREE_STRUCT_STATUS))
+        if self.use_greedy and status > 0:
+            # the greedy walk's codes (`kernel/greedy_gate_walk.mojo`), raised
+            # with the drained arm's messages
+            if status == GREEDY_STATUS_COVERAGE:
+                raise Error(
+                    "DEVIATION 2002: refusing to return this tree -- the fit"
+                    " produced an empty or non-covering model: the final leaf"
+                    " partitions cover "
+                    + String(Int(h_part.unsafe_ptr().unsafe_load(2 * nl)))
+                    + " of " + String(self.n_rows) + " rows. On a live device"
+                    " splits conserve rows, so this is either the"
+                    " dead/saturated-device signature or a row-conservation"
+                    " defect; the fit raises instead of returning it."
+                )
+            if status > GREEDY_STATUS_NO_FEATURE:
+                raise Error(
+                    "the winning bin-feature of level "
+                    + String(status - GREEDY_STATUS_NO_FEATURE - 1)
+                    + " belongs to no feature; the histogram and the layout"
+                    " disagree"
+                )
+            raise Error(
+                "All splits have infinite score. Probably, numerical"
+                " overflow occurs in loss function and/or split score"
+                " calculation. Try increasing l2_leaf_reg, and/or"
+                " decreasing learning_rate, etc."
+                " [level " + String(status - 1) + ", live leaves "
+                + String(1 << (status - 1)) + "]"
+            )
         if status > 0:
             raise Error(
                 "best split is undefined at depth "
@@ -3359,8 +3588,8 @@ struct SymDeviceRounds(LoopStep, Movable):
         var h_part = ctx.enqueue_create_host_buffer[DType.int64](2 * nl + 2)
         var h_leaf = ctx.enqueue_create_host_buffer[DType.float32](nl)
         var h_scaled = ctx.enqueue_create_host_buffer[DType.float32](nl)
-        var structure = self.pw_pool[0].d_structure.copy()
-        var words = self.parts.d_part.copy()
+        var structure = self._structure()
+        var words = self._part_words()
         ctx.enqueue_copy(dst_buf=h_struct, src_buf=structure)
         ctx.enqueue_copy(dst_buf=h_part, src_buf=words)
         regs.read(ctx)
@@ -3381,7 +3610,7 @@ struct SymDeviceRounds(LoopStep, Movable):
             cursor.unsafe_ptr(), Int32(self.n_rows), scratch.unsafe_ptr(),
             grid_dim=(_rounds_blocks(self.n_rows), 1, 1), block_dim=(256, 1, 1),
         )
-        var rows = self.parts.vals.copy()
+        var rows = self._part_rows()
         var targets = self.targets.copy()
         var weights = self.weights.copy()
         var values = List[Float32]()
@@ -3480,6 +3709,11 @@ def fit_sym_rounds_on_device(
     loss_norm: Float64,
     device_plan: DevicePlan,
     var tree_seeds: List[UInt64],
+    use_greedy: Bool,
+    simple_leaves: Bool,
+    use_subtraction: Bool,
+    fold_counts: List[Int],
+    mut row_index: DeviceBuffer[DType.uint32],
 ) raises -> Bool:
     """The rounds of a `sym_device_rounds_eligible` fit as one executor loop
     (the block above), then the model, the learn losses in the host loop's
@@ -3510,6 +3744,21 @@ def fit_sym_rounds_on_device(
     var arm = Optional[TestArm]()
     if test:
         arm = Optional(test.take())
+    # lane t3: the buffers only one arm reads are allocated at one word (or
+    # one row) for the other arm: the pointwise planes, partitioner and
+    # learn records for the greedy arm; the greedy table, record and words
+    # for the pointwise arm; the walk's state when the leaves are Simple.
+    var arm_rows = 1 if use_greedy else n_rows
+    var walk_rows = 1 if (use_greedy and simple_leaves) else n_rows
+    var walk_leaves = 1 if (use_greedy and simple_leaves) else nl
+    var bf_table: DeviceBuffer[DType.uint32]
+    if use_greedy:
+        bf_table = greedy_bin_feature_table(ctx, layout)
+    else:
+        bf_table = ctx.enqueue_create_buffer[DType.uint32](3)
+    var g_structure = ctx.enqueue_create_buffer[DType.int32](sw)
+    enqueue_fill(ctx, g_structure, Int32(0))
+    var g_words = ctx.enqueue_create_buffer[DType.int64](2 * nl + 2 if use_greedy else 2)
     var step = SymDeviceRounds(
         n_rows, max_depth, nl, sw, objective, alpha, estimator_alpha,
         logloss_border, l2_leaf_reg, leaf_estimation_method, num_classes,
@@ -3520,13 +3769,13 @@ def fit_sym_rounds_on_device(
         fv_part.copy(), mag_part.copy(), mags.copy(), boot_mag_part.copy(),
         boot_seeds.copy(), seed_snapshot^, cindex.copy(),
         layout.copy(), one_hot.copy(), device_plan.copy(), tree_seeds^,
-        ctx.enqueue_create_buffer[DType.float32](n_rows),
-        ctx.enqueue_create_buffer[DType.float32](n_rows),
+        ctx.enqueue_create_buffer[DType.float32](arm_rows),
+        ctx.enqueue_create_buffer[DType.float32](arm_rows),
         std_scale^,
         List[PointwiseTreeWorkspace](),
-        DeviceLeafPartitioner(ctx, n_rows, nl),
+        DeviceLeafPartitioner(ctx, arm_rows, nl),
         p_status^, l_status^,
-        LeafEstimateOpState(ctx, n_rows, nl, sm),
+        LeafEstimateOpState(ctx, walk_rows, walk_leaves, sm),
         ctx.enqueue_create_buffer[DType.float32](n_estimators * nl),
         ctx.enqueue_create_buffer[DType.float32](nl),
         ctx.enqueue_create_buffer[DType.int32](n_estimators * sw),
@@ -3541,6 +3790,15 @@ def fit_sym_rounds_on_device(
         List[TEstimationWorkspace](),
         ctx.enqueue_create_buffer[DType.float32](n_rows),
         0,
+        use_greedy,
+        simple_leaves,
+        use_subtraction,
+        fold_counts.copy(),
+        row_index.copy(),
+        List[TTreeWorkspace](),
+        bf_table^,
+        g_structure^,
+        g_words^,
     )
     var chunk = GBDT_ROUNDS_CHUNK_STOPPING if (has_test and detector.is_active()) else GBDT_ROUNDS_CHUNK_FREE
     var registers = LoopRegisters(ctx)
@@ -4444,7 +4702,7 @@ def fit_with_test(
         use_pointwise_searcher, non_symmetric, perm_count,
         feature_fraction < 1, random_strength, trace.enabled, objective,
         leaf_estimation_method, approx_dim, not device_plan.single(),
-        n_estimators,
+        n_estimators, need_estimation,
     )
     if device_rounds:
         # the host loop's one `noise_rand` draw per tree, in tree order (a
@@ -4465,6 +4723,8 @@ def fit_with_test(
             learning_rate, second_order, mse_blocks, score_function,
             est_sm, boot_kind, boot_param, bootstrap_on, stat_count,
             needs_mags, loss_norm, device_plan, tree_seeds^,
+            not use_pointwise_searcher, not need_estimation, use_subtraction,
+            fold_counts, row_index,
         )
     for iteration in range(0 if device_rounds else n_estimators):
         var t_grad = loop_times.start()
