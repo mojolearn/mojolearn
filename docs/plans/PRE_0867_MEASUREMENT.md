@@ -16,28 +16,74 @@ owed. Our arms only. Opponents are never rerun; the compare reuses the paper's s
 
 ## 0. Inputs
 
-1. **Candidate wheels.** Run the release pipeline on the frozen 0.8.67 source up to `linux-pack`. The packed
-   wheels land in `~/mojolearn-evidence/release/0.8.67/<commit12>/linux/final/` (`Release.split_final`). The
-   GitHub workflow `release-linux-build.yml` uploads binding sets, not wheels. The wheels only exist after
-   `linux-pack`, so the job installs those packed files and nothing else. Nothing is published.
+1. **Candidate wheels.** `tools/release.py candidate` builds them from one exact commit and never touches main,
+   tags, PyPI or the release ledger (`tools/release_candidate.py`). It runs five steps of the release and no
+   other: `reuse-plan`, `linux-builds` (`.github/workflows/release-linux-build.yml` on GitHub's free runners,
+   one run per set: cuda sm_89, cuda sm_80, hip gfx942), `linux-wait`, `linux-assemble`, `linux-pack`. The
+   Release runs with `--only` those five, so `freeze-version`, `freeze-changelog`, `freeze-docs-facts`,
+   `freeze-commit` (the version bump commit and its push), `identity-at-freeze`, `rehearsal`, `readiness`,
+   `cross-compile`, every gate, column, publish, `finish-line` and `record` never run. The commit is pinned in the
+   candidate's own `state.json`. The version is local, `0.8.67.dev0+<commit12>[.<label>]`, and exists only in the
+   packed wheels: PyPI refuses local versions, so they cannot be uploaded. Each candidate gets its own work dir,
+   `~/mojolearn-evidence/release-candidates/<version>/`, with its own source worktree and local ledger. The
+   wheels land in `<work dir>/<commit12>/linux/final/` beside `candidate.json`, where
+   `measure_candidate.py stage` looks for a local `--version`. At the end the tool checks that origin/main and
+   the tag lists are unchanged.
+
+   The run needs the commit pushed, and a tooling checkout whose branch is pushed at its HEAD, because the
+   workflow runs from that branch. Pass it with `--ref`, or run from a checkout of that branch. The tool refuses
+   a work dir inside the main checkout.
+
+   A set first (it fills the binding cache the B sets reuse):
    ```
-   python3 tools/release.py 0.8.67 --only freeze-version,freeze-changelog,freeze-docs-facts,freeze-commit,rehearsal,reuse-plan,readiness,cross-compile,linux-builds,linux-wait,linux-assemble,linux-pack
+   python3 tools/release.py candidate --commit <SHA40> --ref <pushed tooling branch>
    ```
-   A fix after the measurement needs `--refreeze`, which creates a new candidate commit and new wheels.
+   Then the three B sets, all at once. Each is the same commit with `--defines`, which the workflow passes to
+   every compile as `MOJOLEARN_BUILD_DEFINES`. The label defaults to `d` plus 8 hex digits of the defines; the
+   owed arm names below are clearer:
+   ```
+   python3 tools/release.py candidate --commit <SHA40> --ref <branch> --defines "-D MOJOLEARN_EM_LOOP_CHECK_EVERY=1" --label em1
+   python3 tools/release.py candidate --commit <SHA40> --ref <branch> --defines "-D MOJOLEARN_EM_LOOP_CHECK_EVERY=8" --label em8
+   python3 tools/release.py candidate --commit <SHA40> --ref <branch> --defines "-D MOJOLEARN_SGD_LOOP_CHECK_EVERY=1" --label sgd1
+   ```
+   Add `-D MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF` as its own B set once a `.mojo` file of the candidate commit reads
+   it; none does at measure-prep 3d67f6c437. The tool refuses any define that no `.mojo` or `bindings/` file of
+   the commit names, because such a B set would be byte-identical to the A set.
+
+   A B set recompiles only the bindings that can read its define. The reuse plan builds every row whose closure
+   names the define (`release_reuse.apply_defines`). The binding cache keys and builds every other binding without
+   the variable (`tools/bincache.py scope_build_defines`), so those are cache hits on the A set's bytes.
+   `core/em_loop_chunk.mojo` and `x_linear/device.mojo` are the readers today. The defines are recorded in the
+   run name, `GHA/defines.txt`, each wheel's `LINUX_PAYLOAD.json` (`candidate.defines`), the version label and
+   the box's `wheel-manifest-<arm>.json`.
+
+   Expected wall time: the three sets build at once, about 1.5 h for the A set. The 0.8.66 release legs took
+   5217 to 5513 s, and 0.8.65's took 2712 to 3892 s. linux-pack then runs about 10 to 20 min on the Mac
+   (pack, the auditwheel docker run, the strip). Each B set is mostly cache-hit assembly plus the reader groups'
+   compiles, about 30 to 60 min plus the pack. Three B sets at once fan out about 3 x 3 x (shards + 1) jobs, so
+   GitHub's concurrent-job cap may queue some of them. Use `--dry-run` to print the five steps' plan without
+   running anything.
 2. **Job tree.** The tree the job runs `tools/` from must contain this lane's commits (the integration branch
    after merge). It is a different commit from the candidate's source commit.
 3. **Datasets** on each box: `sh tools/dataset_store.sh stage "<ssh flags+target>" gbm-bench/taxi/taxi_speed.npz gbm-bench/istella/istella_speed.npz`.
-4. **B wheel sets** (optional, define A/Bs only). Each is a full core plus vendor set, packed the same way from a
-   commit that changes the define's default:
-   `em-check-1` (`MOJOLEARN_EM_LOOP_CHECK_EVERY=1`), `em-check-8` (`=8`), `sgd-check-1`
-   (`MOJOLEARN_SGD_LOOP_CHECK_EVERY=1`). `svd-round-launches` has no switch in code yet (see the owed file).
-   Without the sets, those rows report `B-NOT-RUN`.
+4. **B wheel sets** for the define A/Bs. Stage each with the A set: `--b-arm em-check-1=<B work dir>/<commit12>/linux/final@<SHA40>`
+   (likewise `em-check-8`, `sgd-check-1`). The stage step reads each B set's own version from its `candidate.json`.
+   `svd-round-launches` has no switch in code yet (see the owed file). Rows without a staged set report
+   `B-NOT-RUN`.
+5. **The ours-only venv** gets our wheels, `scikit-learn` (the trees opponent pin, 1.7.2), and `pandas` and
+   `huggingface_hub` at their `pixi.lock` versions (3.0.5 and 1.33.0). The board's drivers import nothing else
+   for our arm: the other third-party imports belong to opponent arms or to the parquet download step.
+   `huggingface_hub` fetches the `causal-lm-generate` checkpoint when the box lacks it. The **prior arm** (published
+   0.8.66) runs on this tree's drivers. Two driver changes since the 0.8.66 run need APIs that 0.8.66 lacks, and
+   both now fall back: mamba2/3-decode and samba-decode use 0.8.66's public per-call `step` (it has no public
+   `decode_session`; `decode_n` refuses there), and the `while_loop` driver passes `check_every` only when the case
+   names one.
 
 ## 1. Submit commands (orchestrator; boxes already up)
 
 NVIDIA (lane tree `/root/mojolearn-measure`; the stage step syncs it from `--tree`):
 ```
-python3 tools/ops/measure_candidate.py stage nvidia --version 0.8.67 --source-commit <SHA40> --tree <job worktree> \
+python3 tools/ops/measure_candidate.py stage nvidia --version '0.8.67.dev0+<sha12>' --source-commit <SHA40> --tree <job worktree> \
     [--b-arm em-check-1=<dir>@<sha40> ...]
 # prints, among others:
 SUBMIT bash tools/nvidia_central.sh submit measure --cap 240 --note pc-<sha12>-nvidia --results box-out/pc-<sha12>-nvidia \
@@ -53,7 +99,7 @@ these to the printed line:
 AMD (the droplet's `/root/mojolearn` must be at the pushed job-tree head; the stage step refuses otherwise):
 ```
 bash tools/do_amd_steward.sh update <job tree sha>
-python3 tools/ops/measure_candidate.py stage amd --version 0.8.67 --source-commit <SHA40> --tree <job worktree>
+python3 tools/ops/measure_candidate.py stage amd --version '0.8.67.dev0+<sha12>' --source-commit <SHA40> --tree <job worktree>
 nohup bash tools/do_amd_steward.sh run pc-<sha12>-amd box-out/pc-<sha12>-amd \
     'PC_WHEEL_DIR=/root/pc-in/<sha12>/amd PC_SOURCE_COMMIT=<SHA40> bash tools/ops/paper_compare_job.sh' \
     > ~/mojolearn-evidence/measure-candidate/amd-run.log 2>&1 &
