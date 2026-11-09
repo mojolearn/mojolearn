@@ -402,7 +402,7 @@ class _Optimizer(NumericModeMixin):
         # a checkpoint beside `exp_avg`); and the host mirrors `_m` / `_v` of
         # `exp_avg` and `exp_avg_sq`, allocated on first need (with the
         # optimizer under MOJOLEARN_OPT_LAZY_MOMENTS=0, the A/B).
-        _buffers._native("optimizer_door_init")(self, params)  # cpu-route: the parameter registry offsets are host metadata built once with the optimizer
+        _buffers._native("optimizer_door_init")(self, params)  # import-time: the parameter registry offsets are host metadata built once with the optimizer
         #: ONE-BASED. The first step of a run is `t = 1`.
         self.t = 0
         self.packed_ = None

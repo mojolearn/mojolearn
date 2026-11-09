@@ -511,13 +511,13 @@ class _DenseCOO:
     def __init__(self, m):
         n_r, n_c = m.r, m.c
         src = m.addr
-        nnz = int(_native("nonzero_f32_count")(src, n_r * n_c)) if n_r * n_c else 0  # cpu-route: float32 host matrix read once by nonzero_f32_count on a CPU-only install
+        nnz = int(_native("nonzero_f32_count")(src, n_r * n_c)) if n_r * n_c else 0  # glue: pack addresses for one native call; float32 host matrix read once by nonzero_f32_count on a CPU-only install
         self.shape = (n_r, n_c)
         self.row = empty((nnz,), "<i4")
         self.col = empty((nnz,), "<i4")
         self.data = empty((nnz,), "<f4")
         if nnz:
-            wrote = int(_native("nonzero_f32_fill")(  # cpu-route: float32 host matrix read once by nonzero_f32_fill on a CPU-only install
+            wrote = int(_native("nonzero_f32_fill")(  # glue: pack addresses for one native call; float32 host matrix read once by nonzero_f32_fill on a CPU-only install
                 src, n_r, n_c,
                 [addr(self.row, name="rows"), addr(self.col, name="cols"), addr(self.data, name="vals")],
                 nnz))

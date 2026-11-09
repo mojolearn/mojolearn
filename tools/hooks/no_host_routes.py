@@ -233,6 +233,12 @@ x_cnn_pool_shape forest_export forest_export_legacy
 # CPU-only install, file I/O, a user callable) says so:
 #     # cpu-route: <reason of 3+ words>
 _CPU_ROUTE = re.compile(r"#\s*cpu-route:\s*(\S+\s+){2,}\S+")
+# A Python line that connects a native binding or entry ONCE at import (a
+# host binding's module, a compiled entry it keeps) says so, so that
+# `# cpu-route:` means only a real Python-driven CPU path (lane
+# p5-cpu-route-relabel-and-dead-code, 2026-11-09):
+#     # import-time: <reason of 3+ words>
+_IMPORT_TIME = re.compile(r"#\s*import-time:\s*(\S+\s+){2,}\S+")
 # A host Mojo loop over a size that is d- or k-sized, never rows, says so on
 # the `for` line, naming the bound (as small-launch does for launches):
 #     # small-loop(<bound>: <what it counts>): <why it is bounded>
@@ -1022,7 +1028,7 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
         # for an explicit CPU-only input step before the runtime (text
         # tokenization, file handling) says so on the line, as AGENTS.md asks:
         # `# cpu-route: <reason of 3+ words>`. Mojo lines never qualify.
-        if rule == "host-module" and lang == "py" and _CPU_ROUTE.search(t):
+        if rule == "host-module" and lang == "py" and (_CPU_ROUTE.search(t) or _IMPORT_TIME.search(t)):
             return
         # lane py-runtime round 3: sklearn's own interface (the tags it asks
         # an estimator for) imports sklearn only when sklearn calls in; a
@@ -1224,7 +1230,7 @@ def _py_compute(lines):
         if re.match(r"(async\s+)?def\s", st):
             def_ind.append(ind)
             continue
-        if not def_ind or _GLUE.search(t) or _CPU_ROUTE.search(t):
+        if not def_ind or _GLUE.search(t) or _CPU_ROUTE.search(t) or _IMPORT_TIME.search(t):
             continue
         code = _PY_STR.sub('""', t.split("  #", 1)[0] if "  #" in t else t)
         # a reviewed d- or k-sized walk names its bound, and the bound must
@@ -1275,7 +1281,7 @@ def _py_native_host(lines, names):
         if re.match(r"(async\s+)?def\s", st):
             def_ind.append(ind)
             continue
-        if not def_ind or _GLUE.search(t) or _CPU_ROUTE.search(t):
+        if not def_ind or _GLUE.search(t) or _CPU_ROUTE.search(t) or _IMPORT_TIME.search(t):
             continue
         code = t.split("  #", 1)[0] if "  #" in t else t
         if attr.search(_PY_STR.sub('""', code)) or lit.search(code):

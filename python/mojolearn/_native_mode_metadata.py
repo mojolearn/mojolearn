@@ -69,14 +69,14 @@ def connect_classes(context, package):
         if route == 'host_gp':
             import os
             actual = (_classical_host._GPC_HOST_INFERENCE_BASENAME
-                      if os.path.exists(_backend.host_module_path(_classical_host._GPC_HOST_INFERENCE_BASENAME))  # cpu-route: import-time explicit HostGaussianProcessClassifier metadata, not a GPU fallback
+                      if os.path.exists(_backend.host_module_path(_classical_host._GPC_HOST_INFERENCE_BASENAME))  # import-time: import-time explicit HostGaussianProcessClassifier metadata, not a GPU fallback
                       else _classical_host._GPC_HOST_BASENAME)
         modes = {}
         for mode in ('identical', 'fast'):  # glue: connect existing supported mode binaries, no new fast campaign
             key = (route in ('host', 'host_gp'), actual, mode)
             if key not in connected:
                 try:
-                    module = (_backend.load_host_module(actual) if key[0] else _backend.binding(actual, mode))  # cpu-route: import-time explicit Host* readback; GPU classes retain their GPU binding
+                    module = (_backend.load_host_module(actual) if key[0] else _backend.binding(actual, mode))  # import-time: import-time explicit Host* readback; GPU classes retain their GPU binding
                     leaf = module.__name__.rsplit('.', 1)[-1]
                     vendor_name = _backend._vendor_fn(leaf)
                     mode_name = vendor_name.removesuffix('_vendor') + '_numeric_mode'

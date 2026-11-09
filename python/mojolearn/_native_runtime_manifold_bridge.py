@@ -46,7 +46,7 @@ def connect():
         try:
             # Replaces the same orchestration inside tokenizer._binding().
             # Numerical bindings and their resident stores keep their owners.
-            module = _backend.load_host_module("_mojolearn_runtime_manifold_host")  # cpu-route: import-time connection of existing native manifold orchestration
+            module = _backend.load_host_module("_mojolearn_runtime_manifold_host")  # import-time: import-time connection of existing native manifold orchestration
             entry = module.manifold_native_call
             if not isinstance(entry, BuiltinFunctionType):
                 raise TypeError("manifold requires the compiled manifold_native_call entry")
