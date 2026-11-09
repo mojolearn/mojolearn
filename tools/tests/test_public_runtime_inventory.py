@@ -293,6 +293,7 @@ def test_module_level_entries():
 def test_door_baseline_and_check():
     with tempfile.TemporaryDirectory() as tmp:
         root = build(Path(tmp))
+        (root / "bindings").mkdir(exist_ok=True)       # an (empty) door layer: nothing is registered
         baseline = root / "door.tsv"
         assert INV.main(["--root", str(root), "--baseline", "--baseline-file", str(baseline)]) == 0
         assert INV.main(["--root", str(root), "--door-check", "--baseline-file", str(baseline)]) == 0

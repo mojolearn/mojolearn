@@ -2485,7 +2485,7 @@ def door_classify(index, rows, root, door=None):
 
 
 def door_headline(rows):
-    c = Counter(r["door"] for r in rows)
+    c = Counter(r.get("door") for r in rows)
     total = len(rows)
     counted = sum(c[k] for k in DOOR_LEVELS)
     return (f"public runtime (through the native door): {total} public endpoints; "
@@ -2497,7 +2497,7 @@ def door_headline(rows):
 def door_summary(rows):
     fams = defaultdict(Counter)
     for r in rows:
-        fams[r["family"]][r["door"]] += 1
+        fams[r["family"]][r.get("door")] += 1
     head = f"{'family':<28}{'native':>8}{'glue':>7}{'python':>8}{'unres':>7}{'other':>7}"
     out = [head]
     for fam in sorted(fams, key=lambda f: (-sum(fams[f].values()), f)):
@@ -2513,7 +2513,7 @@ def door_tsv(rows):
     for r in rows:
         c = r.get("door_counts") or {}
         lines.append("\t".join(str(v) for v in (
-            r["endpoint"], r["kind"], r["family"], r["runtime_status"], r["door"], c.get("b", 0), c.get("b?", 0), c.get("b-table", 0),
+            r["endpoint"], r["kind"], r["family"], r["runtime_status"], r.get("door") or "not-walked", c.get("b", 0), c.get("b?", 0), c.get("b-table", 0),
             c.get("c-loops", 0), c.get("c-loops-data", 0), c.get("c-inline", 0), c.get("a", 0), c.get("a-native", 0),
             ",".join(r.get("door_entries") or []), " | ".join(r.get("door_worst") or []).replace("\t", " "))))
     return "\n".join(lines) + "\n"
