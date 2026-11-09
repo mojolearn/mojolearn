@@ -239,11 +239,14 @@ def samba_decode_tokens(session: PythonObject, inputs: PythonObject, context: Py
     var what = String("SambaDecodeSession.decode")
     _decode_require_open(values, what)
     var handle = values["_handle"]
-    var v = Int(py=values["_vocab"]) if handle is not None else Int(py=values["_model"].vocab_size)
+    var v = Int(py=values["_vocab"])
     var admitted = _samba_inference_ids(inputs, v, False, PythonObject(None), context)
     var ids = admitted[0]
     var b = Int(py=ids.shape[0])
     var n = Int(py=ids.shape[1])
+    var rows = Int(py=values["_rows"])
+    if b != rows:
+        raise Error(what + ": the session holds " + String(rows) + " rows, inputs has B = " + String(b))
     var output = generation_array([b, n, v])
     if handle is None:
         # The host arm: the per-call step on the caller's own state, token by
@@ -263,9 +266,6 @@ def samba_decode_tokens(session: PythonObject, inputs: PythonObject, context: Py
             _ = column^
         _ = ids
         return output
-    var rows = Int(py=values["_rows"])
-    if b != rows:
-        raise Error(what + ": the session holds " + String(rows) + " rows, inputs has B = " + String(b))
     _ = py_call(_native_function(values["_entries"], "samba_decode_tokens"), handle,
                 Python.list(ids._addr, output._addr), py_ints([b, n]))
     _ = ids  # keep the Python object alive through the native call above
