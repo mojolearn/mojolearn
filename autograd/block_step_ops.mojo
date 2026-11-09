@@ -284,13 +284,14 @@ def _read_words(mut ex: DeviceExec, p: FP, k: Int) raises -> List[Int]:
 
 
 def _write_words(mut ex: DeviceExec, p: FP, words: List[Int]) raises:
-    """Queue the carried state's host integers into their int32 words (the
-    executor stages the bytes at once; no wait)."""
-    var host = List[Float32](length=len(words), fill=Float32(0))
+    """Queue the carried state's host integers into their int32 words: one
+    device fill of each word's bit pattern (lane x4b: was an executor
+    upload, which stages a host buffer per call that only the executor's
+    next `sync` frees; a decode stack that never syncs its layers' own
+    executors grew one per token per layer). No wait, no host staging."""
     for i in range(len(words)):  # small-loop(words: at most two state words): word encode, no data
-        host[i] = bitcast[DType.float32](Int32(words[i]))
-    ex.upload(p, FP(unsafe_from_address=Int(host.unsafe_ptr())), len(words))
-    _ = len(host)  # keep-alive past the staging copy
+        var cell = _view(ex, p + i, 1)
+        cell.enqueue_fill(bitcast[DType.float32](Int32(words[i])))
 
 
 # ---------------------------------------------------------------- resident entries

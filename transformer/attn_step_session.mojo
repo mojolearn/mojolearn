@@ -387,7 +387,7 @@ struct AttnStepArm(Movable):
         ctx.enqueue_copy(dst_buf=self._view(self.xio, n), src_ptr=f32_ptr(px))
         self._run(l, False)
         ctx.enqueue_copy(dst_ptr=f32_ptr(py), src_buf=self._view(self.yio, n))
-        ctx.synchronize()
+        self.ex.sync()
         return self.cached
 
     def run_device(mut self, x: DeviceBuffer[DType.float32], l: Int, mut shared: AttnPrefill) raises:
@@ -431,7 +431,7 @@ struct AttnStepArm(Movable):
                 self._run(1, False)
                 decode_slab_put(ctx, ys_v, yt_v, self.b, steps, self.dm, t)
             ctx.enqueue_copy(dst_ptr=f32_ptr(py), src_buf=ys_v)
-            ctx.synchronize()
+            self.ex.sync()
         except err:
             self.ex.free(xs)
             self.ex.free(ys)
@@ -443,12 +443,12 @@ struct AttnStepArm(Movable):
     def export(mut self, pk: Int, pv: Int) raises -> Int:
         """Both caches into the caller's buffers, one wait."""
         self._caches_out(pk, pv)
-        self.ex.ctx.synchronize()
+        self.ex.sync()
         return self.cached
 
     def load(mut self, pk: Int, pv: Int, s0: Int) raises -> Int:
         self._load(pk, pv, s0)
-        self.ex.ctx.synchronize()
+        self.ex.sync()
         return s0
 
     def k_view(self) raises -> DeviceBuffer[DType.float32]:
@@ -486,7 +486,7 @@ struct AttnStepArm(Movable):
         ctx.enqueue_copy(dst_ptr=f32_ptr(a[12]), src_buf=self._view(self.yio, n))
         if not stateless:
             self._caches_out(a[10], a[11])
-        ctx.synchronize()
+        self.ex.sync()
         return self.cached
 
     def block_backward(mut self, a: List[Int], ints: List[Int], l: Int) raises:
@@ -545,7 +545,7 @@ struct AttnStepArm(Movable):
         _down(ctx, bst.dw_gate, it * dm, a[18])
         _down(ctx, bst.dw_up, it * dm, a[19])
         _down(ctx, bst.dw_down, dm * it, a[20])
-        ctx.synchronize()
+        self.ex.sync()
 
 
 def _down(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int, addr: Int) raises:
