@@ -644,13 +644,12 @@ def has_module(python, module):
 
 
 def torch_python_for(python, logs, torch_python=None):
-    """The python the torch entries run under. PYTHON itself when it imports torch; else the adapters unit's venv
-    beside this run (tools/release_check_units.py: <units>/adapters/venv, the installed wheel's own `[torch]`
-    extra: the gate's identity venv holds the wheels and numpy only, 0.8.66 run i 2026-11-08: import-torch-smoke
-    SKIPPED, real-model-smoke failed and autograd-public read PARTIAL there) or MOJOLEARN_AUTOGRAD_TORCH_PYTHON;
-    None when no python has torch (the probes then print SKIPPED no torch, as before). TORCH_PYTHON (`run
-    --torch-python`, what release_check_units passes: the adapters unit runs first and its venv holds torch) is
-    tried first; the env var and the glob stay as fallbacks. torchvision, which real-model-smoke needs, is
+    """The python the torch entries run under. TORCH_PYTHON (`run --torch-python`, what release_check_units
+    passes: the adapters unit runs first and its scratch venv holds the installed wheel's own `[torch]` extra; the
+    gate's identity venv holds the wheels and numpy only, 0.8.66 run i 2026-11-08) is tried first, then PYTHON
+    itself when it imports torch, then MOJOLEARN_AUTOGRAD_TORCH_PYTHON; None when no python has torch (the probes
+    then print SKIPPED no torch, as before). The old glob for <units>/adapters/**/venv is gone (2026-11-09): that
+    venv is a scratch venv outside the evidence folder now. torchvision, which real-model-smoke needs, is
     installed into that venv from the index its torch build came from when missing (release_check_units installs
     it once after the adapters unit, so this finds it present and installs nothing)."""
     if torch_python and Path(torch_python).is_file() and has_module(torch_python, "torch"):
@@ -659,8 +658,6 @@ def torch_python_for(python, logs, torch_python=None):
         chosen = str(python)
     else:
         candidates = [os.environ.get("MOJOLEARN_AUTOGRAD_TORCH_PYTHON", "")]
-        units = Path(logs).resolve().parent.parent
-        candidates += [str(p) for p in sorted(units.glob("adapters/**/venv/bin/python"))]
         chosen = next((c for c in candidates if c and Path(c).is_file() and has_module(c, "torch")), None)
         if chosen is None:
             return None
