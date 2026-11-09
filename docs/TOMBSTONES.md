@@ -427,6 +427,7 @@ in the tables after the sections.
 | [`MOJOLEARN_MCD_FAST_G1_GRAM`](#mojolearn_mcd_fast_g1_gram) | Decomp (+ MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT, MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM) | NEUTRAL | 2026-11-08 | [MOJOLEARN_MCD_FAST_G1_GRAM.patch](../experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch) |
 | [`MOJOLEARN_MCD_ORDERED_COV`](#mojolearn_mcd_ordered_cov) | Decomp (+ x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) | NEUTRAL | 2026-11-08 | [MOJOLEARN_MCD_ORDERED_COV.patch](../experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch) |
 | [`MOJOLEARN_EIGH_FAST_PANEL_DF`](#mojolearn_eigh_fast_panel_df) | Decomp (+ MOJOLEARN_EIGH_FAST_PANEL_DF_OFF) | DROPPED-slower | 2026-11-08 | [MOJOLEARN_EIGH_FAST_PANEL_DF.patch](../experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch) |
+| [`_gather_cls` (RFE gather program per round)](#rfe-one-program-per-elimination-round-2026-11-09) | Prep (RFE fit rounds; + the host support list per round, the no-scope fallback) | removed (superseded: one program per round, `_stage_block` + `c2_rfe_keep`) | 2026-11-09 | [W1_RFE_GATHER_PROGRAM_PER_ROUND.patch](../experiments/removed/W1_RFE_GATHER_PROGRAM_PER_ROUND.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3981,3 +3982,23 @@ release (the door is on every path) and the classical/trees/family test suites.
   `byte_lm_parallel_*` entries and no longer applies), and earlier in this batch `tools/kernel_pca_gpu_trial.py`,
   `tools/mcd_g1_quality.py`, `tools/mcd_ordered_quality.py`, `tools/mcd_ordered_pair.py`, `tools/eigh_panel_df_pair.py`
   with the code they drove.
+
+## RFE one program per elimination round (2026-11-09)
+
+Lane `w1-readmission-rfe` (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 4, row RFE), branch
+`lane/w1-readmission-rfe` from `origin/integ/pre-0867` `f7d10d2b09`; deletion commit `d6f2d5ed09`. Not an experiment
+define: a re-admission defect. `bindings/prep_select_native.mojo` ran two x_prep programs per elimination round (a
+gather program `_gather_cls` putting X and gathering the active columns, then the importance keys + `c2_rfe_step` +
+`c2_rfe_rank`), one more gather program for the final fit, rebuilt the active-column list and the support mask on the
+host every round, and fell back silently to putting X every round when the resident scope could not be entered.
+
+Now one program per round: the importance keys, `c2_rfe_step`, `c2_rfe_rank`, then `_stage_block` (the new x_prep op
+`c2_rfe_keep` 271, the supported columns compacted on the device, and `gather_cols` from the resident X) stages the next
+round's block in the same program; program 0 stages the first block. The resident scope is required (entering it only
+records the scope; the rows owner connects when the package imports `model_selection`). The support is read on the host
+once, after the last round. Programs per fit: 2R + 1 -> R + 1. No bit change: the same stages on the same words, and the
+gather is bit for bit. Deleted: `_gather_cls`, the per-round host `features` / `mask` lists, the no-scope fallback.
+
+Restore: `git apply -3 experiments/removed/W1_RFE_GATHER_PROGRAM_PER_ROUND.patch` (the reverse of `d6f2d5ed09` on
+`bindings/prep_select_native.mojo`; op 271 may stay). Run owed: RFE speed on NVIDIA and AMD (paper_compare / board RFE
+rows) against `f7d10d2b09`, and the RFE identity lane at the release.
