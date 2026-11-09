@@ -153,8 +153,8 @@ ENTRIES = (
      "what": "Mamba-1/2 tape backward against stored gradient digests and the Mamba-1 host oracle"},
     {"name": "autograd-lm-tape", "source": "training/checks/lm_tape_backward_check.mojo",
      "what": "language-model tape backward and updated parameters against stored digests"},
-    {"name": "autograd-small-mlp-tape", "source": "training/checks/mlp_tape_step_check.mojo",
-     "what": "small-MLP tape backward, two AdamW steps and stored output/state digests"},
+    # small MLP: its hand step and tape-rule check were deleted with plan row X2 (2026-11-09); the trainer is a
+    # captured program, covered by the public SmallMLPTrainer tests and the `mlp` identity lane.
     {"name": "autograd-samba-tape", "source": "training/checks/samba_tape_step_check.mojo",
      "what": "Samba whole-stack tape backward, loss, gradients and updated parameter digests"},
     # 2026-10-20 (lane ag-import-docs): model import, docs/plans/MODEL_IMPORT.md

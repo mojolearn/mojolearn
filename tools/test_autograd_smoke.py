@@ -17,7 +17,6 @@ def test_registry_covers_public_training_and_all_tape_integrations():
         "autograd/checks/import_gpu.mojo",
         "mamba/checks/mamba_tape_backward_check.mojo",
         "training/checks/lm_tape_backward_check.mojo",
-        "training/checks/mlp_tape_step_check.mojo",
         "training/checks/samba_tape_step_check.mojo",
     } <= sources
     tests = {e["pytest"] for e in entries if "pytest" in e}
