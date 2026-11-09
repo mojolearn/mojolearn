@@ -44,7 +44,6 @@ step of the byte LM; its bits changed with it on every GPU column together.
 
 Device only (the attention step op runs on a GPU session).
 """
-from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 from sequence.ops import FP, Args, OP_COPY, OPT_ADAMW
 from sequence.exec_device import DeviceExec
