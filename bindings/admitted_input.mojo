@@ -18,6 +18,9 @@
 #   admit_weights(...)  sample_weight as `rows` float32 words (None stays None)
 #   admitted_storage_f32(rows, cols, context)
 #                     the one uninitialised float32 destination of a cast
+#   admitted_scope_begin() / admitted_scope_end(mark) / admitted_hold(...)
+#                     a meta-estimator's X admitted once for all its
+#                     members (lane A1; see "admitted once per call")
 #
 # Rules this module keeps (lesson 8: one helper per concern):
 # - Metadata is read once per argument: the exporter's view (classical_view:
@@ -37,6 +40,7 @@
 #   (door_rows_host): these kernels read host addresses.
 # - Numerics: none. The bytes reaching a kernel are the same float32 C-order
 #   bytes as before; the finite and sign tests are predicates.
+from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.admitted_call import AdmittedCall, admitted_input_dense, ADMITTED_ITEM_F32
@@ -102,6 +106,100 @@ struct AdmittedX(Movable):
         self.borrowed = borrowed
         self.finite = True
         self.position = -1
+
+
+# ------------------------------------------------- admitted once per call
+#
+# Lane A1 admit-trees-labels (plan section 4, meta-estimators): a
+# meta-estimator (Stacking, Voting, OneVsRest, MultiOutput,
+# CalibratedClassifierCV) admits X once and hands the same float32 C-order
+# matrix to every member's public fit and predict. Each member door used to
+# admit it again (its view, its checks and one finiteness scan per member,
+# per fold). The meta-estimator's operation now opens a scope
+# (`admitted_scope_begin` ... `admitted_scope_end` in a `finally`), holds
+# the matrices it admitted inside it (`admitted_hold`), and `admit_x`
+# returns a held matrix as it is: no view, no check, no scan.
+#
+# A matrix is held only inside an open scope and only after it was
+# admitted finite, 2-D, non-empty and float32 C-order; entries are strong
+# references (no address reuse while held), matched by identity, and the
+# scope's end drops every entry made inside it, so nothing outlives the
+# call that admitted it. Any other object is admitted as before. A binding
+# that does not see the holder's registry (another extension module) admits
+# the matrix as before: the same verdict, one more scan. Numerics: none.
+
+
+struct AdmittedHeld(Defaultable, Movable):
+    var items: List[PythonObject]
+    var addresses: List[Int]
+    var rows: List[Int]
+    var cols: List[Int]
+    var depth: Int
+
+    def __init__(out self):
+        self.items = List[PythonObject]()
+        self.addresses = List[Int]()
+        self.rows = List[Int]()
+        self.cols = List[Int]()
+        self.depth = 0
+
+
+comptime ADMITTED_HELD = _Global[StorageType=AdmittedHeld, name="MojolearnAdmittedHeldV1",
+                                 init_fn=AdmittedHeld.__init__]
+
+
+def admitted_scope_begin() raises -> Int:
+    """Open a hold scope; returns the mark `admitted_scope_end` takes."""
+    var g = ADMITTED_HELD.get_or_create_ptr()
+    g[].depth += 1
+    return len(g[].items)
+
+
+def admitted_scope_end(mark: Int) raises:
+    """Close the scope `mark` opened: drop every entry held inside it."""
+    var g = ADMITTED_HELD.get_or_create_ptr()
+    # Hold the references while the registry shrinks, so no destructor runs
+    # while it is being changed.
+    var dropped = List[PythonObject]()
+    while len(g[].items) > mark:  # small-loop(items: the held matrices of the running calls, a few)
+        dropped.append(g[].items.pop())
+        _ = g[].addresses.pop()
+        _ = g[].rows.pop()
+        _ = g[].cols.pop()
+    if g[].depth > 0:
+        g[].depth -= 1
+    _ = dropped^
+
+
+def admitted_hold(array: PythonObject, address: Int, rows: Int, cols: Int) raises:
+    """Hold `array` (admitted finite: rows x cols float32 C-order words at
+    `address`) until the open scope ends, so member doors reuse its
+    admission. Outside a scope nothing is held."""
+    var g = ADMITTED_HELD.get_or_create_ptr()
+    if g[].depth <= 0:
+        return
+    g[].items.append(array)
+    g[].addresses.append(address)
+    g[].rows.append(rows)
+    g[].cols.append(cols)
+
+
+def admitted_scope_open() raises -> Bool:
+    """True inside a hold scope."""
+    return ADMITTED_HELD.get_or_create_ptr()[].depth > 0
+
+
+def admitted_is_held(array: PythonObject) raises -> Bool:
+    return _held_index(array) >= 0
+
+
+def _held_index(source: PythonObject) raises -> Int:
+    """The registry row holding `source` (identity), or -1."""
+    var g = ADMITTED_HELD.get_or_create_ptr()
+    for k in range(len(g[].items)):  # small-loop(items: the held matrices of the running calls, a few)
+        if g[].items[k] is source:
+            return k
+    return -1
 
 
 def _repr(value: PythonObject) raises -> String:
@@ -246,6 +344,11 @@ def _admitted_x(source: PythonObject, est: String, context: PythonObject, admitt
     # materializer (the device gather out of the resident base) and is then
     # checked like any Array. Same rows, same order: the same bytes as the
     # host path.
+    # A matrix a meta-estimator already admitted for this call (above).
+    var held = _held_index(source)
+    if held >= 0:
+        var g = ADMITTED_HELD.get_or_create_ptr()
+        return AdmittedX(source, source, g[].addresses[held], g[].rows[held], g[].cols[held], 2, True)
     var x_source = source
     var x_admitted = admitted
     if door_is_device_rows(source, context):
