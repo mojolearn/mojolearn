@@ -243,7 +243,8 @@ def _sweep_src_lane(tid: Int, r: Int) -> UInt32:
     return UInt32((tid % WARP_SIZE) - (tid % 32) + r)
 
 
-def trsm_lower_sweep_kernel(
+@always_inline
+def _trsm_lower_sweep_kernel_body(
     l: MutPointer[Float32, MutAnyOrigin],
     b: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
@@ -304,6 +305,34 @@ def trsm_lower_sweep_kernel(
         barrier()
 
 
+def trsm_lower_sweep_kernel(
+    l: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    nrhs_in: Int32,
+    ld_in: Int32,
+):
+    """`_trsm_lower_sweep_kernel_body` (the one body this kernel and its guarded twin
+    share; lane n7-device-linalg-ops)."""
+    _trsm_lower_sweep_kernel_body(l, b, n_in, nrhs_in, ld_in)
+
+
+def trsm_lower_sweep_guarded_kernel(
+    info: MutPointer[Int32, MutAnyOrigin],
+    l: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    nrhs_in: Int32,
+    ld_in: Int32,
+):
+    """`trsm_lower_sweep_kernel` when `info[0] == 0`; the whole block returns before any
+    barrier otherwise (a failed factor or a closed executor gate,
+    cholesky/chol_ops.mojo). Same words."""
+    if info[0] != Int32(0):
+        return
+    _trsm_lower_sweep_kernel_body(l, b, n_in, nrhs_in, ld_in)
+
+
 #: lane/neighbors-apple (2026-09-28): `trsm_lower_sweep_kernel` with RB
 #: right-hand-side columns per block. Each thread loads its row's L value
 #: once per step and applies it to RB chains, so L is read nrhs / RB times
@@ -324,7 +353,8 @@ comptime CHOL_MR_NT = 256
 comptime CHOL_MR_RB = 8
 
 
-def trsm_lower_multi_rhs_kernel(
+@always_inline
+def _trsm_lower_multi_rhs_kernel_body(
     l: MutPointer[Float32, MutAnyOrigin],
     b: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
@@ -396,6 +426,34 @@ def trsm_lower_multi_rhs_kernel(
                         b.unsafe_store(i * nrhs + j0 + c, tv[c])
             i += NT
         barrier()
+
+
+def trsm_lower_multi_rhs_kernel(
+    l: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    nrhs_in: Int32,
+    ld_in: Int32,
+):
+    """`_trsm_lower_multi_rhs_kernel_body` (the one body this kernel and its guarded twin
+    share; lane n7-device-linalg-ops)."""
+    _trsm_lower_multi_rhs_kernel_body(l, b, n_in, nrhs_in, ld_in)
+
+
+def trsm_lower_multi_rhs_guarded_kernel(
+    info: MutPointer[Int32, MutAnyOrigin],
+    l: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    nrhs_in: Int32,
+    ld_in: Int32,
+):
+    """`trsm_lower_multi_rhs_kernel` when `info[0] == 0`; the whole block returns before any
+    barrier otherwise (a failed factor or a closed executor gate,
+    cholesky/chol_ops.mojo). Same words."""
+    if info[0] != Int32(0):
+        return
+    _trsm_lower_multi_rhs_kernel_body(l, b, n_in, nrhs_in, ld_in)
 
 
 #: lane neighbors-apple2 (2026-09-28): `trsm_lower_multi_rhs_kernel` at 256
@@ -511,7 +569,8 @@ def trsm_lower_multi_rhs4_kernel(
 comptime CHOL_BACK_RING = CHOL_SWEEP_SOLVES and not is_defined["MOJOLEARN_CHOL_BACK_RING_OFF"]()
 
 
-def trsm_upper_ring_kernel(
+@always_inline
+def _trsm_upper_ring_kernel_body(
     l: MutPointer[Float32, MutAnyOrigin],
     b: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
@@ -574,6 +633,34 @@ def trsm_upper_ring_kernel(
             b.unsafe_store(i * nrhs + j, x)
             xr[i & MASK] = x
         barrier()
+
+
+def trsm_upper_ring_kernel(
+    l: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    nrhs_in: Int32,
+    ld_in: Int32,
+):
+    """`_trsm_upper_ring_kernel_body` (the one body this kernel and its guarded twin
+    share; lane n7-device-linalg-ops)."""
+    _trsm_upper_ring_kernel_body(l, b, n_in, nrhs_in, ld_in)
+
+
+def trsm_upper_ring_guarded_kernel(
+    info: MutPointer[Int32, MutAnyOrigin],
+    l: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    nrhs_in: Int32,
+    ld_in: Int32,
+):
+    """`trsm_upper_ring_kernel` when `info[0] == 0`; the whole block returns before any
+    barrier otherwise (a failed factor or a closed executor gate,
+    cholesky/chol_ops.mojo). Same words."""
+    if info[0] != Int32(0):
+        return
+    _trsm_upper_ring_kernel_body(l, b, n_in, nrhs_in, ld_in)
 
 
 def trsm_upper_staged_kernel(
