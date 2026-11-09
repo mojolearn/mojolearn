@@ -540,6 +540,15 @@ def classical_view(source: PythonObject, context: PythonObject, name: String = "
         # any array. This is what lets every family and classical estimator
         # opt into DeviceRows folds (no fold is downloaded).
         return admit_rows_host_unchecked(source, context)
+    return _classical_view_storage(source, context, name)
+
+
+def _classical_view_storage(source: PythonObject, context: PythonObject, name: String) raises -> PythonObject:
+    """`classical_view`'s storage read (pandas and Torch natively), with no
+    DeviceRows branch. `_admitted_rows` views a fold's base and indices
+    through this, so classical_view -> admit_rows_host_unchecked ->
+    _admitted_rows never calls back into classical_view: that mutual
+    recursion deadlocked the Mojo compiler (integ-w3, 2026-11-09)."""
     var prepared = source
     if native_pandas_exact(source):
         prepared = native_pandas_f32(source, context)
@@ -620,10 +629,10 @@ def _admitted_rows(source: PythonObject, est: String, context: PythonObject, dev
     # 2026-11-08 by lane a5-admit-core-followup; code recoverable at f7d10d2b09.
     # Restore: experiments/removed/A5_DOOR_ROWS_HOST.patch.
     var door = DoorRows(source, context)
-    var base = classical_view(door.base, context, "X", True)
+    var base = _classical_view_storage(door.base, context, "X")
     if Int(py=base.ndim) != 2 or not classical_is_f32(base, context) or not classical_c_order(base, context):
         raise Error("TypeError: DeviceRows requires a float32 C-order 2-D base")
-    var indices = classical_view(door.indices, context, "indices", True)
+    var indices = _classical_view_storage(door.indices, context, "indices")
     if (Int(py=indices.ndim) != 1 or classical_kind(indices, context) != "i" or Int(py=indices.itemsize) != 8
             or not classical_c_order(indices, context)):
         raise Error("TypeError: DeviceRows requires C-contiguous int64 row indices")

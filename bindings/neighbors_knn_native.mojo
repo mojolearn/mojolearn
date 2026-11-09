@@ -674,7 +674,7 @@ def _check_metric_input(cls_name: String, value: Int, x: PythonObject, context: 
 
 
 def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject,
-            binding: PythonObject = PythonObject(None)) raises:
+            binding: PythonObject) raises:
     """`NearestNeighbors.fit(X)`: the refusals, the release of the last
     fit's device index, then the float32 points held on the instance.
     `binding`: the search binding the index is prepared on (None: the
@@ -806,7 +806,7 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     (POLICY 6: `n_outputs` contiguous columns) and the classes per column."""
     var b = _b()
     var xn = args[0]
-    _nn_fit(model, args[1], context)
+    _nn_fit(model, args[1], context, PythonObject(None))
     var fields = py_fields(model)
     var y = args[2]
     var shape = _y_shape(y, fields, context)
@@ -895,7 +895,7 @@ def _reg_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     columns (POLICY 6)."""
     var b = _b()
     var xn = args[0]
-    _nn_fit(model, args[1], context)
+    _nn_fit(model, args[1], context, PythonObject(None))
     var fields = py_fields(model)
     var target = admit_family_meta(args[2], -1, "y", context)
     var shape = target.shape.copy()
@@ -1192,7 +1192,7 @@ def _neighbors_knn_operation(model: PythonObject, operation: String, var args: P
         args = estimator_arguments(model, "_mojolearn", args, context)
     if operation == "family_xn_knn_nn_fit":
         # args = (X,)
-        _nn_fit(model, args[0], context)
+        _nn_fit(model, args[0], context, PythonObject(None))
         return model
     if operation == "family_xn_knn_clf_fit":
         # args = (x_neighbors binding, X, y)
