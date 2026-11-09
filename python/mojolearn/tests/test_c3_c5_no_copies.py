@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Fits and block forwards read the caller's float32 C-order buffer in place.
+"""Fits and block forwards never change the caller's float32 buffer.
 
-0.8.66 regressions C3 and C5 (docs/plans/REGRESSIONS_0866_VS_0855.md): k-NN
-fit and IsolationForest fit keep a caller's float32 C matrix that owns its
-memory, frozen read-only, instead of a zero-filled copy; a view keeps the
-copy and its owner stays writable. A block forward reads a C-contiguous
-float32 `x` in place and never writes it. The outputs are byte-identical to
-the copied path's.
+0.8.66 regressions C3 and C5 (docs/plans/REGRESSIONS_0866_VS_0855.md): a
+k-NN fit keeps a caller's float32 C matrix by reference (as scikit-learn
+does) and never freezes or writes it; IsolationForest keeps its own copy,
+because scoring reads the training matrix after fit. A block forward reads a
+C-contiguous float32 `x` in place and never writes it or its flags. The
+outputs are byte-identical to the copied path's.
 """
 import os
 
@@ -24,7 +24,7 @@ def _x(rows=64, cols=6, seed=3):
 
 
 @pytest.mark.parametrize("cls", ["NearestNeighbors", "KNeighborsRegressor", "KNeighborsClassifier"])
-def test_knn_fit_keeps_an_owning_float32_matrix_read_only(cls):
+def test_knn_fit_keeps_the_float32_matrix_by_reference_and_never_changes_it(cls):
     X = _x()
     y = (np.arange(len(X)) % 3).astype(np.int64)
     reference = X.copy()
@@ -32,51 +32,42 @@ def test_knn_fit_keeps_an_owning_float32_matrix_read_only(cls):
     b = getattr(ml, cls)(n_neighbors=3)
     a.fit(X) if cls == "NearestNeighbors" else a.fit(X, y)
     b.fit(reference.copy()) if cls == "NearestNeighbors" else b.fit(reference.copy(), y)
-    assert not X.flags.writeable
-    with pytest.raises(ValueError):
-        X[0, 0] = 1.0
+    # The caller's array is never frozen or written.
+    assert X.flags.writeable
+    assert X.tobytes() == reference.tobytes()
     da, ia = a.kneighbors(reference[:5])
     db, ib = b.kneighbors(reference[:5])
     assert np.asarray(ia).tobytes() == np.asarray(ib).tobytes()
     assert np.asarray(da).tobytes() == np.asarray(db).tobytes()
+    # The documented contract: after an in-place edit, fit again.
+    X[:] = X[::-1].copy()
+    a.fit(X) if cls == "NearestNeighbors" else a.fit(X, y)
+    c = getattr(ml, cls)(n_neighbors=3)
+    c.fit(X.copy()) if cls == "NearestNeighbors" else c.fit(X.copy(), y)
+    assert np.asarray(a.kneighbors(reference[:5])[1]).tobytes() == np.asarray(c.kneighbors(reference[:5])[1]).tobytes()
 
 
-def test_knn_fit_copies_a_view_and_leaves_its_owner_writable():
-    fresh = _x(rows=128)
-    for view in (lambda a: a[::2], lambda a: a[:64]):  # strided, then C-contiguous
-        base = fresh.copy()
-        source = view(base)
-        query = view(fresh)[:4].copy()
-        model = ml.NearestNeighbors(n_neighbors=2).fit(source)
-        assert base.flags.writeable and source.flags.writeable
-        before = np.asarray(model.kneighbors(query)[1]).tobytes()
-        base[:] = 0.0  # the fitted index is a copy: the caller's edit cannot reach it
-        assert np.asarray(model.kneighbors(query)[1]).tobytes() == before
+def test_knn_fit_casts_a_strided_view_and_leaves_its_owner_alone():
+    base = _x(rows=128)
+    before_bytes = base.tobytes()
+    model = ml.NearestNeighbors(n_neighbors=2).fit(base[::2])
+    assert base.flags.writeable and base.tobytes() == before_bytes
+    query = base[::2][:4].copy()
+    before = np.asarray(model.kneighbors(query)[1]).tobytes()
+    base[:] = 0.0  # the strided view was cast into the model's own Array
+    assert np.asarray(model.kneighbors(query)[1]).tobytes() == before
 
 
-def test_iforest_fit_keeps_an_owning_float32_matrix_read_only():
+def test_iforest_fit_copies_and_never_changes_the_caller_matrix():
     X = _x(rows=256)
     reference = X.copy()
     a = ml.IsolationForest(n_estimators=8, random_state=5).fit(X)
     b = ml.IsolationForest(n_estimators=8, random_state=5).fit(reference.copy())
-    assert a.input_copied_ is False
-    assert not X.flags.writeable
-    with pytest.raises(ValueError):
-        X[0, 0] = 1.0
-    sa = np.asarray(a.score_samples(reference))
-    sb = np.asarray(b.score_samples(reference))
-    assert sa.tobytes() == sb.tobytes()
-
-
-def test_iforest_fit_copies_a_view():
-    base = _x(rows=512)
-    X = base[:256]
-    model = ml.IsolationForest(n_estimators=8, random_state=5).fit(X)
-    assert base.flags.writeable and X.flags.writeable
-    before = np.asarray(model.score_samples(X.copy())).tobytes()
-    snapshot = X.copy()
-    base[:] = 0.0
-    assert np.asarray(model.score_samples(snapshot)).tobytes() == before
+    assert X.flags.writeable and X.tobytes() == reference.tobytes()
+    sa = np.asarray(a.score_samples(reference)).tobytes()
+    assert sa == np.asarray(b.score_samples(reference)).tobytes()
+    X[:] = 0.0  # scoring reads the fit's own copy of the training matrix
+    assert np.asarray(a.score_samples(reference)).tobytes() == sa
 
 
 @pytest.mark.parametrize("kind", ["mamba1", "mamba2", "mamba3"])
