@@ -45,26 +45,6 @@
    "status": "confirmed:postmerge-20261010 (lane/postmerge-act-6; fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default)): one upload stays the default",
    "note": "T1: TruncatedSVD.fit calls tsvd_fit_explained (new export, device + host twin): one H2D copy of X shared by the Gram and the explained-variance tail instead of two. OFF arm runs the two host functions in order inside the same export. CONFIRMED 2026-10-10 (measured together with pca_lean_scratch_off): tsvd istella NV 1.60x / AMD 1.48x, tsvd taxi NV 0.96x / AMD 1.24x, pca istella NV 1.11x / AMD 1.04x slower with both _OFF; hashes unchanged."
   },
-  "rsvd_idn_direct_in": {
-   "define": "MOJOLEARN_IDN_RSVD_DIRECT_IN_OFF",
-   "kind": "switch",
-   "arms": {
-    "on": [],
-    "off": [
-     "MOJOLEARN_IDN_RSVD_DIRECT_IN_OFF"
-    ]
-   },
-   "default": "on",
-   "source": [
-    "x_decomp/w4_fast.mojo:121",
-    "x_decomp/w4_fast.mojo:134",
-    "python/mojolearn/_expansion_decomp.py:2933"
-   ],
-   "binding": "_mojolearn_x_decomp",
-   "bits_change": false,
-   "status": "default CONFIRMED (post-merge A/B, lane postmerge-act-2)",
-   "note": "R1: randomized_svd uploads M from the caller's buffer (x_decomp_dev_upload into a pooled device matrix, w4 flag bit 2) on IDENTICAL too, instead of _M.from_input's host array copy. Waste removal; same words. CONFIRMED 2026-10-09 (post-merge A/B, nv n0607 -> n0622, amd a1066 -> a1082): the _OFF arm is slower, randomized-svd istella NV 3.06x / AMD 2.15x, taxi NV 1.39x / AMD 1.12x, same digests."
-  },
   "gemm_tn_centered": {
    "define": "MOJOLEARN_IDN_GEMM_TN_CENTERED",
    "kind": "switch",
@@ -139,12 +119,10 @@
   },
   "expanded:randomized-svd": {
    "binding": "_mojolearn_x_decomp",
-   "route": "randomized_svd -> _rsvd_direct_input [rsvd_idn_direct_in] | _M.from_input -> _rsvd_core",
-   "controls": [
-    "rsvd_idn_direct_in"
-   ],
+   "route": "randomized_svd -> x_decomp_randomized_svd (one driver: RKit pca_randomized_core + svd_flip)",
+   "controls": [],
    "interaction_groups": [],
-   "note": "Copy-only; R2 (rsvd_tsqr_ortho, classical-structural) is the existing control for the dominant orth stage and is not repeated here."
+   "note": "Copy-only; R2 (rsvd_tsqr_ortho, classical-structural) is the existing control for the dominant orth stage and is not repeated here. (rsvd_idn_direct_in removed 2026-11-08: the one driver has no other input route.)"
   }
  },
  "removed": [
@@ -157,6 +135,11 @@
    "define": "MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE",
    "control": "pca_device_truncate",
    "reason": "DELETED 2026-10-10 (lane postmerge-act-6): fg2 board-bridge A/B on main 0a7b206f1, one run per arm (nv2 L40S v1021-v1050, amd MI325X a1161-a1190; ratio = arm / fg2 default): pca istella NV 1.00x / AMD 1.00x, pca taxi 1.01x / 1.00x, tsvd istella 1.00x / 1.00x, tsvd taxi NV 0.91x / AMD 1.00x: noise, hashes unchanged. P5 device order + gather (pca.mojo _device_truncate, truncate_in_order, the two kernels) and the host twin host_order_truncate_spectrum_ranked deleted; define refused in core/six_lane_experiment_guards.mojo; code recoverable at main 9f83ea479 (experiments/removed/MOJOLEARN_IDN_PCA_DEVICE_TRUNCATE.patch)."
+  },
+  {
+   "define": "MOJOLEARN_IDN_RSVD_DIRECT_IN_OFF",
+   "control": "rsvd_idn_direct_in",
+   "reason": "DELETED 2026-11-08 (lane a3-admit-decomp-prep-metrics): superseded, not a loser. CONFIRMED kept on grid g50ebe26a5 (_OFF arm 1.931x combined, slower). randomized_svd is now one driver (x_decomp/randomized_svd_owner.mojo, x_decomp_randomized_svd) that always reads M in place and uploads it once, so no route remains to switch; RSVD_IDN_DIRECT_IN, its FAST twin RSVD_FAST_DIRECT_IN, RSVD_FAST_DEVSCAN and the x_decomp_w4_flags / x_decomp_dev_upload_scan entries deleted; the _OFF names refused in core/experiment_guards_decomposition.mojo; code recoverable at f7d10d2b09 (experiments/removed/A3_ADMISSION_HELPERS.patch)."
   }
  ],
  "notes": [
