@@ -187,7 +187,7 @@ def xn_schema(op: Int) raises -> Tuple[Int, Int, Int]:
     if op == 1:
         return (3, 3, 0)
     if op == 2:
-        return (3, 5, 2)
+        return (3, 6, 2)
     if op == 3:
         return (3, 3, 0)
     if op == 4:
@@ -199,7 +199,7 @@ def xn_schema(op: Int) raises -> Tuple[Int, Int, Int]:
     if op == 7:
         return (3, 4, 0)
     if op == 8:
-        return (4, 5, 0)
+        return (4, 6, 0)
     if op == 9:
         return (3, 3, 0)
     if op == 10:
@@ -219,13 +219,13 @@ def xn_schema(op: Int) raises -> Tuple[Int, Int, Int]:
     if op == 17:
         return (3, 3, 0)
     if op == 18:
-        return (4, 3, 0)
+        return (4, 4, 0)
     if op == 19:
         return (6, 4, 2)
     if op == 20:
         return (6, 4, 2)
     if op == 21:
-        return (5, 3, 0)
+        return (5, 4, 0)
     if op == 22:
         return (2, 2, 0)
     if op == 23:
@@ -297,7 +297,7 @@ def xn_schema(op: Int) raises -> Tuple[Int, Int, Int]:
     if op == 56:
         return (5, 4, 0)
     if op == 57:
-        return (6, 3, 0)
+        return (6, 4, 0)
     if op == 58:
         return (3, 4, 0)
     if op == 59:
@@ -309,7 +309,7 @@ def xn_schema(op: Int) raises -> Tuple[Int, Int, Int]:
     if op == 62:
         return (4, 5, 2)
     if op == 63:
-        return (4, 5, 0)
+        return (4, 6, 0)
     if op == 64:
         return (4, 6, 0)
     if op == 65:
@@ -351,14 +351,18 @@ def xn_schema(op: Int) raises -> Tuple[Int, Int, Int]:
     if op == 83:
         return (4, 6, 5)
     if op == 84:
-        return (5, 4, 0)
+        return (5, 5, 0)
     if op == 85:
-        return (5, 4, 0)
+        return (5, 5, 0)
     if op == 86:
-        return (5, 6, 2)
+        return (5, 7, 2)
     raise Error("x_neighbors native ABI: unknown operation")
 
 
 def xn_min_ints(op: Int) raises -> Int:
     # nan_cells has an optional third flag; host ignores it as before.
-    return 2 if op == 67 else xn_schema(op)[1]
+    # The finite status address (lane a8b-device-x-neighbors-rest) is an
+    # optional last int of these operations.
+    if op == 67 or op == 2 or op == 8 or op == 18 or op == 21 or op == 57 or op == 63 or op == 84 or op == 85 or op == 86:
+        return xn_schema(op)[1] - 1
+    return xn_schema(op)[1]

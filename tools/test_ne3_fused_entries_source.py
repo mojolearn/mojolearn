@@ -6,9 +6,10 @@ from gen_x_neighbors_provider import EXTRA, generated
 
 ROOT = Path(__file__).resolve().parents[1]
 NEW = [('ocsvm_labels', (4, 6, 5), 5, 'x_neighbors_ocsvm_labels', 4),
-       ('nc_labels', (5, 4, 0), 6, 'x_neighbors_nc_labels', 5),
-       ('nc_proba', (5, 4, 0), 7, 'x_neighbors_nc_proba', 5),
-       ('lp_dense_proba', (5, 6, 2), 8, 'x_neighbors_lp_dense_proba', 6)]
+       # one more int each: the optional finite status address (lane a8b-device-x-neighbors-rest)
+       ('nc_labels', (5, 5, 0), 6, 'x_neighbors_nc_labels', 5),
+       ('nc_proba', (5, 5, 0), 7, 'x_neighbors_nc_proba', 5),
+       ('lp_dense_proba', (5, 7, 2), 8, 'x_neighbors_lp_dense_proba', 6)]
 
 
 def _read(path):
