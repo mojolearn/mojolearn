@@ -95,6 +95,14 @@ def test_run_records_the_judged_receipt(tmp_path, status, ok):
     assert [c[1:3] for c in calls[:2]] == [["-m", "venv"], ["-m", "pip"]] and "--device" in calls[2]
 
 
+def test_run_keeps_no_venv_in_the_evidence_folder(tmp_path):
+    calls = []
+    rec = AG.run("nvidia", "/base/python3", tmp_path / "a", ["/w/core.whl"], launch=fake_launch("PASSED", calls))
+    venv = Path(rec["python"]).parents[1]
+    assert tmp_path not in venv.parents and not venv.parent.exists()  # a temp dir, removed on return
+    assert not (tmp_path / "a" / "venv").exists()
+
+
 def test_run_stops_when_the_venv_does_not_install(tmp_path):
     calls = []
     rec = AG.run("amd", "/base/python3", tmp_path / "a", ["x.whl"], launch=fake_launch("PASSED", calls, venv_rc=1))
@@ -139,8 +147,9 @@ def test_gate_stage_runs_the_smoke_on_its_own_venv(tmp_path, monkeypatch, status
     g.adapters()
     rec = json.loads(g.state_path.read_text())
     assert rec["adapters_enabled"] is True and rec["adapters"]["ok"] is ok and rec["adapters_finished"]
-    venv = str(tmp_path / "gate" / "adapter-smoke" / "venv")
-    assert calls[0][-1] == venv and "/gate/venv/bin/python" not in calls[2]  # never the measurement venv
+    # a scratch venv under a temp dir, never inside the gate's evidence folder, and never the measurement venv
+    venv = calls[0][-1]
+    assert venv.endswith("/venv") and str(tmp_path / "gate") not in venv and "/gate/venv/bin/python" not in calls[2]
     assert calls[1][-3:] == ["mojolearn-core==0.8.56", "mojolearn-nvidia==0.8.56", "numpy"]
     assert calls[2][calls[2].index("--device") + 1] == "cuda:0"
     assert (G.gate_verdict(dict(state(), **{k: rec[k] for k in ("adapters_enabled", "adapters_finished",

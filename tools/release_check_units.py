@@ -243,6 +243,7 @@ class Runner:
         #: the adapters unit's venv interpreter once that unit ran and its venv imports torch: the autograd torch
         #: entries run under it (one torch per gate: the identity venv holds the wheels and numpy only)
         self.torch_python = None
+        self.adapters_venv = None  # the adapters unit's scratch venv (adapter_gate.scratch_venv), dropped by main
         #: the tools/adapter_gate.py TORCH_ENV file the adapters unit wrote for that interpreter, or None
         self.torch_env = None
         #: this process's environment as the job started it, taken before any unit runs: every unit's subprocess
@@ -304,7 +305,11 @@ class Runner:
     def adapters(self, row):
         import adapter_gate as AG
         out = self.out / "adapters"
-        rec = AG.run(self.plan["vendor"], sys.executable, out, self.a.wheel, env=dict(self.base_env))
+        # the adapters venv is the gate's one torch for the autograd entries after it: a scratch venv kept until
+        # main ends (drop_venv there), never inside the evidence folder
+        self.adapters_venv = AG.scratch_venv()
+        rec = AG.run(self.plan["vendor"], sys.executable, out, self.a.wheel, env=dict(self.base_env),
+                     venv=self.adapters_venv)
         ok = bool(rec.get("ok"))
         self.torch_python = self.adapters_torch_python(out)
         self.torch_env = self.write_torch_env(out, rec) if self.torch_python else None
@@ -324,7 +329,7 @@ class Runner:
         variables) with adapter_gate.framework_env computed NOW, after torch is installed (on AMD torch/lib first:
         the probes import mojolearn before torch, and without it the ROCm torch import failed, 0.8.66 run t)."""
         import adapter_gate as AG
-        venv = Path(out) / "venv"
+        venv = self.adapters_venv
         smoke = AG.apply_overrides(rec.get("env_overrides") or {}, self.base_env)
         smoke.update(AG.SMOKE_PHASE_ENV)
         env = AG.framework_env(self.plan["vendor"], venv, smoke)
@@ -340,14 +345,21 @@ class Runner:
         passed does not matter: the torch install is what the autograd entries need."""
         import adapter_gate as AG
         import autograd_smoke as AS
-        py = AG.venv_python(Path(out) / "venv")
-        if not Path(py).is_file() or not AS.has_module(py, "torch"):
+        py = AG.venv_python(self.adapters_venv) if self.adapters_venv is not None else ""
+        if not py or not Path(py).is_file() or not AS.has_module(py, "torch"):
             return None
         if not AS.has_module(py, "torchvision"):
             AS.ensure_torchvision(py, Path(out) / "ensure-torchvision.log")
         return py
 
     def main(self):
+        import adapter_gate as AG
+        try:
+            return self._main()
+        finally:
+            AG.drop_venv(self.adapters_venv)
+
+    def _main(self):
         self.plan = json.loads(Path(self.a.plan).read_text())
         if self.plan.get("schema") != PLAN_SCHEMA:
             raise SystemExit("release_check_units: not a check plan")
