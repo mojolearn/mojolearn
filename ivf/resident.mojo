@@ -27,7 +27,6 @@ a search through a handle returns the bits a one-shot search returns (the
 ivf, ivf-euclidean, ivf-filter and par-ivf lanes, base against head, both
 columns).
 """
-from std.ffi import _Global
 
 from max.gpu.host import DeviceContext
 from core.identity_trace import IdentityTrace
@@ -41,6 +40,7 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_search import (
     IvfSearchResult,
     ivf_flat_search_prepared,
 )
+from core.shared_slot import SharedSlot
 
 
 struct ResidentIvfFlat(Movable):
@@ -66,7 +66,7 @@ struct ResidentIvfFlat(Movable):
         self.partial_storage = False
 
 
-struct IvfFlatRegistry(Movable):
+struct IvfFlatRegistry(Defaultable, Movable):
     var entries: Dict[Int, ResidentIvfFlat]
     var next_id: Int
 
@@ -75,14 +75,7 @@ struct IvfFlatRegistry(Movable):
         self.next_id = 1
 
 
-comptime IVF_FLAT_REGISTRY = _Global[
-    StorageType=IvfFlatRegistry,
-    name=(
-        "MojoIvfFlatResidentIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-        "MojoIvfFlatResidentFast"
-    ),
-    init_fn=IvfFlatRegistry.__init__,
-]
+comptime IVF_FLAT_REGISTRY = SharedSlot[IvfFlatRegistry, ( "MojolearnIvfFlatResidentIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnIvfFlatResidentFastV1" )]
 
 
 def ivf_resident_prepare(ctx: DeviceContext, var index: IvfFlatIndex, partial_storage: Bool) raises -> Int:

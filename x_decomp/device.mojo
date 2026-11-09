@@ -9,7 +9,6 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.memory import memcpy
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
@@ -175,6 +174,7 @@ from x_decomp.eigh_ops import eigh_op_dense, eigh_op_sym
 from core.step_gate import step_gate_open_word
 from x_decomp.eigh_tridiag_cells import TD_MIN_N
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_scale_rect, enqueue_es_unscale
+from core.shared_slot import SharedSlot
 
 
 #: rounds enqueued between two synchronize() calls
@@ -297,7 +297,7 @@ struct _XdContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime X_DECOMP_CONTEXT = _Global[StorageType=_XdContext, name="MojolearnXDecompContextIdenticalV2", init_fn=_XdContext.__init__]
+comptime X_DECOMP_CONTEXT = SharedSlot[_XdContext, "MojolearnXDecompContextIdenticalV3"]
 
 
 def xd_ctx() raises -> DeviceContext:
@@ -1672,7 +1672,7 @@ struct _XdStage(Defaultable, Movable):
         self.buf = Optional[HostBuffer[DType.float32]]()
 
 
-comptime X_DECOMP_STAGE = _Global[StorageType=_XdStage, name="MojoXDecompStageIdentical", init_fn=_XdStage.__init__]
+comptime X_DECOMP_STAGE = SharedSlot[_XdStage, "MojolearnXDecompStageIdenticalV1"]
 
 
 def _xd_staged(n: Int) -> Bool:

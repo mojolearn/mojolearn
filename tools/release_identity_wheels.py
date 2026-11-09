@@ -229,7 +229,7 @@ class IdentityOnWheels:
     # ------------------------------------------------------------------ what is owed, before any rental
     def lanes_owed(self, column):
         """[lanes] the recorder would record for COLUMN at the frozen source: identity_columns.py changed-lanes
-        with the recorder's own reuse arguments (record_identity_column.sh auto-reuse), static, on this Mac.
+        with the recorder's own reuse arguments (record_identity_column.sh REUSE=1), static, on this Mac.
         An unreadable selection owes every lane of the column (None means: not decidable, so owed)."""
         if self.dry:
             # A DRY RUN HASHES NO CLOSURES (2026-11-08): changed-lanes over every retained record took 20+ min per

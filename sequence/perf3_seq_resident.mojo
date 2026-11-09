@@ -49,13 +49,13 @@ per-call upload), a stale-token replacement of a pinned slot is deferred
 posted again for the next drain. Every free synchronizes the shared context
 first, so launches queued before the unpin finish before the block goes.
 """
-from std.ffi import _Global
 from std.atomic import Atomic, Ordering
 from max.gpu.host import DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.ops import FP
 from sequence.exec_device import DeviceExec, _pcopy
 from sequence.perf3_seq_resident_words import SEQ_RESIDENT_ON_EXEC, seq_resident_take_dead, seq_resident_owner_died
+from core.shared_slot import SharedSlot
 
 comptime _SLOTS = 64
 comptime _KEEP_BYTES = 1 << 30
@@ -94,10 +94,10 @@ struct _SeqResidentStore(Defaultable, Movable):
 # One store per numeric tier, next to that tier's sequence context (a FAST
 # and an IDENTICAL binding in one process never share device memory).
 comptime _STORE_NAME = (
-    "MojoXSequenceResidentParamsIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    else "MojoXSequenceResidentParamsFastV3"
+    "MojolearnXSequenceResidentParamsIdenticalV4" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    else "MojolearnXSequenceResidentParamsFastV4"
 )
-comptime _STORE = _Global[StorageType=_SeqResidentStore, name=_STORE_NAME, init_fn=_SeqResidentStore.__init__]
+comptime _STORE = SharedSlot[_SeqResidentStore, _STORE_NAME]
 
 
 def _store() raises -> UnsafePointer[_SeqResidentStore, MutAnyOrigin]:

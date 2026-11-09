@@ -18,33 +18,29 @@ Public loads (`CausalLM.load`, `load_state_dict`, attribute assignment) give
 new arrays, which bump at their first use. In-place edits of a frozen weight
 are refused by the array itself.
 """
-from std.ffi import _Global
 from std.atomic import Atomic, Ordering
-from core.shared_slot import shared_slot_word, shared_slot_check
+from core.shared_slot import SharedSlot
 
 
 #: integ-w4: the epoch is a cross-module slot (every extension module that
 #: keys a resident weight copy reads it), so it follows lane s1's rule
 #: (core/shared_slot.mojo): versioned name, `layout` first, checked on read.
-comptime _EPOCH_LAYOUT = 1
-comptime _EPOCH_NAME = "MojolearnWeightEpochV1"
+comptime _EPOCH_LAYOUT = 2
+comptime _EPOCH_NAME = "MojolearnWeightEpochV2"
 
 
-struct _WeightEpoch(Movable):
-    var layout: Int
+struct _WeightEpoch(Defaultable, Movable):
     var word: List[Int64]
 
     def __init__(out self):
-        self.layout = shared_slot_word[_WeightEpoch](_EPOCH_LAYOUT)
         self.word = List[Int64](length=1, fill=Int64(1))
 
 
-comptime _EPOCH = _Global[StorageType=_WeightEpoch, name=_EPOCH_NAME, init_fn=_WeightEpoch.__init__]
+comptime _EPOCH = SharedSlot[_WeightEpoch, _EPOCH_NAME, _EPOCH_LAYOUT]
 
 
 def _ptr() raises -> MutPointer[Int64, MutUntrackedOrigin]:
     var g = _EPOCH.get_or_create_ptr()
-    shared_slot_check(g[].layout, shared_slot_word[_WeightEpoch](_EPOCH_LAYOUT), _EPOCH_NAME)
     return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(g[].word.unsafe_ptr()))
 
 

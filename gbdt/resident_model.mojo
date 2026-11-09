@@ -85,7 +85,6 @@ build with it moves every infer and proba cell that goes through this
 door and nothing that does not; the identity gate's sabotage column is
 built with it.
 """
-from std.ffi import _Global
 from std.memory import memcpy
 from std.sys.compile import is_defined
 from core.forest_experiments import C50_GB_PACKED
@@ -96,7 +95,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnGbdtContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnGbdtContextFastV2"
+comptime _DEVCTX_SLOT = "MojolearnGbdtContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnGbdtContextFastV3"
 
 
 from checks.numerics import (
@@ -150,6 +149,7 @@ from gbdt.models.kernel.resident_link import (
     resident_link_kernel,
     resident_stage_kernel,
 )
+from core.shared_slot import SharedSlot
 
 
 #: `gbdt_resident_predict`'s modes. The first three are
@@ -1071,7 +1071,7 @@ struct ResidentGbdtModel(Movable):
         )
 
 
-struct GbdtModelRegistry(Movable):
+struct GbdtModelRegistry(Defaultable, Movable):
     var entries: Dict[Int, ResidentGbdtModel]
     var next_id: Int
 
@@ -1080,14 +1080,7 @@ struct GbdtModelRegistry(Movable):
         self.next_id = 1
 
 
-comptime GBDT_MODEL_REGISTRY = _Global[
-    StorageType=GbdtModelRegistry,
-    name=(
-        "MojoGbdtResidentModelIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-        "MojoGbdtResidentModelFast"
-    ),
-    init_fn=GbdtModelRegistry.__init__,
-]
+comptime GBDT_MODEL_REGISTRY = SharedSlot[GbdtModelRegistry, ( "MojolearnGbdtResidentModelIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnGbdtResidentModelFastV1" )]
 
 
 def gbdt_resident_prepare(text: String) raises -> Int:

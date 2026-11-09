@@ -27,7 +27,7 @@ from bindings.py_attr import py_attr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_wrap_array, _store_code
-from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end, admitted_scope_open, admitted_hold, admitted_is_held
+from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end, admitted_scope_open, admitted_hold, admitted_hold_rows_of, admitted_is_held
 from bindings.trees_public_inputs import (
     TreesLabels, trees_builtins, trees_table, trees_entry, trees_helper,
     trees_reshape, trees_address, trees_itemsize,
@@ -909,10 +909,12 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
         var Xte = _gather(xt, trees_address(x_view), n, d, te_view, cols_view, context)
         _ = Xa  # keep the Python object alive through the native call above
         if admitted_is_held(Xa):
-            # Rows of a held (finite) X are finite: the fold's members read
-            # the fold matrices as admitted too.
-            admitted_hold(Xtr, trees_address(Xtr), Int(py=tr_view.shape[0]), d)
-            admitted_hold(Xte, trees_address(Xte), Int(py=te_view.shape[0]), d)
+            # Rows of a held X carry its verdict (finite rows of a finite X;
+            # rows of an X an outer cross-validation held with its finite
+            # test deferred stay deferred and linked to it, lane s2): the
+            # fold's members read the fold matrices as admitted too.
+            admitted_hold_rows_of(Xa, Xtr, trees_address(Xtr), Int(py=tr_view.shape[0]), d)
+            admitted_hold_rows_of(Xa, Xte, trees_address(Xte), Int(py=te_view.shape[0]), d)
         for i in range(len(active.ests)):  # driver-loop: over members
             var e = _clone(active.ests[i], context)
             _fit_member(e, Xtr, y_tr, w_tr, context)

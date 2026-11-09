@@ -11,6 +11,20 @@
 #   admitted_hold(array, address, rows, cols)
 #                     hold an admitted finite float32 C-order matrix until
 #                     the open scope ends (outside a scope: nothing held)
+#   admitted_hold_deferred(array, address, rows, cols, parent)
+#                     hold one whose finite test is DEFERRED (lane s2): a
+#                     member whose kernel entry tests the words it uploads
+#                     (defer_finite) reads it with no host pass; the first
+#                     member that needs a host verdict gets it once
+#                     (bindings/admitted_meta_scope.mojo admitted_held_verify)
+#                     and it is recorded on the row. `parent`: the held
+#                     matrix these rows were gathered out of, or None
+#   admitted_hold_rows_of(parent, array, address, rows, cols)
+#                     hold rows gathered out of a held `parent` with the
+#                     parent's verdict (finite, or deferred with the link)
+#   admitted_held_finite(index) / admitted_held_parent(index) /
+#   admitted_held_set_finite(index)
+#                     the row's recorded verdict, its parent, and the record
 #   admitted_scope_open() -> Bool
 #   admitted_held_index(source) -> Int
 #                     the registry row holding `source` (identity), or -1
@@ -44,48 +58,50 @@
 # Moved from lane A1's bindings/admitted_held.mojo (branch
 # lane/a1-admit-trees-labels 076abee5ea) word for word, under a new global
 # name so the two definitions never share storage while both exist.
-from std.ffi import _Global, external_call
+from std.ffi import external_call
 from std.python import PythonObject
 
-from core.shared_slot import shared_slot_check, shared_slot_word
+from core.shared_slot import SharedSlot
 
 #: Layout version of `AdmittedRegistry` (core/shared_slot.mojo rule). V2: the
-#: layout word, the per-row thread and the per-thread depth.
-comptime _ADMITTED_LAYOUT = 2
-comptime _ADMITTED_NAME = "MojolearnAdmittedRegistryV2"
+#: layout word, the per-row thread and the per-thread depth. V3 (lane s2):
+#: the per-row finite verdict and parent (deferred holds).
+comptime _ADMITTED_LAYOUT = 3
+comptime _ADMITTED_NAME = "MojolearnAdmittedRegistryV3"
 
 
 struct AdmittedRegistry(Defaultable, Movable):
-    # first field: the layout word (core/shared_slot.mojo)
-    var layout: Int
     var items: List[PythonObject]
     var addresses: List[Int]
     var rows: List[Int]
     var cols: List[Int]
     # the thread that held each row
     var threads: List[Int]
+    # 1: tested finite; 0: deferred (not tested on the host yet)
+    var verdicts: List[Int]
+    # the held matrix each row was gathered out of, or None
+    var parents: List[PythonObject]
     # the open-scope depth of each thread that has one open
     var depth_threads: List[Int]
     var depths: List[Int]
 
     def __init__(out self):
-        self.layout = shared_slot_word[AdmittedRegistry](_ADMITTED_LAYOUT)
         self.items = List[PythonObject]()
         self.addresses = List[Int]()
         self.rows = List[Int]()
         self.cols = List[Int]()
         self.threads = List[Int]()
+        self.verdicts = List[Int]()
+        self.parents = List[PythonObject]()
         self.depth_threads = List[Int]()
         self.depths = List[Int]()
 
 
-comptime ADMITTED_REGISTRY = _Global[StorageType=AdmittedRegistry, name=_ADMITTED_NAME,
-                                     init_fn=AdmittedRegistry.__init__]
+comptime ADMITTED_REGISTRY = SharedSlot[AdmittedRegistry, _ADMITTED_NAME, _ADMITTED_LAYOUT]
 
 
 def _registry() raises -> UnsafePointer[AdmittedRegistry, MutAnyOrigin]:
     var g = ADMITTED_REGISTRY.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    shared_slot_check(g[].layout, shared_slot_word[AdmittedRegistry](_ADMITTED_LAYOUT), _ADMITTED_NAME)
     return g
 
 
@@ -147,6 +163,8 @@ def admitted_scope_end(mark: Int) raises:
         _ = g[].rows.pop(k)
         _ = g[].cols.pop(k)
         _ = g[].threads.pop(k)
+        _ = g[].verdicts.pop(k)
+        dropped.append(g[].parents.pop(k))
         j -= 1
     var d = _depth_index(g, me)
     if d >= 0:
@@ -157,10 +175,7 @@ def admitted_scope_end(mark: Int) raises:
     _ = dropped^
 
 
-def admitted_hold(array: PythonObject, address: Int, rows: Int, cols: Int) raises:
-    """Hold `array` (admitted finite: rows x cols float32 C-order words at
-    `address`) until the calling thread's open scope ends, so member doors
-    reuse its admission. Outside a scope nothing is held."""
+def _hold_row(array: PythonObject, address: Int, rows: Int, cols: Int, verdict: Int, parent: PythonObject) raises:
     var g = _registry()
     var me = _thread()
     if _depth_index(g, me) < 0:
@@ -170,6 +185,39 @@ def admitted_hold(array: PythonObject, address: Int, rows: Int, cols: Int) raise
     g[].rows.append(rows)
     g[].cols.append(cols)
     g[].threads.append(me)
+    g[].verdicts.append(verdict)
+    g[].parents.append(parent)
+
+
+def admitted_hold(array: PythonObject, address: Int, rows: Int, cols: Int) raises:
+    """Hold `array` (admitted finite: rows x cols float32 C-order words at
+    `address`) until the calling thread's open scope ends, so member doors
+    reuse its admission. Outside a scope nothing is held."""
+    _hold_row(array, address, rows, cols, 1, PythonObject(None))
+
+
+def admitted_hold_deferred(array: PythonObject, address: Int, rows: Int, cols: Int, parent: PythonObject) raises:
+    """Hold `array` (rows x cols float32 C-order words at `address`, NOT yet
+    tested finite) until the calling thread's open scope ends. A member door
+    that defers its finite test to its kernel entry reads it with no host
+    pass; one that needs a host verdict gets it once from
+    `admitted_held_verify` (bindings/admitted_meta_scope.mojo). `parent` is
+    the held matrix the rows were gathered out of (its verdict covers them),
+    or None."""
+    _hold_row(array, address, rows, cols, 0, parent)
+
+
+def admitted_hold_rows_of(parent: PythonObject, array: PythonObject, address: Int, rows: Int, cols: Int) raises:
+    """Hold rows gathered out of the held matrix `parent` with its verdict:
+    finite when `parent` was tested finite, else deferred and linked to it.
+    Nothing is held when `parent` is not held by the calling thread."""
+    var k = admitted_held_index(parent)
+    if k < 0:
+        return
+    if _registry()[].verdicts[k] == 1:
+        _hold_row(array, address, rows, cols, 1, PythonObject(None))
+    else:
+        _hold_row(array, address, rows, cols, 0, parent)
 
 
 def admitted_scope_open() raises -> Bool:
@@ -206,3 +254,18 @@ def admitted_held_rows(index: Int) raises -> Int:
 
 def admitted_held_cols(index: Int) raises -> Int:
     return _registry()[].cols[index]
+
+
+def admitted_held_finite(index: Int) raises -> Bool:
+    """True when the held row was tested finite (not deferred)."""
+    return _registry()[].verdicts[index] == 1
+
+
+def admitted_held_parent(index: Int) raises -> PythonObject:
+    """The held matrix the row was gathered out of, or None."""
+    return _registry()[].parents[index]
+
+
+def admitted_held_set_finite(index: Int) raises:
+    """Record that the held row's words were tested finite."""
+    _registry()[].verdicts[index] = 1

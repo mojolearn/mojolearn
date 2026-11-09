@@ -11,7 +11,6 @@ as `core/forest_inference_model.mojo` keeps one registry per specialization.
 The caller holds the GIL through prepare, predict and release, as the GPU
 binding's caller does.
 """
-from std.ffi import _Global
 from std.python import PythonObject
 
 from core.forest_host_groves import HostGroveForest, HostGroveRegistry
@@ -20,18 +19,11 @@ from core.forest_host_groves_binding_impl import (
     _i32_ptr,
     host_grove_forest_from,
 )
+from core.shared_slot import SharedSlot
 
 
-comptime RF_GROVE_REGISTRY = _Global[
-    StorageType=HostGroveRegistry,
-    name="MojoRFResidentForestHost",
-    init_fn=HostGroveRegistry.__init__,
-]
-comptime ET_GROVE_REGISTRY = _Global[
-    StorageType=HostGroveRegistry,
-    name="MojoETResidentForestHost",
-    init_fn=HostGroveRegistry.__init__,
-]
+comptime RF_GROVE_REGISTRY = SharedSlot[HostGroveRegistry, "MojolearnRFResidentForestHostV1"]
+comptime ET_GROVE_REGISTRY = SharedSlot[HostGroveRegistry, "MojolearnETResidentForestHostV1"]
 
 
 def forest_prepare_host_binding[RF_INPUT: Bool](

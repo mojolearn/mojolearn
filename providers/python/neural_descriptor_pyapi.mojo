@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Setup/ownership boundary for explicitly named native execution ABIs. No
 # unwrapping of arbitrary Python functions, extension layouts or signatures.
-from std.ffi import c_int, _Global
+from std.ffi import c_int
 from std.collections import Dict
 from std.memory import memcpy
 from std.os import getenv
@@ -14,6 +14,7 @@ from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit,
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call_spans
 from core.native_call_output import NativeCallWorkspace, NativeCallWorkspaceLease
+from core.shared_slot import SharedSlot
 
 
 struct NeuralDescriptorProvider(Movable, Writable):
@@ -128,8 +129,7 @@ struct NeuralDescriptorAdmitted(Defaultable, Movable):
         self.sizes = List[Int]()
 
 
-comptime NEURAL_DESCRIPTOR_ADMITTED = _Global[StorageType=NeuralDescriptorAdmitted,
-    name="MojolearnNeuralDescriptorAdmittedV1", init_fn=NeuralDescriptorAdmitted.__init__]
+comptime NEURAL_DESCRIPTOR_ADMITTED = SharedSlot[NeuralDescriptorAdmitted, "MojolearnNeuralDescriptorAdmittedV2"]
 
 
 def _neural_descriptor_module_fields_once(module: PythonObject, bi: PythonObject) raises -> PythonObject:
@@ -211,8 +211,7 @@ struct NeuralDescriptorEntries(Defaultable, Movable):
 
 # Shared by every Mojo extension in the process: bump the name's version
 # whenever NeuralDescriptorEntries' layout changes.
-comptime NEURAL_DESCRIPTOR_ENTRIES = _Global[StorageType=NeuralDescriptorEntries,
-    name="MojolearnNeuralDescriptorEntriesV1", init_fn=NeuralDescriptorEntries.__init__]
+comptime NEURAL_DESCRIPTOR_ENTRIES = SharedSlot[NeuralDescriptorEntries, "MojolearnNeuralDescriptorEntriesV2"]
 
 #: entries kept at once (memory reasoning: a few hundred compiled entries per
 #: process across every binding; past this the table starts over).
@@ -358,8 +357,7 @@ struct NeuralDescriptorConnections(Defaultable, Movable):
 
 # The named global may be shared by every Mojo extension in the process:
 # bump the name's version whenever NeuralDescriptorConnections' layout changes.
-comptime NEURAL_DESCRIPTOR_CONNECTIONS = _Global[StorageType=NeuralDescriptorConnections,
-    name="MojolearnNeuralDescriptorConnectionsV1", init_fn=NeuralDescriptorConnections.__init__]
+comptime NEURAL_DESCRIPTOR_CONNECTIONS = SharedSlot[NeuralDescriptorConnections, "MojolearnNeuralDescriptorConnectionsV2"]
 
 
 def neural_descriptor_connect_once(module: PythonObject, factory_name: String, var name: String,
@@ -534,8 +532,7 @@ struct NeuralValueHandles(Defaultable, Movable):
 
 
 # Bump the name's version whenever NeuralValueHandles' layout changes.
-comptime NEURAL_VALUE_HANDLES = _Global[StorageType=NeuralValueHandles,
-    name="MojolearnNeuralValueHandlesV1", init_fn=NeuralValueHandles.__init__]
+comptime NEURAL_VALUE_HANDLES = SharedSlot[NeuralValueHandles, "MojolearnNeuralValueHandlesV2"]
 
 # Bound on remembered values (memory only: a dropped answer is recomputed).
 comptime _NEURAL_VALUE_HANDLES_MAX = 4096

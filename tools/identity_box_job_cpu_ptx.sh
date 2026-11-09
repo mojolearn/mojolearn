@@ -7,9 +7,8 @@
 # behind: python/mojolearn/identical (the native merged set), python/mojolearn/host (the host set) and
 # python/mojolearn/.libs/libMojolearnMath.so, activated at the tree's HEAD. This job compiles nothing.
 #
-#   cpu  CPU_THREADS=3 REPEATS=1 tools/record_identity_column.sh cpu <out>/cpu: incremental by
-#        default (record_identity_column.sh's auto reuse: only the lanes whose closure changed since
-#        the cpu class's newest good evidence; FULL=1 is never set here).
+#   cpu  CPU_THREADS=3 REPEATS=1 tools/record_identity_column.sh cpu <out>/cpu: every lane (the
+#        recorder's default since 2026-11-09; reuse of old runs is opt-in with REUSE=1, never set here).
 #   ptx  only with PTX_SET_TGZ: a cuda-sm_80 PTX set tarball (entries cuda/sm_80/..., the release
 #        leg's set, as ~/mojolearn-evidence/rel0864/sets/cuda-sm_80.tar.gz), placed on the box first,
 #        with PTX_SET_SHA256 (its sha256) and PTX_SET_COMMIT (the commit the set was built from; it

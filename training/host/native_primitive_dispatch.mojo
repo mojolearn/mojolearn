@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Shared provider table for CPU training primitives. Existing public bindings
 # and this table call the same relocated host helpers, preserving arithmetic.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, PRIMITIVE_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -14,6 +13,7 @@ from core.mojolearn_training_host_impl import (
     chunked_lm_head_v2_loss_host_into, chunked_lm_head_v2_train_host_into,
 )
 from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2
+from core.shared_slot import SharedSlot
 
 
 def host_primitive_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -98,5 +98,4 @@ struct NativeHostTrainingPrimitiveAPI(Defaultable, Movable):
         self.entries.append(host_primitive_v1)
 
 
-comptime NATIVE_HOST_TRAINING_PRIMITIVE_API = _Global[StorageType=NativeHostTrainingPrimitiveAPI,
-    name=("MojolearnHostTrainingPrimitiveAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnHostTrainingPrimitiveAPIFastV2"), init_fn=NativeHostTrainingPrimitiveAPI.__init__]
+comptime NATIVE_HOST_TRAINING_PRIMITIVE_API = SharedSlot[NativeHostTrainingPrimitiveAPI, ("MojolearnHostTrainingPrimitiveAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnHostTrainingPrimitiveAPIFastV3")]

@@ -13,11 +13,12 @@ the binding that minted it. Moved out of bindings/decomp_kit_native.mojo
 the TSA owners and the random-projection owner share one copy (plan section 4,
 lesson 8). Nothing here touches data.
 """
-from std.ffi import _Global, external_call, c_size_t
+from std.ffi import external_call, c_size_t
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call
 from bindings.cpython_table import cpython_table
+from core.shared_slot import SharedSlot
 
 
 struct _ResidentNames(Defaultable, Movable):
@@ -29,10 +30,7 @@ struct _ResidentNames(Defaultable, Movable):
         self.capsule_name = String("mojolearn.decomp_kit.resident.v1")
 
 
-comptime _RESIDENT_NAMES = _Global[
-    StorageType=_ResidentNames, name="MojolearnDecompResidentNamesV1",
-    init_fn=_ResidentNames.__init__,
-]
+comptime _RESIDENT_NAMES = SharedSlot[_ResidentNames, "MojolearnDecompResidentNamesV2"]
 
 comptime _ResidentWords = MutPointer[Int, MutUntrackedOrigin]
 comptime _ResidentBytes = MutPointer[UInt8, MutUntrackedOrigin]

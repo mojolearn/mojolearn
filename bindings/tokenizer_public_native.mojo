@@ -6,7 +6,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.os import getenv
-from std.ffi import _Global, c_int
+from std.ffi import c_int
 from std.memory import memcpy
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit
@@ -42,6 +42,7 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
     bpe_encode_corpus_into, bpe_train_corpus_fill,
     tokens_gather_rows_width, tokens_gather_rows_into,
 )
+from core.shared_slot import SharedSlot
 
 
 struct TokenizerPublicConnection(Defaultable, Movable):
@@ -70,10 +71,7 @@ struct TokenizerPublicConnection(Defaultable, Movable):
         self.owner_names = PythonObject(None)
 
 
-comptime TOKENIZER_PUBLIC_CONNECTION = _Global[
-    StorageType=TokenizerPublicConnection, name="MojoTokenizerPublicConnection",
-    init_fn=TokenizerPublicConnection.__init__,
-]
+comptime TOKENIZER_PUBLIC_CONNECTION = SharedSlot[TokenizerPublicConnection, "MojolearnTokenizerPublicConnectionV1"]
 
 
 def _vocab_context() raises -> PythonObject:

@@ -2,12 +2,12 @@
 # Reader/resolve ownership through the common native descriptor transport.
 # This does not allocate an execution Session or GPU context merely to parse
 # an artifact. All graph handles belong to the selected compiled image.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from autograd.import_reader import OnnxInfo, onnx_read, onnx_info, onnx_buffers, onnx_close, onnx_registry_token
 from autograd.import_resolve import OnnxResolved, onnx_resolve
+from core.shared_slot import SharedSlot
 
 comptime ONNX_READER_ABI = "mojolearn.autograd.onnx.v1"
 comptime ONNX_READER_COUNT = 4
@@ -78,5 +78,4 @@ struct NativeReaderTable(Defaultable, Movable):
         self.entries.append(reader_native_v1)
 
 
-comptime ONNX_READER_TABLE = _Global[StorageType=NativeReaderTable,
-    name=("MojolearnNativeOnnxReaderTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNativeOnnxReaderTableFastV2"), init_fn=NativeReaderTable.__init__]
+comptime ONNX_READER_TABLE = SharedSlot[NativeReaderTable, ("MojolearnNativeOnnxReaderTableIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNativeOnnxReaderTableFastV3")]

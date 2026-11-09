@@ -2,7 +2,7 @@
 # Native framed transport. POSIX owns fd/process operations; CPython is used
 # only for exact builtin containers and an opaque fd-owning capsule. Calling
 # CPython's socket/posix wrappers would invoke Python audit hooks.
-from std.ffi import _Global, c_int, c_uint, c_size_t, external_call
+from std.ffi import c_int, c_uint, c_size_t, external_call
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -21,6 +21,7 @@ from bindings.native_posix_transport import (
     posix_errno, posix_failure,
 )
 from bindings.cpython_table import cpython_table
+from core.shared_slot import SharedSlot
 
 
 struct TransportBoundary(Defaultable, Movable):
@@ -40,10 +41,7 @@ struct TransportBoundary(Defaultable, Movable):
         self.capsule_name = String("mojolearn.native_transport.fd.v1")
 
 
-comptime TRANSPORT_BOUNDARY = _Global[
-    StorageType=TransportBoundary, name="MojoNativeTransportBoundary",
-    init_fn=TransportBoundary.__init__,
-]
+comptime TRANSPORT_BOUNDARY = SharedSlot[TransportBoundary, "MojolearnNativeTransportBoundaryV1"]
 
 
 def transport_initialize() raises:

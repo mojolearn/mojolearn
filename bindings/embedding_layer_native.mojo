@@ -20,7 +20,6 @@ it replaces, so no bit moves.
 """
 from bindings.native_class_admission import class_record, class_admit
 from bindings.native_loaded_module import NativeModules
-from std.ffi import _Global
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -45,6 +44,7 @@ from core.borrowed_buffer import BorrowedBufferLayout
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_FLOAT, CAST_KIND_BOOL
 from bindings.classical_archive_read import classical_archive_read, _archive_string, _archive_exact
 from bindings.optimizer_public_words import optimizer_python_error
+from core.shared_slot import SharedSlot
 
 comptime _NO_PADDING = -1
 comptime _FORMAT = "mojolearn-embedding-1"
@@ -59,9 +59,7 @@ struct _EmbeddingTokens(Defaultable, Movable):
         self.next = 1
 
 
-comptime _EMBEDDING_TOKENS = _Global[
-    StorageType=_EmbeddingTokens, name="MojoEmbeddingLayerTokens", init_fn=_EmbeddingTokens.__init__
-]
+comptime _EMBEDDING_TOKENS = SharedSlot[_EmbeddingTokens, "MojolearnEmbeddingLayerTokensV1"]
 
 
 def _b() raises -> PythonObject:

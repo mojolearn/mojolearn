@@ -101,7 +101,7 @@ def test_constant_probe():
 
 
 def test_valueless_definitions():
-    assert audit_tool._valueless('comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV2"')
+    assert audit_tool._valueless('comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV3"')
     assert audit_tool._valueless("@fieldwise_init\nstruct Handle(Movable):\n    var id: Int")
     assert audit_tool._valueless("def __init__(out self):\n    pass", ("m", "f.mojo", "Store", "__init__"))
     assert not audit_tool._valueless("def gather(x: Int) -> Int:\n    return x + 1", ("t", "f.mojo", "gather"))

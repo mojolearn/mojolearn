@@ -19,7 +19,6 @@ before it returns; the context stays.
 from std.gpu import block_idx, block_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
 from std.utils import StaticTuple
 from std.gpu.primitives.warp import shuffle_idx, shuffle_xor
-from std.ffi import _Global
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext, DeviceBuffer
@@ -106,6 +105,7 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
+from core.shared_slot import SharedSlot
 
 
 struct _LinearContext(Defaultable, Movable):
@@ -117,8 +117,8 @@ struct _LinearContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojolearnXLinearContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXLinearContextFastV2"
-comptime X_LINEAR_CONTEXT = _Global[StorageType=_LinearContext, name=_CTX_NAME, init_fn=_LinearContext.__init__]
+comptime _CTX_NAME = "MojolearnXLinearContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXLinearContextFastV3"
+comptime X_LINEAR_CONTEXT = SharedSlot[_LinearContext, _CTX_NAME]
 
 
 def linear_ctx() raises -> DeviceContext:

@@ -3,7 +3,6 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from std.ffi import _Global
 from std.time import perf_counter_ns
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.sha256 import Sha256
@@ -19,6 +18,7 @@ from bindings.neural_block_admission import neural_array_slots
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from providers.python.autograd_import_frontend_pyapi import _import
 from providers.python.autograd_program_pyapi import ops_imported_run_py
+from core.shared_slot import SharedSlot
 
 
 struct CatalogConnection(Defaultable, Movable):
@@ -28,8 +28,7 @@ struct CatalogConnection(Defaultable, Movable):
         self.context = PythonObject(None)
 
 
-comptime CATALOG_CONNECTION = _Global[StorageType=CatalogConnection,
-    name="MojolearnCatalogConnection", init_fn=CatalogConnection.__init__]
+comptime CATALOG_CONNECTION = SharedSlot[CatalogConnection, "MojolearnCatalogConnectionV1"]
 
 
 def _catalog_context() raises -> PythonObject:

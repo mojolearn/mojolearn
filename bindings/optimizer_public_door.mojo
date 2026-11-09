@@ -27,7 +27,6 @@ training/optimizer_public_common.mojo (shared, no device code); `OptKernels`
 names the entries a binding provides. Ownership (docs/MODULAR_ASKS.md):
 every Python call and attribute or item assignment goes through
 bindings/py_balanced.mojo, so no caller object is retained."""
-from std.ffi import _Global
 from std.memory import memcpy
 from std.math import isfinite
 from std.python import Python, PythonObject
@@ -47,6 +46,7 @@ from training.optimizer_public_common import (
     GRADS_DEVICE, GRADS_HOST, GRADS_RESIDENT, I32P, OptHyper, PublicStep, PublicStepOut, eager_moments,
     registry_offsets, zero_tensors,
 )
+from core.shared_slot import SharedSlot
 
 comptime IP = MutPointer[Int, MutUntrackedOrigin]
 comptime BP = MutPointer[UInt8, MutUntrackedOrigin]
@@ -124,7 +124,7 @@ struct OptDoor(Defaultable, Movable):
         self.refused = PythonObject(None)
 
 
-comptime OPT_DOOR = _Global[StorageType=OptDoor, name="MojoOptimizerPublicDoor", init_fn=OptDoor.__init__]
+comptime OPT_DOOR = SharedSlot[OptDoor, "MojolearnOptimizerPublicDoorV1"]
 
 
 def door_ready() raises:

@@ -21,8 +21,8 @@ from bindings.py_attr import py_attr
 from bindings.py_slice_native import py_slice, py_slice_from
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.arena_resident_plan import ArenaResidentPlan
-from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end
-from bindings.admitted_meta_scope import admitted_hold_array_f32
+from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end, admitted_hold_rows_of, admitted_is_held
+from bindings.admitted_meta_scope import admitted_hold_array_f32_deferred
 from bindings.metrics_native_support import metric_float
 from bindings.msel_json import msel_canonical
 from bindings.sha256_door import sha256_update, sha256_hexdigest
@@ -280,6 +280,18 @@ def _arena_rows_call(obj: PythonObject, op: String, args: PythonObject, context:
     return family_call(entry, obj, PythonObject(op), args, context["family_msel_rows_context"])
 
 
+def _msel_hold_rows_of(x: PythonObject, rows: PythonObject) raises:
+    """Hold a fold's rows (an exact float32 C-order Array gathered out of the
+    held X) with X's verdict."""
+    if Int(py=rows.ndim) != 2 or String(py=rows.dtype) != "<f4" or String(py=rows.order) != "C":
+        return
+    var n = Int(py=rows.shape[0])
+    var cols = Int(py=rows.shape[1])
+    if n < 1 or cols < 1 or admitted_is_held(rows):
+        return
+    admitted_hold_rows_of(x, rows, Int(py=rows._addr), n, cols)
+
+
 struct MselFoldRows(Movable):
     """`_FoldRows`: each fold's rows of X (and y) for the fits that share
     the folds, out of X, y and the fold indices resident on the device."""
@@ -300,14 +312,20 @@ struct MselFoldRows(Movable):
     var rows_cache: PythonObject
     var rows_dict: PythonObject
     # S4 (lane s1): the admitted-registry hold scope of the fold set. A host
-    # float32 C-order X found finite by one scan here is held for the whole
-    # set, and each fold's X rows (gathered out of it, so finite) are held in
-    # a nested scope while that fold runs: every member door, in any binding
-    # (one registry per process), reads them as admitted, with no view, check
-    # or scan of its own. -1: no scope open.
+    # float32 C-order X is held for the whole set, and each fold's X rows
+    # (gathered out of it) are held in a nested scope while that fold runs:
+    # every member door, in any binding (one registry per process), reads
+    # them as admitted, with no view or check of its own. -1: no scope open.
+    # Lane s2: X is held with its finite test DEFERRED, not scanned here (the
+    # scan was one host pass over X per CV call, also on a GPU install whose
+    # members test the words in their kernel entries). A member that tests in
+    # its entry reads the rows untested; the first one that needs a host
+    # verdict scans X once (bindings/admitted_meta_scope.mojo
+    # admitted_held_verify, through the fold rows' parent link), so a host
+    # column still scans X at most once per CV call.
     var scope_mark: Int
     var fold_mark: Int
-    var x_finite: Bool
+    var x_held: Bool
 
     def __init__(out self, x: PythonObject, y: PythonObject, folds: PythonObject, device_rows: Bool,
                  context: PythonObject) raises:
@@ -345,29 +363,30 @@ struct MselFoldRows(Movable):
             self.rows_dict = context["family_msel_rows_context"]["maxabs_rows_dict"]
         self.scope_mark = -1
         self.fold_mark = -1
-        self.x_finite = False
+        self.x_held = False
         if not self.dev and msel_is_array(x, context):
             self.scope_mark = admitted_scope_begin()
             try:
-                self.x_finite = admitted_hold_array_f32(x, True)
+                self.x_held = admitted_hold_array_f32_deferred(x)
             except error:
                 admitted_scope_end(self.scope_mark)
                 self.scope_mark = -1
                 raise error^
 
     def _hold_fold(mut self, xtr: PythonObject, xte: PythonObject, context: PythonObject) raises:
-        """Hold fold rows gathered out of the finite X for this fold only:
-        the previous fold's rows are dropped first, so at most one fold's
-        arrays are held beyond their own use."""
-        if not self.x_finite:
+        """Hold fold rows gathered out of the held X for this fold only,
+        with X's verdict (rows of a finite X are finite; rows of an untested
+        X are linked to it): the previous fold's rows are dropped first, so
+        at most one fold's arrays are held beyond their own use."""
+        if not self.x_held:
             return
         if self.fold_mark >= 0:
             admitted_scope_end(self.fold_mark)
         self.fold_mark = admitted_scope_begin()
         if msel_is_array(xtr, context):
-            _ = admitted_hold_array_f32(xtr, False)
+            _msel_hold_rows_of(self.x, xtr)
         if msel_is_array(xte, context):
-            _ = admitted_hold_array_f32(xte, False)
+            _msel_hold_rows_of(self.x, xte)
 
     def _end_holds(mut self):
         if self.fold_mark >= 0:

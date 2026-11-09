@@ -16,7 +16,6 @@ from std.python._cpython import PyObjectPtr
 from sequence.model_host_dispatch import NATIVE_MODEL_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from providers.python.autograd_python_errors_pyapi import graph_python_error
-from std.ffi import _Global
 from providers.python.autograd_session_public_request_pyapi import ops_session_public_call_py, ops_session_public_connect_py
 from providers.python.autograd_program_public_request_pyapi import ops_program_public_call_py
 from providers.python.autograd_session_public_dispatch_pyapi import NativeSessionPublicAPI
@@ -80,6 +79,7 @@ from providers.python.autograd_model_verify_pyapi import verify_digest_py, verif
 from providers.python.autograd_model_checkpoint_pyapi import model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py
 from providers.python.sequence_pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, layer_norm_py, theta_py, theta_forecast_py, croston_py, croston_forecast_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, prophet_predict_days_py, moe_forward_py
 from providers.python.sequence_pyapi import moe_backward_py
+from core.shared_slot import SharedSlot
 
 
 def host_numeric_mode_binding() raises -> PythonObject:
@@ -145,8 +145,7 @@ def mlp_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonO
     return mlp_predict_py(ex, addrs, ip)
 
 
-comptime SESSION_PUBLIC_API = _Global[StorageType=NativeSessionPublicAPI[HostExec, OPS_HOST],
-    name=("MojolearnSessionPublicOPS_HOSTAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnSessionPublicOPS_HOSTAPIFastV2"), init_fn=NativeSessionPublicAPI[HostExec, OPS_HOST].__init__]
+comptime SESSION_PUBLIC_API = SharedSlot[NativeSessionPublicAPI[HostExec, OPS_HOST], ("MojolearnSessionPublicOPS_HOSTAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnSessionPublicOPS_HOSTAPIFastV3")]
 
 
 def session_public_api_binding() raises -> PythonObject:
@@ -358,8 +357,7 @@ def ops_distributed_close_binding(id: PythonObject) raises -> PythonObject:
     return distributed_close_py[HostExec, OPS_HOST](id)
 
 
-comptime OWNED_PROGRAM_PUBLIC_API = _Global[StorageType=NativeOwnedProgramPublicAPI,
-    name=("MojolearnOwnedProgramPublicOPS_HOSTAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnOwnedProgramPublicOPS_HOSTAPIFastV2"), init_fn=NativeOwnedProgramPublicAPI.__init__]
+comptime OWNED_PROGRAM_PUBLIC_API = SharedSlot[NativeOwnedProgramPublicAPI, ("MojolearnOwnedProgramPublicOPS_HOSTAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnOwnedProgramPublicOPS_HOSTAPIFastV3")]
 
 
 def owned_program_public_native_binding(

@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # CPU SVC/SVR through the same common provider ABI as the GPU family.
 # Numerical calls and checks are retained from _mojolearn_svm_host.
-from std.ffi import _Global
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
@@ -11,6 +10,7 @@ from svm.native_descriptor_schema import svc_binary_spans
 from svm.host.native_epilogue_dispatch import svc_host_epilogue, svc_host_platt, svc_host_splitmix
 from svm.host.native_auxiliary_dispatch import svc_host_auxiliary
 from svm.host.svm_host_impl import svc_fit_host, svc_predict_host, svr_fit_host, svr_predict_host
+from core.shared_slot import SharedSlot
 
 
 def svc_host_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -95,5 +95,4 @@ struct SvcHostNativeAPI(Defaultable, Movable):
         self.entries.append(svc_host_v1)
 
 
-comptime SVC_HOST_NATIVE_API = _Global[StorageType=SvcHostNativeAPI,
-    name=("MojolearnSvcHostNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnSvcHostNativeAPIFastV2"), init_fn=SvcHostNativeAPI.__init__]
+comptime SVC_HOST_NATIVE_API = SharedSlot[SvcHostNativeAPI, ("MojolearnSvcHostNativeAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnSvcHostNativeAPIFastV3")]

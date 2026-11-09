@@ -6,10 +6,10 @@ door (bindings/optimizer_public_pyapi.mojo), the CPU door
 (bindings/optimizer_public_door.mojo) and the schedules
 (bindings/lr_table_helpers.mojo): unpacking and raising only, no device code
 (lane neural-optimizers, 2026-10-21; lane optimizers-thin-glue)."""
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from core.shared_slot import SharedSlot
 
 #: The message of an Error that stands for a Python exception a caller's own
 #: object raised (a user `lr_schedule.lr_at`): `optimizer_python_error`
@@ -27,10 +27,7 @@ struct PendingPythonError(Defaultable, Movable):
         self.words = List[Int](length=3, fill=0)
 
 
-comptime PENDING_PYTHON_ERROR = _Global[
-    StorageType=PendingPythonError, name="MojoOptimizerPendingPythonError",
-    init_fn=PendingPythonError.__init__,
-]
+comptime PENDING_PYTHON_ERROR = SharedSlot[PendingPythonError, "MojolearnOptimizerPendingPythonErrorV1"]
 
 
 def stash_python_error() raises -> Error:

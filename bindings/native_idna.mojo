@@ -6,12 +6,12 @@ UseSTD3ASCIIRules false). Unicode 3.2 properties/normalization are provided by
 unicodedata's compiled C database; all mapping, validation and encoding control
 runs in Mojo. Python codec registration/search/encode functions are never used.
 """
-from std.ffi import _Global
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from core.native_idna_impl import idna_punycode
 from bindings.native_idna_data import IDNA_B3_EXCEPTIONS
+from core.shared_slot import SharedSlot
 
 
 struct IdnaBoundary(Defaultable, Movable):
@@ -29,10 +29,7 @@ struct IdnaBoundary(Defaultable, Movable):
         self.mappings = PythonObject(None)
 
 
-comptime IDNA_BOUNDARY = _Global[
-    StorageType=IdnaBoundary, name="MojoNativeIdnaBoundary",
-    init_fn=IdnaBoundary.__init__,
-]
+comptime IDNA_BOUNDARY = SharedSlot[IdnaBoundary, "MojolearnNativeIdnaBoundaryV1"]
 
 
 def idna_initialize() raises:

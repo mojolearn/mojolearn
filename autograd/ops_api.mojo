@@ -60,7 +60,6 @@ a captured program records the ids as a value (an input of kind
 PROGRAM_IN_IDS, uploaded through the same cast at each run) instead of an
 address. The eager words are the caller-array form's: the same int32 words
 reach the same Tape.embedding and rankn_take kernels."""
-from std.ffi import _Global
 from std.memory import bitcast
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_FILL, OP_COPY, OPT_SGD, OPT_ADAM, OPT_ADAMW
@@ -123,6 +122,7 @@ from autograd.generation_ops import (
     OPS_LM_PICK, OPS_LM_ALIVE, is_generation_op, generation_op_check, generation_op_name, lm_pick_run,
     lm_alive_run, LM_PICK_SAMPLE,
 )
+from core.shared_slot import SharedSlot
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -2595,8 +2595,8 @@ struct _OpsStore(Defaultable, Movable):
         self.next_id = 1
 
 
-comptime _OPS_NAME = "MojoAutogradOpsSessionsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoAutogradOpsSessionsFast"
-comptime _OPS_SESSIONS = _Global[StorageType=_OpsStore, name=_OPS_NAME, init_fn=_OpsStore.__init__]
+comptime _OPS_NAME = "MojolearnAutogradOpsSessionsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnAutogradOpsSessionsFastV1"
+comptime _OPS_SESSIONS = SharedSlot[_OpsStore, _OPS_NAME]
 
 
 def ops_session_registry_token() raises -> Int:

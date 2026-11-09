@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Exact native types at the distributed transport boundary; no protocols."""
-from std.ffi import _Global
 from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.native_json import native_path
 from bindings.py_balanced import py_call, py_type, py_get
+from core.shared_slot import SharedSlot
 
 
 struct CrossVendorTypes(Defaultable, Movable):
@@ -26,9 +26,7 @@ struct CrossVendorTypes(Defaultable, Movable):
         self.pure_path = PythonObject(None)
 
 
-comptime CROSS_VENDOR_TYPES = _Global[
-    StorageType=CrossVendorTypes, name="MojoCrossVendorTypes", init_fn=CrossVendorTypes.__init__,
-]
+comptime CROSS_VENDOR_TYPES = SharedSlot[CrossVendorTypes, "MojolearnCrossVendorTypesV1"]
 
 
 def cv_types_initialize(array_cls: PythonObject) raises:

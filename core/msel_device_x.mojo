@@ -34,7 +34,6 @@ same order as model selection's own device gather and as the host gather
 on every vendor and on the host column.
 """
 
-from std.ffi import _Global
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -42,39 +41,36 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.msel_device import MselStore, MSEL_STORE_LAYOUT, MSEL_TPB, MSEL_MAX_BLOCKS
 from core.ctx_key import ctx_cache_key
 from core.neural_context import process_ctx
-from core.shared_slot import shared_slot_check, shared_slot_word
+from core.shared_slot import SharedSlot
 
 #: The base binding's process-lifetime context slot (bindings/_mojolearn.mojo
 #: `_DEVCTX_SLOT`) and store name in this build's numeric mode: the base
 #: binding's own msel entries (bindings/msel_device.mojo) use these.
 comptime MSEL_CONTEXT_SLOT = (
-    "MojolearnCoreContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV2"
+    "MojolearnCoreContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV3"
 )
-comptime _MSEL_STORE_NAME_IDN: StaticString = "MojolearnMselStoreIdenticalV2"
-comptime _MSEL_STORE_NAME_OTHER: StaticString = "MojolearnMselStoreFastV2"
-# typed StaticString arms: a conditional of two literals is a String value,
-# which shared_slot_check (StaticString) does not take
+comptime _MSEL_STORE_NAME_IDN: StaticString = "MojolearnMselStoreIdenticalV3"
+comptime _MSEL_STORE_NAME_OTHER: StaticString = "MojolearnMselStoreFastV3"
 comptime MSEL_STORE_NAME: StaticString = _MSEL_STORE_NAME_IDN if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else _MSEL_STORE_NAME_OTHER
 #: The model-selection store (one definition; bindings/msel_device.mojo
 #: imports it). A `_Global` is named process-wide, so every binding module
 #: that names it reads the same store.
-comptime MSEL_STORE = _Global[StorageType=MselStore, name=MSEL_STORE_NAME, init_fn=MselStore.__init__]
+comptime MSEL_STORE = SharedSlot[MselStore, MSEL_STORE_NAME, MSEL_STORE_LAYOUT]
 #: THE store cross-validation folds live in: model selection always connects
 #: the IDENTICAL base binding's msel entries (python/mojolearn/
 #: _native_arena_rows.py `_native('msel_put')`), whatever mode the estimator's
 #: own binding was built in, so a fold reader names the identical store and
 #: context explicitly (in an identical build these are MSEL_STORE and
 #: MSEL_CONTEXT_SLOT themselves).
-comptime MSEL_FOLD_CONTEXT_SLOT = "MojolearnCoreContextIdenticalV2"
-comptime MSEL_FOLD_STORE_NAME = "MojolearnMselStoreIdenticalV2"
-comptime MSEL_FOLD_STORE = _Global[StorageType=MselStore, name=MSEL_FOLD_STORE_NAME, init_fn=MselStore.__init__]
+comptime MSEL_FOLD_CONTEXT_SLOT = "MojolearnCoreContextIdenticalV3"
+comptime MSEL_FOLD_STORE_NAME = "MojolearnMselStoreIdenticalV3"
+comptime MSEL_FOLD_STORE = SharedSlot[MselStore, MSEL_FOLD_STORE_NAME, MSEL_STORE_LAYOUT]
 
 
 def msel_store() raises -> UnsafePointer[MselStore, MutAnyOrigin]:
     """This build's store (`MSEL_STORE`), refused when its creator had
     another layout. Its buffers belong to `msel_store_context()`."""
     var store = MSEL_STORE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    shared_slot_check(store[].layout, shared_slot_word[MselStore](MSEL_STORE_LAYOUT), MSEL_STORE_NAME)
     return store
 
 
@@ -89,7 +85,6 @@ def msel_fold_store() raises -> UnsafePointer[MselStore, MutAnyOrigin]:
     creator had another layout. Its buffers belong to
     `msel_device_x_context()`."""
     var store = MSEL_FOLD_STORE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    shared_slot_check(store[].layout, shared_slot_word[MselStore](MSEL_STORE_LAYOUT), MSEL_FOLD_STORE_NAME)
     return store
 
 comptime MDX_FINITE: Int32 = 0

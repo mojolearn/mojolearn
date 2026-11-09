@@ -13,7 +13,6 @@ so the Python glue takes `_boost_loop_device` on both columns.
 Serial loops on purpose: this column is a verification digest and a
 CPU-only install's fit; it is never timed."""
 from gbdt.trees_identical_switches import T30
-from std.ffi import _Global
 from xtrees.ops import stream_base, draw
 from xtrees.dart_units import (
     IDN_DART_DEVICE, DART_CHUNK, F32P, I32P, I64P, U16P, dart_init_unit, dart_drop_unit, dart_row_unit,
@@ -21,6 +20,7 @@ from xtrees.dart_units import (
     dart_predict_unit,
 )
 from std.memory import bitcast
+from core.shared_slot import SharedSlot
 
 #: The host twin exists exactly where the IDENTICAL device round does.
 comptime DART_HOST = IDN_DART_DEVICE
@@ -106,9 +106,7 @@ struct DartHostRegistry(Defaultable, Movable):
         raise Error("x_trees dart: unknown or closed session handle")
 
 
-comptime DART_HOST_SESSIONS = _Global[
-    StorageType=DartHostRegistry, name="MojoXTreesDartHostSessions", init_fn=DartHostRegistry.__init__
-]
+comptime DART_HOST_SESSIONS = SharedSlot[DartHostRegistry, "MojolearnXTreesDartHostSessionsV1"]
 
 
 def dart_open(

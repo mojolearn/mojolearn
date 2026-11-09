@@ -9,7 +9,6 @@ arithmetic and uses no interpreter callback; targets are checked at admission.
 """
 from providers.python.transformer_resident_pyapi import transformer_resident_decode_call, transformer_resident_words, transformer_resident_lm_open, transformer_resident_lm_close, transformer_resident_lm_run
 from std.python import Python, PythonObject
-from std.ffi import _Global
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.cpython_table import cpython_table
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -60,6 +59,7 @@ from bindings.mode_metadata_native import _fields as _native_record_fields, _tru
 from bindings.neural_block_admission import neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys, neural_block_weight_names, neural_metadata_snapshot, neural_block_fields
 from bindings.causal_model_config import model_record_fields, model_plan_snapshot, model_dict, model_plain
 from bindings.causal_operation_owner import causal_model_capture, causal_model_publish, causal_model_origin, causal_state_capture, causal_state_publish, causal_state_origin, causal_state_fields, causal_snapshot_fields, causal_model_cache_set, causal_block_cache_set, causal_checkpoint_capture, causal_pin_entries, causal_layer_capture, causal_layer_publish
+from core.shared_slot import SharedSlot
 
 
 struct CausalPublicConnection(Defaultable, Movable):
@@ -69,8 +69,7 @@ struct CausalPublicConnection(Defaultable, Movable):
         self.context = PythonObject(None)
 
 
-comptime CAUSAL_PUBLIC_CONNECTION = _Global[StorageType=CausalPublicConnection,
-    name="MojoCausalPublicConnection", init_fn=CausalPublicConnection.__init__]
+comptime CAUSAL_PUBLIC_CONNECTION = SharedSlot[CausalPublicConnection, "MojolearnCausalPublicConnectionV1"]
 
 
 def causal_public_connect(context: PythonObject) raises:

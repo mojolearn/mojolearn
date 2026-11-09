@@ -4,13 +4,13 @@
 # The host image has no device pool: it serves the host-address operations on
 # HostExec (the executor `ew_py[HostExec]` etc. use) and refuses the resident
 # ones, as the host binding exports no `x_decomp_dev_*` entry.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from x_decomp.host import HostExec
 from x_decomp.descriptor_ops import xd_address_op, xd_is_address_op
 from x_decomp.descriptor_schema import XD_ABI_NAME, XD_MODE, XD_CAPABILITIES, XD_CAP_HOST, xd_validate_call
+from core.shared_slot import SharedSlot
 
 
 def x_decomp_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
@@ -51,6 +51,5 @@ struct XDecompHostAPI(Defaultable, Movable):
 # global is process-wide, so the name carries the image's numeric mode (as
 # x_neighbors/device_ops.mojo names its context): the identical and fast
 # images loaded together must each export their own dispatch function.
-comptime _X_DECOMP_HOST_API_NAME = "MojoXDecompHostAPIIdenticalv1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXDecompHostAPIFastv1"
-comptime X_DECOMP_HOST_API = _Global[StorageType=XDecompHostAPI,
-    name=_X_DECOMP_HOST_API_NAME, init_fn=XDecompHostAPI.__init__]
+comptime _X_DECOMP_HOST_API_NAME = "MojolearnXDecompHostAPIIdenticalv1V1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXDecompHostAPIFastv1V1"
+comptime X_DECOMP_HOST_API = SharedSlot[XDecompHostAPI, _X_DECOMP_HOST_API_NAME]

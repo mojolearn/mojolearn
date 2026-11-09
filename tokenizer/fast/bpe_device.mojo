@@ -34,7 +34,6 @@ THE SWITCHES (default OFF; docs/apple-fast/ab/bpe.md):
     MOJOLEARN_BPE_ALL            every switch above
 """
 from std.atomic import Atomic, Ordering
-from std.ffi import _Global
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
@@ -47,6 +46,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.neural_context import process_ctx
 from tokenizer.impl.ranks import RankTable
 from tokenizer.train.bpe_train import PieceGroups
+from core.shared_slot import SharedSlot
 
 comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime _ALL = is_defined["MOJOLEARN_BPE_ALL"]()
@@ -636,7 +636,7 @@ def bpe_encode_counts_kernel(dp: I32P, pfx: I32P, counts: I64P, ndocs: Int64):
 def bpe_ctx() raises -> DeviceContext:
     """ONE process-lifetime DeviceContext for this binding (buffers must not outlive their context,
     and a context per call exhausts Metal's queues)."""
-    return process_ctx["MojolearnTokenizerFastContextV2"]()
+    return process_ctx["MojolearnTokenizerFastContextV3"]()
 
 
 @fieldwise_init
@@ -774,8 +774,8 @@ struct BpeMem(Defaultable, Movable):
             )
 
 
-comptime BPE_TRAIN_POOL = _Global[StorageType=BpeMem, name="MojoTokenizerFastTrainPool", init_fn=BpeMem.__init__]
-comptime BPE_ENCODE_POOL = _Global[StorageType=BpeMem, name="MojoTokenizerFastEncodePool", init_fn=BpeMem.__init__]
+comptime BPE_TRAIN_POOL = SharedSlot[BpeMem, "MojolearnTokenizerFastTrainPoolV1"]
+comptime BPE_ENCODE_POOL = SharedSlot[BpeMem, "MojolearnTokenizerFastEncodePoolV1"]
 
 
 def _fill(ctx: DeviceContext, p: I32P, words: Int, v: Int32) raises:

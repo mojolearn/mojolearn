@@ -10,7 +10,6 @@ The byte budget includes metadata, validity and routing arrays. High node
 indices simply stop caching. All data work and routing execute on device.
 """
 from std.atomic import Atomic, Ordering
-from std.ffi import _Global
 from std.sys.compile import is_defined
 from ensemble.decisiontree.batched_levelalgo.kernels.level_loop_kernels import LOOP_H_CUR, LOOP_HDR_WORDS
 from std.gpu import block_idx, thread_idx, block_dim, grid_dim
@@ -19,6 +18,7 @@ from core.launch_clock import log_launch_ctx
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import NodeWorkItem, WorkloadInfo
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import HistogramArgs, _histogram_inner_loop, _histogram_inner_loop_binned
 from ensemble.decisiontree.batched_levelalgo.objectives import ObjectiveLike
+from core.shared_slot import SharedSlot
 
 
 struct _RetainedAudit(Defaultable,Movable):
@@ -26,7 +26,7 @@ struct _RetainedAudit(Defaultable,Movable):
     def __init__(out self):
         self.reused=Int64(0)
 
-comptime _RETAINED_AUDIT=_Global[StorageType=_RetainedAudit,name="MojolearnRetainedHistogramAudit",init_fn=_RetainedAudit.__init__]
+comptime _RETAINED_AUDIT=SharedSlot[_RetainedAudit, "MojolearnRetainedHistogramAuditV1"]
 
 def retained_histogram_reused() raises -> Int:
     # I18: NEVER RUN — PENDING MEASUREMENT; explicit experiment/audit only.

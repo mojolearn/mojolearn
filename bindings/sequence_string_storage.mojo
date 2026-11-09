@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # NumPy's public NpyString storage API; formatting remains Mojo code.
-from std.ffi import _Global, c_char, c_int, c_uint, c_size_t, external_call
+from std.ffi import c_char, c_int, c_uint, c_size_t, external_call
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.sys import size_of
@@ -12,6 +12,7 @@ from bindings.sequence_array_warnings import sequence_array_exception, sequence_
 from core.sequence_array_format import sequence_float_text
 from core.sequence_array_cast import sequence_signaling, SEQ_CAST_INVALID
 from bindings.cpython_table import cpython_table
+from core.shared_slot import SharedSlot
 
 comptime StringStoragePointer = MutPointer[UInt8, MutUntrackedOrigin]
 
@@ -29,10 +30,7 @@ struct SequenceStringTableRecord(Defaultable, Movable):
         self.table = 0
 
 
-comptime SEQUENCE_STRING_TABLE = _Global[
-    StorageType=SequenceStringTableRecord, name="MojolearnP3SequenceStringTableV1",
-    init_fn=SequenceStringTableRecord.__init__,
-]
+comptime SEQUENCE_STRING_TABLE = SharedSlot[SequenceStringTableRecord, "MojolearnP3SequenceStringTableV2"]
 comptime StringStorageVersion = def() thin abi("C") -> c_uint
 comptime StringStorageAcquire = def(StringStoragePointer) thin abi("C") -> Optional[StringStoragePointer]
 comptime StringStorageRelease = def(StringStoragePointer) thin abi("C") -> NoneType

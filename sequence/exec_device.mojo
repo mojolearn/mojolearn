@@ -2,7 +2,6 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`DeviceExec`: the lane's operations on the GPU, one thread per element,
 over `sequence/ops.mojo::apply`, the body `HostExec` loops over on the CPU."""
-from std.ffi import _Global
 from std.memory import bitcast
 from std.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
@@ -86,6 +85,7 @@ from autograd.kernels.recurrent_scan import cell_bwd_scan_kernel
 from x_linear.ops import IP
 from x_linear.witness import witness_end
 from std.sys.info import has_apple_gpu_accelerator
+from core.shared_slot import SharedSlot
 
 #: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple, and
 #: since nr-small D1/D11 (2026-10-04) NVIDIA and AMD in IDENTICAL. The
@@ -181,8 +181,8 @@ struct _SeqContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojolearnXSequenceContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequenceContextFastV2"
-comptime X_SEQUENCE_CONTEXT = _Global[StorageType=_SeqContext, name=_CTX_NAME, init_fn=_SeqContext.__init__]
+comptime _CTX_NAME = "MojolearnXSequenceContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequenceContextFastV3"
+comptime X_SEQUENCE_CONTEXT = SharedSlot[_SeqContext, _CTX_NAME]
 
 
 def sequence_ctx() raises -> DeviceContext:
@@ -381,8 +381,8 @@ struct _SeqPool(Defaultable, Movable):
         self.bytes = 0
 
 
-comptime _POOL_NAME = "MojoXSequencePoolIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXSequencePoolFast"
-comptime X_SEQUENCE_POOL = _Global[StorageType=_SeqPool, name=_POOL_NAME, init_fn=_SeqPool.__init__]
+comptime _POOL_NAME = "MojolearnXSequencePoolIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequencePoolFastV1"
+comptime X_SEQUENCE_POOL = SharedSlot[_SeqPool, _POOL_NAME]
 
 
 def seq_pool_on() -> Bool:

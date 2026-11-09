@@ -5,7 +5,6 @@ The fixed architecture and arithmetic entries are the existing supported MLP.
 This module owns admission, snapshots and kernel sequences; it introduces no
 new numerical kernels or topology-dependent reduction order.
 """
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from core.parallel_mlp_native_impl import mlp_check_finite, mlp_check_optimizer_state, mlp_targets_into
 from std.python._cpython import PyObjectPtr
@@ -21,6 +20,7 @@ from bindings.parallel_byte_native import _parallel_array, _parallel_view, _para
 from bindings.native_transport import _transport_json
 from bindings.native_json import native_json_parse
 from bindings.small_mlp_native import small_mlp_call, small_mlp_from_state
+from core.shared_slot import SharedSlot
 
 
 struct ParallelMlpBoundary(Defaultable, Movable):
@@ -42,10 +42,7 @@ struct ParallelMlpBoundary(Defaultable, Movable):
         self.mode = String()
 
 
-comptime PARALLEL_MLP_BOUNDARY = _Global[
-    StorageType=ParallelMlpBoundary, name="MojoParallelMlpBoundary",
-    init_fn=ParallelMlpBoundary.__init__,
-]
+comptime PARALLEL_MLP_BOUNDARY = SharedSlot[ParallelMlpBoundary, "MojolearnParallelMlpBoundaryV1"]
 
 
 def mlp_initialize(model_cls: PythonObject, opt_cls: PythonObject, binding: PythonObject,

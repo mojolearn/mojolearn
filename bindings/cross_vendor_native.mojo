@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native byte admission, identity folds and state hashes for live training."""
-from std.ffi import _Global
 from std.math import isfinite
 from std.memory import memcpy, bitcast
 from std.python import Python, PythonObject
@@ -25,6 +24,7 @@ from bindings.native_json import native_json_parse
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from core.sha256 import Sha256, sha256_hex_addr, sha256_sliced8_hex
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
+from core.shared_slot import SharedSlot
 
 
 struct CrossVendorBoundary(Defaultable, Movable):
@@ -60,10 +60,7 @@ struct CrossVendorBoundary(Defaultable, Movable):
         self.console_write = PythonObject(None)
 
 
-comptime CROSS_VENDOR_BOUNDARY = _Global[
-    StorageType=CrossVendorBoundary, name="MojoCrossVendorBoundary",
-    init_fn=CrossVendorBoundary.__init__,
-]
+comptime CROSS_VENDOR_BOUNDARY = SharedSlot[CrossVendorBoundary, "MojolearnCrossVendorBoundaryV1"]
 
 
 def cross_vendor_initialize(array_cls: PythonObject, mismatch_cls: PythonObject, fold_pair: PythonObject) raises:

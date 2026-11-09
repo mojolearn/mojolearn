@@ -21,7 +21,6 @@ WHAT DOES NOT CHANGE. A resident predict runs `spectral_predict_run`
 (spectral/impl/spectral_predict.mojo), the very body the per-call
 `spectral_predict_device` runs after its own uploads, over the same bytes on
 the same context slot: the bits are the same."""
-from std.ffi import _Global
 from std.atomic import Atomic, Ordering
 from std.memory import ArcPointer
 
@@ -38,10 +37,11 @@ from spectral.impl.spectral_predict_common import (
     spectral_predict_mu,
     spectral_predict_validate,
 )
+from core.shared_slot import SharedSlot
 
 # The context slot of spectral/estimator.mojo (`spectral_predict_host`), so a
 # resident predict runs where the per-call one does.
-comptime _DEVCTX_SLOT = "MojolearnMetricsContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnMetricsContextFastV2"
+comptime _DEVCTX_SLOT = "MojolearnMetricsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnMetricsContextFastV3"
 
 
 struct SpectralResident(Movable):
@@ -90,7 +90,7 @@ struct SpectralResident(Movable):
         _ = self.ctx^
 
 
-struct SpectralResidentRegistry(Movable):
+struct SpectralResidentRegistry(Defaultable, Movable):
     var entries: Dict[Int, ArcPointer[SpectralResident]]
     var next_id: Int
     var lock: List[Int64]
@@ -101,14 +101,7 @@ struct SpectralResidentRegistry(Movable):
         self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime SPECTRAL_RESIDENT_REGISTRY = _Global[
-    StorageType=SpectralResidentRegistry,
-    name=(
-        "MojoSpectralPredictResidentIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else
-        "MojoSpectralPredictResidentFast"
-    ),
-    init_fn=SpectralResidentRegistry.__init__,
-]
+comptime SPECTRAL_RESIDENT_REGISTRY = SharedSlot[SpectralResidentRegistry, ( "MojolearnSpectralPredictResidentIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnSpectralPredictResidentFastV1" )]
 
 
 def _registry() raises -> UnsafePointer[SpectralResidentRegistry, MutAnyOrigin]:

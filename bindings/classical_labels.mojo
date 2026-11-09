@@ -45,8 +45,7 @@ from bindings.label_input_sources import (
     LABELS_LIST_OTHER, LABELS_LIST_BOOL, LABELS_LIST_FLOAT)
 from bindings.str_labels_native import StrTable, _read, _sorted
 from bindings.cpython_table import cpython_table
-from std.ffi import _Global
-from core.shared_slot import shared_slot_check, shared_slot_word
+from core.shared_slot import SharedSlot
 from bindings.kit_call import kit_connect, kit_provider, kit_capabilities, kit_call
 from bindings.labels_native_abi import (
     LABELS_NATIVE_ABI_NAME, LABELS_NATIVE_FACTORY, LABELS_NATIVE_OPERATION_COUNT, LABELS_CAP_DEVICE,
@@ -171,32 +170,28 @@ def labels_need(table: PythonObject, name: String, message: String, kind: String
 # THE NATIVE DEVICE-OR-HOST SELECTOR (lane s1, S3; bindings/labels_native_abi.mojo).
 # The label steps below run on the GPU base binding's device helpers through
 # its `labels_native_api_v1` provider, connected once per process and kept in
-# the named slot `MojolearnLabelsProviderV1`, or, on an install with no GPU
+# the named slot `MojolearnLabelsProviderV2`, or, on an install with no GPU
 # base binding (the label context's `labels_base_binding` is False), on the
 # same host bodies in-process. A context without the label context at all
 # (no `labels_base_binding` key) takes the label input step only
 # (classical_encode_labels).
 
 #: Layout version of `_LabelsProvider` (core/shared_slot.mojo rule).
-comptime _LABELS_PROVIDER_LAYOUT = 1
-comptime _LABELS_PROVIDER_NAME = "MojolearnLabelsProviderV1"
+comptime _LABELS_PROVIDER_LAYOUT = 2
+comptime _LABELS_PROVIDER_NAME = "MojolearnLabelsProviderV2"
 
 
 struct _LabelsProvider(Defaultable, Movable):
-    # first field: the layout word (core/shared_slot.mojo)
-    var layout: Int
     # 0 not connected yet, 1 the device provider, 2 the host column
     var state: Int
     var provider: PythonObject
 
     def __init__(out self):
-        self.layout = shared_slot_word[_LabelsProvider](_LABELS_PROVIDER_LAYOUT)
         self.state = 0
         self.provider = PythonObject(None)
 
 
-comptime _LABELS_PROVIDER = _Global[StorageType=_LabelsProvider, name=_LABELS_PROVIDER_NAME,
-                                    init_fn=_LabelsProvider.__init__]
+comptime _LABELS_PROVIDER = SharedSlot[_LabelsProvider, _LABELS_PROVIDER_NAME, _LABELS_PROVIDER_LAYOUT]
 
 comptime _LABELS_DEVICE = 1
 comptime _LABELS_HOST = 2
@@ -206,7 +201,6 @@ def _labels_route(context: PythonObject) raises -> Int:
     """`_LABELS_DEVICE` or `_LABELS_HOST`: connect the GPU base binding's
     provider on first use (under the GIL, so one connection per process)."""
     var slot = _LABELS_PROVIDER.get_or_create_ptr()
-    shared_slot_check(slot[].layout, shared_slot_word[_LabelsProvider](_LABELS_PROVIDER_LAYOUT), _LABELS_PROVIDER_NAME)
     if slot[].state != 0:
         return slot[].state
     var base = py_get(context, "labels_base_binding")

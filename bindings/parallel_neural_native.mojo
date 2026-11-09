@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native owner and local workers for existing parallel MLP/Samba training."""
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from core.parallel_neural_native_impl import samba_ids_into
 from std.python._cpython import PyObjectPtr
@@ -23,6 +22,7 @@ from bindings.parallel_neural_admission import neural_admit
 from core.sha256 import Sha256
 from bindings.cpython_table import cpython_table
 from bindings.sha256_door import sha256_update, sha256_update_text
+from core.shared_slot import SharedSlot
 
 
 struct ParallelNeuralBoundary(Defaultable, Movable):
@@ -50,10 +50,7 @@ struct ParallelNeuralBoundary(Defaultable, Movable):
         self.cache = PythonObject(None)
 
 
-comptime PARALLEL_NEURAL_BOUNDARY = _Global[
-    StorageType=ParallelNeuralBoundary, name="MojoParallelNeuralOwner",
-    init_fn=ParallelNeuralBoundary.__init__,
-]
+comptime PARALLEL_NEURAL_BOUNDARY = SharedSlot[ParallelNeuralBoundary, "MojolearnParallelNeuralOwnerV1"]
 
 
 def parallel_neural_initialize(args: PythonObject) raises:

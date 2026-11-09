@@ -21,18 +21,26 @@ def _refusal(error):
 def _base_binding():
     # glue: the GPU base binding whose `labels_native_api_v1` provider the
     # label steps connect once (bindings/labels_native_abi.mojo), the module
-    # `_buffer._native` resolves (always the identical binary); False on an
-    # install with no GPU base binding, where the native label path runs the
-    # same host bodies in-process; a recorded refusal otherwise
+    # `_buffer._native` resolves (always the identical binary); False on a
+    # CPU-only install, where the native label path runs the same host bodies
+    # in-process; a recorded refusal otherwise, including an ImportError of
+    # the base binding on a GPU install (never a silent host column)
     from . import _backend
     if _backend._CPU_ONLY is not None:
         return False
     try:
         with _backend.host_helper_scope():
             module = _backend.binding("_mojolearn", mode="identical")
-    except ImportError:
-        # no GPU base binding on this box (DEVIATION 2614): the host column
-        return False
+    except ImportError as error:
+        if _backend._CPU_ONLY is not None:
+            # a CPU-only install (selected while resolving): the host column
+            return False
+        # glue: a GPU install whose base binding does not load never falls to
+        # the host column silently; the refusal is raised by the first label
+        # step that needs it
+        return _refusal(ImportError(
+            "mojolearn: the GPU base binding _mojolearn did not load on this GPU install, so the "
+            f"native label steps cannot run ({error}); reinstall the GPU wheel for this machine"))
     except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
         return _refusal(error)
     if getattr(module, "__name__", "").rpartition(".")[2].endswith("_host"):

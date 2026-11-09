@@ -6,7 +6,6 @@
 # typed entries of x_decomp/resident.mojo that the `dev_*_py` doors of
 # providers/python/x_decomp_resident_pyapi.mojo call, with the same checks.
 # No numeric change: the same kernels, the same operands, the same order.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -24,6 +23,7 @@ from x_decomp.descriptor_schema import (
     XD_CELL_ADD, XD_CELL_MIN, XD_MV_TAKE_ROWS, XD_MV_TAKE_COLS,
     xd_validate_call, xd_dim,
 )
+from core.shared_slot import SharedSlot
 
 
 def xd_iso_gather_min(d: Int, im: Int, sq: Int, q: Int, dc: Int, nn: Int, one: Int,
@@ -136,6 +136,5 @@ struct XDecompDeviceAPI(Defaultable, Movable):
 # global is process-wide, so the name carries the image's numeric mode (as
 # x_neighbors/device_ops.mojo names its context): the identical and fast
 # images loaded together must each export their own dispatch function.
-comptime _X_DECOMP_DEVICE_API_NAME = "MojoXDecompDeviceAPIIdenticalv1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXDecompDeviceAPIFastv1"
-comptime X_DECOMP_DEVICE_API = _Global[StorageType=XDecompDeviceAPI,
-    name=_X_DECOMP_DEVICE_API_NAME, init_fn=XDecompDeviceAPI.__init__]
+comptime _X_DECOMP_DEVICE_API_NAME = "MojolearnXDecompDeviceAPIIdenticalv1V1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXDecompDeviceAPIFastv1V1"
+comptime X_DECOMP_DEVICE_API = SharedSlot[XDecompDeviceAPI, _X_DECOMP_DEVICE_API_NAME]

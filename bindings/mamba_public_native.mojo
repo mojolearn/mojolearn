@@ -17,7 +17,6 @@ return only the output. Internal tuple-returning operations remain available
 for other compiled owners. Dictionary insertion retains each report before
 the temporary tuple is released.
 """
-from std.ffi import _Global
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from std.python import Python, PythonObject
 from std.os import getenv
@@ -48,6 +47,7 @@ from mamba.impl.mamba_session_impl import mamba_copy_f32, mamba_host_copy
 from mamba.impl.mamba_decode_plan import MambaDecodePlan
 from core.hostptr import f32_ptr
 from std.memory import memcpy
+from core.shared_slot import SharedSlot
 
 
 # ---------------------------------------------------------------- Mamba3Block
@@ -1175,10 +1175,7 @@ struct _MambaGenerationSeen(Defaultable, Movable):
         self.classes = PythonObject(None)
 
 
-comptime _MAMBA_GENERATION_SEEN = _Global[
-    StorageType=_MambaGenerationSeen, name="MojoMambaGenerationSeenV1",
-    init_fn=_MambaGenerationSeen.__init__,
-]
+comptime _MAMBA_GENERATION_SEEN = SharedSlot[_MambaGenerationSeen, "MojolearnMambaGenerationSeenV2"]
 
 
 def _mamba_generation_ready(classes: PythonObject) raises:

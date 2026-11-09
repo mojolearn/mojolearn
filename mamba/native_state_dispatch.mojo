@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native descriptor counterpart of the existing carried-state Mamba entries.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, MAMBA_STATE_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from mamba.impl.mamba_block_program import mamba_block_call_abi
+from core.shared_slot import SharedSlot
 
 
 def mamba_state_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -80,5 +80,4 @@ struct NativeMambaStateAPI(Defaultable, Movable):
         self.entries.append(mamba_state_v1)
 
 
-comptime NATIVE_MAMBA_STATE_API = _Global[StorageType=NativeMambaStateAPI,
-    name=("MojolearnMambaStateNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnMambaStateNativeAPIFastV2"), init_fn=NativeMambaStateAPI.__init__]
+comptime NATIVE_MAMBA_STATE_API = SharedSlot[NativeMambaStateAPI, ("MojolearnMambaStateNativeAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnMambaStateNativeAPIFastV3")]

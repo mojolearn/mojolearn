@@ -8,7 +8,6 @@ Cython owning-object boundary. Python holds the GIL across these operations.
 Snapshots own model buffers and a context; release drops buffers before context.
 Only input validation/upload and result readback recur per prediction.
 """
-from std.ffi import _Global
 from std.sys.compile import is_defined
 from std.memory import bitcast
 from std.time import perf_counter_ns
@@ -23,6 +22,7 @@ from core.forest_inference_pool import PooledForest, forest_device_count
 from core.neural_context import process_ctx
 from core.admitted_finite_status import enqueue_finite_status
 from core.forest_experiments import T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T37_WORKSPACE, T38_FUSED_LABELS
+from core.shared_slot import SharedSlot
 
 
 #: The resident path checks its input and output for non-finite values on
@@ -217,18 +217,14 @@ struct ForestIOWorkspace(Defaultable, Movable):
         self.label_len = rows
 
 
-comptime RF_IO = _Global[StorageType=ForestIOWorkspace,
-    name=("MojoRFResidentIOIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoRFResidentIOFast"), init_fn=ForestIOWorkspace.__init__]
-comptime ET_IO = _Global[StorageType=ForestIOWorkspace,
-    name=("MojoETResidentIOIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoETResidentIOFast"), init_fn=ForestIOWorkspace.__init__]
+comptime RF_IO = SharedSlot[ForestIOWorkspace, ("MojolearnRFResidentIOIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFResidentIOFastV1")]
+comptime ET_IO = SharedSlot[ForestIOWorkspace, ("MojolearnETResidentIOIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnETResidentIOFastV1")]
 comptime RF_CTX_SLOT = (
-    "MojolearnRFResidentContextIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else
-    "MojolearnRFResidentContextFastV2")
+    "MojolearnRFResidentContextIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else
+    "MojolearnRFResidentContextFastV3")
 comptime ET_CTX_SLOT = (
-    "MojolearnETResidentContextIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else
-    "MojolearnETResidentContextFastV2")
+    "MojolearnETResidentContextIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else
+    "MojolearnETResidentContextFastV3")
 
 
 struct ResidentForest(Movable):
@@ -746,12 +742,8 @@ struct ForestRegistry(Defaultable, Movable):
 
 
 # One registry per RF_INPUT specialization avoids RF/ET policy confusion.
-comptime RF_REGISTRY = _Global[StorageType=ForestRegistry,
-    name=("MojoRFResidentForestIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoRFResidentForestFast"), init_fn=ForestRegistry.__init__]
-comptime ET_REGISTRY = _Global[StorageType=ForestRegistry,
-    name=("MojoETResidentForestIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoETResidentForestFast"), init_fn=ForestRegistry.__init__]
+comptime RF_REGISTRY = SharedSlot[ForestRegistry, ("MojolearnRFResidentForestIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFResidentForestFastV1")]
+comptime ET_REGISTRY = SharedSlot[ForestRegistry, ("MojolearnETResidentForestIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnETResidentForestFastV1")]
 
 
 def resident_prepare[RF_INPUT: Bool](offsets: List[Int32], columns: List[Int32],

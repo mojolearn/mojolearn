@@ -209,7 +209,7 @@ _CONTEXT_RULES = (
      r'from checks\.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL\n\n'
      r"#: This binding's ONE process-lifetime DeviceContext \(core/neural_context\.mojo,\n"
      r'#: lane/devctx-lifetime\): a context per call exhausts Metal command queues\.\n'
-     r'comptime _DEVCTX_SLOT = "MojolearnNeuralMambaContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnNeuralMambaContextFastV2"\n\n', ''),
+     r'comptime _DEVCTX_SLOT = "MojolearnNeuralMambaContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnNeuralMambaContextFastV3"\n\n', ''),
     (r'\bprocess_ctx\[_DEVCTX_SLOT\]\(\)', 'DeviceContext()'),
     (r'# Direct callers also reuse that context when none is supplied\.',
      '# Same kernels, same launches, same order: no bit moves.'),

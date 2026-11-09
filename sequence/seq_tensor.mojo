@@ -20,12 +20,12 @@ values: no bit moves. Storage is `std.ffi._Global`, one pool per numeric
 tier (as `_ResPool`); a freed handle's slot is reused. The Python entries
 (`seq_tensor_alloc_py` ...) are `providers/python/sequence_seq_tensor_pyapi.mojo`'s; this
 file takes typed handles and addresses only."""
-from std.ffi import _Global
 from max.gpu.host import DeviceBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.exec_device import sequence_ctx
 from sequence.ops import FP
+from core.shared_slot import SharedSlot
 
 
 struct _SeqTensorPool(Defaultable, Movable):
@@ -39,8 +39,8 @@ struct _SeqTensorPool(Defaultable, Movable):
         self.n = List[Int]()
 
 
-comptime _SEQ_TENSOR_NAME = "MojoXSequenceTensorsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXSequenceTensorsFast"
-comptime _SEQ_TENSORS = _Global[StorageType=_SeqTensorPool, name=_SEQ_TENSOR_NAME, init_fn=_SeqTensorPool.__init__]
+comptime _SEQ_TENSOR_NAME = "MojolearnXSequenceTensorsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequenceTensorsFastV1"
+comptime _SEQ_TENSORS = SharedSlot[_SeqTensorPool, _SEQ_TENSOR_NAME]
 
 
 def _tensor(h: Int) raises -> Int:

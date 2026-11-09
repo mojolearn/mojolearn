@@ -48,7 +48,6 @@ SCHI2_LAZYW, DEFAULT in FAST + Apple (bit 4; rollback
 `-D MOJOLEARN_XN_FAST_SCHI2_LAZYW_OFF`; needs SCHI2_MOJO_MT): fit without device work, the weights made inside
 the first transform's single call (section at the end of this file).
 """
-from std.ffi import _Global
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -61,6 +60,7 @@ from x_neighbors.items import FP, U_LOG
 from x_neighbors.items import IP
 from x_neighbors.kfeat_rng import kfeat_pcs_draw_item, kfeat_schi2_draw_item
 from std.gpu import block_dim, block_idx, thread_idx
+from core.shared_slot import SharedSlot
 
 
 comptime _KFEAT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
@@ -90,7 +90,7 @@ struct _KfeatStage(Defaultable, Movable):
         self.z_cap = 0
 
 
-comptime KFEAT_STAGE = _Global[StorageType=_KfeatStage, name="MojoXNeighborsKfeatStageFast", init_fn=_KfeatStage.__init__]
+comptime KFEAT_STAGE = SharedSlot[_KfeatStage, "MojolearnXNeighborsKfeatStageFastV1"]
 
 
 def kfeat_flags() -> Int:
@@ -153,7 +153,7 @@ def kfeat_first_negative(xaddr: Int, cnt: Int) raises -> Int:
         st[].part = ctx.enqueue_create_buffer[DType.int32](SCAN_BLOCKS)
         st[].host = ctx.enqueue_create_host_buffer[DType.int32](SCAN_BLOCKS)
     var blocks = _scan_blocks(cnt)
-    var buf = pool_take["MojoXNeighborsKfeatScan"](ctx, cnt)
+    var buf = pool_take["MojolearnXNeighborsKfeatScanV1"](ctx, cnt)
     ctx.enqueue_copy(dst_buf=buf, src_ptr=src)
     ctx.enqueue_function[negative_partial_kernel](
         st[].part.value().unsafe_ptr(), buf.unsafe_ptr(), Int32(cnt),
@@ -168,7 +168,7 @@ def kfeat_first_negative(xaddr: Int, cnt: Int) raises -> Int:
         var v = hp[i]
         if v < best:
             best = v
-    pool_give["MojoXNeighborsKfeatScan"](buf^)
+    pool_give["MojolearnXNeighborsKfeatScanV1"](buf^)
     return -1 if best == NONFINITE_NONE else Int(best)
 
 
@@ -251,8 +251,8 @@ def kfeat_schi2_fit(seed_word: Int, d: Int, nc: Int, w_out: Int, off_out: Int) r
         st[].z_cap = count
     var hz = st[].z.value().unsafe_ptr()
     _schi2_draw(seed, count, nc, FP(unsafe_from_address=Int(hz)), op)
-    var dz = pool_take["MojoXNeighborsKfeatSkewZ"](ctx, count)
-    var dw = pool_take["MojoXNeighborsKfeatSkewW"](ctx, count)
+    var dz = pool_take["MojolearnXNeighborsKfeatSkewZV1"](ctx, count)
+    var dw = pool_take["MojolearnXNeighborsKfeatSkewWV1"](ctx, count)
     ctx.enqueue_copy(dst_buf=dz, src_ptr=hz)
     ctx.enqueue_function[skew_weights_kernel](
         dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(count),
@@ -260,8 +260,8 @@ def kfeat_schi2_fit(seed_word: Int, d: Int, nc: Int, w_out: Int, off_out: Int) r
     )
     ctx.enqueue_copy(dst_ptr=wp, src_buf=dw)
     ctx.synchronize()
-    pool_give["MojoXNeighborsKfeatSkewZ"](dz^)
-    pool_give["MojoXNeighborsKfeatSkewW"](dw^)
+    pool_give["MojolearnXNeighborsKfeatSkewZV1"](dz^)
+    pool_give["MojolearnXNeighborsKfeatSkewWV1"](dw^)
 
 
 # ---------------------------------------------------------------- SCHI2_LAZYW
@@ -307,8 +307,8 @@ def kfeat_schi2_weights(z_addr: Int, w_addr: Int, count: Int) raises:
     var zp = FP(unsafe_from_address=z_addr)
     var wp = FP(unsafe_from_address=w_addr)
     var ctx = xn_ctx()
-    var dz = pool_take["MojoXNeighborsKfeatSkewZ"](ctx, count)
-    var dw = pool_take["MojoXNeighborsKfeatSkewW"](ctx, count)
+    var dz = pool_take["MojolearnXNeighborsKfeatSkewZV1"](ctx, count)
+    var dw = pool_take["MojolearnXNeighborsKfeatSkewWV1"](ctx, count)
     ctx.enqueue_copy(dst_buf=dz, src_ptr=zp)
     ctx.enqueue_function[skew_weights_kernel](
         dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(count),
@@ -316,8 +316,8 @@ def kfeat_schi2_weights(z_addr: Int, w_addr: Int, count: Int) raises:
     )
     ctx.enqueue_copy(dst_ptr=wp, src_buf=dw)
     ctx.synchronize()
-    pool_give["MojoXNeighborsKfeatSkewZ"](dz^)
-    pool_give["MojoXNeighborsKfeatSkewW"](dw^)
+    pool_give["MojolearnXNeighborsKfeatSkewZV1"](dz^)
+    pool_give["MojolearnXNeighborsKfeatSkewWV1"](dw^)
 
 
 def kfeat_schi2_transform(
@@ -344,11 +344,11 @@ def kfeat_schi2_transform(
     var outp = FP(unsafe_from_address=out_addr)
     var skew = Float32(skewedness)
     var ctx = xn_ctx()
-    var dx = pool_take["MojoXNeighborsKfeatSkewTX"](ctx, nx)
-    var dl = pool_take["MojoXNeighborsKfeatSkewTL"](ctx, nx)
-    var dw = pool_take["MojoXNeighborsKfeatSkewW"](ctx, nw)
-    var doff = pool_take["MojoXNeighborsKfeatSkewTO"](ctx, nc)
-    var dres = pool_take["MojoXNeighborsKfeatSkewTR"](ctx, nz)
+    var dx = pool_take["MojolearnXNeighborsKfeatSkewTXV1"](ctx, nx)
+    var dl = pool_take["MojolearnXNeighborsKfeatSkewTLV1"](ctx, nx)
+    var dw = pool_take["MojolearnXNeighborsKfeatSkewWV1"](ctx, nw)
+    var doff = pool_take["MojolearnXNeighborsKfeatSkewTOV1"](ctx, nc)
+    var dres = pool_take["MojolearnXNeighborsKfeatSkewTRV1"](ctx, nz)
     ctx.enqueue_copy(dst_buf=dx, src_ptr=xp)
     # main's `_unary(X, _U_LOG, 1.0, skewedness)`: log(1 * x + skewedness)
     ctx.enqueue_function[unary_kernel](
@@ -356,7 +356,7 @@ def kfeat_schi2_transform(
         grid_dim=_grid(nx), block_dim=(BLOCK if nx > 1 else 1),
     )
     if pending:
-        var dz = pool_take["MojoXNeighborsKfeatSkewZ"](ctx, nw)
+        var dz = pool_take["MojolearnXNeighborsKfeatSkewZV1"](ctx, nw)
         ctx.enqueue_copy(dst_buf=dz, src_ptr=wzp)
         ctx.enqueue_function[skew_weights_kernel](
             dz.unsafe_ptr(), dw.unsafe_ptr(), Int64(nw),
@@ -370,7 +370,7 @@ def kfeat_schi2_transform(
         )
         ctx.enqueue_copy(dst_ptr=outp, src_buf=dres)
         ctx.synchronize()
-        pool_give["MojoXNeighborsKfeatSkewZ"](dz^)
+        pool_give["MojolearnXNeighborsKfeatSkewZV1"](dz^)
     else:
         ctx.enqueue_copy(dst_buf=dw, src_ptr=wzp)
         ctx.enqueue_copy(dst_buf=doff, src_ptr=offp)
@@ -380,11 +380,11 @@ def kfeat_schi2_transform(
         )
         ctx.enqueue_copy(dst_ptr=outp, src_buf=dres)
         ctx.synchronize()
-    pool_give["MojoXNeighborsKfeatSkewTX"](dx^)
-    pool_give["MojoXNeighborsKfeatSkewTL"](dl^)
-    pool_give["MojoXNeighborsKfeatSkewW"](dw^)
-    pool_give["MojoXNeighborsKfeatSkewTO"](doff^)
-    pool_give["MojoXNeighborsKfeatSkewTR"](dres^)
+    pool_give["MojolearnXNeighborsKfeatSkewTXV1"](dx^)
+    pool_give["MojolearnXNeighborsKfeatSkewTLV1"](dl^)
+    pool_give["MojolearnXNeighborsKfeatSkewWV1"](dw^)
+    pool_give["MojolearnXNeighborsKfeatSkewTOV1"](doff^)
+    pool_give["MojolearnXNeighborsKfeatSkewTRV1"](dres^)
 
 
 # ------------------------------------------------------- IDENTICAL sketch draws

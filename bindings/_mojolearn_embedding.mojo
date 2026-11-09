@@ -28,7 +28,6 @@ device call, and nothing inside the `GILReleased` block touches a
 
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
-from std.ffi import _Global
 from std.atomic import Atomic, Ordering
 from std.sys.compile import is_defined
 from core.hostptr import f32_ptr, i32_ptr, read_f32
@@ -48,10 +47,10 @@ from core.device_scan import device_first_nonfinite
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_EMB_SCAN_DEFERRED.patch; record in docs/TOMBSTONES.md.
 from core.staged_download import download_f32_into
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
-comptime _NEURAL_CTX = "MojolearnNeuralEmbeddingContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralEmbeddingContextFastV2"
+comptime _NEURAL_CTX = "MojolearnNeuralEmbeddingContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralEmbeddingContextFastV3"
 # The pinned stages of this binding's downloads (core/staged_download.mojo),
 # one pool per binding and tier like the context above.
-comptime _STAGE_POOL = "MojoDownloadStagesEmbeddingIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDownloadStagesEmbeddingFast"
+comptime _STAGE_POOL = "MojolearnDownloadStagesEmbeddingIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDownloadStagesEmbeddingFastV1"
 from checks.vendor import COMPILED_VENDOR
 from embedding.checks.embedding_identical import (
     PLAN_AUTO,
@@ -84,6 +83,7 @@ from embedding.checks.embedding_oracle import (
     emb_refuse_shape,
     nonfinite_refusal,
 )
+from core.shared_slot import SharedSlot
 
 
 def embedding_numeric_mode_binding() raises -> PythonObject:
@@ -221,8 +221,8 @@ struct _EmbPool(Defaultable, Movable):
         self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime _EMB_POOL_NAME = "MojoEmbeddingResidentIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoEmbeddingResidentFast"
-comptime _EMB_POOL = _Global[StorageType=_EmbPool, name=_EMB_POOL_NAME, init_fn=_EmbPool.__init__]
+comptime _EMB_POOL_NAME = "MojolearnEmbeddingResidentIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnEmbeddingResidentFastV1"
+comptime _EMB_POOL = SharedSlot[_EmbPool, _EMB_POOL_NAME]
 
 
 def _pool_f32(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
@@ -972,8 +972,8 @@ struct _EmbTensors(Defaultable, Movable):
         self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime _EMB_TENSORS_NAME = "MojoEmbeddingTensorsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoEmbeddingTensorsFast"
-comptime _EMB_TENSORS = _Global[StorageType=_EmbTensors, name=_EMB_TENSORS_NAME, init_fn=_EmbTensors.__init__]
+comptime _EMB_TENSORS_NAME = "MojolearnEmbeddingTensorsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnEmbeddingTensorsFastV1"
+comptime _EMB_TENSORS = SharedSlot[_EmbTensors, _EMB_TENSORS_NAME]
 
 
 def _tensor_n(h: Int) raises -> Int:

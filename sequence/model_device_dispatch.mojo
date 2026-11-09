@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # Target-specific ownership only; both doors share the same whole-model engine.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from autograd.ops_api import ops_session_open, ops_session_close, ops_session_registry_token, OPS_DEVICE
 from autograd.program_import_request import program_import_request
@@ -16,6 +15,7 @@ from sequence.model_outputs_device import model_output_device
 from autograd.program_device_execution import program_device_request
 from sequence.exec_device import DeviceExec
 from core.label_cast_device import device_unique_inverse_cast
+from core.shared_slot import SharedSlot
 
 
 def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
@@ -138,5 +138,4 @@ struct NativeModelAPI(Defaultable, Movable):
         self.entries.append(model_native_v1)
 
 
-comptime NATIVE_MODEL_API = _Global[StorageType=NativeModelAPI,
-    name=("MojolearnWholeModelDeviceNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnWholeModelDeviceNativeAPIFastV2"), init_fn=NativeModelAPI.__init__]
+comptime NATIVE_MODEL_API = SharedSlot[NativeModelAPI, ("MojolearnWholeModelDeviceNativeAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnWholeModelDeviceNativeAPIFastV3")]

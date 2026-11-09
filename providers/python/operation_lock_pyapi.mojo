@@ -3,7 +3,6 @@
 # Native engines receive a handle from a retained OperationLockLease, never a
 # Python lock or callback. Legacy exact RLock instances remain explicit until
 # their caller is migrated; arbitrary lock protocols are never invoked.
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import GILReleased, PyObjectPtr
@@ -11,6 +10,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type
 from bindings.native_error_class import error_without_class
 from core.operation_lock import NativeOperationLock, operation_lock_acquire, operation_lock_release, operation_lock_owned
+from core.shared_slot import SharedSlot
 
 
 struct ProviderOperationLock(Movable, Writable):
@@ -39,8 +39,7 @@ struct OperationLockBoundary(Defaultable, Movable):
         self.legacy = PythonObject(None)
 
 
-comptime OPERATION_LOCK_BOUNDARY = _Global[StorageType=OperationLockBoundary,
-    name="MojoOperationLockBoundaryV1", init_fn=OperationLockBoundary.__init__]
+comptime OPERATION_LOCK_BOUNDARY = SharedSlot[OperationLockBoundary, "MojolearnOperationLockBoundaryV2"]
 
 
 def operation_lock_connect(context: PythonObject) raises -> PythonObject:

@@ -29,7 +29,6 @@
 # x_neighbors for fit. Explicit bindings remain supported for native drivers.
 from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
-from std.ffi import _Global
 from std.math import isfinite
 from std.memory import memcpy
 from std.python import Python, PythonObject
@@ -63,6 +62,7 @@ from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64, host
 from bindings.mcls_common import mc_is_integer_labels, mc_dtype_name
 from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.host_archive_native import host_archive_rbc_metric_object
+from core.shared_slot import SharedSlot
 
 #: cuVS `DistanceType` values the refusals and the input check read
 #: (python/mojolearn/neighbors.py `_DIST_LP_UNEXPANDED`, `_DIST_JENSEN_SHANNON`).
@@ -97,8 +97,7 @@ struct _AdmittedToken(Defaultable, Movable):
         self.token = PythonObject(None)
 
 
-comptime _ADMITTED_TOKEN = _Global[StorageType=_AdmittedToken, name="MojolearnNeighborAdmittedTokenV1",
-    init_fn=_AdmittedToken.__init__]
+comptime _ADMITTED_TOKEN = SharedSlot[_AdmittedToken, "MojolearnNeighborAdmittedTokenV2"]
 
 
 def _admitted_token() raises -> PythonObject:

@@ -42,11 +42,11 @@ code of the caller's objects except one attribute lookup of `__init__` on a
 class that passed its full admission (`type_version_tag_assign`), which
 CPython resolves in C for functions and slot wrappers.
 """
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
 from bindings.py_attr import py_attr
+from core.shared_slot import SharedSlot
 
 comptime _DICT_USED = 16
 comptime _DICT_VERSION = 24
@@ -68,10 +68,7 @@ struct VersionTagMode(Defaultable, Movable):
 
 # Shared by every Mojo extension in the process: bump the name's version
 # whenever VersionTagMode's layout changes.
-comptime VERSION_TAG_MODE = _Global[
-    StorageType=VersionTagMode, name="MojolearnVersionTagModeV1",
-    init_fn=VersionTagMode.__init__,
-]
+comptime VERSION_TAG_MODE = SharedSlot[VersionTagMode, "MojolearnVersionTagModeV2"]
 
 
 @always_inline

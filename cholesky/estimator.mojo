@@ -45,7 +45,6 @@ from std.sys.info import has_apple_gpu_accelerator
 from std.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.ffi import _Global
 from core.device_pool import pool_give, pool_take
 from core.neural_context import neural_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
@@ -56,7 +55,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL 
 #: device never wrote (x-neighbors-svc-multiclass BATCH_MOVED, gp-optimize,
 #: steward 1790601762837). Same kernels, same order, each entry still
 #: synchronizes before it returns, so no bit moves.
-comptime _CTX_NAME = "MojolearnCholeskyContextIdenticalV2" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnCholeskyContextFastV2"
+comptime _CTX_NAME = "MojolearnCholeskyContextIdenticalV3" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnCholeskyContextFastV3"
 
 
 def _binding_ctx() raises -> DeviceContext:
@@ -86,6 +85,7 @@ from cholesky.impl.linalg.cholesky_r1_update import (
     chol_rank1_update,
     chol_rank1_update_workspace_floats,
 )
+from core.shared_slot import SharedSlot
 
 
 @fieldwise_init
@@ -278,7 +278,7 @@ def chol_devio_check_kernel(a: MutPointer[Float32, MutAnyOrigin], bad: MutPointe
 #: identical, digest same. KEEP: the FAST + Apple default; rollback
 #: -D MOJOLEARN_CHOL_FAST_POOLIO_OFF.
 comptime CHOL_FAST_POOLIO = CHOL_FAST_DEVIO and not is_defined["MOJOLEARN_CHOL_FAST_POOLIO_OFF"]()
-comptime _CHOL_POOL = "MojoCholFastPoolIO"
+comptime _CHOL_POOL = "MojolearnCholFastPoolIOV1"
 
 
 struct _CholStage(Defaultable, Movable):
@@ -290,7 +290,7 @@ struct _CholStage(Defaultable, Movable):
         self.n = 0
 
 
-comptime CHOL_STAGE = _Global[StorageType=_CholStage, name="MojoCholFastPoolIOStage", init_fn=_CholStage.__init__]
+comptime CHOL_STAGE = SharedSlot[_CholStage, "MojolearnCholFastPoolIOStageV1"]
 
 
 def _chol_stage_ptr(ctx: DeviceContext, cells: Int) raises -> MutPointer[Float32, MutAnyOrigin]:

@@ -94,7 +94,6 @@ come through the kernel matrix.
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
 from std.utils import StaticTuple
-from std.ffi import _Global
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from std.sys import llvm_intrinsic
@@ -176,6 +175,7 @@ from checks.numerics import (
     identical_fmax,
     identical_mul_add,
 )
+from core.shared_slot import SharedSlot
 
 
 # ===========================================================================
@@ -1651,8 +1651,7 @@ struct _AttnEstashGate(Defaultable, Movable):
         self.recompute_denied = False
 
 
-comptime _ATTN_ESTASH_GATE = _Global[StorageType=_AttnEstashGate,
-    name="MojolearnAttnEstashGateV1", init_fn=_AttnEstashGate.__init__]
+comptime _ATTN_ESTASH_GATE = SharedSlot[_AttnEstashGate, "MojolearnAttnEstashGateV2"]
 
 
 def attention_estash_granted() -> Bool:
@@ -2379,8 +2378,7 @@ struct _AttnScanCache(Defaultable, Movable):
         self.host = List[HostBuffer[DType.float32]]()
 
 
-comptime _ATTN_SCAN_CACHE = _Global[StorageType=_AttnScanCache,
-    name="MojolearnAttnScanCacheV1", init_fn=_AttnScanCache.__init__]
+comptime _ATTN_SCAN_CACHE = SharedSlot[_AttnScanCache, "MojolearnAttnScanCacheV2"]
 
 
 def _scan_cache_slot(ctx: DeviceContext) raises -> Int:
@@ -2922,8 +2920,7 @@ struct _AttnFwdScanLast(Defaultable, Movable):
         self.rec = AttnFwdScan()
 
 
-comptime _ATTN_FWD_SCAN_LAST = _Global[StorageType=_AttnFwdScanLast,
-    name="MojolearnAttnFwdScanLastV1", init_fn=_AttnFwdScanLast.__init__]
+comptime _ATTN_FWD_SCAN_LAST = SharedSlot[_AttnFwdScanLast, "MojolearnAttnFwdScanLastV2"]
 
 
 def attention_fwd_scan_clear() raises:
@@ -9684,8 +9681,7 @@ struct _AttnScratch(Defaultable, Movable):
         self.cells = List[Int]()
 
 
-comptime _ATTN_SCRATCH = _Global[StorageType=_AttnScratch,
-    name="MojolearnAttnScratchV1", init_fn=_AttnScratch.__init__]
+comptime _ATTN_SCRATCH = SharedSlot[_AttnScratch, "MojolearnAttnScratchV2"]
 
 
 def _attn_scratch(ctx: DeviceContext, slot: Int, cells: Int) raises -> DeviceBuffer[DType.float32]:

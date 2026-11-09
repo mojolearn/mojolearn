@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Private sibling ABI for the existing fresh/backward Transformer operations.
 # Common descriptor transport; no Python/provider imports or changed kernels.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from transformer.native_lm_resident_dispatch import transformer_lm_resident_operation
 from transformer.native_decode_dispatch import transformer_decode_operation
@@ -14,6 +13,7 @@ from transformer.transformer_binding_impl import (
     _transformer_run_session_backward, _transformer_run, _transformer_backward_run,
     _transformer_run_session_int15, INT15_ENTRY_ADDRS, INT15_ENTRY_PARAMS,
 )
+from core.shared_slot import SharedSlot
 
 # 0 reserve, 1 release (caller GIL/lock held); 2 session fresh, 3 session
 # backward; 4 ephemeral fresh, 5 ephemeral backward. Session operations prepend
@@ -175,5 +175,4 @@ struct NativeTransformerBlockAPI(Defaultable, Movable):
         self.entries.append(transformer_block_v1)
 
 
-comptime NATIVE_TRANSFORMER_BLOCK_API = _Global[StorageType=NativeTransformerBlockAPI,
-    name=("MojolearnTransformerBlockNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnTransformerBlockNativeAPIFastV2"), init_fn=NativeTransformerBlockAPI.__init__]
+comptime NATIVE_TRANSFORMER_BLOCK_API = SharedSlot[NativeTransformerBlockAPI, ("MojolearnTransformerBlockNativeAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnTransformerBlockNativeAPIFastV3")]

@@ -5,7 +5,6 @@
 `bindings/msel_device.mojo` (lane cpu2-l4-modelsel, 2026-10-04), same names,
 signatures and refusals, over `core/msel_host.mojo`."""
 
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
@@ -20,10 +19,9 @@ from core.msel_host import (
     host_scatter_rows,
     host_take_rows,
 )
+from core.shared_slot import SharedSlot
 
-comptime MSEL_HOST_STORE = _Global[
-    StorageType=MselHostStore, name="MojoMselHostStore", init_fn=MselHostStore.__init__
-]
+comptime MSEL_HOST_STORE = SharedSlot[MselHostStore, "MojolearnMselHostStoreV1"]
 
 
 def msel_put_binding(addr: PythonObject, nbytes: PythonObject) raises -> PythonObject:

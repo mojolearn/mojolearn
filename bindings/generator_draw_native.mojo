@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native buffer preparation and launch ownership for existing Generator draws."""
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
@@ -11,6 +10,7 @@ from bindings.generator_state_native import generator_fields, generator_next
 from bindings.causal_checkpoint import checkpoint_array
 from bindings.causal_lm_construct import _model_f32
 from bindings.generation_buffers import generation_initialize_binding, generation_array, GENERATION_BOUNDARY
+from core.shared_slot import SharedSlot
 
 
 def _generator_shape(shape: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -52,10 +52,7 @@ struct GeneratorDrawBoundary(Defaultable, Movable):
         self.admitted = PythonObject(None)
 
 
-comptime GENERATOR_DRAW_BOUNDARY = _Global[
-    StorageType=GeneratorDrawBoundary, name="MojolearnGeneratorDrawBoundaryV1",
-    init_fn=GeneratorDrawBoundary.__init__,
-]
+comptime GENERATOR_DRAW_BOUNDARY = SharedSlot[GeneratorDrawBoundary, "MojolearnGeneratorDrawBoundaryV2"]
 
 
 def _builtins() raises -> PythonObject:

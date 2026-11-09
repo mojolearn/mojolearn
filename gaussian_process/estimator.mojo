@@ -95,7 +95,7 @@ from std.sys.compile import is_defined
 # on one stream, and every entry still synchronizes before it returns, so no
 # bit moves. This module is compiled into ONE GPU binding, so the slot name
 # (per module and tier) is that binding's own.
-comptime _FAMILY_CTX = "MojolearnGpContextIdenticalV2" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnGpContextOtherV2"
+comptime _FAMILY_CTX = "MojolearnGpContextIdenticalV3" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnGpContextOtherV3"
 
 
 def _family_ctx() raises -> DeviceContext:

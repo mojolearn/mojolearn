@@ -52,7 +52,6 @@ on every one):
       (vs ~12 launches, 2 vendor matmuls, 5 waits, ~16 buffers and
       a host-built ones vector per call in main).
 """
-from std.ffi import _Global
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import exp, fma, log, max, sqrt
 from std.memory import bitcast, stack_allocation
@@ -91,6 +90,7 @@ from training.checks.optimizer_contract import (
     opt_nonfinite_message,
     refuse_nonfinite_scalar,
 )
+from core.shared_slot import SharedSlot
 
 
 # ===========================================================================
@@ -235,13 +235,9 @@ struct _AfnScratch(Defaultable, Movable):
 #: one pool per tier's binding (lane idn-opt-resident: IDENTICAL's resident
 #: step and clip take their small scratch from it too, training/estimator.mojo)
 comptime _AFN_SCRATCH_NAME = (
-    "MojoAfnOptimScratchFast" if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else "MojoAfnOptimScratchIdentical"
+    "MojolearnAfnOptimScratchFastV1" if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else "MojolearnAfnOptimScratchIdenticalV1"
 )
-comptime AFN_SCRATCH = _Global[
-    StorageType=_AfnScratch,
-    name=_AFN_SCRATCH_NAME,
-    init_fn=_AfnScratch.__init__,
-]
+comptime AFN_SCRATCH = SharedSlot[_AfnScratch, _AFN_SCRATCH_NAME]
 
 #: Float32 slots (0, 1 and 10..12 were the FAST RESIDENT_STATE slots; numbers kept).
 comptime AFN_SF_DENOM = 2  # the resident host entry's eight buffers ...

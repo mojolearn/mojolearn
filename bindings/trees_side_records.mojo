@@ -23,7 +23,6 @@
 # by item, with their lengths; anything else by identity). Values are
 # compared by identity only (counts by value), so no user `__eq__`/`__hash__`
 # or other Python protocol runs. A record never holds its own model.
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import NativeModules
 from bindings.native_model_records import (
@@ -32,6 +31,7 @@ from bindings.native_model_records import (
 )
 from bindings.py_balanced import py_call, py_type, py_contains, py_fields
 from bindings.classical_pandas import classical_admit_value
+from core.shared_slot import SharedSlot
 
 comptime _MAX_DEPTH = 64
 
@@ -251,8 +251,7 @@ struct TreesFiniteSources(Defaultable, Movable):
         self.items = List[PythonObject]()
 
 
-comptime TREES_FINITE = _Global[StorageType=TreesFiniteSources, name="MojolearnTreesFiniteSourcesV1",
-                                init_fn=TreesFiniteSources.__init__]
+comptime TREES_FINITE = SharedSlot[TreesFiniteSources, "MojolearnTreesFiniteSourcesV2"]
 
 
 def trees_finite_known(value: PythonObject) raises -> Bool:

@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Direct native transport to the existing device linkage owner, preserving the
 # solver module's process context and completion boundary. No Python arithmetic.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.hostptr import f32_ptr, i32_ptr
 from core.neural_context import process_ctx
@@ -13,10 +12,11 @@ from hierarchy.solver_descriptor_schema import (
     HIERARCHY_SOLVER_CAP_LINKAGE, HIERARCHY_SOLVER_CAP_DEVICE,
     hierarchy_solver_validate_call, hierarchy_solver_validate_buffers,
 )
+from core.shared_slot import SharedSlot
 
 
 # Exactly bindings/_mojolearn_solver.mojo's slot; no second device context.
-comptime _DEVCTX_SLOT = "MojolearnSolverContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnSolverContextFastV2"
+comptime _DEVCTX_SLOT = "MojolearnSolverContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnSolverContextFastV3"
 
 
 def hierarchy_solver_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
@@ -55,5 +55,4 @@ struct HierarchySolverDeviceAPI(Defaultable, Movable):
 
 
 # PyCapsule borrows both table and name: the module image owns them for life.
-comptime HIERARCHY_SOLVER_DEVICE_API = _Global[StorageType=HierarchySolverDeviceAPI,
-    name=("MojolearnHierarchySolverDeviceAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnHierarchySolverDeviceAPIFastV2"), init_fn=HierarchySolverDeviceAPI.__init__]
+comptime HIERARCHY_SOLVER_DEVICE_API = SharedSlot[HierarchySolverDeviceAPI, ("MojolearnHierarchySolverDeviceAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnHierarchySolverDeviceAPIFastV3")]

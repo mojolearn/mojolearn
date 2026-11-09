@@ -16,10 +16,10 @@ which is the stricter of the two readings.
 Cache key: the connection's `numpy_names` tuple (connection contexts live for
 the process, so its address is never recycled while the entry is used).
 """
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem
+from core.shared_slot import SharedSlot
 
 
 struct P3NumpyTypes(Defaultable, Movable):
@@ -31,8 +31,7 @@ struct P3NumpyTypes(Defaultable, Movable):
 
 # Named globals may be shared by every Mojo extension in the process: bump the
 # name's version whenever the record layout changes.
-comptime P3_NUMPY_TYPES = _Global[StorageType=P3NumpyTypes,
-    name="MojolearnP3NumpyTypesV1", init_fn=P3NumpyTypes.__init__]
+comptime P3_NUMPY_TYPES = SharedSlot[P3NumpyTypes, "MojolearnP3NumpyTypesV2"]
 
 
 def _resolve(module: PythonObject, context: PythonObject) raises -> PythonObject:

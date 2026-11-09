@@ -1,3 +1,4 @@
+from core.shared_slot import SharedSlot
 # SPDX-License-Identifier: Apache-2.0
 # The one table of integer operation codes for the classical owner's door
 # (lane ne1-h-labels, plan NATIVE_ENTRY_POINTS_AFTER_0866 section H, lesson
@@ -19,7 +20,6 @@
 # Codes are the index in `_operation_names` (sorted); they hold within one
 # build only, and Python never hard-codes them. Add a name here when a shell
 # passes a new `family_*`, `trees_*` or `host_tree_*` operation by code.
-from std.ffi import _Global
 
 comptime OP_ROUTE_FAMILY = 1
 comptime OP_ROUTE_TREES = 2
@@ -307,7 +307,7 @@ def _operation_names(mut names: List[String]):
     names.append("trees_public_meta_transform")
 
 
-struct OperationTable(Movable):
+struct OperationTable(Defaultable, Movable):
     """The names, routes and family route words, filled once per process."""
     var names: List[String]
     var routes: List[Int]
@@ -332,10 +332,7 @@ struct OperationTable(Movable):
 
 # Shared by every Mojo extension in the process; bump the version whenever a
 # name is added, removed or reordered (the codes are indices).
-comptime OPERATION_TABLE = _Global[
-    StorageType=OperationTable, name="MojolearnOperationCodesV1",
-    init_fn=OperationTable.__init__,
-]
+comptime OPERATION_TABLE = SharedSlot[OperationTable, "MojolearnOperationCodesV2"]
 
 
 def operation_table() raises -> UnsafePointer[OperationTable, MutAnyOrigin]:

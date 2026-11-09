@@ -42,7 +42,6 @@ float64), the leaf sums fold per 8192-row chunk then across chunks instead
 of one row-order chain, and the dropped trees come off and go back as one
 gathered sum per row instead of one add per tree. The drop set, the shrink
 factors and the tree shapes are main's."""
-from std.ffi import _Global
 from std.gpu import block_idx, block_dim, grid_dim, thread_idx
 from std.sys.compile import is_defined
 from gbdt.trees_identical_switches import T30
@@ -86,10 +85,11 @@ comptime DART_DEVICE = (
 ) or IDN_DART_DEVICE
 
 from core.apple_fast_tree_experiments import AFT_DART_ROWS, AFT_DART_ADD_ROWS
+from core.shared_slot import SharedSlot
 
 comptime TPB = 256
 comptime GRID_MAX = 65535 * 16
-comptime _DART_CTX = "MojolearnXTreesDartContextV2"
+comptime _DART_CTX = "MojolearnXTreesDartContextV3"
 
 
 @always_inline
@@ -354,7 +354,7 @@ struct DartRegistry(Defaultable, Movable):
         raise Error("x_trees dart: unknown or closed session handle")
 
 
-comptime DART_SESSIONS = _Global[StorageType=DartRegistry, name="MojoXTreesDartSessions", init_fn=DartRegistry.__init__]
+comptime DART_SESSIONS = SharedSlot[DartRegistry, "MojolearnXTreesDartSessionsV1"]
 
 
 @always_inline
@@ -660,7 +660,7 @@ struct DartForests(Defaultable, Movable):
         raise Error("x_trees dart: unknown or released forest handle")
 
 
-comptime DART_FORESTS = _Global[StorageType=DartForests, name="MojoXTreesDartForestsV1", init_fn=DartForests.__init__]
+comptime DART_FORESTS = SharedSlot[DartForests, "MojolearnXTreesDartForestsV2"]
 
 
 def dart_forest_prepare(

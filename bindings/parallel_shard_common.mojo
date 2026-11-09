@@ -23,7 +23,7 @@ PLACED at the true offset. Inert at one device.
 
 No floating-point value is computed here: copies only.
 """
-from std.ffi import _Global, external_call
+from std.ffi import external_call
 from std.memory import memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
@@ -34,6 +34,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.native_process_pool import process_pool_create, process_pool_map, process_pool_close, PROCESS_BOUNDARY
 from bindings.native_worker_inventory import native_worker_inventory, native_require_worker_inventory
 from bindings.tsa_hw_native import tsa_array
+from core.shared_slot import SharedSlot
 
 
 def shard_b() raises -> PythonObject:
@@ -102,7 +103,7 @@ struct ShardTrace(Defaultable, Movable):
 #: `shard_trace_take`: its devices and its workers' own driver inventories
 #: (the record the verifier's two-device witness reads,
 #: python/mojolearn/_verify_par.py). Bounded: the oldest records go first.
-comptime SHARD_TRACE = _Global[StorageType=ShardTrace, name="MojoParallelShardTrace", init_fn=ShardTrace.__init__]
+comptime SHARD_TRACE = SharedSlot[ShardTrace, "MojolearnParallelShardTraceV1"]
 
 
 struct ShardIdle(Defaultable, Movable):
@@ -189,7 +190,7 @@ def _is_stored_ref(item: PythonObject) raises -> Bool:
 #: workers by identity and starts its own trace record, as a fresh pool
 #: does. A failed call closes its pool and nothing is kept. Workers held
 #: here end when the parent process ends (their socket closes).
-comptime SHARD_IDLE = _Global[StorageType=ShardIdle, name="MojoParallelShardIdle", init_fn=ShardIdle.__init__]
+comptime SHARD_IDLE = SharedSlot[ShardIdle, "MojolearnParallelShardIdleV1"]
 
 
 def shard_identity() raises -> PythonObject:

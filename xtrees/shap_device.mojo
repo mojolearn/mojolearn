@@ -13,7 +13,6 @@ A row chunk holds as many rows as fit BUF_BYTES of (row, tree, slot, output)
 cells and at most UNITS_MAX (row, tree) units, so no single launch walks an
 unbounded grid (Apple aborts long command buffers). The chunking moves no
 bit: every unit's chain is independent of it (xtrees/shap.mojo)."""
-from std.ffi import _Global
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.gpu import block_idx, block_dim, thread_idx
@@ -31,6 +30,7 @@ from xtrees.shap_tab import U64P, shap_tab_rank_unit, shap_tab_need_unit, shap_t
 from core.apple_fast_tree_experiments import (
     AFT_P07, AFT_P08, AFT_P09, AFT_SHAP_FOLD_ITEMS,
 )
+from core.shared_slot import SharedSlot
 
 comptime TPB = 64 if AFT_P08 else 128
 # AFCL-T11: two SIMD groups per query/fold block reduce private TreeSHAP
@@ -102,7 +102,7 @@ struct ShapPairAudit(Defaultable, Movable):
     var calls: Int
     def __init__(out self):
         self.calls = 0
-comptime SHAP_PAIR_STATE = _Global[StorageType=ShapPairAudit, name="ShapPairAudit", init_fn=ShapPairAudit.__init__]
+comptime SHAP_PAIR_STATE = SharedSlot[ShapPairAudit, "MojolearnShapPairAuditV1"]
 
 def shap_pair_count() raises -> Int:
     return SHAP_PAIR_STATE.get_or_create_ptr()[].calls
@@ -129,8 +129,8 @@ struct _ShapContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojolearnXTreesShapContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXTreesShapContextFastV2"
-comptime X_TREES_SHAP_CONTEXT = _Global[StorageType=_ShapContext, name=_CTX_NAME, init_fn=_ShapContext.__init__]
+comptime _CTX_NAME = "MojolearnXTreesShapContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXTreesShapContextFastV3"
+comptime X_TREES_SHAP_CONTEXT = SharedSlot[_ShapContext, _CTX_NAME]
 
 
 def _ctx() raises -> DeviceContext:
@@ -661,7 +661,7 @@ struct _ShapCache(Defaultable, Movable):
         raise Error("unknown or released TreeSHAP cache handle")
 
 
-comptime _SHAP_CACHE = _Global[StorageType=_ShapCache, name="MojoTreesShapRetained", init_fn=_ShapCache.__init__]
+comptime _SHAP_CACHE = SharedSlot[_ShapCache, "MojolearnTreesShapRetainedV1"]
 
 
 def shap_prepare_retain(forest: List[Int], tscale: Int, bg: Int, cover_out: Int, ev: Int, meta_out: Int, nb: Int,

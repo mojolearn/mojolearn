@@ -23,7 +23,7 @@ def forest_auxiliary_device(forest: List[Int], x: Int, leaf_out: Int, prefix_out
                             rows: Int, features: Int, trees: Int, outputs: Int, rf_input: Bool) raises:
     if rows == 0:
         return
-    var ctx = process_ctx["MojoTreesT39Auxiliary"]()
+    var ctx = process_ctx["MojolearnTreesT39AuxiliaryV1"]()
     var offsets = AuxI32(unsafe_from_address=forest[0])
     var nodes = Int(offsets.unsafe_load(trees))
     var doff = ctx.enqueue_create_buffer[DType.int32](trees+1)

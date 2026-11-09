@@ -93,7 +93,6 @@ every access confirms the weak referent is the object itself.
 
 Nothing here computes on data or changes an arithmetic or fold order.
 """
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import PythonModuleBuilder, ExceptionType, raise_python_exception
@@ -110,6 +109,7 @@ from core.records_death_ring import (
     records_death_seq,
     records_dead_keys_since,
 )
+from core.shared_slot import SharedSlot
 
 
 # Family codes of the named payload records.
@@ -287,10 +287,7 @@ struct ModelRecords(Defaultable, Movable):
 
 # Shared by every Mojo extension in the process: bump the name's version
 # whenever a field is added, removed or reordered in any struct above.
-comptime MODEL_RECORDS = _Global[
-    StorageType=ModelRecords, name="MojolearnModelRecordsV1",
-    init_fn=ModelRecords.__init__,
-]
+comptime MODEL_RECORDS = SharedSlot[ModelRecords, "MojolearnModelRecordsV2"]
 
 
 # ------------------------------------------------------------------ lifetime

@@ -14,7 +14,6 @@ native `predict` (bindings/tsa_arima_native.mojo, tsa_hw_native.mojo), and
 each shard's block is placed at its own offset in range order. The same
 compiled entries on the same words, so no bit moves.
 """
-from std.ffi import _Global
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
@@ -37,6 +36,7 @@ from bindings.parallel_shard_common import (
     shard_array, shard_identity,
 )
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols
+from core.shared_slot import SharedSlot
 
 comptime _CHILD = "mojolearn._native_parallel_forecast_worker"
 
@@ -56,10 +56,7 @@ struct ParallelForecastBoundary(Defaultable, Movable):
         self.backend = PythonObject(None)
 
 
-comptime PARALLEL_FORECAST_BOUNDARY = _Global[
-    StorageType=ParallelForecastBoundary, name="MojoParallelForecastOwner",
-    init_fn=ParallelForecastBoundary.__init__,
-]
+comptime PARALLEL_FORECAST_BOUNDARY = SharedSlot[ParallelForecastBoundary, "MojolearnParallelForecastOwnerV1"]
 
 
 def _b() raises -> PythonObject:

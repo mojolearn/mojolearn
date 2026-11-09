@@ -29,7 +29,6 @@ the same order on the same words: every output bit is main's. A NaN or
 infinity in X raises main's transform message after that wait (the outputs
 are then never handed out).
 """
-from std.ffi import _Global
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -59,6 +58,7 @@ from kernel_methods.checks.random_features import (
 from kernel_methods.estimator import _family_ctx
 from core.staged_download import download_f32_into, DOWNLOAD_CHUNK_FLOATS, _stage_take, _stage_give, _stage_enqueue
 from std.memory import memcpy
+from core.shared_slot import SharedSlot
 
 
 # KM_FAST_RBF_RESIDENT, DEFAULT in FAST + Apple (lane/apple-fast-w2-kfeat):
@@ -92,7 +92,7 @@ comptime KM_FAST_RBF_RESIDENT = (
 # The output stays the caller's ordinary (mapped) memory: handing out the
 # pinned stage itself would leave the caller reading write-combined memory.
 comptime KM_FAST_RBF_STAGED = KM_FAST_RBF_RESIDENT and not is_defined["MOJOLEARN_KM_FAST_RBF_STAGED_OFF"]()
-comptime _RBF_STAGE_POOL = "MojoKmRbfDownloadStagesFast"
+comptime _RBF_STAGE_POOL = "MojolearnKmRbfDownloadStagesFastV1"
 
 
 #: MOJOLEARN_KM_FAST_RBF_PIPE (lane apple-fast-s-small, 2026-10-05), FAST +
@@ -164,7 +164,7 @@ struct _RbfStage(Defaultable, Movable):
         self.host = Optional[HostBuffer[DType.int32]]()
 
 
-comptime _RBF_STAGE = _Global[StorageType=_RbfStage, name="MojoKmRbfResidentStageFast", init_fn=_RbfStage.__init__]
+comptime _RBF_STAGE = SharedSlot[_RbfStage, "MojolearnKmRbfResidentStageFastV1"]
 
 
 def _rbf_gemm(
@@ -287,10 +287,10 @@ def rbf_sampler_fit_transform_resident(
         # SCAN_BLOCKS partials plus one slot for their device-folded minimum
         st[].part = ctx.enqueue_create_buffer[DType.int32](SCAN_BLOCKS + 1)
         st[].host = ctx.enqueue_create_host_buffer[DType.int32](1)
-    var dw = pool_take["MojoKmRbfResW"](ctx, d * q)
-    var db = pool_take["MojoKmRbfResB"](ctx, q)
-    var dx = pool_take["MojoKmRbfResX"](ctx, nx)
-    var dz = pool_take["MojoKmRbfResZ"](ctx, nz)
+    var dw = pool_take["MojolearnKmRbfResWV1"](ctx, d * q)
+    var db = pool_take["MojolearnKmRbfResBV1"](ctx, q)
+    var dx = pool_take["MojolearnKmRbfResXV1"](ctx, nx)
+    var dz = pool_take["MojolearnKmRbfResZV1"](ctx, nz)
     km_random_weights(ctx, dw, seed, d, q, sigma, KM_RF_TPB, KMSAB_NONE)
     km_random_offsets(ctx, db, seed, q, KM_RF_TPB)
     var blocks = _scan_blocks(nx)
@@ -336,10 +336,10 @@ def rbf_sampler_fit_transform_resident(
     var is_nan = False
     if bad >= 0:
         is_nan = device_classify_nonfinite(ctx, dx, bad)
-    pool_give["MojoKmRbfResW"](dw^)
-    pool_give["MojoKmRbfResB"](db^)
-    pool_give["MojoKmRbfResX"](dx^)
-    pool_give["MojoKmRbfResZ"](dz^)
+    pool_give["MojolearnKmRbfResWV1"](dw^)
+    pool_give["MojolearnKmRbfResBV1"](db^)
+    pool_give["MojolearnKmRbfResXV1"](dx^)
+    pool_give["MojolearnKmRbfResZV1"](dz^)
     if bad >= 0:
         if is_nan:
             raise Error("rbf_sampler transform X: NaN at flat index " + String(bad) + "; refused by name (DEVIATION 1686)")

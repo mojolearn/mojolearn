@@ -40,7 +40,7 @@ def test_both_doors_share_numerical_functions_and_original_float_casts():
     for op in (2, 3):
         branch = native.split(f'    if op == {op}:')[1].split('    if op ==')[0]
         assert branch.count('Float32(f[0])') == 1
-    assert 'MojolearnNeuralTrainingContextIdenticalV2' in native
+    assert 'MojolearnNeuralTrainingContextIdenticalV3' in native
     mamba = read('mamba/native_state_dispatch.mojo')
     # lane x5-mamba-on-executor: every family runs the block step op on the
     # cached block program (mamba/impl/mamba_block_program.mojo).

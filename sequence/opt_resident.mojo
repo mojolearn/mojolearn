@@ -21,7 +21,6 @@ statements on the same values: no bit moves against the per-call entries.
 handle indexes the pool and a closed handle's slot is reused. The Python
 entries (`opt_resident_open_py` ...) are `providers/python/sequence_opt_resident_pyapi.mojo`'s;
 this file takes typed handles, addresses and parameters only."""
-from std.ffi import _Global
 from std.memory import bitcast, memcpy
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -33,6 +32,7 @@ from sequence.ops import FP, OP_OPT, OPT_NADAM, OPT_SGD, OPT_SK_ADAM, OPT_SK_SGD
 from sequence.recurrent import OptConfig, OptState, opt_scalars, opt_step
 from sequence.ops_impl import adafactor_core, lamb_bias, lamb_core, lamb_table, opt_slots
 from sequence.seq_tensor import seq_tensor_ptr, seq_tensor_view
+from core.shared_slot import SharedSlot
 
 #: Apple FAST transport switches of the resident step (lane
 #: apple-fast-optspeed, 2026-10-03). At the board's one tensor of 16,777,216
@@ -175,8 +175,8 @@ struct _ResPool(Defaultable, Movable):
         self.offs = List[List[Int]]()
 
 
-comptime _RES_NAME = "MojoXSequenceOptResidentIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXSequenceOptResidentFast"
-comptime _RES = _Global[StorageType=_ResPool, name=_RES_NAME, init_fn=_ResPool.__init__]
+comptime _RES_NAME = "MojolearnXSequenceOptResidentIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequenceOptResidentFastV1"
+comptime _RES = SharedSlot[_ResPool, _RES_NAME]
 
 
 def _slot_buf(n: Int, keep: Bool) raises -> DeviceBuffer[DType.float32]:

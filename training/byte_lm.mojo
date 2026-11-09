@@ -319,8 +319,8 @@ def _require_device_finite(ctx: DeviceContext, mut scan: DeviceScanScratch,
 # The process context the byte-LM bindings run on (`neural_ctx` caches it per
 # name, so this is the binding's own context, created once, not a new one).
 comptime _BYTE_VALIDATE_CTX = (
-    "MojolearnNeuralByteLMContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    else "MojolearnNeuralByteLMContextFastV2")
+    "MojolearnNeuralByteLMContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    else "MojolearnNeuralByteLMContextFastV3")
 
 
 def _device_copy_f32(ctx: DeviceContext, values: List[Float32]) raises -> DeviceBuffer[DType.float32]:

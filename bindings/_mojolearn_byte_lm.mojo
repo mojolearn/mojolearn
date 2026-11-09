@@ -31,7 +31,6 @@ from training.byte_lm_stateless_logits import byte_lm_stateless_logits_native
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
-from std.ffi import _Global
 from std.memory import bitcast, memcmp
 from std.os import abort, getenv
 from std.python import Python, PythonObject
@@ -119,6 +118,7 @@ from core.step_glue import (
     step_glue_arm_name,
     step_glue_trial_build,
 )
+from core.shared_slot import SharedSlot
 
 
 def byte_lm_step_glue_arm_binding() raises -> PythonObject:
@@ -1589,8 +1589,7 @@ struct ByteLmScheduleTable(Defaultable, Movable):
         self.entries.append(byte_lm_schedule_v1)
 
 
-comptime BYTE_LM_SCHEDULE_TABLE = _Global[StorageType=ByteLmScheduleTable,
-    name=("MojolearnByteLmScheduleTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnByteLmScheduleTableFastV2"), init_fn=ByteLmScheduleTable.__init__]
+comptime BYTE_LM_SCHEDULE_TABLE = SharedSlot[ByteLmScheduleTable, ("MojolearnByteLmScheduleTableIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnByteLmScheduleTableFastV3")]
 
 
 def byte_lm_schedule_api_binding() raises -> PythonObject:

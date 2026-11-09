@@ -36,7 +36,6 @@ DEVIATION 636 text are gone from this route. A fold runs on the fold
 store's context with lease 0 (its fresh fitted model is uploaded for the
 call, as a lease-0 predict always was).
 """
-from std.ffi import _Global
 from std.memory import memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -55,17 +54,11 @@ from core.device_query_x import DeviceQueryX, QueryFold, query_context
 from svm.estimator import _family_ctx, _kernel_params, svc_predict_host, svr_predict_host
 from svm.impl.svc_impl import svc_predict_batch_rows, svc_predict_dev
 from svm.impl.svm_parameter import KERNEL_PRECOMPUTED, SvmModel
+from core.shared_slot import SharedSlot
 
 
 # One store per numeric tier, next to that tier's SVM context.
-comptime SVM_RESIDENT_STORE = _Global[
-    StorageType=FittedResidentStore,
-    name=(
-        "MojoSvmResidentFittedIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        else "MojoSvmResidentFittedFast"
-    ),
-    init_fn=FittedResidentStore.__init__,
-]
+comptime SVM_RESIDENT_STORE = SharedSlot[FittedResidentStore, ( "MojolearnSvmResidentFittedIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnSvmResidentFittedFastV1" )]
 
 
 def svm_resident_store() raises -> UnsafePointer[FittedResidentStore, MutAnyOrigin]:

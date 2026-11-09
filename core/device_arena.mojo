@@ -24,18 +24,17 @@ runs). The bytes a kernel reads and writes are the same; only where a
 buffer's storage sits moves. Default on for the Apple column, off
 elsewhere; `MOJOLEARN_DEVICE_ARENA=0/1` forces either.
 """
-from std.ffi import _Global
 from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.ctx_key import ctx_cache_key
-from core.shared_slot import shared_slot_check, shared_slot_word
+from core.shared_slot import SharedSlot
 
 #: Layout version of `_ArenaPool` (core/shared_slot.mojo rule). V2: the
 #: layout word and `chunk_ctx`, the context key a chunk was created on.
-comptime _ARENA_LAYOUT = 2
+comptime _ARENA_LAYOUT = 3
 
 #: a chunk's floats (256 MB) and a view's alignment (256 B)
 comptime ARENA_CHUNK_FLOATS = 1 << 26
@@ -43,8 +42,6 @@ comptime ARENA_ALIGN_FLOATS = 64
 
 
 struct _ArenaPool(Defaultable, Movable):
-    # first field: the layout word (core/shared_slot.mojo)
-    var layout: Int
     var chunks: List[DeviceBuffer[DType.float32]]
     var chunk_n: List[Int]
     # the `ctx_cache_key` of the context each chunk was created on: the
@@ -60,7 +57,6 @@ struct _ArenaPool(Defaultable, Movable):
     var views: Int
 
     def __init__(out self):
-        self.layout = shared_slot_word[_ArenaPool](_ARENA_LAYOUT)
         self.chunks = List[DeviceBuffer[DType.float32]]()
         self.chunk_n = List[Int]()
         self.chunk_ctx = List[Int]()
@@ -72,18 +68,15 @@ struct _ArenaPool(Defaultable, Movable):
         self.views = 0
 
 
-comptime _ARENA_NAME_IDN: StaticString = "MojolearnDeviceArenaIdenticalV2"
-comptime _ARENA_NAME_OTHER: StaticString = "MojolearnDeviceArenaFastV2"
-# typed StaticString arms: a conditional of two literals is a String value,
-# which shared_slot_check (StaticString) does not take
+comptime _ARENA_NAME_IDN: StaticString = "MojolearnDeviceArenaIdenticalV3"
+comptime _ARENA_NAME_OTHER: StaticString = "MojolearnDeviceArenaFastV3"
 comptime _ARENA_NAME: StaticString = _ARENA_NAME_IDN if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else _ARENA_NAME_OTHER
-comptime DEVICE_ARENA = _Global[StorageType=_ArenaPool, name=_ARENA_NAME, init_fn=_ArenaPool.__init__]
+comptime DEVICE_ARENA = SharedSlot[_ArenaPool, _ARENA_NAME, _ARENA_LAYOUT]
 
 
 def _arena() raises -> UnsafePointer[_ArenaPool, MutAnyOrigin]:
     """The process-wide arena, refused when its creator had another layout."""
     var pool = DEVICE_ARENA.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    shared_slot_check(pool[].layout, shared_slot_word[_ArenaPool](_ARENA_LAYOUT), _ARENA_NAME)
     return pool
 
 

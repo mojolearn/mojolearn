@@ -65,7 +65,7 @@ def native_imports(source):
 
 
 def table(source, rows, target):
-    out = HEADER + '''from std.ffi import _Global
+    out = HEADER + '''from core.shared_slot import SharedSlot
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from x_neighbors.descriptor_schema import XN_ABI_NAME, xn_schema, xn_min_ints
@@ -133,7 +133,7 @@ struct XNeighborsNativeAPI(Defaultable, Movable):
         self.entries.append(xn_native_v1)
 
 '''
-    out += f'comptime XN_NATIVE_API = _Global[StorageType=XNeighborsNativeAPI,\n    name=("MojolearnXNeighborsNative{target.title()}APIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnXNeighborsNative{target.title()}APIFastV2"), init_fn=XNeighborsNativeAPI.__init__]\n'
+    out += f'comptime XN_NATIVE_API = SharedSlot[XNeighborsNativeAPI, ("MojolearnXNeighborsNative{target.title()}APIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnXNeighborsNative{target.title()}APIFastV3")]\n'
     return out
 
 

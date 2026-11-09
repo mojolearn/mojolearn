@@ -2,7 +2,6 @@
 # Native lifetime table and typed entries for model/tensor/pipeline
 # partitioned captured graphs. The Python door (partition_pyapi.mojo)
 # converts arrays and options and builds results.
-from std.ffi import _Global
 from std.memory import alloc, memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import FP
@@ -18,9 +17,10 @@ from autograd.optim import optimizer_slots
 from core.cast_in import CastIn
 from training.checkpoint import read_checkpoint_unchecked, save_checkpoint
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.shared_slot import SharedSlot
 
-comptime _PARTITION_NAME = "MojoPartitionedGraphsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoPartitionedGraphsFast"
-comptime _PARTITIONS = _Global[StorageType=_OpsStore, name=_PARTITION_NAME, init_fn=_OpsStore.__init__]
+comptime _PARTITION_NAME = "MojolearnPartitionedGraphsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnPartitionedGraphsFastV1"
+comptime _PARTITIONS = SharedSlot[_OpsStore, _PARTITION_NAME]
 
 
 def register_partition[E: Exec & Movable & Deinitable, KIND: Int](var d: PartitionedProgram[E]) raises -> Int:

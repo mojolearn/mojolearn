@@ -175,7 +175,7 @@ def bisect_entry_ptr(
         if k < 1 or k > n:
             raise Error("BisectingKMeans: n_samples=" + String(n) + " should be >= n_clusters=" + String(k))
         # X from the caller's pointer into a pooled buffer, centered in place
-        var xbuf = pool_take["MojoXClusterClus3BisectX"](ops.ctx, nx)
+        var xbuf = pool_take["MojolearnXClusterClus3BisectXV1"](ops.ctx, nx)
         ops.ctx.enqueue_copy(dst_buf=xbuf, src_ptr=xp)
         ops.f.append(xbuf^)
         var xs = len(ops.f) - 1
@@ -310,7 +310,7 @@ def bisect_entry_ptr(
         # Removing X shifts every later float-buffer slot. Keep it in the
         # slot table until the final center readbacks have used their saved
         # indices; those reads also drain all launches that reference X.
-        pool_give["MojoXClusterClus3BisectX"](ops.f.pop(xs))
+        pool_give["MojolearnXClusterClus3BisectXV1"](ops.f.pop(xs))
         var nodes = List[Int32](capacity=3 * nn)
         for t in range(nn):  # small-loop(nn: tree nodes): 2k - 1 nodes of tree metadata
             nodes.append(Int32(tree.left[t]))

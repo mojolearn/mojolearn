@@ -6,7 +6,6 @@ posix entries with exact strings/bytes, never pathlib, tempfile, shutil, hashlib
 or json Python functions. Paths returned to callers have native slots populated
 directly; their Python convenience methods run only when the caller uses them.
 """
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.os import getenv
@@ -18,6 +17,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.native_json import native_path, native_json_parse
 from bindings.mode_metadata_native import _class_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
+from core.shared_slot import SharedSlot
 
 
 struct CorpusFileConnection(Defaultable, Movable):
@@ -31,10 +31,7 @@ struct CorpusFileConnection(Defaultable, Movable):
         self.path_slots = PythonObject(None)
 
 
-comptime CORPUS_FILES = _Global[
-    StorageType=CorpusFileConnection, name="MojoCorpusFileConnection",
-    init_fn=CorpusFileConnection.__init__,
-]
+comptime CORPUS_FILES = SharedSlot[CorpusFileConnection, "MojolearnCorpusFileConnectionV1"]
 
 
 def corpus_files_initialize() raises:

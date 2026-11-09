@@ -41,10 +41,10 @@
 # Every mutation runs with the GIL held (door code), which serializes the
 # table; the release calls run after the entry has left the table, so a
 # release that reenters the door sees a consistent table.
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call
 from bindings.trees_side_records import trees_side_get, trees_side_put
+from core.shared_slot import SharedSlot
 
 comptime TREES_RESIDENT_SLOTS = 64
 comptime TREES_RESIDENT_KEEP_BYTES = 1 << 30
@@ -102,9 +102,7 @@ struct TreesResidentTable(Defaultable, Movable):
         self.uploads = 0
 
 
-comptime TREES_RESIDENT = _Global[
-    StorageType=TreesResidentTable, name="MojolearnTreesResidentTableV1", init_fn=TreesResidentTable.__init__,
-]
+comptime TREES_RESIDENT = SharedSlot[TreesResidentTable, "MojolearnTreesResidentTableV2"]
 
 
 def _release_now(release: PythonObject, handle: Int):
