@@ -971,7 +971,10 @@ def samba_program_forward_binding(
     pieces: PythonObject, cursors: PythonObject,
 ) raises -> PythonObject:
     """One per-call Samba run. addresses = [registry (n_total f32, read),
-    ids (b * l i32, read), logits (b * l * vocab f32, written)]; params =
+    ids (b * l i32, read), logits (b * l * vocab f32, written)], optionally
+    followed by the Mamba-3 layers' report arrays (four f32 addresses per
+    Mamba-3 layer in layer order: h_last, k_last, v_last, theta_last;
+    written); params =
     [b, l]. The registry is reloaded only when the program's weight key is
     stale (training/samba_program.mojo refresh_weights). With no state
     addresses the run starts from a zero state and the
@@ -983,7 +986,13 @@ def samba_program_forward_binding(
         raise Error("samba_program_forward: a host build has no device program")
     else:
         var owner = program.downcast_value_ptr[SambaStackProgram]()
-        var a = _addrs(addresses, 3, "samba_program_forward")
+        # [registry, ids, logits] then, optionally, the Mamba-3 layers' four
+        # report addresses each (h_last, k_last, v_last, theta_last).
+        var head = Python.list(addresses[0], addresses[1], addresses[2]) if len(addresses) > 3 else addresses
+        var a = _addrs(head, 3, "samba_program_forward")
+        var reports = List[Int]()
+        for i in range(3, len(addresses)):  # driver-loop: over the Mamba-3 layers' report addresses
+            reports.append(Int(py=addresses[i]))
         _params(params, 2, "samba_program_forward")
         var b = Int(py=params[0])
         var l = Int(py=params[1])
@@ -1007,6 +1016,8 @@ def samba_program_forward_binding(
                 else:
                     owner[].zero_state()
                 owner[].run(_i32_ptr(a[1]), _f32_ptr(a[2]), l)
+                if len(reports) > 0:
+                    owner[].enqueue_reports(reports)
                 if stateful:
                     out = owner[].enqueue_export(sp)
                 owner[].finish()
