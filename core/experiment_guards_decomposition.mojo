@@ -66,6 +66,9 @@ def _check_configuration() -> Bool:
     # Lane a3-admit-decomp-prep-metrics (2026-11-08): randomized_svd's route switches, superseded by its one driver (x_decomp/randomized_svd_owner.mojo). Code at f7d10d2b09.
     # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch
     comptime assert not (is_defined["MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF"]() or is_defined["MOJOLEARN_IDN_RSVD_DIRECT_IN_OFF"]() or is_defined["MOJOLEARN_RSVD_FAST_DEVSCAN_OFF"]()), "removed 2026-11-08 (lane a3-admit-decomp-prep-metrics): MOJOLEARN_RSVD_FAST_DIRECT_IN and MOJOLEARN_IDN_RSVD_DIRECT_IN (randomized_svd's input straight to the device; KEPT defaults, M3 istella 517.3 -> 501.3 ms) and MOJOLEARN_RSVD_FAST_DEVSCAN (its finiteness scan on the device copy; KEPT, rab15 istella 490.1 -> 435.1 ms with ORTH_WS) were superseded: randomized_svd is one driver that reads M in place and uploads it once, and its admission scans in parallel on the host; no route is left to roll back to; code at f7d10d2b09; see docs/TOMBSTONES.md"
+    # Lane k1-delete-unverdicted-fast (2026-11-09): Apple FAST experiments with no verdict, never to be measured.
+    # Restore: git apply experiments/removed/MOJOLEARN_FA_FAST_GRAM_SPREAD.patch
+    comptime assert not is_defined["MOJOLEARN_FA_FAST_GRAM_SPREAD"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_FA_FAST_GRAM_SPREAD, FactorAnalysis's FAST + Apple Gram pass with rows per partial shrunk with n (x_decomp/fa_fast.mojo fa_gram_rows), was OPEN (M3 A/B owed, never run) and will not be measured; every Gram pass keeps FG_ROWS; code at f59d913b0b; see docs/TOMBSTONES.md"
     return True
 
 
