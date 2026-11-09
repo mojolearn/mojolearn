@@ -294,6 +294,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_NN64_SESSION_PACK (removed: its mlp_sessions entry is deleted) deleted 2026-11-09 by lane/m2-neural-leftovers; code recoverable at 0ce88411d3.
     # Restore: git apply experiments/removed/M2_SMALL_MLP_PRIMITIVES.patch
     comptime assert not is_defined["MOJOLEARN_NN64_SESSION_PACK"](), "removed 2026-11-09 (lane/m2-neural-leftovers): MOJOLEARN_NN64_SESSION_PACK chose per-session vs packed forwards of the training binding's mlp_sessions entry, which is deleted; SmallMLPTrainer.predict_logits_sessions and training.mlp_inference_sessions run their sessions packed as one forward of the small-MLP program (autograd/small_mlp_program.mojo). Restore with experiments/removed/M2_SMALL_MLP_PRIMITIVES.patch"
+    # TOMBSTONE: MOJOLEARN_AFN_ATTN_ARENA (removed: dead; no caller built TransformerWorkspace after lanes x45c and x6) deleted 2026-11-09 by lane/m2-neural-leftovers; code recoverable at 0ce88411d3.
+    # Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_ARENA.patch
+    comptime assert not is_defined["MOJOLEARN_AFN_ATTN_ARENA"](), "removed 2026-11-09 (lane/m2-neural-leftovers): MOJOLEARN_AFN_ATTN_ARENA (A07, Apple FAST, never measured) put TransformerWorkspace's buffers in one device arena; nothing built that workspace after the block forward moved onto the attention step op (lanes x45c, x6), so the workspace, its key and the arena arm are deleted. Restore with experiments/removed/MOJOLEARN_AFN_ATTN_ARENA.patch"
     # ---- end lane m2-neural-leftovers
     return True
 

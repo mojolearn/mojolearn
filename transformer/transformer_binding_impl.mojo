@@ -106,11 +106,7 @@ from gemm.experiments.neural_switches import ROLE_HEAD
 from gemm.contract import OP_NT
 from transformer.impl.llama.modeling_llama import llama_rms_norm
 from std.math import isfinite
-# lane afn-attn (2026-10-03): MOJOLEARN_AFN_ATTN_ARENA, FAST + Apple only
-# (AFN_ATTN_ARENA is False on every other build, so these are never called).
-from core.device_arena import arena_begin, arena_end, arena_release
-from transformer.impl.llama.afn_apple_fast import AFN_ATTN_ARENA, afn_flash_call_count
-
+from transformer.impl.llama.afn_apple_fast import afn_flash_call_count
 
 
 def _optional_upload(
@@ -134,20 +130,16 @@ def _optional_upload(
     return _llama_zeros[False](ctx, 1)
 
 
-
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
-
 
 
 def _read_f32(addr: Int, n: Int) raises -> List[Float32]:
     return read_f32(addr, n)
 
 
-
 def _write_f32(addr: Int, values: List[Float32]) raises:
     copy_f32(values.unsafe_ptr(), _f32_ptr(addr), len(values))
-
 
 
 def _upload_addr[wait: Bool = True](
@@ -181,7 +173,6 @@ def _upload_addr[wait: Bool = True](
     ctx.synchronize()
     _ = host^
     return dev^
-
 
 
 def _download_addr[wait: Bool = True](
@@ -219,7 +210,6 @@ def _download_addr[wait: Bool = True](
     _ = host^
 
 
-
 def _btick(on: Bool, mut t: Int, name: String):
     if not on:
         return
@@ -230,7 +220,6 @@ def _btick(on: Bool, mut t: Int, name: String):
     t = now
 
 
-
 # ===========================================================================
 # The block: profile mojolearn.identical.transformer.fp32.v1
 # ===========================================================================
@@ -239,7 +228,6 @@ def _btick(on: Bool, mut t: Int, name: String):
 # transformer_lean_stages and _lean_for live in transformer/lean_stages.mojo
 # (lane x4: the attention step op imports them without a cycle).
 from transformer.lean_stages import transformer_lean_stages, _lean_for
-
 
 
 def _load_transformer_weights[wait: Bool = True](
@@ -337,7 +325,6 @@ def _load_transformer_weights[wait: Bool = True](
     )
 
 
-
 def _tail_of(a: List[Int], base: Int) -> List[Int]:
     """The eleven optional addresses out of a base + tail list (zeros when
     the list is the base alone)."""
@@ -350,14 +337,12 @@ def _tail_of(a: List[Int], base: Int) -> List[Int]:
     return t^
 
 
-
 def _check_base_addrs(a: List[Int], slots: List[Int], what: String) raises:
     """Null refusals for the base slots a caller must fill (the gate slot is
     checked by `_load_transformer_weights` against the MLP form)."""
     for i in range(len(slots)):  # small-loop(slots: a handful of base address slots): null checks on addresses, not data
         if a[slots[i]] == 0:
             raise Error(what + ": null buffer address at slot " + String(slots[i]))
-
 
 
 def _lean_for_w(hd: Int, w: LlamaDeviceWeights) -> Bool:
@@ -369,111 +354,11 @@ def _lean_for_w(hd: Int, w: LlamaDeviceWeights) -> Bool:
     return _lean_for(hd, w.opts)
 
 
-
-def _workspace_key(
-    b: Int, l: Int, dims: LlamaDims, smax: Int, window: Int, lean: Bool,
-    opts: BlockOptions,
-) -> List[Int]:
-    """The retained workspace's identity: the shape, and the whole options
-    record (a different theta or rope_dim is a different rotary table)."""
-    var key: List[Int] = [b, l, dims.d_model, dims.n_heads, dims.n_kv,
-                          dims.head_dim, dims.intermediate, smax, window, Int(lean)]
-    var tail = opts.to_params()
-    for i in range(len(tail)):  # small-loop(tail: the 17 block option params): builds a cache key, not data
-        key.append(tail[i])
-    return key^
-
-
-
-struct TransformerWorkspace(Movable):
-    var key: List[Int]
-    var kv: LlamaKVCache
-    var rope: LlamaRopeTable
-    var stages: LlamaDeviceStages
-    var x: DeviceBuffer[DType.float32]
-    #: MOJOLEARN_AFN_ATTN_ARENA (FAST + Apple): the arena the workspace's
-    #: buffers are views of; -1 (no arena) on every other build.
-    var arena_id: Int
-
-    def __init__(out self, ctx: DeviceContext, dims: LlamaDims,
-                 b: Int, l: Int, smax: Int, window: Int, lean: Bool,
-                 opts: BlockOptions) raises:
-        self.key = _workspace_key(b, l, dims, smax, window, lean, opts)
-        self.arena_id = -1
-        comptime if AFN_ATTN_ARENA:
-            # lane afn-attn: every buffer below (cache, rope, ~30 stages, x)
-            # is a sub-buffer view of the arena's chunks (core/device_arena),
-            # so a Metal launch pays for a few live allocations, not ~35.
-            # `_zeros`/`_upload` take the views while the arena is active.
-            self.arena_id = arena_begin()
-        self.kv = LlamaKVCache(ctx, b, dims, smax, window, opts.max_positions)
-        # The table from the record: DEVIATIONS 2930-2933 and 2948; the
-        # default record is `LlamaRopeTable(ctx, dims, ROPE_THETA, smax)`.
-        self.rope = LlamaRopeTable(ctx, dims, opts, smax)
-        self.stages = LlamaDeviceStages(ctx, b, l, smax, dims, window, lean=lean)
-        comptime if AFN_ATTN_ARENA:
-            self.x = _llama_zeros(ctx, b * l * dims.d_model)
-            arena_end(self.arena_id)
-        else:
-            self.x = ctx.enqueue_create_buffer[DType.float32](b * l * dims.d_model)
-
-    def __deinit__(deinit self):
-        """MOJOLEARN_AFN_ATTN_ARENA: the arena's chunks go back to the pool
-        (not freed; the views in this struct's fields die right after this
-        body). Nothing on every other build."""
-        comptime if AFN_ATTN_ARENA:
-            try:
-                arena_release(self.arena_id)
-            except:
-                pass
-
-    def retained_bytes(self) -> Int:
-        var cells = len(self.x) + len(self.kv.k) + len(self.kv.v)
-        cells += len(self.rope.inv_freq) + len(self.rope.cos) + len(self.rope.sin)
-        cells += len(self.stages.gemm_workspace.buffer)
-        cells += len(self.stages.norm1_sumsq)
-        cells += len(self.stages.norm1_out)
-        cells += len(self.stages.q_proj)
-        cells += len(self.stages.k_proj)
-        cells += len(self.stages.v_proj)
-        cells += len(self.stages.q_rope)
-        cells += len(self.stages.k_rope)
-        cells += len(self.stages.k_cache)
-        cells += len(self.stages.v_cache)
-        cells += len(self.stages.scores)
-        cells += len(self.stages.masked)
-        cells += len(self.stages.amax)
-        cells += len(self.stages.aexp)
-        cells += len(self.stages.denom)
-        cells += len(self.stages.weights)
-        cells += len(self.stages.ctxv)
-        cells += len(self.stages.o_proj)
-        cells += len(self.stages.residual1)
-        cells += len(self.stages.norm2_sumsq)
-        cells += len(self.stages.norm2_out)
-        cells += len(self.stages.gate_proj)
-        cells += len(self.stages.up_proj)
-        cells += len(self.stages.silu_out)
-        cells += len(self.stages.gated)
-        cells += len(self.stages.down_proj)
-        cells += len(self.stages.residual2)
-        cells += len(self.stages.qbh)
-        cells += len(self.stages.kbh)
-        cells += len(self.stages.sbh)
-        return cells * 4
-
-    def matches(self, key: List[Int]) -> Bool:
-        if len(key) != len(self.key):
-            return False
-        for i in range(len(key)):  # small-loop(key: shape and option entries of the workspace key): compares cache keys, not data
-            if key[i] != self.key[i]:
-                return False
-        return True
-
+# TOMBSTONE: MOJOLEARN_AFN_ATTN_ARENA (removed: dead; no caller built TransformerWorkspace after lanes x45c and x6) with TransformerWorkspace and _workspace_key deleted 2026-11-09 by lane/m2-neural-leftovers; code recoverable at 0ce88411d3.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_ARENA.patch
 
 
 from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
-
 
 
 struct TransformerSession(Movable, Writable):
@@ -484,7 +369,6 @@ struct TransformerSession(Movable, Writable):
     block, made once at its construction and never exposed or written, so
     unlike a caller's float32 array their address is their version."""
     var ctx: Optional[DeviceContext]
-    var workspace: Optional[TransformerWorkspace]
     var arm15: Optional[AttnStepArm]
     """Lane x45c: the fixed15_v1 block forward on the attention step op (an
     adopted entry over the profile's weights), keyed by `key15`: the shape,
@@ -501,10 +385,6 @@ struct TransformerSession(Movable, Writable):
     into the op's weight buffer (keyed by the caller's addresses and the
     weight epoch, lane x45c), its cache in the op's state buffer, its L
     stages and the backward stages kept by the arm."""
-    # integ-w4: with x45c's fixed15 forward on the op (arm15) and x6's tape
-    # API gone, nothing assigns `workspace` any more; TransformerWorkspace,
-    # _workspace_key and its MOJOLEARN_AFN_ATTN_ARENA arm are owed a
-    # deletion lane (Apple FAST define: tombstone records needed).
     var busy: Bool
     var closed: Bool
     var contexts: Int
@@ -512,7 +392,6 @@ struct TransformerSession(Movable, Writable):
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
-        self.workspace = Optional[TransformerWorkspace]()
         self.arm15 = Optional[AttnStepArm]()
         self.key15 = WeightKey()
         self.arm = Optional[AttnStepArm]()
@@ -531,7 +410,6 @@ struct TransformerSession(Movable, Writable):
         # Same teardown order as ByteLMSession (DEVIATION 2520): buffer
         # destruction enqueues frees, which must drain before context death.
         _ = self.arm^
-        _ = self.workspace^
         _ = self.arm15^
         if self.ctx:
             try:
@@ -544,12 +422,10 @@ struct TransformerSession(Movable, Writable):
         if self.ctx:
             self.ctx.value().synchronize()
         self.arm = None
-        self.workspace = None
         self.arm15 = None
         self.key15 = WeightKey()
         if self.ctx:
             self.ctx.value().synchronize()
-
 
 
 struct _TransformerSessionEnv(Defaultable, Movable):
@@ -585,7 +461,6 @@ def _session_retain_cap_bytes() raises -> Int:
     return _TRANSFORMER_SESSION_ENV.get_or_create_ptr()[].retain_cap_bytes
 
 
-
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_DEFER_REGIME (loser: transformer-forward 1.376) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch
 # TOMBSTONE: MOJOLEARN_IDN_TF_SESSION_LEAN (loser: transformer-forward 1.350) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
@@ -612,11 +487,9 @@ def _transformer_run_session[discard_cache: Bool = False](
                                                       window, opts)
 
 
-
-
 def _stage_cells(stages: LlamaDeviceStages) -> Int:
     """The float cells of one block's stages (the retention budget's count;
-    `TransformerWorkspace.retained_bytes` adds the cache, rope and x)."""
+    the attention step arm's pre stages are counted against the cap)."""
     var cells = len(stages.gemm_workspace.buffer)
     cells += len(stages.norm1_sumsq) + len(stages.norm1_out) + len(stages.q_proj) + len(stages.k_proj)
     cells += len(stages.v_proj) + len(stages.q_rope) + len(stages.k_rope) + len(stages.k_cache)
@@ -695,14 +568,12 @@ def _transformer_run_session_op[discard_cache: Bool](
     return result
 
 
-
 # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
 # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
 # (`TransformerForwardTape`, the standalone single-use forward owner, and
 # `_transformer_saved_backward`, its backward over the saved workspace.)
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
-
 
 
 def _transformer_run_session_backward(
@@ -760,19 +631,16 @@ comptime INT15_ENTRY_ADDRS = 13 + BLOCK_OPTION_ADDRS + 21
 comptime INT15_ENTRY_PARAMS = 10 + BLOCK_OPTION_PARAMS
 
 
-
 def _upload_i8(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.int8]:
     var dev = ctx.enqueue_create_buffer[DType.int8](n)
     ctx.enqueue_copy(dst_buf=dev, src_ptr=i8_ptr(addr))
     return dev^
 
 
-
 def _upload_i32(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.int32]:
     var dev = ctx.enqueue_create_buffer[DType.int32](n)
     ctx.enqueue_copy(dst_buf=dev, src_ptr=i32_ptr(addr))
     return dev^
-
 
 
 def _upload_planes_one(
@@ -784,7 +652,6 @@ def _upload_planes_one(
         _upload_i8(ctx, a[at], rows * cols), _upload_i8(ctx, a[at + 1], rows * cols),
         _upload_i32(ctx, a[at + 2], rows), rows, cols,
     )
-
 
 
 def _upload_planes(
@@ -818,7 +685,6 @@ def _upload_planes(
     ctx.synchronize()
     out.check_shapes(dm, qw, kw, it)
     return out^
-
 
 
 def _transformer_run_session_int15(
@@ -897,7 +763,6 @@ def _transformer_run_session_int15(
 
 # TOMBSTONE: the fixed15_v1 block forward's own workspace body (REFACTORED: onto the attention step op, an adopted entry) deleted 2026-11-09 by lane/x45c-causal-generate-program-decode; code recoverable at 5b5490960d.
 # Restore: git apply experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch; record in docs/TOMBSTONES.md.
-
 
 
 def _transformer_run(
@@ -1025,7 +890,6 @@ def _transformer_run(
     return out_len
 
 
-
 # ===========================================================================
 # The resident decode session (DEVIATION 2940, lane/infer-speed-neural,
 # 2026-09-17): device-owned weights, KV cache, rotary table and L = 1 stages
@@ -1140,7 +1004,6 @@ struct TransformerDecodeSession(Movable, Writable):
         self.release()
 
 
-
 def _require_session_open(s: TransformerDecodeSession) raises:
     if s.busy:
         raise Error("transformer decode session: busy")
@@ -1148,7 +1011,6 @@ def _require_session_open(s: TransformerDecodeSession) raises:
         raise Error("transformer decode session: not open (transformer_decode_session_open first)")
     if not s.usable:
         raise Error("transformer decode session: lost after a failed call; close it and open a new one")
-
 
 
 def _session_dims(
@@ -1163,7 +1025,6 @@ def _session_dims(
     s.it = it
     s.smax = smax
     s.window = window
-
 
 
 def _session_open_run(
@@ -1192,7 +1053,6 @@ def _session_open_run(
     s.op = AttnStepArm(s.ctx.value(), a, b, dm, nh, nkv, hd, it, smax, s0, window, opts, words)
     _session_dims(s, b, dm, nh, nkv, hd, it, smax, window)
     return s0
-
 
 
 def _session_open_run_int15(
@@ -1253,12 +1113,10 @@ def _session_open_run_int15(
     return s0
 
 
-
 def _session_step_run(mut s: TransformerDecodeSession, px: Int, py: Int) raises -> Int:
     """One decode token on the step op. ONE completion wait; the caller's x
     stays live for the call."""
     return s.op.value().run(px, py, 1)
-
 
 
 def _session_decode_run(mut s: TransformerDecodeSession, px: Int, py: Int, steps: Int) raises -> Int:
@@ -1270,17 +1128,14 @@ def _session_decode_run(mut s: TransformerDecodeSession, px: Int, py: Int, steps
     return s.op.value().decode(px, py, steps)
 
 
-
 def _session_forward_run(mut s: TransformerDecodeSession, px: Int, py: Int, l: Int) raises -> Int:
     """`l` tokens per row (a prefill or a chunked continuation) on the step
     op, the arm's kept L stages."""
     return s.op.value().run(px, py, l)
 
 
-
 def _session_export_run(mut s: TransformerDecodeSession, pk: Int, pv: Int) raises -> Int:
     return s.op.value().export(pk, pv)
-
 
 
 def _session_load_run(mut s: TransformerDecodeSession, pk: Int, pv: Int, s0: Int) raises -> Int:
@@ -1289,7 +1144,6 @@ def _session_load_run(mut s: TransformerDecodeSession, pk: Int, pv: Int, s0: Int
             String("transformer decode session: cached_tokens must be in [0, ") + String(s.smax)
             + "], got " + String(s0))
     return s.op.value().load(pk, pv, s0)
-
 
 
 # ===========================================================================
@@ -1384,7 +1238,6 @@ struct CausalLMSession(Movable, Writable):
         self.release()
 
 
-
 def _lm_refuse_nonfinite_device(
     ctx: DeviceContext, name: String, mut buf: DeviceBuffer[DType.float32], n: Int,
 ) raises:
@@ -1393,7 +1246,6 @@ def _lm_refuse_nonfinite_device(
     var bad = device_first_nonfinite(ctx, buf, n)
     if bad >= 0:
         raise Error("mojolearn samba ops: non-finite " + name + " at flat index " + String(bad))
-
 
 
 comptime _LM_ARGMAX_TPB = 256
@@ -1411,7 +1263,6 @@ here and take the per-layer route, one stage allocation, upload and download
 per layer per token."""
 
 
-
 @always_inline
 def _lm_order_key(value: Float32) -> UInt32:
     """An unsigned key whose order is the float order (by bits, never a
@@ -1424,7 +1275,6 @@ def _lm_order_key(value: Float32) -> UInt32:
     if (bits & UInt32(0x80000000)) != UInt32(0):
         return ~bits
     return bits | UInt32(0x80000000)
-
 
 
 def _lm_last_argmax_kernel(
@@ -1484,8 +1334,6 @@ def _lm_last_argmax_kernel(
         out_ids.unsafe_store(r * Int(n_steps_in) + Int(step_in), best)
 
 
-
-
 # TOMBSTONE: _lm_read_argmax_kernel / _lm_read_status_kernel / _lm_read_sample_kernel / _lm_read_progress / _LMSamplingCheckpoint / _lm_sampling_outputs (REFACTORED: the pick rule is the session op OPS_LM_PICK, autograd/generation_ops.mojo; reads run as the decode program) deleted 2026-11-09 by lane/x45c-causal-generate-program-decode; code recoverable at 5b5490960d.
 # Restore: git apply experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch; record in docs/TOMBSTONES.md.
 
@@ -1519,7 +1367,6 @@ def _lm_open_run(mut s: CausalLMSession, pe: Int, pn: Int, ph: Int, b: Int, v: I
     s.v = v
     s.d = d
     s.eps = eps
-
 
 
 def _lm_open_run_int15(
@@ -1558,7 +1405,6 @@ def _lm_open_run_int15(
     s.v = v
     s.d = d
     s.eps = eps
-
 
 
 def _lm_scratch_buffer(ctx: DeviceContext, mut buffer: Optional[DeviceBuffer[DType.float32]], n: Int) raises:
@@ -1632,7 +1478,6 @@ def _lm_layers_run(
         raise original^
     finally:
         _ = shared
-
 
 
 def _lm_run(
@@ -1724,7 +1569,6 @@ def _lm_run(
         _ = ids0^
         _ = next_ids^
         _ = out_dev^
-
 
 
 def _lm_forward_run(
