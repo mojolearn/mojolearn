@@ -52,6 +52,9 @@
 #                     former LabelsMatrix / TreesMatrix constructor)
 #   admitted_finite_refuse(status, est)
 #                     the refusal of a deferred finite test (defer_finite)
+#   admitted_finite_entry_refuse(error, est)
+#                     the same refusal when the entry raised it in its own
+#                     words (one scikit-learn wording for every door)
 #   admit_rows_host(value, context)
 #                     the host rows of a DeviceRows fold, gathered in
 #                     parallel out of the host base (no device round trip)
@@ -744,6 +747,35 @@ def admitted_finite_refuse(status: Int, est: String, name: String = "X") raises:
     finite). Raises scikit-learn's wording, as admit_x would have."""
     if status != 0:
         raise Error("Input " + name + " contains NaN or infinity (" + est + ").")
+
+
+def _entry_nonfinite(text: String, name: String) -> Bool:
+    """True when `text` is a kernel entry's own refusal of a non-finite
+    `name` ("X" or "y"): the x_linear fit's "mojolearn: X contains NaN or
+    infinity", the forest's "X contains NaN or infinity; the forest has no
+    missing-value arm", IsolationForest's "mojolearn IsolationForest: X
+    contains NaN or infinity" and the resident forest's "resident forest
+    requires finite Float32 values" (X only). The admission's own wording
+    ("Input X contains ...") is not an entry's: it is left as it is."""
+    if text.startswith("Input ") or text.startswith("ValueError: Input "):
+        return False
+    if name == "X" and "resident forest requires finite Float32 values" in text:
+        return True
+    return (name + " contains NaN or infinity") in text and "metrics" not in text
+
+
+def admitted_finite_entry_refuse(error: Error, est: String) raises:
+    """The refusal of a deferred finite test that the kernel entry raised in
+    its own words instead of returning the status word (the fit entries of
+    x_linear, the forests and IsolationForest; lane a7c): raises
+    scikit-learn's wording through `admitted_finite_refuse`, the one
+    wording of every deferred refusal. Returns for any other error: the
+    caller re-raises it."""
+    var text = String(error)
+    if _entry_nonfinite(text, "X"):
+        admitted_finite_refuse(1, est, "X")
+    if _entry_nonfinite(text, "y"):
+        admitted_finite_refuse(1, est, "y")
 
 
 def admit_rows_host(value: PythonObject, est: String, context: PythonObject) raises -> PythonObject:
