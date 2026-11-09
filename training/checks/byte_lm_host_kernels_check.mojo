@@ -32,7 +32,6 @@ from gemm.contract import OP_NT
 from gemm.host.neural_gemm import gemm_oracle
 from training.byte_lm_host_kernels import (
     block_fast,
-    ce_causal_mean_loss_fast,
     flushed,
     fmax_fold_span,
     gemm_nt_rows,
@@ -280,24 +279,7 @@ def check_fmax_folds(mut rng: Rng, trials: Int) raises -> Int:
     return report(String("fmax fold, S14 and L1 spellings, ") + String(trials) + " planted rows", bad)
 
 
-def check_loss(mut rng: Rng, n: Int, vocab: Int) raises -> Int:
-    var logits = random_list(rng, n * vocab, Float32(8.0))
-    var targets = List[Int32](capacity=n)
-    for i in range(n):
-        targets.append(Int32(Int(rng.next() >> 33) % vocab))
-    # A row whose exponentials underflow almost everywhere, a flat row, and an
-    # ignored target.
-    for v in range(vocab):
-        logits[v] = Float32(-100.0)
-        logits[vocab + v] = Float32(0.25)
-    logits[3] = Float32(90.0)
-    if n > 2:
-        targets[2] = Int32(IGNORE_INDEX_DEFAULT)
-    var want = ce_forward_oracle(logits, targets, CeConfig.causal_lm(vocab)).loss[0]
-    var got = ce_causal_mean_loss_fast(logits, targets, vocab)
-    var want_l: List[Float32] = [want]
-    var got_l: List[Float32] = [got]
-    return report(String("loss n=") + String(n) + " vocab=" + String(vocab), differing(got_l, want_l))
+# TOMBSTONE: check_loss (ce_causal_mean_loss_fast against the loss oracle) deleted 2026-11-09 by lane x7b-step-ops-host-arm with the function it checked.
 
 
 def main() raises:
@@ -325,8 +307,6 @@ def main() raises:
     bad += check_block(rng, 32, 4, 2, 8, 64, 32, 5)
     bad += check_block(rng, 24, 4, 4, 6, 40, 16, 16)
     bad += check_block(rng, 24, 4, 2, 6, 40, 16, 1)
-    bad += check_loss(rng, 64, 256)
-    bad += check_loss(rng, 5, 300)
     if bad != 0:
         raise Error("byte LM host kernels check: " + String(bad) + " failures")
     print("PASS")
