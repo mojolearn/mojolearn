@@ -224,3 +224,82 @@ finishes) is a host driver loop over trees and needs the header to decide.
 - NVIDIA + AMD: the pointwise-searcher GBDT board rows (with and without held-out rows, with an `Iter` and an
   `IncToDec` detector) A = device rounds vs B = `_OFF`; the ExtraTrees classifier and regressor rows vs main.
 - Identity (the one global verify): the pointwise-searcher symmetric GBDT lanes move on every column.
+
+## 8. Lane T3 (`t3-gbdt-greedy-on-device-loop`, 2026-11-09): the greedy arm moves
+
+**Moved: the default SymmetricTree fit.** `run_tree_layout_traced(enqueue_only=True, gate, bf_table, structure_out,
+words_out)` is tree op 13 `TREE_OP_GREEDY_SEARCH`: the level loop (already blind, DEVIATION 94), then on the device
+(`gbdt/methods/greedy_subsets_searcher/kernel/greedy_gate_walk.mojo`) the post-tree gates of
+`accept_symmetric_level_winner` statement for statement (sentinel / infinite score, unresolved bin-feature, `score > 0`,
+`HasSplit`; the `bin-feature -> (feature, bin, split type)` resolution is a table built once per fit,
+`greedy_bin_feature_table`), the multi-level rollback of the sizes with the discarded slots zeroed, DEVIATION 2002's
+root-coverage check as a status word, and the partition as `DeviceLeafPartitioner.d_part` words. With
+`apply_to_cursor` (the Simple leaves) it also computes `compute_leaf_values_kernel` over every slot and leaves the
+cursor alone. No drain, no host read. Tree op 14 `TREE_OP_SEARCHER_APPLY` is `add_model_value_kernel`'s body behind the
+gate (`add_model_value_gated_kernel`, one `@always_inline` body for both kernels).
+
+`SymDeviceRounds.use_greedy` runs the round: gradients, seed snapshot, bootstrap (shared with the pointwise arm),
+`MakeSequence`, TREE_OP_GREEDY_SEARCH (join on the structure word), leaves (Simple: the searcher's leaves through
+`_leaf_out_gated_kernel`; walked: TREE_OP_LEAF_ESTIMATE over the searcher's row order and partition words),
+TREE_OP_SEARCHER_APPLY on the learn cursor, then the pointwise arm's held-out records / apply / loss / detector. The
+host-tail rerun and `raise_failure` read the greedy record and words (the drained arm's three messages).
+`sym_device_rounds_eligible` admits a greedy fit with one permutation, no feature sampling, `random_strength == 0`, no
+trace, one device, and a single-dimensional pointwise loss whose leaves are Simple (`need_estimation` False: Simple,
+or RMSE + Newton at one iteration, DEVIATION 64) or a Newton / Gradient walk. The per-tree host fill of `h_off` / `h_sz`
+and its two uploads are replaced by `root_partition_kernel` on both arms of the searcher (same words).
+
+**Bits.** None move. The round runs the drained arm's kernels on the drained arm's partition in the same order: the
+Simple leaves are the same per-slot folds (slots past the kept depth hold no rows; `compute_partition_stats`' grid y
+is the slot), the walked leaves are T1b's op with its two bit-inert differences (section 4), the learn add is the same
+`identical_mul_add` per row, the held-out add is `cursor + round(leaf * rate)` as `_apply_last_tree_to_test`'s. The
+canary of DEVIATION 2002 (leg 1) is not launched on this arm: it witnesses the drain the arm no longer has.
+
+**A/B.** `-D MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF` (greedy arm only; `MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF` still turns
+both off). Row in `docs/apple-fast/EXPERIMENTS.md`, B set in `docs/plans/PRE_0867_MEASUREMENT.md`.
+
+**Still on the host loop, per item, and why.**
+- `random_strength != 0` (greedy and pointwise): the greedy score std dev is `compute_target_std_dev`, a device fold
+  read back and finished as a binary64 `sqrt` on the host, and every score kernel takes it BY VALUE
+  (`kernel/compute_scores.mojo` :104, :359, :568, :622, :681, :732). The move is a device word read by every score
+  kernel the greedy and depthwise drivers launch, plus a soft-binary64 sqrt so the host column keeps the bits; not
+  done here (every score launch changes signature, uncompiled in this lane).
+- Feature sampling (`feature_fraction < 1`): each tree has its own layout, so the level loop's launch grids, the
+  workspace's bin-feature tables (`refresh_sampled_layout`, host uploads) and the projected compressed index
+  (`FeatureProjectionWorkspace.project`, which drains) change per tree. The draws themselves are a host RNG chain that
+  could be precomputed, but enqueuing rounds ahead needs one projected index per round in flight (`n_rows x features`
+  words each) and per-round workspace tables: the memory decides against it, so it stays host-driven.
+- More than one permutation (the CTR estimation permutations): owed, not attempted here. The round needs, per
+  permutation, records / bins / partition / leaf op / apply on that permutation's index and cursor, and the host-tail
+  rerun must not double-add a cursor already updated by an earlier permutation of the same round: estimate every
+  permutation first (each joined), then apply, which needs one partition and leaf-op state per permutation in flight.
+- QueryRMSE / PairLogit / YetiRank: the device walk exists (`device_walk_estimate` with query, pair or YetiRank
+  buffers), but TREE_OP_LEAF_ESTIMATE builds its oracle with none of them, the grouped gradient launches and the
+  YetiRank RNG draws are not in the round step, and PairLogit needs the zero-average shift; owed as one op extension.
+- Multiclass / MultiClassOneVsAll / MultiRMSE: `device_multi_walk_estimate` has no bounded enqueue-only form (the
+  single-dimensional `device_walk_enqueue_bounded` is the model); owed.
+- Exact: `estimate_exact` returns a host list and sizes its quantile scratch from the host's widest leaf
+  (`make_exact_quantile_scratch(..., max_leaf)`); an op needs the scratch sized for `n_rows` and the result kept on the
+  device. Owed.
+- Depthwise / Lossguide (`fit_non_symmetric_tree`): a different driver (`greedy_search_helper_depthwise.mojo`) whose
+  per-level leaf selection (Lossguide's best-leaf queue, Depthwise's per-leaf gates) is host logic over drained split
+  records; an enqueue-only form is that driver's own lane. Not attempted.
+- Ordered boosting (`ordered_boosting.mojo`): its own round loop over the fold structure; not attempted.
+- Traced fits and multi-device plans: unchanged from section 7.
+
+**Section 5 deletions, status.** Nothing in 5.1-5.3 lost its last caller: the host loop still serves every fit listed
+above, so `compute_bins_for_model`, `partition_from_bins`, `_apply_last_tree_to_test`, `_test_loss`, the host
+detector calls, the searcher's drained tail, `estimate_advance` / `PendingEstimation` / `walk_leaf_values` /
+`finish_deferred_estimation` and `IDN_GBDT_SYM_EST_DEFER_DRAIN` (still reached by refused greedy fits with one
+permutation and no held-out rows) stay. Removed in this lane: the per-tree host root-partition fill and its two
+uploads (`run_tree_layout_traced`).
+
+**RUN OWED (T3).**
+- Compile once (orchestrator): the GBDT binding (`doc_parallel_boosting.mojo`, `greedy_search_helper.mojo`,
+  `kernel/greedy_gate_walk.mojo` new, `kernel_add_model_value.mojo`, `tree_ops.mojo`), default and with
+  `-D MOJOLEARN_GBDT_GREEDY_DEVICE_ROUNDS_OFF` and `-D MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF`, NVIDIA, AMD and Apple,
+  IDENTICAL and FAST; `checks/executor_t1_tree_ops_compile.mojo` (the table grew to 15 rows); every check that calls
+  `run_tree_layout` / `run_tree_layout_traced` (the root-partition kernel is on both arms).
+- NVIDIA + AMD: the greedy (default) SymmetricTree GBDT board rows (catboost-style regressor RMSE, classifier
+  Logloss; with and without held-out rows; `Iter` and `IncToDec` detectors), A = device rounds vs B =
+  `greedyoff`. Same bits expected between the arms; a difference is a bug.
+- Identity: no lane is expected to move; the one global verify checks it.
