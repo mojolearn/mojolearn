@@ -180,7 +180,7 @@ def svd_op_tall(
     var marks = ctx.enqueue_create_buffer[DType.float32](2)
     enqueue_fill(ctx, marks, Float32(-1.0))
     var gp = _ip(gate)
-    ctx.enqueue_function[rs_block_gated_kernel](
+    ctx.enqueue_function[rs_block_gated_kernel](  # small-launch(n: columns of R, the features): the n x n Jacobi of the QR's R in one block, its pairs across the block
         gp, _fp(rt), _fp(vtb), _fp(su), _fp(marks), Int32(n), Int32(X_DECOMP_SVD_SWEEPS), X_DECOMP_SVD_TOL,
         grid_dim=1, block_dim=RS_TPB,
     )

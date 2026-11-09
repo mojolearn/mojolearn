@@ -3,14 +3,11 @@
 """x_decomp/pls.mojo's component loop on resident device matrices (lane
 py-runtime-b): the driver text of pls.mojo on `DKit` (the same cells and
 reads). The SVD is the executor op (`DKit.svd`, S and V^T resident) and the
-pinv's cut is taken on the device (`pls_pinv_inv_kernel`; lane
+pinv's cut is taken on the device (`DKit.pinv_inv`; lane
 n9b-device-svd-qr: were the solve's words home, the order on the host, and
 s_max home for the cut). GPU binding only."""
-from std.gpu import block_dim, block_idx, thread_idx
 from experiments.classical_identical_ideas.linear_controls import C27_NORM_VECTOR
-from checks.numerics import ftz, identical_mul
-from x_decomp.cells import F32Ptr, OP_CLASSICAL_NORM, ew_cell
-from x_decomp.device import TPB, _blocks
+from x_decomp.cells import F32Ptr, OP_CLASSICAL_NORM
 from x_decomp.kit import (
     Mat, OP_ABS, OP_ADDS, OP_DIV, OP_GTS, OP_LE, OP_MUL, OP_RECIP, OP_SCALE, OP_SELECT, OP_SQRT, OP_SUB,
     mat_from,
@@ -46,20 +43,6 @@ def thin_svd_dev(mut k: DKit, X: DMat, nc: Int, u_based: Bool, mut U: DMat, mut 
         Vt = k.ew2(OP_MUL, Vt, sg)
 
 
-def pls_pinv_inv_kernel(s: F32Ptr, inv: F32Ptr, r_in: Int32, mx: Float32, eps: Float32):
-    """inv[j] = `ew1(OP_RECIP, ew3(OP_SELECT, S, S, 0, cut))` cell j, the
-    cut = f32(s[0] max(shape) eps) taken here (was s[0] home and the product
-    in binary64): max(shape) < 2^24 is exact in float32 and s[0] has 24
-    bits, so the binary64 product was exact and its one rounding to float32
-    is the float32 product's; eps = 2^-23 is an exact scale."""
-    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if j >= Int(r_in):
-        return
-    var cut = ftz(identical_mul(ftz(identical_mul(s.unsafe_load(0), mx)), eps))
-    var kept = ew_cell(OP_SELECT, s.unsafe_load(j), s.unsafe_load(j), Float32(0), cut)
-    inv.unsafe_store(j, ew_cell(OP_RECIP, kept, Float32(0), Float32(0), Float32(0)))
-
-
 def pinv_dev(mut k: DKit, A: DMat) raises -> DMat:
     """`_pinv(k, A)`: V diag(1/s) U^T, values at or below max(shape) eps s_max dropped."""
     var r = min(A.r, A.c)
@@ -68,13 +51,7 @@ def pinv_dev(mut k: DKit, A: DMat) raises -> DMat:
     var Vt = k.zeros(0, 0)
     thin_svd_dev(k, A, r, True, U, S, Vt)
     var mx = max(A.r, A.c)
-    if mx >= 1 << 24:
-        raise Error("x_decomp: PLS pinv shape exceeds float32's exact integers")
-    var inv = DMat(1, r)
-    if r > 0:
-        k.ctx.enqueue_function[pls_pinv_inv_kernel](
-            S.p(), inv.p(), Int32(r), Float32(mx), Float32(PLS_F32_EPS), grid_dim=_blocks(r), block_dim=TPB
-        )
+    var inv = k.pinv_inv(S, r, mx)
     return k.mm(Vt, k.ew2(OP_MUL, U, inv), True, True)
 
 

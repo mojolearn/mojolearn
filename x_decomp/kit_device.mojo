@@ -33,7 +33,8 @@ from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from x_decomp.cells import F32Ptr, I32Ptr
-from checks.numerics import ftz
+from checks.numerics import ftz, identical_mul
+from x_decomp.cells import ew_cell
 from x_decomp.rr import RR_EIGH_SWEEPS
 from x_decomp.cells import X_DECOMP_SVD_SWEEPS
 from x_decomp.svd_ops import qr_op_q, svd_op_tall
@@ -149,6 +150,21 @@ def pinv_mask_dev_kernel(keep: F32Ptr, w: F32Ptr, dst: F32Ptr, n: Int32, eps: Fl
     var cb = bitcast[DType.uint32](cut) & UInt32(0x7FFFFFFF)
     var take = ab <= UInt32(0x7F800000) and cb <= UInt32(0x7F800000) and ab > cb
     dst.unsafe_store(j, keep.unsafe_load(j) if take else Float32(0))
+
+
+def pinv_inv_dev_kernel(s: F32Ptr, inv: F32Ptr, r_in: Int32, mx: Float32, eps: Float32):
+    """inv[j] = `ew1(OP_RECIP, ew3(OP_SELECT, S, S, 0, cut))` cell j with
+    cut = f32(s[0] mx eps) taken here (PLS's `_pinv`; lane n9b-device-svd-qr:
+    was s[0] home and the product in binary64). mx < 2^24 is exact in
+    float32 and s[0] has 24 bits, so the binary64 product s[0] mx was exact
+    and its one rounding is the float32 product's; eps = 2^-23 is an exact
+    scale."""
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j >= Int(r_in):
+        return
+    var cut = ftz(identical_mul(ftz(identical_mul(s.unsafe_load(0), mx)), eps))
+    var kept = ew_cell(OP_SELECT, s.unsafe_load(j), s.unsafe_load(j), Float32(0), cut)
+    inv.unsafe_store(j, ew_cell(OP_RECIP, kept, Float32(0), Float32(0), Float32(0)))
 
 
 def dk_eig_sticky_kernel(status: I32Ptr, dst: F32Ptr):
@@ -794,6 +810,18 @@ struct DKit(Movable):
         _ = status^
         _ = ds^
         _ = dv^
+
+    def pinv_inv(self, S: DMat, r: Int, mx: Int) raises -> DMat:
+        """PLS's pinv weights: 1 / s over s > f32(s[0] mx 2^-23), else 0, on
+        the device (`pinv_inv_dev_kernel`); mx = max(shape)."""
+        if mx < 1 or mx >= 1 << 24:
+            raise Error("x_decomp: the pinv cut needs 1 <= max(shape) < 2^24")
+        var inv = DMat(1, r)
+        if r > 0:
+            self.ctx.enqueue_function[pinv_inv_dev_kernel](
+                S.p(), inv.p(), Int32(r), Float32(mx), Float32(_F32_EPS), grid_dim=_blocks(r), block_dim=TPB
+            )
+        return inv^
 
     def qr_q(mut self, A: DMat, qc: Int) raises -> DMat:
         """The first qc columns of Q of the sliced Householder QR of a
