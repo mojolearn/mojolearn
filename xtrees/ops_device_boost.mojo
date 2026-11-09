@@ -188,6 +188,11 @@ def samme_step_on[CACHE: Bool = False](
     gets [status, alpha, error, new total]. Returns True when `d_w` moved.
     (AdaBoostClassifier's device rounds call this on the weights they keep
     resident across rounds; lane n5-prophet-adaboost-loops.)"""
+    # the buffers are borrowed handles of resident state: the kernels take
+    # mutable device pointers (the xtrees/dart_device.mojo:361 cast)
+    var pw = d_w.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
+    var pp = d_p.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
+    var py = d_y.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
     var m = fold_chunks(n)
     var d_s = ctx.enqueue_create_buffer[DType.uint64](2 * m)
     var wrong: DeviceBuffer[DType.uint8]
@@ -197,12 +202,12 @@ def samme_step_on[CACHE: Bool = False](
         wrong = d_p.create_sub_buffer[DType.uint8](0, 1)  # unread B view
     comptime if CACHE:
         ctx.enqueue_function[samme_sums_kernel[CACHE]](
-            d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), d_s.unsafe_ptr(), wrong.unsafe_ptr(),
+            pw, pp, py, Int64(n), Int64(m), d_s.unsafe_ptr(), wrong.unsafe_ptr(),
             grid_dim=_blocks(m), block_dim=OPS_TPB,
         )
     else:
         ctx.enqueue_function[samme_sums_kernel_reference](
-            d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), d_s.unsafe_ptr(),
+            pw, pp, py, Int64(n), Int64(m), d_s.unsafe_ptr(),
             grid_dim=_blocks(m), block_dim=OPS_TPB,
         )
     fold_tree_device(ctx, d_s, m, 2)
@@ -229,12 +234,12 @@ def samme_step_on[CACHE: Bool = False](
                 var d_q = ctx.enqueue_create_buffer[DType.uint64](m)
                 comptime if CACHE:
                     ctx.enqueue_function[samme_update_kernel[CACHE]](
-                        d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), _w(boost),
+                        pw, pp, py, Int64(n), Int64(m), _w(boost),
                         d_q.unsafe_ptr(), wrong.unsafe_ptr(), grid_dim=_blocks(m), block_dim=OPS_TPB,
                     )
                 else:
                     ctx.enqueue_function[samme_update_kernel_reference](
-                        d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), _w(boost),
+                        pw, pp, py, Int64(n), Int64(m), _w(boost),
                         d_q.unsafe_ptr(), grid_dim=_blocks(m), block_dim=OPS_TPB,
                     )
                 fold_tree_device(ctx, d_q, m, 1)
@@ -398,6 +403,10 @@ def r2_step_on[CACHE: Bool = False](
     `stats` (host, 4 float64) gets [status, alpha, error, new total].
     Returns True when `d_w` moved. (AdaBoostRegressor's device rounds call
     this on the weights they keep resident; lane n5-prophet-adaboost-loops.)"""
+    # borrowed handles of resident state; the kernels take mutable pointers
+    var pw = d_w.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
+    var pp = d_p.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
+    var py = d_y.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
     var m = fold_chunks(n)
     var d_s = ctx.enqueue_create_buffer[DType.uint64](m)
     var errors: DeviceBuffer[DType.uint64]
@@ -406,7 +415,7 @@ def r2_step_on[CACHE: Bool = False](
     else:
         errors = d_s.copy()  # unread B view; no cache allocation
     ctx.enqueue_function[r2_emax_kernel](
-        d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), d_s.unsafe_ptr(),
+        pw, pp, py, Int64(n), Int64(m), d_s.unsafe_ptr(),
         grid_dim=_blocks(m), block_dim=OPS_TPB,
     )
     var s = 1
@@ -418,12 +427,12 @@ def r2_step_on[CACHE: Bool = False](
     var emax = _head_u64(ctx, d_s, 1)[0]
     comptime if CACHE:
         ctx.enqueue_function[r2_err_kernel[CACHE]](
-            d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), emax, Int64(loss),
+            pw, pp, py, Int64(n), Int64(m), emax, Int64(loss),
             d_s.unsafe_ptr(), errors.unsafe_ptr(), grid_dim=_blocks(m), block_dim=OPS_TPB,
         )
     else:
         ctx.enqueue_function[r2_err_kernel_reference](
-            d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), emax, Int64(loss),
+            pw, pp, py, Int64(n), Int64(m), emax, Int64(loss),
             d_s.unsafe_ptr(), grid_dim=_blocks(m), block_dim=OPS_TPB,
         )
     fold_tree_device(ctx, d_s, m, 1)
@@ -443,13 +452,13 @@ def r2_step_on[CACHE: Bool = False](
         var lb = identical_log64(beta)
         comptime if CACHE:
             ctx.enqueue_function[r2_update_kernel[CACHE]](
-                d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), emax, Int64(loss),
+                pw, pp, py, Int64(n), Int64(m), emax, Int64(loss),
                 _w(learning_rate), _w(lb), Int64(0 if last else 1), d_s.unsafe_ptr(), errors.unsafe_ptr(),
                 grid_dim=_blocks(m), block_dim=OPS_TPB,
             )
         else:
             ctx.enqueue_function[r2_update_kernel_reference](
-                d_w.unsafe_ptr(), d_p.unsafe_ptr(), d_y.unsafe_ptr(), Int64(n), Int64(m), emax, Int64(loss),
+                pw, pp, py, Int64(n), Int64(m), emax, Int64(loss),
                 _w(learning_rate), _w(lb), Int64(0 if last else 1), d_s.unsafe_ptr(),
                 grid_dim=_blocks(m), block_dim=OPS_TPB,
             )
