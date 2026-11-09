@@ -25,10 +25,24 @@ the Metal witness may rerun it (x_linear/witness.mojo). tt = 2^-k is the
 host's exact sequence, passed in.
 
 Layout (float32 words, P = p): theta[2] P | g[2] P | dir[2] P | S M*P | Y M*P |
-rho M | parts vscratch(P) | sc[2] 4 (f, slope, count bits, head bits) | flags 2.
+rho M | parts vscratch(P) | sc[2] 4 (f, slope, count bits, head bits) | flags 4
+(accepted, stop, halt, accepted units since the last reset).
+
+Lane n2-cd-qn-glm-loops: in `identical` builds off Apple the host queues
+LBD_BATCH first-trial units (tt = 1) back to back and reads the four flag
+words once. `lbd_halt_kernel` sets the halt word after a unit that was
+rejected or stopped the fit; the trial and step kernels of every unit
+queued after it do nothing, and the objective those units still run reads a
+theta it already evaluated (or the rejected trial's scratch) and rewrites
+the same words, because it is a pure function of theta. A rejected first
+trial then halves on the host exactly as before. Same trials, same words,
+same iteration count; one wait per LBD_BATCH accepted iterations instead
+of one per trial.
 """
 from std.gpu import block_idx, thread_idx, block_dim
 from std.memory import bitcast
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_linear.ops import FP, IP, ld, st, fm, fmad
 from x_linear.team import Team, team_at
@@ -37,6 +51,9 @@ from x_linear.vfold import vscratch
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 
 comptime LBD_TPB = 256
+#: first-trial units queued between host reads (see the module docstring)
+comptime LBD_BATCH = 8
+comptime LBD_BATCH_ON = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not has_apple_gpu_accelerator()
 
 
 @always_inline
@@ -85,7 +102,7 @@ def lbd_flags(p: Int) -> Int:
 
 
 def lbd_words(p: Int) -> Int:
-    return lbd_flags(p) + 2
+    return lbd_flags(p) + 4
 
 
 def lbd_blocks(count: Int) -> Int:
@@ -120,45 +137,63 @@ def lbd_start_kernel(lw: FP, p: Int32, tol: Float32, wf: IP, woff: Int32, nonce:
         st(lw, sc + 3, _bits(r[3]))
         st(lw, lbd_flags(pp), Float32(1))
         st(lw, lbd_flags(pp) + 1, Float32(r[0]))
+        st(lw, lbd_flags(pp) + 2, Float32(0))
+        st(lw, lbd_flags(pp) + 3, Float32(0))
     witness_end(wf, woff, nonce)
 
 
 def lbd_trial_kernel(lw: FP, p: Int32, c: Int32, tt: Float32, wf: IP, woff: Int32, nonce: Int32):
-    """theta[o] = tt dir[c] + theta[c], a thread an entry."""
+    """theta[o] = tt dir[c] + theta[c], a thread an entry; nothing once the
+    halt word is set."""
     var j = Int(block_idx.x) * LBD_TPB + Int(thread_idx.x)
     var pp = Int(p)
     var cc = Int(c)
-    if j < pp:
+    if j < pp and ld(lw, lbd_flags(pp) + 2) == Float32(0):
         st(lw, lbd_th(pp, 1 - cc) + j, fmad(tt, ld(lw, lbd_dr(pp, cc) + j), ld(lw, lbd_th(pp, cc) + j)))
     witness_end(wf, woff, nonce)
 
 
 def lbd_step_kernel(lw: FP, p: Int32, c: Int32, tt: Float32, tol: Float32, wf: IP, woff: Int32, nonce: Int32):
-    """Accept or not; on accept the pair and the next direction at parity o."""
+    """Accept or not; on accept the pair and the next direction at parity o.
+    Nothing once the halt word is set (every thread reads it at entry; only
+    `lbd_halt_kernel`, a later launch, writes it)."""
     var t = _team(lw)
     var pp = Int(p)
-    var cc = Int(c)
-    var o = 1 - cc
-    var parts = lw + lbd_parts(pp)
-    var scc = lbd_sc(pp, cc)
-    var sco = lbd_sc(pp, o)
-    var f = ld(lw, scc)
-    var fnew = ld(lw, sco)
-    var slope = ld(lw, scc + 1)
-    var ok = lb_accept(t, lw, lbd_g(pp, o), lbd_dr(pp, cc), pp, f, fnew, tt, slope, parts)
-    if ok == 1:
-        var r = lb_pair(t, lw, lbd_th(pp, cc), lw, lbd_th(pp, o), lw, lbd_g(pp, cc), lbd_g(pp, o), lbd_s(pp),
-                        lbd_y(pp), lbd_rho(pp), pp, _int(ld(lw, scc + 2)), _int(ld(lw, scc + 3)), parts)
-        var dd = lb_direction(t, lw, lbd_g(pp, o), lbd_dr(pp, o), lbd_s(pp), lbd_y(pp), lbd_rho(pp), pp, r[0], r[1],
-                              tol, parts)
+    if ld(lw, lbd_flags(pp) + 2) == Float32(0):
+        var cc = Int(c)
+        var o = 1 - cc
+        var parts = lw + lbd_parts(pp)
+        var scc = lbd_sc(pp, cc)
+        var sco = lbd_sc(pp, o)
+        var f = ld(lw, scc)
+        var fnew = ld(lw, sco)
+        var slope = ld(lw, scc + 1)
+        var ok = lb_accept(t, lw, lbd_g(pp, o), lbd_dr(pp, cc), pp, f, fnew, tt, slope, parts)
+        if ok == 1:
+            var r = lb_pair(t, lw, lbd_th(pp, cc), lw, lbd_th(pp, o), lw, lbd_g(pp, cc), lbd_g(pp, o), lbd_s(pp),
+                            lbd_y(pp), lbd_rho(pp), pp, _int(ld(lw, scc + 2)), _int(ld(lw, scc + 3)), parts)
+            var dd = lb_direction(t, lw, lbd_g(pp, o), lbd_dr(pp, o), lbd_s(pp), lbd_y(pp), lbd_rho(pp), pp, r[0], r[1],
+                                  tol, parts)
+            if t.lead():
+                st(lw, sco + 1, dd[1])
+                st(lw, sco + 2, _bits(dd[2]))
+                st(lw, sco + 3, _bits(dd[3]))
+                st(lw, lbd_flags(pp) + 1, Float32(dd[0]))
         if t.lead():
-            st(lw, sco + 1, dd[1])
-            st(lw, sco + 2, _bits(dd[2]))
-            st(lw, sco + 3, _bits(dd[3]))
-            st(lw, lbd_flags(pp) + 1, Float32(dd[0]))
-    if t.lead():
-        st(lw, lbd_flags(pp), Float32(ok))
+            st(lw, lbd_flags(pp), Float32(ok))
     witness_end(wf, woff, nonce)
+
+
+def lbd_halt_kernel(lw: FP, p: Int32):
+    """One thread, after a queued unit's step: a live fit counts an accepted
+    unit (flags[3]) and halts (flags[2] = 1) at a rejected trial or a stop."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        var fl = lbd_flags(Int(p))
+        if ld(lw, fl + 2) == Float32(0):
+            if ld(lw, fl) != Float32(0):
+                st(lw, fl + 3, ld(lw, fl + 3) + Float32(1))
+            if ld(lw, fl) == Float32(0) or ld(lw, fl + 1) != Float32(0):
+                st(lw, fl + 2, Float32(1))
 
 
 trait LbObjective(Movable):
@@ -188,8 +223,10 @@ def lbfgs_device[O: LbObjective](
     var lp = FP(unsafe_from_address=Int(lw.unsafe_ptr()))
     var ob = obj.blocks()
     var bt = lbd_blocks(p)
-    var flags = List[Float32](length=2, fill=Float32(0))
-    var fl = lw.create_sub_buffer[DType.float32](lbd_flags(p), 2)
+    var flags = List[Float32](length=4, fill=Float32(0))
+    var fl = lw.create_sub_buffer[DType.float32](lbd_flags(p), 4)
+    # the halt word and the unit count (`lbd_halt_kernel`)
+    var hb = lw.create_sub_buffer[DType.float32](lbd_flags(p) + 2, 2)
     var tries = 0
     while True:
         var nonce = wit.begin()
@@ -212,7 +249,38 @@ def lbfgs_device[O: LbObjective](
     while it < max_iter:
         var tt = Float32(1)
         var accepted = False
-        for _ in range(40):
+        var host_trials = 40
+        comptime if LBD_BATCH_ON:
+            var k = min(LBD_BATCH, max_iter - it)
+            ctx.enqueue_memset(hb, Float32(0))
+            var cu = c
+            for _u in range(k):  # driver-loop: over queued first-trial units, gated by the device halt word
+                var nonce = wit.begin()
+                var wf = wit.p()
+                ctx.enqueue_function[lbd_trial_kernel](lp, Int32(p), Int32(cu), Float32(1), wf, Int32(0), nonce,
+                                                       grid_dim=bt, block_dim=LBD_TPB)
+                obj.enqueue(ctx, lp + lbd_th(p, 1 - cu), lp + lbd_g(p, 1 - cu), lp + lbd_sc(p, 1 - cu), wf, bt, nonce)
+                ctx.enqueue_function[lbd_step_kernel](lp, Int32(p), Int32(cu), Float32(1), tol, wf, Int32(bt + ob), nonce,  # small-launch(p: parameters): one block strides the P-vector accept, pair and two-loop
+                                                      grid_dim=1, block_dim=LBD_TPB)
+                ctx.enqueue_function[lbd_halt_kernel](lp, Int32(p), grid_dim=1, block_dim=1)
+                cu = 1 - cu
+            ctx.enqueue_copy(dst_ptr=flags.unsafe_ptr(), src_buf=fl)
+            ctx.synchronize()
+            var n_acc = Int(flags[3])
+            it += n_acc
+            if n_acc % 2 == 1:
+                c = 1 - c
+            if it >= max_iter:
+                return (-it, c)
+            if flags[2] == Float32(0):
+                continue  # every queued unit accepted, no stop
+            if flags[0] != Float32(0):
+                return (it, c)  # the halting unit accepted and stopped the fit
+            # the halting unit's first trial was rejected: halve on the host
+            ctx.enqueue_memset(hb, Float32(0))
+            tt = fm(tt, Float32(0.5))
+            host_trials = 39
+        for _ in range(host_trials):
             tries = 0
             while True:
                 var nonce = wit.begin()

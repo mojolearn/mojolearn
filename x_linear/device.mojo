@@ -393,6 +393,11 @@ def bayes_wgram_fin_kernel(n: Int32, d: Int32, gparts: FP, fw: FP, wf: IP, woff:
             st(fw, dd + dd * dd + (c - cells), v)
     witness_end(wf, woff, nonce)
 
+#: BayesianRidge iterations between host reads of the stop word off Apple
+#: (lane n2-cd-qn-glm-loops; the FAST Apple batch is C1_BATCH = 8 too)
+comptime BAYES_IDN_READ = 8
+
+
 def bayes_coef_kernel(fw: FP, res: FP, d: Int32, state: FP, wf: IP, woff: Int32, nonce: Int32):
     """Thread j: the next iteration's coefficient j (`bayes_coef_one`, lambda
     and alpha from state) unless the step stopped (its final update wrote them)."""
@@ -425,8 +430,10 @@ def bayes_eig_kernel(fw: FP, fp: FP, res: FP, ip: IP, d: Int32, nb: Int32, ypart
     witness_end(wf, woff, nonce)
 
 def bayes_resid_kernel(x: FP, y: FP, n: Int32, d: Int32, fw: FP, res: FP, state: FP, rows: FP, wf: IP, woff: Int32, nonce: Int32):
+    """Row i's residual; a stopped fit (state[5] != 0) writes nothing, so
+    iterations queue past the stop (lane n2-cd-qn-glm-loops)."""
     var i = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
-    if i < Int(n):
+    if i < Int(n) and ld(state, 5) == Float32(0):
         var dd = Int(d)
         var p = Float32(0)
         for j in range(dd):
@@ -434,10 +441,11 @@ def bayes_resid_kernel(x: FP, y: FP, n: Int32, d: Int32, fw: FP, res: FP, state:
         st(rows, i, fs(fs(ld(y, i), ld(state, 2)), p))
     witness_end(wf, woff, nonce)
 
-def bayes_part_kernel(rows: FP, y: FP, n: Int32, sw: Int32, parts: FP, wf: IP, woff: Int32, nonce: Int32):
+def bayes_part_kernel(rows: FP, y: FP, n: Int32, sw: Int32, parts: FP, state: FP, wf: IP, woff: Int32, nonce: Int32):
+    """Row block bk's sse partial; gated on state[5] like `bayes_resid_kernel`."""
     var bk = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var nn = Int(n)
-    if bk < fold_blocks(nn):
+    if bk < fold_blocks(nn) and ld(state, 5) == Float32(0):
         var lo = bk * FOLD_BLOCK
         st(parts, bk, _sse_part(rows, y, nn, sw != 0, lo, min(FOLD_BLOCK, nn - lo)))
     witness_end(wf, woff, nonce)
@@ -445,13 +453,17 @@ def bayes_part_kernel(rows: FP, y: FP, n: Int32, sw: Int32, parts: FP, wf: IP, w
 def bayes_step_kernel(fw: FP, res: FP, fp: FP, d: Int32, nb: Int32, parts: FP, state: FP, it: Int32, wf: IP, woff: Int32, nonce: Int32):
     """One thread: the nb row-block sse partials folded blocks ascending,
     then the scalar update (`bayes_step`, O(d) folds); `bayes_coef_kernel`
-    then writes the next coefficients a thread each."""
-    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+    then writes the next coefficients a thread each. A stopped fit (state[5]
+    != 0) does nothing; a live step stores the iterations run, it + 1, into
+    state[8], so the host reads the count with the stop word once per
+    BAYES_IDN_READ iterations (lane n2-cd-qn-glm-loops)."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0 and ld(state, 5) == Float32(0):
         var sse = fold_parts(parts, 0, Int(nb))
         var r = bayes_step(fw, res, Int(d), fp, ld(state, 1), ld(state, 0), sse, ld(state, 3), Int(it))
         st(state, 0, r[1])
         st(state, 1, r[0])
         st(state, 5, Float32(r[2]))
+        st(state, 8, i2f(Int(it) + 1))
     witness_end(wf, woff, nonce)
 
 #: FAST on Apple (lane/apple-fast-classical, re-expressed on the grid
@@ -3445,14 +3457,14 @@ def glm_accept_kernel(res: FP, trial: FP, m: Int32):
         st(res, j, ld(trial, j))
 
 
-def _glm_grid_objective(
-    mut ctx: DeviceContext, theta: FP, x: FP, y: FP, eta: FP, lt: FP, tw: FP, fparts: FP, sc: FP,
-    sc_buf: DeviceBuffer[DType.float32], hsc: FP,
+def _glm_grid_objective_enqueue(
+    mut ctx: DeviceContext, theta: FP, x: FP, y: FP, eta: FP, lt: FP, fparts: FP, sc: FP,
     n: Int, d: Int, fi: Int, power: Float32, link: Int, sw: Int, alpha: Float32, rows_grid: Int,
     mut wit: Witness, gr: FP, hr: FP,
-) raises -> Float32:
-    """`_objective_team` at theta on the grid (map) and one block (fold); eta
-    holds its linear predictor afterwards."""
+) raises:
+    """`_objective_team` at theta into sc[1], enqueued (the map on the grid,
+    the fold); eta holds its linear predictor afterwards. Off Apple nothing
+    waits; on Apple the witness checks each try."""
     var tries = 0
     while True:
         var nonce = wit.begin()
@@ -3471,12 +3483,41 @@ def _glm_grid_objective(
         tries += 1
         if tries >= WITNESS_TRIES:
             wit.fail()
-    ctx.synchronize()
-    var v = Float32(0)
+
+
+def _glm_grid_objective(
+    mut ctx: DeviceContext, theta: FP, x: FP, y: FP, eta: FP, lt: FP, tw: FP, fparts: FP, sc: FP,
+    sc_buf: DeviceBuffer[DType.float32], hsc: FP,
+    n: Int, d: Int, fi: Int, power: Float32, link: Int, sw: Int, alpha: Float32, rows_grid: Int,
+    mut wit: Witness, gr: FP, hr: FP,
+) raises -> Float32:
+    """`_glm_grid_objective_enqueue`, then the value home behind one wait
+    (lane n2-cd-qn-glm-loops: a bare `synchronize` before the ordered copy
+    read nothing and is gone)."""
+    _glm_grid_objective_enqueue(ctx, theta, x, y, eta, lt, fparts, sc, n, d, fi, power, link, sw, alpha,
+                                rows_grid, wit, gr, hr)
     ctx.enqueue_copy(dst_ptr=hsc, src_buf=sc_buf)
     ctx.synchronize()
-    v = hsc.unsafe_load(1)
-    return v
+    return hsc.unsafe_load(1)
+
+
+def glm_ls_first_kernel(sc: FP, res: FP, trial: FP, m: Int32, f: Float32, tt: Float32):
+    """The line search's first trial decided on the device (lane
+    n2-cd-qn-glm-loops): when the step flag sc[2] is 0, the host's Armijo
+    test (`ft == ft and ft <= f + 1e-4 * tt * slope`, the same fa / fm
+    roundings) on the trial objective sc[1] and the slope sc[3]; accepted,
+    the trial goes into res (one thread a coefficient). sc[5] = 1 accepted,
+    else 0. Every thread reads the same three words, written by earlier
+    launches."""
+    var ok = False
+    if ld(sc, 2) == Float32(0):
+        var ft = ld(sc, 1)
+        ok = ft == ft and ft <= fa(f, fm(fm(Float32(1e-4), tt), ld(sc, 3)))
+    var j = _gt()
+    if ok and j < Int(m):
+        st(res, j, ld(trial, j))
+    if j == 0:
+        st(sc, 5, Float32(1) if ok else Float32(0))
 
 
 def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
@@ -3615,6 +3656,21 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
                          FP(unsafe_from_address=Int(dl_.unsafe_ptr())), FP(unsafe_from_address=Int(dyv.unsafe_ptr())),
                          FP(unsafe_from_address=Int(dslp.unsafe_ptr())), IP(unsafe_from_address=Int(dgm.unsafe_ptr())),
                          FP(unsafe_from_address=Int(dsc.unsafe_ptr())), m, d, alpha, tol)
+        # lane n2-cd-qn-glm-loops: the first trial (tt = 1) is enqueued behind
+        # the step and decided on the device (`glm_ls_first_kernel`), so the
+        # step's flag and slope, the trial objective and the verdict come home
+        # behind ONE wait; a Newton step that is accepted at once (the common
+        # case) costs one wait an iteration where it cost two (three with the
+        # objective's bare sync). A rejected first trial halves on the host as
+        # before. Same launches, same words: no bit moves. At a converged or
+        # failed step the trial objective is computed and never read.
+        ctx.enqueue_function[glm_trial_kernel](dstep.unsafe_ptr(), dres.unsafe_ptr(), dtrial.unsafe_ptr(), Int32(m),
+                                               Float32(1), grid_dim=_xg_blocks(m), block_dim=XG_TPB)
+        _glm_grid_objective_enqueue(ctx, FP(unsafe_from_address=Int(dtrial.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), n, d, fi, power, link, sw, alpha, rows_grid, wit, FP(unsafe_from_address=Int(dgr.unsafe_ptr())), FP(unsafe_from_address=Int(dhr.unsafe_ptr())))
+        ctx.enqueue_function[glm_ls_first_kernel](FP(unsafe_from_address=Int(dsc.unsafe_ptr())),
+                                                  FP(unsafe_from_address=Int(dres.unsafe_ptr())),
+                                                  FP(unsafe_from_address=Int(dtrial.unsafe_ptr())), Int32(m), f,
+                                                  Float32(1), grid_dim=_xg_blocks(m), block_dim=XG_TPB)
         ctx.enqueue_copy(dst_ptr=hscp, src_buf=dsc)
         ctx.synchronize()
         var flag = Int(hscp.unsafe_load(2))
@@ -3627,7 +3683,17 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
             break
         var tt = Float32(1)
         var accepted = False
-        for _ in range(40):
+        if hscp.unsafe_load(5) != Float32(0):
+            var ft1 = hscp.unsafe_load(1)
+            if ft1 == f:
+                stall += 1
+            else:
+                stall = 0
+            f = ft1
+            accepted = True
+        else:
+            tt = fm(tt, Float32(0.5))
+        for _ in range(39 if not accepted else 0):
             ctx.enqueue_function[glm_trial_kernel](dstep.unsafe_ptr(), dres.unsafe_ptr(), dtrial.unsafe_ptr(), Int32(m), tt,
                                                    grid_dim=_xg_blocks(m), block_dim=XG_TPB)
             var ft = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dtrial.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit, FP(unsafe_from_address=Int(dgr.unsafe_ptr())), FP(unsafe_from_address=Int(dhr.unsafe_ptr())))
@@ -5630,7 +5696,8 @@ def fit_device(
                             else:
                                 ctx.enqueue_function[bayes_part_kernel](
                                     drows.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(sw), dparts.unsafe_ptr(),
-                                    wit2.p(), Int32(_xg_blocks(n)), nonce, grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
+                                    dstate.unsafe_ptr(), wit2.p(), Int32(_xg_blocks(n)), nonce,
+                                    grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
                                 )
                             if wit2.ok(ctx, _xg_blocks(n) + pblocks, "Bayes residuals"):
                                 break
@@ -5651,6 +5718,9 @@ def fit_device(
                         break
                     fresh = hst[6] == Float32(0)
                 max_iter = 0  # the loop below ran here
+        var bayes_read = BAYES_IDN_READ
+        comptime if has_apple_gpu_accelerator():
+            bayes_read = 1
         for it in range(max_iter):
             iters = it + 1
             if gram_sse:
@@ -5685,7 +5755,8 @@ def fit_device(
                 else:
                     ctx.enqueue_function[bayes_part_kernel](
                         drows.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(sw), dparts.unsafe_ptr(),
-                        wit2.p(), Int32(_xg_blocks(n)), nonce, grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
+                        dstate.unsafe_ptr(), wit2.p(), Int32(_xg_blocks(n)), nonce,
+                        grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
                     )
                 if wit2.ok(ctx, _xg_blocks(n) + pblocks, "Bayes residuals"):
                     break
@@ -5703,10 +5774,17 @@ def fit_device(
             )
             if not wit2.ok(ctx, 1 + _xg_blocks(d), "Bayes step"):
                 wit2.fail()
-            ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dstate)
-            ctx.synchronize()
-            if hst[5] != Float32(0):
-                break
+            # lane n2-cd-qn-glm-loops: the stop word and the count come home
+            # once per `bayes_read` iterations; the kernels of an iteration
+            # queued after the stop write nothing (state[5] gates them), so
+            # the fit ends at the same step with the same words. Apple reads
+            # every iteration (its witness reruns a cut iteration).
+            if (it + 1) % bayes_read == 0 or it + 1 == max_iter:
+                ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dstate)
+                ctx.synchronize()
+                if hst[5] != Float32(0):
+                    iters = Int(hst[8])
+                    break
         var nf = wit2.begin()
         if dev_iters:
             ctx.enqueue_function[c1_bayes_finish_kernel](
