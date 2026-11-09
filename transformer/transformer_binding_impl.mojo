@@ -2043,7 +2043,7 @@ def _lm_run(
     var finite_checks = Optional[DeviceNonfinitePair]()
     try:
         var cur_l = l
-        for step in range(n_steps):  # driver-loop: over autoregressive decode steps of the private resident loop
+        for step in range(n_steps):
             var m = b * cur_l
             _lm_scratch_buffer(ctx, workspace.x, m * d)
             ref x = workspace.x.value()
@@ -2084,7 +2084,7 @@ def _lm_run(
             )
             if p_logits != 0 and step == n_steps - 1:
                 var lp = _f32_ptr(p_logits)
-                for r in range(b):  # driver-loop: over batch rows (last-position logits transfer spans)
+                for r in range(b):
                     logits_rows.append(logits.create_sub_buffer[DType.float32]((r * cur_l + cur_l - 1) * v, v))
                     ctx.enqueue_copy(dst_ptr=lp + r * v, src_buf=logits_rows[r])
             ctx.synchronize()
