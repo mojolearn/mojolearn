@@ -29,6 +29,9 @@ def _check_configuration() -> Bool:
     # registered sched_exp_block, which nothing called after the schedules went native; PURITY_3_OFF / PURITY_6_OFF only
     # changed the x_neighbors_purity_flags word, which nothing read. Recoverable at 485ba9cc1.
     comptime assert not (is_defined["MOJOLEARN_SCHED_FAST_TABLE"]() or is_defined["MOJOLEARN_SCHED_FAST_TABLE_OFF"]()), "removed: MOJOLEARN_SCHED_FAST_TABLE (sched_exp_block) had no caller; the schedules run lr_schedule_at / lr_schedule_series"
+    # Deleted 2026-11-09 (lane x4-transformer-on-executor): the device per-call fresh prefill entry and the public
+    # decode session's deferred-check window (docs/TOMBSTONES.md). Recoverable at f59d913b0b.
+    comptime assert not (is_defined["MOJOLEARN_TRANSFORMER_FRESH_PREFILL"]() or is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"]()), "removed: MOJOLEARN_TRANSFORMER_FRESH_PREFILL / MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (the GPU binding's per-call transformer_forward_fresh) superseded by the block session's fresh prefill; deleted 2026-11-09, recoverable at f59d913b0b; see docs/TOMBSTONES.md"
     comptime assert get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_DEPTH",2]() == 1 or get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_DEPTH",2]() == 2, "invalid neural STAGE_DEPTH configuration"
     comptime assert get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_PAD",0]() == 0 or get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_PAD",0]() == 1, "invalid neural STAGE_PAD configuration"
     comptime assert get_defined_int["MOJOLEARN_IDN_NEURAL_FILL_BLOCKS",1]() > 0, "positive neural resource budget required"

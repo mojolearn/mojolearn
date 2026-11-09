@@ -659,7 +659,9 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
     if supplied_state is not None and py_get(_fields(mods, supplied_state), "_resident_session") is not None:
         raise Error("neural block: state is owned by a resident decode session")
     var e = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].entries
-    var reuse = transformer and py_contains(e, "forward_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
+    # Lane x4: MOJOLEARN_TRANSFORMER_LEGACY_SETUP and _SESSION_FRESH removed;
+    # a binding with the session entries always runs on the block's session.
+    var reuse = transformer and py_contains(e, "forward_session")
     var lock = py_get(fields, "_runtime_lock") if transformer else PythonObject(None)
     var lock_lease = OperationLockLease(lock)
     var locked = transformer and (reuse or fields["_native_session"] is not None or fields["_int15"] is not None)
@@ -672,7 +674,7 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
             py_setitem(fields, "_native_session", PythonObject(None))
             py_setitem(fields, "_session_binding", PythonObject(None))
         if transformer and supplied_state is None and not step and fields["_int15"] is None:
-            var fresh_session = reuse and py_contains(e, "transformer_session_forward_fresh") and String(getenv("MOJOLEARN_TRANSFORMER_SESSION_FRESH")) != "0"
+            var fresh_session = reuse and py_contains(e, "transformer_session_forward_fresh")
             if fresh_session or py_contains(e, "transformer_forward_fresh"):
                 var y = generation_array([b, l, d])
                 var keep = List[PythonObject]()
@@ -1206,7 +1208,7 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
         lock_lease.acquire()
         mods.released()
         try:
-            var session = _native_has_entry(mods, entries, "transformer_session_backward") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
+            var session = _native_has_entry(mods, entries, "transformer_session_backward")
             if session:
                 if fields["_native_session"] is not None and fields["_session_binding"] is not entries.canonical:
                     causal_transformer_admin(mods, fields["_session_binding"], fields["_native_session"], 13)

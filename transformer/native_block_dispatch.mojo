@@ -96,10 +96,14 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List
         var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=session)
         return transformer_session_forward_native(owner[], expanded, p, opts)
     var result = 0
-    if op == 2 or op == 4:
-        var base_a = 13 if op == 2 else 11
-        var base_p = 10 if op == 2 else 8
-        var name = "transformer_session_forward_fresh" if op == 2 else "transformer_forward_fresh"
+    if op == 4:
+        # Lane x4: the device per-call fresh prefill was removed (the
+        # session's fresh prefill, op 2, is the one stateless forward).
+        raise Error("transformer_forward_fresh: removed from the GPU binding; the session's fresh prefill runs it")
+    if op == 2:
+        var base_a = 13
+        var base_p = 10
+        var name = "transformer_session_forward_fresh"
         if len(a) != base_a and len(a) != base_a + BLOCK_OPTION_ADDRS:
             raise Error(name + ": addrs must contain " + String(base_a) + " addresses, or "
                 + String(base_a) + " + " + String(BLOCK_OPTION_ADDRS)
@@ -107,38 +111,20 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List
         var raw = a.copy()
         while len(raw) < base_a + BLOCK_OPTION_ADDRS:  # small-loop(pad existing optional block address tail)
             raw.append(0)
-        var expanded = List[Int]()
-        if op == 2:
-            expanded = raw.copy()
-            _check_base_addrs(expanded, [0, 1, 2, 3, 4, 5, 6, 8, 9, 12], name)
+        var expanded = raw.copy()
+        _check_base_addrs(expanded, [0, 1, 2, 3, 4, 5, 6, 8, 9, 12], name)
         if len(p) != base_p and len(p) != base_p + BLOCK_OPTION_PARAMS:
             raise Error(name + ": params must contain " + String(base_p) + " values, or "
                 + String(base_p) + " + " + String(BLOCK_OPTION_PARAMS)
                 + " with the block options tail, got " + String(len(p)))
         var opts = BlockOptions.from_params(p, base_p)
-        if op == 2:
-            var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=session)
-            try:
-                result = _transformer_run_session[True](owner[], expanded,
-                    p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts)
-            except problem:
-                owner[].clear()
-                raise problem
-        else:
-            for i in range(10):  # small-loop(original ten input/weight address slots)
-                expanded.append(raw[i])
-            expanded.append(0)
-            expanded.append(0)
-            expanded.append(raw[10])
-            for i in range(BLOCK_OPTION_ADDRS):  # small-loop(original optional address tail)
-                expanded.append(raw[11 + i])
-            _check_base_addrs(expanded, [0, 1, 2, 3, 4, 5, 6, 8, 9], name)
-            if expanded[12] == 0:
-                raise Error("transformer_forward_fresh: null output address")
-            if p[0] <= 0 or p[1] <= 0:
-                raise Error("transformer_forward_fresh: B and L must be positive")
-            result = _transformer_run[True](expanded,
-                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[1], 0, p[7], opts)
+        var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=session)
+        try:
+            result = _transformer_run_session[True](owner[], expanded,
+                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts)
+        except problem:
+            owner[].clear()
+            raise problem
     elif op == 3 or op == 5:
         if len(a) != 21 or len(p) != 8:
             raise Error("transformer backward: expected 21 addresses and 8 scalars (B,"

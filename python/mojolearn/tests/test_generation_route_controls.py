@@ -48,7 +48,6 @@ print(json.dumps(dict(passed=True,mode=mode,route=route)))
 def _run(tmp_path, mode, route):
     env = dict(os.environ, PYTHONFAULTHANDLER="1")
     env.pop("PYTHONPATH", None)
-    env.pop("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", None)
     result = subprocess.run(
         [sys.executable, "-c", _CASE, mode, route, str(tmp_path)],
         cwd=tmp_path, env=env, capture_output=True, text=True, timeout=120,
