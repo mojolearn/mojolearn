@@ -48,6 +48,7 @@ from x_linear.ridge_ff_blocks import (
 )
 from x_linear.team import TEAM_SLOTS
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device, xlin_finite_host
+from core.admitted_finite_status import enqueue_finite_status
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_bad
 from x_linear.sgd_end import sgd_ys_kernel, sgd_iota_kernel, sgd_perm_kernel, sgd_mb_end_kernel, sgd_mb_res_kernel, sgd_ps_end_kernel, sgd_ps_res_kernel, SGD_END_ST, SGD_END_TPB, SGD_MB_FLAGS, SGD_MB_WORDS
@@ -5754,8 +5755,24 @@ def decision_codes_kernel(s: FP, n: Int32, k: Int32, strict: Int32, below: Int32
         codes.unsafe_store(i, decision_code_row(s, i, Int(k), Int(strict), Int(below), Int(above)))
 
 
+def _decision_status(ctx: DeviceContext, dx: DeviceBuffer[DType.float32], count: Int, status: Int) raises -> DeviceBuffer[DType.int32]:
+    """The deferred finite test of a decision entry's X (lane
+    a1b-doors-opt-in-trees-linear; core/admitted_finite_status.mojo): over
+    the words the entry just uploaded, one grid-stride kernel, the status
+    word copied back with the result (no new synchronisation). `status` is
+    the host address of one int32 word, 0 when the door tested X itself."""
+    var dstat = ctx.enqueue_create_buffer[DType.int32](1)
+    if status != 0:
+        dstat.enqueue_fill(Int32(0))
+        if count > 0:
+            enqueue_finite_status(ctx, dx.unsafe_ptr(), count, dstat.unsafe_ptr(), 0)
+        ctx.enqueue_copy(dst_ptr=IP(unsafe_from_address=status), src_buf=dstat)
+    return dstat^
+
+
 def decision_codes_device(
-    x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, strict: Int, below: Int, above: Int, codes: IP
+    x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, strict: Int, below: Int, above: Int, codes: IP,
+    status: Int = 0,
 ) raises:
     """`decision_device`'s block, then each row's class code on the device
     (`decision_code_row`); only the n int32 codes come down."""
@@ -5767,6 +5784,7 @@ def decision_codes_device(
     if n * d > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     ctx.enqueue_copy(dst_buf=dwb, src_ptr=wb)
+    var dstat = _decision_status(ctx, dx, n * d, status)
     if n > 0:
         ctx.enqueue_function[decision_kernel](
             dx.unsafe_ptr(), dwb.unsafe_ptr(), Int32(n), Int32(d), Int32(k), Int32(link), dout.unsafe_ptr(),
@@ -5778,6 +5796,7 @@ def decision_codes_device(
         )
         ctx.enqueue_copy(dst_ptr=codes, src_buf=dc.create_sub_buffer[DType.int32](0, n))
     ctx.synchronize()
+    _ = dstat^
     _ = dx^
     _ = dwb^
     _ = dout^
@@ -5785,7 +5804,8 @@ def decision_codes_device(
     _ = ctx^
 
 
-def decision_rows_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, rows_mode: Int, res: FP) raises:
+def decision_rows_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, rows_mode: Int, res: FP,
+                         status: Int = 0) raises:
     """`decision_device`'s block, then `py2mojo_rows` mode `rows_mode`
     (ROWS_SGD_PROBA or ROWS_LRCV_PROBA, float32 in and out) on the scores
     while they are on the device; only the n x max(k, 2) float32
@@ -5808,6 +5828,7 @@ def decision_rows_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, rows_
     if n * d > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     ctx.enqueue_copy(dst_buf=dwb, src_ptr=wb)
+    var dstat = _decision_status(ctx, dx, n * d, status)
     if n > 0:
         ctx.enqueue_function[decision_kernel](
             dx.unsafe_ptr(), dwb.unsafe_ptr(), Int32(n), Int32(d), Int32(k), Int32(link), dout.unsafe_ptr(),
@@ -5821,6 +5842,7 @@ def decision_rows_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, rows_
         )
         ctx.enqueue_copy(dst_ptr=res, src_buf=dres.create_sub_buffer[DType.float32](0, n_res))
     ctx.synchronize()
+    _ = dstat^
     _ = dx^
     _ = dwb^
     _ = dout^
@@ -5878,7 +5900,7 @@ def decision_huber_out_device(
     _ = ctx^
 
 
-def decision_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, res: FP) raises:
+def decision_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, res: FP, status: Int = 0) raises:
     var ctx = linear_ctx()
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
     var dwb = ctx.enqueue_create_buffer[DType.float32](k * (d + 1))
@@ -5886,6 +5908,7 @@ def decision_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, res: FP) r
     if n * d > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     ctx.enqueue_copy(dst_buf=dwb, src_ptr=wb)
+    var dstat = _decision_status(ctx, dx, n * d, status)
     var total = n * k
     if total > 0:
         ctx.enqueue_function[decision_kernel](
@@ -5894,6 +5917,7 @@ def decision_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, res: FP) r
         )
         ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
     ctx.synchronize()
+    _ = dstat^
     _ = dx^
     _ = dwb^
     _ = dout^

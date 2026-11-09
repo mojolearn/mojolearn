@@ -46,7 +46,7 @@ from bindings.prep_native_estimator import prep_native_context, prep_native_spli
 from bindings.msel_inputs import msel_admit
 from bindings.admitted_input import (
     AdmittedX, admit_x_unrecorded, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
-    classical_view, admit_ids,
+    classical_view, admit_ids, admitted_finite_refuse,
 )
 from bindings.classical_arrays import classical_dtype_str, classical_c_order, classical_is_f32
 from bindings.classical_labels import (
@@ -284,7 +284,7 @@ def _xl_floats(values: PythonObject, context: PythonObject) raises -> PythonObje
     return classical_wrap_array(store, Python.tuple(len(store)), "<f4", "C", context)
 
 
-def _xl_matrix(source: PythonObject, est: String, fit: Bool, context: PythonObject) raises -> AdmittedX:
+def _xl_matrix(source: PythonObject, est: String, context: PythonObject) raises -> AdmittedX:
     """`_matrix(X)`: X through the one admission (bindings/admitted_input.mojo
     admit_x_unrecorded) with scikit-learn's refusals: the caller's float32
     C-order words as they are, anything else one parallel cast."""
@@ -295,9 +295,28 @@ def _xl_matrix(source: PythonObject, est: String, fit: Bool, context: PythonObje
     # (defer_finite) and a cast X is tested in its cast pass. The decision
     # entries test nothing, as before: X is admitted as it is
     # (allow_nonfinite), so no host pass is added to predict.
-    if fit:
-        return admit_x_unrecorded(source, est, context, defer_finite=True)
-    return admit_x_unrecorded(source, est, context, allow_nonfinite=True)
+    # Lane a1b (part 2): the decision entries (x_linear_decision /
+    # _codes / _rows) now test the X they upload too and return the status
+    # word (`_xl_status`), so predict defers like fit: no host pass over a
+    # borrowed X, the refusal through admitted_finite_refuse.
+    return admit_x_unrecorded(source, est, context, defer_finite=True)
+
+
+def _xl_status(x: AdmittedX, dims: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The deferred finite status word of `x` for a decision entry: a fresh
+    int32 word whose address rides as the last dims element (None, and no
+    element, when admit_x already tested X)."""
+    if x.finite:
+        return PythonObject(None)
+    var word = admitted_vector(1, "<i4", context)
+    _ = py_call(dims.append, PythonObject(labels_address(word)))
+    return word
+
+
+def _xl_status_refuse(word: PythonObject, model: PythonObject) raises:
+    """Refuse a non-finite X the decision entry found (scikit-learn's wording)."""
+    if word is not None:
+        admitted_finite_refuse(Int(_I32P(unsafe_from_address=labels_address(word))[0]), _name(model))
 
 
 def _xl_vector(source: PythonObject, n: Int, context: PythonObject) raises -> AdmittedX:
@@ -372,9 +391,11 @@ def _xl_decision(model: PythonObject, x: AdmittedX, coef: PythonObject, intercep
     var k = block[1]
     var shape = Python.tuple(x.rows) if squeeze and k == 1 else Python.tuple(x.rows, k)
     var out = admitted_array(shape, "<f4", context)
+    var dims = Python.list(PythonObject(x.rows), PythonObject(x.cols), PythonObject(k), PythonObject(link))
+    var word = _xl_status(x, dims, context)
     _ = py_call_typed(entries["x_linear_decision"], PythonObject(x.address), PythonObject(labels_address(wb)),
-                      Python.list(PythonObject(x.rows), PythonObject(x.cols), PythonObject(k), PythonObject(link)),
-                      PythonObject(labels_address(out)))
+                      dims, PythonObject(labels_address(out)))
+    _xl_status_refuse(word, model)
     _ = wb  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = wb^
@@ -388,11 +409,13 @@ def _xl_codes(model: PythonObject, x: AdmittedX, coef: PythonObject, intercept: 
     var wb = block[0]
     var k = block[1]
     var out = admitted_vector(x.rows, "<i4", context)
+    var dims = Python.list(PythonObject(x.rows), PythonObject(x.cols), PythonObject(k),
+                           PythonObject(LINK_IDENTITY), PythonObject(1 if strict else 0), PythonObject(below),
+                           PythonObject(above))
+    var word = _xl_status(x, dims, context)
     _ = py_call_typed(entries["x_linear_decision_codes"], PythonObject(x.address), PythonObject(labels_address(wb)),
-                      Python.list(PythonObject(x.rows), PythonObject(x.cols), PythonObject(k),
-                                  PythonObject(LINK_IDENTITY), PythonObject(1 if strict else 0), PythonObject(below),
-                                  PythonObject(above)),
-                      PythonObject(labels_address(out)))
+                      dims, PythonObject(labels_address(out)))
+    _xl_status_refuse(word, model)
     _ = wb  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = wb^
@@ -650,7 +673,7 @@ def xl_fit_sgd_regressor(model: PythonObject, args: PythonObject, passive: Bool,
     elif not py_contains(losses, loss):
         raise Error("mojolearn SGDRegressor: loss must be one of " + _sorted_repr(losses))
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(args[0], _name(model), True, context)
+    var x = _xl_matrix(args[0], _name(model), context)
     var y = _xl_vector(args[1], x.rows, context)
     var fit: Tuple[PythonObject, PythonObject]
     if passive:
@@ -687,7 +710,7 @@ def xl_fit_one_class(model: PythonObject, args: PythonObject, context: PythonObj
     if py_contains(Python.tuple("pa1", "pa2"), fields["learning_rate"]):
         raise Error("mojolearn SGDOneClassSVM: learning_rate must be constant, optimal, invscaling or adaptive")
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(args[0], _name(model), True, context)
+    var x = _xl_matrix(args[0], _name(model), context)
     var fit = _xl_sgd(model, fields, entries, x, PythonObject(None), 0, 1, _int(context["xl_sgd_clf_loss"]["hinge"]),
                       PythonObject("l2"), fields["learning_rate"], nu, PythonObject(0.0), fields["eta0"],
                       fields["power_t"], PythonObject(0.1), fields["fit_intercept"], fields["max_iter"], fields["tol"],
@@ -714,7 +737,7 @@ def xl_one_class(model: PythonObject, operation: String, source: PythonObject, c
     var fields = py_fields(model)
     _xl_check_fitted(fields, model)
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(source, _name(model), False, context)
+    var x = _xl_matrix(source, _name(model), context)
     _xl_width(x, fields, model)
     var offset = _xl_offset(fields, context)
     var result = PythonObject(None)
@@ -745,7 +768,7 @@ def xl_regressor_predict(model: PythonObject, args: PythonObject, context: Pytho
         _xl_bayes_refuse(model, fields, args[1])
     _xl_check_fitted(fields, model)
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(args[0], _name(model), False, context)
+    var x = _xl_matrix(args[0], _name(model), context)
     _xl_width(x, fields, model)
     var link = LINK_IDENTITY
     var stored = py_get(fields, "_link")
@@ -762,7 +785,7 @@ def xl_classifier_decision(model: PythonObject, source: PythonObject, context: P
     var fields = py_fields(model)
     _xl_check_fitted(fields, model)
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(source, _name(model), False, context)
+    var x = _xl_matrix(source, _name(model), context)
     _xl_width(x, fields, model)
     var out = _xl_decision(model, x, fields["coef_"], fields["intercept_"], LINK_IDENTITY, True, entries, context)
     _ = x^
@@ -775,7 +798,7 @@ def xl_classifier_predict(model: PythonObject, source: PythonObject, context: Py
     var fields = py_fields(model)
     _xl_check_fitted(fields, model)
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(source, _name(model), False, context)
+    var x = _xl_matrix(source, _name(model), context)
     _xl_width(x, fields, model)
     var codes = _xl_codes(model, x, fields["coef_"], fields["intercept_"], True, 0, 1, entries, context)
     _ = x^
@@ -791,7 +814,7 @@ def xl_predict_proba(model: PythonObject, source: PythonObject, lrcv: Bool, cont
         raise Error("AttributeError: probability estimates are not available for loss=" + _repr(fields["loss"]))
     _xl_check_fitted(fields, model)
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(source, _name(model), False, context)
+    var x = _xl_matrix(source, _name(model), context)
     _xl_width(x, fields, model)
     var k = len(fields["intercept_"])
     var n = x.rows
@@ -805,10 +828,12 @@ def xl_predict_proba(model: PythonObject, source: PythonObject, lrcv: Bool, cont
         var wb = block[0]
         var kb = block[1]
         var res = admitted_array(Python.tuple(n, 2 if kb == 1 else kb), "<f4", context)
+        var dims = Python.list(PythonObject(n), PythonObject(x.cols), PythonObject(kb), PythonObject(link),
+                               PythonObject(rows_mode))
+        var word = _xl_status(x, dims, context)
         _ = py_call_typed(fused, PythonObject(x.address), PythonObject(labels_address(wb)),
-                          Python.list(PythonObject(n), PythonObject(x.cols), PythonObject(kb), PythonObject(link),
-                                      PythonObject(rows_mode)),
-                          PythonObject(labels_address(res)))
+                          dims, PythonObject(labels_address(res)))
+        _xl_status_refuse(word, model)
         _ = wb  # keep the Python object alive through the native call above
         _ = res  # keep the Python object alive through the native call above
         _ = wb^
@@ -871,7 +896,7 @@ def xl_fit_glm(model: PythonObject, args: PythonObject, context: PythonObject) r
     if not _ge(fields["alpha"], PythonObject(0)):
         raise Error("mojolearn " + name + ": alpha must be >= 0")
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(args[0], _name(model), True, context)
+    var x = _xl_matrix(args[0], _name(model), context)
     var n = x.rows
     var d = x.cols
     var y = _xl_vector(args[1], n, context)
@@ -943,7 +968,7 @@ def xl_fit_huber(model: PythonObject, args: PythonObject, context: PythonObject)
     if _truth(fields["warm_start"]):
         raise Error("mojolearn HuberRegressor: warm_start is not implemented")
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(args[0], _name(model), True, context)
+    var x = _xl_matrix(args[0], _name(model), context)
     var n = x.rows
     var d = x.cols
     var y = _xl_vector(args[1], n, context)
@@ -1029,7 +1054,7 @@ def xl_fit_bayes(model: PythonObject, args: PythonObject, context: PythonObject)
     var fields = py_fields(model)
     _xl_bayes_refuse(model, fields, PythonObject(False))
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(args[0], _name(model), True, context)
+    var x = _xl_matrix(args[0], _name(model), context)
     var n = x.rows
     var d = x.cols
     var y = _xl_vector(args[1], n, context)
@@ -1067,7 +1092,7 @@ def xl_fit_ard(model: PythonObject, args: PythonObject, context: PythonObject) r
     var fields = py_fields(model)
     _xl_bayes_refuse(model, fields, PythonObject(False))
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(args[0], _name(model), True, context)
+    var x = _xl_matrix(args[0], _name(model), context)
     var n = x.rows
     var d = x.cols
     if n < 2:
@@ -1115,7 +1140,7 @@ def xl_fit_lars(model: PythonObject, args: PythonObject, lasso: Bool, context: P
     if _attr(model, "jitter", PythonObject(None)) is not None:
         raise Error("mojolearn " + name + ": jitter is not implemented")
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(args[0], _name(model), True, context)
+    var x = _xl_matrix(args[0], _name(model), context)
     var n = x.rows
     var d = x.cols
     var y = _xl_vector(args[1], n, context)
@@ -1162,7 +1187,7 @@ def xl_fit_quantile(model: PythonObject, args: PythonObject, context: PythonObje
     if not _ge(fields["alpha"], PythonObject(0)):
         raise Error("mojolearn QuantileRegressor: alpha must be >= 0")
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(args[0], _name(model), True, context)
+    var x = _xl_matrix(args[0], _name(model), context)
     var n = x.rows
     var d = x.cols
     var y = _xl_vector(args[1], n, context)
@@ -1221,7 +1246,7 @@ def xl_fit_sgd_classifier(model: PythonObject, args: PythonObject, kind: String,
         if not _gt(fields["C"], PythonObject(0)):
             raise Error("mojolearn PassiveAggressiveClassifier: C must be > 0")
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(args[0], _name(model), True, context)
+    var x = _xl_matrix(args[0], _name(model), context)
     var labels = _xl_class_codes(model, args[1], x.rows, context)
     var codes = admitted_vector(x.rows, "<f4", context)
     labels_cast(labels_address(labels.codes), "<i4", labels_address(codes), "<f4", x.rows, context)
@@ -1274,7 +1299,7 @@ def xl_fit_ridge_classifier(model: PythonObject, args: PythonObject, context: Py
     if not _ge(alpha, PythonObject(0)):
         raise Error("mojolearn RidgeClassifier: alpha must be >= 0")
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(args[0], _name(model), True, context)
+    var x = _xl_matrix(args[0], _name(model), context)
     var n = x.rows
     var d = x.cols
     var labels = classical_encode_labels(args[1], context)
@@ -1926,7 +1951,7 @@ def xl_fit_ridge_cv(model: PythonObject, args: PythonObject, context: PythonObje
     if refuse:
         raise Error("mojolearn RidgeCV: alphas must be positive")
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(args[0], _name(model), True, context)
+    var x = _xl_matrix(args[0], _name(model), context)
     var n = x.rows
     var d = x.cols
     var y = _xl_vector(args[1], n, context)
@@ -2101,7 +2126,7 @@ def _xl_enetcv(model: PythonObject, fields: PythonObject, args: PythonObject, l1
         if not (r > 0 and r <= 1):
             raise Error("mojolearn " + name + ": l1_ratio must be in (0, 1]")
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(args[0], _name(model), True, context)
+    var x = _xl_matrix(args[0], _name(model), context)
     var n = x.rows
     var d = x.cols
     var y = _xl_vector(args[1], n, context)
@@ -2292,7 +2317,7 @@ def xl_fit_logistic_cv(model: PythonObject, args: PythonObject, context: PythonO
     if not py_contains(Python.tuple("lbfgs", "newton-cg", "newton-cholesky"), fields["solver"]):
         raise Error("mojolearn LogisticRegressionCV: solver must be lbfgs (newton-* run L-BFGS too)")
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(args[0], _name(model), True, context)
+    var x = _xl_matrix(args[0], _name(model), context)
     var n = x.rows
     var d = x.cols
     var labels = _xl_class_codes(model, args[1], n, context)
