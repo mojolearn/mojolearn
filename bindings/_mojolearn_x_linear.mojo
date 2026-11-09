@@ -24,8 +24,11 @@ from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
 from x_linear.ops import FP, IP
 from x_linear.ridgecv import ridge_best_alpha
-from x_linear.device import fit_device, decision_device, decision_codes_device, decision_rows_device, decision_huber_out_device, SGD_IDN_DEV_FINITE
-from x_linear.dispatch import isotonic_abi_check, ALGO_SGD
+from x_linear.device import fit_device, ridge_resident, decision_device, decision_codes_device, decision_rows_device, decision_huber_out_device, SGD_IDN_DEV_FINITE
+from x_linear.dispatch import isotonic_abi_check, ALGO_SGD, ALGO_RIDGE
+from core.device_zero import enqueue_fill
+from core.msel_device_x import msel_device_x_context, msel_device_x_f32
+from checks.numerics import NUMERIC_IDENTICAL
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE
 from x_linear.class_prep_device import class_prep_device
 from x_linear.x_linear_input_impl import x_linear_finite_device as _finite
@@ -84,6 +87,67 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
             _finite(y, n_y, "y")
         fit_device(a, x, n_x, y, n_y, n, d, ipl, fpl, n_out, n_fw, n_iw, out)
     return PythonObject(n_out)
+
+
+def fit_fold_binding(algo: PythonObject, ids: PythonObject, y_addr: PythonObject, dims: PythonObject,
+                     ip: PythonObject, fp: PythonObject, out_addr: PythonObject) raises -> PythonObject:
+    """`x_linear_fit` over a model-selection fold resident on the device
+    (lane a8c-device-x-linear-prep-rfe; IDENTICAL GPU builds): `ids` is
+    [base store id, base rows, index store id] in model selection's store
+    (bindings/device_rows_door.mojo door_rows_store); the fold's n x d rows
+    are gathered on the device straight into the fit's X buffer, the finite
+    and range tests in the same pass (core/msel_device_x.mojo), and the fit
+    runs on the store's context (`msel_device_x_context()`): no host gather
+    and no upload of X. `dims`, `ip`, `fp` and the result are
+    `x_linear_fit`'s. Ridge (algo 8: Ridge with weights, RidgeClassifier)
+    only; any other algo is refused by name (its door gathers host rows).
+    Returns [n_out, finite word, range word]: a nonzero word means the
+    result is not to be read and the door refuses."""
+    var a = Int(py=algo)
+    if a != ALGO_RIDGE:
+        raise Error("x_linear_fit_fold: only the Ridge fit (algo 8) reads a device fold; algo " + String(a))
+    if len(ids) != 3:
+        raise Error("x_linear_fit_fold: ids must hold 3 values")
+    var base_id = Int(py=ids[0])
+    var base_rows = Int(py=ids[1])
+    var index_id = Int(py=ids[2])
+    var n = Int(py=dims[0])
+    var d = Int(py=dims[1])
+    var n_y = Int(py=dims[3])
+    var n_out = Int(py=dims[4])
+    var n_ip = Int(py=dims[7])
+    var n_fp = Int(py=dims[8])
+    if n <= 0 or d <= 0 or n_out <= 0:
+        raise Error("x_linear: positive dimensions required")
+    if Int(py=dims[2]) != n * d:
+        raise Error("x_linear_fit_fold: dims[2] must be n * d (the fold's X words)")
+    var ipl = List[Int32](capacity=n_ip)
+    for i in range(n_ip):  # small-loop(n_ip: integer hyperparameters of the route): Python parameter list, not data
+        ipl.append(Int32(Int(py=ip[i])))
+    var fpl = List[Float32](capacity=n_fp)
+    for i in range(n_fp):  # small-loop(n_fp: float hyperparameters of the route): Python parameter list, not data
+        fpl.append(Float32(Float64(py=fp[i])))
+    var y = _fp(Int(py=y_addr))
+    var out = _fp(Int(py=out_addr))
+    var finite = Int32(0)
+    var in_range = Int32(0)
+    with GILReleased(Python()):
+        var ctx = msel_device_x_context()
+        var dx = ctx.enqueue_create_buffer[DType.float32](n * d)
+        var dst = ctx.enqueue_create_buffer[DType.int32](2)
+        enqueue_fill[DType.int32](ctx, dst, Int32(0))
+        msel_device_x_f32(ctx, base_id, base_rows, d, index_id, n, dx, dst.unsafe_ptr(), 0)
+        var words = ctx.enqueue_create_host_buffer[DType.int32](2)
+        ctx.enqueue_copy(dst_buf=words, src_buf=dst)
+        # the gather tested X (n_x_test 0); y is tested by the fit as before.
+        # ridge_resident synchronizes once at its end, which delivers words.
+        ridge_resident(ctx.copy(), dx, 0, y, n_y, n, d, ipl, fpl, n_out, out)
+        finite = words.unsafe_ptr().unsafe_load(0)
+        in_range = words.unsafe_ptr().unsafe_load(1)
+        _ = words^
+        _ = dst^
+        _ = dx^
+    return Python.list(n_out, Int(finite), Int(in_range))
 
 
 def decision_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
@@ -255,6 +319,10 @@ def build__mojolearn_x_linear() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_linear")
         m.def_function[fit_binding]("x_linear_fit")
+        # lane a8c: the fold store is the IDENTICAL base binding's, so only
+        # an IDENTICAL GPU build reads a device fold
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            m.def_function[fit_fold_binding]("x_linear_fit_fold")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")

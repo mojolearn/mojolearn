@@ -161,13 +161,28 @@ def _ridge_device(
     """Ridge on the grid (x_linear/ridge_grid.mojo), then the float-float
     refit when the float32 factor was not trusted (status 1)."""
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
-    var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
     if n_x > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    ridge_resident(ctx^, dx, n_x, y, n_y, n, d, ip, fp, n_out, res)
+    _ = dx^
+
+
+def ridge_resident(
+    var ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], n_x_test: Int, y: FP, n_y: Int, n: Int, d: Int,
+    ip: List[Int32], fp: List[Float32], n_out: Int, res: FP,
+) raises:
+    """`_ridge_device` over an X already on `ctx` (`dx`, n x d C order): the
+    host upload's entry above, and the cross-validation fold entry
+    (bindings/_mojolearn_x_linear.mojo `x_linear_fit_fold`, lane
+    a8c-device-x-linear-prep-rfe), which gathers the fold into `dx` on the
+    device out of model selection's store. `n_x_test` words of `dx` are
+    tested finite here (0: the gather already tested them). One
+    synchronize at the end; the caller keeps `dx` until it returns."""
+    var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     comptime if XLIN_IDN_DEV_FINITE:
-        xlin_finite_device(ctx, dx, n_x, y, n_y)
+        xlin_finite_device(ctx, dx, n_x_test, y, n_y)
     var dxp = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
     var dyp = FP(unsafe_from_address=Int(dy.unsafe_ptr()))
     # ip[4] == 1 means y holds the n int32 class codes (RidgeClassifier),
@@ -196,7 +211,6 @@ def _ridge_device(
         _ridge_ff_grid(ctx, dxp, dyp, n, d, t_n, Int(ip[1]) != 0, len(ip) > 3 and Int(ip[3]) != 0,
                        res.unsafe_load(t_n * d + t_n), res, sidx)
     ctx.synchronize()
-    _ = dx^
     _ = dy^
     _ = dyt^
 
