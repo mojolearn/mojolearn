@@ -287,9 +287,14 @@ def gpc_fit_all_device(
     gpc_validate_max_iter(max_iter_predict)
     if codes_addr == 0:
         raise Error("gpc_fit_all: the class codes have a null address")
+    if n_train <= 0 or n_features <= 0:
+        raise Error("gpc_fit_all: X must have at least one row and one feature, got " + String(n_train) + " x "
+                    + String(n_features))
     var n = n_train
     var ctx = _family_ctx()
-    var dx = _gpc_upload_checked(ctx, x_addr, n_train, n_features, String("X"))
+    # TOMBSTONE: the synchronising first-non-finite scan of the fit X (_gpc_upload_checked; DEVIATION 1768 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr: the public door admits X once and refuses a non-finite X in scikit-learn's wording before this entry; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
+    var dx = ctx.enqueue_create_buffer[DType.float32](n_train * n_features)
+    _copy_in(ctx, dx, x_addr, String("X"))
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dk = ctx.enqueue_create_buffer[DType.float32](n * n)
     var dstack = ctx.enqueue_create_buffer[DType.float32](gp_kernel_stack_floats(n, n))

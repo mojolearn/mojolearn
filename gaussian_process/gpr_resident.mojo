@@ -139,21 +139,22 @@ def gpr_fit_ptr_device(
         raise Error("gpr_fit: an output has a null address")
     if y_addr == 0:
         raise Error("gpr_fit: y has a null address")
+    if n_train <= 0 or n_features <= 0:
+        raise Error("gpr_fit: X must have at least one row and one feature, got " + String(n_train) + " x "
+                    + String(n_features))
+    if x_addr == 0:
+        raise Error("gpr_fit: X has a null address")
     var n = n_train
     var ctx = _family_ctx()
-    var dx = _gpc_upload_checked(ctx, x_addr, n_train, n_features, String("X"))
+    # TOMBSTONE: the synchronising first-non-finite scan of the fit X (_gpc_upload_checked; DEVIATION 1768 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr: the public door admits X once, nested fits included, and refuses a non-finite X in scikit-learn's wording before this entry (providers/python/gp_public_lifecycle_pyapi.mojo); recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
+    var dx = ctx.enqueue_create_buffer[DType.float32](n_train * n_features)
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=_GP(unsafe_from_address=x_addr))
     var dy = ctx.enqueue_create_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_buf=dy, src_ptr=_GP(unsafe_from_address=y_addr))
-    var bad = device_first_nonfinite(ctx, dy, n)
-    if bad >= 0:
-        var is_nan = device_classify_nonfinite(ctx, dy, bad)
-        raise Error(
-            "gpr_fit_host: y contains "
-            + ("NaN" if is_nan else "infinity")
-            + " at index "
-            + String(bad)
-            + "; refused by name before any model launch (DEVIATION 1768)"
-        )
+    # y keeps its scan: a nested fit's door does not test y (the public
+    # door's target check runs at depth 0 only). One wording (lane a8a).
+    if device_first_nonfinite(ctx, dy, n) >= 0:
+        raise Error("Input y contains NaN or infinity (GaussianProcessRegressor).")
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dk = ctx.enqueue_create_buffer[DType.float32](n * n)
     var dstack = ctx.enqueue_create_buffer[DType.float32](gp_kernel_stack_floats(n, n))
