@@ -465,6 +465,7 @@ in the tables after the sections.
 | [`MOJOLEARN_RSVD_FAST_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, FAST + Apple) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_IDN_RSVD_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, IDENTICAL) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_RSVD_FAST_DEVSCAN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd finiteness scan, FAST + Apple) | removed (KEPT default, superseded: parallel host scan of the one admission path) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`_mamba1_run`, `_mamba2_run`, `_mamba3_run`, their arena twins, `Mamba2PublicWorkspace` and the three Mamba decode-session bodies](#mamba-blocks-on-the-block-step-op-2026-11-09) | Mamba (per-call doors, decode sessions, Mamba-2 public step) | removed (superseded: one body, the block step op) | 2026-11-09 | [X5_MAMBA_PER_CALL_BODIES.patch](../experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -4271,3 +4272,35 @@ lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Bits: none for any int32-range or
   lane/a3-admit-decomp-prep-metrics@0cb550c337.
 - `door_rows_call` (the `_arena_io._ROWS_CALL` connection in `_native_msel_dispatch.connect`): no reader after A5 deleted
   `door_rows_host`; removed from the glue and from tools/test_device_rows_door_cv.py.
+
+
+## Mamba blocks on the block step op (2026-11-09)
+
+Lane x5-mamba-on-executor (docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X5), deletion commits
+`844ea17a80` (the bodies) and `08332f3665` (the doors and the Mamba-2 workspace), code recoverable at `25e5650c14`.
+Every Mamba-1/2/3 block call now runs the block step op of autograd/block_step_ops.mojo (`OPS_M1_STEP` 81,
+`OPS_M2_STEP` 82, `OPS_M3_STEP` 83) on one executor program per block (`MambaBlockProgram`,
+mamba/impl/mamba_block_program.mojo: the weights one uploaded parameter tensor, the carried state one declared state
+tensor, the carried integers one int32-word state tensor). The decode sessions own their program; the per-call doors
+share a process-wide cache of programs (at most 64, least recently used idle one evicted) whose weights stay on the
+device while the caller's bytes are unchanged (a memcmp against the program's host copy, the Mamba-3 prefill
+session's rule). What went:
+
+| symbols | where | why |
+|---|---|---|
+| `_mamba1_run`, `_mamba1_run_arena` | mamba/impl/mamba_shell_impl.mojo | the per-call Mamba-1 body: ten weight uploads, two state uploads, x, three downloads per call; now `mamba_block_call(OPS_M1_STEP, ...)` |
+| `_mamba2_run`, `_mamba2_run_arena`, `_mamba2_arena_execute`, `_mamba2_arena_execute_prepared` | same | the per-call Mamba-2 body and its arena twins (nine weight uploads per call) |
+| `Mamba2PublicWorkspace`, `_mamba2_workspace_step` (both overloads), mamba/native_workspace_dispatch.mojo, core/native_mamba_workspace_abi.mojo, `mamba2_workspace_api_v1`, the `mamba2_workspace_provider` entry and `NativeBlockPlan.mamba2_workspace*` | mamba, core, bindings/_mojolearn_mamba.mojo, bindings/causal_lm_public.mojo, bindings/neural_block_public.mojo, bindings/causal_operation_owner.mojo | the Mamba-2 public step's retained storage that still re-uploaded every weight per call; the cached program is that storage with the weights resident |
+| `_mamba3_run`, `_mamba3_check_state_words`, `_mamba3_run_on`, `_mamba3_run_arena` | mamba/impl/mamba_shell_impl.mojo | the per-call Mamba-3 body (nine weight and ten state uploads, fifteen downloads per call: regression C4's device half); the discard-state prefill is `mamba_block_call(..., fresh=True)` |
+| the bodies of `Mamba1DecodeSession`, `Mamba2DecodeSession`, `Mamba3DecodeSession` and their `_m{1,2,3}_session_*_run` helpers, `_m2_session_download_direct`, the Mamba-2 site of `MOJOLEARN_IDN_DECODE_RESIDENT_IO` (`IDN_DECODE_RESIDENT_IO_M2`) | same | the sessions duplicated the step op's device-copy wrapper; they are thin owners of a `MambaBlockProgram` now. The Mamba-2 session returns y and h_last straight into the caller's arrays behind one wait, which was that define's ON arm; the define stays for the transformer session |
+
+Kept and moved, not deleted: `MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE` (NI47, default off) is now an arm of the one Mamba-3
+step body in autograd/block_step_ops.mojo; `_mamba3_run_owned` (NN40, default off) keeps its name and runs the cached
+program over the installed snapshot's host copy. `MOJOLEARN_AFN_MAMBA_ARENA` / `IDN_MAMBA_ARENA` stay (the block
+structs' arena constructors); only the per-call bodies that used them went.
+
+Bits: the step op is the session bodies' launch set, so a decode step and a prefill are the same kernels in the same
+order. One possible change: a per-call Mamba-1 forward with L = 1 now runs `mamba_step` (the L = 1 arm of the op)
+where `_mamba1_run` ran `mamba_block_forward` at L = 1; every vendor and the host column move together if the two
+round differently. A/B owed: the per-call program against the 0.8.66 arena bodies on mamba1-forward, mamba2-forward,
+mamba3-forward, mamba3-decode, mamba2-decode and samba-decode (NVIDIA and AMD, one run per arm).
