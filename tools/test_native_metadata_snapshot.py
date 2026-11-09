@@ -53,7 +53,8 @@ class NativeMetadataSnapshotSourceTests(unittest.TestCase):
     def test_admission_reads_shape_and_strides_once(self):
         for name, value in (('_view_of_array', 'value'), ('_view_of_buffer', 'view')):
             with self.subTest(name=name):
-                source = function('bindings/trees_public_inputs.mojo', name)
+                # The one copy of the admission helpers (lane consol-a0-admission).
+                source = function('bindings/classical_labels.mojo', name)
                 self.assertEqual(source.count(value + '.shape'), 1)
                 self.assertEqual(source.count(value + '.strides'), 1)
                 loop = source[source.index('    for k in range(rank):'):]
