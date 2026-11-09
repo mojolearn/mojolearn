@@ -50,7 +50,13 @@ replacement of _IN_FLIGHT) pre-authorize the lines one open PR adds, and only
 for a tree that contains that PR head; once that code is in a tree that
 carries the baseline the row must become `debt` (--prune-baseline does it).
 Nothing in this tool adds a row: the baseline was written once, from the
-Oct 2 2026 audit, and every later change can only delete rows.
+Oct 2 2026 audit, and every later change can only delete rows. On 2026-11-09,
+when the loop tags started to be judged (the LOOP-TAG VOCABULARY), the findings
+of the rules that stopped trusting free-text notes were written once more, as
+`owed-tags` rows, from the integration tree _REGEN_ANCHOR. A row main's
+baseline lacks holds only for a finding main's tree (or, for a tree that
+contains it, _REGEN_ANCHOR's tree) carries, so a branch can never grandfather
+a finding of its own.
 """
 import collections
 import os
