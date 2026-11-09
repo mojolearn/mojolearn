@@ -87,7 +87,7 @@ def test_native_samba_complete_gradient_matches_explicit_chain(monkeypatch, laye
     if force_per_op:
         entries = dict(vars(bridge.CONTEXT["entries"]))
         for name in ("samba_head_loss", "training_chunked_lm_head_enabled",
-                     "samba_afn_norm_head_forward", "samba_afn_tail_train",
+                     "samba_afn_tail_train",
                      "samba_afn_embedding_backward_tied"):
             entries.pop(name, None)
         # The optional-entry record is read once per compiled binding and kept

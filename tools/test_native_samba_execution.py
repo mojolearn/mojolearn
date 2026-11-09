@@ -26,10 +26,10 @@ def test_public_boundary_uses_native_model_and_preserves_partial_publication():
     assert 'except problem:\n            self.publish()' in source
     assert 'if not layer.completed:' in source
     assert 'if not layer.visited:' in source
-    assert 'self.native.forward(' in source
     assert 'layer.refresh_layouts.append(pin.layout.value().copy())' in source
     public=(ROOT/'bindings/samba_inference_native.mojo').read_text()
-    assert 'samba_provider_forward(fields, config, entries, ids, state, step' in public
+    assert 'samba_provider_forward(' not in public  # lane x6: one device path, the stack program
+    assert '_samba_program_call(model, fields, config, entries, ids, state, context)' in public
 
 
 def test_native_backward_walk_preserves_saved_tapes_and_original_loss_routes():
@@ -50,7 +50,7 @@ def test_native_backward_walk_preserves_saved_tapes_and_original_loss_routes():
 
 def test_resident_lifecycle_uses_shared_owner_and_validates_before_reserving():
     native=(ROOT/'training/native_resident_dispatch.mojo').read_text()
-    for function in ('samba_resident_forward', 'samba_resident_train_step',
+    for function in ('samba_resident_train_step',
                      'samba_resident_accumulated_step', 'resident_open',
                      'resident_upload', 'resident_download', 'resident_close'):
         assert f'return {function}(' in native
@@ -60,7 +60,6 @@ def test_resident_lifecycle_uses_shared_owner_and_validates_before_reserving():
     step=boundary.split('def samba_resident_native_step(')[1]
     assert step.index('neural_descriptor_execute(provider, 19,') < step.index('neural_descriptor_reserved_execute(')
     assert '[Int(py=opt["_res"]), Int(py=fields["n_total"])], [], False)' in step
-    assert 'samba_resident_native_forward(fields, config, entries, ids)' in (ROOT/'bindings/samba_inference_native.mojo').read_text()
 
 
 def test_native_lock_is_an_exact_samba_admission_owner():

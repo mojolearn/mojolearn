@@ -139,7 +139,6 @@ from training.samba_ops import (
 from training.samba_afn import AFN_SAMBA_FUSE
 from providers.python.training_samba_afn_pyapi import (
     samba_afn_embedding_backward_tied_binding,
-    samba_afn_norm_head_forward_binding,
     samba_afn_tail_train_binding,
 )
 # lane S1 samba-resident (2026-10-07): the device-resident Samba forward and
@@ -1494,7 +1493,6 @@ def build__mojolearn_training() -> PythonObject:
             m.def_function[samba_decode_export_binding]("samba_decode_export")
             m.def_function[samba_decode_load_binding]("samba_decode_load")
         comptime if AFN_SAMBA_FUSE:
-            m.def_function[samba_afn_norm_head_forward_binding]("samba_afn_norm_head_forward")
             m.def_function[samba_afn_tail_train_binding]("samba_afn_tail_train")
             m.def_function[samba_afn_embedding_backward_tied_binding]("samba_afn_embedding_backward_tied")
         m.def_function[accumulate_binding]("accumulate")

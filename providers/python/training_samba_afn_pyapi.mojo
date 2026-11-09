@@ -11,7 +11,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
 from training.samba_afn import (
     afn_embedding_backward_tied_host,
-    afn_norm_head_forward_host,
     afn_tail_train_host,
 )
 
@@ -59,25 +58,8 @@ def _afn_i32(addr: Int) -> MutPointer[Int32, MutUntrackedOrigin]:
     return MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)
 
 
-def samba_afn_norm_head_forward_binding(
-    addresses: PythonObject, params: PythonObject
-) raises -> PythonObject:
-    """addresses = [c (m*n f32, written), x (m*k f32), norm_w (k f32),
-    head_w (n*k f32)]; params = [m, n, k, eps (float)]. Returns `m * n`."""
-    var a = _afn_addrs(addresses, 4, "samba_afn_norm_head_forward")
-    _afn_params(params, 4, "samba_afn_norm_head_forward")
-    var m = Int(py=params[0])
-    var n = Int(py=params[1])
-    var k = Int(py=params[2])
-    var eps = Float32(Float64(py=params[3]))
-    var count = 0
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_AFN_NEURAL_CTX]()
-        count = afn_norm_head_forward_host(
-            ctx, _afn_f32(a[0]), _afn_f32(a[1]), _afn_f32(a[2]), _afn_f32(a[3]),
-            m, n, k, eps,
-        )
-    return PythonObject(count)
+# TOMBSTONE: SAMBA_THREE_TIER_FORWARD samba_afn_norm_head_forward_binding deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
 
 
 def samba_afn_tail_train_binding(
