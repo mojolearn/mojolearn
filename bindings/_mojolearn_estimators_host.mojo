@@ -566,7 +566,7 @@ def pca_fit_owned_binding(
     with GILReleased(Python()):
         if test and nr >= 1 and nf >= 1:
             # parallel: the deferred finite test of X (SIMD scan across the host's cores)
-            status = 0 if host_all_finite_f32(f32_ptr(x_address), nr * nf) else 1
+            status = Int(host_finite_status(x_address, nr * nf))
         if status == 0:
             var fitted = pca_fit_owned_host_run(
                 x_address, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, fraction, op, oa != 0, whiten
