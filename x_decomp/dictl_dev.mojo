@@ -187,6 +187,10 @@ def dict_learning_loop_dev(mut k: DKit, X: DMat, mut code: DMat, mut D: DMat, a:
     var fs = (ii - 1) % K
     code = k.copy(DMat(rows_of=ringC, row0=fs * n, rows=n))
     D = k.copy(DMat(rows_of=ringD, row0=fs * nc, rows=nc))
+    # A view does not keep its owner: without these the rings die at their
+    # last named use (the view's construction) and k.copy reads freed ids.
+    _ = ringC^
+    _ = ringD^
     return ii
 
 
@@ -285,6 +289,7 @@ def minibatch_loop_dev(mut k: DKit, Xt: DMat, mut D: DMat, a: DlArgs, bs: Int, n
                 break
         st0 = last
     D = k.copy(DMat(rows_of=ringD, row0=(step % K) * nc, rows=nc))
+    _ = ringD^  # keep the ring past its view (see dict_learning_loop_dev)
     return step + 1
 
 
