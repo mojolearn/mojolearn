@@ -17,6 +17,9 @@ from bindings.py_balanced import py_call, py_setattr, py_type
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_validate import classical_view, RESHAPE_HINT
 from bindings.native_buffer_owner import native_storage_allocate
+from bindings.native_array_storage import native_array_zeros
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_arrays import classical_is_array
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
@@ -191,8 +194,12 @@ def lin_array(shape: List[Int], typestr: String, context: PythonObject) raises -
     var count = 1
     for i in range(len(shape)):  # driver-loop: over shape words
         count *= shape[i]
-    var store = py_call(context["array_type"], PythonObject(_store_code(typestr)),
-                        py_call(context["native_bytes_type"], count * lin_width(typestr)))
+    # One fill pass (array.array repetition of a one-word zero seed): the
+    # store was a zeroed bytes object copied into the array, two passes over
+    # every output byte (audit, lane a3). Array stores have no uninitialised
+    # constructor, so the zeros stay.
+    _ = lin_width(typestr)  # its refusal for a dtype no Array holds
+    var store = native_array_zeros(_store_code(typestr), count)
     return classical_wrap_array(store, lin_tuple(shape), typestr, "C", context)
 
 
@@ -329,10 +336,48 @@ def _lin_integer(raw: UInt64, kind: Int, item: Int, typestr: String, low: Int, h
     return value
 
 
+@always_inline
+def _lin_offset(linear: Int, shape: LIN_IP, strides: LIN_IP, rank: Int) -> Int:
+    """The byte offset of C-order element `linear` of the strided view."""
+    var remainder = linear
+    var offset = 0
+    for k in range(rank):  # small-loop(the view's rank)
+        var axis = rank - 1 - k
+        var extent = shape.unsafe_load(axis)
+        offset += (remainder % extent) * strides.unsafe_load(axis)
+        remainder //= extent
+    return offset
+
+
+def _lin_one(raw: UInt64, kind: Int, item: Int, tkind: Int, titem: Int, same: Bool, typestr: String,
+             low: Int, high: Int, wide_low: Int, wide_high: Int, dst: Int, t: Int) raises:
+    """Element `t` (its raw item) converted into the C-order store at `dst`
+    by Array.astype's rules; raises Array.astype's refusal."""
+    if same:
+        _lin_store(dst, t, titem, raw)
+    elif tkind == CAST_KIND_FLOAT and titem == 4:
+        _lin_store(dst, t, 4, UInt64(cast_f32_bits(raw, kind, item)))
+    elif tkind == CAST_KIND_FLOAT and titem == 8:
+        var x = Float64(0.0)
+        if kind == CAST_KIND_FLOAT:
+            x = _lin_float(raw, item)
+        else:
+            x = Float64(_lin_integer(raw, kind, item, "<i8", wide_low, wide_high))
+        _lin_store(dst, t, 8, bitcast[DType.uint64](x))
+    else:
+        var value = _lin_integer(raw, kind, item, typestr, low, high)
+        _lin_store(dst, t, titem, UInt64(bitcast[DType.uint64](Int64(value))))
+
+
 def lin_convert(v: TensorView, typestr: String, dst: Int, name: String) raises:
     """Every element of the viewed buffer, in C order, into the C-order
-    `typestr` store at `dst`: a byte copy for the same dtype, else one
-    conversion per element by Array.astype's rules."""
+    `typestr` store at `dst`: a copy of each contiguous run for the same
+    dtype, else one conversion per element by Array.astype's rules. The
+    elements are split into contiguous C-order ranges across the host's
+    cores (each element writes only its own cell, so no word depends on the
+    split); a refusal is the one the first failing element in C order
+    raises, as the serial walk raised it."""
+    # parallel: host input layout copy / conversion over element ranges across host cores (was serial, audit R10)
     var item = 0
     var kind = _lin_kind(v, item)
     if kind < 0:
@@ -341,7 +386,8 @@ def lin_convert(v: TensorView, typestr: String, dst: Int, name: String) raises:
     var tkind = _lin_target(typestr, titem)
     var same = kind == tkind and item == titem
     var nd = len(v.shape)
-    var strides = List[Int](length=nd, fill=0)
+    var strides = List[Int](length=max(nd, 1), fill=0)
+    var shape = List[Int](length=max(nd, 1), fill=1)
     if v.has_strides:
         for k in range(nd):  # driver-loop: over stride words
             strides[k] = v.strides[k]
@@ -350,63 +396,78 @@ def lin_convert(v: TensorView, typestr: String, dst: Int, name: String) raises:
         for k in range(nd - 1, -1, -1):  # driver-loop: over stride words
             strides[k] = step
             step *= v.shape[k]
+    for k in range(nd):  # driver-loop: over shape words
+        shape[k] = v.shape[k]
     var count = v.count()
-    if same and nd >= 1 and count > 0 and strides[nd - 1] == item:
-        # Same dtype, unit-stride last axis (a row slice, a transposed outer
-        # axis): one memcpy per contiguous run instead of one byte-assembled
-        # load and store per element (p3 rank 99). Same bytes.
-        var run = v.shape[nd - 1]
-        var runs = count // run
-        var ridx = List[Int](length=nd, fill=0)
-        var roff = 0
-        for r in range(runs):  # cpu-route: host input layout copy, one contiguous run at a time
-            memcpy(dest=LIN_BP(unsafe_from_address=dst + r * run * item),
-                   src=LIN_BP(unsafe_from_address=v.addr + roff), count=run * item)
-            var k = nd - 2
-            while k >= 0:  # driver-loop: over the outer axes of one run step
-                ridx[k] += 1
-                roff += strides[k]
-                if ridx[k] < v.shape[k]:
-                    break
-                roff -= strides[k] * v.shape[k]
-                ridx[k] = 0
-                k -= 1
+    if count <= 0:
         return
-    var idx = List[Int](length=nd, fill=0)
-    var off = 0
+    var rank = max(nd, 1)
+    var shape_ptr = rebind[LIN_IP](shape.unsafe_ptr())
+    var stride_ptr = rebind[LIN_IP](strides.unsafe_ptr())
+    var src = v.addr
+    if same and nd >= 1 and strides[nd - 1] == item:
+        # Same dtype, unit-stride last axis (a row slice, a transposed outer
+        # axis): one memcpy per contiguous run (p3 rank 99), runs split
+        # across the host's cores. Same bytes.
+        var run = shape[nd - 1]
+        var runs = count // run
+        var run_tasks = host_predict_task_count_work(runs, count * item)
+        var run_chunk = host_predict_chunk(runs, run_tasks)
+
+        def _runs(t: Int) {imm src, imm dst, imm run, imm runs, imm item, imm run_chunk, imm shape_ptr, imm stride_ptr, imm rank}:
+            var lo = t * run_chunk
+            var hi = min(lo + run_chunk, runs)
+            for r in range(lo, hi):  # admitted input: this task's contiguous runs
+                memcpy(dest=LIN_BP(unsafe_from_address=dst + r * run * item),
+                       src=LIN_BP(unsafe_from_address=src + _lin_offset(r * run, shape_ptr, stride_ptr, rank)),
+                       count=run * item)
+
+        if run_tasks <= 1:
+            _runs(0)
+        else:
+            host_parallelize(_runs, run_tasks)
+        _ = shape^
+        _ = strides^
+        return
     var low = 0
     var high = 0
     _lin_bounds(typestr, low, high)
     var wide_low = 0
     var wide_high = 0
     _lin_bounds("<i8", wide_low, wide_high)
-    # cpu-route: the host input conversion `_buffer.as_*_c` made (the base
-    # binding's cast_elements / layout copy), before the kernel call
-    for t in range(count):  # cpu-route: host input conversion, element by element
-        var raw = _lin_raw(v.addr, off, item)
-        if same:
-            _lin_store(dst, t, titem, raw)
-        elif tkind == CAST_KIND_FLOAT and titem == 4:
-            _lin_store(dst, t, 4, UInt64(cast_f32_bits(raw, kind, item)))
-        elif tkind == CAST_KIND_FLOAT and titem == 8:
-            var x = Float64(0.0)
-            if kind == CAST_KIND_FLOAT:
-                x = _lin_float(raw, item)
-            else:
-                x = Float64(_lin_integer(raw, kind, item, "<i8", wide_low, wide_high))
-            _lin_store(dst, t, 8, bitcast[DType.uint64](x))
-        else:
-            var value = _lin_integer(raw, kind, item, typestr, low, high)
-            _lin_store(dst, t, titem, UInt64(bitcast[DType.uint64](Int64(value))))
-        var k = nd - 1
-        while k >= 0:  # driver-loop: over the axes of one index step
-            idx[k] += 1
-            off += strides[k]
-            if idx[k] < v.shape[k]:
-                break
-            off -= strides[k] * v.shape[k]
-            idx[k] = 0
-            k -= 1
+    var tasks = host_predict_task_count_work(count, count * max(item, 1))
+    var chunk = host_predict_chunk(count, tasks)
+    # The first refused element of each task (count when none).
+    var failed = List[Int](length=tasks, fill=count)
+    var failed_ptr = rebind[LIN_IP](failed.unsafe_ptr())
+
+    def _elements(t: Int) {imm src, imm dst, imm kind, imm item, imm tkind, imm titem, imm same, imm low, imm high, imm wide_low, imm wide_high, imm count, imm chunk, imm failed_ptr, imm shape_ptr, imm stride_ptr, imm rank}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, count)
+        for e in range(lo, hi):  # admitted input: this task's elements, converted one by one
+            var raw = _lin_raw(src, _lin_offset(e, shape_ptr, stride_ptr, rank), item)
+            try:
+                # The target's name only spells a refusal, which is raised
+                # again below with it; the bounds are the target's own.
+                _lin_one(raw, kind, item, tkind, titem, same, String(), low, high, wide_low, wide_high, dst, e)
+            except:
+                failed_ptr.unsafe_store(t, e)
+                return
+
+    if tasks <= 1:
+        _elements(0)
+    else:
+        host_parallelize(_elements, tasks)
+    var first = count
+    for t in range(tasks):  # driver-loop: over the conversion tasks' first refusals (at most one per core)
+        first = min(first, failed[t])
+    if first < count:
+        # Raise the refusal of the first failing element in C order.
+        var raw = _lin_raw(src, _lin_offset(first, shape_ptr, stride_ptr, rank), item)
+        _lin_one(raw, kind, item, tkind, titem, same, typestr, low, high, wide_low, wide_high, dst, first)
+    _ = failed^
+    _ = shape^
+    _ = strides^
 
 
 def lin_c_order(obj: PythonObject, v: TensorView, typestr: String, name: String,
