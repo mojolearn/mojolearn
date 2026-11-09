@@ -31,36 +31,6 @@ from .exceptions import NotFittedError, not_fitted_error  # noqa: F401
 _SCALER_FORMAT = "mojolearn-scaler-1"
 
 
-def _require_training(estimator):
-    """The CPU inference boundary for the scalers, which do not inherit
-    `NumericModeMixin`'s guard: on a CPU-only install `fit` refuses outside
-    `mojolearn._cpu_reference.reference_training()`."""
-    from ._cpu_reference import require_training
-    require_training(estimator)
-
-
-def _saved_statistic(arrays, name, d, path):
-    value = _serialize.exact(arrays, name, "<f4")
-    if value.ndim != 1 or value.size != d:
-        raise ValueError(f"mojolearn: {path!r} {name} does not match n_features_in_")
-    return value
-
-
-def _scaler_header(arrays, path, cls, fields):
-    """The format, estimator, numeric mode and `meta` checks both loads
-    share; returns `(mode, meta)`."""
-    saved_as = _serialize.scalar_str(arrays, "estimator")
-    if saved_as not in (c.__name__ for c in cls.__mro__):  # glue: walks the class hierarchy names
-        raise ValueError(f"mojolearn: {path!r} was saved by {saved_as}, not {cls.__name__}")
-    mode = _serialize.scalar_str(arrays, "numeric_mode")
-    if mode not in ("fast", "identical"):
-        raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
-    meta = _serialize.exact(arrays, "meta", "<i8")
-    if meta.size != fields:
-        raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, {fields} are needed")
-    return mode, meta
-
-
 def _prep():
     from . import _expansion_prep
     return _expansion_prep
@@ -72,69 +42,6 @@ def _refuse_inf(pr, st, d):
     lo, hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
     if any(math.isinf(v) for v in lo + hi):  # glue: raises on an infinite per-column statistic
         raise ValueError('Scaler input contains infinity; only NaN may be missing')
-
-
-def _nan_scan_fill(mode, values, fill_row):
-    """One x_prep program over X with NaN: col_stats (count, mean, var, min,
-    max, maxabs over the non-NaN entries; an infinity refused) and X with
-    every NaN replaced by the per-column value of col_stats row `fill_row`
-    (3: the column's minimum, which leaves its min and max unchanged; None:
-    zero). Returns (filled X, counts, colnan): colnan the int32 words
-    count == 0 (c2_cnt0, lane cpu2-l3-prep). Data movement only: the filled
-    X feeds the binding's own fit or transform, so every finite entry takes
-    the same arithmetic as a NaN-free call."""
-    P = _prep()
-    n, d = values.shape
-    pr = P._Prog()
-    xo = pr.put(values)
-    st = pr.alloc(6 * d)
-    keep = pr.put_list(range(d))
-    stat = st + fill_row * d if fill_row is not None else pr.put_list([0.0] * d)
-    out = pr.alloc(n * d)
-    pr.stage("col_stats", d, xo, n, d, st)
-    pr.stage("fill", n * d, xo, n, d, stat, out, keep, d)
-    cn = pr.alloc(d)
-    pr.stage("c2_cnt0", d, st, cn)
-    pr.run(mode)
-    _refuse_inf(pr, st, d)
-    return pr.get(out, (n, d)), pr.get(st, d), pr.get_i32(cn, d)
-
-
-def _nan_keep(mode, values, transformed, colnan):
-    """The transform of X with NaN: NaN entries of X kept bit for bit, a
-    column never seen in fit (NaN statistics; `colnan` int32 words, or None
-    for none) all NaN, else the binding's transform of the NaN-filled X
-    (x_prep `nan_keep`)."""
-    P = _prep()
-    n, d = values.shape
-    pr = P._Prog()
-    xo = pr.put(values)
-    to = pr.put(transformed)
-    cn = pr.put_codes(colnan) if colnan is not None else pr.put(zeros((d,), "<f4"))
-    out = pr.alloc(n * d)
-    pr.stage("nan_keep", n * d, xo, d, to, cn, out)
-    return pr.run(mode).get(out, (n, d))
-
-
-def _stat_sub(mode, a, b, use_a, use_b, fill_a, fill_b):
-    """Lane cpu2-l3-prep: a transform's two statistic vectors on the device
-    (x_prep c2_nan_sub): colnan = (use_a and a is NaN) or (use_b and b is
-    NaN); there a, b become fill_a, fill_b. Returns (a, b, colnan int32
-    words or None when no column is NaN, nonfinite count, nonpositive-b
-    count); the counts are c2_isum words (three read back)."""
-    P = _prep()
-    d = a.size
-    pr = P._Prog()
-    oa, ob, cn, nf, npos, sums = (pr.alloc(d), pr.alloc(d), pr.alloc(d), pr.alloc(d), pr.alloc(d),
-                                  pr.alloc(3))
-    pr.stage("c2_nan_sub", d, pr.put(a), pr.put(b), int(use_a), int(use_b), pr.put_scalar(fill_a),
-             pr.put_scalar(fill_b), oa, ob, cn, nf, npos)
-    pr.stage("c2_isum", 1, cn, d, sums)
-    pr.stage("c2_isum", 1, nf, d, sums + 1)
-    pr.stage("c2_isum", 1, npos, d, sums + 2)
-    pr.run(mode)
-    k = pr.get_i32(sums, 3).tolist()
-    return pr.get(oa, d), pr.get(ob, d), (pr.get_i32(cn, d) if k[0] else None), k[1], k[2]
 
 
 def _sample_weight(sample_weight, n):
@@ -190,57 +97,6 @@ def _seen(counts, weighted):
         return vals[0] if len(set(vals)) == 1 else Array.from_list(vals, "<f4")
     vals = [int(v) for v in counts]  # glue: converts the device sample counts (counts-sized: per-column sample counts)
     return vals[0] if len(set(vals)) == 1 else Array.from_list(vals, "<i8")
-
-
-def _per_feature(seen, d):
-    if isinstance(seen, Array):
-        return [float(v) for v in seen.tolist()]  # glue: per-column sample counts of n_samples_seen_
-    return [float(seen)] * d
-
-
-def _write_back(copy, copied, values, X, output):
-    """copy=False (the reference's in-place transform): when X's own float32
-    C-contiguous writable buffer was used without a copy, the result is
-    written into it and X is returned; otherwise the new Array (the
-    reference also copies an input it had to convert)."""
-    if copy or copied or getattr(values, "_readonly", False):
-        return output
-    ctypes.memmove(_addr(values), _addr_ro(output), 4 * output.size)
-    return X
-
-
-def _direct_entry(binding, name):
-    """The binding's direct fit entry (lane gap-prep2: X goes up from its own
-    buffer and the device scans it for a nonfinite value; the same kernels
-    and words as the List route), or None: an older binary, the host
-    binding, or MOJOLEARN_SCALER_DIRECT=0 (the A/B switch: the host scan and
-    the binding's List copies, as before)."""
-    import os
-    if os.environ.get("MOJOLEARN_SCALER_DIRECT", "1").strip() == "0":
-        return None
-    try:
-        return getattr(binding, name)
-    except (AttributeError, ImportError):
-        return None
-
-
-def _counts_i64(seen, d):
-    """n_samples_seen_ (an int or an int64 vector) as d int64 words."""
-    if isinstance(seen, Array):
-        return seen.astype("<i8") if seen.dtype != "<i8" else seen
-    return full((d,), int(seen), "<i8")
-
-
-def _add_counts(mode, a, b, d):
-    """Two n_samples_seen_ counts added per feature on the device
-    (x_prep c2_add_i64): an int64 Array."""
-    P = _prep()
-    pr = P._Prog()
-    out = pr.alloc(2 * d)
-    pr.stage("c2_add_i64", d, pr.put_words(P._label_buffer(_counts_i64(a, d)).words),
-             pr.put_words(P._label_buffer(_counts_i64(b, d)).words), out)
-    pr.run(mode)
-    return P._class_words(pr, out, d, True)
 
 
 class _ScalerProtocol(PublicOutputsMixin):
@@ -300,7 +156,6 @@ class _ScalerProtocol(PublicOutputsMixin):
 
     def __sklearn_is_fitted__(self):
         return hasattr(self, 'scale_') and hasattr(self, 'numeric_mode_')
-
 
 
 # Maintainer notes: partial_fit's first batch reproduces fit's bits; statistics
@@ -617,7 +472,6 @@ class StandardScaler(_ScalerProtocol):
     def __init__(self, *, copy=True, with_mean=True, with_std=True, numeric_mode=None):
         return _STANDARD_CALL(self, "init", (copy, with_mean, with_std, numeric_mode), _STANDARD_CONTEXT)
         # Stored as given; fit and partial_fit check them (`_configuration`), scikit-learn's convention.
-
 
 
     def fit(self, X, y=None, sample_weight=None):

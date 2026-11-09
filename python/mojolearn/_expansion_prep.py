@@ -156,35 +156,6 @@ def _p2m_chunks(n, per=1):
     return ch, max(1, -(-n // ch))
 
 
-def _p2m_class_rows(pr, co, n, K, rows=True):
-    """Stages (p2m_ccount .. p2m_cwrite): the class counts of the float codes
-    at `co` (int32 words, TOT) and, with rows, the rows grouped by class,
-    ascending inside a class (int32 words, ROWS). Returns (ROWS or None, TOT)."""
-    ch, nch = _p2m_chunks(n, K)
-    cnt, tot = pr.alloc(nch * K), pr.alloc(K)
-    pr.stage("p2m_ccount", nch, co, n, K, ch, cnt)
-    pr.stage("p2m_cscan", K, cnt, nch, K, tot)
-    if not rows:
-        return None, tot
-    start, ro = pr.alloc(K), pr.alloc(n)
-    pr.stage("p2m_cstart", 1, tot, K, start, _NONE)
-    pr.stage("p2m_cwrite", nch, co, n, K, ch, cnt, start, ro)
-    return ro, tot
-
-
-def _p2m_sel(pr, xo, n, d, mode, dst):
-    """Stages (p2m_sel_count .. p2m_sel_write): per column j of the (n, d)
-    block at xo, the selected rows ascending at dst + j*n (mode 0: the
-    non-NaN words; mode 1: the indices of the positive rows). Returns the
-    offset of the d counts (int32 words)."""
-    ch, nch = _p2m_chunks(n)
-    cnt, tot = pr.alloc(d * nch), pr.alloc(d)
-    pr.stage("p2m_sel_count", d * nch, xo, n, d, ch, nch, mode, cnt)
-    pr.stage("p2m_sel_scan", d, cnt, nch, tot)
-    pr.stage("p2m_sel_write", d * nch, xo, n, d, ch, nch, mode, cnt, dst)
-    return tot
-
-
 #: the smallest output (words) that `_Prog.output` keeps out of the arena
 _OUT_MIN_WORDS = 2 ** 27
 
@@ -636,19 +607,6 @@ class _PrepBase(SklearnTagsMixin):
         if arr.shape[1] != self.n_features_in_:
             raise ValueError(f"mojolearn: X has {arr.shape[1]} features, {type(self).__name__} "
                              f"was fitted with {self.n_features_in_}")
-
-
-def _affine(mode, X, center, scale):
-    """(X - center) / scale on the device (either may be None)."""
-    arr = _x2d(X)
-    n, d = arr.shape
-    pr = _Prog()
-    xo = pr.put(arr)
-    co = pr.put(center) if center is not None else _NONE
-    so = pr.put(scale) if scale is not None else _NONE
-    out = pr.output(n * d)
-    pr.stage("affine", n * d, xo, n * d, d, co, so, out)
-    return pr.run(mode).get(out, (n, d))
 
 
 # ---------------------------------------------------------------- scalers
@@ -1410,21 +1368,6 @@ class SimpleImputer(_PrepBase):
 
     def transform(self, X):
         return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
-
-
-def join_column_blocks(parts, ranges, n, d, mode=None):
-    """The (n, d) float32 matrix whose columns [start, end) are the C-order
-    (n, end - start) Array parts[k] for ranges[k]: one `colblock` stage per
-    part in one program (word copies, on the device on a GPU install)."""
-    pr = _Prog()
-    out = pr.output(n * d)
-    for (start, end), part in zip(ranges, parts):  # glue: stages one copy per column block (parts-sized: column block parts)
-        w = end - start
-        if w <= 0 or n <= 0:
-            continue
-        pr.stage("colblock", n * w, pr.put(part), w, out, d, start)
-    pr.run(_mode() if mode is None else mode)
-    return pr.get(out, (n, d))
 
 
 # ---------------------------------------------------------------- discretizer
