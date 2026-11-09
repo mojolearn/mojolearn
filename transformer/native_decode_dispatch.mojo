@@ -4,8 +4,7 @@
 from transformer.block_options import BLOCK_OPTION_ADDRS, BLOCK_OPTION_PARAMS, BlockOptions
 from transformer.transformer_binding_impl import (
     TransformerDecodeSession, _require_session_open, _check_base_addrs,
-    _session_open_run, _session_open_run_int15, _session_step_run,
-    _session_forward_run, _session_export_run, _session_load_run,
+    _session_open_run, _session_open_run_int15, _session_export_run, _session_load_run,
 )
 
 
@@ -68,24 +67,19 @@ def transformer_decode_operation(op: Int, a: List[Int], words: List[Int]) raises
             raise problem
         owner[].usable = True
         return result
+    if op == 5 or op == 6:
+        # Lane x4: the descriptor step (5) and forward (6) served only the
+        # public decode session's provider arm, which now runs the attention
+        # step op through its binding entries; the CausalLM layers use open,
+        # export, load and close only.
+        raise Error("transformer decode: the descriptor step and forward were removed; use the session entries")
     if len(a) != 2 or a[0] == 0 or a[1] == 0:
         raise Error("transformer decode: expected two nonnull buffer addresses")
-    if (op == 5 or op == 8) and len(p) != 1:
+    if op == 8 and len(p) != 1:
         raise Error("transformer decode: expected cached_tokens")
-    if op == 6 and (len(p) != 2 or p[0] <= 0):
-        raise Error("transformer decode forward: expected positive L and cached_tokens")
     if op == 7 and len(p) != 0:
         raise Error("transformer decode export: unexpected scalars")
-    if op == 5 or op == 6:
-        var claimed = p[0] if op == 5 else p[1]
-        if owner[].cached() != claimed:
-            raise Error("transformer decode session: the caller believes cached_tokens = " + String(claimed)
-                + " but the resident cache holds " + String(owner[].cached()))
     try:
-        if op == 5:
-            return _session_step_run(owner[], a[0], a[1])
-        if op == 6:
-            return _session_forward_run(owner[], a[0], a[1], p[0])
         if op == 7:
             return _session_export_run(owner[], a[0], a[1])
         if op == 8:

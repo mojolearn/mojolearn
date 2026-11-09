@@ -19,7 +19,6 @@ from bindings.transformer_public_native import _transformer_fields, _transformer
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from providers.python.generation_metadata_pyapi import GenerationLayerSnapshot
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_module_fields
-from providers.python.transformer_resident_pyapi import transformer_resident_decode_handle, transformer_resident_decode_call_handle
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
 from core.hostptr import f32_ptr
 from transformer.block_options import BlockOptions
@@ -41,9 +40,6 @@ struct TransformerDecodeHandle(Movable, Writable):
     var optional: List[List[Float32]]
     var k_cache: List[Float32]
     var v_cache: List[Float32]
-    # N186: the provider's native handle of `device`, resolved once at open
-    # (0 when no provider route). `device` retains its owner.
-    var native_handle: Int
     # N181: the compiled entries a step, state transfer or close calls,
     # resolved once at open by _TRANSFORMER_DECODE_* index (None when the
     # binding lacks one; the use raises the same refusal as before).
@@ -74,7 +70,6 @@ struct TransformerDecodeHandle(Movable, Writable):
         self.optional = List[List[Float32]]()
         self.k_cache = List[Float32]()
         self.v_cache = List[Float32]()
-        self.native_handle = 0
         self.entries = List[PythonObject]()
         self.block_generation = 0
         self.state_generation = 0
@@ -558,15 +553,12 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
             if i != 1:
                 open_p.append(p[i])
         handle.device = _transformer_decode_entry(binding, "transformer_decode_session_create")()
-        if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1" and String(fields["numeric_mode"]) == "identical":
-            handle.provider = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
-                _transformer_decode_entry(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
-            handle.native_handle = transformer_resident_decode_handle(handle.provider, handle.device)
-            cached = transformer_resident_decode_call_handle(handle.provider, handle.device, handle.native_handle,
-                19 if packed else 18, a, open_p)
-        else:
-            cached = Int(py=py_call(_transformer_decode_entry(binding, "transformer_decode_session_open_int15" if packed else "transformer_decode_session_open"),
-                handle.device, py_ints(a), py_ints(open_p)))
+        # Lane x4: one device open. A float32 session runs on the attention
+        # step op (`transformer_decode_session_open_step_op`); fixed15_v1
+        # keeps its resident planes. The descriptor-provider arm of the
+        # public session (MOJOLEARN_NEURAL_NATIVE_DISPATCH ops 18-24) is gone.
+        cached = Int(py=py_call(_transformer_decode_entry(binding, "transformer_decode_session_open_int15" if packed else "transformer_decode_session_open_step_op"),
+            handle.device, py_ints(a), py_ints(open_p)))
     else:
         if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
             handle.provider = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
@@ -676,12 +668,8 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
             h[].device, py_ints([px, py]), py_ints([length, cached])))
     elif h[].device is not None:
         var p: List[Int] = [cached] if step else [length, cached]
-        if h[].provider is not None:
-            cached = transformer_resident_decode_call_handle(h[].provider, h[].device, h[].native_handle,
-                20 if step else 21, [px, py], p)
-        else:
-            cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_STEP if step else _TRANSFORMER_DECODE_FORWARD),
-                h[].device, py_ints([px, py]), py_ints(p)))
+        cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_STEP if step else _TRANSFORMER_DECODE_FORWARD),
+            h[].device, py_ints([px, py]), py_ints(p)))
     else:
         var a: List[Int] = [px]
         for i in range(len(h[].weights)):  # driver-loop: native session-owned weight addresses
@@ -745,10 +733,7 @@ def transformer_decode_state(session: PythonObject, load: Bool, context: PythonO
     if h[].device is not None:
         var a: List[Int] = [pieces[0], pieces[1]]
         var p: List[Int] = [cached] if load else []
-        if h[].provider is not None:
-            cached = transformer_resident_decode_call_handle(h[].provider, h[].device, h[].native_handle,
-                23 if load else 22, a, p)
-        elif load:
+        if load:
             cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_LOAD), h[].device, py_ints(a), py_ints(p)))
         else:
             cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_EXPORT), h[].device, py_ints(a)))
@@ -785,10 +770,7 @@ def transformer_decode_release(session: PythonObject, context: PythonObject) rai
     h[].open = False
     py_setitem(state_fields, "_resident_session", PythonObject(None))
     if h[].device is not None:
-        if h[].provider is not None:
-            _ = transformer_resident_decode_call_handle(h[].provider, h[].device, h[].native_handle, 24, [], [])
-        else:
-            _ = py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_CLOSE), h[].device)
+        _ = py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_CLOSE), h[].device)
     h[].weights.clear(); h[].optional.clear(); h[].k_cache.clear(); h[].v_cache.clear()
 
 
