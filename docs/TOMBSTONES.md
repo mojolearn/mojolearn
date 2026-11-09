@@ -5649,6 +5649,7 @@ RUN OWED: mlp-infer sessions, par-mlp train and lm-train-step (chunked) ms on NV
 - Guards: `core/experiment_guards_neural.mojo` refuses `MOJOLEARN_NN64_SESSION_PACK` and `MOJOLEARN_AFN_ATTN_ARENA`;
   `nn64_session_pack` moved to `removed` in `experiments/six_lane_integration/grid_controls/neural-seq-train-dedupe.json`
   (`AFN_ATTN_ARENA` had no grid control); rows in `docs/apple-fast/EXPERIMENTS.md`.
+- **Reviewed 2026-11-09, not restored** (lane r2-restore-unmeasured-defaults): `MOJOLEARN_NN64_SESSION_PACK` was default OFF at `0ce88411d3` (`training/neural_ab_lifetime.mojo`: IDENTICAL and `is_defined`), an opt-in arm never measured, so it stays deleted and its refusal stays. Note: the per-session forward it switched away from was that entry's default; the replacement runs the sessions packed as one forward of the small-MLP program, a plumbing move made without a measurement (mlp-infer sessions rows are in owed row `r1-small-mlp-op`).
 - Code recoverable at `0ce88411d3`; patches `experiments/removed/M2_SMALL_MLP_PRIMITIVES.patch` and
   `experiments/removed/MOJOLEARN_AFN_ATTN_ARENA.patch` (the reverse of the lane's change to the code files; `git apply`
   restores them).
