@@ -467,6 +467,7 @@ in the tables after the sections.
 | [`MOJOLEARN_RSVD_FAST_DEVSCAN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd finiteness scan, FAST + Apple) | removed (KEPT default, superseded: parallel host scan of the one admission path) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_IDN_ARIMA_ASYNC_OFF`](#arima-lock-step-l-bfgs-superseded-by-the-per-series-solver-2026-11-09) | Time series (ARIMA fit, IDENTICAL) | removed (KEPT default's `_OFF`, superseded: the lock-step solver is deleted) | 2026-11-09 | [ARIMA_LOCKSTEP_LBFGS.patch](../experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch) |
 | [`MOJOLEARN_ARIMA_FAST_ASYNC_OFF`](#arima-lock-step-l-bfgs-superseded-by-the-per-series-solver-2026-11-09) | Time series (ARIMA fit, FAST) | removed (KEPT default's `_OFF`, superseded: the lock-step solver is deleted) | 2026-11-09 | [ARIMA_LOCKSTEP_LBFGS.patch](../experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch) |
+| [dictionary learning per-iteration host reads (`resample_atom_dev`, `cost_dev`, the used-atom count, A[j, j] per atom)](#dictionary-learning-loops-as-device-programs-2026-11-09) | Decomposition (DictionaryLearning, MiniBatchDictionaryLearning, GPU) | REFACTORED (device program, one read per DL_CHECK_EVERY iterations) | 2026-11-09 | [DICTL_HOST_READS.patch](../experiments/removed/DICTL_HOST_READS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -4292,3 +4293,21 @@ and `retcode` are the lock-step solver's by construction; the sequential and hel
 `n_eval` now counts rounds (up to `ASYNC_READ_EVERY - 1` no-op rounds past the last series), as the per-series arm always
 did. Run ids: gaparima-async-* (M3). RUN OWED: NVIDIA + AMD autoarima rows for the fits that used to take the lock-step arm.
 Recoverable at f59d913b0b; patch `experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch` (all code hunks of the deletion).
+
+## Dictionary learning loops as device programs (2026-11-09)
+
+Lane n10-dictl-arima-loops (plan section 4, row "Dictionary learning"). `x_decomp/dictl_dev.mojo`'s two loops read
+3 + 2 nc words home per iteration: the used-atom count (`count_gt` of A's diagonal), A[j, j] per atom (`cols` with a
+drain and `word`), the resample's draw and std (`resample_atom_dev`), the two cost words (`cost_dev`), and per
+MiniBatch step the dictionary change; every row solve (`DKit._code_rows`) also drained. Now each loop enqueues
+`DL_CHECK_EVERY` = 4 iterations (state in a ring of slots, cost words in a device array) and reads once; the host
+replays the float64 error, forgetting average and stop tests over the chunk in order and takes the stopping slot. The
+atom test, the Philox draw, the row pick, the noise and the code column's zeroing are `x_decomp/dictl_resample.mojo`
+(the FAST fused update, `x_decomp/dict_fast.mojo`, runs the same kernel between its two launches, so it no longer needs
+the used-atom count). Deleted: `resample_atom_dev`, `cost_dev`, the per-atom reads, `_code_rows`'s drain. Bits: none on
+an update without an unused atom (same cells, same order; the row std is the same per-row folds computed for every row
+at once). A resampled atom's noise scale is now one float32 product `mul(0.01f, std or 1)` on the device and in the host
+column (`x_decomp/dictl.mojo::resample_atom`), where it was the float64 product rounded to float32; that changes the bits
+of a resampled atom only, on every vendor and the host column together (identity lanes: dictionary-learning,
+minibatch-dictionary-learning, sparse-coder when an atom goes unused). Recoverable at f59d913b0b; patch
+`experiments/removed/DICTL_HOST_READS.patch` (all code hunks).
