@@ -17,8 +17,10 @@ from std.python._cpython import PyObjectPtr, GILReleased
 from std.ffi import c_int, external_call
 from std.sys.compile import is_defined
 from bindings.cpython_table import cpython_table
-from bindings.optimizer_public_words import stash_python_error, PYTHON_ERROR_PENDING, _restore_python_error
-from bindings.native_unit_threads import native_unit_threads_run, native_unit_gil_enter, native_unit_gil_leave, native_unit_cores
+from bindings.optimizer_public_words import stash_python_error
+from bindings.native_unit_threads import (
+    native_unit_threads_run, native_unit_gil_enter, native_unit_gil_leave, native_unit_cores, NativeUnitFailure,
+)
 from core.host_parallel import host_fp_env, host_fp_env_set
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.py_attr import py_attr
@@ -705,9 +707,7 @@ struct MselUnitRun(Movable):
     var fit_time: List[Float64]
     var score_time: List[Float64]
     var estimators: PythonObject
-    var failed: Int
-    var failure: String
-    var failure_words: List[Int]
+    var failure: NativeUnitFailure
     var fp_env: UInt64
     # cross_val_predict: the method each unit calls on its test rows (an
     # exact str), its output in `preds[u]`; None: the units score.
@@ -753,9 +753,7 @@ struct MselUnitRun(Movable):
         self.estimators = py_call(b.list, Python.tuple())
         if return_estimator:
             self.estimators = family_call(msel_op("mul"), Python.list(PythonObject(None)), PythonObject(self.n_units))
-        self.failed = -1
-        self.failure = String()
-        self.failure_words = List[Int](length=3, fill=0)
+        self.failure = NativeUnitFailure()
         self.fp_env = host_fp_env()
         self.method = method
         self.preds = py_call(b.list, Python.tuple())
@@ -835,26 +833,8 @@ struct MselUnitRun(Movable):
             py_setitem(self.estimators, PythonObject(u), est)
 
     def fail(mut self, u: Int, error: Error):
-        """Keep the error of the lowest failing unit (the one the serial
-        order raises); a stashed Python exception moves into this run."""
         self.stop = True
-        try:
-            var words = List[Int](length=3, fill=0)
-            var message = String(error)
-            if message == PYTHON_ERROR_PENDING:
-                _ = _restore_python_error()
-                ref cpy = Python().cpython()
-                var p = words.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-                cpy.lib.get_function[NoneType]("PyErr_Fetch")(p, p + 1, p + 2)
-            if self.failed >= 0 and self.failed < u:
-                _msel_drop_words(words)
-                return
-            _msel_drop_words(self.failure_words)
-            self.failed = u
-            self.failure = message
-            self.failure_words = words^
-        except:
-            pass
+        self.failure.record(u, error)
 
     def drain(mut self):
         while True:  # driver-loop: over units, pulled in index order under the GIL
@@ -868,15 +848,7 @@ struct MselUnitRun(Movable):
                 self.fail(u, error)
 
     def reraise(mut self) raises:
-        if self.failed < 0:
-            return
-        if self.failure_words[0] != 0:
-            var w = self.failure_words.copy()
-            self.failure_words = List[Int](length=3, fill=0)
-            ref cpy = Python().cpython()
-            cpy.lib.get_function[NoneType]("PyErr_Restore")(w[0], w[1], w[2])
-            raise stash_python_error()
-        raise Error(self.failure)
+        self.failure.reraise()
 
     def candidate(self, c: Int, return_indices: Bool, context: PythonObject) raises -> MselScores:
         """Candidate c's per-fold results, in fold order."""
@@ -896,18 +868,6 @@ struct MselUnitRun(Movable):
                 _ = py_call(out.train_idx.append, folds[f][0])
                 _ = py_call(out.test_idx.append, folds[f][1])
         return out^
-
-
-def _msel_drop_words(words: List[Int]):
-    """Release a fetched (type, value, traceback) triple."""
-    if words[0] == 0 and words[1] == 0 and words[2] == 0:
-        return
-    try:
-        ref cpy = Python().cpython()
-        cpy.lib.get_function[NoneType]("PyErr_Restore")(words[0], words[1], words[2])
-        cpython_table()[].PyErr_Clear()
-    except:
-        pass
 
 
 def msel_cv_units(base: PythonObject, candidates: PythonObject, y: PythonObject, mut rows: MselFoldRows,

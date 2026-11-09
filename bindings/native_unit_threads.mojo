@@ -26,6 +26,7 @@ from std.python._cpython import GILReleased
 from std.sys.info import num_physical_cores
 
 from bindings.cpython_table import cpython_table
+from bindings.optimizer_public_words import stash_python_error, PYTHON_ERROR_PENDING, _restore_python_error
 
 #: The thread entry: `void *(*)(void *)` with the argument and result as
 #: address words (same register class under the C ABI on every target).
@@ -85,3 +86,65 @@ def native_unit_threads_run(entry: NativeUnitEntry, arg: Int, workers: Int) rais
                 _ = external_call["pthread_join", c_int](handles[i], Int(0))
     _ = handles^
     _ = attr^
+
+
+struct NativeUnitFailure(Movable):
+    """The error of the lowest failing unit of a run: the one the serial
+    order raises (units are pulled in index order, so every lower unit was
+    started before it and ran to its end). A stashed Python exception
+    (`PYTHON_ERROR_PENDING`) is fetched out of the process-wide pending slot
+    into this record at once, with the GIL held, so another unit's stash
+    cannot overwrite it; `reraise` puts it back on the calling thread."""
+    var unit: Int
+    var message: String
+    var words: List[Int]
+
+    def __init__(out self):
+        self.unit = -1
+        self.message = String()
+        self.words = List[Int](length=3, fill=0)
+
+    def failed(self) -> Bool:
+        return self.unit >= 0
+
+    def record(mut self, u: Int, error: Error):
+        try:
+            var words = List[Int](length=3, fill=0)
+            var message = String(error)
+            if message == PYTHON_ERROR_PENDING:
+                _ = _restore_python_error()
+                ref cpy = Python().cpython()
+                var p = words.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+                cpy.lib.get_function[NoneType]("PyErr_Fetch")(p, p + 1, p + 2)
+            if self.unit >= 0 and self.unit < u:
+                _native_unit_drop(words)
+                return
+            _native_unit_drop(self.words)
+            self.unit = u
+            self.message = message
+            self.words = words^
+        except:
+            pass
+
+    def reraise(mut self) raises:
+        if self.unit < 0:
+            return
+        if self.words[0] != 0:
+            var w = self.words.copy()
+            self.words = List[Int](length=3, fill=0)
+            ref cpy = Python().cpython()
+            cpy.lib.get_function[NoneType]("PyErr_Restore")(w[0], w[1], w[2])
+            raise stash_python_error()
+        raise Error(self.message)
+
+
+def _native_unit_drop(words: List[Int]):
+    """Release a fetched (type, value, traceback) triple."""
+    if words[0] == 0 and words[1] == 0 and words[2] == 0:
+        return
+    try:
+        ref cpy = Python().cpython()
+        cpy.lib.get_function[NoneType]("PyErr_Restore")(words[0], words[1], words[2])
+        cpython_table()[].PyErr_Clear()
+    except:
+        pass
