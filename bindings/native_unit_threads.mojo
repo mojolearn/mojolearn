@@ -26,6 +26,8 @@ from std.python._cpython import GILReleased
 from std.sys.info import num_physical_cores
 
 from bindings.cpython_table import cpython_table
+from bindings.native_loaded_module import native_loaded_module
+from bindings.py_balanced import py_type
 from bindings.optimizer_public_words import stash_python_error, PYTHON_ERROR_PENDING, _restore_python_error
 
 #: The thread entry: `void *(*)(void *)` with the argument and result as
@@ -44,6 +46,24 @@ comptime _UNIT_THREAD_STACK_BYTES = 64 << 20
 def native_unit_cores() -> Int:
     """Physical cores of this host (at least 1)."""
     return max(num_physical_cores(), 1)
+
+
+def native_unit_jobs(n_jobs: PythonObject, caller: String) raises -> Int:
+    """The thread bound of a unit run from an estimator's `n_jobs`
+    (joblib's meaning): an int k > 0 is the bound, -1 all cores, -k all
+    cores but k - 1; None all cores (parallel by default, AGENTS.md: the
+    results do not depend on it)."""
+    var cores = native_unit_cores()
+    if n_jobs is None:
+        return cores
+    if py_type(n_jobs) is not native_loaded_module("builtins").int:
+        raise Error("TypeError: " + caller + ": n_jobs must be None or an int")
+    var k = Int(py=n_jobs)
+    if k == 0:
+        raise Error("ValueError: n_jobs == 0 in Parallel has no meaning")
+    if k < 0:
+        return max(cores + 1 + k, 1)
+    return k
 
 
 def native_unit_gil_enter() raises -> c_int:
