@@ -143,7 +143,7 @@ def _check_dims(fields: PythonObject, source: PythonObject, context: PythonObjec
         raise Error("ValueError: " + _HW + "endog is empty")
     var out = tsa_array("f", "<f4", Python.tuple(rows, n), rows * n, 4, context)
     _ = admitted_cast_nd_f32(value.source.addr, value.shape, value.strides, value.source.itemsize,
-                 value.source.kind, True, _F32P(unsafe_from_address=Int(py=classical_address(out))))
+                 value.source.kind, _F32P(unsafe_from_address=Int(py=classical_address(out))))
     _ = value
     _ = out
     return Python.tuple(out, n)

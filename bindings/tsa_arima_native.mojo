@@ -125,7 +125,7 @@ def _entry(entries: PythonObject, name: String) raises -> PythonObject:
 
 def _copy_series(source: ArimaBuffer, shape: PythonObject, context: PythonObject) raises -> PythonObject:
     var result = tsa_array("f", "<f4", shape, source.count, 4, context)
-    _ = admitted_cast_nd_f32(source.address, source.shape, source.strides, source.itemsize, source.kind, True,
+    _ = admitted_cast_nd_f32(source.address, source.shape, source.strides, source.itemsize, source.kind,
                  _F32P(unsafe_from_address=Int(py=classical_address(result))))
     _ = source
     return result

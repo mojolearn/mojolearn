@@ -534,7 +534,7 @@ def _float_owned(source: PythonObject, name: String, context: PythonObject) rais
         strides[i] = step
         step *= layout.shape[i]
     var out = new_array(layout.shape, "<f4")
-    _ = admitted_cast_nd_f32(Int(bytes.unsafe_ptr()), layout.shape, strides, layout.itemsize, kind, True,
+    _ = admitted_cast_nd_f32(Int(bytes.unsafe_ptr()), layout.shape, strides, layout.itemsize, kind,
         MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr)))
     _ = bytes^
     _ = pin^

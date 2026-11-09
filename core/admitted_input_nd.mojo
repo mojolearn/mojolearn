@@ -8,23 +8,27 @@ Plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2 step 2
 ("`family_cast_rows_finite`'s shape generalised to N-d strides, so
 `xseq_cast_nd` folds in"), lane A4 a4-admit-sequence-tsa-neural, 2026-11-08.
 
-    admitted_cast_nd_f32(base, dims, steps, item, kind, double_ints, dst) -> Bool
+    admitted_cast_nd_f32(base, dims, steps, item, kind, dst) -> Bool
         the float32 word of every item of the strided rank-N array at byte
         address `base` (byte `steps` per axis), written to `dst` in C order;
         True when none of the written words is a NaN or an infinity.
-        `double_ints` takes `Array.astype`'s integer -> double -> float32
-        route (`classical_f32_bits`); otherwise NumPy's direct
-        `astype(float32)` bits (`cast_f32_bits`). Floats and bools are the
-        same word either way.
+        Integers take the one admission rule, `Array.astype`'s integer ->
+        double -> float32 route (`classical_f32_bits`, as `admit_x`).
     admitted_ids_i32(addr, s0, s1, rows, cols, item, kind, dst)
         a strided (rows, cols) integer or bool array as C-order int32 ids
         (`cast_i32_bits`: exact, saturated outside int32).
 
-Numerics: none. Each item is one typed load (`admitted_raw_word`) and the
-same bit function per item as the serial odometer walks these replace
-(`xseq_cast_nd`, `neural_cast_i32_2d`, core/xseq_marshal.mojo), written to the
-same cell; the finiteness verdict is an AND over tasks. Neither the split nor
-the read order can change an output bit.
+Numerics: no arithmetic on values. Each item is one typed load
+(`admitted_raw_word`) and one bit function, written to its own cell; the
+finiteness verdict is an AND over tasks, so neither the split nor the read
+order can change an output bit. Bit change (allowed between versions, owner
+rule 2026-11-08): `xseq_cast_nd` had two integer rules; the doors that used
+NumPy's direct integer -> float32 rounding (`cast_f32_bits`: xseq_f32 by
+default, the VAR / forecast matrices) now take the one admission rule
+(`classical_f32_bits`). The two differ only for an integer input of
+magnitude above 2^53 (int64 / uint64); float and bool inputs, and every
+float32 board input, keep their words. The host column runs this same
+code, so NVIDIA, AMD, Apple and the host column change together.
 
 Parallel plan: the array is read as rows x cols, cols the last axis (a rank-1
 array is one element per row, so its elements split too). Rows are
@@ -35,7 +39,7 @@ cell is written before return.
 """
 from std.memory import bitcast
 from core.classical_cast import classical_f32_bits
-from core.cast_in import cast_f32_bits, cast_i32_bits
+from core.cast_in import cast_i32_bits
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.admitted_input import admitted_raw_word
@@ -48,7 +52,7 @@ comptime _AN_EXP = UInt32(0x7F800000)
 
 
 def admitted_cast_nd_f32(
-    base: Int, dims: List[Int], steps: List[Int], item: Int, kind: Int, double_ints: Bool, dst: _AN_F32P,
+    base: Int, dims: List[Int], steps: List[Int], item: Int, kind: Int, dst: _AN_F32P,
 ) -> Bool:
     """`np.array(a, dtype=float32, order="C")` of the strided array at `base`
     into `dst` (element i in C order at `dst[i]`); True when every written
@@ -79,7 +83,7 @@ def admitted_cast_nd_f32(
     var flags = List[UInt8](length=tasks, fill=UInt8(1))
     var flag_ptr = rebind[_AN_U8P](flags.unsafe_ptr())
 
-    def _rows(t: Int) {imm base, imm item, imm kind, imm double_ints, imm dst, imm cols, imm col_step, imm rows, imm lead, imm dims_ptr, imm steps_ptr, imm chunk, imm flag_ptr}:
+    def _rows(t: Int) {imm base, imm item, imm kind, imm dst, imm cols, imm col_step, imm rows, imm lead, imm dims_ptr, imm steps_ptr, imm chunk, imm flag_ptr}:
         var lo = t * chunk
         var hi = min(lo + chunk, rows)
         var finite = True
@@ -94,7 +98,7 @@ def admitted_cast_nd_f32(
                 axis -= 1
             for c in range(cols):  # native input marshaling: numeric buffer items preserve exact cast bits
                 var raw = admitted_raw_word(base + offset + c * col_step, item)
-                var bits = classical_f32_bits(raw, kind, item) if double_ints else cast_f32_bits(raw, kind, item)
+                var bits = classical_f32_bits(raw, kind, item)
                 dst.unsafe_store(r * cols + c, bitcast[DType.float32](bits))
                 if (bits & _AN_EXP) == _AN_EXP:
                     finite = False

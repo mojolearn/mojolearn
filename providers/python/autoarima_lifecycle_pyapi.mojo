@@ -119,7 +119,7 @@ def autoarima_initialize(model: PythonObject, args: PythonObject, context: Pytho
         strides.append(source.source.s0)
         if rank == 2:
             strides.append(source.source.s1)
-        _ = admitted_cast_nd_f32(source.source.addr, source.shape, strides, source.source.itemsize, source.source.kind, True,
+        _ = admitted_cast_nd_f32(source.source.addr, source.shape, strides, source.source.itemsize, source.source.kind,
                      _F32(unsafe_from_address=Int(py=classical_address(out))))
     var updates = Python.dict()
     py_setitem(updates, "endog", args[0])

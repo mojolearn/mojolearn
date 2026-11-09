@@ -8,7 +8,7 @@
 #
 #   admitted_ndarray_f32(shape, count, context) -> ndarray
 #                     the uninitialised float32 ndarray a cast fills
-#   admit_nd_f32(value, name, copy, context, double_ints) -> ndarray
+#   admit_nd_f32(value, name, copy, context) -> ndarray
 #                     `np.array(value, dtype=float32, order="C", copy=copy)`
 #                     of an admitted ndarray: the array itself when it is
 #                     C-order float32 and no copy is asked for (borrowed),
@@ -47,15 +47,13 @@ def admitted_ndarray_f32(shape: PythonObject, count: Int, context: PythonObject)
     return py_call(context["ndarray"], shape, dtype=context["float32"], buffer=storage)
 
 
-def admit_nd_f32(value: PythonObject, name: String, copy: Bool, context: PythonObject,
-                 double_ints: Bool = False) raises -> PythonObject:
+def admit_nd_f32(value: PythonObject, name: String, copy: Bool, context: PythonObject) raises -> PythonObject:
     """`np.array(value, dtype=np.float32, order="C", copy=copy)` of an
     admitted ndarray (`sequential_input`): the array itself when it is
     already C-ordered float32 and no copy is asked for, otherwise one
-    C-ordered float32 copy with the shared integer-defined conversion
-    (`cast_f32_bits`: `numpy.astype(float32)`'s bits; `double_ints` takes
-    `Array.astype`'s integer -> double -> float32 route,
-    `classical_f32_bits`). Non-finite words are copied as they are."""
+    C-ordered float32 copy with the one admission integer rule
+    (integer -> double -> float32, `classical_f32_bits`, as `admit_x`).
+    Non-finite words are copied as they are."""
     var dtype = value.dtype
     var kind = String(py=dtype.kind)
     if kind != "b" and kind != "i" and kind != "u" and kind != "f":
@@ -78,7 +76,7 @@ def admit_nd_f32(value: PythonObject, name: String, copy: Bool, context: PythonO
         steps.append(Int(py=strides[k]))
         count *= dims[k]
     var out = admitted_ndarray_f32(shape, count, context)
-    _ = admitted_cast_nd_f32(Int(py=sequential_address(value)), dims, steps, item, cast, double_ints,
+    _ = admitted_cast_nd_f32(Int(py=sequential_address(value)), dims, steps, item, cast,
                              _AS_F32P(unsafe_from_address=Int(py=sequential_address(out))))
     _ = value  # keep the source alive through the native cast above
     return out
@@ -117,7 +115,7 @@ def admit_nd_owned_f32(source: PythonObject, dims: List[Int], name: String,
     var result = _owned(native_array_zeros("f", count), output_shape, "<f4", context)
     var pointer = _AS_F32P(unsafe_from_address=Int(py=classical_address(result)))
     # One pass: the cast's own finite flag replaces the second scan.
-    if not admitted_cast_nd_f32(Int(py=classical_address(value)), dims, native_strides, item, kind, True, pointer):
+    if not admitted_cast_nd_f32(Int(py=classical_address(value)), dims, native_strides, item, kind, pointer):
         raise Error(name + " must be finite")
     _ = value^
     return result

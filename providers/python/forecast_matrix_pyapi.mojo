@@ -54,7 +54,7 @@ def _matrix(value: PythonObject, name: String, context: PythonObject, reject_dou
         var shape = Python.tuple(source.shape[0]) if len(source.shape) == 1 else Python.tuple(source.shape[0], source.shape[1])
         # One parallel cast into uninitialised storage (REGRESSIONS F3/C3).
         var result = admitted_ndarray_f32(shape, source.count, context)
-        _ = admitted_cast_nd_f32(source.address, source.shape, source.strides, source.itemsize, source.kind, False, xseq_f32p(result))
+        _ = admitted_cast_nd_f32(source.address, source.shape, source.strides, source.itemsize, source.kind, xseq_f32p(result))
         source.keep = result
         source.address = Int(py=xseq_addr(result))
         source.itemsize = 4

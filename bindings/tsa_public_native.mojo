@@ -72,7 +72,7 @@ def _series_major(source: PythonObject, name: String, context: PythonObject) rai
         steps.append(value.strides[1])
     dims.append(rows)
     steps.append(value.strides[0])
-    _ = admitted_cast_nd_f32(value.source.addr, dims, steps, value.source.itemsize, value.source.kind, True,
+    _ = admitted_cast_nd_f32(value.source.addr, dims, steps, value.source.itemsize, value.source.kind,
                  _F32P(unsafe_from_address=Int(py=classical_address(out))))
     _ = value
     _ = out

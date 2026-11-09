@@ -88,7 +88,7 @@ def xseq_as_f32_c(source: PythonObject, ndim: Int, name: String, context: Python
         var what = String("feature(s)") if rank == 2 and Int(py=a.shape[0]) != 0 else String("sample(s)")
         raise Error("mojolearn: " + name + " is empty, shape " + _shape_text(a) + ": Found array with 0 " + what
                     + " (shape=" + _shape_text(a) + ") while a minimum of 1 is required.")
-    return admit_nd_f32(a, name, False, context, True)
+    return admit_nd_f32(a, name, False, context)
 
 
 def xseq_labels(source: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:

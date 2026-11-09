@@ -89,7 +89,7 @@ def _series(source: PythonObject, label: String, copy: Bool, context: PythonObje
         if not one:
             strides.append(metadata.source.s1)
         _ = admitted_cast_nd_f32(metadata.source.addr, metadata.shape, strides, metadata.source.itemsize,
-                     metadata.source.kind, False, xseq_f32p(arr))
+                     metadata.source.kind, xseq_f32p(arr))
         address = Int(py=xseq_addr(arr))
     _ = metadata
     return Python.tuple(one, arr, rows, cols, address)
