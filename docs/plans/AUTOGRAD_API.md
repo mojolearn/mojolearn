@@ -471,10 +471,12 @@ with ops.Session() as s:
     out["outputs"], out["iterations"], out["stopped"]
 ```
 
-- `check_every` (default 1): iterations between two status reads. With 1,
-  no body runs after the stop. Above 1, up to `check_every - 1` extra
-  iterations are computed and discarded, and the body must keep each state
-  array's shape.
+- `check_every` (default None: the loop's chunk rule, see
+  docs/plans/EXECUTOR_X1_API.md section 5): iterations between two status
+  reads. With 1, no body runs after the stop. Above 1, up to
+  `check_every - 1` extra iterations are computed and discarded (their
+  writes to state tensors too), and the body must keep each state array's
+  shape.
 - `iteration=True`: the body and the condition take one more input, the
   iteration register (one value). Pass only the state arrays.
 - `max_iterations` is at most 16777216.
