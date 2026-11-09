@@ -46,3 +46,36 @@ def weight_epoch_bump() raises:
     """A weight a kernel reads may hold new bytes at an address a resident
     copy is keyed by: every resident copy reloads at its next use."""
     _ = Atomic.fetch_add(_ptr(), Int64(1))
+
+
+struct WeightKey(Copyable, Movable):
+    """The version key of one resident weight copy: the host addresses it was
+    loaded from and the epoch at that load.
+
+        var key = WeightKey()                # empty: never current
+        if not key.current(addrs):           # compare: no pass over weights
+            upload(addrs)                    # (the caller's copy, once)
+            key = WeightKey.take(addrs)      # read the epoch BEFORE the upload
+                                             # (take first, then upload, is safe too:
+                                             # a bump in between only re-uploads)
+    """
+    var addrs: List[Int]
+    var epoch: Int
+
+    def __init__(out self):
+        self.addrs = List[Int]()
+        self.epoch = 0
+
+    def __init__(out self, var addrs: List[Int], epoch: Int):
+        self.addrs = addrs^
+        self.epoch = epoch
+
+    @staticmethod
+    def take(addrs: List[Int]) raises -> WeightKey:
+        """The key of a copy loaded now from `addrs`."""
+        return WeightKey(addrs.copy(), weight_epoch())
+
+    def current(self, addrs: List[Int]) raises -> Bool:
+        """Whether the copy still holds the bytes at `addrs`: same addresses
+        and no bump since it was loaded."""
+        return self.epoch != 0 and self.epoch == weight_epoch() and self.addrs == addrs
