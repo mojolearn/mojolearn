@@ -179,6 +179,8 @@ def program_op_name(code: Int) -> String:
         return "lm_pick"
     if code == 86:
         return "lm_alive"
+    if code == 87:
+        return "lm_head_v2"
     return "op_" + String(code)
 
 

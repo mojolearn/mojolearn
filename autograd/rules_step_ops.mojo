@@ -26,6 +26,7 @@ from sequence.ops import FP, Args
 from autograd.tape import BackwardRules
 from autograd.import_api import ImportRules
 from autograd.block_step_ops import BlockStepScratch, ATTN_STEP_TAG, attn_step_backward
+from autograd.lm_head_v2_op import LM_HEAD_V2_TAG, lm_head_v2_backward_device, lm_head_v2_backward_host
 
 comptime _ScratchRef = MutPointer[BlockStepScratch, MutUntrackedOrigin]
 
@@ -40,9 +41,14 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
     def supports(self, tag: Int) -> Bool:
         if tag == ATTN_STEP_TAG:
             return self.scratch != 0
+        if tag == LM_HEAD_V2_TAG:
+            return True
         return ImportRules().supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        if tag == LM_HEAD_V2_TAG:
+            # the rule writes all of d_hidden and d_weight
+            return False
         if tag == ATTN_STEP_TAG:
             # edge 0 (x): the rule writes all of d_x; edge 1 (the packed
             # weights): only the nine piece slots, the gaps stay zero.
@@ -50,6 +56,8 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
         return ImportRules().zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
+        if tag == LM_HEAD_V2_TAG:
+            return False
         if tag == ATTN_STEP_TAG:
             return False
         return ImportRules().writes_total(tag, saved, edge)
@@ -71,5 +79,17 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
                 # the host runs every launch before it returns: the upstream
                 # gradient is final here
                 ex.step_backward(saved.p0, saved.p1, saved.p2, upstream, gradients[0], gradients[1])
+            return
+        if tag == LM_HEAD_V2_TAG:
+            # saved: p0 the int32 codes, p1 the row maxima, p2 the row
+            # denominators; i0 rows, i1 vocab, i2 width (OpsSession._lm_head_v2)
+            if len(gradients) != 2 or len(inputs) != 2:
+                raise Error("ops: lm_head_v2 backward takes [hidden, weight]")
+            comptime if E.IS_DEVICE:
+                lm_head_v2_backward_device(rebind[DeviceExec](ex), gradients[0], gradients[1], inputs[0], inputs[1],
+                                           saved.p0, saved.p1, saved.p2, upstream, saved.i0, saved.i1, saved.i2)
+            else:
+                lm_head_v2_backward_host(gradients[0], gradients[1], inputs[0], inputs[1],
+                                         saved.p0, saved.p1, saved.p2, upstream, saved.i0, saved.i1, saved.i2)
             return
         ImportRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)

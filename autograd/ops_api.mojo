@@ -119,6 +119,9 @@ from autograd.block_step_ops import (
 )
 # Generation ops (lane x45c): the language model's token pick and the decode
 # loop's condition, session codes 85, 86 (autograd/generation_ops.mojo).
+from autograd.lm_head_v2_op import (
+    OPS_LM_HEAD_V2, LM_HEAD_V2_TAG, lm_head_v2_check, lm_head_v2_forward_device, lm_head_v2_forward_host,
+)
 from autograd.generation_ops import (
     OPS_LM_PICK, OPS_LM_ALIVE, is_generation_op, generation_op_check, generation_op_name, lm_pick_run,
     lm_alive_run, LM_PICK_SAMPLE,
@@ -1420,6 +1423,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if is_generation_op(code):
             # Lane x45c: the token pick and the decode condition, one branch.
             return self._generation_op(code, hs, ints, fs, x)
+        if code == OPS_LM_HEAD_V2:
+            # Lane m2-neural-leftovers: the chunked LM head (loss without
+            # the logits), one custom node (autograd/lm_head_v2_op.mojo).
+            return self._lm_head_v2(hs, ints, fs, x)
         if code == OPS_RMS_NORM or code == OPS_ROTARY or code == OPS_TRANSFORMER_LINEAR or code == OPS_TRANSFORMER_SOFTMAX:
             # These primitive signatures have at most two handles. Their
             # arity validation below rejects any additional operands.
@@ -1831,6 +1838,58 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         else:
             t = self.tape.variable_nd(self.ex, out, sh, False)
         return self._add(t, 0, False, 0)
+
+    def _lm_head_v2(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_LM_HEAD_V2: [hidden (rows x width, any rank), weight (vocab,
+        width), codes (rows class values)] -> the (1, 1) mean loss. Recorded:
+        one custom node over [hidden, weight] (LM_HEAD_V2_TAG, VJP in
+        StepOpRules); the row statistics are tape storage until the reset."""
+        _need("lm_head_v2", len(x), 3, 0, len(ints), 0, len(fs))
+        var hslot = self._slot(hs[0])
+        var wslot = self._slot(hs[1])
+        var cslot = self._slot(hs[2])
+        if self.int_words[hslot] or self.int_words[wslot] or self.int_words[cslot]:
+            raise Error("ValueError: ops: lm_head_v2 takes floating-point hidden, weight and class-value codes")
+        var wshape = self.shapes[wslot]
+        if wshape.ndim != 2:
+            raise Error("ValueError: ops: lm_head_v2: the weight must be (vocab, width)")
+        var vocab = wshape.d[0]
+        var width = wshape.d[1]
+        var count = self.shapes[hslot].count()
+        if width < 1 or count % width != 0:
+            raise Error("ValueError: ops: lm_head_v2: the hidden rows must have the weight's width")
+        var rows = count // width
+        if self.shapes[cslot].count() != rows:
+            raise Error("ValueError: ops: lm_head_v2 takes one class code per hidden row")
+        lm_head_v2_check(rows, vocab, width)
+        var hp = self.tape.value_of(self.ex, x[0])
+        var wp = self.tape.value_of(self.ex, x[1])
+        var cp = self.tape.value_of(self.ex, x[2])
+        var targets = self.tape.reserve(self.ex, rows)
+        var maxima = self.tape.reserve(self.ex, rows)
+        var denom = self.tape.reserve(self.ex, rows)
+        var row_loss = self.tape.reserve(self.ex, rows)
+        var loss = self.tape.reserve(self.ex, 1)
+        comptime if Self.E.IS_DEVICE:
+            lm_head_v2_forward_device(rebind[DeviceExec](self.ex), hp, wp, cp, targets, maxima, denom, row_loss,
+                                      loss, rows, vocab, width)
+        else:
+            lm_head_v2_forward_host(hp, wp, cp, targets, maxima, denom, row_loss, loss, rows, vocab, width)
+        if not self.tape.is_recording():
+            var t = self.tape.variable(self.ex, loss, 1, 1, False)
+            return self._add(t, 0, False, 0)
+        var saved = Args()
+        saved.p0 = targets
+        saved.p1 = maxima
+        saved.p2 = denom
+        saved.i0 = rows
+        saved.i1 = vocab
+        saved.i2 = width
+        var rx = List[Tensor]()
+        rx.append(x[0])
+        rx.append(x[1])
+        var rt = self.tape.custom(self.ex, rx, loss, 1, 1, LM_HEAD_V2_TAG, saved)
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
 
     def _generation_op(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
         """Generation op `code` (autograd/generation_ops.mojo): operand 0 the
