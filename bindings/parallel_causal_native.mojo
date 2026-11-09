@@ -445,6 +445,36 @@ def _parallel_causal_worker_request(mut mods: NativeModules, world: PythonObject
                 raise Error("ParallelCausalLM: restored state metadata type differs")
         _ = py_call(fields.update, supplied)
         return PythonObject(True)
+    if operation == "run_layers":
+        # Lane p3-msel-parallel-and-process-pool (audit B worst path 9): one
+        # request runs this worker's consecutive layers for a token batch,
+        # with the embedding when the batch starts here and the final head
+        # when it ends here. args: ([(layer index, state token)], method, x,
+        # ids or None, final flag). The same entries in the same order as the
+        # per-layer requests: no bits change.
+        var items = args[0]
+        var step = PythonObject(String(args[1]) == "step")
+        var x = args[2]
+        if args[3] is not None:
+            x = causal_model_embedding(top, args[3])
+            mods.released()
+        for i in range(len(items)):  # driver-loop: over this worker's consecutive layers
+            var item = items[i]
+            var layer_holder = world["blocks"][item[0]]
+            var layer_state = PythonObject(None)
+            if item[1] is not None:
+                if not py_contains(world["states"], item[1]):
+                    raise Error("ParallelCausalLM: state released")
+                var saved = world["states"][item[1]]
+                if Bool(py=saved[0] != item[0]):
+                    raise Error("ParallelCausalLM: state belongs to another layer")
+                layer_state = saved[1]
+            x = neural_block_forward_binding(mods, layer_holder._blocks[0], x, layer_state, step, PythonObject(None), context)
+        if Bool(py=args[4]):
+            var head_top = _causal_namespace(mods, _parallel_causal_fields(top))
+            x = causal_model_head(head_top, x)
+            mods.released()
+        return x
     var holder = world["blocks"][args if operation == "parameters" else args[0]]
     var block = holder._blocks[0]
     if operation == "parameters":
@@ -942,6 +972,23 @@ def _parallel_causal_block_run(mut mods: NativeModules, block: PythonObject, met
     return _parallel_causal_block_run(mods, block, method, x, state, model, _parallel_find_block(mods, block, model), captured)
 
 
+def _parallel_layer_item(mut mods: NativeModules, captured_block: PythonObject, captured_state: PythonObject,
+                         captured_model: PythonObject) raises -> PythonObject:
+    """(layer index, state token) of one layer of a "run_layers" request,
+    with the checks `_parallel_causal_block_run` makes for a "run"."""
+    var block = causal_snapshot_fields(mods, captured_block)["_causal_original"]
+    var state = causal_snapshot_fields(mods, captured_state)["_causal_original"]
+    _ = causal_snapshot_fields(mods, captured_model)
+    var layer = _parallel_captured(mods, block, captured_block)
+    var token = PythonObject(None)
+    if state is not None:
+        var fields = _parallel_captured(mods, state, captured_state)
+        if fields["layer"] is not block or fields["token"] is None:
+            raise Error("ParallelCausalLM: state belongs to another layer or has been released")
+        token = fields["token"]
+    return Python.tuple(layer["index"], token)
+
+
 def parallel_causal_call(mut mods: NativeModules, operation: String, args: PythonObject) raises -> PythonObject:
     var p = PARALLEL_CAUSAL.get_or_create_ptr()
     var child = String("mojolearn._native_parallel_causal_worker")
@@ -1041,15 +1088,54 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
         var devices = model_fields["layer_devices"]
         var blocks = model_fields["_native_parallel_blocks"]
         var layers = state_fields["layers"]
-        var x = _parallel_causal_rpc(mods, owner, devices[0], "embedding", ids, args[4])
         # The legacy parallel API used each block's dedicated decode entry
         # after prefill. Preserve that route independently of ordinary CausalLM.
         var method = PythonObject("step" if _parallel_flag(args[3]) else "forward")
-        for i in range(len(blocks)):  # driver-loop: ordered persistent layer owners retain the dedicated remote decode route
-            var block = causal_snapshot_fields(mods, blocks[i])
-            var layer = causal_snapshot_fields(mods, layers[i])
-            x = _parallel_causal_block_run(mods, block["_causal_original"], method, x, layer["_causal_original"], args[4], blocks[i], layers[i])
-        var result = _parallel_causal_rpc(mods, owner, devices[len(devices) - 1], "final", x, args[4])
+        # Lane p3-msel-parallel-and-process-pool (audit B worst path 9: one
+        # request per layer plus the embedding and the head, n_layers + 2 per
+        # token batch): consecutive layers on one device go in ONE
+        # "run_layers" request, with the embedding folded into the first and
+        # the head into the last when they live on that device: one request
+        # per device per token batch. REMOVED: the per-layer request loop.
+        var nb = len(blocks)
+        var embed_device = devices[0]
+        var head_device = devices[len(devices) - 1]
+        var x = PythonObject(None)
+        var embedded = False
+        if nb == 0:
+            x = _parallel_causal_rpc(mods, owner, embed_device, "embedding", ids, args[4])
+            embedded = True
+        var i = 0
+        var result = PythonObject(None)
+        var finished = False
+        while i < nb:  # driver-loop: over runs of consecutive layers on one device
+            var items = Python.list()
+            var device = PythonObject(None)
+            var j = i
+            while j < nb:  # driver-loop: over the layers of this device run
+                var item = _parallel_layer_item(mods, blocks[j], layers[j], args[4])
+                var layer_device = model_fields["layer_devices"][item[0]]
+                if j > i and Bool(py=layer_device != device):
+                    break
+                device = layer_device
+                _ = py_call(items.append, item)
+                j += 1
+            var first_ids = PythonObject(None)
+            if not embedded:
+                if Bool(py=device == embed_device):
+                    first_ids = ids
+                else:
+                    x = _parallel_causal_rpc(mods, owner, embed_device, "embedding", ids, args[4])
+                embedded = True
+            var last = j == nb and Bool(py=device == head_device)
+            x = _parallel_causal_rpc(mods, owner, device, "run_layers",
+                                     Python.list(items, method, x, first_ids, PythonObject(last)), args[4])
+            if last:
+                result = x
+                finished = True
+            i = j
+        if not finished:
+            result = _parallel_causal_rpc(mods, owner, head_device, "final", x, args[4])
         py_setitem(state_fields, "positions", _parallel_word(state_fields["positions"]) + length)
         return result
     elif operation == "close" or operation == "close_quiet" or operation == "exit":

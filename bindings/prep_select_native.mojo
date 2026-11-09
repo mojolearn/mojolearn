@@ -34,7 +34,7 @@ from bindings.admitted_input import admit_f32, admitted_vector
 from bindings.scaler_native import _stage, _ptr
 from bindings.scaler_lifecycle_native import _entries
 from bindings.x_prep_native_owner import xprep_values
-from bindings.prep_stateless_native import _select_transform, _support_columns
+from bindings.prep_stateless_native import _select_transform, _select_gather, _support_columns, _words
 from bindings.prep_encode_native import (
     EncProg, _cs, _codes, _fit_categories, _take1, _take2, _word, _iword, _put_codes, _default_mode,
     _seed64, _score_words)
@@ -336,12 +336,24 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
     _rfe_hold_block(block, hold, mark, cc)
     var final = _fit_clone(estimator, block, y, fit_params, context)
     var mask_list = Python.list()
+    var kept = List[Int]()
     var fs = _ptr(support)
     for j in range(d):  # driver-loop: over the fitted support (feature count)
         _ = py_call(mask_list.append, PythonObject(fs[j] != Float32(0)))
+        if fs[j] != Float32(0):
+            kept.append(j)
         _ = support  # keep the Python object alive through the native call above
     py_setitem(fields, "estimator_", final)
     py_setitem(fields, "_mask", mask_list)
+    # Lane p3-msel-parallel-and-process-pool (audit B: RFE redid its support
+    # and member admission on every predict): the kept columns as the gather's
+    # index words and the admitted member, stored once here. A predict reads
+    # them while `_mask` and `estimator_` are still the objects stored here
+    # (identity), else it falls back to reading the mask and admitting.
+    py_setitem(fields, "_support_words_", _words(kept, context))
+    py_setitem(fields, "_support_k_", PythonObject(len(kept)))
+    py_setitem(fields, "_support_mask_", mask_list)
+    py_setitem(fields, "_estimator_admitted_", final)
     py_setitem(fields, "support_", py_call(b.list, mask_list))
     # ranking.astype("<i8")
     var ranks = classical_typed(Python.tuple(d), "<i8", cc["output_context"])
@@ -363,9 +375,28 @@ def _rfe_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
     if not py_contains(fields, "n_features_in_"):
         raise Error("RuntimeError: mojolearn: this " + _class_name(model) + " instance is not fitted yet")
     var values = xprep_values(x, _entries(fields["numeric_mode_"], context), context)
-    var out = _select_transform(model, values, context)
+    var out: PythonObject
+    if rfe_support_cached(fields):
+        var d = Int(py=values[4])
+        var fitted = fields["n_features_in_"]
+        if Int(py=fitted) != d:
+            raise Error("mojolearn: X has " + String(d) + " features, " + _class_name(model) + " was fitted with " + String(Int(py=fitted)))
+        out = _select_gather(fields, values, fields["_support_words_"], Int(py=fields["_support_k_"]), context)
+    else:
+        out = _select_transform(model, values, context)
     _ = values^
     return out
+
+
+def rfe_support_cached(fields: PythonObject) raises -> Bool:
+    """Whether fit's stored support words still describe `_mask` (the mask
+    object fit stored, not one put there since) and select any column."""
+    var words = py_get(fields, "_support_words_")
+    if words is None:
+        return False
+    var mask = py_get(fields, "_mask")
+    var k = py_get(fields, "_support_k_")
+    return mask is not None and mask is py_get(fields, "_support_mask_") and k is not None and Int(py=k) > 0
 
 
 def prep_rfe_call(model: PythonObject, operation: String, args: PythonObject,
@@ -398,7 +429,8 @@ def prep_rfe_call(model: PythonObject, operation: String, args: PythonObject,
         if not py_contains(fitted, "estimator_"):
             raise Error("AttributeError: '" + _class_name(model) + "' object has no attribute 'estimator_'")
         var est = fitted["estimator_"]
-        prep_estimator_admit(est, "RFE", context)
+        if est is not py_get(fitted, "_estimator_admitted_"):
+            prep_estimator_admit(est, "RFE", context)
         if not prep_estimator_has(est, operation, context):
             raise Error("AttributeError: '" + _class_name(est) + "' object has no attribute '" + operation + "'")
         var xs = _rfe_transform(model, args[0], context)

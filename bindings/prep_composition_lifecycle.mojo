@@ -12,6 +12,7 @@ from bindings.classifier_public_lifecycle import _feature_names
 from bindings.metrics_native_support import metric_warn
 from bindings.optimizer_public_words import stash_python_error
 from bindings.prep_native_estimator import prep_estimator_admit
+from bindings.prep_select_native import rfe_support_cached
 from bindings.x_prep_native_inputs import _dense_values, _target
 
 
@@ -83,7 +84,10 @@ def composition_before(model: PythonObject, kind: String, operation: String, arg
     var fitting = operation == "fit" or operation == "fit_transform"
     if not fitting:
         composition_require_fitted(model, fields, operation, context)
-        if kind == "rfe":
+        # A predict reads fit's stored support words, not `_mask`
+        # (prep_select_native rfe_support_cached); the mask is admitted only
+        # when it is read: get_support, or a mask put there after fit.
+        if kind == "rfe" and (operation == "get_support" or not rfe_support_cached(fields)):
             composition_value(fields["_mask"], context)
     if operation == "get_support":
         composition_value(args[0], context)

@@ -13,9 +13,15 @@
 from std.memory import memcpy
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
+from std.ffi import c_int, external_call
+from std.sys.compile import is_defined
 from bindings.cpython_table import cpython_table
 from bindings.optimizer_public_words import stash_python_error
+from bindings.native_unit_threads import (
+    native_unit_threads_run, native_unit_gil_enter, native_unit_gil_leave, native_unit_cores, NativeUnitFailure,
+)
+from core.host_parallel import host_fp_env, host_fp_env_set
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.py_attr import py_attr
 from bindings.py_slice_native import py_slice, py_slice_from
@@ -30,7 +36,7 @@ from core.sha256 import Sha256
 from core.msel_fold_digest import msel_fold_digest_hex
 from bindings.msel_estimator_native import (
     msel_native_clone, msel_native_clone_planned, msel_clone_parameter, msel_estimator_call, msel_estimator_plan,
-    msel_planned_call,
+    msel_planned_call, msel_native_set_params,
 )
 from bindings.family_common import (
     family_array, family_call, family_call_kw, family_isinstance, family_is_str, family_repr, family_str, family_type_name,
@@ -326,6 +332,17 @@ struct MselFoldRows(Movable):
     var scope_mark: Int
     var fold_mark: Int
     var x_held: Bool
+    # Lane p3-msel-parallel-and-process-pool: True while units of one run
+    # take folds on several threads (MselUnitRun). Each take is then made
+    # alone (the run's gate), the per-fold registry hold is skipped (a hold
+    # scope belongs to the thread that opened it; a member on another thread
+    # re-scans its rows: lost reuse, never a wrong verdict), and a cached
+    # DeviceRows is not handed to a second unit (two concurrent units could
+    # materialize and write one host snapshot).
+    var shared: Bool
+    # cross_val_score's FAST slice route (MSEL_CV_SLICE_BIT): [a, b) of each
+    # contiguous test fold, 2 words per fold; empty: every take gathers.
+    var ranges: List[Int]
 
     def __init__(out self, x: PythonObject, y: PythonObject, folds: PythonObject, device_rows: Bool,
                  context: PythonObject) raises:
@@ -364,6 +381,8 @@ struct MselFoldRows(Movable):
         self.scope_mark = -1
         self.fold_mark = -1
         self.x_held = False
+        self.shared = False
+        self.ranges = List[Int]()
         if not self.dev and msel_is_array(x, context):
             self.scope_mark = admitted_scope_begin()
             try:
@@ -378,7 +397,7 @@ struct MselFoldRows(Movable):
         with X's verdict (rows of a finite X are finite; rows of an untested
         X are linked to it): the previous fold's rows are dropped first, so
         at most one fold's arrays are held beyond their own use."""
-        if not self.x_held:
+        if not self.x_held or self.shared:
             return
         if self.fold_mark >= 0:
             admitted_scope_end(self.fold_mark)
@@ -408,7 +427,7 @@ struct MselFoldRows(Movable):
             return self.rows(x, idx_in, context)
         var key = PythonObject(Int(idx_in._obj_ptr))
         var hit = py_get(self.rows_cache, key)
-        if hit is not None and hit[0] is idx_in:
+        if hit is not None and hit[0] is idx_in and not self.shared:
             # Reused only while no route has taken its host rows: a host
             # snapshot an estimator was handed may since have been written
             # (an in-place transform), so a materialized one is replaced.
@@ -448,6 +467,14 @@ struct MselFoldRows(Movable):
     def take(mut self, i: Int, y_in: PythonObject, context: PythonObject) raises -> PythonObject:
         """(X_train, y_train, X_test, y_test) of fold i; a `y_in` (a permuted
         y) stands in for the stored one."""
+        if len(self.ranges) > 0 and y_in is None:
+            # Views over contiguous rows, no gather (the slice route).
+            var a = self.ranges[2 * i]
+            var b = self.ranges[2 * i + 1]
+            var xs = _rows_outside(self.x, a, b, context)
+            var xv = _row_view(self.x, a, b, context)
+            self._hold_fold(xs, xv, context)
+            return Python.tuple(xs, _rows_outside(self.y, a, b, context), xv, _row_view(self.y, a, b, context))
         var pair = self.folds[i]
         var train = pair[0]
         var test = pair[1]
@@ -550,77 +577,345 @@ def msel_error_value(error_score: PythonObject) raises -> Float64:
 
 def msel_cross_validate_run(estimator: PythonObject, y: PythonObject, mut rows: MselFoldRows, scoring: PythonObject,
                             return_train: Bool, return_estimator: Bool, return_indices: Bool,
-                            error_score: PythonObject, context: PythonObject) raises -> MselScores:
+                            error_score: PythonObject, context: PythonObject, workers: Int = 1) raises -> MselScores:
     """`_cross_validate_folds` on the folds of `rows`: one clone fit and
-    scored per fold. `estimator` is cloned per fold (a search candidate:
-    the configured estimator, `_Pinned`'s clone)."""
-    var b = msel_b()
-    var multi = msel_scorers(scoring, context)
-    var single = PythonObject(None)
-    var keys = Python.list()
-    if multi is not None:
-        keys = py_call(b.list, multi)
-    else:
-        single = msel_get_scorer(scoring, context)
-        _ = py_call(keys.append, PythonObject("score"))
-    var out = MselScores(keys)
-    # Only metric ABI/options live across folds. Every score still admits its
-    # current public scorer and rechecks template identities after prediction;
-    # fits/phases share no model metadata, dynamic inputs or prediction cache.
-    var metric_plans = List[MselMetricPrepared]()
-    for k in range(len(keys)):  # driver-loop: metadata-only template owner per scoring slot
-        metric_plans.append(MselMetricPrepared(True))
-    var raise_errors = family_is_str(error_score)
-    var folds = rows.folds
-    for i in range(len(folds)):  # driver-loop: over folds
-        var cloned = msel_native_clone_planned(estimator, context)
+    scored per fold, the folds run as units on `workers` threads."""
+    var run = msel_cv_units(estimator, PythonObject(None), y, rows, scoring, return_train, return_estimator,
+                            error_score, workers, context)
+    return run.candidate(0, return_indices, context)
+
+
+# ---------------------------------------------------------------- units
+#
+# Lane p3-msel-parallel-and-process-pool (2026-11-09; audit B worst path 6:
+# candidates x folds ran serially, every candidate cloned once and again per
+# fold, n_jobs refused). A UNIT is one (candidate, fold): a clone of the base
+# estimator (the only clone the unit makes), the candidate's parameters set on
+# it (their values cloned, as scikit-learn's clone(base).set_params(**clone(
+# params)) does), the fold's rows taken, the fit and every score. Units are
+# independent; they are pulled in index order (candidate-major) by every
+# thread of the run (bindings/native_unit_threads.mojo) and each writes only
+# its own result slots, so the results, and the first error raised, are those
+# of the serial order on any thread count. Each fit computes what it computed
+# serially: no fold order, reduction or kernel changes, so no bits change.
+#
+# REMOVED by this change: the per-candidate clone of GridSearchCV,
+# RandomizedSearchCV and validation_curve (msel_search.mojo, the clone before
+# set_params; each unit clones the base once), the serial fold loop of
+# msel_cross_validate_run (the units replace it; one thread is the serial
+# run) and the n_jobs refusal `msel_require_serial` (n_jobs is the thread
+# bound now, `msel_unit_jobs`).
+
+#: Old form behind a switch until the A/B is measured (CLAUDE.md "remove what
+#: a change made unnecessary"): -D MOJOLEARN_MSEL_UNITS_SERIAL=1 runs every
+#: unit on the calling thread, whatever n_jobs says. RUN OWED: GridSearchCV /
+#: cross_validate rows of paper_compare on NVIDIA and AMD, units on vs off.
+comptime MSEL_UNITS_SERIAL = is_defined["MOJOLEARN_MSEL_UNITS_SERIAL"]()
+
+#: Fraction of the device's free bytes the concurrent units may claim, by
+#: the bytes the first unit kept (measured, below): half, because what a fit
+#: keeps after it returns (its fitted buffers, cached workspaces) is less than
+#: its peak. A cost rule over any shape, not a board size.
+comptime MSEL_UNITS_FREE_DIVISOR = 2
+
+
+def msel_unit_jobs(n_jobs: PythonObject, error_score: PythonObject, caller: String,
+                   context: PythonObject) raises -> Int:
+    """The thread bound of a CV operation from its `n_jobs` (joblib's
+    meaning): a positive int is the bound; -1 all cores, -k all cores but
+    k - 1; None all cores (the default is parallel: AGENTS.md "parallelize
+    tests and experiments by default"; the result does not depend on it).
+    Also checks `error_score` as `_require_serial` did."""
+    msel_admit(n_jobs, context)
+    msel_admit(error_score, context)
+    if not (py_type(error_score) is msel_b().str and msel_cmp("eq", error_score, PythonObject("raise"))) and not msel_is_real(error_score, context):
+        raise Error("error_score must be 'raise' or a number")
+    var cores = native_unit_cores()
+    if n_jobs is None:
+        return cores
+    if py_type(n_jobs) is msel_b().bool or not msel_is_integral(n_jobs, context):
+        raise Error("TypeError: " + caller + ": n_jobs must be None or an integer")
+    var k = Int(py=family_call(msel_b().int, n_jobs))
+    if k == 0:
+        raise Error("ValueError: n_jobs == 0 in Parallel has no meaning")
+    if k < 0:
+        return max(cores + 1 + k, 1)
+    return k
+
+
+def msel_unit_workers(jobs: Int, units: Int) -> Int:
+    comptime if MSEL_UNITS_SERIAL:
+        return 1
+    return max(min(jobs, units), 1)
+
+
+def _msel_device_free(rows: MselFoldRows, context: PythonObject) -> Int:
+    """Free bytes of the device the fold rows live on (the base binding's
+    `msel_free_bytes`), or -1 with no device rows or no entry."""
+    if not rows.dev:
+        return -1
+    try:
+        var rc = context["family_msel_rows_context"]
+        var entry = py_get(rc, "arena_msel_free_bytes")
+        if entry is None:
+            return -1
+        return Int(py=family_call(entry))
+    except:
+        return -1
+
+
+def _msel_units_thread(arg: Int) abi("C") -> Int:
+    """A unit thread (and the caller's share): take the GIL, run units in the
+    caller's floating-point environment until none is left."""
+    try:
+        var state = native_unit_gil_enter()
+        var run = MutPointer[MselUnitRun, MutUntrackedOrigin](unsafe_from_address=arg)
+        var saved = host_fp_env()
+        host_fp_env_set(run[].fp_env)
+        run[].drain()
+        host_fp_env_set(saved)
+        native_unit_gil_leave(state)
+    except:
+        pass
+    return 0
+
+
+struct MselUnitRun(Movable):
+    """The units of one CV operation and their result slots; every field is
+    read and written with the GIL held."""
+    var base: PythonObject
+    var candidates: PythonObject
+    var y: PythonObject
+    var rows: MutPointer[MselFoldRows, MutUntrackedOrigin]
+    var multi: PythonObject
+    var single: PythonObject
+    var keys: PythonObject
+    var n_keys: Int
+    var n_folds: Int
+    var n_candidates: Int
+    var n_units: Int
+    var return_train: Bool
+    var return_estimator: Bool
+    var raise_errors: Bool
+    var error_score: PythonObject
+    var context: PythonObject
+    var next: Int
+    var stop: Bool
+    var gate: Bool
+    var test: List[Float64]
+    var train: List[Float64]
+    var fit_time: List[Float64]
+    var score_time: List[Float64]
+    var estimators: PythonObject
+    var failure: NativeUnitFailure
+    var fp_env: UInt64
+    # cross_val_predict: the method each unit calls on its test rows (an
+    # exact str), its output in `preds[u]`; None: the units score.
+    var method: PythonObject
+    var preds: PythonObject
+
+    def __init__(out self, base: PythonObject, candidates: PythonObject, y: PythonObject, mut rows: MselFoldRows,
+                 scoring: PythonObject, return_train: Bool, return_estimator: Bool, error_score: PythonObject,
+                 method: PythonObject, context: PythonObject) raises:
+        var b = msel_b()
+        self.base = base
+        self.candidates = candidates
+        self.y = PythonObject(None) if y is rows.y else y
+        self.rows = MutPointer[MselFoldRows, MutUntrackedOrigin](unsafe_from_address=Int(UnsafePointer(to=rows)))
+        self.multi = PythonObject(None)
+        self.single = PythonObject(None)
+        self.keys = Python.list()
+        if method is None:
+            self.multi = msel_scorers(scoring, context)
+        if method is not None:
+            pass  # predicting units score nothing: no scorer is admitted
+        elif self.multi is not None:
+            self.keys = py_call(b.list, self.multi)
+        else:
+            self.single = msel_get_scorer(scoring, context)
+            _ = py_call(self.keys.append, PythonObject("score"))
+        self.n_keys = len(self.keys)
+        self.n_folds = len(rows.folds)
+        self.n_candidates = 1 if candidates is None else len(candidates)
+        self.n_units = self.n_candidates * self.n_folds
+        self.return_train = return_train
+        self.return_estimator = return_estimator
+        self.raise_errors = family_is_str(error_score)
+        self.error_score = error_score
+        self.context = context
+        self.next = 0
+        self.stop = False
+        self.gate = False
+        self.test = List[Float64](length=self.n_units * self.n_keys, fill=0.0)
+        self.train = List[Float64](length=self.n_units * self.n_keys, fill=0.0)
+        self.fit_time = List[Float64](length=self.n_units, fill=0.0)
+        self.score_time = List[Float64](length=self.n_units, fill=0.0)
+        self.estimators = py_call(b.list, Python.tuple())
+        if return_estimator:
+            self.estimators = family_call(msel_op("mul"), Python.list(PythonObject(None)), PythonObject(self.n_units))
+        self.failure = NativeUnitFailure()
+        self.fp_env = host_fp_env()
+        self.method = method
+        self.preds = py_call(b.list, Python.tuple())
+        if method is not None:
+            self.preds = family_call(msel_op("mul"), Python.list(PythonObject(None)), PythonObject(self.n_units))
+
+    def _take(mut self, f: Int) raises -> PythonObject:
+        """Fold f's rows, one take at a time across threads: a take can
+        release the GIL inside its device gather."""
+        while self.gate:  # driver-loop: wait for another unit's take (GIL released while waiting)
+            with GILReleased(Python()):
+                _ = external_call["sched_yield", c_int]()
+        self.gate = True
+        try:
+            var got = self.rows[].take(f, self.y, self.context)
+            self.gate = False
+            return got
+        except error:
+            self.gate = False
+            raise error^
+
+    def unit(mut self, u: Int) raises:
+        var b = msel_b()
+        var c = u // self.n_folds
+        var f = u - c * self.n_folds
+        var cloned = msel_native_clone_planned(self.base, self.context)
         var est = cloned[0]
         var plan = cloned[1]
+        if self.candidates is not None:
+            _ = msel_native_set_params(est, msel_clone_parameter(self.candidates[c], self.context), self.context)
         var t0 = msel_seconds()
-        var got = rows.take(i, PythonObject(None) if y is rows.y else y, context)
+        var got = self._take(f)
         var xtr = got[0]
         var ytr = got[1]
         var xte = got[2]
         var yte = got[3]
         var ok = True
-        if raise_errors:
-            msel_fit_planned(est, plan, xtr, ytr, context)
+        if self.raise_errors:
+            msel_fit_planned(est, plan, xtr, ytr, self.context)
         else:
             try:
-                msel_fit_planned(est, plan, xtr, ytr, context)
+                msel_fit_planned(est, plan, xtr, ytr, self.context)
             except error:
                 if not msel_catch(error, b.Exception):
                     raise error^
                 ok = False
         var t1 = msel_seconds()
-        # Several named metrics often consume the same response of this fitted
-        # clone. The native scorer already retains predictions by response
-        # method (and the binary probability column); share that work only
-        # within this fold and data phase. Separate train/test owners preserve
-        # the existing interleaved scorer order without mixing their inputs.
+        if self.method is not None:
+            # Fit is native: no Python ran since the clone's plan was made.
+            var pred = msel_planned_call(est, plan, String(self.method), Python.tuple(xte), self.context)
+            py_setitem(self.preds, PythonObject(u), _numeric_pred(pred, self.context))
+            return
+        # Only metric ABI/options live across this unit's scorers; nothing
+        # is shared with another unit.
+        var plans = List[MselMetricPrepared]()
+        for k in range(self.n_keys):  # driver-loop: metadata-only template owner per scoring slot
+            plans.append(MselMetricPrepared(True))
         var test_memo = PythonObject(None)
         var train_memo = PythonObject(None)
-        if ok and multi is not None and len(keys) > 1:
+        if ok and self.multi is not None and self.n_keys > 1:
             test_memo = Python.dict()
-            if return_train:
+            if self.return_train:
                 train_memo = Python.dict()
-        for k in range(len(keys)):  # driver-loop: over scorer names
-            var sc = multi[keys[k]] if multi is not None else single
-            out.test[k].append(msel_score_value(est, xte, yte, sc, context, test_memo, metric_plans[k]) if ok else msel_error_value(error_score))
-            if return_train:
-                out.train[k].append(msel_score_value(est, xtr, ytr, sc, context, train_memo, metric_plans[k]) if ok else msel_error_value(error_score))
-        # End both owner lifetimes before the next clone/fit. No response can
-        # survive into another fold, candidate or public operation.
+        var failed_value = 0.0
+        if not ok:
+            failed_value = msel_error_value(self.error_score)
+        for k in range(self.n_keys):  # driver-loop: over scorer names
+            var sc = self.multi[self.keys[k]] if self.multi is not None else self.single
+            self.test[u * self.n_keys + k] = msel_score_value(est, xte, yte, sc, self.context, test_memo, plans[k]) if ok else failed_value
+            if self.return_train:
+                self.train[u * self.n_keys + k] = msel_score_value(est, xtr, ytr, sc, self.context, train_memo, plans[k]) if ok else failed_value
         _ = test_memo^
         _ = train_memo^
-        out.fit_time.append(t1 - t0)
-        out.score_time.append(msel_seconds() - t1)
-        if return_estimator:
-            _ = py_call(out.estimators.append, est)
-        if return_indices:
-            _ = py_call(out.train_idx.append, folds[i][0])
-            _ = py_call(out.test_idx.append, folds[i][1])
-    return out^
+        self.fit_time[u] = t1 - t0
+        self.score_time[u] = msel_seconds() - t1
+        if self.return_estimator:
+            py_setitem(self.estimators, PythonObject(u), est)
+
+    def fail(mut self, u: Int, error: Error):
+        self.stop = True
+        self.failure.record(u, error)
+
+    def drain(mut self):
+        while True:  # driver-loop: over units, pulled in index order under the GIL
+            if self.stop or self.next >= self.n_units:
+                return
+            var u = self.next
+            self.next += 1
+            try:
+                self.unit(u)
+            except error:
+                self.fail(u, error)
+
+    def reraise(mut self) raises:
+        self.failure.reraise()
+
+    def candidate(self, c: Int, return_indices: Bool, context: PythonObject) raises -> MselScores:
+        """Candidate c's per-fold results, in fold order."""
+        var out = MselScores(self.keys)
+        var folds = self.rows[].folds
+        for f in range(self.n_folds):  # driver-loop: over folds
+            var u = c * self.n_folds + f
+            for k in range(self.n_keys):  # driver-loop: over scorer names
+                out.test[k].append(self.test[u * self.n_keys + k])
+                if self.return_train:
+                    out.train[k].append(self.train[u * self.n_keys + k])
+            out.fit_time.append(self.fit_time[u])
+            out.score_time.append(self.score_time[u])
+            if self.return_estimator:
+                _ = py_call(out.estimators.append, self.estimators[u])
+            if return_indices:
+                _ = py_call(out.train_idx.append, folds[f][0])
+                _ = py_call(out.test_idx.append, folds[f][1])
+        return out^
+
+
+def msel_cv_units(base: PythonObject, candidates: PythonObject, y: PythonObject, mut rows: MselFoldRows,
+                  scoring: PythonObject, return_train: Bool, return_estimator: Bool, error_score: PythonObject,
+                  jobs: Int, context: PythonObject) raises -> MselUnitRun:
+    return msel_cv_units(base, candidates, y, rows, scoring, return_train, return_estimator, error_score, jobs,
+                         PythonObject(None), context)
+
+
+def msel_cv_units(base: PythonObject, candidates: PythonObject, y: PythonObject, mut rows: MselFoldRows,
+                  scoring: PythonObject, return_train: Bool, return_estimator: Bool, error_score: PythonObject,
+                  jobs: Int, method: PythonObject, context: PythonObject) raises -> MselUnitRun:
+    """Run every (candidate, fold) unit of `rows` (candidates None: the base
+    estimator itself, one candidate) on at most `jobs` threads.
+
+    The first unit runs alone on the calling thread: it creates every lazy
+    process state (contexts, compiled kernels, caches) single-threaded, and
+    the device bytes it kept bound how many units run at once. The rest run
+    on min(jobs, units, free bytes / MSEL_UNITS_FREE_DIVISOR / kept bytes)
+    threads."""
+    var run = MselUnitRun(base, candidates, y, rows, scoring, return_train, return_estimator, error_score, method, context)
+    var workers = msel_unit_workers(jobs, run.n_units)
+    if workers <= 1 or run.n_units <= 1:
+        run.drain()
+        run.reraise()
+        return run^
+    var free0 = _msel_device_free(rows, context)
+    run.next = 1
+    try:
+        run.unit(0)
+    except error:
+        run.fail(0, error)
+    if not run.stop:
+        var free1 = _msel_device_free(rows, context)
+        if free0 > 0 and free1 >= 0 and free0 > free1:
+            var kept = free0 - free1
+            workers = max(min(workers, free1 // MSEL_UNITS_FREE_DIVISOR // kept), 1)
+        workers = min(workers, run.n_units - 1)
+        rows.shared = workers > 1
+        try:
+            if workers > 1:
+                native_unit_threads_run(_msel_units_thread, Int(UnsafePointer(to=run)), workers)
+            else:
+                run.drain()
+        finally:
+            rows.shared = False
+    run.reraise()
+    return run^
 
 
 def msel_scores_dict(scores: MselScores, return_train: Bool, return_estimator: Bool, return_indices: Bool,
@@ -643,23 +938,12 @@ def msel_scores_dict(scores: MselScores, return_train: Bool, return_estimator: B
     return res
 
 
-def msel_require_serial(n_jobs: PythonObject, error_score: PythonObject, caller: String,
-                        context: PythonObject) raises:
-    """`_require_serial`."""
-    msel_admit(n_jobs, context)
-    msel_admit(error_score, context)
-    if n_jobs is not None and (not msel_is_real(n_jobs, context) or msel_cmp("ne", n_jobs, PythonObject(1))):
-        raise Error("NotImplementedError: " + caller + " supports n_jobs=1 (or None) only")
-    if not (py_type(error_score) is msel_b().str and msel_cmp("eq", error_score, PythonObject("raise"))) and not msel_is_real(error_score, context):
-        raise Error("error_score must be 'raise' or a number")
-
-
 def msel_cross_validate(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`cross_validate(estimator, X, y, groups, scoring, cv, n_jobs,
     return_train_score, return_estimator, return_indices, error_score)`."""
     var estimator = args[0]
     var error_score = args[10]
-    msel_require_serial(args[6], error_score, "cross_validate", context)
+    var jobs = msel_unit_jobs(args[6], error_score, "cross_validate", context)
     var got = msel_cv_folds(estimator, args[1], args[2], args[5], args[3], False, context)
     var x = got[0]
     var y = got[1]
@@ -674,7 +958,7 @@ def msel_cross_validate(args: PythonObject, context: PythonObject) raises -> Pyt
     var rows = MselFoldRows(x, y, folds, msel_device_rows_ok(estimator, scoring, context), context)
     var result = PythonObject(None)
     try:
-        var scores = msel_cross_validate_run(estimator, y, rows, scoring, rt, re, ri, error_score, context)
+        var scores = msel_cross_validate_run(estimator, y, rows, scoring, rt, re, ri, error_score, context, jobs)
         result = msel_scores_dict(scores, rt, re, ri, context)
     finally:
         rows.close(context)
@@ -776,22 +1060,12 @@ def _kfold_ranges(x: PythonObject, y: PythonObject, folds: PythonObject, context
     return ranges^
 
 
-def msel_fit_score_fold(fitted: PythonObject, plan: PythonObject, xtr: PythonObject, ytr: PythonObject,
-                        xte: PythonObject, yte: PythonObject, scoring: PythonObject,
-                        context: PythonObject) raises -> Float64:
-    """`_fit_score_fold` of a fresh `msel_native_clone_planned` clone."""
-    msel_fit_planned(fitted, plan, xtr, ytr, context)
-    return Float64(py=msel_score(fitted, xte, yte, scoring, context))
-
-
 def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`cross_val_score(estimator, X, y, cv, scoring, groups, n_jobs, error_score)`."""
     var estimator = args[0]
     var cv = args[3]
     var groups = args[5]
-    var n_jobs = args[6]
-    if msel_is_bool(n_jobs, context) or not msel_is_integral(n_jobs, context) or msel_cmp("ne", n_jobs, PythonObject(1)):
-        raise Error("NotImplementedError: cross_val_score supports n_jobs=1 only")
+    var jobs = msel_unit_jobs(args[6], PythonObject("raise"), "cross_val_score", context)
     var scoring = args[4]
     if py_type(scoring) is msel_b().str:
         scoring = msel_get_scorer(scoring, context)
@@ -807,24 +1081,15 @@ def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> Py
         sliced = len(ranges) > 0
     var scores = List[Float64]()
     var rows = MselFoldRows(x, y, folds, msel_device_rows_ok(estimator, scoring, context), context)
+    if sliced:
+        rows.ranges = ranges^
     try:
-        for i in range(len(folds)):  # driver-loop: over folds
-            var cloned = msel_native_clone_planned(estimator, context)
-            var fitted = cloned[0]
-            var plan = cloned[1]
-            if sliced:
-                var a = ranges[2 * i]
-                var b = ranges[2 * i + 1]
-                var xtr = _rows_outside(x, a, b, context)
-                var xte = _row_view(x, a, b, context)
-                rows._hold_fold(xtr, xte, context)
-                scores.append(msel_fit_score_fold(fitted, plan, xtr, _rows_outside(y, a, b, context),
-                                                  xte, _row_view(y, a, b, context), scoring, context))
-            else:
-                var fr = rows.take(i, PythonObject(None), context)
-                scores.append(msel_fit_score_fold(fitted, plan, fr[0], fr[1], fr[2], fr[3], scoring, context))
-            # each fold's estimator is released before the next is built
-            _ = fitted^
+        # The folds are units (msel_cv_units) on `jobs` threads; a fit error
+        # raises, as the fold loop did.
+        var r = msel_cross_validate_run(estimator, y, rows, scoring, False, False, False, PythonObject("raise"),
+                                        context, jobs)
+        for i in range(len(r.test[0])):  # driver-loop: over folds (results only)
+            scores.append(r.test[0][i])
     finally:
         rows.close(context)
     return msel_f64_list(scores, context)
@@ -1019,7 +1284,7 @@ def _place(preds: PythonObject, tests: PythonObject, n: Int, mut resident_rows: 
 def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`cross_val_predict(estimator, X, y, groups, cv, n_jobs, method)`."""
     var estimator = args[0]
-    msel_require_serial(args[5], PythonObject("raise"), "cross_val_predict", context)
+    var jobs = msel_unit_jobs(args[5], PythonObject("raise"), "cross_val_predict", context)
     var got = msel_cv_folds(estimator, args[1], args[2], args[4], args[3], False, context)
     var x = got[0]
     var y = got[1]
@@ -1049,20 +1314,13 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
     var method = args[6]
     var rows = MselFoldRows(x, y, folds, msel_device_rows_ok(estimator, PythonObject(None), context), context)
     var result = PythonObject(None)
+    if py_type(method) is not msel_b().str:
+        raise Error("TypeError: native prediction method must be an exact string")
     try:
-        var preds = Python.list()
-        for i in range(len(folds)):  # driver-loop: over folds
-            var cloned = msel_native_clone_planned(estimator, context)
-            var est = cloned[0]
-            var plan = cloned[1]
-            var fr = rows.take(i, PythonObject(None), context)
-            msel_fit_planned(est, plan, fr[0], fr[1], context)
-            if py_type(method) is not msel_b().str:
-                raise Error("TypeError: native prediction method must be an exact string")
-            # Fit is native: no Python ran since the clone's plan was made.
-            var pred = msel_planned_call(est, plan, String(method), Python.tuple(fr[2]), context)
-            _ = py_call(preds.append, _numeric_pred(pred, context))
-        result = _place(preds, tests, n, rows, context)
+        # The folds are units (msel_cv_units): one clone, fit and predict each.
+        var run = msel_cv_units(estimator, PythonObject(None), y, rows, PythonObject(None), False, False,
+                                PythonObject("raise"), jobs, method, context)
+        result = _place(run.preds, tests, n, rows, context)
     finally:
         rows.close(context)
     return result

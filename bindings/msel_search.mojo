@@ -24,7 +24,6 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.arena_materialize_native import _cast
-from bindings.arena_resident_plan import ArenaResidentPlan
 from bindings.msel_parameter_grid import parameter_grid_dicts, PreparedParameterGrid
 from bindings.family_common import (
     FAMILY_I64P, family_call, family_call_kw, family_isinstance, family_is_str, family_repr, family_str,
@@ -42,7 +41,7 @@ from bindings.msel_common import msel_signed32
 from bindings.family_common import FAMILY_I32P
 from bindings.msel_cv import (
     msel_clone, msel_cv_folds, msel_cv_splitter, msel_cv_folds_admitted, msel_materialize_y, msel_device_rows_ok,
-    msel_require_serial, msel_scorers, MselFoldRows, MselScores,
+    msel_unit_jobs, msel_cv_units, msel_scorers, MselFoldRows, MselScores,
     msel_cross_validate_run, msel_seconds, msel_fit, msel_fit_planned, msel_error_value,
 )
 from bindings.msel_estimator_native import msel_native_clone_planned
@@ -292,8 +291,7 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     var groups = args[2]
     var estimator = fields["estimator"]
     var error_score = fields["error_score"]
-    msel_require_serial(fields["n_jobs"], error_score,
-                        String(py=py_type(model).__name__), context)
+    var jobs = msel_unit_jobs(fields["n_jobs"], error_score, String(py=py_type(model).__name__), context)
     _ = msel_estimator_plan(estimator, context)
     msel_admit(fields["n_jobs"], context)
     msel_admit(error_score, context)
@@ -320,10 +318,13 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     var n_splits = 0
     var rows = MselFoldRows(xf, yf, folds, msel_device_rows_ok(estimator, scoring, context), context)
     try:
-        for c in range(len(candidates)):  # driver-loop: over candidates
-            var est = msel_clone(estimator, False, context)
-            _set_params(est, candidates[c], context)
-            var cvr = msel_cross_validate_run(est, yf, rows, scoring, return_train, False, False, error_score, context)
+        # Every (candidate, fold) is one unit (msel_cv_units): the base
+        # estimator cloned once per unit with the candidate's parameters set
+        # on the clone; no candidate clone is made first.
+        var run = msel_cv_units(estimator, candidates, yf, rows, scoring, return_train, False, error_score, jobs,
+                                context)
+        for c in range(len(candidates)):  # driver-loop: over candidates (results only)
+            var cvr = run.candidate(c, False, context)
             if c == 0:
                 names = cvr.names.copy()
                 for _ in range(len(names)):  # driver-loop: over scorer names
@@ -403,7 +404,7 @@ def msel_validation_curve(args: PythonObject, context: PythonObject) raises -> P
     var estimator = args[0]
     var scoring = args[7]
     var error_score = args[9]
-    msel_require_serial(args[8], error_score, "validation_curve", context)
+    var jobs = msel_unit_jobs(args[8], error_score, "validation_curve", context)
     if py_type(args[3]) is not b.str:
         raise Error("TypeError: param_name must be an exact string")
     var got = msel_cv_folds(estimator, args[1], args[2], args[6], args[5], True, context)
@@ -417,12 +418,16 @@ def msel_validation_curve(args: PythonObject, context: PythonObject) raises -> P
     var values = msel_parameter_values(args[4], context)
     var rows = MselFoldRows(xf, yf, folds, msel_device_rows_ok(estimator, scoring, context), context)
     try:
-        for v in range(len(values)):  # driver-loop: over parameter values
-            var est = msel_clone(estimator, False, context)
+        # Every (value, fold) is one unit (msel_cv_units); each unit clones
+        # the base once and sets {param_name: value} on its clone.
+        var candidates = Python.list()
+        for v in range(len(values)):  # driver-loop: over parameter values (the candidate dicts)
             var params = Python.dict()
             py_setitem(params, args[3], values[v])
-            _set_params(est, params, context)
-            var r = msel_cross_validate_run(est, yf, rows, scoring, True, False, False, error_score, context)
+            _ = py_call(candidates.append, params)
+        var run = msel_cv_units(estimator, candidates, yf, rows, scoring, True, False, error_score, jobs, context)
+        for v in range(len(values)):  # driver-loop: over parameter values (results only)
+            var r = run.candidate(v, False, context)
             if len(r.names) != 1 or r.names[0] != "score":
                 _ = family_call(py_attr(Python.dict(), "__getitem__"), PythonObject("train_score"))
             for i in range(len(r.train[0])):  # driver-loop: over folds
@@ -446,7 +451,7 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     n_jobs, shuffle, random_state, error_score, return_times)`."""
     var b = msel_b()
     var estimator = args[0]
-    msel_require_serial(args[7], args[10], "learning_curve", context)
+    var jobs = msel_unit_jobs(args[7], args[10], "learning_curve", context)
     var shuffle = msel_flag_truth(args[8], context)
     var seed = _search_seed(args[9], context)
     var return_times = msel_flag_truth(args[11], context)
@@ -500,56 +505,35 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     else:
         for f in range(nf):  # driver-loop: over folds
             _ = py_call(orders.append, msel_index_i64(folds[f][0], context))
+    var scoring = args[6]
+    var error_score = args[10]
+    # Lane p3-msel-parallel-and-process-pool: every (train size, fold) is a
+    # unit of msel_cv_units, size-major, so the results keep the old order.
+    # The fold rows stay on the host gather (device_rows False), as before:
+    # each unit's fit sees the same arrays, so no bits change. REMOVED: the
+    # serial size x fold loop and its own resident plan; the test rows are
+    # now gathered per unit (they were gathered once per fold for every
+    # size): the price of independent units, RUN OWED in the A/B.
+    var unit_folds = Python.list()
+    for si in range(len(sizes)):  # driver-loop: over train sizes
+        for f in range(nf):  # driver-loop: over folds
+            _ = py_call(unit_folds.append, Python.tuple(msel_slice_i64(orders[f], 0, sizes[si], context), folds[f][1]))
     var tr_s = List[Float64]()
     var te_s = List[Float64]()
     var ft = List[Float64]()
     var st = List[Float64]()
-    var res = ArenaResidentPlan(context["family_msel_resident_context"])
-    var scoring = args[6]
-    var error_score = args[10]
-    var raise_errors = py_type(error_score) is b.str and String(error_score) == "raise"
-    # The scorer is resolved once per call, not once per size and fold (lane
-    # perf-sweep-msel-nbr-svc); the same scorer object scores every fold.
-    var sc = msel_get_scorer(scoring, context)
+    var rows = MselFoldRows(x, y, unit_folds, False, context)
     try:
-        # pass 3 (rank 863): each fold's test rows of X and y are gathered
-        # once for every train size (they were gathered and downloaded again
-        # per size); the same rows, in the same order, score every size.
-        var x_tests = Python.list()
-        var y_tests = Python.list()
-        for f in range(nf):  # driver-loop: over folds
-            var test = folds[f][1]
-            _ = py_call(x_tests.append, _take(res, x, test, context))
-            _ = py_call(y_tests.append, _take(res, y, test, context))
-        for si in range(len(sizes)):  # driver-loop: over train sizes
-            var a = sizes[si]
-            for f in range(nf):  # driver-loop: over folds
-                var sub = msel_slice_i64(orders[f], 0, a, context)
-                var cloned = msel_native_clone_planned(estimator, context)
-                var est = cloned[0]
-                var plan = cloned[1]
-                var t0 = msel_seconds()
-                var xs = _take(res, x, sub, context)
-                var ys = _take(res, y, sub, context)
-                var fitted = True
-                if raise_errors:
-                    msel_fit_planned(est, plan, xs, ys, context)
-                else:
-                    try:
-                        msel_fit_planned(est, plan, xs, ys, context)
-                    except error:
-                        if not msel_catch(error, b.Exception):
-                            raise error^
-                        fitted = False
-                var t1 = msel_seconds()
-                tr_s.append(Float64(py=msel_score(est, xs, ys, sc, context)) if fitted else msel_error_value(error_score))
-                te_s.append(Float64(py=msel_score(est, x_tests[f], y_tests[f], sc, context))
-                            if fitted else msel_error_value(error_score))
-                res.release(sub)
-                ft.append(t1 - t0)
-                st.append(msel_seconds() - t1)
+        var r = msel_cross_validate_run(estimator, y, rows, scoring, True, False, False, error_score, context, jobs)
+        if len(r.names) != 1:
+            raise Error("TypeError: learning_curve takes one scorer")
+        for u in range(len(r.fit_time)):  # driver-loop: over size x fold units
+            tr_s.append(r.train[0][u])
+            te_s.append(r.test[0][u])
+            ft.append(r.fit_time[u])
+            st.append(r.score_time[u])
     finally:
-        res.close()
+        rows.close(context)
     var out = Python.list()
     _ = py_call(out.append, msel_i64_list(sizes, context))
     _ = py_call(out.append, msel_f64_block(tr_s, len(sizes), nf, context))
@@ -558,14 +542,6 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
         _ = py_call(out.append, msel_f64_block(ft, len(sizes), nf, context))
         _ = py_call(out.append, msel_f64_block(st, len(sizes), nf, context))
     return py_call(b.tuple, out)
-
-
-def _take(mut res: ArenaResidentPlan, values: PythonObject, idx: PythonObject, context: PythonObject) raises -> PythonObject:
-    """learning_curve's `take`: a list by index, else the resident gather."""
-    var b = msel_b()
-    if family_isinstance(values, b.list):
-        return msel_take_labels(values, idx, context)
-    return res.take(values, idx)
 
 
 # ---------------------------------------------------------------- permutation_test_score
@@ -642,10 +618,11 @@ def _perm_base(y: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def _mean_test(estimator: PythonObject, x: PythonObject, y: PythonObject, folds: PythonObject, scoring: PythonObject,
-               mut rows: MselFoldRows, context: PythonObject) raises -> Float64:
-    """`_row_means([cross_validate(...)['test_score']])[0]` on `rows`."""
+               mut rows: MselFoldRows, jobs: Int, context: PythonObject) raises -> Float64:
+    """`_row_means([cross_validate(...)['test_score']])[0]` on `rows`, the
+    folds as units on `jobs` threads."""
     var r = msel_cross_validate_run(estimator, y, rows, scoring, False, False, False, PythonObject(_nan()),
-                                    context)
+                                    context, jobs)
     var one = List[List[Float64]]()
     one.append(r.test[0].copy())
     return msel_row_means(one, context)[0]
@@ -656,12 +633,12 @@ def _nan() -> Float64:
 
 
 def _mean_own(estimator: PythonObject, x: PythonObject, y: PythonObject, folds: PythonObject, scoring: PythonObject,
-              device: Bool, context: PythonObject) raises -> Float64:
+              device: Bool, jobs: Int, context: PythonObject) raises -> Float64:
     """`_mean_test` on rows of its own (the folds drawn for this y)."""
     var rows = MselFoldRows(x, y, folds, device, context)
     var value: Float64 = 0.0
     try:
-        value = _mean_test(estimator, x, y, folds, scoring, rows, context)
+        value = _mean_test(estimator, x, y, folds, scoring, rows, jobs, context)
     finally:
         rows.close(context)
     return value
@@ -787,7 +764,7 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
     var y = args[2]
     var groups = args[3]
     var cv = args[4]
-    msel_require_serial(args[6], PythonObject(_nan()), "permutation_test_score", context)
+    var jobs = msel_unit_jobs(args[6], PythonObject(_nan()), "permutation_test_score", context)
     var n_permutations = msel_int(_search_scalar(args[5], "n_permutations", context))
     var random_state = _search_seed(args[7], context)
     var base = PythonObject(None)
@@ -797,7 +774,7 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
         if base is not None and Int(py=base.size) < 2:
             base = PythonObject(None)
     if base is None:
-        return _permutation_definition(args, n_permutations, random_state, context)
+        return _permutation_definition(args, n_permutations, random_state, jobs, context)
     var x = msel_materialize(args[1], "X", context)
     var sc = msel_get_scorer(args[9], context)
     var n = Int(py=base.size)
@@ -808,7 +785,7 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
     var score: Float64 = 0.0
     var perm_scores = List[Float64]()
     try:
-        score = _mean_test(estimator, x, base, folds0, sc, rows0, context)
+        score = _mean_test(estimator, x, base, folds0, sc, rows0, jobs, context)
         var rng = MselRng(random_state, context)
         var order = PythonObject(None) if groups is None else _group_order(groups, n, context)
         var group_sizes = List[Int]() if groups is None else _group_sizes(order)
@@ -833,7 +810,7 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
             var yp = rows0.resident_take(base, idx, context)
             rows0.resident_release(idx, context)
             if reuse:
-                perm_scores.append(_mean_test(estimator, x, yp, folds0, sc, rows0, context))
+                perm_scores.append(_mean_test(estimator, x, yp, folds0, sc, rows0, jobs, context))
             else:
                 var folds = msel_cv_folds_admitted(splitter, x, yp, group_values, context)
                 # pass 3 (rank 107): the permutation's folds run on rows0 (X
@@ -845,7 +822,7 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
                 # store never held).
                 rows0.folds = folds
                 try:
-                    perm_scores.append(_mean_test(estimator, x, yp, folds, sc, rows0, context))
+                    perm_scores.append(_mean_test(estimator, x, yp, folds, sc, rows0, jobs, context))
                 finally:
                     rows0.folds = folds0
                     for f in range(len(folds)):  # driver-loop: over this permutation's folds
@@ -858,7 +835,7 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
 
 
 def _permutation_definition(args: PythonObject, n_permutations: Int, random_state: PythonObject,
-                            context: PythonObject) raises -> PythonObject:
+                            jobs: Int, context: PythonObject) raises -> PythonObject:
     """`permutation_test_score`'s definition route (label objects the
     native permutation cannot hold): y rebuilt from a list per permutation,
     the permutations by Python's own list operations."""
@@ -871,7 +848,7 @@ def _permutation_definition(args: PythonObject, n_permutations: Int, random_stat
     var xa = msel_materialize(args[1], "X", context)
     var yl = msel_flatten(args[2], context)
     var sc = msel_get_scorer(args[9], context)
-    var score = _definition_mean(estimator, xa, yl, groups, cv, sc, context)
+    var score = _definition_mean(estimator, xa, yl, groups, cv, sc, jobs, context)
     var rng = MselRng(random_state, context)
     var perm_scores = List[Float64]()
     # The groups, their sorted values and each group's rows depend on the
@@ -898,13 +875,13 @@ def _permutation_definition(args: PythonObject, n_permutations: Int, random_stat
                 var src = py_call(b.map, py_call(b.getattr, yl, PythonObject("__getitem__")),
                                   py_call(b.map, py_call(b.getattr, rows, PythonObject("__getitem__")), perm))
                 _ = py_call(b.list, py_call(b.map, py_call(b.getattr, yp, PythonObject("__setitem__")), rows, src))
-        perm_scores.append(_definition_mean(estimator, xa, yp, groups, cv, sc, context))
+        perm_scores.append(_definition_mean(estimator, xa, yp, groups, cv, sc, jobs, context))
     return Python.tuple(PythonObject(score), msel_f64_list(perm_scores, context),
                         PythonObject(_pvalue(perm_scores, score, n_permutations)))
 
 
 def _definition_mean(estimator: PythonObject, xa: PythonObject, yv: PythonObject, groups: PythonObject, cv: PythonObject,
-                     sc: PythonObject, context: PythonObject) raises -> Float64:
+                     sc: PythonObject, jobs: Int, context: PythonObject) raises -> Float64:
     """The definition's `mean_score(yv)`: y as a float32 / int32 Array by
     `Array.from_list`, then one cross_validate."""
     var b = msel_b()
@@ -912,4 +889,4 @@ def _definition_mean(estimator: PythonObject, xa: PythonObject, yv: PythonObject
     var dtype = String("<f4") if py_type(first) is b.float else String("<i4")
     var yarr = _cast(msel_materialize(yv, "y", context), dtype, context["family_msel_resident_context"])
     var folds = msel_cv_folds(estimator, xa, yarr, cv, groups, False, context)[2]
-    return _mean_own(estimator, xa, yarr, folds, sc, msel_device_rows_ok(estimator, sc, context), context)
+    return _mean_own(estimator, xa, yarr, folds, sc, msel_device_rows_ok(estimator, sc, context), jobs, context)

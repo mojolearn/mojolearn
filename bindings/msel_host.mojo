@@ -42,6 +42,12 @@ def msel_free_binding(id: PythonObject) raises -> PythonObject:
     return PythonObject(0)
 
 
+def msel_free_bytes_binding() raises -> PythonObject:
+    """The host column has no device memory to bound concurrent
+    cross-validation units by (bindings/msel_cv.mojo msel_cv_units): -1."""
+    return PythonObject(-1)
+
+
 def msel_live_binding() raises -> PythonObject:
     return PythonObject(MSEL_HOST_STORE.get_or_create_ptr()[].live)
 

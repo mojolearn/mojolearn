@@ -86,6 +86,15 @@ def msel_live_binding() raises -> PythonObject:
     return PythonObject(msel_store()[].live)
 
 
+def msel_free_bytes_binding() raises -> PythonObject:
+    """Free bytes of the device the fold store lives on: the measured bound
+    of how many cross-validation units run at once (bindings/msel_cv.mojo
+    msel_cv_units, lane p3-msel-parallel-and-process-pool)."""
+    var ctx = process_ctx[_MSEL_SLOT]()
+    var mem = ctx.get_memory_info()
+    return PythonObject(Int(mem[0]))
+
+
 def msel_take_rows_binding(
     src_id: PythonObject, n_src: PythonObject, row_bytes: PythonObject,
     idx_id: PythonObject, n_idx: PythonObject, dst_addr: PythonObject,
