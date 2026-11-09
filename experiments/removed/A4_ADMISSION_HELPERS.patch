@@ -1,9 +1,9 @@
 diff --git a/bindings/admitted_sequence.mojo b/bindings/admitted_sequence.mojo
 deleted file mode 100644
-index 4120e31259..0000000000
+index 7febe24748..0000000000
 --- a/bindings/admitted_sequence.mojo
 +++ /dev/null
-@@ -1,125 +0,0 @@
+@@ -1,134 +0,0 @@
 -# SPDX-License-Identifier: Apache-2.0
 -# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 -# THE ONE ADMISSION PATH, rank-N members: the sequence, time-series and
@@ -14,6 +14,8 @@ index 4120e31259..0000000000
 -#
 -#   admitted_ndarray_f32(shape, count, context) -> ndarray
 -#                     the uninitialised float32 ndarray a cast fills
+-#   admitted_array_f32(shape, count, context) -> Array
+-#                     the uninitialised float32 Array a cast fills
 -#   admit_nd_f32(value, name, copy, context) -> ndarray
 -#                     `np.array(value, dtype=float32, order="C", copy=copy)`
 -#                     of an admitted ndarray: the array itself when it is
@@ -52,6 +54,19 @@ index 4120e31259..0000000000
 -    # overwrote in full was a second pass over X.
 -    var storage = native_scratch_bytes(count * 4)
 -    return py_call(context["ndarray"], shape, dtype=context["float32"], buffer=storage)
+-
+-
+-def admitted_array_f32(shape: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
+-    """A C-order float32 mojolearn Array of `shape` (`count` words) whose
+-    contents are NOT initialised, for a cast that writes every word: an
+-    uninitialised bytearray store (`native_scratch_bytes`) behind a float32
+-    view. The Array owns the store (`_store`), so it may be kept by the
+-    model. `context` is an arena Array context (as `tsa_array` takes)."""
+-    # Audit R7 / REGRESSIONS C3: tsa_array zero-filled an array.array store
+-    # that the cast then overwrote in full.
+-    var store = native_scratch_bytes(count * 4) if count > 0 else py_call(native_loaded_module("builtins").bytearray)
+-    var view = py_call(py_call(native_buffer_view(store).cast, "B").cast, "f")
+-    return _array(shape, "<f4", view, store, PythonObject(None), context, PythonObject(None))
 -
 -
 -def admit_nd_f32(value: PythonObject, name: String, copy: Bool, context: PythonObject) raises -> PythonObject:
@@ -116,13 +131,7 @@ index 4120e31259..0000000000
 -    output_shape = py_call(native_loaded_module("builtins").tuple, output_shape)
 -    if count < 0 or count > 9223372036854775807 // 4:
 -        raise Error("ValueError: " + name + " exceeds native indexing bounds")
--    # The cast writes every word, so the retained Array's store is an
--    # UNINITIALISED bytearray (native_scratch_bytes) behind a float32 view
--    # (the former tsa_array zero-filled an array.array first; audit R7).
--    # The Array owns the store (`_store`) for as long as the model keeps it.
--    var store = native_scratch_bytes(count * 4) if count > 0 else py_call(native_loaded_module("builtins").bytearray)
--    var view = py_call(py_call(native_buffer_view(store).cast, "B").cast, "f")
--    var result = _array(output_shape, "<f4", view, store, PythonObject(None), context, PythonObject(None))
+-    var result = admitted_array_f32(output_shape, count, context)
 -    var pointer = _AS_F32P(unsafe_from_address=Int(py=classical_address(result)))
 -    # One pass: the cast's own finite flag replaces the second scan.
 -    if not admitted_cast_nd_f32(Int(py=classical_address(value)), dims, native_strides, item, kind, pointer):
@@ -645,48 +654,54 @@ index c900cda886..c427006261 100644
      var lease = OperationLockLease(fields["_runtime_lock"])
      lease.acquire()
 diff --git a/bindings/tsa_arima_native.mojo b/bindings/tsa_arima_native.mojo
-index eeab8aef15..d9d88852d6 100644
+index 58979a61d0..d9d88852d6 100644
 --- a/bindings/tsa_arima_native.mojo
 +++ b/bindings/tsa_arima_native.mojo
-@@ -29,8 +29,7 @@ from bindings.py_typed_call import py_call_typed
+@@ -29,9 +29,7 @@ from bindings.py_typed_call import py_call_typed
  from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind
  from bindings.classical_pandas import classical_admit_value
  from bindings.tsa_hw_native import tsa_array
 -from core.xseq_marshal import xseq_widen_f32_f64
 -from core.admitted_input_nd import admitted_cast_nd_f32
+-from bindings.admitted_sequence import admitted_array_f32
 +from core.xseq_marshal import xseq_cast_nd, xseq_widen_f32_f64
  from bindings.native_prepared_owner import prepared_get
  from bindings.tsa_arima_resident import (
      ARIMA_RESIDENT_SLOT, arima_resident_words, arima_resident_hit, arima_resident_mint, arima_resident_call,
-@@ -125,7 +124,7 @@ def _entry(entries: PythonObject, name: String) raises -> PythonObject:
+@@ -125,8 +123,8 @@ def _entry(entries: PythonObject, name: String) raises -> PythonObject:
+ 
  
  def _copy_series(source: ArimaBuffer, shape: PythonObject, context: PythonObject) raises -> PythonObject:
-     var result = tsa_array("f", "<f4", shape, source.count, 4, context)
+-    var result = admitted_array_f32(shape, source.count, context)
 -    _ = admitted_cast_nd_f32(source.address, source.shape, source.strides, source.itemsize, source.kind,
++    var result = tsa_array("f", "<f4", shape, source.count, 4, context)
 +    xseq_cast_nd(source.address, source.shape, source.strides, source.itemsize, source.kind, True,
                   _F32P(unsafe_from_address=Int(py=classical_address(result))))
      _ = source
      return result
 diff --git a/bindings/tsa_hw_native.mojo b/bindings/tsa_hw_native.mojo
-index ac6553f1a1..c2988f89ed 100644
+index ec359d6906..c2988f89ed 100644
 --- a/bindings/tsa_hw_native.mojo
 +++ b/bindings/tsa_hw_native.mojo
-@@ -33,8 +33,7 @@ from bindings.tsa_admission import tsa_hw_fields, tsa_hw_class, tsa_buffer, tsa_
+@@ -33,9 +33,7 @@ from bindings.tsa_admission import tsa_hw_fields, tsa_hw_class, tsa_buffer, tsa_
  from bindings.native_owner_lifetime import native_release_admit
  from bindings.classical_attributes import classical_connect_numpy
  from providers.python.forecast_owner_pyapi import forecast_commit
 -from core.xseq_marshal import xseq_column_copy_f32
 -from core.admitted_input_nd import admitted_cast_nd_f32
+-from bindings.admitted_sequence import admitted_array_f32
 +from core.xseq_marshal import xseq_cast_nd, xseq_column_copy_f32
  from bindings.native_loaded_module import NativeModules
  from bindings.native_prepared_owner import prepared_get, prepared_put
  from bindings.native_resident_capsule import resident_capsule
-@@ -142,8 +141,8 @@ def _check_dims(fields: PythonObject, source: PythonObject, context: PythonObjec
+@@ -142,9 +140,9 @@ def _check_dims(fields: PythonObject, source: PythonObject, context: PythonObjec
+         raise Error("ValueError: " + _HW + "initialized series count disagrees with data")
      if rows * n == 0:
          raise Error("ValueError: " + _HW + "endog is empty")
-     var out = tsa_array("f", "<f4", Python.tuple(rows, n), rows * n, 4, context)
+-    var out = admitted_array_f32(Python.tuple(rows, n), rows * n, context)
 -    _ = admitted_cast_nd_f32(value.source.addr, value.shape, value.strides, value.source.itemsize,
 -                 value.source.kind, _F32P(unsafe_from_address=Int(py=classical_address(out))))
++    var out = tsa_array("f", "<f4", Python.tuple(rows, n), rows * n, 4, context)
 +    xseq_cast_nd(value.source.addr, value.shape, value.strides, value.source.itemsize,
 +                 value.source.kind, True, _F32P(unsafe_from_address=Int(py=classical_address(out))))
      _ = value
