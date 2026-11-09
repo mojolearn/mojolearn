@@ -28,6 +28,7 @@ from gemm.host_transport import (
     ROLE_A,
     ROLE_B,
     ROLE_C,
+    ROLE_WS,
     ROLE_X,
     gemm_down_f32,
     gemm_up_f32,
@@ -368,7 +369,8 @@ def dequantize_int8_native(
     var de = _dev_i32(ctx, e_address, rows)
     var dy = ctx.enqueue_create_buffer[DType.float32](rows * cols)
     dequantize_rows_int8_device(ctx, dy, dq, de, rows, cols)
-    ctx.synchronize()
+    # The copy is ordered after the kernel on the same queue; the wait below
+    # retires both (a bare synchronize() between them read nothing; lane a3).
     ctx.enqueue_copy(dst_ptr=f32_ptr(y_address), src_buf=dy)
     ctx.synchronize()
     _ = dq^
@@ -402,17 +404,25 @@ def gemm_int15_native(addrs: List[Int], params: List[Int]) raises -> Int:
     if k > INT15_MAX_K:
         raise Error("gemm_int15: k must be at most " + String(INT15_MAX_K) + " (contract W-4), got " + String(k))
     var ctx = process_ctx[_DEVCTX_SLOT]()
-    var dah = _dev_i8(ctx, ah_address, m * k)
-    var dal = _dev_i8(ctx, al_address, m * k)
-    var dea = _dev_i32(ctx, ea_address, m)
-    var dbh = _dev_i8(ctx, bh_address, n * k)
-    var dbl = _dev_i8(ctx, bl_address, n * k)
-    var deb = _dev_i32(ctx, eb_address, n)
-    var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
+    # Pooled buffers and the staged download, as gemm_int8 (lane a3); the
+    # download's wait retires the kernel, so no bare synchronize() before it.
+    var lease = GemmHostLease()
+    var dah = lease.i8(ctx, ROLE_A, m * k)
+    var dal = lease.i8(ctx, ROLE_X, m * k)
+    var dbh = lease.i8(ctx, ROLE_B, n * k)
+    var dbl = lease.i8(ctx, ROLE_WS, n * k)
+    var dea = lease.i32(ctx, ROLE_A, m)
+    var deb = lease.i32(ctx, ROLE_B, n)
+    ctx.enqueue_copy(dst_buf=dah, src_ptr=i8_ptr(ah_address))
+    ctx.enqueue_copy(dst_buf=dal, src_ptr=i8_ptr(al_address))
+    ctx.enqueue_copy(dst_buf=dbh, src_ptr=i8_ptr(bh_address))
+    ctx.enqueue_copy(dst_buf=dbl, src_ptr=i8_ptr(bl_address))
+    ctx.enqueue_copy(dst_buf=dea, src_ptr=i32_ptr(ea_address))
+    ctx.enqueue_copy(dst_buf=deb, src_ptr=i32_ptr(eb_address))
+    var dc = lease.f32(ctx, ROLE_C, m * n)
     identical_gemm_int15_planes_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k)
-    ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
-    ctx.synchronize()
+    gemm_down_f32(ctx, lease, dc, f32_ptr(c_address), m * n)
+    lease.release()
     _ = dah^
     _ = dal^
     _ = dea^
