@@ -52,7 +52,7 @@ from core.admitted_finite_status import enqueue_finite_status
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_bad
 from x_linear.sgd_end import sgd_ys_kernel, sgd_iota_kernel, sgd_perm_kernel, sgd_mb_end_kernel, sgd_mb_res_kernel, sgd_ps_end_kernel, sgd_ps_res_kernel, SGD_END_ST, SGD_END_TPB, SGD_MB_FLAGS, SGD_MB_WORDS
-from x_linear.sgd_end import sgd_mb_ovr_act_kernel, sgd_flags_crit_kernel, sgd_live_crit_kernel
+from x_linear.sgd_end import sgd_mb_ovr_act_kernel, sgd_mb_ovr_res_kernel, sgd_flags_crit_kernel, sgd_live_crit_kernel
 # lane n3b-sgd-on-program-fit: the SGD epochs on the executor's bounded device loop
 from std.sys.compile import get_defined_int
 from autograd.program_loop import LoopTimers, fit_epochs_per_read
@@ -1420,7 +1420,6 @@ struct _SgdOvrEpochs(LoopStep, Movable):
     var hcf: List[Float32]
     var hstt: List[Float32]
     var hact: List[Int32]
-    var hep: List[Int32]
     var k: Int
     var penalty: Int
     var lr: Int
@@ -1571,7 +1570,6 @@ struct _SgdOvrEpochs(LoopStep, Movable):
         self.hcf = hcf^
         self.hstt = hstt^
         self.hact = hact^
-        self.hep = List[Int32](length=problems, fill=Int32(0))
         self.k = k
         self.penalty = penalty
         self.lr = lr
@@ -1707,31 +1705,17 @@ struct _SgdOvrEpochs(LoopStep, Movable):
         loop_lap(ctx, timers, "sgd_ovr_epoch")
 
     def finish(mut self, res: FP) raises:
-        """Every problem's failed word and epoch count (one read, after the
-        loop) and the result words."""
+        """The result words, every problem's epoch count and the status
+        (`sgd_mb_ovr_res_kernel`, on the device), home in one copy."""
         var cx = self.ctx.copy()
-        cx.enqueue_copy(dst_ptr=self.hstt.unsafe_ptr(), src_buf=self.dstt)
-        cx.enqueue_copy(dst_ptr=self.hep.unsafe_ptr(), src_buf=self.dep)
-        cx.synchronize()
-        var max_epochs = 0
-        var status = 0
-        var a_w = Int(self.dw.unsafe_ptr())
-        var a_bias = Int(self.dbias.unsafe_ptr())
-        for c in range(self.problems):  # driver-loop: over the one-vs-rest problems, one result launch each
-            var failed = self.hstt[c * SGD_MB_WORDS + SGD_MB_FLAGS + 1] != Float32(0)
-            cx.enqueue_function[sgd_mb_res_kernel](
-                FP(unsafe_from_address=a_w) + c * self.d, FP(unsafe_from_address=a_bias) + c, self.dres.unsafe_ptr(),
-                Int32(c), Int32(self.d), Int32(self.problems), Int32(0), Int32(1 if failed else 0),
-                grid_dim=_xg_blocks(self.d + 1), block_dim=XG_TPB,
-            )
-            if failed:
-                status = -1
-            elif Int(self.hep[c]) > max_epochs:
-                max_epochs = Int(self.hep[c])
+        var words = self.problems * self.d + self.problems + 2
+        cx.enqueue_function[sgd_mb_ovr_res_kernel](
+            self.dw.unsafe_ptr(), self.dbias.unsafe_ptr(), self.dstt.unsafe_ptr(), self.dep.unsafe_ptr(),
+            self.dres.unsafe_ptr(), Int32(self.d), Int32(self.problems),
+            grid_dim=(words + SGD_END_TPB - 1) // SGD_END_TPB, block_dim=SGD_END_TPB,
+        )
         cx.enqueue_copy(dst_ptr=res, src_buf=self.dres)
         cx.synchronize()
-        res.unsafe_store(self.problems * self.d + self.problems, i2f(max_epochs))
-        res.unsafe_store(self.problems * self.d + self.problems + 1, i2f(status))
 
 
 def _sgd_mb_ovr_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],

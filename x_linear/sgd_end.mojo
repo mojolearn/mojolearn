@@ -317,6 +317,35 @@ def sgd_mb_ovr_act_kernel(
     witness_end(wf, woff, nonce)
 
 
+def sgd_mb_ovr_res_kernel(w: FP, bias: FP, stt: FP, epw: IP, res: FP, d: Int32, problems: Int32):
+    """The one-vs-rest minibatch fit's result words on the device, one thread
+    a word: coef row c and intercept c (`sgd_mb_res_kernel`'s, zeros for a
+    problem whose failed word is set), then the epochs maximum over the
+    problems that did not fail and the status (-1 when one failed) by one
+    thread, as `sgd_ps_res_kernel` writes them."""
+    var q = Int(block_idx.x) * SGD_END_TPB + Int(thread_idx.x)
+    var dd = Int(d)
+    var pp = Int(problems)
+    if q < pp * dd:
+        var c = q // dd
+        var failed = ld(stt, c * SGD_MB_WORDS + SGD_MB_FLAGS + 1) != Float32(0)
+        st(res, q, Float32(0) if failed else ld(w, q))
+    elif q < pp * dd + pp:
+        var c = q - pp * dd
+        var failed = ld(stt, c * SGD_MB_WORDS + SGD_MB_FLAGS + 1) != Float32(0)
+        st(res, q, Float32(0) if failed else ld(bias, c))
+    elif q == pp * dd + pp:
+        var mx = 0
+        var status = 0
+        for c in range(pp):
+            if ld(stt, c * SGD_MB_WORDS + SGD_MB_FLAGS + 1) != Float32(0):
+                status = -1
+            else:
+                mx = max(mx, ldi(epw, c))
+        st(res, q, i2f(mx))
+        st(res, q + 1, i2f(status))
+
+
 def sgd_flags_crit_kernel(words: IP, flags: FP, it: Int32):
     """The minibatch loop's criterion, one thread, after the epoch end:
     while the loop runs it stores the iteration (`it`, 1-based) and, when
