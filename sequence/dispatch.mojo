@@ -185,11 +185,14 @@ from autograd.import_ops import OP_IMP_FIRST, OP_IMP_LAST, apply_import
 # lane ag-ho-core (H1, docs/plans/AUTOGRAD_HIGHER_ORDER.md): the higher-order bodies
 from autograd.higher_ops import OP_HO_FIRST, OP_HO_LAST, apply_higher
 from autograd.transformer_primitives_ops import OP_TFP_FIRST, OP_TFP_LAST, apply_transformer_primitive
+# lane fix-d3-executor-loops: the program loop's control ops (autograd/program_loop.mojo), 1800..1809
+from autograd.program_loop import OP_LOOP_FIRST, OP_LOOP_LAST, apply_loop
 
 
 @always_inline
 def apply[OP: Int](t: Int, a: Args):
     comptime assert OP_TFP_FIRST > OP_IMP_LAST and OP_TFP_FIRST > OP_RNV_LAST and OP_TFP_FIRST > OP_HO_LAST, "transformer graph opcode range overlaps existing family"
+    comptime assert OP_LOOP_FIRST > OP_AGF_LAST and OP_LOOP_LAST < OP_TFP_FIRST and OP_LOOP_LAST < OP_CAST_FIRST and (OP_LOOP_LAST < OP_AG_FIRST or OP_LOOP_FIRST > OP_AG_LAST) and (OP_LOOP_LAST < OP_MLP_LB_FIRST or OP_LOOP_FIRST > OP_MLP_LB_LAST), "program loop opcode range overlaps another family"
     # The autograd family (autograd/ops.mojo) is one contiguous range of
     # codes, one body each; no other operation code may fall inside it.
     comptime assert OP_AG_FIRST <= OP_AG_LAST, "autograd opcode range is empty"
@@ -530,6 +533,9 @@ def apply[OP: Int](t: Int, a: Args):
         apply_higher[OP](t, a)
     elif OP >= OP_TFP_FIRST and OP <= OP_TFP_LAST:
         apply_transformer_primitive[OP](t, a)
+    elif OP >= OP_LOOP_FIRST and OP <= OP_LOOP_LAST:
+        # lane fix-d3-executor-loops: the program loop's tick, commit, advance
+        apply_loop[OP](t, a)
     elif OP == OP_GEMM:
         op_gemm(t, a)
     elif OP == OP_GEMM_SPLITK:

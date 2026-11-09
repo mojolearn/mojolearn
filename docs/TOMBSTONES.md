@@ -404,6 +404,7 @@ in the tables after the sections.
 | [`MOJOLEARN_AUTOGRAD_TRANSFORMER`](#mojolearn_autograd_transformer) | Neural | PROMOTED (hand arm deleted) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_TRANSFORMER.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch) |
 | [`MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN`](#mojolearn_idn_mamba1_chunked_scan) | Neural | REJECTED (breaks decode==prefill) | 2026-10-28 | none (recoverable at lane/mamba-folds@db803a1337) |
 | [`MOJOLEARN_PAR_VERIFY`](#mojolearn_par_verify) | Verification (multi-GPU: par-* identity lanes, `verify --par`, multi-gpu release rows) | retired (owner decision) | 2026-10-31 | [MOJOLEARN_PAR_VERIFY.patch](../experiments/removed/MOJOLEARN_PAR_VERIFY.patch) |
+| [Executor loop driver loops (no define): k-means Lloyd chunk loop, `kmeans_conv_step_kernel`, program `_copy_state`](#executor-loop-driver-loops-2026-11-08) | Cluster / Autograd executor | REFACTORED (onto the executor's bounded loop) | 2026-11-08 | [EXECUTOR_LOOP_DRIVER_LOOPS.patch](../experiments/removed/EXECUTOR_LOOP_DRIVER_LOOPS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3754,3 +3755,34 @@ public runtime qualification; this entry is not release or performance evidence.
   historical box legs that mention par lanes (`tools/two_device_par_class_amd_leg.sh`, `tools/gap_column_leg.sh`,
   `tools/par_lm_xvendor*.py`/`.sh`), and the 531 par-* cells of the shipped reference table (preserved history; the
   admission guard refuses edits to unselected rows, and no harness lane reads them).
+
+## Executor loop driver loops (2026-11-08)
+
+- **What it was**: three hand-written loop drivers replaced by the executor's bounded loop
+  (`autograd/program_loop.mojo`, `autograd/program_loop_device.mojo`; docs/plans/AUTOGRAD_API.md "Bounded loops").
+  (1) The IDENTICAL k-means Lloyd chunk loop in `cluster/impl/detail/kmeans.mojo::kmeans_fit_main_traced`
+  (`IDN_KMEANS_DEVICE_CONV`: gated assignment, gated row-block accumulations, finalize, shift, gated copy back and the
+  device criterion, enqueued KMEANS_CONV_CHUNK iterations per flag read). It is now the step op `LloydStep` run by
+  `bounded_device_loop`: the same kernels, arguments and order, so no bit moves. (2) `kmeans_conv_step_kernel`
+  (`cluster/checks/reduce_by_key.mojo`), merged into the generic criterion op `loop_below_kernel`, which also stores the
+  iteration register (a word no k-means output reads). (3) `_copy_state` in `autograd/program_control.mojo`: the
+  program `while_loop` copied every carried state tensor into a fresh buffer and drained the executor per iteration,
+  after a host read of the condition (two drains per iteration). The loop now carries the state in place
+  (OP_LOOP_COMMIT, a gated bit copy), tests the condition on the device (OP_LOOP_TICK) and reads the register block
+  every `check_every` iterations (one drain per iteration at the default 1). Same outputs, `iterations` and `stopped`.
+- **Versions and measurements**: the k-means loop had two IDENTICAL forms, the device-criterion chunk loop (default since
+  fam2-cluster, 0372975724, 2026-10-04) and the per-iteration drain (`-D MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF`). No
+  standalone A/B of the two exists; the chunk loop is the form behind every recorded kmeans cell (paper 0.8.55
+  istella fit 405.7 ms, taxi 191.6 ms on MI300X) and the chunk size 8 kept by A08 (chunk 1: AMD 0.83-0.99x, NVIDIA mixed;
+  `cluster/impl/detail/kmeans.mojo` KMEANS_CONV_CHUNK note). Kept: the chunk loop's order, now on the executor. The
+  per-iteration drain stays as the `_OFF` B arm and as the form for `inertia_check`, the identity trace, multi-device
+  assignment and FAST. A/B owed: DEVICE_CONV on vs off on NVIDIA and AMD (kmeans istella, taxi, one non-board shape).
+  The program `while_loop` had one form; no measurement exists; bits are unchanged by construction.
+- **Verdict**: REFACTORED (no define removed, no bit change). Quality: unchanged (same words).
+- **Run ids**: none (lanes never run; RUN OWED in the lane reply).
+- **Recoverable**: `22ac89b54c` (origin/main at the lane's base); deleted on lane/fix-d3-executor-loops.
+- **Patch**: `experiments/removed/EXECUTOR_LOOP_DRIVER_LOOPS.patch`, `git diff <lane head> 22ac89b54c --
+  cluster/impl/detail/kmeans.mojo cluster/checks/reduce_by_key.mojo autograd/program_control.mojo`; `git apply`
+  restores the three files on the lane head, `git apply -3` once main has moved.
+- **Guard / records**: no `-D` define was removed, so no guard refusal and no `grid_controls` entry moves. One row in
+  `docs/apple-fast/EXPERIMENTS.md`.
