@@ -18,6 +18,11 @@
   fixture or a better fold order because it changes the bits an older version
   produced. Change every vendor column and the host column together, then
   record the new reference in the release's one verification round.
+- Restated (Andrew, 2026-11-08): it is OK to change bits between versions.
+  Bits must match across GPU vendors within one version, and that is the only
+  bits requirement. A refactor, consolidation or cleanup lane takes the faster
+  or simpler path even when it changes bits; "keeps the old bits" is never a
+  reason to keep a duplicate path, a slower kernel or a serial fold.
 
 ## Fix everything before a release (Andrew, 2026-11-08)
 
