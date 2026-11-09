@@ -77,7 +77,7 @@ from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.native_array_storage import native_scratch_bytes, native_array_zeros
 from bindings.admitted_registry import admitted_held_index, admitted_held_address, admitted_held_rows, admitted_held_cols
-from bindings.device_rows_door import door_is_device_rows, DoorRows
+from bindings.device_rows_door import door_is_device_rows, DoorRows, DoorRowsStore, door_rows_store
 from core.admitted_input import admitted_check_f32, admitted_check_weights_f32, admitted_cast_f32
 from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_NONFINITE, ARG_OUT_OF_RANGE
 
@@ -119,6 +119,13 @@ struct AdmittedX(Movable):
             (`array` is None, `address` 0, `finite` False).
         c_order: True for C-order words; False when the door asked for
             `order="F"` (then `address` holds F-order words).
+        store: with `device_x=True`, the fold's resident store ids in
+            model selection's store (`store.active()`): the kernel entry
+            gathers the rows on the device out of them
+            (core/msel_device_x.mojo msel_device_x_f32). Inactive
+            otherwise (a door outside model selection, or a host column
+            whose store is not on a device: then the rows are gathered on
+            the host and `address` holds them).
     """
     var array: PythonObject
     var source: PythonObject
@@ -133,6 +140,7 @@ struct AdmittedX(Movable):
     var rows_base: PythonObject
     var rows_indices: PythonObject
     var c_order: Bool
+    var store: DoorRowsStore
 
     def __init__(out self, array: PythonObject, source: PythonObject, address: Int, rows: Int, cols: Int,
                  ndim: Int, borrowed: Bool, finite: Bool = True):
@@ -149,6 +157,7 @@ struct AdmittedX(Movable):
         self.rows_base = PythonObject(None)
         self.rows_indices = PythonObject(None)
         self.c_order = True
+        self.store = DoorRowsStore.none()
 
 
 def _repr(value: PythonObject) raises -> String:
@@ -301,6 +310,14 @@ def classical_view(source: PythonObject, context: PythonObject, name: String = "
     # before dispatch), so the walk is not repeated; storage is still read.
     if not admitted:
         classical_admit_value(source, context)
+    if door_is_device_rows(source, context):
+        # A model-selection fold reaching a door that views X directly
+        # (lane a6): its rows gathered on the host straight out of the host
+        # base (row tasks across the cores, no device round trip), not
+        # finite-tested here: the door's own test runs on the view, as for
+        # any array. This is what lets every family and classical estimator
+        # opt into DeviceRows folds (no fold is downloaded).
+        return admit_rows_host_unchecked(source, context)
     var prepared = source
     if native_pandas_exact(source):
         prepared = native_pandas_f32(source, context)
@@ -362,7 +379,8 @@ def _check_x_view(view: PythonObject, est: String, context: PythonObject, defer_
     return _cast_x(view, est, context, defer_finite, order, as_array, finite)
 
 
-def _admitted_rows(source: PythonObject, est: String, context: PythonObject, device_x: Bool) raises -> AdmittedX:
+def _admitted_rows(source: PythonObject, est: String, context: PythonObject, device_x: Bool,
+                   finite: Bool = True) raises -> AdmittedX:
     """A model-selection fold (`_arena_io.DeviceRows`) admitted without its
     device gather ever being downloaded (REGRESSIONS R13; plan section 3.2
     step 4). The handle (base, indices) always rides on the result. With
@@ -371,7 +389,10 @@ def _admitted_rows(source: PythonObject, est: String, context: PythonObject, dev
     gathered on the host straight out of the host base, in row tasks across
     the cores, finite-tested in the copy (core/admitted_rows_gather.mojo).
     The same rows in the same order as model selection's device gather, so
-    the same bytes reach the kernel."""
+    the same bytes reach the kernel. `finite=False` (a NaN-accepting door):
+    a NaN fold is not refused (lane a6). With `device_x` the fold's store
+    ids ride on `store` (lane a6); when they cannot be resolved (no store
+    connection) the rows are gathered on the host as without `device_x`."""
     # TOMBSTONE: door_rows_host (bindings/device_rows_door.mojo, the DeviceRows
     # materialize: device gather, download, host scan, kernel re-upload) deleted
     # 2026-11-08 by lane a5-admit-core-followup; code recoverable at f7d10d2b09.
@@ -393,18 +414,24 @@ def _admitted_rows(source: PythonObject, est: String, context: PythonObject, dev
         raise Error("Found array with 0 feature(s) (shape=(" + String(rows) + ", 0)) while a minimum of 1 is required by " + est + ".")
     var array = PythonObject(None)
     var address = 0
-    var finite = False
-    if not device_x:
+    var tested = False
+    var store = DoorRowsStore.none()
+    if device_x:
+        store = door_rows_store(source, context)
+        if store.active() and (store.rows != rows or store.row_words != columns or store.base_rows != base_rows):
+            raise Error("TypeError: DeviceRows store entries differ from the fold's base and indices")
+    if not store.active():
         array = admitted_storage_f32(rows, columns, context)
         address = Int(py=classical_address(array))
         var status = admitted_gather_rows_f32(Int(py=classical_address(base)), base_rows, columns,
                                               Int(py=classical_address(indices)), rows, address)
         if status == ARG_OUT_OF_RANGE:
             raise Error("IndexError: DeviceRows row index out of range for a base of " + String(base_rows) + " rows")
-        if status == ARG_NONFINITE:
+        if status == ARG_NONFINITE and finite:
             raise Error("Input X contains NaN or infinity (" + est + ").")
-        finite = True
-    var x = AdmittedX(array, source, address, rows, columns, 2, False, finite)
+        tested = finite
+    var x = AdmittedX(array, source, address, rows, columns, 2, False, tested)
+    x.store = store
     x.device_rows = True
     x.rows_base = door.base
     x.rows_indices = door.indices
@@ -415,7 +442,7 @@ def _admitted_rows(source: PythonObject, est: String, context: PythonObject, dev
 
 def _admitted_x(source: PythonObject, est: String, context: PythonObject, admitted: Bool,
                 defer_finite: Bool = False, device_x: Bool = False, order: String = "C",
-                as_array: Bool = False) raises -> AdmittedX:
+                as_array: Bool = False, finite: Bool = True) raises -> AdmittedX:
     """X refused with scikit-learn's wording and cast (or borrowed) as
     float32 in `order`; no admission record."""
     if order == "C" and not as_array:
@@ -430,17 +457,18 @@ def _admitted_x(source: PythonObject, est: String, context: PythonObject, admitt
         if order != "C" or as_array:
             # The gather writes C-order fresh storage; an F-order or Array
             # request re-admits those rows through the cast below.
-            var rows_x = _admitted_rows(source, est, context, False)
-            var ordered = _admitted_x(rows_x.array, est, context, True, defer_finite, False, order, as_array)
+            var rows_x = _admitted_rows(source, est, context, False, finite)
+            var ordered = _admitted_x(rows_x.array, est, context, True, defer_finite, False, order, as_array,
+                                      finite)
             ordered.source = source
             ordered.device_rows = True
             ordered.rows_base = rows_x.rows_base
             ordered.rows_indices = rows_x.rows_indices
             return ordered^
-        return _admitted_rows(source, est, context, device_x)
+        return _admitted_rows(source, est, context, device_x, finite)
     classical_refuse_sparse(source, est)
     var view = classical_view(source, context, "X", admitted)
-    var x = _check_x_view(view, est, context, defer_finite, order, as_array)
+    var x = _check_x_view(view, est, context, defer_finite, order, as_array, finite)
     # _cast_x refused every rank but 2; the cast keeps the view's shape.
     var rows = Int(py=view.shape[0])
     var columns = Int(py=view.shape[1])
@@ -449,7 +477,8 @@ def _admitted_x(source: PythonObject, est: String, context: PythonObject, admitt
     var borrowed = address == Int(py=classical_address(view))
     _ = view^
     # A borrowed X under defer_finite was not scanned: its entry tests it.
-    var result = AdmittedX(x, source, address, rows, columns, 2, borrowed, not (borrowed and defer_finite))
+    var result = AdmittedX(x, source, address, rows, columns, 2, borrowed,
+                           finite and not (borrowed and defer_finite))
     result.c_order = order == "C" or rows == 1 or columns == 1
     return result^
 
@@ -457,7 +486,7 @@ def _admitted_x(source: PythonObject, est: String, context: PythonObject, admitt
 def admit_x_unrecorded(source: PythonObject, est: String, context: PythonObject,
                        admitted: Bool = False, defer_finite: Bool = False,
                        device_x: Bool = False, order: String = "C",
-                       as_array: Bool = False) raises -> AdmittedX:
+                       as_array: Bool = False, finite: Bool = True) raises -> AdmittedX:
     """X for fit, predict or score: refused with scikit-learn's wording (a
     sparse, complex, empty or non-2-D X; NaN or infinity), then the C-order
     float32 words the kernels read (the input itself when it already is
@@ -468,20 +497,23 @@ def admit_x_unrecorded(source: PythonObject, est: String, context: PythonObject,
     `admitted_finite_refuse`). `device_x`: the door's entry reads a
     DeviceRows fold from its device handle (`device_rows`), so no host rows
     are made. `order`: "C" (default) or "F" words. `as_array`: the array
-    is a mojolearn Array, never an ndarray."""
-    return _admitted_x(source, est, context, admitted, defer_finite, device_x, order, as_array)
+    is a mojolearn Array, never an ndarray. `finite=False`: the no-check
+    mode of a door that accepts NaN (a NaN fold or X is not refused;
+    `finite` on the result is then False)."""
+    return _admitted_x(source, est, context, admitted, defer_finite, device_x, order, as_array, finite)
 
 
 def admit_x(mut call: AdmittedCall, source: PythonObject, est: String, context: PythonObject,
             position: Int, admitted: Bool = False, defer_finite: Bool = False,
-            device_x: Bool = False, order: String = "C", as_array: Bool = False) raises -> AdmittedX:
+            device_x: Bool = False, order: String = "C", as_array: Bool = False,
+            finite: Bool = True) raises -> AdmittedX:
     """As above, recording the admitted X on the door's admission record at
     `position` (its rows, columns, address and the array that owns it), so
     the door reads the shape from the record instead of admitting X again
     (labels_shape_of; rows N254, N279). A DeviceRows fold under `device_x`
     is recorded with address 0 and no owning array; so is an F-order X
     (the record's readers take C-order words)."""
-    var x = _admitted_x(source, est, context, admitted, defer_finite, device_x, order, as_array)
+    var x = _admitted_x(source, est, context, admitted, defer_finite, device_x, order, as_array, finite)
     x.position = call.add_input(admitted_input_dense(position, source, x.array, x.address if x.c_order else 0,
                                                      x.rows, x.cols, ADMITTED_ITEM_F32, False))
     return x^
@@ -501,6 +533,12 @@ def admit_rows_host(value: PythonObject, est: String, context: PythonObject) rai
     device gather, no download, the finite test in the copy). For a door
     that still hands its owners an array object instead of an AdmittedX."""
     return _admitted_rows(value, est, context, False).array
+
+
+def admit_rows_host_unchecked(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`admit_rows_host` with no finite refusal: the view of a fold for a
+    door that tests (or accepts) NaN itself (classical_view)."""
+    return _admitted_rows(value, "", context, False, False).array
 
 
 def admit_y(source: PythonObject, rows: Int, est: String, context: PythonObject,
