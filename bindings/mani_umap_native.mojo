@@ -15,6 +15,7 @@ from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_meta
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem, py_contains, py_type
+from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.pca_exact import pca_copied
@@ -320,18 +321,29 @@ def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: P
             var fast = _umap_native_codes(y, n, context)
             if fast is not None:
                 return Python.tuple(PythonObject(1), PythonObject(1), fast[0], tk_kept, PythonObject(w), fast[0], fast[1])
+        # P1: only an exact list, tuple or NumPy array is read (ndarray.tolist
+        # and list() are C code), and every label must be an exact int,
+        # float, str or bool, refused before any comparison or hash: the
+        # set, sort and equality below then run no Python method of a
+        # caller's object (the former hasattr/tolist on any object and the
+        # (type name, value) sort over arbitrary labels are removed).
+        var y_cls = py_type(y)
         var vals: PythonObject
-        if Bool(py=py_call(b.hasattr, y, PythonObject("tolist"))):
-            vals = family_call(py_call(b.getattr, y, PythonObject("tolist")))
-        else:
+        if y_cls is py_get(context, "ndarray"):
+            vals = py_call(py_attr(py_get(context, "ndarray"), "tolist"), y)
+        elif y_cls is b.list or y_cls is b.tuple:
             vals = py_call(b.list, y)
+        else:
+            raise Error("TypeError: UMAP categorical y must be a list, tuple or NumPy array of labels")
         var count = Int(py=py_call(b.len, vals))
         var nested = False
-        var seq_types = Python.tuple(b.list, b.tuple)
         for i in range(count):  # cpu-route: categorical y label objects ordered by (type, value)
-            if Bool(py=py_call(b.isinstance, vals[i], seq_types)):
+            var label_cls = py_type(vals[i])
+            if label_cls is b.list or label_cls is b.tuple:
                 nested = True
                 break
+            if label_cls is not b.int and label_cls is not b.float and label_cls is not b.str and label_cls is not b.bool:
+                raise Error("TypeError: UMAP categorical y labels must be int, float, str or bool values")
         if count != n or nested:
             raise Error("UMAP categorical y must be one label per row")
         var unknown = PythonObject(-1)
