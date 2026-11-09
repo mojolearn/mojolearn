@@ -743,6 +743,24 @@ struct BlockStepScratch(Movable):
                                 + String(self.attn[i].ints[6]) + "]")
                 self.attn[i].kv.s = words[0]
 
+    def drop_training(mut self, w_addr: Int):
+        """Free the recorded run kept by every Mamba entry over the weights at
+        `w_addr` (lane x56d: a one-shot block VJP holds no training stages
+        past its call)."""
+        for i in range(len(self.m1)):  # driver-loop: over resident Mamba-1 blocks
+            if self.m1[i].w_addr == w_addr:
+                self.m1[i].train = None
+                self.m1[i].train_l = 0
+        for i in range(len(self.m2)):  # driver-loop: over resident Mamba-2 blocks
+            if self.m2[i].w_addr == w_addr:
+                self.m2[i].train = None
+                self.m2[i].train_l = 0
+        for i in range(len(self.m3)):  # driver-loop: over resident Mamba-3 blocks
+            if self.m3[i].w_addr == w_addr:
+                self.m3[i].train_st = None
+                self.m3[i].train_x = None
+                self.m3[i].train_l = 0
+
     def weights_changed(mut self, addr: Int):
         """The weights at `addr` were rewritten in place: the block's own
         refusal of non-finite weights runs again at the next step."""
