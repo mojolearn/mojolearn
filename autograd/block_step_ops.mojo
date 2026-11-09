@@ -43,9 +43,22 @@ integer words back once.
 Dispatch is one table (`comptime for` over the codes), not one more `elif` per
 op in `OpsSession._op_run_tensors` (lessons 8, 12 of NATIVE_ENTRY_POINTS_AFTER_0866).
 
-Device only: an `OpsSession` on the host executor refuses these codes
-(`Exec.IS_DEVICE`), so a host build never instantiates them. Recording: the
-ops run in an inference session; a family lane that trains through a step op
+The host arm (lane x7b-step-ops-host-arm, 2026-11-09): an `OpsSession` on the
+host executor runs the same four ops through the host block bodies, the
+oracles the CPU identity column runs (`transformer_block_oracle` and
+`transformer_block_backward_oracle`, `mamba_block_oracle`,
+`mamba2_block_oracle`, `mamba3_block_oracle`), over the SAME packed
+layouts: the weights are read from the weights tensor at its `block_offsets`
+slots at every run, the carried state is read from the state tensor and
+written back after a successful run, the integers are the words tensor's.
+So one captured program runs on the GPU columns and the host column with
+one algorithm; the host entry (`BlockStepScratch.hattn` / `.hmamba`) keeps
+only the rotary table, a training run's stages and the reports. Every
+cross-row fold inside the bodies is a gemm v1 call and every per-row stage
+runs over host tasks, so a run uses every core; consecutive layers are
+dependent and run in order.
+
+Recording: the ops run in an inference session; a family lane that trains through a step op
 records it with `Tape.custom_nd` over the stage buffers its rule reads
 (`rules_mamba`, `rules_mamba3`, `rules_transformer`), see the API note.
 """
@@ -80,6 +93,22 @@ from transformer.block_options import BlockOptions, BLOCK_OPTION_PARAMS
 from transformer.lean_stages import _lean_for
 from autograd.kernels.transformer import LlamaBackwardStages
 from autograd.rules_transformer import llama_decoder_layer_backward_autograd
+# The host arm (lane x7b-step-ops-host-arm): the host block bodies, the same
+# oracles the CPU identity column has always run (each equal to its device
+# block's bits, gemm v1 folds inside, rows over host tasks).
+from std.memory import memcpy
+from core.host_lanes import host_f32_uninit
+from transformer.checks.transformer_fixture import TransformerDims, TransformerWeights, ScorePlant
+from transformer.checks.transformer_oracle import (
+    RopeTable, TransformerKVCache, TransformerStages, build_rope_table_opts, transformer_block_oracle,
+)
+from transformer.checks.transformer_backward_oracle import transformer_block_backward_oracle
+from mamba.checks.mamba_fixture import MambaWeights
+from mamba.checks.mamba_oracle import MambaState, mamba_block_oracle
+from mamba.checks.mamba2_fixture import Mamba2Weights
+from mamba.checks.mamba2_oracle import Mamba2State, mamba2_block_oracle
+from mamba.checks.mamba3_fixture import Mamba3Weights
+from mamba.checks.mamba3_oracle import Mamba3State, mamba3_block_oracle
 
 # Session operation codes (autograd/ops_api.mojo OPS_*; autograd/program.mojo
 # PROGRAM_MAX_CODE covers them, record version 3).
@@ -594,15 +623,20 @@ struct BlockStepScratch(Movable):
     var m2: List[_M2Block]
     var m3: List[_M3Block]
     var attn: List[_AttnBlock]
+    #: lane x7b: the host arm's entries (a host session's runs)
+    var hattn: List[_HostAttnBlock]
+    var hmamba: List[_HostMambaBlock]
 
     def __init__(out self):
         self.m1 = List[_M1Block]()
         self.m2 = List[_M2Block]()
         self.m3 = List[_M3Block]()
         self.attn = List[_AttnBlock]()
+        self.hattn = List[_HostAttnBlock]()
+        self.hmamba = List[_HostMambaBlock]()
 
     def count(self) -> Int:
-        return len(self.m1) + len(self.m2) + len(self.m3) + len(self.attn)
+        return len(self.m1) + len(self.m2) + len(self.m3) + len(self.attn) + len(self.hattn) + len(self.hmamba)
 
     def forget(mut self, addr: Int):
         """Drop every entry built over the session buffer at `addr` (its
@@ -629,12 +663,24 @@ struct BlockStepScratch(Movable):
             if self.attn[i].w_addr == addr or self.attn[i].s_addr == addr or self.attn[i].q_addr == addr:
                 _ = self.attn.pop(i)
             i -= 1
+        i = len(self.hattn) - 1
+        while i >= 0:  # driver-loop: over host attention entries
+            if self.hattn[i].w_addr == addr or self.hattn[i].s_addr == addr or self.hattn[i].q_addr == addr:
+                _ = self.hattn.pop(i)
+            i -= 1
+        i = len(self.hmamba) - 1
+        while i >= 0:  # driver-loop: over host Mamba entries
+            if self.hmamba[i].w_addr == addr or self.hmamba[i].s_addr == addr or self.hmamba[i].q_addr == addr:
+                _ = self.hmamba.pop(i)
+            i -= 1
 
     def clear(mut self):
         self.m1.clear()
         self.m2.clear()
         self.m3.clear()
         self.attn.clear()
+        self.hattn.clear()
+        self.hmamba.clear()
 
     def set_words(mut self, addr: Int, words: List[Int]) raises:
         """The carried integers of every Mamba entry whose state words live at
@@ -678,6 +724,11 @@ struct BlockStepScratch(Movable):
         for i in range(len(self.attn) - 1, -1, -1):  # driver-loop: over resident attention blocks
             if self.attn[i].w_addr == addr and not self.attn[i].adopted:
                 _ = self.attn.pop(i)
+        # lane x7b: a host entry reads the weights tensor at every run; only
+        # a training run's kept stages (computed over the old weights) go.
+        for i in range(len(self.hattn) - 1, -1, -1):  # driver-loop: over host attention entries
+            if self.hattn[i].w_addr == addr:
+                _ = self.hattn.pop(i)
 
 
 # ---------------------------------------------------------------- the runs
