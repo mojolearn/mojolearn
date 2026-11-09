@@ -16,7 +16,7 @@ the finiteness test moves into the kernel entry that reads X anyway.
               downloads. Word `slot` of the status buffer is 1 when any
               word is NaN or infinite, else it stays at the 0 the entry
               filled it with (`enqueue_fill`).
-  host entry  `host_finite_status(address, n)` (the CPU column, the parallel
+  host entry  `host_finite_status(address, n)` (core/host_finite_scan.mojo; the CPU column, the parallel
               SIMD scan of core/host_finite_scan.mojo) before it reads X.
 
 The entry returns the status word(s) to its door, which refuses through
@@ -32,7 +32,6 @@ constant 1 into its own input's word: no atomics, no order, no 64-bit word
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
-from core.host_finite_scan import host_all_finite_f32
 
 comptime AFS_TPB = 256
 comptime AFS_REDUCE_BLOCKS = 1024
@@ -79,9 +78,7 @@ def enqueue_finite_status(ctx: DeviceContext, d_words: _AFS_F32, n: Int, d_statu
         off += m
 
 
-def host_finite_status(address: Int, n: Int) -> Int32:
-    """The status word of the `n` float32 words at host `address`: 0 when
-    all are finite, 1 otherwise (the parallel SIMD scan; the CPU column of
-    a deferred finite test)."""
-    var p = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
-    return AFS_FINITE if host_all_finite_f32(p, n) else AFS_NONFINITE
+# host_finite_status (the CPU column's status word) moved to
+# core/host_finite_scan.mojo by lane a6: this module is imported by GPU
+# kernel entries, and a host scan in it made every such entry reach host
+# threads (the no-host-routes fence).

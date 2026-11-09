@@ -70,7 +70,7 @@ from providers.python.core_py2mojo_rows_pyapi import py2mojo_rows_host_binding
 from providers.python.svm_host_scale_gamma_host_pyapi import py2mojo_linear_flags_binding
 
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
-from core.host_finite_scan import host_all_finite_f32
+from core.host_finite_scan import host_finite_status
 from core.classical_ridge_impl import classical_widen_f32_f64
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -1037,7 +1037,7 @@ def pca_transform_binding(
         _positive(nf, "n_features")
         _positive(nc, "n_components")
     # parallel: the deferred finite test of X (SIMD scan across the host's cores)
-    var status = 0 if host_all_finite_f32(f32_ptr(x_address), nr * nf) else 1
+    var status = Int(host_finite_status(x_address, nr * nf))
     if status == 0:
         with GILReleased(Python()):
             host_pca_transform_into(
