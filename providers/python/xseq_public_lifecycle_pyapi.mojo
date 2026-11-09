@@ -2,6 +2,7 @@
 # Actual public RNN/MLP envelope formerly installed by _mode's Python wrappers.
 # Retain fit tracking, validation, fitted errors, feature names and public output
 # dtype while calling the existing xseq native owners directly.
+from bindings.admitted_finite_wording import admitted_finite_wording
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.native_loaded_module import native_loaded_module, NativeModules
@@ -217,7 +218,7 @@ def _finite(view: PythonObject, name: String, model_name: String, context: Pytho
     try:
         host_inference_nd_finite(address, shape, strides, width, native)
     except:
-        raise Error("Input " + name + " contains NaN or infinity (" + model_name + ").")
+        raise Error(admitted_finite_wording(model_name, name))
     _ = view
 
 

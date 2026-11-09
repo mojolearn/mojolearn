@@ -1,6 +1,7 @@
-# Pre-0.8.67 measurement: the candidate against 0.8.55 and 0.8.66
+# Pre-0.8.67 measurement: the measurement build against 0.8.55 and 0.8.66
 
-One NVIDIA L40S and one AMD MI300X. One job per box measures the candidate build, not a published release,
+One NVIDIA L40S and one AMD MI300X. One job per box measures the measurement build (wheels built from one commit to time them; never a release
+candidate, AGENTS.md), not a published release,
 against the mlsys paper's 0.8.55 numbers and the 0.8.66 boards on main, plus every row tonight's lanes left
 owed. Our arms only. Opponents are never rerun; the compare reuses the paper's stored opponent cells.
 
@@ -16,15 +17,16 @@ owed. Our arms only. Opponents are never rerun; the compare reuses the paper's s
 
 ## 0. Inputs
 
-1. **Candidate wheels.** `tools/release.py candidate` builds them from one exact commit and never touches main,
+1. **The measurement build.** `tools/release.py candidate` (the subcommand keeps its name) builds the wheels from one
+   exact commit and never touches main,
    tags, PyPI or the release ledger (`tools/release_candidate.py`). It runs five steps of the release and no
    other: `reuse-plan`, `linux-builds` (`.github/workflows/release-linux-build.yml` on GitHub's free runners,
    one run per set: cuda sm_89, cuda sm_80, hip gfx942), `linux-wait`, `linux-assemble`, `linux-pack`. The
    Release runs with `--only` those five, so `freeze-version`, `freeze-changelog`, `freeze-docs-facts`,
    `freeze-commit` (the version bump commit and its push), `identity-at-freeze`, `rehearsal`, `readiness`,
    `cross-compile`, every gate, column, publish, `finish-line` and `record` never run. The commit is pinned in the
-   candidate's own `state.json`. The version is local, `0.8.67.dev0+<commit12>[.<label>]`, and exists only in the
-   packed wheels: PyPI refuses local versions, so they cannot be uploaded. Each candidate gets its own work dir,
+   build's own `state.json`. The version is local, `0.8.67.dev0+<commit12>[.<label>]`, and exists only in the
+   packed wheels: PyPI refuses local versions, so they cannot be uploaded. Each measurement build gets its own work dir,
    `~/mojolearn-evidence/release-candidates/<version>/`, with its own source worktree and local ledger. The
    wheels land in `<work dir>/<commit12>/linux/final/` beside `candidate.json`, where
    `measure_candidate.py stage` looks for a local `--version`. At the end the tool checks that origin/main and
@@ -38,15 +40,16 @@ owed. Our arms only. Opponents are never rerun; the compare reuses the paper's s
    ```
    python3 tools/release.py candidate --commit <SHA40> --ref <pushed tooling branch>
    ```
-   Then the three B sets, all at once. Each is the same commit with `--defines`, which the workflow passes to
+   Then the four B sets, all at once. Each is the same commit with `--defines`, which the workflow passes to
    every compile as `MOJOLEARN_BUILD_DEFINES`. The label defaults to `d` plus 8 hex digits of the defines; the
    owed arm names below are clearer:
    ```
    python3 tools/release.py candidate --commit <SHA40> --ref <branch> --defines "-D MOJOLEARN_EM_LOOP_CHECK_EVERY=1" --label em1
    python3 tools/release.py candidate --commit <SHA40> --ref <branch> --defines "-D MOJOLEARN_EM_LOOP_CHECK_EVERY=8" --label em8
    python3 tools/release.py candidate --commit <SHA40> --ref <branch> --defines "-D MOJOLEARN_SGD_LOOP_CHECK_EVERY=1" --label sgd1
+   python3 tools/release.py candidate --commit <SHA40> --ref <branch> --defines "-D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK" --label svd1
    ```
-   Add `-D MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF` as its own B set once a `.mojo` file of the candidate commit reads
+   Add `-D MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF` as its own B set once a `.mojo` file of the measured commit reads
    it; none does at measure-prep 3d67f6c437. The tool refuses any define that no `.mojo` or `bindings/` file of
    the commit names, because such a B set would be byte-identical to the A set.
 
@@ -64,11 +67,11 @@ owed. Our arms only. Opponents are never rerun; the compare reuses the paper's s
    GitHub's concurrent-job cap may queue some of them. Use `--dry-run` to print the five steps' plan without
    running anything.
 2. **Job tree.** The tree the job runs `tools/` from must contain this lane's commits (the integration branch
-   after merge). It is a different commit from the candidate's source commit.
+   after merge). It is a different commit from the measurement build's source commit.
 3. **Datasets** on each box: `sh tools/dataset_store.sh stage "<ssh flags+target>" gbm-bench/taxi/taxi_speed.npz gbm-bench/istella/istella_speed.npz`.
 4. **B wheel sets** for the define A/Bs. Stage each with the A set: `--b-arm em-check-1=<B work dir>/<commit12>/linux/final@<SHA40>`
    (likewise `em-check-8`, `sgd-check-1`). The stage step reads each B set's own version from its `candidate.json`.
-   `svd-round-launches` has no switch in code yet (see the owed file). Rows without a staged set report
+   `svd-one-block` is `-D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK` (label `svd1`): B routes PCA / TSVD / randomized-svd through `svd_op_tall`. Rows without a staged set report
    `B-NOT-RUN`.
 5. **The ours-only venv** gets our wheels, `scikit-learn` (the trees opponent pin, 1.7.2), and `pandas` and
    `huggingface_hub` at their `pixi.lock` versions (3.0.5 and 1.33.0). The board's drivers import nothing else
@@ -92,7 +95,7 @@ SUBMIT bash tools/nvidia_central.sh submit measure --cap 240 --note pc-<sha12>-n
 The NVIDIA queue caps a job at 240 minutes, so split it into three submits on the same `--results` dir. Add
 these to the printed line:
 ```
---env PC_PARTS=plan,install,smoke,board,compare                          # paper + owed candidate full rows
+--env PC_PARTS=plan,install,smoke,board,compare                          # paper + owed measurement-build full rows
 --env PC_PARTS=install,owed,compare --env PC_OWED_ARMS=candidate,em-check-1,em-check-8,sgd-check-1
 --env PC_PARTS=install,owed,drivers,compare --env PC_OWED_ARMS=prior
 ```
@@ -118,7 +121,7 @@ the timed board took 3405 s for 62 races, about 55 s per race.
 | plan | CPU | one process, seconds | < 1 min | - |
 | install | CPU (+1 GPU set load per arm) | every arm at once + the dry run | 3-6 min | ~1 GB per arm venv (candidate, prior, each B) under `/root/pc-cache` |
 | smoke | one GPU, not timed | min(nproc/4, MemAvailable/12 GB, 8, races) shards on ONE venv | 10-15 min | data blocks per shard cache, ~1-2 GB each |
-| board (paper + owed candidate full rows, ~62 + ~90 races) | one GPU, timed | serial by nature, nothing else on the box | 2.5 h | results ~1.5 GB |
+| board (paper + owed measurement-build full rows, ~62 + ~90 races) | one GPU, timed | serial by nature, nothing else on the box | 2.5 h | results ~1.5 GB |
 | owed: B arms and neighbour rows (~30 races) | one GPU, timed | serial | 30-40 min | ~0.3 GB |
 | owed: prior 0.8.66 (~80 races) | one GPU, timed | serial | 1.2-1.5 h | ~1 GB |
 | drivers | one GPU, timed | serial | 5-10 min | - |
@@ -143,7 +146,7 @@ tail -n 8 <dest>/job/phases.tsv; tail -n 3 <dest>/job/cores.log; cat <dest>/job/
 How to read the flags:
 
 - Paper rows: `RECOVERED` is a 0.8.66 regression fixed. `STILL-REGRESSED` and `REGRESSION-VS-PRIOR` are open work.
-- Owed rows: `REGRESSION` means the candidate is slower than 0.8.66. `<b>:B-FASTER` means the define's B arm wins
+- Owed rows: `REGRESSION` means the measurement build is slower than 0.8.66. `<b>:B-FASTER` means the define's B arm wins
   that cell. The define decision takes the NVIDIA and AMD average (CLAUDE.md measurement item 2).
 
 Every file carries the label `candidate <sha12> (<version>)` and the wheel sha256s. It can never be read as a

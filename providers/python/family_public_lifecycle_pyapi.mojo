@@ -11,6 +11,7 @@
 # public class labels after a fit, and NumPy results (float64 where
 # scikit-learn returns float64) for callers outside the package. The numerical
 # owners are unchanged; this provider imports none of them.
+from bindings.admitted_finite_wording import admitted_finite_wording
 from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_meta, admit_family_owned
@@ -251,7 +252,7 @@ def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, oper
         # The finiteness test rides in the admission (the cast's own verdict,
         # or one parallel scan of a borrowed X): no second pass over X.
         var snapshot = admit_family_meta(source, 2, "X", context, True, finite=spec.scan,
-                                         refusal="Input X contains NaN or infinity (" + name + ").")
+                                         refusal=admitted_finite_wording(name, "X"))
         rows = snapshot.shape[0]
         columns = snapshot.shape[1]
         # The snapshot's buffer and owner, recorded before any refusal below

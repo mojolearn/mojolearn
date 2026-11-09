@@ -92,6 +92,7 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.admitted_call import AdmittedCall, admitted_input_dense, ADMITTED_ITEM_F32
+from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays import (
     classical_wrap_array, _store_code, classical_input, classical_kind, classical_address, classical_cast_kind,
@@ -765,13 +766,6 @@ def admit_x(mut call: AdmittedCall, source: PythonObject, est: String, context: 
     x.position = call.add_input(admitted_input_dense(position, source, x.array, x.address if x.c_order else 0,
                                                      x.rows, x.cols, ADMITTED_ITEM_F32, False))
     return x^
-
-
-def admitted_finite_wording(est: String, name: String = "X") -> String:
-    """scikit-learn's wording of the non-finite refusal, the ONE text every
-    door raises (admitted_finite_refuse, and a family door's cast verdict
-    through `admit_family_meta(..., refusal=...)`)."""
-    return "Input " + name + " contains NaN or infinity (" + est + ")."
 
 
 def admitted_finite_refuse(status: Int, est: String, name: String = "X") raises:

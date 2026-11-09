@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # RadiusNeighbors.fit owns its complete public lifecycle here. Search remains
 # the separately owned neighbor_query provider; fit only stores the admitted X.
+from bindings.admitted_finite_wording import admitted_finite_wording
 from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_meta, admit_family_owned
@@ -91,7 +92,7 @@ def _list_finite(value: PythonObject, context: PythonObject, name: String, depth
     host_inference_scalar(value, context)
     var number = host_inference_primitive_number(value, context)
     if not isfinite(Float64(py=py_call(b.float, number))):
-        raise Error("Input y contains NaN or infinity (" + name + ").")
+        raise Error(admitted_finite_wording(name, "y"))
 
 
 def _complex_scalar(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -259,7 +260,7 @@ def radius_target(source: PythonObject, rows: Int, context: PythonObject, transp
                 offset += (remaining % dimensions[axis]) * steps[axis]
                 remaining //= dimensions[axis]
             if native_scalar_real(data, offset, code, width, little).special != 0:
-                raise Error("Input y contains NaN or infinity (" + name + ").")
+                raise Error(admitted_finite_wording(name, "y"))
     finally:
         if exported:
             cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)

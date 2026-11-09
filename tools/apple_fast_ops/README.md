@@ -8,7 +8,7 @@ Copies of the scripts the Apple FAST manager runs. The live copies are in ~/mojo
 - `m2_build_ab.py` + `m2_bq.sh` (M2 ~/m2-arms): serial build queue. Drop `[{"sha","binding","A","B"?,"mode"?}]` JSON into ~/m2-arms/bq/NN-name.json; logs go to bq/done/. Binding `core` = bindings/build.sh.
 - `ident_to_afb.py`: IDENTICAL sweep race.txt -> AFB lines (see tools/af_board_ident_update.py for the board fold-in).
 
-Verdict rule (CLAUDE.md): FAST flips on when it's faster and quality doesn't go down (no material drop vs FAST main, >= best opponent). Bits are free.
+Verdict rule (AGENTS.md): FAST flips on when it's faster and quality doesn't go down (no material drop vs FAST main, >= best opponent). Bits are free.
 Board: tools/af_board_apply.py (quality-gated), tools/af_board_quality_audit.py.
 
 ## Source of truth (2026-10-05)

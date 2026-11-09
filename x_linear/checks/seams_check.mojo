@@ -19,7 +19,7 @@ from std.sys.info import CompilationTarget
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.numerics import ftz
-from x_linear.ops import FP, IP, dot, fa, fm, fz_branchless, cholesky, jacobi_eig, shuffle, fexp, flog
+from x_linear.ops import FP, IP, dot, fa, fm, fz_branchless, cholesky, shuffle, fexp, flog
 from x_linear.dispatch import decision_one
 from x_linear.team import team_work, solo
 from x_linear.lars import lars_fit
@@ -27,7 +27,7 @@ from x_linear.isotonic import isotonic_predict
 from x_linear.cd import alpha_grid_value
 from x_linear.checks.seams_oracle import (
     flush, dot_pinned, dot_reversed, dot_unfused, add, add_unflushed,
-    cholesky_pinned, cholesky_reversed_inner, jacobi, splitmix, shuffle_mod, shuffle_mulshift,
+    cholesky_pinned, cholesky_reversed_inner, splitmix, shuffle_mod, shuffle_mulshift,
     argmax_abs_first, argmax_abs_last, CANONICAL_NAN_BITS,
     score_intercept_last, score_intercept_first, exp_pinned, log_pinned, exp_libm, log_libm,
     grid_pinned, grid_logspace,
@@ -161,29 +161,8 @@ def check_cholesky(mut card: IdentityTrace) raises:
     print("PASS 5002 cholesky: column-ascending, inner-ascending factor")
 
 
-def check_jacobi(mut card: IdentityTrace) raises:
-    """DEVIATION 5003: cyclic Jacobi, p ascending then q ascending."""
-    var m = 6
-    var a = _spd(m, 31)
-    var wa = a.copy()
-    var wv = List[Float32](length=m * m, fill=0)
-    jacobi(wa, wv, m, 60, False)
-    var xa = a.copy()
-    var xv = List[Float32](length=m * m, fill=0)
-    jacobi(xa, xv, m, 60, True)
-    var sep = False
-    for i in range(m * m):
-        if _bits(wv[i]) != _bits(xv[i]):
-            sep = True
-    _require(sep, "VACUOUS jacobi fixture: q ascending and q descending sweeps agree")
-    var ga = a.copy()
-    var gv = List[Float32](length=m * m, fill=0)
-    jacobi_eig(_p(ga), 0, _p(gv), 0, m, 60)
-    for i in range(m * m):
-        _require(_bits(ga[i]) == _bits(wa[i]), "jacobi: eigenvalue matrix entry " + String(i))
-        _require(_bits(gv[i]) == _bits(wv[i]), "jacobi: eigenvector entry " + String(i))
-    card.record_host("x_linear.seam5003.jacobi", _u(gv), m * m)
-    print("PASS 5003 jacobi: p-ascending, q-ascending sweep")
+# TOMBSTONE: x_linear ops.jacobi_eig + seam check 5003 (no product caller since lane n9b-device-svd-qr moved BayesianRidge onto the eigh op) deleted 2026-11-09 by lane m3-linalg-and-housekeeping; code recoverable at 0ce88411d3.
+# Restore: git apply experiments/removed/X_LINEAR_JACOBI_EIG_SEAM_5003.patch
 
 
 def check_shuffle(mut card: IdentityTrace) raises:
@@ -349,15 +328,14 @@ def main() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL, "run under tools/with_identical_mode.sh"
     var path = getenv("MOJOLEARN_XLINEAR_CARD", "/tmp/x_linear_seams.card")
     var card = IdentityTrace.to_path(path)
-    card.header("x_linear seams (DEVIATIONS 5000-5009)")
+    card.header("x_linear seams (DEVIATIONS 5000-5009 but 5003)")
     check_dot(card)
     check_flush(card)
     check_cholesky(card)
-    check_jacobi(card)
     check_shuffle(card)
     check_tie(card)
     check_nan(card)
     check_intercept(card)
     check_transcendentals(card)
     check_grid(card)
-    print("PASS x_linear seams: 10 seams, card", path)
+    print("PASS x_linear seams: 9 seams, card", path)

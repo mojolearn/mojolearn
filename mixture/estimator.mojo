@@ -75,8 +75,7 @@ comptime _CTX_NAME = "MojolearnMixtureContextIdenticalV3" if _CTX_MODE == _CTX_I
 def _binding_ctx() raises -> DeviceContext:
     return neural_ctx[_CTX_NAME]()
 
-from cholesky.checks.potrf import CHOL_ELEM_TPB, CHOL_PANEL_TPB
-from cholesky.checks.trsm import CHOL_SOLVE_TPB
+from cholesky.checks.potrf import CHOL_ELEM_TPB
 from cluster.estimator import kmeans_fit
 from cluster.impl.kmeans_params import (
     INIT_KMEANS_PLUS_PLUS,
@@ -118,7 +117,6 @@ from mixture.checks.mstep import (
     GmmCholScratch,
     GmmMStepRun,
     gmm_chol_dwork_floats,
-    gmm_chol_workspace_floats,
     gmm_m_step,
     gmm_mstep_gemm_workspace_floats,
     gmm_mstep_scratch_floats,
@@ -1160,7 +1158,6 @@ struct GmmEmStep(LoopStep, Movable):
     var escratch: DeviceBuffer[DType.float32]
     var mscratch: DeviceBuffer[DType.float32]
     var gws: DeviceBuffer[DType.float32]
-    var cws: DeviceBuffer[DType.float32]
     var dwork: DeviceBuffer[DType.float32]
     var c_weights: DeviceBuffer[DType.float32]
     var c_means: DeviceBuffer[DType.float32]
@@ -1180,8 +1177,6 @@ struct GmmEmStep(LoopStep, Movable):
     var elem_tpb: Int
     var row_tpb: Int
     var comp_tpb: Int
-    var solve_tpb: Int
-    var panel_tpb: Int
     var chol_elem_tpb: Int
     var sabotage: Int
     var cov_lo_addr: Int
@@ -1219,9 +1214,8 @@ struct GmmEmStep(LoopStep, Movable):
         else:
             var run = gmm_precision_cholesky(
                 ctx, self.cov, self.chol_l, self.linv, self.prec,
-                self.log_det_chol, self.cws, self.dwork, self.d, self.ncomp,
-                self.trace, tag, self.elem_tpb, self.solve_tpb,
-                self.panel_tpb, self.chol_elem_tpb, self.sabotage,
+                self.log_det_chol, self.dwork, self.d, self.ncomp,
+                self.trace, tag, self.elem_tpb, self.chol_elem_tpb, self.sabotage,
                 self.cov_lo_addr,
             )
             gmm_status_put(ctx, self.chol, run)
@@ -1268,8 +1262,6 @@ def gaussian_mixture_fit(
     elem_tpb: Int = GMM_ELEM_TPB,
     row_tpb: Int = GMM_ROW_TPB,
     comp_tpb: Int = GMM_COMP_TPB,
-    solve_tpb: Int = CHOL_SOLVE_TPB,
-    panel_tpb: Int = CHOL_PANEL_TPB,
     chol_elem_tpb: Int = CHOL_ELEM_TPB,
     sabotage: Int = GMM_SAB_NONE,
     card_prefix: String = "gmm",
@@ -1286,8 +1278,6 @@ def gaussian_mixture_fit(
         elem_tpb,
         row_tpb,
         comp_tpb,
-        solve_tpb,
-        panel_tpb,
         chol_elem_tpb,
         sabotage,
         card_prefix,
@@ -1305,8 +1295,6 @@ def gaussian_mixture_fit(
     elem_tpb: Int = GMM_ELEM_TPB,
     row_tpb: Int = GMM_ROW_TPB,
     comp_tpb: Int = GMM_COMP_TPB,
-    solve_tpb: Int = CHOL_SOLVE_TPB,
-    panel_tpb: Int = CHOL_PANEL_TPB,
     chol_elem_tpb: Int = CHOL_ELEM_TPB,
     sabotage: Int = GMM_SAB_NONE,
     card_prefix: String = "gmm",
@@ -1448,10 +1436,6 @@ def gaussian_mixture_fit(
     if mg > need_gws:
         need_gws = mg
     var gws = ctx.enqueue_create_buffer[DType.float32](need_gws)
-    # the sabotage arms' host-read chain (gmm_precision_cholesky) only
-    var cws = ctx.enqueue_create_buffer[DType.float32](
-        gmm_chol_workspace_floats(d)
-    )
     var dwork = ctx.enqueue_create_buffer[DType.float32](
         gmm_chol_dwork_floats(d)
     )
@@ -1511,9 +1495,9 @@ def gaussian_mixture_fit(
         pre = gmm_precision_status(ctx, chol)
     else:
         pre = gmm_precision_cholesky(
-            ctx, cov, chol_l, linv, prec, log_det_chol, cws, dwork, d, ncomp,
-            trace, card_prefix + ".init", elem_tpb, solve_tpb, panel_tpb,
-            chol_elem_tpb, sabotage, cov_lo_addr,
+            ctx, cov, chol_l, linv, prec, log_det_chol, dwork, d, ncomp,
+            trace, card_prefix + ".init", elem_tpb, chol_elem_tpb, sabotage,
+            cov_lo_addr,
         )
     if pre.info != 0:
         raise Error(_collapse_message(0, pre, params))
@@ -1543,11 +1527,11 @@ def gaussian_mixture_fit(
         wlp.copy(), rowmax.copy(), lse.copy(), meanll.copy(), nk.copy(),
         weights.copy(), log_weights.copy(), log_det_chol.copy(),
         means.copy(), cov.copy(), chol_l.copy(), linv.copy(), prec.copy(),
-        escratch.copy(), mscratch.copy(), gws.copy(), cws.copy(),
+        escratch.copy(), mscratch.copy(), gws.copy(),
         dwork.copy(), c_weights.copy(), c_means.copy(), c_cov.copy(),
         c_prec.copy(), c_logdet.copy(), lb.copy(), change.copy(), chol^,
         trace^, card_prefix, n, d, ncomp, params.reg_covar, params.tol,
-        elem_tpb, row_tpb, comp_tpb, solve_tpb, panel_tpb, chol_elem_tpb,
+        elem_tpb, row_tpb, comp_tpb, chol_elem_tpb,
         sabotage, cov_lo_addr, GmmStepKeep(),
     )
     var n_iter = 0
@@ -1641,7 +1625,6 @@ def gaussian_mixture_fit(
     _ = escratch^
     _ = mscratch^
     _ = gws^
-    _ = cws^
     _ = dwork^
     _ = open_gate^
     _ = c_weights^

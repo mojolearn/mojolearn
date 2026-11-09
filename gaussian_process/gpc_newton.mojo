@@ -38,7 +38,7 @@ from std.atomic import Atomic
 from std.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from autograd.program_loop import LoopTimers
+from autograd.program_loop import LOOP_WORDS, LoopTimers
 from autograd.program_loop_device import LoopRegisters, LoopStep, bounded_device_loop
 from cholesky.checks.potrf import CHOL_NB_PINNED, chol_nb_for
 from cholesky.chol_ops import (
@@ -198,7 +198,7 @@ def gpc_newton_criterion_kernel(words: _GI, lml: _GP, kept: _GP, nan_at: _GI, n:
     kept.unsafe_store(0, l)
 
 
-struct GPCNewtonStep(LoopStep, Movable):
+struct GPCNewtonStep(Copyable, LoopStep, Movable):
     """One Laplace Newton iteration (`_gpc.py:_posterior_mode`) as a step of
     `bounded_device_loop`. The fields are handle copies of the fit's
     buffers (`DeviceBuffer.copy()` shares the memory)."""
@@ -265,8 +265,13 @@ struct GPCNewtonStep(LoopStep, Movable):
     def enqueue_step(
         mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
     ) raises:
+        self.enqueue_gated(ctx, registers.words, it)
+
+    def enqueue_gated(mut self, ctx: DeviceContext, mut words: DeviceBuffer[DType.int32], it: Int) raises:
+        """Iteration `it` gated on the register block `words` (the loop's
+        own, or one class's block inside `GPCNewtonBatch`)."""
         var n = self.n
-        var g = _ip(registers.words)
+        var g = _ip(words)
         ctx.enqueue_function[gpc_newton_w_kernel](
             g, _fp(self.df), _fp(self.dpi), _fp(self.dw), _fp(self.dwsr), Int32(n),
             grid_dim=_blocks(n), block_dim=GPC_NEWTON_TPB,
@@ -275,9 +280,9 @@ struct GPCNewtonStep(LoopStep, Movable):
             g, _fp(self.db), _fp(self.dk), _fp(self.dwsr), Int32(n),
             grid_dim=_blocks(n * n), block_dim=GPC_NEWTON_TPB,
         )
-        chol_op_begin(ctx, registers.words, self.dinfo)
+        chol_op_begin(ctx, words, self.dinfo)
         chol_op_factor(ctx, self.db, self.dinfo, n)
-        chol_op_info_joins_loop(ctx, registers.words, self.dinfo, it)
+        chol_op_info_joins_loop(ctx, words, self.dinfo, it)
         chol_op_logdet(ctx, self.db, self.dinfo, self.dldscr, self.dldet, n)
         ctx.enqueue_function[gpc_newton_rhs_kernel](
             g, _fp(self.dw), _fp(self.df), _fp(self.dy), _fp(self.dpi), _fp(self.dbv), Int32(n),
@@ -315,7 +320,7 @@ struct GPCNewtonStep(LoopStep, Movable):
 
 
 @fieldwise_init
-struct GPCNewtonRun(Movable):
+struct GPCNewtonRun(ImplicitlyCopyable, Movable):
     """What the Newton loop leaves besides the resident factor, pi and W_sr:
     the likelihood kept (DEVIATION 2830), the iterations and the Cholesky
     panel width that ran."""
@@ -323,6 +328,147 @@ struct GPCNewtonRun(Movable):
     var lml: Float32
     var n_iter: Int
     var nb: Int
+
+
+def gpc_newton_join_kernel(outer: _GI, blocks: MutPointer[Int64, MutAnyOrigin], k: Int32, it: Int32):
+    """One thread, after iteration `it` of every class: the batch loop's
+    register block is done (stopping at `it`) once every class's block is
+    done (converged or failed). Once done, it changes nothing."""
+    if _tid() != 0:
+        return
+    if outer.unsafe_load(STEP_DONE) != Int32(0):
+        return
+    outer.unsafe_store(STEP_ITER, it)
+    for c in range(Int(k)):
+        var w = _GI(unsafe_from_address=Int(blocks.unsafe_load(c)))
+        if w.unsafe_load(STEP_DONE) == Int32(0):
+            return
+    outer.unsafe_store(STEP_STOP_ITER, it)
+    outer.unsafe_store(STEP_DONE, Int32(1))
+
+
+struct GPCNewtonBatch(LoopStep, Movable):
+    """Several binary Laplace fits (one-vs-rest classes) as ONE step of
+    `bounded_device_loop` (lane m3-linalg-and-housekeeping, 2026-11-09).
+    Each class keeps its own register block, so it stops (or fails) on its
+    own iteration exactly as alone; the batch's block is done once every
+    class's is. Every class's kernels are the single fit's, in the single
+    fit's order, on the same stream: the same words. What changes is the
+    host side: one read of the register blocks per GPC_NEWTON_CHECK
+    iterations for all classes, where the classes ran one loop (and its
+    reads) after another."""
+    var steps: List[GPCNewtonStep]
+    var words: List[DeviceBuffer[DType.int32]]
+    var blocks: DeviceBuffer[DType.int64]
+    var k: Int
+
+    def __init__(out self, ctx: DeviceContext, var steps: List[GPCNewtonStep]) raises:
+        var k = len(steps)
+        var words = List[DeviceBuffer[DType.int32]](capacity=k)
+        var addrs = List[Int64](length=k, fill=Int64(0))
+        for c in range(k):  # driver-loop: over the batch's classes (model structure)
+            var w = ctx.enqueue_create_buffer[DType.int32](LOOP_WORDS)
+            ctx.enqueue_memset(w, Int32(0))
+            addrs[c] = Int64(Int(w.unsafe_ptr()))
+            words.append(w^)
+        var blocks = ctx.enqueue_create_buffer[DType.int64](max(k, 1))
+        ctx.enqueue_copy(
+            dst_buf=blocks, src_ptr=MutPointer[Int64, MutAnyOrigin](unsafe_from_address=Int(addrs.unsafe_ptr()))
+        )
+        ctx.synchronize()
+        _ = addrs^
+        self.k = k
+        self.steps = steps^
+        self.words = words^
+        self.blocks = blocks^
+
+    def enqueue_step(
+        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
+    ) raises:
+        for c in range(self.k):  # driver-loop: over the batch's classes (model structure)
+            var w = self.words[c].copy()  # a handle copy: the same device words
+            self.steps[c].enqueue_gated(ctx, w, it)
+        ctx.enqueue_function[gpc_newton_join_kernel](  # small-launch(k: classes): one thread joins the classes' done words
+            _ip(registers.words), MutPointer[Int64, MutAnyOrigin](unsafe_from_address=Int(self.blocks.unsafe_ptr())),
+            Int32(self.k), Int32(it), grid_dim=1, block_dim=1,
+        )
+
+
+def gpc_newton_device_batch(
+    ctx: DeviceContext,
+    mut dk: DeviceBuffer[DType.float32],
+    dys: List[DeviceBuffer[DType.float32]],
+    dbs: List[DeviceBuffer[DType.float32]],
+    mut dgw: DeviceBuffer[DType.float32],
+    dpis: List[DeviceBuffer[DType.float32]],
+    dwsrs: List[DeviceBuffer[DType.float32]],
+    n: Int,
+    max_iter_predict: Int,
+) raises -> List[GPCNewtonRun]:
+    """The Laplace Newton loop of every class in `dys` against ONE resident
+    K (`dk`, n x n) in one bounded device loop (`GPCNewtonBatch`). Class c
+    leaves its last factor in `dbs[c]` and its pi and W_sr in `dpis[c]`,
+    `dwsrs[c]`; the GEMV workspace `dgw` is shared (one stream: the classes'
+    GEMVs run one after another). Raises by name for the lowest class whose
+    factor failed or whose right-hand side was NaN, as that class's own loop
+    did."""
+    var k = len(dys)
+    if len(dbs) != k or len(dpis) != k or len(dwsrs) != k or k < 1:
+        raise Error("gpc_newton_device_batch: one target, factor, pi and W_sr buffer per class")
+    var runs = List[GPCNewtonRun](capacity=k)
+    if max_iter_predict < 1:
+        # no iteration: the likelihood kept is the start's -inf
+        for _c in range(k):  # driver-loop: over the classes (model structure)
+            runs.append(GPCNewtonRun(gpc_neg_inf32(), 0, 0))
+        return runs^
+    var steps = List[GPCNewtonStep](capacity=k)
+    for c in range(k):  # driver-loop: over the classes (model structure)
+        steps.append(GPCNewtonStep(ctx, dk, dys[c], dbs[c], dgw, dpis[c], dwsrs[c], n))
+    var batch = GPCNewtonBatch(ctx, steps^)
+    var registers = LoopRegisters(ctx)
+    var timers = LoopTimers("gpc.newton")
+    _ = bounded_device_loop(ctx, batch, registers, 1, max_iter_predict, GPC_NEWTON_CHECK, timers)
+    timers.report()
+    # one read: every class's block, likelihood kept and NaN index
+    var hw = ctx.enqueue_create_host_buffer[DType.int32](k * LOOP_WORDS)
+    var hkept = ctx.enqueue_create_host_buffer[DType.float32](k)
+    var hnan = ctx.enqueue_create_host_buffer[DType.int32](k)
+    for c in range(k):  # driver-loop: over the classes (model structure)
+        ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr() + c * LOOP_WORDS, src_buf=batch.words[c])
+        ctx.enqueue_copy(dst_ptr=hkept.unsafe_ptr() + c, src_buf=batch.steps[c].dkept)
+        ctx.enqueue_copy(dst_ptr=hnan.unsafe_ptr() + c, src_buf=batch.steps[c].dnan)
+    ctx.synchronize()
+    for c in range(k):  # driver-loop: over the classes (model structure)
+        var w = hw.unsafe_ptr() + c * LOOP_WORDS
+        var code = Int(w.unsafe_load(STEP_FAIL))
+        var done = Int(w.unsafe_load(STEP_DONE)) != 0
+        var stop = Int(w.unsafe_load(STEP_STOP_ITER))
+        if code == Int(GPC_NEWTON_FAIL_NAN):
+            raise Error(
+                "cholesky_solve_host: the right-hand side contains NaN at"
+                " flat index "
+                + String(Int(hnan.unsafe_ptr().unsafe_load(c)))
+                + "; refused by name (DEVIATION 1638)"
+            )
+        if code != 0:
+            raise Error(
+                "gpc_fit_host: the factorization of B = I + W_sr K W_sr failed"
+                " at Newton iteration "
+                + String(stop)
+                + " (info="
+                + String(code)
+                + "). B's eigenvalues are at least 1 for any finite kernel"
+                " matrix, so this means a non-finite latent value"
+            )
+        var n_iter = stop if done else max(max_iter_predict, 0)
+        var nb = chol_nb_for(n, CHOL_NB_PINNED) if n_iter > 0 else 0
+        runs.append(GPCNewtonRun(hkept.unsafe_ptr().unsafe_load(c), n_iter, nb))
+    _ = hw^
+    _ = hkept^
+    _ = hnan^
+    _ = batch^
+    _ = registers^
+    return runs^
 
 
 def gpc_newton_device(
@@ -337,47 +483,14 @@ def gpc_newton_device(
     max_iter_predict: Int,
 ) raises -> GPCNewtonRun:
     """The Laplace Newton loop against a resident K (`dk`, n x n) and
-    resident targets (`dy`). On return `db` holds the last factor, `dpi` and
-    `dwsr` the last pi and W_sr. `dgw` holds
+    resident targets (`dy`): `gpc_newton_device_batch` with one class (one
+    loop for the binary and the one-vs-rest fits). On return `db` holds the
+    last factor, `dpi` and `dwsr` the last pi and W_sr. `dgw` holds
     `identical_gemm_workspace_max_floats(n, 1, n)` floats. Raises by name
     when B's factor fails or a right-hand side is NaN."""
-    if max_iter_predict < 1:
-        # no iteration: the likelihood kept is the start's -inf
-        return GPCNewtonRun(gpc_neg_inf32(), 0, 0)
-    var step =GPCNewtonStep(ctx, dk, dy, db, dgw, dpi, dwsr, n)
-    var registers = LoopRegisters(ctx)
-    var timers = LoopTimers("gpc.newton")
-    var outcome = bounded_device_loop(ctx, step, registers, 1, max_iter_predict, GPC_NEWTON_CHECK, timers)
-    timers.report()
-    var code = registers.failure()
-    if code == Int(GPC_NEWTON_FAIL_NAN):
-        var hnan = ctx.enqueue_create_host_buffer[DType.int32](1)
-        ctx.enqueue_copy(dst_ptr=hnan.unsafe_ptr(), src_buf=step.dnan)
-        ctx.synchronize()
-        var nan_at = Int(hnan.unsafe_ptr().unsafe_load(0))
-        raise Error(
-            "cholesky_solve_host: the right-hand side contains NaN at"
-            " flat index "
-            + String(nan_at)
-            + "; refused by name (DEVIATION 1638)"
-        )
-    if code != 0:
-        raise Error(
-            "gpc_fit_host: the factorization of B = I + W_sr K W_sr failed"
-            " at Newton iteration "
-            + String(outcome.stop_iteration)
-            + " (info="
-            + String(code)
-            + "). B's eigenvalues are at least 1 for any finite kernel"
-            " matrix, so this means a non-finite latent value"
-        )
-    var n_iter = outcome.stop_iteration if outcome.converged else max(max_iter_predict, 0)
-    var hkept = ctx.enqueue_create_host_buffer[DType.float32](1)
-    ctx.enqueue_copy(dst_ptr=hkept.unsafe_ptr(), src_buf=step.dkept)
-    ctx.synchronize()
-    var kept = hkept.unsafe_ptr().unsafe_load(0)
-    var nb = chol_nb_for(n, CHOL_NB_PINNED) if n_iter > 0 else 0
-    _ = hkept^
-    _ = step^
-    _ = registers^
-    return GPCNewtonRun(kept, n_iter, nb)
+    var dys = List[DeviceBuffer[DType.float32]](dy.copy())
+    var dbs = List[DeviceBuffer[DType.float32]](db.copy())
+    var dpis = List[DeviceBuffer[DType.float32]](dpi.copy())
+    var dwsrs = List[DeviceBuffer[DType.float32]](dwsr.copy())
+    var runs = gpc_newton_device_batch(ctx, dk, dys, dbs, dgw, dpis, dwsrs, n, max_iter_predict)
+    return runs[0]

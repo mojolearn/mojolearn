@@ -88,7 +88,7 @@ def wheel_record(path, version, source_commit):
                     sha256=published.sha256_file(path), bytes=path.stat().st_size, tags=sorted(tags),
                     source_commit=source_commit, requires_dist=meta.get_all('Requires-Dist', []),
                     release_modes=modes,
-                    # a candidate build (tools/release.py candidate): local version, committed version, defines
+                    # a measurement build (tools/release.py candidate): local version, committed version, defines
                     candidate=payload.get('candidate'),
                     payload_sha256=hashlib.sha256(wheel.read(prefix+'/LINUX_PAYLOAD.json')).hexdigest())
 

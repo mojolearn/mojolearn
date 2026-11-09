@@ -8,7 +8,7 @@
 
     python3 tools/af_quality.py "auc=0.93, logloss=0.43" "auc=0.931"   # prints the comparison
 
-FAST passes only when quality does not go down (CLAUDE.md): no material drop against FAST
+FAST passes only when quality does not go down (AGENTS.md): no material drop against FAST
 main, and at least as good as the best opponent. This module is the one place that knows
 which way each metric points.
 

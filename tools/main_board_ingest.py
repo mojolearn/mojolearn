@@ -889,7 +889,7 @@ def _input_home(ob):
 
 
 def fill_input_home(winners, observations):
-    """THE OPPONENT-CLOCKS RULE for OUR cell (CLAUDE.md item 6; 2026-10-22): an lq ALGOS / GRIDBB summary line
+    """THE OPPONENT-CLOCKS RULE for OUR cell (AGENTS.md item 6; 2026-10-22): an lq ALGOS / GRIDBB summary line
     carries no clock span, so 147 of 194 algos NVIDIA cells had input_home None and their two-clock ratio was not
     derivable. When the winning observation has no span and another observation of the SAME column, race and
     commit (a campaign or gate board, a JSON job board) recorded one, the winner takes its LABELS only

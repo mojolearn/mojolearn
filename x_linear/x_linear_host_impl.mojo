@@ -16,6 +16,8 @@ from std.memory import bitcast
 from x_linear.dispatch_host import fit_dispatch
 from x_linear.dispatch import decision_one, decision_code_row, team_rows, team_own, ALGO_ISOTONIC, ALGO_LOGCV, ALGO_RIDGE, isotonic_abi_check
 from x_linear.dispatch import ALGO_GLM
+from x_linear.dispatch import ALGO_BAYES
+from x_linear.bayes import BAYES_EIGH_REFUSAL
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_host
 from x_linear.logcv import logcv_fold_ids, lcv_caller_folds
 from x_linear.isotonic_host import isotonic_fit_host
@@ -123,10 +125,15 @@ def x_linear_fit_host(
             IP(unsafe_from_address=Int(ipl.unsafe_ptr())), FP(unsafe_from_address=Int(fpl.unsafe_ptr())),
             out, FP(unsafe_from_address=Int(fw.unsafe_ptr())), IP(unsafe_from_address=Int(iw.unsafe_ptr())),
         )
+    # BayesianRidge's unconverged eigendecomposition (x_linear/bayes_host.mojo
+    # `bayes_ridge_fit` sets iw[0]): refused as on every device column
+    var bayes_refused = a == ALGO_BAYES and Int(iw[0]) != 0
     _ = fw^
     _ = iw^
     _ = tw^
     _ = ycopy^
+    if bayes_refused:
+        raise Error(BAYES_EIGH_REFUSAL)
     return n_out
 
 

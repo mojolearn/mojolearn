@@ -2,6 +2,7 @@
 # AgglomerativeClustering's public lifecycle, setting admission and captured X.
 # Numerical backend extension dispatch remains explicit migration debt in the
 # dedicated owner; moving this envelope does not make those calls descriptor ABI.
+from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.admitted_family import admit_family_meta
 from bindings.native_class_admission import class_record, class_admit
 from bindings.cpython_table import cpython_table
@@ -156,7 +157,7 @@ def hierarchy_target(source: PythonObject, rows: Int, name: String, classifier: 
     if stored is not None:
         var refusal = labels_float_storage(stored, context, classifier)
         if refusal == LABELS_FLOAT_NONFINITE:
-            raise Error("Input y contains NaN or infinity (" + name + ").")
+            raise Error(admitted_finite_wording(name, "y"))
         if refusal == LABELS_FLOAT_CONTINUOUS:
             raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
         if refusal == LABELS_FLOAT_OK:
@@ -175,7 +176,7 @@ def hierarchy_target(source: PythonObject, rows: Int, name: String, classifier: 
     # walk's verdicts; the walk returns such a list unchanged.
     var verdict = p3nc_float_list_verdict(source, classifier)
     if verdict == P3NC_REAL_NONFINITE:
-        raise Error("Input y contains NaN or infinity (" + name + ").")
+        raise Error(admitted_finite_wording(name, "y"))
     if verdict == P3NC_REAL_CONTINUOUS:
         raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
     if verdict == P3NC_REAL_OK:
@@ -189,7 +190,7 @@ def hierarchy_target(source: PythonObject, rows: Int, name: String, classifier: 
         if metric_is_real(flat[i], context) and not metric_is_integral(flat[i], context):
             var number = metric_float(flat[i], context)
             if not isfinite(number):
-                raise Error("Input y contains NaN or infinity (" + name + ").")
+                raise Error(admitted_finite_wording(name, "y"))
             if classifier and floor(number) != number:
                 raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
     if (not multioutput and len(shape) == 2 and shape[1] == 1 and py_type(source) is not b.list
@@ -218,7 +219,7 @@ def hierarchy_public_begin(model: PythonObject, operation: String, args: PythonO
         raise Error("NotImplementedError: mojolearn AgglomerativeClustering: sparse X is refused; pass a dense matrix")
     # The finiteness test rides in the admission (no second pass over X).
     var x = admit_family_meta(source, 2, "X", context, finite=True,
-                              refusal="Input X contains NaN or infinity (AgglomerativeClustering).")
+                              refusal=admitted_finite_wording("AgglomerativeClustering"))
     if Int(py=depth) == 0:
         if fitting:
             _ = hierarchy_target(args[2], x.shape[0], "AgglomerativeClustering", False, False, False, context)

@@ -105,60 +105,12 @@ def cholesky_reversed_inner(mut a: List[Float32], m: Int):
             a[i * m + j] = div(t, r)
 
 
-# 5003: the Jacobi sweep ---------------------------------------------------------
+# TOMBSTONE: x_linear ops.jacobi_eig + seam check 5003 (no product caller since lane n9b-device-svd-qr moved BayesianRidge onto the eigh op) deleted 2026-11-09 by lane m3-linalg-and-housekeeping; code recoverable at 0ce88411d3.
+# Restore: git apply experiments/removed/X_LINEAR_JACOBI_EIG_SEAM_5003.patch
+
 
 def _abs(x: Float32) -> Float32:
     return -x if x < 0 else x
-
-
-def _sign(x: Float32) -> Float32:
-    if x > 0:
-        return Float32(1)
-    if x < 0:
-        return Float32(-1)
-    return Float32(0)
-
-
-def jacobi(mut a: List[Float32], mut v: List[Float32], m: Int, sweeps: Int, q_descending: Bool):
-    """Cyclic Jacobi, p ascending and q ascending (or q descending, the
-    unpinned order), Rutishauser's rotation, the 1e-9 relative skip."""
-    for i in range(m):
-        for j in range(m):
-            v[i * m + j] = Float32(1) if i == j else Float32(0)
-    for _ in range(sweeps):
-        var rotated = False
-        for p in range(m):
-            for qq in range(p + 1, m):
-                var q = (m - 1 - (qq - p - 1)) if q_descending else qq
-                var apq = a[p * m + q]
-                var app = a[p * m + p]
-                var aqq = a[q * m + q]
-                var scale = sqrt_(_abs(mul(app, aqq)))
-                if _abs(apq) <= mul(Float32(1e-9), scale) or apq == 0:
-                    continue
-                rotated = True
-                var theta = div(sub(aqq, app), mul(Float32(2), apq))
-                var t = div(_sign(theta) if theta != 0 else Float32(1),
-                            add(_abs(theta), sqrt_(add(mul(theta, theta), Float32(1)))))
-                var c = div(Float32(1), sqrt_(add(mul(t, t), Float32(1))))
-                var s = mul(t, c)
-                for k in range(m):
-                    var akp = a[k * m + p]
-                    var akq = a[k * m + q]
-                    a[k * m + p] = sub(mul(c, akp), mul(s, akq))
-                    a[k * m + q] = add(mul(s, akp), mul(c, akq))
-                for k in range(m):
-                    var apk = a[p * m + k]
-                    var aqk = a[q * m + k]
-                    a[p * m + k] = sub(mul(c, apk), mul(s, aqk))
-                    a[q * m + k] = add(mul(s, apk), mul(c, aqk))
-                for k in range(m):
-                    var vkp = v[k * m + p]
-                    var vkq = v[k * m + q]
-                    v[k * m + p] = sub(mul(c, vkp), mul(s, vkq))
-                    v[k * m + q] = add(mul(s, vkp), mul(c, vkq))
-        if not rotated:
-            return
 
 
 # 5004: the shuffle --------------------------------------------------------------
