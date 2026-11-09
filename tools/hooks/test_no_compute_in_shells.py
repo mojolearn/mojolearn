@@ -28,7 +28,7 @@ class ScanTest(unittest.TestCase):
         text = "\n".join([
             "fn a(n: Int):",
             "    for i in range(n):",                                   # 2 untagged
-            "    for i in range(3):  # small-loop(three shape words)",  # 3 tagged
+            "    for i in range(3):  # small-loop(3)",                  # 3 tagged, constant bound
             "    # driver-loop: over model layers",
             "    for b in blocks:",                                     # 5 tagged above
             "    while x < n:",                                         # 6 untagged
@@ -44,6 +44,72 @@ class ScanTest(unittest.TestCase):
         ])
         self.assertEqual(self.kinds(text), [(2, "loop"), (6, "loop"), (7, "launch"), (8, "launch"),
                                             (9, "launch"), (10, "launch"), (15, "launch")])
+
+    def test_structure_tag_on_a_structure_loop_passes(self):
+        for line in ("    for li in range(len(self.layers)):  # driver-loop: over model layers",
+                     "    for e in estimators_:  # driver-loop: over the fitted estimators",
+                     "    for c in range(n_classes):  # driver-loop: over the classes",
+                     "    for k in kwargs.keys():  # driver-loop: over keyword arguments",
+                     "    for d in range(value.ndim):  # driver-loop: over the axes"):
+            st = ncs.Counter()
+            self.assertEqual(ncs.scan("fn a():\n" + line, st), [], line)
+            self.assertEqual(st["driver-structure"], 1, line)
+
+    def test_structure_tag_on_a_data_loop_fails(self):
+        for line in ("    for i in range(n_samples):  # driver-loop: over model layers",
+                     "    for r in range(len(rows)):  # driver-loop: over the blocks",
+                     "    for v in values:  # driver-loop: over the fields",
+                     "    for i in range(X.shape[0]):  # driver-loop: over the features",
+                     "    for c in classes_:  # driver-loop: over the classes",
+                     "    for t in py_tokens:  # driver-loop: over the stages",
+                     "    for i in range(len(y)):  # driver-loop: over the heads",
+                     "    while i < n_rows:  # driver-loop: over the blocks"):
+            self.assertEqual(self.kinds("fn a():\n" + line), [(2, "false-tag")], line)
+
+    def test_tag_text_decides_only_when_the_loop_is_silent(self):
+        self.assertEqual(self.kinds("fn a():\n    for i in range(k):  # driver-loop: over the rows"),
+                         [(2, "false-tag")])
+        st = ncs.Counter()
+        self.assertEqual(ncs.scan("fn a():\n    for i in range(k):  # driver-loop: over the shapes", st), [])
+        self.assertEqual(st["driver-unknown"], 1)      # could not judge: kept and counted
+
+    def test_free_comments_and_cpu_route_no_longer_exempt(self):
+        text = "\n".join([
+            "fn a(n: Int):",
+            "    for i in range(n):  # cpu-route: Python label objects walked natively",   # 2
+            "    for i in range(n):  # native data movement: one column",                 # 3
+            "    for i in range(m):  # driver-loop: over the layers",                     # 4 tagged
+            "        for j in range(q):",                                                  # 5 code line above: no tag
+            "    # cpu-route: a reviewed note above",
+            "    for i in range(q):",                                                      # 7
+        ])
+        self.assertEqual(self.kinds(text), [(2, "loop"), (3, "loop"), (5, "loop"), (7, "loop")])
+
+    def test_small_loop_needs_a_constant_bound(self):
+        ok = ["    for i in range(4):  # small-loop(4)",
+              "    for i in range(MAX_RANK):  # small-loop(MAX_RANK: the rank cap)",
+              "    # small-loop(MAX_RANK)\n    for i in range(MAX_RANK):"]
+        for line in ok:
+            self.assertEqual(self.kinds("fn a():\n" + line), [], line)
+        bad = ["    for i in range(n):  # small-loop(n argument words)",
+               "    for i in range(d):  # small-loop(d: feature count)",
+               "    for i in range(n_rows):  # small-loop(MAX_RANK)"]       # the constant is not the loop's bound
+        for line in bad:
+            self.assertEqual(self.kinds("fn a():\n" + line), [(2, "small-bound")], line)
+
+    def test_inline_iteration_is_counted(self):
+        bad = ["    var s = py_call(b.sorted, labels)",
+               "    var m = py_call(b.map, b.type, value)",
+               "    var z = py_call(g[].bi.zip, a, c)",
+               "    var l = py_call(y.tolist)",
+               "    var it = table[].PyObject_GetIter(obj._obj_ptr)",
+               "    var nx = table[].PyIter_Next(it)",
+               "    var r = py_call(itertools.repeat, v, 3)",
+               "    var u = py_call(b.dict.fromkeys, labels)"]
+        for line in bad:
+            self.assertEqual(self.kinds("fn a():\n" + line), [(2, "inline")], line)
+        for line in ["    var n = py_call(b.len, labels)", "    var s = sorted_ids(v)", "    # b.sorted in a comment"]:
+            self.assertEqual(self.kinds("fn a():\n" + line), [], line)
 
     def test_docstrings_are_skipped(self):
         text = '\n'.join([
@@ -102,7 +168,7 @@ class TreeTest(unittest.TestCase):
         self.write("bindings/entry/x.mojo", LOOPY)
         self.write("x_decomp/pca_pyapi.mojo", "fn f():\n    var c = DeviceContext()\n")
         self.write("svm/svc_py.mojo", LOOPY)
-        self.write("bindings/ok.mojo", "fn f(n: Int):\n    for i in range(n):  # small-loop(n argument words)\n")
+        self.write("bindings/ok.mojo", "fn f(n: Int):\n    for i in range(4):  # small-loop(4)\n")
         self.commit()
         rc, err = self.run_checker("--tree")
         self.assertEqual(rc, 1)
@@ -163,6 +229,24 @@ class TreeTest(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("bindings/x.mojo:2: untagged loop", err)
         self.assertIn("bindings/z.mojo:2: untagged loop", err)
+
+    def test_a_row_main_lacks_holds_only_for_a_hit_main_carries(self):
+        self.write("bindings/x.mojo", LOOPY)        # main's debt that a stricter rule made visible
+        self.write(BASELINE, "# main's baseline, written before the rule\n")
+        self.commit("main")
+        self.git("checkout", "-q", "-b", "lane/regen")
+        self.write(BASELINE, "bindings/x.mojo:2: for i in range(n):\n")
+        self.commit("regenerate the baseline")
+        rc, err = self.run_checker("--tree", "HEAD")
+        self.assertEqual(rc, 0, err)
+        self.write("bindings/w.mojo", LOOPY)        # a hit the lane adds, with its own row
+        self.write(BASELINE, "bindings/x.mojo:2: for i in range(n):\nbindings/w.mojo:2: for i in range(n):\n")
+        self.commit("grow")
+        rc, err = self.run_checker("--tree", "HEAD")
+        self.assertEqual(rc, 1)
+        self.assertIn("bindings/w.mojo:2: untagged loop", err)
+        self.assertIn("baseline row bindings/w.mojo: for i in range(n): (x1) is not in main's baseline", err)
+        self.assertNotIn("bindings/x.mojo:2", err)
 
     def test_usage(self):
         self.commit()
