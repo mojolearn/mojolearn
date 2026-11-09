@@ -1,0 +1,1070 @@
+diff --git a/bindings/_mojolearn_kernel_methods.mojo b/bindings/_mojolearn_kernel_methods.mojo
+index d37d182e25..9e20f81dc0 100644
+--- a/bindings/_mojolearn_kernel_methods.mojo
++++ b/bindings/_mojolearn_kernel_methods.mojo
+@@ -266,24 +266,14 @@ def kernel_ridge_fit_ptr_binding(
+     addrs: PythonObject, params: PythonObject
+ ) raises -> PythonObject:
+     """fam2-kernel-gp (KRR_IDN_PTR_IN; registered as `kernel_ridge_fit_ptr`
+-    only when that define is on): `kernel_ridge_fit_binding`'s `params`,
+-    exactly, with X and y read from their addresses on the device and
+-    `dual_out` written by the device copy (`kernel_ridge_fit_ptr_into`).
+-    No owned host copy of X or y is made.
+-
+-    `addrs` is `kernel_ridge_fit_binding`'s 4 (or 5, with the weights), or
+-    9 (lane a8a): x, y, dual_out, scalars_out, sw (0: unweighted), x_fit_out
+-    (0: none; else n * d float32 receiving the device copy of X), then a
+-    cross-validation fold's store ids [base id, base rows, index id] (x is
+-    then 0 and the fold's rows are gathered on the device).
+-
+-    Returns [info, finite word, range word] of X (0, 0: finite and in range;
+-    a flagged X is not fitted and the door refuses it)."""
+-    if len(addrs) != 4 and len(addrs) != 5 and len(addrs) != 9:
++    only when that define is on): `kernel_ridge_fit_binding`'s `addrs` and
++    `params`, exactly, with X and y read from their addresses on the device
++    and `dual_out` written by the device copy (`kernel_ridge_fit_ptr_into`).
++    No owned host copy of X or y is made. Returns `info`."""
++    if len(addrs) != 4 and len(addrs) != 5:
+         raise Error(
+             "kernel_ridge_fit: addrs must contain 4 addresses (x, y,"
+-            " dual_out, scalars_out), 5 (and sw) or 9 (sw, x_fit_out and a"
+-            " fold's base id, base rows, index id), got "
++            " dual_out, scalars_out) and optionally sw, got "
+             + String(len(addrs))
+         )
+     if len(params) != 8:
+@@ -292,13 +282,8 @@ def kernel_ridge_fit_ptr_binding(
+             " degree, gamma, coef0, alpha), got "
+             + String(len(params))
+         )
+-    var fold = QueryFold.none()
+-    var xfit_addr = 0
+-    if len(addrs) == 9:
+-        xfit_addr = Int(py=addrs[5])
+-        fold = QueryFold(Int(py=addrs[6]), Int(py=addrs[7]), Int(py=addrs[8]))
+-    var xaddr = 0 if fold.active() else Int(_f32_ptr(Int(py=addrs[0])))
+-    var yaddr = Int(_f32_ptr(Int(py=addrs[1])))
++    var xp = _f32_ptr(Int(py=addrs[0]))
++    var yp = _f32_ptr(Int(py=addrs[1]))
+     var dp = _f32_ptr(Int(py=addrs[2]))
+     var sp = _f64_ptr(Int(py=addrs[3]))
+     var n = Int(py=params[0])
+@@ -313,19 +298,21 @@ def kernel_ridge_fit_ptr_binding(
+     var alpha = Float32(Float64(py=params[7]))
+     var sw = List[Float32]()
+     var waddr = 0
+-    if len(addrs) >= 5 and Int(py=addrs[4]) != 0:
++    if len(addrs) == 5:
+         # cpu2-l6-bindings: the per-row factors sqrt(sample_weight) are
+         # formed and refused on the device from the caller's float64
+         # weights (`_krr_sqrt_weights_dev`), not in a host loop
+         waddr = Int(_f64_ptr(Int(py=addrs[4])))
+-    var result: Tuple[Int, Int32, Int32]
++    var xaddr = Int(xp)
++    var yaddr = Int(yp)
++    var info = 0
+     with GILReleased(Python()):
+         var trace = IdentityTrace()
+-        result = kernel_ridge_fit_ptr_into(
+-            xaddr, yaddr, n, d, t, kp, alpha, sw, dp, trace, waddr, fold, xfit_addr
++        info = kernel_ridge_fit_ptr_into(
++            xaddr, yaddr, n, d, t, kp, alpha, sw, dp, trace, waddr=waddr
+         )
+-        sp.unsafe_store(0, Float64(result[0]))
+-    return Python.list(result[0], Int(result[1]), Int(result[2]))
++        sp.unsafe_store(0, Float64(info))
++    return PythonObject(info)
+ 
+ 
+ def kernel_ridge_predict_ptr_binding(
+diff --git a/bindings/_mojolearn_svm.mojo b/bindings/_mojolearn_svm.mojo
+index e2994950bf..87bd947d9f 100644
+--- a/bindings/_mojolearn_svm.mojo
++++ b/bindings/_mojolearn_svm.mojo
+@@ -103,7 +103,7 @@ from svm.estimator import (
+     svc_fit_host,
+     svc_fit_host_borrowed,
+     svc_predict_host,
+-    svr_fit_host_borrowed,
++    svr_fit_host,
+     svr_predict_host,
+ )
+ 
+@@ -208,34 +208,12 @@ def svc_fit_binding(
+     pins the first three at the only values rung 1 accepts and refuses the
+     rest by name. `max_outer_iter` is pinned at -1, which is what cuML's
+     own Python layer does (`svm_base.pyx:371`).
+-
+-    THE DEVICE-X FORM (lane a8a): 15 values, the ten above, then
+-
+-        10 the per-row bounds' address (0: unweighted)
+-        11 a cross-validation fold's base id   (-1: no fold)
+-        12 the fold's base rows
+-        13 the fold's index id                 (-1: no fold)
+-        14 scale_gamma     (1: gamma='scale' is resolved from the fit's own
+-                            device copy of X; slot 3 is then ignored)
+-
+-    With a fold, `x_addr` is 0 and the rows are gathered on the device.
+-    `info_addr` then holds EIGHT float64: the five above, then X's finite
+-    word (5), its range word (6) and the gamma solved with (7). A flagged X
+-    (5 or 6 nonzero) is not solved: the door refuses it in admit_x's
+-    wording 'Input X contains NaN or infinity (SVC).'
+     """
+-    if len(params) != 10 and len(params) != 11 and len(params) != 15:
++    if len(params) != 10 and len(params) != 11:
+         raise Error(
+-            "svc_fit: params must contain 10 values (11 with the per-row bounds, 15 with a fold and"
+-            " scale_gamma), got " + String(len(params))
++            "svc_fit: params must contain 10 values (11 with the per-row bounds), got " + String(len(params))
+         )
+-    var device_form = len(params) == 15
+-    var fold = QueryFold.none()
+-    var scale_gamma = False
+-    if device_form:
+-        fold = QueryFold(Int(py=params[11]), Int(py=params[12]), Int(py=params[13]))
+-        scale_gamma = Int(py=params[14]) != 0
+-    var x_word = 0 if fold.active() else Int(py=x_addr)
++    var xp = _f32_ptr(Int(py=x_addr))
+     var yp = _f32_ptr(Int(py=y_addr))
+     var dp = _f32_ptr(Int(py=dual_addr))
+     var sip = _i32_ptr(Int(py=support_idx_addr))
+@@ -258,11 +236,11 @@ def svc_fit_binding(
+     var c_rows = _c_rows(params, 10, n_rows, "svc_fit")
+     var res = SvcFitOutputs()
+     with GILReleased(Python()):
+-        # DEVIATION 2665: X is not copied into a host List; the fit stages
+-        # the caller's buffer (or gathers the fold) on the device once.
++        # DEVIATION 2665: X is not copied into a host List; the fit checks
++        # and stages the caller's buffer, which `_svm_impl.py` holds alive.
+         res = svc_fit_host_borrowed(
+-            x_word, fold, y, n_rows, n_cols, kernel, gamma, c, tol, max_iter,
+-            nochange_steps, degree, coef0, c_rows, scale_gamma,
++            xp, y, n_rows, n_cols, kernel, gamma, c, tol, max_iter,
++            nochange_steps, degree, coef0, c_rows,
+         )
+     copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
+     memcpy(dest=sip, src=res.support_idx.unsafe_ptr(), count=res.n_support)
+@@ -272,13 +250,6 @@ def svc_fit_binding(
+     ip.unsafe_store(2, Float64(res.n_iter))
+     ip.unsafe_store(3, Float64(res.label0))
+     ip.unsafe_store(4, Float64(res.label1))
+-    if device_form:
+-        ip.unsafe_store(5, Float64(res.finite_word))
+-        ip.unsafe_store(6, Float64(res.range_word))
+-        ip.unsafe_store(7, res.gamma)
+-    elif res.finite_word != 0:
+-        # The short forms carry no status slots: refuse in admit_x's wording.
+-        raise Error("Input X contains NaN or infinity (SVC).")
+     return PythonObject(res.n_support)
+ 
+ 
+@@ -410,18 +381,6 @@ def svr_fit_binding(
+     THREE, NOT FIVE. `svc_fit`'s slots 3 and 4 are the class labels and a
+     regressor has none.
+ 
+-    THE DEVICE-X FORM (lane a8a): 16 values, the nine above, then the per-row
+-    bounds' address (9; 0: unweighted), degree (10), coef0 (11), a
+-    cross-validation fold's base id (12; -1: no fold), base rows (13), index
+-    id (14; -1: no fold) and scale_gamma (15; 1: gamma='scale' resolved from
+-    the fit's own device copy of X, slot 3 ignored). With a fold `x_addr` is
+-    0 and the rows are gathered on the device. `info_addr` then holds SIX
+-    float64: the three below, then X's finite word, its range word and the
+-    gamma solved with; a flagged X is not solved and the door refuses it.
+-    X is never copied into a host List: one copy to the device from
+-    `x_addr` (the former form read it element by element into a List,
+-    scanned it serially and staged it again).
+-
+     `cache_size`, `svmType`, `sample_weight`, POLYNOMIAL, TANH and
+     PRECOMPUTED are not on this surface at all: `svm/estimator.mojo` pins
+     the first two at the only values this rung accepts and refuses the rest
+@@ -429,18 +388,12 @@ def svr_fit_binding(
+     Python layer does (`svm_base.pyx:371`), and -1 resolves over the DOUBLED
+     `n_train`.
+     """
+-    if len(params) != 9 and len(params) != 10 and len(params) != 12 and len(params) != 16:
++    if len(params) != 9 and len(params) != 10 and len(params) != 12:
+         raise Error(
+             "svr_fit: params must contain 9 values (10 with the per-row bounds, 12 with"
+-            " degree and coef0, 16 with a fold and scale_gamma), got " + String(len(params))
++            " degree and coef0), got " + String(len(params))
+         )
+-    var device_form = len(params) == 16
+-    var fold = QueryFold.none()
+-    var scale_gamma = False
+-    if device_form:
+-        fold = QueryFold(Int(py=params[12]), Int(py=params[13]), Int(py=params[14]))
+-        scale_gamma = Int(py=params[15]) != 0
+-    var x_word = 0 if fold.active() else Int(py=x_addr)
++    var xp = _f32_ptr(Int(py=x_addr))
+     var yp = _f32_ptr(Int(py=y_addr))
+     var dp = _f32_ptr(Int(py=dual_addr))
+     var sip = _i32_ptr(Int(py=support_idx_addr))
+@@ -457,20 +410,21 @@ def svr_fit_binding(
+     var nochange_steps = Int(py=params[8])
+     if n_rows <= 0 or n_cols <= 0:
+         raise Error("svr_fit: n_rows and n_features must both be positive")
+-    # TOMBSTONE: the element-by-element host List copy of X (read_f32) before svr_fit_host removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr: one device copy from x_addr; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
++    var x = List[Float32]()
+     var y = List[Float32]()
++    x = read_f32(Int(xp), max(0, n_rows * n_cols))
+     y = read_f32(Int(yp), max(0, n_rows))
+     var c_rows = _c_rows(params, 9, n_rows, "svr_fit")
+     var degree = 3
+     var coef0 = 0.0
+-    if len(params) >= 12:
++    if len(params) == 12:
+         degree = Int(py=params[10])
+         coef0 = Float64(py=params[11])
+     var res = SvrFitOutputs()
+     with GILReleased(Python()):
+-        res = svr_fit_host_borrowed(
+-            x_word, fold, y, n_rows, n_cols, kernel, gamma, c, epsilon, tol, max_iter,
+-            nochange_steps, c_rows, degree, coef0, scale_gamma,
++        res = svr_fit_host(
++            x, y, n_rows, n_cols, kernel, gamma, c, epsilon, tol, max_iter,
++            nochange_steps, c_rows, degree, coef0,
+         )
+     copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
+     memcpy(dest=sip, src=res.support_idx.unsafe_ptr(), count=res.n_support)
+@@ -478,13 +432,6 @@ def svr_fit_binding(
+     ip.unsafe_store(0, Float64(res.b))
+     ip.unsafe_store(1, Float64(res.n_support))
+     ip.unsafe_store(2, Float64(res.n_iter))
+-    if device_form:
+-        ip.unsafe_store(3, Float64(res.finite_word))
+-        ip.unsafe_store(4, Float64(res.range_word))
+-        ip.unsafe_store(5, res.gamma)
+-    elif res.finite_word != 0:
+-        # The short forms carry no status slots: refuse in admit_x's wording.
+-        raise Error("Input X contains NaN or infinity (SVR).")
+     return PythonObject(res.n_support)
+ 
+ 
+diff --git a/gaussian_process/gpc_ovr.mojo b/gaussian_process/gpc_ovr.mojo
+index 5aac438066..05e3d4b3ea 100644
+--- a/gaussian_process/gpc_ovr.mojo
++++ b/gaussian_process/gpc_ovr.mojo
+@@ -287,14 +287,9 @@ def gpc_fit_all_device(
+     gpc_validate_max_iter(max_iter_predict)
+     if codes_addr == 0:
+         raise Error("gpc_fit_all: the class codes have a null address")
+-    if n_train <= 0 or n_features <= 0:
+-        raise Error("gpc_fit_all: X must have at least one row and one feature, got " + String(n_train) + " x "
+-                    + String(n_features))
+     var n = n_train
+     var ctx = _family_ctx()
+-    # TOMBSTONE: the synchronising first-non-finite scan of the fit X (_gpc_upload_checked; DEVIATION 1768 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr: the public door admits X once and refuses a non-finite X in scikit-learn's wording before this entry; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
+-    var dx = ctx.enqueue_create_buffer[DType.float32](n_train * n_features)
+-    _copy_in(ctx, dx, x_addr, String("X"))
++    var dx = _gpc_upload_checked(ctx, x_addr, n_train, n_features, String("X"))
+     var dls = _upload(ctx, _length_scale_table(kernel))
+     var dk = ctx.enqueue_create_buffer[DType.float32](n * n)
+     var dstack = ctx.enqueue_create_buffer[DType.float32](gp_kernel_stack_floats(n, n))
+diff --git a/gaussian_process/gpr_resident.mojo b/gaussian_process/gpr_resident.mojo
+index 51d73d31e7..bcb7d904d5 100644
+--- a/gaussian_process/gpr_resident.mojo
++++ b/gaussian_process/gpr_resident.mojo
+@@ -139,22 +139,21 @@ def gpr_fit_ptr_device(
+         raise Error("gpr_fit: an output has a null address")
+     if y_addr == 0:
+         raise Error("gpr_fit: y has a null address")
+-    if n_train <= 0 or n_features <= 0:
+-        raise Error("gpr_fit: X must have at least one row and one feature, got " + String(n_train) + " x "
+-                    + String(n_features))
+-    if x_addr == 0:
+-        raise Error("gpr_fit: X has a null address")
+     var n = n_train
+     var ctx = _family_ctx()
+-    # TOMBSTONE: the synchronising first-non-finite scan of the fit X (_gpc_upload_checked; DEVIATION 1768 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr: the public door admits X once, nested fits included, and refuses a non-finite X in scikit-learn's wording before this entry (providers/python/gp_public_lifecycle_pyapi.mojo); recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
+-    var dx = ctx.enqueue_create_buffer[DType.float32](n_train * n_features)
+-    ctx.enqueue_copy(dst_buf=dx, src_ptr=_GP(unsafe_from_address=x_addr))
++    var dx = _gpc_upload_checked(ctx, x_addr, n_train, n_features, String("X"))
+     var dy = ctx.enqueue_create_buffer[DType.float32](n)
+     ctx.enqueue_copy(dst_buf=dy, src_ptr=_GP(unsafe_from_address=y_addr))
+-    # y keeps its scan: a nested fit's door does not test y (the public
+-    # door's target check runs at depth 0 only). One wording (lane a8a).
+-    if device_first_nonfinite(ctx, dy, n) >= 0:
+-        raise Error("Input y contains NaN or infinity (GaussianProcessRegressor).")
++    var bad = device_first_nonfinite(ctx, dy, n)
++    if bad >= 0:
++        var is_nan = device_classify_nonfinite(ctx, dy, bad)
++        raise Error(
++            "gpr_fit_host: y contains "
++            + ("NaN" if is_nan else "infinity")
++            + " at index "
++            + String(bad)
++            + "; refused by name before any model launch (DEVIATION 1768)"
++        )
+     var dls = _upload(ctx, _length_scale_table(kernel))
+     var dk = ctx.enqueue_create_buffer[DType.float32](n * n)
+     var dstack = ctx.enqueue_create_buffer[DType.float32](gp_kernel_stack_floats(n, n))
+diff --git a/kernel_methods/estimator.mojo b/kernel_methods/estimator.mojo
+index 4a253b2aae..2584844e03 100644
+--- a/kernel_methods/estimator.mojo
++++ b/kernel_methods/estimator.mojo
+@@ -894,42 +894,25 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
+     sw: List[Float32],
+     dual_out: MutPointer[Float32, out_origin],
+     mut trace: IdentityTrace,
+-    waddr: Int,
+-    fold: QueryFold,
+-    xfit_addr: Int,
+-) raises -> Tuple[Int, Int32, Int32]:
++    waddr: Int = 0,
++) raises -> Int:
+     """KRR_IDN_PTR_IN: `kernel_ridge_fit_host` with X and y read from the
+-    caller's addresses on the device and `dual_coef_` copied into
+-    `dual_out` (n_samples x n_targets). The same launches in the same order
+-    as the list route at its default scheduling and no sabotage; the
+-    weighted arm scales on the device (`krr_scale_rows_kernel`, the host
+-    loop's line). Returns (info, X's finite word, X's range word): info 0
+-    (a failed factorization raises DEVIATION 1662's refusal); a flagged X
+-    returns before any kernel launch and the door refuses it in admit_x's
+-    wording.
+-
+-    X (lane a8a) is a `DeviceQueryX` (core/device_query_x.mojo): the host
+-    words at `xaddr`, or the cross-validation fold `fold` gathered on the
+-    device out of model selection's resident base (`xaddr` 0; the call
+-    then runs on the fold store's context). The status words ride back on
+-    the stream with the setup drain below: no synchronising scan. y is the
+-    door's admitted float32 target, tested finite there, one copy.
+-    `xfit_addr` nonzero receives the n_samples x n_features device copy of
+-    X (a fold's `X_fit_`: no host gather of the fold).
++    caller's addresses on the device (`_upload_checked`: shape refused on
++    the host, NaN / infinity on the device, X before y as the list route
++    walks them) and `dual_coef_` copied into `dual_out` (n_samples x
++    n_targets). The same launches in the same order as the list route at
++    its default scheduling and no sabotage; the weighted arm scales on the
++    device (`krr_scale_rows_kernel`, the host loop's line). Returns `info`
++    (0; a failed factorization raises DEVIATION 1662's refusal).
+ 
+     `waddr` (cpu2-l6-bindings): nonzero is the caller's n float64 sample
+     weights; the sqrt factors are formed and refused on the device
+     (`_krr_sqrt_weights_dev`) and `sw` must then be empty."""
+-    if (xaddr == 0 and not fold.active()) or yaddr == 0:
++    if xaddr == 0 or yaddr == 0:
+         raise Error("kernel_ridge_fit: null X or y address")
+-    if n_samples <= 0 or n_features <= 0 or n_targets <= 0:
+-        raise Error("kernel_ridge X: need positive dimensions, got " + String(n_samples) + " x "
+-                    + String(n_features) + " with " + String(n_targets) + " targets")
+-    var ctx = query_context(fold, _family_ctx())
+-    # TOMBSTONE: _upload_checked on the fit X and y (synchronising first-non-finite scans, DEVIATION 1686 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
+-    var qx = DeviceQueryX(ctx, xaddr, n_samples, n_features, fold)
+-    var dy = ctx.enqueue_create_buffer[DType.float32](n_samples * n_targets)
+-    ctx.enqueue_copy(dst_buf=dy, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=yaddr))
++    var ctx = _family_ctx()
++    var xa = _upload_checked(ctx, xaddr, n_samples, n_features, "kernel_ridge X")
++    var dy = _upload_checked(ctx, yaddr, n_samples, n_targets, "kernel_ridge y")
+     var precomputed = kp.kernel == KM_KERNEL_PRECOMPUTED
+     if precomputed:
+         if n_features != n_samples:
+@@ -970,7 +953,7 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
+     else:
+         if weighted:
+             dy = _upload(ctx, krr_scale_rows(_download(ctx, dy, n_samples * n_targets), sw_h, n_samples, n_targets))
+-    trace.record_device(ctx, "krr.input", qx.x, n_samples * n_features)
++    trace.record_device(ctx, "krr.input", xa, n_samples * n_features)
+ 
+     var dk = ctx.enqueue_create_buffer[DType.float32](n_samples * n_samples)
+     var na = ctx.enqueue_create_buffer[DType.float32](n_samples)
+@@ -982,31 +965,15 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
+         kernel_ridge_workspace_floats(n_samples)
+     )
+     ctx.synchronize()
+-    # The setup drain above made X's status words valid: a flagged X is
+-    # refused by the door before any kernel launch reads it.
+-    var finite_word = qx.finite_word()
+-    var range_word = qx.range_word()
+-    if finite_word != 0 or range_word != 0:
+-        _ = dsw^
+-        _ = qx^
+-        _ = dy^
+-        _ = dk^
+-        _ = na^
+-        _ = nb^
+-        _ = kws^
+-        _ = cws^
+-        # DEVIATION 1946: the context dies LAST, after every value built on it.
+-        _ = ctx^
+-        return (0, finite_word, range_word)
+ 
+     if precomputed:
+-        ctx.enqueue_copy(dst_buf=dk, src_buf=qx.x)
++        ctx.enqueue_copy(dst_buf=dk, src_buf=xa)
+     else:
+         # The kernel-method entry reads the calling thread's device plan once; the
+         # svm kernel rows shard over it (svm/multi_gpu.mojo::kernel_matrix_dispatch).
+         var km_plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
+         km_kernel_matrix(
+-            ctx, kp, dk, qx.x, qx.x, n_samples, n_samples, n_features,
++            ctx, kp, dk, xa, xa, n_samples, n_samples, n_features,
+             na, nb, kws, KM_EPILOGUE_TPB, KMSAB_NONE, True,
+             plan=km_plan,
+         )
+@@ -1052,9 +1019,6 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
+                 dual_out.unsafe_store(i, dual[i])
+         else:
+             _download_into(ctx, dy, dual_out, n_samples * n_targets)
+-    if xfit_addr != 0:
+-        # A fold's X_fit_: the device copy of the gathered rows, home once.
+-        ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=xfit_addr), src_buf=qx.x)
+     ctx.synchronize()
+     var info = Int(hinfo.unsafe_ptr().unsafe_load(0))
+     _ = hinfo^
+@@ -1062,7 +1026,7 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
+     if info != 0:
+         raise Error(_krr_not_pd_message(info, kp.kernel, n_samples))
+     _ = dsw^
+-    _ = qx^
++    _ = xa^
+     _ = dy^
+     _ = dk^
+     _ = na^
+@@ -1071,7 +1035,7 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
+     _ = cws^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.
+     _ = ctx^
+-    return (0, Int32(0), Int32(0))
++    return 0
+ 
+ 
+ def kernel_ridge_predict_ptr_into[out_origin: MutOrigin, //](
+diff --git a/kernel_methods/native_descriptor_dispatch.mojo b/kernel_methods/native_descriptor_dispatch.mojo
+index 2aae8e3763..9a76e01212 100644
+--- a/kernel_methods/native_descriptor_dispatch.mojo
++++ b/kernel_methods/native_descriptor_dispatch.mojo
+@@ -8,7 +8,6 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
+ from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
+ from core.hostptr import f32_ptr as _f32_ptr, f64_ptr as _f64_ptr, i32_ptr as _i32_ptr, read_f32, read_i32
+ from core.identity_trace import IdentityTrace
+-from core.device_query_x import QueryFold
+ from svm.impl.svm_parameter import KernelParams
+ from kernel_methods.estimator import (KernelRidgeModel, NystroemModel, RBFSamplerModel,
+     KRR_IDN_PTR_IN, NYS_IDN_FIT_PTR_IN, KM_FAST_PTR_IN,
+@@ -143,14 +142,11 @@ def km_native_kernel_ridge_fit_ptr(a: List[Int], p: List[Int], f: List[Float64])
+         waddr = Int(_f64_ptr(a[4]))
+     var xaddr = Int(xp)
+     var yaddr = Int(yp)
++    var info = 0
+     var trace = IdentityTrace()
+-    # The descriptor door tests X on the host before this call
+-    # (bindings/kernel_methods_native.mojo `_krr_fit`, lane a8a): the status
+-    # words are all zero here, and no fold reaches this route.
+-    var result = kernel_ridge_fit_ptr_into(
+-        xaddr, yaddr, n, d, t, kp, alpha, sw, dp, trace, waddr, QueryFold.none(), 0
++    info = kernel_ridge_fit_ptr_into(
++        xaddr, yaddr, n, d, t, kp, alpha, sw, dp, trace, waddr=waddr
+     )
+-    var info = result[0]
+     sp.unsafe_store(0, Float64(info))
+     return info
+ 
+diff --git a/svm/checks/device_select.mojo b/svm/checks/device_select.mojo
+index 70f0b5e456..f6e72d6631 100644
+--- a/svm/checks/device_select.mojo
++++ b/svm/checks/device_select.mojo
+@@ -460,5 +460,48 @@ def upload_i32(
+     return d^
+ 
+ 
+-# TOMBSTONE: check_finite_device + first_nonfinite_kernel (the synchronising first-non-finite scan of the fit X, DEVIATION 636 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr: the fit X's finite word rides back on the stream (core/device_query_x.mojo) and the door refuses in admit_x's wording; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
+-# Restore: git apply experiments/removed/A8A_SVM_FIT_FINITE_SCAN.patch
++def first_nonfinite_kernel(
++    first: MutPointer[Int32, MutAnyOrigin],
++    v: MutPointer[Float32, MutAnyOrigin],
++    n_in: Int32,
++):
++    """DEVIATION 636 on the device: `first[0] = min i` over the cells whose
++    exponent bits are all ones (a NaN or an infinity, `isfinite`'s
++    predicate by bits). An integer `Atomic.min` is order-free, so every
++    column reports the same first index."""
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i < Int(n_in):
++        var bits = bitcast[DType.uint32](v.unsafe_load(i)) & UInt32(0x7FFFFFFF)
++        if bits >= UInt32(0x7F800000):
++            _ = Atomic.min(first.unsafe_offset(0), Int32(i))
++
++
++def check_finite_device(
++    ctx: DeviceContext,
++    mut values: DeviceBuffer[DType.float32],
++    n: Int,
++    what: String,
++) raises:
++    """`check_finite_list` over `n` uploaded cells: one grid scan and one
++    int read back; the same first flat index and the same message."""
++    if n <= 0:
++        return
++    if n > 2147483647:
++        raise Error("svm: " + what + " has more than 2^31 - 1 cells")
++    var first = ctx.enqueue_create_buffer[DType.int32](1)
++    ctx.enqueue_function[set_i32_kernel](
++        first.unsafe_ptr(), Int32(2147483647), grid_dim=1, block_dim=1,
++    )
++    ctx.enqueue_function[first_nonfinite_kernel](
++        first.unsafe_ptr(), values.unsafe_ptr(), Int32(n),
++        grid_dim=_grid(n), block_dim=SEL_TPB,
++    )
++    var got = read_i32(ctx, first, 1)
++    _ = first^
++    var f = Int(got[0])
++    if f != 2147483647:
++        raise Error(
++            "svm: " + what + " contains a non-finite value at flat index "
++            + String(f) + " (DEVIATION 636: a NaN or inf input cannot be"
++            " fitted; a computed NaN has a vendor-specific payload)"
++        )
+diff --git a/svm/estimator.mojo b/svm/estimator.mojo
+index 225ced7c34..f509f26753 100644
+--- a/svm/estimator.mojo
++++ b/svm/estimator.mojo
+@@ -90,8 +90,7 @@ from core.device_plan import device_plan_current
+ from core.identity_trace import IdentityTrace
+ from svm.impl.smosolver import SmoTrace
+ from svm.impl.svc_impl import svc_fit, svc_fit_borrowed, svc_predict
+-from svm.impl.svr_impl import svr_fit_borrowed, svr_predict
+-from core.device_query_x import QueryFold, query_context
++from svm.impl.svr_impl import svr_fit, svr_predict
+ from svm.impl.svm_parameter import (
+     C_SVC,
+     EPSILON_SVR,
+@@ -125,12 +124,6 @@ struct SvcFitOutputs(Copyable, Movable):
+     var dual_coefs: List[Float32]
+     var support_idx: List[Int32]
+     var support_matrix: List[Float32]
+-    var finite_word: Int32
+-    """1 when X held a NaN or an infinity (lane a8a): nothing was solved."""
+-    var range_word: Int32
+-    """1 when a fold's row index was out of range: nothing was solved."""
+-    var gamma: Float64
+-    """The gamma the fit solved with (gamma='scale' resolved on the device)."""
+ 
+     def __init__(out self):
+         self.n_support = 0
+@@ -141,9 +134,6 @@ struct SvcFitOutputs(Copyable, Movable):
+         self.dual_coefs = List[Float32]()
+         self.support_idx = List[Int32]()
+         self.support_matrix = List[Float32]()
+-        self.finite_word = Int32(0)
+-        self.range_word = Int32(0)
+-        self.gamma = 0.0
+ 
+ 
+ def _kernel_params(
+@@ -256,8 +246,7 @@ def svc_fit_host(
+ 
+ 
+ def svc_fit_host_borrowed(
+-    x_addr: Int,
+-    fold: QueryFold,
++    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+     labels: List[Float32],
+     n_rows: Int,
+     n_cols: Int,
+@@ -267,21 +256,16 @@ def svc_fit_host_borrowed(
+     tol: Float64,
+     max_iter: Int,
+     nochange_steps: Int,
+-    degree: Int,
+-    coef0: Float64,
+-    c_rows: List[Float32],
+-    scale_gamma: Bool,
++    degree: Int = 3,
++    coef0: Float64 = 0.0,
++    c_rows: List[Float32] = List[Float32](),
+ ) raises -> SvcFitOutputs:
+     """`svc_fit_host` on the caller's borrowed row-major `n_rows x n_cols`
+-    float32 buffer at `x_addr` (DEVIATION 2665, 2026-09-11), what the binding
+-    calls, or a cross-validation fold `fold` gathered on the device (lane
+-    a8a; `x_addr` 0, the fit runs on the fold store's context). No host List
+-    copy of X and no host pass over it: `svc_fit_borrowed` copies it to the
+-    device once and returns its finite and range words on the outputs (a
+-    flagged X is not solved; the door refuses it). `scale_gamma`:
+-    gamma='scale' is resolved from the device copy (`gamma` on the outputs
+-    is the value solved with). The caller keeps the buffer alive and
+-    unmodified for the call. Same parameters, card and bytes as
++    float32 buffer (DEVIATION 2665, 2026-09-11), what the binding calls. No
++    host List copy of X: `svc_fit_borrowed` checks the borrowed cells in one
++    threaded pass and fills the device buffer from the address. The caller
++    keeps the buffer alive and unmodified for the call (`_svm_impl.py` holds
++    the array across it). Same parameters, refusals, card and bytes as
+     `svc_fit_host`."""
+     if n_rows <= 0:
+         raise Error("Parameter n_rows: number of rows cannot be less than one")
+@@ -310,7 +294,7 @@ def svc_fit_host_borrowed(
+     param.verbosity = 0
+     check_rung1_scope(param, kp, False)
+ 
+-    var ctx = query_context(fold, _family_ctx())
++    var ctx = _family_ctx()
+     var card = IdentityTrace()
+     card.header(
+         "svc_fit_host: n_rows=" + String(n_rows) + " n_cols=" + String(n_cols)
+@@ -323,9 +307,7 @@ def svc_fit_host_borrowed(
+     # and passes the value down (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+     var plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
+     var trace = SmoTrace()
+-    var status = List[Int32]()
+-    var model = svc_fit_borrowed(ctx, x_addr, fold, labels, n_rows, n_cols, param, kp, card, trace, status,
+-                                 scale_gamma, c_rows, plan)
++    var model = svc_fit_borrowed(ctx, x_ptr, labels, n_rows, n_cols, param, kp, card, trace, c_rows, plan)
+ 
+     var out = SvcFitOutputs()
+     out.n_support = model.n_support
+@@ -336,9 +318,6 @@ def svc_fit_host_borrowed(
+     out.dual_coefs = model.dual_coefs.copy()
+     out.support_idx = model.support_idx.copy()
+     out.support_matrix = model.support_matrix.copy()
+-    out.finite_word = status[0]
+-    out.range_word = status[1]
+-    out.gamma = kp.gamma
+     _ = model^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.
+     _ = ctx^
+@@ -460,12 +439,6 @@ struct SvrFitOutputs(Copyable, Movable):
+     var dual_coefs: List[Float32]
+     var support_idx: List[Int32]
+     var support_matrix: List[Float32]
+-    var finite_word: Int32
+-    """1 when X held a NaN or an infinity (lane a8a): nothing was solved."""
+-    var range_word: Int32
+-    """1 when a fold's row index was out of range: nothing was solved."""
+-    var gamma: Float64
+-    """The gamma the fit solved with (gamma='scale' resolved on the device)."""
+ 
+     def __init__(out self):
+         self.n_support = 0
+@@ -474,9 +447,6 @@ struct SvrFitOutputs(Copyable, Movable):
+         self.dual_coefs = List[Float32]()
+         self.support_idx = List[Int32]()
+         self.support_matrix = List[Float32]()
+-        self.finite_word = Int32(0)
+-        self.range_word = Int32(0)
+-        self.gamma = 0.0
+ 
+ 
+ def svr_fit_host(
+@@ -494,53 +464,10 @@ def svr_fit_host(
+     c_rows: List[Float32] = List[Float32](),
+     degree: Int = 3,
+     coef0: Float64 = 0.0,
+-) raises -> SvrFitOutputs:
+-    """`svr_fit_host_borrowed` over a host List X (the native-only smoke
+-    cases): the same fit from the List's own words. A non-finite X is
+-    refused by name here, as the door would."""
+-    if len(x) != n_rows * n_cols:
+-        raise Error(
+-            "svr_fit_host: X has " + String(len(x)) + " values, n_rows x n_cols is "
+-            + String(n_rows * n_cols)
+-        )
+-    if n_rows <= 0 or n_cols <= 0:
+-        raise Error("Parameter n_rows: number of rows cannot be less than one")
+-    var out = svr_fit_host_borrowed(
+-        Int(x.unsafe_ptr()), QueryFold.none(), targets, n_rows, n_cols, kernel, gamma, C, epsilon, tol,
+-        max_iter, nochange_steps, c_rows, degree, coef0, False,
+-    )
+-    if out.finite_word != 0:
+-        raise Error("Input X contains NaN or infinity (SVR).")
+-    return out^
+-
+-
+-def svr_fit_host_borrowed(
+-    x_addr: Int,
+-    fold: QueryFold,
+-    targets: List[Float32],
+-    n_rows: Int,
+-    n_cols: Int,
+-    kernel: Int,
+-    gamma: Float64,
+-    C: Float64,
+-    epsilon: Float64,
+-    tol: Float64,
+-    max_iter: Int,
+-    nochange_steps: Int,
+-    c_rows: List[Float32],
+-    degree: Int,
+-    coef0: Float64,
+-    scale_gamma: Bool,
+ ) raises -> SvrFitOutputs:
+     """`SVR(C, epsilon, kernel, gamma, tol, max_iter, nochange_steps).fit(X,
+-    y)`, one shot. X is the caller's ROW-MAJOR `n_rows x n_cols` float32
+-    words at `x_addr` (theirs is column-major; a layout, not an arithmetic),
+-    copied to the device once with no host pass (lane a8a: the former form
+-    took a host List the binding filled element by element), or a
+-    cross-validation fold `fold` gathered on the device (`x_addr` 0). X's
+-    finite and range words come back on the outputs; a flagged X is not
+-    solved and the door refuses it. `scale_gamma`: gamma='scale' resolved
+-    from the device copy (`gamma` on the outputs).
++    y)`, one shot. `x` is ROW-MAJOR `n_rows x n_cols` (theirs is
++    column-major; a layout, not an arithmetic).
+ 
+     `targets` are CONTINUOUS VALUES, one per row. Nothing here validates
+     them as `+-1` and nothing sorts them into a label pair, because
+@@ -591,6 +518,11 @@ def svr_fit_host_borrowed(
+         raise Error("Parameter n_rows: number of rows cannot be less than one")
+     if n_cols <= 0:
+         raise Error("Parameter n_cols: number of columns cannot be less than one")
++    if len(x) != n_rows * n_cols:
++        raise Error(
++            "svr_fit_host: X has " + String(len(x)) + " values, n_rows x n_cols is "
++            + String(n_rows * n_cols)
++        )
+     if len(targets) != n_rows:
+         raise Error(
+             "svr_fit_host: y has " + String(len(targets)) + " values, n_rows is "
+@@ -614,7 +546,7 @@ def svr_fit_host_borrowed(
+     param.verbosity = 0
+     check_rung1_scope(param, kp, False)
+ 
+-    var ctx = query_context(fold, _family_ctx())
++    var ctx = _family_ctx()
+     var card = IdentityTrace()
+     card.header(
+         "svr_fit_host: n_rows=" + String(n_rows) + " n_cols=" + String(n_cols)
+@@ -628,9 +560,7 @@ def svr_fit_host_borrowed(
+     # and passes the value down (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+     var plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
+     var trace = SmoTrace()
+-    var status = List[Int32]()
+-    var model = svr_fit_borrowed(ctx, x_addr, fold, targets, n_rows, n_cols, param, kp, card, trace, status,
+-                                 scale_gamma, c_rows=c_rows, plan=plan)
++    var model = svr_fit(ctx, x, targets, n_rows, n_cols, param, kp, card, trace, c_rows=c_rows, plan=plan)
+ 
+     var out = SvrFitOutputs()
+     out.n_support = model.n_support
+@@ -639,9 +569,6 @@ def svr_fit_host_borrowed(
+     out.dual_coefs = model.dual_coefs.copy()
+     out.support_idx = model.support_idx.copy()
+     out.support_matrix = model.support_matrix.copy()
+-    out.finite_word = status[0]
+-    out.range_word = status[1]
+-    out.gamma = kp.gamma
+     _ = model^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.
+     _ = ctx^
+diff --git a/svm/impl/svc_impl.mojo b/svm/impl/svc_impl.mojo
+index 29dc0c102f..da2a027eec 100644
+--- a/svm/impl/svc_impl.mojo
++++ b/svm/impl/svc_impl.mojo
+@@ -38,11 +38,7 @@ from max.gpu.sync import barrier
+ 
+ from core.identity_trace import IdentityTrace
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
+-from svm.checks.device_select import SEL_TPB, read_f32, upload_f32
+-from core.device_query_x import DeviceQueryX, QueryFold
+-from core.scale_gamma_exact import scale_gamma_from_limbs
+-from svm.impl.scale_gamma_device import scale_gamma_limbs_resident
+-from svm.impl.scale_gamma_limbs import SG_SLOTS
++from svm.checks.device_select import SEL_TPB, check_finite_device, read_f32, upload_f32
+ from core.device_plan import DevicePlan, plan_for_single
+ from svm.multi_gpu import kernel_matrix_dispatch
+ from svm.impl.distance.kernel_matrices import (
+@@ -165,79 +161,44 @@ def svc_fit(
+     return fitted^
+ 
+ 
+-def svm_fit_device_x(
+-    ctx: DeviceContext,
+-    x_addr: Int,
+-    fold: QueryFold,
+-    n_rows: Int,
+-    n_cols: Int,
+-    mut kp: KernelParams,
+-    scale_gamma: Bool,
+-) raises -> DeviceQueryX:
+-    """The fit X of a kernel SVM on the device (lane a8a): the caller's
+-    row-major words at `x_addr` copied once, or the cross-validation fold
+-    `fold` gathered out of model selection's resident base (`ctx` is then
+-    the fold store's context), with X's two status words read back on the
+-    stream (core/device_query_x.mojo; no synchronising scan).
+-
+-    `scale_gamma`: gamma='scale' is resolved here from this device copy
+-    (`scale_gamma_limbs_resident`, the exact integer limbs; the same words
+-    as the door's host-address form, so the same gamma) into `kp.gamma`;
+-    its drain makes the status words valid, and a flagged X keeps the
+-    caller's placeholder gamma (the fit is refused, never solved)."""
+-    var qx = DeviceQueryX(ctx, x_addr, n_rows, n_cols, fold)
+-    if scale_gamma:
+-        var limbs = List[Int64](length=SG_SLOTS, fill=Int64(0))
+-        scale_gamma_limbs_resident(ctx, qx.x, n_rows * n_cols, Int(limbs.unsafe_ptr()))
+-        if qx.finite_word() == 0 and qx.range_word() == 0:
+-            kp.gamma = scale_gamma_from_limbs(limbs, n_rows * n_cols, n_cols)
+-    return qx^
+-
+-
+ def svc_fit_borrowed(
+     ctx: DeviceContext,
+-    x_addr: Int,
+-    fold: QueryFold,
++    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+     labels_host: List[Float32],
+     n_rows: Int,
+     n_cols: Int,
+     param: SvmParameter,
+-    mut kp: KernelParams,
++    kp: KernelParams,
+     mut card: IdentityTrace,
+     mut trace: SmoTrace,
+-    mut status: List[Int32],
+-    scale_gamma: Bool,
+     c_rows: List[Float32] = List[Float32](),
+     plan: DevicePlan = plan_for_single(),
+ ) raises -> SvmModel:
+     """`svc_fit` on the caller's borrowed row-major X (DEVIATION 2665,
+-    2026-09-11) or a cross-validation fold (lane a8a): X reaches the device
+-    once (`svm_fit_device_x`: one copy from the address or the fold's
+-    device gather; gamma='scale' resolved from that copy when asked), and
+-    its finite and range words come back on the stream with the labels'
+-    staging drain. A flagged X is not solved: `status` receives [finite
+-    word, range word] (0, 0: finite and in range) and the door refuses a
+-    flagged X in admit_x's wording. Everything after the upload is
+-    `_svc_fit_staged`, shared with `svc_fit`. The caller keeps the buffer
+-    alive and unmodified for the call."""
++    2026-09-11). The List front copied X into a host List, walked it once
++    for finiteness, then copied it element by element into a pinned host
++    buffer before the device copy. Here X is copied to the device from the
++    address once and checked there (`check_finite_device`: one grid scan,
++    the same predicate, first index and message; no host pass over the
++    cells). The same checks run in the same order, the same bytes reach the
++    device, and everything after the upload is `_svc_fit_staged`, shared with
++    `svc_fit`. The caller keeps the buffer alive and unmodified for the call."""
+     if n_cols <= 0:
+         raise Error("Parameter n_cols: number of columns cannot be less than one")
+     if n_rows <= 0:
+         raise Error("Parameter n_rows: number of rows cannot be less than one")
+     if len(labels_host) != n_rows:
+         raise Error("svc_fit: x / labels sizes do not match n_rows x n_cols")
+-    if x_addr == 0 and not fold.active():
+-        raise Error("svc_fit: X has a null address")
+     check_rung1_scope(param, kp, False)
+-    # TOMBSTONE: check_finite_device on the fit X (synchronising first-non-finite scan, DEVIATION 636 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
+-    var qx = svm_fit_device_x(ctx, x_addr, fold, n_rows, n_cols, kp, scale_gamma)
++    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
++    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
++    check_finite_device(ctx, x, n_rows * n_cols, "X")
+     var model = _svc_label_model(labels_host, n_rows, n_cols, param, kp, card)
+     var fitted = _svc_fit_staged(
+-        ctx, plan, qx.x, labels_host, n_rows, n_cols, param, kp, model^, card, trace,
+-        1 << 30, 0, False, 0, Float32(0.0), c_rows, Int(qx.words.unsafe_ptr()),
++        ctx, plan, x, labels_host, n_rows, n_cols, param, kp, model^, card, trace,
++        1 << 30, 0, False, 0, Float32(0.0), c_rows,
+     )
+-    status = [qx.finite_word(), qx.range_word()]
+-    _ = qx^
++    _ = x^
+     return fitted^
+ 
+ 
+@@ -286,21 +247,12 @@ def _svc_fit_staged(
+     scratch_pad: Int,
+     scratch_poison: Float32,
+     c_rows: List[Float32] = List[Float32](),
+-    status_addr: Int = 0,
+ ) raises -> SvmModel:
+     """`svcFit` from the uploaded X on: the labels, the one-vs-rest targets,
+-    the card's input stages and the solve. `status_addr` nonzero holds X's
+-    two status words (a `DeviceQueryX`'s host words, lane a8a), valid after
+-    the staging drain below: a flagged X returns the unsolved model."""
++    the card's input stages and the solve."""
+     var labels = upload_f32(ctx, labels_host)
+     var y = ctx.enqueue_create_buffer[DType.float32](n_rows)
+     ctx.synchronize()
+-    if status_addr != 0:
+-        var words = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=status_addr)
+-        if words[0] != 0 or words[1] != 0:
+-            _ = labels^
+-            _ = y^
+-            return model^
+     ctx.enqueue_function[ovr_labels_kernel](
+         y.unsafe_ptr(), labels.unsafe_ptr(), model.unique_labels[1], Int32(n_rows),
+         grid_dim=_grid(n_rows), block_dim=SEL_TPB,
+diff --git a/svm/impl/svr_impl.mojo b/svm/impl/svr_impl.mojo
+index 7910e43687..83b94a0e2d 100644
+--- a/svm/impl/svr_impl.mojo
++++ b/svm/impl/svr_impl.mojo
+@@ -55,8 +55,7 @@ from core.device_plan import DevicePlan, plan_for_single
+ from core.identity_trace import IdentityTrace
+ from svm.checks.device_select import upload_f32
+ from svm.impl.smosolver import SmoSolver, SmoTrace
+-from svm.impl.svc_impl import svc_predict, svm_fit_device_x
+-from core.device_query_x import QueryFold
++from svm.impl.svc_impl import svc_predict
+ from svm.impl.svm_parameter import (
+     EPSILON_SVR,
+     KernelParams,
+@@ -67,19 +66,16 @@ from svm.impl.svm_parameter import (
+ )
+ 
+ 
+-def svr_fit_borrowed(
++def svr_fit(
+     ctx: DeviceContext,
+-    x_addr: Int,
+-    fold: QueryFold,
++    x_host: List[Float32],
+     targets_host: List[Float32],
+     n_rows: Int,
+     n_cols: Int,
+     param: SvmParameter,
+-    mut kp: KernelParams,
++    kp: KernelParams,
+     mut card: IdentityTrace,
+     mut trace: SmoTrace,
+-    mut status: List[Int32],
+-    scale_gamma: Bool,
+     has_sample_weight: Bool = False,
+     kernel_tile_byte_limit: Int = 1 << 30,
+     block_solve_threads: Int = 0,
+@@ -93,24 +89,12 @@ def svr_fit_borrowed(
+     sample_weight)`. Returns the model (host values); `trace` receives the
+     iteration record, empty unless `record_iterations`.
+ 
+-    X (lane a8a) is the caller's row-major `n_rows x n_cols` float32 words
+-    at `x_addr`, copied to the device ONCE, or the cross-validation fold
+-    `fold` gathered there (`svm_fit_device_x`; `ctx` is then the fold
+-    store's context). The former list form copied X into a host List
+-    element by element, walked it serially for finiteness and copied it
+-    into a pinned stage before the device copy. X's finite and range words
+-    come back on the stream with the targets' upload drain: `status`
+-    receives them (0, 0: finite and in range) and a flagged X returns the
+-    unsolved model, which the door refuses in admit_x's wording.
+-    gamma='scale' (`scale_gamma`) is resolved from the device copy into
+-    `kp.gamma`.
+-
+     `targets_host` holds CONTINUOUS TARGETS, one per row. Nothing validates
+     them as a label pair and nothing sorts them, because the reference does
+-    neither. What IS checked is every cell finite (the door refuses a
+-    non-finite y first, in scikit-learn's wording), for the same reason the
+-    classifier checks its labels: a NaN target lands in `svm.init.f` on the
+-    first recorded stage with a vendor-specific payload.
++    neither. What IS checked is DEVIATION 636's family, every cell finite,
++    for the same reason the classifier checks its labels: a NaN target
++    lands in `svm.init.f` on the first recorded stage with a
++    vendor-specific payload.
+ 
+     The body is `svc_fit` minus the two label kernels and plus nothing.
+     `svm/checks/svc_check.mojo::_run_svr_device` is the fit this was lifted
+@@ -124,17 +108,16 @@ def svr_fit_borrowed(
+         raise Error("Parameter n_cols: number of columns cannot be less than one")
+     if n_rows <= 0:
+         raise Error("Parameter n_rows: number of rows cannot be less than one")
+-    if len(targets_host) != n_rows:
++    if len(x_host) != n_rows * n_cols or len(targets_host) != n_rows:
+         raise Error("svr_fit: x / y sizes do not match n_rows x n_cols")
+-    if x_addr == 0 and not fold.active():
+-        raise Error("svr_fit: X has a null address")
+     if param.svmType != EPSILON_SVR:
+         raise Error(
+             "svr_fit: svmType must be EPSILON_SVR ("
+             + String(EPSILON_SVR) + "), got " + String(param.svmType)
+         )
+     check_rung1_scope(param, kp, has_sample_weight)
+-    # TOMBSTONE: the host List copy of X and its serial check_finite_list walk (DEVIATION 636 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr: one copy to the device, the finite word on the stream; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
++    # DEVIATION 636 (row 39, FACT 2): no NaN/inf may enter; see svm_parameter.mojo
++    check_finite_list(x_host, "X")
+     check_finite_list(targets_host, "labels")
+ 
+     var model = SvmModel()
+@@ -151,15 +134,10 @@ def svr_fit_borrowed(
+         + " tol=" + String(param.tol)
+     )
+ 
+-    var qx = svm_fit_device_x(ctx, x_addr, fold, n_rows, n_cols, kp, scale_gamma)
++    var x = upload_f32(ctx, x_host)
+     var yv = upload_f32(ctx, targets_host)
+     ctx.synchronize()
+-    status = [qx.finite_word(), qx.range_word()]
+-    if status[0] != 0 or status[1] != 0:
+-        _ = yv^
+-        _ = qx^
+-        return model^
+-    card.record_device[DType.float32](ctx, "svm.input.x", qx.x, n_rows * n_cols)
++    card.record_device[DType.float32](ctx, "svm.input.x", x, n_rows * n_cols)
+     card.record_device[DType.float32](ctx, "svm.input.y", yv, n_rows)
+ 
+     var smo = SmoSolver(
+@@ -167,12 +145,12 @@ def svr_fit_borrowed(
+         block_solve_threads, record_iterations, scratch_pad, scratch_poison,
+         c_rows,
+     )
+-    smo.solve(ctx, qx.x, yv, model, card, param.max_iter, param.max_outer_iter)
++    smo.solve(ctx, x, yv, model, card, param.max_iter, param.max_outer_iter)
+     model.n_cols = n_cols
+     ctx.synchronize()
+     trace = smo.trace^
+     smo.trace = SmoTrace()
+-    _ = qx^
++    _ = x^
+     _ = yv^
+     return model^
+ 
+diff --git a/svm/native_descriptor_dispatch.mojo b/svm/native_descriptor_dispatch.mojo
+index 793f9a3305..e8fae6efa1 100644
+--- a/svm/native_descriptor_dispatch.mojo
++++ b/svm/native_descriptor_dispatch.mojo
+@@ -13,7 +13,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
+ from svm.native_auxiliary_dispatch import svc_native_auxiliary
+ from svm.native_svr_dispatch import native_svr_fit, native_svr_predict
+ from svm.estimator import svc_fit_host_borrowed, svc_predict_host
+-from core.device_query_x import QueryFold
+ 
+ 
+ def svc_binary_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
+@@ -47,12 +46,8 @@ def svc_binary_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64])
+         var bounds = List[Float32]()
+         if a[6] != 0:
+             bounds = read_f32(a[6], n)
+-        # The descriptor door tests X on the host before this call
+-        # (bindings/svc_kernel_native.mojo, lane a8a); no fold reaches it.
+-        var result = svc_fit_host_borrowed(Int(xp), QueryFold.none(), y, n, d,
+-            p[2], f[0], f[1], f[2], p[3], p[4], p[5], f[3], bounds, False)
+-        if result.finite_word != 0:
+-            raise Error("Input X contains NaN or infinity (SVC).")
++        var result = svc_fit_host_borrowed(xp, y, n, d,
++            p[2], f[0], f[1], f[2], p[3], p[4], p[5], f[3], bounds)
+         copy_f32(result.dual_coefs.unsafe_ptr(), dp, result.n_support)
+         memcpy(dest=sip, src=result.support_idx.unsafe_ptr(), count=result.n_support)
+         copy_f32(result.support_matrix.unsafe_ptr(), smp, result.n_support * d)
+diff --git a/svm/native_svr_dispatch.mojo b/svm/native_svr_dispatch.mojo
+index 7259a3d175..8d0edc50e7 100644
+--- a/svm/native_svr_dispatch.mojo
++++ b/svm/native_svr_dispatch.mojo
+@@ -2,8 +2,7 @@
+ # Typed SVR transport to unchanged numerical owners; same packed scalar schema.
+ from std.memory import memcpy
+ from core.hostptr import f32_ptr as _f32_ptr, f64_ptr as _f64_ptr, i32_ptr as _i32_ptr, read_f32, copy_f32
+-from svm.estimator import SvrFitOutputs, svr_fit_host_borrowed, svr_predict_host
+-from core.device_query_x import QueryFold
++from svm.estimator import SvrFitOutputs, svr_fit_host, svr_predict_host
+ 
+ 
+ def _c_rows(params: List[Int], slot: Int, n_rows: Int, who: String) raises -> List[Float32]:
+@@ -36,8 +35,9 @@ def native_svr_fit(a: List[Int], params: List[Int], floats: List[Float64]) raise
+     var nochange_steps = params[8]
+     if n_rows <= 0 or n_cols <= 0:
+         raise Error("svr_fit: n_rows and n_features must both be positive")
+-    # TOMBSTONE: the element-by-element host List copy of X (read_f32) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr: one device copy from the address; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
++    var x = List[Float32]()
+     var y = List[Float32]()
++    x = read_f32(Int(xp), max(0, n_rows * n_cols))
+     y = read_f32(Int(yp), max(0, n_rows))
+     var c_rows = _c_rows(params, 9, n_rows, "svr_fit")
+     var degree = 3
+@@ -46,14 +46,10 @@ def native_svr_fit(a: List[Int], params: List[Int], floats: List[Float64]) raise
+         degree = params[10]
+         coef0 = floats[11]
+     var res = SvrFitOutputs()
+-    # The descriptor door tests X on the host before this call
+-    # (bindings/svc_kernel_native.mojo, lane a8a); no fold reaches it.
+-    res = svr_fit_host_borrowed(
+-        Int(xp), QueryFold.none(), y, n_rows, n_cols, kernel, gamma, c, epsilon, tol, max_iter,
+-        nochange_steps, c_rows, degree, coef0, False,
++    res = svr_fit_host(
++        x, y, n_rows, n_cols, kernel, gamma, c, epsilon, tol, max_iter,
++        nochange_steps, c_rows, degree, coef0,
+     )
+-    if res.finite_word != 0:
+-        raise Error("Input X contains NaN or infinity (SVR).")
+     copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
+     memcpy(dest=sip, src=res.support_idx.unsafe_ptr(), count=res.n_support)
+     copy_f32(res.support_matrix.unsafe_ptr(), smp, res.n_support * n_cols)

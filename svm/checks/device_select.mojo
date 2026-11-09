@@ -461,4 +461,4 @@ def upload_i32(
 
 
 # TOMBSTONE: check_finite_device + first_nonfinite_kernel (the synchronising first-non-finite scan of the fit X, DEVIATION 636 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr: the fit X's finite word rides back on the stream (core/device_query_x.mojo) and the door refuses in admit_x's wording; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
-# Restore: git apply experiments/removed/A8A_SVM_FIT_FINITE_SCAN.patch
+# Restore: git apply experiments/removed/A8A_DEVICE_X_FIT.patch

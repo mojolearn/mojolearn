@@ -558,6 +558,8 @@ in the tables after the sections.
 | [Lanczos projected T host assembly (`kpca_owner`, `mani_decomp_native`)](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | KernelPCA / Isomap | REFACTORED (`eigh_op_tridiag`; bits change) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
 | [`labels_helper` / `labels_call` and the `labels_helpers` callables table (`_native_labels_bridge._helpers`)](#labels-steps-on-the-native-device-or-host-selector-2026-11-09) | Labels (prepare_targets, reduce_stat, argmax_rows, gather, class_ratio, fsum) | removed (onto `labels_native_api_v1`, `bindings/labels_native_abi.mojo`, and the in-process host column) | 2026-11-09 | [S1_LABELS_PY_CALL_SELECTOR.patch](../experiments/removed/S1_LABELS_PY_CALL_SELECTOR.patch) |
 | [Synchronising query finite scans of the SVM / GP / KernelRidge predict entries](#svm-gp-and-kernelridge-queries-on-the-device-query-x-2026-11-09) | SVC / SVR / GaussianProcessRegressor / GaussianProcessClassifier / KernelRidge | REFACTORED (status word read back with the result; fold gathered on the device; no bit change) | 2026-11-09 | lane only (lane/a7a-device-x-svm-gp-krr from 5b5490960d) |
+| [Synchronising fit finite scans of the SVM / GP / KernelRidge fit entries (`check_finite_device`, `first_nonfinite_kernel`, fit `_upload_checked`, fit `_gpc_upload_checked`)](#svm-gp-and-kernelridge-fits-on-the-device-x-2026-11-09) | SVC / SVR / GaussianProcessRegressor / GaussianProcessClassifier / KernelRidge (fit) | REFACTORED (status word on the stream; fold gathered on the device; no bit change) | 2026-11-09 | [A8A_DEVICE_X_FIT.patch](../experiments/removed/A8A_DEVICE_X_FIT.patch) |
+| [SVR fit's serial host-List upload (`svr_fit` list form: `read_f32` copy, `check_finite_list` walk, `upload_f32` stage)](#svm-gp-and-kernelridge-fits-on-the-device-x-2026-11-09) | SVR (fit) | removed (superseded: `svr_fit_borrowed`, one device copy; no bit change) | 2026-11-09 | [A8A_DEVICE_X_FIT.patch](../experiments/removed/A8A_DEVICE_X_FIT.patch) |
 | [`_kmeans_nonfinite` / `_kmeans_f32` and the KMeans query host scan of X](#kmeans-tsvd-pca-deferred-finite-tests-and-fold-entries-2026-11-09) | KMeans (fit, predict, transform) | removed (the kernel entry tests X over its own upload and returns the status word; one refusal wording) | 2026-11-09 | [A7D_KMEANS_HOST_FINITE.patch](../experiments/removed/A7D_KMEANS_HOST_FINITE.patch) |
 | [`DKit.svd_host`, `svd_desc`, LLE's host-address `DevExec.geqrf` / `orgqr` round trip](#n9b-device-svd-and-qr-ops-2026-11-09) | FactorAnalysis EM / LLE subspace iteration / PLS (resident SVD and QR) | REFACTORED (`svd_op_tall` / `qr_op_q`; same words) | 2026-11-09 | [N9B_RESIDENT_SVD.patch](../experiments/removed/N9B_RESIDENT_SVD.patch) |
 | [KernelPCA `_cols_desc` host-built index list](#n9b-device-svd-and-qr-ops-2026-11-09) | KernelPCA (descending columns) | REFACTORED (the REV_COLS move; same words) | 2026-11-09 | [N9B_RESIDENT_SVD.patch](../experiments/removed/N9B_RESIDENT_SVD.patch) |
@@ -5101,6 +5103,38 @@ origin/integ/pre-0867-w3 5b5490960d.
 - Verdict: refactor, no define. Bits: none (the same words reach the same kernels). RUN OWED: SVC / SVR / GPR / GPC
   / KernelRidge predict and cross_validate on NVIDIA and AMD against 5b5490960d.
 - Never reached main: recoverable at 5b5490960d (no patch).
+
+## SVM, GP and KernelRidge fits on the device X (2026-11-09)
+
+Lane a8a-device-x-fit-svm-gp-krr (follow-up of a7a; plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2
+steps 3-4), branch `lane/a8a-device-x-fit-svm-gp-krr` from origin/main 0ce88411d3.
+
+- What it did: the GPU fit entries of SVC (binary, computed kernel, no probability: `svc_fit`'s 15-value form), SVR
+  (`svr_fit`'s 16-value form) and KernelRidge (`kernel_ridge_fit_ptr`'s 9-address form) take X as a `DeviceQueryX`
+  (core/device_query_x.mojo): the host words copied once, or a cross-validation fold gathered on the device out of
+  model selection's resident base (the doors pass the fold's store ids; no host gather). X's finite and range words
+  ride back on the stream with a drain the entry makes anyway; a flagged X is not solved and the door refuses it in
+  the one wording, 'Input X contains NaN or infinity (<est>).' (`admitted_finite_refuse`, `door_rows_refuse`).
+  gamma='scale' is resolved by the SVM entry from its own device copy (`scale_gamma_limbs_resident`; the same exact
+  limbs as the host-address form, so the same gamma). A KernelRidge fold's `X_fit_` is the entry's device copy of the
+  gathered rows, downloaded once. Every other fit route (SVC one-vs-one and Platt, kernel='precomputed', the host
+  column, the descriptor routes, a KernelRidge chi2 kernel) tests the host words once at the door
+  (`_svm_x_scan`, `_krr_query_scan`) in the same wording; a fold on those routes is gathered on the host.
+- Deleted: `svm/checks/device_select.mojo` `check_finite_device` and `first_nonfinite_kernel` (no caller left);
+  the list form of `svm/impl/svr_impl.mojo::svr_fit` (the binding's element-by-element `read_f32` copy of X, the
+  serial `check_finite_list` walk, the pinned `upload_f32` stage; `svr_fit_host` is now a thin List wrapper over
+  `svr_fit_host_borrowed`); the fit `_upload_checked` scans of X and y in `kernel_ridge_fit_ptr_into` (y is tested
+  at the door); the fit `_gpc_upload_checked` scans of X in `gpr_fit_ptr_device` and `gpc_fit_all_device` (the GP
+  door admits X once, nested fits included). GPR's device y scan stays (a nested fit's door skips its y check) with
+  the one wording. kernel_methods' private `_km_fold_metadata` became the shared `admit_family_fold_meta`.
+- Verdict: refactor, no define. Bits: none (the same words reach the same kernels in the same order; gamma='scale'
+  is the same exact-limb value). RUN OWED: SVC / SVR / KernelRidge / GPR / GPC fit and cross_validate on NVIDIA and
+  AMD against 0ce88411d3.
+- Recoverable at 0ce88411d3; restore with `git apply experiments/removed/A8A_DEVICE_X_FIT.patch` (svm/checks/device_select.mojo,
+  svm/impl/svr_impl.mojo, svm/impl/svc_impl.mojo, svm/estimator.mojo, bindings/_mojolearn_svm.mojo,
+  svm/native_svr_dispatch.mojo, svm/native_descriptor_dispatch.mojo, kernel_methods/estimator.mojo,
+  bindings/_mojolearn_kernel_methods.mojo, kernel_methods/native_descriptor_dispatch.mojo,
+  gaussian_process/gpr_resident.mojo, gaussian_process/gpc_ovr.mojo).
 
 ## KMeans, TSVD, PCA: deferred finite tests and fold entries (2026-11-09)
 
