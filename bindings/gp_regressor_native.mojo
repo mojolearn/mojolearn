@@ -25,6 +25,7 @@ from bindings.fitted_resident_door import fitted_resident_lease, fitted_resident
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_view
+from bindings.gp_query_x import GpQuery, gp_query, gp_query_address, gp_query_refuse, gp_query_scan
 from bindings.family_common import (
     family_repr, family_is_str, family_isinstance, family_call, family_array, family_shape_repr, family_field,
     family_is_real, FAMILY_F32P, FAMILY_F64P,
@@ -402,17 +403,21 @@ def _gpr_fitted(fields: PythonObject, message: String) raises:
         raise Error(String(_GPR) + ": " + message)
 
 
-def _gpr_query(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`as_f32_c(X, ndim=2, name="X")` with the fitted feature count."""
+def _gpr_query(fields: PythonObject, source: PythonObject, context: PythonObject,
+               entry_tests: Bool = False) raises -> GpQuery:
+    """`as_f32_c(X, ndim=2, name="X")` with the fitted feature count, as a
+    GpQuery (bindings/gp_query_x.mojo; lane a7a): `entry_tests` (the
+    resident predict, which returns the query's status words) keeps a
+    cross-validation fold on the device. A caller whose entry returns no
+    status word calls gp_query_scan."""
     # The public door already admitted this X as C-order float32 and
     # registered it (bindings/gp_svm_records.mojo): no second snapshot.
-    var q = source if gp_x_known(source, context) else admit_family(source, 2, "X", context).array
-    var d = Int(py=q.shape[1])
+    var q = gp_query(source, "GaussianProcessRegressor", context, entry_tests)
     var fitted = Int(py=fields["n_features_in_"])
-    if d != fitted:
-        raise Error(String(_GPR) + ": X has " + String(d) + " "
+    if q.cols != fitted:
+        raise Error(String(_GPR) + ": X has " + String(q.cols) + " "
                     + "features, fit saw " + String(fitted))
-    return q
+    return q^
 
 
 def _gpr_tail(fields: PythonObject, params: PythonObject) raises:
@@ -437,8 +442,12 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     if return_cov:
         return _gpr_predict_cov(model, args, context)
     _gpr_fitted(fields, "call fit() first (the unfitted-prior arm of sklearn's predict is not implemented)")
-    var q = _gpr_query(fields, args[1], context)
-    var n_star = Int(py=q.shape[0])
+    var ext = _gpr_ext(model, args[0], context)
+    var caps = gp_caps(ext)
+    var resident = (caps & 4) == 4
+    var gq = _gpr_query(fields, args[1], context, resident)
+    var q = gq.q
+    var n_star = gq.rows
     var xt = gp_f32(fields, "X_train_", 2, context)
     var n_train = Int(py=xt.shape[0])
     var arrays = gp_kernel_arrays_reused(model, gp_model_kernel(fields), context)  # packed once per kernel state
@@ -461,14 +470,15 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
         clamped_address = classical_address(clamped)
     var lf = gp_f32(fields, "L_", -1, context)
     var dual = gp_f32(fields, "alpha_", -1, context)
-    var ext = _gpr_ext(model, args[0], context)
     var params = Python.list(PythonObject(n_train), fields["n_features_in_"], PythonObject(n_star),
                              PythonObject(Int(py=arrays[0].shape[0])), arrays[4], PythonObject(1 if return_std else 0),
                              fields["info_"])
     _gpr_tail(fields, params)
-    var caps = gp_caps(ext)
     var predict_name = String("gpr_predict_ptr") if (caps & 2) == 2 else String("gpr_predict")
-    if (caps & 4) == 4:
+    if not resident:
+        # These entries return no status word: the query is tested here.
+        gp_query_scan(gq, "GaussianProcessRegressor", context)
+    if resident:
         # Device-resident fitted state (lane ne1-a-gp-svm): X_train_, alpha_
         # and L_ cross to the device once per fitted state; the lease word
         # follows the pointer route's params. Lease 0 (an array the binding
@@ -486,12 +496,20 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls, mean_out, var_out, std_out, clamped_out;
     # n_train, n_features, n_star, n_nodes, n_ls, return_std, info (+ normalize_y, y_std, y_mean)
     # (+ lease: gpr_predict_resident_binding)
-    var n_clamped = family_call(gp_entry(ext, predict_name),
-        Python.list(classical_address(xt), classical_address(lf), classical_address(dual), classical_address(q),
-                    classical_address(arrays[0]), classical_address(arrays[1]), classical_address(arrays[2]),
-                    classical_address(arrays[3]), classical_address(mean), var_address,
-                    std_address, clamped_address),
-        params)
+    var addrs = Python.list(classical_address(xt), classical_address(lf), classical_address(dual), gp_query_address(gq),
+                            classical_address(arrays[0]), classical_address(arrays[1]), classical_address(arrays[2]),
+                            classical_address(arrays[3]), classical_address(mean), var_address,
+                            std_address, clamped_address)
+    if gq.store.active():
+        # then the fold's store ids (gpr_predict_resident gathers the rows)
+        _ = py_call(addrs.append, PythonObject(gq.store.base_id))
+        _ = py_call(addrs.append, PythonObject(gq.store.base_rows))
+        _ = py_call(addrs.append, PythonObject(gq.store.index_id))
+    var n_clamped = family_call(gp_entry(ext, predict_name), addrs, params)
+    if resident:
+        # [n_clamped, finite word, range word] (lane a7a)
+        gp_query_refuse(Int(py=n_clamped[1]), Int(py=n_clamped[2]), gq, "GaussianProcessRegressor")
+        n_clamped = n_clamped[0]
     _ = dual  # keep the Python object alive through the native call above
     _ = lf  # keep the Python object alive through the native call above
     _ = xt  # keep the Python object alive through the native call above
@@ -521,7 +539,10 @@ def _gpr_predict_cov(model: PythonObject, args: PythonObject, context: PythonObj
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     _gpr_fitted(fields, "call fit() first (the unfitted-prior arm of sklearn's predict is not implemented)")
-    var q = _gpr_query(fields, args[1], context)
+    # This entry returns no status word: the query is tested here (lane a7a).
+    var gq = _gpr_query(fields, args[1], context)
+    gp_query_scan(gq, "GaussianProcessRegressor", context)
+    var q = gq.q
     var n_star = Int(py=q.shape[0])
     var xt = gp_f32(fields, "X_train_", 2, context)
     var n_train = Int(py=xt.shape[0])
@@ -581,7 +602,10 @@ def _gpr_sample_y(model: PythonObject, args: PythonObject, context: PythonObject
                     + "draw (DEVIATION 2793)")
     seed = family_call(b.int, seed)
     var n = Int(py=family_call(b.int, args[2]))
-    var q = _gpr_query(fields, args[1], context)
+    # This entry returns no status word: the query is tested here (lane a7a).
+    var gq = _gpr_query(fields, args[1], context)
+    gp_query_scan(gq, "GaussianProcessRegressor", context)
+    var q = gq.q
     var n_star = Int(py=q.shape[0])
     var xt = gp_f32(fields, "X_train_", 2, context)
     var n_train = Int(py=xt.shape[0])
