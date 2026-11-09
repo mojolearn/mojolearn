@@ -36,8 +36,10 @@ Entry words (`small_mlp_program_open` / `small_mlp_program_run`):
               -> the handle
     STEP      addresses [x, y (int32), loss (k floats), logits, dw1, db1,
               dw2, db2, dx]; ints [rows, mode, want_dx, k] -> rows * 3.
-              mode 0 forward (y, loss, gradients unread), 1 loss and
-              gradients (weights read only), 2 the whole step. k > 1 (mode
+              mode 0 forward (y, loss, gradients unread; any rows >= 1),
+              1 loss and gradients (weights read only; the parallel
+              trainer's shard gradients), 2 the whole step (rows 1..256
+              for modes 1 and 2). k > 1 (mode
               2 only, want_dx 0): k consecutive minibatches of `rows` rows,
               one loss each; logits and gradients are the last step's.
     DOWNLOAD  addresses [w1, b1, w2, b2, m, v] -> 195
@@ -433,7 +435,10 @@ def small_mlp_program_run[E: Exec & Movable & Deinitable, KIND: Int](
     var mode = p[2]
     var want_dx = p[3] != 0
     var k = p[4]
-    if rows < 1 or rows > _MAX_ROWS:
+    # Training modes keep the trainer's 1..256 batch; the forward takes any
+    # positive row count (the inference sessions run their packed rows as one
+    # forward; _grow sizes the scratch, no node depends on the row count).
+    if rows < 1 or (rows > _MAX_ROWS and mode != SMALL_MLP_PROGRAM_FORWARD):
         raise Error("small MLP operations require rows 1..256")
     if mode < SMALL_MLP_PROGRAM_FORWARD or mode > SMALL_MLP_PROGRAM_TRAIN:
         raise Error("small MLP train step: mode must be 0 (forward), 1 (grads) or 2 (train)")
