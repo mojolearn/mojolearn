@@ -773,6 +773,27 @@ def test_rows_main_lacks_are_refused_unless_main_or_the_regeneration_tree_carrie
     assert rc == 1 and "not in main's baseline" in err, err[-600:]
 
 
+def test_hook_worker_cap():
+    old = os.environ.pop("MOJOLEARN_HOOK_WORKERS", None)
+    real = nhr.sys.platform
+    try:
+        nhr.sys.platform = "darwin"
+        assert nhr.hook_workers() == 4
+        nhr.sys.platform = "linux"
+        assert nhr.hook_workers() == (os.cpu_count() or 1)
+        for plat in ("darwin", "linux"):
+            nhr.sys.platform = plat
+            os.environ["MOJOLEARN_HOOK_WORKERS"] = "2"
+            assert nhr.hook_workers() == 2
+            os.environ["MOJOLEARN_HOOK_WORKERS"] = "0"
+            assert nhr.hook_workers() == 1
+    finally:
+        nhr.sys.platform = real
+        os.environ.pop("MOJOLEARN_HOOK_WORKERS", None)
+        if old is not None:
+            os.environ["MOJOLEARN_HOOK_WORKERS"] = old
+
+
 # ------------------------------------------------- pre-push ref routing ----
 # The hook is run as git runs it (stdin "<local ref> <sha> <remote ref> <sha>")
 # from a scratch directory beside a stub checker that records its arguments

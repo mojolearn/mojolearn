@@ -34,6 +34,10 @@ Modes:
         Diff mode on a unified diff (no scope: every path is GPU code).
 Exit 1 with one line per finding, 0 when clean, 2 on usage errors.
 
+Parsing and scanning are split over worker processes: MOJOLEARN_HOOK_WORKERS=N
+sets their number (any platform); unset, it is 4 on macOS and the core count
+elsewhere.
+
 Which files count as GPU code is decided by imports, not by file names:
   * Mojo: every module that a GPU binding (the entry file of a non-host
     bindings/build_*.sh, or bindings/build.sh) reaches through its imports,
@@ -1148,6 +1152,19 @@ _SCAN_CACHE = {}
 _POOL_TREE = None
 
 
+def hook_workers():
+    """Worker processes for the parallel scan: MOJOLEARN_HOOK_WORKERS=N when set
+    (any platform, at least 1), else 4 on macOS (the hooks run on a shared,
+    often loaded laptop) and os.cpu_count() elsewhere (rented hosts and CI)."""
+    env = os.environ.get("MOJOLEARN_HOOK_WORKERS", "").strip()
+    if env:
+        try:
+            return max(1, int(env))
+        except ValueError:
+            pass
+    return 4 if sys.platform == "darwin" else (os.cpu_count() or 1)
+
+
 def _pool_call(arg):
     method, chunk = arg
     f = getattr(_POOL_TREE, method) if not callable(method) else (lambda it: method(_POOL_TREE, it))
@@ -1161,7 +1178,7 @@ def _pool_map(tree, method, items):
     method: a Tree method name or a function f(tree, item)."""
     global _POOL_TREE
     items = list(items)
-    workers = min(os.cpu_count() or 1, len(items) // 4)
+    workers = min(hook_workers(), len(items) // 4)
     if workers > 1:
         import multiprocessing
         _POOL_TREE = tree

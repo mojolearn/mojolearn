@@ -111,6 +111,24 @@ class ScanTest(unittest.TestCase):
         for line in ["    var n = py_call(b.len, labels)", "    var s = sorted_ids(v)", "    # b.sorted in a comment"]:
             self.assertEqual(self.kinds("fn a():\n" + line), [], line)
 
+    def test_hook_worker_cap(self):
+        old = os.environ.pop("MOJOLEARN_HOOK_WORKERS", None)
+        real = ncs.sys.platform
+        try:
+            ncs.sys.platform = "darwin"
+            self.assertEqual(ncs.hook_workers(), 4)
+            ncs.sys.platform = "linux"
+            self.assertEqual(ncs.hook_workers(), os.cpu_count() or 1)
+            os.environ["MOJOLEARN_HOOK_WORKERS"] = "2"
+            self.assertEqual(ncs.hook_workers(), 2)
+            ncs.sys.platform = "darwin"
+            self.assertEqual(ncs.hook_workers(), 2)
+        finally:
+            ncs.sys.platform = real
+            os.environ.pop("MOJOLEARN_HOOK_WORKERS", None)
+            if old is not None:
+                os.environ["MOJOLEARN_HOOK_WORKERS"] = old
+
     def test_docstrings_are_skipped(self):
         text = '\n'.join([
             'fn a():',

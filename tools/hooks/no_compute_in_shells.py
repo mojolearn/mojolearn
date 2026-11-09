@@ -55,6 +55,8 @@ Modes:
         Rewrite the worktree baseline without its stale rows and with current line
         numbers. It never adds a row.
 Exit 0 clean, 1 on findings, 2 on usage errors. Pure git and regex; no Mojo, no build.
+The files are scanned by worker processes: MOJOLEARN_HOOK_WORKERS=N sets their
+number (any platform); unset, it is 4 on macOS and the core count elsewhere.
 """
 import os
 import re
@@ -332,6 +334,19 @@ def _read(shas):
     return texts
 
 
+def hook_workers():
+    """Worker processes for the parallel scan: MOJOLEARN_HOOK_WORKERS=N when set
+    (any platform, at least 1), else 4 on macOS (the hooks run on a shared,
+    often loaded laptop) and os.cpu_count() elsewhere (rented hosts and CI)."""
+    env = os.environ.get("MOJOLEARN_HOOK_WORKERS", "").strip()
+    if env:
+        try:
+            return max(1, int(env))
+        except ValueError:
+            pass
+    return 4 if sys.platform == "darwin" else (os.cpu_count() or 1)
+
+
 def _scan_many(items):
     """[(path, hits, stats)] for [(path, text)]: one worker's share."""
     out = []
@@ -350,7 +365,7 @@ def hits_at(ref, paths=None, stats=None):
         blobs = {p: s for p, s in blobs.items() if p in paths}
     texts = _read(blobs.values())
     items = [(p, texts[blobs[p]]) for p in sorted(blobs)]
-    workers = min(os.cpu_count() or 1, max(1, len(items) // 64))
+    workers = min(hook_workers(), max(1, len(items) // 64))
     if workers > 1:
         import multiprocessing
         chunks = [items[i::workers] for i in range(workers)]
