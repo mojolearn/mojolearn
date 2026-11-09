@@ -1,0 +1,174 @@
+diff --git a/bindings/_mojolearn_mamba.mojo b/bindings/_mojolearn_mamba.mojo
+index 0824312065..5d951a65fa 100644
+--- a/bindings/_mojolearn_mamba.mojo
++++ b/bindings/_mojolearn_mamba.mojo
+@@ -227,6 +227,8 @@ from autograd.kernels.mamba3_proj import ANY_BWD3_SABOTAGE
+ # (autograd/rules_mamba.mojo), which launches the hand kernels in the hand order.
+ # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1/2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
+ # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
++from autograd.rules_mamba import mamba1_tape_backward, mamba2_tape_backward
++from autograd.rules_mamba3 import mamba3_tape_backward, mamba3_tape_backward_on
+ from autograd.kernels.mamba1_prefill import Mamba1PrefillGradients
+ from autograd.kernels.mamba2_prefill import Mamba2PrefillGradients
+ from autograd.kernels.mamba1_proj import ANY_BWD_SABOTAGE as M1_ANY_BWD_SABOTAGE
+diff --git a/mamba/impl/mamba_shell_impl.mojo b/mamba/impl/mamba_shell_impl.mojo
+index 9ef6f7d365..d735361391 100644
+--- a/mamba/impl/mamba_shell_impl.mojo
++++ b/mamba/impl/mamba_shell_impl.mojo
+@@ -47,7 +47,7 @@ from mamba.impl.modeling.modeling_mamba import (
+     MambaDeviceWeights,
+ )
+ from mamba.impl.modules.mamba_simple import mamba_step
+-from mamba.impl.mamba_block_program import MambaBlockProgram, mamba_block_call, mamba_block_backward_call_abi
++from mamba.impl.mamba_block_program import MambaBlockProgram, mamba_block_call
+ from autograd.block_step_ops import OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP
+ #: lane afn-mamba (2026-10-03): MOJOLEARN_AFN_MAMBA_ARENA / IDN_MAMBA_ARENA make
+ #: the block structs views of one arena; the per-call `_mamba{1,2,3}_run_arena`
+@@ -94,10 +94,12 @@ from mamba.impl.modules.mamba3 import (
+ 
+ from autograd.kernels.mamba2_proj import ANY_BWD2_SABOTAGE
+ from autograd.kernels.mamba3_proj import ANY_BWD3_SABOTAGE
+-# The Mamba-1/2/3 backward entries run the block step op's recorded run and
+-# its rule (lane x56d, mamba/impl/mamba_block_program.mojo); the Mamba-3
+-# prefill session keeps its own stages for `mamba3_tape_backward_on`.
+-from autograd.rules_mamba3 import mamba3_tape_backward_on
++# The Mamba-1 / Mamba-2 backward entries assemble the VJP on the tape
++# (autograd/rules_mamba.mojo), which launches the hand kernels in the hand order.
++from autograd.rules_mamba import mamba1_tape_backward, mamba2_tape_backward
++from autograd.rules_mamba3 import mamba3_tape_backward, mamba3_tape_backward_on
++from autograd.kernels.mamba1_prefill import Mamba1PrefillGradients
++from autograd.kernels.mamba2_prefill import Mamba2PrefillGradients
+ from autograd.kernels.mamba1_proj import ANY_BWD_SABOTAGE as M1_ANY_BWD_SABOTAGE
+ from autograd.kernels.mamba1 import ANY_BWD_BLOCK_SABOTAGE
+ from autograd.kernels.mamba1_scan import ANY_BWD_SCAN_SABOTAGE
+@@ -201,16 +203,44 @@ def _m3_download_addr[wait: Bool = True](ctx: DeviceContext, mut buf: DeviceBuff
+ 
+ 
+ def _mamba1_backward_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
+-    """`mamba1_backward` (23 addresses: x, ten weights, grad_output,
+-    grad_x, ten weight gradients): the zero-state VJP through the block step
+-    op's recorded run and its rule over the kept stages (lane x56d,
+-    `mamba_block_backward_call`): the forward runs once, the weights stay
+-    on the device in the cached block program."""
++    var dims = MambaDims.of(dm)
++    var di = dims.d_inner
++    var r = dims.dt_rank
++    var xr = dims.x_proj_rows()
++
++    # Host weights, THROUGH the lane's own struct (its field table is the
++    # reference shape authority); values arrive as given bits, unjudged
++    # (the initializer rows of FEATURE_PARITY.md are REFUSED as bitwise
++    # claims; weights-in is what ships).
++    var w = MambaWeights(dims)
++    w.norm_w = _read_f32(a[1], dm)
++    w.w_in = _read_f32(a[2], 2 * di * dm)
++    w.conv_w = _read_f32(a[3], di * D_CONV)
++    w.conv_b = _read_f32(a[4], di)
++    w.w_x = _read_f32(a[5], xr * di)
++    w.w_dt = _read_f32(a[6], di * r)
++    w.b_dt = _read_f32(a[7], di)
++    w.a_log = _read_f32(a[8], di * D_STATE)
++    w.d_skip = _read_f32(a[9], di)
++    w.w_out = _read_f32(a[10], dm * di)
++
+     # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1 prefill backward arm) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
+     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
+-    # TOMBSTONE: X56D_MAMBA_BACKWARD_RECOMPUTE (REFACTORED: host copies of the weights, x and grad_output, a fresh weight upload and the block forward recomputed inside `mamba1_tape_backward` on every call) deleted 2026-11-09 by lane/x56d-mamba-samba-train-and-host; code recoverable at 0ce88411d3.
+-    # Restore: git apply experiments/removed/X56D_MAMBA_BACKWARD_RECOMPUTE.patch
+-    mamba_block_backward_call_abi(1, a, b, l, dm, Float32(0), Float32(0))
++    var gradients: Mamba1PrefillGradients = mamba1_tape_backward(
++        w, _read_f32(a[0], b * l * dm), _read_f32(a[11], b * l * dm), b, l,
++        neural_ctx[_NEURAL_CTX](),
++    )
++    _write_f32(a[12], gradients.x)
++    _write_f32(a[13], gradients.norm_weight)
++    _write_f32(a[14], gradients.in_proj_weight)
++    _write_f32(a[15], gradients.conv1d_weight)
++    _write_f32(a[16], gradients.conv1d_bias)
++    _write_f32(a[17], gradients.x_proj_weight)
++    _write_f32(a[18], gradients.dt_proj_weight)
++    _write_f32(a[19], gradients.dt_proj_bias)
++    _write_f32(a[20], gradients.A_log)
++    _write_f32(a[21], gradients.D)
++    _write_f32(a[22], gradients.out_proj_weight)
+ 
+ 
+ # ===========================================================================
+@@ -1125,19 +1155,65 @@ def _m3_backward_tape_run(mut s: Mamba3PrefillSession, a: List[Int]) raises:
+ 
+ 
+ def _mamba2_backward_run(a: List[Int], b: Int, l: Int, dm: Int, dt_lo: Float32, dt_hi: Float32) raises:
+-    """`mamba2_backward` (21 addresses: x, nine weights, grad_output,
+-    grad_x, nine weight gradients): the zero-state VJP through the block
+-    step op's recorded run and its rule (lane x56d)."""
++    var dims = Mamba2Dims.of(dm)
++    var di = dims.d_inner
++    var cd = dims.conv_dim()
++    var dip = dims.d_in_proj()
++    var nh = dims.nheads
++    var w = Mamba2Weights(dims)
++    w.norm_w = _read_f32(a[1], dm)
++    w.w_in = _read_f32(a[2], dip * dm)
++    w.conv_w = _read_f32(a[3], cd * M2_D_CONV)
++    w.conv_b = _read_f32(a[4], cd)
++    w.dt_bias = _read_f32(a[5], nh)
++    w.a_log = _read_f32(a[6], nh)
++    w.d_skip = _read_f32(a[7], nh)
++    w.gnorm_w = _read_f32(a[8], di)
++    w.w_out = _read_f32(a[9], dm * di)
+     # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-2 prefill backward arm) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
+     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
+-    # TOMBSTONE: X56D_MAMBA_BACKWARD_RECOMPUTE (REFACTORED: the per-call forward recompute of `mamba2_tape_backward`) deleted 2026-11-09 by lane/x56d-mamba-samba-train-and-host; code recoverable at 0ce88411d3.
+-    # Restore: git apply experiments/removed/X56D_MAMBA_BACKWARD_RECOMPUTE.patch
+-    mamba_block_backward_call_abi(2, a, b, l, dm, dt_lo, dt_hi)
++    var gradients: Mamba2PrefillGradients = mamba2_tape_backward(
++        w, _read_f32(a[0], b*l*dm), _read_f32(a[10], b*l*dm), b, l, dt_lo, dt_hi,
++        neural_ctx[_NEURAL_CTX](),
++    )
++    _write_f32(a[11], gradients.x)
++    _write_f32(a[12], gradients.block_norm_weight)
++    _write_f32(a[13], gradients.in_proj_weight)
++    _write_f32(a[14], gradients.conv1d_weight)
++    _write_f32(a[15], gradients.conv1d_bias)
++    _write_f32(a[16], gradients.dt_bias)
++    _write_f32(a[17], gradients.A_log)
++    _write_f32(a[18], gradients.D)
++    _write_f32(a[19], gradients.norm_weight)
++    _write_f32(a[20], gradients.out_proj_weight)
+ 
+ 
+ def _mamba3_backward_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
+-    """`mamba3_backward` (21 addresses, as Mamba-2's): the zero-state VJP
+-    through the block step op's recorded run and its rule (lane x56d)."""
+-    # TOMBSTONE: X56D_MAMBA_BACKWARD_RECOMPUTE (REFACTORED: the per-call forward recompute of `mamba3_tape_backward`) deleted 2026-11-09 by lane/x56d-mamba-samba-train-and-host; code recoverable at 0ce88411d3.
+-    # Restore: git apply experiments/removed/X56D_MAMBA_BACKWARD_RECOMPUTE.patch
+-    mamba_block_backward_call_abi(3, a, b, l, dm, Float32(0), Float32(0))
++    var dims = Mamba3Dims.of(dm)
++    var di = dims.d_inner
++    var dip = dims.d_in_proj()
++    var nh = dims.nheads
++    var w = Mamba3Weights(dims)
++    w.norm_w = _read_f32(a[1], dm)
++    w.w_in = _read_f32(a[2], dip * dm)
++    w.dt_bias = _read_f32(a[3], nh)
++    w.bnorm_w = _read_f32(a[4], M3_D_STATE)
++    w.cnorm_w = _read_f32(a[5], M3_D_STATE)
++    w.b_bias = _read_f32(a[6], nh * M3_D_STATE)
++    w.c_bias = _read_f32(a[7], nh * M3_D_STATE)
++    w.d_skip = _read_f32(a[8], nh)
++    w.w_out = _read_f32(a[9], dm * di)
++    var gradients = mamba3_tape_backward(
++        w, _read_f32(a[0], b*l*dm), _read_f32(a[10], b*l*dm), b, l,
++        neural_ctx[_NEURAL_CTX](),
++    )
++    _write_f32(a[11], gradients.x)
++    _write_f32(a[12], gradients.block_norm_weight)
++    _write_f32(a[13], gradients.in_proj_weight)
++    _write_f32(a[14], gradients.dt_bias)
++    _write_f32(a[15], gradients.B_norm_weight)
++    _write_f32(a[16], gradients.C_norm_weight)
++    _write_f32(a[17], gradients.B_bias)
++    _write_f32(a[18], gradients.C_bias)
++    _write_f32(a[19], gradients.D)
++    _write_f32(a[20], gradients.out_proj_weight)
+\ No newline at end of file
