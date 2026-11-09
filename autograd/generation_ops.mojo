@@ -273,9 +273,13 @@ def lm_pick_run(
     if n_rows < 3 * b + 4:
         raise Error("ValueError: ops: lm_pick: the rows state holds " + String(n_rows) + " words, fewer than 3 * b + 4")
     var ctx = ex.ctx.copy()
-    var lp = block_buffer_view(ex, logits, n_logits).unsafe_ptr()
-    var rp = block_buffer_view(ex, rows, n_rows).unsafe_ptr()
-    var ip = block_buffer_view(ex, ids, b).unsafe_ptr()
+    # views held in vars: a temporary's unsafe_ptr() is immutable, the kernels take mutable pointers
+    var lv = block_buffer_view(ex, logits, n_logits)
+    var rv = block_buffer_view(ex, rows, n_rows)
+    var iv = block_buffer_view(ex, ids, b)
+    var lp = lv.unsafe_ptr()
+    var rp = rv.unsafe_ptr()
+    var ip = iv.unsafe_ptr()
     if ints[3] == LM_PICK_SAMPLE:
         var temperature = fs[0]
         var top_p = fs[1]
@@ -283,24 +287,38 @@ def lm_pick_run(
             raise Error("generation: temperature must be finite and positive; top_k must be in [0, vocabulary];"
                         + " top_p in (0, 1]")
         var seed = (UInt64(ints[6]) << 32) | UInt64(ints[5])
-        var op = block_buffer_view(ex, order, b * v).unsafe_ptr().bitcast[Int32]()
-        var mp = block_buffer_view(ex, merge, b * v).unsafe_ptr().bitcast[Int32]()
-        var wp = block_buffer_view(ex, weights, b * v).unsafe_ptr()
+        var ov = block_buffer_view(ex, order, b * v)
+        var mv = block_buffer_view(ex, merge, b * v)
+        var wv = block_buffer_view(ex, weights, b * v)
+        var op = ov.unsafe_ptr().bitcast[Int32]()
+        var mp = mv.unsafe_ptr().bitcast[Int32]()
+        var wp = wv.unsafe_ptr()
         ctx.enqueue_function[_lm_sample_kernel](
             lp, rp, ip, op, mp, wp, Int32(b), Int32(l), Int32(v), Int32(ints[2]),
             temperature, Int32(ints[4]), top_p, seed,
             grid_dim=(b, 1, 1), block_dim=(1, 1, 1))
+        _ = ov^
+        _ = mv^
+        _ = wv^
     else:
         ctx.enqueue_function[_lm_greedy_kernel](
             lp, rp, ip, Int32(b), Int32(l), Int32(v), Int32(ints[2]),
             grid_dim=(b, 1, 1), block_dim=(_TPB, 1, 1))
     ctx.enqueue_function[_lm_status_kernel](rp, ip, Int32(b), grid_dim=(1, 1, 1), block_dim=(_TPB, 1, 1))
+    _ = lv^
+    _ = rv^
+    _ = iv^
 
 
 def lm_alive_run(mut ex: DeviceExec, rows: FP, n_rows: Int, b: Int, dst: FP) raises:
     if n_rows < 3 * b + 4:
         raise Error("ValueError: ops: lm_alive: the rows state holds " + String(n_rows) + " words, fewer than 3 * b + 4")
     var ctx = ex.ctx.copy()
-    var rp = block_buffer_view(ex, rows, n_rows).unsafe_ptr()
-    var op = block_buffer_view(ex, dst, 1).unsafe_ptr()
+    # views held in vars: a temporary's unsafe_ptr() is immutable, the kernel takes mutable pointers
+    var rv = block_buffer_view(ex, rows, n_rows)
+    var ov = block_buffer_view(ex, dst, 1)
+    var rp = rv.unsafe_ptr()
+    var op = ov.unsafe_ptr()
     ctx.enqueue_function[_lm_alive_kernel](rp, op, Int32(b), grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
+    _ = rv^
+    _ = ov^

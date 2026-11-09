@@ -428,6 +428,9 @@ def weighted_sample_on(
     negative-weight flag and the total) for the refusals; `d_res` is not
     written on a refusal. (AdaBoost.R2's device rounds call this on the
     weights they keep resident; lane n5-prophet-adaboost-loops.)"""
+    # borrowed handles of resident buffers; the kernels take mutable pointers
+    var pw = d_w.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
+    var pres = d_res.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
     if n <= 0:
         raise Error("x_trees weighted_sample: weights must have a positive total")
     var n_chunks = ceildiv(n, WS_CHUNK)
@@ -437,7 +440,7 @@ def weighted_sample_on(
     var d_flag = ctx.enqueue_create_buffer[DType.int32](1)
     d_flag.enqueue_fill(Int32(0))
     ctx.enqueue_function[ws_chunk_kernel](
-        d_w.unsafe_ptr(), Int64(n), Int64(n_chunks), d_cdf.unsafe_ptr(), d_a.unsafe_ptr(), d_flag.unsafe_ptr(),
+        pw, Int64(n), Int64(n_chunks), d_cdf.unsafe_ptr(), d_a.unsafe_ptr(), d_flag.unsafe_ptr(),
         grid_dim=_blocks(n_chunks), block_dim=OPS_TPB,
     )
     var src_is_a = True
@@ -472,8 +475,8 @@ def weighted_sample_on(
         raise Error("x_trees weighted_sample: weights must have a positive total")
     if n_draw > 0:
         ctx.enqueue_function[ws_draw_kernel](
-            d_w.unsafe_ptr(), d_cdf.unsafe_ptr(), Int64(n), stream_base(seed, stream), Int64(n_draw),
-            d_res.unsafe_ptr(),
+            pw, d_cdf.unsafe_ptr(), Int64(n), stream_base(seed, stream), Int64(n_draw),
+            pres,
             grid_dim=_blocks(n_draw), block_dim=OPS_TPB,
         )
     _ = d_cdf^
