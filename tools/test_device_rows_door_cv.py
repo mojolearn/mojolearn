@@ -52,7 +52,23 @@ def _estimators():
         ("knn-clf", lambda: neighbors.KNeighborsClassifier(n_neighbors=3), "clf"),
         ("knn-reg", lambda: neighbors.KNeighborsRegressor(n_neighbors=3), "reg"),
         ("qn", lambda: linear_model.QNRegressor(), "reg"),
+        # lane a7c: the x_linear door's opt-ins
+        ("lasso", lambda: _cd().Lasso(alpha=0.1), "reg"),
+        ("elastic-net", lambda: _cd().ElasticNet(alpha=0.1), "reg"),
+        ("huber", lambda: _xl().HuberRegressor(max_iter=50), "reg"),
+        ("sgd-clf", lambda: _xl().SGDClassifier(max_iter=5, random_state=0), "clf"),
+        ("ridge-clf", lambda: _xl().RidgeClassifier(), "clf"),
     ]
+
+
+def _cd():
+    from mojolearn import _solver_impl
+    return _solver_impl
+
+
+def _xl():
+    from mojolearn import _expansion_linear
+    return _expansion_linear
 
 
 def _data(task):
@@ -157,3 +173,14 @@ def test_nan_fold_reaches_a_nan_accepting_door():
     x[4, 1] = np.nan
     with pytest.raises(ValueError, match="NaN"):
         model_selection.cross_val_score(linear_model.Ridge(alpha=1.0), x, y, cv=3, error_score="raise")
+
+
+def test_x_linear_estimators_opt_in():
+    # Lane a7c: Lasso, ElasticNet and the x_linear door's estimators take
+    # DeviceRows folds; the *CV estimators (own splitter) do not.
+    xl, cd = _xl(), _cd()
+    for cls in (cd.Lasso, cd.ElasticNet, xl.SGDClassifier, xl.SGDRegressor, xl.HuberRegressor,
+                xl.BayesianRidge, xl.RidgeClassifier, xl.QuantileRegressor):
+        assert _plan(cls)["device_rows"] is True, cls.__name__
+    for cls in (xl.RidgeCV, xl.LassoCV, xl.ElasticNetCV, xl.LogisticRegressionCV):
+        assert not _plan(cls).get("device_rows"), cls.__name__
