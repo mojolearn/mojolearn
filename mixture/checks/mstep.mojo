@@ -107,16 +107,8 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
-from cholesky.checks.potrf import (
-    CHOL_ELEM_TPB,
-    CHOL_NB_PINNED,
-    CHOL_PANEL_TPB,
-    add_jitter,
-    chol_logdet,
-    chol_workspace_floats,
-    potrf_lower,
-)
-from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
+from cholesky.checks.potrf import CHOL_ELEM_TPB, add_jitter
+from core.device_zero import enqueue_fill
 from cholesky.chol_ops import (
     chol_op_begin,
     chol_op_factor,
@@ -1775,21 +1767,8 @@ def gmm_mstep_gemm_workspace_floats(n: Int, d: Int, ncomp: Int) -> Int:
     return w
 
 
-def gmm_chol_workspace_floats(d: Int) -> Int:
-    """Floats the per-component Cholesky needs, from the Cholesky lane's own
-    helper at this lane's pinned block size.
-
-    `chol_workspace_floats(d, CHOL_NB_PINNED)` and not a guess: the Cholesky
-    lane's `NB` is a NUMERIC parameter pinned under IDENTICAL (its DEVIATION
-    1630), a hint asking for anything else RAISES BY NAME, and the workspace
-    a smaller `nb` would need is BIGGER rather than smaller. Sizing this by
-    hand is the out-of-bounds write both that lane and the gemm lane record
-    having been bitten by.
-    """
-    var w = chol_workspace_floats(d, CHOL_NB_PINNED)
-    if w < 1:
-        return 1
-    return w
+# TOMBSTONE: `gmm_chol_workspace_floats` (the sabotage chain's `potrf_lower` workspace) deleted 2026-11-09 by lane
+# m3-linalg-and-housekeeping when the chain moved onto the Cholesky ops (no workspace); code recoverable at 0ce88411d3.
 
 
 def gmm_chol_dwork_floats(d: Int) -> Int:
@@ -1815,6 +1794,22 @@ def gmm_chol_dwork_floats(d: Int) -> Int:
 # ===========================================================================
 
 
+def _gmm_chain_factor(
+    ctx: DeviceContext,
+    mut work: DeviceBuffer[DType.float32],
+    mut dinfo: DeviceBuffer[DType.int32],
+    mut hinfo: HostBuffer[DType.int32],
+    d: Int,
+) raises -> Int:
+    """`chol_op_factor` on the working block (info zeroed first), and its
+    LAPACK info read home: the sabotage chain decides on it."""
+    enqueue_fill(ctx, dinfo, Int32(0))
+    chol_op_factor(ctx, work, dinfo, d)
+    ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
+    ctx.synchronize()
+    return Int(hinfo.unsafe_ptr().unsafe_load(0))
+
+
 def gmm_precision_cholesky(
     ctx: DeviceContext,
     mut cov: DeviceBuffer[DType.float32],
@@ -1822,15 +1817,12 @@ def gmm_precision_cholesky(
     mut linv: DeviceBuffer[DType.float32],
     mut prec: DeviceBuffer[DType.float32],
     mut log_det_chol: DeviceBuffer[DType.float32],
-    mut cws: DeviceBuffer[DType.float32],
     mut dwork: DeviceBuffer[DType.float32],
     d: Int,
     ncomp: Int,
     mut trace: IdentityTrace,
     tag: String,
     elem_tpb: Int = GMM_ELEM_TPB,
-    solve_tpb: Int = CHOL_SOLVE_TPB,
-    panel_tpb: Int = CHOL_PANEL_TPB,
     chol_elem_tpb: Int = CHOL_ELEM_TPB,
     sabotage: Int = GMM_SAB_NONE,
     cov_lo_addr: Int = 0,
@@ -1850,11 +1842,11 @@ def gmm_precision_cholesky(
       2. `add_jitter(..., GMM_CHOL_JITTER)` -- a ridge of `+0.0`
          (DEVIATION 1737), called for its `ftz` on the diagonal rather than
          for a ridge;
-      3. `potrf_lower` -> `L_k`, and **`info != 0` STOPS EVERYTHING**
+      3. `chol_op_factor` -> `L_k` (info read home), and **`info != 0` STOPS EVERYTHING**
          (DEVIATION 1723);
-      4. `chol_logdet(L_k)` -> `2 sum log L_jj`, and
+      4. `chol_op_logdet(L_k)` (read home) -> `2 sum log L_jj`, and
          `log_det_chol[k] = -0.5 *` that (DEVIATION 1726);
-      5. `trsm_lower(L_k, I)` -> `L_k^{-1}`;
+      5. `chol_op_solve_lower(L_k, I)` -> `L_k^{-1}`;
       6. transpose -> `P_k = (L_k^{-1})^T`, scikit-learn's `.T` at `:370`.
 
     **THE CHOLESKY LANE'S OWN CARD STAGES ARE NOT EMITTED, AND THAT IS
@@ -1893,21 +1885,20 @@ def gmm_precision_cholesky(
             + String(need_dwork)
             + "; use gmm_chol_dwork_floats, not a guess"
         )
-    if len(cws) < gmm_chol_workspace_floats(d):
-        raise Error(
-            "gmm_precision_cholesky: the Cholesky workspace holds "
-            + String(len(cws))
-            + " floats, d="
-            + String(d)
-            + " at the pinned block size needs "
-            + String(gmm_chol_workspace_floats(d))
-            + "; use gmm_chol_workspace_floats, not a guess"
-        )
     var identity = dwork.create_sub_buffer[DType.float32](0, dd)
     var scal = dwork.create_sub_buffer[DType.float32](dd, d + 1)
     var work = dwork.create_sub_buffer[DType.float32](dd + d + 1, dd)
-    var quiet = IdentityTrace.disabled()
     var logdet_host = List[Float32]()
+    # lane m3-linalg-and-housekeeping (2026-11-09): the executor's Cholesky
+    # ops (cholesky/chol_ops.mojo), with this chain's host reads (the
+    # component's info, its log det), where `potrf_lower`'s per-panel
+    # route, `chol_logdet` and `trsm_lower` ran: their arithmetic at the
+    # pinned width (the same words); `gmm_precision_enqueue` already ran them
+    var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
+    var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
+    var dscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(d))
+    var dld = ctx.enqueue_create_buffer[DType.float32](1)
+    var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
 
     var grid_dd = (dd + elem_tpb - 1) // elem_tpb
 
@@ -1927,17 +1918,8 @@ def gmm_precision_cholesky(
         add_jitter(ctx, work, d, GMM_CHOL_JITTER, chol_elem_tpb)
 
         # (3) the factorization, and the only failure this lane has
-        var run = potrf_lower(
-            ctx,
-            work,
-            cws,
-            d,
-            quiet,
-            CHOL_NB_PINNED,
-            panel_tpb,
-            chol_elem_tpb,
-        )
-        if run.info != 0:
+        var info = _gmm_chain_factor(ctx, work, dinfo, hinfo, d)
+        if info != 0:
             if sabotage == GMM_SAB_COLLAPSE_RESET:
                 # ARM. See `cov_reset_identity_kernel`. The component's
                 # covariance is silently replaced and the loop continues, so
@@ -1954,18 +1936,9 @@ def gmm_precision_cholesky(
                 ctx.enqueue_copy(dst_buf=work, src_buf=src2)
                 ctx.synchronize()
                 add_jitter(ctx, work, d, GMM_CHOL_JITTER, chol_elem_tpb)
-                run = potrf_lower(
-                    ctx,
-                    work,
-                    cws,
-                    d,
-                    quiet,
-                    CHOL_NB_PINNED,
-                    panel_tpb,
-                    chol_elem_tpb,
-                )
+                info = _gmm_chain_factor(ctx, work, dinfo, hinfo, d)
                 _ = src2^
-                if run.info != 0:
+                if info != 0:
                     # The identity matrix failed to factor, which is
                     # arithmetically impossible. Reported rather than looped
                     # on, so a broken Cholesky cannot be mistaken for a
@@ -1974,16 +1947,19 @@ def gmm_precision_cholesky(
                     _ = identity^
                     _ = scal^
                     _ = work^
-                    return GmmMStepRun(run.info, kc)
+                    return GmmMStepRun(info, kc)
             else:
                 _ = src^
                 _ = identity^
                 _ = scal^
                 _ = work^
-                return GmmMStepRun(run.info, kc)
+                return GmmMStepRun(info, kc)
 
         # (4) log|Sigma_k| through the ONE pinned fold, halved and negated.
-        var ld = chol_logdet(ctx, work, scal, d, quiet, chol_elem_tpb)
+        chol_op_logdet(ctx, work, dinfo, dscr, dld, d)
+        ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dld)
+        ctx.synchronize()
+        var ld = hld.unsafe_ptr().unsafe_load(0)
         logdet_host.append(ftz(identical_mul(Float32(-0.5), ld)))
 
         # the factor, kept for the card and for the VENDOR_MATMUL arm
@@ -2000,9 +1976,7 @@ def gmm_precision_cholesky(
             grid_dim=(grid_dd, 1, 1),
             block_dim=(elem_tpb, 1, 1),
         )
-        trsm_lower(
-            ctx, work, identity, d, d, quiet, "gmm.precision.trsm", solve_tpb
-        )
+        chol_op_solve_lower(ctx, work, identity, dinfo, d, d)
         var linv_k = linv.create_sub_buffer[DType.float32](kc * dd, dd)
         ctx.enqueue_copy(dst_buf=linv_k, src_buf=identity)
 

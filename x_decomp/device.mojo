@@ -160,11 +160,8 @@ from x_decomp.tsqr_device import (
 from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
 from x_decomp.tsqr_multi_gpu import ts_factor_dispatch, tsqr_plan_current
 from glm.impl.center_device import col_means_buf, col_sums_buf, col_sums_pair_buf
-from cholesky.checks.potrf import (
-    CHOL_ELEM_TPB, CHOL_NB_PINNED, add_jitter, chol_logdet, chol_nb_for, chol_workspace_floats, potrf_lower,
-)
-from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
-from core.identity_trace import IdentityTrace
+from cholesky.checks.potrf import CHOL_ELEM_TPB, add_jitter
+from cholesky.chol_ops import chol_op_factor, chol_op_logdet, chol_op_logdet_scratch_floats, chol_op_solve_lower
 from x_decomp.jacobi_par import (
     PJ_TPB,
     pj_identity_kernel,
@@ -2740,33 +2737,47 @@ struct DevExec(Exec):
 
     @staticmethod
     def chol_inv(a: F32Ptr, li: F32Ptr, st: F32Ptr, n: Int) raises:
-        """`Exec.chol_inv` (lane apple-holes, MinCovDet's IDN_MCD_CHOL):
-        `potrf_lower` at +0.0 ridge, `chol_logdet`, L^{-1} by `trsm_lower`
-        against I. The resident kit's `DMcd.chol` (x_decomp/kit_device.mojo)
-        runs the same calls on its pooled matrices."""
+        """`Exec.chol_inv` (lane apple-holes, MinCovDet's IDN_MCD_CHOL): the
+        executor's Cholesky ops (cholesky/chol_ops.mojo) at +0.0 ridge: the
+        factor, log det and L^{-1} = `chol_op_solve_lower(L, I)` enqueued
+        read-free (each skipped on the device when the factor fails), then
+        ONE read of info and log det. The resident kit's `DMcd.chol`
+        (x_decomp/kit_device.mojo) runs the same ops on its pooled matrices.
+        Lane m3-linalg-and-housekeeping (2026-11-09): was `potrf_lower`'s
+        per-panel route (an info read per panel, a wait in `chol_logdet`);
+        the ops are its arithmetic at the pinned width (the same words)."""
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * n)
-        var nb = chol_nb_for(n, CHOL_NB_PINNED)
-        var ws = ctx.enqueue_create_buffer[DType.float32](max(chol_workspace_floats(n, nb), 1))
-        var trace = IdentityTrace()
+        var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
+        var dscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
+        var dld = ctx.enqueue_create_buffer[DType.float32](1)
+        var db = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var hst = ctx.enqueue_create_host_buffer[DType.int32](1)
+        var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
+        enqueue_fill(ctx, dinfo, Int32(0))
+        enqueue_fill(ctx, dld, Float32(0.0))
         add_jitter(ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
-        var run = potrf_lower(ctx, da, ws, n, trace)
-        st.unsafe_store(0, Float32(run.info))
-        st.unsafe_store(1, Float32(0.0))
-        if run.info == 0:
-            var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
-            st.unsafe_store(1, chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB))
-            var db = ctx.enqueue_create_buffer[DType.float32](n * n)
-            ctx.enqueue_function[pj_identity_kernel](
-                db.unsafe_ptr(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
-            )
-            trsm_lower(ctx, da, db, n, n, trace, "mcd.linv", CHOL_SOLVE_TPB)
+        chol_op_factor(ctx, da, dinfo, n)
+        chol_op_logdet(ctx, da, dinfo, dscr, dld, n)
+        ctx.enqueue_function[pj_identity_kernel](
+            db.unsafe_ptr(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
+        )
+        chol_op_solve_lower(ctx, da, db, dinfo, n, n)
+        ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dinfo)
+        ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dld)
+        ctx.synchronize()
+        var info = Int(hst.unsafe_ptr().unsafe_load(0))
+        st.unsafe_store(0, Float32(info))
+        st.unsafe_store(1, hld.unsafe_ptr().unsafe_load(0) if info == 0 else Float32(0.0))
+        if info == 0:
             _down(ctx, db, li, n * n)
             ctx.synchronize()
-            _ = db^
-            _ = dwork^
-        ctx.synchronize()
-        _ = ws^
+        _ = db^
+        _ = dscr^
+        _ = dld^
+        _ = dinfo^
+        _ = hst^
+        _ = hld^
         _ = da^
         _ = ctx^
 
