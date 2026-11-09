@@ -10,7 +10,6 @@ from providers.python.neural_descriptor_pyapi import (
     neural_descriptor_execute, neural_descriptor_construct, neural_descriptor_handle,
     neural_descriptor_reserved_execute,
 )
-from providers.python.operation_lock_pyapi import OperationLockLease
 from bindings.causal_lm_construct import _model_f32, _model_shape
 from bindings.causal_lm_public import _native_function
 from std.ffi import _Global
