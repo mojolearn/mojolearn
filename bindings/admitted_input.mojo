@@ -14,6 +14,12 @@
 #   admit_x(source, ndim, name, context, column_target, admitted) -> array
 #                     the C-order float32 array of an input of rank `ndim`
 #                     (the former classical_host_f32, same signature)
+#   Options on every admit_x form (keywords, defaults keep the old
+#   behaviour): `defer_finite` (the entry tests a borrowed X), `device_x`
+#   (a DeviceRows fold stays a device handle), `order` ("C" or "F": one
+#   parallel cast-and-transpose pass), `as_array` (a mojolearn Array, never
+#   an ndarray). A matrix held in bindings/admitted_registry.mojo by the
+#   running operation is returned as it is (C order, not as_array).
 #   admit_y(...)      the float fit target (one column, finite, as long as X)
 #   admit_weights(...)  sample_weight as `rows` float32 words (None stays None)
 #   admitted_storage(shape, typestr, context)
