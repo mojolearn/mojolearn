@@ -122,7 +122,7 @@ from autograd.rules_step_ops import StepOpRules
 # loop's condition, session codes 85, 86 (autograd/generation_ops.mojo).
 from autograd.generation_ops import (
     OPS_LM_PICK, OPS_LM_ALIVE, is_generation_op, generation_op_check, generation_op_name, lm_pick_run,
-    lm_alive_run, LM_PICK_SAMPLE,
+    lm_alive_run, LM_PICK_SAMPLE, lm_pick_host, lm_alive_host,
 )
 
 # Executor kinds of a session (the binding that opened it).
@@ -1877,7 +1877,21 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 lm_alive_run(rebind[DeviceExec](self.ex), rp, n_rows, b, out)
                 t = self.tape.variable(self.ex, out, 1, 1, False)
         else:
-            raise Error("ValueError: ops: " + name + " runs on a GPU session")
+            # lane x56d: the host arm (autograd/generation_ops.mojo), the
+            # same rule over host storage
+            if code == OPS_LM_PICK:
+                var lslot = self._slot(hs[0])
+                if self.int_words[lslot]:
+                    raise Error("ValueError: ops: lm_pick: the logits must hold floating-point values")
+                var lp = self.tape.value_of(self.ex, x[0])
+                var out = self.tape.reserve(self.ex, b)
+                lm_pick_host(lp, self.shapes[lslot].count(), rp, n_rows, ints, fs, out)
+                t = self.tape.variable(self.ex, out, b, 1, False)
+                int_result = True
+            else:
+                var out = self.tape.reserve(self.ex, 1)
+                lm_alive_host(rp, n_rows, b, out)
+                t = self.tape.variable(self.ex, out, 1, 1, False)
         var h = self._add(t, 0, False, 0)
         self.int_words[self._slot(h)] = int_result
         return h
