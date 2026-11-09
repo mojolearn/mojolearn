@@ -140,8 +140,14 @@ def train_program_control[E: Exec & Movable & Deinitable](
     mut s: OpsSession[E], pid: Int, srcs: List[CastIn], shapes: List[ShapeN],
     target: CastIn, loss_kind: Int, delta: Float32, optimizer: Int, parameters: List[Int],
     epochs: Int, batch: Int, shuffle_rows: Bool, seed: UInt64, curve: FP,
-    condition_id: Int, otherwise_id: Int,
+    condition_id: Int, otherwise_id: Int, step_curve: Int = 0,
 ) raises -> Tuple[Int, Int]:
+    """Program.fit: `epochs` passes of minibatch training of program `pid`.
+    `curve` receives one sample-weighted mean loss per epoch (float32).
+    `step_curve`, when not 0, is the address of epochs * ceil(n / batch)
+    float32 words that receive every minibatch's own loss in step order
+    (CNNClassifier's `losses_`, lane x8-cnn-on-executor): one OP_COPY per
+    minibatch into one device buffer, downloaded once at the end."""
     var p = s.program(pid)
     var conditional = condition_id > 0 and otherwise_id > 0
     if (condition_id > 0) != (otherwise_id > 0):
@@ -190,6 +196,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
     var indices = Optional[FP]()
     var batch_losses = Optional[FP]()
     var losses = Optional[FP]()
+    var step_losses = Optional[FP]()
     var held = Tape()
     var swapped = False
     var temps = List[Int]()
@@ -238,6 +245,8 @@ def train_program_control[E: Exec & Movable & Deinitable](
         indices = s.ex.alloc(n)
         batch_losses = s.ex.alloc(n_batches)
         losses = s.ex.alloc(epochs)
+        if step_curve != 0:
+            step_losses = s.ex.alloc(epochs * n_batches)
         swap(held, s.prog_tape)
         swap(held, s.tape)
         swapped = True
@@ -317,6 +326,11 @@ def train_program_control[E: Exec & Movable & Deinitable](
                 a.p0 = s.tape.value(weighted)
                 a.p1 = batch_losses.value() + bi
                 s.ex.launch[OP_COPY](a, 1)
+                if step_losses:
+                    var sa = Args()
+                    sa.p0 = s.tape.value(loss)
+                    sa.p1 = step_losses.value() + (e * n_batches + bi)
+                    s.ex.launch[OP_COPY](sa, 1)
                 for j in range(len(params)):  # driver-loop: over optimizer parameter updates
                     if not selected[j] or not differentiable:
                         continue
@@ -338,6 +352,8 @@ def train_program_control[E: Exec & Movable & Deinitable](
             s.scheduler_step(optimizer)
         s.ex.sync()
         s.ex.download(curve, losses.value(), epochs)
+        if step_losses:
+            s.ex.download(FP(unsafe_from_address=step_curve), step_losses.value(), epochs * n_batches)
     except err:
         if swapped:
             s._drop_temps(temps)
@@ -345,12 +361,16 @@ def train_program_control[E: Exec & Movable & Deinitable](
             swap(held, s.tape)
             swap(held, s.prog_tape)
         release_training_buffers(s.ex, full, batches, ty, yb, indices, batch_losses, losses)
+        if step_losses:
+            s.ex.free(step_losses.value())
         raise err
     s._drop_temps(temps)
     s.tape.no_grad()
     swap(held, s.tape)
     swap(held, s.prog_tape)
     release_training_buffers(s.ex, full, batches, ty, yb, indices, batch_losses, losses)
+    if step_losses:
+        s.ex.free(step_losses.value())
     return (true_batches, false_batches)
 
 
