@@ -30,10 +30,11 @@ from bindings.classical_labels import _flatten_labels
 from bindings.classical_arrays import classical_address
 from bindings.admitted_input import admit_x
 from bindings.classical_labels import (
-    ClassicalLabels, LabelsMatrix, classical_encode_labels, classical_decode_labels, classical_accuracy,
-    labels_check_sample_weight, labels_class_weight_rows, labels_argmax_rows, labels_shape_of,
-    labels_empty, labels_vector, labels_address, labels_cast,
+    ClassicalLabels, classical_encode_labels, classical_decode_labels, classical_accuracy,
+    labels_class_weight_rows, labels_argmax_rows, labels_shape_of,
+    labels_address, labels_cast,
 )
+from bindings.admitted_input import AdmittedX, admit_weight_words, admitted_words, admitted_array, admitted_vector
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -197,14 +198,14 @@ def _qn_params(fields: PythonObject, l1_ratio: PythonObject) raises -> Tuple[Pyt
 
 
 def _row_weights(model: PythonObject, fields: PythonObject, sample_weight: PythonObject, class_weight: PythonObject,
-                 labels: ClassicalLabels, n: Int, context: PythonObject) raises -> LabelsMatrix:
+                 labels: ClassicalLabels, n: Int, context: PythonObject) raises -> AdmittedX:
     """`linear_model._qn_row_weights`: no weights (address 0) for an
     unweighted fit, else the checked float32 sample weights times each row's
     class weight (their owner kept alive with the address)."""
     var b = _builtins()
     if sample_weight is None and class_weight is None:
-        return LabelsMatrix(PythonObject(None), 0, 0, 0, True)
-    var sw = labels_check_sample_weight(sample_weight, n, context)
+        return admitted_words(PythonObject(None), 0, 0, 0)
+    var sw = admit_weight_words(sample_weight, n, context)
     if class_weight is None:
         return sw^
     var refused = False
@@ -224,17 +225,17 @@ def _row_weights(model: PythonObject, fields: PythonObject, sample_weight: Pytho
     var cw = labels_class_weight_rows(class_weight, labels, xtrees, context)
     if cw is None:  # every class weight is 1
         return sw^
-    var out = labels_vector(n, "<f4", context)
+    var out = admitted_vector(n, "<f4", context)
     var mul = py_get(xtrees, "x_trees_mul_f32")
     if mul is None:
         raise Error("ImportError: the x_trees binding has no x_trees_mul_f32")
-    _ = py_call_typed(mul, PythonObject(sw.addr), PythonObject(labels_address(cw)), PythonObject(labels_address(out)),
+    _ = py_call_typed(mul, PythonObject(sw.address), PythonObject(labels_address(cw)), PythonObject(labels_address(out)),
                       Python.list(n))
     _ = out  # keep the Python object alive through the native call above
     _ = cw  # keep the Python object alive through the native call above
     _ = sw^
     _ = cw^
-    var _keep_ret_out = LabelsMatrix(out, labels_address(out), n, 1, True)
+    var _keep_ret_out = admitted_words(out, labels_address(out), n, 1)
     _ = out  # keep the Python object alive through the native call above
     return _keep_ret_out^
 
@@ -286,7 +287,7 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var n_targets = 1 if n_classes == 2 else n_classes
     var loss = QN_LOSS_LOGISTIC if n_targets == 1 else QN_LOSS_SOFTMAX
     # The dense codes as float32 (codes < 2**24: exact), `codes.astype('<f4')`.
-    var y_enc = labels_vector(rows, "<f4", context)
+    var y_enc = admitted_vector(rows, "<f4", context)
     # One native cast of the int32 codes (exact below 2**24), as
     # LogisticRegressionCV does; no host loop over rows in this owner.
     labels_cast(labels_address(labels.codes), "<i4", labels_address(y_enc), "<f4", rows, context)
@@ -304,10 +305,10 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var entries = _entries(model, fields, context)
     var intercept = Bool(py=fields["fit_intercept"])
     var n_param = cols + (1 if intercept else 0)
-    var w = labels_vector(n_param * n_targets, "<f4", context)
-    var info = labels_vector(2, "<f4", context)
+    var w = admitted_vector(n_param * n_targets, "<f4", context)
+    var info = admitted_vector(2, "<f4", context)
     var tol = fields["tol"]
-    var has_sw = sw.addr != 0
+    var has_sw = sw.address != 0
     _ = sw  # keep the Python object alive through the native call above
     var params = Python.list(rows, cols, n_classes,
                              py_call(b.float, l1), py_call(b.float, l2), py_call(b.float, tol),
@@ -320,7 +321,7 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     if has_sw:
         # field 15 svr_eps (0), field 16 the weights
         _ = py_call(params.append, PythonObject(0.0))
-        _ = py_call(params.append, PythonObject(sw.addr))
+        _ = py_call(params.append, PythonObject(sw.address))
         _ = sw  # keep the Python object alive through the native call above
     _ = sw  # keep the Python object alive through the native calls above
     var n_iter = py_call_typed(_need(entries, "qn_fit"), classical_address(x), PythonObject(labels_address(y_enc)),
@@ -335,8 +336,8 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     # targets, cuML's column-major block w[c + C*j], the bias at j == cols.
     var source = _F32P(unsafe_from_address=labels_address(w))
     _ = w  # keep the Python object alive through the native call above
-    var coef = labels_empty(Python.tuple(n_targets, cols), "<f4", context)
-    var inter = labels_vector(n_targets, "<f4", context)
+    var coef = admitted_array(Python.tuple(n_targets, cols), "<f4", context)
+    var inter = admitted_vector(n_targets, "<f4", context)
     var cp = _F32P(unsafe_from_address=labels_address(coef))
     _ = coef  # keep the Python object alive through the native call above
     var ip = _F32P(unsafe_from_address=labels_address(inter))
@@ -352,7 +353,7 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject,
             _ = w  # keep the Python object alive through the native call above
     py_setitem(fields, "coef_", coef)
     py_setitem(fields, "intercept_", inter)
-    var iterations = labels_vector(1, "<i8", context)
+    var iterations = admitted_vector(1, "<i8", context)
     _I64P(unsafe_from_address=labels_address(iterations))[0] = Int64(_int(n_iter))
     _ = iterations  # keep the Python object alive through the native call above
     _ = info  # keep the Python object alive through the native call above
@@ -415,9 +416,9 @@ def logistic_decision(model: PythonObject, fields: PythonObject, mut entries: Py
     var out = PythonObject(None)
     var params = Python.list(rows, cols, intercept)
     if n_targets == 1:
-        out = labels_vector(rows, "<f4", context)
+        out = admitted_vector(rows, "<f4", context)
     else:
-        out = labels_empty(Python.tuple(rows, n_targets), "<f4", context)
+        out = admitted_array(Python.tuple(rows, n_targets), "<f4", context)
         _ = py_call(params.append, PythonObject(n_targets))
     _ = py_call_typed(_need(entries, "qn_decision_function"), classical_address(x),
                       classical_address(fields["_w"]), PythonObject(labels_address(out)), params)
@@ -437,7 +438,7 @@ def logistic_predict(model: PythonObject, fields: PythonObject, source: PythonOb
         var cols = Int(py=x.shape[1])
         if cols != Int(py=fields["n_features_in_"]):
             raise Error("mojolearn LogisticRegression feature count differs from fit")
-        var codes = labels_vector(rows, "<i8", context)
+        var codes = admitted_vector(rows, "<i8", context)
         var entries = _entries(model, fields, context)
         var native = py_get(entries, "qn_predict_binary")
         if native is None:
@@ -462,7 +463,7 @@ def logistic_predict(model: PythonObject, fields: PythonObject, source: PythonOb
         var cols = Int(py=x.shape[1])
         if Bool(py=PythonObject(cols) != fields["n_features_in_"]):
             raise Error("mojolearn LogisticRegression feature count differs from fit")
-        var codes = labels_vector(rows, "<i8", context)
+        var codes = admitted_vector(rows, "<i8", context)
         if rows:
             _ = py_call_typed(native, classical_address(x), classical_address(fields["_w"]),
                               PythonObject(labels_address(codes)),
@@ -500,7 +501,7 @@ def _logistic_proba_fused(model: PythonObject, fields: PythonObject, mut entries
     if fused is None:
         return PythonObject(None)
     var intercept = 1 if Bool(py=fields["fit_intercept"]) else 0
-    var out = labels_empty(Python.tuple(rows, 2 if n_targets == 1 else n_targets), "<f8", context)
+    var out = admitted_array(Python.tuple(rows, 2 if n_targets == 1 else n_targets), "<f8", context)
     var params = Python.list(rows, cols, intercept, n_targets)
     if log_out:
         # ne2-g-linear (N361): the 5th word asks the entry for log(p) in the
@@ -527,13 +528,13 @@ def logistic_proba(model: PythonObject, fields: PythonObject, mut entries: Pytho
     var rows = Int(py=scores.shape[0])
     var out = PythonObject(None)
     if n_targets == 1:
-        out = labels_empty(Python.tuple(rows, 2), "<f8", context)
+        out = admitted_array(Python.tuple(rows, 2), "<f8", context)
         _ = py_call_typed(_need(entries, "qn_sigmoid"), PythonObject(labels_address(scores)), PythonObject(labels_address(out)),
                           Python.list(rows))
         _ = out  # keep the Python object alive through the native call above
         _ = scores  # keep the Python object alive through the native call above
     else:
-        out = labels_empty(Python.tuple(rows, n_targets), "<f8", context)
+        out = admitted_array(Python.tuple(rows, n_targets), "<f8", context)
         _ = py_call_typed(_need(entries, "qn_softmax"), PythonObject(labels_address(scores)), PythonObject(labels_address(out)),
                           Python.list(rows, n_targets))
         _ = out  # keep the Python object alive through the native call above
@@ -563,7 +564,7 @@ def logistic_log_proba(model: PythonObject, fields: PythonObject, source: Python
     var size = 1
     for dimension in range(len(shape)):  # driver-loop: native Array shape slots
         size *= Int(py=shape[dimension])
-    var out = labels_empty(shape, "<f8", context)
+    var out = admitted_array(shape, "<f8", context)
     if size:
         _ = py_call_typed(_need(entries, "py2mojo_rows"), PythonObject(ROWS_LOG), PythonObject(labels_address(proba)),
                           PythonObject(labels_address(out)), Python.list(size, 1))
