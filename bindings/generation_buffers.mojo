@@ -18,6 +18,7 @@ from bindings.native_array_snapshot import native_array_slots, native_array_snap
 from bindings.native_array_storage import native_array_zeros
 from bindings.native_buffer_address import native_buffer_address
 from bindings.p3nc_fitted_freeze import fitted_freeze_foreign
+from core.weight_epoch import weight_epoch_bump
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from core.generation_buffers_impl import generation_ids_into
 from std.memory import memcpy
@@ -237,10 +238,21 @@ def generation_weight_address(value: PythonObject, mut keep: List[PythonObject])
     # copy. Never use this for an output or a state
     # buffer: a kernel write would then reach the caller's buffer, where the
     # copy used to absorb it. Array weights take the snapshot path as before.
+    #
+    # Lane x45c (core/weight_epoch.mojo): every weight this door hands to a
+    # kernel is read-only from here on, so a resident copy keyed by its
+    # address stays valid until the weight epoch moves. The epoch moves when
+    # a weight that was writeable until now is frozen (a new or reassigned
+    # array, at its first use) and on every per-call copy of storage that
+    # cannot be frozen (its address names new bytes each call). The resident
+    # copies compare no weight bytes.
     if value is None:
         return 0
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     if py_type(value) is g[].array_cls:
+        if not Bool(py=value._readonly):
+            py_setattr(value, "_readonly", PythonObject(True))
+            weight_epoch_bump()
         return generation_address(value, keep)
     var view = generation_buffer_view(value)
     if not Bool(py=view.c_contiguous):
@@ -250,9 +262,13 @@ def generation_weight_address(value: PythonObject, mut keep: List[PythonObject])
         raise Error("generation: unsupported native model buffer format " + format)
     var itemsize = Int(py=view.itemsize)
     var address = native_buffer_address(view)
+    var was_writeable = not Bool(py=view.readonly)
     if address != 0 and (itemsize == 1 or address % itemsize == 0) and fitted_freeze_foreign(value):
+        if was_writeable:
+            weight_epoch_bump()
         keep.append(view)
         return address
+    weight_epoch_bump()
     return _generation_pack_foreign(view, format, keep)
 
 

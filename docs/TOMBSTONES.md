@@ -579,6 +579,9 @@ in the tables after the sections.
 | [`ByteOneWait` (`training/byte_lm_one_wait.mojo`), ByteBuffers `dw_emb` / `dw_lm`, `experiments/decode_resident_20261028`, `experiments/grad_views_20261028`](#byte-lm-cpu-column-on-the-executor-and-x7-leftovers-2026-11-09) | Neural (byte LM, lane x7 leftovers) | removed (no reader after lane x7) | 2026-11-09 | [BYTE_LM_X7_LEFTOVERS.patch](../experiments/removed/BYTE_LM_X7_LEFTOVERS.patch) |
 | [`MOJOLEARN_IDN_PARAM_GRAD_VIEWS`, `MOJOLEARN_IDN_LM_RESIDENT_TOKENS` (NI32 / NN51)](#byte-lm-cpu-column-on-the-executor-and-x7-leftovers-2026-11-09) | Neural (byte LM hand-step arms) | removed (their step deleted; default off, never promoted) | 2026-11-09 | [BYTE_LM_X7_LEFTOVERS.patch](../experiments/removed/BYTE_LM_X7_LEFTOVERS.patch) |
 
+| [CausalLM resident greedy / sampling reads and the generation engine token loop (host-driven token loops)](#causallm-generate-as-one-programdecode-2026-11-09) | Neural (CausalLM.generate, streams) | removed (superseded: one Program.decode over one session) | 2026-11-09 | [CAUSAL_GENERATE_RESIDENT_READS.patch](../experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch) |
+| [Per-call weight byte compare of block sessions and Mamba programs (weight versioning)](#causallm-generate-as-one-programdecode-2026-11-09) | Neural (TransformerBlock, Mamba blocks) | removed (superseded: address + weight epoch key) | 2026-11-09 | [WEIGHT_BYTE_COMPARE.patch](../experiments/removed/WEIGHT_BYTE_COMPARE.patch) |
+
 ## Retired by lane debt-block-per-n (2026-10-21)
 
 These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
@@ -5326,3 +5329,33 @@ reverses the inference head fold only).
 - Code recoverable at `5fff22515a` (the lane's base); patches `experiments/removed/BYTE_LM_HOST_COMPOSED_STEP.patch` and
   `experiments/removed/BYTE_LM_X7_LEFTOVERS.patch` (the reverse of the lane's change to the code files; `git apply` restores
   them).
+
+## CausalLM generate as one Program.decode (2026-11-09)
+
+Lane x45c-causal-generate-program-decode (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X4, follow-ups
+X4b, X5, D2), on origin/integ/pre-0867-w3 5b5490960d. Every GPU read of a float32 CausalLM (transformer, Mamba-1,
+Mamba-2 layers; greedy or the FP32 sampler) is ONE `Program.decode` over ONE `OpsSession`
+(transformer/causal_lm_program.mojo): embedding, one block step op per layer (every layer's weights, state and words are
+tensors of that session), final norm, head and the pick (`OPS_LM_PICK`, autograd/generation_ops.mojo, the documented
+lowest-index / non-finite rule and the eos / pad / lengths rows as declared state) are session ops; the condition
+`OPS_LM_ALIVE` stops the loop on the device. What went:
+
+| symbols | where | why |
+|---|---|---|
+| `_read_resident`, `_resident_acquire_read`, `_read_sampling_resident`, `_sampling_read_progress`, `_sampling_read_state`, `_sampling_read_cache_valid`, `_read_engine`, `_engine_publish_stream`, the resident shortcut of `_generate_complete` | bindings/causal_lm_public.mojo | the three host-chosen read routes (resident greedy, resident sampling, native engine) |
+| `NativeGenerationProgress`, `native_generation_read` | transformer/native_generation_engine.mojo | the engine's token x layer loop (a host round trip per layer per token) |
+| `_lm_read_argmax_kernel`, `_lm_read_status_kernel`, `_lm_read_sample_kernel`, `_lm_read_progress`, `_LMSamplingCheckpoint`, `_lm_sampling_outputs`, the read modes of `_lm_run`, group operations 2 and 3 | transformer/transformer_binding_impl.mojo, transformer/native_lm_resident_dispatch.mojo | the resident read loop (one wait per token); the pick rule now is `OPS_LM_PICK` |
+| `causal_lm_resident_read_v1`, `causal_lm_resident_sampling_v1`, `transformer_resident_lm_read`, `transformer_resident_lm_sampling_read`, core/resident_generation_read.mojo, core/resident_sampling_read.mojo | bindings, providers, core | capability words and descriptors of the deleted reads |
+| `AttnStepArm` host weight copy + `_same_bits` / `_host_copy`; `MambaBlockProgram.w_host` + `_same_bits` / `_host_copy` and the cache's byte-match fallback; `MAMBA_PROGRAM_CACHE_CAP` | transformer/attn_step_session.mojo, mamba/impl/mamba_block_program.mojo | the per-call compare of every weight byte (~7 MB per call); now `WeightKey` (core/weight_epoch.mojo), the cache bounded by device bytes |
+| the fixed15_v1 block forward's own workspace body (`TransformerSession.planes` / `planes_key`) | transformer/transformer_binding_impl.mojo | it now runs on the attention step op (adopted entry) |
+
+- Verdict: superseded, never A/B'd. RUN OWED on NVIDIA and AMD: CausalLM generate / stream rows (lm-generate, decode
+  rows of paper_compare: mamba3-decode is not a CausalLM kind; samba-decode is X6's), transformer-forward fixed15,
+  mamba1/2 forward/step per-call doors, program vs 5b5490960d.
+- Bits: the logits of a generate read now come from `OPS_RMS_NORM` and `OPS_TRANSFORMER_LINEAR` (the resident read
+  used `llama_rms_norm` and the role-head GEMM): the CausalLM generate identity lanes re-record. The non-finite refusal
+  of a read names the logit (`non-finite logit at token i`), no longer the rms_norm or linear input.
+- Contract change: a weight a kernel has read is read-only (an Array's flag, an ndarray's writeable flag); assign a new
+  array to change it.
+- Recoverable at 5b5490960d; restore with `git apply experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch` and
+  `git apply experiments/removed/WEIGHT_BYTE_COMPARE.patch`.

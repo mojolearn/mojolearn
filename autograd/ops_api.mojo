@@ -117,6 +117,12 @@ from autograd.block_step_ops import (
     block_step_run, block_weight_sizes, block_state_sizes, block_offsets, block_guard, block_int_words,
     block_part_floats, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
 )
+# Generation ops (lane x45c): the language model's token pick and the decode
+# loop's condition, session codes 85, 86 (autograd/generation_ops.mojo).
+from autograd.generation_ops import (
+    OPS_LM_PICK, OPS_LM_ALIVE, is_generation_op, generation_op_check, generation_op_name, lm_pick_run,
+    lm_alive_run, LM_PICK_SAMPLE,
+)
 
 # Executor kinds of a session (the binding that opened it).
 # Lane ag-pass6-host (2026-10-19, PASS6_IDEAS idea G): the packed argument
@@ -358,6 +364,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     var buffer_kind: Dict[Int, Int]
     #: lane x1: the resident block structs of this session's step ops
     var steps: BlockStepScratch
+    #: lane x45c: append-only state, by address: a full-causal KV cache
+    #: (window 0) -> the address of the position word that addresses it.
+    #: A write past the committed position lands in slots no committed
+    #: position reads, so a bounded loop shadows only the position word
+    #: (autograd/program_control.mojo), never the cache itself.
+    var append_state: Dict[Int, Int]
 
     def __init__(out self, var ex: Self.E, record: Bool):
         self.ex = ex^
@@ -388,6 +400,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.op_tensors = List[Tensor]()
         self.buffer_kind = Dict[Int, Int]()
         self.steps = BlockStepScratch()
+        self.append_state = Dict[Int, Int]()
 
     # ------------------------------------------------------------ handles
     def _slot(self, h: Int) raises -> Int:
@@ -442,6 +455,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             if self.owned[slot] in self.buffer_kind:
                 try:
                     _ = self.buffer_kind.pop(self.owned[slot])
+                except:
+                    pass
+            if self.owned[slot] in self.append_state:
+                try:
+                    _ = self.append_state.pop(self.owned[slot])
                 except:
                     pass
             self.steps_forget(self.owned[slot])
@@ -585,6 +603,28 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             return self.buffer_kind[addr] != OPS_BUFFER_UPLOAD
         except:
             return False
+
+    def declare_append(mut self, kv: Int, words: Int) raises:
+        """Lane x45c: state tensor `kv` is written only at the position the
+        int32 state word tensor `words` holds, and read only below it (a
+        full-causal attention cache): a bounded loop then restores the
+        position word alone when iterations ran past its stop."""
+        if not self.is_state(kv) or not self.is_state(words):
+            raise Error("ValueError: ops: declare_append takes two state tensors")
+        var ws = self._slot(words)
+        if not self.int_words[ws]:
+            raise Error("ValueError: ops: declare_append: the position must be an int32 state word tensor")
+        self.append_state[self.owned[self._slot(kv)]] = self.owned[ws]
+
+    def append_words_of(self, addr: Int) -> Int:
+        """The position word address of append-only state at `addr`, 0 for
+        any other buffer."""
+        if addr not in self.append_state:
+            return 0
+        try:
+            return self.append_state[addr]
+        except:
+            return 0
 
     def _buffer_kind_of(self, addr: Int) -> Int:
         """OPS_BUFFER_* of the session-owned buffer at addr, 0 for tape storage."""
@@ -747,6 +787,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 continue
             self.ex.download_async(FP(unsafe_from_address=dsts[i]), buf + offs[i], sizes[i])
         self.ex.sync()
+        self.steps.release_parked()
 
     def download(mut self, h: Int, dst: FP) raises:
         """The tensor's rows x cols floats (row-major) into the caller's memory."""
@@ -755,6 +796,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var src = self.tape.value_of(self.ex, src_t)
         var count = self.rows[slot] * self.cols[slot]
         self.ex.download(dst, src, count)
+        # lane x45c: the stream drained; step ops' parked stages can go
+        self.steps.release_parked()
 
     def scalar(mut self, h: Int) raises -> Float32:
         """The one value of a (1, 1) tensor, read back to the caller."""
@@ -765,6 +808,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var src = self.tape.value_of(self.ex, src_t)
         var out = List[Float32](length=1, fill=Float32(0))
         self.ex.download(FP(unsafe_from_address=Int(out.unsafe_ptr())), src, 1)
+        self.steps.release_parked()
         return out[0]
 
     def free(mut self, h: Int) raises:
@@ -800,6 +844,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     def close(mut self) raises:
         """Return every buffer to the executor and wait for its queue."""
         # the resident block structs view session buffers: drop them first
+        # (lane x45c: after the queue drained, with the parked run stages;
+        # integ-w4: then both arms' entries through the x7b hook)
+        if self.steps.parked() > 0:
+            self.ex.sync()
+            self.steps.release_parked()
         self.steps_clear()
         self.buffer_kind.clear()
         self.tape.release(self.ex)
@@ -1368,6 +1417,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             # Lane x1: the step-op table (autograd/block_step_ops.mojo), one
             # branch for all its codes.
             return self._block_step(code, hs, ints, fs, x)
+        if is_generation_op(code):
+            # Lane x45c: the token pick and the decode condition, one branch.
+            return self._generation_op(code, hs, ints, fs, x)
         if code == OPS_RMS_NORM or code == OPS_ROTARY or code == OPS_TRANSFORMER_LINEAR or code == OPS_TRANSFORMER_SOFTMAX:
             # These primitive signatures have at most two handles. Their
             # arity validation below rejects any additional operands.
@@ -1779,6 +1831,47 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         else:
             t = self.tape.variable_nd(self.ex, out, sh, False)
         return self._add(t, 0, False, 0)
+
+    def _generation_op(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """Generation op `code` (autograd/generation_ops.mojo): operand 0 the
+        logits (pick, floating point) or the ids (alive), operand 1 the rows
+        int32 state words, written in place by the pick."""
+        generation_op_check(code, len(x), ints, fs)
+        var name = String(generation_op_name(code))
+        if self.tape.is_recording():
+            raise Error("ValueError: ops: " + name + " runs in an inference session (Session(record=False))")
+        var rslot = self._slot(hs[1])
+        var rp = self.tape.value_of(self.ex, x[1])
+        if self._buffer_kind_of(Int(rp)) != OPS_BUFFER_STATE_WORDS:
+            raise Error("ValueError: ops: " + name + ": the rows must be an integer tensor declared state")
+        var n_rows = self.shapes[rslot].count()
+        var b = ints[0]
+        var t: Tensor
+        var int_result = False
+        comptime if Self.E.IS_DEVICE:
+            if code == OPS_LM_PICK:
+                var lslot = self._slot(hs[0])
+                if self.int_words[lslot]:
+                    raise Error("ValueError: ops: lm_pick: the logits must hold floating-point values")
+                var lp = self.tape.value_of(self.ex, x[0])
+                var out = self.tape.reserve(self.ex, b)
+                var n_scratch = b * ints[1] if ints[3] == LM_PICK_SAMPLE else 1
+                var order = self.tape.reserve(self.ex, n_scratch)
+                var merge = self.tape.reserve(self.ex, n_scratch)
+                var weights = self.tape.reserve(self.ex, n_scratch)
+                lm_pick_run(rebind[DeviceExec](self.ex), lp, self.shapes[lslot].count(), rp, n_rows, ints, fs,
+                            out, order, merge, weights)
+                t = self.tape.variable(self.ex, out, b, 1, False)
+                int_result = True
+            else:
+                var out = self.tape.reserve(self.ex, 1)
+                lm_alive_run(rebind[DeviceExec](self.ex), rp, n_rows, b, out)
+                t = self.tape.variable(self.ex, out, 1, 1, False)
+        else:
+            raise Error("ValueError: ops: " + name + " runs on a GPU session")
+        var h = self._add(t, 0, False, 0)
+        self.int_words[self._slot(h)] = int_result
+        return h
 
     def _import_op(mut self, code: Int, x: List[Tensor], ints: List[Int], fs: List[Float32]) raises -> Tensor:
         """Session codes OPS_ERF .. OPS_PAD (lane ag-import-kernels): the

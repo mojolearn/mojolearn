@@ -31,7 +31,7 @@ def candidate(monkeypatch):
 def test_candidate_matches_host_policy_and_chunk_checkpoint(
         tmp_path, monkeypatch, uniform, temperature, top_k, top_p):
     model = load_fixture(tmp_path, "llama", uniform=uniform)
-    assert model._native_entries["resident_sampling_v1"] is True
+    assert model._native_entries["program_read"] is not None
     prompt = np.array([[1, 3], [2, 4]], dtype="i4")
     options = dict(greedy=False, seed=123, temperature=temperature,
                    top_k=top_k, top_p=top_p)

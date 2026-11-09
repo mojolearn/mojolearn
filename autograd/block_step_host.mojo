@@ -29,6 +29,14 @@ executor (`HostExec.steps`, sequence/exec.mojo), and generic session code
 reaches the arm through the executor trait (`Exec.step_run`,
 `Exec.step_backward`, `Exec.step_forget`, `Exec.step_weights_changed`,
 `Exec.step_clear`), so the device build never instantiates or imports it.
+
+Stage lifetime (integ-w4, against lane x45c's parked-stage contract): the
+device table parks a run's call-shaped stages until the stream drains
+(`BlockStepScratch.release_parked`, STEP_PARK_CAP). The host arm parks
+nothing: every host body runs to completion before `step_run` returns, so a
+run's stages are freed eagerly when the call ends (kept only for a recorded
+OPS_ATTN_STEP's backward, as above), and `OpsSession`'s parked count stays 0
+on a host session.
 """
 from std.memory import bitcast, memcpy
 from sequence.ops import FP

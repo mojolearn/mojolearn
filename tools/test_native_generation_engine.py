@@ -14,15 +14,13 @@ def test_native_engine_transitive_closure_has_no_provider_or_python():
     assert not problems, problems
 
 
-def test_token_loop_uses_native_state_and_original_sampling_policy():
+def test_engine_has_no_token_loop():
+    # Lane x45c: generation reads run as the decode program; the engine keeps
+    # only CausalLM.forward's layer walk.
     src = text('transformer/native_generation_engine.mojo')
-    read = src.split('def native_generation_read(')[1]
-    assert 'model.forward_into(Int(progress.current.unsafe_ptr()), progress.length, progress.logits)' in read
-    assert 'causal_lm_pick_step(' in read
+    assert 'def native_generation_read(' not in src
     for forbidden in ('PythonObject', 'py_call', 'py_get', '._addr', '.shape', 'getenv', 'GILReleased'):
         assert forbidden not in src
-    assert 'swap(progress.current, progress.next)' in read
-    assert 'progress.produced += 1' in read and 'progress.wrote += 1' in read
 
 
 def test_numerical_order_and_native_cached_token_publication_are_explicit():
@@ -49,11 +47,6 @@ def test_reservations_and_outputs_remain_at_checked_boundary():
     assert 'py_setattr(self.states[i]' not in provider
     assert '"_usable", PythonObject(False)' in provider
     assert 'if self.published:' in provider
-    public = text('bindings/causal_lm_public.mojo')
-    read = public.split('def _read_engine(')[1].split('def _read(')[0]
-    assert 'owner.reserve()' not in read and 'GILReleased' not in read
-    assert read.count('owner.publish()') == 2
-    assert read.count('_engine_publish_stream(s, progress, batch)') == 2
 
 
 def test_experiment_never_silently_relabels_unsupported_routes():

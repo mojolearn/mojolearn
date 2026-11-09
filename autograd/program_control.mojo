@@ -59,6 +59,32 @@ def _predicate[E: Exec & Movable & Deinitable](
     return value != 0
 
 
+def _shadow_mask[E: Exec & Movable & Deinitable](mut s: OpsSession[E], body: OpsProgram) raises -> List[Bool]:
+    """Which body parameters the loop's gate shadows (lane x1b): declared
+    state, except (lane x45c) append-only state, a full-causal KV cache
+    whose position word is a shadowed parameter of the same body. A body
+    run past the stop writes such a cache only at the position its word
+    holds, in slots no committed position reads; the gate restores the
+    word, so the next write lands there again. The cache is neither copied
+    per iteration nor counted against LOOP_DRAIN_FLOATS, so a decode body
+    over many layers keeps its chunk."""
+    var params = parameter_buffers(s, body)
+    var n = len(body.params)
+    var mask = List[Bool](length=n, fill=False)
+    for j in range(n):  # driver-loop: over body parameters (declared state)
+        mask[j] = s.is_state(body.params[j])
+    for j in range(n):  # driver-loop: over body parameters (append-only state)
+        if not mask[j]:
+            continue
+        var q = s.append_words_of(Int(params[j]))
+        if q == 0:
+            continue
+        for k in range(n):  # driver-loop: over body parameters (the position word of an append-only cache)
+            if k != j and mask[k] and Int(params[k]) == q and s.append_words_of(Int(params[k])) == 0:
+                mask[j] = False
+    return mask^
+
+
 # TOMBSTONE: _copy_state (REFACTORED: per-iteration copy of the carried state into fresh buffers plus a drain) deleted 2026-11-08 by lane/fix-d3-executor-loops; code recoverable at 22ac89b54c.
 # The bounded loop now carries its state in place (`_commit_state`, OP_LOOP_COMMIT) and stops on the device (OP_LOOP_TICK).
 # Restore: git apply experiments/removed/EXECUTOR_LOOP_DRIVER_LOOPS.patch; record in docs/TOMBSTONES.md.
@@ -309,8 +335,9 @@ def control_prepare[E: Exec & Movable & Deinitable, KIND: Int](
         # op's state, kv and words are its parameters; state is a property of
         # the buffer, OpsSession.buffer_kind).
         var shadow_floats = 0
+        var shadowed = _shadow_mask(s[], body)
         for j in range(len(body.params)):  # driver-loop: over body parameters, for declared state written in place
-            if s[].is_state(body.params[j]):
+            if shadowed[j]:
                 shadow_floats += body.param_shapes[j].count()
         if every == LOOP_CHECK_AUTO:
             auto_chunk = True
@@ -429,8 +456,9 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
             if plan.shadow:
                 # Each shadow starts as the state before the first body.
                 var params = parameter_buffers(s[], body)
+                var shadowed = _shadow_mask(s[], body)
                 for j in range(len(body.params)):  # driver-loop: over body parameters (declared state shadows)
-                    if s[].is_state(body.params[j]):
+                    if shadowed[j]:
                         var n = body.param_shapes[j].count()
                         var copy = s[].ex.alloc(n)
                         extras.append(copy)
@@ -475,6 +503,7 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
                         # at the bound the tick has stopped the loop: read it
                         # rather than enqueue a body past max_iterations
                         s[].ex.download(mirror_p, words, LOOP_WORDS)
+                        s[].steps.release_parked()
                         iterations = Int(mirror[LOOP_ITER])
                         _lap(s[], timers, "read_flag")
                         if mirror[LOOP_DONE] != Float32(0.0):

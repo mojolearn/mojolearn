@@ -75,7 +75,7 @@ def test_explicit_legacy_route_has_independent_upload_policy(tmp_path, mode):
 @pytest.mark.parametrize("mode", ["greedy", "fp32"])
 def test_resident_route_does_not_manufacture_reload_off_arm(tmp_path, mode):
     records = _run(tmp_path, mode, "resident")
-    assert {r["route"] for r in records} == {"resident_greedy" if mode == "greedy" else "resident_sampling"}
+    assert {r["route"] for r in records} == {"program_decode"}
     assert {r["kv_policy"] for r in records} == {"already_resident"}
     assert {r["kv_uploads_skipped"] for r in records} == {"0"}
 
@@ -131,29 +131,22 @@ def test_checkpoint_sampling_policy_survives_route_changes(tmp_path, monkeypatch
     np.testing.assert_array_equal(prefix, saved_prefix)
 
 
-def test_exposed_mutable_weights_refresh_after_reused_read(tmp_path, monkeypatch):
+def test_exposed_weights_are_read_only_after_use(tmp_path, monkeypatch):
+    # Resident weight copies are keyed by address and the weight epoch
+    # (core/weight_epoch.mojo): a weight a kernel has read is read-only, so
+    # an in-place edit is refused instead of silently diverging from the
+    # device copy; a read after the refusal still returns the original tokens.
     import numpy as np
     from mojolearn.tests.test_generation_native import load_fixture
     monkeypatch.setenv("MOJOLEARN_EXPERIMENT_GENERATION_ROUTE", "legacy")
-    monkeypatch.setenv("MOJOLEARN_EXPERIMENT_SAMPLING_KV_UPLOAD_REUSE", "1")
-    monkeypatch.setenv("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD", "1")
     model = load_fixture(tmp_path, "llama", uniform=False)
     prompt = np.array([[1, 3]], dtype="i4")
     reference = np.asarray(model.stream(prompt, 3).read(3)).copy()
-    assert np.any(reference != 0), "mutation positive control needs nonzero original tokens"
-    stream = model.stream(prompt, 5)
-    prefix = np.asarray(stream.read(2)).copy()
     owners = model.parameters()
     assert owners and model._parameters_exposed is True
-    original = np.asarray(model._head).copy()
-    address = model._head._addr
-    np.asarray(model._head)[:] = 0
-    assert model._head._addr == address
-    np.testing.assert_array_equal(np.asarray(stream.read(3)), [[0, 0, 0]])
-    np.asarray(model._head)[:] = original
-    assert model._head._addr == address
+    with pytest.raises(ValueError):
+        np.asarray(model._head)[:] = 0
     np.testing.assert_array_equal(np.asarray(model.stream(prompt, 3).read(3)), reference)
-    assert prefix.shape == (1, 2)
     assert model._resident_busy is False
 
 

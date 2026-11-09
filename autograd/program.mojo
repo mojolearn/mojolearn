@@ -69,10 +69,11 @@ comptime PROGRAM_PARAM_STATE_WORDS = 2
 # The largest operation code a program may hold (autograd/ops_api.mojo OPS_*):
 # OPS_INDEX 76 ends the import family; 77..80 are captured Transformer
 # RMSNorm, rotary, projection and ascending-key softmax; 81..84 the block step
-# ops (autograd/block_step_ops.mojo), version 3 records only. Code 47 stays
-# reserved.
+# ops (autograd/block_step_ops.mojo), 85..86 the generation pick and decode
+# condition (autograd/generation_ops.mojo, lane x45c), version 3 records
+# only. Code 47 stays reserved.
 comptime PROGRAM_MAX_CODE_V2 = 80
-comptime PROGRAM_MAX_CODE = 84
+comptime PROGRAM_MAX_CODE = 86
 
 
 struct OpsLog(Movable):

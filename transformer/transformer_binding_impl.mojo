@@ -34,9 +34,6 @@ from std.sys.compile import is_defined
 from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 
 from core.identity_trace import IdentityTrace
-from core.resident_generation_read import ResidentGreedyRead
-from core.resident_sampling_read import ResidentSamplingRead
-from core.generation_sampling_f32 import sampling_pick_f32
 from core.device_scan import device_first_nonfinite
 from core.device_nonfinite_pair import DeviceNonfinitePair
 from std.gpu import block_idx, thread_idx
@@ -65,6 +62,7 @@ from transformer.checks.transformer_fixture import RMS_EPS, ROPE_THETA
 from transformer.impl.llama.fused_attention import fused_forward_supported_head_dim
 # Lane x4: the public decode session runs the attention step op.
 from transformer.attn_step_session import AttnStepArm, attn_step_ints, attn_step_same_layout
+from core.weight_epoch import WeightKey
 from autograd.block_step_ops import AttnPrefill
 from transformer.impl.llama.modeling_llama import (
     ATTN_PATH_EAGER,
@@ -514,8 +512,11 @@ struct TransformerSession(Movable, Writable):
     unlike a caller's float32 array their address is their version."""
     var ctx: Optional[DeviceContext]
     var workspace: Optional[TransformerWorkspace]
-    var planes: Optional[LlamaInt15Weights]
-    var planes_key: List[Int]
+    var arm15: Optional[AttnStepArm]
+    """Lane x45c: the fixed15_v1 block forward on the attention step op (an
+    adopted entry over the profile's weights), keyed by `key15`: the shape,
+    every weight and plane address and the weight epoch."""
+    var key15: WeightKey
     var weights: Optional[LlamaDeviceWeights]
     """lane/neural-net-experiment (2026-09-30): the block's float32 weights
     RETAINED on the device across calls. A Python address is still not a
@@ -534,8 +535,8 @@ struct TransformerSession(Movable, Writable):
     var arm: Optional[AttnStepArm]
     """Lane x4b: the block's forward, step and backward on the attention
     step op (transformer/attn_step_session.mojo): its weights packed once
-    into the op's weight buffer (byte-compared with the caller's arrays on
-    every call), its cache in the op's state buffer, its L stages and the
+    into the op's weight buffer (keyed by the caller's addresses and the
+    weight epoch, lane x45c), its cache in the op's state buffer, its L stages and the
     backward stages kept by the arm. `workspace` and `weights` above serve
     only the forward tape (`retain_tape`, lane X6 deletes it)."""
     var tape: Optional[BorrowedAttentionTape]
@@ -548,8 +549,8 @@ struct TransformerSession(Movable, Writable):
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
         self.workspace = Optional[TransformerWorkspace]()
-        self.planes = Optional[LlamaInt15Weights]()
-        self.planes_key = List[Int]()
+        self.arm15 = Optional[AttnStepArm]()
+        self.key15 = WeightKey()
         self.weights = Optional[LlamaDeviceWeights]()
         self.weights_key = List[Int]()
         self.weights_host = List[Float32]()
@@ -576,7 +577,7 @@ struct TransformerSession(Movable, Writable):
         _ = self.tape^
         _ = self.arm^
         _ = self.workspace^
-        _ = self.planes^
+        _ = self.arm15^
         _ = self.weights^
         if self.ctx:
             try:
@@ -602,8 +603,8 @@ struct TransformerSession(Movable, Writable):
             self.ctx.value().synchronize()
         self.arm = None
         self.workspace = None
-        self.planes = None
-        self.planes_key = List[Int]()
+        self.arm15 = None
+        self.key15 = WeightKey()
         self.weights = None
         self.weights_key = List[Int]()
         self.weights_host = List[Float32]()
@@ -951,7 +952,7 @@ def _session_arm(
         for i in range(8, len(ints)):  # small-loop(ints: the 17 block option words): argument words, no data
             words.append(ints[i])
     session.arm = AttnStepArm(session.ctx.value(), a, b, dm, nh, nkv, hd, it, smax, s0, window, opts, words,
-                              keep_host=True)
+                              keyed=True)
     session.workspaces += 1
 
 
@@ -1191,9 +1192,12 @@ def _transformer_run_session_int15(
     dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
     smax: Int, s0: Int, window: Int, opts: BlockOptions,
 ) raises -> Int:
-    """`_transformer_run_session` under the profile: the same stages, cache
-    handling and downloads, with the weights' seven projections as the
-    session's retained planes."""
+    """`TransformerBlock.forward` under numeric_profile="fixed15_v1" on the
+    attention step op (lane x45c; x4b moved the decode sessions): the
+    profile's weights (norms, biases and the seven projection planes) built
+    once per weight key into an adopted step-op entry, the caller's caches
+    loaded at s0, the op, y and the caches back, one wait. The former body
+    ran its own workspace and re-uploaded the norms and biases every call."""
     session.invalidate_tape()
     var dims = LlamaDims(dm, nh, nkv, hd, it)
     dims.validate()
@@ -1204,7 +1208,7 @@ def _transformer_run_session_int15(
             + String(s0) + "; the two sides of this boundary disagree about the state")
     if window < 0:
         raise Error("transformer: window must be >= 0 (0 = full causal)")
-    for i in range(3, 10):
+    for i in range(3, 10):  # small-loop(7: the float32 projection slots): address checks, no data
         if a[i] != 0:
             raise Error(
                 "transformer_session_forward_int15: float32 projection slot "
@@ -1215,72 +1219,51 @@ def _transformer_run_session_int15(
         session.contexts += 1
     ref ctx = session.ctx.value()
     var pbase = 13 + BLOCK_OPTION_ADDRS
-    var pkey: List[Int] = [dm, nh, nkv, hd, it, Int(opts.gated())]
-    for i in range(21):
-        pkey.append(a[pbase + i])
-    var same = Bool(session.planes) and len(session.planes_key) == len(pkey)
-    if same:
-        for i in range(len(pkey)):  # small-loop(pkey: six shapes plus 21 plane addresses): compares cache keys, not data
-            if pkey[i] != session.planes_key[i]:
-                same = False
-    if not same:
-        ctx.synchronize()
-        session.planes = None
-        session.planes = Optional[LlamaInt15Weights](_upload_planes(ctx, dims, opts, a, pbase))
-        session.planes_key = pkey^
-    var lean = False
-    var key = _workspace_key(b, l, dims, smax, window, lean, opts)
-    var reused = False
-    if session.workspace:
-        reused = session.workspace.value().matches(key)
-    if not reused:
-        ctx.synchronize()
-        session.workspace = None
-        ctx.synchronize()
-    var what = String("transformer_session_forward_int15")
     var t = _tail_of(a, 13)
-    var w = LlamaDeviceWeights(
-        ctx, dims, opts,
-        _upload_addr(ctx, a[1], dm),
-        _upload_addr(ctx, a[2], dm),
-        session.planes.value().copy(),
-        _optional_upload(ctx, t[0], dims.q_width(), opts.qkv_bias, "q_proj.bias", what),
-        _optional_upload(ctx, t[1], dims.kv_width(), opts.qkv_bias, "k_proj.bias", what),
-        _optional_upload(ctx, t[2], dims.kv_width(), opts.qkv_bias, "v_proj.bias", what),
-        _optional_upload(ctx, t[3], dm, opts.o_bias, "o_proj.bias", what),
-        _optional_upload(ctx, t[4], dm, opts.norm_bias, "input_layernorm.bias", what),
-        _optional_upload(ctx, t[5], dm, opts.norm_bias, "post_attention_layernorm.bias", what),
-        _optional_upload(ctx, t[6], it, opts.mlp_bias, "up_proj.bias", what),
-        _optional_upload(ctx, t[7], dm, opts.mlp_bias, "down_proj.bias", what),
-        _optional_upload(ctx, t[8], it, opts.has_gate_bias(), "gate_proj.bias", what),
-        _optional_upload(ctx, t[9], hd, opts.qk_norm, "q_norm.weight", what),
-        _optional_upload(ctx, t[10], hd, opts.qk_norm, "k_norm.weight", what),
-    )
-    if not reused:
-        session.workspace = TransformerWorkspace(ctx, dims, b, l, smax, window, lean, opts)
-        session.workspaces += 1
-    ref ws = session.workspace.value()
-    if reused:
-        ws.stages.reset(ctx)
-    ctx.enqueue_copy(dst_buf=ws.kv.k, src_ptr=_f32_ptr(a[10]))
-    ctx.enqueue_copy(dst_buf=ws.kv.v, src_ptr=_f32_ptr(a[11]))
-    ctx.enqueue_copy(dst_buf=ws.x, src_ptr=_f32_ptr(a[0]))
-    ctx.synchronize()
-    ws.kv.s = s0
-    var trace = IdentityTrace.disabled()
-    llama_decoder_layer_forward(ctx, ws.stages, ws.kv, ws.rope, w, ws.x,
-                                b, l, s0, trace, String("py"))
-    _download_addr(ctx, ws.stages.residual2, b * l * dm, a[12])
-    _download_addr(ctx, ws.kv.k, len(ws.kv.k), a[10])
-    _download_addr(ctx, ws.kv.v, len(ws.kv.v), a[11])
-    var result = ws.kv.s
-    var retain = ws.retained_bytes() <= 64 * 1024 * 1024
-    _ = w^
-    ctx.synchronize()
-    if not retain:
-        session.workspace = None
-        ctx.synchronize()
-    return result
+    var addrs: List[Int] = [b, smax, window, dm, nh, nkv, hd, it, Int(opts.gated()), a[1], a[2]]
+    for i in range(len(t)):  # small-loop(t: the 11 optional weight addresses): key words, no data
+        addrs.append(t[i])
+    for i in range(21):  # small-loop(21: the seven plane triples): key words, no data
+        addrs.append(a[pbase + i])
+    if session.arm15 and session.key15.current(addrs):
+        session.arm15.value().load(a[10], a[11], s0)
+    else:
+        session.arm15 = None
+        session.key15 = WeightKey()
+        var key = WeightKey.take(addrs)
+        var what = String("transformer_session_forward_int15")
+        var planes = _upload_planes(ctx, dims, opts, a, pbase)
+        var w = LlamaDeviceWeights(
+            ctx, dims, opts,
+            _upload_addr(ctx, a[1], dm),
+            _upload_addr(ctx, a[2], dm),
+            planes^,
+            _optional_upload(ctx, t[0], dims.q_width(), opts.qkv_bias, "q_proj.bias", what),
+            _optional_upload(ctx, t[1], dims.kv_width(), opts.qkv_bias, "k_proj.bias", what),
+            _optional_upload(ctx, t[2], dims.kv_width(), opts.qkv_bias, "v_proj.bias", what),
+            _optional_upload(ctx, t[3], dm, opts.o_bias, "o_proj.bias", what),
+            _optional_upload(ctx, t[4], dm, opts.norm_bias, "input_layernorm.bias", what),
+            _optional_upload(ctx, t[5], dm, opts.norm_bias, "post_attention_layernorm.bias", what),
+            _optional_upload(ctx, t[6], it, opts.mlp_bias, "up_proj.bias", what),
+            _optional_upload(ctx, t[7], dm, opts.mlp_bias, "down_proj.bias", what),
+            _optional_upload(ctx, t[8], it, opts.has_gate_bias(), "gate_proj.bias", what),
+            _optional_upload(ctx, t[9], hd, opts.qk_norm, "q_norm.weight", what),
+            _optional_upload(ctx, t[10], hd, opts.qk_norm, "k_norm.weight", what),
+        )
+        var lean = _lean_for_w(hd, w)
+        var ints = attn_step_ints(b, dm, nh, nkv, hd, it, smax, window, opts)
+        var words = List[Int]()
+        for i in range(8, len(ints)):  # small-loop(ints: the 17 block option words): argument words, no data
+            words.append(ints[i])
+        session.arm15 = AttnStepArm(ctx, w^, b, dm, nh, nkv, hd, it, smax, s0, window, words, a[10], a[11], lean)
+        session.key15 = key^
+    var cached = session.arm15.value().run(a[0], a[12], l)
+    _ = session.arm15.value().export(a[10], a[11])
+    return cached
+
+
+# TOMBSTONE: the fixed15_v1 block forward's own workspace body (REFACTORED: onto the attention step op, an adopted entry) deleted 2026-11-09 by lane/x45c-causal-generate-program-decode; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch; record in docs/TOMBSTONES.md.
 
 
 
@@ -1870,124 +1853,8 @@ def _lm_last_argmax_kernel(
 
 
 
-def _lm_read_argmax_kernel(
-    logits: MutPointer[Float32, MutAnyOrigin], next_ids: MutPointer[Int32, MutAnyOrigin],
-    out_ids: MutPointer[Int32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
-    batch_in: Int32, cur_l_in: Int32, vocab_in: Int32, capacity_in: Int32,
-    step_in: Int32, pad: Int32,
-):
-    # One block per row: stable lowest-index maximum, first nonfinite refusal,
-    # next input stays on device. Progress commits only after the next kernel
-    # knows the first failing row, matching source-ordered failure publication.
-    var r = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var batch = Int(batch_in)
-    var cur_l = Int(cur_l_in)
-    var vocab = Int(vocab_in)
-    var capacity = Int(capacity_in)
-    var step = Int(step_in)
-    if status[r] != 0:
-        if tid == 0:
-            next_ids[r] = pad
-            out_ids[r * capacity + step] = pad
-            status[batch + r] = -1
-        return
-    var keys = stack_allocation[_LM_ARGMAX_TPB, UInt32, address_space=AddressSpace.SHARED]()
-    var indices = stack_allocation[_LM_ARGMAX_TPB, Int32, address_space=AddressSpace.SHARED]()
-    var bad = stack_allocation[_LM_ARGMAX_TPB, Int32, address_space=AddressSpace.SHARED]()
-    var best_key = UInt32(0)
-    var best_index = _LM_ARGMAX_NONE
-    var first_bad = _LM_ARGMAX_NONE
-    var base = (r * cur_l + cur_l - 1) * vocab
-    var c = tid
-    while c < vocab:
-        var value = logits[base + c]
-        if (bitcast[DType.uint32](value) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            first_bad = min(first_bad, Int32(c))
-        var key = _lm_order_key(value)
-        if best_index == _LM_ARGMAX_NONE or key > best_key:
-            best_key = key
-            best_index = Int32(c)
-        c += _LM_ARGMAX_TPB
-    keys[tid] = best_key
-    indices[tid] = best_index
-    bad[tid] = first_bad
-    barrier()
-    var active = _LM_ARGMAX_TPB // 2
-    while active > 0:
-        if tid < active:
-            var oi = indices[tid + active]
-            var ok = keys[tid + active]
-            var mi = indices[tid]
-            var mk = keys[tid]
-            if oi != _LM_ARGMAX_NONE and (mi == _LM_ARGMAX_NONE or ok > mk or (ok == mk and oi < mi)):
-                keys[tid] = ok
-                indices[tid] = oi
-            bad[tid] = min(bad[tid], bad[tid + active])
-        barrier()
-        active //= 2
-    if tid == 0:
-        status[batch + r] = -1 if bad[0] == _LM_ARGMAX_NONE else bad[0]
-        if bad[0] != _LM_ARGMAX_NONE:
-            return
-        var pick = indices[0]
-        next_ids[r] = pick
-        out_ids[r * capacity + step] = pick
-
-
-
-
-def _lm_read_status_kernel(status: MutPointer[Int32, MutAnyOrigin],
-                           summary: MutPointer[Int32, MutAnyOrigin],
-                           lengths: MutPointer[Int64, MutAnyOrigin],
-                           next_ids: MutPointer[Int32, MutAnyOrigin],
-                           eos: MutPointer[Int32, MutAnyOrigin], batch_in: Int32, n_eos_in: Int32):
-    # First locate the first invalid active row. Then commit only earlier
-    # rows (all rows when valid), exactly as the source-ordered picker did.
-    # This uses the existing second launch and two-word control transfer.
-    var batch = Int(batch_in)
-    var tid = Int(thread_idx.x)
-    var rows = stack_allocation[_LM_ARGMAX_TPB, Int32, address_space=AddressSpace.SHARED]()
-    var pending = stack_allocation[_LM_ARGMAX_TPB, Int32, address_space=AddressSpace.SHARED]()
-    var first_bad = _LM_ARGMAX_NONE
-    var r = tid
-    while r < batch:
-        if status[batch + r] >= 0:
-            first_bad = min(first_bad, Int32(r))
-        r += _LM_ARGMAX_TPB
-    rows[tid] = first_bad
-    barrier()
-    var width = _LM_ARGMAX_TPB // 2
-    while width > 0:
-        if tid < width:
-            rows[tid] = min(rows[tid], rows[tid + width])
-        barrier()
-        width //= 2
-    var stop = Int(rows[0])
-    var active = Int32(0)
-    r = tid
-    while r < batch:
-        if status[r] == 0 and r < stop:
-            lengths[r] += 1
-            var pick = next_ids[r]
-            for i in range(Int(n_eos_in)):
-                if pick == eos[i]:
-                    status[r] = 1
-        if status[r] == 0:
-            active = 1
-        r += _LM_ARGMAX_TPB
-    pending[tid] = active
-    barrier()
-    width = _LM_ARGMAX_TPB // 2
-    while width > 0:
-        if tid < width:
-            pending[tid] = max(pending[tid], pending[tid + width])
-        barrier()
-        width //= 2
-    if tid == 0:
-        summary[0] = pending[0]
-        summary[1] = -1 if rows[0] == _LM_ARGMAX_NONE else status[batch + stop]
-
+# TOMBSTONE: _lm_read_argmax_kernel / _lm_read_status_kernel / _lm_read_sample_kernel / _lm_read_progress / _LMSamplingCheckpoint / _lm_sampling_outputs (REFACTORED: the pick rule is the session op OPS_LM_PICK, autograd/generation_ops.mojo; reads run as the decode program) deleted 2026-11-09 by lane/x45c-causal-generate-program-decode; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch; record in docs/TOMBSTONES.md.
 
 
 def _lm_open_run(mut s: CausalLMSession, pe: Int, pn: Int, ph: Int, b: Int, v: Int, d: Int, eps: Float32) raises:
@@ -2135,148 +2002,17 @@ def _lm_layers_run(
 
 
 
-def _lm_read_progress(ctx: DeviceContext, mut read: ResidentGreedyRead,
-                      lengths: DeviceBuffer[DType.int64], finished: DeviceBuffer[DType.int32]) raises:
-    # One normal or failure-only metadata publication. A failed copy must not
-    # expose partially refreshed lists as a coherent progress snapshot.
-    read.progress_ready = False
-    ctx.enqueue_copy(dst_ptr=read.lengths.unsafe_ptr(), src_buf=lengths)
-    ctx.enqueue_copy(dst_ptr=read.finished.unsafe_ptr(), src_buf=finished)
-    ctx.synchronize()
-    read.progress_ready = True
-
-
-struct _LMSamplingCheckpoint(Movable):
-    # Correctness prototype: live KV plus TWO full alternating snapshots =3x
-    # total KV storage. One full KV D2D copy per completed forward remains.
-    # No allocation per token and no claim that this is a performance win.
-    var k0: List[DeviceBuffer[DType.float32]]
-    var v0: List[DeviceBuffer[DType.float32]]
-    var k1: List[DeviceBuffer[DType.float32]]
-    var v1: List[DeviceBuffer[DType.float32]]
-    var active: Int
-    var pending: Int
-    var cached: Int
-    var pending_cached: Int
-    var ready: Bool
-
-    def __init__(out self, ctx: DeviceContext, layers: List[Int]) raises:
-        self.k0 = List[DeviceBuffer[DType.float32]]()
-        self.v0 = List[DeviceBuffer[DType.float32]]()
-        self.k1 = List[DeviceBuffer[DType.float32]]()
-        self.v1 = List[DeviceBuffer[DType.float32]]()
-        self.active = 1
-        self.pending = 0
-        self.cached = 0
-        self.pending_cached = 0
-        self.ready = False
-        try:
-            for address in layers:
-                var layer = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=address)
-                self.k0.append(ctx.enqueue_create_buffer[DType.float32](len(layer[].op.value().k_view())))
-                self.v0.append(ctx.enqueue_create_buffer[DType.float32](len(layer[].op.value().v_view())))
-                self.k1.append(ctx.enqueue_create_buffer[DType.float32](len(layer[].op.value().k_view())))
-                self.v1.append(ctx.enqueue_create_buffer[DType.float32](len(layer[].op.value().v_view())))
-            # Initial state is a valid recovery point even if the first forward
-            # fails. Only the first snapshot is initialized here.
-            self.enqueue(ctx, layers)
-            ctx.synchronize()
-            self.commit()
-        except original:
-            try:
-                ctx.synchronize()
-            except:
-                pass
-            raise original
-        finally:
-            _ = self
-            _ = layers
-
-    def enqueue(mut self, ctx: DeviceContext, layers: List[Int]) raises:
-        self.pending = 1 - self.active
-        for i in range(len(layers)):
-            var layer = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=layers[i])
-            if i == 0:
-                self.pending_cached = layer[].cached()
-            elif self.pending_cached != layer[].cached():
-                raise Error("causal lm sampling: completed layers disagree about cached length")
-            if self.pending == 0:
-                ctx.enqueue_copy(dst_buf=self.k0[i], src_buf=layer[].op.value().k_view())
-                ctx.enqueue_copy(dst_buf=self.v0[i], src_buf=layer[].op.value().v_view())
-            else:
-                ctx.enqueue_copy(dst_buf=self.k1[i], src_buf=layer[].op.value().k_view())
-                ctx.enqueue_copy(dst_buf=self.v1[i], src_buf=layer[].op.value().v_view())
-
-    def commit(mut self):
-        # Caller has synchronized ALL inactive copies and accepted the forward.
-        self.active = self.pending
-        self.cached = self.pending_cached
-        self.ready = True
-
-    def publish(mut self, ctx: DeviceContext, mut read: ResidentSamplingRead) raises:
-        read.kv_ready = False
-        if not self.ready:
-            return
-        for i in range(len(read.cache_keys)):
-            if self.active == 0:
-                ctx.enqueue_copy(dst_ptr=_f32_ptr(read.cache_keys[i]), src_buf=self.k0[i])
-                ctx.enqueue_copy(dst_ptr=_f32_ptr(read.cache_values[i]), src_buf=self.v0[i])
-            else:
-                ctx.enqueue_copy(dst_ptr=_f32_ptr(read.cache_keys[i]), src_buf=self.k1[i])
-                ctx.enqueue_copy(dst_ptr=_f32_ptr(read.cache_values[i]), src_buf=self.v1[i])
-        ctx.synchronize()
-        read.cached_tokens = self.cached
-        read.kv_ready = True
-
-
-def _lm_read_sample_kernel(
-    logits: MutPointer[Float32, MutAnyOrigin], next_ids: MutPointer[Int32, MutAnyOrigin],
-    out_ids: MutPointer[Int32, MutAnyOrigin], status: MutPointer[Int32, MutAnyOrigin],
-    order: MutPointer[Int32, MutAnyOrigin], merge: MutPointer[Int32, MutAnyOrigin],
-    weights: MutPointer[Float32, MutAnyOrigin], batch_in: Int32, cur_l_in: Int32,
-    vocab_in: Int32, capacity_in: Int32, step_in: Int32, pad: Int32,
-    temperature: Float32, top_k: Int32, top_p: Float32, seed: UInt64, position: Int64,
-):
-    # One worker per row executes the SAME native policy as the host fallback.
-    # This deliberately simple experimental kernel may be slow for large V/B1.
-    var row = Int(block_idx.x)
-    if Int(thread_idx.x) != 0:
-        return
-    var b = Int(batch_in)
-    var v = Int(vocab_in)
-    var step = Int(step_in)
-    var capacity = Int(capacity_in)
-    if status[row] != 0:
-        next_ids[row] = pad
-        out_ids[row * capacity + step] = pad
-        status[b + row] = -1
-        return
-    var selected = sampling_pick_f32(
-        logits + (row * Int(cur_l_in) + Int(cur_l_in) - 1) * v,
-        order + row * v, merge + row * v, weights + row * v,
-        v, temperature, Int(top_k), top_p, seed, row, Int(position))
-    status[b + row] = Int32(selected[1])
-    next_ids[row] = Int32(selected[0]) if selected[1] < 0 else pad
-    out_ids[row * capacity + step] = next_ids[row]
-
-
-def _lm_sampling_outputs(ctx: DeviceContext, mut read: ResidentGreedyRead,
-                         out_dev: DeviceBuffer[DType.int32], output: MutPointer[Int32, MutUntrackedOrigin],
-                         capacity: Int, lengths: DeviceBuffer[DType.int64], finished: DeviceBuffer[DType.int32],
-                         mut views: List[DeviceBuffer[DType.int32]]) raises:
-    # progress_ready covers tokens AND row diagnostics, on success and failure.
-    read.progress_ready = False
-    for row in range(len(read.finished)):
-        if read.wrote > 0:
-            views.append(out_dev.create_sub_buffer[DType.int32](row * capacity, read.wrote))
-            ctx.enqueue_copy(dst_ptr=output + row * capacity, src_buf=views[len(views) - 1])
-    _lm_read_progress(ctx, read, lengths, finished)
-
-
 def _lm_run(
     mut s: CausalLMSession, layers: List[Int], p_ids: Int, p_out: Int, p_logits: Int,
-    l: Int, n_steps: Int, read_address: Int = 0, sampling_address: Int = 0,
+    l: Int, n_steps: Int,
 ) raises:
+    """`n_steps` greedy tokens of the resident stack (`CausalLM._generate_resident`):
+    the embedding, every layer, the norm, the head and the pick on the
+    device, the ids fed back on the device, the [b, n_steps] ids (and, when
+    asked, the last step's last-position logits) down once. Lane x45c: the
+    stream reads (greedy and sampled, with EOS rows) moved to the decode
+    program (transformer/causal_lm_program.mojo); this fixed-length loop
+    stays for the private resident entry only."""
     ref ctx = s.ctx.value()
     var b = s.b
     var d = s.d
@@ -2284,66 +2020,16 @@ def _lm_run(
     var emb_cfg = EmbConfig.llama(v, d)
     var ids_i32 = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=p_ids)
     var out_i32 = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=p_out)
-    # cpu2-l11-neural (2026-10-04): the greedy pick runs on the device
-    # (`_lm_last_argmax_kernel`), and its ids feed the next step from
-    # `next_ids` without a host round trip; the [b, n_steps] ids and (when
-    # asked) the last step's last-position logits come down once, at the end.
     var ids0 = ctx.enqueue_create_buffer[DType.int32](b * l)
     ctx.enqueue_copy(dst_buf=ids0, src_ptr=ids_i32)
     var next_ids = ctx.enqueue_create_buffer[DType.int32](b)
     var out_dev = ctx.enqueue_create_buffer[DType.int32](b * n_steps)
-    var sampling = MutPointer[ResidentSamplingRead, MutUntrackedOrigin](unsafe_from_address=sampling_address)
-    var progress_address = read_address
-    if sampling_address != 0:
-        progress_address = Int(Pointer(to=sampling[].progress))
-    var read = MutPointer[ResidentGreedyRead, MutUntrackedOrigin](unsafe_from_address=progress_address)
-    var status = List[Int32]()
-    var status_device = Optional[DeviceBuffer[DType.int32]]()
-    var finished_device = Optional[DeviceBuffer[DType.int32]]()
-    var summary_device = Optional[DeviceBuffer[DType.int32]]()
-    var lengths_device = Optional[DeviceBuffer[DType.int64]]()
-    var eos_device = Optional[DeviceBuffer[DType.int32]]()
-    if read_address != 0:
-        status = List[Int32](length=2, fill=0)
-        status_device = ctx.enqueue_create_buffer[DType.int32](2 * b)
-        finished_device = status_device.value().create_sub_buffer[DType.int32](0, b)
-        summary_device = ctx.enqueue_create_buffer[DType.int32](2)
-        lengths_device = ctx.enqueue_create_buffer[DType.int64](b)
-        eos_device = ctx.enqueue_create_buffer[DType.int32](max(1, len(read[].eos)))
-        ctx.enqueue_copy(dst_buf=finished_device.value(), src_ptr=read[].finished.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=lengths_device.value(), src_ptr=read[].lengths.unsafe_ptr())
-        if len(read[].eos) > 0:
-            ctx.enqueue_copy(dst_buf=eos_device.value(), src_ptr=read[].eos.unsafe_ptr())
-    var output_rows = List[DeviceBuffer[DType.int32]]()
     var logits_rows = List[DeviceBuffer[DType.float32]]()
     var workspace = _LMRunWorkspace()
-    var checkpoint = Optional[_LMSamplingCheckpoint]()
-    var sample_order = Optional[DeviceBuffer[DType.int32]]()
-    var sample_merge = Optional[DeviceBuffer[DType.int32]]()
-    var sample_weights = Optional[DeviceBuffer[DType.float32]]()
     var finite_checks = Optional[DeviceNonfinitePair]()
-    var progress_synchronized = True
     try:
-        if sampling_address != 0:
-            checkpoint = _LMSamplingCheckpoint(ctx, layers)
-            sample_order = ctx.enqueue_create_buffer[DType.int32](b * v)
-            sample_merge = ctx.enqueue_create_buffer[DType.int32](b * v)
-            sample_weights = ctx.enqueue_create_buffer[DType.float32](b * v)
         var cur_l = l
         for step in range(n_steps):
-            if sampling_address != 0:
-                sampling[].failure_is_forward = False
-            if read_address != 0:
-                var consumed = l + step
-                var position = read[].position + consumed
-                if read[].max_positions >= 0 and position > read[].max_positions:
-                    raise Error("CausalLM: max_tokens or sequence exceeds max_positions")
-                if position > read[].state_capacity:
-                    raise Error("CausalLM: sequence exceeds allocated state capacity")
-                if consumed > read[].cache_remaining:
-                    raise Error("causal lm resident: additional positions do not fit the cache")
-            if sampling_address != 0:
-                sampling[].failure_is_forward = True
             var m = b * cur_l
             _lm_scratch_buffer(ctx, workspace.x, m * d)
             ref x = workspace.x.value()
@@ -2359,8 +2045,6 @@ def _lm_run(
             if s.norm:
                 llama_rms_norm(ctx, sumsq, hn, x, s.norm.value(), m, d, s.eps)
             else:
-                # No final norm (LM_RESIDENT_GENERATE): the head reads the stack
-                # output, as the per-layer route's head does; a copy, no arithmetic.
                 ctx.enqueue_copy(dst_buf=hn, src_buf=x)
             _lm_scratch_buffer(ctx, workspace.logits, m * v)
             workspace.prepare_gemm(ctx, m, v, d, Bool(s.head15))
@@ -2372,13 +2056,6 @@ def _lm_run(
                 identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.embed.value(), ws, m, v, d, OP_NT)
             else:
                 identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.head.value(), ws, m, v, d, OP_NT)
-            if sampling_address != 0:
-                # The existing finite-check wait also completes every inactive
-                # snapshot copy. Rejecting the forward leaves the old slot live.
-                checkpoint.value().enqueue(ctx, layers)
-            # The same independent x/hn scans share one completion wait.
-            # Lazily prepare at the original refusal point (not for zero steps)
-            # and keep x error priority before progress or selection commits.
             if not finite_checks:
                 finite_checks = DeviceNonfinitePair(ctx, max(b * l * d, b * d), Bool(s.norm))
             var bad = finite_checks.value().first_nonfinite(ctx, x, hn, m * d)
@@ -2386,121 +2063,34 @@ def _lm_run(
                 raise Error("mojolearn samba ops: non-finite rms_norm input at flat index " + String(bad[0]))
             if bad[1] >= 0:
                 raise Error("mojolearn samba ops: non-finite linear input at flat index " + String(bad[1]))
-            if sampling_address != 0:
-                checkpoint.value().commit()
-                sampling[].failure_is_forward = False
-            if read_address != 0:
-                read[].consumed += cur_l
-            if read_address == 0:
-                ctx.enqueue_function[_lm_last_argmax_kernel](
-                    logits.unsafe_ptr(), next_ids.unsafe_ptr(), out_dev.unsafe_ptr(),
-                    Int32(cur_l), Int32(v), Int32(n_steps), Int32(step),
-                    grid_dim=(b, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
-                )
-            else:
-                if sampling_address != 0:
-                    ctx.enqueue_function[_lm_read_sample_kernel](
-                        logits.unsafe_ptr(), next_ids.unsafe_ptr(), out_dev.unsafe_ptr(),
-                        status_device.value().unsafe_ptr(), sample_order.value().unsafe_ptr(),
-                        sample_merge.value().unsafe_ptr(), sample_weights.value().unsafe_ptr(),
-                        Int32(b), Int32(cur_l), Int32(v), Int32(n_steps), Int32(step), Int32(read[].pad),
-                        sampling[].temperature, Int32(sampling[].top_k), sampling[].top_p,
-                        sampling[].seed, Int64(sampling[].output_position + step),
-                        grid_dim=(b, 1, 1), block_dim=(1, 1, 1))
-                else:
-                    ctx.enqueue_function[_lm_read_argmax_kernel](
-                        logits.unsafe_ptr(), next_ids.unsafe_ptr(), out_dev.unsafe_ptr(),
-                        status_device.value().unsafe_ptr(),
-                        Int32(b), Int32(cur_l), Int32(v), Int32(n_steps), Int32(step), Int32(read[].pad),
-                        grid_dim=(b, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
-                    )
-                progress_synchronized = False
-                ctx.enqueue_function[_lm_read_status_kernel](
-                    status_device.value().unsafe_ptr(), summary_device.value().unsafe_ptr(),
-                    lengths_device.value().unsafe_ptr(), next_ids.unsafe_ptr(), eos_device.value().unsafe_ptr(),
-                    Int32(b), Int32(len(read[].eos)),
-                    grid_dim=(1, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
-                )
-                ctx.enqueue_copy(dst_ptr=status.unsafe_ptr(), src_buf=summary_device.value())
+            ctx.enqueue_function[_lm_last_argmax_kernel](
+                logits.unsafe_ptr(), next_ids.unsafe_ptr(), out_dev.unsafe_ptr(),
+                Int32(cur_l), Int32(v), Int32(n_steps), Int32(step),
+                grid_dim=(b, 1, 1), block_dim=(_LM_ARGMAX_TPB, 1, 1),
+            )
             if p_logits != 0 and step == n_steps - 1:
                 var lp = _f32_ptr(p_logits)
                 for r in range(b):
                     logits_rows.append(logits.create_sub_buffer[DType.float32]((r * cur_l + cur_l - 1) * v, v))
                     ctx.enqueue_copy(dst_ptr=lp + r * v, src_buf=logits_rows[r])
             ctx.synchronize()
-            progress_synchronized = True
             logits_rows.clear()
             cur_l = 1
-            if read_address != 0:
-                if status[1] >= 0:
-                    raise Error("generation: non-finite logit at token " + String(status[1]))
-                read[].wrote = step + 1
-                if status[0] == 0:
-                    break
-        if sampling_address != 0:
-            _lm_sampling_outputs(ctx, read[], out_dev, out_i32, n_steps,
-                lengths_device.value(), finished_device.value(), output_rows)
-            checkpoint.value().publish(ctx, sampling[])
-        elif read_address == 0:
-            ctx.enqueue_copy(dst_ptr=out_i32, src_buf=out_dev)
-        else:
-            # A stopped read has unwritten trailing capacity. Copy only published
-            # tokens, retaining row views until the final device synchronization.
-            for r in range(b):  # driver-loop: completed output-row transfer spans, no token computation
-                output_rows.append(out_dev.create_sub_buffer[DType.int32](r * n_steps, read[].wrote))
-                ctx.enqueue_copy(dst_ptr=out_i32 + r * n_steps, src_buf=output_rows[r])
-        if sampling_address == 0:
-            if read_address != 0:
-                _lm_read_progress(ctx, read[], lengths_device.value(), finished_device.value())
-            else:
-                ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=out_i32, src_buf=out_dev)
+        ctx.synchronize()
     except original:
-        if sampling_address != 0:
-            if progress_synchronized:
-                try:
-                    _lm_sampling_outputs(ctx, read[], out_dev, out_i32, n_steps,
-                        lengths_device.value(), finished_device.value(), output_rows)
-                except recovery:
-                    read[].progress_ready = False
-                    _ = recovery
-            if checkpoint:
-                try:
-                    checkpoint.value().publish(ctx, sampling[])
-                except recovery:
-                    sampling[].kv_ready = False
-                    _ = recovery
-        elif read_address != 0 and progress_synchronized:
-            try:
-                _lm_read_progress(ctx, read[], lengths_device.value(), finished_device.value())
-            except recovery:
-                # Device/readback failure cannot replace the original model or
-                # policy error. progress_ready stays false after a partial copy.
-                _ = recovery
-        # Keep all read-owned scratch and transfer views live through failure
-        # completion too; cleanup cannot replace the original operation error.
         try:
             ctx.synchronize()
         except:
             pass
         raise original
     finally:
-        _ = checkpoint
-        _ = sample_order
-        _ = sample_merge
-        _ = sample_weights
         _ = finite_checks
         _ = workspace
         _ = logits_rows
         _ = ids0^
         _ = next_ids^
         _ = out_dev^
-        _ = output_rows^
-        _ = finished_device^
-        _ = status_device^
-        _ = summary_device^
-        _ = lengths_device^
-        _ = eos_device^
-        _ = status^
 
 
 

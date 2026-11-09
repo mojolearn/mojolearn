@@ -18,7 +18,7 @@ def resident_route(monkeypatch):
 
 def test_default_profile_publishes_with_resident_state(tmp_path):
     model = load_fixture(tmp_path, "llama", uniform=True)
-    assert model._native_entries["resident_read_v1"] is True
+    assert model._native_entries["program_read"] is not None
     expected = [block._arithmetic_profile for block in model._blocks]
     assert all(isinstance(value, str) for value in expected)
     state = model.allocate_state(1, 5)
@@ -52,8 +52,8 @@ def test_changed_profile_unlabelled_cache_keeps_legacy_diagnostic(tmp_path):
 
 
 @pytest.mark.parametrize("family,entry,value", [
-    ("llama", "resident_read_v1", 1),
-    ("llama", "resident_read_v1", lambda: True),
+    ("llama", "program_read", 1),
+    ("llama", "program_read", lambda: True),
     # the Mamba-2 public-step workspace provider is gone (lane x5); the Mamba
     # state descriptor is the pinned Mamba-2 entry now
     ("mamba2", "native_mamba", object()),
