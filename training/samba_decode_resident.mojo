@@ -47,6 +47,7 @@ would have left there.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from core.decode_slab import decode_slab_check, decode_slab_put, decode_slab_take_ids
 from core.device_scan import device_first_nonfinite
 from core.hostptr import f32_ptr
 from core.identity_trace import IdentityTrace
@@ -413,29 +414,21 @@ def samba_decode_export(
     return cursors^
 
 
-def samba_decode_step(
-    mut s: SambaDecodeResident,
-    ids_ptr: MutPointer[Int32, MutUntrackedOrigin],
-    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
-) raises -> Int:
-    """One token per row: B ids (already range-checked by the door, and
-    again on the device by the embedding's own refusal) -> B x vocab logits
-    at `out_ptr`. Returns the first attention layer's cached_tokens after the
-    step (0 for an all-Mamba-3 stack), which the door does not need but a
-    probe can read. ONE wait, after the logits copy is enqueued."""
-    comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("mojolearn samba decode: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
+def _samba_decode_token(mut s: SambaDecodeResident, mut m3_stages: List[Mamba3DeviceStages]) raises -> Int:
+    """The stack on the B ids already in `s.ids`: embedding -> layers ->
+    final norm -> head into `s.logits`, all enqueued, no wait. The Mamba-3
+    stages it builds go into `m3_stages`, which the caller holds until its
+    wait. Returns the first attention layer's cached_tokens after the token
+    (0 for an all-Mamba-3 stack)."""
     ref ctx = s.ctx
     var b = s.b
     var dm = s.dm
-    ctx.enqueue_copy(dst_buf=s.ids, src_ptr=ids_ptr)
     var emb = EmbConfig.llama(s.vocab, dm)
     var ew = s._view(0)
     identical_embedding_forward_into(ctx, s.acts[0], ew, s.ids, b, emb)
     var trace = IdentityTrace.disabled()
     # The Mamba-3 stages depend on the carried buf_len, so they are built per
-    # step (as `_m3_session_step_run` builds them) and held until the wait.
-    var m3_stages = List[Mamba3DeviceStages]()
+    # step (as `_m3_session_step_run` builds them).
     var position = 0
     for i in range(s.n_layers()):  # driver-loop: over the stack's layers, in stack order
         var j = s.slot[i]
@@ -461,10 +454,63 @@ def samba_decode_step(
     var hw = s._view(s.head_index())
     llama_rms_norm(ctx, s.sumsq, s.hn, s.acts[s.n_layers()], nw, b, dm, s.eps)
     identical_gemm_into(ctx, s.logits, s.hn, hw, s.head_ws, b, s.vocab, dm, OP_NT)
-    ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=s.logits)
-    ctx.synchronize()
     _ = ew^
     _ = nw^
     _ = hw^
+    return position
+
+
+def samba_decode_step(
+    mut s: SambaDecodeResident,
+    ids_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+) raises -> Int:
+    """One token per row: B ids (already range-checked by the door, and
+    again on the device by the embedding's own refusal) -> B x vocab logits
+    at `out_ptr`. Returns the first attention layer's cached_tokens after the
+    step (0 for an all-Mamba-3 stack), which the door does not need but a
+    probe can read. ONE wait, after the logits copy is enqueued."""
+    comptime if not IDN_SAMBA_RESIDENT_STEP:
+        raise Error("mojolearn samba decode: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
+    ref ctx = s.ctx
+    ctx.enqueue_copy(dst_buf=s.ids, src_ptr=ids_ptr)
+    var m3_stages = List[Mamba3DeviceStages]()
+    var position = _samba_decode_token(s, m3_stages)
+    ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=s.logits)
+    ctx.synchronize()
     _ = m3_stages^
+    return position
+
+
+def samba_decode_tokens(
+    mut s: SambaDecodeResident,
+    ids_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+) raises -> Int:
+    """N tokens per row in one call (decode plan D2): the (B, N) ids uploaded
+    once, the body of `samba_decode_step` once per token with token t's ids
+    taken on the device and its B x vocab logits put into a (B, N, vocab)
+    device slab, one download, ONE wait. Same kernels, same order, same bytes
+    as N `samba_decode_step` calls; the states end where they leave them."""
+    comptime if not IDN_SAMBA_RESIDENT_STEP:
+        raise Error("mojolearn samba decode: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
+    decode_slab_check(s.b, n, s.vocab, "samba decode")
+    ref ctx = s.ctx
+    var ids = ctx.enqueue_create_buffer[DType.int32](s.b * n)
+    var out = ctx.enqueue_create_buffer[DType.float32](s.b * n * s.vocab)
+    ctx.enqueue_copy(dst_buf=ids, src_ptr=ids_ptr)
+    var position = 0
+    var last = List[Mamba3DeviceStages]()
+    for t in range(n):  # driver-loop: over decode tokens, the stack's one-token body each
+        decode_slab_take_ids(ctx, s.ids, ids, s.b, n, t)
+        # The previous token's stages return to the stream-ordered pool.
+        last = List[Mamba3DeviceStages]()
+        position = _samba_decode_token(s, last)
+        decode_slab_put(ctx, out, s.logits, s.b, n, s.vocab, t)
+    ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
+    ctx.synchronize()
+    _ = last^
+    _ = ids^
+    _ = out^
     return position
