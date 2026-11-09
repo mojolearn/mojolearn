@@ -18,9 +18,8 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, ne
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type, py_fields
 from bindings.family_common import family_call, family_repr, family_str, family_type_name, family_isinstance
 from bindings.optimizer_public_door import TensorView, shape_text
-from bindings.linalg_ops_buffers import (
-    LinBuf, LinAdmission, lin_admitted_c, lin_admitted_output, lin_truth, lin_is_f32, lin_dtype_name, lin_new, lin_typed, lin_tuple,
-)
+from bindings.linalg_ops_buffers import lin_truth, lin_is_f32, lin_dtype_name
+from bindings.admitted_input import AdmittedBuf, AdmittedTyped, admitted_typed_c, admitted_typed_output, admitted_zeros, admit_typed, admitted_shape_tuple
 
 comptime OP_NN = 0
 comptime OP_NT = 1
@@ -258,17 +257,17 @@ def lin_ints(*values: Int) raises -> PythonObject:
     return out
 
 
-def lin_operand(x: PythonObject, name: String, context: PythonObject, admitted: Bool = False) raises -> LinBuf:
+def lin_operand(x: PythonObject, name: String, context: PythonObject, admitted: Bool = False) raises -> AdmittedBuf:
     """`_operand(x, name)`: a float32 2-D buffer, refused by name otherwise,
     in C order (a layout copy at most, never a cast)."""
     # `admitted`: the family door already admitted this very argument (row
     # N237: lin_lowbit_operation and lin_decomp_operation admit every
-    # operand before dispatch), so LinAdmission does not admit it again.
-    var input = LinAdmission(x, context, admitted)
+    # operand before dispatch), so AdmittedTyped does not admit it again.
+    var input = AdmittedTyped(x, context, admitted)
     return _lin_operand_admitted(input^, name, context)
 
 
-def _lin_operand_admitted(var input: LinAdmission, name: String, context: PythonObject) raises -> LinBuf:
+def _lin_operand_admitted(var input: AdmittedTyped, name: String, context: PythonObject) raises -> AdmittedBuf:
     var profile = lin_text(context, "PROFILE")
     var v = input.view.copy()
     if not lin_is_f32(v):
@@ -290,17 +289,17 @@ def _lin_operand_admitted(var input: LinAdmission, name: String, context: Python
                     + "but no gate in this tree has run them through the Python "
                     + "surface, so they are refused here rather than answered "
                     + "unchecked.")
-    return lin_admitted_c(input^, "<f4", name, context)
+    return admitted_typed_c(input^, "<f4", name, context)
 
 
-def lin_operand_bits(x: PythonObject, name: String, context: PythonObject, admitted: Bool = False) raises -> LinBuf:
+def lin_operand_bits(x: PythonObject, name: String, context: PythonObject, admitted: Bool = False) raises -> AdmittedBuf:
     """`_operand_bits(x, name)`: a 2-D uint16 buffer of bf16 bits in C order."""
     # `admitted`: as lin_operand (row N237).
-    var input = LinAdmission(x, context, admitted)
+    var input = AdmittedTyped(x, context, admitted)
     return _lin_bits_admitted(input^, name, context)
 
 
-def _lin_bits_admitted(var input: LinAdmission, name: String, context: PythonObject) raises -> LinBuf:
+def _lin_bits_admitted(var input: AdmittedTyped, name: String, context: PythonObject) raises -> AdmittedBuf:
     var v = input.view.copy()
     var dtype = lin_dtype_name(input.keep, v)
     if dtype != "uint16":
@@ -311,14 +310,14 @@ def _lin_bits_admitted(var input: LinAdmission, name: String, context: PythonObj
         raise Error("mojolearn.linalg: " + name + " must be 2-D, got " + String(len(v.shape)) + "-D")
     if v.count() == 0:
         raise Error("mojolearn.linalg: " + name + " has no elements")
-    return lin_admitted_c(input^, "<u2", name, context)
+    return admitted_typed_c(input^, "<u2", name, context)
 
 
-def lin_out(out_buf: PythonObject, m: Int, n: Int, who: String, context: PythonObject) raises -> LinBuf:
+def lin_out(out_buf: PythonObject, m: Int, n: Int, who: String, context: PythonObject) raises -> AdmittedBuf:
     """`_out_or_new(out, m, n, who)`."""
     if out_buf is None:
-        return lin_new([m, n], "<f4", context)
-    var input = LinAdmission(out_buf, context)
+        return admitted_zeros([m, n], "<f4", context)
+    var input = AdmittedTyped(out_buf, context)
     var v = input.view.copy()
     if not lin_is_f32(v):
         raise Error("TypeError: mojolearn.linalg." + who + ": out must be float32")
@@ -327,7 +326,7 @@ def lin_out(out_buf: PythonObject, m: Int, n: Int, who: String, context: PythonO
                     + String(m) + ", " + String(n) + ")")
     if not v.c_contig or v.readonly:
         raise Error("mojolearn.linalg." + who + ": out must be C-contiguous and writable")
-    return lin_admitted_output(input^)
+    return admitted_typed_output(input^)
 
 
 # ---------------------------------------------------------------------------
@@ -367,11 +366,11 @@ def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObjec
                     + "transpose_b=" + ("True" if tb else "False") + "). The row-major shapes for each "
                     + "op are in this function's table and in contract section 0.1.")
     var out_obj = args[5]
-    var out: LinBuf
+    var out: AdmittedBuf
     if out_obj is None:
-        out = lin_new([m, n], "<f4", context)
+        out = admitted_zeros([m, n], "<f4", context)
     else:
-        var output = LinAdmission(out_obj, context)
+        var output = AdmittedTyped(out_obj, context)
         var v = output.view.copy()
         if not lin_is_f32(v):
             raise Error("TypeError: mojolearn.linalg.matmul: out has dtype " + lin_dtype_name(out_obj, v)
@@ -391,7 +390,7 @@ def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObjec
                         + "write to it; the device writes `out` directly (contract "
                         + "section 2) and a read-only buffer handed to it is memory "
                         + "corruption, not an exception.")
-        out = lin_admitted_output(output^)
+        out = admitted_typed_output(output^)
         _ = v  # keep the Python object alive through the native call above
     # ORDER MATCHES bindings/_mojolearn_linalg.mojo::gemm_binding: the output
     # address first, then a and b; params (m, n, k, op).
@@ -405,11 +404,11 @@ def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObjec
 
 
 def _lin_to_bf16(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var a = lin_typed(args[1], "<f4", -1, "x", context, True)
+    var a = admit_typed(args[1], "<f4", -1, "x", context, True)
     var n = a.count()
     if n == 0:
         raise Error("mojolearn.linalg.to_bf16: x has no elements")
-    var out = lin_new(a.shape, "<u2", context)
+    var out = admitted_zeros(a.shape, "<u2", context)
     _ = lin_call(lin_lowbit(args[0], context), context, "to_bf16", PythonObject(out.addr), PythonObject(a.addr), lin_ints(n))
     _ = out  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
@@ -418,11 +417,11 @@ def _lin_to_bf16(args: PythonObject, context: PythonObject) raises -> PythonObje
 
 
 def _lin_from_bf16(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var a = lin_typed(args[1], "<u2", -1, "bits", context, True)
+    var a = admit_typed(args[1], "<u2", -1, "bits", context, True)
     var n = a.count()
     if n == 0:
         raise Error("mojolearn.linalg.from_bf16: bits has no elements")
-    var out = lin_new(a.shape, "<f4", context)
+    var out = admitted_zeros(a.shape, "<f4", context)
     _ = lin_call(lin_lowbit(args[0], context), context, "from_bf16", PythonObject(out.addr), PythonObject(a.addr), lin_ints(n))
     _ = out  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
@@ -431,11 +430,11 @@ def _lin_from_bf16(args: PythonObject, context: PythonObject) raises -> PythonOb
 
 
 def _lin_from_f16(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var a = lin_typed(args[1], "<u2", -1, "bits", context)
+    var a = admit_typed(args[1], "<u2", -1, "bits", context)
     var n = a.count()
     if n == 0:
         raise Error("mojolearn.linalg.from_f16: bits has no elements")
-    var out = lin_new(a.shape, "<f4", context)
+    var out = admitted_zeros(a.shape, "<f4", context)
     _ = lin_call(lin_lowbit(args[0], context), context, "from_f16", PythonObject(out.addr), PythonObject(a.addr), lin_ints(n))
     _ = out  # keep the Python object alive through the native call above
     _ = a  # keep the Python object alive through the native call above
@@ -443,12 +442,12 @@ def _lin_from_f16(args: PythonObject, context: PythonObject) raises -> PythonObj
     return out.keep
 
 
-def lin_quantize_int8(binding: PythonObject, a: LinBuf, context: PythonObject) raises -> PythonObject:
+def lin_quantize_int8(binding: PythonObject, a: AdmittedBuf, context: PythonObject) raises -> PythonObject:
     """`quantize_int8` of an admitted operand: (codes, exponents)."""
     var rows = a.dim(0)
     var cols = a.dim(1)
-    var codes = lin_new([rows, cols], "<i1", context)
-    var exps = lin_new([rows], "<i4", context)
+    var codes = admitted_zeros([rows, cols], "<i1", context)
+    var exps = admitted_zeros([rows], "<i4", context)
     _ = lin_call(lin_lowbit(binding, context), context, "quantize_int8", PythonObject(codes.addr), PythonObject(exps.addr),
                  PythonObject(a.addr), lin_ints(rows, cols))
     _ = exps  # keep the Python object alive through the native call above
@@ -464,14 +463,14 @@ def _lin_quantize_int8(args: PythonObject, context: PythonObject) raises -> Pyth
 
 
 def _lin_dequantize_int8(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var q = lin_typed(args[1], "<i1", 2, "codes", context, True)
-    var e = lin_typed(args[2], "<i4", 1, "exponents", context, True)
+    var q = admit_typed(args[1], "<i1", 2, "codes", context, True)
+    var e = admit_typed(args[2], "<i4", 1, "exponents", context, True)
     var rows = q.dim(0)
     var cols = q.dim(1)
     if e.rank() != 1 or e.dim(0) != rows:
         raise Error("mojolearn.linalg.dequantize_int8: exponents has shape " + e.text() + ", want ("
                     + String(rows) + ",)")
-    var out = lin_new([rows, cols], "<f4", context)
+    var out = admitted_zeros([rows, cols], "<f4", context)
     _ = lin_call(lin_lowbit(args[0], context), context, "dequantize_int8", PythonObject(out.addr), PythonObject(q.addr),
                  PythonObject(e.addr), lin_ints(rows, cols))
     _ = out  # keep the Python object alive through the native call above
@@ -483,13 +482,13 @@ def _lin_dequantize_int8(args: PythonObject, context: PythonObject) raises -> Py
 
 
 def _lin_int8_operand(binding: PythonObject, x: PythonObject, name: String, context: PythonObject,
-                      mut q: LinBuf, mut e: LinBuf) raises:
+                      mut q: AdmittedBuf, mut e: AdmittedBuf) raises:
     """`_int8_operand(x, name)`: a (codes, exponents) pair, or a float32
     matrix quantized by `quantize_int8`."""
     var b = native_loaded_module("builtins")
     if py_type(x) is b.tuple and len(x) == 2:
-        q = lin_typed(x[0], "<i1", 2, name + " codes", context)
-        e = lin_typed(x[1], "<i4", 1, name + " exponents", context)
+        q = admit_typed(x[0], "<i1", 2, name + " codes", context)
+        e = admit_typed(x[1], "<i4", 1, name + " exponents", context)
         if e.rank() != 1 or e.dim(0) != q.dim(0):
             raise Error("mojolearn.linalg.matmul_int8: " + name + " exponents has shape " + e.text()
                         + ", want (" + String(q.dim(0)) + ",)")
@@ -497,16 +496,16 @@ def _lin_int8_operand(binding: PythonObject, x: PythonObject, name: String, cont
     var a = lin_operand(x, name, context)
     var pair = lin_quantize_int8(binding, a, context)
     _ = a^
-    q = lin_typed(pair[0], "<i1", 2, name + " codes", context)
-    e = lin_typed(pair[1], "<i4", 1, name + " exponents", context)
+    q = admit_typed(pair[0], "<i1", 2, name + " codes", context)
+    e = admit_typed(pair[1], "<i4", 1, name + " exponents", context)
 
 
 def _lin_matmul_int8(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var binding = args[0]
-    var qa = LinBuf(PythonObject(None), 0, List[Int]())
-    var ea = LinBuf(PythonObject(None), 0, List[Int]())
-    var qb = LinBuf(PythonObject(None), 0, List[Int]())
-    var eb = LinBuf(PythonObject(None), 0, List[Int]())
+    var qa = AdmittedBuf(PythonObject(None), 0, List[Int]())
+    var ea = AdmittedBuf(PythonObject(None), 0, List[Int]())
+    var qb = AdmittedBuf(PythonObject(None), 0, List[Int]())
+    var eb = AdmittedBuf(PythonObject(None), 0, List[Int]())
     _lin_int8_operand(binding, args[1], "a", context, qa, ea)
     _lin_int8_operand(binding, args[2], "b", context, qb, eb)
     var m = qa.dim(0)
@@ -532,7 +531,7 @@ def _lin_matmul_int8(args: PythonObject, context: PythonObject) raises -> Python
     return out.keep
 
 
-def _lin_op_and_shape(a: LinBuf, bb: LinBuf, transpose_a: PythonObject, transpose_b: PythonObject,
+def _lin_op_and_shape(a: AdmittedBuf, bb: AdmittedBuf, transpose_a: PythonObject, transpose_b: PythonObject,
                       who: String, mut op: Int, mut m: Int, mut n: Int, mut k: Int) raises:
     """`_op_and_shape(a.shape, b.shape, transpose_a, transpose_b, who)`."""
     var ta = lin_truth(transpose_a)
@@ -569,7 +568,7 @@ def _lin_op_and_shape(a: LinBuf, bb: LinBuf, transpose_a: PythonObject, transpos
 
 def _lin_matmul_bf16(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var binding = args[0]
-    var input = LinAdmission(args[1], context)
+    var input = AdmittedTyped(args[1], context)
     var a_bits = lin_dtype_name(input.keep, input.view) == "uint16"
     var a = _lin_bits_admitted(input^, "a", context) if a_bits else _lin_operand_admitted(input^, "a", context)
     var bb = lin_operand_bits(args[2], "b", context, True)
@@ -590,13 +589,13 @@ def _lin_matmul_bf16(args: PythonObject, context: PythonObject) raises -> Python
     return out.keep
 
 
-def lin_quantize_int15(binding: PythonObject, a: LinBuf, context: PythonObject) raises -> PythonObject:
+def lin_quantize_int15(binding: PythonObject, a: AdmittedBuf, context: PythonObject) raises -> PythonObject:
     """`quantize_int15` of an admitted operand: (hi, lo, exponents)."""
     var rows = a.dim(0)
     var cols = a.dim(1)
-    var hi = lin_new([rows, cols], "<i1", context)
-    var lo = lin_new([rows, cols], "<i1", context)
-    var exps = lin_new([rows], "<i4", context)
+    var hi = admitted_zeros([rows, cols], "<i1", context)
+    var lo = admitted_zeros([rows, cols], "<i1", context)
+    var exps = admitted_zeros([rows], "<i4", context)
     # addrs (mirrored in quantize_int15_binding): hi, lo, exponents, x
     var addrs = Python.list(PythonObject(hi.addr), PythonObject(lo.addr), PythonObject(exps.addr), PythonObject(a.addr))
     _ = exps  # keep the Python object alive through the native call above
@@ -617,11 +616,11 @@ def _lin_quantize_int15(args: PythonObject, context: PythonObject) raises -> Pyt
 
 
 def _lin_int15_planes(x: PythonObject, name: String, who: String, context: PythonObject,
-                      mut hi: LinBuf, mut lo: LinBuf, mut e: LinBuf) raises:
+                      mut hi: AdmittedBuf, mut lo: AdmittedBuf, mut e: AdmittedBuf) raises:
     """`_int15_planes(x, name, who)`."""
-    hi = lin_typed(x[0], "<i1", 2, name + " hi", context)
-    lo = lin_typed(x[1], "<i1", 2, name + " lo", context)
-    e = lin_typed(x[2], "<i4", 1, name + " exponents", context)
+    hi = admit_typed(x[0], "<i1", 2, name + " hi", context)
+    lo = admit_typed(x[1], "<i1", 2, name + " lo", context)
+    e = admit_typed(x[2], "<i4", 1, name + " exponents", context)
     if lo.rank() != hi.rank() or lo.dim(0) != hi.dim(0) or lo.dim(1) != hi.dim(1):
         raise Error("mojolearn.linalg." + who + ": " + name + " lo has shape " + lo.text() + ", hi has " + hi.text())
     if e.rank() != 1 or e.dim(0) != hi.dim(0):
@@ -630,13 +629,13 @@ def _lin_int15_planes(x: PythonObject, name: String, who: String, context: Pytho
 
 
 def _lin_dequantize_int15(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var h = LinBuf(PythonObject(None), 0, List[Int]())
-    var l = LinBuf(PythonObject(None), 0, List[Int]())
-    var e = LinBuf(PythonObject(None), 0, List[Int]())
+    var h = AdmittedBuf(PythonObject(None), 0, List[Int]())
+    var l = AdmittedBuf(PythonObject(None), 0, List[Int]())
+    var e = AdmittedBuf(PythonObject(None), 0, List[Int]())
     _lin_int15_planes(Python.tuple(args[1], args[2], args[3]), "operand", "dequantize_int15", context, h, l, e)
     var rows = h.dim(0)
     var cols = h.dim(1)
-    var out = lin_new([rows, cols], "<f4", context)
+    var out = admitted_zeros([rows, cols], "<f4", context)
     # addrs: y, hi, lo, exponents (mirrored in the binding)
     var addrs = Python.list(PythonObject(out.addr), PythonObject(h.addr), PythonObject(l.addr), PythonObject(e.addr))
     _ = out  # keep the Python object alive through the native call above
@@ -655,7 +654,7 @@ def _lin_dequantize_int15(args: PythonObject, context: PythonObject) raises -> P
 
 
 def _lin_int15_operand(binding: PythonObject, x: PythonObject, name: String, context: PythonObject,
-                       mut hi: LinBuf, mut lo: LinBuf, mut e: LinBuf) raises:
+                       mut hi: AdmittedBuf, mut lo: AdmittedBuf, mut e: AdmittedBuf) raises:
     """`_int15_operand(x, name)`."""
     var b = native_loaded_module("builtins")
     if py_type(x) is b.tuple and len(x) == 3:
@@ -667,19 +666,19 @@ def _lin_int15_operand(binding: PythonObject, x: PythonObject, name: String, con
     var a = lin_operand(x, name, context)
     var planes = lin_quantize_int15(binding, a, context)
     _ = a^
-    hi = lin_typed(planes[0], "<i1", 2, name + " hi", context)
-    lo = lin_typed(planes[1], "<i1", 2, name + " lo", context)
-    e = lin_typed(planes[2], "<i4", 1, name + " exponents", context)
+    hi = admit_typed(planes[0], "<i1", 2, name + " hi", context)
+    lo = admit_typed(planes[1], "<i1", 2, name + " lo", context)
+    e = admit_typed(planes[2], "<i4", 1, name + " exponents", context)
 
 
 def _lin_matmul_int15(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var binding = args[0]
-    var ah = LinBuf(PythonObject(None), 0, List[Int]())
-    var al = LinBuf(PythonObject(None), 0, List[Int]())
-    var ea = LinBuf(PythonObject(None), 0, List[Int]())
-    var bh = LinBuf(PythonObject(None), 0, List[Int]())
-    var bl = LinBuf(PythonObject(None), 0, List[Int]())
-    var eb = LinBuf(PythonObject(None), 0, List[Int]())
+    var ah = AdmittedBuf(PythonObject(None), 0, List[Int]())
+    var al = AdmittedBuf(PythonObject(None), 0, List[Int]())
+    var ea = AdmittedBuf(PythonObject(None), 0, List[Int]())
+    var bh = AdmittedBuf(PythonObject(None), 0, List[Int]())
+    var bl = AdmittedBuf(PythonObject(None), 0, List[Int]())
+    var eb = AdmittedBuf(PythonObject(None), 0, List[Int]())
     _lin_int15_operand(binding, args[1], "a", context, ah, al, ea)
     _lin_int15_operand(binding, args[2], "b", context, bh, bl, eb)
     var m = ah.dim(0)

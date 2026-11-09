@@ -16,7 +16,8 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays import classical_address
 from bindings.family_common import family_call
-from bindings.linalg_ops_buffers import lin_array, lin_truth
+from bindings.linalg_ops_buffers import lin_truth
+from bindings.admitted_input import admitted_zeros
 from core.classical_tsqr_impl import tsqr_fill_constant, tsqr_copy_columns, tsqr_fill_eye
 # The x_decomp native kernel-call table (lane ne3-f-kernel-table, rows N293,
 # N294): alloc / upload / download / free, ew, gemm, the sums and the moves
@@ -183,7 +184,7 @@ struct LinKit(Movable):
     def zeros(mut self, rows: Int, cols: Int) raises -> Int:
         """`_M.zeros(rows, cols)` (one spare word keeps an empty matrix's
         address valid, as `_M._one` did)."""
-        var host = lin_array([max(rows * cols, 1)], "<f4", self.context)
+        var host = admitted_zeros([max(rows * cols, 1)], "<f4", self.context).keep
         return self.add(host, rows, cols)
 
     def borrow(mut self, keep: PythonObject, addr: Int, rows: Int, cols: Int) raises -> Int:
@@ -198,7 +199,7 @@ struct LinKit(Movable):
             # an empty operand keeps of_buffer's owned spare word
             self.matrices[out].borrowed = 0
             self.matrices[out].keep = PythonObject(None)
-            self.matrices[out].host = lin_array([max(rows * cols, 1)], "<f4", self.context)
+            self.matrices[out].host = admitted_zeros([max(rows * cols, 1)], "<f4", self.context).keep
         return out
 
     def of_buffer(mut self, addr: Int, rows: Int, cols: Int) raises -> Int:
@@ -219,7 +220,7 @@ struct LinKit(Movable):
         """`_M.s`: the host store, downloading a device matrix once (it moves)."""
         if self.matrices[a].host is None:
             var count = self.n(a)
-            var result = lin_array([max(count, 1)], "<f4", self.context)
+            var result = admitted_zeros([max(count, 1)], "<f4", self.context).keep
             if self.matrices[a].borrowed != 0 and self.matrices[a].device < 0:
                 # a borrowed matrix asked for its owned store (no kit path
                 # does today): one copy of the admitted words, as of_buffer made
@@ -285,7 +286,7 @@ struct LinKit(Movable):
         """`_M.out()`: a public float32 Array (C order) of the matrix."""
         var rows = self.r(a)
         var cols = self.c(a)
-        var result = lin_array([rows, cols], "<f4", self.context)
+        var result = admitted_zeros([rows, cols], "<f4", self.context).keep
         if rows * cols:
             memcpy(dest=KIT_F32P(unsafe_from_address=Int(py=classical_address(result))), src=self.ptr(a),
                    count=rows * cols)
@@ -294,7 +295,7 @@ struct LinKit(Movable):
 
     def out_vector(mut self, a: Int, length: Int) raises -> PythonObject:
         """`_M.out((length,))`."""
-        var result = lin_array([length], "<f4", self.context)
+        var result = admitted_zeros([length], "<f4", self.context).keep
         if length:
             memcpy(dest=KIT_F32P(unsafe_from_address=Int(py=classical_address(result))), src=self.ptr(a),
                    count=length)

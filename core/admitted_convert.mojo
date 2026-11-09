@@ -4,7 +4,7 @@
 of any Array dtype (no Python import): Array.astype's rules (float to float32
 round to nearest even, integers range checked, float to integer truncated
 toward zero). The native linalg / metrics admission
-(bindings/linalg_ops_buffers.mojo `lin_convert`) reads it.
+(bindings/admitted_input.mojo `admitted_typed_convert`) reads it.
 
     admitted_convert(src, shape, strides, count, item, kind, titem, tkind,
                      typestr, dst)
