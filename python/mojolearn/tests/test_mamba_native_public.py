@@ -156,7 +156,7 @@ def test_decode_session_methods_are_native_and_equal_the_per_call_step(monkeypat
     rows, length = 2, 6
     x = _tokens(rows, length, dm)
     owned = block.allocate_state(rows)
-    door = block.decode_session if kind == "mamba1" else block._decode_session
+    door = block.decode_session
     try:
         session = _native(monkeypatch, door, owned)
     except AssertionError as exc:
