@@ -1534,40 +1534,9 @@ class GCNConv(_Layer):
     # bias add is `bias_rows_at`, the same IEEE add per element as the
     # broadcast `add_at`. No bit moves.
 
-    def _backward_dev(self, b, G):
-        np = _np()
-        dev, xh = self._xdev
-        g = self._g
-        n, F, D = G.shape[0], self.out_channels, self.in_channels
-        if tuple(G.shape) != (self._x.shape[0], F):
-            raise ValueError(f"mojolearn: grad_out shape {G.shape}, expected {(self._x.shape[0], F)}")
-        gt = _is_t(G)
-        Gh = G.h if gt else dev.upload("G", G)
-        if self.bias:
-            gb = np.empty((F, 1), np.float32)
-            if _device_io_off(b):
-                ones = np.ones(n, np.float32)
-                b.x_cnn_gemm_m([Gh, ones.ctypes.data, gb.ctypes.data], 0b001, [F, 1, n, 2])
-            else:
-                # lane idn-cnn-resident: the ones operand is resident with
-                # the layer, not built and uploaded per call (the same words)
-                b.x_cnn_gemm_m([Gh, _ones_dev(dev, n), gb.ctypes.data], 0b011, [F, 1, n, 2])
-            self.grad_bias_ = gb.reshape(-1)
-        else:
-            self.grad_bias_ = np.zeros(F, np.float32)
-        dhh = dev.get("dh", n * F)
-        b.x_cnn_spmm_m([dev.h["vals_t"][0], Gh, dev.h["csr_t"][0], dhh], 0b1111, [n, F, g.nnz, 0])
-        gw = np.empty((F, D), np.float32)
-        b.x_cnn_gemm_m([dhh, xh, gw.ctypes.data], 0b011, [F, D, n, 2])
-        self.grad_weight_ = gw
-        W = _f32(self.weight_, "b")
-        if gt:
-            dxt = DeviceTensor._new(b, (n, D))
-            b.x_cnn_gemm_m([dhh, W.ctypes.data, dxt.h], 0b101, [n, D, F, 0])
-            return dxt
-        dx = np.empty((n, D), np.float32)
-        b.x_cnn_gemm_m([dhh, W.ctypes.data, dx.ctypes.data], 0b001, [n, D, F, 0])
-        return dx
+    # TOMBSTONE: the Python _backward_dev body (a dead copy of the native resident backward, 0 callers; removed)
+    # deleted 2026-11-09 by lane/x9-moe-gcn-rules; code recoverable at origin/integ/pre-0867-w2 f59d913b0b.
+    # Restore: git apply experiments/removed/XCNN_GRAPH_HAND_BACKWARD.patch
 
     def backward(self, grad_out):
         return _XCNN(self, "gcn_backward", (grad_out,), _XCNN_CONTEXT)
@@ -1603,59 +1572,9 @@ class SAGEConv(_Layer):
     # in-degree read from the resident CSR offsets (spmm mode 3). The same
     # entries' bodies on the same words: no bit moves.
 
-    def _backward_dev(self, b, G):
-        np = _np()
-        dev, xh, aggh = self._xdev
-        g = self._g
-        n, D, F = self._x.shape[0], self.in_channels, self.out_channels
-        if tuple(G.shape) != (n, F):
-            raise ValueError(f"mojolearn: grad_out shape {G.shape}, expected {(n, F)}")
-        gt = _is_t(G)
-        Gh = G.h if gt else dev.upload("G", G)
-        if self.normalize:
-            # lane fam-neural: the normalization's backward on the resident y, G and denominators
-            yh, denh, _ = self._ydev
-            g2h = dev.get("G2", n * F)
-            b.x_cnn_graph_op_m([yh, Gh, denh, g2h, 0], 0b01111, [n, F, 0, 3])
-            Gh = g2h
-        lin = self.lin_l
-        dagg = dev.get("dagg", n * D)
-        dw = np.empty_like(lin.weight_)
-        db = np.empty_like(lin.bias_)
-        b.x_cnn_linear_backward_m([aggh, lin.weight_.ctypes.data, Gh, dagg, dw.ctypes.data, db.ctypes.data],
-                                  0b001101, [n, D, F])
-        lin.grad_weight_, lin.grad_bias_ = dw, db
-        if not self.bias:
-            lin.grad_bias_[:] = 0
-        dxt = DeviceTensor._new(b, (n, D)) if gt else None
-        dxs = dxt.h if gt and not self.root_weight else dev.get("dxs", n * D)
-        if self.aggr == "mean":
-            # each target row of dagg over its in-degree, read from the
-            # forward CSR offsets on the device (spmm mode 3), then the
-            # transposed fold with unit values: no host degree count
-            dsc = dev.get("dsc", n * D)
-            b.x_cnn_spmm_m([dev.h["vals_f"][0], dagg, dev.h["csr_f"][0], dsc], 0b1111, [n, D, g.nnz, 3])
-            dagg = dsc
-        if self.aggr == "max":
-            # lane fam-neural: the max backward over the transposed view (resident x, dagg, aux)
-            b.x_cnn_graph_op_m([xh, dagg, dev.h["maxaux"][0], dxs, dev.h["csr_t"][0]], 0b11111, [n, D, g.nnz, 1])
-        else:
-            b.x_cnn_spmm_m([dev.h["vals_t"][0], dagg, dev.h["csr_t"][0], dxs], 0b1111, [n, D, g.nnz, 0])
-        dx = dxt if gt else np.empty((n, D), np.float32)
-        if self.root_weight:
-            gwr = np.empty((F, D), np.float32)
-            b.x_cnn_gemm_m([Gh, xh, gwr.ctypes.data], 0b011, [F, D, n, 2])
-            self.grad_weight_r_ = gwr
-            Wr = _f32(self.weight_r_, "b")
-            grh = dev.get("gr", n * D)
-            b.x_cnn_gemm_m([Gh, Wr.ctypes.data, grh], 0b101, [n, D, F, 0])
-            if gt:
-                b.x_cnn_map2_m([grh, dxs, dx.h], 0b111, [2, n * D])
-            else:
-                b.x_cnn_map2_m([grh, dxs, dx.ctypes.data], 0b011, [2, n * D])
-        elif not gt:
-            dev.download(dxs, dx)
-        return dx
+    # TOMBSTONE: the Python _backward_dev body (a dead copy of the native resident backward, 0 callers; removed)
+    # deleted 2026-11-09 by lane/x9-moe-gcn-rules; code recoverable at origin/integ/pre-0867-w2 f59d913b0b.
+    # Restore: git apply experiments/removed/XCNN_GRAPH_HAND_BACKWARD.patch
 
     def backward(self, grad_out):
         return _XCNN(self, "sage_backward", (grad_out,), _XCNN_CONTEXT)
