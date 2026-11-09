@@ -390,13 +390,20 @@ def _codes(addr: Int, n: Int, context: PythonObject) raises -> PythonObject:
 
 def _group_key(value: PythonObject, index: Int, context: PythonObject) raises -> PythonObject:
     """`ensemble._group_id_key`: the bytes CatBoost hashes for a group id."""
+    # P1: exact types only. A str/bytes/int subclass or another Integral
+    # could run its own encode/__int__/__index__ (Python code) here; such an
+    # id is refused before any of its methods runs. NumPy's integer scalars
+    # (C types of the numpy module) keep their native int conversion.
     var b = _b()
-    if Bool(py=py_call(b.isinstance, value, b.bytes)):
+    var cls = py_type(value)
+    if cls is b.bytes:
         return value
-    if Bool(py=py_call(b.isinstance, value, b.str)):
-        return py_call(value.encode, "utf-8")
-    if Bool(py=py_call(b.isinstance, value, context["trees_integral_type"])) and not Bool(py=py_call(b.isinstance, value, b.bool)):
-        return py_call(py_call(b.str, py_call_typed(b.int, value)).encode, "ascii")
+    if cls is b.str:
+        return py_call(b.str.encode, value, "utf-8")
+    var numpy_int = (cls is not b.bool and String(py_call(b.getattr, cls, "__module__", "")) == "numpy"
+                     and Bool(py=py_call(b.isinstance, value, context["trees_integral_type"])))
+    if cls is b.int or numpy_int:
+        return py_call(b.str.encode, py_call(b.str, py_call_typed(b.int, value)), "ascii")
     raise Error("mojolearn: group_id[" + String(index) + "] object (" + _repr(value) + ") is unsuitable "
                 + "(should be string or integral type)")
 
@@ -413,8 +420,11 @@ def _listed(value: PythonObject, context: PythonObject) raises -> PythonObject:
         return py_call(context["array_type"].tolist, value)
     if cls is b.list:
         return value
-    # typed, so a non-iterable reaches the caller as its TypeError
-    return py_call_typed(b.list, value)
+    if cls is b.tuple:
+        return py_call(b.list, value)
+    # P1: list() of any other object would run its own __iter__ (Python
+    # code); it is refused before that.
+    raise Error("TypeError: mojolearn: group_id, pairs and pairs_weight must be a list, tuple, array.array or NumPy array")
 
 
 def _id_code(typestr: String) -> Int:

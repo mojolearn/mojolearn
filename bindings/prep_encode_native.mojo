@@ -2810,7 +2810,7 @@ def _target_splitter_folds(model: PythonObject, x: PythonObject, y: PythonObject
     var splits = PythonObject(None)
     if cls is b.list or cls is b.tuple:
         splits = py_call(b.list, cv)
-    elif Bool(py=py_call(b.hasattr, cv, "split")) and String(py_call(b.getattr, cls, "__module__", "")).startswith("mojolearn."):
+    elif String(py_call(b.getattr, cls, "__module__", "")).startswith("mojolearn.") and Bool(py=py_call(b.hasattr, cv, "split")):
         splits = py_call(b.list, prep_native_split(cv, x, y, context))
     else:
         raise Error("TypeError: mojolearn: TargetEncoder cv must be an integer, a mojolearn splitter or a list of "
