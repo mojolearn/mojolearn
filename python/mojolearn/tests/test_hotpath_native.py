@@ -115,7 +115,7 @@ def _outcome(fn):
     return result, [(w.category.__name__, str(w.message)) for w in caught]
 
 
-_LABEL_SEAMS = ("_encode_labels_native", "_decode_labels_native")
+_LABEL_SEAMS = ("_encode_labels_native",)
 
 
 @contextlib.contextmanager
@@ -778,6 +778,20 @@ def _pinned(module, name, fn, answers=True, ref_fn=None):
     return ref
 
 
+def _flatten_oracle(y):
+    """The former Python `_labels.flatten_labels` (deleted by lane
+    p2-labels-lists-arrays), the reference of the native flatten."""
+    from itertools import chain
+    if hasattr(y, "tolist") and not isinstance(y, (list, tuple)):
+        y = y.tolist()
+    if isinstance(y, (str, bytes)):
+        raise ValueError("mojolearn: y must be a sequence of labels")
+    items = [y]
+    while any(isinstance(item, (list, tuple)) for item in items):
+        items = list(chain.from_iterable(item if isinstance(item, (list, tuple)) else (item,) for item in items))
+    return items
+
+
 def _general_sorted_classes(y):
     """`sorted_classes` through the general label walk (the kind check and the
     ORDER RULE), the definition `_sorted_plain_classes` specializes. Since lane
@@ -801,8 +815,9 @@ def test_plain_label_lists_match_the_label_loop(name):
     if isinstance(y, list):
         _pinned(_labels, "_sorted_plain_classes", lambda: _labels.sorted_classes(y),
                 answers=plain, ref_fn=lambda: _general_sorted_classes(y))
-    _pinned(_labels, "_plain_labels", lambda: _labels.flatten_labels(y),
-            answers=plain or big or name == "tuple")
+    # flatten_labels is one native call (lane p2-labels-lists-arrays): held
+    # equal to the Python flatten it replaced.
+    assert _outcome(lambda: _labels.flatten_labels(y)) == _outcome(lambda: _flatten_oracle(y))
     if plain and name != "nan":
         classes, codes = _labels.sorted_classes(list(y))
         assert all(classes[c] == v for c, v in zip(codes, y))

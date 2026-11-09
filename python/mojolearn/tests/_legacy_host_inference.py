@@ -6,6 +6,7 @@ remain the independent reference while the surrounding operation is migrated.
 """
 from mojolearn._buffer import as_f32_colmajor, as_f32_c, empty, addr, addr_ro, all_finite
 from mojolearn.cluster import _METRIC_NAMES
+from mojolearn._array import Array
 
 
 def decode_labels(classes, codes):
@@ -18,10 +19,10 @@ def decode_labels(classes, codes):
     from mojolearn import _labels
     from mojolearn._array import Array
     kind = _labels.label_kind(classes)
-    fast = _labels._decode_labels_native(classes, codes, kind)
+    fast = _decode_labels_native(classes, codes, kind)
     if fast is not None:
         return fast
-    values = _labels._decode_list_native(classes, codes)
+    values = _decode_list_native(classes, codes)
     if values is None:
         values = list(map(classes.__getitem__, map(int, codes)))
     try:
@@ -421,3 +422,59 @@ def iforest(model, X, want, public=True):
     model.offset_ = array.array("f", [float(info[0])])[0]
     model.max_samples_ = int(info[1])
     return out if want == 2 or not public else out.astype("<f8")
+
+
+# Frozen copies of the former _labels decode seams (deleted from the package
+# by lane p2-labels-lists-arrays), kept only as this oracle's routine.
+_STR_LABELS = []
+
+
+def _decode_list_native(classes, codes):
+    """`[classes[c] for c in codes]` as ONE native call (bindings/str_labels_native.mojo
+    "decode"): a presized list filled in C from an int32 or int64 vector code
+    `Array`. None for any other codes, or a code out of range."""
+    if type(classes) not in (list, tuple) or not isinstance(codes, Array):
+        return None
+    if codes.ndim != 1 or codes.dtype not in ("<i4", "<i8"):
+        return None
+    if not _STR_LABELS:
+        from mojolearn.tokenizer import _binding
+        _STR_LABELS.append(_binding()._module.str_labels_native_call)
+    return _STR_LABELS[0]("decode", classes, codes._addr, int(codes.size),
+                          4 if codes.dtype == "<i4" else 8)
+
+
+def _decode_labels_native(classes, codes, kind):
+    """DEVIATION 2500: `classes[code]` per row through the base binding's
+    `gather_i64` / `gather_f64` when `codes` is an int64 `Array` (what
+    `argmax_rows` returns) and the classes are all int or all float. The
+    dtype of the answer is the one `decode_labels` documents; a class that
+    does not fit int64 leaves the Python arm to raise and fall back."""
+    from mojolearn._buffer import _native, _output_store
+
+    if kind not in ("int", "float") or not isinstance(codes, Array):
+        return None
+    if codes.dtype == "<i4" and codes.ndim == 1 and classes:
+        # DEVIATION 3103: int32 codes (`GradientBoostingClassifier.predict`
+        # hands these over) used to take the Python arm, four passes over
+        # the rows. Widened by `Array.astype` they take the gather. A code
+        # the gather refuses (negative: Python indexes from the END, so the
+        # Python arm ANSWERS it) sends the call back to the Python arm.
+        try:
+            return _decode_labels_native(classes, codes.astype("<i8"), kind)
+        except (ImportError, AttributeError):
+            raise
+        except Exception:
+            return None
+    if codes.dtype != "<i8" or codes.ndim != 1 or not classes:
+        return None
+    try:
+        table = (Array.from_list([int(c) for c in classes], "<i8") if kind == "int"  # glue: packs the class table for the native decode (classes-sized: distinct classes)
+                 else Array.from_list([float(c) for c in classes], "<f8"))  # glue: packs the class table for the native decode (classes-sized: distinct classes)
+    except (OverflowError, TypeError):
+        return None  # a class outside int64: the Python arm returns the objects
+    n = int(codes.size)
+    store = _output_store("q" if kind == "int" else "d", n)
+    fn = _native("gather_i64" if kind == "int" else "gather_f64")
+    fn(table._addr, len(classes), codes._addr, n, store.buffer_info()[0])
+    return Array._owned(store, (n,), "<i8" if kind == "int" else "<f8", "C")
