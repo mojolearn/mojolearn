@@ -167,6 +167,14 @@ def program_op_name(code: Int) -> String:
         return "transformer_linear"
     if code == 80:
         return "transformer_softmax"
+    if code == 81:
+        return "mamba1_step"
+    if code == 82:
+        return "mamba2_step"
+    if code == 83:
+        return "mamba3_step"
+    if code == 84:
+        return "attention_step"
     return "op_" + String(code)
 
 
