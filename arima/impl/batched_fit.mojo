@@ -105,14 +105,24 @@ a compile slot should replace both with what it sees, exactly as
 `arima/README.md`'s bounds table asks for the other four.
 """
 
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from std.memory import memcpy
 
 from arima.impl.batched_arima import _refuse_non_finite
 from arima.impl.batched_kalman import ARIMA_EVAL_WS_EXOG, KALMAN_FAST_EVAL_WS, eval_ws_fits
 from arima.impl.estimate_x0 import StartParamsResult, estimate_x0_x
 from arima.impl.fast_eval_ws import FastEvalWS
 from arima.impl.fast_order_state import ARIMA_ORDER_BATCH, order_min_lbfgs
-from arima.impl.fast_lbfgs_async import AsyncLBFGSOut, async_min_lbfgs
+from arima.impl.eval_batch import arima_eval
+from arima.impl.fast_lbfgs_async import ARIMA_ASYNC_ALL, AsyncLBFGSOut, async_min_lbfgs
+from arima.impl.lbfgs_device import (
+    LBFGS_TPB,
+    lbfgs_accept_kernel,
+    lbfgs_candidate_kernel,
+    lbfgs_init_kernel,
+    lbfgs_prelude_kernel,
+    lbfgs_verdict_kernel,
+)
 from arima.impl.timeSeries.arima_helpers import batched_jones_transform
 from arima.impl.tsa.arima_common import (
     ARIMAOrder,
@@ -214,6 +224,34 @@ struct BatchedLBFGSResult(Movable):
 # (the lock-step loop, `_read_flag`, `_record_iter`, `_iter_tag`,
 # `_download_i32` and its per-iteration `fit.init.*` / `fit.iterNNNN.*` card,
 # which nothing read)
+# Restored 2026-11-09 by lane/r2-restore-unmeasured-defaults: the lock-step
+# loop (`_lockstep_min_lbfgs`), `_read_flag` and `_download_i32` are back as the
+# default wherever the fit holds no evaluation workspace (the routes that took
+# it before the deletion; the per-series solver was never measured there).
+# The per-iteration card (`_record_iter`, `_iter_tag`, `fit.init.*`,
+# `fit.iterNNNN.*`; nothing read it) stays deleted, and the evaluation keeps
+# the deletion's drain-free `eval_batch.mojo::arima_eval` on both solvers.
+
+
+def _download_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int) raises -> List[Int32]:
+    var h = ctx.enqueue_create_host_buffer[DType.int32](n if n > 0 else 1)
+    if n > 0:
+        var view = buf.create_sub_buffer[DType.int32](0, n)
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
+    ctx.synchronize()
+    var out = List[Int32](length=n, fill=Int32(0))
+    if n > 0:
+        memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+    _ = h^
+    return out^
+
+
+def _read_flag(ctx: DeviceContext, mut flag: DeviceBuffer[DType.int32], mut host: HostBuffer[DType.int32]) raises -> Bool:
+    """The one control word a step reads back: whether any series is still
+    active (or still searching). One 4-byte copy and its wait."""
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=flag)
+    ctx.synchronize()
+    return host.unsafe_ptr()[0] != 0
 
 
 def batched_min_lbfgs(
@@ -230,9 +268,15 @@ def batched_min_lbfgs(
     mut trace: IdentityTrace,
 ) raises -> BatchedLBFGSResult:
     """B independent L-BFGS solvers, every series' state ON THE DEVICE, one
-    thread per series, sharing ONE batched device evaluation per round
-    (`fast_lbfgs_async.mojo::async_min_lbfgs`, on every vendor and in both
-    modes since lane n10-dictl-arima-loops, 2026-11-09).
+    thread per series, sharing ONE batched device evaluation per round. Two
+    device arms: the per-series solver
+    (`fast_lbfgs_async.mojo::async_min_lbfgs`, described below) when the fit
+    holds the stacked evaluation workspace (FAST on Apple without exog,
+    IDENTICAL within `IDN_EVAL_WS_MAX_CELLS`), and the lock-step solver
+    (`_lockstep_min_lbfgs`) otherwise (FAST on NVIDIA / AMD, FAST on Apple
+    with exog, IDENTICAL above the bound); `-D MOJOLEARN_ARIMA_ASYNC_ALL`
+    takes the per-series solver everywhere. Both give each series the same
+    iterates, `n_iter` and `retcode`.
 
     THE SHAPE. Every still-running series proposes its own candidate, all B
     candidates go into one evaluation (`eval_batch.mojo::arima_eval`: the
@@ -242,8 +286,7 @@ def batched_min_lbfgs(
     direction in its own thread. A series that has stopped still proposes its
     current `x` and its result is discarded, so the batch composition and the
     launch geometry are a function of the fixture alone. Each series'
-    iterates, `n_iter` and `retcode` are the lock-step solver's (deleted)
-    bit for bit and equal the host column's
+    iterates, `n_iter` and `retcode` are the lock-step solver's bit for bit and equal the host column's
     (`arima_oracle._batched_min_lbfgs`); the host reads one word every
     `ASYNC_READ_EVERY` rounds, never per line-search step. The identity
     trace records the answer (`fit.x`, `fit.loss`, `fit.n_iter`,
@@ -274,10 +317,244 @@ def batched_min_lbfgs(
             var ao = order_min_lbfgs(ctx, ews.value(), bs, scale, order_kf, x0, param, h)
             _ = ews^
             return _answer(trace, ao)
-    var ar = async_min_lbfgs(ctx, ews, d_y_kf, d_exog_kf, n_obs_kf, bs, scale, order_kf, x0, param, h)
-    _ = ews^
-    return _answer(trace, ar)
+    # The per-series solver where the fit holds the evaluation workspace (its
+    # measured default: M3 A/B autoarima taxi-hourly 39,639 -> 24,563 ms);
+    # the lock-step solver everywhere else, as before lane
+    # n10-dictl-arima-loops (never measured against the per-series one on
+    # those routes). `-D MOJOLEARN_ARIMA_ASYNC_ALL` takes the per-series solver
+    # on every route: the A/B's B arm.
+    if Bool(ews) or ARIMA_ASYNC_ALL:
+        var ar = async_min_lbfgs(ctx, ews, d_y_kf, d_exog_kf, n_obs_kf, bs, scale, order_kf, x0, param, h)
+        _ = ews^
+        return _answer(trace, ar)
+    return _lockstep_min_lbfgs(
+        ctx, ews, d_y_kf, d_exog_kf, bs, n_obs_kf, scale, order_kf, x0, param, h, trace
+    )
 
+
+def _lockstep_min_lbfgs(
+    ctx: DeviceContext,
+    mut ews: Optional[FastEvalWS],
+    mut d_y_kf: DeviceBuffer[DType.float32],
+    mut d_exog_kf: DeviceBuffer[DType.float32],
+    batch_size: Int,
+    n_obs_kf: Int,
+    scale: Float32,
+    order_kf: ARIMAOrder,
+    x0: List[Float32],
+    param: LBFGSParam,
+    h: Float32,
+    mut trace: IdentityTrace,
+) raises -> BatchedLBFGSResult:
+    """The lock-step solver (`arima/impl/lbfgs_device.mojo`'s kernels), one
+    thread per series, sharing ONE batched device evaluation per candidate
+    point (cpu-gpu-cleanup n-seq, 2026-10-02; restored 2026-11-09 by lane
+    r2-restore-unmeasured-defaults).
+
+    THE SHAPE. The OUTER loop is `k`, the L-BFGS iteration. Inside it, the
+    LINE SEARCH is also a shared loop: at step `t` every still-searching
+    series proposes its own candidate `xp + step_b * drt_b` with its OWN step
+    length, all B candidates go into one `d_x`, and ONE evaluation
+    (`eval_batch.mojo::arima_eval`) takes them together. Each series then
+    applies the Armijo test to its own result and either accepts or halves
+    its own step; the loop runs until none is still searching, at most
+    `param.max_linesearch` times. A series that is not searching still
+    proposes its current `x` and its result is discarded, so the batch
+    composition and the launch geometry are a function of the fixture alone.
+
+    The host sequences launches and reads one word per step: whether any
+    series is still active (per iteration) or still searching (per
+    line-search step), raised by the kernels with an atomic max. Each
+    series' arithmetic is its own thread's, so its iterates, `n_iter` and
+    `retcode` equal the per-series solver's and the host column's
+    (`arima_oracle._batched_min_lbfgs`)."""
+    var n = order_kf.complexity()
+    var bs = batch_size
+    var b_n = bs * n
+    var m = param.m
+    var past = param.past if param.past > 0 else 0
+    var grid = (bs + LBFGS_TPB - 1) // LBFGS_TPB
+
+    # device workspace, allocated ONCE for the whole solve
+    var d_x = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
+    var d_grad = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
+    var d_x_pert = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
+    var scratch = ARIMAParams(ctx, order_kf, bs)
+    var x = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
+    var xp = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
+    var grad = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
+    var gradp = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
+    var gradc = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
+    var drt = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
+    var S = ctx.enqueue_create_buffer[DType.float32](max(1, b_n * m))
+    var Y = ctx.enqueue_create_buffer[DType.float32](max(1, b_n * m))
+    var yhist = ctx.enqueue_create_buffer[DType.float32](max(1, bs * m))
+    var alpha = ctx.enqueue_create_buffer[DType.float32](max(1, bs * m))
+    var fx_hist = ctx.enqueue_create_buffer[DType.float32](max(1, bs * (past if past > 0 else 1)))
+    var fx = ctx.enqueue_create_buffer[DType.float32](max(1, bs))
+    var fxc = ctx.enqueue_create_buffer[DType.float32](max(1, bs))
+    var fxp = ctx.enqueue_create_buffer[DType.float32](max(1, bs))
+    var fx_init = ctx.enqueue_create_buffer[DType.float32](max(1, bs))
+    var dg_init = ctx.enqueue_create_buffer[DType.float32](max(1, bs))
+    var dg_test = ctx.enqueue_create_buffer[DType.float32](max(1, bs))
+    var gnorm = ctx.enqueue_create_buffer[DType.float32](max(1, bs))
+    var step = ctx.enqueue_create_buffer[DType.float32](max(1, bs))
+    var active = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
+    var searching = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
+    var endv = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
+    var n_vec = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
+    var lsret = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
+    var ls_iters = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
+    var n_iter = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
+    var retcode = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
+    var bad = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
+    var any_active = ctx.enqueue_create_buffer[DType.int32](1)
+    var any_searching = ctx.enqueue_create_buffer[DType.int32](1)
+    var flag_host = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_memset(xp, Float32(0.0))
+    ctx.enqueue_memset(gradp, Float32(0.0))
+    ctx.enqueue_memset(gradc, Float32(0.0))
+    ctx.enqueue_memset(drt, Float32(0.0))
+    ctx.enqueue_memset(S, Float32(0.0))
+    ctx.enqueue_memset(Y, Float32(0.0))
+    ctx.enqueue_memset(yhist, Float32(0.0))
+    ctx.enqueue_memset(alpha, Float32(0.0))
+    ctx.enqueue_memset(fx_hist, Float32(0.0))
+    ctx.enqueue_memset(fxc, Float32(0.0))
+    ctx.enqueue_memset(fxp, Float32(0.0))
+    ctx.enqueue_memset(fx_init, Float32(0.0))
+    ctx.enqueue_memset(dg_init, Float32(0.0))
+    ctx.enqueue_memset(dg_test, Float32(0.0))
+    ctx.enqueue_memset(gnorm, Float32(0.0))
+    ctx.enqueue_memset(step, Float32(0.0))
+    ctx.enqueue_memset(active, Int32(0))
+    # x0 up ONCE; `x` is the state, `d_x` the evaluation's candidates
+    _upload(ctx, x, x0)
+    ctx.enqueue_copy(dst_buf=d_x, src_buf=x)
+
+    # `min_lbfgs:161-173`: evaluate at x0, and exit early per series if it
+    # is already a minimizer.
+    arima_eval(
+        ctx, ews, d_y_kf, d_exog_kf, bs, n_obs_kf, order_kf, d_x, d_grad, d_x_pert,
+        scratch, h, scale, fx, grad, bad,
+    )
+    var n_eval = 1
+    ctx.enqueue_memset(any_active, Int32(0))
+    ctx.enqueue_function[lbfgs_init_kernel](
+        grad.unsafe_ptr(), drt.unsafe_ptr(), fx.unsafe_ptr(), fxp.unsafe_ptr(),
+        fx_hist.unsafe_ptr(), gnorm.unsafe_ptr(), step.unsafe_ptr(),
+        active.unsafe_ptr(), searching.unsafe_ptr(), endv.unsafe_ptr(), n_vec.unsafe_ptr(),
+        lsret.unsafe_ptr(), ls_iters.unsafe_ptr(), n_iter.unsafe_ptr(), retcode.unsafe_ptr(),
+        any_active.unsafe_ptr(),
+        Int32(bs), Int32(n), Int32(past), param.epsilon, param.delta,
+        grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
+    )
+
+    var k = 1
+    while k <= param.max_iterations:
+        if not _read_flag(ctx, any_active, flag_host):
+            break
+
+        # `min_lbfgs:188-191` and `ls_backtrack:100-108`
+        ctx.enqueue_memset(any_searching, Int32(0))
+        ctx.enqueue_function[lbfgs_prelude_kernel](
+            x.unsafe_ptr(), xp.unsafe_ptr(), grad.unsafe_ptr(), gradp.unsafe_ptr(),
+            drt.unsafe_ptr(), fx.unsafe_ptr(), fxp.unsafe_ptr(), fx_init.unsafe_ptr(),
+            dg_init.unsafe_ptr(), dg_test.unsafe_ptr(), step.unsafe_ptr(),
+            active.unsafe_ptr(), searching.unsafe_ptr(), lsret.unsafe_ptr(),
+            ls_iters.unsafe_ptr(), any_searching.unsafe_ptr(),
+            Int32(bs), Int32(n), param.ftol,
+            grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
+        )
+
+        # THE SHARED LINE SEARCH (`ls_backtrack:109-121`, B at a time)
+        for _t in range(param.max_linesearch):
+            if not _read_flag(ctx, any_searching, flag_host):
+                break
+            ctx.enqueue_memset(any_searching, Int32(0))
+            ctx.enqueue_function[lbfgs_candidate_kernel](
+                d_x.unsafe_ptr(), x.unsafe_ptr(), xp.unsafe_ptr(), drt.unsafe_ptr(),
+                step.unsafe_ptr(), searching.unsafe_ptr(), Int32(bs), Int32(n),
+                grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
+            )
+            arima_eval(
+                ctx, ews, d_y_kf, d_exog_kf, bs, n_obs_kf, order_kf, d_x, d_grad, d_x_pert,
+                scratch, h, scale, fxc, gradc, bad,
+            )
+            n_eval += 1
+            ctx.enqueue_function[lbfgs_accept_kernel](
+                x.unsafe_ptr(), grad.unsafe_ptr(), fx.unsafe_ptr(), d_x.unsafe_ptr(),
+                gradc.unsafe_ptr(), fxc.unsafe_ptr(), fx_init.unsafe_ptr(),
+                dg_test.unsafe_ptr(), step.unsafe_ptr(), searching.unsafe_ptr(),
+                lsret.unsafe_ptr(), ls_iters.unsafe_ptr(), any_searching.unsafe_ptr(),
+                Int32(bs), Int32(n), param.min_step, param.max_step, param.ls_dec,
+                grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
+            )
+
+        # `min_lbfgs:197-222`: verdict, history update, new direction
+        ctx.enqueue_memset(any_active, Int32(0))
+        ctx.enqueue_function[lbfgs_verdict_kernel](
+            x.unsafe_ptr(), xp.unsafe_ptr(), grad.unsafe_ptr(), gradp.unsafe_ptr(),
+            drt.unsafe_ptr(), S.unsafe_ptr(), Y.unsafe_ptr(), yhist.unsafe_ptr(),
+            alpha.unsafe_ptr(), fx.unsafe_ptr(), fxp.unsafe_ptr(), fx_hist.unsafe_ptr(),
+            gnorm.unsafe_ptr(), step.unsafe_ptr(), active.unsafe_ptr(), endv.unsafe_ptr(),
+            n_vec.unsafe_ptr(), lsret.unsafe_ptr(), n_iter.unsafe_ptr(), retcode.unsafe_ptr(),
+            any_active.unsafe_ptr(),
+            Int32(bs), Int32(n), Int32(m), Int32(past), Int32(k),
+            param.epsilon, param.delta, param.ftol,
+            grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
+        )
+
+        k += 1
+
+    # the answer comes down ONCE
+    var x_out = _download(ctx, x, b_n)
+    var fx_out = _download(ctx, fx, bs)
+    var n_iter_out = _download_i32(ctx, n_iter, bs)
+    var retcode_out = _download_i32(ctx, retcode, bs)
+    trace.record_list_f32("fit.x", x_out)
+    trace.record_list_f32("fit.loss", fx_out)
+    trace.record_list_i32("fit.n_iter", n_iter_out)
+    trace.record_list_i32("fit.retcode", retcode_out)
+
+    _ = d_x^
+    _ = d_grad^
+    _ = d_x_pert^
+    _ = scratch^
+    _ = x^
+    _ = xp^
+    _ = grad^
+    _ = gradp^
+    _ = gradc^
+    _ = drt^
+    _ = S^
+    _ = Y^
+    _ = yhist^
+    _ = alpha^
+    _ = fx_hist^
+    _ = fx^
+    _ = fxc^
+    _ = fxp^
+    _ = fx_init^
+    _ = dg_init^
+    _ = dg_test^
+    _ = gnorm^
+    _ = step^
+    _ = active^
+    _ = searching^
+    _ = endv^
+    _ = n_vec^
+    _ = lsret^
+    _ = ls_iters^
+    _ = n_iter^
+    _ = retcode^
+    _ = bad^
+    _ = any_active^
+    _ = any_searching^
+    _ = flag_host^
+    return BatchedLBFGSResult(
+        x=x_out^, fx=fx_out^, n_iter=n_iter_out^, retcode=retcode_out^, n_eval=n_eval
+    )
 
 def _answer(mut trace: IdentityTrace, ar: AsyncLBFGSOut) raises -> BatchedLBFGSResult:
     """The solve's answer, recorded on the identity trace."""
