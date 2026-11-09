@@ -51,6 +51,10 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.host_finite_scan import host_all_finite_f32_strided
 
+# TOMBSTONE: classical_cast_rows and classical_check_weights (core/classical_arrays_impl.mojo, merged into the one admission path) deleted 2026-11-08 by lane consol-a0-admission; code recoverable at ef4bce3a7e.
+# Restore: experiments/removed/A0_ADMISSION_HELPERS.patch. They are
+# `admitted_check_f32` and `admitted_check_weights_f32` below.
+
 comptime _AI_F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _AI_F64P = MutPointer[Float64, MutUntrackedOrigin]
 comptime _AI_U8P = MutPointer[UInt8, MutUntrackedOrigin]
