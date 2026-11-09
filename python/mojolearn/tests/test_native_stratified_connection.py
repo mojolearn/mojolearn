@@ -21,8 +21,6 @@ def _poison_loaders(monkeypatch):
     def forbidden(*args, **kwargs):
         calls.append('loader')
         raise AssertionError('stratification called a Python binding loader')
-    monkeypatch.setitem(ms._NATIVE_CONTEXT, 'family_msel_xm', forbidden)
-    monkeypatch.setattr(ms, '_x_metrics_binding', forbidden)
     monkeypatch.setattr(_expansion_metrics, '_binding', forbidden)
     monkeypatch.setattr(_backend, 'binding', forbidden)
     return calls

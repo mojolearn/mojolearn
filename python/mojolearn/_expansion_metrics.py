@@ -2294,8 +2294,9 @@ from ._native_ops import codes as _operation_codes  # noqa: E402
 _OP = _operation_codes()
 _native_family_bridge.tables(family_metrics_ops=dict(_OPS), family_metrics_terms=dict(_TERM),
                              family_metrics_prog_context=_PROG_CONTEXT,
-                             family_metrics_undefined=UndefinedMetricWarning, family_metrics_real=numbers.Real,
-                             family_mexp_integral=numbers.Integral)
+                             family_metrics_undefined=UndefinedMetricWarning)
+# family_metrics_real and family_mexp_integral (context entries no native owner read) deleted 2026-11-09,
+# lane p5-cpu-route-relabel-and-dead-code (docs/TOMBSTONES.md "Dead code found by the Python audits").
 
 from ._native_owner_lifetime import connect_owner_context as _connect_metric_owners
 _connect_metric_owners(_NATIVE_CONTEXT)
