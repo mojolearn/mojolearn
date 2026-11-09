@@ -34,14 +34,7 @@ from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_inputs import sequential_sequence
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.metrics_native_support import metric_is_bool, metric_is_integral, metric_is_real, metric_float
-from bindings.classical_labels import (
-    ClassicalLabels,
-    _encode_label_view as classical_encode_label_view,
-    _native_labels as classical_native_labels,
-    _flat_list_labels as classical_flat_list_labels,
-    _text_buffer_labels as classical_text_buffer_labels,
-    _text_list_labels as classical_text_list_labels,
-)
+from bindings.classical_labels import ClassicalLabels, classical_encode_labels
 # The array admission helpers (lane consol-a0-admission, 2026-11-08): this
 # file kept a near-verbatim copy of bindings/classical_labels.mojo's block;
 # the one merged copy lives there and is imported here under the trees_*
@@ -50,29 +43,20 @@ from bindings.classical_labels import (
 # Restore: experiments/removed/A0_ADMISSION_HELPERS.patch.
 from bindings.classical_labels import (
     labels_itemsize as trees_itemsize,
-    labels_empty as trees_empty,
-    labels_vector as trees_vector,
     labels_full_f32 as trees_full_f32,
     labels_reshape as trees_reshape,
     labels_freeze as trees_freeze,
     labels_address as trees_address,
-    LabelsView as TreesView,
-    labels_shape_repr as trees_shape_repr,
-    _view_of_array,
-    _any_contiguous_address,
-    _view_of_buffer,
     _pandas_values,
-    labels_view as trees_view,
-    labels_check_rank as trees_check_rank,
     _native_code,
     labels_cast as trees_cast,
-    LabelsMatrix as TreesMatrix,
-    labels_f32 as trees_f32,
-    labels_f32_view as trees_f32_view,
-    labels_forest_layout as trees_forest_layout,
-    labels_all_finite as trees_all_finite,
-    labels_check_sample_weight as trees_check_sample_weight,
-    labels_prepare_weights as trees_prepare_weights,
+)
+# The X / weight / view admission is the one path (bindings/admitted_input.mojo).
+# TOMBSTONE: trees_empty / trees_vector / TreesView / trees_view / trees_check_rank / trees_shape_repr / TreesMatrix / trees_f32 / trees_f32_view / trees_forest_layout / trees_all_finite / trees_check_sample_weight / trees_prepare_weights aliases, and the trees label encoder copy (_native_labels, _label_list, _flatten_labels, _flatten_into, _label_kind, _sorted_classes, _numeric_label_view, _list_labels) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
+from bindings.admitted_input import (
+    AdmittedX, admit_f32, admit_x_unrecorded, admit_weight_words, admitted_words, admitted_array, admitted_vector,
+    admit_c_view, admitted_dtype,
 )
 from bindings.label_input_sources import labels_storage_source
 from bindings.perf3_label_doors_text import labels_all_exact_str
@@ -187,276 +171,16 @@ struct TreesLabels(Copyable, Movable):
         self.n = n
 
 
-def _native_labels(view: TreesView, bool_source: Bool, context: PythonObject) raises -> TreesLabels:
-    """`_labels._encode_labels_native`: one `prepare_targets` call over a
-    numeric label vector, the k class values as Python numbers."""
-    var n = view.size()
-    var wide_float = view.typestr == "<f4" or view.typestr == "<f8"
-    var classes_store = trees_vector(n, "<f8" if wide_float else "<i8", context)
-    var codes = trees_vector(n, "<i4", context)
-    # Every view here is contiguous (`_view_of_buffer` linearizes a strided
-    # export; an Array is C or F), so a vector's storage is its logical order.
-    var y_addr = view.addr
-    var keep = view.keep
-    var k = 0
-    try:
-        k = Int(py=py_call_typed(trees_helper(context, "prepare_targets"), PythonObject(y_addr),
-                                PythonObject(_encode_code(view.typestr)), PythonObject(n),
-                                PythonObject(trees_address(classes_store)), PythonObject(trees_address(codes)),
-                                PythonObject(0), PythonObject(0), PythonObject(0)))
-        _ = codes  # keep the Python object alive through the native call above
-        _ = classes_store  # keep the Python object alive through the native call above
-    except error:
-        var message = String(error)
-        if "NaN label" in message:
-            if message.startswith("ValueError: "):
-                raise error^
-            raise Error("ValueError: " + message)
-        raise error^
-    _ = keep^
-    var b = trees_builtins()
-    var classes = Python.list()
-    for i in range(k):  # driver-loop: over the k distinct classes
-        if wide_float:
-            _ = py_call(classes.append, PythonObject(_F64P(unsafe_from_address=trees_address(classes_store))[i]))
-            _ = classes_store  # keep the Python object alive through the native call above
-        else:
-            var v = Int(_I64P(unsafe_from_address=trees_address(classes_store))[i])
-            _ = classes_store  # keep the Python object alive through the native call above
-            if bool_source:
-                _ = py_call(classes.append, PythonObject(v != 0))
-                _ = classes_store  # keep the Python object alive through the native call above
-            else:
-                _ = py_call(classes.append, PythonObject(v))
-                _ = classes_store  # keep the Python object alive through the native call above
-    var _keep_ret_classes_store = TreesLabels(classes, codes, n)
-    _ = classes_store  # keep the Python object alive through the native call above
-    return _keep_ret_classes_store^
-
-
-def _label_list(y: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`y.tolist()` of a label container that has one (an ndarray, an
-    `array.array`, a pandas Series, an Array): the C methods of the exact
-    native classes; any other buffer through its memoryview."""
-    var b = trees_builtins()
-    var cls = py_type(y)
-    var ndarray = py_get(context, "ndarray")
-    if ndarray is not None and cls is ndarray:
-        return py_call(ndarray.tolist, y)
-    if cls is context["array_type"]:
-        return py_call(context["array_type"].tolist, y)
-    if native_pandas_exact(y):
-        return _label_list(_pandas_values(y), context)
-    if cls is context["array_class"]:
-        return py_call(native_buffer_view(y._mv).tolist)
-    return py_call(native_buffer_view(y).tolist)
-
-
-def _flatten_labels(y: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_labels.flatten_labels`: a flat Python list of the label objects,
-    nested lists and tuples flattened depth first."""
-    var b = trees_builtins()
-    var item = y
-    var cls = py_type(y)
-    if cls is not b.list and cls is not b.tuple and cls is not b.str and cls is not b.bytes:
-        item = _label_list(y, context)
-        cls = py_type(item)
-    if cls is b.str or cls is b.bytes:
-        raise Error("mojolearn: y must be a sequence of labels")
-    var out = Python.list()
-    _flatten_into(item, out, b)
-    return out
-
-
-def _flatten_into(item: PythonObject, out_buf: PythonObject, b: PythonObject) raises:
-    var cls = py_type(item)
-    if Bool(py=py_call(b.isinstance, item, Python.tuple(b.list, b.tuple))):
-        for k in range(len(item)):  # cpu-route: Python label objects, the explicit label input step
-            _flatten_into(item[k], out_buf, b)
-        return
-    _ = py_call(out_buf.append, item)
-
-
-def _label_kind(t: PythonObject, b: PythonObject, context: PythonObject) raises -> Int:
-    """`_labels._kind_of_type`: 1 str, 2 number, 0 refused."""
-    if t is b.str:
-        return 1
-    if t is b.int or t is b.float or t is b.bool or _one_of(t, context["scalar_types"]):
-        return 2
-    return 0
-
-
-def _sorted_classes(labels: PythonObject, context: PythonObject) raises -> TreesLabels:
-    """`_labels.sorted_classes`: the ORDER RULE over Python label objects
-    (numbers by value, strings by code point, the first of equal labels
-    kept), its refusals in walk order, one dense code per label."""
-    var b = trees_builtins()
-    var n = len(labels)
-    if n == 0:
-        raise Error("mojolearn: y is empty")
-    var kinds = Python.dict()
-    var seen_str = False
-    var seen_number = False
-    for i in range(n):  # cpu-route: Python label objects, the explicit label input step
-        var item = labels[i]
-        var t = py_type(item)
-        if py_type(t) is not b.type:
-            raise Error("TypeError: native tree labels require ordinary numeric or string storage without Python hooks")
-        var kind_obj = py_get(kinds, t)
-        var kind = 0
-        if kind_obj is None:
-            kind = _label_kind(t, b, context)
-            py_setitem(kinds, t, PythonObject(kind))
-        else:
-            kind = Int(py=kind_obj)
-        if kind == 0:
-            raise Error("mojolearn: labels require native numbers or strings without Python hooks")
-        if kind == 2 and Bool(py=item != item):
-            raise Error("mojolearn: y contains a NaN label; NaN is not a class")
-        seen_str = seen_str or kind == 1
-        seen_number = seen_number or kind == 2
-    if seen_str and seen_number:
-        raise Error("mojolearn: y mixes numeric and str labels; encode one kind before fitting")
-    var classes = py_call(b.sorted, py_call(b.dict.fromkeys, labels))
-    var index = Python.dict()
-    for i in range(len(classes)):  # driver-loop: over class index table (classes-sized: distinct classes)
-        py_setitem(index, classes[i], PythonObject(i))
-    var codes = trees_vector(n, "<i4", context)
-    var p = _I32P(unsafe_from_address=trees_address(codes))
-    _ = codes  # keep the Python object alive through the native call above
-    for i in range(n):  # cpu-route: Python label objects, the explicit label input step
-        p[i] = Int32(Int(py=index[labels[i]]))
-        _ = codes  # keep the Python object alive through the native call above
-    return TreesLabels(classes, codes, n)
-
-
-def _numeric_label_view(y: PythonObject, context: PythonObject, mut bool_source: Bool) raises -> Optional[TreesView]:
-    """The numeric label vector `_labels._encode_labels_native` encodes, or
-    None for what only the label input step reads (lists, str or object
-    buffers, a pandas Series, a matrix, an empty vector)."""
-    var b = trees_builtins()
-    var cls = py_type(y)
-    if cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes:
-        return None
-    if native_pandas_exact(y):
-        # An exact pandas Series over one plain NumPy integer, unsigned,
-        # bool or float block (lane perf2-trees, 2026-11-06): its `tolist()`
-        # lists exactly that block's values as Python ints, bools or floats,
-        # which the label input step then encoded through the same native
-        # `prepare_targets` (ints, floats) or sorted to the same bool classes
-        # (`bool_source`). The block is read in place instead of listed and
-        # walked per label. Nullable, categorical, string, object and any
-        # other storage keep the walk. Same classes and codes: no bits change.
-        var values = PythonObject(None)
-        try:
-            values = _pandas_values(y)
-        except:
-            return None
-        var ndarray = py_get(context, "ndarray")
-        if ndarray is None or py_type(values) is not ndarray or Int(py=values.ndim) != 1:
-            return None
-        var kind = String(values.dtype.kind)
-        if not (kind == "i" or kind == "u" or kind == "b" or kind == "f"):
-            return None
-        return _numeric_label_view(values, context, bool_source)
-    var found: Optional[TreesView] = None
-    try:
-        if cls is context["array_class"]:
-            found = _view_of_array(y)
-        else:
-            var probe = native_buffer_view(y)
-            bool_source = String(probe.format) == "?"
-            found = _view_of_buffer(y, "y", context)
-    except:
-        return None
-    var view = found.value().copy()
-    var n = view.size()
-    var big = 0
-    for k in range(view.ndim()):  # driver-loop: over array rank metadata
-        if view.shape[k] > big:
-            big = view.shape[k]
-    if _encode_code(view.typestr) < 0 or n == 0 or n != big:
-        return None
-    return view^
-
-
-def _list_labels(y: PythonObject, context: PythonObject) raises -> Optional[TreesLabels]:
-    """`_labels._encode_label_list_native`: a flat list or tuple whose every
-    label is exactly an int, or exactly a float, through the native encoder;
-    None for anything else (and for an int outside int64)."""
-    var b = trees_builtins()
-    var n = len(y)
-    if n == 0:
-        return None
-    var all_int = True
-    var all_float = True
-    for i in range(n):  # cpu-route: Python label objects, the explicit label input step
-        var t = py_type(y[i])
-        all_int = all_int and t is b.int
-        all_float = all_float and t is b.float
-    if not all_int and not all_float:
-        return None
-    var store = PythonObject(None)
-    try:
-        store = py_call(context["array_type"], "q" if all_int else "d", y)
-    except:
-        return None  # an int outside int64: a class only Python can hold
-    var array = classical_wrap_array(store, Python.tuple(n), "<i8" if all_int else "<f8", "C", context)
-    return _native_labels(_view_of_array(array), False, context)
-
-
 def trees_encode_labels(y: PythonObject, context: PythonObject) raises -> TreesLabels:
-    """`_labels.encode_labels(y)`: one native `prepare_targets` call for a
-    numeric label vector (a buffer or a flat list of exact ints or exact
-    floats); the ORDER RULE over Python objects for str and object labels."""
-    var b = trees_builtins()
-    var bool_source = False
-    var numeric = _numeric_label_view(y, context, bool_source)
-    if numeric:
-        return _native_labels(numeric.value(), bool_source, context)
-    # perf3-label-doors (2026-11-06): the classical encoder's one-read paths
-    # (bindings/classical_labels.mojo, perf2-labels), each giving exactly the
-    # classes and codes the walk below gives the same input, so no bits
-    # change. A numeric ndarray / Array / numpy-backed Series this copy's view
-    # does not take (a C-ordered matrix, a bool or one-byte '|' Array,
-    # int8 / uint16 / float16 storage) is encoded from its buffer; only
-    # numeric storage is handed over, so the classical admission it runs
-    # first meets nothing this encoder would refuse differently.
-    var stored = labels_storage_source(y, context)
-    if stored is not None:
-        var kind: String
-        if py_type(stored) is py_get(context, "ndarray"):
-            kind = String(stored.dtype.kind)
-        else:
-            var typestr = String(stored.dtype)
-            kind = String(typestr[byte=1:2])
-        if kind == "i" or kind == "u" or kind == "b" or kind == "f":
-            var wide_bool = False
-            var wide = classical_encode_label_view(y, context, wide_bool)
-            if wide:
-                return _trees_of(classical_native_labels(wide.value(), wide_bool, context))
-    # An exact flat list / tuple of exact ints, floats or bools: one native
-    # encode from the container's C storage (no flatten, no type walk).
-    var direct = classical_flat_list_labels(y, context)
-    if direct:
-        return _trees_of(direct.value())
-    # An exact '<U' ndarray: UCS4 read from its buffer, native stable sort.
-    var text = classical_text_buffer_labels(y, context)
-    if text:
-        return _trees_of(text.value())
-    var flat = _flatten_labels(y, context)
-    var listed = _list_labels(flat, context)
-    if listed:
-        return listed.value().copy()
-    # A flat list of exact str labels only (this copy's ORDER RULE refuses
-    # str subclasses, which the native str reader would take): code points
-    # read natively and sorted by the stable merge sort, the same classes
-    # (first of each run) and codes as the ORDER RULE.
-    if labels_all_exact_str(flat):
-        var named = classical_text_list_labels(flat, context)
-        if named:
-            return _trees_of(named.value())
-    return _sorted_classes(flat, context)
+    """`_labels.encode_labels(y)`: THE one label encoder
+    (bindings/classical_labels.mojo classical_encode_labels; the trees
+    context carries the label helpers through label_context())."""
+    # Lane a1b-doors-opt-in-trees-linear: this was a second encoder (its own
+    # numeric view, flatten, ORDER RULE and list paths, then the classical
+    # one-read paths). The classical encoder gives the same classes and
+    # codes for every input it takes; a str subclass label, which this copy
+    # refused, is now encoded as the classical ORDER RULE encodes it.
+    return _trees_of(classical_encode_labels(y, context))
 
 
 def _trees_of(labels: ClassicalLabels) -> TreesLabels:
@@ -590,7 +314,7 @@ def trees_decode_labels(var classes: PythonObject, codes: PythonObject, context:
     var k = len(classes)
     var wide_codes = codes
     if String(codes.dtype) == "<i4":
-        wide_codes = trees_vector(n, "<i8", context)
+        wide_codes = admitted_vector(n, "<i8", context)
         trees_cast(trees_address(codes), "<i4", trees_address(wide_codes), "<i8", n, context)
         _ = wide_codes  # keep the Python object alive through the native call above
     if slot < 0 and not ((kind == "int" or kind == "float") and k > 0):
@@ -600,7 +324,7 @@ def trees_decode_labels(var classes: PythonObject, codes: PythonObject, context:
         var table = cached_table
         var fits = True
         if slot < 0:
-            table = trees_vector(k, "<i8" if kind == "int" else "<f8", context)
+            table = admitted_vector(k, "<i8" if kind == "int" else "<f8", context)
             for i in range(k):  # driver-loop: over the k class values into the gather table
                 if kind == "int":
                     var v = classes[i]
@@ -614,7 +338,7 @@ def trees_decode_labels(var classes: PythonObject, codes: PythonObject, context:
                     _ = table  # keep the Python object alive through the native call above
             _decode_record(owner, classes, 0 if kind == "int" else 1, table if fits else PythonObject(None))
         if fits:
-            var out = trees_vector(n, "<i8" if kind == "int" else "<f8", context)
+            var out = admitted_vector(n, "<i8" if kind == "int" else "<f8", context)
             var fn_obj = trees_helper(context, "gather_i64" if kind == "int" else "gather_f64")
             _ = py_call_typed(fn_obj, PythonObject(trees_address(table)), PythonObject(k),
                               PythonObject(trees_address(wide_codes)), PythonObject(n), PythonObject(trees_address(out)))
@@ -656,7 +380,7 @@ def trees_decode_labels(var classes: PythonObject, codes: PythonObject, context:
 def trees_argmax_rows(scores: PythonObject, rows: Int, cols: Int, wide: Bool, context: PythonObject) raises -> PythonObject:
     """`_labels.argmax_rows` of a C-order float32 or float64 block: the
     base binding's first-max scan, int64 codes."""
-    var out = trees_vector(rows, "<i8", context)
+    var out = admitted_vector(rows, "<i8", context)
     if rows == 0:
         return out
     if cols == 0:
@@ -686,17 +410,17 @@ def trees_class_weight_rows(class_weight: PythonObject, labels: TreesLabels, xtr
     var n = labels.n
     var objects = Python.list()
     if Bool(py=py_call(b.isinstance, class_weight, b.str)):
-        var counts = trees_vector(k, "<i4", context)
+        var counts = admitted_vector(k, "<i4", context)
         var count_entry = trees_need(xtrees, "x_trees_code_counts", "the x_trees binding has no x_trees_code_counts",
                                      "ImportError")
         _ = py_call_typed(count_entry, PythonObject(trees_address(labels.codes) if n else 0),
                           PythonObject(trees_address(counts)), Python.list(n, k))
         _ = counts  # keep the Python object alive through the native call above
-        var wide = trees_vector(k, "<i8", context)
+        var wide = admitted_vector(k, "<i8", context)
         trees_cast(trees_address(counts), "<i4", trees_address(wide), "<i8", k, context)
         _ = wide  # keep the Python object alive through the native call above
         _ = counts  # keep the Python object alive through the native call above
-        var w64 = trees_vector(k, "<f8", context)
+        var w64 = admitted_vector(k, "<f8", context)
         if k and Int(py=py_call_typed(trees_helper(context, "class_ratio_f64"), PythonObject(trees_address(wide)),
                                       PythonObject(k), PythonObject(n), PythonObject(0), PythonObject(trees_address(w64)))):
             raise Error("ZeroDivisionError: division by zero")
@@ -726,7 +450,7 @@ def trees_class_weight_rows(class_weight: PythonObject, labels: TreesLabels, xtr
         all_one = all_one and Bool(py=v == PythonObject(1))
     if all_one:
         return PythonObject(None)
-    var narrowed = trees_vector(k, "<f4", context)
+    var narrowed = admitted_vector(k, "<f4", context)
     var q = _F32P(unsafe_from_address=trees_address(narrowed))
     _ = narrowed  # keep the Python object alive through the native call above
     var top = Float32(0)
@@ -740,7 +464,7 @@ def trees_class_weight_rows(class_weight: PythonObject, labels: TreesLabels, xtr
             top = f32
     if top <= 0:
         raise Error("class weights must have positive total")
-    var out = trees_vector(n, "<f4", context)
+    var out = admitted_vector(n, "<f4", context)
     if n:
         var rows_entry = trees_need(xtrees, "x_trees_class_rows", "the x_trees binding has no x_trees_class_rows",
                                     "ImportError")
@@ -752,35 +476,31 @@ def trees_class_weight_rows(class_weight: PythonObject, labels: TreesLabels, xtr
 
 
 def trees_weighted_rows(sample_weight: PythonObject, class_weight: PythonObject, labels: TreesLabels,
-                        xtrees: PythonObject, context: PythonObject) raises -> TreesMatrix:
+                        xtrees: PythonObject, context: PythonObject) raises -> AdmittedX:
     """`_expansion_trees._trees_weighted_rows`: the checked sample weights
     times the class_weight row weights, one correctly rounded float32
     product per row (`x_trees_mul_f32`); the sample weights alone when no
     class weight differs from 1."""
-    var sw = trees_check_sample_weight(sample_weight, labels.n, context)
+    var sw = admit_weight_words(sample_weight, labels.n, context)
     if class_weight is None:
         return sw^
     var rows = trees_class_weight_rows(class_weight, labels, xtrees, context)
     if rows is None:
         return sw^
-    var out = trees_vector(labels.n, "<f4", context)
+    var out = admitted_vector(labels.n, "<f4", context)
     var mul = trees_need(xtrees, "x_trees_mul_f32", "the x_trees binding has no x_trees_mul_f32", "ImportError")
-    _ = py_call_typed(mul, PythonObject(sw.addr), PythonObject(trees_address(rows)), PythonObject(trees_address(out)),
+    _ = py_call_typed(mul, PythonObject(sw.address), PythonObject(trees_address(rows)), PythonObject(trees_address(out)),
                       Python.list(labels.n))
     _ = out  # keep the Python object alive through the native call above
     _ = rows  # keep the Python object alive through the native call above
     _ = sw^
-    var _keep_ret_out = TreesMatrix(out, trees_address(out), labels.n, 1, True)
-    _ = out  # keep the Python object alive through the native call above
-    return _keep_ret_out^
+    return admitted_words(out, trees_address(out), labels.n, 1)
 
 
 def trees_class_rows_only(class_weight: PythonObject, labels: TreesLabels, xtrees: PythonObject,
-                          context: PythonObject) raises -> Optional[TreesMatrix]:
+                          context: PythonObject) raises -> Optional[AdmittedX]:
     """The class_weight row weights without sample weights, or None."""
     var rows = trees_class_weight_rows(class_weight, labels, xtrees, context)
     if rows is None:
         return None
-    var _keep_ret_rows = TreesMatrix(rows, trees_address(rows), labels.n, 1, True)
-    _ = rows  # keep the Python object alive through the native call above
-    return _keep_ret_rows^
+    return admitted_words(rows, trees_address(rows), labels.n, 1)
