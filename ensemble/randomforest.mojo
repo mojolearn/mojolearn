@@ -3149,10 +3149,6 @@ def fit_forest_prepared[
     )
     for k in range(k_streams):
         builders[k].adopt_shared_splits(split_staging, k)
-        # TREE_OP_FOREST_FINISH (lane t1b-tree-leaf-and-node-ops): a
-        # device-loop tree's finish is enqueued only; the cycle's one drain
-        # below settles it and `_take_finished` lands it in the forest
-        builders[k].defer_finish = True
 
     # `:337-367` -- their tree loop, K-WAY PIPELINED (DEVIATION 117; see
     # the block above `k_streams`). Trees finish out of order, so the
@@ -3318,8 +3314,8 @@ def fit_forest_prepared[
         t_stage = instr.times.start()
         ctx.synchronize()
         instr.times.stop_host("device_wait", t_stage)
-        # the trees whose finish the previous pass enqueued (their
-        # downloads rode the drain above)
+        # the trees whose finish the previous pass enqueued (TREE_OP_FOREST_FINISH,
+        # lane t1b-tree-leaf-and-node-ops: their downloads rode the drain above)
         for k in range(len(builders)):  # driver-loop: over the K pipeline slots
             builders[k].collect_finished()
             _take_finished(builders[k], forest, instr)
