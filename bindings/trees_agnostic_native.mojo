@@ -34,13 +34,14 @@ comptime _AGN_BUDGET_RESIDENT = 1 << 28
 #: MOJOLEARN_PSHAP_DELTA, MOJOLEARN_IDN_SHAP_DEVICE_MODEL (an IDENTICAL GPU
 #: build: Kernel/Permutation SHAP over a built-in flat forest evaluate the
 #: model on the device, xtrees/agnostic_device.mojo `model_kernel`; moves no
-#: bit) and MOJOLEARN_KSHAP/PSHAP_FAST_DEVICE_MODEL (the FAST twins).
+#: bit).
 comptime _KSHAP_FAST_BATCH = 8
 comptime _AGN_IDN_SYN_POOL = 16
 comptime _PSHAP_DELTA = 32
 comptime _AGN_IDN_DEVICE_MODEL = 64
-comptime _KSHAP_FAST_DEVICE_MODEL = 1024
-comptime _PSHAP_FAST_DEVICE_MODEL = 2048
+# TOMBSTONE: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL (never measured, deleted) deleted 2026-11-09 by @K1SHA_KSHAP@; code
+# recoverable at f59d913b0b. Same commit: its twin MOJOLEARN_PSHAP_FAST_DEVICE_MODEL (bits 1024 / 2048).
+# Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch
 
 
 def _b() raises -> PythonObject:
@@ -153,17 +154,14 @@ def _shape(phi: PythonObject, n: Int, d: Int, k: Int, context: PythonObject) rai
 
 def _device_forest(model: PythonObject, mode: String, permutation: Bool, table: PythonObject,
                    context: PythonObject) raises -> PythonObject:
-    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL (and its FAST twins): (arrays, k,
+    """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: (arrays, k,
     n_trees, rf_input) when the model is a built-in flat forest whose
     predict is the strict increasing-tree device kernel; else None (the
     model runs through its native predict per chunk). rf_input: the random
     forest's predict flushes the compared feature, ExtraTrees' does not."""
     var bits = _switches(table)
-    var fast = mode == "fast"
-    if fast:
-        if (bits & (_PSHAP_FAST_DEVICE_MODEL if permutation else _KSHAP_FAST_DEVICE_MODEL)) == 0:
-            return PythonObject(None)
-    elif (bits & _AGN_IDN_DEVICE_MODEL) == 0:
+    # The FAST tier has no device-model route (MOJOLEARN_KSHAP_FAST_DEVICE_MODEL deleted 2026-11-09).
+    if mode == "fast" or (bits & _AGN_IDN_DEVICE_MODEL) == 0:
         return PythonObject(None)
     var m = model
     var outer = _fields(model)

@@ -55,6 +55,12 @@ def _check_configuration() -> Bool:
     # one warmup + one scored fit per arm (docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md). Code recoverable at 1a76955b5^.
     # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch (or MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch)
     comptime assert not is_defined["MOJOLEARN_RF_FAST_QSAMPLE"](), "removed 2026-10-15 (lane/tombstone-qsample-ivfstride, 1a76955b5): RF_FAST_QSAMPLE (split candidates from >= 65,536 sampled rows) was DROPPED-slower: M4 DecisionTreeRegressor 1,000,000 x 32 7995 -> 8673 ms (8% slower), R2 0.99118 -> 0.99159 (noise). Restore with experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch."
+    # Lane k1-delete-unverdicted-fast (2026-11-09): Apple FAST experiments with no verdict, never to be measured (Apple FAST
+    # investment stopped); deleted (docs/TOMBSTONES.md "Unverdicted FAST experiments deleted (lane K1)").
+    # Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch
+    comptime assert not is_defined["MOJOLEARN_KSHAP_FAST_DEVICE_MODEL"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_KSHAP_FAST_DEVICE_MODEL, KernelExplainer's FAST tier on the IDENTICAL device-model route for a built-in forest, was OPEN (afr2-kshap-dm-rf never run) and will not be measured; the IDENTICAL MOJOLEARN_IDN_SHAP_DEVICE_MODEL stays; code at f59d913b0b; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_PSHAP_FAST_DEVICE_MODEL"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_PSHAP_FAST_DEVICE_MODEL, the PermutationExplainer twin of KSHAP_FAST_DEVICE_MODEL, was OPEN (afr2-pshap-dm-rf never run) and will not be measured; code at f59d913b0b; see docs/TOMBSTONES.md"
+
     return True
 
 
