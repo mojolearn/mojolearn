@@ -465,6 +465,8 @@ in the tables after the sections.
 | [`MOJOLEARN_RSVD_FAST_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, FAST + Apple) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_IDN_RSVD_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, IDENTICAL) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_RSVD_FAST_DEVSCAN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd finiteness scan, FAST + Apple) | removed (KEPT default, superseded: parallel host scan of the one admission path) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`MOJOLEARN_AUTOGRAD_MOE_OFF`](#moe-backward-on-the-forwards-ops-2026-11-09) | Neural (MoEBlock backward) | removed (the tape is the only MoE backward) | 2026-11-09 | [MOJOLEARN_AUTOGRAD_MOE_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch) |
+| [`OP_MOEB_HIDDEN_FWD` / `OP_MOEB_OUT_FWD` (op codes 2900, 2901)](#moe-backward-on-the-forwards-ops-2026-11-09) | Neural (MoEBlock training forward) | removed (duplicate codes of `OP_MOE_HIDDEN` / `OP_MOE_OUT`) | 2026-11-09 | [MOJOLEARN_AUTOGRAD_MOE_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -515,8 +517,6 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | define | area | deleted | restored | now | patch |
 |---|---|---|---|---|---|
 | [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE`](#mojolearn_classical_c25_projection_reuse) | Decomp | 2026-10-08 (`ab4e8e543`) | 2026-10-10 (lane/c25-restore-promote) | IDENTICAL default; `_OFF` restores the old path | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch) |
-| [`MOJOLEARN_AUTOGRAD_MOE_OFF`](#moe-backward-on-the-forwards-ops-2026-11-09) | Neural (MoEBlock backward) | removed (the tape is the only MoE backward) | 2026-11-09 | [MOJOLEARN_AUTOGRAD_MOE_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch) |
-| [`OP_MOEB_HIDDEN_FWD` / `OP_MOEB_OUT_FWD` (op codes 2900, 2901)](#moe-backward-on-the-forwards-ops-2026-11-09) | Neural (MoEBlock training forward) | removed (duplicate codes of `OP_MOE_HIDDEN` / `OP_MOE_OUT`) | 2026-11-09 | [MOJOLEARN_AUTOGRAD_MOE_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch) |
 
 ## Trees
 
