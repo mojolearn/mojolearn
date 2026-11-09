@@ -26,7 +26,7 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_numpy_metadata import native_numpy_type, native_numpy_dtype
 from bindings.native_buffer_owner import native_storage_allocate
 from providers.python.byte_lm_metadata_pyapi import _Shape, _shape_of, byte_lm_lengths, byte_lm_config_operation
-from providers.python.training_buffer_pyapi import training_f32_cast_owned
+from bindings.admitted_sequence import admit_nd_owned_f32
 from core.training_state_validation import training_byte_shape_validate
 from core.sha256 import sha256_hex_addr
 from bindings.tsa_hw_native import tsa_array
@@ -37,7 +37,8 @@ from bindings.classical_arrays import classical_input, classical_address, classi
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from core.cast_in import CAST_KIND_FLOAT
-from core.xseq_marshal import neural_cast_i32_2d, neural_first_bad_id
+from core.xseq_marshal import neural_first_bad_id
+from core.admitted_input_nd import admitted_ids_i32
 from bindings.byte_perf_helpers import byte_int_list_from_i32, byte_int_list_from_i64
 
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -75,7 +76,7 @@ def _ids_i32(source: PythonObject, context: PythonObject) raises -> PythonObject
         raise Error("TypeError: ids must be an integer array")
     var store = _zero_store("i", rows * cols, context)
     var tokens = classical_wrap_array(store, Python.tuple(rows, cols), "<i4", "C", context)
-    neural_cast_i32_2d(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
+    admitted_ids_i32(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
                        rows, cols, item, kind, _I32P(unsafe_from_address=Int(py=classical_address(tokens))))
     _ = value  # keep the Python object alive through the native call above
     _ = tokens  # keep the Python object alive through the native call above
@@ -175,7 +176,7 @@ def _inference_parameters(mut mods: NativeModules, source: PythonObject, shape: 
                           context: PythonObject) raises -> Tuple[PythonObject, String]:
     var bi = mods.module("builtins")
     if py_type(source) is not bi.dict:
-        return (training_f32_cast_owned(source, [shape.n_total()], "parameters", context), String("float32"))
+        return (admit_nd_owned_f32(source, [shape.n_total()], "parameters", context), String("float32"))
     # Inspect native dictionary keys without invoking mapping/protocol hooks.
     # Packed classes are storage only; their buffers pass the same admission as
     # a direct linalg call, and decoding uses that existing provider/kernel.
@@ -234,7 +235,7 @@ def _inference_parameters(mut mods: NativeModules, source: PythonObject, shape: 
         elif formats[i] == 2:
             item = linalg_ops_operation(PythonObject(None), "family_lin_dequantize_int8", item, context["byte_lm_linalg_context"])
             mods.released()
-        var owned = training_f32_cast_owned(item, shapes[i], names[i], context)
+        var owned = admit_nd_owned_f32(item, shapes[i], names[i], context)
         var count = 1
         for j in range(len(shapes[i])):  # driver-loop: over admitted tensor shape metadata
             count *= shapes[i][j]
@@ -321,9 +322,9 @@ def byte_lm_host_construct(mut mods: NativeModules, trainer: PythonObject, args:
         raise Error(String(binding))
     var entry = neural_descriptor_entry(binding, "byte_lm_host_train_step")
     var n = shape.n_total()
-    var parameters = training_f32_cast_owned(args[0], [n], "parameters", context)
-    var moment = _f32_array(n, context) if args[1] is None else training_f32_cast_owned(args[1], [n], "m", context)
-    var variance = _f32_array(n, context) if args[2] is None else training_f32_cast_owned(args[2], [n], "v", context)
+    var parameters = admit_nd_owned_f32(args[0], [n], "parameters", context)
+    var moment = _f32_array(n, context) if args[1] is None else admit_nd_owned_f32(args[1], [n], "m", context)
+    var variance = _f32_array(n, context) if args[2] is None else admit_nd_owned_f32(args[2], [n], "v", context)
     if py_type(args[4]) is not bi.int:
         raise Error("completed_steps must be an int")
     var completed = Int(py=args[4])
@@ -469,7 +470,7 @@ def byte_lm_host_infer(mut mods: NativeModules, model: PythonObject, operation: 
     var kind = classical_cast_kind(value, item, "ids", context)
     var tokens = tsa_array("i", "<i4", Python.tuple(batch, length), batch * length, 4, context)
     var token_address = Int(py=classical_address(tokens))
-    neural_cast_i32_2d(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
+    admitted_ids_i32(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
         batch, length, item, kind, _I32P(unsafe_from_address=token_address))
     _ = value^
     var sizes = List[Int](length=batch, fill=length)
