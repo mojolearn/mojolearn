@@ -359,6 +359,14 @@ def byte_host_program_load(mut e: ByteHostProgram, param: Int, m: Int, v: Int, c
     _loaded(e, completed)
 
 
+def byte_host_program_load_params(mut e: ByteHostProgram, param: Int) raises:
+    """The owner's parameters alone into the session (a loss-only call)."""
+    var s = ops_session[HostExec, OPS_HOST](e.sid)
+    _move_host(s[], e, param, BYTE_PART_PARAM, True)
+    for l in range(len(e.blocks)):  # driver-loop: over decoder layers
+        s[].steps.weights_changed(Int(s[].buffer(e.blocks[l])))
+
+
 def byte_host_program_store(mut e: ByteHostProgram, param: Int, m: Int, v: Int, grad: Int) raises:
     """`byte_program_store` on the CPU column: parameters, moments and the
     last step's pre-update gradient into the owner's flat lists."""
