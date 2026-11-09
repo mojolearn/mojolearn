@@ -227,6 +227,7 @@ struct SmallMlpRecordExec(Exec, Movable):
     caller storage and its rules launch on the trainer's context, so the
     tape needs no storage, launch, copy or wait of its own: every method
     raises, which keeps it that way."""
+    comptime IS_DEVICE: Bool = False
 
     def __init__(out self):
         pass

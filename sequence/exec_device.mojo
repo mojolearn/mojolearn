@@ -490,6 +490,7 @@ def _pool_release_host(i: Int) raises:
 # Movable (lane ag-ops-api): an operation session (autograd/ops_api.mojo)
 # owns its executor across binding calls; moving changes no value.
 struct DeviceExec(Exec, Movable):
+    comptime IS_DEVICE: Bool = True
     var ctx: DeviceContext
     var bufs: List[DeviceBuffer[DType.float32]]
     var base: List[Int]

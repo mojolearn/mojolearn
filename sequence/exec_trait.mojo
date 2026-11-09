@@ -14,6 +14,13 @@ from sequence.execution_profile import ExecutionProfile
 
 
 trait Exec:
+    #: True for the GPU executor (`DeviceExec`). Generic code that has a
+    #: device-only arm (the executor's block step ops,
+    #: autograd/block_step_ops.mojo) selects it with `comptime if
+    #: E.IS_DEVICE` and `rebind[DeviceExec]`, so a host build never
+    #: instantiates device kernels.
+    comptime IS_DEVICE: Bool
+
     def alloc(mut self, n: Int) raises -> FP:
         """A zero-filled buffer of n floats that lives as long as the Exec."""
         ...
