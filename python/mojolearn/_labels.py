@@ -102,87 +102,11 @@ def flatten_labels(y):
     return entry(LABELS_OP_FLATTEN, (y,), context)
 
 
-_PLAIN_NUMBERS = frozenset((int, float, bool))
-_PLAIN_STR = frozenset((str,))
-
-
-def _plain_labels(labels):
-    """'number' or 'str' when EVERY label is exactly a Python int, float or
-    bool, or exactly a str (the type set, read in C); None for anything
-    else, an empty sequence included."""
-    if not labels:
-        return None
-    kinds = set(map(type, labels))
-    if kinds <= _PLAIN_NUMBERS:
-        return "number"
-    if kinds == _PLAIN_STR:
-        return "str"
-    return None
-
-
-def _classes_and_codes(labels):
-    """The ORDER RULE over labels already checked: the FIRST of equal keys
-    is the one `dict.fromkeys` keeps, the classes sort by Python's own
-    comparison, and each label's code is one dict lookup, driven by `map`."""
-    classes = sorted(dict.fromkeys(labels))  # cpu-route: Python label objects (str or Python numbers), the explicit label input step
-    code = {c: i for i, c in enumerate(classes)}  # glue: class index table (classes-sized: distinct classes)
-    return classes, list(map(code.__getitem__, labels))  # cpu-route: Python label objects, the explicit label input step
-
-
-def _sorted_plain_classes(labels, kind):
-    """DEVIATION 3103: `sorted_classes` for labels `_plain_labels` vouched
-    for: one kind (no mixing) of exact Python types, so only a float can be
-    a NaN."""
-    if kind == "number":
-        # `v != v` in C: True only for a NaN float (an int or bool never,
-        # at any size)
-        if any(map(operator.ne, labels, labels)):  # cpu-route: NaN test of a plain Python label list, the explicit label input step
-            raise ValueError(
-                "mojolearn: y contains a NaN label; NaN is not a class"
-            )
-    return _classes_and_codes(labels)
-
-
-def _kind_of_type(t):
-    """'str', 'number' or None (refused) for one label TYPE: the per-label
-    tests of the ORDER RULE (rules 1 and 2), asked once per distinct type."""
-    if issubclass(t, str):
-        return "str"
-    if issubclass(t, numbers.Real) or t.__name__ == "bool_":
-        return "number"
-    return None
-
-
-def _first_true(flags):
-    """Index of the first true flag, or None."""
-    try:
-        return operator.indexOf(flags, True)
-    except ValueError:
-        return None
-
-
-def _check_label_kinds(labels):
-    """Rules 1, 2 and 4 of the ORDER RULE over a list of label objects, with
-    the refusals in walk order: the first label that is neither a number
-    nor a str, or a NaN before it, then a mix of the two kinds."""
-    kinds = {t: _kind_of_type(t) for t in set(map(type, labels))}  # glue: over the distinct label types (types-sized)
-    refused = frozenset(t for t, kind in kinds.items() if kind is None)  # glue: over the distinct label types (types-sized)
-    stop = _first_true(map(refused.__contains__, map(type, labels))) if refused else None
-    head = labels if stop is None else labels[:stop]
-    if _first_true(map(operator.ne, head, head)) is not None:  # cpu-route: NaN test of Python label objects, the explicit label input step
-        raise ValueError(
-            "mojolearn: y contains a NaN label; NaN is not a class"
-        )
-    if stop is not None:
-        raise ValueError(
-            f"mojolearn: label {labels[stop]!r} is neither a number nor a str"
-        )
-    found = set(kinds.values())
-    if "str" in found and "number" in found:
-        raise ValueError(
-            "mojolearn: y mixes numeric and str labels; encode one kind "
-            "before fitting"
-        )
+# TOMBSTONE: _labels._plain_labels / _classes_and_codes / _sorted_plain_classes /
+# _kind_of_type / _first_true / _check_label_kinds (the Python ORDER RULE walk)
+# deleted 2026-11-09 by lane p2-labels-lists-arrays: `sorted_classes` is one
+# native call (bindings/classical_labels.mojo `_sorted_classes`); the oracle
+# copies live in tests/test_hotpath_native.py.
 
 
 _STR_LABELS = []
@@ -212,15 +136,18 @@ def sorted_classes(labels):
     """`(classes, codes)`: the class list under the ORDER RULE above, and
     one dense code per label, `classes[codes[i]] == labels[i]` under
     Python equality."""
-    if not labels:
-        raise ValueError("mojolearn: y is empty")
-    if type(labels) is not list:
+    classes, codes = _sorted_native(labels)
+    return classes, codes.tolist()
+
+
+def _sorted_native(labels):
+    """`sorted_classes` with the codes as the int32 `Array` the native ORDER
+    RULE writes (one native call; exact label types only, by pointer)."""
+    from ._native_labels_bridge import labels_entry, LABELS_OP_SORTED
+    if type(labels) not in (list, tuple):
         labels = list(labels)
-    kind = _plain_labels(labels)
-    if kind is not None:
-        return _sorted_plain_classes(labels, kind)
-    _check_label_kinds(labels)
-    return _classes_and_codes(labels)
+    entry, context = labels_entry()
+    return entry(LABELS_OP_SORTED, (labels,), context)
 
 
 # DEVIATION 2500 (2026-09-10): the ORDER RULE for ONE numeric buffer, in
@@ -608,8 +535,7 @@ def unique_inverse(y):
         native = str_labels("encode", flat) if type(flat) is list else None
         if native is not None:
             return native
-        classes, codes = sorted_classes(flat)  # cpu-route: mixed or non-str object labels, the explicit label input step
-        return classes, Array.from_list(codes, "<i4")
+        return _sorted_native(flat)
     if arr.size == 0:
         raise ValueError("mojolearn: y is empty")
     if arr.size != max(arr.shape):  # glue: largest axis of the shape
