@@ -58,10 +58,10 @@
 # Moved from lane A1's bindings/admitted_held.mojo (branch
 # lane/a1-admit-trees-labels 076abee5ea) word for word, under a new global
 # name so the two definitions never share storage while both exist.
-from std.ffi import _Global, external_call
+from std.ffi import external_call
 from std.python import PythonObject
 
-from core.shared_slot import shared_slot_check, shared_slot_word
+from core.shared_slot import SharedSlot
 
 #: Layout version of `AdmittedRegistry` (core/shared_slot.mojo rule). V2: the
 #: layout word, the per-row thread and the per-thread depth. V3 (lane s2):
@@ -71,8 +71,6 @@ comptime _ADMITTED_NAME = "MojolearnAdmittedRegistryV3"
 
 
 struct AdmittedRegistry(Defaultable, Movable):
-    # first field: the layout word (core/shared_slot.mojo)
-    var layout: Int
     var items: List[PythonObject]
     var addresses: List[Int]
     var rows: List[Int]
@@ -88,7 +86,6 @@ struct AdmittedRegistry(Defaultable, Movable):
     var depths: List[Int]
 
     def __init__(out self):
-        self.layout = shared_slot_word[AdmittedRegistry](_ADMITTED_LAYOUT)
         self.items = List[PythonObject]()
         self.addresses = List[Int]()
         self.rows = List[Int]()
@@ -100,13 +97,11 @@ struct AdmittedRegistry(Defaultable, Movable):
         self.depths = List[Int]()
 
 
-comptime ADMITTED_REGISTRY = _Global[StorageType=AdmittedRegistry, name=_ADMITTED_NAME,
-                                     init_fn=AdmittedRegistry.__init__]
+comptime ADMITTED_REGISTRY = SharedSlot[AdmittedRegistry, _ADMITTED_NAME, _ADMITTED_LAYOUT]
 
 
 def _registry() raises -> UnsafePointer[AdmittedRegistry, MutAnyOrigin]:
     var g = ADMITTED_REGISTRY.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    shared_slot_check(g[].layout, shared_slot_word[AdmittedRegistry](_ADMITTED_LAYOUT), _ADMITTED_NAME)
     return g
 
 

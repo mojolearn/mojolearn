@@ -65,11 +65,10 @@ created and destroyed per call. Without a plan nothing changes. The root
 device enters no value: the same kernels run in the same order on it.
 """
 from std.atomic import Atomic, Ordering
-from std.ffi import _Global
 from max.gpu.host import DeviceContext
 
 from core.device_plan import DevicePlan, device_plan_current
-from core.shared_slot import shared_slot_check, shared_slot_lock, shared_slot_unlock, shared_slot_word
+from core.shared_slot import shared_slot_lock, shared_slot_unlock, SharedSlot
 
 #: Layout version of `_NeuralContext` (core/shared_slot.mojo rule): bump on
 #: any field change. V2 added the layout word and the root branch's use of
@@ -85,8 +84,6 @@ comptime _ROOT_PUBLISHED = 1
 
 
 struct _NeuralContext(Defaultable, Movable):
-    # first field: the layout word every accessor checks (core/shared_slot.mojo)
-    var layout: Int
     var ctx: Optional[DeviceContext]
     var device_ids: List[Int]
     var device_contexts: List[DeviceContext]
@@ -99,7 +96,6 @@ struct _NeuralContext(Defaultable, Movable):
     def __init__(out self):
         # side-effect free: the runtime may run it twice and destroy the
         # loser (core/shared_slot.mojo, first creation); no context here
-        self.layout = shared_slot_word[_NeuralContext](_NEURAL_CONTEXT_LAYOUT)
         self.ctx = Optional[DeviceContext]()
         self.device_ids = List[Int]()
         self.device_contexts = List[DeviceContext]()
@@ -122,9 +118,8 @@ def process_ctx[name: StaticString]() raises -> DeviceContext:
 
 def process_ctx[name: StaticString](dplan: DevicePlan) raises -> DeviceContext:
     """`process_ctx` on the root of a plan the entry already read."""
-    comptime SLOT = _Global[StorageType=_NeuralContext, name=name, init_fn=_NeuralContext.__init__]
+    comptime SLOT = SharedSlot[_NeuralContext, name, _NEURAL_CONTEXT_LAYOUT]
     var slot = SLOT.get_or_create_ptr()
-    shared_slot_check(slot[].layout, shared_slot_word[_NeuralContext](_NEURAL_CONTEXT_LAYOUT), name)
     var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].device_lock.unsafe_ptr())
     var root = dplan.root
     if root > 0:

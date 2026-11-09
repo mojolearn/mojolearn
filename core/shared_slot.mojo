@@ -13,17 +13,18 @@ name whose struct changed layout without a rename corrupts memory the moment
 two modules built from different sources meet in one process (a stale .so in
 a dev tree, a core and a vendor wheel of different versions).
 
-THE RULE for every cross-module slot of ours (`SharedSlot` below applies
-it for a slot: prefer it to a hand-written `_Global`):
-  * the name is `Mojolearn<What>V<n>` (tier suffix only when the contents
-    differ by tier); bump `n` on any field change;
-  * the struct's FIRST field is `layout: Int`, set by `init_fn` to
-    `shared_slot_word[T](n)`, and every accessor calls
-    `shared_slot_check(slot[].layout, shared_slot_word[T](n), name)` before
-    any other field is read. A mismatch raises
-    `mojolearn: mixed binary versions (<name>)` instead of reinterpreting.
-    The word folds in `size_of[T]()`, so a field added without a bump is
-    caught too whenever the size moves.
+THE RULE for every cross-module slot of ours (lane s2, 2026-11-09: every
+slot is a `SharedSlot`; no hand-written `_Global` and no hand-written layout
+field or check remain):
+  * declare it `comptime MY_SLOT = SharedSlot[T, "Mojolearn<What>V<n>", n]`
+    (tier suffix in the name only when the contents differ by tier); bump the
+    name's `V<n>` and the version together on any field change of `T`;
+  * `MY_SLOT.get_or_create_ptr()` stores the layout word in front of the
+    value (`_SlotBox`) and checks it on every call before the value is
+    handed out. A mismatch stops the process with
+    `mojolearn: mixed binary versions (<name>)` instead of reinterpreting
+    another binary's bytes. The word folds in `size_of[T]()`, so a field
+    added without a bump is caught too whenever the size moves.
 
 FIRST CREATION (S0, read from the runtime on the mac build,
 `libKGENCompilerRTShared.dylib`: `KGEN_CompilerRT_GetOrCreateGlobal` at
@@ -82,11 +83,9 @@ def shared_slot_word[T: AnyType](version: Int) -> Int:
     return SHARED_SLOT_MAGIC | ((version & 0xFFF) << 20) | (size_of[T]() & 0xFFFFF)
 
 
-@always_inline
-def shared_slot_check(seen: Int, want: Int, name: StaticString) raises:
-    """Refuse a slot whose creator was built with another layout."""
-    if seen != want:
-        raise Error("mojolearn: mixed binary versions (" + String(name) + ")")
+# Lane s2 removed `shared_slot_check`, the hand-written accessor check, with
+# the last hand-written layout field: the check lives in
+# `SharedSlot.get_or_create_ptr`.
 
 
 @always_inline

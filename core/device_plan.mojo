@@ -44,8 +44,8 @@ callers not yet moved.
 """
 from std.atomic import Atomic, Ordering
 
-from core.shared_slot import shared_slot_check, shared_slot_word
-from std.ffi import _Global, external_call
+from core.shared_slot import SharedSlot
+from std.ffi import external_call
 from std.os import getenv
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -133,8 +133,6 @@ struct _DevicePlanTable(Defaultable, Movable):
     # case of no plan anywhere in the process).
     # The lists are sized once here and never resized, so their storage
     # addresses are stable for the process.
-    # first field: the layout word every accessor checks (core/shared_slot.mojo)
-    var layout: Int
     var owners: List[Int64]
     var counts: List[Int64]
     var masks: List[Int64]
@@ -159,7 +157,6 @@ struct _DevicePlanTable(Defaultable, Movable):
     var used: List[Int64]
 
     def __init__(out self):
-        self.layout = shared_slot_word[_DevicePlanTable](_DEVICE_PLAN_LAYOUT)
         self.owners = List[Int64](length=DEVICE_PLAN_SLOTS, fill=Int64(0))
         self.counts = List[Int64](length=DEVICE_PLAN_SLOTS, fill=Int64(0))
         self.masks = List[Int64](length=DEVICE_PLAN_SLOTS, fill=Int64(0))
@@ -174,25 +171,15 @@ struct _DevicePlanTable(Defaultable, Movable):
 
 #: Layout version of `_DevicePlanTable` (core/shared_slot.mojo rule). V2:
 #: the table gained `used` (lane perf3-cluster-gp-gate); V3: the layout word.
-comptime _DEVICE_PLAN_LAYOUT = 3
-comptime _DEVICE_PLAN_NAME_IDN: StaticString = "MojolearnDevicePlanIdenticalV3"
-comptime _DEVICE_PLAN_NAME_OTHER: StaticString = "MojolearnDevicePlanOtherV3"
-# typed StaticString arms: a conditional of two literals is a String value,
-# which shared_slot_check (StaticString) does not take
+comptime _DEVICE_PLAN_LAYOUT = 4
+comptime _DEVICE_PLAN_NAME_IDN: StaticString = "MojolearnDevicePlanIdenticalV4"
+comptime _DEVICE_PLAN_NAME_OTHER: StaticString = "MojolearnDevicePlanOtherV4"
 comptime _DEVICE_PLAN_NAME: StaticString = _DEVICE_PLAN_NAME_IDN if GLOBAL_NUMERIC_MODE == 1 else _DEVICE_PLAN_NAME_OTHER
-comptime _DEVICE_PLAN_TABLE = _Global[
-    StorageType=_DevicePlanTable,
-    # a new name per layout version, so a DSO built with an older layout
-    # never shares storage with this one; the layout word refuses one that
-    # forgot to bump it
-    name=_DEVICE_PLAN_NAME,
-    init_fn=_DevicePlanTable.__init__,
-]
+comptime _DEVICE_PLAN_TABLE = SharedSlot[_DevicePlanTable, _DEVICE_PLAN_NAME, _DEVICE_PLAN_LAYOUT]
 
 
 def _plan_table() raises -> UnsafePointer[_DevicePlanTable, MutAnyOrigin]:
     var table = _DEVICE_PLAN_TABLE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    shared_slot_check(table[].layout, shared_slot_word[_DevicePlanTable](_DEVICE_PLAN_LAYOUT), _DEVICE_PLAN_NAME)
     return table
 
 
