@@ -66,8 +66,13 @@ comptime MOVE_FILL0 = 3
 #: TAKE_COLS (lane fam2-decomp, 2026-10-04): dst (r x w) column b = src (r x c)
 #: column Int(idx[b]) (a1 = w, a2 = c; idx holds w exact floats).
 comptime MOVE_TAKE_COLS = 4
+#: REV_COLS (lane n9b-device-svd-qr, 2026-11-09): dst (r x w) column b = src
+#: (r x c) column ioff - b (a1 = w, a2 = c, ioff = the highest column): an
+#: ascending spectrum's top columns in descending order with no index list
+#: (KernelPCA's `_cols_desc` built and uploaded one per call).
+comptime MOVE_REV_COLS = 5
 #: the highest op (the entries' range check)
-comptime MOVE_LAST = MOVE_TAKE_COLS
+comptime MOVE_LAST = MOVE_REV_COLS
 
 
 @always_inline
@@ -82,6 +87,8 @@ def move_src(op: Int, t: Int, idx: F32Ptr, a1: Int, a2: Int, ist: Int, ioff: Int
         return t
     if op == MOVE_TAKE_COLS:
         return (t // a1) * a2 + Int(idx.unsafe_load(t % a1))
+    if op == MOVE_REV_COLS:
+        return (t // a1) * a2 + ioff - t % a1
     return -1
 
 
@@ -113,6 +120,10 @@ def move_host(
             var vc = idx.unsafe_load(t % a1)
             if not (vc >= Float32(0) and vc < Float32(a2)):
                 raise Error("x_decomp: take_cols index out of range")
+        if op == MOVE_REV_COLS:
+            var cr = ioff - t % a1
+            if cr < 0 or cr >= a2:
+                raise Error("x_decomp: rev_cols column out of range")
         var s = move_src(op, t, idx, a1, a2, ist, ioff)
         var d = move_dst(op, t, a1, a2, a3)
         if s >= nsrc or d < 0 or d >= ndst:

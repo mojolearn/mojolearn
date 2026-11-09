@@ -2,17 +2,18 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """x_decomp/fa_em.mojo's FactorAnalysis EM loop on resident device matrices
 (lane py-runtime-b): the same statements on `DKit`. The d x d spectral
-step: the SVD branch (n >= d) comes home where `_Kit.svd` brought it
-(`svd_desc`'s descending order); the eigh branch (n < d) stays resident
-(`DKit.eigh`, its reversal and transpose as device copies), and the
+step stays resident on both branches: the SVD (n >= d) on the executor op
+(`DKit.svd`, the descending order on the device; lane n9b-device-svd-qr),
+the eigh (n < d) on `DKit.eigh` (its reversal and transpose as device
+copies), and the
 log-likelihood's float32 words come home for `_dsum`, as Python read them.
 GPU binding only."""
 from std.math import inf, sqrt
 from experiments.classical_identical_ideas.linear_controls import C27_FA_COMPONENTS
 from x_decomp.cells import F32Ptr, OP_CLASSICAL_FA_LOAD
-from x_decomp.fa_em import FA_LOG_FLOOR, FA_SMALL, FaArgs, dsum, fa_mask, svd_desc
+from x_decomp.fa_em import FA_LOG_FLOOR, FA_SMALL, FaArgs, dsum, fa_mask
 from x_decomp.kit import (
-    Mat, OP_ADD, OP_ADDS, OP_DIV, OP_LOGS, OP_MAXS, OP_MINS, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT, mat_from,
+    OP_ADD, OP_ADDS, OP_DIV, OP_LOGS, OP_MAXS, OP_MINS, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT, mat_from,
 )
 from x_decomp.kit_device import DKit, DMat
 
@@ -36,14 +37,14 @@ def fa_em_dev(mut k: DKit, A: DMat, mut psi: DMat, mut W: DMat, mut ll_out: List
         var Vfull: DMat
         if n >= d:
             var B = k.ew1(OP_SCALE, k.ew2(OP_DIV, A, sqrt_psi), 1.0 / nsqrt)
-            var s = Mat(0, 0)
-            var v = Mat(0, 0)
-            k.svd_host(B, s, v)
-            var sv = Mat(0, 0)
-            var Vh = Mat(0, 0)
-            svd_desc(s, v, sv, Vh)
-            s2 = k.ew1(OP_SQ, k.upload(sv), 0.0)
-            Vfull = k.upload(Vh)
+            # lane n9b-device-svd-qr: the SVD op, S descending and V^T left
+            # resident (was s and V home, `svd_desc` on the host, both up
+            # again); the same words
+            var sv = k.zeros(0, 0)
+            var Vh = k.zeros(0, 0)
+            k.svd(B, sv, Vh)
+            s2 = k.ew1(OP_SQ, sv, 0.0)
+            Vfull = Vh^
         else:
             var Z = k.ew1(OP_SCALE, k.ew2(OP_DIV, A, sqrt_psi), 1.0 / nsqrt)
             var e = k.eigh(k.mm(Z, Z, True, False))

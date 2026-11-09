@@ -549,6 +549,12 @@ in the tables after the sections.
 | [`labels_helper` / `labels_call` and the `labels_helpers` callables table (`_native_labels_bridge._helpers`)](#labels-steps-on-the-native-device-or-host-selector-2026-11-09) | Labels (prepare_targets, reduce_stat, argmax_rows, gather, class_ratio, fsum) | removed (onto `labels_native_api_v1`, `bindings/labels_native_abi.mojo`, and the in-process host column) | 2026-11-09 | [S1_LABELS_PY_CALL_SELECTOR.patch](../experiments/removed/S1_LABELS_PY_CALL_SELECTOR.patch) |
 | [Synchronising query finite scans of the SVM / GP / KernelRidge predict entries](#svm-gp-and-kernelridge-queries-on-the-device-query-x-2026-11-09) | SVC / SVR / GaussianProcessRegressor / GaussianProcessClassifier / KernelRidge | REFACTORED (status word read back with the result; fold gathered on the device; no bit change) | 2026-11-09 | lane only (lane/a7a-device-x-svm-gp-krr from 5b5490960d) |
 | [`_kmeans_nonfinite` / `_kmeans_f32` and the KMeans query host scan of X](#kmeans-tsvd-pca-deferred-finite-tests-and-fold-entries-2026-11-09) | KMeans (fit, predict, transform) | removed (the kernel entry tests X over its own upload and returns the status word; one refusal wording) | 2026-11-09 | [A7D_KMEANS_HOST_FINITE.patch](../experiments/removed/A7D_KMEANS_HOST_FINITE.patch) |
+| [`DKit.svd_host`, `svd_desc`, LLE's host-address `DevExec.geqrf` / `orgqr` round trip](#n9b-device-svd-and-qr-ops-2026-11-09) | FactorAnalysis EM / LLE subspace iteration / PLS (resident SVD and QR) | REFACTORED (`svd_op_tall` / `qr_op_q`; same words) | 2026-11-09 | [N9B_RESIDENT_SVD.patch](../experiments/removed/N9B_RESIDENT_SVD.patch) |
+| [KernelPCA `_cols_desc` host-built index list](#n9b-device-svd-and-qr-ops-2026-11-09) | KernelPCA (descending columns) | REFACTORED (the REV_COLS move; same words) | 2026-11-09 | [N9B_RESIDENT_SVD.patch](../experiments/removed/N9B_RESIDENT_SVD.patch) |
+| [`MOJOLEARN_X_LINEAR_JACOBI_LEAD` (with `t_jacobi_eig`)](#n9b-device-svd-and-qr-ops-2026-11-09) | BayesianRidge (eigh of the centered Gram) | removed (superseded: the executor eigh op; bits change) | 2026-11-09 | [N9B_BAYES_EIGH.patch](../experiments/removed/N9B_BAYES_EIGH.patch) |
+| [`bayes_prep`'s device team branch](#n9b-device-svd-and-qr-ops-2026-11-09) | BayesianRidge (dead since cgr-linear) | removed (dead code) | 2026-11-09 | [N9B_BAYES_EIGH.patch](../experiments/removed/N9B_BAYES_EIGH.patch) |
+| [`discretize_labels` (binary64 host discretize)](#n9b-device-svd-and-qr-ops-2026-11-09) | SpectralClustering assign_labels='discretize' | REFACTORED (float-float on every column, device driver; bits change) | 2026-11-09 | [N9B_SPECTRAL_DISCRETIZE.patch](../experiments/removed/N9B_SPECTRAL_DISCRETIZE.patch) |
+
 ## Retired by lane debt-block-per-n (2026-10-21)
 
 These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
@@ -5089,3 +5095,40 @@ section 3.2 steps 3 and 4; docs/plans/REGRESSIONS_0866_VS_0855.md rows C1 / C2 f
   randomized solver keep a parallel host scan (their drivers upload X in their own executors).
 - Bits: none (the same words reach every kernel; the finite kernel only reads X). Code recoverable at `5b5490960d`;
   restore with `git apply experiments/removed/A7D_KMEANS_HOST_FINITE.patch`.
+<a id="n9b-device-svd-and-qr-ops-2026-11-09"></a>
+
+## N9b: device SVD and QR ops, their families, BayesianRidge's eigh, float-float discretize (2026-11-09)
+
+Lane `n9b-device-svd-qr` (branch `lane/n9b-device-svd-qr`, base `origin/integ/pre-0867-w3` 5b5490960d; code
+recoverable at 5b5490960d). Not measured (lanes never measure); RUN OWED below.
+
+- **`DKit.svd_host`, `svd_desc`, LLE's host-address QR.** Tried: the resident kit's SVD ran `DevExec._svd_on` into host
+  memory (a wait every XD_SVD_GROUP sweeps), ordered s and V on the host (`svd_desc`, a second copy of
+  `x_decomp/kit.mojo` `svd_order`) and uploaded both again (FactorAnalysis EM n >= d every iteration, LLE every
+  iteration, PLS every `_pinv` / `_thin_svd`); LLE's orthonormalization brought each block home for
+  `DevExec.geqrf` / `orgqr` and uploaded Q. Now: `x_decomp/svd_ops.mojo` `svd_op_tall` (the bounded QR / TSQR, the
+  round-robin one-sided Jacobi as one block, `rs_block_gated_kernel` in `x_decomp/rr_svd_device.mojo`, the
+  descending order on the device) and `qr_op_q`, both resident (`DKit.svd`, `DKit.qr_q`); PLS's pinv cut is a device
+  kernel (`DKit.pinv_inv`). Verdict: REFACTORED, same words (the one-block solve adds the round launches' pairs in
+  their tree; the order is `svd_order`'s). Files: x_decomp/kit_device.mojo, fa_em.mojo, fa_em_dev.mojo,
+  lle_iter.mojo, lle_iter_dev.mojo, pls_dev.mojo. Patch: `experiments/removed/N9B_RESIDENT_SVD.patch`.
+- **KernelPCA `_cols_desc`'s index list.** Tried: the descending column indices built on the host and uploaded per
+  call. Now the REV_COLS move (`x_decomp/moves.mojo` MOVE_REV_COLS, no index). REFACTORED, same words. File:
+  x_decomp/kpca_owner.mojo. Patch: `experiments/removed/N9B_RESIDENT_SVD.patch`.
+- **`MOJOLEARN_X_LINEAR_JACOBI_LEAD`, `t_jacobi_eig`, `bayes_prep`'s device branch.** Tried: BayesianRidge's centered
+  Gram eigendecomposition by the team's cyclic Jacobi inside `bayes_eig_kernel` (the define restored the lead-only
+  call); the device team branch of `bayes_prep` had no caller since cgr-linear. Now: `eigh_op_dense` (device) /
+  `eigh_op_dense_host` (host column), placed by `bayes_eig_place`. Verdict: removed (superseded); bits change on
+  every column (the round-robin Jacobi's words, ascending order): identity lane bayesian-ridge. Files:
+  x_linear/bayes.mojo, bayes_host.mojo, tops.mojo, device.mojo. Refusal: core/experiment_guards_linear.mojo. Patch:
+  `experiments/removed/N9B_BAYES_EIGH.patch`.
+- **`discretize_labels`.** Tried: SpectralClustering assign_labels='discretize' in binary64 on the host (n x k loops
+  after the device embedding). Now `x_cluster/spectral_df64.mojo` (bodies), `spectral_df64_device.mojo` (the GPU
+  binding) and `host/spectral_df64_host.mojo` (the host column), float-float throughout, through
+  `ClusterOps.spectral_discretize`. Verdict: REFACTORED, bits change (labels can move where classes tie within
+  float-float rounding): identity lane spectral-clustering (discretize). Patch:
+  `experiments/removed/N9B_SPECTRAL_DISCRETIZE.patch`.
+- RUN OWED: NVIDIA + AMD board rows factor-analysis, locally-linear-embedding, pls (svd/canonical/regression),
+  kernel-pca, bayesian-ridge, spectral-clustering (discretize), plus one non-board shape each; identity re-record of
+  bayesian-ridge and spectral-clustering on every column at the release's one verify.
+

@@ -61,7 +61,9 @@ from x_linear.sgd import sgd_perc_avg_on, sgd_perc_avg_from
 from x_linear.sgd_avg import sgd_avg_acc_kernel, sgd_avg_fin_kernel
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
 from x_linear.bayes import bayes_wy_part, bayes_wx_part, bayes_wgram_part, bayes_wxty_part, bayes_wvar_part, bayes_coef_one
-from x_linear.bayes import bayes_prep, bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_prep, bayes_yvar_part, GRAM_SSE_TRUST
+from x_linear.bayes import bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_place, bayes_eig_prep, bayes_yvar_part, GRAM_SSE_TRUST
+from x_decomp.eigh_ops import eigh_op_dense
+from core.step_gate import step_gate_open_word
 from x_linear.classical_fold_stats import fold_stat_words, kfold_mean_cell, kfold_gram_cell, kfold_combine_unit
 from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score, kf_ff_solve, kf_blocks, kf_ysum_part, kf_sq_part, kf_score_final
 from x_linear.ridge import ridge_ff_unit, ridge_ff_units, ridge_ff_solve
@@ -407,14 +409,20 @@ def bayes_coef_kernel(fw: FP, res: FP, d: Int32, state: FP, wf: IP, woff: Int32,
     witness_end(wf, woff, nonce)
 
 def bayes_eig_kernel(fw: FP, fp: FP, res: FP, ip: IP, d: Int32, nb: Int32, yparts: FP, vparts: FP, tw: FP,
-                     state: FP, wf: IP, woff: Int32, nonce: Int32):
-    """One block team: the d x d half of the prep (`bayes_eig_prep`: the
-    Jacobi eigendecomposition of G, V'X'y, the starting alpha and lambda)
-    and the first coefficients. Every row pass ran on the grid kernels
-    above; this block folds only the nb row-block partials."""
+                     state: FP, ew: FP, ev: FP, est: IP, wf: IP, woff: Int32, nonce: Int32):
+    """One block team: the d x d half of the prep after the executor eigh op
+    (`eigh_op_dense` on a copy of G, enqueued just before: w ascending in
+    ew, V in ev, its status word est; lane n9b-device-svd-qr, was the
+    team's cyclic Jacobi): the answer placed (`bayes_eig_place`), V'X'y, the
+    starting alpha and lambda (`bayes_eig_prep`) and the first
+    coefficients. Every row pass ran on the grid kernels above; this block
+    folds only the nb row-block partials. An unconverged eigh (or a cut
+    Jacobi launch: its block's mark stays -1) withholds the Metal witness,
+    so the unit reruns and then raises on Apple."""
     var a = ALGO_BAYES
     var dd = Int(d)
     var t = device_team(tw, 0, team_rows(a, ip), team_own(a, dd))
+    bayes_eig_place(t, fw, ew, ev, dd)
     var wsum = ld(state, 3)
     var yvar = fd(fold_parts(vparts, 0, Int(nb)), wsum)
     var al = bayes_eig_prep(t, fw, fp, dd, yvar)
@@ -427,7 +435,8 @@ def bayes_eig_kernel(fw: FP, fp: FP, res: FP, ip: IP, d: Int32, nb: Int32, ypart
         st(state, 1, al[1])
         st(state, 2, ym)
         st(state, 5, Float32(0))
-    witness_end(wf, woff, nonce)
+    if ldi(est, 0) == 0:
+        witness_end(wf, woff, nonce)
 
 def bayes_resid_kernel(x: FP, y: FP, n: Int32, d: Int32, fw: FP, res: FP, state: FP, rows: FP, wf: IP, woff: Int32, nonce: Int32):
     """Row i's residual; a stopped fit (state[5] != 0) writes nothing, so
@@ -5497,11 +5506,28 @@ def fit_device(
                             dyparts.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(d), block_dim=XG_TPB,
                         )
                         wo += _xg_blocks(d)
+                # lane n9b-device-svd-qr: G's eigendecomposition is the
+                # executor op (`eigh_op_dense`, the round-robin Jacobi on a
+                # copy of G; host column `eigh_op_dense_host`), then the
+                # team's d x d half
+                var dg = ctx.enqueue_create_buffer[DType.float32](d * d)
+                ctx.enqueue_copy(dst_buf=dg, src_buf=dfw.create_sub_buffer[DType.float32](d, d * d))
+                var dew = ctx.enqueue_create_buffer[DType.float32](d)
+                var dev_v = ctx.enqueue_create_buffer[DType.float32](d * d)
+                var dest = ctx.enqueue_create_buffer[DType.int32](1)
+                var egate = step_gate_open_word(ctx)
+                eigh_op_dense(ctx, egate, dg, dew, dev_v, dest, 1, d)
                 ctx.enqueue_function[bayes_eig_kernel](
                     dfw.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dip.unsafe_ptr(), Int32(d), Int32(ynb),
                     dyparts.unsafe_ptr(), dvparts.unsafe_ptr(), dtw.unsafe_ptr(), dstate.unsafe_ptr(),
+                    dew.unsafe_ptr(), dev_v.unsafe_ptr(), dest.unsafe_ptr(),
                     wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=LINEAR_TPB,
                 )
+                _ = dg^
+                _ = dew^
+                _ = dev_v^
+                _ = dest^
+                _ = egate^
                 units = wo + 1
             else:
                 ctx.enqueue_function[lars_path_kernel](

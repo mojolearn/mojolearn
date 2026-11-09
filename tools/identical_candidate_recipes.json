@@ -774,54 +774,6 @@
       "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
     },
     {
-      "id": "eigh_small_limit/64",
-      "candidate_group": "eigh_small_limit",
-      "source_ref": "lane/fam2-decomp",
-      "source_sha": "59d1615810907c73cf3cec4f53ab4b47790bef4d",
-      "baseline_defines": [],
-      "candidate_defines": [
-        "MOJOLEARN_IDN_EIGH_SMALL_N64=1"
-      ],
-      "recommended_builders": [
-        "base",
-        "base_host",
-        "x_decomp",
-        "x_decomp_host"
-      ],
-      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
-      "qualification_ready": false,
-      "required_fixture_and_gate": "n48,64,128 exact host/GPU eigensystem; one-block host-route guard and residual/orthogonality; keep default32 unless needed.",
-      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
-      "current_gate_ids": [],
-      "evidence": null,
-      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
-      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
-    },
-    {
-      "id": "eigh_small_limit/128",
-      "candidate_group": "eigh_small_limit",
-      "source_ref": "lane/fam2-decomp",
-      "source_sha": "59d1615810907c73cf3cec4f53ab4b47790bef4d",
-      "baseline_defines": [],
-      "candidate_defines": [
-        "MOJOLEARN_IDN_EIGH_SMALL_N128=1"
-      ],
-      "recommended_builders": [
-        "base",
-        "base_host",
-        "x_decomp",
-        "x_decomp_host"
-      ],
-      "status": "NOT_QUALIFIED_LEAVE_DISABLED",
-      "qualification_ready": false,
-      "required_fixture_and_gate": "n48,64,128 exact host/GPU eigensystem; one-block host-route guard and residual/orthogonality; keep default32 unless needed.",
-      "route_readback": "REQUIRED: explicit flags and import mode/vendor alone do not prove conditional route eligibility.",
-      "current_gate_ids": [],
-      "evidence": null,
-      "measurement": "Not authorized by recipe creation. Root queues one run per selected arm only after targeted identity and quality.",
-      "master_off": "Use --arm off only for precedence/safety checking or global baseline; candidate-vs-default comparison normally uses --arm on for BOTH recipe roles."
-    },
-    {
       "id": "rf_sorted_bootstrap/1",
       "candidate_group": "rf_sorted_bootstrap",
       "source_ref": "lane/fam2-forests",

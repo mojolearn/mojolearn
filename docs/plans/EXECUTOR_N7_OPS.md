@@ -61,6 +61,19 @@ learning: `eigh_op_dense`. KernelPCA / Isomap / SpectralEmbedding Lanczos (the T
 already keeps on the device, `x_decomp/lanczos_dev.mojo`): `eigh_op_tridiag` on (alphas, betas), then the Ritz
 vectors as one GEMM of the basis with z.
 
+## SVD and QR (`x_decomp/svd_ops.mojo`, lane N9b)
+
+| call | does | host twin |
+|---|---|---|
+| `svd_op_tall(ctx, gate, a, s, vt, status, m, n)` | tall A (m >= n, CONSUMED): range scale, bounded Householder QR / TSQR (no wait off Apple), the round-robin one-sided Jacobi of R as ONE block (`rs_block_gated_kernel`: sweeps and test on the device), unscale, the descending order on the device; s (n descending), vt (row a = right vector of s[a]); status[0] = 1 when unconverged or NaN | `HostExec.svd` + `svd_order` (`Kit[HostExec].svd`) |
+| `qr_op_r(ctx, gate, a, r, m, n)` | R of the bounded QR / TSQR | `HostExec._qr_r` |
+| `qr_op_q(ctx, gate, a, q, m, n, qc)` | the first qc columns of Q of the sliced Householder QR (`qs_geqrf_device` / `qs_orgqr_device`, now enqueue-only) | `HostExec.geqrf` + `orgqr` |
+
+Same words as the paths they replace (the one-block solve adds the round launches' pairs in their tree). Resident
+users: `DKit.svd` / `DKit.qr_q` (FactorAnalysis EM, LLE, PLS). `DevExec._svd_on` (PCA / TSVD, the host-address forms)
+still runs the round launches with a read per XD_SVD_GROUP sweeps: A/B the op against it on the pca / tsvd rows,
+then delete the slower.
+
 ## Sort (`core/sort_ops.mojo`, host `core/sort_ops_host.mojo`)
 
 | call | does | host twin |
@@ -112,8 +125,8 @@ iteration goes, and so does `SelectScratch` once its last caller moves.
   precomputed / multi-device), whose `kernel_matrix_dispatch` over nnz rows would have to run over n_ws rows: up to
   n_ws / nnz times the tile GEMM per outer iteration, which can cost more than the drain it removes. Measure that
   arm (svc / svr board rows, late iterations where nnz << n_ws) before choosing it.
-- SMO, Spectral discretize, dictionary learning, ARIMA lock-step (N10): the drained count, the host n x k loops
-  of `x_cluster/spectral_assign.mojo:232-275` (`jacobi_svd` on the host).
+- SMO, dictionary learning, ARIMA lock-step (N10): the drained count. Spectral discretize: DONE 2026-11-09 (lane
+  n9b-device-svd-qr): float-float on the device (x_cluster/spectral_df64*.mojo); cluster_qr's `jacobi_svd` stays on the host.
 
 ## Bits
 
