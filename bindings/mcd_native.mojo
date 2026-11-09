@@ -22,7 +22,8 @@ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_pyth
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_labels import classical_accuracy, labels_shape_of, labels_view, labels_check_rank
+from bindings.classical_labels import classical_accuracy, labels_shape_of
+from bindings.admitted_input import classical_view
 from bindings.classical_arrays import classical_address, classical_wrap_array
 from bindings.admitted_input import admit_x
 from bindings.decomp_public_lifecycle import decomp_public_method, decomp_public_begin, decomp_public_finish
@@ -449,9 +450,10 @@ def elliptic_score(model: PythonObject, args: PythonObject, envelope: Bool, cont
     if len(y_shape) == 0 or y_shape[0] != n:
         raise Error("y and X have different numbers of rows")
     if sample_weight is not None:
-        var view = labels_view(sample_weight, "sample_weight", context)
-        labels_check_rank(view, 1, "sample_weight")
-        if view.shape[0] != n:
+        var view = classical_view(sample_weight, context, "sample_weight")
+        if Int(py=view.ndim) != 1:
+            raise Error("mojolearn: sample_weight must be 1-D, got " + String(Int(py=view.ndim)) + "-D")
+        if Int(py=view.shape[0]) != n:
             raise Error("sample_weight and X have different numbers of rows")
     try:
         return PythonObject(classical_accuracy(y, prediction, sample_weight, py_fields(model)["numeric_mode_"], context))

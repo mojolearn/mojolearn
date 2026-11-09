@@ -26,6 +26,8 @@
 #                     to 2): targets, fitted arrays, published predictions
 #   admit_weight_words(source, rows, context) -> AdmittedX
 #                     admit_weights as an AdmittedX; None is `rows` ones
+#   admit_ids(source, name, context, wide) -> Array
+#                     a 1-D integer input as fresh int64 / int32 words
 #   admit_y(...)      the float fit target (one column, finite, as long as X)
 #   admit_weights(...)  sample_weight as `rows` float32 words (None stays None)
 #   admitted_storage(shape, typestr, context)
@@ -95,6 +97,7 @@ from bindings.py_attr import py_attr
 from bindings.admitted_registry import admitted_held_index, admitted_held_address, admitted_held_rows, admitted_held_cols
 from bindings.device_rows_door import door_is_device_rows, DoorRows
 from core.admitted_input import admitted_check_f32, admitted_check_weights_f32, admitted_cast_f32
+from core.admitted_ids import admitted_ids_i64, admitted_ids_i32
 from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_NONFINITE, ARG_OUT_OF_RANGE
 
 comptime RESHAPE_HINT = "Reshape your data either using array.reshape(-1, 1) if your data has a single feature or array.reshape(1, -1) if it contains a single sample."
@@ -394,6 +397,41 @@ def admit_weight_words(source: PythonObject, rows: Int, context: PythonObject,
         w = admit_weights(source, rows, context, admitted)
     var x = AdmittedX(w, source, Int(py=classical_address(w)), rows, 1, 1, w is source, True)
     return x^
+
+
+def admit_ids(source: PythonObject, name: String, context: PythonObject, wide: Bool = True,
+              admitted: Bool = False) raises -> PythonObject:
+    """A 1-D integer (or bool) input as a fresh C-order int64 (`wide`) or
+    int32 mojolearn Array: one parallel read of the exporter's own strides
+    (core/admitted_ids.mojo). Refuses another rank, a float or text input,
+    and an id that does not fit."""
+    # Lane a1b-doors-opt-in-trees-linear: index vectors, fold ids and LU
+    # pivots were read through labels_view + labels_cast (a second view
+    # struct, a strided export linearized first).
+    var view = classical_view(source, context, name, admitted)
+    if Int(py=view.ndim) != 1:
+        raise Error("mojolearn: " + name + " must be 1-D, got " + String(Int(py=view.ndim)) + "-D")
+    var kind = classical_kind(view, context)
+    if kind != "i" and kind != "u" and kind != "b":
+        raise Error("TypeError: mojolearn: " + name + " must hold integers")
+    var count = Int(py=view.shape[0])
+    var out = admitted_array(Python.tuple(count), "<i8" if wide else "<i4", context)
+    if count > 0:
+        var addr = Int(py=classical_address(view))
+        var step = Int(py=view.strides[0])
+        var item = Int(py=view.itemsize)
+        var dst = Int(py=classical_address(out))
+        var fits: Bool
+        if wide:
+            fits = admitted_ids_i64(addr, step, 0, count, 1, item, kind == "i", False,
+                                    MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=dst))
+        else:
+            fits = admitted_ids_i32(addr, step, 0, count, 1, item, kind == "i", False,
+                                    MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=dst))
+        if not fits:
+            raise Error("ValueError: mojolearn: " + name + " holds an id outside int" + ("64" if wide else "32"))
+    _ = view^
+    return out
 
 
 def classical_view(source: PythonObject, context: PythonObject, name: String = "input",

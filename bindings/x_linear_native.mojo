@@ -46,7 +46,7 @@ from bindings.prep_native_estimator import prep_native_context, prep_native_spli
 from bindings.msel_inputs import msel_admit
 from bindings.admitted_input import (
     AdmittedX, admit_x_unrecorded, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
-    classical_view,
+    classical_view, admit_ids,
 )
 from bindings.classical_arrays import classical_dtype_str, classical_c_order, classical_is_f32
 from bindings.classical_labels import (
@@ -1662,27 +1662,9 @@ def _xl_index_i64(values: PythonObject, name: String, context: PythonObject) rai
     if cls is b.list or cls is b.tuple or cls is b.range:
         var store = py_call(context["array_type"], PythonObject("q"), values)
         return classical_wrap_array(store, Python.tuple(len(store)), "<i8", "C", context)
-    # The exporter's view (bindings/admitted_input.mojo classical_view: an
-    # ndarray, or an Array without NumPy), read once.
-    var view = classical_view(values, context, name)
-    var count = Int(py=view.size)
-    var address = Int(py=classical_address(view))
-    var typestr = classical_dtype_str(view, context)
-    if typestr == "<i8" and classical_c_order(view, context):
-        if py_type(view) is context["array_class"] and labels_address(view) == address:
-            return labels_reshape(view, Python.tuple(count), context)
-        var copy = admitted_vector(count, "<i8", context)
-        if count > 0:
-            memcpy(dest=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=labels_address(copy)),
-                   src=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=address), count=count)
-        _ = view^
-        return copy
-    if not classical_c_order(view, context):
-        raise Error("TypeError: mojolearn: " + name + " must be a contiguous index vector")
-    var out = admitted_vector(count, "<i8", context)
-    labels_cast(address, typestr, labels_address(out), "<i8", count, context)
-    _ = view^
-    return out
+    # The one integer admission (bindings/admitted_input.mojo admit_ids):
+    # one parallel read of the exporter's strides into fresh int64 words.
+    return admit_ids(values, name, context)
 
 
 def _xl_cv_splits(cv: PythonObject, x_source: PythonObject, y_source: PythonObject,

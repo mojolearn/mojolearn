@@ -29,7 +29,7 @@ from providers.python.estimator_lifecycle_pyapi import estimator_feature_check
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_arrays import classical_address
 from bindings.admitted_input import admit_x
-from bindings.classical_labels import labels_f32
+from bindings.admitted_input import admit_f32
 from bindings.metrics_cls_native import metrics_cls_operation
 from providers.python.estimator_binding_pyapi import estimator_binding_mode
 from providers.python.classical_family_admission_pyapi import classical_family_admit
@@ -432,11 +432,11 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
             raise Error("NotImplementedError: mojolearn: the PLS score needs the native metrics owner "
                         + "(family_mcls_r2); this install does not carry it")
         var binding = _score_binding(fields, owner[1])
-        var truth = labels_f32(args[1], -1, "C", "y", context)
+        var truth = admit_f32(args[1], -1, "y", context, allow_nonfinite=True)
         var prediction = pls_operation(model, "predict", Python.tuple(args[0]), context, fields, state, captured_x)
         var mode = py_get(fields, "numeric_mode")
         var r2 = metrics_cls_operation(PythonObject(None), "family_mcls_r2",
-                         Python.tuple(binding, truth.keep, prediction, args[2], PythonObject("uniform_average"),
+                         Python.tuple(binding, truth.array, prediction, args[2], PythonObject("uniform_average"),
                                       PythonObject(True), mode), owner[1])
         _ = truth^
         return r2

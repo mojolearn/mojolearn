@@ -15,7 +15,7 @@ from std.memory import memcpy
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains
-from bindings.classical_labels import labels_view, labels_check_rank, labels_vector, labels_cast
+from bindings.admitted_input import admit_ids
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_wrap_array, classical_typed
 from bindings.admitted_input import admit_x
@@ -499,14 +499,8 @@ def lu_factor_call(args: PythonObject, context: PythonObject) raises -> PythonOb
 
 def _pivots_i32(source: PythonObject, context: PythonObject) raises -> PythonObject:
     # `as_i32_c(piv, ndim=1, name="piv")`: a fresh int32 Array of the pivots.
-    var view = labels_view(source, "piv", context)
-    labels_check_rank(view, 1, "piv")
-    var n = view.shape[0]
-    var out = labels_vector(n, "<i4", context)
-    labels_cast(view.addr, view.typestr, Int(py=out._addr), "<i4", n, context)
-    _ = out  # keep the Python object alive through the native call above
-    _ = view^
-    return out
+    # The one integer admission (lane a1b: was labels_view + labels_cast).
+    return admit_ids(source, "piv", context, wide=False)
 
 
 def _lu_solve_trans(mut kit: DecompKit, lu: Int, piv: PythonObject, b: Int, trans: Int) raises -> Int:

@@ -37,7 +37,8 @@ from bindings.classical_metadata import classical_is_fitted
 from bindings.classical_pandas import classical_admit_value
 from bindings.msel_fixed_owner import fixed_owner_context, fixed_owner_fields, fixed_owner_set_params
 from bindings.scaler_lifecycle_native import _public_result
-from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_accuracy, labels_check_sample_weight
+from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_accuracy
+from bindings.admitted_input import admit_weight_words
 from bindings.x_prep_native_inputs import _values, _rows_fields
 from bindings.arena_cache_release import arena_cache_release_operation
 from bindings.prep_classify_prog import ClsProg, NONE, f32_array, i32_array, f32_input
@@ -139,9 +140,9 @@ def _weights(sample_weight: PythonObject, n: Int, context: PythonObject) raises 
     not given): the words `_nb_weights` put."""
     if sample_weight is None:
         return PythonObject(None)
-    var m = labels_check_sample_weight(sample_weight, n, context)
+    var m = admit_weight_words(sample_weight, n, context)
     var w = f32_array(n, context)
-    memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(w))), src=F32P(unsafe_from_address=m.addr), count=n)
+    memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(w))), src=F32P(unsafe_from_address=m.address), count=n)
     _ = w  # keep the Python object alive through the native call above
     _ = m  # keep the Python object alive through the native call above
     _ = m^

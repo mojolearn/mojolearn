@@ -26,7 +26,8 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_address, classical_typed, classical_input
 from bindings.admitted_input import admit_x
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_labels import labels_f32, labels_vector, classical_encode_labels
+from bindings.classical_labels import classical_encode_labels
+from bindings.admitted_input import admit_f32, admitted_vector
 from bindings.scaler_native import _stage, _ptr
 from bindings.scaler_lifecycle_native import _entries
 from bindings.x_prep_native_owner import xprep_values
@@ -519,11 +520,11 @@ def prep_mutual_info_call(operation: String, args: PythonObject, context: Python
             fl.append(Float64(counts[i]))
         lc = p.put_floats(fl, context)
     else:
-        var t = labels_f32(y, 1, "C", "y", context)
+        var t = admit_f32(y, 1, "y", context, allow_nonfinite=True)
         if t.rows != n:
             raise Error("mojolearn: X and y have different numbers of rows")
-        target = labels_vector(n, "<f4", context)
-        memcpy(dest=_ptr(target), src=F32P(unsafe_from_address=t.addr), count=n)
+        target = admitted_vector(n, "<f4", context)
+        memcpy(dest=_ptr(target), src=F32P(unsafe_from_address=t.address), count=n)
         _ = target  # keep the Python object alive through the native call above
         _ = t^
     var dc = len(cont)
