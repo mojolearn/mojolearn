@@ -16,7 +16,7 @@ criterion period, so no iteration runs past the stop), CD every
 NMF_CD_LOOP_CHUNK. Before, MU read 1-3 error words home per 10 iterations and
 CD 1-2 violation words per iteration."""
 # TOMBSTONE: nmf-mu-cd-host-word-loops (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
-# Restore: git show f59d913b0b:x_decomp/nmf_dev.mojo; record in docs/TOMBSTONES.md.
+# Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
 from experiments.classical_identical_ideas.linear_controls import C26_PRODUCTS, C26_UPDATE_FUSED
 from std.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceContext

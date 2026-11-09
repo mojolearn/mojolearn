@@ -16,7 +16,7 @@ per MDS_LOOP_CHUNK iterations and the stress once per start; before, every
 iteration read two or three words (the stress, ssd and the disparities'
 sum of squares)."""
 # TOMBSTONE: mds-smacof-host-word-loop (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
-# Restore: git show f59d913b0b:x_decomp/mds_dev.mojo; record in docs/TOMBSTONES.md.
+# Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
 from std.math import sqrt
 from std.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceContext

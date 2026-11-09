@@ -120,7 +120,7 @@ def xn_tree_fold_kernel(part: FP, res: FP, nb_: Int64):
 
 
 # TOMBSTONE: MOJOLEARN_C33_FROZEN_CHUNKS in op_lp_iterate (REFACTORED: the frozen-chunk body is the only path, on autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
-# Restore: git show f59d913b0b:x_neighbors/iter_device.mojo; record in docs/TOMBSTONES.md.
+# Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
 def lp_dense_product_gated(gate: IP, graph: FP, cur: FP, nxt: FP, n: Int32, c: Int32, degree: FP, raw_graph: Int32, variant: Int32):
     """The dense graph product (`matmul_item`, or the raw affinity's
     `classical_graph_product`) while the bounded loop runs (gate[0] == 0)."""
@@ -3228,9 +3228,9 @@ comptime LPK_FAST_BUILD = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
 #: binding's per-iteration loop alive, which allocated n x C per iteration;
 #: both are refused now (core/experiment_guards_cluster.mojo).
 # TOMBSTONE: MOJOLEARN_LP_FAST_RESIDENT_OFF (rollback of a measured winner) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
-# Restore: git show f59d913b0b:x_neighbors/iter_device.mojo; record in docs/TOMBSTONES.md.
+# Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_IDN_LP_RESIDENT_OFF (rollback of a measured default) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
-# Restore: git show f59d913b0b:x_neighbors/iter_device.mojo; record in docs/TOMBSTONES.md.
+# Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
 #: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor: the loop
 #: resident in IDENTICAL, every launch the op's own item:
 #: `absdiff_part_item` + `absdiff_fin_item` (the `absdiff_sum` op's bits),

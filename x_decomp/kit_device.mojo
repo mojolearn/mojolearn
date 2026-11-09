@@ -831,7 +831,7 @@ struct DKit(Movable):
         operand on the device; `cd_rows`, which read it home on every half
         sweep, is gone."""
         # TOMBSTONE: DKit.cd_rows (REFACTORED onto the bounded device loop) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
-        # Restore: git show f59d913b0b:x_decomp/kit_device.mojo; record in docs/TOMBSTONES.md.
+        # Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
         var n = W.r
         var kc = W.c
         if n * kc == 0:

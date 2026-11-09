@@ -725,7 +725,7 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         # The kNN-graph loop as one resident op (`lp_iterate_knn`), on every
         # binding (lane n4-mds-labelprop-nmf-loops, 2026-11-09).
         # TOMBSTONE: label-propagation compact-graph binding loop (REFACTORED: lp_iterate_knn on every vendor and tier) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
-        # Restore: git show f59d913b0b:bindings/neighbors_semi_native.mojo; record in docs/TOMBSTONES.md.
+        # Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
         var cols = graph[0]
         var vals = graph[1]
         var info = _semi_out(Python.tuple(2), "<i4", context)
