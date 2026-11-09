@@ -229,3 +229,32 @@ def chol_op_info_joins_loop(
     code lands in the register block's STEP_FAIL word
     (`LoopRegisters.failure()`). Enqueue it right after `chol_op_factor`."""
     step_fail_joins_loop(ctx, words, info, it)
+
+
+def chol_op_zero_on_fail_kernel(info: StepI32, buf: _F32, count: Int32):
+    """`buf[0, count) = +0.0` when the factor failed or was gated
+    (`info[0] != 0`); nothing otherwise."""
+    var t = Int(block_idx.x) * CHOL_ELEM_TPB + Int(thread_idx.x)
+    if t >= Int(count):
+        return
+    if info.unsafe_load(0) != Int32(0):
+        buf.unsafe_store(t, Float32(0.0))
+
+
+def chol_op_zero_on_fail(
+    ctx: DeviceContext, mut info: DeviceBuffer[DType.int32], mut buf: DeviceBuffer[DType.float32], count: Int,
+) raises:
+    """Zero `buf[0, count)` on the device when `info[0] != 0` (a failed
+    factor's solution is handed back as zeros beside its nonzero info, the
+    families' contract) without reading `info` on the host (lane
+    n8-gp-krr-smo)."""
+    if count <= 0:
+        return
+    if len(buf) < count:
+        raise Error("chol_op_zero_on_fail: the buffer holds " + String(len(buf)) + " floats, count = " + String(count))
+    var ip = StepI32(unsafe_from_address=Int(info.unsafe_ptr()))
+    var bp = _F32(unsafe_from_address=Int(buf.unsafe_ptr()))
+    ctx.enqueue_function[chol_op_zero_on_fail_kernel](
+        ip, bp, Int32(count),
+        grid_dim=((count + CHOL_ELEM_TPB - 1) // CHOL_ELEM_TPB, 1, 1), block_dim=(CHOL_ELEM_TPB, 1, 1),
+    )
