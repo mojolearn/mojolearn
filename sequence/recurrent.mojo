@@ -60,7 +60,7 @@ from autograd.optim import OptimizerState, optimizer_config_packed, step_lr
 # change between versions, never keep a serial fold for old bits): each step's reported loss (losses[k]) comes
 # from autograd/losses.mojo (loss_value_into: the squared-error terms or op_ce's row losses, term for term, then
 # the tape's blocked fold with factor 1 / count) instead of sum_into's one-thread ascending OP_SUM (deleted).
-# The gradient seed w.dy still comes from OP_MSE / OP_CE. NEW BITS in losses[] only (every column together:
+# The gradient seed w.dy still comes from OP_MSE / OP_CE (gradient only: their unread loss stores are deleted). NEW BITS in losses[] only (every column together:
 # host, Metal, NVIDIA, AMD run the same fold); parameters unchanged. A/B owed: arm A f7d10d2b09 (OP_SUM), arm B dbab55bea7.
 from autograd.losses import LossScratch, loss_scratch, release_loss_scratch, loss_value_into, REDUCTION_MEAN
 from autograd.loss_ops import LS_MSE, LS_CROSS_ENTROPY
@@ -262,7 +262,6 @@ struct Work(Movable):
     var yb: FP
     var yhat: FP
     var dy: FP
-    var sq: FP
     var one: FP
     var wsplit: FP
 
@@ -292,15 +291,18 @@ struct Work(Movable):
         self.yb = ex.alloc(B * net.O)
         self.yhat = ex.alloc(B * net.O)
         self.dy = ex.alloc(B * net.O)
-        self.sq = ex.alloc(B * net.O)
+        # TOMBSTONE: w.sq (the squared-error / row-loss words OP_MSE and OP_CE stored and nothing read; the reported loss is
+        # loss_value_into's) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+        # Restore: git apply experiments/removed/SEQ_LOSS_SEED_UNREAD_STORES.patch
         comptime if SEQ_WGRAD_BLOCKED:
             # the bias sums as ones^T dG (one fma by 1.0 per term, exact)
             self.one = ex.alloc(1)
             fill(ex, self.one, 1, Float32(1.0))
             self.wsplit = ex.alloc(WGRAD_IDN_SCRATCH if train else 1)
         else:
-            self.one = self.sq
-            self.wsplit = self.sq
+            # unread placeholders (the unblocked weight gradient takes no ones or split scratch)
+            self.one = ex.alloc(1)
+            self.wsplit = self.one
 
 
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by 9a9a8e3148; code recoverable at c3b7dc42e6^.
@@ -498,7 +500,6 @@ def rnn_fit[E: Exec, //, S: RnnStep](
             a.p0 = w.yhat
             a.p1 = w.yb
             a.p2 = w.dy
-            a.p3 = w.sq
             a.f0 = Float32(2.0) / Float32(B * net.O)
             ex.launch[OP_MSE](a, B * net.O)
             loss_value_into(ex, LS_MSE, w.yhat, w.yb, B, net.O, REDUCTION_MEAN, dloss + k, loss_ws)
@@ -508,7 +509,6 @@ def rnn_fit[E: Exec, //, S: RnnStep](
             a.p0 = w.yhat
             a.p1 = w.yb
             a.p2 = w.dy
-            a.p3 = w.sq
             a.i0 = B
             a.i1 = net.O
             a.f0 = Float32(1.0) / Float32(B)
