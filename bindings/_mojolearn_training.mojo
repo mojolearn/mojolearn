@@ -80,7 +80,6 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
 from training.native_primitive_dispatch import NATIVE_PRIMITIVE_API, native_primitive_operation
-from training.small_mlp_dispatch import SMALL_MLP_NATIVE_TABLE
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime _NEURAL_CTX = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingContextFast"
@@ -118,16 +117,7 @@ from std.ffi import _Global
 from max.gpu.host import DeviceBuffer
 from training.mlp_ops import (
     mlp_bias_activation_host, mlp_relu_backward_host, mlp_sum_rows_host,
-    mlp_train_step_host, mlp_validate_shape,
-)
-#: lane afn-mlp (2026-10-03): the Apple FAST resident session, registered
-#: only under FAST + Apple + `-D MOJOLEARN_AFN_MLP_RESIDENT` / `_MULTISTEP`
-#: / `_ALL` (training/mlp_fast.mojo); absent from every other build.
-from training.mlp_fast import (
-    MLP_MULTISTEP, MLP_RESIDENT,
-    mlp_resident_close_host, mlp_resident_download_host, mlp_resident_open_host,
-    mlp_resident_step_host, mlp_resident_upload_host, mlp_resident_registry,
-    FT_TOTAL, RS_OFF_P, RS_OFF_G, RS_OFF_M, RS_OFF_V,
+    mlp_validate_shape,
 )
 from training.checks.optimizer_contract import microbatch_split_is_identical
 from training.chunked_lm_head_v2 import (
@@ -629,218 +619,8 @@ def mlp_sum_rows_binding(
     return PythonObject(count)
 
 
-def mlp_train_step_binding(
-    addresses: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """The small MLP's whole step as ONE call (lane/apple-mlp-fused,
-    2026-09-30): the same GEMMs, bias/ReLU/row-sum launches, cross-entropy
-    and AdamW step `SmallMLPTrainer` made through twelve binding calls, the
-    intermediates kept on the device. Returns `rows * 3`, the logits written.
-
-    addresses, in this exact order (mirrored word for word in
-    `python/mojolearn/_mlp_impl.py::_fused`):
-
-        0  x        rows x 8 f32, read
-        1  y        rows i32 classes 0..2, read (unread under mode 0)
-        2  w1       16 x 8 f32   read; WRITTEN IN PLACE under mode 2
-        3  b1       16 f32       "
-        4  w2       3 x 16 f32   "
-        5  b2       3 f32        "
-        6  m        195 f32      read and written under mode 2 (any one
-                                 float otherwise, never 0)
-        7  v        195 f32      "
-        8  flags    4 i32        read and written back under mode 2
-        9  loss     1 f32        written (modes 1 and 2)
-        10 logits   rows x 3 f32 written
-        11 dw1      16 x 8 f32   written (modes 1 and 2)
-        12 db1      16 f32       "
-        13 dw2      3 x 16 f32   "
-        14 db2      3 f32        "
-        15 dx       rows x 8 f32 written when want_input_grad (else any
-                                 one float, never 0)
-        16 info     3 f32        the optimizer's info, +0.0 (no clip)
-
-    params, in this exact order:
-
-        0  rows              1..256
-        1  mode              0 forward only, 1 forward and backward,
-                             2 the whole step
-        2  t                 the optimizer's ONE-BASED step (mode 2)
-        3  lr                (float)
-        4  beta1             (float)
-        5  beta2             (float)
-        6  eps               (float)
-        7  weight_decay      (float)
-        8  want_input_grad   0 or 1
-
-    A silent reorder here is a WRONG ANSWER and not a crash. If you change
-    either list, change `_fused` in the same edit.
-    """
-    var a = _addrs(addresses, 17, "mlp_train_step")
-    _params(params, 9, "mlp_train_step")
-    var rows = Int(py=params[0])
-    var mode = Int(py=params[1])
-    var t = Int(py=params[2])
-    var lr = Float32(Float64(py=params[3]))
-    var beta1 = Float32(Float64(py=params[4]))
-    var beta2 = Float32(Float64(py=params[5]))
-    var eps = Float32(Float64(py=params[6]))
-    var weight_decay = Float32(Float64(py=params[7]))
-    var want_input_grad = Int(py=params[8])
-    var count = 0
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        count = mlp_train_step_host(
-            ctx,
-            _f32_ptr(a[0]), _i32_ptr(a[1]),
-            _f32_ptr(a[2]), _f32_ptr(a[3]), _f32_ptr(a[4]), _f32_ptr(a[5]),
-            _f32_ptr(a[6]), _f32_ptr(a[7]), _i32_ptr(a[8]),
-            _f32_ptr(a[9]), _f32_ptr(a[10]),
-            _f32_ptr(a[11]), _f32_ptr(a[12]), _f32_ptr(a[13]), _f32_ptr(a[14]),
-            _f32_ptr(a[15]), _f32_ptr(a[16]),
-            rows, mode, t, lr, beta1, beta2, eps, weight_decay, want_input_grad,
-        )
-    return PythonObject(count)
-
-
-# ---------------------------------------------------------------------------
-# lane afn-mlp (2026-10-03): the small MLP's RESIDENT SESSION on Apple FAST.
-# `python/mojolearn/_mlp_impl.py::SmallMLPTrainer` opens one per trainer when
-# the binding exposes `mlp_resident_open`; weights and moments live on the
-# device between steps and come down only for `state_dict`.
-# ---------------------------------------------------------------------------
-
-
-def mlp_resident_open_binding(
-    addresses: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """addresses = [w1, b1, w2, b2, m, v] (read); params = [cap_k], the most
-    minibatches one `mlp_resident_steps` call may run. Returns the handle."""
-    var a = _addrs(addresses, 6, "mlp_resident_open")
-    _params(params, 1, "mlp_resident_open")
-    var cap_k = Int(py=params[0])
-    var h = -1
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        h = mlp_resident_open_host(
-            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]),
-            _f32_ptr(a[4]), _f32_ptr(a[5]), cap_k,
-        )
-    return PythonObject(h)
-
-
-def mlp_resident_download_binding(
-    handle: PythonObject, addresses: PythonObject,
-) raises -> PythonObject:
-    """addresses = [w1, b1, w2, b2, m, v] (written): the session's state."""
-    var a = _addrs(addresses, 6, "mlp_resident_download")
-    var h = Int(py=handle)
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        mlp_resident_download_host(
-            ctx, h, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]),
-            _f32_ptr(a[4]), _f32_ptr(a[5]),
-        )
-    return PythonObject(h)
-
-
-def mlp_resident_close_binding(handle: PythonObject) raises -> PythonObject:
-    var h = Int(py=handle)
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        mlp_resident_close_host(ctx, h)
-    return PythonObject(h)
-
-
-def mlp_resident_steps_binding(
-    handle: PythonObject, addresses: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """`k` steps on the session (mirrored word for word in
-    `python/mojolearn/_mlp_impl.py::SmallMLPTrainer._resident_steps`):
-
-        addresses: x (k*rows x 8), y (k*rows i32), losses (k f32, written),
-                   logits (rows x 3, the last step's), dw1, db1, dw2, db2
-                   (the last step's), dx (rows x 8 when want_input_grad,
-                   else any one float)
-        params:    rows, k, mode, t, lr, beta1, beta2, eps, weight_decay,
-                   want_input_grad
-
-    `k > 1` is compiled under MOJOLEARN_AFN_MLP_MULTISTEP only. Returns
-    `rows * 3`."""
-    var a = _addrs(addresses, 9, "mlp_resident_steps")
-    _params(params, 10, "mlp_resident_steps")
-    var h = Int(py=handle)
-    var rows = Int(py=params[0])
-    var k = Int(py=params[1])
-    var mode = Int(py=params[2])
-    var t = Int(py=params[3])
-    var lr = Float32(Float64(py=params[4]))
-    var beta1 = Float32(Float64(py=params[5]))
-    var beta2 = Float32(Float64(py=params[6]))
-    var eps = Float32(Float64(py=params[7]))
-    var weight_decay = Float32(Float64(py=params[8]))
-    var want_input_grad = Int(py=params[9])
-    var count = 0
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        count = mlp_resident_step_host(
-            ctx, h, _f32_ptr(a[0]), _i32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]),
-            _f32_ptr(a[4]), _f32_ptr(a[5]), _f32_ptr(a[6]), _f32_ptr(a[7]), _f32_ptr(a[8]),
-            rows, k, mode, t, lr, beta1, beta2, eps, weight_decay, want_input_grad,
-        )
-    return PythonObject(count)
-
-
-def mlp_resident_apply_binding(
-    handle: PythonObject, addresses: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """`SmallMLPTrainer.apply_gradients` on the open session (lane
-    migrate-neural-2): the packed gradient [dw1, db1, dw2, db2] goes up into
-    the session's gradient slot and `optimizer_step`'s AdamW step (the same
-    `identical_optimizer_step_resident_io` on the same registry offsets
-    [0, 128, 144, 192, 195]) updates the session's weights and moments in
-    place; nothing comes down, so the session stays open.
-
-        addresses: grads (195 f32), flags (4 i32, read and written),
-                   info (3 f32, written)
-        params:    t, lr, beta1, beta2, eps, weight_decay
-
-    Returns 195."""
-    var a = _addrs(addresses, 3, "mlp_resident_apply")
-    _params(params, 6, "mlp_resident_apply")
-    var h = Int(py=handle)
-    var t = Int(py=params[0])
-    var lr = Float32(Float64(py=params[1]))
-    var beta1 = Float32(Float64(py=params[2]))
-    var beta2 = Float32(Float64(py=params[3]))
-    var eps = Float32(Float64(py=params[4]))
-    var weight_decay = Float32(Float64(py=params[5]))
-    var n = 0
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        var arena = mlp_resident_registry(h)
-        var p_v = arena.create_sub_buffer[DType.float32](RS_OFF_P, FT_TOTAL)
-        var g_v = arena.create_sub_buffer[DType.float32](RS_OFF_G, FT_TOTAL)
-        var m_v = arena.create_sub_buffer[DType.float32](RS_OFF_M, FT_TOTAL)
-        var v_v = arena.create_sub_buffer[DType.float32](RS_OFF_V, FT_TOTAL)
-        var p_stage = ctx.enqueue_create_host_buffer[DType.float32](1)
-        var g_stage = ctx.enqueue_create_host_buffer[DType.float32](1)
-        var offsets: List[Int32] = [0, 128, 144, 192, 195]
-        n = identical_optimizer_step_resident_io(
-            ctx, _f32_ptr(a[0]), _f32_ptr(a[0]), m_v, v_v, p_v, g_v, p_stage, g_stage,
-            offsets.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), _i32_ptr(a[1]), _f32_ptr(a[2]),
-            4, 2, t, 0, lr, beta1, beta2, eps, weight_decay, Float32(0.0), Float32(0.0), Float32(0.0),
-            OPT_IO_UP_G,
-        )
-        _ = offsets^
-        _ = p_v^
-        _ = g_v^
-        _ = m_v^
-        _ = v_v^
-        _ = p_stage^
-        _ = g_stage^
-        _ = arena^
-    return PythonObject(n)
+# TOMBSTONE: mlp_train_step, the mlp_resident_* session and small_mlp_api_v1 entries (MOJOLEARN_AFN_MLP_RESIDENT / _MULTISTEP / _FUSED_STEP / _ALL, merged-unmeasured; superseded by SmallMLPTrainer's captured program, autograd/small_mlp_program.mojo, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
+# Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
 
 
 # ===========================================================================
@@ -872,11 +652,6 @@ def _params(params: PythonObject, want: Int, name: String) raises:
             name + ": params must contain " + String(want) + " values, got "
             + String(len(params))
         )
-
-
-def small_mlp_api_binding() raises -> PythonObject:
-    var api = SMALL_MLP_NATIVE_TABLE.get_or_create_ptr()
-    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def neural_primitives_api_binding() raises -> PythonObject:
@@ -994,39 +769,6 @@ def mlp_sessions_binding(addresses: PythonObject, input_addresses: PythonObject,
     with GILReleased(Python()):
         var ctx = neural_ctx[_NEURAL_CTX]()
         count = nn_mlp_sessions_device(ctx, inputs, rows, _f32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]), _f32_ptr(a[4]), _f32_ptr(a[0]), in_width, hidden, out_width)
-    return PythonObject(count)
-
-
-def mlp_sessions_resident_binding(handle: PythonObject, addresses: PythonObject, input_addresses: PythonObject,
-                                  shapes: PythonObject, dims: PythonObject) raises -> PythonObject:
-    """`mlp_sessions` reading the weights of open training session `handle`
-    where they are (lane migrate-neural-2: `mlp_inference_sessions` no
-    longer downloads the session to upload it again). addresses = [output];
-    the rest as `mlp_sessions`."""
-    if len(addresses) != 1 or Int(py=addresses[0]) == 0:
-        raise Error("mlp_sessions_resident: addresses must be [output]")
-    _params(dims, 3, "mlp_sessions")
-    var n_sessions = len(shapes)
-    if len(input_addresses) != n_sessions:
-        raise Error("neural MLP sessions: metadata length mismatch")
-    var inputs = List[Int]()
-    var rows = List[Int]()
-    for i in range(n_sessions):  # small-loop(n_sessions: session handles): reads buffer addresses and shapes, not data
-        inputs.append(Int(py=input_addresses[i]))
-        rows.append(Int(py=shapes[i][0]))
-    var in_width = Int(py=dims[0])
-    var hidden = Int(py=dims[1])
-    var out_width = Int(py=dims[2])
-    var out = _f32_ptr(Int(py=addresses[0]))
-    var h = Int(py=handle)
-    var count = 0
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        var arena = mlp_resident_registry(h)
-        var reg = Optional[DeviceBuffer[DType.float32]](arena.create_sub_buffer[DType.float32](RS_OFF_P, FT_TOTAL))
-        count = nn_mlp_sessions_device(ctx, inputs, rows, out, out, out, out, out, in_width, hidden, out_width, reg)
-        _ = reg^
-        _ = arena^
     return PythonObject(count)
 
 
@@ -1675,20 +1417,10 @@ def build__mojolearn_training() -> PythonObject:
         m.def_function[mlp_bias_activation_binding]("mlp_bias_activation")
         m.def_function[mlp_relu_backward_binding]("mlp_relu_backward")
         m.def_function[mlp_sum_rows_binding]("mlp_sum_rows")
-        m.def_function[mlp_train_step_binding]("mlp_train_step")
-        comptime if MLP_RESIDENT:
-            # lane afn-mlp: Apple FAST only, behind its define
-            m.def_function[mlp_resident_open_binding]("mlp_resident_open")
-            m.def_function[mlp_resident_download_binding]("mlp_resident_download")
-            m.def_function[mlp_resident_close_binding]("mlp_resident_close")
-            m.def_function[mlp_resident_steps_binding]("mlp_resident_step")
-            m.def_function[mlp_resident_apply_binding]("mlp_resident_apply")
-            m.def_function[mlp_sessions_resident_binding]("mlp_sessions_resident")
-        comptime if MLP_MULTISTEP:
-            m.def_function[mlp_resident_steps_binding]("mlp_resident_steps")
+        # TOMBSTONE: mlp_train_step, the mlp_resident_* session and small_mlp_api_v1 entries (MOJOLEARN_AFN_MLP_RESIDENT / _MULTISTEP / _FUSED_STEP / _ALL, merged-unmeasured; superseded by SmallMLPTrainer's captured program, autograd/small_mlp_program.mojo, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
+        # Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
         m.def_function[neural_primitives_api_binding]("neural_primitives_api_v1")
         m.def_function[samba_resident_native_handle_binding]("samba_resident_native_handle_v1")
-        m.def_function[small_mlp_api_binding]("small_mlp_api_v1")
         m.def_function[embedding_forward_binding]("embedding_forward")
         m.def_function[embedding_backward_binding]("embedding_backward")
         m.def_function[rms_norm_forward_binding]("rms_norm_forward")
