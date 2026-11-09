@@ -23,6 +23,7 @@ from bindings.native_array_view import native_array_ndarray_view
 from core.p3nc_scan import p3nc_all_finite_f32, p3nc_widen_f32_f64, P3NC_REAL_OK, P3NC_REAL_NONFINITE, P3NC_REAL_CONTINUOUS
 from bindings.p3nc_label_lists import p3nc_float_list_verdict
 from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_f32_snapshot, family_owned_snapshot, family_array
+from bindings.p3nc_fitted_freeze import fitted_freeze_sole_owner
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields
 from bindings.cluster_fit_a_native import _pending, _pending_text, _drop_pending
@@ -209,6 +210,17 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
         # the owned copy.
         var borrow = (not fitting and not operation.startswith("family_xn_loc_imp_")
                       and not snapshot.readonly and snapshot.f32_c())
+        # 0.8.66 regression C3 (knn-reg / knn-clf fit 8.5x on istella, 2.2x
+        # on taxi): a k-NN fit keeps the caller's float32 C-order matrix as
+        # its index, as 0.8.55 did, instead of a zero-filled copy. The
+        # device-resident index is keyed on that matrix's address and shape,
+        # so the read-only rule holds it (lesson 10): the matrix is frozen
+        # when it owns its memory (fitted_freeze_sole_owner); a view, a
+        # foreign exporter or a buffer that cannot be frozen keeps the copy.
+        if (fitting and not borrow and operation.startswith("family_xn_knn_") and snapshot.f32_c()
+                and not snapshot.copied and not snapshot.owned_writable
+                and fitted_freeze_sole_owner(snapshot.keep)):
+            borrow = True
         py_setitem(values, PythonObject(first), snapshot.keep if borrow else family_owned_snapshot(snapshot, context))
     elif not fitting and host_sparse_format(source).byte_length() == 0:
         # Perf (perf2-neighbors): a dense KDE query (score_samples/score) only
