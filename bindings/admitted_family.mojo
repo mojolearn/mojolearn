@@ -36,6 +36,9 @@
 # - The weight status (finite, sign, all-zero) is one parallel pass instead of
 #   two serial ones, and a scalar weight is filled in parallel.
 #
+# A DeviceRows fold reaching a family door is handed to admit_x unchanged
+# (admit_family_meta); the family side keeps no download or second scan.
+#
 # Numerics: none. The bytes reaching a kernel are the same float32 (or
 # float64) C-order bytes, written by the same classical_f32_bits word cast;
 # the finiteness and sign tests are predicates.
@@ -47,7 +50,8 @@ from bindings.native_array_storage import native_scratch_bytes, native_scratch_a
 from bindings.classical_arrays import (
     classical_address, classical_is_array, classical_cast_kind, classical_dtype_str, classical_c_order,
 )
-from bindings.admitted_input import AdmittedX, RESHAPE_HINT, classical_view
+from bindings.admitted_input import AdmittedX, RESHAPE_HINT, classical_view, admit_x_unrecorded
+from bindings.device_rows_door import door_is_device_rows
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from bindings.family_common import family_array, family_repr
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
@@ -179,6 +183,23 @@ def admit_family_meta(source: PythonObject, ndim: Int, name: String, context: Py
     view with no words (the cast of an already checked view, which
     `_buffer.as_f32_c`'s cast step never refused). `refusal`, when given,
     is the door's own wording of the non-finite refusal."""
+    if door_is_device_rows(source, context):
+        # A model-selection fold (`_arena_io.DeviceRows`) goes to the one
+        # admission path unchanged: admit_x resolves it and tests it finite
+        # once; this door neither downloads it nor scans it again. Its rows
+        # are float32 C-order, so the snapshot below borrows them.
+        var fold: AdmittedX
+        try:
+            fold = admit_x_unrecorded(source, name, context)
+        except error:
+            if String(error).find("contains NaN or infinity") >= 0:
+                if refusal.byte_length() > 0:
+                    raise Error(refusal)
+                raise Error("Input " + name + " contains NaN or infinity")
+            raise error^
+        var rows = admit_family_input(fold.array, ndim, name, context, False, True, empty)
+        admit_family_cast(rows, name, context)
+        return rows^
     var snapshot = admit_family_input(source, ndim, name, context, dense, admitted, empty)
     admit_family_cast(snapshot, name, context, finite, refusal)
     return snapshot^

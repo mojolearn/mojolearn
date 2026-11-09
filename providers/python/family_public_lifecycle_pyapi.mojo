@@ -30,7 +30,8 @@ from providers.python.estimator_lifecycle_pyapi import (
     estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_complete,
 )
 from providers.python.neighbors_public_lifecycle_pyapi import NeighborPublicCall, _target, _public_result
-from bindings.device_rows_door import door_is_device_rows, door_rows_host
+from bindings.device_rows_door import door_is_device_rows
+from bindings.admitted_input import admit_x
 
 
 struct FamilyLifecycle(Copyable, Movable):
@@ -210,16 +211,20 @@ def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, oper
     var values = Python.list()
     for i in range(len(args)):  # small-loop(fixed operation argument envelope)
         _ = py_call(values.append, args[i])
-    if door_is_device_rows(source, context):
-        # The DeviceRows door (lane ne1-b-door, workstream B): a
-        # model-selection fold's X resolves to its rows through its own
-        # native materializer (the device gather out of the resident base);
-        # these owners read host addresses. Same rows, same order.
-        source = door_rows_host(source, context)
-        py_setitem(values, PythonObject(x_index), source)
     var rows = -1
     var columns = -1
-    if host_sparse_format(source).byte_length() > 0:
+    if door_is_device_rows(source, context):
+        # A model-selection fold's X (`_arena_io.DeviceRows`) goes to the one
+        # admission path unchanged (lane a2-admit-family; admit_x resolves
+        # it, records it on this call and refuses NaN or infinity with the
+        # same "(<name>)" wording); this door no longer downloads the fold or
+        # scans it a second time. A fit keeps an owned copy, as below.
+        var x = admit_x(admitted, source, name, context, x_index)
+        rows = x.rows
+        columns = x.cols
+        source = x.array
+        py_setitem(values, PythonObject(x_index), admit_family_owned(x.array, context) if spec.replace and fitting else x.array)
+    elif host_sparse_format(source).byte_length() > 0:
         # Sparse X keeps its own owner path (densified there, or a sparse
         # result); only its declared shape is read here.
         var shape = _sparse_fields(source)["_shape"]
