@@ -406,6 +406,7 @@ in the tables after the sections.
 | [`MOJOLEARN_PAR_VERIFY`](#mojolearn_par_verify) | Verification (multi-GPU: par-* identity lanes, `verify --par`, multi-gpu release rows) | retired (owner decision) | 2026-10-31 | [MOJOLEARN_PAR_VERIFY.patch](../experiments/removed/MOJOLEARN_PAR_VERIFY.patch) |
 | [`byte_lm_parallel_open` + 9 sibling entries (native entries)](#dead-native-entries-batch-3-2026-11) | Byte LM (the legacy per-entry parallel trainer: open, open_pooled, close, rollback, shard_gradient, apply_gradient, reduction_pool_available, fold_reset, shard_gradient_fold, fold_add) | removed (dead native entries: no live caller) | 2026-11-08 | [dead_entries_byte_lm_parallel.patch](../experiments/removed/dead_entries_byte_lm_parallel.patch) |
 | [`vocab_encode_public` + 4 sibling entries (native entries)](#dead-native-entries-batch-3-2026-11) | Tokenizer host (vocab_encode_public, vocab_decode_public, vocab_pretrained_public, vocab_pretokenize_public, vocab_pattern_name) | removed (dead native entries: no live caller) | 2026-11-08 | [dead_entries_tokenizer_vocab_public.patch](../experiments/removed/dead_entries_tokenizer_vocab_public.patch) |
+| [`classical_host_weights`, `pca_query_fields`, `prep_check_info`, `prep_scalar_dtype` (orphan functions)](#dead-native-entries-batch-3-2026-11) | Classical arrays, PCA and preprocessing providers | removed (orphan functions: no caller) | 2026-11-08 | [dead_entries_orphan_functions.patch](../experiments/removed/dead_entries_orphan_functions.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3775,3 +3776,13 @@ public runtime qualification; this entry is not release or performance evidence.
 | entries | where | deleted by | why they were dead | restore |
 |---|---|---|---|---|
 | `vocab_encode_public`, `vocab_decode_public`, `vocab_pretrained_public`, `vocab_pretokenize_public`, `vocab_pattern_name` | `bindings/_mojolearn_tokenizer_host.mojo` (wrappers, the `_vocab_public_c` arms 3, 4, 5, 6 and 8, registrations) + the orphan `tokenizer_vocab_pretokenize` wrapper in `bindings/tokenizer_public_native.mojo` | `@K0SHA_VOCAB@` | `Tokenizer` reaches every operation through `tokenizer_public_call` (`vocab_encode`, `vocab_decode`, `vocab_pretrained`, `vocab_pretokenize`, `vocab_pattern`); no Python, tool, test or Mojo string caller named the five exports (the 2026-10-27 inventories under `experiments/` are records). The tokenizer host group is the largest compile, so every deletion there helps. `vocab_init_public`, `_spelled_public`, `_json_public`, `vocab_pretokenize_pattern` and `native_json_parse` keep their arms and indices | `experiments/removed/dead_entries_tokenizer_vocab_public.patch` |
+
+### Orphan functions
+
+| symbols | where | deleted by | why they were dead | restore |
+|---|---|---|---|---|
+| `classical_host_weights` | `bindings/classical_arrays.mojo` (+ its now-unused `classical_check_weights` import) | `@K0SHA_ORPHAN@` | no caller anywhere; the classical doors admit `sample_weight` through their own family paths | `experiments/removed/dead_entries_orphan_functions.patch` |
+| `pca_query_fields` | `providers/python/pca_model_pyapi.mojo` | `@K0SHA_ORPHAN@` | no caller; the PCA owners call `_pca_query_fields_from` directly (kept) | same patch |
+| `prep_check_info`, `prep_scalar_dtype` | `providers/python/prep_metadata_pyapi.mojo` (+ its now-unused `sequence_dtype_native` import) | `@K0SHA_ORPHAN@` | no caller anywhere | same patch |
+
+- Left (plan 5.2): `rankn_mean` / `rankn_softmax` (`autograd/rankn_fold.mojo`) are called by `autograd/checks/rankn_fold_cases.mojo`, which `tools/autograd_smoke.py` runs; deleting them edits a live check, and routing `OPS_MEAN_N` / `OPS_SOFTMAX_N` to them is executor work. The ALS `flags` buffer and the two bare `synchronize()` calls in `x_decomp/als_dev.mojo` belong to lane N0 `readmission-defects` (plan section 8), which owns that file.

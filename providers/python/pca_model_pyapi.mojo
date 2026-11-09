@@ -46,8 +46,8 @@ def _native_number(value: PythonObject, context: PythonObject, truth: Bool,
     return decoded.to_python_number(kind == "i" or kind == "u" or kind == "b")
 
 
-def pca_query_fields(model: PythonObject, context: PythonObject, operation: String = "transform") raises -> PythonObject:
-    return _pca_query_fields_from(classical_family_admit(model), context, operation)
+# TOMBSTONE: pca_query_fields (orphan function: no caller; the owners call _pca_query_fields_from) deleted 2026-11-08 by @K0SHA_ORPHAN@; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_entries_orphan_functions.patch
 
 
 def _pca_query_fields_from(state: PythonObject, context: PythonObject, operation: String) raises -> PythonObject:

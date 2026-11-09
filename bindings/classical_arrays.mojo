@@ -17,7 +17,7 @@ from std.python import Python, PythonObject
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.py_balanced import py_call, py_type, py_get, py_setattr
 from core.cast_in import cast_in_kind, NPY_HALF, NPY_FLOAT, NPY_DOUBLE
-from core.classical_arrays_impl import classical_cast_rows, classical_check_weights
+from core.classical_arrays_impl import classical_cast_rows
 from bindings.classical_warnings import classical_warn_column
 from bindings.sequential_admission import sequential_admit_value, _ordinary_torch
 from bindings.sequential_arrays import sequential_array, sequential_address
@@ -334,21 +334,5 @@ def classical_word(value: PythonObject, index: Int = 0) raises -> Float64:
     return Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)[index])
 
 
-def classical_host_weights(source: PythonObject, rows: Int, context: PythonObject) raises -> PythonObject:
-    if source is None:
-        return PythonObject(None)
-    classical_admit_value(source, context)
-    var prepared = native_pandas_f32(source, context) if native_pandas_exact(source) else source
-    var raw = classical_input(prepared, context, "sample_weight")
-    var scalar = Int(py=raw.ndim) == 0
-    var value = classical_host_f32(source, 0 if scalar else 1, "sample_weight", context)
-    if not scalar and Int(py=value.size) != rows:
-        raise Error("sample_weight length differs from X")
-    var out = classical_array(rows, 0, context) if scalar else value
-    var input = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value)))
-    var output = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))
-    var any_positive = classical_check_weights(input, output, rows, scalar)
-    if not any_positive:
-        raise Error("Sample weights must contain at least one non-zero number.")
-    _ = value^
-    return out
+# TOMBSTONE: classical_host_weights (orphan function: no caller) deleted 2026-11-08 by @K0SHA_ORPHAN@; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_entries_orphan_functions.patch
