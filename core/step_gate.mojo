@@ -37,7 +37,7 @@ comptime STEP_STOP_ITER = 1
 #: The iteration register (LOOP_ITER).
 comptime STEP_ITER = 2
 #: The first failure code an op reported (0: none). Word 6 of the
-#: LOOP_WORDS = 8 register block; the device loop of step ops writes no
+#: LOOP_WORDS register block; the device loop of step ops writes no
 #: other word there.
 comptime STEP_FAIL = 6
 

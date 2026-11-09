@@ -15,6 +15,7 @@ from std.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from autograd.program_loop import (
     LOOP_DONE, LOOP_STOP_ITER, LOOP_ITER, LOOP_STOPPED, LOOP_BAD, LOOP_GATE, LOOP_WORDS, EXECUTOR_TIMERS, LoopTimers,
+    LOOP_FIT_BEST, LOOP_FIT_STALL,
 )
 # lane n7-device-linalg-ops: the linear-algebra step ops gate on these words
 # under core's names (core/step_gate.mojo), so the classical packages need
@@ -55,8 +56,9 @@ struct LoopRegisters(Movable):
         # integ/pre-0867-w2: words 0-5 are the loop's (DONE 0, STOP_ITER 1,
         # ITER 2, STOPPED 3, BAD 4, GATE 5; lane X1's OP_LOOP_APPEND /
         # OP_LOOP_ITER_WORD read GATE and ITER), STEP_FAIL is word 6 (lane N7),
-        # word 7 is free.
+        # Program.fit's best-loss / stall words are 7 and 8 (integ-w3).
         comptime assert STEP_FAIL != LOOP_STOPPED and STEP_FAIL != LOOP_BAD and STEP_FAIL != LOOP_GATE, "STEP_FAIL collides with a loop register word"
+        comptime assert STEP_FAIL != LOOP_FIT_BEST and STEP_FAIL != LOOP_FIT_STALL and LOOP_FIT_STALL < LOOP_WORDS, "STEP_FAIL collides with Program.fit's best-loss / stall words"
         self.words = ctx.enqueue_create_buffer[DType.int32](LOOP_WORDS)
         self.host = ctx.enqueue_create_host_buffer[DType.int32](LOOP_WORDS)
 

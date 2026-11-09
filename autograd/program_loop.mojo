@@ -28,7 +28,8 @@
 #   [LOOP_BAD]        program loop: the condition was not finite
 #   [LOOP_GATE]       program loop: nonzero when this iteration's state is
 #                     committed (set by the tick, read by the commits)
-#   [LOOP_FIT_BEST]   Program.fit: the best epoch loss so far (lane x1b)
+#   [LOOP_FIT_BEST]   Program.fit: the best epoch loss so far (lane x1b; word 7,
+#                     after core/step_gate.mojo STEP_FAIL = word 6)
 #   [LOOP_FIT_STALL]  Program.fit: epochs since the loss last improved
 #
 # Lane x1b: every write an iteration makes is behind the gate, including
@@ -55,14 +56,16 @@ comptime LOOP_ITER = 2
 comptime LOOP_STOPPED = 3
 comptime LOOP_BAD = 4
 comptime LOOP_GATE = 5
-comptime LOOP_WORDS = 8
+comptime LOOP_WORDS = 9
 
 #: Program.fit's register block only (lane x1b): the best epoch loss so far
 #: and the epochs since it last improved by `tol`. The step-op device loop's
-#: Int32 block keeps STEP_FAIL in word 6 (core/step_gate.mojo); the two
-#: blocks are never the same buffer.
-comptime LOOP_FIT_BEST = 6
-comptime LOOP_FIT_STALL = 7
+#: Int32 block keeps STEP_FAIL in word 6 (core/step_gate.mojo); integ-w3 gives
+#: the fit words 7 and 8 so no word of the layout means two things, even
+#: though the two blocks are separate buffers (asserted at compile time in
+#: autograd/program_loop_device.mojo DeviceLoopWords.__init__).
+comptime LOOP_FIT_BEST = 7
+comptime LOOP_FIT_STALL = 8
 
 #: The largest bound the float32 register block counts exactly (2**24).
 comptime LOOP_MAX_EXACT = 16777216
