@@ -13,7 +13,16 @@ from bindings.classical_attributes import classical_check_layout
 from bindings.classical_pandas import classical_admit_value
 from bindings.native_owner_lifetime import native_release_admit, native_release_weakrefs
 from bindings.trees_public_state import _release_tree_values
-from bindings.trees_public_inputs import trees_table, trees_call, trees_view, trees_check_rank, trees_cast, trees_empty, trees_vector, trees_full_f32, trees_address, trees_reshape
+from bindings.trees_public_inputs import trees_table, trees_call, trees_cast, trees_full_f32, trees_address, trees_reshape
+from bindings.admitted_input import admitted_array, admitted_vector, admit_c_view, admitted_dtype, classical_view
+from bindings.classical_arrays import classical_address, classical_c_order
+# TOMBSTONE: trees_view / trees_check_rank / trees_empty / trees_vector uses (the trees admission aliases; the serial strided element copy of _snapshot) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
+
+
+def _check_rank(view: PythonObject, rank: Int, name: String) raises:
+    if Int(py=view.ndim) != rank:
+        raise Error("mojolearn: " + name + " must be " + String(rank) + "-D, got " + String(Int(py=view.ndim)) + "-D")
 from providers.python.array_metadata_pyapi import array_owner_once
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 
@@ -97,32 +106,26 @@ def _snapshot(source: PythonObject, dtype: String, rank: Int, name: String,
     else:
         classical_admit_value(source, context)
         var owners = array_owner_once(source, context)
-        var view = trees_view(source, name, context)
-        trees_check_rank(view, rank, name)
-        var shape = Python.tuple(view.shape[0]) if rank == 1 else Python.tuple(view.shape[0], view.shape[1])
-        # Copy captured strides before any extension call releases the GIL.
-        # Each distinct source owner is admitted/captured once per operation.
-        raw = trees_empty(shape, view.typestr, context)
+        # The source in C order (admit_c_view: a strided export is one
+        # C-order copy in C), then one block copy into the snapshot, made
+        # before any extension call releases the GIL. Each distinct source
+        # owner is admitted/captured once per operation.
+        var view = admit_c_view(source, name, context, True)
+        _check_rank(view, rank, name)
+        var shape = Python.tuple(Int(py=view.shape[0])) if rank == 1 else Python.tuple(Int(py=view.shape[0]),
+                                                                                      Int(py=view.shape[1]))
+        raw = admitted_array(shape, admitted_dtype(view, context), context)
         var dst = _U8(unsafe_from_address=trees_address(raw))
-        var cols = view.shape[1] if rank == 2 else 1
-        if view.c_order():
-            # The common C-contiguous buffer: one block copy (lane
-            # perf-trees-owed, 2026-11-06: one memcpy per element before).
-            if view.size() > 0:
-                memcpy(dest=dst, src=_U8(unsafe_from_address=view.addr), count=view.size() * view.item)
-        else:
-            for row in range(view.shape[0]):  # driver-loop: admitted buffer layout, no numerical algorithm
-                for col in range(cols):  # driver-loop: physical input strides
-                    var offset = row * view.strides[0] + (col * view.strides[1] if rank == 2 else 0)
-                    memcpy(dest=dst + (row * cols + col) * view.item,
-                           src=_U8(unsafe_from_address=view.addr + offset), count=view.item)
+        if Int(py=view.size) > 0:
+            memcpy(dest=dst, src=_U8(unsafe_from_address=Int(py=classical_address(view))),
+                   count=Int(py=view.size) * Int(py=view.itemsize))
         py_setitem(snapshots, identity, Python.tuple(source, raw, owners))
         _ = owners
         _ = view
     var source_type = String(raw.dtype)
     if source_type == dtype:
         return raw
-    var out = trees_empty(raw.shape, dtype, context)
+    var out = admitted_array(raw.shape, dtype, context)
     _ = _entry(context["trees_helpers"], "cast_elements")
     var count = Int(py=raw.shape[0]) * (Int(py=raw.shape[1]) if rank == 2 else 1)
     trees_cast(trees_address(raw), source_type, trees_address(out), dtype, count, context)
@@ -140,12 +143,12 @@ def _tree_offsets_size(source: PythonObject, context: PythonObject, snapshots: P
     if not py_contains(snapshots, identity):
         classical_admit_value(source, context)
         var owners = array_owner_once(source, context)
-        var view = trees_view(source, "tree offsets", context)
-        trees_check_rank(view, 1, "tree offsets")
-        if view.typestr == "<i4" and view.c_order():
-            if view.shape[0] != 2:
+        var view = classical_view(source, context, "tree offsets", True)
+        _check_rank(view, 1, "tree offsets")
+        if admitted_dtype(view, context) == "<i4" and classical_c_order(view, context):
+            if Int(py=view.shape[0]) != 2:
                 raise Error("ValueError: a DART tree must hold one tree")
-            var tp = _I32(unsafe_from_address=view.addr)
+            var tp = _I32(unsafe_from_address=Int(py=classical_address(view)))
             lo = Int(tp[0])
             hi = Int(tp[1])
             _ = view
@@ -180,12 +183,12 @@ def _copy_into(source: PythonObject, dtype: String, size: Int, name: String, des
     if not py_contains(snapshots, identity):
         classical_admit_value(source, context)
         var owners = array_owner_once(source, context)
-        var view = trees_view(source, name, context)
-        trees_check_rank(view, 1, name)
-        if view.typestr == dtype and view.item == 4 and view.c_order():
-            if view.shape[0] != size:
+        var view = classical_view(source, context, name, True)
+        _check_rank(view, 1, name)
+        if admitted_dtype(view, context) == dtype and Int(py=view.itemsize) == 4 and classical_c_order(view, context):
+            if Int(py=view.shape[0]) != size:
                 raise Error("ValueError: DART node buffers differ from tree offsets")
-            memcpy(dest=dst, src=_U8(unsafe_from_address=view.addr), count=size * 4)
+            memcpy(dest=dst, src=_U8(unsafe_from_address=Int(py=classical_address(view))), count=size * 4)
             _ = view
             _ = owners
             _ = dest
@@ -246,7 +249,7 @@ def _flat(model: PythonObject, fields: PythonObject, context: PythonObject,
         scales = _snapshot(_get(fields, "tree_coefs_"), "<f4", 1, "tree coefficients", context, snapshots)
         if Int(py=scales.shape[0]) != count:
             raise Error("ValueError: DART tree coefficient count differs from tree count")
-        var offsets = trees_vector(count + 1, "<i4", context)
+        var offsets = admitted_vector(count + 1, "<i4", context)
         var off = _I32(unsafe_from_address=trees_address(offsets))
         # One pass reads each member's four node arrays where they are and
         # writes them once into the flat buffers (lane ne2-b-members, N085,
@@ -275,10 +278,10 @@ def _flat(model: PythonObject, fields: PythonObject, context: PythonObject,
             sizes.append(size)
             total += size
             off[i + 1] = Int32(total)
-        var columns = trees_vector(total, "<i4", context)
-        var questions = trees_vector(total, "<f4", context)
-        var children = trees_vector(total, "<i4", context)
-        var vals = trees_vector(total, "<f4", context)
+        var columns = admitted_vector(total, "<i4", context)
+        var questions = admitted_vector(total, "<f4", context)
+        var children = admitted_vector(total, "<i4", context)
+        var vals = admitted_vector(total, "<f4", context)
         var at = 0
         for i in range(count):  # driver-loop: write each fitted tree's nodes into the flat buffers
             var parts = sources[i]
@@ -290,7 +293,7 @@ def _flat(model: PythonObject, fields: PythonObject, context: PythonObject,
             at += size
         var expanded = vals
         if k > 1:
-            expanded = trees_vector(total * k, "<f4", context)
+            expanded = admitted_vector(total * k, "<f4", context)
             _ = py_call(_entry(table, "x_trees_spread_leaves"), trees_address(vals), trees_address(offsets), trees_address(expanded), Python.list(total, count, k))
         arrays = Python.list(offsets, columns, questions, children, expanded)
     return Python.tuple(py_call(native_loaded_module("builtins").tuple, arrays), scales, initial)
@@ -444,8 +447,8 @@ def _construct(fields: PythonObject, args: PythonObject, context: PythonObject) 
             raise Error("ValueError: TreeExplainer requires increasing tree offsets")
     if nn < 1 or Int(py=forest[1].shape[0]) != nn or Int(py=forest[2].shape[0]) != nn or Int(py=forest[3].shape[0]) != nn or Int(py=forest[4].shape[0]) != nn * k:
         raise Error("ValueError: TreeExplainer node buffers differ from forest offsets")
-    var cover = trees_vector(nn, "<i4", context)
-    var meta = trees_vector(3, "<i4", context)
+    var cover = admitted_vector(nn, "<i4", context)
+    var meta = admitted_vector(3, "<i4", context)
     var addresses = Python.list()
     # Hold backing storage independently; public Array slots can change.
     # The private owner must not retain mutable exposed Array metadata.
@@ -538,7 +541,7 @@ def trees_explainer_operation(model: PythonObject, operation: String, args: Pyth
     var nn = Int(py=shape[2])
     var slots = Int(py=shape[3])
     var width = Int(py=shape[4])
-    var phi = trees_vector(n * d * k, "<f4", context)
+    var phi = admitted_vector(n * d * k, "<f4", context)
     if held[].handle > 0:
         _ = py_call(state[7], held[].handle, trees_address(x), trees_address(phi), Python.list(n, slots, width))
     else:

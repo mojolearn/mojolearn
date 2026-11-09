@@ -29,7 +29,7 @@ from providers.python.estimator_lifecycle_pyapi import estimator_feature_check
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_arrays import classical_address
 from bindings.admitted_input import admit_x
-from bindings.classical_labels import labels_f32
+from bindings.admitted_input import admit_f32
 from bindings.metrics_cls_native import metrics_cls_operation
 from providers.python.estimator_binding_pyapi import estimator_binding_mode
 from providers.python.classical_family_admission_pyapi import classical_family_admit
@@ -37,7 +37,10 @@ from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.native_array_storage import native_array_zeros
 from bindings.sequential_admission import _one_of
 from bindings.classifier_public_lifecycle import _feature_names
-from providers.python.decomp_input_pyapi import decomp_input_snapshot
+from bindings.admitted_input import admit_x_unrecorded, classical_view
+from bindings.classical_arrays import classical_kind
+from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
+from providers.python.array_metadata_pyapi import array_shape_once, array_metadata_once
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.decomp_kit_native import (
     DecompKit, decomp_int, decomp_float, decomp_entries, decomp_is_a,
@@ -131,14 +134,58 @@ def _pls_require_fitted(fields: PythonObject, operation: String, context: Python
         raise Error("NotFittedError: This " + String(fields["_pls_name"]) + " instance is not fitted yet. Call 'fit' with appropriate arguments before using " + operation + ".")
 
 
+def _pls_input(source: PythonObject, name: String, context: PythonObject, ndim: Int = 2, public_name: String = "",
+               public_target: Bool = False, sparse_allowed: Bool = True) raises -> ArrayMetadata:
+    """A PLS operand through the one admission (bindings/admitted_input.mojo):
+    the public X by admit_x_unrecorded (scikit-learn's refusals and wording),
+    a target or fitted operand of rank `ndim` (-1: 1-D or 2-D) by admit_f32;
+    then its captured metadata (array_metadata_once) for DecompKit. A
+    float32 C-order operand is borrowed, anything else one parallel cast
+    with the finite test in the pass."""
+    # TOMBSTONE: decomp_input_snapshot (providers/python/decomp_input_pyapi.mojo, PLS's own cast-and-scan copy) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+    # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
+    var value = source
+    var format = host_sparse_format(source)
+    if format.byte_length() > 0:
+        if not sparse_allowed:
+            raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (" + public_name + " takes dense X only.)")
+        value = host_sparse_dense(source, format, context)
+    var array = PythonObject(None)
+    if public_name != "" and not public_target:
+        array = admit_x_unrecorded(value, public_name, context).array
+    else:
+        var view = classical_view(value, context, name)
+        if classical_kind(view, context) == "c":
+            if public_name != "":
+                raise Error("Complex data not supported: " + public_name + " got a complex y.")
+            raise Error("TypeError: mojolearn: " + name + " has a non-numeric dtype")
+        var nd = Int(py=view.ndim)
+        if (ndim >= 0 and nd != ndim) or nd == 0 or nd > 2:
+            raise Error("mojolearn: " + name + " must be " + String(ndim if ndim >= 0 else 2) + "-D, got "
+                        + String(nd) + "-D")
+        try:
+            array = admit_f32(view, nd, name, context, admitted=True).array
+        except error:
+            if "contains NaN or infinity" in String(error):
+                if public_target and public_name != "":
+                    raise Error("Input y contains NaN or infinity (" + public_name + ").")
+                raise Error(name + ": input must be finite; NaN/inf are unsupported")
+            raise error^
+        _ = view^
+    var snapshot = array_metadata_once(array, array_shape_once(array, context), name, context)
+    # Pin the caller's object with the admitted words for the operation.
+    snapshot.owner = Python.tuple(source, snapshot.owner)
+    return snapshot^
+
+
 def _matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
-    var input = decomp_input_snapshot(source, name, context)
+    var input = _pls_input(source, name, context)
     return kit.input_snapshot(input, input.shape[0], input.shape[1])
 
 
 def _row(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
     # A fitted 1-D float32 vector as a 1 x n matrix.
-    var input = decomp_input_snapshot(source, name, context, 1)
+    var input = _pls_input(source, name, context, 1)
     return kit.input_snapshot(input, 1, input.shape[0])
 
 
@@ -148,7 +195,7 @@ def _fitted_matrix(mut kit: DecompKit, source: PythonObject, name: String, conte
     var hit = kit.resident_hit(source, name)  # frozen and resident: no re-admission
     if hit >= 0:
         return hit
-    var input = decomp_input_snapshot(source, name, context)
+    var input = _pls_input(source, name, context)
     var held = kit.resident_input(source, name, input.keep, input.source.addr, input.owner, input.shape[0], input.shape[1])
     if held >= 0:
         return held
@@ -160,7 +207,7 @@ def _fitted_row(mut kit: DecompKit, source: PythonObject, name: String, context:
     var hit = kit.resident_hit(source, name)  # frozen and resident: no re-admission
     if hit >= 0:
         return hit
-    var input = decomp_input_snapshot(source, name, context, 1)
+    var input = _pls_input(source, name, context, 1)
     var held = kit.resident_input(source, name, input.keep, input.source.addr, input.owner, 1, input.shape[0])
     if held >= 0:
         return held
@@ -174,7 +221,7 @@ def _target(mut kit: DecompKit, source: PythonObject, context: PythonObject,
     # and address instead of source.shape, source.reshape or __array__ hooks.
     if source is None:
         return (Int(-1), False)
-    var input = captured.value().copy() if captured else decomp_input_snapshot(source, "Y", context, -1)
+    var input = captured.value().copy() if captured else _pls_input(source, "Y", context, -1)
     if len(input.shape) == 2:
         return (kit.input_snapshot(input, input.shape[0], input.shape[1]), False)
     var row = kit.input_snapshot(input, 1, input.shape[0])
@@ -432,11 +479,11 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
             raise Error("NotImplementedError: mojolearn: the PLS score needs the native metrics owner "
                         + "(family_mcls_r2); this install does not carry it")
         var binding = _score_binding(fields, owner[1])
-        var truth = labels_f32(args[1], -1, "C", "y", context)
+        var truth = admit_f32(args[1], -1, "y", context, allow_nonfinite=True)
         var prediction = pls_operation(model, "predict", Python.tuple(args[0]), context, fields, state, captured_x)
         var mode = py_get(fields, "numeric_mode")
         var r2 = metrics_cls_operation(PythonObject(None), "family_mcls_r2",
-                         Python.tuple(binding, truth.keep, prediction, args[2], PythonObject("uniform_average"),
+                         Python.tuple(binding, truth.array, prediction, args[2], PythonObject("uniform_average"),
                                       PythonObject(True), mode), owner[1])
         _ = truth^
         return r2
@@ -488,13 +535,13 @@ def pls_public_operation(model: PythonObject, operation: String, args: PythonObj
     var fitting = operation == "fit" or operation == "fit_transform"
     var name = String(fields["_pls_name"])
     var sparse = Bool(py=fields["_pls_regression"])
-    var x = decomp_input_snapshot(args[0], "X", context, 2, name, False, sparse)
+    var x = _pls_input(args[0], "X", context, 2, name, False, sparse)
     var y = Optional[ArrayMetadata]()
     if fitting:
         var target = args[1] if args[1] is not None else args[2]
         if target is None:
             raise Error(name + " requires y to be passed, but the target y is None.")
-        y = decomp_input_snapshot(target, "Y", context, -1, name, True)
+        y = _pls_input(target, "Y", context, -1, name, True)
         if x.shape[0] != y.value().shape[0]:
             raise Error("Found input variables with inconsistent numbers of samples: [" + String(x.shape[0]) + ", " + String(y.value().shape[0]) + "]")
     elif operation != "inverse_transform":

@@ -41,7 +41,8 @@ from bindings.family_common import (
 )
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense, _sparse_fields
 from bindings.native_buffer_owner import native_buffer_view
-from bindings.classical_labels import _any_contiguous_address
+# TOMBSTONE: _any_contiguous_address use (the labels admission copy's buffer address read) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.neighbors_knn_native import knn_door
 from core.host_finite_scan import host_all_finite_f32
 from bindings.p3nc_fitted_freeze import fitted_freeze
@@ -118,10 +119,9 @@ def _kde_borrowed(source: PythonObject, x: PythonObject, context: PythonObject) 
     if py_type(source) is context["array_class"]:
         return address == Int(py=classical_address(source))
     try:
-        var view = native_buffer_view(source)
-        var same = _any_contiguous_address(view) == address
-        _ = view^
-        return same
+        # The exporter's own data address (classical_address: an ndarray's,
+        # or a buffer export's first element).
+        return Int(py=classical_address(source)) == address
     except:
         return False
 

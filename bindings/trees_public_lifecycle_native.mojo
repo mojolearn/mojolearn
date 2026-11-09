@@ -19,7 +19,8 @@ from providers.python.estimator_lifecycle_pyapi import estimator_outside as _out
 from bindings.sequential_inputs import sequential_input
 from bindings.trees_public_forest import forest_fit, forest_public_predict, forest_kind, forest_get_params, forest_check_fit_device
 from bindings.trees_public_score import forest_score_public
-from bindings.trees_public_inputs import trees_empty, trees_address, trees_cast, TreesMatrix
+from bindings.trees_public_inputs import trees_address, trees_cast
+from bindings.admitted_input import admitted_array
 from bindings.trees_public_auxiliary import forest_auxiliary, forest_shape
 from bindings.trees_public_state import forest_restore_state, tree_is_fitted
 from bindings.trees_side_records import trees_admit_parameters, trees_finite_mark, trees_finite_clear
@@ -89,7 +90,13 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
     # (one parallel finiteness scan, no cast), otherwise one parallel cast;
     # a matrix the running meta-estimator holds is taken as it is
     # (bindings/admitted_registry.mojo, consulted by admit_x_unrecorded).
-    var admitted = admit_x_unrecorded(args[0], name, context, True)
+    # Lane a1b (part 2): a fit defers the finite test of a borrowed X to its
+    # kernel entry, which tests the words it uploads (the forest fit's
+    # device scan, `forest_device_scan`; the CPU column's host scan in
+    # trees_public_forest `_finite_or_refuse`): no host pass here. A cast X
+    # is tested in its cast pass. Predict keeps the door's parallel scan
+    # (its entries test nothing).
+    var admitted = admit_x_unrecorded(args[0], name, context, True, defer_finite=fitting)
     var x = admitted.array
     var kind = forest_kind(model, context)
     var classifier = kind.endswith("_classifier")
@@ -98,7 +105,7 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
         # The admitted X is the predict's matrix as is (lane A1
         # admit-trees-labels: it was viewed a second time through trees_f32;
         # lane perf-trees-owed, 2026-11-06, had removed the third).
-        var matrix = TreesMatrix(admitted.array, admitted.address, admitted.rows, admitted.cols, True)
+        var matrix = admitted.copy()
         classical_check_width(matrix.cols, Int(py=fields["n_features_in_"]), name)
         _feature_check(model, fields, args[0], context)
         if operation == "trees_public_forest_predict":
@@ -126,9 +133,11 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
             raise Error("TypeError: native forest fit depth must be an exact integer")
         var depth = Int(py=depth_object)
         py_setitem(fields, "_mojolearn_fitting", PythonObject(depth + 1))
-        # admit_x refused NaN and infinity in x: the fit skips its
-        # second scan of it (trees_side_records `trees_finite_known`).
-        trees_finite_mark(x)
+        # A cast X was tested in its cast pass: the fit skips its second
+        # scan of it (trees_side_records `trees_finite_known`). A borrowed
+        # X is the entry's to test (defer_finite above).
+        if admitted.finite:
+            trees_finite_mark(x)
         try:
             result = forest_fit(model, Python.tuple(x, y, args[2], args[3], args[4]), context)
         finally:
@@ -155,7 +164,7 @@ def _public_result(var result: PythonObject, operation: String, classifier: Bool
                    context: PythonObject) raises -> PythonObject:
     if classical_is_array(result, context) and py_get(context, "ndarray") is not None and _outside():
         if operation == "trees_public_forest_predict" and not classifier and String(result.dtype) == "<f4":
-            var wide = trees_empty(result.shape, "<f8", context)
+            var wide = admitted_array(result.shape, "<f8", context)
             trees_cast(trees_address(result), "<f4", trees_address(wide), "<f8", Int(py=result.size), context)
             _ = result
             result = wide

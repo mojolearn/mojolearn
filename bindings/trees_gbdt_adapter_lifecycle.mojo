@@ -19,7 +19,9 @@ from bindings.parallel_public_result import parallel_public_result
 from providers.python.estimator_lifecycle_pyapi import estimator_feature_check
 from bindings.trees_constructor_native import tree_parameter_storage
 from bindings.trees_public_state import _release_tree_values, tree_is_fitted
-from bindings.trees_public_inputs import trees_view, trees_check_rank, trees_f32_view
+from bindings.admitted_input import admit_f32, classical_view
+# TOMBSTONE: trees_view / trees_check_rank / trees_f32_view uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.native_loaded_module import NativeModules
 from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_fields
 from bindings.native_model_records import (
@@ -191,12 +193,10 @@ def gbdt_adapter_public_operation(model: PythonObject, operation: String, args: 
     classical_admit_value(args, native)
     var name = classical_estimator_name(model)
     classical_refuse_sparse(args[0], name)
-    # trees_view snapshots native input metadata and its owner once. The tree
-    # conversion preserves NaN; classical_check_x's finite-only cast would
-    # incorrectly discard the adapter's documented nan_mode behavior.
-    var view = trees_view(args[0], "X", native)
-    trees_check_rank(view, 2, "X")
-    var x = trees_f32_view(view^, "C", native)
+    # One admission of X (admit_f32). The tree conversion preserves NaN
+    # (allow_nonfinite): a finite-only cast would discard the adapter's
+    # documented nan_mode behavior.
+    var x = admit_f32(args[0], 2, "X", native, allow_nonfinite=True)
     var classifier = String(kind) == "classifier"
     if fitting:
         var params = _read(model, False, native["trees_gbdt_parameter_metadata"], Python.list())
@@ -228,7 +228,7 @@ def gbdt_adapter_public_operation(model: PythonObject, operation: String, args: 
         py_setitem(fields, "_mojolearn_fitting", PythonObject(depth + 1))
         var result = PythonObject(None)
         try:
-            var inputs = Python.tuple(x.keep, y, args[2], args[3])
+            var inputs = Python.tuple(x.array, y, args[2], args[3])
             result = adapter_classifier_fit(model, inputs, native) if classifier else adapter_regressor_fit(model, inputs, native)
         finally:
             if depth > 0:
@@ -253,13 +253,13 @@ def gbdt_adapter_public_operation(model: PythonObject, operation: String, args: 
     if method == "score":
         if classifier:
             lda_native_labels(args[1], native)
-        result = gbdt_adapter_score(model, Python.tuple(x.keep, args[1], args[2]), native)
+        result = gbdt_adapter_score(model, Python.tuple(x.array, args[1], args[2]), native)
     elif operation.endswith("_decision") or operation.endswith("_regression_predict"):
-        result = adapter_decision_function(model, x.keep, native)
+        result = adapter_decision_function(model, x.array, native)
     elif operation.endswith("_proba"):
-        result = adapter_predict_proba(model, x.keep, native)
+        result = adapter_predict_proba(model, x.array, native)
     elif operation.endswith("_predict"):
-        result = adapter_predict(model, x.keep, native)
+        result = adapter_predict(model, x.array, native)
     else:
         raise Error("unknown native GBDT adapter operation " + operation)
     _ = x
@@ -305,8 +305,8 @@ def _gbdt_model_y(y: PythonObject, rows: Int, model: PythonObject, fields: Pytho
         return y
     var column = False
     try:
-        var yv = trees_view(y, "y", native)
-        column = yv.ndim() == 2 and yv.shape[1] == 1
+        var yv = classical_view(y, native, "y")
+        column = Int(py=yv.ndim) == 2 and Int(py=yv.shape[1]) == 1
         _ = yv^
     except:
         # not a numeric array: the inner fit reports it in its own words
@@ -340,10 +340,11 @@ def gbdt_model_public_operation(model: PythonObject, operation: String, args: Py
                 return gbdt_predict_proba(model, args[0], context)
             return gbdt_predict(model, args[0], context)
     classical_refuse_sparse(args[0], name)
-    var view = trees_view(args[0], "X", native)
-    trees_check_rank(view, 2, "X")
-    var rows = view.shape[0]
-    var cols = view.shape[1]
+    var view = classical_view(args[0], native, "X")
+    if Int(py=view.ndim) != 2:
+        raise Error("X must be 2-D")
+    var rows = Int(py=view.shape[0])
+    var cols = Int(py=view.shape[1])
     _ = view^
     if fitting:
         var inputs = args

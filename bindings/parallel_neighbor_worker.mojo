@@ -10,7 +10,8 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_labels import labels_cast, labels_reshape, labels_view, labels_check_rank, classical_decode_labels
+from bindings.classical_labels import labels_cast, labels_reshape, classical_decode_labels
+from bindings.admitted_input import admit_ids
 from bindings.family_common import family_call, family_entry, family_array
 from bindings.parallel_shard_common import shard_model, shard_rows, shard_dtype, shard_item, shard_array
 from bindings.host_archive_native import host_archive_rbc_metric_object
@@ -443,23 +444,9 @@ def parallel_neighbor_worker(operation: String, args: PythonObject, tables: Pyth
 
 
 def _i32_vector(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    var view = labels_view(source, name, context)
-    labels_check_rank(view, 1, name)
-    var n = view.size()
-    var out = family_array(Python.tuple(n), "<i4", context)
-    var src = view.addr
-    var contiguous = PythonObject(None)
-    if view.strides[0] != view.item:
-        contiguous = family_array(Python.tuple(n), view.typestr, context)
-        var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(contiguous)))
-        for i in range(n):  # driver-loop: gather a strided metadata vector before one native cast
-            memcpy(dest=dst + i * view.item,
-                   src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=src + i * view.strides[0]), count=view.item)
-        src = Int(py=classical_address(contiguous))
-    labels_cast(src, view.typestr, Int(py=classical_address(out)), "<i4", n, context)
-    _ = view.keep
-    _ = contiguous
-    return out
+    # The one integer admission (lane a1b: was labels_view, a serial strided
+    # gather and labels_cast): one parallel read of the exporter's strides.
+    return admit_ids(source, name, context, wide=False)
 
 
 def parallel_ivf_admit(index: PythonObject, tables: PythonObject, context: PythonObject) raises -> PythonObject:

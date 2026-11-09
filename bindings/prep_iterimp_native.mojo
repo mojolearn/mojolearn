@@ -17,7 +17,8 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_arrays import classical_typed, classical_wrap_array
-from bindings.classical_labels import LabelsView, labels_view
+from bindings.admitted_input import classical_view
+from bindings.classical_arrays import classical_dtype_str, classical_address
 from bindings.scaler_native import _stage, _ptr
 from bindings.scaler_lifecycle_native import _entries
 from bindings.x_prep_native_owner import xprep_values
@@ -155,22 +156,24 @@ def _pred_f64(v: PythonObject, context: PythonObject) raises -> List[Float64]:
     var b = _b()
     var cls = py_type(v)
     if not (cls is b.list or cls is b.tuple):
-        var found = Optional[LabelsView](None)
+        var found = True
+        var view = PythonObject(None)
         try:
-            found = labels_view(v, "predict", context)
+            view = classical_view(v, context, "predict")
         except:
-            found = None
+            found = False
         if found:
-            var view = found.value().copy()
-            var t = view.typestr
-            if view.ndim() == 1 and (t == "<f4" or t == "<f8") and view.size() > 0:
+            var t = classical_dtype_str(view, context)
+            var size = Int(py=view.shape[0]) if Int(py=view.ndim) == 1 else 0
+            if Int(py=view.ndim) == 1 and (t == "<f4" or t == "<f8") and size > 0:
                 var out = List[Float64]()
-                var step = view.strides[0]
-                for i in range(view.size()):  # cpu-route: the user estimator's predictions, widened once
+                var step = Int(py=view.strides[0])
+                var addr = Int(py=classical_address(view))
+                for i in range(size):  # cpu-route: the user estimator's predictions, widened once
                     if t == "<f4":
-                        out.append(Float64(F32P(unsafe_from_address=view.addr + i * step)[0]))
+                        out.append(Float64(F32P(unsafe_from_address=addr + i * step)[0]))
                     else:
-                        out.append(F64P(unsafe_from_address=view.addr + i * step)[0])
+                        out.append(F64P(unsafe_from_address=addr + i * step)[0])
                 _ = view  # keep the Python object alive through the reads above
                 return out^
     var listed = py_call(v.tolist) if Bool(py=py_call(b.hasattr, v, "tolist")) else v

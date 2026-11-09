@@ -18,8 +18,21 @@
 #   behaviour): `defer_finite` (the entry tests a borrowed X), `device_x`
 #   (a DeviceRows fold stays a device handle), `order` ("C" or "F": one
 #   parallel cast-and-transpose pass), `as_array` (a mojolearn Array, never
-#   an ndarray). A matrix held in bindings/admitted_registry.mojo by the
+#   an ndarray), `allow_nonfinite` (NaN and infinity pass: imputers and
+#   the NaN-accepting doors; `finite` stays False). A matrix held in bindings/admitted_registry.mojo by the
 #   running operation is returned as it is (C order, not as_array).
+#   admit_f32(source, ndim, name, context, ...) -> AdmittedX
+#                     the array form as an AdmittedX (ndim -1: any rank up
+#                     to 2): targets, fitted arrays, published predictions
+#   admit_weight_words(source, rows, context) -> AdmittedX
+#                     admit_weights as an AdmittedX; None is `rows` ones
+#   admit_c_view(source, name, context) -> array
+#                     any numeric input in its own dtype, C order (a view, or
+#                     one C-order copy of a strided export)
+#   admitted_dtype(view, context) -> String
+#                     the Array typestr of a view's items
+#   admit_ids(source, name, context, wide) -> Array
+#                     a 1-D integer input as fresh int64 / int32 words
 #   admit_y(...)      the float fit target (one column, finite, as long as X)
 #   admit_weights(...)  sample_weight as `rows` float32 words (None stays None)
 #   admitted_storage(shape, typestr, context)
@@ -27,7 +40,16 @@
 #                     destination written in full before it is read
 #   admitted_storage_f32(rows, cols, context)
 #                     its float32 rows (cols == 0) or rows x cols form
-#   admitted_finite_refuse(x, status, est)
+#   admitted_array(shape, typestr, context, order) / admitted_vector(count,
+#                     typestr, context)
+#                     THE zero-filled mojolearn Array (any Array dtype) of a
+#                     destination that is partly written or accumulated into
+#                     (lane a1b: labels_empty / labels_vector / trees_empty)
+#   admitted_words(array, address, rows, cols, c_order)
+#                     an AdmittedX over float32 words the door made itself
+#                     (a kernel's output, a joined vector: lane a1b, the
+#                     former LabelsMatrix / TreesMatrix constructor)
+#   admitted_finite_refuse(status, est)
 #                     the refusal of a deferred finite test (defer_finite)
 #   admit_rows_host(value, context)
 #                     the host rows of a DeviceRows fold, gathered in
@@ -48,8 +70,8 @@
 #   and admit_x then makes NO host pass over a float32 C-order X (it returns
 #   `finite = False`). The GPU entry enqueues `enqueue_finite_status` on the
 #   upload it makes in any case and reads the word back with its result; the
-#   host entry (CPU column) calls `host_finite_status`
-#   (core/admitted_finite_status.mojo); the door refuses through
+#   host entry (CPU column) calls core/host_finite_scan.mojo
+#   `host_all_finite_f32`; the door refuses through
 #   `admitted_finite_refuse`. A door that does not opt in keeps the parallel
 #   host scan here (core/host_finite_scan.mojo). A cast input is tested in
 #   the cast pass itself, so it is never deferred.
@@ -69,16 +91,19 @@ from bindings.admitted_call import AdmittedCall, admitted_input_dense, ADMITTED_
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays import (
     classical_wrap_array, _store_code, classical_input, classical_kind, classical_address, classical_cast_kind,
-    classical_is_array, classical_is_f32, classical_c_order, classical_numpy,
+    classical_is_array, classical_is_f32, classical_c_order, classical_numpy, classical_dtype_str,
 )
+from bindings.native_buffer_owner import native_buffer_view
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, classical_admit_value
 from bindings.classical_warnings import classical_warn_column
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
-from bindings.native_array_storage import native_scratch_bytes, native_array_zeros
+from bindings.native_array_storage import native_scratch_bytes, native_array_zeros, native_array_from_values, native_array_from_bytes
+from bindings.py_attr import py_attr
 from bindings.admitted_registry import admitted_held_index, admitted_held_address, admitted_held_rows, admitted_held_cols
 from bindings.device_rows_door import door_is_device_rows, DoorRows
-from core.admitted_input import admitted_check_f32, admitted_check_weights_f32
+from core.admitted_input import admitted_check_f32, admitted_check_weights_f32, admitted_cast_f32
+from core.admitted_ids import admitted_ids_i64, admitted_ids_i32
 from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_NONFINITE, ARG_OUT_OF_RANGE
 
 comptime RESHAPE_HINT = "Reshape your data either using array.reshape(-1, 1) if your data has a single feature or array.reshape(1, -1) if it contains a single sample."
@@ -86,7 +111,7 @@ comptime RESHAPE_HINT = "Reshape your data either using array.reshape(-1, 1) if 
 comptime _ADM_F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
-struct AdmittedX(Movable):
+struct AdmittedX(Copyable, Movable):
     """One admitted float array of a public call, as the kernels read it.
 
     This is the contract every admission lane builds on (A1-A4 of the
@@ -151,6 +176,51 @@ struct AdmittedX(Movable):
         self.c_order = True
 
 
+def admitted_words(array: PythonObject, address: Int, rows: Int, cols: Int, c_order: Bool = True) -> AdmittedX:
+    """An AdmittedX over `rows` x `cols` float32 words at `address` that the
+    door made itself (a fresh vector, a kernel's output, a joined block):
+    `array` owns them. Finite is not claimed for anything but the words
+    admit_x tested, so `finite` is False; nothing is borrowed."""
+    var x = AdmittedX(array, array, address, rows, cols, 2 if cols > 1 else 1, False, False)
+    x.c_order = c_order
+    return x^
+
+
+def _array_itemsize(typestr: String) raises -> Int:
+    """The item width of an Array dtype (refuses any other typestr)."""
+    if typestr == "<f8" or typestr == "<i8":
+        return 8
+    if typestr == "<f4" or typestr == "<i4" or typestr == "<u4":
+        return 4
+    if typestr == "<f2" or typestr == "<u2":
+        return 2
+    if typestr == "<u1" or typestr == "<i1":
+        return 1
+    raise Error("TypeError: " + typestr + " is not an Array dtype")
+
+
+def admitted_array(shape: PythonObject, typestr: String, context: PythonObject, order: String = "C") raises -> PythonObject:
+    """A new ZERO-FILLED mojolearn Array of `shape` (a tuple of native ints)
+    and any Array dtype, assembled from its slots; never an ndarray. THE
+    zero-filled allocator of a destination that is partly written or
+    accumulated into (or whose zeros are read)."""
+    # Lane a1b-doors-opt-in-trees-linear: labels_empty / labels_vector (and
+    # their trees_empty alias) moved here word for word: one zero store
+    # (native_array_zeros), the same zero bytes as before.
+    # TOMBSTONE: labels_empty / labels_vector / trees_empty (bindings/classical_labels.mojo) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+    # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
+    var count = 1
+    for k in range(len(shape)):  # driver-loop: over array rank metadata
+        count *= Int(py=shape[k])
+    _ = _array_itemsize(typestr)  # refuses a non-Array dtype
+    return classical_wrap_array(native_array_zeros(_store_code(typestr), count), shape, typestr, order, context)
+
+
+def admitted_vector(count: Int, typestr: String, context: PythonObject) raises -> PythonObject:
+    """`admitted_array((count,), typestr, context)`: a zero-filled vector."""
+    return admitted_array(Python.tuple(count), typestr, context)
+
+
 def _repr(value: PythonObject) raises -> String:
     return String(py_call(native_loaded_module("builtins").repr, value))
 
@@ -194,14 +264,14 @@ def admitted_storage(shape: PythonObject, typestr: String, context: PythonObject
     installed (a door whose result must never be an ndarray)."""
     # The zero-fill-then-overwrite sites that move here are listed by owning
     # lane in ~/mojolearn-evidence/a5-zero-fill-sites.md.
-    var key = _admitted_storage_key(typestr)
     if order != "C" and order != "F":
         raise Error("ValueError: admitted storage order must be 'C' or 'F', not " + order)
+    if as_array or not classical_numpy(context):
+        return admitted_array(shape, typestr, context, order)
+    var key = _admitted_storage_key(typestr)
     var count = 1
     for k in range(len(shape)):  # driver-loop: over array rank metadata
         count *= Int(py=shape[k])
-    if as_array or not classical_numpy(context):
-        return classical_wrap_array(native_array_zeros(_store_code(typestr), count), shape, typestr, order, context)
     var width = 4 if typestr == "<f4" else 8
     var storage = native_scratch_bytes(count * width)
     return py_call(context["ndarray"], shape, dtype=context[PythonObject(key)], buffer=storage, order=PythonObject(order))
@@ -209,7 +279,7 @@ def admitted_storage(shape: PythonObject, typestr: String, context: PythonObject
 
 def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject, column_target: Bool = False,
             admitted: Bool = False, defer_finite: Bool = False, order: String = "C",
-            as_array: Bool = False) raises -> PythonObject:
+            as_array: Bool = False, allow_nonfinite: Bool = False) raises -> PythonObject:
     """The float32 array of an input of rank `ndim` in `order` ("C", or "F"
     for a 2-D input): the input itself when it already is one (borrowed),
     otherwise one cast copy into uninitialised storage. `as_array`: the
@@ -230,6 +300,13 @@ def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject
     # same native call (an ndarray, or an Array without NumPy). It was
     # admitted and its pandas/Torch storage read there, so the admission walk
     # and the two storage tests are not repeated for the same value.
+    # A matrix the running meta-estimator already admitted (held in
+    # bindings/admitted_registry.mojo) is the array its members read as it
+    # is: no view, no check, no scan, in this form too (lane a1b: the
+    # array-form doors, classical_host_f32's callers among them, skipped
+    # the registry and re-checked every member's X).
+    if ndim == 2 and order == "C" and not as_array and admitted_held_index(source) >= 0:
+        return source
     var b = native_loaded_module("builtins")
     var prepared = source
     if not admitted:
@@ -243,8 +320,12 @@ def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject
     var column = column_target and ndim == 1 and nd == 2 and Int(py=value.shape[1]) == 1 and py_type(source) is not b.list and py_type(source) is not b.tuple and py_type(source) is not b.memoryview
     if column:
         classical_warn_column(context)
-    if nd != ndim and not column:
+    if ndim >= 0 and nd != ndim and not column:
         raise Error(name + " must be " + String(ndim) + "-D")
+    if nd > 2:
+        raise Error(name + " must be at most 2-D")
+    # ndim -1 (lane a1b): any rank up to 2, kept as it is (a fitted array).
+    var rank = nd if ndim < 0 else ndim
     var rows = 1 if nd == 0 else Int(py=value.shape[0])
     var cols = 1 if nd < 2 else Int(py=value.shape[1])
     if rows < 1 or cols < 1:
@@ -269,10 +350,19 @@ def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject
         in_order = classical_c_order(value, context)
     var borrowed = (not column and classical_is_f32(value, context) and in_order
                     and (not as_array or classical_is_array(value, context)))
-    var result = value if borrowed else admitted_storage_f32(rows, cols if ndim == 2 else 0, context,
+    var result = value if borrowed else admitted_storage_f32(rows, cols if rank == 2 else 0, context,
                                                              "F" if want_f else "C", as_array)
     var out = _ADM_F32P(unsafe_from_address=Int(py=classical_address(result)))
-    if not (borrowed and defer_finite):
+    if allow_nonfinite:
+        # A NaN-accepting door (imputers, missing-value encoders): the cast
+        # still runs, its finite flag is not a refusal; a borrowed input is
+        # read as it is (no pass at all).
+        if not borrowed:
+            if want_f:
+                _ = admitted_cast_f32(addr, s1, s0, cols, rows, item, kind, out)
+            else:
+                _ = admitted_cast_f32(addr, s0, s1, rows, cols, item, kind, out)
+    elif not (borrowed and defer_finite):
         if want_f:
             admitted_check_f32(addr, s1, s0, cols, rows, item, kind, name, borrowed, out)
         else:
@@ -280,6 +370,121 @@ def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject
     _ = value^
     _ = prepared^
     return result
+
+
+def admit_f32(source: PythonObject, ndim: Int, name: String, context: PythonObject, order: String = "C",
+              defer_finite: Bool = False, as_array: Bool = False, allow_nonfinite: Bool = False,
+              admitted: Bool = False) raises -> AdmittedX:
+    """`admit_x(source, ndim, name, ...)` as an AdmittedX: the float32 words
+    of an input of rank `ndim` (-1: any rank up to 2) in `order`, with its
+    rows and columns (a rank-0 or rank-1 input has one column). For the
+    inputs that are not a public X (a target, a fitted array, a published
+    prediction); a public X goes through admit_x_unrecorded / admit_x."""
+    # Lane a1b-doors-opt-in-trees-linear: the former labels_f32 /
+    # trees_f32 (bindings/classical_labels.mojo, a second cast path with its
+    # own view struct) is this call.
+    var array = admit_x(source, ndim, name, context, False, admitted, defer_finite, order, as_array,
+                        allow_nonfinite)
+    var nd = Int(py=array.ndim)
+    var rows = 1 if nd == 0 else Int(py=array.shape[0])
+    var cols = 1 if nd < 2 else Int(py=array.shape[1])
+    var x = AdmittedX(array, source, Int(py=classical_address(array)), rows, cols, nd, array is source,
+                      not allow_nonfinite and not defer_finite)
+    x.c_order = order == "C" or rows == 1 or cols == 1
+    return x^
+
+
+def admit_weight_words(source: PythonObject, rows: Int, context: PythonObject,
+                       admitted: Bool = False) raises -> AdmittedX:
+    """`admit_weights(source, rows)` as an AdmittedX of `rows` words; None
+    is `rows` ones (the unweighted fit's weights, as a fresh vector)."""
+    # Lane a1b: the former labels_check_sample_weight / trees_check_sample_weight.
+    var w: PythonObject
+    if source is None:
+        # One float32 1.0 repeated in C (`array.array.__mul__`), the store
+        # labels_full_f32 made.
+        var one = native_array_from_values(String("f"), Python.list(PythonObject(1.0)))
+        w = classical_wrap_array(py_call(py_attr(one, "__mul__"), PythonObject(rows)), Python.tuple(rows), "<f4",
+                                 "C", context)
+    else:
+        w = admit_weights(source, rows, context, admitted)
+    var x = AdmittedX(w, source, Int(py=classical_address(w)), rows, 1, 1, w is source, True)
+    return x^
+
+
+def admitted_dtype(view: PythonObject, context: PythonObject) raises -> String:
+    """The Array typestr of an admitted view's items ("<f4", "<i8", "<u1",
+    ...): a one-byte "|" type and a native "=" one read as "<", a bool as
+    its "<u1" bytes (the reading of `_buffer_typestr`). Refuses a
+    non-native byte order."""
+    var typestr = classical_dtype_str(view, context)
+    if typestr.startswith("|") or typestr.startswith("="):
+        typestr = "<" + String(typestr[byte=1:typestr.byte_length()])
+    if typestr == "<b1":
+        typestr = "<u1"
+    if not typestr.startswith("<"):
+        raise Error("TypeError: mojolearn: an input of dtype " + typestr + " must be in native byte order")
+    return typestr
+
+
+def admit_c_view(source: PythonObject, name: String, context: PythonObject, admitted: Bool = False) raises -> PythonObject:
+    """The exporter's view of an input of any numeric dtype, in C order: the
+    view itself (classical_view: an ndarray, or an Array without NumPy) when
+    its words are already C-contiguous, else one C-order copy of its bytes
+    (`memoryview.tobytes('C')`, in C) as an Array of its own dtype. For the
+    doors that read a label, prior or flag vector in its own dtype; X goes
+    through admit_x."""
+    # Lane a1b-doors-opt-in-trees-linear: the former labels_view /
+    # trees_view (a LabelsView struct over the same exporters, which
+    # linearized a strided export the same way).
+    var view = classical_view(source, context, name, admitted)
+    if classical_c_order(view, context):
+        return view
+    if classical_is_array(view, context):
+        # An F-ordered 2-D Array (an install without NumPy): its store is in
+        # storage order, so its bytes are not the C-order words.
+        raise Error("TypeError: mojolearn: " + name + " must be a C-ordered Array")
+    var typestr = admitted_dtype(view, context)
+    var exported = native_buffer_view(view)
+    var store = native_array_from_bytes(String(_store_code(typestr)), py_call(exported.tobytes, "C"))
+    var copy = classical_wrap_array(store, view.shape, typestr, "C", context)
+    _ = view^
+    return copy
+
+
+def admit_ids(source: PythonObject, name: String, context: PythonObject, wide: Bool = True,
+              admitted: Bool = False) raises -> PythonObject:
+    """A 1-D integer (or bool) input as a fresh C-order int64 (`wide`) or
+    int32 mojolearn Array: one parallel read of the exporter's own strides
+    (core/admitted_ids.mojo). Refuses another rank, a float or text input,
+    and an id that does not fit."""
+    # Lane a1b-doors-opt-in-trees-linear: index vectors, fold ids and LU
+    # pivots were read through labels_view + labels_cast (a second view
+    # struct, a strided export linearized first).
+    var view = classical_view(source, context, name, admitted)
+    if Int(py=view.ndim) != 1:
+        raise Error("mojolearn: " + name + " must be 1-D, got " + String(Int(py=view.ndim)) + "-D")
+    var kind = classical_kind(view, context)
+    if kind != "i" and kind != "u" and kind != "b":
+        raise Error("TypeError: mojolearn: " + name + " must hold integers")
+    var count = Int(py=view.shape[0])
+    var out = admitted_array(Python.tuple(count), "<i8" if wide else "<i4", context)
+    if count > 0:
+        var addr = Int(py=classical_address(view))
+        var step = Int(py=view.strides[0])
+        var item = Int(py=view.itemsize)
+        var dst = Int(py=classical_address(out))
+        var fits: Bool
+        if wide:
+            fits = admitted_ids_i64(addr, step, 0, count, 1, item, kind == "i", False,
+                                    MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=dst))
+        else:
+            fits = admitted_ids_i32(addr, step, 0, count, 1, item, kind == "i", False,
+                                    MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=dst))
+        if not fits:
+            raise Error("ValueError: mojolearn: " + name + " holds an id outside int" + ("64" if wide else "32"))
+    _ = view^
+    return out
 
 
 def classical_view(source: PythonObject, context: PythonObject, name: String = "input",
@@ -320,7 +525,7 @@ def _numeric(view: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def _cast_x(view: PythonObject, est: String, context: PythonObject, defer_finite: Bool, order: String,
-           as_array: Bool) raises -> PythonObject:
+           as_array: Bool, allow_nonfinite: Bool = False) raises -> PythonObject:
     var nd = Int(py=view.ndim)
     if nd != 2:
         raise Error("mojolearn: X must be 2-D, got " + String(nd) + "-D shape " + _repr(view.shape))
@@ -328,7 +533,7 @@ def _cast_x(view: PythonObject, est: String, context: PythonObject, defer_finite
         raise Error("TypeError: mojolearn: X has buffer format " + _repr(py_call(native_loaded_module("builtins").memoryview, view).format) + ", which is not a numeric array")
     try:
         return admit_x(view, 2, "X", context, admitted=True, defer_finite=defer_finite, order=order,
-                       as_array=as_array)
+                       as_array=as_array, allow_nonfinite=allow_nonfinite)
     except error:
         if String(error) == "Input X contains NaN or infinity":
             raise Error("Input X contains NaN or infinity (" + est + ").")
@@ -336,7 +541,7 @@ def _cast_x(view: PythonObject, est: String, context: PythonObject, defer_finite
 
 
 def _check_x_view(view: PythonObject, est: String, context: PythonObject, defer_finite: Bool = False,
-                  order: String = "C", as_array: Bool = False) raises -> PythonObject:
+                  order: String = "C", as_array: Bool = False, allow_nonfinite: Bool = False) raises -> PythonObject:
     # The one place for scikit-learn's X refusal text.
     var kind = classical_kind(view, context)
     if kind == "c":
@@ -349,7 +554,7 @@ def _check_x_view(view: PythonObject, est: String, context: PythonObject, defer_
             raise Error("Found array with 0 sample(s) (shape=" + _repr(view.shape) + ") while a minimum of 1 is required by " + est + ".")
         if nd == 2 and Int(py=view.shape[1]) == 0:
             raise Error("Found array with 0 feature(s) (shape=" + _repr(view.shape) + ") while a minimum of 1 is required by " + est + ".")
-    return _cast_x(view, est, context, defer_finite, order, as_array)
+    return _cast_x(view, est, context, defer_finite, order, as_array, allow_nonfinite)
 
 
 def _admitted_rows(source: PythonObject, est: String, context: PythonObject, device_x: Bool) raises -> AdmittedX:
@@ -405,7 +610,7 @@ def _admitted_rows(source: PythonObject, est: String, context: PythonObject, dev
 
 def _admitted_x(source: PythonObject, est: String, context: PythonObject, admitted: Bool,
                 defer_finite: Bool = False, device_x: Bool = False, order: String = "C",
-                as_array: Bool = False) raises -> AdmittedX:
+                as_array: Bool = False, allow_nonfinite: Bool = False) raises -> AdmittedX:
     """X refused with scikit-learn's wording and cast (or borrowed) as
     float32 in `order`; no admission record."""
     if order == "C" and not as_array:
@@ -421,7 +626,8 @@ def _admitted_x(source: PythonObject, est: String, context: PythonObject, admitt
             # The gather writes C-order fresh storage; an F-order or Array
             # request re-admits those rows through the cast below.
             var rows_x = _admitted_rows(source, est, context, False)
-            var ordered = _admitted_x(rows_x.array, est, context, True, defer_finite, False, order, as_array)
+            var ordered = _admitted_x(rows_x.array, est, context, True, defer_finite, False, order, as_array,
+                                      allow_nonfinite)
             ordered.source = source
             ordered.device_rows = True
             ordered.rows_base = rows_x.rows_base
@@ -430,7 +636,7 @@ def _admitted_x(source: PythonObject, est: String, context: PythonObject, admitt
         return _admitted_rows(source, est, context, device_x)
     classical_refuse_sparse(source, est)
     var view = classical_view(source, context, "X", admitted)
-    var x = _check_x_view(view, est, context, defer_finite, order, as_array)
+    var x = _check_x_view(view, est, context, defer_finite, order, as_array, allow_nonfinite)
     # _cast_x refused every rank but 2; the cast keeps the view's shape.
     var rows = Int(py=view.shape[0])
     var columns = Int(py=view.shape[1])
@@ -439,7 +645,9 @@ def _admitted_x(source: PythonObject, est: String, context: PythonObject, admitt
     var borrowed = address == Int(py=classical_address(view))
     _ = view^
     # A borrowed X under defer_finite was not scanned: its entry tests it.
-    var result = AdmittedX(x, source, address, rows, columns, 2, borrowed, not (borrowed and defer_finite))
+    # Under allow_nonfinite nothing was refused.
+    var result = AdmittedX(x, source, address, rows, columns, 2, borrowed,
+                           not allow_nonfinite and not (borrowed and defer_finite))
     result.c_order = order == "C" or rows == 1 or columns == 1
     return result^
 
@@ -447,7 +655,7 @@ def _admitted_x(source: PythonObject, est: String, context: PythonObject, admitt
 def admit_x_unrecorded(source: PythonObject, est: String, context: PythonObject,
                        admitted: Bool = False, defer_finite: Bool = False,
                        device_x: Bool = False, order: String = "C",
-                       as_array: Bool = False) raises -> AdmittedX:
+                       as_array: Bool = False, allow_nonfinite: Bool = False) raises -> AdmittedX:
     """X for fit, predict or score: refused with scikit-learn's wording (a
     sparse, complex, empty or non-2-D X; NaN or infinity), then the C-order
     float32 words the kernels read (the input itself when it already is
@@ -458,20 +666,22 @@ def admit_x_unrecorded(source: PythonObject, est: String, context: PythonObject,
     `admitted_finite_refuse`). `device_x`: the door's entry reads a
     DeviceRows fold from its device handle (`device_rows`), so no host rows
     are made. `order`: "C" (default) or "F" words. `as_array`: the array
-    is a mojolearn Array, never an ndarray."""
-    return _admitted_x(source, est, context, admitted, defer_finite, device_x, order, as_array)
+    is a mojolearn Array, never an ndarray. `allow_nonfinite`: NaN and
+    infinity are admitted as they are (a NaN-accepting door)."""
+    return _admitted_x(source, est, context, admitted, defer_finite, device_x, order, as_array, allow_nonfinite)
 
 
 def admit_x(mut call: AdmittedCall, source: PythonObject, est: String, context: PythonObject,
             position: Int, admitted: Bool = False, defer_finite: Bool = False,
-            device_x: Bool = False, order: String = "C", as_array: Bool = False) raises -> AdmittedX:
+            device_x: Bool = False, order: String = "C", as_array: Bool = False,
+            allow_nonfinite: Bool = False) raises -> AdmittedX:
     """As above, recording the admitted X on the door's admission record at
     `position` (its rows, columns, address and the array that owns it), so
     the door reads the shape from the record instead of admitting X again
     (labels_shape_of; rows N254, N279). A DeviceRows fold under `device_x`
     is recorded with address 0 and no owning array; so is an F-order X
     (the record's readers take C-order words)."""
-    var x = _admitted_x(source, est, context, admitted, defer_finite, device_x, order, as_array)
+    var x = _admitted_x(source, est, context, admitted, defer_finite, device_x, order, as_array, allow_nonfinite)
     x.position = call.add_input(admitted_input_dense(position, source, x.array, x.address if x.c_order else 0,
                                                      x.rows, x.cols, ADMITTED_ITEM_F32, False))
     return x^

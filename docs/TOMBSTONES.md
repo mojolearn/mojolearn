@@ -422,6 +422,12 @@ in the tables after the sections.
 | [`labels_prepare_weights` / `trees_prepare_weights` base `prepare_targets` call](#tree-and-label-door-admission-in-process-2026-11-08) | Trees and label admission (sample_weight) | removed (in process: `host_all_finite_f32` + `admitted_check_weights_f32`) | 2026-11-08 | [A1_ADMIT_TREES_LABELS.patch](../experiments/removed/A1_ADMIT_TREES_LABELS.patch) |
 | [IsolationForest fit zero-filled copy destination](#tree-and-label-door-admission-in-process-2026-11-08) | Trees (IsolationForest fit) | removed (uninitialised store; REGRESSIONS C3) | 2026-11-08 | [A1_ADMIT_TREES_LABELS.patch](../experiments/removed/A1_ADMIT_TREES_LABELS.patch) |
 | [forest door second `trees_f32` view of the admitted X](#tree-and-label-door-admission-in-process-2026-11-08) | Trees (forest predict) | removed (the `AdmittedX` words go to predict) | 2026-11-08 | [A1_ADMIT_TREES_LABELS.patch](../experiments/removed/A1_ADMIT_TREES_LABELS.patch) |
+| [`labels_empty` / `labels_vector` / `LabelsView` / `labels_view` / `labels_check_rank` / `LabelsMatrix` / `labels_f32` / `labels_f32_view` / `labels_forest_layout` / `labels_all_finite` / `labels_check_sample_weight` / `labels_prepare_weights` and their `trees_*` aliases](#labels-and-trees-admission-copy-onto-the-one-path-2026-11-09) | Label and tree admission (the second admission path) | removed (onto `bindings/admitted_input.mojo`: `admit_x_unrecorded`, `admit_f32`, `admit_weight_words`, `admit_c_view`, `admit_ids`, `admitted_array` / `admitted_vector`) | 2026-11-09 | [A1B_LABELS_ADMISSION_COPY.patch](../experiments/removed/A1B_LABELS_ADMISSION_COPY.patch) |
+| [`trees_encode_labels` copy of the label encoder (`_native_labels`, `_sorted_classes`, `_numeric_label_view`, `_list_labels` and walks)](#labels-and-trees-admission-copy-onto-the-one-path-2026-11-09) | Trees (labels) | removed (folded into `classical_encode_labels`, the one encoder) | 2026-11-09 | [A1B_LABELS_ADMISSION_COPY.patch](../experiments/removed/A1B_LABELS_ADMISSION_COPY.patch) |
+| [`decomp_input_snapshot` (`providers/python/decomp_input_pyapi.mojo`)](#labels-and-trees-admission-copy-onto-the-one-path-2026-11-09) | PLS admission | removed (`_pls_input`: `admit_x_unrecorded` / `admit_f32`, then `array_metadata_once`) | 2026-11-09 | [A1B_LABELS_ADMISSION_COPY.patch](../experiments/removed/A1B_LABELS_ADMISSION_COPY.patch) |
+| [`core/admitted_transpose.mojo`](#labels-and-trees-admission-copy-onto-the-one-path-2026-11-09) | Label admission (F-order cast) | removed (no caller; `admit_x` order "F" is the one cast-and-transpose) | 2026-11-09 | [A1B_LABELS_ADMISSION_COPY.patch](../experiments/removed/A1B_LABELS_ADMISSION_COPY.patch) |
+| [prep_labels multilabel base `transpose_f32` call](#labels-and-trees-admission-copy-onto-the-one-path-2026-11-09) | Prep (LabelBinarizer multilabel y) | removed (y read in C order through `admit_c_view`) | 2026-11-09 | [A1B_LABELS_ADMISSION_COPY.patch](../experiments/removed/A1B_LABELS_ADMISSION_COPY.patch) |
+| [KNeighborsClassifier column-major y narrowing branch](#labels-and-trees-admission-copy-onto-the-one-path-2026-11-09) | Neighbors (multi-output y) | removed (y read in C order through `admit_c_view`) | 2026-11-09 | [A1B_LABELS_ADMISSION_COPY.patch](../experiments/removed/A1B_LABELS_ADMISSION_COPY.patch) |
 | [`xseq_cast_nd` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Sequence / TSA / forecast / embedding admission (N-d float32 cast) | removed (merged: `admitted_cast_nd_f32`, parallel) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
 | [`xseq_f32` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | xseq neural, recurrent, xcnn admission (float32 ndarray) | removed (moved: `admit_nd_f32`) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
 | [`training_f32_cast_owned` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Byte-LM host trainer (owned float32 buffers) | removed (moved: `admit_nd_owned_f32`) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
@@ -4306,3 +4312,46 @@ lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Bits: none for any int32-range or
   wrappers); `git apply` restores them on the lane head, `git apply -3` once main has moved.
 - **Guard / records**: no `-D` define was removed, so no guard refusal and no `grid_controls` entry moves. One row in
   `docs/apple-fast/EXPERIMENTS.md`.
+## Labels and trees admission copy onto the one path (2026-11-09)
+
+Lane `a1b-doors-opt-in-trees-linear` (A1b of `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 3.3, finishing
+A1 on A5's `admit_x` options), branch `lane/a1b-doors-opt-in-trees-linear` from `integ/pre-0867-w2` `f59d913b0b`. Not
+experiment defines: the second admission path in `bindings/classical_labels.mojo` (and its `trees_*` aliases in
+`bindings/trees_public_inputs.mojo`), a cast-and-view copy beside `bindings/admitted_input.mojo` with its own view
+struct, no finite test of X and zero-filled destinations. No A/B: the same words reach every kernel (one conversion
+per element in both paths; a borrowed float32 C-order input is borrowed in both).
+
+- `labels_f32` / `trees_f32` / `labels_f32_view` / `labels_forest_layout`: `admit_x_unrecorded` for a public X,
+  `admit_f32` (the array form as an `AdmittedX`, `ndim` -1 any rank up to 2) for targets, fitted arrays and published
+  predictions, `order="F"` for the F-order layouts. Where the old path tested nothing, `allow_nonfinite=True` keeps that.
+- `LabelsMatrix` / `TreesMatrix`: `AdmittedX` (now `Copyable`); the constructor is `admitted_words`.
+- `labels_empty` / `labels_vector` / `trees_empty` / `trees_vector`: `admitted_array` / `admitted_vector`, the one
+  zero-filled Array allocator (`admitted_storage(..., as_array=True)` is the same call).
+- `labels_view` / `LabelsView` / `trees_view` / `TreesView` / `_view_of_array` / `_view_of_buffer` /
+  `labels_check_rank` / `labels_shape_repr`: `admit_c_view` (any numeric dtype in C order: the exporter's view, or one
+  C-order copy of a strided export) with `admitted_dtype`; integer vectors through `admit_ids` (one parallel read of the
+  exporter's strides, `core/admitted_ids.mojo`). The label encoder reads its block through `admit_c_view`
+  (`classical_encode_words` is the encoder over a contiguous block); an F-ordered label matrix is now its C-order copy
+  (the same values in the same order as the label input step, so the same classes and codes).
+- `labels_check_sample_weight` / `labels_prepare_weights` / `trees_*`: `admit_weight_words` (`admit_weights`; None is
+  the ones vector).
+- `labels_all_finite` / `trees_all_finite`: `core/host_finite_scan.mojo` directly where a label vector is tested.
+- `trees_encode_labels`: the trees copy of the encoder is gone; it returns `classical_encode_labels`' classes and codes.
+  Behaviour: str-subclass labels, which the trees copy refused, are encoded like str (the shared encoder's rule).
+- Trees internals (`trees_public_boost` `_gather_view` / `_gather_codes_view` / `_gather_vec_view`, `trees_public_meta`
+  `_place_view`, `trees_explainer_native` `_snapshot`'s serial strided copy, `trees_public_iforest` `_copied`): the
+  helpers take the Arrays themselves; meta Y and explainer snapshots are read in C order (one C-order copy of an
+  F-ordered or strided input; same values).
+- `decomp_input_snapshot` (PLS's own cast and scan): `_pls_input` in `bindings/pls_native.mojo`.
+- `core/admitted_transpose.mojo`: no caller left.
+- The prep_labels multilabel F-order arm (base `transpose_f32`) and the KNeighborsClassifier column-major y branch: y is
+  read in C order.
+
+Also in the lane (not removals): the x_linear decision entries (`x_linear_decision` / `_codes` / `_rows`, GPU and host
+column) take an optional status-word address as their last dims element and test the X they upload
+(`core/admitted_finite_status.mojo`); x_linear fit and predict doors and the forest / IsolationForest fit doors pass
+`defer_finite=True` (their entries test the upload); the array form of `admit_x` consults the meta-estimator registry.
+
+Restore: `git apply -3 experiments/removed/A1B_LABELS_ADMISSION_COPY.patch` (the reverse of the lane's code changes
+from `f59d913b0b`). Run owed: the linear (sgd, ridge, huber, glm, enet, lasso, logistic), trees (rf, extratrees,
+iforest, gbdt, meta) and prep / neighbors rows of the board on NVIDIA and AMD, and the release's one identity record.

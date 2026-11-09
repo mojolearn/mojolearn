@@ -88,7 +88,7 @@ def test_auxiliary_dispatch_preserves_the_recorded_array_boundary_and_old_valida
     assert 'parallel_public_result' not in route and 'sequential_input' not in route
     owner = (ROOT / 'bindings/trees_public_auxiliary.mojo').read_text()
     assert owner.index('this estimator is not fitted yet') < owner.index('classical_admit_value(args, context)')
-    assert owner.index('classical_admit_value(args, context)') < owner.index('trees_f32(args[0]')
+    assert owner.index('classical_admit_value(args, context)') < owner.index('admit_f32(args[0]')
     assert 'x_trees_forest_auxiliary' in owner and 'NotImplementedError' in owner
     assert 'if leaf_requested else PythonObject(None)' in owner
     assert 'if prefix_requested else PythonObject(None)' in owner

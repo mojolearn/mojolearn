@@ -53,10 +53,12 @@ from bindings.family_common import (
     family_field, family_snapshot_min,
 )
 from bindings.classical_labels import (
-    LabelsView, labels_view, labels_check_rank, labels_cast, labels_all_finite, labels_helper,
+    labels_cast, labels_helper,
     classical_encode_labels, labels_shape_of, labels_reshape, classical_decode_labels, classical_accuracy,
-    _native_labels,
+    classical_encode_words,
 )
+from bindings.admitted_input import admit_c_view, admitted_dtype
+from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64
 from bindings.mcls_common import mc_is_integer_labels, mc_dtype_name
 from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.host_archive_native import host_archive_rbc_metric_object
@@ -694,25 +696,28 @@ def _whole_float_labels(y: PythonObject, context: PythonObject) raises -> Bool:
     `prepare_targets` found (`_all_finite`, then `_integral`)."""
     if not _is_float_buffer(y, context):
         return False
-    var finite_view = labels_view(y, "X", context)
-    if finite_view.typestr == "<f4" or finite_view.typestr == "<f8":
-        var finite = labels_all_finite(finite_view.addr, finite_view.size(), finite_view.typestr == "<f8", context)
-        _ = finite_view  # keep the Python object alive through the native call above
-        if not finite:
+    # The labels in their own dtype, C order (bindings/admitted_input.mojo
+    # admit_c_view; lane a1b: was two labels_view reads of the same y).
+    var view = admit_c_view(y, "y", context)
+    var typestr = admitted_dtype(view, context)
+    var n = Int(py=view.size)
+    var addr = Int(py=classical_address(view))
+    if typestr == "<f4" or typestr == "<f8":
+        var finite = (host_all_finite_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr), n)
+                      if typestr == "<f8" else
+                      host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr), n))
+        if n > 0 and not finite:
             return False
-    _ = finite_view^
-    var view = labels_view(y, "y", context)
-    var n = view.size()
     var big = 0
-    for k in range(view.ndim()):  # driver-loop: over array rank metadata
-        if view.shape[k] > big:
-            big = view.shape[k]
-    if (view.typestr != "<f4" and view.typestr != "<f8") or n == 0 or n != big:
+    for k in range(Int(py=view.ndim)):  # driver-loop: over array rank metadata
+        if Int(py=view.shape[k]) > big:
+            big = Int(py=view.shape[k])
+    if (typestr != "<f4" and typestr != "<f8") or n == 0 or n != big:
         return True
     var classes_store = family_array(Python.tuple(n), "<f8", context)
     var codes = family_array(Python.tuple(n), "<i4", context)
-    var n_distinct = Int(py=family_call(labels_helper(context, "prepare_targets"), PythonObject(view.addr),
-                               PythonObject(_CODE_F32 if view.typestr == "<f4" else _CODE_F64), PythonObject(n),
+    var n_distinct = Int(py=family_call(labels_helper(context, "prepare_targets"), PythonObject(addr),
+                               PythonObject(_CODE_F32 if typestr == "<f4" else _CODE_F64), PythonObject(n),
                                classical_address(classes_store), classical_address(codes),
                                PythonObject(0), PythonObject(0), PythonObject(0)))
     _ = view  # keep the Python object alive through the native call above
@@ -725,12 +730,8 @@ def _whole_float_labels(y: PythonObject, context: PythonObject) raises -> Bool:
 def _encode_column(y_cols: PythonObject, row: Int, n: Int, context: PythonObject) raises -> PythonObject:
     """`encode_labels(y_cols[row])[0]`: the sorted classes of one int32
     label column (the native encoder over the row of the column block)."""
-    var shape = List[Int]()
-    shape.append(n)
-    var strides = List[Int]()
-    strides.append(4)
-    var view = LabelsView(y_cols, Int(py=classical_address(y_cols)) + 4 * row * n, shape^, strides^, "<i4", 4)
-    var labels = _native_labels(view, False, context)
+    var labels = classical_encode_words(y_cols, Int(py=classical_address(y_cols)) + 4 * row * n, n, "<i4", False,
+                                        context)
     _ = y_cols  # keep the Python object alive through the native call above
     return labels.classes
 
@@ -764,15 +765,17 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                     + "your labels")
     # `as_i64_c(y, ndim=len(shape), name="y")`: the labels as int64 in the
     # view's storage order (the input itself when it already is int64).
-    var view = labels_view(y, "y", context)
-    labels_check_rank(view, len(shape), "y")
-    var count = view.size()
+    var view = admit_c_view(y, "y", context)
+    if Int(py=view.ndim) != len(shape):
+        raise Error("mojolearn: y must be " + String(len(shape)) + "-D, got " + String(Int(py=view.ndim)) + "-D")
+    var count = Int(py=view.size)
+    var y_typestr = admitted_dtype(view, context)
     var wide = PythonObject(None)
-    var wide_addr = view.addr
-    if view.typestr != "<i8":
+    var wide_addr = Int(py=classical_address(view))
+    if y_typestr != "<i8":
         wide = family_array(Python.tuple(count), "<i8", context)
         wide_addr = Int(py=classical_address(wide))
-        labels_cast(view.addr, view.typestr, wide_addr, "<i8", count, context)
+        labels_cast(Int(py=classical_address(view)), y_typestr, wide_addr, "<i8", count, context)
         _ = wide  # keep the Python object alive through the native call above
     _ = view  # keep the Python object alive through the native call above
     var low = _reduce(wide_addr, _CODE_I64, count, _REDUCE_MIN, context)
@@ -801,28 +804,20 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         py_setitem(fields, "_classes_list", Python.list(classical_encode_labels(y32, context).classes))
         return
     var yc = family_array(Python.tuple(n_out, n), "<i4", context)
-    if view.c_order():
-        # The narrowing is a C-level copy (exact after the range check) and
-        # the transpose a device op (`xn_p2m_transpose_i`; the host binding's
-        # same op on a CPU-only install).
-        var y32 = family_array(Python.tuple(n, n_out), "<i4", context)
-        labels_cast(wide_addr, "<i8", Int(py=classical_address(y32)), "<i4", count, context)
+    # admit_c_view hands the labels in C order (an F-ordered y is one
+    # C-order copy), so the narrowing is a C-level copy (exact after the
+    # range check) and the transpose a device op (`xn_p2m_transpose_i`; the
+    # host binding's same op on a CPU-only install). Integers: the same
+    # column words as the former storage-order narrowing of an F-ordered y.
+    var y32 = family_array(Python.tuple(n, n_out), "<i4", context)
+    labels_cast(wide_addr, "<i8", Int(py=classical_address(y32)), "<i4", count, context)
+    _ = wide  # keep the Python object alive through the native call above
+    _ = view  # keep the Python object alive through the native call above
+    if n:
+        xn_execute(xn, "p2m_transpose_i", Python.list(classical_address(y32), classical_address(yc)),
+                   Python.list(PythonObject(n), PythonObject(n_out)), Python.list())
         _ = y32  # keep the Python object alive through the native call above
-        _ = wide  # keep the Python object alive through the native call above
-        _ = view  # keep the Python object alive through the native call above
-        if n:
-            xn_execute(xn, "p2m_transpose_i", Python.list(classical_address(y32), classical_address(yc)),
-                       Python.list(PythonObject(n), PythonObject(n_out)), Python.list())
-            _ = y32  # keep the Python object alive through the native call above
-            _ = yc  # keep the Python object alive through the native call above
-    else:
-        # A column-major y already stores the `n_outputs` contiguous columns:
-        # its narrowing in storage order IS the column block the transpose of
-        # its C-order copy produced (integers, so the same words).
-        labels_cast(wide_addr, "<i8", Int(py=classical_address(yc)), "<i4", count, context)
         _ = yc  # keep the Python object alive through the native call above
-        _ = wide  # keep the Python object alive through the native call above
-        _ = view  # keep the Python object alive through the native call above
     py_setitem(fields, "_y_cols", yc)
     var classes = Python.list()
     for j in range(n_out):  # driver-loop: over output columns, one native encoding each
