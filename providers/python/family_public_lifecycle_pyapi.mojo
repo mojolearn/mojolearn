@@ -23,7 +23,7 @@ from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields
 from bindings.family_common import FAMILY_F32P, family_f32_snapshot, family_owned_snapshot
-from core.family_cast_impl import family_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32
 from bindings.cluster_side_records import cluster_refuse_fit_callbacks
 from providers.python.estimator_lifecycle_pyapi import (
     estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_complete,
@@ -242,7 +242,7 @@ def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, oper
         if spec.scan:
             # The shared exponent-mask scan (decomp_input_pyapi uses it too):
             # no per-element isfinite branch with a raise in the loop body.
-            if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=snapshot.source.addr), snapshot.count):
+            if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=snapshot.source.addr), snapshot.count):
                 raise Error("Input X contains NaN or infinity (" + name + ").")
         if spec.replace:
             # Perf: a query only reads X (its owners write separate outputs),

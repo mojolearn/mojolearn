@@ -9,8 +9,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_validate import classical_view
-from core.family_cast_impl import family_all_finite_f32
-from core.p3nc_scan import p3nc_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32
 from core.cfb_impl import cfb_any_positive_i32
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_call, family_entry, family_array, family_as_f32,

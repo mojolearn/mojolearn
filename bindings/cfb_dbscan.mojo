@@ -12,8 +12,8 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields
 from bindings.classical_arrays import classical_address, classical_wrap_array, classical_is_array
-from core.family_cast_impl import family_fill_i32, family_all_finite_f32
-from core.p3nc_scan import p3nc_all_finite_f32
+from core.family_cast_impl import family_fill_i32
+from core.host_finite_scan import host_all_finite_f32
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_array, family_as_f32,
     family_sample_weight, family_min, family_field,
@@ -128,7 +128,7 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    if not admitted and not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
+    if not admitted and not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
         # Before this check a NaN row reached the kernel and came back
         # labelled noise (-1), silently; scikit-learn refuses it.
         raise Error("mojolearn DBSCAN: X contains a NaN or an infinity; a "

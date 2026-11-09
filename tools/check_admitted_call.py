@@ -58,6 +58,9 @@ DOORS = frozenset({
     "bindings/public_attributes_native.mojo",
     "bindings/classical_attributes.mojo",
     "bindings/classical_validate.mojo",
+    # The X, y and sample_weight checks moved out of classical_validate (a
+    # door) into the one admission path (lane consol-a0-admission).
+    "bindings/admitted_input.mojo",
     "bindings/params_metadata_native.mojo",
     "bindings/mode_metadata_native.mojo",
     "providers/python/family_public_lifecycle_pyapi.mojo",
@@ -120,7 +123,7 @@ DEBT = {
     'bindings/cfb_spectral.mojo': {'native_loaded_module': 6},
     'bindings/classical_archive.mojo': {'cpython': 2, 'native_loaded_module': 2},
     'bindings/classical_archive_read.mojo': {'cpython': 5, 'native_loaded_module': 1},
-    'bindings/classical_arrays.mojo': {'cpython': 1, 'native_loaded_module': 6},
+    'bindings/classical_arrays.mojo': {'cpython': 1, 'native_loaded_module': 5},
     'bindings/classical_error_boundary.mojo': {'cpython': 2, 'native_loaded_module': 1},
     'bindings/classical_exceptions.mojo': {'native_loaded_module': 5},
     'bindings/classical_host_owner.mojo': {'native_loaded_module': 2},

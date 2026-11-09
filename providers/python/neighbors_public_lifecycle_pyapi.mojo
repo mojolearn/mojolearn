@@ -20,7 +20,8 @@ from bindings.classical_warnings import classical_warn_column
 from bindings.classifier_public_lifecycle import _public_labels
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_array_view import native_array_ndarray_view
-from core.p3nc_scan import p3nc_all_finite_f32, p3nc_widen_f32_f64, P3NC_REAL_OK, P3NC_REAL_NONFINITE, P3NC_REAL_CONTINUOUS
+from core.p3nc_scan import p3nc_widen_f32_f64, P3NC_REAL_OK, P3NC_REAL_NONFINITE, P3NC_REAL_CONTINUOUS
+from core.host_finite_scan import host_all_finite_f32
 from bindings.p3nc_label_lists import p3nc_float_list_verdict
 from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_f32_snapshot, family_owned_snapshot, family_array
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral
@@ -186,7 +187,7 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
     if not operation.startswith("family_xn_loc_imp_") and not operation.startswith("family_xn_kde_"):
         # p3-neighbors-cluster: one eight-lane exponent-bit pass over the
         # admitted words (core/p3nc_scan.mojo), not a scalar isfinite loop.
-        if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=snapshot.source.addr), snapshot.count):
+        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=snapshot.source.addr), snapshot.count):
             raise Error("Input X contains NaN or infinity (" + name + ").")
     if not fitting and Int(py=depth) == 0:
         var width = py_get(fields, "n_features_in_")

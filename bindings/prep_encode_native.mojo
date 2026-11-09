@@ -30,7 +30,7 @@ from bindings.prep_entry_cache import prep_entry_word, prep_entry_text
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 from bindings.classical_validate import classical_estimator_name
-from core.family_cast_impl import family_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32
 from bindings.prep_stateless_native import _fam, _int_like, _repr, _name, _take_f, _select_transform
 from bindings.classical_labels import (
     LabelsView, ClassicalLabels, labels_view, labels_vector, labels_address, labels_cast, labels_all_finite,
@@ -751,7 +751,7 @@ def _kbins_finite(values: PythonObject) raises:
     if Int(py=values[0]) != 0:
         return
     var count = Int(py=values[3]) * Int(py=values[4])
-    if not family_all_finite_f32(F32P(unsafe_from_address=Int(py=classical_address(values[1]))), count):
+    if not host_all_finite_f32(F32P(unsafe_from_address=Int(py=classical_address(values[1]))), count):
         raise Error("Input X contains NaN or infinity (KBinsDiscretizer).")
 
 

@@ -4,7 +4,8 @@ from std.python import Python, PythonObject
 from bindings.linalg_ops_buffers import LinAdmission, lin_admitted_c, lin_tuple
 from bindings.optimizer_public_door import base_format
 from bindings.family_common import family_repr, FAMILY_F32P
-from core.family_cast_impl import family_all_finite_f32, family_min_f32, family_max_f32
+from core.family_cast_impl import family_min_f32, family_max_f32
+from core.host_finite_scan import host_all_finite_f32
 
 
 def _metric_f32(input: LinAdmission) -> Bool:
@@ -22,7 +23,7 @@ def metric_reg_target(source: PythonObject, name: String, caller: String,
     if (rank != 1 and rank != 2) or rows == 0 or cols == 0:
         raise Error("mojolearn " + caller + ": " + name + " must be a nonempty (n,) or (n, n_outputs) array")
     var output = lin_admitted_c(input^, "<f4", name, context, True)
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=output.addr), rows * cols):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=output.addr), rows * cols):
         raise Error("mojolearn " + caller + ": " + name + " contains NaN or infinity")
     var result = Python.tuple(output.keep, rows, cols)
     _ = output^
@@ -51,7 +52,7 @@ def metric_score_matrix(source: PythonObject, n: Int, caller: String, ndim: Int,
         raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 " + what
                     + " (shape=" + shape + ") while a minimum of 1 is required.")
     var output = lin_admitted_c(input^, "<f4", name, context, True)
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=output.addr), rows * cols):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=output.addr), rows * cols):
         raise Error("mojolearn " + caller + ": " + name + " must be finite")
     var result = Python.tuple(output.keep, rows, cols, nd)
     _ = output^
@@ -69,7 +70,7 @@ def metric_sample_weights(source: PythonObject, n: Int, caller: String,
         raise Error("mojolearn " + caller + ": sample_weight has " + String(count) + " entries for " + String(n) + " samples")
     var output = lin_admitted_c(input^, "<f4", "sample_weight", context, True)
     var words = FAMILY_F32P(unsafe_from_address=output.addr)
-    if not family_all_finite_f32(words, n) or (n > 0 and family_min_f32(words, n) < 0):
+    if not host_all_finite_f32(words, n) or (n > 0 and family_min_f32(words, n) < 0):
         raise Error("mojolearn " + caller + ": sample_weight must have finite nonnegative entries")
     if n == 0 or not family_max_f32(words, n) > 0:
         raise Error("mojolearn " + caller + ": sample_weight must have positive total weight")

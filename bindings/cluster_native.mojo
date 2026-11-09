@@ -14,8 +14,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from bindings.classical_arrays import (
     classical_address, classical_wrap_array, classical_c_bytes, classical_is_f32, classical_c_order,
 )
-from core.family_cast_impl import family_fill_i32, family_all_finite_f32
-from core.p3nc_scan import p3nc_all_finite_f32
+from core.family_cast_impl import family_fill_i32
+from core.host_finite_scan import host_all_finite_f32
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.perf2_shared_fitted_field import native_fitted_get
@@ -67,7 +67,7 @@ def _xc_input(mut mods: NativeModules, model: PythonObject, source: PythonObject
         # admitted X (an exact float32 C-order Array or ndarray), which
         # `as_f32_c` would return as is. Only the finite refusal is repeated,
         # as one native scan of the same words, in the same wording.
-        if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(source))),
+        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(source))),
                                      Int(py=source.size)):
             raise Error("mojolearn: X contains NaN or infinity")
         _ = source  # keep the Python object alive through the native scan above
@@ -209,7 +209,7 @@ def _reference_queries(source: PythonObject, n_features: Int, where: String, con
         raise Error("mojolearn " + where + ": X has " + String(d) + " features, the fit saw " + String(n_features))
     if Int(py=q.shape[0]) < 1:
         raise Error("mojolearn " + where + ": X has no rows; refused by name")
-    if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(q))), Int(py=q.size)):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(q))), Int(py=q.size)):
         raise Error("mojolearn " + where + ": X contains a NaN or an infinity; a non-finite "
                     + "query has no distance order to take a nearest row from, so it is "
                     + "refused by name")

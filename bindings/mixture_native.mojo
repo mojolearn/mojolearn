@@ -30,7 +30,8 @@ from bindings.family_common import (
     family_as_f32, family_view, family_cast_view, family_nonfinite, family_is_int, family_is_real, family_is_str,
     family_type_name,
 )
-from core.family_cast_impl import family_cast_rows, family_all_finite_f32
+from core.admitted_input import admitted_cast_f32
+from core.host_finite_scan import host_all_finite_f32
 from checks.numerics import pinned_mul_f64, portable_log64
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_check_x, classical_check_width, classical_estimator_name
@@ -122,7 +123,7 @@ def _x_finite(source: PythonObject, name: String, context: PythonObject) raises 
     if _f32_ready(source, context) and Int(py=source.ndim) == 2:
         # One native scan of the admitted float32 words: the same refusal
         # the cast's scan makes, for the same values.
-        if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(source))), Int(py=source.size)):
+        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(source))), Int(py=source.size)):
             raise Error("mojolearn: " + name + " contains NaN or infinity")
         _ = source  # keep the Python object alive through the native scan above
         return source
@@ -189,7 +190,7 @@ def _any_f32_view(view: PythonObject, name: String, context: PythonObject) raise
             var dim = Int(py=view.shape[a])
             offset += (rest % dim) * Int(py=view.strides[a])
             rest //= dim
-        family_cast_rows(base + offset, s0, s1, rows, cols, item, kind,
+        _ = admitted_cast_f32(base + offset, s0, s1, rows, cols, item, kind,
                          FAMILY_F32P(unsafe_from_address=out + s * rows * cols * 4))
         _ = result  # keep the Python object alive through the native call above
     _ = view  # keep the Python object alive through the native casts above
@@ -588,7 +589,7 @@ def _gmm_ext_fit(model: PythonObject, xc_binding: PythonObject, source: PythonOb
         if size != want:
             raise Error("The parameter '" + family_str(covariance_type) + " precision' has " + String(size)
                         + " values, expected " + String(want))
-        if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(pi))), size):
+        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(pi))), size):
             raise Error("precisions_init must be finite")
         _ = pi  # keep the Python object alive through the native calls above
         _ = py_call(parts.append, pi)

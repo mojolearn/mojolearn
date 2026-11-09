@@ -23,7 +23,7 @@ from bindings.mcls_common import (
     mc_i32_1d, mc_f32_1d, mc_regression_f32_1d, mc_pair_check, mc_weights, mc_encode_store,
     mc_encode_signed,
 )
-from core.family_cast_impl import family_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32
 from core.mcls_impl import mcls_min_i32, mcls_max_i32, mcls_copy_words
 from checks.numerics import portable_exp64, portable_log64
 
@@ -174,7 +174,7 @@ def _silhouette(args: PythonObject, caller: String, context: PythonObject) raise
     var x = family_as_f32(args[1], 2, "X", context)
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), rows * cols):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), rows * cols):
         raise Error("mojolearn " + caller + ": X contains NaN or infinity; refused here "
                     + "(metrics/README.md HAND-OFF ask 3), because a NaN distance "
                     + "reaches sil_op as +0.0 (DEVIATION 656) rather than as an error")
@@ -233,10 +233,10 @@ def _trustworthiness(args: PythonObject, context: PythonObject) raises -> Python
     if rows != Int(py=emb.shape[0]):
         raise Error("mojolearn trustworthiness: X has " + String(rows) + " rows and X_embedded has "
                     + String(Int(py=emb.shape[0])))
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
         raise Error("mojolearn trustworthiness: X contains NaN or infinity; refused here (metrics/README.md HAND-OFF ask 3)")
     _ = x  # keep the Python object alive through the native calls above
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(emb))), Int(py=emb.size)):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(emb))), Int(py=emb.size)):
         raise Error("mojolearn trustworthiness: X_embedded contains NaN or infinity; refused here "
                     + "(metrics/README.md HAND-OFF ask 3)")
     _ = emb  # keep the Python object alive through the native calls above

@@ -26,7 +26,7 @@ from bindings.family_common import (
     family_f32_snapshot, family_field,
 )
 from bindings.spectral_umap_routes import spectral_umap_route, spectral_umap_entry as family_entry
-from core.family_cast_impl import family_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32
 from core.mani_impl import mani_same_words
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL, CAST_KIND_FLOAT
 from std.builtin.sort import sort
@@ -98,7 +98,7 @@ def _umap_copy(shape: PythonObject, address: Int, count: Int, context: PythonObj
 
 
 def _umap_finite(address: Int, count: Int) -> Bool:
-    return count == 0 or family_all_finite_f32(FAMILY_F32P(unsafe_from_address=address), count)
+    return count == 0 or host_all_finite_f32(FAMILY_F32P(unsafe_from_address=address), count)
 
 
 def _umap_state(value: PythonObject, name: String, context: PythonObject) raises -> ArrayMetadata:
