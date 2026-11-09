@@ -4,6 +4,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_contains, py_get, py_type
 from bindings.device_rows_door import door_rows_refuse
+from bindings.admitted_input import admitted_finite_refuse
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_validate import classical_check_width
 from bindings.sequential_arrays import sequential_array, sequential_address
@@ -37,7 +38,10 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
     var fold_entry = py_get(context, "pca_transform_fold")
     var fold_ok = (not inverse and not whiten and fold_entry is not None
                    and py_type(fold_entry) is py_type(entries["pca_transform"]))
-    var x = decomp_admit(source, "PCA", context, fold_ok)
+    # The plain transform's entry tests a borrowed X on the device after its
+    # upload and returns the finite word (lane a6, defer_finite): no host
+    # scan of X here.
+    var x = decomp_admit(source, "PCA", context, fold_ok, not inverse and not whiten)
     var rows = x.rows
     if x.cols != (count if inverse else features):
         if inverse:
@@ -81,8 +85,10 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
             mean.source.addr, components.source.addr, output_address, Python.list(rows, features, count))
         door_rows_refuse(Int(py=words[0]), Int(py=words[1]), "PCA", x.store.base_rows)
     else:
-        _ = py_call_typed(entries["pca_transform"], x.address, mean.source.addr,
+        var status = py_call_typed(entries["pca_transform"], x.address, mean.source.addr,
             components.source.addr, output_address, Python.list(rows, features, count))
+        if not x.finite:
+            admitted_finite_refuse(Int(py=status), "PCA")
     _ = x^
     _ = components^
     _ = mean^

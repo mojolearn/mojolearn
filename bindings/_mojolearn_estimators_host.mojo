@@ -70,6 +70,7 @@ from providers.python.core_py2mojo_rows_pyapi import py2mojo_rows_host_binding
 from providers.python.svm_host_scale_gamma_host_pyapi import py2mojo_linear_flags_binding
 
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from core.host_finite_scan import host_all_finite_f32
 from core.classical_ridge_impl import classical_widen_f32_f64
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -1018,7 +1019,9 @@ def pca_transform_binding(
 ) raises -> PythonObject:
     """`PCA.transform` (whiten=False) on the host: center by `mean_`, then
     `out = (X - mean) . components^T` by `host_pca_transform`. params:
-    n_rows, n_features, n_components. Returns 0. The whitened pair is
+    n_rows, n_features, n_components. Returns X's finite status word (0 =
+    every word finite: the door's deferred finite test, lane a6; a non-zero
+    word means the door refuses and discards `out`). The whitened pair is
     `pca_whiten_transform` and `pca_whiten_inverse_transform` below."""
     if len(params) != 3:
         raise Error("pca_transform: params must contain 3 values")
@@ -1033,11 +1036,15 @@ def pca_transform_binding(
         _positive(nr, "n_rows")
         _positive(nf, "n_features")
         _positive(nc, "n_components")
-        host_pca_transform_into(
-            f32_ptr(x_address), f32_ptr(m_address), f32_ptr(c_address),
-            op, nr, nf, nc, host_predict_task_count(nr),
-        )
-    return PythonObject(0)
+    # parallel: the deferred finite test of X (SIMD scan across the host's cores)
+    var status = 0 if host_all_finite_f32(f32_ptr(x_address), nr * nf) else 1
+    if status == 0:
+        with GILReleased(Python()):
+            host_pca_transform_into(
+                f32_ptr(x_address), f32_ptr(m_address), f32_ptr(c_address),
+                op, nr, nf, nc, host_predict_task_count(nr),
+            )
+    return PythonObject(status)
 
 
 def inverse_transform_binding(

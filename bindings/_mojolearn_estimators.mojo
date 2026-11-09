@@ -379,11 +379,13 @@ def pca_transform_binding(
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
+    # Returns X's finite status word (0 = finite), tested on the device after
+    # the upload (lane a6; the door defers its finite scan to this entry).
+    var status: Int32
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        pca_transform_host(ctx, xp, mp, cp, op, nr, nf, nc)
-        ctx.synchronize()
-    return PythonObject(0)
+        status = pca_transform_host(ctx, xp, mp, cp, op, nr, nf, nc)
+    return PythonObject(Int(status))
 
 
 def _pca_whiten_pointer(
