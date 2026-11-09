@@ -100,7 +100,20 @@ retired with a reason within two weeks. Applies to hardware, firmware and softwa
 
 ## Release order
 
-### Fix everything before a release (Andrew, 2026-11-08)
+### A measured winner is never deleted on reasoning (Andrew, 2026-11-09)
+
+- Code that won a measurement (a hand-tuned kernel, a fused path, a switch whose
+  A/B it won) is deleted only after a measurement on NVIDIA and AMD shows its
+  replacement is at least as fast with quality equal. "The new path subsumes it"
+  is a claim to measure, never a reason to delete.
+- A refactor that moves a family onto a shared runtime keeps the tuned kernel as
+  an op of that runtime (one runtime path, tuned kernels inside it). It does not
+  replace the kernel with the generic op.
+- Until the measurement exists, the old code stays behind its switch, default
+  unchanged. This narrows "remove what a change made unnecessary": unnecessary
+  means measured, not argued.
+
+## Fix everything before a release (Andrew, 2026-11-08)
 
 - We fix everything we can before a release. We do not release while there is more work to incorporate: known
   regressions, planned refactors, owed fixes and owed deletions all go in first. No piecemeal releases.
