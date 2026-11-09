@@ -62,6 +62,7 @@ from transformer.checks.transformer_fixture import RMS_EPS, ROPE_THETA
 from transformer.impl.llama.fused_attention import fused_forward_supported_head_dim
 # Lane x4: the public decode session runs the attention step op.
 from transformer.attn_step_session import AttnStepArm, attn_step_ints, attn_step_same_layout
+from core.weight_epoch import WeightKey
 from autograd.block_step_ops import AttnPrefill
 from transformer.impl.llama.modeling_llama import (
     ATTN_PATH_EAGER,
@@ -511,8 +512,11 @@ struct TransformerSession(Movable, Writable):
     unlike a caller's float32 array their address is their version."""
     var ctx: Optional[DeviceContext]
     var workspace: Optional[TransformerWorkspace]
-    var planes: Optional[LlamaInt15Weights]
-    var planes_key: List[Int]
+    var arm15: Optional[AttnStepArm]
+    """Lane x45c: the fixed15_v1 block forward on the attention step op (an
+    adopted entry over the profile's weights), keyed by `key15`: the shape,
+    every weight and plane address and the weight epoch."""
+    var key15: WeightKey
     var weights: Optional[LlamaDeviceWeights]
     """lane/neural-net-experiment (2026-09-30): the block's float32 weights
     RETAINED on the device across calls. A Python address is still not a
@@ -545,8 +549,8 @@ struct TransformerSession(Movable, Writable):
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
         self.workspace = Optional[TransformerWorkspace]()
-        self.planes = Optional[LlamaInt15Weights]()
-        self.planes_key = List[Int]()
+        self.arm15 = Optional[AttnStepArm]()
+        self.key15 = WeightKey()
         self.weights = Optional[LlamaDeviceWeights]()
         self.weights_key = List[Int]()
         self.weights_host = List[Float32]()
@@ -573,7 +577,7 @@ struct TransformerSession(Movable, Writable):
         _ = self.tape^
         _ = self.arm^
         _ = self.workspace^
-        _ = self.planes^
+        _ = self.arm15^
         _ = self.weights^
         if self.ctx:
             try:
@@ -599,8 +603,8 @@ struct TransformerSession(Movable, Writable):
             self.ctx.value().synchronize()
         self.arm = None
         self.workspace = None
-        self.planes = None
-        self.planes_key = List[Int]()
+        self.arm15 = None
+        self.key15 = WeightKey()
         self.weights = None
         self.weights_key = List[Int]()
         self.weights_host = List[Float32]()
@@ -1188,9 +1192,12 @@ def _transformer_run_session_int15(
     dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
     smax: Int, s0: Int, window: Int, opts: BlockOptions,
 ) raises -> Int:
-    """`_transformer_run_session` under the profile: the same stages, cache
-    handling and downloads, with the weights' seven projections as the
-    session's retained planes."""
+    """`TransformerBlock.forward` under numeric_profile="fixed15_v1" on the
+    attention step op (lane x45c; x4b moved the decode sessions): the
+    profile's weights (norms, biases and the seven projection planes) built
+    once per weight key into an adopted step-op entry, the caller's caches
+    loaded at s0, the op, y and the caches back, one wait. The former body
+    ran its own workspace and re-uploaded the norms and biases every call."""
     session.invalidate_tape()
     var dims = LlamaDims(dm, nh, nkv, hd, it)
     dims.validate()
@@ -1201,7 +1208,7 @@ def _transformer_run_session_int15(
             + String(s0) + "; the two sides of this boundary disagree about the state")
     if window < 0:
         raise Error("transformer: window must be >= 0 (0 = full causal)")
-    for i in range(3, 10):
+    for i in range(3, 10):  # small-loop(7: the float32 projection slots): address checks, no data
         if a[i] != 0:
             raise Error(
                 "transformer_session_forward_int15: float32 projection slot "
@@ -1212,72 +1219,51 @@ def _transformer_run_session_int15(
         session.contexts += 1
     ref ctx = session.ctx.value()
     var pbase = 13 + BLOCK_OPTION_ADDRS
-    var pkey: List[Int] = [dm, nh, nkv, hd, it, Int(opts.gated())]
-    for i in range(21):
-        pkey.append(a[pbase + i])
-    var same = Bool(session.planes) and len(session.planes_key) == len(pkey)
-    if same:
-        for i in range(len(pkey)):  # small-loop(pkey: six shapes plus 21 plane addresses): compares cache keys, not data
-            if pkey[i] != session.planes_key[i]:
-                same = False
-    if not same:
-        ctx.synchronize()
-        session.planes = None
-        session.planes = Optional[LlamaInt15Weights](_upload_planes(ctx, dims, opts, a, pbase))
-        session.planes_key = pkey^
-    var lean = False
-    var key = _workspace_key(b, l, dims, smax, window, lean, opts)
-    var reused = False
-    if session.workspace:
-        reused = session.workspace.value().matches(key)
-    if not reused:
-        ctx.synchronize()
-        session.workspace = None
-        ctx.synchronize()
-    var what = String("transformer_session_forward_int15")
     var t = _tail_of(a, 13)
-    var w = LlamaDeviceWeights(
-        ctx, dims, opts,
-        _upload_addr(ctx, a[1], dm),
-        _upload_addr(ctx, a[2], dm),
-        session.planes.value().copy(),
-        _optional_upload(ctx, t[0], dims.q_width(), opts.qkv_bias, "q_proj.bias", what),
-        _optional_upload(ctx, t[1], dims.kv_width(), opts.qkv_bias, "k_proj.bias", what),
-        _optional_upload(ctx, t[2], dims.kv_width(), opts.qkv_bias, "v_proj.bias", what),
-        _optional_upload(ctx, t[3], dm, opts.o_bias, "o_proj.bias", what),
-        _optional_upload(ctx, t[4], dm, opts.norm_bias, "input_layernorm.bias", what),
-        _optional_upload(ctx, t[5], dm, opts.norm_bias, "post_attention_layernorm.bias", what),
-        _optional_upload(ctx, t[6], it, opts.mlp_bias, "up_proj.bias", what),
-        _optional_upload(ctx, t[7], dm, opts.mlp_bias, "down_proj.bias", what),
-        _optional_upload(ctx, t[8], it, opts.has_gate_bias(), "gate_proj.bias", what),
-        _optional_upload(ctx, t[9], hd, opts.qk_norm, "q_norm.weight", what),
-        _optional_upload(ctx, t[10], hd, opts.qk_norm, "k_norm.weight", what),
-    )
-    if not reused:
-        session.workspace = TransformerWorkspace(ctx, dims, b, l, smax, window, lean, opts)
-        session.workspaces += 1
-    ref ws = session.workspace.value()
-    if reused:
-        ws.stages.reset(ctx)
-    ctx.enqueue_copy(dst_buf=ws.kv.k, src_ptr=_f32_ptr(a[10]))
-    ctx.enqueue_copy(dst_buf=ws.kv.v, src_ptr=_f32_ptr(a[11]))
-    ctx.enqueue_copy(dst_buf=ws.x, src_ptr=_f32_ptr(a[0]))
-    ctx.synchronize()
-    ws.kv.s = s0
-    var trace = IdentityTrace.disabled()
-    llama_decoder_layer_forward(ctx, ws.stages, ws.kv, ws.rope, w, ws.x,
-                                b, l, s0, trace, String("py"))
-    _download_addr(ctx, ws.stages.residual2, b * l * dm, a[12])
-    _download_addr(ctx, ws.kv.k, len(ws.kv.k), a[10])
-    _download_addr(ctx, ws.kv.v, len(ws.kv.v), a[11])
-    var result = ws.kv.s
-    var retain = ws.retained_bytes() <= 64 * 1024 * 1024
-    _ = w^
-    ctx.synchronize()
-    if not retain:
-        session.workspace = None
-        ctx.synchronize()
-    return result
+    var addrs: List[Int] = [b, smax, window, dm, nh, nkv, hd, it, Int(opts.gated()), a[1], a[2]]
+    for i in range(len(t)):  # small-loop(t: the 11 optional weight addresses): key words, no data
+        addrs.append(t[i])
+    for i in range(21):  # small-loop(21: the seven plane triples): key words, no data
+        addrs.append(a[pbase + i])
+    if session.arm15 and session.key15.current(addrs):
+        session.arm15.value().load(a[10], a[11], s0)
+    else:
+        session.arm15 = None
+        session.key15 = WeightKey()
+        var key = WeightKey.take(addrs)
+        var what = String("transformer_session_forward_int15")
+        var planes = _upload_planes(ctx, dims, opts, a, pbase)
+        var w = LlamaDeviceWeights(
+            ctx, dims, opts,
+            _upload_addr(ctx, a[1], dm),
+            _upload_addr(ctx, a[2], dm),
+            planes^,
+            _optional_upload(ctx, t[0], dims.q_width(), opts.qkv_bias, "q_proj.bias", what),
+            _optional_upload(ctx, t[1], dims.kv_width(), opts.qkv_bias, "k_proj.bias", what),
+            _optional_upload(ctx, t[2], dims.kv_width(), opts.qkv_bias, "v_proj.bias", what),
+            _optional_upload(ctx, t[3], dm, opts.o_bias, "o_proj.bias", what),
+            _optional_upload(ctx, t[4], dm, opts.norm_bias, "input_layernorm.bias", what),
+            _optional_upload(ctx, t[5], dm, opts.norm_bias, "post_attention_layernorm.bias", what),
+            _optional_upload(ctx, t[6], it, opts.mlp_bias, "up_proj.bias", what),
+            _optional_upload(ctx, t[7], dm, opts.mlp_bias, "down_proj.bias", what),
+            _optional_upload(ctx, t[8], it, opts.has_gate_bias(), "gate_proj.bias", what),
+            _optional_upload(ctx, t[9], hd, opts.qk_norm, "q_norm.weight", what),
+            _optional_upload(ctx, t[10], hd, opts.qk_norm, "k_norm.weight", what),
+        )
+        var lean = _lean_for_w(hd, w)
+        var ints = attn_step_ints(b, dm, nh, nkv, hd, it, smax, window, opts)
+        var words = List[Int]()
+        for i in range(8, len(ints)):  # small-loop(ints: the 17 block option words): argument words, no data
+            words.append(ints[i])
+        session.arm15 = AttnStepArm(ctx, w^, b, dm, nh, nkv, hd, it, smax, s0, window, words, a[10], a[11], lean)
+        session.key15 = key^
+    var cached = session.arm15.value().run(a[0], a[12], l)
+    _ = session.arm15.value().export(a[10], a[11])
+    return cached
+
+
+# TOMBSTONE: the fixed15_v1 block forward's own workspace body (REFACTORED: onto the attention step op, an adopted entry) deleted 2026-11-09 by lane/x45c-causal-generate-program-decode; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch; record in docs/TOMBSTONES.md.
 
 
 
