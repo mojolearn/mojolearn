@@ -764,7 +764,7 @@ def _transformer_run_session_int15(
 # Restore: git apply experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch; record in docs/TOMBSTONES.md.
 
 
-def _transformer_run(
+def _transformer_run[discard_cache: Bool = False](
     a: List[Int],
     b: Int,
     l: Int,
@@ -834,8 +834,9 @@ def _transformer_run(
     # packed at stride s0 (DEVIATION 795(ii)).
     _btick(ton, tk, "surface.weights_up")
     var kv = LlamaKVCache(ctx, b, dims, smax, window, opts.max_positions)
-    kv.k = _upload_addr[False](ctx, a[10], cache_n)
-    kv.v = _upload_addr[False](ctx, a[11], cache_n)
+    comptime if not discard_cache:
+        kv.k = _upload_addr[False](ctx, a[10], cache_n)
+        kv.v = _upload_addr[False](ctx, a[11], cache_n)
     kv.s = s0
     # Per call, from the record (DEVIATION 795(iii) at the default record:
     # the FROZEN theta). p_max is the cache capacity: pos0 + l <= kv.s_max
@@ -866,8 +867,9 @@ def _transformer_run(
     # One wait for the three downloads (lane/neural-apple, 2026-09-28): the
     # owners stay alive through it.
     _download_addr[False](ctx, stages.residual2, b * l * dm, a[12])
-    _download_addr[False](ctx, kv.k, cache_n, a[10])
-    _download_addr[False](ctx, kv.v, cache_n, a[11])
+    comptime if not discard_cache:
+        _download_addr[False](ctx, kv.k, cache_n, a[10])
+        _download_addr[False](ctx, kv.v, cache_n, a[11])
     ctx.synchronize()
     _btick(ton, tk, "surface.outputs_down")
     var out_len = kv.s
