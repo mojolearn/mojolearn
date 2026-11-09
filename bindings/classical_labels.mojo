@@ -19,7 +19,7 @@
 # slots (classical_wrap_array), and the only callables invoked are compiled
 # entry points and C builtins connected at import
 # (python/mojolearn/_native_labels_bridge.py `label_context`).
-from bindings.native_array_storage import native_array_from_bytes, native_array_from_values, native_array_zeros, native_array_empty
+from bindings.native_array_storage import native_array_from_bytes, native_array_from_values, native_array_zeros, native_array_empty, native_scratch_bytes, native_scratch_address
 from bindings.native_loaded_module import native_loaded_module
 from std.math import isfinite
 from std.memory import bitcast, memcpy
@@ -171,6 +171,14 @@ def labels_env(name: String, default: String) -> String:
 # --------------------------------------------------------------- outputs
 
 
+# The one copy of the array admission helpers (lane consol-a0-admission,
+# 2026-11-08): bindings/trees_public_inputs.mojo kept a near-verbatim copy
+# of this block (81 of ~415 lines differed after renaming) and now imports
+# these names from here under its trees_* names. The merge keeps each
+# copy's later improvements: the trees copy's uninitialised scratch
+# destination (0.8.66 C3), forest layout and once-read shape tuples, and
+# this copy's native array stores (no array.array constructor call), type
+# names through the C descriptor and the one scalar-weight classification.
 def labels_itemsize(typestr: String) raises -> Int:
     if typestr == "<f8" or typestr == "<i8":
         return 8
@@ -189,8 +197,14 @@ def labels_empty(shape: PythonObject, typestr: String, context: PythonObject, or
     var count = 1
     for k in range(len(shape)):  # driver-loop: over array rank metadata
         count *= Int(py=shape[k])
-    var width = labels_itemsize(typestr)
-    var store = native_array_zeros(String(_store_code(typestr)), count)
+    # One zero-filled store: `array(code, [0]) * count` (p3-trees: a
+    # zero-filled bytes object of the full size was allocated first and then
+    # copied into the array, two allocations and two passes).
+    _ = labels_itemsize(typestr)  # refuses a non-Array dtype as before
+    # 0.8.66 regression C3: the shared native zero store (one allocation;
+    # a bulk fill on every supported CPython, where `seed * count` ran one
+    # memcpy per element before 3.12). The same zero bytes as before.
+    var store = native_array_zeros(_store_code(typestr), count)
     return classical_wrap_array(store, shape, typestr, order, context)
 
 
@@ -293,9 +307,13 @@ def _view_of_array(value: PythonObject) raises -> LabelsView:
     var shape = List[Int]()
     var strides = List[Int]()
     var rank = Int(py=value.ndim)
+    # Capture the immutable tuples once while admitting this Array. This is
+    # operation-local metadata; a later operation admits its current owner anew.
+    var pyshape = value.shape
+    var pystrides = value.strides
     for k in range(rank):  # driver-loop: over array rank metadata
-        shape.append(Int(py=value.shape[k]))
-        strides.append(Int(py=value.strides[k]))
+        shape.append(Int(py=pyshape[k]))
+        strides.append(Int(py=pystrides[k]))
     var typestr = String(value.dtype)
     return LabelsView(value, Int(py=value._addr), shape^, strides^, typestr, Int(py=value.itemsize))
 
@@ -307,10 +325,12 @@ def _any_contiguous_address(value: PythonObject) raises -> Int:
     ref cpy = Python().cpython()
     var storage = List[Int](length=10, fill=0)
     var pointer = storage.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    if cpython_table()[].PyObject_GetBuffer(value._obj_ptr, pointer, Int32(0x9C)) != 0:
+    # The process-wide C-API table (no by-name symbol lookup per call).
+    var table = cpython_table()
+    if table[].PyObject_GetBuffer(value._obj_ptr, pointer, Int32(0x9C)) != 0:
         raise cpy.unsafe_get_error()
     var address = storage[0]
-    cpython_table()[].PyBuffer_Release(pointer)
+    table[].PyBuffer_Release(pointer)
     _ = storage^
     return address
 
@@ -322,9 +342,11 @@ def _view_of_buffer(value: PythonObject, name: String, context: PythonObject) ra
     var rank = Int(py=view.ndim)
     var shape = List[Int]()
     var strides = List[Int]()
+    var buffer_shape = view.shape
+    var buffer_strides = view.strides
     for k in range(rank):  # driver-loop: over array rank metadata
-        shape.append(Int(py=view.shape[k]))
-        strides.append(Int(py=view.strides[k]))
+        shape.append(Int(py=buffer_shape[k]))
+        strides.append(Int(py=buffer_strides[k]))
     if rank == 0:
         shape.append(1)
         strides.append(item)
@@ -457,17 +479,24 @@ struct LabelsMatrix(Copyable, Movable):
         self.row_major = row_major
 
 
-def labels_f32(source: PythonObject, ndim: Int, order: String, name: String, context: PythonObject) raises -> LabelsMatrix:
+def labels_f32(source: PythonObject, ndim: Int, order: String, name: String, context: PythonObject,
+              scratch: Bool = False) raises -> LabelsMatrix:
     """`_buffer._as_typed(source, '<f4', order, ndim, name)`: the input
     itself when it is already float32 in `order` (no copy), otherwise one
     converted copy through the base binding's casts (a float64 or float32
-    source) or the classical element cast (integers and float16)."""
+    source) or the classical element cast (integers and float16).
+
+    `scratch`: the caller only reads the result's address during this
+    operation and never keeps or returns its owner (a fit's transient X).
+    A converted copy is then written into an uninitialized private store
+    (`native_scratch_bytes`) instead of a zero-filled Array."""
     var view = labels_view(source, name, context)
     labels_check_rank(view, ndim, name)
-    return labels_f32_view(view^, order, context)
+    return labels_f32_view(view^, order, context, scratch)
 
 
-def labels_f32_view(var view: LabelsView, order: String, context: PythonObject) raises -> LabelsMatrix:
+def labels_f32_view(var view: LabelsView, order: String, context: PythonObject,
+                   scratch: Bool = False) raises -> LabelsMatrix:
     var rows = view.shape[0]
     var cols = view.shape[1] if view.ndim() == 2 else 1
     var two = view.ndim() == 2
@@ -478,8 +507,18 @@ def labels_f32_view(var view: LabelsView, order: String, context: PythonObject) 
         _ = view  # keep the Python object alive through the native call above
         return _keep_ret_view^
     var shape = Python.tuple(rows, cols) if two else Python.tuple(rows)
-    var out = labels_empty(shape, "<f4", context, "F" if want_f and two else "C")
-    var dst = labels_address(out)
+    # 0.8.66 regression C3 (gbdt-rank-pairlogit fit 1.24x, +405 ms on
+    # istella: the 1.8 GB transpose destination was zero-filled first).
+    # Every branch below writes all rows * cols words of `dst` before it
+    # returns, so a transient caller's destination needs no fill.
+    var out: PythonObject
+    var dst: Int
+    if scratch:
+        out = native_scratch_bytes(view.size() * 4)
+        dst = native_scratch_address(out)
+    else:
+        out = labels_empty(shape, "<f4", context, "F" if want_f and two else "C")
+        dst = labels_address(out)
     _ = out  # keep the Python object alive through the native call above
     var contiguous_c = view.c_order()
     var contiguous_f = view.f_order()
@@ -512,18 +551,34 @@ def labels_f32_view(var view: LabelsView, order: String, context: PythonObject) 
         _ = out  # keep the Python object alive through the native call above
         _ = view  # keep the Python object alive through the native call above
         return LabelsMatrix(out, dst, rows, cols, not want_f)
-    var staged = labels_vector(view.size(), "<f4", context)
-    labels_cast(view.addr, view.typestr, labels_address(staged), "<f4", view.size(), context)
+    # The staging store is written in full by the cast and read only by the
+    # transpose below; it never escapes, so it needs no fill either.
+    var staged = native_scratch_bytes(view.size() * 4) if scratch else labels_vector(view.size(), "<f4", context)
+    var staged_addr = native_scratch_address(staged) if scratch else labels_address(staged)
+    labels_cast(view.addr, view.typestr, staged_addr, "<f4", view.size(), context)
     _ = staged  # keep the Python object alive through the native call above
     _ = view  # keep the Python object alive through the native call above
     var r = cols if contiguous_f else rows
     var c = rows if contiguous_f else cols
-    _ = py_call_typed(labels_helper(context, "transpose_f32"), PythonObject(labels_address(staged)), PythonObject(dst),
+    _ = py_call_typed(labels_helper(context, "transpose_f32"), PythonObject(staged_addr), PythonObject(dst),
                       PythonObject(r), PythonObject(c))
     _ = staged  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = staged^
     return LabelsMatrix(out, dst, rows, cols, not want_f)
+
+
+def labels_forest_layout(source: PythonObject, name: String, context: PythonObject) raises -> LabelsMatrix:
+    """`_buffer.as_f32_forest_layout`: a 2-D float32 C-order input as is
+    (row-major, a borrow); every other input column-major
+    (`as_f32_colmajor`)."""
+    var view = labels_view(source, name, context)
+    if view.ndim() == 2 and view.typestr == "<f4" and view.size() > 0 and view.c_order() and not view.both_orders():
+        var _keep_ret_view = LabelsMatrix(view.keep, view.addr, view.shape[0], view.shape[1], True)
+        _ = view  # keep the Python object alive through the native call above
+        return _keep_ret_view^
+    labels_check_rank(view, 2, name)
+    return labels_f32_view(view^, "F", context)
 
 
 def labels_all_finite(addr: Int, count: Int, wide: Bool, context: PythonObject) raises -> Bool:
