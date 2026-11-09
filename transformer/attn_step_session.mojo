@@ -77,7 +77,7 @@ def attn_step_same_layout(a: List[Int], b: List[Int]) -> Bool:
     s_max and window)."""
     if len(a) != len(b):
         return False
-    for i in range(len(a)):  # small-loop(ints: at most 25 argument words): compares keys, no data
+    for i in range(len(a)):  # small-loop(a: at most 25 op argument words): compares keys, no data
         if i == 0 or i == 6 or i == 7:
             continue
         if a[i] != b[i]:
