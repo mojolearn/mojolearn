@@ -229,8 +229,11 @@ comptime OP_MLP_LB_PART = 1600
 comptime OP_MLP_LB_FOLD = 1601
 comptime OP_MLP_LB_EPOCH_PART = 1602
 comptime OP_MLP_LB_EPOCH_FOLD = 1603
+#: lane m1-followups-misc: the small MLP program's device non-finite refusal
+#: (autograd/small_mlp_program.mojo): p1[i0] = 1 when p0[t] is NaN or infinite.
+comptime OP_MLP_NONFINITE = 1604
 comptime OP_MLP_LB_FIRST = OP_MLP_LB_PART
-comptime OP_MLP_LB_LAST = OP_MLP_LB_EPOCH_FOLD
+comptime OP_MLP_LB_LAST = OP_MLP_NONFINITE
 #: lane cpu4-python: p0[t] = t (float32, exact below 2^24): the unshuffled
 #: epoch order of the RNN fit, built on the executor.
 comptime OP_SEQ_IOTA = 95
@@ -805,6 +808,15 @@ def op_mse(t: Int, a: Args):
     its unread p3 store of (yhat - y)^2."""
     var d = sub(ld(a.p0, t), ld(a.p1, t))
     st(a.p2, t, mul(d, a.f0))
+
+
+def op_mlp_nonfinite(t: Int, a: Args):
+    """p1[i0] = 1.0 when p0[t] is NaN or infinite (p1[i0] filled with 0
+    first). Every writer stores the same word, so the flag does not depend
+    on the order the threads run in."""
+    var v = a.p0.unsafe_load(t)
+    if v != v or v - v != v - v:
+        a.p1.unsafe_store(a.i0, Float32(1))
 
 
 def op_ce(t: Int, a: Args):

@@ -47,7 +47,7 @@ Entry words (`small_mlp_program_open` / `small_mlp_program_run`):
 from std.ffi import _Global
 from std.math import isfinite
 from sequence.exec_trait import Exec
-from sequence.ops import FP, OPT_ADAMW
+from sequence.ops import FP, OPT_ADAMW, Args, OP_FILL, OP_MLP_NONFINITE
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul
 from core.cast_in import CastIn, CAST_KIND_SIGNED
 from autograd.ops_api import (
@@ -271,6 +271,15 @@ def _run_steps[E: Exec & Movable & Deinitable](
     var y_dev = FP(unsafe_from_address=e.y_buf)
     var held = Tape()
     var temps = List[Int]()
+    # The non-finite refusal of the returned words, on the device (lane m1-followups-misc; X2 had moved it to host
+    # scans of the downloads): one flag word each for the logits, the gradients and the input gradient, filled 0
+    # and set by OP_MLP_NONFINITE, read with the step's one wait.
+    var dflag = s.ex.alloc(3)
+    var flags = List[Float32](length=3, fill=Float32(0))
+    var fa = Args()
+    fa.p0 = dflag
+    fa.f0 = Float32(0)
+    s.ex.launch[OP_FILL](fa, 3)
     swap(held, s.prog_tape)
     swap(held, s.tape)
     try:
@@ -307,9 +316,13 @@ def _run_steps[E: Exec & Movable & Deinitable](
             var out_h = phs[-out_ref - 1] if out_ref < 0 else vals[out_ref]
             var out = s.tensor(out_h)
             if last:
-                s.ex.download_async(FP(unsafe_from_address=a[3]), s.tape.value_of(s.ex, out), rows * _OUT)
+                var lv = s.tape.value_of(s.ex, out)
+                _flag(s.ex, lv, rows * _OUT, dflag, 0)
+                s.ex.download_async(FP(unsafe_from_address=a[3]), lv, rows * _OUT)
             if not train:
+                s.ex.download_async(FP(unsafe_from_address=Int(flags.unsafe_ptr())), dflag, 3)
                 s.ex.sync()
+                _refuse(flags)
                 continue
             var codes = s.tape.variable(s.ex, y_dev + step * rows, rows, 1, False)
             var loss = cross_entropy(s.tape, s.ex, out, codes)
@@ -321,14 +334,20 @@ def _run_steps[E: Exec & Movable & Deinitable](
                 grads[reg[j]] = s.tape.gradient(s.tensor(phs[j]))
             if last:
                 for i in range(4):  # driver-loop: over the four gradients
+                    _flag(s.ex, grads[i], _size(i), dflag, 1)
                     s.ex.download_async(FP(unsafe_from_address=a[4 + i]), grads[i], _size(i))
                 if want_dx:
-                    s.ex.download_async(FP(unsafe_from_address=a[8]), s.tape.gradient(s.tensor(xh)), rows * _IN)
+                    var gx = s.tape.gradient(s.tensor(xh))
+                    _flag(s.ex, gx, rows * _IN, dflag, 2)
+                    s.ex.download_async(FP(unsafe_from_address=a[8]), gx, rows * _IN)
+                s.ex.download_async(FP(unsafe_from_address=Int(flags.unsafe_ptr())), dflag, 3)
             # ONE wait per step: the refusal reads the loss before any update
             # is queued, so a refused step leaves the weights as they were.
             s.ex.sync()
             if not isfinite(FP(unsafe_from_address=loss_dst)[]):
                 raise Error("small MLP train step: loss is not finite")
+            if last:
+                _refuse(flags)
             if mode == SMALL_MLP_PROGRAM_TRAIN:
                 _update(s, e, grads)
         s._drop_temps(temps)
@@ -338,9 +357,31 @@ def _run_steps[E: Exec & Movable & Deinitable](
         s.tape.no_grad()
         swap(held, s.tape)
         swap(held, s.prog_tape)
+        s.ex.free(dflag)
         raise err
     swap(held, s.tape)
     swap(held, s.prog_tape)
+    s.ex.free(dflag)
+    _ = flags^
+
+
+def _flag[E: Exec](mut ex: E, src: FP, n: Int, dflag: FP, slot: Int) raises:
+    """dflag[slot] = 1 when any of src[0:n] is NaN or infinite (OP_MLP_NONFINITE)."""
+    var a = Args()
+    a.p0 = src
+    a.p1 = dflag
+    a.i0 = slot
+    ex.launch[OP_MLP_NONFINITE](a, n)
+
+
+def _refuse(flags: List[Float32]) raises:
+    """The refusal the binding's host scans raised, from the device flags."""
+    if flags[0] != 0:
+        raise Error("RuntimeError: SmallMLPTrainer logits returned an invalid result")
+    if flags[1] != 0:
+        raise Error("RuntimeError: SmallMLPTrainer gradient returned an invalid result")
+    if flags[2] != 0:
+        raise Error("RuntimeError: SmallMLPTrainer input gradient returned an invalid result")
 
 
 def small_mlp_program_run[E: Exec & Movable & Deinitable, KIND: Int](

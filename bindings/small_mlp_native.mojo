@@ -660,18 +660,12 @@ def _program_steps(index: Int, entries: MlpOperationMetadata, x: List[Float32], 
     _ = scratch^
     if written != rows * 3:
         raise Error("RuntimeError: SmallMLPTrainer step returned an invalid result")
-    mlp_require_result_finite(Int(py=logits._addr), rows * 3, "logits")
+    # the logits, gradients and input gradient were refused on the device when not finite
+    # (autograd/small_mlp_program.mojo OP_MLP_NONFINITE flags; lane m1-followups-misc removed the host scans)
     _ = logits
     if mode == _FORWARD:
         _ = losses^
         return Python.list(PythonObject(None), logits, PythonObject(None), PythonObject(None))
-    for i in range(4):  # driver-loop: over the fixed MLP gradient registry
-        var g = g0 if i == 0 else (g1 if i == 1 else (g2 if i == 2 else g3))
-        mlp_require_result_finite(Int(py=g._addr), mlp_size(i), "gradient")
-        _ = g
-    if want_dx:
-        mlp_require_result_finite(Int(py=dx._addr), rows * 8, "input gradient")
-        _ = dx
     var values = bi.list()
     var append = values.append
     for i in range(k):  # driver-loop: over the k step losses the program returned
