@@ -242,6 +242,7 @@ def kernel_ridge_predict_resident[out_origin: MutOrigin, //](
             + " fit with " + String(view.t) + " targets, the call names " + String(n) + " x "
             + String(d) + " with " + String(t)
         )
+    # TOMBSTONE: _upload_checked on the predict query (synchronising scan, DEVIATION 1686 text) removed 2026-11-09 by lane a7a-device-x-svm-gp-krr; recoverable at 5b5490960d (docs/TOMBSTONES.md).
     var qx = DeviceQueryX(view.ctx, xnew_addr, n_query, d, QueryFold.none())
     # kernel_ridge_predict_dev synchronises before its read-back: the status
     # words copied after the query are valid below.

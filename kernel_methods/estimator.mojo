@@ -1067,6 +1067,7 @@ def kernel_ridge_predict_ptr_into[out_origin: MutOrigin, //](
             + String(n) + ", " + String(d) + ", " + String(t)
         )
     var ctx = query_context(fold, _family_ctx())
+    # TOMBSTONE: _upload_checked on the predict query (synchronising scan, DEVIATION 1686 text) removed 2026-11-09 by lane a7a-device-x-svm-gp-krr; recoverable at 5b5490960d (docs/TOMBSTONES.md).
     var qx = DeviceQueryX(ctx, xnew_addr, n_query, d, fold)
     var dfit = _upload_ptr(ctx, xfit_addr, n * d)
     var ddual = _upload_ptr(ctx, dual_addr, n * t)

@@ -438,6 +438,7 @@ def gpc_predict_all_device(
         _ = held^
     else:
         dx = _gpc_upload_checked(ctx, xt_addr, n_train, n_features, String("X_train"))
+    # TOMBSTONE: _gpc_upload_checked on X_star (synchronising scan, DEVIATION 1768 text) removed 2026-11-09 by lane a7a-device-x-svm-gp-krr; recoverable at 5b5490960d (docs/TOMBSTONES.md).
     var qx = DeviceQueryX(ctx, xs_addr, n_star, n_features, fold)
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dkc = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)

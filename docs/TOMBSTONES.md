@@ -546,6 +546,7 @@ in the tables after the sections.
 | [`DevExec._eigh_par_on`, `_eigh_td_try`, `_eigh_par_test`, `_rr_batch_enq` / `_rr_batch_on` / `_rr_batch_check`, `xd_first_where2_enq`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (host-driven dense eigh drivers) | REFACTORED (every dense eigh on `eigh_op_sym` / `eigh_op_dense`) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`DKit.eigh` host words, `IpcaDev.eigh` resident host words, `pinv_mask_kernel`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | FastICA / FactorAnalysis / rotation / MinCovDet / IncrementalPCA / MDS-Isomap-KPCA dense eigh | REFACTORED (w and V stay on the device) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
 | [Lanczos projected T host assembly (`kpca_owner`, `mani_decomp_native`)](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | KernelPCA / Isomap | REFACTORED (`eigh_op_tridiag`; bits change) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
+| [Synchronising query finite scans of the SVM / GP / KernelRidge predict entries](#svm-gp-and-kernelridge-queries-on-the-device-query-x-2026-11-09) | SVC / SVR / GaussianProcessRegressor / GaussianProcessClassifier / KernelRidge | REFACTORED (status word read back with the result; fold gathered on the device; no bit change) | 2026-11-09 | none (never reached main; lane/a7a-device-x-svm-gp-krr from 5b5490960d) |
 ## Retired by lane debt-block-per-n (2026-10-21)
 
 These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
@@ -5014,3 +5015,27 @@ origin/lane/x4-transformer-on-executor c0b21c971c.
 - Recoverable at c0b21c971c; restore with `git apply experiments/removed/TRANSFORMER_DECODE_SESSION_STRUCTS.patch`
   (transformer/transformer_binding_impl.mojo, bindings/_mojolearn_transformer.mojo,
   transformer/native_lm_resident_dispatch.mojo).
+
+## SVM, GP and KernelRidge queries on the device query X (2026-11-09)
+
+Lane a7a-device-x-svm-gp-krr (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2 steps 3-4), on
+origin/integ/pre-0867-w3 5b5490960d.
+
+- What it did: every GPU query entry of SVC / SVR (`svc_predict_resident`, `svr_predict_resident`),
+  GaussianProcessRegressor (`gpr_predict_resident`), GaussianProcessClassifier (`gpc_predict_all`,
+  `gpc_predict_all_resident`) and KernelRidge (`kernel_ridge_predict_ptr`, `kernel_ridge_predict_resident`) takes its
+  query as a `DeviceQueryX` (core/device_query_x.mojo): the host words copied once with `enqueue_finite_status`, or a
+  cross-validation fold gathered on the device out of model selection's resident base (`msel_device_x_f32`), the
+  finite and range words read back with the result. The doors refuse in one wording, 'Input X contains NaN or
+  infinity (<est>).' (`admitted_finite_refuse`, `door_rows_refuse`); routes whose entry returns no word test the
+  query on the host first (`gp_query_scan`, `_krr_query_scan`, the SVC/SVR host-list and descriptor routes through
+  `admit_family_meta(finite=True)`).
+- Deleted from those entries: the synchronising first-non-finite scans of the query and their refusal texts
+  (svm `check_finite_device` "predict X ... DEVIATION 636" in `_svm_resident_decide`; gp `_gpc_upload_checked`
+  "X_star ... DEVIATION 1768" in `gpr_predict_resident_device` and `gpc_predict_all_device`; kernel_methods
+  `_upload_checked` "predict X ... DEVIATION 1686" in `kernel_ridge_predict_ptr_into` and
+  `kernel_ridge_predict_resident`). The GP door's host scan of a borrowed predict X (`classical_check_x`) is now
+  `defer_finite`. The functions themselves stay (fit uploads and other callers use them).
+- Verdict: refactor, no define. Bits: none (the same words reach the same kernels). RUN OWED: SVC / SVR / GPR / GPC
+  / KernelRidge predict and cross_validate on NVIDIA and AMD against 5b5490960d.
+- Never reached main: recoverable at 5b5490960d (no patch).
