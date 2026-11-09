@@ -10,8 +10,8 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_address
-from bindings.admitted_input import admit_x
-from bindings.decomp_inputs import decomp_input
+from bindings.admitted_input import admit_x, admitted_finite_refuse
+from bindings.decomp_inputs import decomp_admit, decomp_input
 from bindings.decomp_owner_common import (
     decomp_attr, decomp_check, decomp_entries, decomp_eq, decomp_f32, decomp_float, decomp_gemm_check, decomp_int,
     decomp_le, decomp_repr, decomp_seed, decomp_set_mode,
@@ -68,8 +68,12 @@ def _regs(fields: PythonObject, n: Int, d: Int) raises -> PythonObject:
 
 
 def _run(model: PythonObject, fields: PythonObject, x: PythonObject, nc: Int, init: Int, w_in: PythonObject,
-         h_in: PythonObject, seed: Int, update_h: Bool, beta: Float64, context: PythonObject) raises -> PythonObject:
-    """One x_decomp_nmf_fit call: (W, H, n_iter_, error)."""
+         h_in: PythonObject, seed: Int, update_h: Bool, beta: Float64, context: PythonObject,
+         test: Bool = False) raises -> PythonObject:
+    """One x_decomp_nmf_fit call: (W, H, n_iter_, error). `test` (lane a8d):
+    X was admitted with `defer_finite` and not scanned; the driver returns
+    its finite status word (the trailing flag) and a flagged X is refused
+    with the admission's wording."""
     var entries = decomp_entries(model, fields, Python.tuple("x_decomp_nmf_fit"), context)
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
@@ -84,12 +88,16 @@ def _run(model: PythonObject, fields: PythonObject, x: PythonObject, nc: Int, in
         0 if decomp_eq(fields["solver"], PythonObject("cd")) else 1, 1 if update_h else 0,
         decomp_int(fields["max_iter"]), 1 if Bool(py=fields["shuffle"]) else 0, classical_address(w),
         classical_address(h))
+    if test:
+        _ = py_call(params.append, PythonObject(1))
     _ = w  # keep the Python object alive through the native call above
     _ = h  # keep the Python object alive through the native call above
     var floats = Python.list(beta, decomp_float(fields["tol"]), regs[0], regs[1], regs[2], regs[3])
     var got = py_call_typed(entries["x_decomp_nmf_fit"], params, floats)
     _ = h  # keep the Python object alive through the native call above
     _ = w  # keep the Python object alive through the native call above
+    if test:
+        admitted_finite_refuse(Int(py=got[2]), "NMF")
     return Python.tuple(w, h, got[0], got[1])
 
 
@@ -98,7 +106,11 @@ def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: Python
     """`NMF.fit_transform(X, W=None, H=None)`: W."""
     var fields = py_fields(model)
     decomp_set_mode(fields, context)
-    var x = decomp_input(source, "NMF", context)
+    # Lane a8d: X is not scanned here (defer_finite); the driver tests it in
+    # its negativity total and returns the status word.
+    var admitted = decomp_admit(source, "NMF", context, defer_finite=True)
+    var test = not admitted.finite
+    var x = admitted.array
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     var beta = _validate(fields)
@@ -111,7 +123,7 @@ def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: Python
         if Int(py=wm.shape[0]) != n or Int(py=wm.shape[1]) != nc or Int(py=hm.shape[1]) != d:
             raise Error("NMF: W must be (n_samples, n_components) and H (n_components, n_features) for init='custom'")
         result = _run(model, fields, x, nc, _INIT_GIVEN, wm, hm, decomp_seed(fields["random_state"]), True, beta,
-                      context)
+                      context, test)
         _ = wm^
         _ = hm^
     else:
@@ -137,7 +149,7 @@ def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: Python
         if code != _INIT_RANDOM and nc > smaller:
             raise Error("init = 'nndsvd' can only be used when n_components <= min(n_samples, n_features)")
         result = _run(model, fields, x, nc, code, PythonObject(None), PythonObject(None),
-                      decomp_seed(fields["random_state"]), True, beta, context)
+                      decomp_seed(fields["random_state"]), True, beta, context, test)
     var h = result[1]
     py_setitem(fields, "components_", h)
     py_setitem(fields, "n_components_", PythonObject(Int(py=h.shape[0])))
@@ -163,7 +175,9 @@ def nmf_transform(model: PythonObject, source: PythonObject, context: PythonObje
     """`NMF.transform`: W for the fitted components (H fixed)."""
     var fields = py_fields(model)
     decomp_check(model, fields, "components_")
-    var x = decomp_input(source, "NMF", context)
+    var admitted = decomp_admit(source, "NMF", context, defer_finite=True)
+    var test = not admitted.finite
+    var x = admitted.array
     var d = Int(py=x.shape[1])
     var fitted = decomp_int(decomp_attr(model, fields, "n_features_in_"))
     if d != fitted:
@@ -171,7 +185,7 @@ def nmf_transform(model: PythonObject, source: PythonObject, context: PythonObje
     var beta = _validate(fields)
     var h = admit_x(fields["components_"], 2, "components_", context)
     var result = _run(model, fields, x, Int(py=h.shape[0]), _TRANSFORM, PythonObject(None), h,
-                      decomp_seed(fields["random_state"]), False, beta, context)
+                      decomp_seed(fields["random_state"]), False, beta, context, test)
     _ = x^
     _ = h^
     return result[0]
