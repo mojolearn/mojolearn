@@ -285,7 +285,7 @@ struct GPCNewtonStep(LoopStep, Movable):
         )
         # K b from frozen inputs once the loop is done: the same words
         identical_gemm_into(ctx, self.dkb, self.dk, self.dbv, self.dgw, n, 1, n, OP_TN)
-        ctx.enqueue_function[gpc_newton_nan_reset_kernel](  # small-launch(one word): the NaN guard's index
+        ctx.enqueue_function[gpc_newton_nan_reset_kernel](  # small-launch(n: the sentinel value stored, not a bound): one thread stores one word, the NaN guard's index
             g, _ip(self.dnan), Int32(n), grid_dim=1, block_dim=1,
         )
         ctx.enqueue_function[gpc_newton_scale_nan_kernel](
@@ -304,11 +304,11 @@ struct GPCNewtonStep(LoopStep, Movable):
                 g, _fp(self.da), _fp(self.df), _fp(self.dy), Int32(n), _fp(self.dpd), _fp(self.dpt), Int32(self.nbf),
                 grid_dim=_blocks(self.nbf), block_dim=GPC_NEWTON_TPB,
             )
-        ctx.enqueue_function[gpc_newton_lml_fin_kernel](  # small-launch(one word): the likelihood's scalar combine
+        ctx.enqueue_function[gpc_newton_lml_fin_kernel](  # small-launch(nbf: fold blocks of the likelihood): one thread combines the partials into one scalar
             g, _fp(self.dpd), _fp(self.dpt), Int32(self.nbf), _fp(self.dldet), _fp(self.dlml),
             grid_dim=1, block_dim=1,
         )
-        ctx.enqueue_function[gpc_newton_criterion_kernel](  # small-launch(one word): the loop's NaN guard and stop test
+        ctx.enqueue_function[gpc_newton_criterion_kernel](  # small-launch(n: the sentinel compared, not a bound): one thread runs the loop criterion over three words
             g, _fp(self.dlml), _fp(self.dkept), _ip(self.dnan), Int32(n), Int32(it),
             grid_dim=1, block_dim=1,
         )
