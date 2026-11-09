@@ -252,9 +252,12 @@ def _connect_device_rows(registry):
     # join when that door is on admit_x (lane A1b).
     from . import linear_model, _expansion_prep as prep, decomposition
     from . import _svm_impl as svm, svm as linear_svm, _gp_impl as gp, kernel_methods as km, neighbors
+    from . import _gpc_impl as gpc
+    # Lane a7a: GaussianProcessClassifier opts in (its door admits X through
+    # admit_x; predict / predict_proba gather a fold on the device).
     for cls in (linear_model.LinearRegression, linear_model.Ridge, prep.MaxAbsScaler, prep.RobustScaler,  # glue: fixed ABI metadata connected once during package import
                 decomposition.PCA, svm.SVC, svm.SVR, linear_svm.LinearSVC, linear_svm.LinearSVR,
-                gp.GaussianProcessRegressor, km.KernelRidge,
+                gp.GaussianProcessRegressor, gpc.GaussianProcessClassifier, km.KernelRidge,
                 neighbors.KNeighborsClassifier, neighbors.KNeighborsRegressor,
                 linear_model.LogisticRegression, linear_model.QNRegressor):
         if cls in registry:
