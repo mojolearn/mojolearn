@@ -419,6 +419,14 @@ them for you.
 - No call as a default argument value (for example
   `binding: PythonObject = PythonObject(None)`). Defaults are evaluated at
   compile time. Pass the value at the call site.
+- Register a Python type for a Mojo struct in ONE binding only. A second binding that calls
+  `add_type` for the same struct aborts `import mojolearn` ("Error building multiple Python type
+  objects"). The other bindings import the type from its owner (`bindings/native_identity_type.mojo`).
+- Mojo frees a local at its last named use. A device buffer, ring or list that a view, a pointer or a
+  queued launch still reads must be named again after that use (keep it alive past the final copy),
+  or the later read hits freed storage.
+- Compile-green is not a gate. A packed wheel must import and pass the light smoke on the Mac before
+  it is merged to main, built for measurement or sent to a box.
 
 ## Logs and context
 
