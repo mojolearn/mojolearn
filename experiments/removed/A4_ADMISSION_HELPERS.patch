@@ -1,0 +1,1447 @@
+diff --git a/bindings/admitted_sequence.mojo b/bindings/admitted_sequence.mojo
+deleted file mode 100644
+index 144018e22c..0000000000
+--- a/bindings/admitted_sequence.mojo
++++ /dev/null
+@@ -1,121 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-# THE ONE ADMISSION PATH, rank-N members: the sequence, time-series and
+-# neural doors (TSA, forecast, embedding, xcnn, xseq_neural, the byte-LM
+-# trainers). Plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section
+-# 3.3 row A4 (lane a4-admit-sequence-tsa-neural, 2026-11-08); the rank 0-2
+-# X / y / sample_weight doors are bindings/admitted_input.mojo (lane A0).
+-#
+-#   admitted_ndarray_f32(shape, count, context) -> ndarray
+-#                     the uninitialised float32 ndarray a cast fills
+-#   admit_nd_f32(value, name, copy, context) -> ndarray
+-#                     `np.array(value, dtype=float32, order="C", copy=copy)`
+-#                     of an admitted ndarray: the array itself when it is
+-#                     C-order float32 and no copy is asked for (borrowed),
+-#                     otherwise ONE parallel cast into uninitialised storage
+-#                     (the former xseq_f32)
+-#   admit_nd_owned_f32(source, dims, name, context) -> Array
+-#                     the model's own C-order float32 copy of an input of
+-#                     exactly `dims`, refused unless finite, in one pass (the
+-#                     former training_f32_cast_owned + xseq_all_finite_f32)
+-#
+-# Every cast is core/admitted_input_nd.mojo `admitted_cast_nd_f32` (row tasks
+-# across the host's cores, a typed load per item, the finite test in the same
+-# pass). Numerics: none; the same float32 words reach the same kernels.
+-from std.python import Python, PythonObject
+-from bindings.native_loaded_module import native_loaded_module
+-from bindings.py_balanced import py_call
+-from bindings.classical_pandas import classical_admit_value
+-from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind
+-from bindings.sequential_arrays import sequential_address
+-from bindings.native_array_storage import native_scratch_bytes, native_array_zeros
+-from bindings.arena_materialize_native import _owned
+-from core.cast_in import cast_in_kind
+-from core.admitted_input_nd import admitted_cast_nd_f32
+-
+-comptime _AS_F32P = MutPointer[Float32, MutUntrackedOrigin]
+-
+-
+-def admitted_ndarray_f32(shape: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
+-    """A C-order float32 ndarray of `shape` (`count` words) whose contents
+-    are NOT initialised: the destination of one cast that writes every word
+-    before anything reads it. It is the same ndarray-over-bytearray object
+-    `sequential_array` makes, without the zero fill."""
+-    # REGRESSIONS F3 / C3: the zero fill of a destination the cast then
+-    # overwrote in full was a second pass over X.
+-    var storage = native_scratch_bytes(count * 4)
+-    return py_call(context["ndarray"], shape, dtype=context["float32"], buffer=storage)
+-
+-
+-def admit_nd_f32(value: PythonObject, name: String, copy: Bool, context: PythonObject) raises -> PythonObject:
+-    """`np.array(value, dtype=np.float32, order="C", copy=copy)` of an
+-    admitted ndarray (`sequential_input`): the array itself when it is
+-    already C-ordered float32 and no copy is asked for, otherwise one
+-    C-ordered float32 copy with the one admission integer rule
+-    (integer -> double -> float32, `classical_f32_bits`, as `admit_x`).
+-    Non-finite words are copied as they are."""
+-    var dtype = value.dtype
+-    var kind = String(py=dtype.kind)
+-    if kind != "b" and kind != "i" and kind != "u" and kind != "f":
+-        raise Error("TypeError: " + name + " must be a numeric array")
+-    if not Bool(py=dtype.isnative):
+-        raise Error("TypeError: " + name + " must be in native byte order")
+-    var rank = Int(py=value.ndim)
+-    var c_order = Bool(py=value.flags.c_contiguous)
+-    if not copy and c_order and Int(py=dtype.num) == 11:
+-        return value
+-    var shape = value.shape
+-    var item = Int(py=dtype.itemsize)
+-    var cast = cast_in_kind(Int(py=dtype.num), item, name)
+-    var dims = List[Int]()
+-    var steps = List[Int]()
+-    var strides = value.strides  # one attribute read, not one per axis
+-    var count = 1
+-    for k in range(rank):  # driver-loop: over array rank metadata
+-        dims.append(Int(py=shape[k]))
+-        steps.append(Int(py=strides[k]))
+-        count *= dims[k]
+-    var out = admitted_ndarray_f32(shape, count, context)
+-    _ = admitted_cast_nd_f32(Int(py=sequential_address(value)), dims, steps, item, cast,
+-                             _AS_F32P(unsafe_from_address=Int(py=sequential_address(out))))
+-    _ = value  # keep the source alive through the native cast above
+-    return out
+-
+-
+-def admit_nd_owned_f32(source: PythonObject, dims: List[Int], name: String,
+-                       context: PythonObject) raises -> PythonObject:
+-    """The model's own C-order float32 Array of `source` (any admitted
+-    numeric exporter or nested sequence), which must have exactly the shape
+-    `dims`; refused ("<name> must be finite") when any word is NaN or an
+-    infinity. Integers take `Array.astype`'s integer -> double -> float32
+-    route."""
+-    classical_admit_value(source, context)
+-    var value = classical_input(source, context, name)
+-    var shape = value.shape
+-    var strides = value.strides
+-    var item = Int(py=value.itemsize)
+-    var kind = classical_cast_kind(value, item, name, context)
+-    if len(shape) != len(dims):
+-        raise Error(name + " has an unexpected shape")
+-    var count = 1
+-    var native_strides = List[Int]()
+-    var output_shape = Python.list()
+-    for axis in range(len(dims)):  # driver-loop: over admitted array rank metadata
+-        if Int(py=shape[axis]) != dims[axis]:
+-            raise Error(name + " has an unexpected shape")
+-        count *= dims[axis]
+-        native_strides.append(Int(py=strides[axis]))
+-        _ = py_call(output_shape.append, dims[axis])
+-    output_shape = py_call(native_loaded_module("builtins").tuple, output_shape)
+-    if count < 0 or count > 9223372036854775807 // 4:
+-        raise Error("ValueError: " + name + " exceeds native indexing bounds")
+-    # A retained Array: its array.array store has no uninitialised
+-    # constructor, so it keeps the zero-filled store (as admitted_storage_f32
+-    # does without NumPy).
+-    var result = _owned(native_array_zeros("f", count), output_shape, "<f4", context)
+-    var pointer = _AS_F32P(unsafe_from_address=Int(py=classical_address(result)))
+-    # One pass: the cast's own finite flag replaces the second scan.
+-    if not admitted_cast_nd_f32(Int(py=classical_address(value)), dims, native_strides, item, kind, pointer):
+-        raise Error(name + " must be finite")
+-    _ = value^
+-    return result
+diff --git a/bindings/byte_lm_host_trainer_native.mojo b/bindings/byte_lm_host_trainer_native.mojo
+index 866eded1e5..80789eb5ac 100644
+--- a/bindings/byte_lm_host_trainer_native.mojo
++++ b/bindings/byte_lm_host_trainer_native.mojo
+@@ -26,7 +26,7 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
+ from bindings.native_numpy_metadata import native_numpy_type, native_numpy_dtype
+ from bindings.native_buffer_owner import native_storage_allocate
+ from providers.python.byte_lm_metadata_pyapi import _Shape, _shape_of, byte_lm_lengths, byte_lm_config_operation
+-from bindings.admitted_sequence import admit_nd_owned_f32
++from providers.python.training_buffer_pyapi import training_f32_cast_owned
+ from core.training_state_validation import training_byte_shape_validate
+ from core.sha256 import sha256_hex_addr
+ from bindings.tsa_hw_native import tsa_array
+@@ -37,8 +37,7 @@ from bindings.classical_arrays import classical_input, classical_address, classi
+ from bindings.classical_attributes import classical_connect_numpy
+ from bindings.classical_pandas import classical_admit_value
+ from core.cast_in import CAST_KIND_FLOAT
+-from core.xseq_marshal import neural_first_bad_id
+-from core.admitted_input_nd import admitted_ids_i32
++from core.xseq_marshal import neural_cast_i32_2d, neural_first_bad_id
+ from bindings.byte_perf_helpers import byte_int_list_from_i32, byte_int_list_from_i64
+ 
+ comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
+@@ -76,7 +75,7 @@ def _ids_i32(source: PythonObject, context: PythonObject) raises -> PythonObject
+         raise Error("TypeError: ids must be an integer array")
+     var store = _zero_store("i", rows * cols, context)
+     var tokens = classical_wrap_array(store, Python.tuple(rows, cols), "<i4", "C", context)
+-    admitted_ids_i32(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
++    neural_cast_i32_2d(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
+                        rows, cols, item, kind, _I32P(unsafe_from_address=Int(py=classical_address(tokens))))
+     _ = value  # keep the Python object alive through the native call above
+     _ = tokens  # keep the Python object alive through the native call above
+@@ -176,7 +175,7 @@ def _inference_parameters(mut mods: NativeModules, source: PythonObject, shape:
+                           context: PythonObject) raises -> Tuple[PythonObject, String]:
+     var bi = mods.module("builtins")
+     if py_type(source) is not bi.dict:
+-        return (admit_nd_owned_f32(source, [shape.n_total()], "parameters", context), String("float32"))
++        return (training_f32_cast_owned(source, [shape.n_total()], "parameters", context), String("float32"))
+     # Inspect native dictionary keys without invoking mapping/protocol hooks.
+     # Packed classes are storage only; their buffers pass the same admission as
+     # a direct linalg call, and decoding uses that existing provider/kernel.
+@@ -235,7 +234,7 @@ def _inference_parameters(mut mods: NativeModules, source: PythonObject, shape:
+         elif formats[i] == 2:
+             item = linalg_ops_operation(PythonObject(None), "family_lin_dequantize_int8", item, context["byte_lm_linalg_context"])
+             mods.released()
+-        var owned = admit_nd_owned_f32(item, shapes[i], names[i], context)
++        var owned = training_f32_cast_owned(item, shapes[i], names[i], context)
+         var count = 1
+         for j in range(len(shapes[i])):  # driver-loop: over admitted tensor shape metadata
+             count *= shapes[i][j]
+@@ -322,9 +321,9 @@ def byte_lm_host_construct(mut mods: NativeModules, trainer: PythonObject, args:
+         raise Error(String(binding))
+     var entry = neural_descriptor_entry(binding, "byte_lm_host_train_step")
+     var n = shape.n_total()
+-    var parameters = admit_nd_owned_f32(args[0], [n], "parameters", context)
+-    var moment = _f32_array(n, context) if args[1] is None else admit_nd_owned_f32(args[1], [n], "m", context)
+-    var variance = _f32_array(n, context) if args[2] is None else admit_nd_owned_f32(args[2], [n], "v", context)
++    var parameters = training_f32_cast_owned(args[0], [n], "parameters", context)
++    var moment = _f32_array(n, context) if args[1] is None else training_f32_cast_owned(args[1], [n], "m", context)
++    var variance = _f32_array(n, context) if args[2] is None else training_f32_cast_owned(args[2], [n], "v", context)
+     if py_type(args[4]) is not bi.int:
+         raise Error("completed_steps must be an int")
+     var completed = Int(py=args[4])
+@@ -470,7 +469,7 @@ def byte_lm_host_infer(mut mods: NativeModules, model: PythonObject, operation:
+     var kind = classical_cast_kind(value, item, "ids", context)
+     var tokens = tsa_array("i", "<i4", Python.tuple(batch, length), batch * length, 4, context)
+     var token_address = Int(py=classical_address(tokens))
+-    admitted_ids_i32(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
++    neural_cast_i32_2d(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
+         batch, length, item, kind, _I32P(unsafe_from_address=token_address))
+     _ = value^
+     var sizes = List[Int](length=batch, fill=length)
+diff --git a/bindings/byte_lm_trainer_native.mojo b/bindings/byte_lm_trainer_native.mojo
+index 697b9e7839..561cf9da31 100644
+--- a/bindings/byte_lm_trainer_native.mojo
++++ b/bindings/byte_lm_trainer_native.mojo
+@@ -44,7 +44,7 @@ from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR
+ from bindings.byte_checkpoint_native import byte_checkpoint_save, byte_checkpoint_load
+ from providers.python.byte_lm_json_checkpoint_pyapi import BYTE_JSON_LIMIT, byte_json_payload, byte_json_arrays, byte_json_encode, byte_json_read, byte_json_write
+ from bindings.tsa_hw_native import tsa_array
+-from core.admitted_input_nd import admitted_ids_i32
++from core.xseq_marshal import neural_cast_i32_2d
+ from bindings.byte_perf_helpers import byte_int_list_from_i64
+ from core.byte_lm_teardown_switch import byte_lm_teardown_with_gil
+ from bindings.native_model_records import records_get, records_put, RECORDS_PREPARED
+@@ -95,7 +95,7 @@ def _ids(mut mods: NativeModules, source: PythonObject, shape: _Shape, context:
+         raise Error("ValueError: Byte-LM ids requires finite shape (" + String(rows) + ", " + String(cols) + ")")
+     var strides = value.strides
+     var tokens = tsa_array("i", "<i4", Python.tuple(rows, cols), rows * cols, 4, context)
+-    admitted_ids_i32(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
++    neural_cast_i32_2d(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
+                        rows, cols, item, CAST_KIND_SIGNED, _I32P(unsafe_from_address=Int(py=classical_address(tokens))))
+     _ = value  # keep the Python object alive through the native call above
+     _ = tokens  # keep the Python object alive through the native call above
+@@ -1193,7 +1193,7 @@ def _ids_steps(mut mods: NativeModules, source: PythonObject, shape: _Shape,
+     var source_address = Int(py=classical_address(value))
+     var target_address = Int(py=classical_address(tokens))
+     for k in range(n_steps):  # driver-loop: over the step batches (one strided 2-D cast each)
+-        admitted_ids_i32(source_address + k * s0, s1, s2, rows, cols, item, CAST_KIND_SIGNED,
++        neural_cast_i32_2d(source_address + k * s0, s1, s2, rows, cols, item, CAST_KIND_SIGNED,
+                            _I32P(unsafe_from_address=target_address + k * rows * cols * 4))
+     _ = value  # keep the Python object alive through the native calls above
+     _ = tokens  # keep the Python object alive through the native calls above
+@@ -1351,7 +1351,7 @@ def _logits_input(mut mods: NativeModules, source: PythonObject, lengths: Python
+     var source_addr = Int(py=classical_address(value))
+     var tokens = tsa_array("i", "<i4", Python.tuple(batch, length), batch * length, 4, context)
+     var token_addr = Int(py=classical_address(tokens))
+-    admitted_ids_i32(source_addr, Int(py=strides[0]), Int(py=strides[1]), batch, length,
++    neural_cast_i32_2d(source_addr, Int(py=strides[0]), Int(py=strides[1]), batch, length,
+         item, kind, _I32P(unsafe_from_address=token_addr))
+     _ = value^
+     var sizes = List[Int](length=batch, fill=length)
+diff --git a/bindings/causal_lm_construct.mojo b/bindings/causal_lm_construct.mojo
+index 9e68941bcb..91a550739e 100644
+--- a/bindings/causal_lm_construct.mojo
++++ b/bindings/causal_lm_construct.mojo
+@@ -22,7 +22,7 @@ from bindings.causal_model_config import config_load_binding, model_plan_for_bin
+ from bindings.causal_checkpoint import checkpoint_array, checkpoint_zeros, checkpoint_open_binding, checkpoint_index_binding, checkpoint_read_binding, checkpoint_close_binding, _info_snapshot
+ from bindings.native_json import native_path, native_path_exists
+ from bindings.mode_metadata_native import _fields, _class_fields
+-from bindings.neural_block_admission import admit_block_f32, BLOCK_OPERATION, neural_array_snapshot, neural_array_slots, neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys, neural_metadata_snapshot, neural_model_weights, neural_block_fields, neural_block_weight_names
++from bindings.neural_block_admission import neural_block_f32, neural_array_snapshot, neural_array_slots, neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys, neural_metadata_snapshot, neural_model_weights, neural_block_fields, neural_block_weight_names
+ from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
+ from core.native_descriptor_abi import MAMBA_STATE_ABI_NAME
+ from providers.python.neural_descriptor_pyapi import neural_descriptor_cached
+@@ -54,7 +54,7 @@ def _model_dtype_refusal(name: String, code: String) -> String:
+ def _model_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+     # Shared native admission captures the original Array slots/export once,
+     # retains their owner and preserves C-view versus F/foreign-copy behavior.
+-    return admit_block_f32(value, name, context, BLOCK_OPERATION)
++    return neural_block_f32(value, name, context)
+ 
+ 
+ def _model_native_buffer(mut mods: NativeModules, value: PythonObject, code: String, context: PythonObject) raises -> PythonObject:
+diff --git a/bindings/embedding_layer_native.mojo b/bindings/embedding_layer_native.mojo
+index 7f0863c495..0a6c8ce838 100644
+--- a/bindings/embedding_layer_native.mojo
++++ b/bindings/embedding_layer_native.mojo
+@@ -39,7 +39,7 @@ from bindings.classical_attributes import classical_connect_numpy
+ from bindings.sequential_inputs import sequential_input
+ from bindings.native_loaded_module import native_loaded_module, native_interpreter_finalizing
+ from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
+-from core.admitted_input_nd import admitted_cast_nd_f32
++from core.xseq_marshal import xseq_cast_nd
+ from core.training_embedding_inputs import embedding_pack, embedding_cast_refusal
+ from core.borrowed_buffer import BorrowedBufferLayout
+ from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_FLOAT, CAST_KIND_BOOL
+@@ -534,7 +534,7 @@ def _float_owned(source: PythonObject, name: String, context: PythonObject) rais
+         strides[i] = step
+         step *= layout.shape[i]
+     var out = new_array(layout.shape, "<f4")
+-    _ = admitted_cast_nd_f32(Int(bytes.unsafe_ptr()), layout.shape, strides, layout.itemsize, kind,
++    xseq_cast_nd(Int(bytes.unsafe_ptr()), layout.shape, strides, layout.itemsize, kind, True,
+         MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr)))
+     _ = bytes^
+     _ = pin^
+diff --git a/bindings/mamba_public_native.mojo b/bindings/mamba_public_native.mojo
+index de5182dc97..d1ce42e362 100644
+--- a/bindings/mamba_public_native.mojo
++++ b/bindings/mamba_public_native.mojo
+@@ -32,7 +32,7 @@ from bindings.generation_buffers import (
+ from bindings.causal_lm_public import _native_function, _native_entry_fields, _native_has_entry, _mutable, _writeback
+ from bindings.causal_lm_construct import _model_bindings, _model_block
+ from bindings.neural_block_public import neural_training_entries, _neural_input, _neural_lengths, _neural_int_words, neural_block_snapshot_prepared
+-from bindings.neural_block_admission import neural_block_fields, neural_block_snapshot, admit_block_f32, BLOCK_OPERATION, neural_array_snapshot, neural_native_scalar
++from bindings.neural_block_admission import neural_block_fields, neural_block_snapshot, neural_block_f32, neural_array_snapshot, neural_native_scalar
+ from bindings.mode_metadata_native import _fields, _class_fields
+ from bindings.native_loaded_module import native_loaded_module, NativeModules
+ from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
+@@ -594,7 +594,7 @@ def mamba3_set_input_states(mut mods: NativeModules,
+     var targets = [String("theta"), String("h"), String("pending_k"), String("pending_v")]
+     var sources = Python.list(theta, h, k, v)
+     for i in range(4):  # driver-loop: over the four named continuation pieces
+-        var source = admit_block_f32(sources[i], names[i], context, BLOCK_OPERATION)
++        var source = neural_block_f32(sources[i], names[i], context)
+         var target = slots[targets[i]]
+         var want = _shape_of(target)
+         if not Bool(py=source.shape == want):
+diff --git a/bindings/neural_block_admission.mojo b/bindings/neural_block_admission.mojo
+index 4013ef2e3d..7d9e384af8 100644
+--- a/bindings/neural_block_admission.mojo
++++ b/bindings/neural_block_admission.mojo
+@@ -8,19 +8,12 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
+ from bindings.native_array_snapshot import native_array_slots as neural_array_slots, native_array_snapshot as neural_array_snapshot
+ from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
+ from bindings.generation_buffers import generation_array, py_ints
+-from bindings.native_array_storage import native_scratch_bytes, native_scratch_address
+ from transformer.causal_lm_construct_impl import causal_lm_gather_f32
+ from core.hostptr import f32_ptr
+ from std.memory import memcpy
+ from bindings.classical_attributes import classical_connect_numpy
+ from bindings.sequential_admission import _one_of
+ 
+-# The uses of admit_block_f32 (below): read in place when possible, kept for
+-# the operation, or retained by the model.
+-comptime BLOCK_READ = 0
+-comptime BLOCK_OPERATION = 1
+-comptime BLOCK_RETAINED = 2
+-
+ 
+ def neural_native_scalar(mut mods: NativeModules, value: PythonObject, context: PythonObject, integer: Bool = False) raises -> Bool:
+     var b = mods.module("builtins")
+@@ -249,11 +242,11 @@ def neural_weights_snapshot(mut mods: NativeModules, values: PythonObject, conte
+         if value is None:
+             py_call(result.append, value)
+         elif py_type(value) is context["array_class"]:
+-            py_call(result.append, admit_block_f32(mods, value, "weight", context, BLOCK_OPERATION) if f32 else neural_array_snapshot(mods, value, context))
++            py_call(result.append, neural_block_f32(mods, value, "weight", context) if f32 else neural_array_snapshot(mods, value, context))
+         else:
+             # Foreign model buffers historically copy to native storage on
+             # use. Capture that copy once and retain it for this operation.
+-            py_call(result.append, admit_block_f32(mods, value, "weight", context, BLOCK_OPERATION))
++            py_call(result.append, neural_block_f32(mods, value, "weight", context))
+     return result
+ 
+ 
+@@ -341,33 +334,33 @@ def neural_model_weights(mut mods: NativeModules, values: PythonObject, context:
+                     py_setitem(saved, name, storage)
+             py_setitem(result, keys[i], captured)
+         else:
+-            py_setitem(result, keys[i], admit_block_f32(mods, value, String(keys[i]), context, BLOCK_RETAINED))
++            py_setitem(result, keys[i], neural_block_f32_owned(mods, value, String(keys[i]), context))
+     return result
+ 
+ 
+-
+-# THE ONE NEURAL INPUT DOOR (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md
+-# section 3.3 row A4, lane a4-admit-sequence-tsa-neural, 2026-11-08): every
+-# float32 tensor a neural block, model or session operation admits goes
+-# through `admit_block_f32` with the USE that decides borrow versus copy.
+-#
+-#   BLOCK_READ       the operation only reads it (a forward / step / backward
+-#                    x): a C-order float32 Array or a C-contiguous, four-byte
+-#                    aligned float32 export is read in place (a read-only
+-#                    Array view); anything else is ONE copy into
+-#                    uninitialised storage (0.8.66 regression C5: a fresh
+-#                    zero-filled Array per call before the copy).
+-#   BLOCK_OPERATION  kept for this operation (weights, grad_output, session
+-#                    pieces): a C-order float32 Array is used as it is, any
+-#                    other input is the operation's own copy (a native Array).
+-#   BLOCK_RETAINED   kept by the model (constructor weights): always the
+-#                    model's own C-order copy, so a later in-place write into
+-#                    the caller's array cannot reach a resident session.
+-#
+-# Numerics: none; the same float32 words, in C order, reach the same kernels.
+-# TOMBSTONE: neural_block_f32, neural_block_f32_owned and neural_block_f32_input (admission helpers, merged into admit_block_f32) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A4_ADMISSION_HELPERS.patch.
+-# (BLOCK_READ / BLOCK_OPERATION / BLOCK_RETAINED are defined after the imports.)
++def neural_block_f32_owned(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
++    """`neural_block_f32` for a weight the model RETAINS (constructor
++    weights): always the model's own C-order float32 copy. A C-order float32
++    Array used to be kept as a view of the caller's storage, so an in-place
++    write into the caller's array after construction reached the per-layer
++    and CPU routes but not a kept resident device session (lane
++    p3-neural-blocks; resident sessions are invalidated only through
++    `parameters()`). Every other input already came back as a new array."""
++    if py_type(value) is context["array_class"]:
++        var captured = neural_array_snapshot(mods, value, context)
++        if String(captured.dtype) != "<f4":
++            raise Error(_neural_dtype_refusal(name, String(captured.dtype)))
++        if String(captured.order) == "C":
++            var dims = List[Int]()
++            for i in range(len(captured.shape)):  # driver-loop: over the weight's shape words
++                dims.append(Int(py=captured.shape[i]))
++            var result = generation_array(dims)
++            var count = Int(py=captured.size)
++            if count > 0:
++                memcpy(dest=f32_ptr(Int(py=result._addr)), src=f32_ptr(Int(py=captured._addr)), count=count)
++            _ = captured^
++            return result
++    return neural_block_f32(mods, value, name, context)
+ 
+ 
+ def _neural_dtype_refusal(name: String, code: String) -> String:
+@@ -384,110 +377,97 @@ def _neural_dtype_refusal(name: String, code: String) -> String:
+             + "float16 and float64 are refused rather than converted. Convert to float32.")
+ 
+ 
+-def _block_view(mut mods: NativeModules, store: PythonObject, address: Int, dims: List[Int], count: Int,
+-                context: PythonObject) raises -> PythonObject:
+-    """A read-only C-order float32 Array over `store` (a native memoryview
+-    of `count` float32 words at `address`), assembled from its slots: the
+-    view holds the one export for the call, no Array callback runs."""
+-    var b = mods.module("builtins")
+-    var slots = neural_array_slots(mods, context)
+-    var result = py_call(b.object.__new__, context["array_class"])
+-    var steps = List[Int](length=len(dims), fill=0)
+-    var step = 4
+-    for i in range(len(dims)):  # small-loop(array shape dimension words)
+-        var axis = len(dims) - i - 1
+-        steps[axis] = step
+-        step *= dims[axis]
+-    var typed = py_call(py_call(store.cast, "B").cast, "f")
+-    py_call(slots["_store"].__set__, result, store)
+-    py_call(slots["_base"].__set__, result, PythonObject(None))
+-    py_call(slots["_pin"].__set__, result, PythonObject(None))
+-    py_call(slots["_mv"].__set__, result, typed)
+-    py_call(slots["_addr"].__set__, result, PythonObject(address))
+-    py_call(slots["_readonly"].__set__, result, PythonObject(True))
+-    py_call(slots["shape"].__set__, result, py_call(b.tuple, py_ints(dims)))
+-    py_call(slots["dtype"].__set__, result, PythonObject("<f4"))
+-    py_call(slots["ndim"].__set__, result, PythonObject(len(dims)))
+-    py_call(slots["size"].__set__, result, PythonObject(count))
+-    py_call(slots["nbytes"].__set__, result, PythonObject(count * 4))
+-    py_call(slots["itemsize"].__set__, result, PythonObject(4))
+-    py_call(slots["strides"].__set__, result, py_call(b.tuple, py_ints(steps)))
+-    py_call(slots["order"].__set__, result, PythonObject("C"))
+-    return result
++def neural_block_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
++    # Callers without an operation handle keep their per-call module checks.
++    var mods = NativeModules()
++    return neural_block_f32(mods, value, name, context)
+ 
+ 
+-def _block_destination(mut mods: NativeModules, dims: List[Int], count: Int, use: Int,
+-                       context: PythonObject) raises -> PythonObject:
+-    """The C-order float32 destination of one copy of `count` words. A
+-    BLOCK_READ copy never outlives the operation and is written in full
+-    before any kernel reads it, so it is UNINITIALISED storage (a read-only
+-    Array view over a native scratch store); a kept copy is a native Array
+-    (its array.array store has no uninitialised constructor)."""
+-    if use != BLOCK_READ or count == 0:
+-        return generation_array(dims)
+-    var scratch = native_scratch_bytes(count * 4)
+-    var store = py_call(mods.module("builtins").memoryview, scratch)
+-    return _block_view(mods, store, native_scratch_address(scratch), dims, count, context)
+-
+-
+-def admit_block_f32(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject,
+-                    use: Int) raises -> PythonObject:
+-    """The float32 tensor `value` (a mojolearn Array or a native float32
+-    buffer export) as a C-order float32 Array for `use` (BLOCK_READ,
+-    BLOCK_OPERATION or BLOCK_RETAINED, above). Other dtypes are refused by
+-    name, never converted."""
++def neural_block_f32(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+     if py_type(value) is context["array_class"]:
+         var captured = neural_array_snapshot(mods, value, context)
+         if String(captured.dtype) != "<f4":
+             raise Error(_neural_dtype_refusal(name, String(captured.dtype)))
+-        var dims = List[Int]()
+-        for i in range(len(captured.shape)):  # driver-loop: over the tensor's shape words
+-            dims.append(Int(py=captured.shape[i]))
+-        var count = Int(py=captured.size)
+         if String(captured.order) == "C":
+-            if use != BLOCK_RETAINED:
+-                return captured
+-            var owned = generation_array(dims)
+-            if count > 0:
+-                memcpy(dest=f32_ptr(Int(py=owned._addr)), src=f32_ptr(Int(py=captured._addr)), count=count)
+-            _ = captured^
+-            return owned
+-        # F-order: the byte-preserving C gather, metadata captured once above
+-        # and the original owner retained.
++            return captured
++        # F-order follows the existing byte-preserving C preparation, with
++        # metadata captured once above and the original owner retained.
++        var dims = List[Int]()
+         var steps = List[Int]()
+         for i in range(len(captured.shape)):  # driver-loop: native admission metadata and retained owner registry
++            dims.append(Int(py=captured.shape[i]))
+             steps.append(Int(py=captured.strides[i]))
+-        var result = _block_destination(mods, dims, count, use, context)
+-        causal_lm_gather_f32(f32_ptr(Int(py=captured._addr)), f32_ptr(Int(py=result._addr)), count, dims, steps)
++        var result = generation_array(dims)
++        causal_lm_gather_f32(f32_ptr(Int(py=captured._addr)), f32_ptr(Int(py=result._addr)), Int(py=captured.size), dims, steps)
+         _ = captured^
+         return result
+     admit_native_buffer_exporter(value)
+-    # One export of the caller's buffer; every word below is read from it.
+-    var store = py_call(mods.module("builtins").memoryview, value)
+-    var pin = AdmittedBorrowedBuffer(store)
++    var pin = AdmittedBorrowedBuffer(value)
+     if pin.format != "f" and pin.format != "<f" and pin.format != "=f" and pin.format != "@f":
+         raise Error(_neural_dtype_refusal(name, pin.format))
+     var layout = pin.layout.value().copy()
+     if layout.itemsize != 4:
+         raise Error("TypeError: neural float32 input requires four-byte elements")
+-    # The Array class's storage descriptors are admitted before any Array is
+-    # assembled or allocated for this input.
+     _ = neural_array_slots(mods, context)
+-    if use == BLOCK_READ and layout.contiguous() and layout.count > 0 and layout.address % 4 == 0:
+-        # 0.8.66 regression C5 (samba-forward 1.55x, mamba1-forward 1.51x,
+-        # mamba3-forward 1.35x, mamba2-forward 1.27x): read in place, as
+-        # 0.8.55 did, through a read-only view holding the one export.
+-        var view = _block_view(mods, store, layout.address, layout.shape, layout.count, context)
+-        _ = pin^
+-        return view
+-    var result = _block_destination(mods, layout.shape, layout.count, use, context)
++    var result = generation_array(layout.shape)
+     layout.copy_to(Int(py=result._addr))
+     _ = pin^
+-    _ = store^
+     return result
+ 
+ 
+-def admit_block_f32(value: PythonObject, name: String, context: PythonObject, use: Int) raises -> PythonObject:
+-    # Callers without an operation handle keep their per-call module checks.
+-    var mods = NativeModules()
+-    return admit_block_f32(mods, value, name, context, use)
++def neural_block_f32_input(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
++    # The float32 input `x` of a block forward, step or backward: READ ONLY
++    # by every kernel it reaches (never an output, a state or a workspace).
++    # 0.8.66 regression C5 (samba-forward 1.55x, mamba1-forward 1.51x,
++    # mamba3-forward 1.35x, mamba2-forward 1.27x): `neural_block_f32` put a
++    # foreign `x` (1x2048x384 float32, 3.1 MB) into a fresh zero-filled
++    # Array and copied it on every call; 0.8.55 read it in place. A
++    # C-contiguous, four-byte-aligned float32 export is now read in place
++    # through an Array view that holds one export of it for the call (its
++    # `_store` memoryview) and is marked read-only. Anything else (strided,
++    # empty or misaligned) keeps the copy, from the same admitted export.
++    # An exact Array already takes its captured snapshot without a copy.
++    if py_type(value) is context["array_class"]:
++        return neural_block_f32(mods, value, name, context)
++    admit_native_buffer_exporter(value)
++    var b = mods.module("builtins")
++    # One export of the caller's buffer; every word below is read from it.
++    var store = py_call(b.memoryview, value)
++    var pin = AdmittedBorrowedBuffer(store)
++    if pin.format != "f" and pin.format != "<f" and pin.format != "=f" and pin.format != "@f":
++        raise Error(_neural_dtype_refusal(name, pin.format))
++    var layout = pin.layout.value().copy()
++    if layout.itemsize != 4:
++        raise Error("TypeError: neural float32 input requires four-byte elements")
++    var slots = neural_array_slots(mods, context)
++    if not layout.contiguous() or layout.count == 0 or layout.address % 4 != 0:
++        var copied = generation_array(layout.shape)
++        layout.copy_to(Int(py=copied._addr))
++        _ = pin^
++        _ = store^
++        return copied
++    var cls = context["array_class"]
++    var result = py_call(b.object.__new__, cls)
++    var steps = List[Int](length=len(layout.shape), fill=0)
++    var step = 4
++    for i in range(len(layout.shape)):  # small-loop(array shape dimension words)
++        var axis = len(layout.shape) - i - 1
++        steps[axis] = step
++        step *= layout.shape[axis]
++    var typed = py_call(py_call(store.cast, "B").cast, "f")
++    py_call(slots["_store"].__set__, result, store)
++    py_call(slots["_base"].__set__, result, PythonObject(None))
++    py_call(slots["_pin"].__set__, result, PythonObject(None))
++    py_call(slots["_mv"].__set__, result, typed)
++    py_call(slots["_addr"].__set__, result, PythonObject(layout.address))
++    py_call(slots["_readonly"].__set__, result, PythonObject(True))
++    py_call(slots["shape"].__set__, result, py_call(b.tuple, py_ints(layout.shape)))
++    py_call(slots["dtype"].__set__, result, PythonObject("<f4"))
++    py_call(slots["ndim"].__set__, result, PythonObject(len(layout.shape)))
++    py_call(slots["size"].__set__, result, PythonObject(layout.count))
++    py_call(slots["nbytes"].__set__, result, PythonObject(layout.count * 4))
++    py_call(slots["itemsize"].__set__, result, PythonObject(4))
++    py_call(slots["strides"].__set__, result, py_call(b.tuple, py_ints(steps)))
++    py_call(slots["order"].__set__, result, PythonObject("C"))
++    _ = pin^
++    return result
+diff --git a/bindings/neural_block_public.mojo b/bindings/neural_block_public.mojo
+index ace2c844d8..5264398d39 100644
+--- a/bindings/neural_block_public.mojo
++++ b/bindings/neural_block_public.mojo
+@@ -8,7 +8,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
+ from bindings.native_error_class import error_without_class
+ from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
+ from bindings.neural_block_admission import (
+-    neural_block_fields, admit_block_f32, BLOCK_READ, BLOCK_OPERATION, neural_record_fields, neural_string_keys,
++    neural_block_fields, neural_block_f32, neural_block_f32_input, neural_record_fields, neural_string_keys,
+     neural_plain_value, neural_array_snapshot, neural_array_slots, neural_admit_weights,
+     neural_native_scalar, neural_model_weights, neural_block_snapshot, neural_block_weight_names, neural_metadata_snapshot,
+ )
+@@ -466,9 +466,8 @@ def neural_block_allocate_binding(block: PythonObject, batch: PythonObject, capa
+ 
+ def _neural_input(mut mods: NativeModules, value: PythonObject, d_model: Int, step: Bool, context: PythonObject) raises -> PythonObject:
+     # 0.8.66 regression C5: x is only read; a C-contiguous float32 export is
+-    # read in place (admit_block_f32 BLOCK_READ), not copied per call; any
+-    # other x is one copy into uninitialised storage.
+-    var x = admit_block_f32(mods, value, "x", context, BLOCK_READ)
++    # read in place (neural_block_f32_input), not copied per call.
++    var x = neural_block_f32_input(mods, value, "x", context)
+     var bi = mods.module("builtins")
+     if step and len(x.shape) == 2:
+         var shaped = py_call(bi.object.__new__, context["array_class"])
+@@ -1112,7 +1111,7 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
+     var x = _neural_input(mods, input, d, False, context)
+     var b = Int(py=x.shape[0])
+     var l = Int(py=x.shape[1])
+-    var dy = admit_block_f32(mods, grad_output, "grad_output", context, BLOCK_OPERATION)
++    var dy = neural_block_f32(mods, grad_output, "grad_output", context)
+     _model_shape(dy, [b, l, d], "grad_output")
+     var weights = fields["_w"]
+     if not transformer:
+diff --git a/bindings/transformer_public_native.mojo b/bindings/transformer_public_native.mojo
+index c900cda886..c427006261 100644
+--- a/bindings/transformer_public_native.mojo
++++ b/bindings/transformer_public_native.mojo
+@@ -11,8 +11,7 @@ from bindings.mode_metadata_native import _fields, _class_fields
+ from bindings.native_error_class import error_without_class
+ from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
+ from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
+-from bindings.neural_block_public import neural_block_fields, neural_block_snapshot, neural_training_entries, _neural_input
+-from bindings.neural_block_admission import admit_block_f32, BLOCK_OPERATION
++from bindings.neural_block_public import neural_block_fields, neural_block_snapshot, neural_block_f32, neural_training_entries, _neural_input
+ from bindings.neural_block_admission import neural_native_scalar, neural_array_slots, neural_record_fields, neural_string_keys
+ from bindings.causal_lm_construct import _model_shape
+ from providers.python.operation_lock_pyapi import OperationLockLease
+@@ -727,7 +726,7 @@ def transformer_backward_from_tape(mut mods: NativeModules, block: PythonObject,
+     var fields = _transformer_block_snapshot(mods, block, neural)
+     var entries = _transformer_tape_entries(mods, block, fields, neural)[0]
+     _ = _transformer_array_slots(mods, context)
+-    var dy = admit_block_f32(input, "Transformer tape grad_output", neural, BLOCK_OPERATION)
++    var dy = neural_block_f32(input, "Transformer tape grad_output", neural)
+     _model_shape(dy, owner[].shape, "Transformer tape grad_output")
+     var lease = OperationLockLease(fields["_runtime_lock"])
+     lease.acquire()
+diff --git a/bindings/tsa_arima_native.mojo b/bindings/tsa_arima_native.mojo
+index eeab8aef15..d9d88852d6 100644
+--- a/bindings/tsa_arima_native.mojo
++++ b/bindings/tsa_arima_native.mojo
+@@ -29,8 +29,7 @@ from bindings.py_typed_call import py_call_typed
+ from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind
+ from bindings.classical_pandas import classical_admit_value
+ from bindings.tsa_hw_native import tsa_array
+-from core.xseq_marshal import xseq_widen_f32_f64
+-from core.admitted_input_nd import admitted_cast_nd_f32
++from core.xseq_marshal import xseq_cast_nd, xseq_widen_f32_f64
+ from bindings.native_prepared_owner import prepared_get
+ from bindings.tsa_arima_resident import (
+     ARIMA_RESIDENT_SLOT, arima_resident_words, arima_resident_hit, arima_resident_mint, arima_resident_call,
+@@ -125,7 +124,7 @@ def _entry(entries: PythonObject, name: String) raises -> PythonObject:
+ 
+ def _copy_series(source: ArimaBuffer, shape: PythonObject, context: PythonObject) raises -> PythonObject:
+     var result = tsa_array("f", "<f4", shape, source.count, 4, context)
+-    _ = admitted_cast_nd_f32(source.address, source.shape, source.strides, source.itemsize, source.kind,
++    xseq_cast_nd(source.address, source.shape, source.strides, source.itemsize, source.kind, True,
+                  _F32P(unsafe_from_address=Int(py=classical_address(result))))
+     _ = source
+     return result
+diff --git a/bindings/tsa_hw_native.mojo b/bindings/tsa_hw_native.mojo
+index ac6553f1a1..c2988f89ed 100644
+--- a/bindings/tsa_hw_native.mojo
++++ b/bindings/tsa_hw_native.mojo
+@@ -33,8 +33,7 @@ from bindings.tsa_admission import tsa_hw_fields, tsa_hw_class, tsa_buffer, tsa_
+ from bindings.native_owner_lifetime import native_release_admit
+ from bindings.classical_attributes import classical_connect_numpy
+ from providers.python.forecast_owner_pyapi import forecast_commit
+-from core.xseq_marshal import xseq_column_copy_f32
+-from core.admitted_input_nd import admitted_cast_nd_f32
++from core.xseq_marshal import xseq_cast_nd, xseq_column_copy_f32
+ from bindings.native_loaded_module import NativeModules
+ from bindings.native_prepared_owner import prepared_get, prepared_put
+ from bindings.native_resident_capsule import resident_capsule
+@@ -142,8 +141,8 @@ def _check_dims(fields: PythonObject, source: PythonObject, context: PythonObjec
+     if rows * n == 0:
+         raise Error("ValueError: " + _HW + "endog is empty")
+     var out = tsa_array("f", "<f4", Python.tuple(rows, n), rows * n, 4, context)
+-    _ = admitted_cast_nd_f32(value.source.addr, value.shape, value.strides, value.source.itemsize,
+-                 value.source.kind, _F32P(unsafe_from_address=Int(py=classical_address(out))))
++    xseq_cast_nd(value.source.addr, value.shape, value.strides, value.source.itemsize,
++                 value.source.kind, True, _F32P(unsafe_from_address=Int(py=classical_address(out))))
+     _ = value
+     _ = out
+     return Python.tuple(out, n)
+diff --git a/bindings/tsa_public_native.mojo b/bindings/tsa_public_native.mojo
+index 4fcc4d7a64..3a62972a7e 100644
+--- a/bindings/tsa_public_native.mojo
++++ b/bindings/tsa_public_native.mojo
+@@ -20,9 +20,7 @@ from bindings.py_typed_call import py_call_typed
+ from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind, classical_wrap_array
+ from bindings.classical_attributes import classical_connect_numpy
+ from bindings.classical_pandas import classical_admit_value
+-from core.xseq_marshal import tsa_flags_u8
+-from core.admitted_input_nd import admitted_cast_nd_f32
+-from bindings.native_array_storage import native_scratch_bytes, native_scratch_address
++from core.xseq_marshal import xseq_cast_nd, tsa_flags_u8
+ from bindings.tsa_hw_native import tsa_array, hw_fit, hw_predict, hw_score, hw_initialize, hw_forecast, hw_component, hw_save
+ from bindings.tsa_admission import tsa_buffer, tsa_scalar, tsa_truth
+ from bindings.native_loaded_module import native_loaded_module
+@@ -56,11 +54,7 @@ def _entries(context: PythonObject) raises -> PythonObject:
+ 
+ 
+ def _series_major(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+-    """`_series_major(y, name)`: (series-major float32 scratch store, n_obs,
+-    batch). The store is the kernel's read-only input for this call only
+-    (never returned or kept), written in full by the one parallel cast, so it
+-    is uninitialised (`native_scratch_bytes`; REGRESSIONS F3/C3, was a
+-    zero-filled Array); read its address with `native_scratch_address`."""
++    """`_series_major(y, name)`: (series-major float32 Array, n_obs, batch)."""
+     var value = tsa_buffer(source, name + " y", context)
+     var rank = len(value.shape)
+     if rank != 1 and rank != 2:
+@@ -69,7 +63,7 @@ def _series_major(source: PythonObject, name: String, context: PythonObject) rai
+     var cols = 1 if rank == 1 else value.shape[1]
+     if rows * cols == 0:
+         raise Error("mojolearn " + name + ": y is empty")
+-    var out = native_scratch_bytes(rows * cols * 4)
++    var out = _array("f", "<f4", rows * cols, 4, context)
+     var dims = List[Int]()
+     var steps = List[Int]()
+     if rank == 2:
+@@ -77,8 +71,8 @@ def _series_major(source: PythonObject, name: String, context: PythonObject) rai
+         steps.append(value.strides[1])
+     dims.append(rows)
+     steps.append(value.strides[0])
+-    _ = admitted_cast_nd_f32(value.source.addr, dims, steps, value.source.itemsize, value.source.kind,
+-                 _F32P(unsafe_from_address=native_scratch_address(out)))
++    xseq_cast_nd(value.source.addr, dims, steps, value.source.itemsize, value.source.kind, True,
++                 _F32P(unsafe_from_address=Int(py=classical_address(out))))
+     _ = value
+     _ = out
+     return Python.tuple(out, rows, cols)
+@@ -93,7 +87,7 @@ def tsa_kpss(args: PythonObject, context: PythonObject) raises -> PythonObject:
+     var batch = Int(py=prepared[2])
+     var flags = _array("i", "<i4", batch, 4, context)
+     var stat = _array("f", "<f4", batch, 4, context)
+-    _ = py_call_typed(_entries(context)["kpss_test"], PythonObject(native_scratch_address(flat)), classical_address(flags), classical_address(stat),
++    _ = py_call_typed(_entries(context)["kpss_test"], classical_address(flat), classical_address(flags), classical_address(stat),
+                       Python.list(batch, n_obs, py_call_typed(b.int, tsa_scalar(args[1], context, True)), py_call_typed(b.int, tsa_scalar(args[2], context, True)),
+                                   py_call_typed(b.int, tsa_scalar(args[3], context, True)), py_call_typed(b.float, tsa_scalar(args[4], context))))
+     _ = stat  # keep the Python object alive through the native call above
+@@ -128,7 +122,7 @@ def tsa_select_d(args: PythonObject, context: PythonObject) raises -> PythonObje
+             raise Error("select_d: d_max must satisfy 0 <= d_max <= 2 - D (d_max=" + String(limit) + ", D="
+                         + String(seasonal) + "), refused by name")
+     var out = _array("i", "<i4", batch, 4, context)
+-    _ = py_call_typed(_entries(context)["select_d"], PythonObject(native_scratch_address(flat)), classical_address(out),
++    _ = py_call_typed(_entries(context)["select_d"], classical_address(flat), classical_address(out),
+                       Python.list(batch, n_obs, seasonal, py_call_typed(b.int, tsa_scalar(args[2], context, True)), py_call_typed(b.int, limit_value),
+                                   py_call_typed(b.float, tsa_scalar(args[4], context))))
+     _ = out  # keep the Python object alive through the native call above
+diff --git a/bindings/xcnn_bn_native.mojo b/bindings/xcnn_bn_native.mojo
+index de1e585dff..b34d668c9e 100644
+--- a/bindings/xcnn_bn_native.mojo
++++ b/bindings/xcnn_bn_native.mojo
+@@ -18,6 +18,7 @@ from bindings.xcnn_common import (
+     xcnn_dev, xcnn_dev_get, xcnn_dev_upload, xcnn_dev_has, xcnn_dev_handle, xcnn_download, xcnn_slice_f32, xcnn_put_f32,
+     xcnn_shape_text,
+ )
++from bindings.xseq_native_common import xseq_f32
+ from bindings.mode_metadata_native import _fields
+ from bindings.neural_block_admission import neural_plain_value
+ from bindings.native_loaded_module import NativeModules
+diff --git a/bindings/xcnn_common.mojo b/bindings/xcnn_common.mojo
+index 42ab43b509..0c49f00714 100644
+--- a/bindings/xcnn_common.mojo
++++ b/bindings/xcnn_common.mojo
+@@ -18,7 +18,7 @@ from bindings.py_typed_call import py_call_typed
+ from bindings.sequential_arrays import sequential_array, sequential_address
+ from bindings.sequential_inputs import sequential_input
+ from bindings.classical_attributes import classical_connect_numpy
+-from bindings.admitted_sequence import admit_nd_f32
++from bindings.xseq_native_common import xseq_f32
+ from bindings.native_loaded_module import native_loaded_module, NativeModules
+ from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
+ from bindings.native_buffer_address import native_buffer_address
+@@ -378,7 +378,7 @@ def xcnn_wrap(entries: PythonObject, array: PythonObject, context: PythonObject)
+     """`DeviceTensor._wrap(b, a)`: host float32 array `a` as a tensor (one
+     upload)."""
+     sequential_admit_value(array, context)
+-    var a = admit_nd_f32(sequential_input(array, context), "x", False, context)
++    var a = xseq_f32(sequential_input(array, context), "x", False, context)
+     if not xcnn_mixed(entries):
+         return xcnn_tensor(entries["module"], a.shape, PythonObject(None), a, PythonObject(None), context)
+     var shape = xcnn_shape(a)
+@@ -695,7 +695,7 @@ def xcnn_put_f32(dest: PythonObject, offset: Int, source: PythonObject, count: I
+                  context: PythonObject) raises:
+     """`dest[offset:offset + count] = source` (float32 words; `source` cast
+     as NumPy assignment casts it), refused unless it holds `count` values."""
+-    var a = admit_nd_f32(sequential_input(source, context), name, False, context)
++    var a = xseq_f32(sequential_input(source, context), name, False, context)
+     if Int(py=a.size) != count:
+         raise Error("ValueError: could not broadcast " + name + " into shape (" + String(count) + ",)")
+     if count:
+diff --git a/bindings/xcnn_conv_native.mojo b/bindings/xcnn_conv_native.mojo
+index ba6e7138b2..110521a7da 100644
+--- a/bindings/xcnn_conv_native.mojo
++++ b/bindings/xcnn_conv_native.mojo
+@@ -23,6 +23,7 @@ from bindings.xcnn_common import (
+     xcnn_dev_upload, xcnn_download, xcnn_slice_f32, xcnn_put_f32, xcnn_readonly, xcnn_writable_copy,
+ )
+ from bindings.xcnn_bn_native import xcnn_bn_forward_dev, xcnn_bn_forward, xcnn_bn_layers, xcnn_bn_backward, xcnn_bn_backward_dev, _bn_admit
++from bindings.xseq_native_common import xseq_f32
+ from x_cnn.shape_words import conv_params, CP_OH, CP_OW
+ from bindings.sequential_inputs import sequential_input
+ 
+diff --git a/bindings/xseq_forecast_native.mojo b/bindings/xseq_forecast_native.mojo
+index b84f5a829b..383d12b1a7 100644
+--- a/bindings/xseq_forecast_native.mojo
++++ b/bindings/xseq_forecast_native.mojo
+@@ -30,13 +30,11 @@ from providers.python.forecast_owner_pyapi import forecast_commit
+ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
+ from bindings.py_typed_call import py_call_typed
+ from bindings.xseq_native_common import (
+-    XF32P, XI64P, xseq_entries, xseq_base, xseq_input, xseq_refuse_f64, xseq_zeros, xseq_addr, xseq_f32p,
++    XF32P, XI64P, xseq_entries, xseq_base, xseq_input, xseq_f32, xseq_refuse_f64, xseq_zeros, xseq_addr, xseq_f32p,
+     xseq_reshape, xseq_copy, xseq_item, xseq_first, xseq_column_f32, xseq_column_i64, xseq_mean_dict, xseq_int,
+     xseq_float, xseq_truth, xseq_mode,
+ )
+-from core.xseq_marshal import xseq_var_blocks
+-from core.admitted_input_nd import admitted_cast_nd_f32
+-from bindings.admitted_sequence import admitted_ndarray_f32
++from core.xseq_marshal import xseq_var_blocks, xseq_cast_nd
+ from bindings.native_loaded_module import NativeModules
+ from bindings.native_prepared_owner import prepared_get, prepared_put
+ 
+@@ -82,14 +80,13 @@ def _series(source: PythonObject, label: String, copy: Bool, context: PythonObje
+         if one:
+             arr = xseq_reshape(y, Python.tuple(1, cols))
+     else:
+-        # One parallel cast into uninitialised storage (REGRESSIONS F3/C3).
+-        arr = admitted_ndarray_f32(Python.tuple(rows, cols), rows * cols, context)
++        arr = xseq_zeros(Python.tuple(rows, cols), context)
+         var strides = List[Int]()
+         strides.append(metadata.source.s0)
+         if not one:
+             strides.append(metadata.source.s1)
+-        _ = admitted_cast_nd_f32(metadata.source.addr, metadata.shape, strides, metadata.source.itemsize,
+-                     metadata.source.kind, xseq_f32p(arr))
++        xseq_cast_nd(metadata.source.addr, metadata.shape, strides, metadata.source.itemsize,
++                     metadata.source.kind, False, xseq_f32p(arr))
+         address = Int(py=xseq_addr(arr))
+     _ = metadata
+     return Python.tuple(one, arr, rows, cols, address)
+diff --git a/bindings/xseq_native_common.mojo b/bindings/xseq_native_common.mojo
+index f8b1c13e8b..682b9a3bbd 100644
+--- a/bindings/xseq_native_common.mojo
++++ b/bindings/xseq_native_common.mojo
+@@ -21,7 +21,8 @@ from bindings.sequential_inputs import sequential_input
+ from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute
+ from sequence.neural_model_dispatch import MODEL_OPERATION_COUNT, MODEL_UNIFORM
+ from autograd.model_descriptor import MODEL_ABI_NAME
+-from core.xseq_marshal import xseq_column_copy_f32, xseq_column_copy_i64
++from core.cast_in import cast_in_kind
++from core.xseq_marshal import xseq_cast_nd, xseq_column_copy_f32, xseq_column_copy_i64
+ 
+ comptime XF32P = MutPointer[Float32, MutUntrackedOrigin]
+ comptime XI32P = MutPointer[Int32, MutUntrackedOrigin]
+@@ -121,10 +122,38 @@ def xseq_dim(value: PythonObject, axis: Int) raises -> Int:
+     return Int(py=value.shape[axis])
+ 
+ 
+-# TOMBSTONE: xseq_f32 (admission helper, merged into the one path) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A4_ADMISSION_HELPERS.patch. It is
+-# `admit_nd_f32` (bindings/admitted_sequence.mojo): the same borrow rule and
+-# cast bits, one parallel cast into uninitialised storage.
++def xseq_f32(value: PythonObject, name: String, copy: Bool, context: PythonObject,
++             double_ints: Bool = False) raises -> PythonObject:
++    """`np.array(value, dtype=np.float32, order="C", copy=copy)` of an
++    admitted ndarray: the array itself when it is already C-ordered float32
++    and no copy is asked for, otherwise one C-ordered float32 copy, element by
++    element with the shared integer-defined conversion (`cast_f32_bits`:
++    `numpy.astype(float32)`'s bits; `double_ints` takes `Array.astype`'s
++    integer -> double -> float32 route, `classical_f32_bits`)."""
++    var dtype = value.dtype
++    var kind = String(py=dtype.kind)
++    if kind != "b" and kind != "i" and kind != "u" and kind != "f":
++        raise Error("TypeError: " + name + " must be a numeric array")
++    if not Bool(py=dtype.isnative):
++        raise Error("TypeError: " + name + " must be in native byte order")
++    var rank = Int(py=value.ndim)
++    var c_order = Bool(py=value.flags.c_contiguous)
++    if not copy and c_order and Int(py=dtype.num) == 11:
++        return value
++    var shape = value.shape
++    var out = sequential_array(shape, context["float32"], context)
++    var item = Int(py=dtype.itemsize)
++    var cast = cast_in_kind(Int(py=dtype.num), item, name)
++    var dims = List[Int]()
++    var steps = List[Int]()
++    var strides = value.strides  # one attribute read, not one per axis
++    for k in range(rank):  # driver-loop: over array rank metadata
++        dims.append(Int(py=shape[k]))
++        steps.append(Int(py=strides[k]))
++    xseq_cast_nd(Int(py=sequential_address(value)), dims, steps, item, cast, double_ints,
++                 XF32P(unsafe_from_address=Int(py=sequential_address(out))))
++    _ = out  # keep the Python object alive through the native call above
++    return out
+ 
+ 
+ def xseq_refuse_f64(value: PythonObject, message: String) raises:
+diff --git a/bindings/xseq_neural_native.mojo b/bindings/xseq_neural_native.mojo
+index ae17e03652..7b462e7707 100644
+--- a/bindings/xseq_neural_native.mojo
++++ b/bindings/xseq_neural_native.mojo
+@@ -32,11 +32,10 @@ from bindings.sequential_arrays import sequential_array, sequential_address, seq
+ from bindings.optimizer_admission import opt_schedule
+ from bindings.optimizer_schedule_native import schedule_operation
+ from bindings.xseq_native_common import (
+-    XF32P, XI32P, xseq_entries, xseq_base, xseq_input, xseq_is_f64, xseq_refuse_f64, xseq_zeros,
++    XF32P, XI32P, xseq_entries, xseq_base, xseq_input, xseq_is_f64, xseq_f32, xseq_refuse_f64, xseq_zeros,
+     xseq_addr, xseq_f32p, xseq_reshape, xseq_curve_list, xseq_int, xseq_float, xseq_truth, xseq_is_int,
+     XseqStream, xseq_neural_provider, xseq_output_provider,
+ )
+-from bindings.admitted_sequence import admit_nd_f32
+ from providers.python.xseq_public_lifecycle_pyapi import xseq_public_labels, xseq_private_input
+ from core.xseq_marshal import xseq_fill_f32, xseq_codes_f32, xseq_take_native
+ from sequence.perf3_seq_resident_words import seq_resident_token
+@@ -88,7 +87,7 @@ def xseq_as_f32_c(source: PythonObject, ndim: Int, name: String, context: Python
+         var what = String("feature(s)") if rank == 2 and Int(py=a.shape[0]) != 0 else String("sample(s)")
+         raise Error("mojolearn: " + name + " is empty, shape " + _shape_text(a) + ": Found array with 0 " + what
+                     + " (shape=" + _shape_text(a) + ") while a minimum of 1 is required.")
+-    return admit_nd_f32(a, name, False, context)
++    return xseq_f32(a, name, False, context, True)
+ 
+ 
+ def xseq_labels(source: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+@@ -390,7 +389,7 @@ def _rnn_x(source: PythonObject, fields: PythonObject, fitting: Bool, context: P
+     """`_RecurrentBase._check_X`: a C-ordered float32 (n, T, F) array."""
+     var a = xseq_input(source, context)
+     xseq_refuse_f64(a, "X: float64 is refused; pass float32 (no float64 on the device)")
+-    var x = admit_nd_f32(a, "X", False, context)
++    var x = xseq_f32(a, "X", False, context)
+     if Int(py=x.ndim) != 3:
+         raise Error("X must be 3-D: (n_samples, n_timesteps, n_features)")
+     if fitting:
+@@ -498,7 +497,7 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
+         params = record[1]
+         token = Int(py=record[2])
+     else:
+-        params = admit_nd_f32(xseq_private_input(source_params, context, "params_"), "params_", False, context)
++        params = xseq_f32(xseq_private_input(source_params, context, "params_"), "params_", False, context)
+         var stamp = _xseq_params_frozen(source_params, PythonObject(None), True, context)
+         token = _record_put_token(mods, _RNN_PARAMS_SLOT, model, source_params, PythonObject(None), Python.tuple(params), stamp)
+     var ip = _rnn_ints(model, fields)
+@@ -535,7 +534,7 @@ def xseq_rnn(model: PythonObject, operation: String, args: PythonObject, context
+         if task == 0:
+             var y = xseq_input(args[1], context)
+             xseq_refuse_f64(y, "y: float64 is refused; pass float32 (no float64 on the device)")
+-            y = admit_nd_f32(y, "y", False, context)
++            y = xseq_f32(y, "y", False, context)
+             py_setitem(fields, "_y_1d", Int(py=y.ndim) == 1)
+             var rows = Int(py=y.shape[0])
+             var target = xseq_reshape(y, Python.tuple(rows, -1))
+@@ -769,8 +768,8 @@ def _mlp_pack(coefs: PythonObject, intercepts: PythonObject, columns: Int,
+     var total = 0
+     var input_width = columns
+     for l in range(layers):  # driver-loop: capture each admitted fitted weight and its shape once
+-        var weights = admit_nd_f32(xseq_private_input(coefs[l], context, "coefs_"), "coefs_", False, context)
+-        var bias = admit_nd_f32(xseq_private_input(intercepts[l], context, "intercepts_"), "intercepts_", False, context)
++        var weights = xseq_f32(xseq_private_input(coefs[l], context, "coefs_"), "coefs_", False, context)
++        var bias = xseq_f32(xseq_private_input(intercepts[l], context, "intercepts_"), "intercepts_", False, context)
+         var weight_shape = weights.shape
+         var bias_shape = bias.shape
+         if len(weight_shape) != 2 or len(bias_shape) != 1:
+diff --git a/bindings/xseq_score_native.mojo b/bindings/xseq_score_native.mojo
+index 199c08314a..3b7ea83824 100644
+--- a/bindings/xseq_score_native.mojo
++++ b/bindings/xseq_score_native.mojo
+@@ -18,8 +18,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contain
+ from bindings.py_typed_call import py_call_typed
+ from bindings.xseq_native_common import xseq_addr, xseq_f32p, xseq_reshape
+ from bindings.xseq_neural_native import xseq_as_f32_c
+-from core.xseq_marshal import xseq_min_max_f32
+-from core.host_finite_scan import host_all_finite_f32
++from core.xseq_marshal import xseq_all_finite_f32, xseq_min_max_f32
+ 
+ 
+ def _shape_text(value: PythonObject) raises -> String:
+@@ -37,7 +36,7 @@ def _vector(value: PythonObject, name: String) raises -> PythonObject:
+     if n == 0:
+         raise Error("ValueError: mojolearn metrics: " + name + " is empty")
+     var out = xseq_reshape(value, Python.tuple(n)) if column else value
+-    if not host_all_finite_f32(xseq_f32p(out), n):
++    if not xseq_all_finite_f32(xseq_f32p(out), n):
+         raise Error("ValueError: mojolearn metrics: " + name + " contains NaN or infinity; refused "
+                     + "here (metrics/README.md HAND-OFF ask 3) rather than letting it "
+                     + "reach a kernel whose answer for it is a washed sentinel")
+@@ -81,7 +80,7 @@ def _weights(source: PythonObject, n: Int, context: PythonObject) raises -> Pyth
+                     + " entries for " + String(n) + " samples")
+     var p = xseq_f32p(w)
+     _ = w  # keep the Python object alive through the native call above
+-    if not host_all_finite_f32(p, n):
++    if not xseq_all_finite_f32(p, n):
+         raise Error("ValueError: mojolearn r2_score: sample_weight must have finite nonnegative entries")
+     # one min/max scan serves both refusals (it was run twice)
+     var bounds = xseq_min_max_f32(p, n)
+diff --git a/core/admitted_input_nd.mojo b/core/admitted_input_nd.mojo
+deleted file mode 100644
+index c84daa7e4c..0000000000
+--- a/core/admitted_input_nd.mojo
++++ /dev/null
+@@ -1,143 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""The one host cast of admitted N-d input words (no Python import): the
+-rank-N and integer-id members of the admission path of
+-`core/admitted_input.mojo`.
+-
+-Plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2 step 2
+-("`family_cast_rows_finite`'s shape generalised to N-d strides, so
+-`xseq_cast_nd` folds in"), lane A4 a4-admit-sequence-tsa-neural, 2026-11-08.
+-
+-    admitted_cast_nd_f32(base, dims, steps, item, kind, dst) -> Bool
+-        the float32 word of every item of the strided rank-N array at byte
+-        address `base` (byte `steps` per axis), written to `dst` in C order;
+-        True when none of the written words is a NaN or an infinity.
+-        Integers take the one admission rule, `Array.astype`'s integer ->
+-        double -> float32 route (`classical_f32_bits`, as `admit_x`).
+-    admitted_ids_i32(addr, s0, s1, rows, cols, item, kind, dst)
+-        a strided (rows, cols) integer or bool array as C-order int32 ids
+-        (`cast_i32_bits`: exact, saturated outside int32).
+-
+-Numerics: no arithmetic on values. Each item is one typed load
+-(`admitted_raw_word`) and one bit function, written to its own cell; the
+-finiteness verdict is an AND over tasks, so neither the split nor the read
+-order can change an output bit. Bit change (allowed between versions, owner
+-rule 2026-11-08): `xseq_cast_nd` had two integer rules; the doors that used
+-NumPy's direct integer -> float32 rounding (`cast_f32_bits`: xseq_f32 by
+-default, the VAR / forecast matrices) now take the one admission rule
+-(`classical_f32_bits`). The two differ only for an integer input of
+-magnitude above 2^53 (int64 / uint64); float and bool inputs, and every
+-float32 board input, keep their words. The host column runs this same
+-code, so NVIDIA, AMD, Apple and the host column change together.
+-
+-Parallel plan: the array is read as rows x cols, cols the last axis (a rank-1
+-array is one element per row, so its elements split too). Rows are
+-independent (each writes only its own cells and its task's flag), so they are
+-split into contiguous row tasks over the host's cores with the grain floor
+-(core/host_predict_threads.mojo). Destinations may be uninitialised: every
+-cell is written before return.
+-"""
+-from std.memory import bitcast
+-from core.classical_cast import classical_f32_bits
+-from core.cast_in import cast_i32_bits
+-from core.host_parallel import host_parallelize
+-from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+-from core.admitted_input import admitted_raw_word
+-
+-comptime _AN_F32P = MutPointer[Float32, MutUntrackedOrigin]
+-comptime _AN_I32P = MutPointer[Int32, MutUntrackedOrigin]
+-comptime _AN_INTP = MutPointer[Int, MutUntrackedOrigin]
+-comptime _AN_U8P = MutPointer[UInt8, MutUntrackedOrigin]
+-comptime _AN_EXP = UInt32(0x7F800000)
+-
+-
+-def admitted_cast_nd_f32(
+-    base: Int, dims: List[Int], steps: List[Int], item: Int, kind: Int, dst: _AN_F32P,
+-) -> Bool:
+-    """`np.array(a, dtype=float32, order="C")` of the strided array at `base`
+-    into `dst` (element i in C order at `dst[i]`); True when every written
+-    word is finite. A caller that does not refuse non-finite input ignores
+-    the flag."""
+-    # parallel: N-d cast and finiteness test over row tasks across host cores (was the serial odometer xseq_cast_nd)
+-    var rank = len(dims)
+-    var total = 1
+-    for k in range(rank):  # driver-loop: over the array's rank metadata
+-        total *= dims[k]
+-    if total <= 0:
+-        return True
+-    var cols = 1 if rank <= 1 else dims[rank - 1]
+-    var col_step = 0 if rank <= 1 else steps[rank - 1]
+-    var rows = total // cols
+-    # The axes a row index decomposes over: all but the last (rank >= 2), the
+-    # one axis (rank 1), none (rank 0: one row at `base`).
+-    var lead = rank - 1 if rank >= 2 else rank
+-    var lead_dims = List[Int](length=max(lead, 1), fill=1)
+-    var lead_steps = List[Int](length=max(lead, 1), fill=0)
+-    for k in range(lead):  # driver-loop: over the array's rank metadata
+-        lead_dims[k] = dims[k]
+-        lead_steps[k] = steps[k]
+-    var dims_ptr = rebind[_AN_INTP](lead_dims.unsafe_ptr())
+-    var steps_ptr = rebind[_AN_INTP](lead_steps.unsafe_ptr())
+-    var tasks = host_predict_task_count_work(rows, total * max(item, 1))
+-    var chunk = host_predict_chunk(rows, tasks)
+-    var flags = List[UInt8](length=tasks, fill=UInt8(1))
+-    var flag_ptr = rebind[_AN_U8P](flags.unsafe_ptr())
+-
+-    def _rows(t: Int) {imm base, imm item, imm kind, imm dst, imm cols, imm col_step, imm rows, imm lead, imm dims_ptr, imm steps_ptr, imm chunk, imm flag_ptr}:
+-        var lo = t * chunk
+-        var hi = min(lo + chunk, rows)
+-        var finite = True
+-        for r in range(lo, hi):  # native input marshaling: this task's input rows
+-            var offset = 0
+-            var rest = r
+-            var axis = lead - 1
+-            while axis >= 0:  # driver-loop: the row's coordinate on each leading axis (rank metadata)
+-                var size = dims_ptr.unsafe_load(axis)
+-                offset += (rest % size) * steps_ptr.unsafe_load(axis)
+-                rest //= size
+-                axis -= 1
+-            for c in range(cols):  # native input marshaling: numeric buffer items preserve exact cast bits
+-                var raw = admitted_raw_word(base + offset + c * col_step, item)
+-                var bits = classical_f32_bits(raw, kind, item)
+-                dst.unsafe_store(r * cols + c, bitcast[DType.float32](bits))
+-                if (bits & _AN_EXP) == _AN_EXP:
+-                    finite = False
+-        if not finite:
+-            flag_ptr.unsafe_store(t, UInt8(0))
+-
+-    if tasks <= 1:
+-        _rows(0)
+-    else:
+-        host_parallelize(_rows, tasks)
+-    var all_finite = True
+-    for t in range(tasks):  # driver-loop: over the row tasks' flags (at most one per core)
+-        if flags[t] == UInt8(0):
+-            all_finite = False
+-    _ = flags^
+-    _ = lead_dims^
+-    _ = lead_steps^
+-    return all_finite
+-
+-
+-def admitted_ids_i32(addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, kind: Int, dst: _AN_I32P):
+-    """A strided (rows, cols) integer or bool array (byte strides `s0`, `s1`)
+-    as C-order int32 words in `dst` (`cast_i32_bits`: exact, saturated
+-    outside int32)."""
+-    # parallel: id cast over row tasks across host cores (was the serial neural_cast_i32_2d)
+-    if rows <= 0 or cols <= 0:
+-        return
+-    var tasks = host_predict_task_count_work(rows, rows * cols * max(item, 1))
+-    var chunk = host_predict_chunk(rows, tasks)
+-
+-    def _rows(t: Int) {imm addr, imm s0, imm s1, imm rows, imm cols, imm item, imm kind, imm dst, imm chunk}:
+-        var lo = t * chunk
+-        var hi = min(lo + chunk, rows)
+-        for r in range(lo, hi):  # native input marshaling: this task's input rows
+-            for c in range(cols):  # native input marshaling: one id per position
+-                var bits = cast_i32_bits(admitted_raw_word(addr + r * s0 + c * s1, item), kind, item)
+-                dst.unsafe_store(r * cols + c, bitcast[DType.int32](bits))
+-
+-    if tasks <= 1:
+-        _rows(0)
+-    else:
+-        host_parallelize(_rows, tasks)
+diff --git a/core/xseq_marshal.mojo b/core/xseq_marshal.mojo
+index 3078e3f069..f079c9e44a 100644
+--- a/core/xseq_marshal.mojo
++++ b/core/xseq_marshal.mojo
+@@ -1,10 +1,14 @@
+ # SPDX-License-Identifier: Apache-2.0
+ """Host input marshaling and result publication of the sequence-expansion
+ native owner (bindings/xseq_native_common.mojo and its siblings): the
+-label-code conversion, constant learning-rate tables and the column / block
+-copies the fitted attributes are made of. The element casts of inputs into
+-float32 and int32 are the one admission path's (core/admitted_input_nd.mojo). Typed pointers in, no Python; the words are the ones the
++element casts into C-ordered float32, the label-code conversion, constant
++learning-rate tables and the column / block copies the fitted attributes
++are made of. Typed pointers in, no Python; the words are the ones the
+ NumPy expressions they replace produced."""
++from std.memory import bitcast
++from core.classical_cast import classical_f32_bits
++from core.cast_in import cast_f32_bits, cast_i32_bits
++from core.host_finite_scan import host_all_finite_f32
+ 
+ comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
+ comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
+@@ -12,10 +16,34 @@ comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
+ comptime _U8P = MutPointer[UInt8, MutUntrackedOrigin]
+ 
+ 
+-# TOMBSTONE: xseq_cast_nd (admission helper, merged into the one path) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A4_ADMISSION_HELPERS.patch. It is
+-# `admitted_cast_nd_f32` (core/admitted_input_nd.mojo): the same bits per
+-# item, row tasks across the host's cores instead of one serial odometer.
++def xseq_cast_nd(base: Int, dims: List[Int], steps: List[Int], item: Int, kind: Int, double_ints: Bool,
++                 dst: _F32P):
++    """`np.array(a, dtype=float32, order="C")` of a strided array: element i
++    (C order) of the array at `base` with byte `steps` per axis, cast by the
++    shared integer-defined conversion (`cast_f32_bits`, NumPy's astype bits;
++    `double_ints` the integer -> double -> float32 route of `Array.astype`)."""
++    var rank = len(dims)
++    var total = 1
++    for k in range(rank):  # native input marshaling: the array's rank metadata
++        total *= dims[k]
++    var counter = List[Int](length=rank, fill=0)
++    var offset = 0
++    for i in range(total):  # native input marshaling: numeric buffer items, exact cast bits
++        var bytes = _U8P(unsafe_from_address=base + offset)
++        var raw = UInt64(0)
++        for j in range(item):  # native input marshaling: the bytes of one item
++            raw |= UInt64(bytes[j]) << UInt64(j * 8)
++        var bits = classical_f32_bits(raw, kind, item) if double_ints else cast_f32_bits(raw, kind, item)
++        dst[i] = bitcast[DType.float32](bits)
++        var axis = rank - 1
++        while axis >= 0:  # native input marshaling: the next element's byte offset
++            counter[axis] += 1
++            offset += steps[axis]
++            if counter[axis] < dims[axis]:
++                break
++            offset -= steps[axis] * dims[axis]
++            counter[axis] = 0
++            axis -= 1
+ 
+ 
+ def xseq_fill_f32(dst: _F32P, count: Int, value: Float32):
+@@ -59,9 +87,17 @@ def xseq_var_blocks(params: _F32P, endog: _F32P, resid: _F32P, intercept: _F32P,
+             fitted[r * neqs + c] = endog[(lags + r) * neqs + c] - resid[r * neqs + c]
+ 
+ 
+-# TOMBSTONE: neural_cast_i32_2d (admission helper, merged into the one path) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A4_ADMISSION_HELPERS.patch. It is
+-# `admitted_ids_i32` (core/admitted_input_nd.mojo), row tasks across cores.
++def neural_cast_i32_2d(addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, kind: Int,
++                       dst: _I32P):
++    """A strided (rows, cols) integer or bool array as C-ordered int32 words
++    (`cast_i32_bits`: exact, saturated outside int32)."""
++    for r in range(rows):  # native input marshaling: input rows, never a model loop
++        for c in range(cols):  # native input marshaling: one id per position
++            var bytes = _U8P(unsafe_from_address=addr + r * s0 + c * s1)
++            var raw = UInt64(0)
++            for j in range(item):  # native input marshaling: the bytes of one item
++                raw |= UInt64(bytes[j]) << UInt64(j * 8)
++            dst[r * cols + c] = bitcast[DType.int32](cast_i32_bits(raw, kind, item))
+ 
+ 
+ def neural_first_bad_id(ids: _I32P, rows: Int, cols: Int, vocab: Int, target_column: Int, ignore: Int) -> Int:
+@@ -85,9 +121,10 @@ def tsa_flags_u8(src: _I32P, dst: _U8P, count: Int):
+         dst[i] = UInt8(src[i])
+ 
+ 
+-# TOMBSTONE: xseq_all_finite_f32 (admission helper, a second name of host_all_finite_f32) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A4_ADMISSION_HELPERS.patch. Callers read
+-# `host_all_finite_f32` (core/host_finite_scan.mojo) directly.
++def xseq_all_finite_f32(src: _F32P, count: Int) -> Bool:
++    """`all_finite(a)` of `count` float32 words: no NaN and no infinity."""
++    # parallel: finiteness scan across host cores (0.8.66 regression C2, serial scan)
++    return host_all_finite_f32(src, count)
+ 
+ 
+ def xseq_min_max_f32(src: _F32P, count: Int) -> Tuple[Float32, Float32]:
+diff --git a/providers/python/autoarima_lifecycle_pyapi.mojo b/providers/python/autoarima_lifecycle_pyapi.mojo
+index 02da7a1bef..edebbeb33f 100644
+--- a/providers/python/autoarima_lifecycle_pyapi.mojo
++++ b/providers/python/autoarima_lifecycle_pyapi.mojo
+@@ -9,7 +9,7 @@ from bindings.py_typed_call import py_call_typed
+ from bindings.classical_arrays import classical_input, classical_typed, classical_address
+ from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
+ from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+-from core.admitted_input_nd import admitted_cast_nd_f32
++from core.xseq_marshal import xseq_cast_nd
+ from core.cast_in import NPY_DOUBLE, NPY_FLOAT, CAST_KIND_SIGNED
+ from bindings.sequential_admission import _one_of
+ from providers.python.forecast_owner_pyapi import forecast_commit
+@@ -119,7 +119,7 @@ def autoarima_initialize(model: PythonObject, args: PythonObject, context: Pytho
+         strides.append(source.source.s0)
+         if rank == 2:
+             strides.append(source.source.s1)
+-        _ = admitted_cast_nd_f32(source.source.addr, source.shape, strides, source.source.itemsize, source.source.kind,
++        xseq_cast_nd(source.source.addr, source.shape, strides, source.source.itemsize, source.source.kind, True,
+                      _F32(unsafe_from_address=Int(py=classical_address(out))))
+     var updates = Python.dict()
+     py_setitem(updates, "endog", args[0])
+diff --git a/providers/python/forecast_matrix_pyapi.mojo b/providers/python/forecast_matrix_pyapi.mojo
+index 9cec282389..afae0c9caa 100644
+--- a/providers/python/forecast_matrix_pyapi.mojo
++++ b/providers/python/forecast_matrix_pyapi.mojo
+@@ -12,9 +12,7 @@ from providers.python.autoarima_lifecycle_pyapi import _integer, _number
+ from providers.python.forecast_initialize_pyapi import _scalar
+ from providers.python.forecast_owner_pyapi import forecast_commit
+ from bindings.xseq_native_common import xseq_zeros, xseq_addr, xseq_f32p, xseq_entries, xseq_first
+-from core.xseq_marshal import xseq_var_blocks
+-from core.admitted_input_nd import admitted_cast_nd_f32
+-from bindings.admitted_sequence import admitted_ndarray_f32
++from core.xseq_marshal import xseq_cast_nd, xseq_var_blocks
+ from core.cast_in import NPY_DOUBLE, NPY_FLOAT, CAST_KIND_FLOAT
+ 
+ 
+@@ -52,9 +50,8 @@ def _matrix(value: PythonObject, name: String, context: PythonObject, reject_dou
+         raise Error("TypeError: " + name + ": float64 is refused; pass float32")
+     if not source.f32_c() or py_type(source.keep) is not context["ndarray"]:
+         var shape = Python.tuple(source.shape[0]) if len(source.shape) == 1 else Python.tuple(source.shape[0], source.shape[1])
+-        # One parallel cast into uninitialised storage (REGRESSIONS F3/C3).
+-        var result = admitted_ndarray_f32(shape, source.count, context)
+-        _ = admitted_cast_nd_f32(source.address, source.shape, source.strides, source.itemsize, source.kind, xseq_f32p(result))
++        var result = xseq_zeros(shape, context)
++        xseq_cast_nd(source.address, source.shape, source.strides, source.itemsize, source.kind, False, xseq_f32p(result))
+         source.keep = result
+         source.address = Int(py=xseq_addr(result))
+         source.itemsize = 4
+diff --git a/providers/python/recurrent_state_pyapi.mojo b/providers/python/recurrent_state_pyapi.mojo
+index 38cffd848a..49757d43ea 100644
+--- a/providers/python/recurrent_state_pyapi.mojo
++++ b/providers/python/recurrent_state_pyapi.mojo
+@@ -5,8 +5,7 @@ from std.python import Python, PythonObject
+ from bindings.native_loaded_module import native_loaded_module
+ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+ from bindings.classical_pandas import classical_admit_value
+-from bindings.xseq_native_common import xseq_input, xseq_refuse_f64, xseq_zeros, xseq_f32p
+-from bindings.admitted_sequence import admit_nd_f32
++from bindings.xseq_native_common import xseq_input, xseq_f32, xseq_refuse_f64, xseq_zeros, xseq_f32p
+ 
+ 
+ def _state_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
+@@ -105,7 +104,7 @@ def recurrent_state(model: PythonObject, operation: String, args: PythonObject,
+                 raise Error("TypeError: recurrent parameter names require exact strings")
+         packed = xseq_zeros(Python.tuple(total), context)
+     else:
+-        packed = admit_nd_f32(xseq_input(fields["params_"], context), "params_", False, context)
++        packed = xseq_f32(xseq_input(fields["params_"], context), "params_", False, context)
+         if Int(py=packed.size) != total:
+             raise Error("params_ size differs from the recurrent parameter layout")
+     var base = xseq_f32p(packed)
+@@ -124,7 +123,7 @@ def recurrent_state(model: PythonObject, operation: String, args: PythonObject,
+             for j in range(len(dimensions[i])):  # small-loop(admitted parameter shape words)
+                 if Int(py=actual_shape[j]) != dimensions[i][j]:
+                     raise Error(names[i] + ": shape differs from the recurrent parameter layout")
+-            var input = admit_nd_f32(source, names[i], False, context)
++            var input = xseq_f32(source, names[i], False, context)
+             memcpy(dest=base + offset, src=xseq_f32p(input), count=counts[i])
+             _ = input
+         else:
+diff --git a/providers/python/training_buffer_pyapi.mojo b/providers/python/training_buffer_pyapi.mojo
+index d1faca4d8f..face2139d1 100644
+--- a/providers/python/training_buffer_pyapi.mojo
++++ b/providers/python/training_buffer_pyapi.mojo
+@@ -4,8 +4,9 @@ from std.python import Python, PythonObject
+ from bindings.py_balanced import py_call, py_type
+ from bindings.native_loaded_module import native_loaded_module
+ from bindings.classical_pandas import classical_admit_value
+-from bindings.classical_arrays import classical_input, classical_address, classical_dtype_str
++from bindings.classical_arrays import classical_input, classical_address, classical_dtype_str, classical_cast_kind
+ from bindings.tsa_hw_native import tsa_array
++from core.xseq_marshal import xseq_cast_nd, xseq_all_finite_f32
+ from core.training_input_copy import training_copy_f32, training_copy_words32
+ 
+ 
+@@ -58,7 +59,34 @@ def training_words32_owned(source: PythonObject, dims: List[Int], name: String,
+     return output
+ 
+ 
+-# TOMBSTONE: training_f32_cast_owned (admission helper, merged into the one path) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A4_ADMISSION_HELPERS.patch. It is
+-# `admit_nd_owned_f32` (bindings/admitted_sequence.mojo): the same cast and
+-# refusal, the finite test riding in the parallel cast.
++def training_f32_cast_owned(source: PythonObject, dims: List[Int], name: String,
++                            context: PythonObject) raises -> PythonObject:
++    # Host APIs historically accept native numeric dtypes and nested sequences,
++    # unlike strict training state buffers. Preserve Array.astype's integer ->
++    # double -> float rule through the existing shared native caster.
++    classical_admit_value(source, context)
++    var value = classical_input(source, context, name)
++    var shape = value.shape
++    var strides = value.strides
++    var item = Int(py=value.itemsize)
++    var kind = classical_cast_kind(value, item, name, context)
++    if len(shape) != len(dims):
++        raise Error(name + " has an unexpected shape")
++    var count = 1
++    var native_strides = List[Int]()
++    var output_shape = Python.list()
++    for axis in range(len(dims)):  # driver-loop: over admitted array rank metadata
++        if Int(py=shape[axis]) != dims[axis]:
++            raise Error(name + " has an unexpected shape")
++        count *= dims[axis]
++        native_strides.append(Int(py=strides[axis]))
++        _ = py_call(output_shape.append, dims[axis])
++    output_shape = py_call(native_loaded_module("builtins").tuple, output_shape)
++    var result = tsa_array("f", "<f4", output_shape, count, 4, context)
++    var address = Int(py=classical_address(result))
++    var pointer = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
++    xseq_cast_nd(Int(py=classical_address(value)), dims, native_strides, item, kind, True, pointer)
++    if not xseq_all_finite_f32(pointer, count):
++        raise Error(name + " must be finite")
++    _ = value^
++    return result
+diff --git a/python/mojolearn/_tsa_impl.py b/python/mojolearn/_tsa_impl.py
+index 46743e9544..82d56a2540 100644
+--- a/python/mojolearn/_tsa_impl.py
++++ b/python/mojolearn/_tsa_impl.py
+@@ -72,8 +72,8 @@ import sys
+ 
+ from . import _native_archive_bridge
+ from ._array import Array
+-from ._buffer import addr, addr_ro, as_f32_c, empty
+-from ._bufcheck import flat_view, probe, strided_rows
++from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty
++from ._bufcheck import flat_view, nelems, probe, strided_rows
+ 
+ 
+ def _one_series(src, index, n_series, steps, offset=0):
+@@ -130,8 +130,50 @@ _HW_INIT_CODES = {"estimated": 1, "heuristic": 0, "cuml": 0}
+ _TSA_CONTEXT["hw_init_codes"] = _HW_INIT_CODES
+ 
+ 
+-# TOMBSTONE: _series_major (Python admission helper, zero callers: the TSA doors admit y natively in bindings/tsa_public_native.mojo) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A4_ADMISSION_HELPERS.patch.
++def _series_major(y, name):
++    """A C-contiguous float32 buffer whose flat order is SERIES-MAJOR.
++
++    `y` arrives as cuML's `(n_obs, batch_size)` -- each time series in a
++    COLUMN, which is what `stationarity.pyx`'s `check_array(y, order="F")`
++    produces. The kernels index series `b` at `[b * n_obs, (b+1) * n_obs)`,
++    which is exactly the flat memory of the COLUMN-MAJOR float32 form of
++    `y`, so DEVIATION 2418 takes `_buffer.as_f32_colmajor` (the DEVIATION
++    1887 argument: one materialization, the f64 -> f32 cast is the same
++    elementwise cast either way). It COPIES for anything that is not
++    already float32 F-contiguous, and that is named rather than hidden:
++    on a long batch it is the dominant cost of the call, and a caller who
++    holds `(n_obs, batch_size)` float32 in Fortran order pays nothing.
++    A 1-D `y` is one series and its C-order float32 form is already
++    series-major.
++
++    Returns `(array, n_obs, batch_size)`. The caller MUST keep `array`
++    alive across the Mojo call; the Mojo side borrows the address and
++    holds nothing after it returns (`_buffer.py`).
++    """
++    try:
++        pb = probe(y)
++    except TypeError:
++        try:
++            y = Array.from_list(y, "<f4")
++        except Exception:
++            raise ValueError(
++                f"mojolearn {name}: y must be 1-D or 2-D (n_obs, n_series) "
++                f"-- an array or a nested list of numbers -- got "
++                f"{type(y).__name__}"
++            ) from None
++        pb = probe(y)
++    if pb.ndim not in (1, 2):
++        raise ValueError(
++            f"mojolearn {name}: y must be 1-D or 2-D (n_obs, n_series), got "
++            f"{pb.ndim}-D shape {pb.shape}"
++        )
++    if nelems(pb.shape) == 0:
++        raise ValueError(f"mojolearn {name}: y is empty, shape {pb.shape}")
++    if pb.ndim == 1:
++        arr, _copied = as_f32_c(y, ndim=1, name="y")
++        return arr, int(arr.shape[0]), 1
++    arr, _copied = as_f32_colmajor(y, name="y")
++    return arr, int(arr.shape[0]), int(arr.shape[1])
+ 
+ 
+ # The KPSS stationarity test, with the reference

@@ -416,6 +416,15 @@ in the tables after the sections.
 | [`family_all_finite_f32` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Family admission (finiteness scan) | removed (second name of `host_all_finite_f32`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
 | [`p3nc_all_finite_f32` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Neighbor/cluster admission (finiteness scan) | removed (second name of `host_all_finite_f32`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
 | [trees_public_inputs array helpers copy (`trees_view`, `trees_f32`, `TreesView`, `TreesMatrix`)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Trees admission (TreesView/TreesMatrix copy of classical_labels) | removed (duplicate; the trees_* names import the one copy) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`xseq_cast_nd` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Sequence / TSA / forecast / embedding admission (N-d float32 cast) | removed (merged: `admitted_cast_nd_f32`, parallel) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`xseq_f32` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | xseq neural, recurrent, xcnn admission (float32 ndarray) | removed (moved: `admit_nd_f32`) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`training_f32_cast_owned` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Byte-LM host trainer (owned float32 buffers) | removed (moved: `admit_nd_owned_f32`) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`xseq_all_finite_f32` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | xseq score / training (finiteness scan) | removed (second name of `host_all_finite_f32`) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`neural_cast_i32_2d` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Byte-LM trainers (token ids) | removed (merged: `admitted_ids_i32`, parallel) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`neural_block_f32` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Neural block / Mamba / Transformer / CausalLM inputs | removed (merged: `admit_block_f32` BLOCK_OPERATION) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`neural_block_f32_owned` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Neural constructor weights | removed (merged: `admit_block_f32` BLOCK_RETAINED) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`neural_block_f32_input` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Neural block x (forward / step / backward) | removed (merged: `admit_block_f32` BLOCK_READ; copy into uninitialised storage, C5) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`_series_major` in `python/mojolearn/_tsa_impl.py` (dead Python)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | TSA kpss_test / select_d | removed (zero callers; native door) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
 | [`byte_lm_parallel_open` + 9 sibling entries (native entries)](#dead-native-entries-batch-3-2026-11) | Byte LM (the legacy per-entry parallel trainer: open, open_pooled, close, rollback, shard_gradient, apply_gradient, reduction_pool_available, fold_reset, shard_gradient_fold, fold_add) | removed (dead native entries: no live caller) | 2026-11-08 | [dead_entries_byte_lm_parallel.patch](../experiments/removed/dead_entries_byte_lm_parallel.patch) |
 | [`vocab_encode_public` + 4 sibling entries (native entries)](#dead-native-entries-batch-3-2026-11) | Tokenizer host (vocab_encode_public, vocab_decode_public, vocab_pretrained_public, vocab_pretokenize_public, vocab_pattern_name) | removed (dead native entries: no live caller) | 2026-11-08 | [dead_entries_tokenizer_vocab_public.patch](../experiments/removed/dead_entries_tokenizer_vocab_public.patch) |
 | [`classical_host_weights`, `pca_query_fields`, `prep_check_info`, `prep_scalar_dtype` (orphan functions)](#dead-native-entries-batch-3-2026-11) | Classical arrays, PCA and preprocessing providers | removed (orphan functions: no caller) | 2026-11-08 | [dead_entries_orphan_functions.patch](../experiments/removed/dead_entries_orphan_functions.patch) |
@@ -3839,6 +3848,36 @@ wording. Kept, and why (no measurement separates copies that run the same code; 
 Restore: `git apply -3 experiments/removed/A0_ADMISSION_HELPERS.patch` (the reverse of the lane's `.mojo` changes from
 `ef4bce3a7e`; it restores every helper and its callers together). Run owed: one identity record of every lane at the
 release (the door is on every path) and the classical/trees/family test suites.
+## Sequence and neural admission helpers merged into the one path (2026-11-08)
+
+Lane `a4-admit-sequence-tsa-neural` (A4 of `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 3.3), branch
+`lane/a4-admit-sequence-tsa-neural` from `integ/pre-0867` `f7d10d2b09`. Not experiment defines: duplicate or serial input
+admission helpers of the TSA, forecast, embedding, xcnn, xseq_neural, byte-LM trainer and neural block doors. No A/B: the
+kept forms do the same work in parallel and without the zero fill. Kept, and why:
+
+- `core/admitted_input_nd.mojo` `admitted_cast_nd_f32`: the N-d member of the one cast (`admitted_cast_f32`'s row tasks
+  across the host's cores with the grain floor, one typed load per item, the finite test in the same pass). It replaces
+  the serial byte-assembling odometer `xseq_cast_nd` at all nine sites. `admitted_ids_i32` replaces the serial
+  `neural_cast_i32_2d` (same `cast_i32_bits` words).
+- `bindings/admitted_sequence.mojo`: `admit_nd_f32` (was `xseq_f32`; destination now an uninitialised bytearray-backed
+  ndarray, `admitted_ndarray_f32`, also used by the VAR / forecast matrices), `admit_nd_owned_f32` (was
+  `training_f32_cast_owned` plus a second `xseq_all_finite_f32` pass; now one pass).
+- `bindings/neural_block_admission.mojo` `admit_block_f32` with a use (BLOCK_READ, BLOCK_OPERATION, BLOCK_RETAINED):
+  the three copies `neural_block_f32`, `neural_block_f32_owned`, `neural_block_f32_input` were one door with three
+  borrow rules. A BLOCK_READ x that cannot be borrowed (strided, F-order, misaligned) is one copy into uninitialised
+  storage (REGRESSIONS C5; was a zero-filled `generation_array` per call).
+- `xseq_all_finite_f32` was a one-line second name of `host_all_finite_f32`; callers read it directly.
+- TSA `kpss_test` / `select_d` series-major y: one parallel cast into an uninitialised scratch store (was a zero-filled
+  Array).
+
+Bit change (allowed between versions, owner rule 2026-11-08): `xseq_cast_nd` had two integer rules. The doors that used
+NumPy's direct integer -> float32 rounding (`xseq_f32` by default, the VAR / forecast matrices) now take the one
+admission rule, integer -> double -> float32 (`classical_f32_bits`, as `admit_x`). The two differ only for an integer
+input of magnitude above 2^53; float and bool inputs keep their words. The host column runs the same code, so every
+vendor changes together.
+
+Restore: `git apply -3 experiments/removed/A4_ADMISSION_HELPERS.patch` (the reverse of the lane's code changes from
+`f7d10d2b09`). Run owed: one identity record of every lane at the release and the sequence / TSA / neural test suites.
 ## Dead native entries, batch 3 (2026-11)
 
 - Lane consol-k0-dead-code (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 5) re-checked each
