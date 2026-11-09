@@ -106,7 +106,7 @@ from sequence.exec_device import DeviceExec
 from sequence.ops import FP, Args, OP_COPY
 
 from core.identity_trace import IdentityTrace
-from autograd.kernels.mamba_refusal import mamba_refuse_grad_output
+from autograd.kernels.mamba_refusal import mamba_refuse_grad_output, mamba_refuse_grad_output_on_device
 
 # ---- Mamba-1
 from mamba.checks.mamba_fixture import D_CONV, D_STATE, MambaDims, MambaWeights
@@ -137,6 +137,7 @@ from mamba.impl.modeling.modeling_mamba import (
     mamba_download,
     mamba_upload,
     mamba_zeros,
+    _m1_weight_sizes,
 )
 from autograd.kernels.mamba1 import (
     mamba_bwd_concat_xp_into,
@@ -450,6 +451,48 @@ struct Mamba1TapeStack(Movable):
         _ = ones_body^
         ctx.synchronize()
 
+    def __init__(
+        out self, ctx: DeviceContext, var w: MambaDeviceWeights, x: DeviceBuffer[DType.float32], b: Int, l: Int,
+    ) raises:
+        """ONE block over weights the caller built (lane x56d: a recorded run
+        of the block step op OPS_M1_STEP, autograd/block_step_ops.mojo, whose
+        weights are views of the session's weights tensor): x copied into
+        the stack's own input (the session's x may change before the
+        backward), a zero state_in (the training run is the zero-state
+        prefill), the forward stages and the backward workspaces fresh.
+        `state` stays empty: the caller's forward runs on the step op's own
+        state (views of the session's state tensor) and no rule reads it.
+        The caller runs `mamba_block_forward` into `stages[0]` from
+        `acts[0]` before the backward (`mamba1_step_forward`)."""
+        self.ctx = ctx.copy()
+        self.dims = w.dims.copy()
+        self.b = b
+        self.l = l
+        var m = b * l
+        var dm = self.dims.d_model
+        self.w = List[MambaDeviceWeights]()
+        self.state_in = List[MambaDeviceState]()
+        self.state = List[MambaDeviceState]()
+        self.stages = List[MambaDeviceStages]()
+        self.scratch = List[Mamba1TapeScratch]()
+        self.acts = List[DeviceBuffer[DType.float32]]()
+        var x0 = mamba_zeros(ctx, m * dm)
+        _d2d(ctx, x0, x, m * dm)
+        self.acts.append(x0^)
+        self.state_in.append(MambaDeviceState(ctx, b, self.dims))
+        self.stages.append(MambaDeviceStages(ctx, b, l, self.dims))
+        self.scratch.append(Mamba1TapeScratch(ctx, b, l, self.dims))
+        comptime if AUTOGRAD_MAMBA_EXPORT:
+            self.acts.append(_act_after(ctx, self.stages[0].residual_out, m * dm))
+        else:
+            self.acts.append(mamba_zeros(ctx, m * dm))
+        self.w.append(w^)
+        self.ws = mamba_zeros(ctx, mamba_backward_workspace_max_floats(self.dims, m))
+        self.ones = mamba_zeros(ctx, m)
+        var ones_body = self.ones.create_sub_buffer[DType.float32](0, m)
+        ones_body.enqueue_fill(Float32(1.0))
+        _ = ones_body^
+
 
 def _m1_norm_bwd(mut S: Mamba1TapeStack, k: Int, saved: Args, up: FP, gradients: List[FP]) raises:
     # B16 with the gradient at the block's residual output (saved.p2) as its
@@ -712,12 +755,89 @@ def mamba1_tape_backward_stack(
     var tape = Tape()
     var xs = List[Tensor]()
     var params = List[Tensor]()
+    _m1_record_backward(S, ex, tape, _fp(dres), xs, params)
+    _ = di
+    _ = xr
+    _ = trace
+
+    var result = List[Mamba1PrefillGradients]()
+    comptime if AUTOGRAD_MAMBA_EXPORT:
+        # idea K(2): every download queued, one drain
+        for k in range(nb):  # driver-loop: over blocks
+            var g = Mamba1PrefillGradients()
+            var base = 10 * k
+            g.norm_weight = _grad_queued(tape, ex, params[base + 0])
+            g.in_proj_weight = _grad_queued(tape, ex, params[base + 1])
+            g.conv1d_weight = _grad_queued(tape, ex, params[base + 2])
+            g.conv1d_bias = _grad_queued(tape, ex, params[base + 3])
+            g.x_proj_weight = _grad_queued(tape, ex, params[base + 4])
+            g.dt_proj_weight = _grad_queued(tape, ex, params[base + 5])
+            g.dt_proj_bias = _grad_queued(tape, ex, params[base + 6])
+            g.A_log = _grad_queued(tape, ex, params[base + 7])
+            g.D = _grad_queued(tape, ex, params[base + 8])
+            g.out_proj_weight = _grad_queued(tape, ex, params[base + 9])
+            g.x = _grad_queued(tape, ex, xs[k])
+            g.stage_dB = _download_queued(ctx, S.scratch[k].dbm, m * D_STATE)
+            g.stage_dC = _download_queued(ctx, S.scratch[k].dcm, m * D_STATE)
+            result.append(g^)
+        # the one wait: every queued copy lands (DeviceExec copies the
+        # staged words into the lists here)
+        ex.sync()
+        tape.release(ex)
+        ctx.synchronize()
+        _ = dres^
+        _ = S^
+        return result^
+    else:
+        for k in range(nb):  # driver-loop: over blocks
+            var g = Mamba1PrefillGradients()
+            var base = 10 * k
+            g.norm_weight = tape.gradients(ex, params[base + 0])
+            g.in_proj_weight = tape.gradients(ex, params[base + 1])
+            g.conv1d_weight = tape.gradients(ex, params[base + 2])
+            g.conv1d_bias = tape.gradients(ex, params[base + 3])
+            g.x_proj_weight = tape.gradients(ex, params[base + 4])
+            g.dt_proj_weight = tape.gradients(ex, params[base + 5])
+            g.dt_proj_bias = tape.gradients(ex, params[base + 6])
+            g.A_log = tape.gradients(ex, params[base + 7])
+            g.D = tape.gradients(ex, params[base + 8])
+            g.out_proj_weight = tape.gradients(ex, params[base + 9])
+            g.x = tape.gradients(ex, xs[k])
+            g.stage_dB = mamba_download(ctx, S.scratch[k].dbm, m * D_STATE)
+            g.stage_dC = mamba_download(ctx, S.scratch[k].dcm, m * D_STATE)
+            result.append(g^)
+        tape.release(ex)
+        ctx.synchronize()
+        _ = dres^
+        _ = S^
+        return result^
+
+
+def _m1_record_backward(
+    mut S: Mamba1TapeStack, mut ex: DeviceExec, mut tape: Tape, dres: FP,
+    mut xs: List[Tensor], mut params: List[Tensor],
+) raises:
+    """The tape graph of every block of `S` (whose forward already ran into
+    its stages) and its backward from `dres`, the gradient at the last
+    block's output (used in place as the seed). Block k's input tensor goes
+    to `xs`, its ten weight leaves to `params` (field order). The launches
+    are enqueued on `ex`; the caller reads the gradients and releases the
+    tape. One body for the stack VJP (`mamba1_tape_backward_stack`) and the
+    block step op's rule (`mamba1_step_backward`, lane x56d)."""
+    var b = S.b
+    var l = S.l
+    var m = b * l
+    var nb = len(S.w)
+    var dims = S.dims.copy()
+    var dm = dims.d_model
+    var di = dims.d_inner
+    var xr = dims.x_proj_rows()
     # The gradient at block k's residual output: the caller's dres for the
     # last block (the seed, used in place), tape storage otherwise. O_k's
     # gradient shares it; block k's norm adds it into x_k's (B16).
     var dres_at = List[FP]()
     for k in range(nb):  # driver-loop: over blocks
-        dres_at.append(_fp(dres) if k == nb - 1 else tape.reserve(ex, m * dm))
+        dres_at.append(dres if k == nb - 1 else tape.reserve(ex, m * dm))
     var x_t = tape.variable(ex, _fp(S.acts[0]), m, dm)
     for k in range(nb):  # driver-loop: over blocks
         xs.append(x_t)
@@ -746,63 +866,79 @@ def mamba1_tape_backward_stack(
         var g = tape.custom(ex, [y, u, p, d_skip], _fp(st.gate_out), m, di, M1_GATE, _saved(k, di))
         var o = tape.custom_into(ex, [g, w_out], _fp(st.out_proj), dres_at[k], m, dm, M1_PROJ_OUT, _saved(k, dm))
         x_t = tape.custom_into_shared(ex, [x_t, o], _fp(S.acts[k + 1]), o, m, dm, M1_RESID, _saved(k, dm))
-    var seed = tape.variable(ex, _fp(dres), m, dm, False)
+    var seed = tape.variable(ex, dres, m, dm, False)
     var rules = Mamba1Rules(MutPointer[Mamba1TapeStack, MutUntrackedOrigin](unsafe_from_address=Int(MutPointer(to=S))))
     tape.backward_with_rules(ex, x_t, seed, rules)
 
-    var result = List[Mamba1PrefillGradients]()
-    comptime if AUTOGRAD_MAMBA_EXPORT:
-        # idea K(2): every download queued, one drain
-        for k in range(nb):  # driver-loop: over blocks
-            var g = Mamba1PrefillGradients()
-            var base = 10 * k
-            g.norm_weight = _grad_queued(tape, ex, params[base + 0])
-            g.in_proj_weight = _grad_queued(tape, ex, params[base + 1])
-            g.conv1d_weight = _grad_queued(tape, ex, params[base + 2])
-            g.conv1d_bias = _grad_queued(tape, ex, params[base + 3])
-            g.x_proj_weight = _grad_queued(tape, ex, params[base + 4])
-            g.dt_proj_weight = _grad_queued(tape, ex, params[base + 5])
-            g.dt_proj_bias = _grad_queued(tape, ex, params[base + 6])
-            g.A_log = _grad_queued(tape, ex, params[base + 7])
-            g.D = _grad_queued(tape, ex, params[base + 8])
-            g.out_proj_weight = _grad_queued(tape, ex, params[base + 9])
-            g.x = _grad_queued(tape, ex, xs[k])
-            g.stage_dB = _download_queued(ctx, S.scratch[k].dbm, m * D_STATE)
-            g.stage_dC = _download_queued(ctx, S.scratch[k].dcm, m * D_STATE)
-            result.append(g^)
-        # the one wait: every queued copy lands (DeviceExec copies the
-        # staged words into the lists here)
+
+# ================================================================== the block step op's rules
+# Lane x56d-mamba-samba-train-and-host (2026-11-09; plan row X5, the API note
+# docs/plans/EXECUTOR_X1_API.md section 2 "Training through a step op"): a
+# RECORDED run of OPS_M1_STEP / OPS_M2_STEP / OPS_M3_STEP is the zero-state
+# prefill through the step op with its L-token stages kept in the pair's
+# resident entry (autograd/block_step_ops.mojo `mamba_step_train_run`), and
+# its VJP (`mamba_step_backward`, through StepOpRules) is the stage rules
+# above over THOSE stages: no forward is recomputed. The rules write d_x and
+# the weight gradients into the outer tape's storage: d_x whole, each weight
+# gradient at its `block_offsets` slot of the packed weights' gradient (the
+# gaps stay the outer tape's zeros). Same kernels on the same operands in the
+# same order as the stack VJP, so the same bits as the backward the public
+# block ran before this lane (`mamba1_tape_backward`, which ran the forward
+# first and then this graph).
+def _bwd_refuse_upstream(ctx: DeviceContext, tag: String, mut dres: DeviceBuffer[DType.float32], n: Int) raises:
+    """The block backward's grad_output refusal (a non-finite gradient at
+    the block output) on the device copy, as the public backward ran it."""
+    mamba_refuse_grad_output_on_device(ctx, tag, dres, n)
+
+
+def _bwd_put(ctx: DeviceContext, dst: FP, src: FP, n: Int) raises:
+    """dst[0:n] = src[0:n] on the device (gradient into the outer tape)."""
+    if n <= 0:
+        return
+    _d2d(ctx, _view(ctx, dst, n), _view(ctx, src, n), n)
+
+
+def mamba1_step_forward(mut S: Mamba1TapeStack, mut state: MambaDeviceState, y_out: FP) raises:
+    """The recorded run's forward: `mamba_block_forward` of the stack's one
+    block from its input into its stages, on the step op's state (zeroed by
+    the caller), the block output into y_out."""
+    var trace = IdentityTrace.disabled()
+    var n = S.b * S.l * S.dims.d_model
+    mamba_block_forward(S.ctx, S.stages[0], state, S.w[0], S.acts[0], S.b, S.l, trace, String("ops.step.train"))
+    comptime if not AUTOGRAD_MAMBA_EXPORT:
+        _d2d(S.ctx, S.acts[1], S.stages[0].residual_out, n)
+    _bwd_put(S.ctx, y_out, _fp(S.stages[0].residual_out), n)
+
+
+def mamba1_step_backward(mut S: Mamba1TapeStack, d_out: FP, d_x: FP, d_w: FP, at: List[Int]) raises:
+    """The VJP of the recorded run kept in `S`: d(block output) `d_out`; d_x
+    (B * L * d_model) and the ten weight gradients at `at` (the packed
+    layout's offsets, `_m1_weight_sizes` order) of `d_w`. One wait (the
+    tape's storage is released after the copies land)."""
+    var ctx = S.ctx.copy()
+    var dims = S.dims.copy()
+    var m = S.b * S.l
+    var dm = dims.d_model
+    var dres = mamba_zeros(ctx, m * dm)
+    _d2d(ctx, dres, _view(ctx, d_out, m * dm), m * dm)
+    _bwd_refuse_upstream(ctx, String("mamba1"), dres, m * dm)
+    var ex = DeviceExec(ctx)
+    var tape = Tape()
+    var xs = List[Tensor]()
+    var params = List[Tensor]()
+    try:
+        _m1_record_backward(S, ex, tape, _fp(dres), xs, params)
+        _bwd_put(ctx, d_x, tape.gradient(xs[0]), m * dm)
+        var sizes = _m1_weight_sizes(dims)
+        for i in range(10):  # driver-loop: over the block's ten weights
+            _bwd_put(ctx, d_w + at[i], tape.gradient(params[i]), sizes[i])
+    except err:
         ex.sync()
         tape.release(ex)
-        ctx.synchronize()
-        _ = rules^
-        _ = dres^
-        _ = S^
-        return result^
-    else:
-        for k in range(nb):  # driver-loop: over blocks
-            var g = Mamba1PrefillGradients()
-            var base = 10 * k
-            g.norm_weight = tape.gradients(ex, params[base + 0])
-            g.in_proj_weight = tape.gradients(ex, params[base + 1])
-            g.conv1d_weight = tape.gradients(ex, params[base + 2])
-            g.conv1d_bias = tape.gradients(ex, params[base + 3])
-            g.x_proj_weight = tape.gradients(ex, params[base + 4])
-            g.dt_proj_weight = tape.gradients(ex, params[base + 5])
-            g.dt_proj_bias = tape.gradients(ex, params[base + 6])
-            g.A_log = tape.gradients(ex, params[base + 7])
-            g.D = tape.gradients(ex, params[base + 8])
-            g.out_proj_weight = tape.gradients(ex, params[base + 9])
-            g.x = tape.gradients(ex, xs[k])
-            g.stage_dB = mamba_download(ctx, S.scratch[k].dbm, m * D_STATE)
-            g.stage_dC = mamba_download(ctx, S.scratch[k].dcm, m * D_STATE)
-            result.append(g^)
-        tape.release(ex)
-        ctx.synchronize()
-        _ = rules^
-        _ = dres^
-        _ = S^
-        return result^
+        raise err
+    ex.sync()
+    tape.release(ex)
+    _ = dres^
 
 
 def mamba1_tape_backward(
