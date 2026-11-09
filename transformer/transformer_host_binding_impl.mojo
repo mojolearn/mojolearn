@@ -9,6 +9,7 @@ binding (thin-shell lane, 2026-10-21): same operations, same order.
 """
 
 from std.os import abort
+from std.memory import memcpy
 
 from core.hostptr import copy_f32, f32_ptr, read_f32
 from checks.kernel_matrix import (
@@ -116,6 +117,39 @@ def _host_weights_from(
         _opt_read(a[22], hd, opts.qk_norm, "q_norm.weight", what),
         _opt_read(a[23], hd, opts.qk_norm, "k_norm.weight", what),
     )
+
+
+def _run_decode_steps(
+    a: List[Int], b: Int, n: Int, dm: Int, nh: Int, nkv: Int, hd: Int,
+    it: Int, smax: Int, s0: Int, window: Int, opts: BlockOptions,
+) raises -> Int:
+    """`n` decode tokens per row on the host in one call (lane x4: replaces
+    the decode door's per-token call of `transformer_decode_step`): `a` is
+    `_run_forward`'s layout with x and y_out the caller's (B, n, d_model)
+    slabs. Token t of every row is copied into a (B, d_model) buffer, the
+    block runs at L = 1 on the carried caches, and the row results are
+    copied back, so the bytes are n `transformer_decode_step` calls'.
+    Serial by nature: each token reads the cache the previous one wrote."""
+    if b <= 0 or n <= 0 or dm <= 0:
+        raise Error("transformer decode: B, n_tokens and d_model must be positive")
+    var row = b * dm
+    var xt = List[Float32](length=row, fill=Float32(0.0))
+    var yt = List[Float32](length=row, fill=Float32(0.0))
+    var src = f32_ptr(a[0])
+    var dst = f32_ptr(a[12])
+    var at = a.copy()
+    at[0] = Int(xt.unsafe_ptr())
+    at[12] = Int(yt.unsafe_ptr())
+    var cached = s0
+    for t in range(n):  # driver-loop: over autoregressive decode tokens (each reads the cache the previous one wrote)
+        for r in range(b):  # driver-loop: over the batch rows, token t's row copy in
+            memcpy(dest=xt.unsafe_ptr() + r * dm, src=src + (r * n + t) * dm, count=dm)
+        cached = _run_forward(at, b, 1, dm, nh, nkv, hd, it, smax, cached, window, True, opts)
+        for r in range(b):  # driver-loop: over the batch rows, token t's row copy out
+            memcpy(dest=dst + (r * n + t) * dm, src=yt.unsafe_ptr() + r * dm, count=dm)
+    _ = xt^
+    _ = yt^
+    return cached
 
 
 def _run_forward(
