@@ -193,7 +193,8 @@ def _fold_rows(source: PythonObject, name: String, context: PythonObject, refusa
 
 def admit_family_meta(source: PythonObject, ndim: Int, name: String, context: PythonObject,
                       dense: Bool = False, finite: Bool = False, admitted: Bool = False,
-                      empty: Bool = False, refusal: String = "") raises -> ArrayMetadata:
+                      empty: Bool = False, refusal: String = "",
+                      defer_finite: Bool = False) raises -> ArrayMetadata:
     """The admitted float32 C-order words of a family door's array input, as
     its metadata record: `keep` is the input itself when it already is
     float32 in C order (borrowed, never written), otherwise one cast copy
@@ -203,7 +204,12 @@ def admit_family_meta(source: PythonObject, ndim: Int, name: String, context: Py
     view classical_view returned in the same native call. `empty` admits a
     view with no words (the cast of an already checked view, which
     `_buffer.as_f32_c`'s cast step never refused). `refusal`, when given,
-    is the door's own wording of the non-finite refusal."""
+    is the door's own wording of the non-finite refusal. `defer_finite`
+    (with `finite`; lane a7b-device-x-neighbors): a BORROWED input is not
+    scanned here (`copied` is False on the result): the door's kernel entry
+    tests the words it uploads and the door refuses through
+    `admitted_finite_refuse`; a cast input is still refused from the cast's
+    own verdict, and a fold from its gather."""
     if door_is_device_rows(source, context):
         # A model-selection fold (`_arena_io.DeviceRows`) goes to the one
         # admission path unchanged: admit_x resolves it and tests it finite
@@ -214,12 +220,12 @@ def admit_family_meta(source: PythonObject, ndim: Int, name: String, context: Py
         admit_family_cast(rows, name, context)
         return rows^
     var snapshot = admit_family_input(source, ndim, name, context, dense, admitted, empty)
-    admit_family_cast(snapshot, name, context, finite, refusal)
+    admit_family_cast(snapshot, name, context, finite, refusal, defer_finite)
     return snapshot^
 
 
 def admit_family_cast(mut snapshot: ArrayMetadata, name: String, context: PythonObject, finite: Bool = False,
-                      refusal: String = "") raises:
+                      refusal: String = "", defer_finite: Bool = False) raises:
     """The second step of `admit_family_meta` on an `admit_family_input`
     record: borrow a float32 C-order input, else cast it once (row tasks
     across the host's cores) into an owned Array recorded on `snapshot`;
@@ -228,7 +234,7 @@ def admit_family_cast(mut snapshot: ArrayMetadata, name: String, context: Python
     var ok = True
     var src = snapshot.source
     if snapshot.f32_c():
-        if finite:
+        if finite and not defer_finite:
             # parallel: one finiteness scan of a borrowed input across host cores
             ok = host_all_finite_f32_strided(src.addr, src.s0, src.s1, src.rows, src.cols)
     else:
@@ -258,12 +264,14 @@ def admitted_family_x(snapshot: ArrayMetadata, source: PythonObject, finite: Boo
 
 def admit_family(source: PythonObject, ndim: Int, name: String, context: PythonObject,
                  dense: Bool = False, finite: Bool = False, admitted: Bool = False,
-                 empty: Bool = False, refusal: String = "") raises -> AdmittedX:
+                 empty: Bool = False, refusal: String = "", defer_finite: Bool = False) raises -> AdmittedX:
     """`admit_family_meta` as the AdmittedX contract: `.array` the float32
     C-order array the kernels read, `.borrowed` when it is the input's own
-    storage."""
-    var snapshot = admit_family_meta(source, ndim, name, context, dense, finite, admitted, empty, refusal)
-    return admitted_family_x(snapshot, source, finite)
+    storage. Under `defer_finite` a borrowed X has `.finite` False (its
+    door tests it)."""
+    var snapshot = admit_family_meta(source, ndim, name, context, dense, finite, admitted, empty, refusal,
+                                     defer_finite)
+    return admitted_family_x(snapshot, source, finite and not (defer_finite and not snapshot.copied))
 
 
 def admit_family_copied(snapshot: ArrayMetadata, source: PythonObject) raises -> Bool:

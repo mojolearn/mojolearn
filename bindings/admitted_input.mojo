@@ -741,12 +741,19 @@ def admit_x(mut call: AdmittedCall, source: PythonObject, est: String, context: 
     return x^
 
 
+def admitted_finite_wording(est: String, name: String = "X") -> String:
+    """scikit-learn's wording of the non-finite refusal, the ONE text every
+    door raises (admitted_finite_refuse, and a family door's cast verdict
+    through `admit_family_meta(..., refusal=...)`)."""
+    return "Input " + name + " contains NaN or infinity (" + est + ")."
+
+
 def admitted_finite_refuse(status: Int, est: String, name: String = "X") raises:
     """The refusal of a deferred finite test: `status` is the word the
     kernel entry returned (core/admitted_finite_status.mojo; 0 = every word
     finite). Raises scikit-learn's wording, as admit_x would have."""
     if status != 0:
-        raise Error("Input " + name + " contains NaN or infinity (" + est + ").")
+        raise Error(admitted_finite_wording(est, name))
 
 
 def _entry_nonfinite(text: String, name: String) -> Bool:

@@ -127,6 +127,8 @@ from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.math import fma, sqrt
+from core.admitted_finite_status import enqueue_finite_status
+from core.device_zero import enqueue_fill
 
 comptime KNN_FAST_REFINE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_KNN_FAST_REFINE"]()
@@ -715,6 +717,7 @@ def knn_search_resident(
     metric_arg: Float32 = Float32(2.0),
     cache: KnnIndexCachePointer = None,
     negate_products: Bool = False,
+    status_addr: Int = 0,
 ) raises -> Int:
     """Reads the device plan once and runs the planned overload below."""
     return knn_search_resident(
@@ -736,6 +739,7 @@ def knn_search_resident(
         metric_arg,
         cache,
         negate_products,
+        status_addr,
     )
 
 
@@ -758,6 +762,7 @@ def knn_search_resident(
     metric_arg: Float32 = Float32(2.0),
     cache: KnnIndexCachePointer = None,
     negate_products: Bool = False,
+    status_addr: Int = 0,
 ) raises -> Int:
     """`knn_search` over an index ALREADY ON THE DEVICE (DEVIATION 2921,
     lane/infer-speed-classical, 2026-09-17): `index` holds the same
@@ -784,14 +789,14 @@ def knn_search_resident(
             return _knn_search_resident_refined(
                 dplan, ctx, index, index_ptr, n_index, queries_ptr, n_queries, n_features, k,
                 out_dist_ptr, out_idx_ptr, return_sqrt, requested_query_tile, knn_method,
-                metric, metric_arg, cache,
+                metric, metric_arg, cache, status_addr,
             )
     var retained = List[DeviceBuffer[DType.uint32]]()
     return _knn_search_on_device_index(
         ctx, trace, retained, False, index, n_index, queries_ptr, n_queries,
         n_features, k, out_dist_ptr, out_idx_ptr, return_sqrt, plan[2],
         knn_method, plan[0], metric_arg, plan[1], plan[3], dplan, cache,
-        negate_products,
+        negate_products, status_addr,
     )
 
 
@@ -1251,6 +1256,52 @@ def _knn_refine_applies(mtr: Int, negate_products: Bool, k: Int, n_index: Int) -
     return _knn_refine_pool(k, n_index) > k
 
 
+def knn_upload_finite_status(ctx: DeviceContext, mut words: DeviceBuffer[DType.float32], n: Int) raises -> Int32:
+    """The finite status word of the `n` float32 words just uploaded into
+    `words` (core/admitted_finite_status.mojo contract: 0 when every word is
+    finite, 1 otherwise). Enqueues the test behind the upload, then makes the
+    ONE synchronisation the caller makes after its upload in any case (lane
+    a7b-device-x-neighbors: the k-NN doors admit a borrowed X with no host
+    scan and refuse through `admitted_finite_refuse` on this word)."""
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill[DType.int32](ctx, status, Int32(0))
+    enqueue_finite_status(ctx, words.unsafe_ptr(), n, status.unsafe_ptr(), 0)
+    var word = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
+    ctx.synchronize()
+    var result = word.unsafe_ptr()[0]
+    _ = word^
+    _ = status^
+    return result
+
+
+def knn_upload_finite_status(
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32], na: Int,
+    mut b: DeviceBuffer[DType.float32], nb: Int,
+) raises -> Int32:
+    """`knn_upload_finite_status` over two uploads in the one
+    synchronisation (an index and its queries): 1 when either holds a NaN
+    or an infinity."""
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill[DType.int32](ctx, status, Int32(0))
+    enqueue_finite_status(ctx, a.unsafe_ptr(), na, status.unsafe_ptr(), 0)
+    enqueue_finite_status(ctx, b.unsafe_ptr(), nb, status.unsafe_ptr(), 0)
+    var word = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
+    ctx.synchronize()
+    var result = word.unsafe_ptr()[0]
+    _ = word^
+    _ = status^
+    return result
+
+
+def knn_put_status(status_addr: Int, word: Int32):
+    """Store a status word at the caller's host address (0: not asked)."""
+    if status_addr != 0:
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr).unsafe_store(0, word)
+
+
 def _knn_search_resident_refined(
     dplan: DevicePlan,
     ctx: DeviceContext,
@@ -1269,6 +1320,7 @@ def _knn_search_resident_refined(
     metric: Int,
     metric_arg: Float32,
     cache: KnnIndexCachePointer,
+    status_addr: Int = 0,
 ) raises -> Int:
     """`KNN_FAST_REFINE`: the resident search at the pool width (its refusals,
     plan and selection; the pool's ids stay on the device), then the exact
@@ -1290,10 +1342,13 @@ def _knn_search_resident_refined(
         cand_d.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
         cand_i.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
         return_sqrt, plan[2], knn_method, plan[0], metric_arg, plan[1], plan[3], dplan,
-        cache, False,
+        cache, False, status_addr,
     )
     _ = cand_d^
     _ = cand_i^
+    if status_addr != 0 and MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr)[0] != 0:
+        # A non-finite query: the door refuses; no re-rank.
+        return used
     if len(retained) != 1:
         raise Error("knn refine: the pool search kept " + String(len(retained)) + " index buffers, expected 1")
     var pad = 1
@@ -1365,8 +1420,15 @@ def _knn_search_on_device_index(
     dplan: DevicePlan,
     cache: KnnIndexCachePointer = None,
     negate_products: Bool = False,
+    status_addr: Int = 0,
 ) raises -> Int:
-    """`cache` (DEVIATION 3061) is a resident index's derived buffers, None
+    """`status_addr` (lane a7b-device-x-neighbors), when not 0, is a host
+    int32 word that receives the finite status of the uploaded queries
+    (`knn_upload_finite_status`), tested behind the upload in the
+    synchronisation that follows it; on a non-finite query the search stops
+    there (outputs unwritten) and the door refuses.
+
+    `cache` (DEVIATION 3061) is a resident index's derived buffers, None
     for a per-call index: with it the index norms are copied from the cache
     (built on first use by the call below) and the tiled arm reads the
     cached transposed layout and admission metadata.
@@ -1444,7 +1506,16 @@ def _knn_search_on_device_index(
     comptime if KNN_PHASE_TIMERS:
         t_phase = perf_counter_ns()
     ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
-    ctx.synchronize()
+    if status_addr != 0:
+        # The finite test rides behind the upload, in its synchronisation.
+        var word = knn_upload_finite_status(ctx, queries, n_queries * n_features)
+        knn_put_status(status_addr, word)
+        if word != 0:
+            if pooled:
+                knn_pool_release(cache.value())
+            return query_tile
+    else:
+        ctx.synchronize()
     comptime if KNN_PHASE_TIMERS:
         ns_upload = perf_counter_ns() - t_phase
         t_phase = perf_counter_ns()
@@ -2000,6 +2071,7 @@ def knn_regressor_predict_resident(
     metric_arg: Float32 = Float32(2.0),
     weights: Int = WEIGHTS_UNIFORM,
     cache: KnnIndexCachePointer = None,
+    status_addr: Int = 0,
 ) raises -> Int:
     """Reads the device plan once and runs the planned overload below."""
     return knn_regressor_predict_resident(
@@ -2020,6 +2092,7 @@ def knn_regressor_predict_resident(
         metric_arg,
         weights,
         cache,
+        status_addr,
     )
 
 
@@ -2041,6 +2114,7 @@ def knn_regressor_predict_resident(
     metric_arg: Float32 = Float32(2.0),
     weights: Int = WEIGHTS_UNIFORM,
     cache: KnnIndexCachePointer = None,
+    status_addr: Int = 0,
 ) raises -> Int:
     """`knn_regressor_predict` over an index ALREADY ON THE DEVICE
     (DEVIATION 3002): the search is `_knn_search_on_device_index` and the
@@ -2071,7 +2145,11 @@ def knn_regressor_predict_resident(
         ctx, trace, retained_indices, False, index, n_index, queries_ptr,
         n_queries, n_features, k, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
         weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3], dplan, cache,
+        False, status_addr,
     )
+    if status_addr != 0 and MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr)[0] != 0:
+        # A non-finite query (lane a7b): the door refuses; no vote.
+        return used_tile
     _knn_regressor_vote(ctx, trace, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
                         n_index, n_queries, k, y_ptr, n_outputs, out_ptr, weighted)
     _ = h_dist^
@@ -2513,8 +2591,15 @@ def radius_neighbors_count(
     out_indptr_ptr: MutPointer[Int32, MutUntrackedOrigin],
     metric: Int = RBC_METRIC_DEFAULT,
     metric_arg: Float32 = Float32(2.0),
+    status_addr: Int = 0,
 ) raises -> Int:
     """Pass one: how many neighbours, and where each query's row begins.
+
+    `status_addr` (not 0; lane a7b-device-x-neighbors): a host int32 word
+    that receives the finite status of the uploaded index and queries, tested
+    behind the uploads in their synchronisation; on a non-finite word the
+    pass stops there (returns 0, `out_indptr_ptr` unwritten) and the door
+    refuses.
 
     Writes `n_queries + 1` int32 into `out_indptr_ptr`, the CSR row starts,
     and returns the total edge count. The caller sizes its index and distance
@@ -2546,7 +2631,13 @@ def radius_neighbors_count(
     ctx.synchronize()
     ctx.enqueue_copy(dst_buf=x, src_ptr=index_ptr)
     ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
-    ctx.synchronize()
+    if status_addr != 0:
+        var word = knn_upload_finite_status(ctx, x, n_index * n_features, queries, n_queries * n_features)
+        knn_put_status(status_addr, word)
+        if word != 0:
+            return 0
+    else:
+        ctx.synchronize()
 
     var nnz = _rbc_index_and_count(
         ctx,

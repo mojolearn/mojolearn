@@ -308,17 +308,40 @@ def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
 
 
 def _dist_triple(dist_params: PythonObject) raises -> Tuple[Int, Float32, Int]:
-    """`dist_params` -> `(metric, metric_arg, weights)`, length-checked."""
-    if len(dist_params) != 3:
+    """`dist_params` -> `(metric, metric_arg, weights)`, length-checked. A
+    fourth value is the host address of the finite status word
+    (`_dist_status`)."""
+    if len(dist_params) != 3 and len(dist_params) != 4:
         raise Error(
             "knn: dist_params must hold 3 values (metric, metric_arg,"
-            " weights), got " + String(len(dist_params))
+            " weights) and optionally a status address, got " + String(len(dist_params))
         )
     return (
         Int(py=dist_params[0]),
         Float32(Float64(py=dist_params[1])),
         Int(py=dist_params[2]),
     )
+
+
+def _dist_status(dist_params: PythonObject) raises -> Int:
+    """The optional fourth `dist_params` value (lane a7b-device-x-neighbors):
+    the host address of an int32 word that receives the finite status of the
+    queries the entry uploads (core/admitted_finite_status.mojo; 0 = finite).
+    0 (or absent): not asked; the door tested its X itself."""
+    if len(dist_params) < 4:
+        return 0
+    var address = Int(py=dist_params[3])
+    if address < 0 or address % 4 != 0:
+        raise Error("knn: the status address must be a positive int32-aligned address")
+    return address
+
+
+def _refuse_status(dist_params: PythonObject, what: String) raises:
+    """The per-call entries (index uploaded every call) do not test their
+    words: the doors reach them only on the host binding; a status request
+    here is refused rather than left unanswered."""
+    if _dist_status(dist_params) != 0:
+        raise Error(what + ": the finite status word is answered by the resident entries only")
 
 
 def knn_search_binding(
@@ -365,6 +388,7 @@ def knn_search_binding(
     var sq = Int(py=params[4]) != 0
     var qt = Int(py=params[5])
     var dt = _dist_triple(dist_params)
+    _refuse_status(dist_params, "knn_search")
 
     var used: Int
     with GILReleased(Python()):
@@ -384,17 +408,24 @@ def knn_index_prepare_binding(
     `knn_search_resident` searches through. `params` is `[n_index,
     n_features]`; the bytes at `index_addr` are copied to the device
     inside this call and never read again by a search except for the
-    host-side refusals. Release with `knn_index_release`."""
-    if len(params) != 2:
-        raise Error("knn_index_prepare: params must hold n_index, n_features")
+    host-side refusals. Release with `knn_index_release`.
+
+    A third `params` value (lane a7b-device-x-neighbors) is the host address
+    of an int32 word that receives the finite status of the uploaded index
+    (0 = finite); on a non-finite index nothing is kept and the handle is 0."""
+    if len(params) != 2 and len(params) != 3:
+        raise Error("knn_index_prepare: params must hold n_index, n_features and optionally a status address")
     var ip = _f32_ptr(Int(py=index_addr))
     var ni = Int(py=params[0])
     var nf = Int(py=params[1])
+    var status = 0 if len(params) == 2 else Int(py=params[2])
     if ni <= 0 or nf <= 0:
         raise Error("knn_index_prepare: n_index and n_features must be positive")
+    if status < 0 or status % 4 != 0:
+        raise Error("knn_index_prepare: the status address must be a positive int32-aligned address")
     var handle: Int
     with GILReleased(Python()):
-        handle = knn_index_prepare(ip, ni, nf)
+        handle = knn_index_prepare(ip, ni, nf, status)
     return PythonObject(handle)
 
 
@@ -435,11 +466,12 @@ def knn_search_resident_binding(
     var qt = Int(py=params[5])
     var dt = _dist_triple(dist_params)
     var h = Int(py=handle)
+    var status = _dist_status(dist_params)
     var used: Int
     with GILReleased(Python()):
         used = knn_index_search(
             h, ip, ni, qp, nq, nf, kk, dp, xp, sq, qt, KNN_METHOD_AUTO,
-            dt[0], dt[1], True,
+            dt[0], dt[1], True, status,
         )
     return PythonObject(used)
 
@@ -507,6 +539,7 @@ def knn_classify_binding(
     var pp = _f32_ptr(Int(py=out_proba_addr))
     var up = _i32_ptr(Int(py=out_uniq_addr))
     var dt = _dist_triple(dist_params)
+    _refuse_status(dist_params, "knn_classify")
 
     var used: Int
     # The binding entry reads the neighbors device plan once and passes it down.
@@ -562,6 +595,7 @@ def knn_regress_binding(
     var qt = Int(py=params[4])
     var no = Int(py=params[5])
     var dt = _dist_triple(dist_params)
+    _refuse_status(dist_params, "knn_regress")
 
     var used: Int
     with GILReleased(Python()):
@@ -619,11 +653,12 @@ def knn_classify_resident_binding(
     var pp = _f32_ptr(Int(py=out_proba_addr))
     var up = _i32_ptr(Int(py=out_uniq_addr))
     var dt = _dist_triple(dist_params)
+    var status = _dist_status(dist_params)
     var used: Int
     with GILReleased(Python()):
         used = knn_index_classify(
             h, ip, ni, qp, nq, nf, kk, yp, no, n_classes, lp, pp, up,
-            want_proba, qt, dt[0], dt[1], dt[2],
+            want_proba, qt, dt[0], dt[1], dt[2], status,
         )
     return PythonObject(used)
 
@@ -656,10 +691,11 @@ def knn_regress_resident_binding(
     var qt = Int(py=params[4])
     var no = Int(py=params[5])
     var dt = _dist_triple(dist_params)
+    var status = _dist_status(dist_params)
     var used: Int
     with GILReleased(Python()):
         used = knn_index_regress(
-            h, ip, ni, qp, nq, nf, kk, yp, no, op, qt, dt[0], dt[1], dt[2]
+            h, ip, ni, qp, nq, nf, kk, yp, no, op, qt, dt[0], dt[1], dt[2], status
         )
     return PythonObject(used)
 
@@ -998,9 +1034,9 @@ def radius_neighbors_count_binding(
     That is why there are two of these and not one; the reasoning is in
     `neighbors/estimator.mojo`'s RADIUS NEIGHBOURS banner.
     """
-    if len(params) != 6:
+    if len(params) != 6 and len(params) != 7:
         raise Error(
-            "radius_neighbors_count: params must hold 6 values, got "
+            "radius_neighbors_count: params must hold 6 values and optionally a status address, got "
             + String(len(params))
         )
     var ip = _f32_ptr(Int(py=index_addr))
@@ -1012,12 +1048,18 @@ def radius_neighbors_count_binding(
     var rad = Float32(Float64(py=params[3]))
     var mtr = Int(py=params[4])
     var marg = Float32(Float64(py=params[5]))
+    # Lane a7b-device-x-neighbors: params[6], when present, is the host
+    # address of the int32 finite status word of the uploaded index and
+    # queries (0 = finite; the door refuses otherwise).
+    var status = 0 if len(params) == 6 else Int(py=params[6])
+    if status < 0 or status % 4 != 0:
+        raise Error("radius_neighbors_count: the status address must be a positive int32-aligned address")
 
     var nnz: Int
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         nnz = radius_neighbors_count(
-            ctx, ip, ni, qp, nq, nf, rad, ap, mtr, marg
+            ctx, ip, ni, qp, nq, nf, rad, ap, mtr, marg, status
         )
         ctx.synchronize()
     return PythonObject(nnz)

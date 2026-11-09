@@ -1525,12 +1525,15 @@ def kde_fit_prepare_binding(
         1  n_features
         2  bandwidth   (float)
         3  has_weights (0/1; weights_addr is read only when 1)
+        4  finite_tested (optional, 0/1; lane a7b-device-x-neighbors: the
+           door's fit tested the rows, so the serial host pass runs only
+           for the sqeuclidean bound and the cosine zero-row rule)
 
     Refuses, by name, everything `kde_score_samples` refuses about the fit
     set. Release with `kde_fit_release`."""
-    if len(params) != 4:
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kde_fit_prepare: params must contain 4 values, got "
+            "kde_fit_prepare: params must contain 4 or 5 values, got "
             + String(len(params))
         )
     var tp = _f32_ptr(Int(py=train_addr))
@@ -1538,6 +1541,7 @@ def kde_fit_prepare_binding(
     var n_features = Int(py=params[1])
     var bandwidth = Float32(Float64(py=params[2]))
     var has_weights = Int(py=params[3]) != 0
+    var finite_tested = len(params) == 5 and Int(py=params[4]) != 0
     var kname = String(py=kernel)
     var mname = String(py=metric)
     var weights = List[Float32]()
@@ -1546,7 +1550,8 @@ def kde_fit_prepare_binding(
         weights = read_f32(Int(wp), max(0, n_train))
     var handle: Int
     with GILReleased(Python()):
-        handle = kde_fit_prepare(tp, n_train, n_features, bandwidth, kname, mname, weights, has_weights)
+        handle = kde_fit_prepare(tp, n_train, n_features, bandwidth, kname, mname, weights, has_weights,
+                                 finite_tested)
     return PythonObject(handle)
 
 
@@ -1565,16 +1570,21 @@ def kde_score_samples_resident_binding(
     metric: PythonObject,
 ) raises -> PythonObject:
     """`kde_score_samples` over a resident fit set (DEVIATION 3003).
-    `params`: [n_query, n_features, bandwidth(, want_total)]. Writes
+    `params`: [n_query, n_features, bandwidth(, want_total(, status
+    address))]; the status address (lane a7b-device-x-neighbors) is a host
+    int32 word that receives the queries' finite status (0 = finite). Writes
     `n_query` float32 to `out_addr`; returns n_query, or with want_total the
     scores' fixed-order float32 sum (on the device, `device_sum_f32_fixed`;
     lane pyglue-numeric: KernelDensity.score summed them on the host)."""
-    if len(params) != 3 and len(params) != 4:
+    if len(params) < 3 or len(params) > 5:
         raise Error(
-            "kde_score_samples_resident: params must contain 3 or 4 values, got "
+            "kde_score_samples_resident: params must contain 3 to 5 values, got "
             + String(len(params))
         )
-    var want_total = len(params) == 4 and Int(py=params[3]) != 0
+    var want_total = len(params) >= 4 and Int(py=params[3]) != 0
+    var status = 0 if len(params) < 5 else Int(py=params[4])
+    if status < 0 or status % 4 != 0:
+        raise Error("kde_score_samples_resident: the status address must be a positive int32-aligned address")
     var h = Int(py=handle)
     var qp = _f32_ptr(Int(py=query_addr))
     var op = _f32_ptr(Int(py=out_addr))
@@ -1587,6 +1597,7 @@ def kde_score_samples_resident_binding(
     with GILReleased(Python()):
         total = kde_score_samples_resident(
             h, qp, n_query, n_features, bandwidth, kname, mname, op, want_total=want_total,
+            status_addr=status,
         )
     if want_total:
         return PythonObject(Float64(total))
