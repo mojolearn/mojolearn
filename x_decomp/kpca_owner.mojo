@@ -96,7 +96,6 @@ def _lanczos_top[E: Exec, D: RDev, RES: Bool, X: DecompDev](
         basis = kit.zeros(cap + 1, n)
     var q_row = kit.add(kit.mats[q].host, kit.mats[q].dev, 1, n)
     _ = kit_place_strided(kit, basis, q_row, 1, 0)
-    var alphas = List[Float64]()
     var betas = List[Float64]()
     var width = min(n, max(2 * nc + 1, 20))
     var j = 0
@@ -116,24 +115,29 @@ def _lanczos_top[E: Exec, D: RDev, RES: Bool, X: DecompDev](
             for jj in range(j, width):  # driver-loop: over the batch's Lanczos steps (at most _LANCZOS_MAX_M)
                 var av = Float64(ab[jj])
                 var bv = Float64(ab[cap + jj])
-                alphas.append(av)
                 betas.append(bv)
                 if bv <= 1e-30 * max(1.0, abs(av)) or jj + 1 == n:
                     reached = jj + 1
                     stop = True
                     break
             j = reached
-        # the tridiagonal T from the per-step scalars
-        var t = kit.zeros(j, j)
-        var pt = kit.ptr(t)
-        for i in range(j):  # driver-loop: over the Lanczos steps (at most _LANCZOS_MAX_M)
-            pt[i * j + i] = Float32(alphas[i])
-            if i + 1 < j:
-                pt[i * j + i + 1] = Float32(betas[i])
-                pt[(i + 1) * j + i] = Float32(betas[i])
-        var eig = kit_eigh[E, D, RES, X](kit, t)
-        th = eig[0]
-        y = eig[1]
+        # TOMBSTONE: the host assembly of T (j x j host words of the alphas
+        # and betas) and its dense `kit_eigh` deleted 2026-11-09 by lane
+        # n9-decomp-eigh-families; code recoverable at the lane's base
+        # origin/integ/pre-0867-w2 (f59d913b0b). Restore: git apply experiments/removed/N9_RESIDENT_EIGH.patch
+        # The projected solve is the executor op `eigh_op_tridiag` on the
+        # alphas / betas the Lanczos step wrote (resident: abd, w and z stay
+        # on the device), the host column `eigh_op_tridiag_host` on ab: one
+        # algorithm on every column; T's words are the float32 alphas and
+        # betas as before.
+        comptime if RES:
+            th = kit.device_output(1, j)
+            y = kit.device_output(j, j)
+            X.eigh_tridiag_dev(kit.mats[abd].dev, kit.mats[th].dev, kit.mats[y].dev, j, cap)
+        else:
+            th = kit.zeros(1, j)
+            y = kit.zeros(j, j)
+            X.eigh_tridiag_host(pab, kit.ptr(th), kit.ptr(y), j, cap)
         top = min(nc, j)
         if top < nc:
             return (False, -1, -1)

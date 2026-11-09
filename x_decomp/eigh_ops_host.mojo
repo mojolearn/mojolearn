@@ -7,6 +7,10 @@
                           the words of `rr_batch_kernel` for each problem),
                           the problems in parallel over the host pool (each
                           writes only its own w, v rows).
+  `eigh_op_sym_host`      `eigh_op_sym`: from n = TD_MIN_N (IDENTICAL) the
+                          host tridiagonal solve (`host_eigh_td`) on a
+                          copy, the Jacobi of the input on a refusal; the
+                          Jacobi below (lane n9-decomp-eigh-families).
   `eigh_op_tridiag_host`  the device's items one call per index
                           (`td_bisect_item`, `td_gap_item`, `td_vec_item`, in
                           parallel over the index, as x_decomp/eigh_tridiag_host.mojo
@@ -22,7 +26,9 @@ from cluster.host.host_cells import host_cells
 from decomposition.host.linalg_public import eigh_ascending
 from decomposition.host.pca_oracle import host_sign_flip
 from x_decomp.cells import F32Ptr
-from x_decomp.eigh_tridiag_host import host_td_solve
+from x_decomp.eigh_tridiag_cells import EIGH_TD_IDN, TD_MIN_N
+from x_decomp.eigh_tridiag_host import host_eigh_td, host_td_solve
+from x_decomp.rr_block import IDN_EIGH_BLOCK, rb_use
 from x_decomp.rr_solve import host_eigh_rr_sorted
 
 
@@ -69,6 +75,29 @@ def eigh_op_dense_host(a: F32Ptr, w: F32Ptr, v: F32Ptr, batch: Int, n: Int) rais
         count += Int(bad[b])
     _ = bad^
     return count
+
+
+def eigh_op_sym_host(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises -> Int:
+    """`eigh_op_sym` on host memory: one n x n problem at `a` (both
+    triangles, read only) into w (n ascending) and v (n x n, eigenvector c
+    in column c). Returns 1 when no route holds, else 0. `HostExec.eigh`
+    is this after its triangle mirror."""
+    if n < 1:
+        raise Error("eigh_op_sym_host: n must be positive, got " + String(n))
+    comptime if IDN_EIGH_BLOCK:
+        if rb_use(n):
+            raise Error(
+                "eigh_op_sym: MOJOLEARN_IDN_EIGH_BLOCK_ON is a quarantined candidate with no device op;"
+                " build without it"
+            )
+    comptime if EIGH_TD_IDN:
+        if n >= TD_MIN_N:
+            var work = List[Float32](capacity=n * n)
+            for i in range(n * n):
+                work.append(a.unsafe_load(i))
+            if host_eigh_td(work, n, w, v):
+                return 0
+    return Int(_eo_host_one(a, w, v, n))
 
 
 def eigh_op_tridiag_host(d: F32Ptr, e: F32Ptr, w: F32Ptr, z: F32Ptr, n: Int) raises -> Int:

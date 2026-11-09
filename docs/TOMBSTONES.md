@@ -501,6 +501,13 @@ in the tables after the sections.
 | [`MOJOLEARN_LU_FAST_SHARED_SUB`](#mojolearn_scoped_gemm_audit) | Decomp (LU, F02) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
 | [`MOJOLEARN_CHOL_FAST_SHARED_SUB`](#mojolearn_scoped_gemm_audit) | Linear (Cholesky, F02) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
 
+| [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
+| [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
+| [`MOJOLEARN_IDN_EIGH_SMALL_N128`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
+| [`MOJOLEARN_IDN_EIGH_BLOCK_ON` device arm (`DevExec._eigh_block_on`, `rr_block_device.mojo`)](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (quarantined block Jacobi) | removed (DROPPED candidate; the op refuses the define at run time) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
+| [`DevExec._eigh_par_on`, `_eigh_td_try`, `_eigh_par_test`, `_rr_batch_enq` / `_rr_batch_on` / `_rr_batch_check`, `xd_first_where2_enq`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (host-driven dense eigh drivers) | REFACTORED (every dense eigh on `eigh_op_sym` / `eigh_op_dense`) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
+| [`DKit.eigh` host words, `IpcaDev.eigh` resident host words, `pinv_mask_kernel`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | FastICA / FactorAnalysis / rotation / MinCovDet / IncrementalPCA / MDS-Isomap-KPCA dense eigh | REFACTORED (w and V stay on the device) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
+| [Lanczos projected T host assembly (`kpca_owner`, `mani_decomp_native`)](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | KernelPCA / Isomap | REFACTORED (`eigh_op_tridiag`; bits change) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
 ## Retired by lane debt-block-per-n (2026-10-21)
 
 These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
@@ -4482,3 +4489,40 @@ tools/parallel_gram_check.py (the one-GPU multi-device gate) still read them.
 - Verdict: never measured, deleted. no EXPERIMENTS.md verdict row for any of the thirteen defines. Recorded one-sample M3 evidence (2026-10-06, kept in the deleted comments): F01 task B/A 0.48-1.21, full PCA istella 717.3 -> 710.4 ms, taxi 102.6 -> 97.1 ms; scoped PCA fit HOLD-quality (scoped-pca-fit-istella-q-v1); F02 LU factor B/A 0.62-0.96 (slower), Cholesky fit 0.95 / solve 0.98 with mixed controls; F05 0.89-1.12, quality equal. Mixed, never admitted, and will not be measured.
 - Also removed: tools/scoped_gemm_quality.py, scoped_gemm_preflight_spec.py, test_scoped_gemm_readiness.py, scoped_pca_fit.py, scoped_pca_fit_spec.py, scoped_pca_recover.py, test_scoped_pca_fit_contract.py, softmax_g2_quality.py, the probe binding row of tools/verify_coverage_audit.py, the apple_fast_job_policy entries and nine coverage rows. tools/test_release_no_hands.py keeps listing `identical/_mojolearn_scoped_gemm_probe.so` as a stale artifact to remove.
 - Deleted by `0a1dfdf971`; code recoverable at `f59d913b0b` (= `0a1dfdf971^` for this group). Patch `experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch` (code files only; the guard refusal is not in it). Records: guard refusal, EXPERIMENTS.md row, this section.
+<a id="n9-every-dense-eigh-on-the-executor-ops-2026-11-09"></a>
+
+## N9: every dense eigh on the executor ops (2026-11-09)
+
+Lane n9-decomp-eigh-families (branch lane/n9-decomp-eigh-families, base origin/integ/pre-0867-w2 f59d913b0b;
+docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 4, docs/plans/EXECUTOR_N7_OPS.md).
+
+- What moved: `DevExec.eigh` / `_eigh_on` / `eigh_batch` / `lle_local` and every resident kit's eigh run the N7 ops
+  (x_decomp/eigh_ops.mojo): `eigh_op_sym` (new: `DevExec.eigh`'s own route, the tridiagonal solve from TD_MIN_N on a
+  copy with the Jacobi of the input enqueued behind it and chosen on the device on a refusal, the one-block Jacobi
+  below) and `eigh_op_dense` (batched one-block Jacobi). `eigh_td_on` became `eigh_td_enqueue` (no refusal drain).
+  The host column runs `eigh_op_sym_host` / `eigh_op_dense_host` (`HostExec.eigh_batch` is now parallel over the
+  problems). Resident kits keep w and V on the device: `DKit.eigh` (FastICA symmetric decorrelation, FactorAnalysis EM,
+  the rotation, MinCovDet's pinvh with its cut taken on the device), `IpcaDev.eigh_desc` / `DecompDev.eigh_desc`
+  (`dev_eigh_desc_run`: IncrementalPCA, FastICA whitening, the FactorAnalysis owner), `x_decomp_dev_eigh_to`
+  (DecompKit / MKit: MinCovDet, ClassicalMDS, Isomap and KernelPCA dense top eigenpairs). The KernelPCA / Isomap
+  Lanczos T solve is `eigh_op_tridiag` on the device alphas / betas (`x_decomp_dev_eigh_tridiag`), the host column
+  `eigh_op_tridiag_host` (`x_decomp_eigh_tridiag`). The spectral Lanczos projected solve keeps the Jacobi at every ncv
+  (`DevExec._eigh_jacobi_on` on `eigh_op_dense`), as its host oracle.
+- Deleted: `DevExec._eigh_td_try`, `_eigh_par_on` (two launches a round, a three-scalar wait before every sweep),
+  `_eigh_block_on`, `_eigh_par_test`, `_eigh_block_test`, `_rr_batch_enq` / `_rr_batch_on` / `_rr_batch_check`,
+  `xd_first_where2_enq` / `xd_first_where2_kernel`, x_decomp/rr_block_device.mojo (the device arm of the quarantined
+  `MOJOLEARN_IDN_EIGH_BLOCK_ON`: `eigh_op_sym` and `eigh_op_sym_host` refuse that define at run time by name; its host
+  solver and wave tools stay), `HostExec`'s `_host_eigh_rr_one` and its inline route, the `IDN_EIGH_SMALL` switches
+  (`MOJOLEARN_IDN_EIGH_SMALL_OFF`, `_N64`, `_N128`: refused in core/experiment_guards_decomposition.mojo), `_Eig.wh`
+  and `DKit.eigh`'s w / V download + upload, `pinv_mask_kernel` (replaced by `pinv_mask_dev_kernel`), the IPCA resident
+  host-word route, the Lanczos host T assembly in `x_decomp/kpca_owner.mojo` and `bindings/mani_decomp_native.mojo`.
+- Measurement that decided it: none yet. The one-launch Jacobi was already the measured IDENTICAL default below
+  n = 32 (lane fam-decomp, IDN_EIGH_SMALL); for 32 <= n < TD_MIN_N it replaces the per-round launches with the same
+  words (x_decomp/rr_batch.mojo header), UNMEASURED: RUN OWED.
+- Bits: unchanged by contract for every caller already on `DevExec.eigh` / `HostExec.eigh` (same route and words).
+  CHANGE on every column together for kernel-pca and isomap (Lanczos T: bisection + twisted vectors). FAST Apple:
+  `DKit.eigh` took the Jacobi at every n under FAST; it now takes the op's route (quality only).
+- Grid controls: none named these defines. EXPERIMENTS.md row added.
+- Code recoverable at f59d913b0b. Patches: `experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch` (x_decomp/device.mojo,
+  host.mojo, eigh_tridiag.mojo, rr_block_device.mojo), `experiments/removed/N9_RESIDENT_EIGH.patch` (the kits,
+  owners, entries and the spectral Lanczos).

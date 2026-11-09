@@ -27,6 +27,7 @@ from x_decomp.resident import (
     dev_lu_aux_run,
     dev_code_rows_run,
     dev_eigh_run,
+    dev_eigh_to_run,
     GRP_CLS2_NOSCAN,
     GRP_CLS2_DEVSCAN,
     GRP_CLS2_LAZY,
@@ -266,6 +267,20 @@ def dev_eigh_py(a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObje
     var r = 0
     with GILReleased(Python()):
         r = dev_eigh_run(ia, pw, pv, n, uplo)
+    return PythonObject(r)
+
+
+def dev_eigh_to_py(a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_eigh` of the device matrix a (n x n, left as it is) into the
+    DEVICE matrices w (n) and v (n x n). p = [n, uplo]. Waits once."""
+    var n = _n(p, 0)
+    var uplo = _n(p, 1)
+    var ia = _id(a)
+    var iw = _id(w)
+    var iv = _id(v)
+    var r = 0
+    with GILReleased(Python()):
+        r = dev_eigh_to_run(ia, iw, iv, n, uplo)
     return PythonObject(r)
 
 

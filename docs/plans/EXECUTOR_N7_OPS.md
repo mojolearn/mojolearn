@@ -46,6 +46,7 @@ failing panel (not LAPACK's completed partial factor): nothing may consume it, w
 | call | does | host twin |
 |---|---|---|
 | `eigh_op_dense(ctx, gate, a, w, v, status, batch, n)` | `batch` dense symmetric n x n problems (a CONSUMED) by the round-robin Jacobi, one block per problem (`rr_batch_gated_kernel`), range scale, sign flip, ascending; status[0] = problems not converged | `eigh_op_dense_host` (`host_eigh_rr_sorted` per problem, problems in parallel) |
+| `eigh_op_sym(ctx, gate, a, w, v, status, n)` (lane N9) | ONE dense problem by `DevExec.eigh`'s route: from n = TD_MIN_N the Householder tridiagonal solve on a copy with the Jacobi of `a` enqueued behind it, chosen on the device on a refusal; `eigh_op_dense` below; status[0] = 1 when no route holds. `DevExec.eigh_enq` wraps it with an open gate | `eigh_op_sym_host` (`HostExec.eigh`) |
 | `eigh_op_tridiag(ctx, gate, d, e, w, z, status, n)` | tridiagonal T (d n words, e n-1 words, read only): bisection + twisted vectors (`td_solve_enqueue`), sign flip, ascending; a refusal falls back on the device to the dense Jacobi of T; status[0] = 1 when neither holds | `eigh_op_tridiag_host` (`host_td_solve`, then the Jacobi of T on a refusal) |
 | `eigh_op_status_joins_loop(ctx, words, status, it)` | an unconverged solve stops the loop | n/a |
 

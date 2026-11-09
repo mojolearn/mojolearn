@@ -5,7 +5,7 @@ the route flags the GPU binding registers. The door unpacks pool ids and
 integers and calls `dev_lanczos_run`; no data work happens here."""
 from std.python import PythonObject
 
-from x_decomp.lanczos_dev import IPCA_FAST_DEV, KPCA_FAST_LANCZOS_DEV, dev_lanczos_run
+from x_decomp.lanczos_dev import IPCA_FAST_DEV, KPCA_FAST_LANCZOS_DEV, dev_eigh_tridiag_run, dev_lanczos_run
 from providers.python.x_decomp_resident_pyapi import _id, _n
 
 
@@ -27,3 +27,11 @@ def dev_lanczos_py(a: PythonObject, q: PythonObject, ab: PythonObject, p: Python
     var steps = dev_lanczos_run(ia, iq, iab, n, j0, j1, cap)
     return PythonObject(steps)
 
+
+def dev_eigh_tridiag_py(ab: PythonObject, w: PythonObject, z: PythonObject, p: PythonObject) raises -> PythonObject:
+    """The Lanczos projected solve on pool ids (x_decomp/lanczos_dev.mojo
+    `dev_eigh_tridiag_run`): ab the 2 cap alpha / beta words, w (1 x j) and
+    z (j x j) outputs. p = [j, cap]. Waits (one status word)."""
+    var j = _n(p, 0)
+    var cap = _n(p, 1)
+    return PythonObject(dev_eigh_tridiag_run(_id(ab), _id(w), _id(z), j, cap))
