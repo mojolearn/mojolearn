@@ -16,8 +16,16 @@
 #                     (the former classical_host_f32, same signature)
 #   admit_y(...)      the float fit target (one column, finite, as long as X)
 #   admit_weights(...)  sample_weight as `rows` float32 words (None stays None)
+#   admitted_storage(shape, typestr, context)
+#                     THE uninitialised allocator ("<f4", "<f8", "<i8") of a
+#                     destination written in full before it is read
 #   admitted_storage_f32(rows, cols, context)
-#                     the one uninitialised float32 destination of a cast
+#                     its float32 rows (cols == 0) or rows x cols form
+#   admitted_finite_refuse(x, status, est)
+#                     the refusal of a deferred finite test (defer_finite)
+#   admit_rows_host(value, context)
+#                     the host rows of a DeviceRows fold, gathered in
+#                     parallel out of the host base (no device round trip)
 #
 # Rules this module keeps (lesson 8: one helper per concern):
 # - Metadata is read once per argument: the exporter's view (classical_view:
@@ -54,7 +62,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.admitted_call import AdmittedCall, admitted_input_dense, ADMITTED_ITEM_F32
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays import (
-    classical_array, classical_input, classical_kind, classical_address, classical_cast_kind,
+    classical_typed, classical_input, classical_kind, classical_address, classical_cast_kind,
     classical_is_array, classical_is_f32, classical_c_order, classical_numpy,
 )
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, classical_admit_value
@@ -145,11 +153,41 @@ def admitted_storage_f32(rows: Int, cols: Int, context: PythonObject) raises -> 
     constructor, so that install keeps the zero-filled store)."""
     # REGRESSIONS F3 / C3: the zero fill of a destination the cast then
     # overwrote in full was a second pass over X.
+    return admitted_storage(Python.tuple(rows) if cols == 0 else Python.tuple(rows, cols), "<f4", context)
+
+
+def _admitted_storage_key(typestr: String) raises -> String:
+    if typestr == "<f4":
+        return "float32"
+    if typestr == "<f8":
+        return "float64"
+    if typestr == "<i8":
+        return "int64"
+    raise Error("TypeError: admitted storage holds <f4, <f8 or <i8, not " + typestr)
+
+
+def admitted_storage(shape: PythonObject, typestr: String, context: PythonObject) raises -> PythonObject:
+    """THE uninitialised allocator (lane a5-admit-core-followup): a new
+    C-order array of `shape` (a tuple of native ints) holding "<f4", "<f8"
+    or "<i8" words whose contents are NOT initialised. Only for a
+    destination one native call writes in FULL before anything reads it or
+    it escapes (a cast, a gather, a kernel's download); a destination that
+    is partly written, or accumulated into, keeps a zero-filled allocator.
+    With NumPy it is an ndarray over an uninitialised bytearray
+    (`native_scratch_bytes`: no fill pass). Without NumPy it is a mojolearn
+    Array over the zero-filled array.array store (array.array has no
+    uninitialised constructor)."""
+    # The zero-fill-then-overwrite sites that move here are listed by owning
+    # lane in ~/mojolearn-evidence/a5-zero-fill-sites.md.
+    var key = _admitted_storage_key(typestr)
     if not classical_numpy(context):
-        return classical_array(rows, cols, context)
-    var shape = Python.tuple(rows) if cols == 0 else Python.tuple(rows, cols)
-    var storage = native_scratch_bytes(rows * (cols if cols > 0 else 1) * 4)
-    return py_call(context["ndarray"], shape, dtype=context["float32"], buffer=storage)
+        return classical_typed(shape, typestr, context)
+    var count = 1
+    for k in range(len(shape)):  # driver-loop: over array rank metadata
+        count *= Int(py=shape[k])
+    var width = 4 if typestr == "<f4" else 8
+    var storage = native_scratch_bytes(count * width)
+    return py_call(context["ndarray"], shape, dtype=context[PythonObject(key)], buffer=storage)
 
 
 def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject, column_target: Bool = False,
