@@ -28,10 +28,11 @@ from providers.python.generation_session_pyapi import (
     generation_native_session_matches, generation_native_forward,
 )
 from core.generation_metadata import generation_transformer_addresses
-from transformer.native_generation_engine import NativeGenerationProgress, native_generation_read
 from providers.python.generation_metadata_pyapi import (
     GenerationWeightSnapshot, GenerationLayerSnapshot, GenerationHeadSnapshot, GenerationOperationSnapshot, GenerationEngineAdmission, _generation_bool,
+    _generation_fields,
 )
+from autograd.block_step_ops import OPS_ATTN_STEP, OPS_M1_STEP, OPS_M2_STEP
 from std.memory import memcpy, memset_zero
 from bindings.generation_buffers import (
     GENERATION_BOUNDARY, generation_array, generation_address, generation_weight_address, generation_copy, generation_mutable,
@@ -306,6 +307,9 @@ def causal_lm_admit_binding(mut mods: NativeModules,
         py_setitem(entries, "decode", _native_function(mods, block_binding, "mamba2_decode_step"))
     else:
         raise Error("CausalLM: unsupported model kind " + kind)
+    # Lane x45c: the decode program door (every GPU kind).
+    if requested_gpu and _native_has_entry(mods, block_binding, "causal_lm_program_read_v1"):
+        py_setitem(entries, "program_read", _native_function(mods, block_binding, "causal_lm_program_read_v1"))
     # Native ownership migration: resolve descriptor tables at admission by
     # default, so supported local operations enter the native execution engine.
     # Explicit MOJOLEARN_NEURAL_NATIVE_DISPATCH=0 retains the compatibility route.
@@ -2571,6 +2575,241 @@ def _read_sampling_resident(mut mods: NativeModules, mut s: GenerationHandle, ca
         _ = current
         _ = sessions
         _ = lm
+
+
+# ---------------------------------------------------------------- the decode program
+# Lane x45c-causal-generate-program-decode (2026-11-09): every GPU read of a
+# float32 CausalLM (transformer, Mamba-1 or Mamba-2 layers; greedy or the FP32
+# sampling policy) is ONE `Program.decode` over ONE operation session
+# (transformer/causal_lm_program.mojo, door `causal_lm_program_read_v1` of the
+# model's GPU block binding): the embedding, every layer's step op, the final
+# norm, the head and the pick are session ops; the layers' state is state
+# tensors of that session; the token loop is the executor's bounded loop.
+# This shell only admits the Python model and state and flattens them into
+# the door's descriptor. It replaces the resident greedy read, the resident
+# sampling read and the native generation engine's token x layer loop.
+
+
+def _program_state_fields(st: PythonObject) raises -> PythonObject:
+    var names = Python.tuple(
+        "_resident_session", "cached_tokens", "max_tokens", "k_cache", "v_cache", "conv_window", "h", "profile_id",
+        "_nn34_usable", "absolute_position", "buffer_xbc", "buffer_dtraw", "buffered_tokens",
+    )
+    return _generation_fields(st, names, True)
+
+
+def _program_refusal(mut mods: NativeModules, s: GenerationHandle, blocks: List[PythonObject]) raises -> String:
+    """Why this read cannot run as the decode program ("" when it can)."""
+    if not s.greedy and s.sampling_policy != 1:
+        return "the Float64 sampling policy runs on the host"
+    var entries = s.model._native_entries
+    if py_get(entries, "program_read") is None:
+        return "no GPU decode program in this install"
+    if py_get(entries, "parallel_call") is not None:
+        return "distributed execution"
+    if s.model._head_int15 is not None:
+        return "the fixed15_v1 head"
+    var kind = String(s.model.kind)
+    if kind != "transformer" and kind != "mamba1" and kind != "mamba2":
+        return "layer kind " + kind
+    if kind == "mamba1" and Int(py=entries["mamba1_profile"]) != 1:
+        return "the Mamba-1 profile"
+    if len(blocks) == 0:
+        return "a model without layers"
+    for i in range(len(blocks)):  # driver-loop: over the model's layers (admission)
+        if kind == "transformer" and py_get(blocks[i], "_arithmetic_profile", PythonObject(None)) is not None:
+            return "a layer arithmetic profile"
+    var fields = _generation_fields(s.model, Python.tuple("_norm", "norm_eps"))
+    if fields["_norm"] is not None and not (Float64(py=fields["norm_eps"]) > 0):
+        return "a final norm with eps 0"
+    return ""
+
+
+def _program_state_pieces(kind: String, blk: PythonObject, fields: PythonObject, b: Int, cap: Int,
+                          mut keep: List[PythonObject], mut copies: List[PythonObject]) raises -> List[Int]:
+    """The layer's state arrays (step-op order), admitted writable."""
+    var out = List[Int]()
+    if kind == "transformer":
+        var window = Int(py=blk["window"])
+        var size = b * Int(py=blk["n_kv_heads"]) * (cap if window == 0 else window) * Int(py=blk["head_dim"])
+        out.append(_mutable(fields["k_cache"], [size], keep, copies, "k_cache"))
+        out.append(_mutable(fields["v_cache"], [size], keep, copies, "v_cache"))
+    elif kind == "mamba1":
+        var inner = Int(py=blk["d_inner"])
+        out.append(_mutable(fields["conv_window"], [b, inner, 4], keep, copies, "conv_window"))
+        out.append(_mutable(fields["h"], [b, inner, 16], keep, copies, "h"))
+    else:
+        var heads = Int(py=blk["nheads"])
+        var conv = Int(py=blk["conv_dim"])
+        out.append(_mutable(fields["conv_window"], [b, conv, 4], keep, copies, "conv_window"))
+        out.append(_mutable(fields["h"], [b, heads, 64, 128], keep, copies, "h"))
+        out.append(_mutable(fields["buffer_xbc"], [b, 256, conv], keep, copies, "buffer_xbc"))
+        out.append(_mutable(fields["buffer_dtraw"], [b, 256, heads], keep, copies, "buffer_dtraw"))
+    return out^
+
+
+def _read_program(mut mods: NativeModules, mut s: GenerationHandle, capacity: Int,
+                  mut admission: NativeArrayAdmission, blocks: List[PythonObject]) raises -> PythonObject:
+    var b = len(s.finished)
+    var length = Int(py=s.current.shape[1])
+    _state(mods, s.model, s.state, b, length)
+    var kind = String(s.model.kind)
+    var positions = Int(py=s.state.positions)
+    var cap = Int(py=s.state.max_tokens)
+    # Forward f (from 1) ends at positions + length + f - 1: the read runs at
+    # most `allowed` forwards; the next one is refused below, as the per-token
+    # loop refused it at that forward (`_positions`).
+    var limit = cap
+    if s.model.max_positions is not None:
+        limit = min(limit, Int(py=s.model.max_positions))
+    var n = min(capacity, limit - positions - length + 1)
+    var keep = List[PythonObject]()
+    var copies = List[PythonObject]()
+    var mf = _generation_fields(s.model, Python.tuple("_embed", "_norm", "_head", "norm_eps", "vocab_size", "d_model"))
+    var v = Int(py=mf["vocab_size"])
+    var d = Int(py=mf["d_model"])
+    var pn = _weight_addr(mf["_norm"], keep)
+    var tokens = generation_array([max(1, n) * b], "i")
+    var fin = generation_array([b], "i")
+    var lens = generation_array([b], "i")
+    var fin_p = i32_ptr(_addr(fin, keep))
+    var lens_p = i32_ptr(_addr(lens, keep))
+    for r in range(b):  # driver-loop: over batch rows (row flags, no data)
+        fin_p[r] = Int32(1 if s.finished[r] else 0)
+        lens_p[r] = Int32(s.lengths[r])
+    var a: List[Int] = [_weight_addr(mf["_embed"], keep), pn, _weight_addr(mf["_head"], keep),
+                        _addr(s.current, keep), _addr(tokens, keep), Int(fin_p), Int(lens_p)]
+    for i in range(len(s.eos)):  # small-loop(eos: the stream's end ids): argument words
+        a.append(s.eos[i])
+    var f: List[Float64] = [Float64(py=mf["norm_eps"]) if pn != 0 else 0.0, Float64(s.temperature), s.top_p]
+    var sts = List[PythonObject]()
+    var reports = List[PythonObject]()
+    for i in range(len(blocks)):  # driver-loop: over the model's layers (weight and state admission)
+        var blk = blocks[i]
+        var st = _program_state_fields(s.state.layers[i])
+        if py_get(st, "_resident_session") is not None:
+            raise Error("CausalLM: layer state is owned by a decode session (resident in it); sync_state() or close it first")
+        var w = blk["_w"]
+        var weights = List[Int]()
+        for j in range(len(w)):  # driver-loop: over the block's weight slots
+            weights.append(_weight_addr(w[j], keep))
+        var ints = List[Int]()
+        var words = List[Int]()
+        var code = OPS_ATTN_STEP
+        if kind == "transformer":
+            var optional = blk["_wopt"]
+            for j in range(len(optional)):  # driver-loop: over the block's optional weight slots
+                weights.append(_weight_addr(optional[j], keep))
+            ints = [b, Int(py=blk["d_model"]), Int(py=blk["n_heads"]), Int(py=blk["n_kv_heads"]),
+                    Int(py=blk["head_dim"]), Int(py=blk["intermediate"]), cap, Int(py=blk["window"])]
+            var tail = blk["_opts_tail"]
+            for j in range(len(tail)):  # driver-loop: over the block's option words
+                ints.append(Int(py=tail[j]))
+            words.append(Int(py=st["cached_tokens"]))
+        else:
+            ints = [b, d]
+            if kind == "mamba1":
+                code = OPS_M1_STEP
+                if Int(py=st["profile_id"]) != 1 or not _generation_bool(st["_nn34_usable"]):
+                    raise Error("CausalLM: incompatible or failed Mamba1 state profile")
+            else:
+                code = OPS_M2_STEP
+                var limits = blk["dt_limit"]
+                f.append(Float64(py=limits[0]))
+                f.append(Float64(py=limits[1]))
+                words.append(Int(py=st["buffered_tokens"]))
+        var pieces = _program_state_pieces(kind, blk, st, b, cap, keep, copies)
+        a.append(code)
+        a.append(len(ints))
+        a.extend(ints^)
+        a.append(len(weights))
+        a.extend(weights^)
+        a.append(len(pieces))
+        a.extend(pieces^)
+        a.append(len(words))
+        a.extend(words^)
+        if kind == "mamba2":
+            var report = generation_array([b, Int(py=blk["nheads"]), 64, 128])
+            a.append(1)
+            a.append(_addr(report, keep))
+            reports.append(report)
+        else:
+            a.append(0)
+            reports.append(PythonObject(None))
+        sts.append(st)
+    var p: List[Int] = [b, v, d, len(blocks), len(s.eos), s.pad, 1 if s.greedy else 0, s.top_k,
+                        Int(s.seed & UInt64(0xFFFFFFFF)), Int(s.seed >> 32), length, max(0, n), s.produced]
+    var fields = _standalone_record_fields(mods, s.model)
+    var persist = not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
+    var owner = py_get(fields, "_decode_program") if persist else PythonObject(None)
+    var ret = PythonObject(None)
+    try:
+        var pf = Python.list()
+        for i in range(len(f)):  # driver-loop: over descriptor floats (argument packing)
+            pf.append(f[i])
+        var reply = py_call(s.model._native_entries["program_read"], owner, py_ints(a), py_ints(p), pf)
+        mods.released()
+        if persist:
+            causal_model_cache_set(mods, s.model, fields, "_decode_program", reply[0])
+        ret = reply[1]
+    except error:
+        mods.released()
+        s.usable = False
+        try:
+            py_setattr(s.state, "_usable", PythonObject(False))
+            if persist:
+                causal_model_cache_set(mods, s.model, fields, "_decode_program", PythonObject(None))
+        except publication:
+            _ = publication
+        raise error
+    admission.recheck(generation_array_context())
+    var wrote = Int(py=ret[0])
+    var forwards = Int(py=ret[1])
+    var bad = Int(py=ret[2])
+    var alive = Int(py=ret[3]) != 0
+    var at = 4
+    for i in range(len(blocks)):  # driver-loop: over the model's layers (state publication)
+        if kind == "transformer":
+            py_setitem(sts[i], "cached_tokens", ret[at])
+            at += 1
+        elif kind == "mamba2":
+            py_setitem(sts[i], "buffered_tokens", ret[at])
+            at += 1
+            py_setitem(blocks[i], "h_last_", reports[i])
+        else:
+            py_setitem(sts[i], "absolute_position", PythonObject(Int(py=sts[i]["absolute_position"]) + length + forwards - 1))
+    _writeback(copies)
+    if forwards > 0:
+        py_setattr(s.state, "positions", PythonObject(positions + length + forwards - 1))
+    for r in range(b):  # driver-loop: over batch rows (row flags, no data)
+        s.finished[r] = fin_p[r] != 0
+        s.lengths[r] = Int(lens_p[r])
+    s.produced += wrote
+    var out = generation_array([b, wrote], "i")
+    if wrote > 0:
+        var toks = List[Int32](capacity=wrote * b)
+        var tp = i32_ptr(_addr(tokens, keep))
+        for k in range(wrote * b):  # driver-loop: over the committed token record (id words, no data)
+            toks.append(tp[k])
+        causal_lm_tokens_row_major(toks, i32_ptr(_addr(out, keep)), b, wrote)
+        var current = generation_array([b, 1], "i")
+        var cur = i32_ptr(_addr(current, keep))
+        for r in range(b):  # driver-loop: over batch rows (the last committed ids, no data)
+            cur[r] = tp[(wrote - 1) * b + r]
+        s.current = current
+    var failure = String("")
+    if bad >= 0:
+        failure = "generation: non-finite logit at token " + String(bad)
+    elif alive and wrote < capacity and n < capacity:
+        if s.model.max_positions is not None and positions + length + forwards > Int(py=s.model.max_positions):
+            failure = "CausalLM: max_tokens or sequence exceeds max_positions"
+        else:
+            failure = "CausalLM: sequence exceeds allocated state capacity"
+    if failure != "":
+        s.usable = False
+        raise Error(failure)
+    _ = keep^
+    return out
 
 
 def _read(mut mods: NativeModules, mut s: GenerationHandle, count: Int, mut admission: Optional[NativeArrayAdmission]) raises -> PythonObject:
