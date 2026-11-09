@@ -256,14 +256,14 @@ def trees_r2(y_true: PythonObject, prediction: PythonObject, sample_weight: Pyth
     var result = PythonObject(None)
     if sample_weight is not None:
         var w = trees_sample_weight_f32(sample_weight, y.rows, "r2_score", context)
-        result = py_call_typed(metrics["r2_score_weighted"], PythonObject(y.addr), PythonObject(yh.addr),
-                               PythonObject(w.addr), Python.list(PythonObject(y.rows)))
+        result = py_call_typed(metrics["r2_score_weighted"], PythonObject(y.address), PythonObject(yh.address),
+                               PythonObject(w.address), Python.list(PythonObject(y.rows)))
         _ = yh  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
         _ = w^
     else:
-        result = py_call_typed(metrics["r2_score"], PythonObject(y.addr), PythonObject(yh.addr),
+        result = py_call_typed(metrics["r2_score"], PythonObject(y.address), PythonObject(yh.address),
                                Python.list(PythonObject(y.rows)))
         _ = yh  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
