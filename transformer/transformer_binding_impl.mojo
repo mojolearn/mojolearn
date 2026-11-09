@@ -38,7 +38,6 @@ from core.resident_generation_read import ResidentGreedyRead
 from core.resident_sampling_read import ResidentSamplingRead
 from core.generation_sampling_f32 import sampling_pick_f32
 from core.device_scan import device_first_nonfinite
-from core.decode_slab import decode_slab_check, decode_slab_put, decode_slab_take
 from core.device_nonfinite_pair import DeviceNonfinitePair
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
@@ -1446,21 +1445,21 @@ def _transformer_run(
 struct TransformerDecodeSession(Movable, Writable):
     """Python-owned device lifetime for one block's decode. No global
     handles and no retained host pointers: every caller buffer is read or
-    written inside the call that names it."""
+    written inside the call that names it.
+
+    Lanes x4 / x4b: every session runs on the attention step op
+    (transformer/attn_step_session.mojo `AttnStepArm`): the public decode
+    session, the CausalLM layer sessions and the fixed15_v1 sessions (the
+    profile's planes handed to the op as an adopted entry). The session's
+    own block structs (weights, cache, rotary table, L = 1 stages, x) and
+    the bodies over them are deleted."""
 
     var ctx: Optional[DeviceContext]
-    var w: Optional[LlamaDeviceWeights]
-    var kv: Optional[LlamaKVCache]
-    var rope: Optional[LlamaRopeTable]
-    var stages: Optional[LlamaDeviceStages]
-    var dx: Optional[DeviceBuffer[DType.float32]]
     # TOMBSTONE: MOJOLEARN_IDN_DECODE_RESIDENT_IO (session arm SUPERSEDED, never measured) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_DECODE_RESIDENT_IO_TRANSFORMER.patch
+    # TOMBSTONE: TRANSFORMER_DECODE_SESSION_STRUCTS (the session-owned block structs and their step / decode / forward bodies, SUPERSEDED by the attention step op) deleted 2026-11-09 by lane x4b-transformer-block-and-generate; code recoverable at c0b21c971c.
+    # Restore: git apply experiments/removed/TRANSFORMER_DECODE_SESSION_STRUCTS.patch
     var op: Optional[AttnStepArm]
-    """Lane x4: a session the public door opens runs on the attention step
-    op (transformer/attn_step_session.mojo); its block structs are the op's.
-    None for a CausalLM layer session and under fixed15_v1, which keep the
-    structs above."""
     var b: Int
     var dm: Int
     var nh: Int
@@ -1474,11 +1473,6 @@ struct TransformerDecodeSession(Movable, Writable):
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
-        self.w = Optional[LlamaDeviceWeights]()
-        self.kv = Optional[LlamaKVCache]()
-        self.rope = Optional[LlamaRopeTable]()
-        self.stages = Optional[LlamaDeviceStages]()
-        self.dx = Optional[DeviceBuffer[DType.float32]]()
         self.op = Optional[AttnStepArm]()
         self.b = 0
         self.dm = 0
@@ -1498,24 +1492,19 @@ struct TransformerDecodeSession(Movable, Writable):
         writer.write("TransformerDecodeSession")
 
     def is_open(self) -> Bool:
-        return Bool(self.ctx) and (Bool(self.kv) or Bool(self.op))
+        return Bool(self.ctx) and Bool(self.op)
 
     def cached(self) -> Int:
-        """The position the session holds (the op arm's mirror of its state
-        word, or the structs' cache)."""
+        """The position the session holds (the arm's mirror of the op's
+        state word)."""
         if self.op:
             return self.op.value().cached
-        return self.kv.value().s
+        return 0
 
     def release(mut self):
         """Buffers die before their context, and the frees they enqueue
         drain before the context goes (DEVIATION 2520's ordering)."""
         self.op = None
-        self.stages = None
-        self.dx = None
-        self.rope = None
-        self.kv = None
-        self.w = None
         if self.ctx:
             try:
                 self.ctx.value().synchronize()
@@ -1544,38 +1533,10 @@ def _require_session_open(s: TransformerDecodeSession) raises:
 
 
 
-def _session_open_run(
-    mut s: TransformerDecodeSession, a: List[Int], b: Int, dm: Int, nh: Int, nkv: Int,
-    hd: Int, it: Int, smax: Int, s0: Int, window: Int, opts: BlockOptions,
-) raises -> Int:
-    """The GIL-free half of `transformer_decode_session_open`: one context, the nine
-    weight uploads, the cache uploads over fresh zeros, the rotary table at
-    `smax`, the L = 1 stages and the resident x buffer. `a` is the
-    `transformer_forward` 13 + 11 layout with slots 0 and 12 unused."""
-    var dims = LlamaDims(dm, nh, nkv, hd, it)
-    dims.validate()
-    opts.validate(hd)
-    if s0 < 0 or s0 > smax:
-        raise Error(
-            String("transformer decode session: cached_tokens must be in [0, ") + String(smax)
-            + "], got " + String(s0))
-    if window < 0:
-        raise Error("transformer decode session: window must be >= 0 (0 = full causal)")
-    var cap = smax
-    if window > 0:
-        cap = window
-    var cache_n = b * nkv * cap * hd
-    s.ctx = neural_ctx[_NEURAL_CTX]()
-    s.w = _load_transformer_weights(s.ctx.value(), dims, a, opts, _tail_of(a, 13))
-    var kv = LlamaKVCache(s.ctx.value(), b, dims, smax, window, opts.max_positions)
-    kv.k = _upload_addr(s.ctx.value(), a[10], cache_n)
-    kv.v = _upload_addr(s.ctx.value(), a[11], cache_n)
-    kv.s = s0
-    s.kv = kv^
-    s.rope = LlamaRopeTable(s.ctx.value(), dims, opts, smax)
-    s.stages = LlamaDeviceStages(s.ctx.value(), b, 1, smax, dims, window, lean=_lean_for_w(hd, s.w.value()))
-    s.dx = s.ctx.value().enqueue_create_buffer[DType.float32](b * dm)
-    s.ctx.value().synchronize()
+def _session_dims(
+    mut s: TransformerDecodeSession, b: Int, dm: Int, nh: Int, nkv: Int, hd: Int, it: Int, smax: Int,
+    window: Int,
+):
     s.b = b
     s.dm = dm
     s.nh = nh
@@ -1584,6 +1545,34 @@ def _session_open_run(
     s.it = it
     s.smax = smax
     s.window = window
+
+
+
+def _session_open_run(
+    mut s: TransformerDecodeSession, a: List[Int], b: Int, dm: Int, nh: Int, nkv: Int,
+    hd: Int, it: Int, smax: Int, s0: Int, window: Int, opts: BlockOptions,
+) raises -> Int:
+    """The GIL-free half of `transformer_decode_session_open` (and of
+    `transformer_decode_session_open_step_op`, the public door's name):
+    the weights packed into the attention step op's one weight buffer, the
+    caches into its one state buffer and the position into its state word
+    (transformer/attn_step_session.mojo). `a` is the `transformer_forward`
+    13 + 11 layout with slots 0 and 12 unused. Every later step, forward,
+    decode, export and load runs on the op's operands."""
+    var dims = LlamaDims(dm, nh, nkv, hd, it)
+    dims.validate()
+    opts.validate(hd)
+    if s0 < 0 or s0 > smax:
+        raise Error(
+            String("transformer decode session: cached_tokens must be in [0, ") + String(smax)
+            + "], got " + String(s0))
+    var ints = attn_step_ints(b, dm, nh, nkv, hd, it, smax, window, opts)
+    var words = List[Int]()
+    for i in range(8, len(ints)):  # small-loop(ints: the 17 block option words): argument words, no data
+        words.append(ints[i])
+    s.ctx = neural_ctx[_NEURAL_CTX]()
+    s.op = AttnStepArm(s.ctx.value(), a, b, dm, nh, nkv, hd, it, smax, s0, window, opts, words)
+    _session_dims(s, b, dm, nh, nkv, hd, it, smax, window)
     return s0
 
 
@@ -1596,10 +1585,9 @@ def _session_open_run_int15(
     (lane/lowbit-default): the weights are the profile constructor's, with
     the seven projections as the planes `a` carries after the options tail
     (`_upload_planes`, the layout of `transformer_session_forward_int15`),
-    uploaded ONCE here and resident for the session's life. Every later
-    step and forward runs `llama_decoder_layer_forward` on them exactly as
-    `_transformer_run_session_int15` does, so the bytes are the per-call
-    profile entry's."""
+    uploaded ONCE here. Lane x4b: they run on the attention step op as an
+    adopted entry (`attn_step_adopt`), the caches in the op's state buffer,
+    stages never lean over planes (`_lean_for_w`)."""
     var dims = LlamaDims(dm, nh, nkv, hd, it)
     dims.validate()
     opts.validate(hd)
@@ -1615,16 +1603,12 @@ def _session_open_run_int15(
                 "transformer_decode_session_open_int15: float32 projection slot "
                 + String(i) + " must be 0 under the profile (the planes are the weights)"
             )
-    var cap = smax
-    if window > 0:
-        cap = window
-    var cache_n = b * nkv * cap * hd
     s.ctx = neural_ctx[_NEURAL_CTX]()
     ref ctx = s.ctx.value()
     var what = String("transformer_decode_session_open_int15")
     var t = _tail_of(a, 13)
     var planes = _upload_planes(ctx, dims, opts, a, 13 + BLOCK_OPTION_ADDRS)
-    s.w = LlamaDeviceWeights(
+    var w = LlamaDeviceWeights(
         ctx, dims, opts,
         _upload_addr(ctx, a[1], dm),
         _upload_addr(ctx, a[2], dm),
@@ -1641,155 +1625,43 @@ def _session_open_run_int15(
         _optional_upload(ctx, t[9], hd, opts.qk_norm, "q_norm.weight", what),
         _optional_upload(ctx, t[10], hd, opts.qk_norm, "k_norm.weight", what),
     )
-    var kv = LlamaKVCache(ctx, b, dims, smax, window, opts.max_positions)
-    kv.k = _upload_addr(ctx, a[10], cache_n)
-    kv.v = _upload_addr(ctx, a[11], cache_n)
-    kv.s = s0
-    s.kv = kv^
-    s.rope = LlamaRopeTable(ctx, dims, opts, smax)
-    s.stages = LlamaDeviceStages(ctx, b, 1, smax, dims, window, lean=False)
-    s.dx = ctx.enqueue_create_buffer[DType.float32](b * dm)
-    ctx.synchronize()
-    s.b = b
-    s.dm = dm
-    s.nh = nh
-    s.nkv = nkv
-    s.hd = hd
-    s.it = it
-    s.smax = smax
-    s.window = window
-    return s0
-
-
-
-def _session_open_step_op(
-    mut s: TransformerDecodeSession, a: List[Int], b: Int, dm: Int, nh: Int, nkv: Int,
-    hd: Int, it: Int, smax: Int, s0: Int, window: Int, opts: BlockOptions, option_words: List[Int],
-) raises -> Int:
-    """Lane x4: the GIL-free half of `transformer_decode_session_open_step_op`,
-    the public decode session's open: the weights packed into the attention
-    step op's one weight buffer, the caches into its one state buffer and
-    the position into its state word (transformer/attn_step_session.mojo).
-    `a` is the `transformer_forward` 13 + 11 layout with slots 0 and 12
-    unused. Every later step, forward, decode, export and load runs on the
-    op's operands."""
-    var dims = LlamaDims(dm, nh, nkv, hd, it)
-    dims.validate()
-    opts.validate(hd)
-    s.ctx = neural_ctx[_NEURAL_CTX]()
-    s.op = AttnStepArm(s.ctx.value(), a, b, dm, nh, nkv, hd, it, smax, s0, window, opts, option_words)
-    s.b = b
-    s.dm = dm
-    s.nh = nh
-    s.nkv = nkv
-    s.hd = hd
-    s.it = it
-    s.smax = smax
-    s.window = window
+    var lean = _lean_for_w(hd, w)
+    var ints = attn_step_ints(b, dm, nh, nkv, hd, it, smax, window, opts)
+    var words = List[Int]()
+    for i in range(8, len(ints)):  # small-loop(ints: the 17 block option words): argument words, no data
+        words.append(ints[i])
+    s.op = AttnStepArm(ctx, w^, b, dm, nh, nkv, hd, it, smax, s0, window, words, a[10], a[11], lean)
+    _session_dims(s, b, dm, nh, nkv, hd, it, smax, window)
     return s0
 
 
 
 def _session_step_run(mut s: TransformerDecodeSession, px: Int, py: Int) raises -> Int:
-    """One decode token: on the step op for a session the public door
-    opened, else on the session's structs (fixed15_v1). ONE completion
-    wait; the caller's x stays live for the call."""
-    if s.op:
-        return s.op.value().run(px, py, 1)
-    return _session_step_run_sync(s, px, py)
-
-
-
-def _session_step_run_sync(mut s: TransformerDecodeSession, px: Int, py: Int) raises -> Int:
-    """`_session_step_run` on the session's structs (fixed15_v1 sessions):
-    every check read where it runs."""
-    ref ctx = s.ctx.value()
-    var n = s.b * s.dm
-    ctx.enqueue_copy(dst_buf=s.dx.value(), src_ptr=_f32_ptr(px))
-    var trace = IdentityTrace.disabled()
-    var pos0 = s.kv.value().s
-    llama_decoder_layer_forward(
-        ctx, s.stages.value(), s.kv.value(), s.rope.value(), s.w.value(), s.dx.value(),
-        s.b, 1, pos0, trace, String("py.session"))
-    if n != len(s.stages.value().residual2):
-        raise Error("transformer decode session: the L = 1 stages hold a different output length")
-    ctx.enqueue_copy(dst_ptr=_f32_ptr(py), src_buf=s.stages.value().residual2)
-    ctx.synchronize()
-    return s.kv.value().s
+    """One decode token on the step op. ONE completion wait; the caller's x
+    stays live for the call."""
+    return s.op.value().run(px, py, 1)
 
 
 
 def _session_decode_run(mut s: TransformerDecodeSession, px: Int, py: Int, steps: Int) raises -> Int:
-    """N decode tokens per row on the resident structs (decode plan D2): the
-    caller's (B, N, d_model) x uploaded once, the body of
-    `_session_step_run_sync` once per token (L = 1 at the advancing position)
-    with token t moved on the device, and the (B, N, d_model) output in one
-    download behind one wait. Same kernels, same order, same bytes as N
-    `_session_step_run_sync` calls; the cache ends where they leave it.
-    Lane x4: a session on the step op decodes on the op (`AttnStepArm.decode`);
-    this body is the fixed15_v1 sessions'."""
-    if s.op:
-        return s.op.value().decode(px, py, steps)
-    decode_slab_check(s.b, steps, s.dm, "transformer decode session decode")
-    ref ctx = s.ctx.value()
-    var row = s.b * s.dm
-    if row != len(s.stages.value().residual2):
-        raise Error("transformer decode session: the L = 1 stages hold a different output length")
-    var xs = ctx.enqueue_create_buffer[DType.float32](row * steps)
-    var ys = ctx.enqueue_create_buffer[DType.float32](row * steps)
-    ctx.enqueue_copy(dst_buf=xs, src_ptr=_f32_ptr(px))
-    var trace = IdentityTrace.disabled()
-    for t in range(steps):  # driver-loop: over autoregressive decode steps (each reads the state the previous step left), the session's one-token step body each
-        decode_slab_take(ctx, s.dx.value(), xs, s.b, steps, s.dm, t)
-        var pos0 = s.kv.value().s
-        llama_decoder_layer_forward(
-            ctx, s.stages.value(), s.kv.value(), s.rope.value(), s.w.value(), s.dx.value(),
-            s.b, 1, pos0, trace, String("py.session"))
-        decode_slab_put(ctx, ys, s.stages.value().residual2, s.b, steps, s.dm, t)
-    ctx.enqueue_copy(dst_ptr=_f32_ptr(py), src_buf=ys)
-    ctx.synchronize()
-    # The caller's x and y stay borrowed until the wait above returns.
-    _ = xs^
-    _ = ys^
-    return s.kv.value().s
+    """N decode tokens per row in one call (decode plan D2) on the step op
+    (`AttnStepArm.decode`): x up once, the op at L = 1 per token with token
+    t moved on the device, y down once behind one wait."""
+    # TOMBSTONE: TRANSFORMER_DECODE_SESSION_STRUCTS (the fixed15_v1 sessions' own per-token decode loop over the session structs, SUPERSEDED: they decode on the op) deleted 2026-11-09 by lane x4b-transformer-block-and-generate; code recoverable at c0b21c971c.
+    # Restore: git apply experiments/removed/TRANSFORMER_DECODE_SESSION_STRUCTS.patch
+    return s.op.value().decode(px, py, steps)
 
 
 
 def _session_forward_run(mut s: TransformerDecodeSession, px: Int, py: Int, l: Int) raises -> Int:
-    """`l` tokens per row on the resident weights and cache (a prefill or a
-    chunked continuation), with call-shaped stages built for this call
-    alone. The same entry point at `l`, so the bytes are `transformer_forward`'s.
-    Lane x4: on the step op for a session the public door opened."""
-    if s.op:
-        return s.op.value().run(px, py, l)
-    ref ctx = s.ctx.value()
-    var dims = LlamaDims(s.dm, s.nh, s.nkv, s.hd, s.it)
-    var n = s.b * l * s.dm
-    var stages = LlamaDeviceStages(ctx, s.b, l, s.smax, dims, s.window, lean=_lean_for_w(s.hd, s.w.value()))
-    var dx = _upload_addr(ctx, px, n)
-    var trace = IdentityTrace.disabled()
-    var pos0 = s.kv.value().s
-    llama_decoder_layer_forward(
-        ctx, stages, s.kv.value(), s.rope.value(), s.w.value(), dx, s.b, l, pos0, trace,
-        String("py.session.forward"))
-    _download_addr(ctx, stages.residual2, n, py)
-    _ = stages^
-    _ = dx^
-    return s.kv.value().s
+    """`l` tokens per row (a prefill or a chunked continuation) on the step
+    op, the arm's kept L stages."""
+    return s.op.value().run(px, py, l)
 
 
 
 def _session_export_run(mut s: TransformerDecodeSession, pk: Int, pv: Int) raises -> Int:
-    if s.op:
-        return s.op.value().export(pk, pv)
-    ref ctx = s.ctx.value()
-    var cap = s.smax
-    if s.window > 0:
-        cap = s.window
-    var cache_n = s.b * s.nkv * cap * s.hd
-    _download_addr(ctx, s.kv.value().k, cache_n, pk)
-    _download_addr(ctx, s.kv.value().v, cache_n, pv)
-    return s.kv.value().s
+    return s.op.value().export(pk, pv)
 
 
 
@@ -1798,17 +1670,7 @@ def _session_load_run(mut s: TransformerDecodeSession, pk: Int, pv: Int, s0: Int
         raise Error(
             String("transformer decode session: cached_tokens must be in [0, ") + String(s.smax)
             + "], got " + String(s0))
-    if s.op:
-        return s.op.value().load(pk, pv, s0)
-    ref ctx = s.ctx.value()
-    var cap = s.smax
-    if s.window > 0:
-        cap = s.window
-    var cache_n = s.b * s.nkv * cap * s.hd
-    s.kv.value().k = _upload_addr(ctx, pk, cache_n)
-    s.kv.value().v = _upload_addr(ctx, pv, cache_n)
-    s.kv.value().s = s0
-    return s0
+    return s.op.value().load(pk, pv, s0)
 
 
 
@@ -2243,78 +2105,31 @@ struct _LMRunWorkspace(Movable):
             self.ws_packed = packed
 
 
-def _lm_prefill_stage_matches(
-    stages: LlamaDeviceStages, layer: TransformerDecodeSession, l: Int,
-    held_lean: Bool, lean: Bool,
-) -> Bool:
-    # All five LlamaDims members are independent integers (no option floats).
-    # The stage constructor captures only these shape fields plus window/lean;
-    # current layer options, weights, KV state and rope are still passed anew.
-    return (stages.b == layer.b and stages.l == l
-            and stages.s_max == layer.smax and stages.window == layer.window
-            and stages.dims.d_model == layer.dm and stages.dims.n_heads == layer.nh
-            and stages.dims.n_kv == layer.nkv and stages.dims.head_dim == layer.hd
-            and stages.dims.intermediate == layer.it and held_lean == lean)
-
-
 def _lm_layers_run(
     ctx: DeviceContext, layers: List[Int], mut x: DeviceBuffer[DType.float32], b: Int, l: Int,
 ) raises:
     """Every layer in order on `x` ([b * l * d], overwritten with the stack's
-    output): at l = 1 on the session's own L = 1 stages and resident x buffer
-    (`_session_step_run`), otherwise on one operation-owned prefill workspace
-    reused only between compatible sequential layers."""
-    var prefill_input = Optional[DeviceBuffer[DType.float32]]()
-    var prefill_stages = Optional[LlamaDeviceStages]()
-    var prefill_lean = False
+    output), each through the attention step op (lane x4b: the layer
+    session's `AttnStepArm.run_device`): at l = 1 on the op's resident L = 1
+    stages, otherwise on one operation-owned prefill workspace (`shared`)
+    reused between compatible sequential layers, as before."""
+    _ = b
+    var shared = AttnPrefill()
     try:
-        for i in range(len(layers)):
+        for i in range(len(layers)):  # driver-loop: over decoder layers of the model
             var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=layers[i])
-            var trace = IdentityTrace.disabled()
-            var pos0 = sp[].kv.value().s
-            if l == 1:
-                ctx.enqueue_copy(dst_buf=sp[].dx.value(), src_buf=x)
-                llama_decoder_layer_forward(
-                    ctx, sp[].stages.value(), sp[].kv.value(), sp[].rope.value(), sp[].w.value(),
-                    sp[].dx.value(), sp[].b, 1, pos0, trace, String("py.session"))
-                ctx.enqueue_copy(dst_buf=x, src_buf=sp[].stages.value().residual2)
-            else:
-                var lean = _lean_for_w(sp[].hd, sp[].w.value())
-                var reused = False
-                if prefill_stages:
-                    reused = _lm_prefill_stage_matches(prefill_stages.value(), sp[], l, prefill_lean, lean)
-                if reused:
-                    # Previous layer output has already copied to x and the
-                    # context synchronized. Restore every constructor zero and
-                    # route/status flag before borrowing scratch for this layer.
-                    prefill_stages.value().reset(ctx)
-                    prefill_stages.value().int15_on = False
-                else:
-                    # Drop an incompatible owner before allocating its replacement
-                    # so heterogeneous layers do not retain two full workspaces.
-                    prefill_stages = None
-                    var dims = LlamaDims(sp[].dm, sp[].nh, sp[].nkv, sp[].hd, sp[].it)
-                    prefill_stages = LlamaDeviceStages(ctx, sp[].b, l, sp[].smax, dims, sp[].window, lean=lean)
-                    prefill_lean = lean
-                ref stages = prefill_stages.value()
-                _lm_scratch_buffer(ctx, prefill_input, b * l * sp[].dm)
-                ref dx = prefill_input.value()
-                ctx.enqueue_copy(dst_buf=dx, src_buf=x)
-                llama_decoder_layer_forward(
-                    ctx, stages, sp[].kv.value(), sp[].rope.value(), sp[].w.value(), dx, sp[].b, l,
-                    pos0, trace, String("py.session.forward"))
-                ctx.enqueue_copy(dst_buf=x, src_buf=stages.residual2)
+            sp[].op.value().run_device(x, l, shared)
+            if l > 1:
                 ctx.synchronize()
     except original:
-        # Drain while the reused copy and any partially used stages stay live.
+        # Drain while the shared stages stay live.
         try:
             ctx.synchronize()
         except:
             pass
         raise original^
     finally:
-        _ = prefill_stages
-        _ = prefill_input
+        _ = shared
 
 
 
@@ -2356,10 +2171,10 @@ struct _LMSamplingCheckpoint(Movable):
         try:
             for address in layers:
                 var layer = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=address)
-                self.k0.append(ctx.enqueue_create_buffer[DType.float32](len(layer[].kv.value().k)))
-                self.v0.append(ctx.enqueue_create_buffer[DType.float32](len(layer[].kv.value().v)))
-                self.k1.append(ctx.enqueue_create_buffer[DType.float32](len(layer[].kv.value().k)))
-                self.v1.append(ctx.enqueue_create_buffer[DType.float32](len(layer[].kv.value().v)))
+                self.k0.append(ctx.enqueue_create_buffer[DType.float32](len(layer[].op.value().k_view())))
+                self.v0.append(ctx.enqueue_create_buffer[DType.float32](len(layer[].op.value().v_view())))
+                self.k1.append(ctx.enqueue_create_buffer[DType.float32](len(layer[].op.value().k_view())))
+                self.v1.append(ctx.enqueue_create_buffer[DType.float32](len(layer[].op.value().v_view())))
             # Initial state is a valid recovery point even if the first forward
             # fails. Only the first snapshot is initialized here.
             self.enqueue(ctx, layers)
@@ -2380,15 +2195,15 @@ struct _LMSamplingCheckpoint(Movable):
         for i in range(len(layers)):
             var layer = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=layers[i])
             if i == 0:
-                self.pending_cached = layer[].kv.value().s
-            elif self.pending_cached != layer[].kv.value().s:
+                self.pending_cached = layer[].cached()
+            elif self.pending_cached != layer[].cached():
                 raise Error("causal lm sampling: completed layers disagree about cached length")
             if self.pending == 0:
-                ctx.enqueue_copy(dst_buf=self.k0[i], src_buf=layer[].kv.value().k)
-                ctx.enqueue_copy(dst_buf=self.v0[i], src_buf=layer[].kv.value().v)
+                ctx.enqueue_copy(dst_buf=self.k0[i], src_buf=layer[].op.value().k_view())
+                ctx.enqueue_copy(dst_buf=self.v0[i], src_buf=layer[].op.value().v_view())
             else:
-                ctx.enqueue_copy(dst_buf=self.k1[i], src_buf=layer[].kv.value().k)
-                ctx.enqueue_copy(dst_buf=self.v1[i], src_buf=layer[].kv.value().v)
+                ctx.enqueue_copy(dst_buf=self.k1[i], src_buf=layer[].op.value().k_view())
+                ctx.enqueue_copy(dst_buf=self.v1[i], src_buf=layer[].op.value().v_view())
 
     def commit(mut self):
         # Caller has synchronized ALL inactive copies and accepted the forward.

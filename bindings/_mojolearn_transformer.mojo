@@ -270,7 +270,6 @@ from transformer.transformer_binding_impl import (
     _require_session_open,
     _session_open_run,
     _session_open_run_int15,
-    _session_open_step_op,
     _session_step_run,
     _session_decode_run,
     _session_forward_run,
@@ -1026,10 +1025,6 @@ def transformer_decode_session_open_step_op_binding(
     _check_base_addrs(a, [1, 2, 3, 4, 5, 6, 8, 9, 10, 11], what)
     var p = _read_params(params, 9, what)
     var opts = BlockOptions.from_params(p, 9)
-    var option_words = List[Int]()
-    if len(p) == 9 + BLOCK_OPTION_PARAMS:
-        for i in range(BLOCK_OPTION_PARAMS):  # small-loop(BLOCK_OPTION_PARAMS: the 17 option words): argument words, not data
-            option_words.append(p[9 + i])
     if p[0] <= 0:
         raise Error(what + ": B must be positive")
     owner[].busy = True
@@ -1037,8 +1032,10 @@ def transformer_decode_session_open_step_op_binding(
     var out_len = 0
     try:
         with GILReleased(Python()):
-            out_len = _session_open_step_op(
-                owner[], a, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], opts, option_words)
+            # Lane x4b: every decode session opens on the step op; this entry
+            # and `transformer_decode_session_open` share the one open.
+            out_len = _session_open_run(
+                owner[], a, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], opts)
     except error:
         owner[].busy = False
         owner[].release()
@@ -1348,16 +1345,14 @@ def causal_lm_session_run_binding(
     for i in range(n_layers):  # small-loop(n_layers: decoder layers of the model): one session pointer per layer, not data
         var sp = layers[i].downcast_value_ptr[TransformerDecodeSession]()
         _require_session_open(sp[])
-        if sp[].op:
-            raise Error("causal lm session: a decoder session opened on the step op is not a layer session")
         if sp[].b != owner[].b or sp[].dm != owner[].d:
             raise Error("causal_lm_session_run: layer " + String(i) + " holds B = " + String(sp[].b)
                 + ", d_model = " + String(sp[].dm) + "; the session has B = " + String(owner[].b)
                 + ", d_model = " + String(owner[].d))
-        if sp[].kv.value().s != claimed:
+        if sp[].cached() != claimed:
             raise Error(String("transformer decode session: the caller believes cached_tokens = ")
-                + String(claimed) + " but layer " + String(i) + " holds " + String(sp[].kv.value().s))
-        if sp[].kv.value().s + l + n_steps - 1 > sp[].smax:
+                + String(claimed) + " but layer " + String(i) + " holds " + String(sp[].cached()))
+        if sp[].cached() + l + n_steps - 1 > sp[].smax:
             raise Error("causal_lm_session_run: " + String(l + n_steps - 1) + " more positions do not fit the "
                 + String(sp[].smax) + "-token cache")
         ptrs.append(Int(sp))
@@ -1380,7 +1375,7 @@ def causal_lm_session_run_binding(
     for i in range(n_layers):  # driver-loop: over decoder layers of the model
         var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
         sp[].busy = False
-        result = sp[].kv.value().s
+        result = sp[].cached()
     owner[].busy = False
     return PythonObject(result)
 
@@ -1418,17 +1413,15 @@ def causal_lm_session_forward_binding(
     for i in range(n_layers):  # small-loop(n_layers: decoder layers of the model): one session pointer per layer, not data
         var sp = layers[i].downcast_value_ptr[TransformerDecodeSession]()
         _require_session_open(sp[])
-        if sp[].op:
-            raise Error("causal lm session: a decoder session opened on the step op is not a layer session")
         if sp[].b != owner[].b or sp[].dm != owner[].d:
             raise Error("causal_lm_session_forward: layer " + String(i) + " holds B = " + String(sp[].b)
                 + ", d_model = " + String(sp[].dm) + "; the session has B = " + String(owner[].b)
                 + ", d_model = " + String(owner[].d))
         if held < 0:
-            held = sp[].kv.value().s
-        elif sp[].kv.value().s != held:
+            held = sp[].cached()
+        elif sp[].cached() != held:
             raise Error("causal_lm_session_forward: the layers hold different cached lengths")
-        if sp[].kv.value().s + l > sp[].smax:
+        if sp[].cached() + l > sp[].smax:
             raise Error("causal_lm_session_forward: " + String(l) + " more positions do not fit the "
                 + String(sp[].smax) + "-token cache")
         ptrs.append(Int(sp))
@@ -1451,7 +1444,7 @@ def causal_lm_session_forward_binding(
     for i in range(n_layers):  # driver-loop: over decoder layers of the model
         var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
         sp[].busy = False
-        result = sp[].kv.value().s
+        result = sp[].cached()
     owner[].busy = False
     return PythonObject(result)
 
