@@ -338,6 +338,9 @@ struct MselFoldRows(Movable):
     # DeviceRows is not handed to a second unit (two concurrent units could
     # materialize and write one host snapshot).
     var shared: Bool
+    # cross_val_score's FAST slice route (MSEL_CV_SLICE_BIT): [a, b) of each
+    # contiguous test fold, 2 words per fold; empty: every take gathers.
+    var ranges: List[Int]
 
     def __init__(out self, x: PythonObject, y: PythonObject, folds: PythonObject, device_rows: Bool,
                  context: PythonObject) raises:
@@ -377,6 +380,7 @@ struct MselFoldRows(Movable):
         self.fold_mark = -1
         self.x_held = False
         self.shared = False
+        self.ranges = List[Int]()
         if not self.dev and msel_is_array(x, context):
             self.scope_mark = admitted_scope_begin()
             try:
@@ -461,6 +465,14 @@ struct MselFoldRows(Movable):
     def take(mut self, i: Int, y_in: PythonObject, context: PythonObject) raises -> PythonObject:
         """(X_train, y_train, X_test, y_test) of fold i; a `y_in` (a permuted
         y) stands in for the stored one."""
+        if len(self.ranges) > 0 and y_in is None:
+            # Views over contiguous rows, no gather (the slice route).
+            var a = self.ranges[2 * i]
+            var b = self.ranges[2 * i + 1]
+            var xs = _rows_outside(self.x, a, b, context)
+            var xv = _row_view(self.x, a, b, context)
+            self._hold_fold(xs, xv, context)
+            return Python.tuple(xs, _rows_outside(self.y, a, b, context), xv, _row_view(self.y, a, b, context))
         var pair = self.folds[i]
         var train = pair[0]
         var test = pair[1]
@@ -1088,22 +1100,12 @@ def _kfold_ranges(x: PythonObject, y: PythonObject, folds: PythonObject, context
     return ranges^
 
 
-def msel_fit_score_fold(fitted: PythonObject, plan: PythonObject, xtr: PythonObject, ytr: PythonObject,
-                        xte: PythonObject, yte: PythonObject, scoring: PythonObject,
-                        context: PythonObject) raises -> Float64:
-    """`_fit_score_fold` of a fresh `msel_native_clone_planned` clone."""
-    msel_fit_planned(fitted, plan, xtr, ytr, context)
-    return Float64(py=msel_score(fitted, xte, yte, scoring, context))
-
-
 def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`cross_val_score(estimator, X, y, cv, scoring, groups, n_jobs, error_score)`."""
     var estimator = args[0]
     var cv = args[3]
     var groups = args[5]
-    var n_jobs = args[6]
-    if msel_is_bool(n_jobs, context) or not msel_is_integral(n_jobs, context) or msel_cmp("ne", n_jobs, PythonObject(1)):
-        raise Error("NotImplementedError: cross_val_score supports n_jobs=1 only")
+    var jobs = msel_unit_jobs(args[6], PythonObject("raise"), "cross_val_score", context)
     var scoring = args[4]
     if py_type(scoring) is msel_b().str:
         scoring = msel_get_scorer(scoring, context)
@@ -1119,24 +1121,15 @@ def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> Py
         sliced = len(ranges) > 0
     var scores = List[Float64]()
     var rows = MselFoldRows(x, y, folds, msel_device_rows_ok(estimator, scoring, context), context)
+    if sliced:
+        rows.ranges = ranges^
     try:
-        for i in range(len(folds)):  # driver-loop: over folds
-            var cloned = msel_native_clone_planned(estimator, context)
-            var fitted = cloned[0]
-            var plan = cloned[1]
-            if sliced:
-                var a = ranges[2 * i]
-                var b = ranges[2 * i + 1]
-                var xtr = _rows_outside(x, a, b, context)
-                var xte = _row_view(x, a, b, context)
-                rows._hold_fold(xtr, xte, context)
-                scores.append(msel_fit_score_fold(fitted, plan, xtr, _rows_outside(y, a, b, context),
-                                                  xte, _row_view(y, a, b, context), scoring, context))
-            else:
-                var fr = rows.take(i, PythonObject(None), context)
-                scores.append(msel_fit_score_fold(fitted, plan, fr[0], fr[1], fr[2], fr[3], scoring, context))
-            # each fold's estimator is released before the next is built
-            _ = fitted^
+        # The folds are units (msel_cv_units) on `jobs` threads; a fit error
+        # raises, as the fold loop did.
+        var r = msel_cross_validate_run(estimator, y, rows, scoring, False, False, False, PythonObject("raise"),
+                                        context, jobs)
+        for i in range(len(r.test[0])):  # driver-loop: over folds (results only)
+            scores.append(r.test[0][i])
     finally:
         rows.close(context)
     return msel_f64_list(scores, context)
