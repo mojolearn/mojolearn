@@ -223,6 +223,15 @@ def _leaf_i64(raw: PyObjectPtr, words: _SequenceWords) raises -> Int64:
     return Int64(py=a)
 
 
+def _leaf_into(raw: PyObjectPtr, slot: Int, integer: Bool, mut values: List[Float64], mut ids: List[Int64],
+               words: _SequenceWords) raises:
+    """One leaf into its slot of the typed buffer."""
+    if integer:
+        ids[slot] = _leaf_i64(raw, words)
+    else:
+        values[slot] = _leaf_f64(raw, words)
+
+
 def _sequence_fill(c: PythonObject, level: Int, dims: List[Int], integer: Bool, mut pos: Int,
                    mut values: List[Float64], mut ids: List[Int64], words: _SequenceWords) raises:
     """Fill the leaves under the container `c` at `level`, in C order, into
@@ -244,11 +253,7 @@ def _sequence_fill(c: PythonObject, level: Int, dims: List[Int], integer: Bool, 
     # never reach a device): one borrowed C read and one C conversion per
     # element, straight into the typed buffer.
     for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
-        var raw = p3_item(c, k, is_tuple)
-        if integer:
-            ids[pos + k] = _leaf_i64(raw, words)
-        else:
-            values[pos + k] = _leaf_f64(raw, words)
+        _leaf_into(p3_item(c, k, is_tuple), pos + k, integer, values, ids, words)
     pos += n
     _ = c  # keep the container alive through the borrowed reads above
 
