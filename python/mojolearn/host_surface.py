@@ -2980,7 +2980,7 @@ FAMILIES = (
                         # vendor_used and the numeric helpers the 2026-10-23 audit found
                         # no lane for (tools/identity_lanes/public_gap_methods.py)
                         "public-residual-dropout", "public-numeric-metadata",
-                        # the unfused MLP gradient route (MOJOLEARN_MLP_FUSED=0)
+                        # ParallelNeuralTrainer's per-layer MLP gradient route
                         "neural-trainer-unfused"),
         inference_lanes=(),
         forest_kinds=(),

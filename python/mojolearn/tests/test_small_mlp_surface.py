@@ -248,20 +248,27 @@ def test_checkpoint_refuses_corruption_wrong_schema_and_oversize(tmp_path):
         SmallMLPTrainer.from_checkpoint(tmp_path / 'missing.json')
 
 
-@pytest.mark.skipif(_backend.default_mode() != 'identical',
-                    reason='fast promises quality, not the same bits across routes')
-def test_per_operation_route_has_the_fused_bits(monkeypatch):
+def test_train_step_equals_loss_and_grads_then_apply_gradients():
+    # One program, one AdamW update: a train_step and the two-call form give the same state.
     x, y = batch(9)
-    results = []
-    for fused in ('1', '0'):
-        monkeypatch.setenv('MOJOLEARN_MLP_FUSED', fused)
-        model = trainer()
-        first = model.train_step(x, y, return_input_grad=True)
-        loss, grads = model.loss_and_grads(x, y)
-        step = model.apply_gradients(grads)
-        results.append((state_bytes(model), step, loss, np.asarray(model.predict_logits(x)).tobytes(),
-                        np.asarray(first['input_grad']).tobytes(), first['loss']))
-    assert results[0] == results[1]
+    a = trainer()
+    out = a.train_step(x, y)
+    b = trainer()
+    loss, grads = b.loss_and_grads(x, y)
+    assert b.apply_gradients(grads) == out['step'] == 1
+    assert loss == out['loss']
+    assert state_bytes(a) == state_bytes(b)
+    np.testing.assert_array_equal(np.asarray(a.predict_logits(x)), np.asarray(b.predict_logits(x)))
+
+
+def test_train_steps_equals_consecutive_train_steps():
+    x, y = batch(12)
+    a = trainer()
+    multi = a.train_steps(x, y, 3)
+    b = trainer()
+    losses = [b.train_step(x[4 * i:4 * (i + 1)], y[4 * i:4 * (i + 1)])['loss'] for i in range(3)]
+    assert multi['losses'] == losses and multi['step'] == 3
+    assert state_bytes(a) == state_bytes(b)
 
 
 def test_sessions_concatenate_the_per_batch_logits():

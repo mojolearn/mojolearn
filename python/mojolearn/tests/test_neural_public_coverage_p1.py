@@ -177,15 +177,9 @@ def test_small_mlp_predict_logits_sessions_refusals(inputs, err):
         _trainer().predict_logits_sessions(inputs)
 
 
-def test_small_mlp_train_steps_runs_or_refuses_by_name():
+def test_small_mlp_train_steps_runs():
     trainer = _trainer()
-    try:
-        out = trainer.train_steps(np.concatenate([XM, XM]), np.concatenate([YM, YM]), 2)
-    except RuntimeError as exc:
-        # Builds without the multistep route say so by name and leave the state alone.
-        assert "train_steps" in str(exc)
-        assert trainer.step_ == 0
-        return
+    out = trainer.train_steps(np.concatenate([XM, XM]), np.concatenate([YM, YM]), 2)
     assert out["step"] == 2 and len(out["losses"]) == 2 and trainer.step_ == 2
 
 
