@@ -43,13 +43,13 @@ def _arg_copy_row(src: _ARG_U32P, dst: _ARG_U32P, n: Int) -> Bool:
     var body = n - n % _ARG_W
     while i < body:
         var words = src.unsafe_load[width=_ARG_W, alignment=1](i)
-        dst.unsafe_store[alignment=1](i, words)
+        dst.unsafe_store[width=_ARG_W, alignment=1](i, words)
         bad = bad | (words & exp).eq(exp)
         i += _ARG_W
     var finite = not bad.reduce_or()
     while i < n:
         var w = src.unsafe_load[alignment=1](i)
-        dst.unsafe_store[alignment=1](i, w)
+        dst.unsafe_store(i, w)
         if (w & exp1) == exp1:
             finite = False
         i += 1
