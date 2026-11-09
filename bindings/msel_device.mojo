@@ -35,6 +35,7 @@ from core.msel_device import (
 from core.neural_context import process_ctx
 from core.msel_device_x import msel_device_x_context, msel_store, MSEL_CONTEXT_SLOT
 from decomposition.pca_fold import pca_transform_fold
+from glm.qn_fold import qn_fit_fold
 
 #: The store's own context slot (core/msel_device_x.mojo MSEL_CONTEXT_SLOT,
 #: the base binding's `_DEVCTX_SLOT`): one definition, so every reader of the
@@ -287,3 +288,60 @@ def pca_transform_fold_binding(
         var ctx = msel_device_x_context()
         words = pca_transform_fold(ctx, base_id, base_rows, index_id, mp, cp, op, nr, nf, nc)
     return Python.list(Int(words[0]), Int(words[1]))
+
+
+def qn_fit_fold_binding(
+    ids: PythonObject,
+    y_addr: PythonObject,
+    coef_addr: PythonObject,
+    info_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`qn_fit` over a model-selection fold resident on the device (lane
+    a7c; LogisticRegression and QNRegressor under cross-validation): `ids`
+    is [base store id, base rows, index store id] in model selection's store
+    (bindings/device_rows_door.mojo door_rows_store); `params` is `qn_fit`'s
+    13 to 16 fields (the 16th the sample_weight address when
+    has_sample_weight is 1). Returns [num_iters, finite word, range word]:
+    both words 0 when the fold was finite and in range; otherwise nothing
+    is fitted and the door refuses."""
+    if len(ids) != 3:
+        raise Error("qn_fit_fold: ids must hold 3 values")
+    if len(params) < 13 or len(params) > 16:
+        raise Error("qn_fit_fold: params must carry qn_fit's 13 to 16 fields")
+    var base_id = Int(py=ids[0])
+    var base_rows = Int(py=ids[1])
+    var index_id = Int(py=ids[2])
+    var yp = _mdx_f32_ptr(Int(py=y_addr))
+    var wp = _mdx_f32_ptr(Int(py=coef_addr))
+    var ip = _mdx_f32_ptr(Int(py=info_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var l1 = Float64(py=params[3])
+    var l2 = Float64(py=params[4])
+    var grad_tol = Float64(py=params[5])
+    var change_tol = Float64(py=params[6])
+    var max_iter = Int(py=params[7])
+    var ls_max = Int(py=params[8])
+    var mem = Int(py=params[9])
+    var fit_intercept = Int(py=params[10]) != 0
+    var normalized = Int(py=params[11]) != 0
+    var has_sw = Int(py=params[12]) != 0
+    var loss = Int(py=params[13]) if len(params) >= 14 else 0
+    var svr_eps = Float64(py=params[14]) if len(params) >= 15 else 0.0
+    if has_sw and len(params) < 16:
+        raise Error("qn_fit_fold: has_sample_weight = 1 needs the 16th field, the sample_weight address")
+    var swp = _mdx_f32_ptr(Int(py=params[15])) if has_sw else yp
+    var words = List[Int32](length=2, fill=Int32(0))
+    var wordp = words.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    var iters = 0
+    with GILReleased(Python()):
+        var ctx = msel_device_x_context()
+        iters = qn_fit_fold(ctx, base_id, base_rows, index_id, yp, wp, ip, nr, nf, nc, l1, l2, grad_tol,
+                            change_tol, max_iter, ls_max, mem, fit_intercept, normalized, has_sw, swp,
+                            loss, svr_eps, wordp)
+    var finite = Int(words[0])
+    var in_range = Int(words[1])
+    _ = words^
+    return Python.list(iters, finite, in_range)

@@ -35,7 +35,9 @@ from bindings.trees_public_inputs import (
 )
 from bindings.admitted_input import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector, classical_view,
+    admitted_finite_refuse, admitted_finite_entry_refuse,
 )
+from bindings.classical_validate import classical_estimator_name
 from bindings.classical_arrays import classical_address
 # TOMBSTONE: trees_f32 / trees_forest_layout / trees_all_finite / trees_check_sample_weight / trees_view / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
@@ -1757,9 +1759,35 @@ def forest_public_predict(model: PythonObject, kind: String, x: AdmittedX, proba
         var fitted = Int(py=_int(inner_fields["n_features_in_"]))
         if x.cols != fitted:
             raise Error("X has " + String(x.cols) + " features, fit saw " + String(fitted))
-        return _public_staged(inner, inner_fields, inner_kind, _stage(inner_fields, inner_kind, x.copy(), context),
-                              proba, codes, context)
-    return _public_staged(model, fields, kind, _stage(fields, kind, x.copy(), context), proba, codes, context)
+        return _public_deferred(model, inner, inner_fields, inner_kind,
+                                _stage(inner_fields, inner_kind, x.copy(), context), proba, codes, context)
+    return _public_deferred(model, model, fields, kind, _stage(fields, kind, x.copy(), context), proba, codes, context)
+
+
+def _public_deferred(public: PythonObject, model: PythonObject, fields: PythonObject, kind: String,
+                     staged: ForestInput, proba: Bool, codes: Bool, context: PythonObject) raises -> PythonObject:
+    """`_public_staged` with the deferred finite test of the door's X (lane
+    a7c): the public door admits X with `defer_finite`, so a borrowed X
+    reaches here untested (`finite` False). Every resident engine tests the
+    words it uploads (the device scan after the upload on the GPU, the
+    row tasks' scan of the host groves on the CPU column) and refuses in
+    its own words, which the one scikit-learn wording replaces; the
+    sequential engines (`forest_strict_predict`, `rf_predict_*`,
+    `et_predict`) test nothing, so a deferred X takes the door's parallel
+    host scan before them (the scan admit_x made before, now only there).
+    Refusals name the public estimator (`public`)."""
+    var est = classical_estimator_name(public)
+    if not staged.x.finite and staged.engine == "sequential" and not staged.ordered_export:
+        if not trees_finite_f32(staged.x.address, staged.x.rows * staged.x.cols):
+            admitted_finite_refuse(1, est)
+    var result = PythonObject(None)
+    try:
+        result = _public_staged(model, fields, kind, staged, proba, codes, context)
+    except error:
+        if not staged.x.finite:
+            admitted_finite_entry_refuse(error, est)
+        raise error^
+    return result
 
 
 def _public_staged(model: PythonObject, fields: PythonObject, kind: String, staged: ForestInput, proba: Bool,

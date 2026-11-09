@@ -48,6 +48,8 @@ from glm.impl.ols import (
     ols_fit_weighted_traced,
 )
 from glm.impl.qn.qn import qn_decision_function, qn_fit_x
+from glm.qn_resident import qn_loss_name, qn_check_loss_args, qn_fit_resident
+from core.admitted_finite_status import enqueue_finite_status
 from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_eig_scratch_traced, ridge_fit_traced
 from glm.impl.linear_model.qn import (
     QN_LOSS_ABS,
@@ -584,60 +586,6 @@ def ridge_fit_resident_host(
 # ===========================================================================
 
 
-def qn_loss_name(loss: Int) -> String:
-    """The identity card's header word for a loss id."""
-    if loss == QN_LOSS_LOGISTIC:
-        return "logistic"
-    if loss == QN_LOSS_SOFTMAX:
-        return "softmax"
-    if loss == QN_LOSS_SQUARED:
-        return "qn-squared"
-    if loss == QN_LOSS_ABS:
-        return "qn-absolute"
-    if loss == QN_LOSS_SVC_L1:
-        return "svc-l1"
-    if loss == QN_LOSS_SVC_L2:
-        return "svc-l2"
-    if loss == QN_LOSS_SVR_L1:
-        return "svr-l1"
-    return "svr-l2"
-
-
-def qn_check_loss_args(loss: Int, n_classes: Int, svr_eps: Float64) raises:
-    """The entry's refusals: the eight routed ids, the `C` each one's
-    `ASSERT` in `qn_fit_x` demands (`qn.cuh:121-173`), and `svr_eps` finite,
-    non-negative and nonzero only where the loss reads it."""
-    var is_svr = loss == QN_LOSS_SVR_L1 or loss == QN_LOSS_SVR_L2
-    var is_regression = is_svr or loss == QN_LOSS_SQUARED or loss == QN_LOSS_ABS
-    var is_binary = (
-        loss == QN_LOSS_LOGISTIC or loss == QN_LOSS_SVC_L1 or loss == QN_LOSS_SVC_L2
-    )
-    if not (is_regression or is_binary or loss == QN_LOSS_SOFTMAX):
-        raise Error(
-            "qn_fit: loss " + String(loss) + " is not a qn_loss_type id;"
-            " 0 to 7 are (glm/impl/linear_model/qn.mojo)"
-        )
-    if is_regression and n_classes != 1:
-        raise Error(
-            "qn_fit: loss " + String(loss) + " is a regression loss and needs"
-            " n_classes == 1, got " + String(n_classes)
-        )
-    if is_binary and n_classes != 2:
-        raise Error(
-            "qn_fit: loss " + String(loss) + " needs n_classes == 2, got "
-            + String(n_classes)
-        )
-    if loss == QN_LOSS_SOFTMAX and not (n_classes > 2):
-        raise Error("qn_fit: the softmax loss needs n_classes > 2, got " + String(n_classes))
-    if not (svr_eps >= 0.0) or svr_eps > 3.0e38:
-        raise Error("qn_fit: svr_eps must be finite and non-negative, got " + String(svr_eps))
-    if svr_eps != 0.0 and not is_svr:
-        raise Error(
-            "qn_fit: svr_eps is read by the two SVR losses only; loss "
-            + String(loss) + " must be given 0"
-        )
-
-
 def qn_fit_host(
     ctx: DeviceContext,
     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -660,6 +608,7 @@ def qn_fit_host(
     sw_ptr: MutPointer[Float32, MutUntrackedOrigin],
     loss: Int = QN_LOSS_LOGISTIC,
     svr_eps: Float64 = 0.0,
+    status: Int = 0,
 ) raises -> Int:
     """`qnFit` (`qn.cuh:176-193`) for a dense row-major `X`, through
     `qn_fit_x`'s loss switch. `loss` is QN_LOSS_LOGISTIC (the default) with
@@ -681,53 +630,27 @@ def qn_fit_host(
     weights, uploaded here and installed into the objective; unset, `sw_ptr`
     is never read (any valid pointer will do)."""
     qn_check_loss_args(loss, n_classes, svr_eps)
-    var n_targets = 1 if n_classes == 2 else n_classes
-    var n_param = (n_features + (1 if fit_intercept else 0)) * n_targets
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var y = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var w = ctx.enqueue_create_buffer[DType.float32](n_param)
     # TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by 47a3af928; code recoverable at 47a3af928^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch; record in docs/TOMBSTONES.md.
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
-    ctx.enqueue_memset(w, Float32(0.0))
-    var sw = Optional[DeviceBuffer[DType.float32]]()
-    if has_sample_weight:
-        var swb = ctx.enqueue_create_buffer[DType.float32](n_rows)
-        ctx.enqueue_copy(dst_buf=swb, src_ptr=sw_ptr)
-        sw = Optional[DeviceBuffer[DType.float32]](swb^)
-    ctx.synchronize()
-    var pams = QNParams.default()
-    pams.loss = loss
-    pams.penalty_l1 = penalty_l1
-    pams.penalty_l2 = penalty_l2
-    pams.grad_tol = grad_tol
-    pams.change_tol = change_tol
-    pams.max_iter = max_iter
-    pams.linesearch_max_iter = linesearch_max_iter
-    pams.lbfgs_memory = lbfgs_memory
-    pams.fit_intercept = fit_intercept
-    pams.penalty_normalized = penalty_normalized
-    var trace = IdentityTrace()
-    if trace.enabled:
-        trace.header(
-            qn_loss_name(loss) + " n=" + String(n_rows) + " d=" + String(n_features)
-            + " loss=" + String(loss)
-        )
-    var fx = Float32(0.0)
-    var iters = 0
-    var ret = qn_fit_x(
-        ctx, pams, x^, y^, n_rows, n_features, n_classes, w, fx, iters,
-        has_sample_weight, trace, Float32(svr_eps), sw^,
+    # `status` (lane a7c): the host address of the deferred finite status
+    # word of X (core/admitted_finite_status.mojo; 0 when the door tested X
+    # itself): the words just uploaded are tested on the device and the
+    # word comes back under qn_fit_resident's first synchronize. A
+    # non-finite X fits nothing (0 iterations, coef_ptr untouched); the
+    # door refuses.
+    var dstat = ctx.enqueue_create_buffer[DType.int32](1)
+    if status != 0:
+        dstat.enqueue_fill(Int32(0))
+        enqueue_finite_status(ctx, x.unsafe_ptr(), n_rows * n_features, dstat.unsafe_ptr(), 0)
+        ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status), src_buf=dstat)
+    var iters = qn_fit_resident(
+        ctx, x^, y_ptr, coef_ptr, info_ptr, n_rows, n_features, n_classes, penalty_l1, penalty_l2,
+        grad_tol, change_tol, max_iter, linesearch_max_iter, lbfgs_memory, fit_intercept,
+        penalty_normalized, has_sample_weight, sw_ptr, loss, svr_eps, status, 1,
     )
-    var hw = ctx.enqueue_create_host_buffer[DType.float32](n_param)
-    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
-    ctx.synchronize()
-    for i in range(n_param):
-        coef_ptr.unsafe_store(i, hw.unsafe_ptr().unsafe_load(i))
-    info_ptr.unsafe_store(0, fx)
-    info_ptr.unsafe_store(1, Float32(ret))
-    _ = hw^
+    _ = dstat^
     return iters
 
 

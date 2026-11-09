@@ -28,7 +28,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_dtype_str, classical_c_order
-from bindings.admitted_input import admit_x
+from bindings.admitted_input import admit_x, admit_x_unrecorded, admitted_finite_refuse, admitted_vector
+from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
 from bindings.classical_validate import classical_view, classical_check_weights_input, classical_check_x, classical_check_y, classical_check_width, classical_estimator_name
 from bindings.classical_score import classical_r2_score
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit, class_record, class_admit
@@ -103,9 +104,30 @@ def _float(value: PythonObject) raises -> Float64:
 def qn_regressor_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     var entries = _qn_entries(fields, context)
-    var x = admit_x(args[0], 2, "X", context)
-    var rows = Int(py=x.shape[0])
-    var cols = Int(py=x.shape[1])
+    # Lane a7c: the finite test of a borrowed X is the qn_fit entry's
+    # (its 17th field, the status word: the device scan of the upload, the
+    # CPU column's parallel scan); a cast X is tested in its cast pass.
+    # An identical-mode cross-validation fold (DeviceRows) is fitted by the
+    # base binding's `qn_fit_fold` on rows gathered on the device out of
+    # model selection's resident base (no host gather, no upload of X).
+    var fold_entry = py_get(context, "qn_fit_fold")
+    var store_ids = PythonObject(None)
+    var x = PythonObject(None)
+    var rows = 0
+    var cols = 0
+    if (fold_entry is not None and Int(py=py_call_typed(entries["estimators_numeric_mode"])) == 1
+            and door_is_device_rows(args[0], context)):
+        var fx = admit_x_unrecorded(args[0], "QNRegressor", context, device_x=True)
+        rows = fx.rows
+        cols = fx.cols
+        if fx.store.active():
+            store_ids = Python.list(fx.store.base_id, fx.store.base_rows, fx.store.index_id)
+        else:
+            x = fx.array
+    else:
+        x = admit_x(args[0], 2, "X", context, defer_finite=True)
+        rows = Int(py=x.shape[0])
+        cols = Int(py=x.shape[1])
     var view = classical_view(args[1], context, "y")
     if Int(py=view.ndim) != 1:
         raise Error("mojolearn QNRegressor requires a 1-D y")
@@ -128,11 +150,22 @@ def qn_regressor_fit(model: PythonObject, args: PythonObject, context: PythonObj
                              _int(fields["lbfgs_memory"]), 1 if intercept else 0,
                              1 if Bool(py=fields["penalty_normalized"]) else 0, 1 if has_sw else 0,
                              _int(loss), Float64(0.0))
-    if has_sw:
-        _ = py_call(params.append, classical_address(weights))
-        _ = weights  # keep the Python object alive through the native call above
-    var n_iter = py_call_typed(entries["qn_fit"], classical_address(x), classical_address(target),
+    _ = py_call(params.append, classical_address(weights) if has_sw else PythonObject(0))
+    _ = weights  # keep the Python object alive through the native call above
+    var status = admitted_vector(1, "<i4", context["output_context"])
+    var status_word = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(status)))
+    var n_iter = PythonObject(0)
+    if store_ids is not None:
+        var words = py_call_typed(fold_entry, store_ids, classical_address(target), classical_address(w),
+                                  classical_address(info), params)
+        door_rows_refuse(Int(py=words[1]), Int(py=words[2]), "QNRegressor", Int(py=store_ids[1]))
+        n_iter = words[0]
+    else:
+        _ = py_call(params.append, classical_address(status))
+        n_iter = py_call_typed(entries["qn_fit"], classical_address(x), classical_address(target),
                                classical_address(w), classical_address(info), params)
+        admitted_finite_refuse(Int(status_word[0]), "QNRegressor")
+    _ = status  # keep the Python object alive through the native call above
     _ = target  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _ = info  # keep the Python object alive through the native call above

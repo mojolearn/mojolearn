@@ -248,15 +248,24 @@ def _connect_device_rows(registry):
     # gathered on the host out of model selection's host base (row tasks
     # across the cores), a device-X entry gathers them on the device out of
     # the resident base (core/msel_device_x.mojo). The same rows in the same
-    # order: no bit changes. Lasso / ElasticNet (x_linear door, labels_view)
-    # join when that door is on admit_x (lane A1b).
+    # order: no bit changes.
+    # Lane a7c: the x_linear door is on admit_x (lane A1b), so Lasso,
+    # ElasticNet and every x_linear estimator whose CV methods admit X only
+    # through it (_xl_matrix / classical_view / admit_x, each resolving a
+    # DeviceRows) join. The *CV estimators stay out: their fit hands X to
+    # their own splitter (prep_native_split), which takes no fold handle.
     from . import linear_model, _expansion_prep as prep, decomposition
     from . import _svm_impl as svm, svm as linear_svm, _gp_impl as gp, kernel_methods as km, neighbors
+    from . import _expansion_linear as linear, _solver_impl as cd
+    xl = tuple(getattr(linear, name) for name in (  # glue: fixed ABI metadata connected once during package import
+        'SGDClassifier', 'SGDRegressor', 'PoissonRegressor', 'GammaRegressor', 'TweedieRegressor',
+        'HuberRegressor', 'BayesianRidge', 'ARDRegression', 'Lars', 'LassoLars', 'QuantileRegressor',
+        'Perceptron', 'PassiveAggressiveClassifier', 'PassiveAggressiveRegressor', 'RidgeClassifier'))
     for cls in (linear_model.LinearRegression, linear_model.Ridge, prep.MaxAbsScaler, prep.RobustScaler,  # glue: fixed ABI metadata connected once during package import
                 decomposition.PCA, svm.SVC, svm.SVR, linear_svm.LinearSVC, linear_svm.LinearSVR,
                 gp.GaussianProcessRegressor, km.KernelRidge,
                 neighbors.KNeighborsClassifier, neighbors.KNeighborsRegressor,
-                linear_model.LogisticRegression, linear_model.QNRegressor):
+                linear_model.LogisticRegression, linear_model.QNRegressor, cd.Lasso, cd.ElasticNet) + xl:
         if cls in registry:
             registry[cls]['device_rows'] = True
 

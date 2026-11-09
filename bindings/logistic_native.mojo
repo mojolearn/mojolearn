@@ -28,7 +28,8 @@ from bindings.classifier_public_lifecycle import classifier_after_fit, classifie
 from bindings.scaler_lifecycle_native import _public_result
 from bindings.classical_labels import _flatten_labels
 from bindings.classical_arrays import classical_address
-from bindings.admitted_input import admit_x
+from bindings.admitted_input import admit_x, admit_x_unrecorded, admitted_finite_refuse
+from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
 from bindings.classical_labels import (
     ClassicalLabels, classical_encode_labels, classical_decode_labels, classical_accuracy,
     labels_class_weight_rows, labels_argmax_rows, labels_shape_of,
@@ -269,10 +270,32 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var b = _builtins()
     logistic_fit_replacements_admit(fields, context)
     var l1_ratio = _validate_params(fields)
-    var x = admit_x(args[0], 2, "X", context)
-    py_setitem(fields, "input_copied_", PythonObject(not (x is args[0])))
-    var rows = Int(py=x.shape[0])
-    var cols = Int(py=x.shape[1])
+    # Lane a7c: the finite test of a borrowed X is the qn_fit entry's (its
+    # 17th field, the status word); a cast X is tested in its cast pass.
+    # Lane a7c: a cross-validation fold (DeviceRows) of an identical-mode
+    # fit is gathered on the device out of model selection's resident base
+    # by the base binding's `qn_fit_fold` (no host gather, no upload of X);
+    # without it (the CPU column, FAST) the door gets the host rows.
+    var fold_entry = py_get(context, "qn_fit_fold")
+    var store_ids = PythonObject(None)
+    var x = PythonObject(None)
+    var rows = 0
+    var cols = 0
+    if (fold_entry is not None and Bool(py=_mode(fields, context) == PythonObject("identical"))
+            and door_is_device_rows(args[0], context)):
+        var fx = admit_x_unrecorded(args[0], _name(model), context, device_x=True)
+        rows = fx.rows
+        cols = fx.cols
+        if fx.store.active():
+            store_ids = Python.list(fx.store.base_id, fx.store.base_rows, fx.store.index_id)
+        else:
+            x = fx.array
+        py_setitem(fields, "input_copied_", PythonObject(True))
+    else:
+        x = admit_x(args[0], 2, "X", context, defer_finite=True)
+        py_setitem(fields, "input_copied_", PythonObject(not (x is args[0])))
+        rows = Int(py=x.shape[0])
+        cols = Int(py=x.shape[1])
     var y = args[1]
     var y_shape = labels_shape_of(y, context)
     if len(y_shape) != 1 and not _logistic_buffer_column(y, y_shape, context):
@@ -318,14 +341,25 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject,
                              1 if Bool(py=_class_constant(model, fields, "penalty_normalized", context)) else 0,
                              1 if has_sw else 0, loss)
     _ = sw  # keep the Python object alive through the native call above
-    if has_sw:
-        # field 15 svr_eps (0), field 16 the weights
-        _ = py_call(params.append, PythonObject(0.0))
-        _ = py_call(params.append, PythonObject(sw.address))
-        _ = sw  # keep the Python object alive through the native call above
+    # field 15 svr_eps (0), field 16 the weights (0 without), field 17 the
+    # deferred finite status word of X (lane a7c)
+    _ = py_call(params.append, PythonObject(0.0))
+    _ = py_call(params.append, PythonObject(sw.address if has_sw else 0))
     _ = sw  # keep the Python object alive through the native calls above
-    var n_iter = py_call_typed(_need(entries, "qn_fit"), classical_address(x), PythonObject(labels_address(y_enc)),
+    var status = admitted_vector(1, "<i4", context)
+    var n_iter = PythonObject(0)
+    if store_ids is not None:
+        var words = py_call_typed(fold_entry, store_ids, PythonObject(labels_address(y_enc)),
+                                  PythonObject(labels_address(w)), PythonObject(labels_address(info)), params)
+        door_rows_refuse(Int(py=words[1]), Int(py=words[2]), _name(model), Int(py=store_ids[1]))
+        n_iter = words[0]
+    else:
+        _ = py_call(params.append, PythonObject(labels_address(status)))
+        n_iter = py_call_typed(_need(entries, "qn_fit"), classical_address(x), PythonObject(labels_address(y_enc)),
                                PythonObject(labels_address(w)), PythonObject(labels_address(info)), params)
+        admitted_finite_refuse(Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=labels_address(status))[0]),
+                               _name(model))
+    _ = status  # keep the Python object alive through the native call above
     _ = y_enc  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _ = info  # keep the Python object alive through the native call above
