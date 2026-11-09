@@ -1352,7 +1352,7 @@ NEW_LANE_PURPOSE = {
     "sequence-moe-backward": "MoEBlock.backward: `moe_backward`",
     "sequence-export-roundtrip": "Sequential.export, Sequential.load, predict and predict_proba",
     "sequence-onnx-import": "mojolearn.import_model on an ONNX file: `onnx_import`, the Mojo ONNX reader",
-    "transformer-decode-load-state": "TransformerDecodeSession.load_state: `transformer_decode_session_load_state`",
+    "transformer-decode-load-state": "TransformerDecodeSession.load_state and decode: `transformer_decode_session_load_state`, `transformer_decode_session_decode`",
     "safetensors-widen-f16": "float16 checkpoint weights (models.safetensors.widen_f16): `from_f16`, device and host",
     "sequence-program-save-load": "ops.Program.save and Session.load_program (the public `ops.Program` class)",
     "hf-causal-lm-stream": "CausalLM.stream and models.GenerationStream.read, greedy and sampled",
@@ -1360,14 +1360,15 @@ NEW_LANE_PURPOSE = {
                       "the host column (`ivf_out_of_bounds_distance`)",
     "sequence-device-tensor": "resident sequence tensors (`seq_tensor_alloc`, `seq_tensor_upload`, "
                               "`seq_tensor_download`, `seq_tensor_copy`) through RMSprop",
-    "mamba2-decode-session": "Mamba2Block's resident decode session: step, sync_state and load_state "
-                             "(`mamba2_session_open`, `mamba2_session_export_state`, `mamba2_session_load_state`)",
-    "mamba3-decode-session": "Mamba3Block's resident decode session: step, sync_state and load_state "
-                             "(`mamba3_session_open`, `mamba3_session_step`, `mamba3_session_export_state`, "
-                             "`mamba3_session_load_state`)",
-    "samba-decode-session": "SambaStack.decode_session: step, sync_state and load_state "
-                            "(`samba_decode_open`, `samba_decode_step`, `samba_decode_export`, "
-                            "`samba_decode_load`)",
+    "mamba2-decode-session": "Mamba2Block's resident decode session: step, decode, sync_state and load_state "
+                             "(`mamba2_session_open`, `mamba2_session_decode`, `mamba2_session_export_state`, "
+                             "`mamba2_session_load_state`)",
+    "mamba3-decode-session": "Mamba3Block's resident decode session: step, decode, sync_state and load_state "
+                             "(`mamba3_session_open`, `mamba3_session_step`, `mamba3_session_decode`, "
+                             "`mamba3_session_export_state`, `mamba3_session_load_state`)",
+    "samba-decode-session": "SambaStack.decode_session: step, decode, sync_state and load_state "
+                            "(`samba_decode_open`, `samba_decode_step`, `samba_decode_tokens`, "
+                            "`samba_decode_export`, `samba_decode_load`)",
     "training-chunked-lm-head": "training.chunked_lm_head_loss with and without gradients: "
                                 "`chunked_lm_head_v2_loss`, `chunked_lm_head_v2_train`",
     "training-mlp-sessions": "training.mlp_inference_sessions: `mlp_sessions`",
@@ -1541,8 +1542,9 @@ ANNOTATIONS = {
                  "mamba3_session_step")},
     **{e: ("covered", ["samba-decode-session"],
            _SAMBA_OWNER + ": SambaStack.decode_session -> bindings/samba_decode_native.mojo "
-           "(open, step, sync_state, load_state)")
-       for e in ("samba_decode_open", "samba_decode_step", "samba_decode_export", "samba_decode_load")},
+           "(open, step, decode, sync_state, load_state)")
+       for e in ("samba_decode_open", "samba_decode_step", "samba_decode_tokens", "samba_decode_export",
+                 "samba_decode_load")},
     "samba_head_loss": ("covered", ["samba-untied-dropout-accum"],
                         _SAMBA_OWNER + ": samba_gradients runs the fused head (`fused`) whenever the "
                         "resident Samba step does not take the step (dropout or accumulation) and the "
