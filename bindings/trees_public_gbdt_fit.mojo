@@ -40,6 +40,9 @@ from bindings.classical_arrays import classical_address, classical_c_order
 from bindings.trees_public_gbdt import gbdt_table, gbdt_vendor, gbdt_has_ctr, _field, _int, _repr, ordered_option_values
 from bindings.trees_boost_constructor_native import tree_constructor_storage
 from checks.numerics import portable_exp64, portable_log64, pinned_mul_f64
+from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT
+from bindings.p3_labels_metrics_native import p3_item, p3_text_codes, P3_TEXT_OK
+from bindings.cpython_table import cpython_table
 
 comptime _UNSET = -1.0
 comptime _F32_MAX = 3.4028234663852886e+38
