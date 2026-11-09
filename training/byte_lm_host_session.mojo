@@ -155,6 +155,7 @@ struct ByteHostSession(Movable, Writable):
         self.shadow_p = List[Float32]()
         self.shadow_m = List[Float32]()
         self.shadow_v = List[Float32]()
+        self.shadow_flags = List[Int32]()
         self.program = None
         self.synced = False
         self.opened = False
