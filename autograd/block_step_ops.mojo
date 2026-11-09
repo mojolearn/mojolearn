@@ -1040,6 +1040,8 @@ struct AttnPrefill(Movable):
         self.dx = None
         self.l = 0
         self.pos0 = -1
+        self.ahead = False
+        self.ahead_used = False
 
     def prepare(mut self, ctx: DeviceContext, b: Int, l: Int, smax: Int, dims: LlamaDims, window: Int,
                 lean: Bool) raises:
@@ -1130,8 +1132,19 @@ def attn_step_restart(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[F
     _write_words(ex, bufs[3], words)
 
 
+comptime _NP = MutPointer[Float32, MutAnyOrigin]
+
+
 def _run_attn_on(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
-                 y_out: FP, mut pre: AttnPrefill, forward_only: Bool) raises:
+                 y_out: FP, mut pre: AttnPrefill, forward_only: Bool, norm1_ready: Bool = False,
+                 next_sumsq: Int = 0, next_out: Int = 0, next_w: Int = 0, next_eps: Float32 = 0.0) raises:
+    """One run of the attention step. Lane r1 (ATTN_STEP_NEXT_NORM, L > 1
+    stages only): `norm1_ready` when the previous layer's run wrote this
+    run's norm1 into `pre` (`pre.ahead`; honoured only when `prepare` kept
+    those stages), and `next_*` (device addresses, 0: none) the next layer's
+    norm1 sumsq / out destinations, weight and eps: this run's residual2 add
+    then computes them in the same launch (`residual_rms_norm_kernel`), as
+    the byte LM's hand step did (training/byte_lm.mojo at 5b5490960d)."""
     var ctx = ex.ctx.copy()
     var b = ints[0]
     var dm = ints[1]
@@ -1159,9 +1172,20 @@ def _run_attn_on(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], c
         var dims = _attn_dims(ints)
         pre.prepare(ctx, b, l, ints[6], dims, ints[7], blk.lean)
         _d2d(ctx, pre.dx.value(), x, n)
-        llama_decoder_layer_forward(
-            ctx, pre.stages.value(), blk.kv, blk.rope, blk.w, pre.dx.value(), b, l, pos0, trace,
-            String("ops.step.forward"), forward_only=forward_only)
+        var n1r = norm1_ready and pre.ahead_used
+        pre.ahead_used = False
+        if next_sumsq != 0 and next_out != 0 and next_w != 0:
+            llama_decoder_layer_forward(
+                ctx, pre.stages.value(), blk.kv, blk.rope, blk.w, pre.dx.value(), b, l, pos0, trace,
+                String("ops.step.forward"), norm1_ready=n1r,
+                next_norm_sumsq=Optional(_NP(unsafe_from_address=next_sumsq)),
+                next_norm_out=Optional(_NP(unsafe_from_address=next_out)),
+                next_norm_weight=Optional(_NP(unsafe_from_address=next_w)),
+                next_norm_eps=Optional(next_eps), forward_only=forward_only)
+        else:
+            llama_decoder_layer_forward(
+                ctx, pre.stages.value(), blk.kv, blk.rope, blk.w, pre.dx.value(), b, l, pos0, trace,
+                String("ops.step.forward"), norm1_ready=n1r, forward_only=forward_only)
         _d2d(ctx, y, pre.stages.value().residual2, n)
         pre.pos0 = pos0
     var words: List[Int] = [blk.kv.s]
