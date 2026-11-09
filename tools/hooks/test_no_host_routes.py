@@ -552,11 +552,31 @@ def test_owed_findings_are_reported_not_refused():
         with open(bpath, "w", encoding="utf-8") as f:
             f.write(_git("show", f"{ref}:{nhr.BASELINE}") + "\n")
         err = io.StringIO()
+        real = nhr._restrict_to_main
         with contextlib.redirect_stderr(err):
             nhr.prune_baseline(ref, bpath)
+            # the old tree predates the 2026-11-09 loop-tag rules: give their
+            # findings rows (and let them stand) so only owed findings are judged
+            with open(bpath, encoding="utf-8") as f:
+                rows = nhr.load_baseline(f.read())
+            have = nhr.collections.Counter(nhr._key(r) for r in rows)
+            for (rule, path, text, occ), _no in nhr.tree_findings(nhr.Tree(ref)):
+                if rule in nhr._OWED_RULES:
+                    continue
+                if have[(rule, path, text, occ)] > 0:
+                    have[(rule, path, text, occ)] -= 1
+                    continue
+                rows.append(dict(rule=rule, cls=nhr._RULE_CLASS[rule], owner="test", state="owed-tags", path=path,
+                                 occ=occ, text=text, why="older than the rule"))
+            with open(bpath, "w", encoding="utf-8") as f:
+                f.write(nhr.dump_baseline(rows))
             err.truncate(0)
             err.seek(0)
-            rc = nhr.check_tree(ref, baseline_path=bpath)
+            nhr._restrict_to_main = lambda keys, _ref, _quiet=False: (keys, nhr.collections.Counter())
+            try:
+                rc = nhr.check_tree(ref, baseline_path=bpath)
+            finally:
+                nhr._restrict_to_main = real
     out = err.getvalue()
     assert rc == 0, out[-2000:]
     assert "OWED (not baseline debt)" in out and "mojo-host-loop" in out, out[-2000:]
