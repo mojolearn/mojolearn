@@ -37,6 +37,14 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from gbdt.methods.kernel.pointwise_split_resolve import PW_SENTINEL_ID
 from gbdt.models.oblivious_model import BIN_SPLIT_TAKE_BIN, BIN_SPLIT_TAKE_GREATER
+from gbdt.models.kernel.add_bin_values import (
+    compute_bins_and_add_gated_kernel,
+    compute_bins_gated_kernel,
+)
+
+#: `compute_bins_kernel`'s and the apply's block (COMPUTE_BINS_BLOCK_SIZE,
+#: the 256 of `_apply_last_tree_to_test`).
+comptime TREE_APPLY_BLOCK = 256
 
 comptime TREE_STRUCT_STATUS = 0
 comptime TREE_STRUCT_DEPTH = 1
@@ -206,4 +214,78 @@ def tree_op_tree_records(
         records.take_equal.unsafe_ptr(),
         grid_dim=(1, 1, 1),
         block_dim=(md, 1, 1),
+    )
+
+
+def tree_op_leaf_bins(
+    ctx: DeviceContext,
+    mut gate: DeviceBuffer[DType.int32],
+    mut structure: DeviceBuffer[DType.int32],
+    mut records: TreeRecords,
+    mut cindex: DeviceBuffer[DType.uint32],
+    n_rows: Int,
+    mut out_bins: DeviceBuffer[DType.uint32],
+) raises:
+    """Tree op TREE_OP_LEAF_BINS: each row's leaf under the round's tree
+    (`compute_bins_kernel`, the launch of `sym_compute_bins_pooled`), the
+    depth read from the structure record. Enqueue only."""
+    var blocks = (n_rows + TREE_APPLY_BLOCK - 1) // TREE_APPLY_BLOCK
+    if blocks < 1:
+        blocks = 1
+    var depth_word = structure.unsafe_ptr() + TREE_STRUCT_DEPTH
+    ctx.enqueue_function[compute_bins_gated_kernel](
+        gate.unsafe_ptr(),
+        depth_word,
+        cindex.unsafe_ptr(),
+        records.off.unsafe_ptr(),
+        records.shift.unsafe_ptr(),
+        records.mask.unsafe_ptr(),
+        records.bin.unsafe_ptr(),
+        records.take_equal.unsafe_ptr(),
+        Int32(n_rows),
+        out_bins.unsafe_ptr(),
+        grid_dim=(blocks, 1, 1),
+        block_dim=(TREE_APPLY_BLOCK, 1, 1),
+    )
+
+
+def tree_op_apply(
+    ctx: DeviceContext,
+    mut gate: DeviceBuffer[DType.int32],
+    mut structure: DeviceBuffer[DType.int32],
+    mut records: TreeRecords,
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut leaf_values: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    mut cursor: DeviceBuffer[DType.float32],
+    approx_dim: Int,
+    cursor_stride: Int,
+) raises:
+    """Tree op TREE_OP_APPLY (the tree gather): `cursor[d * stride + i] +=
+    leaf_values[leaf(i) * approx_dim + d]` for every row, the launch of
+    `_apply_last_tree_to_test` (grid `min(ceil(n / 256), 1024)` x
+    approx_dim). `leaf_values` already carry the learning rate. The cursor
+    is carried state, so the add is behind the gate. Enqueue only."""
+    var wide = (n_rows + TREE_APPLY_BLOCK - 1) // TREE_APPLY_BLOCK
+    if wide > 1024:
+        wide = 1024
+    if wide < 1:
+        wide = 1
+    var depth_word = structure.unsafe_ptr() + TREE_STRUCT_DEPTH
+    ctx.enqueue_function[compute_bins_and_add_gated_kernel](
+        gate.unsafe_ptr(),
+        depth_word,
+        cindex.unsafe_ptr(),
+        records.off.unsafe_ptr(),
+        records.shift.unsafe_ptr(),
+        records.mask.unsafe_ptr(),
+        records.bin.unsafe_ptr(),
+        records.take_equal.unsafe_ptr(),
+        leaf_values.unsafe_ptr(),
+        Int32(n_rows),
+        cursor.unsafe_ptr(),
+        Int32(approx_dim),
+        Int32(cursor_stride),
+        grid_dim=(wide, approx_dim, 1),
+        block_dim=(TREE_APPLY_BLOCK, 1, 1),
     )
