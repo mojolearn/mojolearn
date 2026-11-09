@@ -16,6 +16,10 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from autograd.program_loop import (
     LOOP_DONE, LOOP_STOP_ITER, LOOP_ITER, LOOP_WORDS, EXECUTOR_TIMERS, LoopTimers,
 )
+# lane n7-device-linalg-ops: the linear-algebra step ops gate on these words
+# under core's names (core/step_gate.mojo), so the classical packages need
+# not import the tape; the fence is in LoopRegisters.__init__.
+from core.step_gate import STEP_DONE, STEP_FAIL, STEP_ITER, STEP_STOP_ITER
 
 
 def loop_below_kernel(
@@ -46,6 +50,8 @@ struct LoopRegisters(Movable):
     var host: HostBuffer[DType.int32]
 
     def __init__(out self, ctx: DeviceContext) raises:
+        comptime assert STEP_DONE == LOOP_DONE and STEP_STOP_ITER == LOOP_STOP_ITER and STEP_ITER == LOOP_ITER, "core/step_gate.mojo word indices differ from the loop's"
+        comptime assert STEP_FAIL < LOOP_WORDS and STEP_FAIL != LOOP_DONE and STEP_FAIL != LOOP_STOP_ITER and STEP_FAIL != LOOP_ITER, "STEP_FAIL must be a free word of the register block"
         self.words = ctx.enqueue_create_buffer[DType.int32](LOOP_WORDS)
         self.host = ctx.enqueue_create_host_buffer[DType.int32](LOOP_WORDS)
 
@@ -62,6 +68,13 @@ struct LoopRegisters(Movable):
     def word(self, k: Int) -> Int:
         """Word `k` of the host mirror as of the last `read`."""
         return Int(self.host.unsafe_ptr().unsafe_load(k))
+
+    def failure(self) -> Int:
+        """The failure code a step op reported (core/step_gate.mojo
+        `step_fail_joins_loop`), 0 when none, as of the last `read`. A loop
+        that stopped on a failure ends `converged` at that iteration; the
+        family checks this word first and raises by name."""
+        return self.word(STEP_FAIL)
 
 
 def loop_criterion_below(

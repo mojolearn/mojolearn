@@ -652,6 +652,49 @@ def _td_grid(count: Int, tpb: Int) -> Int:
     return (count + tpb - 1) // tpb if count > 0 else 1
 
 
+def td_solve_enqueue(
+    ctx: DeviceContext,
+    mut dd: DeviceBuffer[DType.float32],
+    mut ee: DeviceBuffer[DType.float32],
+    mut info: DeviceBuffer[DType.float32],
+    mut wh: DeviceBuffer[DType.float32],
+    mut wl: DeviceBuffer[DType.float32],
+    mut w: DeviceBuffer[DType.float32],
+    mut z: DeviceBuffer[DType.float32],
+    n: Int,
+) raises:
+    """Stages 2 and 3 on a tridiagonal T (diagonal dd, off-diagonal ee):
+    `td_bisect_kernel`, `td_gap_kernel`, `td_vec_kernel`, enqueued only. On
+    return (in stream order) w holds the eigenvalues ascending, z (n x n)
+    the unit vectors in columns (not sign flipped), info[2] != 0 a refusal;
+    `info` (4 floats) must be zeroed and wh, wl hold n floats. Shared by
+    `eigh_td_on` and the executor op x_decomp/eigh_ops.mojo
+    `eigh_op_tridiag`; the twisted factorization's D+ / D- scratch (4 n^2
+    floats) is released in stream order."""
+    var g = _td_grid(n, TD_EIG_TPB)
+    ctx.enqueue_function[td_bisect_kernel](
+        dd.unsafe_ptr(), ee.unsafe_ptr(), info.unsafe_ptr(), wh.unsafe_ptr(), wl.unsafe_ptr(), Int32(n),
+        grid_dim=g, block_dim=TD_EIG_TPB,
+    )
+    ctx.enqueue_function[td_gap_kernel](
+        wh.unsafe_ptr(), wl.unsafe_ptr(), info.unsafe_ptr(), w.unsafe_ptr(), Int32(n),
+        grid_dim=g, block_dim=TD_EIG_TPB,
+    )
+    var dph = ctx.enqueue_create_buffer[DType.float32](n * n)
+    var dpl = ctx.enqueue_create_buffer[DType.float32](n * n)
+    var dmh = ctx.enqueue_create_buffer[DType.float32](n * n)
+    var dml = ctx.enqueue_create_buffer[DType.float32](n * n)
+    ctx.enqueue_function[td_vec_kernel](
+        dd.unsafe_ptr(), ee.unsafe_ptr(), info.unsafe_ptr(), wh.unsafe_ptr(), wl.unsafe_ptr(),
+        dph.unsafe_ptr(), dpl.unsafe_ptr(), dmh.unsafe_ptr(), dml.unsafe_ptr(), z.unsafe_ptr(), Int32(n),
+        grid_dim=g, block_dim=TD_EIG_TPB,
+    )
+    _ = dph^
+    _ = dpl^
+    _ = dmh^
+    _ = dml^
+
+
 def eigh_td_on(
     ctx: DeviceContext,
     mut da: DeviceBuffer[DType.float32],
@@ -777,33 +820,14 @@ def eigh_td_on(
     enqueue_fill(ctx, dinfo, Float32(0.0))
     var dwh = ctx.enqueue_create_buffer[DType.float32](n)
     var dwl = ctx.enqueue_create_buffer[DType.float32](n)
-    ctx.enqueue_function[td_bisect_kernel](
-        ddd.unsafe_ptr(), dee.unsafe_ptr(), dinfo.unsafe_ptr(), dwh.unsafe_ptr(), dwl.unsafe_ptr(), Int32(n),
-        grid_dim=_td_grid(n, TD_EIG_TPB), block_dim=TD_EIG_TPB,
-    )
-    ctx.enqueue_function[td_gap_kernel](
-        dwh.unsafe_ptr(), dwl.unsafe_ptr(), dinfo.unsafe_ptr(), dw.unsafe_ptr(), Int32(n),
-        grid_dim=_td_grid(n, TD_EIG_TPB), block_dim=TD_EIG_TPB,
-    )
-    ctx.synchronize()
-    # 3. eigenvectors of T
-    var dph = ctx.enqueue_create_buffer[DType.float32](n * n)
-    var dpl = ctx.enqueue_create_buffer[DType.float32](n * n)
-    var dmh = ctx.enqueue_create_buffer[DType.float32](n * n)
-    var dml = ctx.enqueue_create_buffer[DType.float32](n * n)
-    ctx.enqueue_function[td_vec_kernel](
-        ddd.unsafe_ptr(), dee.unsafe_ptr(), dinfo.unsafe_ptr(), dwh.unsafe_ptr(), dwl.unsafe_ptr(),
-        dph.unsafe_ptr(), dpl.unsafe_ptr(), dmh.unsafe_ptr(), dml.unsafe_ptr(), dz.unsafe_ptr(), Int32(n),
-        grid_dim=_td_grid(n, TD_EIG_TPB), block_dim=TD_EIG_TPB,
-    )
+    # 3. eigenvectors of T (lane n7-device-linalg-ops: stages 2 and 3 are
+    # the executor's tridiagonal op's launches, `td_solve_enqueue`; the
+    # drain between them read nothing and is gone)
+    td_solve_enqueue(ctx, ddd, dee, dinfo, dwh, dwl, dw, dz, n)
     var hinfo = ctx.enqueue_create_host_buffer[DType.float32](4)
     ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
     ctx.synchronize()
     var refused = hinfo.unsafe_ptr().unsafe_load(2) != Float32(0.0)
-    _ = dph^
-    _ = dpl^
-    _ = dmh^
-    _ = dml^
     if refused:
         _ = dP1^
         _ = dP2^
