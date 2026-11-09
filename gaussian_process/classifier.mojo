@@ -89,7 +89,11 @@ from gaussian_process.gpc_common import (
 from gaussian_process.gpc_proba64 import gpc_ovr_combine_row, gpc_pi_star_sf64
 from gaussian_process.gpc_items import gpc_residual_item
 from gaussian_process.gpc_newton import gpc_newton_device
-from gemm.checks.gemm_identical import identical_gemm_workspace_max_floats
+from gemm.checks.gemm_identical import (
+    identical_gemm_into,
+    identical_gemm_workspace_max_floats,
+)
+from gemm.contract import OP_TN
 
 
 #: lane/neighbors-apple (2026-09-28): the Laplace Newton loop keeps K, B and
