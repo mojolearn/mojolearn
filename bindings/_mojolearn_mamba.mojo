@@ -239,7 +239,7 @@ from mamba.native_state_dispatch import NATIVE_MAMBA_STATE_API, mamba_state_oper
 from mamba.impl.mamba_block_program import mamba_block_call_abi
 from mamba.native_block_dispatch import NATIVE_MAMBA_BLOCK_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
-from providers.python.causal_lm_program_pyapi import CausalProgramOwner, causal_lm_program_read_py
+from providers.python.causal_lm_program_pyapi import causal_program_owner_type, causal_lm_program_read_py
 
 from mamba.impl.mamba_shell_impl import (
     _f32_ptr,
@@ -1680,7 +1680,7 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba3_session_load_state_binding]("mamba3_session_load_state")
         m.def_function[mamba3_session_close_binding]("mamba3_session_close")
         # Lane x45c: CausalLM.generate as one Program.decode (the decode program).
-        _ = m.add_type[CausalProgramOwner]("_CausalProgramOwner")
+        causal_program_owner_type(m)  # one Python type per interpreter (the mamba binding registers it too)
         m.def_function[causal_lm_program_read_py]("causal_lm_program_read_v1")
         return m.finalize()
     except e:
