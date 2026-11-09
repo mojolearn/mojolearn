@@ -18,7 +18,7 @@ from .. import _backend
 from .. import _numeric_profile
 from .. import lowbit as _lowbit
 from .._array import Array
-from .._buffer import _native, addr, addr_ro, all_finite, as_i32_c, empty
+from .._buffer import _native, addr, addr_ro, all_finite, empty
 from .._bufcheck import is_integer, memcopy, probe
 from .config import (FIXED_TODAY, INTERFACE_DEFAULTS, POSITION_CEILING, HFConfig,
                      UnsupportedModel, plan_for)
@@ -238,11 +238,10 @@ class CausalLM:
                                         (weight_format, max_positions, device, numeric_profile),
                                         _NATIVE_CONTEXT)
 
-    # The old owner is retained only for ParallelCausalLM's existing RPC path.
-    # It remains explicit runtime debt until that transport has native ownership.
-
-    def _make_blocks(self, cls, layers, kwargs):
-        return [cls(w, **kwargs) for w in layers]  # glue: builds one block per model layer
+    # TOMBSTONE: CausalLM._make_blocks, _ids, _check_positions (dead code: no caller; the native
+    # owner builds blocks and admits ids and positions) deleted 2026-11-09 by __SHA__; code
+    # recoverable at __SHA__^.
+    # Restore: git apply experiments/removed/dead_code_p5_20261109.patch
 
     # ------------------------------------------------------------ loading
     @classmethod
@@ -265,36 +264,6 @@ class CausalLM:
     def parameters(self):
         """Return tensors by checkpoint name."""
         return _NATIVE.causal_lm_parameters(self)
-
-    def _ids(self, x, what, step=False):
-        pb = probe(x)
-        if not is_integer(pb.format):
-            raise TypeError(f"mojolearn {what}: ids must be integer, got buffer format {pb.format!r}")
-        if step:
-            if len(pb.shape) not in (1, 2) or (len(pb.shape) == 2 and pb.shape[1] != 1):
-                raise ValueError(f"mojolearn {what}: ids must be (B,) or (B, 1) for a step, got shape {pb.shape}")
-            ids = as_i32_c(x, ndim=None, name="ids")[0].reshape((int(pb.shape[0]), 1))
-        else:
-            if len(pb.shape) != 2:
-                raise ValueError(f"mojolearn {what}: ids must be (B, L), got shape {pb.shape}")
-            ids = as_i32_c(x, ndim=2, name="ids")[0]
-        b, l = int(ids.shape[0]), int(ids.shape[1])
-        if b < 1 or l < 1:
-            raise ValueError(f"mojolearn {what}: B and L must be positive, got ({b}, {l})")
-        if ids.min() < 0 or ids.max() >= self.vocab_size:
-            raise ValueError(f"mojolearn {what}: ids must be in [0, {self.vocab_size})")
-        return ids
-
-    def _check_positions(self, what, state, l):
-        have = state.positions if state is not None else 0
-        if self.max_positions is not None and have + l > self.max_positions:
-            raise ValueError(
-                f"mojolearn {what}: {have} + {l} positions exceed max_positions={self.max_positions} "
-                "(the transformer block's absolute-position ceiling is 8192, DEVIATION 812)")
-        if state is not None and state.positions + l > state.max_tokens:
-            raise ValueError(
-                f"mojolearn {what}: the state was allocated for {state.max_tokens} tokens and holds "
-                f"{state.positions}; {l} more do not fit")
 
     def _run(self, ids, state, step, what):
         return _NATIVE.causal_lm_forward(self, ids, state, step)
