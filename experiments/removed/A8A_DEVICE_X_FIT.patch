@@ -460,7 +460,7 @@ index 2aae8e3763..9a76e01212 100644
      return info
  
 diff --git a/svm/checks/device_select.mojo b/svm/checks/device_select.mojo
-index 70f0b5e456..f6e72d6631 100644
+index bfda794f65..f6e72d6631 100644
 --- a/svm/checks/device_select.mojo
 +++ b/svm/checks/device_select.mojo
 @@ -460,5 +460,48 @@ def upload_i32(
@@ -468,7 +468,7 @@ index 70f0b5e456..f6e72d6631 100644
  
  
 -# TOMBSTONE: check_finite_device + first_nonfinite_kernel (the synchronising first-non-finite scan of the fit X, DEVIATION 636 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr: the fit X's finite word rides back on the stream (core/device_query_x.mojo) and the door refuses in admit_x's wording; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
--# Restore: git apply experiments/removed/A8A_SVM_FIT_FINITE_SCAN.patch
+-# Restore: git apply experiments/removed/A8A_DEVICE_X_FIT.patch
 +def first_nonfinite_kernel(
 +    first: MutPointer[Int32, MutAnyOrigin],
 +    v: MutPointer[Float32, MutAnyOrigin],
