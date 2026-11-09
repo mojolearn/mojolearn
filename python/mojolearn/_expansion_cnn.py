@@ -134,16 +134,14 @@ def _idn(b, bit):
 # lane fam2-neural (2026-10-04): `x_cnn_idn2_flags` (BOTH bindings export it:
 # these switches move bits, so the host column moves with the devices).
 # Bit 0: the softmax mean loss is the blocked device fold (inside the
-# binding; nothing for the glue to choose). Bit 1: the fit epoch's row order
-# and Adam step scalars come from device kernels (`x_cnn_epoch_rows`,
-# `x_cnn_adam_hyper_d`, `x_cnn_fit_epoch_d`), not the CPU helpers
-# `epoch_order_i32` and `adam_hyper_f64`.
+# binding; nothing for the glue to choose). Bit 1: reserved (0; the
+# classifier's device epoch was deleted, lane x8-cnn-on-executor).
 # Bit 2 (lane fix-n1-lm-neural): GCNConv's remaining self loops come from
 # `x_cnn_gcn_loops` (a stable device sort and two gathers; the host twin on a
 # CPU-only install), not host NumPy. Copies only: no bit moves.
 # Bit 3: the candidate fold block 256. Bit 4 (lane/review-fixes): the binding
 # was built with -D MOJOLEARN_IDN_ALL_OFF (read by `_device_io_off`).
-_F2_XENT_FOLD, _F2_EPOCH_DEV, _F2_GCN_LOOPS = 1, 2, 4
+_F2_XENT_FOLD, _F2_GCN_LOOPS = 1, 4
 _F2_FOLD_BLOCK_256, _F2_ALL_OFF = 8, 16
 _IDN2_FLAGS = {}
 

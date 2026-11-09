@@ -265,6 +265,8 @@ def _check_configuration() -> Bool:
     # ---- end lane x3-mlp-rnn-predict-on-tape
     # TOMBSTONE: MOJOLEARN_NI18_FUSED_EPOCH_GATHER (removed with its route) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
     # Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
+    # TOMBSTONE: MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF (removed with its route) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+    comptime assert not is_defined["MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF"](), "removed 2026-11-09 (lane/x8-cnn-on-executor): MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF chose the CNNClassifier epoch's row order and Adam scalars between host and device; that epoch is deleted (the classifier trains through Program.fit); recoverable at f59d913b0b, see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_NI18_FUSED_EPOCH_GATHER"](), "removed 2026-11-09 (lane/x8-cnn-on-executor): MOJOLEARN_NI18_FUSED_EPOCH_GATHER fused the CNNClassifier device epoch's row gather, which is deleted (the classifier is a captured program on the executor); never measured; recoverable at f59d913b0b, see docs/TOMBSTONES.md"
     return True
 
