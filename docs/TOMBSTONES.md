@@ -408,6 +408,7 @@ in the tables after the sections.
 | [`vocab_encode_public` + 4 sibling entries (native entries)](#dead-native-entries-batch-3-2026-11) | Tokenizer host (vocab_encode_public, vocab_decode_public, vocab_pretrained_public, vocab_pretokenize_public, vocab_pattern_name) | removed (dead native entries: no live caller) | 2026-11-08 | [dead_entries_tokenizer_vocab_public.patch](../experiments/removed/dead_entries_tokenizer_vocab_public.patch) |
 | [`classical_host_weights`, `pca_query_fields`, `prep_check_info`, `prep_scalar_dtype` (orphan functions)](#dead-native-entries-batch-3-2026-11) | Classical arrays, PCA and preprocessing providers | removed (orphan functions: no caller) | 2026-11-08 | [dead_entries_orphan_functions.patch](../experiments/removed/dead_entries_orphan_functions.patch) |
 | [`_rsvd_core`, `_randomized_decompose`, `_lanczos_top`, `_prepare_folds` (dead Python loops)](#dead-native-entries-batch-3-2026-11) | Decomposition and model selection (Python glue the native owners replaced) | removed (dead Python: no caller) | 2026-11-08 | [dead_python_loops.patch](../experiments/removed/dead_python_loops.patch) |
+| [`MOJOLEARN_PT_COLBATCH`](#mojolearn_pt_colbatch) | Prep | DROP (quality); the opt-in name only | 2026-11-08 | [MOJOLEARN_PT_COLBATCH.patch](../experiments/removed/MOJOLEARN_PT_COLBATCH.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3795,3 +3796,15 @@ public runtime qualification; this entry is not release or performance evidence.
 | `_rsvd_core` (the `range(n_iter)` power iteration over `k.mm` / `k.orth`), `_randomized_decompose`, and their helpers `_seed_of`, `_orthonormal_cols`, `_flip_u` | `python/mojolearn/_expansion_decomp.py` | `@K0SHA_PY@` | public `randomized_svd` routes to the native linalg door; PCA / TruncatedSVD `algorithm='randomized'` run in `x_decomp/pca_randomized.mojo` / `x_decomp/tsvd_owner.mojo`; no caller was left. `test_pca_exact_native_owner.py` no longer patches the two names (it still forbids `_Kit`) | `experiments/removed/dead_python_loops.patch` |
 | `_lanczos_top`, `_lanczos_batch`, `_kdot`, `_LANCZOS_TOL`, `_LANCZOS_MAX_M`, `_LANCZOS_DEV_MAX_FLOATS` | `python/mojolearn/_expansion_decomp.py` | `@K0SHA_PY@` | the top-eigenpair route runs in `bindings/mani_decomp_native.mojo` and `x_decomp/kpca_owner.mojo`; the only caller was the one-off `tools/kernel_pca_gpu_trial.py`, deleted with it (`bench/decomp_fast_quality.py` uses the public estimators and stays) | same patch |
 | `_prepare_folds` and its helpers `_cv_fast_on`, `_native_default_cv`, `_CV_TRUST_FOLDS_BIT` | `python/mojolearn/model_selection.py` | `@K0SHA_PY@` | `cross_val_score` runs `family_msel_cross_val_score`; `bindings/msel_cv.mojo` (`msel_fast_on`, `msel_native_default_cv`) does the fold validation. `_cv_fast_defines` stays (the native context reads it) | same patch |
+
+### MOJOLEARN_PT_COLBATCH
+
+- What it tried: `-D MOJOLEARN_PT_COLBATCH` turned the FAST + Apple PowerTransformer (pt_map, pt_fold) pair into the
+  row-tiled `pt_tile_kernel` + `pt_tile_finish_kernel` (x_prep/fastpt.mojo).
+- Verdict: DROP (quality), EXPERIMENTS.md row 377 (lane/apple-fast-batchv @ 30aa43339): istella 2,262 -> 425 ms, taxi 305 ->
+  54.5 ms, but the lambdas move up to 9.5e-3 relative against define-off. Listed in "Owed deletions" above; lane
+  owed-deletions-D2 kept it because `PT_SCORE` (FAST + Apple default through `PT_SCORE_STABLE`) turns the same kernels on.
+- Deleted: the opt-in name only. `PT_COLBATCH` is now `_FAST_APPLE and PT_SCORE`, so every default build keeps its bits;
+  the only configuration that goes is the define on with `PT_SCORE` off. `tools/batchv_quality.sh` lost its `ptns` arm.
+- Deleted by `@K0SHA_PTCOL@`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_PT_COLBATCH.patch`
+  (x_prep/fastpt.mojo). Refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry existed.
