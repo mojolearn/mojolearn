@@ -99,6 +99,10 @@ def _i32_c(codes):
     return Array.from_list(list(codes), "<i4")
 
 
+
+# TOMBSTONE: P1_DEAD_PY_CURVE_DRIVERS (removed: the unreachable Python curve/metric drivers _FoldCurve, _curves, _fold_curves, _curve_out, _ovr, roc_auc_options, ... and the other unreferenced work functions of _expansion_metrics, _expansion_decomp, _expansion_prep, preprocessing, linear_model, _linalg_impl, _expansion_neighbors, _labels; their native owners are bindings/metrics_exp_curve.mojo and bindings/mcls_ranking.mojo) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+# Restore: experiments/removed/P1_DEAD_PY_CURVE_DRIVERS.patch.
+
 class _Prog:
     """One program: an arena layout, the inputs copied into it, and stages."""
 

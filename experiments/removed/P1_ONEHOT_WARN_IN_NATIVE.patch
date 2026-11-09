@@ -1,0 +1,77 @@
+diff --git a/bindings/prep_encode_native.mojo b/bindings/prep_encode_native.mojo
+index eaf2a40c45..091e0b3ccd 100644
+--- a/bindings/prep_encode_native.mojo
++++ b/bindings/prep_encode_native.mojo
+@@ -1912,10 +1912,8 @@ def _onehot_fit(model: PythonObject, values: PythonObject, capture: Bool, contex
+ 
+ def _onehot_transform(model: PythonObject, values: PythonObject, inverse: PythonObject, context: PythonObject) raises -> PythonObject:
+     """OneHotEncoder `_transform_encoded`: lookup (or the C08 fit's inverse),
+-    the grouping remap with the unknown slots, and onehot. An unknown-category
+-    warning is left in `context["pending_warning"]` for the shell."""
++    the grouping remap with the unknown slots, and onehot."""
+     var b = native_loaded_module("builtins")
+-    py_setitem(context, "pending_warning", PythonObject(None))
+     var fields = py_fields(model)
+     var n = Int(py=values[3])
+     var d = Int(py=values[4])
+@@ -1966,13 +1964,9 @@ def _onehot_transform(model: PythonObject, values: PythonObject, inverse: Python
+         var bad = _unknown_columns(ran, neg, d)
+         if len(bad) > 0:
+             var where = String("encoded as the infrequent category") if handle_text != "ignore" else String("encoded as all zeros")
+-            # TOMBSTONE: P1_ONEHOT_WARN_IN_NATIVE (removed: warnings.warn through Python inside the native transform; filters and any showwarning hook ran in the operation) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+-            # Restore: experiments/removed/P1_ONEHOT_WARN_IN_NATIVE.patch.
+-            # The warning text is returned to the thin shell (the encode
+-            # context's "pending_warning"), which issues it after this
+-            # native call has returned (_expansion_prep._issue_pending_warning).
+-            py_setitem(context, "pending_warning", PythonObject("Found unknown categories in columns " + _list_text(bad)
+-                       + " during transform. These unknown categories will be " + where + "."))
++            var warnings = Python.import_module("warnings")
++            _ = py_call_typed(warnings.warn, PythonObject("Found unknown categories in columns " + _list_text(bad)
++                              + " during transform. These unknown categories will be " + where + "."), b.UserWarning)
+     return _take2(ran, out, n, W, context)
+ 
+ 
+diff --git a/python/mojolearn/_expansion_prep.py b/python/mojolearn/_expansion_prep.py
+index 1087790896..a7668e8465 100644
+--- a/python/mojolearn/_expansion_prep.py
++++ b/python/mojolearn/_expansion_prep.py
+@@ -39,7 +39,6 @@ from . import _portable_math as math
+ import numbers
+ import operator
+ import os
+-import warnings
+ 
+ from . import _backend
+ from . import _portable_math as _pm
+@@ -1137,29 +1136,15 @@ class OneHotEncoder(_PrepBase):
+         array
+             The transformed data.
+         """
+-        out = _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
+-        _issue_pending_warning()
+-        return out
++        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
+ 
+     def transform(self, X):
+-        out = _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
+-        _issue_pending_warning()
+-        return out
++        return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
+ 
+     def inverse_transform(self, X):
+         return _ENCODE_CALL(self, "inverse_transform", (X,), _ENCODE_CONTEXT)
+ 
+ 
+-def _issue_pending_warning():
+-    # The native transform returns its unknown-category warning text in the
+-    # encode context instead of calling warnings.warn itself, so warning
+-    # filters and showwarning hooks run here, after the native call returned
+-    # (bindings/prep_encode_native.mojo _onehot_transform).
+-    message = _ENCODE_CONTEXT.pop("pending_warning", None)
+-    if message is not None:
+-        warnings.warn(message, UserWarning, stacklevel=3)
+-
+-
+ # ---------------------------------------------------------------- target encoder
+ def _stage_folds(pr, n, n_folds, seed, shuffle, codes=_NONE, n_classes=0):
+     """Stages TargetEncoder's cross-fit fold of every row (lane cpu2-l3-prep:

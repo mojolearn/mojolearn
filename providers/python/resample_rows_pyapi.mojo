@@ -283,6 +283,8 @@ struct ResampleRows(Movable):
             for item in range(0 if self.zero_width else row_items):  # driver-loop: copy every captured trailing element without numeric work
                 var at = dst + (i * row_items + item) * self.layout.itemsize
                 if self.has_objects:
+                    # TOMBSTONE: P1_RESAMPLE_OBJECT_GETITEM (removed: one ndarray __getitem__/__setitem__ per row x element for object and structured arrays) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+                    # Restore: experiments/removed/P1_RESAMPLE_OBJECT_GETITEM.patch.
                     # P1 (audit A #1): the fresh output item holds None at
                     # each object leaf; release those (None has no
                     # finalizer), copy the item's bytes, then own every

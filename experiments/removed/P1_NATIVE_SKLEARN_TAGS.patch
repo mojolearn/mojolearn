@@ -1,0 +1,641 @@
+diff --git a/bindings/classical_native.mojo b/bindings/classical_native.mojo
+index 1248646975..a3bf940f03 100644
+--- a/bindings/classical_native.mojo
++++ b/bindings/classical_native.mojo
+@@ -20,8 +20,7 @@ from bindings.classical_door_routes import (
+ )
+ from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
+ from bindings.classical_pandas import classical_admit_value, classical_admit_fields
+-# TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+-# Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
++from bindings.classical_tags import classical_tags
+ from bindings.classical_validate import classical_refuse_sparse, classical_estimator_name, classical_weight_refusal
+ from bindings.classical_host_owner import classical_host_entries, classical_host_hash
+ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+@@ -243,6 +242,9 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
+         if operation == "is_fitted":
+             result = classical_is_fitted(model)
+             return result.steal_data()
++        if operation == "sklearn_tags":
++            result = classical_tags(context)
++            return result.steal_data()
+         if operation == "model_sha256":
+             if not Bool(py=py_get(context, "classical_explicit_cpu", False)):
+                 raise Error("AttributeError: model_sha256 belongs to the explicit host model interface")
+diff --git a/bindings/classical_tags.mojo b/bindings/classical_tags.mojo
+new file mode 100644
+index 0000000000..b579fb4727
+--- /dev/null
++++ b/bindings/classical_tags.mojo
+@@ -0,0 +1,126 @@
++# SPDX-License-Identifier: Apache-2.0
++# Construct the standard sklearn tag records through their native slots.
++# Dataclass constructors and Python setattr/getattribute never run here.
++from std.python import Python, PythonObject
++from bindings.native_loaded_module import native_loaded_module
++from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
++
++
++def _tag_record_plan(cls: PythonObject, records: PythonObject, context: PythonObject) raises -> PythonObject:
++    # One record type's slots: (name, member descriptor, nested record index
++    # or -1, immutable value). The explicit values are the ones the regressor
++    # tags always carry: estimator_type "regressor", a required target, and
++    # the nested target/input/regressor records; every other field keeps its
++    # declared dataclass default. No dataclass constructor runs.
++    var b = Python.import_module("builtins")
++    if py_type(cls) is not b.type:
++        raise Error("TypeError: sklearn tags require standard classes without metaclass hooks")
++    var class_fields = py_call(b.type.__dict__["__dict__"].__get__, cls)
++    var declared = py_get(class_fields, "__dataclass_fields__")
++    if declared is None or py_type(declared) is not b.dict:
++        raise Error("TypeError: sklearn tag records must be standard dataclasses")
++    var missing = py_get(py_call(b.object.__getattribute__, Python.import_module("dataclasses"), "__dict__"), "MISSING")
++    var names = py_call(b.list, declared.keys())
++    var slots = Python.list()
++    for j in range(len(names)):  # driver-loop: over the record type's declared tag fields
++        var name = names[j]
++        if py_type(name) is not b.str:
++            raise Error("TypeError: sklearn tag field names must be native strings")
++        var descriptor = py_get(class_fields, name)
++        if py_type(descriptor) is not context["native_member_descriptor"]:
++            raise Error("TypeError: sklearn tag fields must be native member descriptors")
++        var nested = -1
++        var value = PythonObject(None)
++        var field = String(name)
++        if cls is records[3] and field == "target_tags":
++            nested = 0
++        elif cls is records[3] and field == "input_tags":
++            nested = 1
++        elif cls is records[3] and field == "regressor_tags":
++            nested = 2
++        elif cls is records[3] and field == "estimator_type":
++            value = PythonObject("regressor")
++        elif cls is records[0] and field == "required":
++            value = PythonObject(True)
++        else:
++            value = declared[name].default
++            if value is missing:
++                raise Error("TypeError: sklearn tag field has no immutable default: " + field)
++            if value is not None and py_type(value) is not b.bool and py_type(value) is not b.str:
++                raise Error("TypeError: sklearn tag defaults must be immutable native metadata")
++        py_call(slots.append, Python.tuple(name, descriptor, nested, value))
++    return Python.tuple(cls, py_call(b.tuple, slots))
++
++
++def classical_tag_plan(context: PythonObject) raises -> PythonObject:
++    """The sklearn tag record layout, read from the loaded sklearn module the
++    first time sklearn asks for tags, then kept on the connected context."""
++    var plan = context["classical_tag_plan"]
++    if plan is not None:
++        return plan
++    var b = Python.import_module("builtins")
++    var module = py_get(Python.import_module("sys").modules, "sklearn.utils._tags")
++    if module is None:
++        try:
++            module = Python.import_module("sklearn.utils._tags")
++        except error:
++            raise Error("ImportError: " + String(error))
++    var fields = py_call(b.object.__getattribute__, module, "__dict__")
++    var records = Python.list()
++    var classes = Python.tuple("TargetTags", "InputTags", "RegressorTags", "Tags")
++    for k in range(len(classes)):  # small-loop(classes: sklearn tag record type names): the four standard records
++        var cls = py_get(fields, classes[k])
++        if cls is None:
++            raise Error("ImportError: sklearn.utils lacks " + String(classes[k]))
++        py_call(records.append, cls)
++    var built = Python.list()
++    for k in range(len(records)):  # small-loop(records: sklearn tag record types): the four standard records
++        py_call(built.append, _tag_record_plan(records[k], records, context))
++    plan = py_call(b.tuple, built)
++    py_setitem(context, "classical_tag_plan", plan)
++    return plan
++
++
++def classical_tags(context: PythonObject) raises -> PythonObject:
++    var b = native_loaded_module("builtins")
++    var plan = classical_tag_plan(context)
++    if py_type(plan) is b.str:
++        raise Error("ImportError: " + String(plan))
++    if py_type(plan) is not b.tuple:
++        raise Error("TypeError: sklearn tag metadata must be a native tuple")
++    var objects = Python.list()
++    for k in range(len(plan)):  # driver-loop: over the four connected sklearn metadata record types
++        var record = plan[k]
++        if py_type(record) is not b.tuple or len(record) != 2:
++            raise Error("TypeError: sklearn tag record metadata differs")
++        var cls = record[0]
++        if py_type(cls) is not b.type:
++            raise Error("TypeError: sklearn tags require standard classes without metaclass hooks")
++        var fields = py_call(b.type.__dict__["__dict__"].__get__, cls)
++        var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
++        if len(mro) != 2 or mro[1] is not b.object or py_get(fields, "__del__") is not None:
++            raise Error("TypeError: sklearn tags require standard native record lifetime")
++        var slots = record[1]
++        if py_type(slots) is not b.tuple:
++            raise Error("TypeError: sklearn tag slots must be native metadata")
++        var value = py_call(b.object.__new__, cls)
++        for j in range(len(slots)):  # driver-loop: over connected native member descriptors
++            var slot = slots[j]
++            if py_type(slot) is not b.tuple or len(slot) != 4 or py_type(slot[0]) is not b.str:
++                raise Error("TypeError: sklearn tag slot metadata differs")
++            var descriptor = slot[1]
++            if py_type(descriptor) is not context["native_member_descriptor"] or py_get(fields, slot[0]) is not descriptor:
++                raise Error("TypeError: sklearn tag slot was replaced by a Python descriptor")
++            var nested = Int(py=slot[2])
++            var content = slot[3]
++            if nested >= 0:
++                if nested >= k:
++                    raise Error("TypeError: sklearn tag reference order differs")
++                content = objects[nested]
++            elif content is not None and py_type(content) is not b.bool and py_type(content) is not b.str:
++                raise Error("TypeError: sklearn tag defaults must be native immutable metadata")
++            py_call(descriptor.__set__, value, content)
++        py_call(objects.append, value)
++    if len(objects) != 4:
++        raise Error("TypeError: sklearn tag metadata must contain its four standard records")
++    return objects[3]
+diff --git a/bindings/maxabs_native.mojo b/bindings/maxabs_native.mojo
+index 8bc382bcd5..cc0eb3875e 100644
+--- a/bindings/maxabs_native.mojo
++++ b/bindings/maxabs_native.mojo
+@@ -7,8 +7,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
+ from bindings.native_error_class import error_without_class
+ from bindings.native_loaded_module import native_loaded_module
+ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+-# TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+-# Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
++from bindings.scaler_tags_native import scaler_tags
+ from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
+ from bindings.classical_arrays import classical_address, classical_typed
+ from bindings.classical_metadata import classical_is_fitted
+@@ -187,6 +186,8 @@ def maxabs_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") ->
+                     raise Error("mojolearn: invalid parameter for MaxAbsScaler")
+                 py_setitem(fields,names[k],options[names[k]])
+             result = model
++        elif operation == "tags":
++            result = scaler_tags(model,context,PythonObject(None))
+         elif operation == "is_fitted":
+             result = classical_is_fitted(model)
+         elif operation == "fit" or operation == "fit_transform":
+diff --git a/bindings/minmax_native.mojo b/bindings/minmax_native.mojo
+index b90f5183d1..ea4000ff4c 100644
+--- a/bindings/minmax_native.mojo
++++ b/bindings/minmax_native.mojo
+@@ -24,8 +24,7 @@ from bindings.scaler_lifecycle_native import _run, _direct, _entries, _fitted, _
+ from core.scaler_fit_impl import scaler_all_finite, scaler_refuse_infinite_columns, scaler_feature_indices
+ from bindings.minmax_metadata import _flag, minmax_range_pair
+ from bindings.minmax_archive_native import minmax_archive_load, minmax_archive_save
+-# TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+-# Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
++from bindings.scaler_tags_native import scaler_tags
+ 
+ alias F32P = MutPointer[Float32, MutUntrackedOrigin]
+ 
+@@ -474,6 +473,8 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") ->
+                 _ = py_call(fields.clear)
+                 _ = minmax_initialize(model,values)
+             result = model
++        elif operation == "tags":
++            result = scaler_tags(model,context,Python.tuple("float32"))
+         elif operation == "is_fitted":
+             result = PythonObject(_fitted(_fields(model)))
+         elif operation == "fit":
+diff --git a/bindings/robust_native.mojo b/bindings/robust_native.mojo
+index 43c040c2d1..5f45974711 100644
+--- a/bindings/robust_native.mojo
++++ b/bindings/robust_native.mojo
+@@ -7,8 +7,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
+ from bindings.native_error_class import error_without_class
+ from bindings.native_loaded_module import native_loaded_module
+ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+-# TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+-# Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
++from bindings.scaler_tags_native import scaler_tags
+ from bindings.classical_attributes import classical_connect_numpy, classical_check_layout, classical_getattribute
+ from bindings.classical_arrays import classical_typed, classical_is_array, classical_input
+ from bindings.native_numpy_metadata import native_numpy_dtype
+@@ -323,6 +322,8 @@ def robust_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") ->
+                     raise Error("mojolearn: invalid parameter for RobustScaler")
+                 py_setitem(fields,keys[k],options[keys[k]])
+             result = model
++        elif operation == "tags":
++            result = scaler_tags(model,context,PythonObject(None))
+         elif operation == "is_fitted":
+             result = classical_is_fitted(model)
+         elif operation == "fit" or operation == "fit_transform":
+diff --git a/bindings/scaler_lifecycle_native.mojo b/bindings/scaler_lifecycle_native.mojo
+index 893498e230..2bd9410cc9 100644
+--- a/bindings/scaler_lifecycle_native.mojo
++++ b/bindings/scaler_lifecycle_native.mojo
+@@ -21,8 +21,7 @@ from bindings.classical_archive_read import classical_archive_read, _archive_exa
+ from bindings.classical_exceptions import classical_not_fitted_class
+ from bindings.causal_exception import causal_borrowed_item, causal_set_exception
+ from bindings.classical_pandas import native_pandas_exact, classical_admit_value
+-# TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+-# Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
++from bindings.scaler_tags_native import scaler_tags
+ from bindings.prep_entry_cache import prep_mode_checked
+ from bindings.sequential_inputs import sequential_input
+ from bindings.sequential_admission import _ordinary_torch
+@@ -708,6 +707,8 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") ->
+                 _ = py_call(fields.clear)
+                 _ = scaler_initialize(model,values)
+             result = model
++        elif op == "tags":
++            result = scaler_tags(model,context,Python.tuple("float32"))
+         elif op == "is_fitted":
+             result = PythonObject(_fitted(py_fields(model)))
+         elif op == "transform":
+diff --git a/bindings/scaler_tags_native.mojo b/bindings/scaler_tags_native.mojo
+new file mode 100644
+index 0000000000..8c191fde1c
+--- /dev/null
++++ b/bindings/scaler_tags_native.mojo
+@@ -0,0 +1,182 @@
++# SPDX-License-Identifier: Apache-2.0
++# scikit-learn's tag records for the scalers (StandardScaler, MinMaxScaler and
++# their subclasses), built through the records' native member slots.
++#
++# Cold contract: scikit-learn calls `__sklearn_tags__`, so the tag module is
++# loaded here on first use when the caller has not imported scikit-learn yet
++# (API shell work: one module lookup, the same as bindings/classical_tags.mojo).
++# `import mojolearn` itself never imports scikit-learn or NumPy, and the
++# records returned are always scikit-learn's own dataclass types. No dataclass
++# constructor, default factory, setattr or Python tag callback runs.
++from bindings.native_loaded_module import native_loaded_module
++from std.python import Python, PythonObject
++from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains, py_setitem
++from bindings.classical_attributes import _type_fields, _type_mro
++
++
++def _tags_module() raises -> PythonObject:
++    # The loaded module when scikit-learn is already imported; otherwise load
++    # it now. scikit-learn absent raises ImportError, as before.
++    var module = py_get(native_loaded_module("sys").modules, "sklearn.utils._tags")
++    if module is None:
++        try:
++            module = Python.import_module("sklearn.utils._tags")
++        except error:
++            raise Error("ImportError: " + String(error))
++    return module
++
++
++def _class_metadata(model: PythonObject, name: String, default: PythonObject) raises -> PythonObject:
++    # Class attribute lookup through the MRO's own dictionaries (no
++    # __getattribute__/__getattr__ hooks, no descriptors invoked).
++    var bases = _type_mro(py_type(model))
++    for k in range(len(bases)):  # driver-loop: over the estimator class ancestry
++        var fields = _type_fields(bases[k])
++        if py_contains(fields, name):
++            return fields[name]
++    return default
++
++
++def _overrides(value: PythonObject, declared: PythonObject, what: String) raises -> PythonObject:
++    # Admission of a `_sklearn_input_tags` / `_sklearn_target_tags` override:
++    # an ordinary dict of declared field name -> bool. Anything else is refused
++    # before any record is built.
++    var b = native_loaded_module("builtins")
++    if py_type(value) is not b.dict:
++        raise Error("TypeError: " + what + " must be a dict of tag names to booleans")
++    var names = py_call(b.list, value)
++    for k in range(len(names)):  # driver-loop: over the override field names
++        var name = names[k]
++        if py_type(name) is not b.str:
++            raise Error("TypeError: " + what + " names must be strings")
++        if py_type(value[name]) is not b.bool:
++            raise Error("TypeError: " + what + "[" + String(name) + "] must be a bool")
++        if not py_contains(declared, name):
++            raise Error("AttributeError: " + what + " names an unknown tag field: " + String(name))
++    return value
++
++
++def _record_class(fields: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
++    var b = native_loaded_module("builtins")
++    var cls = py_get(fields, name)
++    if cls is None or py_type(cls) is not b.type:
++        raise Error("ImportError: sklearn.utils lacks the standard " + name + " record")
++    var own = _type_fields(cls)
++    var mro = _type_mro(cls)
++    if len(mro) != 2 or mro[1] is not b.object or py_get(own, "__del__") is not None:
++        raise Error("TypeError: sklearn tags require standard native record lifetime")
++    var declared = py_get(own, "__dataclass_fields__")
++    if declared is None or py_type(declared) is not b.dict:
++        raise Error("TypeError: sklearn tag records must be standard dataclasses")
++    return cls
++
++
++def _build(cls: PythonObject, values: PythonObject, missing: PythonObject, context: PythonObject) raises -> PythonObject:
++    # One record: every declared field from `values` when named there,
++    # otherwise its declared immutable default.
++    var b = native_loaded_module("builtins")
++    var own = _type_fields(cls)
++    var declared = own["__dataclass_fields__"]
++    var names = py_call(b.list, declared)
++    var record = py_call(b.object.__new__, cls)
++    for j in range(len(names)):  # driver-loop: over the record type's declared tag fields
++        var name = names[j]
++        if py_type(name) is not b.str:
++            raise Error("TypeError: sklearn tag field names must be native strings")
++        var descriptor = py_get(own, name)
++        if py_type(descriptor) is not context["native_member_descriptor"]:
++            raise Error("TypeError: sklearn tag fields must be native member descriptors")
++        var content: PythonObject
++        if py_contains(values, name):
++            content = values[name]
++        else:
++            content = declared[name].default
++            if content is missing:
++                raise Error("TypeError: sklearn tag field has no immutable default: " + String(name))
++            if content is not None and py_type(content) is not b.bool and py_type(content) is not b.str:
++                raise Error("TypeError: sklearn tag defaults must be immutable native metadata")
++        _ = py_call(descriptor.__set__, record, content)
++    return record
++
++
++def _preserved_dtypes(model: PythonObject, fixed_dtypes: PythonObject) raises -> PythonObject:
++    # A fresh list each call. StandardScaler/MinMaxScaler fix ["float32"];
++    # the others read their class's `_sklearn_preserves_dtype` (default none).
++    var b = native_loaded_module("builtins")
++    var names = fixed_dtypes
++    if names is None:
++        names = _class_metadata(model, "_sklearn_preserves_dtype", Python.tuple())
++    if py_type(names) is not b.tuple and py_type(names) is not b.list:
++        raise Error("TypeError: _sklearn_preserves_dtype must be a tuple of dtype names")
++    var out = Python.list()
++    for k in range(len(names)):  # driver-loop: over the declared dtype names
++        if py_type(names[k]) is not b.str:
++            raise Error("TypeError: _sklearn_preserves_dtype names must be strings")
++        _ = py_call(out.append, names[k])
++    return out
++
++
++def scaler_tags(model: PythonObject, context: PythonObject, fixed_dtypes: PythonObject) raises -> PythonObject:
++    """scikit-learn's `Tags` for a scaler instance: the shared estimator
++    answer (estimator type, target/input overrides, requires_fit) with
++    transformer tags. `fixed_dtypes`: the preserved dtype names when the
++    estimator fixes them, or None to read `_sklearn_preserves_dtype`."""
++    var b = native_loaded_module("builtins")
++    var module = _tags_module()
++    if py_type(module) is not context["native_module_type"]:
++        raise Error("TypeError: sklearn tags require the ordinary sklearn metadata module")
++    var fields = py_fields(module)
++    var target_cls = _record_class(fields, "TargetTags", context)
++    var input_cls = _record_class(fields, "InputTags", context)
++    var transformer_cls = _record_class(fields, "TransformerTags", context)
++    var classifier_cls = _record_class(fields, "ClassifierTags", context)
++    var regressor_cls = _record_class(fields, "RegressorTags", context)
++    var tags_cls = _record_class(fields, "Tags", context)
++    var missing = py_get(py_fields(Python.import_module("dataclasses")), "MISSING")
++
++    # Metadata admission, all before any record is built.
++    var kind = py_get(py_fields(model), "_estimator_type", _class_metadata(model, "_estimator_type", PythonObject(None)))
++    if kind is not None and py_type(kind) is not b.str:
++        raise Error("TypeError: _estimator_type must be a string or None")
++    var kind_name = String("") if kind is None else String(py=kind)
++    var requires_fit = _class_metadata(model, "_sklearn_requires_fit", PythonObject(True))
++    if py_type(requires_fit) is not b.bool:
++        raise Error("TypeError: _sklearn_requires_fit must be a bool")
++    if py_get(py_fields(model), "_sklearn_instance_target_tags") is not None or _class_metadata(model, "_sklearn_instance_target_tags", PythonObject(None)) is not None:
++        raise Error("TypeError: scaler tags take _sklearn_target_tags metadata, not an _sklearn_instance_target_tags callback")
++    var target_declared = _type_fields(target_cls)["__dataclass_fields__"]
++    var input_declared = _type_fields(input_cls)["__dataclass_fields__"]
++    var target_overrides = _overrides(_class_metadata(model, "_sklearn_target_tags", Python.dict()), target_declared, "_sklearn_target_tags")
++    var input_overrides = _overrides(_class_metadata(model, "_sklearn_input_tags", Python.dict()), input_declared, "_sklearn_input_tags")
++    var preserved = _preserved_dtypes(model, fixed_dtypes)
++    var accepts_sparse = context["sklearn_accepts_sparse"]
++    if py_type(accepts_sparse) is not b.frozenset:
++        raise Error("TypeError: scaler tag metadata lacks the sparse-input class names")
++
++    # TargetTags: a required target for classifiers and regressors, then the
++    # class's own overrides.
++    var target_values = Python.dict()
++    py_setitem(target_values, "required", PythonObject(kind_name == "classifier" or kind_name == "regressor"))
++    _ = py_call(target_values.update, target_overrides)
++    # InputTags: the shared sparse-input class names (_sk_validate's
++    # input_tag_overrides), then the class's own overrides.
++    var input_values = Python.dict()
++    var bases = _type_mro(py_type(model))
++    for k in range(len(bases)):  # driver-loop: over the estimator class ancestry
++        var name = py_call(b.type.__dict__["__name__"].__get__, bases[k])
++        if py_contains(accepts_sparse, name):
++            py_setitem(input_values, "sparse", PythonObject(True))
++            break
++    _ = py_call(input_values.update, input_overrides)
++    var transformer_values = Python.dict()
++    py_setitem(transformer_values, "preserves_dtype", preserved)
++
++    var tag_values = Python.dict()
++    py_setitem(tag_values, "estimator_type", kind)
++    py_setitem(tag_values, "target_tags", _build(target_cls, target_values, missing, context))
++    py_setitem(tag_values, "input_tags", _build(input_cls, input_values, missing, context))
++    py_setitem(tag_values, "transformer_tags", _build(transformer_cls, transformer_values, missing, context))
++    py_setitem(tag_values, "classifier_tags", _build(classifier_cls, Python.dict(), missing, context) if kind_name == "classifier" else PythonObject(None))
++    py_setitem(tag_values, "regressor_tags", _build(regressor_cls, Python.dict(), missing, context) if kind_name == "regressor" else PythonObject(None))
++    py_setitem(tag_values, "requires_fit", requires_fit)
++    return _build(tags_cls, tag_values, missing, context)
+diff --git a/python/mojolearn/_expansion_prep.py b/python/mojolearn/_expansion_prep.py
+index 6d22a8c619..1087790896 100644
+--- a/python/mojolearn/_expansion_prep.py
++++ b/python/mojolearn/_expansion_prep.py
+@@ -47,7 +47,7 @@ from ._array import Array
+ from ._buffer import as_f32_c, as_i32_c, addr_ro, addr as _addr_rw, _as_typed, empty, full
+ from . import _labels
+ from . import _arena_io
+-from ._mode import SklearnTagsMixin, available_if, _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT, sklearn_tags as _sklearn_tags
++from ._mode import SklearnTagsMixin, available_if, _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
+ from ._native_declared_params import ENTRY as _DECLARED_PARAMS_SET, CONTEXT as _DECLARED_PARAMS_CONTEXT
+ from ._native_robust_bridge import native_method as _native_robust_method
+ 
+@@ -718,9 +718,7 @@ class RobustScaler(_PrepBase):
+         return _ROBUST_CALL(self, "set_params", (params,), _ROBUST_CONTEXT)
+ 
+     def __sklearn_tags__(self):
+-        # scikit-learn tag metadata is built in the Python compatibility
+-        # layer; no native code calls into tag handling.
+-        return _sklearn_tags(self)
++        return _ROBUST_CALL(self, "tags", (), _ROBUST_CONTEXT)
+ 
+     def __sklearn_is_fitted__(self):
+         return _ROBUST_CALL(self, "is_fitted", (), _ROBUST_CONTEXT)
+@@ -796,7 +794,7 @@ class MaxAbsScaler(_PrepBase):
+         return _MAXABS_CALL(self, "set_params", (params,), _MAXABS_CONTEXT)
+ 
+     def __sklearn_tags__(self):
+-        return _sklearn_tags(self)
++        return _MAXABS_CALL(self, "tags", (), _MAXABS_CONTEXT)
+ 
+     def __sklearn_is_fitted__(self):
+         return _MAXABS_CALL(self, "is_fitted", (), _MAXABS_CONTEXT)
+diff --git a/python/mojolearn/_mode.py b/python/mojolearn/_mode.py
+index 699f4b6f13..d5ef8a152b 100644
+--- a/python/mojolearn/_mode.py
++++ b/python/mojolearn/_mode.py
+@@ -57,7 +57,7 @@ def _guard_cpu_training(method):
+     return method
+ 
+ 
+-def sklearn_tags(est, preserves_dtype=None):
++def sklearn_tags(est):
+     """scikit-learn's tag protocol (1.6+) for a mojolearn estimator, read only
+     by scikit-learn, so importing it here needs no dependency.
+ 
+@@ -76,9 +76,6 @@ def sklearn_tags(est, preserves_dtype=None):
+     - `_sklearn_instance_target_tags()`: target tag overrides that depend
+       on the instance's parameters.
+     - `_sklearn_requires_fit = False` for a stateless transformer.
+-
+-    `preserves_dtype` fixes the transformer tags' dtype names for an
+-    estimator whose `transform` always keeps them (the float32 scalers).
+     """
+     from sklearn.utils import (ClassifierTags, InputTags, RegressorTags,  # glue: sklearn tag protocol, imported only when sklearn asks
+                                Tags, TargetTags, TransformerTags)
+@@ -92,8 +89,7 @@ def sklearn_tags(est, preserves_dtype=None):
+                 requires_fit=getattr(cls, "_sklearn_requires_fit", True))
+     if callable(getattr(est, "transform", None)):
+         tags.transformer_tags = TransformerTags(
+-            preserves_dtype=list(getattr(cls, "_sklearn_preserves_dtype", ()) if preserves_dtype is None
+-                                 else preserves_dtype))
++            preserves_dtype=list(getattr(cls, "_sklearn_preserves_dtype", ())))
+     from ._sk_validate import input_tag_overrides
+     for name, value in input_tag_overrides(cls).items():  # glue: sklearn tag field overrides by name
+         setattr(tags.input_tags, name, value)
+diff --git a/python/mojolearn/_native_classical_bridge.py b/python/mojolearn/_native_classical_bridge.py
+index c13e999d08..467bb0c477 100644
+--- a/python/mojolearn/_native_classical_bridge.py
++++ b/python/mojolearn/_native_classical_bridge.py
+@@ -191,6 +191,10 @@ def _state_context():
+                    native_module_type=ModuleType, not_fitted_bridges=_ERROR_BRIDGES,
+                    not_fitted_reduce=_reduce_not_fitted, not_fitted_restore=_restore_not_fitted,
+                    active_not_fitted_class=NotFittedError)
++    # The sklearn tag record layout is read natively from the loaded sklearn
++    # module the first time sklearn asks for tags (bindings/classical_tags.mojo),
++    # so connecting never imports the optional sklearn dependency.
++    context.update(classical_tag_plan=None, native_member_descriptor=MemberDescriptorType)
+     context.update(connect_warnings())
+     context.update(_classical_doors(_binding))
+     archive_types = (io.BytesIO, io.FileIO, io.BufferedReader, io.BufferedWriter, io.BufferedRandom)
+diff --git a/python/mojolearn/_native_maxabs_bridge.py b/python/mojolearn/_native_maxabs_bridge.py
+index 4b9998814b..fe1b275f87 100644
+--- a/python/mojolearn/_native_maxabs_bridge.py
++++ b/python/mojolearn/_native_maxabs_bridge.py
+@@ -14,6 +14,9 @@ def connect(scaler_class):
+ 
+     context = _state_context()
+     context["output_context"] = _numpy_free_context()
++    # sklearn tags: the shared sparse-input class names (_sk_validate.input_tag_overrides)
++    from ._sk_validate import _ACCEPTS_SPARSE
++    context["sklearn_accepts_sparse"] = _ACCEPTS_SPARSE
+     connected = {}
+     for mode in ("identical", "fast"):  # glue: fixed numeric-mode ABI setup
+         try:
+diff --git a/python/mojolearn/_native_minmax_bridge.py b/python/mojolearn/_native_minmax_bridge.py
+index 47bacca228..e7ed0f2867 100644
+--- a/python/mojolearn/_native_minmax_bridge.py
++++ b/python/mojolearn/_native_minmax_bridge.py
+@@ -12,6 +12,9 @@ def connect(scaler_class):
+ 
+     context = _state_context()
+     context["output_context"] = _numpy_free_context()
++    # sklearn tags: the shared sparse-input class names (_sk_validate.input_tag_overrides)
++    from ._sk_validate import _ACCEPTS_SPARSE
++    context["sklearn_accepts_sparse"] = _ACCEPTS_SPARSE
+     connected = {}
+     for mode in ("identical", "fast"):  # glue: fixed numeric-mode ABI setup
+         try:
+diff --git a/python/mojolearn/_native_robust_bridge.py b/python/mojolearn/_native_robust_bridge.py
+index c5a9fa2d52..98877ce21f 100644
+--- a/python/mojolearn/_native_robust_bridge.py
++++ b/python/mojolearn/_native_robust_bridge.py
+@@ -14,6 +14,9 @@ def connect(scaler_class, qselect):
+ 
+     context = _state_context()
+     context["output_context"] = _numpy_free_context()
++    # sklearn tags: the shared sparse-input class names (_sk_validate.input_tag_overrides)
++    from ._sk_validate import _ACCEPTS_SPARSE
++    context["sklearn_accepts_sparse"] = _ACCEPTS_SPARSE
+     connected = {}
+     for mode in ("identical", "fast"):  # glue: fixed numeric-mode ABI setup
+         try:
+diff --git a/python/mojolearn/_native_scaler_bridge.py b/python/mojolearn/_native_scaler_bridge.py
+index c5dda79d4f..286b9f0f12 100644
+--- a/python/mojolearn/_native_scaler_bridge.py
++++ b/python/mojolearn/_native_scaler_bridge.py
+@@ -12,6 +12,9 @@ def connect(scaler_class):
+     context = _state_context()
+     context["native_module_type"] = ModuleType
+     context["output_context"] = _numpy_free_context()
++    # sklearn tags: the shared sparse-input class names (_sk_validate.input_tag_overrides)
++    from ._sk_validate import _ACCEPTS_SPARSE
++    context["sklearn_accepts_sparse"] = _ACCEPTS_SPARSE
+     connected = {}
+     for mode in ("identical", "fast"):  # glue: fixed numeric-mode ABI connection
+         try:
+diff --git a/python/mojolearn/linear_model.py b/python/mojolearn/linear_model.py
+index 93c31119d8..9abe23bfe4 100644
+--- a/python/mojolearn/linear_model.py
++++ b/python/mojolearn/linear_model.py
+@@ -28,7 +28,7 @@ from ._labels import (
+     encode_labels, flatten_labels, sorted_classes, threshold_codes,
+ )
+ from . import _native_archive_bridge, _native_classical_bridge
+-from ._mode import NumericModeMixin, sklearn_tags as _sklearn_tags
++from ._mode import NumericModeMixin
+ from ._sample_weight import check_sample_weight
+ 
+ #: The model file formats (the classical host inference lane, 2026-09-13).
+@@ -657,9 +657,7 @@ class LinearRegression(NumericModeMixin):
+         return _native_classical(self, "is_fitted", (), _CLASSICAL)
+ 
+     def __sklearn_tags__(self):
+-        # scikit-learn tag metadata is built in the Python compatibility
+-        # layer; no native code calls into tag handling.
+-        return _sklearn_tags(self)
++        return _native_classical(self, "sklearn_tags", (), _CLASSICAL)
+ 
+     def vendor_used(self):
+         """The backend this estimator runs on.
+@@ -938,9 +936,7 @@ class Ridge(NumericModeMixin):
+         return _native_classical(self, "is_fitted", (), _CLASSICAL)
+ 
+     def __sklearn_tags__(self):
+-        # scikit-learn tag metadata is built in the Python compatibility
+-        # layer; no native code calls into tag handling.
+-        return _sklearn_tags(self)
++        return _native_classical(self, "sklearn_tags", (), _CLASSICAL)
+ 
+     def vendor_used(self):
+         """The backend this estimator runs on.
+diff --git a/python/mojolearn/preprocessing.py b/python/mojolearn/preprocessing.py
+index 7d0fc4ed8e..599e125584 100644
+--- a/python/mojolearn/preprocessing.py
++++ b/python/mojolearn/preprocessing.py
+@@ -17,7 +17,7 @@ from ._labels import is_bool
+ 
+ from . import _backend, _serialize
+ from ._arrays import _addr, _addr_ro
+-from ._mode import PublicOutputsMixin, sklearn_tags as _sklearn_tags
++from ._mode import PublicOutputsMixin
+ 
+ __all__ = ['MinMaxScaler', 'StandardScaler']
+ 
+@@ -379,9 +379,7 @@ class MinMaxScaler(_ScalerProtocol):
+         return _MINMAX_CALL(self, "set_params", (params,), _MINMAX_CONTEXT)
+ 
+     def __sklearn_tags__(self):
+-        # scikit-learn tag metadata is built in the Python compatibility
+-        # layer; no native code calls into tag handling.
+-        return _sklearn_tags(self, preserves_dtype=["float32"])
++        return _MINMAX_CALL(self, "tags", (), _MINMAX_CONTEXT)
+ 
+     def __sklearn_is_fitted__(self):
+         return _MINMAX_CALL(self, "is_fitted", (), _MINMAX_CONTEXT)
+@@ -608,7 +606,7 @@ class StandardScaler(_ScalerProtocol):
+         return _STANDARD_CALL(self, "set_params", (params,), _STANDARD_CONTEXT)
+ 
+     def __sklearn_tags__(self):
+-        return _sklearn_tags(self, preserves_dtype=["float32"])
++        return _STANDARD_CALL(self, "tags", (), _STANDARD_CONTEXT)
+ 
+     def __sklearn_is_fitted__(self):
+         return _STANDARD_CALL(self, "is_fitted", (), _STANDARD_CONTEXT)

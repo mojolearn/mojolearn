@@ -1,0 +1,112 @@
+diff --git a/bindings/kmeans_native.mojo b/bindings/kmeans_native.mojo
+index 930bdaf156..2ea2b4ceae 100644
+--- a/bindings/kmeans_native.mojo
++++ b/bindings/kmeans_native.mojo
+@@ -18,7 +18,7 @@ from std.python import Python, PythonObject
+ from bindings.admitted_family import (
+     admit_family, admit_family_weights, admit_family_input, admit_family_cast, admitted_family_x,
+ )
+-from bindings.admitted_input import AdmittedX, admit_x_unrecorded, admitted_finite_refuse
++from bindings.admitted_input import AdmittedX, admit_x_unrecorded, admit_rows_host, admitted_finite_refuse
+ from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
+ from bindings.native_loaded_module import native_loaded_module
+ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
+@@ -27,7 +27,7 @@ from bindings.classical_attributes import classical_connect_numpy
+ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
+ from bindings.family_common import (
+     FAMILY_F32P, family_repr, family_str, family_is_str, family_is_int, family_isinstance, family_type_name,
+-    family_call, family_entry, family_array, family_nonfinite, family_field,
++    family_call, family_call_kw, family_entry, family_array, family_nonfinite, family_field,
+ )
+ from bindings.classical_arrays import classical_is_f32, classical_c_order
+ from core.host_finite_scan import host_all_finite_f32
+@@ -220,7 +220,7 @@ def _kmeans_x(source: PythonObject, context: PythonObject) raises -> AdmittedX:
+ 
+ def _kmeans_host_x(source: PythonObject, x: AdmittedX, context: PythonObject) raises -> AdmittedX:
+     """`x` with host words: a resident fold whose operation has no device-X
+-    entry (sample weights, the host binding) is gathered on
++    entry (sample weights, a callable init, the host binding) is gathered on
+     the host out of model selection's host base, tested in the gather."""
+     if x.store.active():
+         return admit_x_unrecorded(source, _KMEANS_EST, context)
+@@ -240,11 +240,25 @@ def _kmeans_metric(fields: PythonObject, context: PythonObject) raises -> Int:
+     return Int(py=family_call(native_loaded_module("builtins").int, metric))
+ 
+ 
+-# P1 (audit A #2, audit B #3): _kmeans_callable_init removed; it imported
+-# NumPy, built numpy.random.RandomState and called the user's init(X, k,
+-# random_state=...) inside fit. A callable init is now refused before it is
+-# called (as MiniBatchKMeans already does, bindings/cluster_fit_a_native.mojo
+-# _init_array); the seeds of 'k-means++' and 'random' are drawn natively.
++def _kmeans_callable_init(init: PythonObject, source: PythonObject, k: PythonObject,
++                          random_state: PythonObject) raises -> PythonObject:
++    """scikit-learn's callable `init` (`init(X, n_clusters,
++    random_state=random_state)`), called once with the fit's rows: a NumPy
++    array and a RandomState seeded by `random_state` when NumPy is
++    installed, the input and the int otherwise."""
++    var data = source
++    var state = random_state
++    var numpy = PythonObject(None)
++    try:
++        numpy = Python.import_module("numpy")
++    except:
++        numpy = PythonObject(None)
++    if numpy is not None:
++        data = family_call(numpy.asarray, source)
++        state = family_call(numpy.random.RandomState, random_state)
++    var keywords = Python.dict()
++    py_setitem(keywords, "random_state", state)
++    return family_call_kw(init, keywords, data, k)
+ 
+ 
+ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
+@@ -271,11 +285,12 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
+                         + ", got " + family_repr(init))
+         init_code = Int(py=inits[init])
+     elif Bool(py=py_call(b.callable, init)):
+-        # Refused before it is called: a Python init would run Python code
+-        # inside the fit. PyCallable_Check through builtins.callable runs no
+-        # user code.
+-        raise Error("TypeError: Python init callbacks are not accepted; pass explicit initial centers "
+-                    + "(an array of shape (n_clusters, n_features)) or use 'k-means++' or 'random'")
++        init_code = _INIT_ARRAY
++        if door_is_device_rows(source, context):
++            # scikit-learn's callable receives the fit's rows: a fold's host
++            # rows (gathered once, tested; the fit then reads them).
++            source = admit_rows_host(source, _KMEANS_EST, context)
++        init_centroids = _kmeans_callable_init(init, source, k_obj, family_field(fields, "random_state"))
+     elif family_is_int(init):
+         init_code = Int(py=family_call(b.int, init))
+     else:
+diff --git a/python/mojolearn/cluster.py b/python/mojolearn/cluster.py
+index 0b56650655..a32c61a3c4 100644
+--- a/python/mojolearn/cluster.py
++++ b/python/mojolearn/cluster.py
+@@ -121,12 +121,12 @@ class KMeans(NumericModeMixin):
+     ----------
+     n_clusters : int, default 8
+         Number of clusters. Must not exceed the number of rows.
+-    init : {'k-means++', 'random', 'array'} or array, default 'k-means++'
++    init : {'k-means++', 'random', 'array'}, array or callable, default 'k-means++'
+         How the starting centers are chosen. 'array' takes them from
+         `init_centroids`. An array of shape `(n_clusters, n_features)` is used
+         directly as the starting centers (`init_centroids` is then ignored).
+-        A callable is not accepted: compute the starting centers first and
+-        pass them as an array.
++        A callable is called as `init(X, n_clusters, random_state)` and must
++        return such an array.
+     n_init : int, default 1
+         Number of restarts. Each restart draws different starting centers;
+         the one with the lowest final inertia is kept.
+@@ -217,8 +217,9 @@ class KMeans(NumericModeMixin):
+         self.oversampling_factor = oversampling_factor
+         self.numeric_mode = numeric_mode
+ 
+-    # A callable `init` is refused before it is called (no Python runs in
+-    # the fit: bindings/kmeans_native.mojo); an array `init` takes the
++    # A callable `init` is called once with the fit's rows and its centers
++    # take the 'array' path (bindings/kmeans_native.mojo, scikit-learn's
++    # `init(X, n_clusters, random_state=...)`); an array `init` takes the
+     # 'array' path with `init_centroids` ignored.
+     def fit(self, X, y=None, sample_weight=None):
+         """Compute the k-means clustering of `X`.

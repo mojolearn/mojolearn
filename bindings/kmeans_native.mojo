@@ -240,6 +240,8 @@ def _kmeans_metric(fields: PythonObject, context: PythonObject) raises -> Int:
     return Int(py=family_call(native_loaded_module("builtins").int, metric))
 
 
+# TOMBSTONE: P1_KMEANS_CALLABLE_INIT (removed: the user's callable init plus numpy.asarray / RandomState called inside KMeans.fit) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+# Restore: experiments/removed/P1_KMEANS_CALLABLE_INIT.patch.
 # P1 (audit A #2, audit B #3): _kmeans_callable_init removed; it imported
 # NumPy, built numpy.random.RandomState and called the user's init(X, k,
 # random_state=...) inside fit. A callable init is now refused before it is

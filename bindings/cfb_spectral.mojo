@@ -101,6 +101,8 @@ def _as_i32(source: PythonObject, name: String, context: PythonObject) raises ->
     return admit_typed(source, "<i4", 1, name, context).keep
 
 
+# TOMBSTONE: P1_SPECTRAL_TOCOO (removed: the caller's own tocoo() / toarray() inside spectral fit and predict) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+# Restore: experiments/removed/P1_SPECTRAL_TOCOO.patch.
 # P1 (audit A #4): _tocoo removed. It looked up and called the caller's
 # own `tocoo()` (SciPy's Python conversion, or any object's method) inside
 # fit. A sparse input is now an exact SciPy container read natively from its
