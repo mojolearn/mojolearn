@@ -47,7 +47,7 @@ def _device_logit(
 
 
 @always_inline
-def chunked_lm_head_v2_row_body(
+def chunked_lm_head_v2_row_body(  # device-helper: one row of the rows kernel, also the host arm's per-owner body
     row: Int,
     row_max: MutPointer[Float32, MutAnyOrigin],
     row_denom: MutPointer[Float32, MutAnyOrigin],
@@ -205,7 +205,7 @@ def _enqueue_loss_total(
 
 
 @always_inline
-def chunked_lm_head_v2_dhidden_body(
+def chunked_lm_head_v2_dhidden_body(  # device-helper: one row of the dHidden kernel, also the host arm's per-owner body
     row: Int,
     d_hidden: MutPointer[Float32, MutAnyOrigin],
     hidden: MutPointer[Float32, MutAnyOrigin],
@@ -258,7 +258,7 @@ def chunked_lm_head_v2_dhidden_kernel(
 
 
 @always_inline
-def chunked_lm_head_v2_dweight_body(
+def chunked_lm_head_v2_dweight_body(  # device-helper: one vocabulary entry of the dWeight kernel, also the host arm's per-owner body
     token: Int,
     d_weight: MutPointer[Float32, MutAnyOrigin],
     hidden: MutPointer[Float32, MutAnyOrigin],
