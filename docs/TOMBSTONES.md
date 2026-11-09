@@ -4410,6 +4410,7 @@ the old sequence moved M; the driver always reads M in place and uploads it once
   flip now runs in the selected mode's binding; every step follows RKit's residency), the same on NVIDIA, AMD and Apple
   within the version. RUN OWED: the randomized-svd row on NVIDIA and AMD (speed), the randomized_svd identity lane.
 - Code recoverable at `f7d10d2b09`; patch `experiments/removed/A3_ADMISSION_HELPERS.patch`.
+- **Restored 2026-11-09** (lane r1-restore-measured-winners; AGENTS.md "A measured winner is never deleted on reasoning"): `MOJOLEARN_RSVD_FAST_DEVSCAN` restored 2026-11-09 by fe8ea8a804 as behaviour inside the one call: the one driver did NOT do the same work (its admission scans M on the host, in parallel: a host pass the measured default never paid). The caller defers M's finite test when `x_decomp_s_flags` bit 1 is set (FAST + Apple) and the driver tests the device copy at M's one upload (RKit.device_tested -> RDev.upload_finite -> resident.mojo dev_upload_finite_run); `-D MOJOLEARN_RSVD_FAST_DEVSCAN_OFF` is the A/B arm again. `MOJOLEARN_RSVD_FAST_DIRECT_IN` / `MOJOLEARN_IDN_RSVD_DIRECT_IN` stay deleted, proven by the code: the one driver borrows a C float32 M (no host copy) and uploads it once into a pooled device matrix from the caller's buffer (RKit.device: Self.D.alloc = pool_alloc, D.upload = dev_upload_run), the work both switches did. No bit change. Owed row `r1-rsvd-devscan` (Apple FAST, paused).
 
 ## One int32 id cast (2026-11-09)
 
@@ -4613,6 +4614,7 @@ tools/parallel_gram_check.py (the one-GPU multi-device gate) still read them.
 - Verdict: never measured, deleted. no EXPERIMENTS.md verdict row for any of the thirteen defines. Recorded one-sample M3 evidence (2026-10-06, kept in the deleted comments): F01 task B/A 0.48-1.21, full PCA istella 717.3 -> 710.4 ms, taxi 102.6 -> 97.1 ms; scoped PCA fit HOLD-quality (scoped-pca-fit-istella-q-v1); F02 LU factor B/A 0.62-0.96 (slower), Cholesky fit 0.95 / solve 0.98 with mixed controls; F05 0.89-1.12, quality equal. Mixed, never admitted, and will not be measured.
 - Also removed: tools/scoped_gemm_quality.py, scoped_gemm_preflight_spec.py, test_scoped_gemm_readiness.py, scoped_pca_fit.py, scoped_pca_fit_spec.py, scoped_pca_recover.py, test_scoped_pca_fit_contract.py, softmax_g2_quality.py, the probe binding row of tools/verify_coverage_audit.py, the apple_fast_job_policy entries and nine coverage rows. tools/test_release_no_hands.py keeps listing `identical/_mojolearn_scoped_gemm_probe.so` as a stale artifact to remove.
 - Deleted by `0a1dfdf971`; code recoverable at `f59d913b0b` (= `0a1dfdf971^` for this group). Patch `experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch` (code files only; the guard refusal is not in it). Records: guard refusal, EXPERIMENTS.md row, this section.
+- **Restored 2026-11-09** (lane r1-restore-measured-winners; AGENTS.md "A measured winner is never deleted on reasoning"): `MOJOLEARN_CHOL_FAST_SHARED_SUB` restored 2026-11-09 by 7ae21c97ed (Apple FAST work is paused, not deleted; one M3 sample fit B/A 0.95): the define (default OFF, as before), its route in cholesky/checks/fast_trsm.mojo, the `gp_shared_sub_count` counter and the one kernel it needs (`scoped_kernel` + the shared-subtract counter, experiments/apple_fast/gemm/scoped_dispatch.mojo) verbatim from f59d913b0b; the guard no longer refuses it. The rest of the scoped adapter family and MOJOLEARN_LU_FAST_SHARED_SUB stay deleted. Owed row `r1-chol-shared-sub` (Apple FAST, paused).
 <a id="n9-every-dense-eigh-on-the-executor-ops-2026-11-09"></a>
 
 ## N9: every dense eigh on the executor ops (2026-11-09)
@@ -4915,6 +4917,7 @@ per arm on NVIDIA and AMD.
   `experiments/six_lane_integration/grid_controls/neural-gemm-attn-dedupe.json`; rows in `docs/apple-fast/EXPERIMENTS.md`.
 - Code recoverable at `f59d913b0b`; patch `experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch` (the reverse of the
   lane's change to the code files; `git apply` restores the old routes and removes the program door).
+- **Restored 2026-11-09** (lane r1-restore-measured-winners; AGENTS.md "A measured winner is never deleted on reasoning"): restored 2026-11-09 by 7ffb47642e (lane commits through a4c7493cd6) as op `small_mlp` (OPS_SMALL_MLP 88, tag 116; autograd/small_mlp_op.mojo, small_mlp_host.mojo, small_mlp_cells.mojo): the leaf-128 step GEMM (`neural_model_leaf_into[128]`, `MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF` live again), the `_mlp_kernel` launches and the rules_small_mlp backward chain from f59d913b0b, captured by the small-MLP program by default; the transpose + OPS_LINEAR capture is the A/B arm `-D MOJOLEARN_SMALL_MLP_GENERIC_OPS`. The per-call upload, host finite scans and the Apple FAST fused / resident sessions stay deleted (plumbing; AFN_MLP_* were merged-unmeasured). Bits: the op's forward / backward words are the 0.8.66 hand step's; CE and AdamW stay the program's, so mlp / par-mlp / training-mlp-sessions / predict_logits_sessions re-record on every column. Owed row `r1-small-mlp-op`.
 ## CNNClassifier hand epoch replaced by one captured program (2026-11-09)
 
 Lane `x8-cnn-on-executor` (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` row X8), branch
@@ -4958,6 +4961,7 @@ Lane `x8-cnn-on-executor` (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.m
   `x-cnn-trainer-options` re-record at the one pre-release run. RUN OWED: board rows `algos/cnn-clf/synthetic` fit and
   infer on NVIDIA and AMD, program vs `f59d913b0b`.
 - Code recoverable at `f59d913b0b`; patch `experiments/removed/X8_CNN_HAND_EPOCH.patch`.
+- **Restored 2026-11-09** (lane r1-restore-measured-winners; AGENTS.md "A measured winner is never deleted on reasoning"): restored 2026-11-09 by 6986d50ee2 (lane commits through 33bfed4272) as ops `cnn_conv_block` (OPS_CNN_CONV_BLOCK 90, tag 117) and `cnn_linear` (OPS_CNN_LINEAR 91, tag 118): the CNN program captures the x_cnn entries `conv_block_forward_into[True]` / `conv_block_backward_into[True]` / `linear_forward_into[True]` / `linear_backward_into[True]` with `CnnRules._block` / `_head`'s arguments (git show f59d913b0b:autograd/rules_cnn.mojo) by default; the generic chain is the A/B arm `-D MOJOLEARN_CNN_GENERIC_OPS`. The epoch drivers, per-call uploads, host epoch order, NI18 gather and IDN_CNN_EPOCH_DEV stay deleted (plumbing). Bits: conv block and head kernels are 0.8.66's again; loss and Adam stay the program's, so x-cnn-trainer / x-cnn-trainer-options re-record on every column. Owed row `r1-cnn-ops` in bench/results/paper_compare/owed-pre0867.json.
 
 ## CNNClassifier predict on a resident session (2026-11-09)
 
@@ -5048,6 +5052,7 @@ origin/integ/pre-0867-w2 f59d913b0b.
   one on NVIDIA; the session is today's default and bits. RUN OWED: transformer-forward on NVIDIA (0.8.66 1.44x slower
   than 0.8.55). Patch `experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch`; refusal in
   `core/experiment_guards_neural.mojo`; no `grid_controls` entry existed.
+  **Restored 2026-11-09** by 144f3abd5a (lane commits 6fd6ed5601, 597874fe0c) as the OPS_ATTN_STEP fresh prefill arm (`attn_step_fresh_prefill`, autograd/block_step_ops.mojo; 0.8.66's `_transformer_run_session[True]` body), the default for every stateless forward; tonight's generic op run is the A/B arm `-D MOJOLEARN_TRANSFORMER_GENERIC_PREFILL`. The per-call `transformer_forward_fresh`, descriptor op 4, both build defines and both runtime switches are live again with their pre-x4 meaning (refusals lifted). No bit change on any column. Owed row `r1-transformer-prefill` (three arms: default, GENERIC_PREFILL, env MOJOLEARN_TRANSFORMER_SESSION_FRESH=0).
 - `TransformerBlock._call`, `_call_impl`, `_call_fresh`, `_call_fresh_session`, `_call_int15`, `_admit_state_profile`,
   `_weight_addrs` and the module helpers `_state_buf`, `_batch_tokens`, `_refuse_resident` in
   `python/mojolearn/_transformer_impl.py`: no caller (forward, step and backward are the native `neural_block_*` door).
