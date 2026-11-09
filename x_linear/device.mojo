@@ -392,6 +392,11 @@ def bayes_wgram_fin_kernel(n: Int32, d: Int32, gparts: FP, fw: FP, wf: IP, woff:
             st(fw, dd + dd * dd + (c - cells), v)
     witness_end(wf, woff, nonce)
 
+#: BayesianRidge iterations between host reads of the stop word off Apple
+#: (lane n2-cd-qn-glm-loops; the FAST Apple batch is C1_BATCH = 8 too)
+comptime BAYES_IDN_READ = 8
+
+
 def bayes_coef_kernel(fw: FP, res: FP, d: Int32, state: FP, wf: IP, woff: Int32, nonce: Int32):
     """Thread j: the next iteration's coefficient j (`bayes_coef_one`, lambda
     and alpha from state) unless the step stopped (its final update wrote them)."""
@@ -424,8 +429,10 @@ def bayes_eig_kernel(fw: FP, fp: FP, res: FP, ip: IP, d: Int32, nb: Int32, ypart
     witness_end(wf, woff, nonce)
 
 def bayes_resid_kernel(x: FP, y: FP, n: Int32, d: Int32, fw: FP, res: FP, state: FP, rows: FP, wf: IP, woff: Int32, nonce: Int32):
+    """Row i's residual; a stopped fit (state[5] != 0) writes nothing, so
+    iterations queue past the stop (lane n2-cd-qn-glm-loops)."""
     var i = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
-    if i < Int(n):
+    if i < Int(n) and ld(state, 5) == Float32(0):
         var dd = Int(d)
         var p = Float32(0)
         for j in range(dd):
@@ -433,10 +440,11 @@ def bayes_resid_kernel(x: FP, y: FP, n: Int32, d: Int32, fw: FP, res: FP, state:
         st(rows, i, fs(fs(ld(y, i), ld(state, 2)), p))
     witness_end(wf, woff, nonce)
 
-def bayes_part_kernel(rows: FP, y: FP, n: Int32, sw: Int32, parts: FP, wf: IP, woff: Int32, nonce: Int32):
+def bayes_part_kernel(rows: FP, y: FP, n: Int32, sw: Int32, parts: FP, state: FP, wf: IP, woff: Int32, nonce: Int32):
+    """Row block bk's sse partial; gated on state[5] like `bayes_resid_kernel`."""
     var bk = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var nn = Int(n)
-    if bk < fold_blocks(nn):
+    if bk < fold_blocks(nn) and ld(state, 5) == Float32(0):
         var lo = bk * FOLD_BLOCK
         st(parts, bk, _sse_part(rows, y, nn, sw != 0, lo, min(FOLD_BLOCK, nn - lo)))
     witness_end(wf, woff, nonce)
@@ -444,13 +452,17 @@ def bayes_part_kernel(rows: FP, y: FP, n: Int32, sw: Int32, parts: FP, wf: IP, w
 def bayes_step_kernel(fw: FP, res: FP, fp: FP, d: Int32, nb: Int32, parts: FP, state: FP, it: Int32, wf: IP, woff: Int32, nonce: Int32):
     """One thread: the nb row-block sse partials folded blocks ascending,
     then the scalar update (`bayes_step`, O(d) folds); `bayes_coef_kernel`
-    then writes the next coefficients a thread each."""
-    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+    then writes the next coefficients a thread each. A stopped fit (state[5]
+    != 0) does nothing; a live step stores the iterations run, it + 1, into
+    state[8], so the host reads the count with the stop word once per
+    BAYES_IDN_READ iterations (lane n2-cd-qn-glm-loops)."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0 and ld(state, 5) == Float32(0):
         var sse = fold_parts(parts, 0, Int(nb))
         var r = bayes_step(fw, res, Int(d), fp, ld(state, 1), ld(state, 0), sse, ld(state, 3), Int(it))
         st(state, 0, r[1])
         st(state, 1, r[0])
         st(state, 5, Float32(r[2]))
+        st(state, 8, i2f(Int(it) + 1))
     witness_end(wf, woff, nonce)
 
 #: FAST on Apple (lane/apple-fast-classical, re-expressed on the grid
@@ -5683,7 +5695,8 @@ def fit_device(
                             else:
                                 ctx.enqueue_function[bayes_part_kernel](
                                     drows.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(sw), dparts.unsafe_ptr(),
-                                    wit2.p(), Int32(_xg_blocks(n)), nonce, grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
+                                    dstate.unsafe_ptr(), wit2.p(), Int32(_xg_blocks(n)), nonce,
+                                    grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
                                 )
                             if wit2.ok(ctx, _xg_blocks(n) + pblocks, "Bayes residuals"):
                                 break
@@ -5704,7 +5717,10 @@ def fit_device(
                         break
                     fresh = hst[6] == Float32(0)
                 max_iter = 0  # the loop below ran here
-        for it in range(max_iter):
+        var bayes_read = BAYES_IDN_READ
+        comptime if has_apple_gpu_accelerator():
+            bayes_read = 1
+        for it in range(max_iter):  # driver-loop: over iterations; the stop word is read every bayes_read
             iters = it + 1
             if gram_sse:
                 var ng = wit2.begin()
@@ -5738,7 +5754,8 @@ def fit_device(
                 else:
                     ctx.enqueue_function[bayes_part_kernel](
                         drows.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(sw), dparts.unsafe_ptr(),
-                        wit2.p(), Int32(_xg_blocks(n)), nonce, grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
+                        dstate.unsafe_ptr(), wit2.p(), Int32(_xg_blocks(n)), nonce,
+                        grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
                     )
                 if wit2.ok(ctx, _xg_blocks(n) + pblocks, "Bayes residuals"):
                     break
@@ -5756,10 +5773,17 @@ def fit_device(
             )
             if not wit2.ok(ctx, 1 + _xg_blocks(d), "Bayes step"):
                 wit2.fail()
-            ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dstate)
-            ctx.synchronize()
-            if hst[5] != Float32(0):
-                break
+            # lane n2-cd-qn-glm-loops: the stop word and the count come home
+            # once per `bayes_read` iterations; the kernels of an iteration
+            # queued after the stop write nothing (state[5] gates them), so
+            # the fit ends at the same step with the same words. Apple reads
+            # every iteration (its witness reruns a cut iteration).
+            if (it + 1) % bayes_read == 0 or it + 1 == max_iter:
+                ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dstate)
+                ctx.synchronize()
+                if hst[5] != Float32(0):
+                    iters = Int(hst[8])
+                    break
         var nf = wit2.begin()
         if dev_iters:
             ctx.enqueue_function[c1_bayes_finish_kernel](
