@@ -92,7 +92,8 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     # (lane a8d): the PCA start's pca_fit_owned returns X's finite status
     # word over its upload, before its eigensolver's result is used; the
     # other starts ask x_ann_tsne_fit for it (params[12]). No host scan.
-    # TOMBSTONE: the door's host_all_finite_f32 scan of X deleted 2026-11-09 by lane a8d-device-x-decomp-manifold; code recoverable at 0ce88411d3.
+    # TOMBSTONE: mani_tsne_native.mojo door host scan of X (host_all_finite_f32) deleted 2026-11-09 by lane a8d-device-x-decomp-manifold; code recoverable at 0ce88411d3.
+    # Restore: experiments/removed/A8D_DECOMP_MANIFOLD_HOST_FINITE.patch.
     var x = snapshot.keep
     var x_address = snapshot.source.addr
     var n = snapshot.source.rows

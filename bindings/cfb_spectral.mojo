@@ -252,6 +252,8 @@ def _x_decomp_input(source: PythonObject, context: PythonObject) raises -> Pytho
             and Bool(py=family_call(b.hasattr, x, PythonObject("nnz")))
             and Bool(py=family_call(b.hasattr, x, PythonObject("format")))):
         x = family_call(py_call(b.getattr, x, PythonObject("toarray")))
+    # TOMBSTONE: cfb_spectral.mojo second host scans after admission (four sites) deleted 2026-11-09 by lane a8d-device-x-decomp-manifold; code recoverable at 0ce88411d3.
+    # Restore: experiments/removed/A8D_DECOMP_MANIFOLD_HOST_FINITE.patch.
     # Lane a8d: the finiteness refusal is the admission's own (tested in the
     # cast pass, or one parallel scan of a borrowed X, or in a fold's
     # gather), not a second scan after it; the same sentence.

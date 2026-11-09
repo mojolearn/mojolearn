@@ -777,6 +777,8 @@ struct MKit(Movable):
         var c = value.source.cols
         if len(value.shape) != 2 or r == 0 or c == 0:
             raise Error(name + ": a nonempty two-dimensional input is required")
+        # TOMBSTONE: mani_kit.mojo from_snapshot host scan (host_all_finite_f32 before the resident upload) deleted 2026-11-09 by lane a8d-device-x-decomp-manifold; code recoverable at 0ce88411d3.
+        # Restore: experiments/removed/A8D_DECOMP_MANIFOLD_HOST_FINITE.patch.
         var nd = self._devbuf(r * c)
         var flagged = kit_call(self.xd(), XD_DEV_UPLOAD_FINITE, [value.source.addr],
                                [Int(py=device_identifier(nd)), r * c], List[Float64](), True)

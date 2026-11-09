@@ -106,6 +106,8 @@ def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: Python
     """`NMF.fit_transform(X, W=None, H=None)`: W."""
     var fields = py_fields(model)
     decomp_set_mode(fields, context)
+    # TOMBSTONE: NMF admission host scan of a borrowed X deleted 2026-11-09 by lane a8d-device-x-decomp-manifold; code recoverable at 0ce88411d3.
+    # Restore: experiments/removed/A8D_DECOMP_MANIFOLD_HOST_FINITE.patch.
     # Lane a8d: X is not scanned here (defer_finite); the driver tests it in
     # its negativity total and returns the status word.
     var admitted = decomp_admit(source, "NMF", context, defer_finite=True)
