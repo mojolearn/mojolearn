@@ -47,10 +47,15 @@ struct FamilyLifecycle(Copyable, Movable):
     var classifier: Bool     # discrete labels; public ClassLabels classes_ after fit
     var required: Bool       # fit refuses y=None
     var widen: Bool          # float32 result widened exactly to float64 for outside callers
+    # The owner has device-X fold entries (lane a7d): a model-selection fold
+    # whose store ids resolve reaches it as the DeviceRows itself (no host
+    # gather here); its entry gathers the rows on the device.
+    var device_x: Bool
 
     def __init__(out self, method: String, requires_fit: Bool = True, scan: Bool = False,
                  replace: Bool = True, graph: Bool = False, target: Int = -1,
-                 classifier: Bool = False, required: Bool = False, widen: Bool = False):
+                 classifier: Bool = False, required: Bool = False, widen: Bool = False,
+                 device_x: Bool = False):
         self.method = method
         self.requires_fit = requires_fit
         self.scan = scan
@@ -60,6 +65,7 @@ struct FamilyLifecycle(Copyable, Movable):
         self.classifier = classifier
         self.required = required
         self.widen = widen
+        self.device_x = device_x
 
 
 def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
@@ -111,21 +117,23 @@ def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
         return FamilyLifecycle("predict", widen=True)
     if operation == "family_xn_graph_svgp_score":
         return FamilyLifecycle("score")
-    # KMeans (bindings/kmeans_native.mojo): its own by-name non-finite refusal;
-    # a fit's X reaches the owner as the caller passed it (array init receives
-    # the rows). Perf (lane perf2-cluster): predict and transform take the
-    # admitted float32 snapshot, so X is admitted and cast once per query
-    # (the owner then only scans it for its by-name refusal), not twice.
+    # KMeans (bindings/kmeans_native.mojo): a fit's X reaches the owner as the
+    # caller passed it (array init receives the rows). Perf (lane
+    # perf2-cluster): predict and transform take the admitted float32
+    # snapshot, so X is admitted and cast once per query, not twice. Lane
+    # a7d: no scan here; the owner's kernel entry returns X's finite status
+    # word over its own upload, and a resident fold reaches the owner as the
+    # DeviceRows for its device-X entries (`device_x`).
     if operation == "family_kmeans_fit":
-        return FamilyLifecycle("fit", replace=False)
+        return FamilyLifecycle("fit", replace=False, device_x=True)
     if operation == "family_kmeans_fit_predict":
-        return FamilyLifecycle("fit_predict", replace=False)
+        return FamilyLifecycle("fit_predict", replace=False, device_x=True)
     if operation == "family_kmeans_fit_transform":
-        return FamilyLifecycle("fit_transform", replace=False)
+        return FamilyLifecycle("fit_transform", replace=False, device_x=True)
     if operation == "family_kmeans_predict":
-        return FamilyLifecycle("predict")
+        return FamilyLifecycle("predict", device_x=True)
     if operation == "family_kmeans_transform":
-        return FamilyLifecycle("transform")
+        return FamilyLifecycle("transform", device_x=True)
     # LinearSVC / LinearSVR (bindings/svc_linear_native.mojo, svm_mixture_native.mojo).
     if operation == "family_svc_linear_svc_fit":
         return FamilyLifecycle("fit", scan=True, replace=False, target=2, classifier=True, required=True)
@@ -221,11 +229,15 @@ def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, oper
         # scans it a second time. A fit keeps an owned copy, as below.
         # A door whose spec does not scan accepts NaN: the fold is not
         # refused either (lane a6; admit_x's no-check mode).
-        var x = admit_x(admitted, source, name, context, x_index, finite=spec.scan)
+        var x = admit_x(admitted, source, name, context, x_index, finite=spec.scan, device_x=spec.device_x)
         rows = x.rows
         columns = x.cols
-        source = x.array
-        py_setitem(values, PythonObject(x_index), admit_family_owned(x.array, context) if spec.replace and fitting else x.array)
+        if not x.store.active():
+            source = x.array
+            py_setitem(values, PythonObject(x_index), admit_family_owned(x.array, context) if spec.replace and fitting else x.array)
+        # else (lane a7d, `spec.device_x`): the fold stays resident; the
+        # owner receives the DeviceRows and its device entry gathers the
+        # rows (finite and range words returned with its result).
     elif host_sparse_format(source).byte_length() > 0:
         # Sparse X keeps its own owner path (densified there, or a sparse
         # result); only its declared shape is read here.

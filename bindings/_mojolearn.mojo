@@ -183,6 +183,9 @@ from bindings.msel_device import (
     msel_take_rows_binding,
     pca_transform_fold_binding,
     qn_fit_fold_binding,
+    kmeans_fit_fold_binding,
+    kmeans_predict_fold_binding,
+    kmeans_transform_fold_binding,
     msel_scatter_rows_binding,
     msel_proba_column_binding,
     msel_rebase_offsets_i32_binding,
@@ -735,10 +738,15 @@ def kmeans_fit_binding(
     `inertia_check` (False by default, per cuVS) governs only the IN-LOOP
     cost. This docstring used to say "0.0 when it was NEVER COMPUTED",
     which was false (corrected 2026-08-23).
+
+    `params[11]` (OPTIONAL, lane a7d-device-x-decomp-cluster): 1 asks for
+    X's finite status word, tested on the device after the upload; it is
+    then the fifth value returned (0 = finite; a nonzero word means the fit
+    stopped before it ran and the door refuses).
     """
-    if len(params) != 10 and len(params) != 11:
+    if len(params) != 10 and len(params) != 11 and len(params) != 12:
         raise Error(
-            "kmeans_fit: params must hold 10 or 11 values, got "
+            "kmeans_fit: params must hold 10, 11 or 12 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -760,8 +768,11 @@ def kmeans_fit_binding(
     var ii = Int(py=params[8])
     var mm = Int(py=params[9])
     var ovs = Float64(2.0)
-    if len(params) == 11:
+    if len(params) >= 11:
         ovs = Float64(py=params[10])
+    var test = len(params) == 12 and Int(py=params[11]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
 
     var inertia = Float64(0.0)
     var n_iter = 0
@@ -776,6 +787,7 @@ def kmeans_fit_binding(
             # Tried: the lazy convergence read (shift tested every KMEANS_LAZY_EVERY iterations) on the KMeans estimator's fits; kmeans istella 1451.5 -> 1527.7 ms, taxi 977.6 -> 974.8, inertia equal.
             # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch; record in docs/TOMBSTONES.md.
             lazy_shift=False,
+            finite_word=word_addr,
         )
         inertia = r.inertia
         n_iter = r.n_iter
@@ -788,6 +800,8 @@ def kmeans_fit_binding(
     out.append(PythonObject(n_iter))
     out.append(PythonObject(sum_scale))
     out.append(PythonObject(weight_scale))
+    if test:
+        out.append(PythonObject(Int(word[0])))
     return out
 
 
@@ -804,10 +818,12 @@ def kmeans_predict_binding(
     2 n_clusters, 3 metric. `out_labels_addr` is `n_samples` uint32 (the
     caller's int32 array is the same bytes). The pass is `kmeans_fit`'s
     final assignment (`cluster/estimator.mojo::kmeans_predict`), so predict
-    on the training rows is `labels_`."""
-    if len(params) != 4:
+    on the training rows is `labels_`. `params[4]` (OPTIONAL, lane a7d): 1
+    asks for X's finite status word over the upload, returned instead of
+    n_samples (0 = finite)."""
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kmeans_predict: params must hold 4 values, got "
+            "kmeans_predict: params must hold 4 or 5 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -817,10 +833,15 @@ def kmeans_predict_binding(
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
     var mm = Int(py=params[3])
+    var test = len(params) == 5 and Int(py=params[4]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        kmeans_predict(ctx, xp, ns, nf, nc, cp, lp, mm)
+        kmeans_predict(ctx, xp, ns, nf, nc, cp, lp, mm, finite_word=word_addr)
         ctx.synchronize()
+    if test:
+        return PythonObject(Int(word[0]))
     return PythonObject(ns)
 
 
@@ -835,10 +856,11 @@ def kmeans_transform_binding(
 
     `params` is, in this exact order: 0 n_samples, 1 n_features,
     2 n_clusters, 3 metric. `out_addr` is `n_samples x n_clusters` float32,
-    row-major (`cluster/estimator.mojo::kmeans_transform`)."""
-    if len(params) != 4:
+    row-major (`cluster/estimator.mojo::kmeans_transform`). `params[4]`
+    (OPTIONAL, lane a7d): as `kmeans_predict`'s."""
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kmeans_transform: params must hold 4 values, got "
+            "kmeans_transform: params must hold 4 or 5 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -848,10 +870,15 @@ def kmeans_transform_binding(
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
     var mm = Int(py=params[3])
+    var test = len(params) == 5 and Int(py=params[4]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        kmeans_transform(ctx, xp, ns, nf, nc, cp, op, mm)
+        kmeans_transform(ctx, xp, ns, nf, nc, cp, op, mm, finite_word=word_addr)
         ctx.synchronize()
+    if test:
+        return PythonObject(Int(word[0]))
     return PythonObject(ns)
 
 
@@ -869,10 +896,11 @@ def kmeans_fit_transform_binding(
     `out_transform_addr` is `n_samples x n_clusters` float32, written with
     the distances to the final centroids from the design and centroids
     already on the device (`cluster/estimator.mojo::kmeans_transform_device`,
-    the same kernels and bytes as a separate `kmeans_transform`)."""
-    if len(params) != 10 and len(params) != 11:
+    the same kernels and bytes as a separate `kmeans_transform`).
+    `params[11]` (OPTIONAL, lane a7d): as `kmeans_fit_binding`'s."""
+    if len(params) != 10 and len(params) != 11 and len(params) != 12:
         raise Error(
-            "kmeans_fit: params must hold 10 or 11 values, got "
+            "kmeans_fit: params must hold 10, 11 or 12 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -891,8 +919,11 @@ def kmeans_fit_transform_binding(
     var ii = Int(py=params[8])
     var mm = Int(py=params[9])
     var ovs = Float64(2.0)
-    if len(params) == 11:
+    if len(params) >= 11:
         ovs = Float64(py=params[10])
+    var test = len(params) == 12 and Int(py=params[11]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     var inertia = Float64(0.0)
     var n_iter = 0
     var sum_scale = Float64(0.0)
@@ -904,6 +935,7 @@ def kmeans_fit_transform_binding(
             0.0, ovs,
             lazy_shift=False,
             transform_out=tp,
+            finite_word=word_addr,
         )
         inertia = r.inertia
         n_iter = r.n_iter
@@ -915,6 +947,8 @@ def kmeans_fit_transform_binding(
     out.append(PythonObject(n_iter))
     out.append(PythonObject(sum_scale))
     out.append(PythonObject(weight_scale))
+    if test:
+        out.append(PythonObject(Int(word[0])))
     return out
 
 
@@ -949,10 +983,12 @@ def kmeans_predict_resident_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """`kmeans_predict` over resident centroids: the same `params`
-    (n_samples, n_features, n_clusters, metric). Returns n_samples."""
-    if len(params) != 4:
+    (n_samples, n_features, n_clusters, metric, and the optional finite
+    flag of lane a7d). Returns n_samples, or the finite status word when
+    the flag asks for it."""
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kmeans_predict: params must hold 4 values, got "
+            "kmeans_predict: params must hold 4 or 5 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -962,8 +998,13 @@ def kmeans_predict_resident_binding(
     var nc = Int(py=params[2])
     var mm = Int(py=params[3])
     var h = Int(py=handle)
+    var test = len(params) == 5 and Int(py=params[4]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
-        kmeans_predict_resident(h, xp, ns, nf, nc, lp, mm)
+        kmeans_predict_resident(h, xp, ns, nf, nc, lp, mm, finite_word=word_addr)
+    if test:
+        return PythonObject(Int(word[0]))
     return PythonObject(ns)
 
 
@@ -974,10 +1015,12 @@ def kmeans_transform_resident_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """`kmeans_transform` over resident centroids: the same `params`
-    (n_samples, n_features, n_clusters, metric). Returns n_samples."""
-    if len(params) != 4:
+    (n_samples, n_features, n_clusters, metric, and the optional finite
+    flag of lane a7d). Returns n_samples, or the finite status word when
+    the flag asks for it."""
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kmeans_transform: params must hold 4 values, got "
+            "kmeans_transform: params must hold 4 or 5 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -987,8 +1030,13 @@ def kmeans_transform_resident_binding(
     var nc = Int(py=params[2])
     var mm = Int(py=params[3])
     var h = Int(py=handle)
+    var test = len(params) == 5 and Int(py=params[4]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
-        kmeans_transform_resident(h, xp, ns, nf, nc, op, mm)
+        kmeans_transform_resident(h, xp, ns, nf, nc, op, mm, finite_word=word_addr)
+    if test:
+        return PythonObject(Int(word[0]))
     return PythonObject(ns)
 
 
@@ -2253,6 +2301,9 @@ def build__mojolearn() -> PythonObject:
         m.def_function[msel_take_rows_binding]("msel_take_rows")
         m.def_function[pca_transform_fold_binding]("pca_transform_fold")
         m.def_function[qn_fit_fold_binding]("qn_fit_fold")
+        m.def_function[kmeans_fit_fold_binding]("kmeans_fit_fold")
+        m.def_function[kmeans_predict_fold_binding]("kmeans_predict_fold")
+        m.def_function[kmeans_transform_fold_binding]("kmeans_transform_fold")
         m.def_function[msel_scatter_rows_binding]("msel_scatter_rows")
         m.def_function[msel_proba_column_binding]("msel_proba_column")
         m.def_function[msel_rebase_offsets_i32_binding]("msel_rebase_offsets_i32")

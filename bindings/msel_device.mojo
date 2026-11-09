@@ -36,6 +36,7 @@ from core.neural_context import process_ctx
 from core.msel_device_x import msel_device_x_context, msel_store, MSEL_CONTEXT_SLOT
 from decomposition.pca_fold import pca_transform_fold
 from glm.qn_fold import qn_fit_fold
+from cluster.kmeans_fold import kmeans_fit_fold, kmeans_query_fold
 
 #: The store's own context slot (core/msel_device_x.mojo MSEL_CONTEXT_SLOT,
 #: the base binding's `_DEVCTX_SLOT`): one definition, so every reader of the
@@ -345,3 +346,102 @@ def qn_fit_fold_binding(
     var in_range = Int(words[1])
     _ = words^
     return Python.list(iters, finite, in_range)
+
+
+def _mdx_u32_ptr(addr: Int) raises -> MutPointer[UInt32, MutUntrackedOrigin]:
+    if addr <= 0 or addr % 4 != 0:
+        raise Error("kmeans fold: pointers must be positive and 4-byte aligned")
+    return MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=addr)
+
+
+def kmeans_fit_fold_binding(
+    ids: PythonObject,
+    out_centroids_addr: PythonObject,
+    out_labels_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`kmeans_fit` with unit weights over a model-selection fold resident
+    on the device (lane a7d-device-x-decomp-cluster; cluster/kmeans_fold.mojo):
+    `ids` is [base store id, base rows, index store id] in model selection's
+    store (bindings/device_rows_door.mojo door_rows_store); `params` is
+    `kmeans_fit_binding`'s first 11 values with n_weights 0 (n_samples,
+    n_features, n_clusters, 0, max_iter, tol, seed, n_init, init, metric,
+    oversampling_factor). Returns [inertia, n_iter, sum_scale,
+    weight_scale, finite word, range word]; a nonzero word means the fold
+    was not fit and the door refuses."""
+    if len(ids) != 3 or len(params) != 11:
+        raise Error("kmeans_fit_fold: ids must hold 3 values and params 11")
+    if Int(py=params[3]) != 0:
+        raise Error("kmeans_fit_fold: a fold fit takes unit weights (n_weights 0)")
+    var base_id = Int(py=ids[0])
+    var base_rows = Int(py=ids[1])
+    var index_id = Int(py=ids[2])
+    var cp = _mdx_f32_ptr(Int(py=out_centroids_addr))
+    var lp = _mdx_u32_ptr(Int(py=out_labels_addr))
+    var ns = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var mi = Int(py=params[4])
+    var tl = Float64(py=params[5])
+    var sd = UInt64(Int(py=params[6]))
+    var ninit = Int(py=params[7])
+    var ii = Int(py=params[8])
+    var mm = Int(py=params[9])
+    var ovs = Float64(py=params[10])
+    var inertia = Float64(0.0)
+    var n_iter = 0
+    var sum_scale = Float64(0.0)
+    var weight_scale = Float64(0.0)
+    var finite = Int32(0)
+    var in_range = Int32(0)
+    with GILReleased(Python()):
+        var ctx = msel_device_x_context()
+        var r = kmeans_fit_fold(ctx, base_id, base_rows, index_id, ns, nf, nc, cp, lp,
+                                mi, tl, sd, ninit, ii, mm, ovs)
+        inertia = r.fit.inertia
+        n_iter = r.fit.n_iter
+        sum_scale = r.fit.sum_scale
+        weight_scale = r.fit.weight_scale
+        finite = r.finite
+        in_range = r.in_range
+    return Python.list(PythonObject(inertia), PythonObject(n_iter), PythonObject(sum_scale),
+                       PythonObject(weight_scale), PythonObject(Int(finite)), PythonObject(Int(in_range)))
+
+
+def _kmeans_query_fold_call(ids: PythonObject, centroids_addr: PythonObject, out_addr: PythonObject,
+                            params: PythonObject, transform: Bool) raises -> PythonObject:
+    if len(ids) != 3 or len(params) != 4:
+        raise Error("kmeans fold query: ids and params must hold 3 and 4 values")
+    var base_id = Int(py=ids[0])
+    var base_rows = Int(py=ids[1])
+    var index_id = Int(py=ids[2])
+    var cp = _mdx_f32_ptr(Int(py=centroids_addr))
+    var out = Int(py=out_addr)
+    _ = _mdx_u32_ptr(out)
+    var ns = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var mm = Int(py=params[3])
+    var words: Tuple[Int32, Int32]
+    with GILReleased(Python()):
+        var ctx = msel_device_x_context()
+        words = kmeans_query_fold(ctx, base_id, base_rows, index_id, ns, nf, nc, cp, out, mm, transform)
+    return Python.list(Int(words[0]), Int(words[1]))
+
+
+def kmeans_predict_fold_binding(
+    ids: PythonObject, centroids_addr: PythonObject, out_labels_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`kmeans_predict` over a model-selection fold resident on the device
+    (lane a7d): `ids` as `kmeans_fit_fold_binding`'s, `params` [n_samples,
+    n_features, n_clusters, metric]. Returns [finite word, range word]."""
+    return _kmeans_query_fold_call(ids, centroids_addr, out_labels_addr, params, False)
+
+
+def kmeans_transform_fold_binding(
+    ids: PythonObject, centroids_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`kmeans_transform` over a model-selection fold resident on the device
+    (lane a7d): as `kmeans_predict_fold_binding`, `out_addr` n_samples x
+    n_clusters float32."""
+    return _kmeans_query_fold_call(ids, centroids_addr, out_addr, params, True)

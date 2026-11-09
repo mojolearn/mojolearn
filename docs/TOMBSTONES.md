@@ -548,6 +548,7 @@ in the tables after the sections.
 | [Lanczos projected T host assembly (`kpca_owner`, `mani_decomp_native`)](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | KernelPCA / Isomap | REFACTORED (`eigh_op_tridiag`; bits change) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
 | [`labels_helper` / `labels_call` and the `labels_helpers` callables table (`_native_labels_bridge._helpers`)](#labels-steps-on-the-native-device-or-host-selector-2026-11-09) | Labels (prepare_targets, reduce_stat, argmax_rows, gather, class_ratio, fsum) | removed (onto `labels_native_api_v1`, `bindings/labels_native_abi.mojo`, and the in-process host column) | 2026-11-09 | [S1_LABELS_PY_CALL_SELECTOR.patch](../experiments/removed/S1_LABELS_PY_CALL_SELECTOR.patch) |
 | [Synchronising query finite scans of the SVM / GP / KernelRidge predict entries](#svm-gp-and-kernelridge-queries-on-the-device-query-x-2026-11-09) | SVC / SVR / GaussianProcessRegressor / GaussianProcessClassifier / KernelRidge | REFACTORED (status word read back with the result; fold gathered on the device; no bit change) | 2026-11-09 | lane only (lane/a7a-device-x-svm-gp-krr from 5b5490960d) |
+| [`_kmeans_nonfinite` / `_kmeans_f32` and the KMeans query host scan of X](#kmeans-tsvd-pca-deferred-finite-tests-and-fold-entries-2026-11-09) | KMeans (fit, predict, transform) | removed (the kernel entry tests X over its own upload and returns the status word; one refusal wording) | 2026-11-09 | [A7D_KMEANS_HOST_FINITE.patch](../experiments/removed/A7D_KMEANS_HOST_FINITE.patch) |
 ## Retired by lane debt-block-per-n (2026-10-21)
 
 These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
@@ -5064,3 +5065,27 @@ origin/integ/pre-0867-w3 5b5490960d.
 - Verdict: refactor, no define. Bits: none (the same words reach the same kernels). RUN OWED: SVC / SVR / GPR / GPC
   / KernelRidge predict and cross_validate on NVIDIA and AMD against 5b5490960d.
 - Never reached main: recoverable at 5b5490960d (no patch).
+
+## KMeans, TSVD, PCA: deferred finite tests and fold entries (2026-11-09)
+
+Lane a7d-device-x-decomp-cluster (branch `lane/a7d-device-x-decomp-cluster` from `integ/pre-0867-w3` 5b5490960d). Not an
+experiment: a host scan of X whose decision moved into the kernel entry (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md
+section 3.2 steps 3 and 4; docs/plans/REGRESSIONS_0866_VS_0855.md rows C1 / C2 for kmeans, tsvd and pca).
+
+- Removed from `bindings/kmeans_native.mojo`: `_kmeans_nonfinite` (KMeans' own "X contains a NaN or an infinity; a non-finite
+  row has no distance to any center, so it is refused by name" wording), `_kmeans_f32` (admit with the finite scan, then the
+  reworded refusal) and the predict / transform host scan of the admitted snapshot (`host_all_finite_f32` over X). X is now
+  admitted once by `_kmeans_x` (a borrowed X is not scanned; a cast X is tested in the cast) and `kmeans_fit`,
+  `kmeans_fit_transform`, `kmeans_predict`, `kmeans_transform` and their resident forms take a finite flag and return the
+  status word (`core/admitted_finite_status.mojo` on the GPU, `host_all_finite_f32` in the core host binding). The refusal is
+  the one admission wording, "Input X contains NaN or infinity (KMeans)." (init_centroids: "Input init_centroids contains
+  NaN or infinity (KMeans).").
+- Added, no deletion: `cluster/kmeans_fold.mojo` (`kmeans_fit_fold`, `kmeans_query_fold`) and the base binding's
+  `kmeans_fit_fold` / `kmeans_predict_fold` / `kmeans_transform_fold` (`bindings/msel_device.mojo`): a resident
+  cross-validation fold is gathered on the device. `kmeans_fit_device` (cluster/estimator.mojo) is `kmeans_fit`'s unit-weight
+  path after its upload. The family lifecycle's `device_x` spec hands such a fold to the owner as the DeviceRows.
+- PCA (exact solvers) and TruncatedSVD (Gram fit, fit_explained, transform, resident transform) test X at their upload's own
+  synchronisation (`finite_word`); their doors admit with `defer_finite`. The TSVD TSQR and randomized arms and PCA's
+  randomized solver keep a parallel host scan (their drivers upload X in their own executors).
+- Bits: none (the same words reach every kernel; the finite kernel only reads X). Code recoverable at `5b5490960d`;
+  restore with `git apply experiments/removed/A7D_KMEANS_HOST_FINITE.patch`.

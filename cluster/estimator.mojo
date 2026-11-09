@@ -124,6 +124,7 @@ from cluster.impl.detail.min_cluster_distance_compute import (
 )
 from cluster.impl.kmeans import fit_predict, predict
 from core.device_zero import enqueue_fill
+from core.admitted_finite_status import enqueue_finite_status
 from core.row_norms import NORM_TPB, row_norm_kernel
 from cluster.impl.kmeans_params import (
     INIT_ARRAY,
@@ -289,8 +290,17 @@ def kmeans_fit(
     oversampling_factor: Float64 = 2.0,
     lazy_shift: Bool = False,
     transform_out: Optional[MutPointer[Float32, MutUntrackedOrigin]] = None,
+    finite_word: Int = 0,
 ) raises -> KMeansFitResult:
     """Fit k-means on host-resident row-major data. See THE POLICY CHOICES.
+
+    `finite_word` (lane a7d-device-x-decomp-cluster): when nonzero, the host
+    address of one Int32 that receives X's finite status word
+    (core/admitted_finite_status.mojo: 0 = every word finite), tested on the
+    device after the upload this fit makes anyway and read at the scale
+    plan's own synchronisation. A flagged X stops the fit there (nothing
+    else is written; the door refuses). The door then admits a borrowed X
+    with `defer_finite=True`: no host scan of X.
 
     `transform_out` (lane migrate-classical-b2, `KMeans.fit_transform`):
     when given, `n_samples x n_clusters` float32 that receives
@@ -386,11 +396,29 @@ def kmeans_fit(
     ctx.synchronize()
 
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    # Lane a7d: the deferred finite test of X over the words just uploaded
+    # (one grid-stride kernel, no new synchronisation).
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    var word = ctx.enqueue_create_host_buffer[DType.int32](1)
+    if finite_word != 0:
+        enqueue_fill[DType.int32](ctx, status, Int32(0))
+        enqueue_finite_status(ctx, x.unsafe_ptr(), n_samples * n_features, status.unsafe_ptr(), 0)
+        ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
 
     # The scale from the design on the device (`plan_sum_scale`, one
     # fixed-order fold on every vendor and in the host column).
     if sum_scale <= 0.0:
         sum_scale = plan_sum_scale(ctx, x, n_samples, n_features)
+    if finite_word != 0:
+        # plan_sum_scale synchronised already (this is then a no-op); a
+        # requested scale skipped it.
+        ctx.synchronize()
+        var flagged = word.unsafe_ptr()[0]
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = flagged
+        if flagged != 0:
+            return KMeansFitResult(0.0, 0, sum_scale, weight_scale)
+    _ = word^
+    _ = status^
     # DEVIATION 5112: weights above one outgrow the unweighted bound
     # (`weighted_sum_scale_cap`, cluster/impl/kmeans_params.mojo)
     if n_weights != 0 and requested_sum_scale <= 0.0:
@@ -627,6 +655,50 @@ def kmeans_fit_rows_resident(
     )
 
 
+def kmeans_fit_device(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    out_centroids_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_labels_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    max_iter: Int,
+    tol: Float64,
+    seed: UInt64,
+    n_init: Int,
+    init: Int,
+    metric: Int,
+    oversampling_factor: Float64,
+) raises -> KMeansFitResult:
+    """`kmeans_fit` with unit weights on rows already on the device in `x`
+    (lane a7d-device-x-decomp-cluster: a model-selection fold gathered on
+    the device, cluster/kmeans_fold.mojo). Statement for statement the
+    unit-weight path of `kmeans_fit` after its upload: the device scale
+    (`plan_sum_scale`), the exact `n_samples` weight bound, the 1.0 fill,
+    the INIT_ARRAY upload of `out_centroids_ptr`, the same tail. The same
+    words in, the same bits out."""
+    if n_samples < 1 or n_features < 1 or n_clusters < 1 or n_clusters > n_samples:
+        raise Error("kmeans_fit_device: bad shape " + String(n_samples) + " x " + String(n_features)
+                    + " for " + String(n_clusters) + " clusters")
+    var sum_scale = plan_sum_scale(ctx, x, n_samples, n_features)
+    var weight_scale = choose_scale(Float64(n_samples), n_samples)
+    var cd = n_clusters * n_features
+    var weights = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var centroids = ctx.enqueue_create_buffer[DType.float32](cd)
+    var labels = ctx.enqueue_create_buffer[DType.uint32](n_samples)
+    var x_norm = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var min_dist = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    enqueue_fill[DType.float32](ctx, weights, Float32(1.0))
+    if init == INIT_ARRAY:
+        ctx.enqueue_copy(dst_buf=centroids, src_ptr=out_centroids_ptr)
+    return _kmeans_fit_tail(
+        ctx, x, x_norm, weights, centroids, labels, min_dist, n_samples, n_features,
+        n_clusters, out_centroids_ptr, out_labels_ptr, max_iter, tol, seed, n_init, init,
+        metric, oversampling_factor, sum_scale, weight_scale,
+    )
+
+
 def kmeans_predict(
     ctx: DeviceContext,
     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -636,8 +708,14 @@ def kmeans_predict(
     centroids_ptr: MutPointer[Float32, MutUntrackedOrigin],
     out_labels_ptr: MutPointer[UInt32, MutUntrackedOrigin],
     metric: Int = METRIC_L2_EXPANDED,
+    finite_word: Int = 0,
 ) raises:
-    """The nearest centroid of every row: cuML's `KMeans.predict`, which is
+    """`finite_word` (lane a7d): when nonzero, the host address of one Int32
+    that receives X's finite status word, tested on the device after the
+    upload and read back with the labels (no new synchronisation; a nonzero
+    word means the door refuses and discards the labels).
+
+    The nearest centroid of every row: cuML's `KMeans.predict`, which is
     `_predict_labels_inertia` keeping the labels (`kmeans.pyx:1071-1082`),
     one cuVS assignment pass (`kmeans_predict`, `detail/kmeans.cuh`).
 
@@ -674,11 +752,21 @@ def kmeans_predict(
     var labels = ctx.enqueue_create_buffer[DType.uint32](n_samples)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=centroids, src_ptr=centroids_ptr)
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    var word = ctx.enqueue_create_host_buffer[DType.int32](1)
+    if finite_word != 0:
+        enqueue_fill[DType.int32](ctx, status, Int32(0))
+        enqueue_finite_status(ctx, x.unsafe_ptr(), n_samples * n_features, status.unsafe_ptr(), 0)
+        ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
     kmeans_predict_device(
         ctx, x, n_samples, n_features, n_clusters, centroids, labels, metric
     )
     ctx.enqueue_copy(dst_ptr=out_labels_ptr, src_buf=labels)
     ctx.synchronize()
+    if finite_word != 0:
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = word.unsafe_ptr()[0]
+    _ = word^
+    _ = status^
 
 
 def kmeans_predict_device(
@@ -746,8 +834,12 @@ def kmeans_transform(
     centroids_ptr: MutPointer[Float32, MutUntrackedOrigin],
     out_ptr: MutPointer[Float32, MutUntrackedOrigin],
     metric: Int = METRIC_L2_EXPANDED,
+    finite_word: Int = 0,
 ) raises:
-    """The distance from every row to every centroid under the model's
+    """`finite_word` (lane a7d): as `kmeans_predict`'s, read back with the
+    distances.
+
+    The distance from every row to every centroid under the model's
     metric: cuML's `KMeans.transform`, cuVS `kmeans_transform`
     (`detail/kmeans.cuh:1178-1219`). `out_ptr` is written row-major
     `n_samples x n_clusters` float32: squared distances for
@@ -781,9 +873,21 @@ def kmeans_transform(
     ctx.synchronize()
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=centroids, src_ptr=centroids_ptr)
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    var word = ctx.enqueue_create_host_buffer[DType.int32](1)
+    if finite_word != 0:
+        enqueue_fill[DType.int32](ctx, status, Int32(0))
+        enqueue_finite_status(ctx, x.unsafe_ptr(), n_samples * n_features, status.unsafe_ptr(), 0)
+        ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
+    # kmeans_transform_device ends with its own synchronisation: the word is
+    # home when it returns.
     kmeans_transform_device(
         ctx, x, n_samples, n_features, n_clusters, centroids, out_ptr, metric
     )
+    if finite_word != 0:
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = word.unsafe_ptr()[0]
+    _ = word^
+    _ = status^
 
 
 def kmeans_transform_device(

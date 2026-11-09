@@ -77,11 +77,12 @@ _METRIC_SAVED = {
 
 
 # `KMeans.fit`, `predict` and `transform` refuse a NaN or an infinity in X,
-# sample_weight or init_centroids BY NAME before any launch
-# (bindings/kmeans_native.mojo `_kmeans_f32`): before that check a NaN row
-# reached the kernel and `fit` returned a NaN centroid, `inertia_` of
-# FLT_MAX and label -1 for the row, all silently (scikit-learn's
-# `validate_data` refuses the same input).
+# sample_weight or init_centroids (bindings/kmeans_native.mojo `_kmeans_x`;
+# lane a7d: X's finite status word comes from the kernel entry over its own
+# upload, the refusal is the one admission wording "Input X contains NaN or
+# infinity (KMeans)."): before that check a NaN row reached the kernel and
+# `fit` returned a NaN centroid, `inertia_` of FLT_MAX and label -1 for the
+# row, all silently (scikit-learn's `validate_data` refuses the same input).
 
 
 # Maintainer notes (moved from the docstring):
