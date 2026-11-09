@@ -2684,6 +2684,7 @@ def fit_forest[
     feature_importances: Bool = False,
     min_weight_leaf: Float32 = Float32(0),
     notices_to_stderr: Bool = True,
+    weights_on_device: Bool = False,
 ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
     O.DataT == DType.float32
 ):
@@ -2695,7 +2696,7 @@ def fit_forest[
         ctx, x, y, sample_weight, n_rows, n_cols, n_unique_labels,
         rf_params, prep, False, scales, sample_weight_host, row_major,
         oob_score, host_x_addr, tree_start, feature_importances,
-        min_weight_leaf, notices_to_stderr,
+        min_weight_leaf, notices_to_stderr, weights_on_device,
     )
 
 
@@ -2721,10 +2722,15 @@ def fit_forest_prepared[
     feature_importances: Bool = False,
     min_weight_leaf: Float32 = Float32(0),
     notices_to_stderr: Bool = True,
+    weights_on_device: Bool = False,
 ) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
     O.DataT == DType.float32
 ):
     """`RandomForest::fit`, `randomforest.cuh:286-370`. THE FOREST LOOP.
+
+    `weights_on_device` (lane n5-prophet-adaboost-loops): `sample_weight`
+    holds the fit's n_rows weights although `sample_weight_host` is empty
+    (a caller whose weights never leave the device: AdaBoost's rounds).
 
     `min_weight_leaf` (lane sk-kernels) is scikit-learn's least summed
     sample weight per child, read by the weighted objectives only
@@ -2998,7 +3004,7 @@ def fit_forest_prepared[
         if instr.trace.enabled:
             instr.trace.record_device(ctx, "forest.binned", prep[0].d_bins)
 
-    var has_sw = len(sample_weight_host) > 0
+    var has_sw = len(sample_weight_host) > 0 or weights_on_device
     # DEVIATION 2510 -- "host_setup": sampler, K builders, the shared
     # splits staging and the forest preallocation, stamped host-only so
     # the stage table can split `other`. Off unless MOJOLEARN_STAGE_TIMES=1.
@@ -3037,7 +3043,7 @@ def fit_forest_prepared[
         or n_cols >= ROWS_SORTED_MIN_COLS,
     )
     if has_sw:
-        if len(sample_weight_host) < n_rows:
+        if not weights_on_device and len(sample_weight_host) < n_rows:
             raise Error(
                 "sample_weight holds "
                 + String(len(sample_weight_host))
