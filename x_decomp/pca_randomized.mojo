@@ -66,6 +66,13 @@ trait RDev:
         ...
 
     @staticmethod
+    def upload_finite(id: Int, src: F32Ptr, n: Int) raises -> Int:
+        """`upload` with the finite test of the uploaded words on the device
+        (RSVD_FAST_DEVSCAN, restored 2026-11-09): 0 when every word is
+        finite, 1 otherwise."""
+        ...
+
+    @staticmethod
     def download(id: Int, dst: F32Ptr, n: Int) raises:
         ...
 
@@ -142,6 +149,10 @@ struct NoRDev(RDev):
 
     @staticmethod
     def upload(id: Int, src: F32Ptr, n: Int) raises:
+        raise Error("x_decomp: no resident matrices on the host binding")
+
+    @staticmethod
+    def upload_finite(id: Int, src: F32Ptr, n: Int) raises -> Int:
         raise Error("x_decomp: no resident matrices on the host binding")
 
     @staticmethod
@@ -294,6 +305,29 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
             self.mats[a].dev = handle
             self.mats[a].host = 0
         return self.mats[a].dev
+
+    def device_tested(mut self, a: Int) raises -> Int32:
+        """`device` for a host matrix not yet uploaded, with the finite test of
+        the uploaded words on the device (RSVD_FAST_DEVSCAN, restored
+        2026-11-09 by lane r1-restore-measured-winners): 0 when every word of
+        `a` is finite, 1 otherwise. The upload is the one `device` makes (no
+        extra pass over the host words); the words are copied, never
+        converted, so no bit changes. A matrix already on the device is not
+        re-tested (0)."""
+        comptime if not Self.RES:
+            raise Error("x_decomp: no resident matrices on the host binding")
+        if self.mats[a].dev >= 0:
+            return Int32(0)
+        var n = self.mats[a].rows * self.mats[a].cols
+        var words = self.host(a)
+        var handle = Self.D.alloc(max(n, 1))
+        self.allocations.append(handle)
+        var flagged = 0
+        if n:
+            flagged = Self.D.upload_finite(handle, F32Ptr(unsafe_from_address=words), n)
+        self.mats[a].dev = handle
+        self.mats[a].host = 0
+        return Int32(1) if flagged != 0 else Int32(0)
 
     def keep(mut self, a: Int) raises -> Int:
         """A pool id holding `a`'s words that the CALLER now owns (lane

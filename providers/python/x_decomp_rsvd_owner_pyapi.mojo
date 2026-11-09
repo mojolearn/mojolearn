@@ -32,8 +32,11 @@ def randomized_svd_py[E: Exec, D: RDev, RES: Bool](
 ) raises -> PythonObject:
     """randomized_svd's (U, S, Vt). p = [rows, cols, n_components,
     n_oversamples, n_iter, auto (1: n_iter='auto'), transpose (1: the
-    sketch runs on M^T), flip_sign, the Philox seed mod 2^32]."""
-    if len(p) != 9:
+    sketch runs on M^T), flip_sign, the Philox seed mod 2^32] and, optional,
+    a tenth word: 1 when the caller deferred M's finite test to this call
+    (RSVD_FAST_DEVSCAN, `x_decomp_s_flags` bit 1; restored 2026-11-09):
+    the test runs on the device copy at M's one upload."""
+    if len(p) != 9 and len(p) != 10:
         raise Error("x_decomp_randomized_svd: params must contain rows, cols, components, oversamples, iterations, auto, transpose, flip_sign, seed")
     var rows = _dim(p, 0)
     var cols = _dim(p, 1)
@@ -48,7 +51,19 @@ def randomized_svd_py[E: Exec, D: RDev, RES: Bool](
     var pu = _ptr(u)
     var ps = _ptr(s)
     var pv = _ptr(vt)
+    var deferred = len(p) == 10 and Int(py=p[9]) != 0
+    var status = List[Int32](length=1, fill=Int32(0))
+    var finite_word = 0
+    comptime if RES:
+        if deferred:
+            finite_word = Int(status.unsafe_ptr())
+    else:
+        if deferred:
+            raise Error("x_decomp_randomized_svd: a deferred finite test needs a resident binding")
     with GILReleased(Python()):
         randomized_svd_run[E, D, RES](px, pu, ps, pv, rows, cols, nc, oversamples, iterations, auto, transpose,
-                                      flip, seed)
+                                      flip, seed, finite_word)
+    if status[0] != 0:
+        raise Error("M: input must be finite; NaN/inf are unsupported")
+    _ = status^
     return PythonObject(nc)

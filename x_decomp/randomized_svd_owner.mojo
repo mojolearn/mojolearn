@@ -30,12 +30,21 @@ comptime _OP_MUL = 2
 def randomized_svd_run[E: Exec, D: RDev, RES: Bool](
     x: F32Ptr, u_out: F32Ptr, s_out: F32Ptr, vt_out: F32Ptr, rows: Int, cols: Int, components: Int,
     oversamples: Int, iterations: Int, auto_iterations: Bool, transpose: Bool, flip_sign: Bool, seed: Int,
+    finite_word: Int = 0,
 ) raises:
     """`randomized_svd(M, components, ...)` of the rows x cols float32 M at
     `x` (read in place, never written): U (rows x components), S
     (components) and Vt (components x cols) written. `transpose`: the sketch
     runs on M^T (the caller resolved 'auto'). `auto_iterations`: n_iter='auto'
-    (scikit-learn's size-ratio rule)."""
+    (scikit-learn's size-ratio rule).
+
+    `finite_word` (RSVD_FAST_DEVSCAN, x_decomp/s_linalg_fast.mojo; restored
+    2026-11-09 by lane r1-restore-measured-winners): when nonzero, the host
+    address of one Int32 that receives M's finite status word (0 = every
+    word finite), tested on the device copy at M's one upload
+    (RKit.device_tested) instead of a host pass over M; a flagged M stops
+    the run (nothing written; the door refuses). Only a resident kit takes
+    it (the door passes it on the FAST + Apple build alone)."""
     if not (1 <= components and components <= min(rows, cols)):
         raise Error("n_components must be in [1, min(n_samples, n_features)]")
     var power = iterations
@@ -45,6 +54,13 @@ def randomized_svd_run[E: Exec, D: RDev, RES: Bool](
     var kit = RKit[E, D, RES]()
     try:
         var original = kit.add(Int(x), -1, rows, cols)
+        comptime if RES:
+            if finite_word != 0:
+                var flagged = kit.device_tested(original)
+                MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = flagged
+                if flagged != 0:
+                    kit.close()
+                    return
         var decomposed = pca_randomized_core(kit, original, components, oversamples, power, seed, transpose)
         var u = decomposed[0]
         var s = decomposed[1]
