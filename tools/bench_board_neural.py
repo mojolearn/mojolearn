@@ -46,6 +46,9 @@ are never raced, so GPU decode work had no row before these):
                        step with a fresh allocate_state per round).
   samba-decode         SambaStack(config, weights).decode_session(state).step(ids_t)
                        (2026-11-08; until then SambaStack.step(ids_t, state)).
+                       A/B operation `decode_n` (decode plan D2) on every
+                       decode lane: the same session, one decode(x) call for
+                       all L tokens instead of one step per token.
                        Peers (2026-10-22): transformer-decode transformers'
                        DynamicCache loop; mamba1/2-decode mamba_ssm's own
                        Mamba/Mamba2 step over InferenceParams (MambaSsmArm);
@@ -2463,8 +2466,12 @@ class OursBlock(Ours):
             if hasattr(self.decode_state, "cached_tokens"):
                 self.decode_state.cached_tokens = 0      # position is API metadata
             self.decode_session.load_state()
-            step = self.decode_session.step
-            self.out = [step(xt) for xt in self.decode_tokens]
+            if self.operation == "decode_n":
+                # D2: one native call decodes every token, (B, L, D) out.
+                self.out = self.decode_session.decode(self.x)
+            else:
+                step = self.decode_session.step
+                self.out = [step(xt) for xt in self.decode_tokens]
         elif self.decode_tokens is not None:
             state = self.block.allocate_state(int(self.x.shape[0]))
             step = self.block.step
@@ -2475,6 +2482,8 @@ class OursBlock(Ours):
 
     def _y(self):
         np = self.np
+        if self.decode_tokens is not None and self.operation == "decode_n":
+            return np.asarray(self.out)        # already (B, L, D)
         if self.decode_tokens is not None:     # after the clock: (B, 1, D) per token -> (B, L, D)
             return np.concatenate([np.asarray(y).reshape(self.x.shape[0], 1, -1) for y in self.out],
                                   axis=1)
@@ -2510,6 +2519,7 @@ class OursSamba(Ours):
         w = {k: np.ascontiguousarray(v) for k, v in _weights(data).items()}
         self.lane = lane
         runtime = ab_runtime or {}
+        self.operation = runtime.get("operation", "model_default")
         max_norm = runtime.get("samba_max_norm")
         accumulation_steps = int(runtime.get("samba_accumulation_steps", 1))
         if (max_norm is not None or accumulation_steps != 1) and lane != "samba-train-step":
@@ -2561,13 +2571,19 @@ class OursSamba(Ours):
             self.k += 1
         elif self.decode_ids is not None:
             self.decode_session.load_state()
-            step = self.decode_session.step
-            self.out = [step(t) for t in self.decode_ids]
+            if self.operation == "decode_n":
+                # D2: one native call decodes every token, (B, L, vocab) out.
+                self.out = self.decode_session.decode(self.ids)
+            else:
+                step = self.decode_session.step
+                self.out = [step(t) for t in self.decode_ids]
         else:
             self.out = self.model.forward(self.ids)
         self.neural_ab_runtime["public_calls_completed"] += 1
 
     def _y(self):
+        if self.decode_ids is not None and self.operation == "decode_n":
+            return self.np.asarray(self.out)   # already (B, L, V)
         if self.decode_ids is not None:        # after the clock: (B, V) per token -> (B, L, V)
             return self.np.stack([self.np.asarray(y) for y in self.out], axis=1)
         return self.np.asarray(self.out)
@@ -5252,7 +5268,7 @@ def build_runner(lane, arm, shape, data, ab_config=None):
         raise ValueError("REFUSED: runtime.optimize requires program_optimize")
     supported = ("model_default", "transformer_configured_forward", "transformer_windowed_forward", "transformer_forward_vjp_tape", "mamba3_owned_forward", "lm_chunked_head_v2",
                  "residual_dropout_forward_vjp", "mlp_inference_sessions", "samba_training_config", "mamba_forward_vjp",
-                 "program_eager", "program_optimize")
+                 "program_eager", "program_optimize", "decode_n")
     if operation not in supported:
         raise RuntimeError("REFUSED: no actual public workload implementation for neural A/B operation " + str(operation))
     if arm in OUR_ARMS:
@@ -5303,6 +5319,10 @@ def build_runner(lane, arm, shape, data, ab_config=None):
             raise RuntimeError("REFUSED: owned-weight operation requires Mamba3")
         if operation == "mamba_forward_vjp" and model not in ("mamba1", "mamba2", "mamba3"):
             raise RuntimeError("REFUSED: Mamba VJP operation requires a Mamba block")
+        if operation == "decode_n" and lane not in DECODE_LANES:
+            # Decode plan D2: the whole decode as one session.decode call (N
+            # tokens per native call), the A/B arm against one step per token.
+            raise RuntimeError("REFUSED: decode_n requires a decode lane")
         if model == "lm":
             return OursLM(lane, shape, data, ab_runtime=runtime)
         if model == "samba":

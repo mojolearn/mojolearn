@@ -259,7 +259,9 @@ def _(ml, X, yc, yr, Xh=None):
         # four tokens (each step advanced it)
         st.cached_tokens = 4
         sess.load_state()
-        after = np.concatenate([np.asarray(sess.step(tok(t))) for t in range(8, 12)], axis=1)  # glue: four steps
+        # The four tokens after the reload go through `decode` (one native
+        # call, `transformer_decode_session_decode`): byte for byte the four steps.
+        after = np.asarray(sess.decode(np.ascontiguousarray(x[:, 8:12])))
         sess.sync_state()
         resident = np.concatenate(_decode_state_arrays(st))
     ref = blk.allocate_state(2, max_tokens=32)
@@ -547,7 +549,9 @@ def _coverage_decode_session(ml, blk, X, dm):
         for t in range(4, 8):  # glue: four steps the reload discards
             sess.step(tok(t))
         sess.load_state()
-        after = np.concatenate([np.asarray(sess.step(tok(t))) for t in range(8, 12)], axis=1)  # glue: four steps
+        # The four tokens after the reload go through `decode` (one native
+        # call, `<kind>_session_decode`): byte for byte the four steps.
+        after = np.asarray(sess.decode(np.ascontiguousarray(x[:, 8:12])))
         sess.sync_state()
         resident = _coverage_state_pieces(st)
     plain = blk.allocate_state(2)
@@ -643,7 +647,9 @@ def _(ml, X, yc, yr, Xh=None):
         for t in range(4, 8):  # glue: four steps the reload discards
             sess.step(tok(t))
         sess.load_state()
-        after = np.stack([np.asarray(sess.step(tok(t))) for t in range(8, 12)], axis=1)  # glue: four steps
+        # The four tokens after the reload go through `decode` (one native
+        # call, `samba_decode_tokens`): (2, 4, vocab), byte for byte the four steps.
+        after = np.asarray(sess.decode(np.ascontiguousarray(ids[:, 8:12])))
         sess.sync_state()
         resident = pieces(st)
     plain = m.allocate_state(2, 16)

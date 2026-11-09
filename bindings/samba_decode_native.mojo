@@ -19,6 +19,7 @@ and the bytes are the per-call step's by construction. `sync_state` and
 `load_state` are then no-ops on a state that is always current.
 """
 from std.python import Python, PythonObject
+from std.memory import memcpy
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
@@ -224,6 +225,49 @@ def samba_decode_step(session: PythonObject, inputs: PythonObject, context: Pyth
     var output = generation_array([b, v])
     _ = py_call(_native_function(values["_entries"], "samba_decode_step"), handle,
                 Python.list(ids._addr, output._addr), py_ints([b]))
+    _ = ids  # keep the Python object alive through the native call above
+    return output
+
+
+def samba_decode_tokens(session: PythonObject, inputs: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`decode(ids)`: (B, N) ids -> (B, N, vocab) logits in one native call
+    (decode plan D2). The device arm runs `samba_decode_tokens` (one id
+    upload, N step bodies on the device, one logits download); the host arm
+    runs the per-call step N times on the caller's own state. Either way the
+    logits and the state equal N `step` calls byte for byte."""
+    var values = samba_fields(session)
+    var what = String("SambaDecodeSession.decode")
+    _decode_require_open(values, what)
+    var handle = values["_handle"]
+    var v = Int(py=values["_vocab"])
+    var admitted = _samba_inference_ids(inputs, v, False, PythonObject(None), context)
+    var ids = admitted[0]
+    var b = Int(py=ids.shape[0])
+    var n = Int(py=ids.shape[1])
+    var rows = Int(py=values["_rows"])
+    if b != rows:
+        raise Error(what + ": the session holds " + String(rows) + " rows, inputs has B = " + String(b))
+    var output = generation_array([b, n, v])
+    if handle is None:
+        # The host arm: the per-call step on the caller's own state, token by
+        # token, with column t of the ids as the step's (B, 1) input.
+        var src = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=ids._addr))
+        var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
+        for t in range(n):  # driver-loop: over decode tokens, one host-arm step each
+            var column = generation_array([b, 1], "i")
+            var col = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=column._addr))
+            for r in range(b):  # driver-loop: over the batch rows, a host-arm copy of token t's id
+                col.unsafe_store(r, src.unsafe_load(r * n + t))
+            var logits = samba_forward(values["_model"], column, values["_state"], PythonObject(None), True, True, context)
+            var row = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=logits._addr))
+            for r in range(b):  # driver-loop: over the batch rows, a host-arm copy of token t's logits
+                memcpy(dest=dst + (r * n + t) * v, src=row + r * v, count=v)
+            _ = logits^
+            _ = column^
+        _ = ids
+        return output
+    _ = py_call(_native_function(values["_entries"], "samba_decode_tokens"), handle,
+                Python.list(ids._addr, output._addr), py_ints([b, n]))
     _ = ids  # keep the Python object alive through the native call above
     return output
 

@@ -700,6 +700,30 @@ class Mamba1DecodeSession:
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_step", (self, x), _native_neural_bridge.CONTEXT)
 
+    def decode(self, x):
+        """Decode `N` tokens per row in one call.
+
+        The output is byte for byte what `N` calls to `step` give, token by token,
+        and the state ends where they leave it. On a GPU the tokens run on the
+        device with one upload and one download.
+
+        Parameters
+        ----------
+        x : float32 buffer, shape (B, N, d_model)
+            B must equal the session's batch size.
+
+        Returns
+        -------
+        y : mojolearn.Array, shape (B, N, d_model)
+
+        Examples
+        --------
+        >>> with block.decode_session(state) as session:
+        ...     y = session.decode(x)
+        """
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_decode_public", (self, x), _native_neural_bridge.CONTEXT)
+
     def sync_state(self):
         """Copy the session's current state into the `Mamba1State` arrays and return the state."""
         return _native_neural_bridge.RUNTIME.mamba_native_call(
@@ -1050,6 +1074,30 @@ class Mamba2DecodeSession:
         """
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_step_public", (self, x), _native_neural_bridge.CONTEXT)
+
+    def decode(self, x):
+        """Decode `N` tokens per row in one call.
+
+        The output is byte for byte what `N` calls to `step` give, token by token,
+        and the state ends where they leave it. On a GPU the tokens run on the
+        device with one upload and one download and sets the block's report attributes to the last token's.
+
+        Parameters
+        ----------
+        x : float32 buffer, shape (B, N, d_model)
+            B must equal the session's batch size.
+
+        Returns
+        -------
+        y : mojolearn.Array, shape (B, N, d_model)
+
+        Examples
+        --------
+        >>> with block.decode_session(state) as session:
+        ...     y = session.decode(x)
+        """
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_decode_public", (self, x), _native_neural_bridge.CONTEXT)
 
     def sync_state(self):
         """Copy the session's current state into the `Mamba2State` arrays and return the state."""
@@ -1595,6 +1643,30 @@ class Mamba3DecodeSession:
         """
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_step_public", (self, x), _native_neural_bridge.CONTEXT)
+
+    def decode(self, x):
+        """Decode `N` tokens per row in one call.
+
+        The output is byte for byte what `N` calls to `step` give, token by token,
+        and the state ends where they leave it. On a GPU the tokens run on the
+        device with one upload and one download and sets the block's report attributes to the last token's.
+
+        Parameters
+        ----------
+        x : float32 buffer, shape (B, N, d_model)
+            B must equal the session's batch size.
+
+        Returns
+        -------
+        y : mojolearn.Array, shape (B, N, d_model)
+
+        Examples
+        --------
+        >>> with block.decode_session(state) as session:
+        ...     y = session.decode(x)
+        """
+        return _native_neural_bridge.RUNTIME.mamba_native_call(
+            "session_decode_public", (self, x), _native_neural_bridge.CONTEXT)
 
     def sync_state(self):
         """Copy the session's current state into the `Mamba3State` arrays and return the state."""

@@ -1313,6 +1313,23 @@ class TransformerDecodeSession:
         return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
             "forward", (self, x), _native_neural_bridge.CONTEXT)
 
+    def decode(self, x):
+        """Decode `N` tokens per row in one call.
+
+        `x` is ``(B, N, d_model)`` float32; returns the same shape and advances
+        `state.cached_tokens` by `N`. The output is byte for byte what `N` calls to
+        `step` give, token by token. On a GPU the tokens run on the device with one
+        upload and one download. Raises `ValueError` if the session is closed or B
+        differs from the state's batch size.
+
+        Examples
+        --------
+        >>> with blk.decode_session(st) as sess:
+        ...     y = sess.decode(x)              # (1, N, d_model)
+        """
+        return _native_neural_bridge.RUNTIME.transformer_decode_native_call(
+            "decode", (self, x), _native_neural_bridge.CONTEXT)
+
     def sync_state(self):
         """Copy the session's cache into the state's buffers; the session stays open and keeps owning the state."""
         return _native_neural_bridge.RUNTIME.transformer_decode_native_call(

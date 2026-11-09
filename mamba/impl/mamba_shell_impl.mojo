@@ -47,6 +47,7 @@ from mamba.impl.modeling.modeling_mamba import (
     MambaDeviceWeights,
 )
 from mamba.impl.modules.mamba_simple import mamba_step
+from core.decode_slab import decode_slab_check, decode_slab_put, decode_slab_take
 #: lane afn-mamba (2026-10-03): under FAST + Apple + `-D MOJOLEARN_AFN_MAMBA_ARENA`
 #: every block call's device buffers are views of ONE arena and the caller's
 #: arrays are copied in with no per-buffer wait (`_mamba{1,2,3}_run_arena`).
@@ -478,6 +479,31 @@ def _m1_session_step_run(mut s: Mamba1DecodeSession, px: Int, py: Int) raises:
             raise Error("mamba1 session: the L = 1 stages hold a different output length")
         ctx.enqueue_copy(dst_ptr=f32_ptr(py), src_buf=s.stages.value().residual_out)
         ctx.synchronize()
+
+
+def _m1_session_decode_run(mut s: Mamba1DecodeSession, px: Int, py: Int, steps: Int) raises:
+    """N decode tokens on the resident structs (decode plan D2): the caller's
+    (B, N, d_model) x is uploaded once, the step body of `_m1_session_step_run`
+    runs once per token with token t moved on the device, and the (B, N, d_model)
+    output comes back in one download behind one wait. Same kernels, same order
+    and same bytes as N `_m1_session_step_run` calls."""
+    decode_slab_check(s.b, steps, s.dm, "mamba1 session decode")
+    ref ctx = s.ctx.value()
+    var row = s.b * s.dm
+    var xs = mamba_device_alloc(ctx, row * steps)
+    var ys = mamba_device_alloc(ctx, row * steps)
+    mamba_copy_in(ctx, xs, f32_ptr(px), row * steps)
+    var trace = IdentityTrace.disabled()
+    for t in range(steps):  # driver-loop: over autoregressive decode steps (each reads the state the previous step left), the session's one-token step body each
+        decode_slab_take(ctx, s.dx.value(), xs, s.b, steps, s.dm, t)
+        mamba_step(ctx, s.stages.value(), s.state.value(), s.w.value(), s.dx.value(), s.b, trace,
+                   String("py.session"))
+        decode_slab_put(ctx, ys, s.stages.value().residual_out, s.b, steps, s.dm, t)
+    _m2_session_download_direct(ctx, ys, row * steps, py)
+    ctx.synchronize()
+    # The host x and y stay borrowed until the wait above returns.
+    _ = xs^
+    _ = ys^
 
 
 def _m1_session_export_run(mut s: Mamba1DecodeSession, pw: Int, ph: Int) raises:
@@ -1054,6 +1080,40 @@ def _m2_session_step_run(mut s: Mamba2DecodeSession, px: Int, py: Int, ph: Int) 
     return state.buf_len
 
 
+def _m2_session_decode_run(mut s: Mamba2DecodeSession, px: Int, py: Int, ph: Int, steps: Int) raises -> Int:
+    """N decode tokens on the resident Mamba-2 session (decode plan D2): one
+    (B, N, d_model) upload, the step body of `_m2_session_step_run` per token
+    (stages rebuilt per token at the carried buf_len, as the step does), one
+    output download and the LAST token's h_last report, behind one wait. Same
+    kernels, same order and same bytes as N `_m2_session_step_run` calls."""
+    decode_slab_check(s.b, steps, s.dm, "mamba2 session decode")
+    ref ctx = s.ctx.value()
+    ref state = s.state.value()
+    var dims = Mamba2Dims.of(s.dm)
+    var row = s.b * s.dm
+    var xs = mamba_device_alloc(ctx, row * steps)
+    var ys = mamba_device_alloc(ctx, row * steps)
+    mamba_copy_in(ctx, xs, f32_ptr(px), row * steps)
+    var trace = IdentityTrace.disabled()
+    var last = Optional[Mamba2DeviceStages]()
+    for t in range(steps):  # driver-loop: over autoregressive decode steps (each reads the state the previous step left), the session's one-token step body each
+        var stages = Mamba2DeviceStages(ctx, s.b, 1, state.buf_len, dims)
+        decode_slab_take(ctx, s.dx.value(), xs, s.b, steps, s.dm, t)
+        mamba2_block_forward(ctx, stages, state, s.w.value(), s.dx.value(), s.b, 1,
+                             s.dt_lo, s.dt_hi, trace, String("py.session"))
+        decode_slab_put(ctx, ys, stages.residual_out, s.b, steps, s.dm, t)
+        # The previous token's stages return to the stream-ordered pool.
+        last = stages^
+    _m2_session_download_direct(ctx, ys, row * steps, py)
+    _m2_session_download_direct(ctx, last.value().h_last,
+        s.b * dims.nheads * M2_HEADDIM * M2_D_STATE, ph)
+    ctx.synchronize()
+    _ = last^
+    _ = xs^
+    _ = ys^
+    return state.buf_len
+
+
 def _m2_session_export_run(mut s: Mamba2DecodeSession, a: List[Int]) raises -> Int:
     ref ctx = s.ctx.value()
     ref state = s.state.value()
@@ -1537,6 +1597,58 @@ def _m3_session_step_run(mut s: Mamba3DecodeSession, a: List[Int]) raises -> Int
     comptime if IDN_M3_DECODE_WINDOW_REUSE:
         # Every report download above completes before capacity is retained.
         s.decode_stages = stages^
+    return st.buf_len
+
+
+def _m3_session_decode_run(mut s: Mamba3DecodeSession, a: List[Int], steps: Int) raises -> Int:
+    """N decode tokens on the resident Mamba-3 session (decode plan D2).
+
+    `a` = [x (B, N, d_model), y (B, N, d_model), h_last, k_last, v_last,
+    theta_last]: one input upload, the step body of `_m3_session_step_run` per
+    token, one output download and the LAST token's four reports, behind one
+    wait (the step downloads five buffers per token, each with its own wait).
+    Same kernels, same order and same bytes as N `_m3_session_step_run` calls."""
+    decode_slab_check(s.b, steps, s.dm, "mamba3 session decode")
+    ref ctx = s.ctx.value()
+    ref st = s.state.value()
+    var dims = Mamba3Dims.of(s.dm)
+    var nh = dims.nheads
+    var row = s.b * s.dm
+    var xs = mamba_device_alloc(ctx, row * steps)
+    var ys = mamba_device_alloc(ctx, row * steps)
+    mamba_copy_in(ctx, xs, f32_ptr(a[0]), row * steps)
+    var trace = IdentityTrace.disabled()
+    var last = Optional[Mamba3DeviceStages]()
+    for t in range(steps):  # driver-loop: over autoregressive decode steps (each reads the state the previous step left), the session's one-token step body each
+        var stages: Mamba3DeviceStages
+        comptime if IDN_M3_DECODE_WINDOW_REUSE:
+            if last:
+                stages = last.take()
+            elif s.decode_stages:
+                stages = s.decode_stages.take()
+            else:
+                stages = Mamba3DeviceStages(ctx, s.b, 1, M3_CHUNK_SIZE, dims)
+            stages.reuse_decode_window(st.buf_len)
+        else:
+            stages = Mamba3DeviceStages(ctx, s.b, 1, st.buf_len, dims)
+        decode_slab_take(ctx, s.dx.value(), xs, s.b, steps, s.dm, t)
+        mamba3_block_forward(ctx, stages, st, s.w.value(), s.dx.value(), s.b, 1,
+                             trace, String("py.session"))
+        decode_slab_put(ctx, ys, stages.residual_out, s.b, steps, s.dm, t)
+        # The previous token's stages return to the stream-ordered pool.
+        last = stages^
+    _m2_session_download_direct(ctx, ys, row * steps, a[1])
+    _m2_session_download_direct(ctx, last.value().h_last, s.b * nh * M3_HEADDIM * M3_D_STATE, a[2])
+    _m2_session_download_direct(ctx, last.value().k_last, s.b * nh * M3_D_STATE, a[3])
+    _m2_session_download_direct(ctx, last.value().v_last, s.b * nh * M3_HEADDIM, a[4])
+    _m2_session_download_direct(ctx, last.value().theta_last, s.b * nh * M3_NUM_ROPE_ANGLES, a[5])
+    ctx.synchronize()
+    comptime if IDN_M3_DECODE_WINDOW_REUSE:
+        # Every report download above completes before capacity is retained.
+        s.decode_stages = last.take()
+    _ = last^
+    _ = xs^
+    _ = ys^
     return st.buf_len
 
 

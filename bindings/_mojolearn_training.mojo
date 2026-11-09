@@ -173,6 +173,7 @@ from training.samba_decode_resident import (
     samba_decode_export,
     samba_decode_load,
     samba_decode_step,
+    samba_decode_tokens,
 )
 
 
@@ -1393,6 +1394,41 @@ def samba_decode_step_binding(
         return PythonObject(position)
 
 
+def samba_decode_tokens_binding(
+    session: PythonObject, addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """N tokens per row in one call (decode plan D2). addresses = [ids
+    (b * n i32 in (B, N) order, read), logits (b * n * vocab f32 in
+    (B, N, vocab) order, written)]; params = [b, n], b refused unless it is
+    the session's batch. Bytes equal n `samba_decode_step` calls. A failed
+    call marks the session lost."""
+    comptime if not IDN_SAMBA_RESIDENT_STEP:
+        raise Error("samba_decode_tokens: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
+    else:
+        var owner = session.downcast_value_ptr[SambaDecodeResident]()
+        var a = _addrs(addresses, 2, "samba_decode_tokens")
+        _params(params, 2, "samba_decode_tokens")
+        if Int(py=params[0]) != owner[].b:
+            raise Error("samba_decode_tokens: the session holds " + String(owner[].b) + " rows, the call has "
+                        + String(Int(py=params[0])))
+        var n = Int(py=params[1])
+        if owner[].busy:
+            raise Error("samba_decode_tokens: session busy")
+        if not owner[].usable:
+            raise Error("samba_decode_tokens: the session was lost after a failed call; close it and open a new one")
+        owner[].busy = True
+        var position = 0
+        try:
+            with GILReleased(Python()):
+                position = samba_decode_tokens(owner[], _i32_ptr(a[0]), _f32_ptr(a[1]), n)
+        except error:
+            owner[].busy = False
+            owner[].usable = False
+            raise error
+        owner[].busy = False
+        return PythonObject(position)
+
+
 def samba_decode_export_binding(session: PythonObject, pieces: PythonObject) raises -> PythonObject:
     """The resident state into the caller's arrays (`samba_decode_load`'s
     addresses); returns the cursor words as a list of ints."""
@@ -1677,6 +1713,7 @@ def build__mojolearn_training() -> PythonObject:
             _ = m.add_type[SambaDecodeResident]("_SambaDecodeResident")
             m.def_function[samba_decode_open_binding]("samba_decode_open")
             m.def_function[samba_decode_step_binding]("samba_decode_step")
+            m.def_function[samba_decode_tokens_binding]("samba_decode_tokens")
             m.def_function[samba_decode_export_binding]("samba_decode_export")
             m.def_function[samba_decode_load_binding]("samba_decode_load")
         comptime if AFN_SAMBA_FUSE:
