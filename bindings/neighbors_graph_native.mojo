@@ -12,7 +12,7 @@
 # floats)` exactly as `_XNeighbors._op` made it, with the same buffers, the
 # same integers and the same float32-rounded scalars, in the same order. The
 # graph inputs are read as before: an `(indptr, indices, n)` tuple or a
-# scipy.sparse matrix through its own `tocsr()` (the caller's container), a
+# scipy.sparse matrix read natively from its stored buffers (no `tocsr()`), a
 # dense matrix as float32. Outputs are new mojolearn Arrays (the Python
 # shells' `empty` / `_empty_out`, zero-filled: every element is written by
 # the kernel). MOJOLEARN_XN_LAZY_OUT (an opt-in memory-map A/B arm for
