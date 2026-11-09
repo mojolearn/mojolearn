@@ -67,6 +67,8 @@ from neighbors.estimator import (
     knn_classifier_predict_resident,
     knn_regressor_predict_resident,
     knn_search_resident,
+    knn_upload_finite_status,
+    knn_put_status,
 )
 from neighbors.impl.knn.knn import KnnVoteCache
 from neighbors.impl.detail.knn_brute_force import (
@@ -96,6 +98,7 @@ struct ResidentKnnIndex(Movable):
         index_ptr: MutPointer[Float32, MutUntrackedOrigin],
         n_index: Int,
         n_features: Int,
+        status_addr: Int = 0,
     ) raises:
         if n_index <= 0 or n_features <= 0:
             raise Error("knn_index_prepare: n_index and n_features must be positive")
@@ -103,7 +106,13 @@ struct ResidentKnnIndex(Movable):
         var ctx = process_ctx[_DEVCTX_SLOT](dplan)
         var index = ctx.enqueue_create_buffer[DType.float32](n_index * n_features)
         ctx.enqueue_copy(dst_buf=index, src_ptr=index_ptr)
-        ctx.synchronize()
+        if status_addr != 0:
+            # Lane a7b-device-x-neighbors: the fit's finite test rides
+            # behind this upload, in its one synchronisation (the door
+            # admitted X with no host scan).
+            knn_put_status(status_addr, knn_upload_finite_status(ctx, index, n_index * n_features))
+        else:
+            ctx.synchronize()
         self.n_index = n_index
         self.n_features = n_features
         self.device = _device_of(dplan.root)
@@ -367,11 +376,18 @@ def _locked_replace(state: UnsafePointer[KnnIndexRegistry, MutAnyOrigin], handle
 
 def knn_index_prepare(
     index_ptr: MutPointer[Float32, MutUntrackedOrigin], n_index: Int, n_features: Int,
+    status_addr: Int = 0,
 ) raises -> Int:
-    """Upload the index once; the handle every later search names."""
+    """Upload the index once; the handle every later search names.
+    `status_addr` (not 0): a host int32 word that receives the finite status
+    of the uploaded index (0 = finite); a non-finite index is not kept and
+    the handle is 0 (handles start at 1)."""
     var state = _registry()
     # The upload runs outside the lock; only the dictionary step is locked.
-    var entry = ResidentKnnIndex(index_ptr, n_index, n_features)
+    var entry = ResidentKnnIndex(index_ptr, n_index, n_features, status_addr)
+    if status_addr != 0 and MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr)[0] != 0:
+        _ = entry^
+        return 0
     return _locked_insert(state, entry^)
 
 
@@ -436,6 +452,7 @@ def knn_index_search(
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
     negate_products: Bool = False,
+    status_addr: Int = 0,
 ) raises -> Int:
     """`knn_search_resident` over the handle's index and context. The shape
     the caller names must be the shape that was uploaded; `index_ptr` is
@@ -448,7 +465,7 @@ def knn_index_search(
         n_features, k, out_dist_ptr, out_idx_ptr, return_sqrt,
         requested_query_tile, knn_method, metric, metric_arg,
         MutPointer(to=cache).unsafe_origin_cast[MutAnyOrigin](),
-        negate_products,
+        negate_products, status_addr,
     )
     _locked_put_cache(state, handle, view.serial, cache^)
     _ = view^
@@ -474,6 +491,7 @@ def knn_index_classify(
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
     weights: Int = WEIGHTS_UNIFORM,
+    status_addr: Int = 0,
 ) raises -> Int:
     """`knn_classifier_predict_resident` over the handle's index and
     context (DEVIATION 3002)."""
@@ -488,6 +506,7 @@ def knn_index_classify(
         metric, metric_arg, weights,
         MutPointer(to=cache).unsafe_origin_cast[MutAnyOrigin](),
         MutPointer(to=vote).unsafe_origin_cast[MutAnyOrigin](),
+        status_addr,
     )
     _locked_put_vote(state, handle, view.serial, vote^)
     _locked_put_cache(state, handle, view.serial, cache^)
@@ -510,6 +529,7 @@ def knn_index_regress(
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
     weights: Int = WEIGHTS_UNIFORM,
+    status_addr: Int = 0,
 ) raises -> Int:
     """`knn_regressor_predict_resident` over the handle's index and
     context (DEVIATION 3002)."""
@@ -521,6 +541,7 @@ def knn_index_regress(
         n_features, k, y_ptr, n_outputs, out_ptr, requested_query_tile,
         metric, metric_arg, weights,
         MutPointer(to=cache).unsafe_origin_cast[MutAnyOrigin](),
+        status_addr,
     )
     _locked_put_cache(state, handle, view.serial, cache^)
     _ = view^
