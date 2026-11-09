@@ -546,6 +546,7 @@ in the tables after the sections.
 | [`DevExec._eigh_par_on`, `_eigh_td_try`, `_eigh_par_test`, `_rr_batch_enq` / `_rr_batch_on` / `_rr_batch_check`, `xd_first_where2_enq`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (host-driven dense eigh drivers) | REFACTORED (every dense eigh on `eigh_op_sym` / `eigh_op_dense`) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`DKit.eigh` host words, `IpcaDev.eigh` resident host words, `pinv_mask_kernel`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | FastICA / FactorAnalysis / rotation / MinCovDet / IncrementalPCA / MDS-Isomap-KPCA dense eigh | REFACTORED (w and V stay on the device) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
 | [Lanczos projected T host assembly (`kpca_owner`, `mani_decomp_native`)](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | KernelPCA / Isomap | REFACTORED (`eigh_op_tridiag`; bits change) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
+| [`labels_helper` / `labels_call` and the `labels_helpers` callables table (`_native_labels_bridge._helpers`)](#labels-steps-on-the-native-device-or-host-selector-2026-11-09) | Labels (prepare_targets, reduce_stat, argmax_rows, gather, class_ratio, fsum) | removed (onto `labels_native_api_v1`, `bindings/labels_native_abi.mojo`, and the in-process host column) | 2026-11-09 | [S1_LABELS_PY_CALL_SELECTOR.patch](../experiments/removed/S1_LABELS_PY_CALL_SELECTOR.patch) |
 ## Retired by lane debt-block-per-n (2026-10-21)
 
 These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
@@ -5014,3 +5015,27 @@ origin/lane/x4-transformer-on-executor c0b21c971c.
 - Recoverable at c0b21c971c; restore with `git apply experiments/removed/TRANSFORMER_DECODE_SESSION_STRUCTS.patch`
   (transformer/transformer_binding_impl.mojo, bindings/_mojolearn_transformer.mojo,
   transformer/native_lm_resident_dispatch.mojo).
+
+## Labels steps on the native device-or-host selector (2026-11-09)
+
+Lane `s1-shared-state-hardening-and-selector` (S3 of `~/mojolearn-evidence/design-shared-process-state.md`, A7c item
+4), branch `lane/s1-shared-state-hardening-and-selector` from `integ/pre-0867-w3` `4f41e3d67d`. Not an experiment
+define: the label path's call-back into the base binding through Python. `bindings/classical_labels.mojo`
+`labels_helper(context, name)` read a `_buffer._native` callable out of the context table `labels_helpers`
+(`python/mojolearn/_native_labels_bridge.py` `_helpers`, 18 names) and `labels_call` / `py_call_typed` /
+`family_call` called it, one boxed argument tuple and one `PyObject_CallObject` per step, from
+`classical_labels.mojo`, `neighbors_knn_native.mojo`, `neighbors_local_native.mojo` and `prep_labels_native.mojo`.
+
+- Now: the GPU base binding (`bindings/_mojolearn.mojo`) exports `labels_native_api_v1` on the `bindings/kit_call.mojo`
+  descriptor ABI (`mojolearn.labels.v1`: PREPARE_TARGETS, REDUCE_STAT, ARGMAX_F32/F64, GATHER_I32/I64/F64,
+  CLASS_RATIO_F64) over the same entries the callables were. The label path connects it once per process into the
+  named slot `MojolearnLabelsProviderV1` and makes one `kit_call` per step; with no GPU base binding
+  (`labels_base_binding` False) it runs the same host bodies in-process (`bindings/labels_host_ops.mojo`, moved word
+  for word out of `bindings/_mojolearn_core_host.mojo`, and the host helpers that binding exports). `fsum_f64` is a host
+  helper in both base bindings, so it is called in-process everywhere.
+- Verdict: removed, no A/B (the same entries in the same order). RUN OWED: the classification rows of paper_compare
+  on NVIDIA and AMD (logistic, RF, SVC, KNN, GaussianNB / LDA priors, the label metrics).
+- Bits: none.
+- Recoverable at `91863cfb35^`; restore with `git apply experiments/removed/S1_LABELS_PY_CALL_SELECTOR.patch`
+  (bindings/classical_labels.mojo, bindings/neighbors_knn_native.mojo, bindings/neighbors_local_native.mojo,
+  bindings/prep_labels_native.mojo, python/mojolearn/_native_labels_bridge.py).

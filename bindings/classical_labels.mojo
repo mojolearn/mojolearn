@@ -165,7 +165,7 @@ def labels_need(table: PythonObject, name: String, message: String, kind: String
     return entry
 
 
-# TOMBSTONE: labels_helper / labels_call (the base binding's `_buffer._native` callables in the `labels_helpers` context table, one PyObject_CallObject per step) deleted 2026-11-09 by lane s1-shared-state-hardening-and-selector; code recoverable at 244c15e707.
+# TOMBSTONE: labels_helper / labels_call (the base binding's `_buffer._native` callables in the `labels_helpers` context table, one PyObject_CallObject per step) deleted 2026-11-09 by lane s1-shared-state-hardening-and-selector; code recoverable at 91863cfb35^ (244c15e707).
 # Restore: experiments/removed/S1_LABELS_PY_CALL_SELECTOR.patch.
 #
 # THE NATIVE DEVICE-OR-HOST SELECTOR (lane s1, S3; bindings/labels_native_abi.mojo).
