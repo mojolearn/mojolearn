@@ -191,7 +191,11 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
     # one parallel host scan on the CPU column: bindings/neighbors_knn_native.mojo
     # `knn_admit_x`), so this admission defers it: no host pass over a
     # float32 X here. A cast X is still refused from the cast's verdict.
-    var defer = operation.startswith("family_xn_knn_")
+    # Lane a8b-device-x-neighbors-rest: LocalOutlierFactor and
+    # NearestCentroid too; their owners pass a status slot to the first
+    # x_neighbors op that uploads X (bindings/neighbors_local_native.mojo).
+    var defer = (operation.startswith("family_xn_knn_") or operation.startswith("family_xn_loc_lof_")
+                 or operation.startswith("family_xn_loc_nc_"))
     var snapshot = admit_family_meta(source, 2, "X", context, True, finite=scan,
                                      refusal=admitted_finite_wording(name, "X"), defer_finite=defer)
     var rows = snapshot.shape[0]
