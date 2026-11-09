@@ -73,7 +73,7 @@ from x_neighbors.items import K_RBF, U_IDENTITY
 from x_neighbors.lp_spmm import lp_ell_fill_kernel, lp_ell_spmm_enqueue, lp_rowcount_kernel
 from autograd.program_loop import LoopTimers
 from autograd.program_loop_device import LoopRegisters, LoopStep, bounded_device_loop, loop_criterion_below, loop_lap
-from core.step_gate import STEP_DONE, STEP_ITER, STEP_STOP_ITER
+from core.step_gate import STEP_DONE, STEP_ITER, STEP_STOP_ITER, step_gate_open_word
 from core.device_zero import enqueue_fill
 from core.pinned_reduce import pinned_block_sum
 from core.scratch_pool import take_host_i32, give_host_i32
@@ -2813,19 +2813,22 @@ def op_lp_knn_product(cols: Int, vals: Int, x: Int, res: Int, n: Int, m: Int, k:
         var dr_i = _buf(ctx_i, 0, n * c, False)
         var d_fl = ctx_i.enqueue_create_buffer[DType.int32](4)
         ctx_i.enqueue_memset(d_fl, Int32(0))
+        # called outside a loop: the kernels' gate is one open (zeroed) word
+        var d_gate = step_gate_open_word(ctx_i)
         if m * c > 0:
             ctx_i.enqueue_function[lpki_nonfinite_kernel](
-                dx_i.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m * c),
+                dx_i.unsafe_ptr(), d_gate.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m * c),
                 grid_dim=_grid(m * c), block_dim=(BLOCK if m * c > 1 else 1),
             )
         if n * c > 0:
             ctx_i.enqueue_function[lpki_product_kernel](
-                dc_i.unsafe_ptr(), dv_i.unsafe_ptr(), dx_i.unsafe_ptr(), dr_i.unsafe_ptr(), d_fl.unsafe_ptr(),
-                Int64(n), Int64(m), Int64(k), Int64(c),
+                dc_i.unsafe_ptr(), dv_i.unsafe_ptr(), dx_i.unsafe_ptr(), dr_i.unsafe_ptr(), d_gate.unsafe_ptr(),
+                d_fl.unsafe_ptr(), Int64(n), Int64(m), Int64(k), Int64(c),
                 grid_dim=_grid(n * c), block_dim=(BLOCK if n * c > 1 else 1),
             )
         _down(ctx_i, dr_i, res, n * c)
         ctx_i.synchronize()
+        _ = d_gate^
         _ = dc_i^
         _ = dv_i^
         _ = dx_i^
