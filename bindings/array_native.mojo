@@ -7,8 +7,8 @@
 # construction, struct pack/unpack, slice.indices, int(), getattr) and the
 # same core helpers (cast_elements, reduce_stat, strided_copy_bytes, the
 # functions `_buffer._native` resolves, captured once at connection). Results
-# are byte-identical to the Python definitions, which stay in the package only
-# as test oracles (`_array._ArrayReference`, test_native_array_operations.py).
+# are byte-identical to the Python definitions, which stay only as test
+# oracles outside the product (python/mojolearn/tests/_array_reference.py).
 #
 # A caller's own object can still run its own code where the Python method
 # did: an `__index__`, `__int__` or dtype attribute of an index, a shape or a
