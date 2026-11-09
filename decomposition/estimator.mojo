@@ -359,10 +359,12 @@ def tsvd_fit_host(
     n_rows: Int,
     n_features: Int,
     n_components: Int,
+    finite_word: Int = 0,
 ) raises:
+    """`finite_word` (lane a7d): as `pca_fit_host`'s."""
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    tsvd_fit_device(
-        ctx, x, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components
+    _ = tsvd_fit_device(
+        ctx, x, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components, finite_word
     )
     _ = x^
 
@@ -376,16 +378,19 @@ def tsvd_fit_device(
     n_rows: Int,
     n_features: Int,
     n_components: Int,
-) raises:
+    finite_word: Int = 0,
+) raises -> Bool:
     """`tsvd_fit_host`'s body on a caller-owned device buffer `x` of
     n_rows * n_features floats: uploads X into it, and leaves it holding X
     unchanged (the Gram only reads it), so T1 can run the explained tail on
-    the same buffer."""
+    the same buffer. `finite_word` (lane a7d): as `pca_fit_host`'s; returns
+    True when X was flagged (nothing fit, nothing written)."""
     var gram = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.synchronize()
+    if _pca_finite_flagged(ctx, x, n_rows * n_features, finite_word):
+        return True
     var trace = IdentityTrace()
     if trace.enabled:
         trace.header(
@@ -415,6 +420,7 @@ def tsvd_fit_device(
     if trace.enabled:
         trace.record_list_f32("tsvd.components", comp32)
         trace.record_list_f32("tsvd.singular_vals", sing32)
+    return False
 
 
 def square_in_place_kernel(
@@ -701,20 +707,26 @@ def tsvd_fit_explained_host(
     n_rows: Int,
     n_features: Int,
     n_components: Int,
+    finite_word: Int = 0,
 ) raises:
     """`tsvd_fit_host` then `tsvd_explained_host`, with one upload of X
-    under TSVD_ONE_UPLOAD (T1)."""
+    under TSVD_ONE_UPLOAD (T1). `finite_word` (lane a7d): as
+    `pca_fit_host`'s; a flagged X skips the explained tail too."""
     comptime if not TSVD_ONE_UPLOAD:
-        tsvd_fit_host(ctx, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components)
+        tsvd_fit_host(ctx, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components, finite_word)
+        if finite_word != 0 and MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] != 0:
+            return
         tsvd_explained_host(
             ctx, x_ptr, components_ptr, explained_ptr, ratio_ptr,
             n_rows, n_features, n_components,
         )
     else:
         var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-        tsvd_fit_device(
-            ctx, x, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components
-        )
+        if tsvd_fit_device(
+            ctx, x, x_ptr, components_ptr, singular_ptr, n_rows, n_features, n_components, finite_word
+        ):
+            _ = x^
+            return
         pca_validate(n_rows, n_features, n_components)
         _tsvd_explained_tail(
             ctx, x, components_ptr, explained_ptr, ratio_ptr,
@@ -731,10 +743,12 @@ def tsvd_transform_host(
     n_rows: Int,
     n_features: Int,
     n_components: Int,
+    finite_word: Int = 0,
 ) raises:
+    """`finite_word` (lane a7d): as `tsvd_transform_dev`'s."""
     var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
     ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
-    tsvd_transform_dev(ctx, x_ptr, components, out_ptr, n_rows, n_features, n_components)
+    tsvd_transform_dev(ctx, x_ptr, components, out_ptr, n_rows, n_features, n_components, finite_word)
     _ = components^
 
 
@@ -746,11 +760,16 @@ def tsvd_transform_dev(
     n_rows: Int,
     n_features: Int,
     n_components: Int,
+    finite_word: Int = 0,
 ) raises:
     """`tsvd_transform_host` on components already on the device (the
     per-call upload above, or a resident copy of the same words:
     decomposition/tsvd_resident_state.mojo, lane ne1-a-decomp-resident):
-    X goes up, `out = X . components^T` by the same gemm_nt, out comes down."""
+    X goes up, `out = X . components^T` by the same gemm_nt, out comes down.
+    `finite_word` (lane a7d): when nonzero, the host address of one Int32
+    that receives X's finite status word, tested on the device at the
+    upload's own synchronisation; a flagged X is not projected (the door
+    refuses)."""
     var x: DeviceBuffer[DType.float32]
     comptime if TSVD_FAST_POOL:
         x = pool_take[_PCA_POOL](ctx, n_rows * n_features)
@@ -758,10 +777,10 @@ def tsvd_transform_dev(
         x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.synchronize()
-    gemm_nt(ctx, out, x, components, n_rows, n_components, n_features)
-    ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
-    ctx.synchronize()
+    if not _pca_finite_flagged(ctx, x, n_rows * n_features, finite_word):
+        gemm_nt(ctx, out, x, components, n_rows, n_components, n_features)
+        ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
+        ctx.synchronize()
     comptime if TSVD_FAST_POOL:
         pool_give[_PCA_POOL](x^)
     else:

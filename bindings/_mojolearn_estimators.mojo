@@ -472,8 +472,9 @@ def tsvd_fit_binding(
     singular_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """Fit tSVD. Only components and singular values are claimed."""
-    if len(params) != 3:
+    """Fit tSVD. Only components and singular values are claimed.
+    An OPTIONAL last param (lane a7d) of 1 asks for X's finite status word over the entry's own upload, returned instead of 0 (the door refuses a nonzero word)."""
+    if len(params) != 3 and len(params) != 4:
         raise Error("tsvd_fit: params must contain 3 values")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=components_addr))
@@ -481,11 +482,14 @@ def tsvd_fit_binding(
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
+    var test = len(params) == 4 and Int(py=params[3]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        tsvd_fit_host(ctx, xp, cp, sp, nr, nf, nc)
+        tsvd_fit_host(ctx, xp, cp, sp, nr, nf, nc, word_addr)
         ctx.synchronize()
-    return PythonObject(0)
+    return PythonObject(Int(word[0]) if test else 0)
 
 
 def tsvd_explained_binding(
@@ -524,8 +528,8 @@ def tsvd_fit_explained_binding(
     """`tsvd_fit` then `tsvd_explained` in one call (`tsvd_fit_explained_host`,
     lane fg-pca T1: one upload of X under the IDENTICAL default; the two
     calls in order under -D MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF): params
-    `n_rows, n_features, n_components`."""
-    if len(params) != 3:
+    `n_rows, n_features, n_components`. An OPTIONAL last param (lane a7d) of 1 asks for X's finite status word over the entry's own upload, returned instead of 0 (the door refuses a nonzero word)."""
+    if len(params) != 3 and len(params) != 4:
         raise Error("tsvd_fit_explained: params must contain 3 values")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=components_addr))
@@ -535,11 +539,14 @@ def tsvd_fit_explained_binding(
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
+    var test = len(params) == 4 and Int(py=params[3]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        tsvd_fit_explained_host(ctx, xp, cp, sp, ep, rp, nr, nf, nc)
+        tsvd_fit_explained_host(ctx, xp, cp, sp, ep, rp, nr, nf, nc, word_addr)
         ctx.synchronize()
-    return PythonObject(0)
+    return PythonObject(Int(word[0]) if test else 0)
 
 
 def tsvd_transform_binding(
@@ -548,7 +555,9 @@ def tsvd_transform_binding(
     out_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    if len(params) != 3:
+    """`TruncatedSVD.transform`: params n_rows, n_features, n_components.
+    An OPTIONAL last param (lane a7d) of 1 asks for X's finite status word over the entry's own upload, returned instead of 0 (the door refuses a nonzero word)."""
+    if len(params) != 3 and len(params) != 4:
         raise Error("tsvd_transform: params must contain 3 values")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=components_addr))
@@ -556,11 +565,14 @@ def tsvd_transform_binding(
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
+    var test = len(params) == 4 and Int(py=params[3]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        tsvd_transform_host(ctx, xp, cp, op, nr, nf, nc)
+        tsvd_transform_host(ctx, xp, cp, op, nr, nf, nc, word_addr)
         ctx.synchronize()
-    return PythonObject(0)
+    return PythonObject(Int(word[0]) if test else 0)
 
 
 def tsvd_resident_lease_binding() raises -> PythonObject:
@@ -582,7 +594,8 @@ def tsvd_resident_stats_binding() raises -> PythonObject:
 
 
 def _tsvd_resident_params(params: PythonObject, who: String) raises -> Tuple[Int, Int, Int, Int]:
-    if len(params) != 4:
+    # Lane a7d: a fifth value is the optional finite flag (read by the caller).
+    if len(params) != 4 and len(params) != 5:
         raise Error(who + ": params must contain 4 values (n_rows, n_features, n_components, lease), got "
                     + String(len(params)))
     var lease = Int(py=params[3])
@@ -599,16 +612,21 @@ def tsvd_transform_resident_binding(
 ) raises -> PythonObject:
     """`tsvd_transform` with `params` = its 3 values followed by the lease
     (`tsvd_resident_lease`; 0 uploads the components for this call only).
-    The components are read from the lease's device copy. Returns 0."""
+    The components are read from the lease's device copy. Returns 0, or
+    with a fifth param of 1 (lane a7d) X's finite status word over the
+    entry's own upload."""
     var words = _tsvd_resident_params(params, "tsvd_transform_resident")
     var xp = _f32_ptr(Int(py=x_addr))
     var c_address = Int(py=components_addr)
     var op = _f32_ptr(Int(py=out_addr))
+    var test = len(params) == 5 and Int(py=params[4]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        tsvd_transform_resident_device(ctx, words[3], xp, c_address, op, words[0], words[1], words[2])
+        tsvd_transform_resident_device(ctx, words[3], xp, c_address, op, words[0], words[1], words[2], word_addr)
         ctx.synchronize()
-    return PythonObject(0)
+    return PythonObject(Int(word[0]) if test else 0)
 
 
 def tsvd_inverse_transform_resident_binding(

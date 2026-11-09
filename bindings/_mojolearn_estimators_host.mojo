@@ -379,8 +379,8 @@ def tsvd_fit_binding(
 ) raises -> PythonObject:
     """`TruncatedSVD.fit` on the host by `host_tsvd_fit`: params `n_rows,
     n_features, n_components`; components and singular values written.
-    Returns 0."""
-    if len(params) != 3:
+    Returns 0. An OPTIONAL last param (lane a7d) of 1 asks for X's finite status word over the entry's own upload, returned instead of 0 (the door refuses a nonzero word)."""
+    if len(params) != 3 and len(params) != 4:
         raise Error("tsvd_fit: params must contain 3 values")
     var x_address = _index(x_addr)
     var cp = f32_ptr(_index(components_addr))
@@ -388,9 +388,15 @@ def tsvd_fit_binding(
     var nr = _index(params[0])
     var nf = _index(params[1])
     var nc = _index(params[2])
+    var test = len(params) == 4 and _index(params[3]) != 0
+    var status = 0
     with GILReleased(Python()):
-        tsvd_fit_host_run(x_address, cp, sp, nr, nf, nc)
-    return PythonObject(0)
+        if test and nr >= 1 and nf >= 1:
+            # parallel: the deferred finite test of X (SIMD scan across the host's cores)
+            status = Int(host_finite_status(x_address, nr * nf))
+        if status == 0:
+            tsvd_fit_host_run(x_address, cp, sp, nr, nf, nc)
+    return PythonObject(status)
 
 
 def tsvd_explained_binding(
@@ -430,8 +436,8 @@ def tsvd_fit_explained_binding(
     """The GPU binding's `tsvd_fit_explained` (lane fg-pca T1) on the host:
     `host_tsvd_fit` then `host_tsvd_explained` on the components just
     written, exactly the two calls above in order (the host column has no
-    upload to save). Returns 0."""
-    if len(params) != 3:
+    upload to save). Returns 0. An OPTIONAL last param (lane a7d) of 1 asks for X's finite status word over the entry's own upload, returned instead of 0 (the door refuses a nonzero word)."""
+    if len(params) != 3 and len(params) != 4:
         raise Error("tsvd_fit_explained: params must contain 3 values")
     var x_address = _index(x_addr)
     var c_address = _index(components_addr)
@@ -442,9 +448,15 @@ def tsvd_fit_explained_binding(
     var nr = _index(params[0])
     var nf = _index(params[1])
     var nc = _index(params[2])
+    var test = len(params) == 4 and _index(params[3]) != 0
+    var status = 0
     with GILReleased(Python()):
-        tsvd_fit_explained_host_run(x_address, c_address, cp, sp, ep, rp, nr, nf, nc)
-    return PythonObject(0)
+        if test and nr >= 1 and nf >= 1:
+            # parallel: the deferred finite test of X (SIMD scan across the host's cores)
+            status = Int(host_finite_status(x_address, nr * nf))
+        if status == 0:
+            tsvd_fit_explained_host_run(x_address, c_address, cp, sp, ep, rp, nr, nf, nc)
+    return PythonObject(status)
 
 
 def lm_classical_stats_binding() raises -> PythonObject:
@@ -1001,8 +1013,8 @@ def tsvd_transform_binding(
 ) raises -> PythonObject:
     """`TruncatedSVD.transform` on the host: `out[n_rows x n_components] =
     X . components^T` by `host_tsvd_transform`. params: n_rows, n_features,
-    n_components. Returns 0."""
-    if len(params) != 3:
+    n_components. Returns 0. An OPTIONAL last param (lane a7d) of 1 asks for X's finite status word over the entry's own upload, returned instead of 0 (the door refuses a nonzero word)."""
+    if len(params) != 3 and len(params) != 4:
         raise Error("tsvd_transform: params must contain 3 values")
     var x_address = _index(x_addr)
     var c_address = _index(components_addr)
@@ -1010,15 +1022,21 @@ def tsvd_transform_binding(
     var nr = _index(params[0])
     var nf = _index(params[1])
     var nc = _index(params[2])
+    var test = len(params) == 4 and _index(params[3]) != 0
+    var status = 0
     with GILReleased(Python()):
         _positive(nr, "n_rows")
         _positive(nf, "n_features")
         _positive(nc, "n_components")
-        host_tsvd_transform_into(
-            f32_ptr(x_address), f32_ptr(c_address), op, nr, nf, nc,
-            host_predict_task_count(nr),
-        )
-    return PythonObject(0)
+        if test:
+            # parallel: the deferred finite test of X (SIMD scan across the host's cores)
+            status = Int(host_finite_status(x_address, nr * nf))
+        if status == 0:
+            host_tsvd_transform_into(
+                f32_ptr(x_address), f32_ptr(c_address), op, nr, nf, nc,
+                host_predict_task_count(nr),
+            )
+    return PythonObject(status)
 
 
 def pca_transform_binding(
