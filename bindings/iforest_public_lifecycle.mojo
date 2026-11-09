@@ -127,7 +127,11 @@ def iforest_public_operation(model: PythonObject, operation: String, args: Pytho
     # A matrix the running meta-estimator holds is taken as it is
     # (bindings/admitted_registry.mojo, consulted by admit_x_unrecorded);
     # anything else is admitted once.
-    var x = admit_x_unrecorded(source, name, context).array
+    # Lane a1b (part 2): a fit defers the finite test of a borrowed X to the
+    # iforest fit entry's device scan (`iforest_device_scan`; the CPU
+    # column's host scan in trees_public_iforest `_fit`): no host pass here.
+    var admitted = admit_x_unrecorded(source, name, context, defer_finite=fitting)
+    var x = admitted.array
     var shape = labels_shape_of(x, context)
     var rows = shape[0]
     var columns = shape[1]
@@ -140,10 +144,10 @@ def iforest_public_operation(model: PythonObject, operation: String, args: Pytho
     var outside = estimator_outside()
     var depth = estimator_fit_begin(fields) if fitting else 0
     var result = PythonObject(None)
-    # classical_check_x refused NaN and infinity in x: the fit skips its
-    # second scan of it (trees_side_records `trees_finite_known`; lane A1
-    # admit-trees-labels).
-    if fitting:
+    # A cast X was tested in its cast pass: the fit skips its second scan
+    # of it (trees_side_records `trees_finite_known`); a borrowed X is the
+    # fit entry's to test (defer_finite above).
+    if fitting and admitted.finite:
         trees_finite_mark(x)
     try:
         result = iforest_operation_with_source(model, "trees_iforest_" + method, Python.tuple(x), context, source)
