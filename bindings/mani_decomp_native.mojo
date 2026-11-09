@@ -287,7 +287,7 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
         # TOMBSTONE: the host assembly of T (a j x j host matrix of the batch's
         # alphas and betas) and its dense `k.eigh` deleted 2026-11-09 by lane
         # n9-decomp-eigh-families; code recoverable at the lane's base
-        # origin/integ/pre-0867-w2 (f59d913b0b).
+        # origin/integ/pre-0867-w2 (f59d913b0b). Restore: git apply experiments/removed/N9_RESIDENT_EIGH.patch
         # The projected solve is the executor op `eigh_op_tridiag` on the
         # alphas / betas the Lanczos step wrote (x_decomp/lanczos_dev.mojo
         # `dev_eigh_tridiag_run`, w and z left on the device), the host

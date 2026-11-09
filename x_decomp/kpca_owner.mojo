@@ -124,7 +124,7 @@ def _lanczos_top[E: Exec, D: RDev, RES: Bool, X: DecompDev](
         # TOMBSTONE: the host assembly of T (j x j host words of the alphas
         # and betas) and its dense `kit_eigh` deleted 2026-11-09 by lane
         # n9-decomp-eigh-families; code recoverable at the lane's base
-        # origin/integ/pre-0867-w2 (f59d913b0b).
+        # origin/integ/pre-0867-w2 (f59d913b0b). Restore: git apply experiments/removed/N9_RESIDENT_EIGH.patch
         # The projected solve is the executor op `eigh_op_tridiag` on the
         # alphas / betas the Lanczos step wrote (resident: abd, w and z stay
         # on the device), the host column `eigh_op_tridiag_host` on ab: one

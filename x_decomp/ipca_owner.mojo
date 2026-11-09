@@ -98,6 +98,7 @@ def _eigh[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int) raises 
 # TOMBSTONE: the resident Gram eigh's host words (`IpcaDev.eigh` -> `dev_eigh_run`: w and V downloaded, reversed on
 # the host by `_reversed_columns`, uploaded again by the next step) deleted 2026-11-09 by lane n9-decomp-eigh-families;
 # `_gram_svd` keeps the resident answer on the device (`IpcaDev.eigh_desc`). Code recoverable at the deletion commit's parent.
+# Restore: git apply experiments/removed/N9_RESIDENT_EIGH.patch
 
 
 def _reversed_columns[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int) raises -> Int:

@@ -1027,6 +1027,9 @@ struct DKit(Movable):
         pool_free(sid)
         pool_free(iid)
 
+    # TOMBSTONE: `DKit.eigh`'s host words (`_Eig.wh`, w and V home through `DevExec._eigh_on`, uploaded again) deleted
+    # 2026-11-09 by lane n9-decomp-eigh-families; code recoverable at f59d913b0b.
+    # Restore: git apply experiments/removed/N9_RESIDENT_EIGH.patch
     def eigh(mut self, A: DMat) raises -> _Eig:
         """`Kit.eigh` on the device: the executor op `eigh_op_sym` (through
         `DevExec.eigh_enq`, `DevExec.eigh`'s route and words) on a device
