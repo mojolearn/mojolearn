@@ -41,7 +41,7 @@ from x_decomp.descriptor_schema import (
     XD_ABI_NAME, XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES,
     XD_EW, XD_GEMM, XD_COLSUM, XD_ROWSUM, XD_SQDIST, XD_MOVE,
     XD_DEV_ALLOC, XD_DEV_UPLOAD, XD_DEV_EW, XD_DEV_GEMM, XD_DEV_COLSUM, XD_DEV_ROWSUM,
-    XD_DEV_SQDIST, XD_DEV_MOVE, XD_DEV_ISO_GATHER_MIN,
+    XD_DEV_SQDIST, XD_DEV_MOVE, XD_DEV_ISO_GATHER_MIN, XD_DEV_UPLOAD_FINITE,
 )
 
 # x_decomp/cells.mojo op codes (`_OP` in _expansion_decomp.py)
@@ -767,19 +767,22 @@ struct MKit(Movable):
         resident from the start; every route the input takes is an exact
         copy or a device route on either side, so no bit changes). The
         finiteness refusal reads the same immutable snapshot, before the
-        upload, with the same sentence. A host kit keeps mk_from_snapshot."""
+        upload, with the same sentence. A host kit keeps mk_from_snapshot.
+        Lane a8d: the finiteness test runs on the device over the uploaded
+        words (XD_DEV_UPLOAD_FINITE, read at the upload's own
+        synchronisation), no host scan; the same refusal sentence."""
         if not self.res():
             return mk_from_snapshot(value, name, self.ctx)
         var r = value.source.rows
         var c = value.source.cols
         if len(value.shape) != 2 or r == 0 or c == 0:
             raise Error(name + ": a nonempty two-dimensional input is required")
-        var src = FAMILY_F32P(unsafe_from_address=value.source.addr)
-        if not host_all_finite_f32(src, r * c):
-            raise Error(name + ": input must be finite; NaN/inf are unsupported")
         var nd = self._devbuf(r * c)
-        self.upload(Int(py=device_identifier(nd)), value.source.addr, r * c)
+        var flagged = kit_call(self.xd(), XD_DEV_UPLOAD_FINITE, [value.source.addr],
+                               [Int(py=device_identifier(nd)), r * c], List[Float64](), True)
         _ = value  # keep the snapshot's owners alive through the synchronous upload
+        if flagged != 0:
+            raise Error(name + ": input must be finite; NaN/inf are unsupported")
         return mk_dev_view(nd, r, c, self.ctx)
 
     def dout(mut self, r: Int, c: Int) raises -> PythonObject:

@@ -23,6 +23,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
+from core.admitted_finite_status import enqueue_finite_status
 
 from x_decomp.cells import F32Ptr, I32Ptr, LARS_ROW_EXTRA, OP_SCALE, OP_SELECT, ew_cell, rand_cell
 from core.philox import philox4x32_10
@@ -201,6 +202,28 @@ def dev_upload_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
     _up_into(ctx, p[].bufs[i], src, cnt)
     ctx.synchronize()
     return cnt
+
+
+def dev_upload_finite_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
+    """`dev_upload_run` with the finite test of the uploaded words on the
+    device (core/admitted_finite_status.mojo), read back at the upload's
+    own synchronisation (lane a8d): 0 when every word is finite, 1
+    otherwise. No host scan of `src`; the words are copied, never
+    converted, so no bit changes."""
+    var p = X_DECOMP_POOL.get_or_create_ptr()
+    var dp = _ptr(i, cnt)
+    var ctx = xd_ctx()
+    _up_into(ctx, p[].bufs[i], src, cnt)
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill[DType.int32](ctx, status, Int32(0))
+    enqueue_finite_status(ctx, dp, cnt, status.unsafe_ptr(), 0)
+    var word = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
+    ctx.synchronize()
+    var flagged = Int(word.unsafe_ptr()[0])
+    _ = word^
+    _ = status^
+    return flagged
 
 
 def dev_download_run(i: Int, dst: F32Ptr, cnt: Int) raises -> Int:
