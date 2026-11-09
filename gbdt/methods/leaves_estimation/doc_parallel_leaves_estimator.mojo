@@ -313,6 +313,45 @@ def leaf_sizes_scan_kernel(
         words.unsafe_store(2 * nl + 1, Int64(bounds.unsafe_load(2 * nl)))
 
 
+def partition_words_u32_kernel(
+    words: MutPointer[Int64, MutAnyOrigin],
+    n_leaves_in: Int32,
+    offsets: MutPointer[UInt32, MutAnyOrigin],
+    sizes: MutPointer[UInt32, MutAnyOrigin],
+):
+    """Tree op TREE_OP_LEAF_ESTIMATE's input (lane t1b-tree-leaf-and-node-ops):
+    `leaf_sizes_scan_kernel`'s offsets and sizes (`words[0, nl)`,
+    `words[nl, 2 nl)`) as the oracle's `d_p_off` / `d_p_sz` (UInt32), one
+    thread per leaf. The integers `_estimate_and_apply` packs on the host
+    from `LeafPartition.offsets` / `sizes` and uploads; here they never
+    leave the device."""
+    var nl = Int(n_leaves_in)
+    var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if leaf >= nl:
+        return
+    offsets.unsafe_store(leaf, UInt32(Int(words.unsafe_load(leaf))))
+    sizes.unsafe_store(leaf, UInt32(Int(words.unsafe_load(nl + leaf))))
+
+
+def enqueue_partition_words_u32(
+    ctx: DeviceContext,
+    mut parts: DeviceLeafPartitioner,
+    n_leaves: Int,
+    mut offsets: DeviceBuffer[DType.uint32],
+    mut sizes: DeviceBuffer[DType.uint32],
+) raises:
+    """`partition_words_u32_kernel` over the partitioner's scanned words
+    (after `partition_device` / `tree_op_partition`), enqueued."""
+    var blocks = (n_leaves + LEAF_SCAN_TPB - 1) // LEAF_SCAN_TPB
+    if blocks < 1:
+        blocks = 1
+    ctx.enqueue_function[partition_words_u32_kernel](  # small-launch(n_leaves: leaves): one thread per leaf, a model-structure size
+        parts.d_part.unsafe_ptr(), Int32(n_leaves), offsets.unsafe_ptr(),
+        sizes.unsafe_ptr(),
+        grid_dim=(blocks, 1, 1), block_dim=(LEAF_SCAN_TPB, 1, 1),
+    )
+
+
 #: `partition_status_kernel`'s codes (tree op TREE_OP_PARTITION's status
 #: word, a failure word in the sense of core/step_gate.mojo).
 comptime PARTITION_STATUS_OUT_OF_RANGE = 1
