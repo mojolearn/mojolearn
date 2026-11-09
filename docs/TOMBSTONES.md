@@ -468,6 +468,8 @@ in the tables after the sections.
 | [`MOJOLEARN_NI18_FUSED_EPOCH_GATHER`](#cnnclassifier-hand-epoch-replaced-by-one-captured-program-2026-11-09) | Neural (CNNClassifier device epoch row gather, IDENTICAL) | removed with its route (never measured; the epoch is a captured program) | 2026-11-09 | [X8_CNN_HAND_EPOCH.patch](../experiments/removed/X8_CNN_HAND_EPOCH.patch) |
 | [`MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF`](#cnnclassifier-hand-epoch-replaced-by-one-captured-program-2026-11-09) | Neural (CNNClassifier epoch order and Adam scalars host vs device) | removed with its route (the classifier trains through Program.fit) | 2026-11-09 | [X8_CNN_HAND_EPOCH.patch](../experiments/removed/X8_CNN_HAND_EPOCH.patch) |
 | [`x_cnn_fit_epoch_r`, `x_cnn_fit_epoch_d`, `x_cnn_fit_d`, `x_cnn_predict_r`, `x_cnn_epoch_rows`, `x_cnn_adam_hyper_d`, `cnn_backward_autograd` (CNNClassifier hand epoch)](#cnnclassifier-hand-epoch-replaced-by-one-captured-program-2026-11-09) | Neural (CNNClassifier fit / predict) | removed (replaced by one captured program and Program.fit on the executor) | 2026-11-09 | [X8_CNN_HAND_EPOCH.patch](../experiments/removed/X8_CNN_HAND_EPOCH.patch) |
+| [`x_cnn_res_argmax` (`res_argmax`, `argmax_rows_into`, `argmax_row_at`) and the per-call CNN predict](#cnnclassifier-predict-on-a-resident-session-2026-11-09) | Neural (CNNClassifier predict) | removed (the predict replays the forward on a resident session; its argmax is OPS_ARGMAX on the executor) | 2026-11-09 | [X8B_XCNN_RES_ARGMAX.patch](../experiments/removed/X8B_XCNN_RES_ARGMAX.patch) |
+| [`tools/identical_wave_quality.py cnn_controls`, `tools/identical_wave_cnn_sgd_gate.py --suite cnn-primitives`](#cnnclassifier-predict-on-a-resident-session-2026-11-09) | Neural (CNN gate fixtures) | removed (their entries went with the CNNClassifier hand epoch) | 2026-11-09 | - (tools; recoverable at 7c9d9d5575) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -4318,3 +4320,39 @@ Lane `x8-cnn-on-executor` (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.m
   `x-cnn-trainer-options` re-record at the one pre-release run. RUN OWED: board rows `algos/cnn-clf/synthetic` fit and
   infer on NVIDIA and AMD, program vs `f59d913b0b`.
 - Code recoverable at `f59d913b0b`; patch `experiments/removed/X8_CNN_HAND_EPOCH.patch`.
+
+## CNNClassifier predict on a resident session (2026-11-09)
+
+Lane `x8b-cnn-resident-predict` (follow-up of row X8 of `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md`), branch
+`lane/x8b-cnn-resident-predict` from `lane/x8-cnn-on-executor` `7c9d9d5575`.
+
+- **What moved.** X8's `predict` / `predict_proba` opened a fresh session and uploaded every fitted parameter at each
+  call, then downloaded each 2048-row chunk. Now the parameters live once in a resident registry session
+  (`sequence/cnn_classifier_program.mojo` `cnn_open_program`, the x_sequence door's new `CNN_OPEN` = 20): uploaded
+  at the model's first predict after a fit, a weight replacement or an unpickle, with the forward and its
+  `OPS_SOFTMAX` captured as the session's one program. `CNN_PREDICT` (= 19, same number, new descriptor
+  `[token, kind, sid, n, codes, chunk]`) uploads the images once, replays the program over row chunks with
+  `replay_values_prepared` (each chunk's probabilities copied on the executor into one (n, k) buffer) and makes ONE
+  download: the probabilities or the `OPS_ARGMAX` codes of the whole buffer. The binding
+  (`bindings/xcnn_classifier_native.mojo`) keeps the session in the prepared registry (`xcnn_clf_predict_v2`: weak on
+  the model, outside `__dict__`, so it is released with the model and never pickled or deep-copied), keyed on the
+  tier's binding entries, `_blocks`, `head_`, `classes_`, every layer and its `weight_` / `bias_`; fit drops it and
+  publishes the weights read-only (an in-place edit raises; an assigned array misses the key and reopens). A call
+  takes the record out while it runs, so concurrent predicts never share one session.
+- **What was deleted.** The per-call parameter-upload predict (X8's `cnn_predict_program` body; never reached main,
+  recoverable at `7c9d9d5575`). `x_cnn_res_argmax` of both `_mojolearn_x_cnn` and `_mojolearn_x_cnn_host`
+  (`x_cnn/device.mojo` `res_argmax`, `x_cnn/host/binding_entries_impl.mojo` `argmax_rows_into`, the shared element
+  function `x_cnn/ops.mojo` `argmax_row_at`, the bridge and surface names): its only caller was the CNNClassifier
+  predict, which left the x_cnn binding in lane x8. The argmax hunks of the sabotage patches
+  `coverage_device_ops.patch` and `coverage_host_binding_entries_impl.patch` went with it. The gate fixtures whose
+  entries X8 deleted: `tools/identical_wave_quality.py cnn_controls` (and its `identical_wave_plan.json` gate
+  `cnn_epoch_adam_controls`), `tools/identical_wave_cnn_sgd_gate.py --suite cnn-primitives` (xent via the deleted
+  `_softmax_xent`, `x_cnn_epoch_rows`, `x_cnn_adam_hyper_d`), the gate's `x_cnn_idn2_flags` fold/epoch arm check and
+  its read of the deleted `_bufs`.
+- **Sabotage.** New arm `coverage-sequence-cnn_classifier_program` (an extra ReLU on the head logits in `_forward`,
+  device and host) for `x-cnn-trainer`, `x-cnn-trainer-options` and `public-cnn-classifier-predict`; the x_cnn
+  `device_ops` arm no longer names `public-cnn-classifier-predict`.
+- **Verdict / bits.** Not measured (lanes never time). No bits change against X8: the same program nodes, kernels
+  and fold order run per row, the chunking is per row, and the argmax reads the same probabilities. RUN OWED:
+  board rows `algos/cnn-clf/synthetic` infer on NVIDIA and AMD (resident vs X8 `7c9d9d5575`).
+- Code recoverable at `7c9d9d5575`; patch `experiments/removed/X8B_XCNN_RES_ARGMAX.patch`.
