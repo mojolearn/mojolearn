@@ -3,6 +3,7 @@
 # Binding entries are connected at import. Input admission precedes metadata,
 # indexing and conversion, and unsupported Python protocols never run.
 from std.memory import memcpy
+from core.admitted_convert import admitted_convert_vector
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -511,7 +512,7 @@ def msel_slice_i64(array: PythonObject, start: Int, count: Int, context: PythonO
 
 def msel_index_i64(value: PythonObject, context: PythonObject) raises -> PythonObject:
     """A 1-D integer index Array as C int64 (`value` itself when it is one,
-    else the base binding's `cast_elements` widening, the `astype('<i8')`)."""
+    else one typed parallel widening, the `astype('<i8')`)."""
     var dtype = String(py=value.dtype)
     if dtype == "<i8":
         return value
@@ -523,8 +524,9 @@ def msel_index_i64(value: PythonObject, context: PythonObject) raises -> PythonO
         return classical_wrap_array(store, Python.tuple(len(store)), "<i8", "C", context)
     var out = msel_new(Int(py=value.size), "<i8", context)
     if Int(py=value.size) > 0:
-        _ = family_call(msel_entry("cast_elements", context), PythonObject(msel_addr(value)), codes[PythonObject(dtype)],
-                        PythonObject(msel_addr(out)), PythonObject(3), value.size)
+        # The typed parallel conversion (core/admitted_convert.mojo), not a
+        # py_call into the base binding's cast_elements.
+        _ = admitted_convert_vector(msel_addr(value), dtype, msel_addr(out), "<i8", Int(py=value.size))
         _ = out  # keep the Python object alive through the native call above
     return out
 
@@ -629,9 +631,11 @@ struct MselGroups(Movable):
             raise Error(name + " has " + String(Int(py=codes.size)) + " labels for " + String(n) + " samples")
         if String(py=codes.dtype) != "<i4":
             var narrow = msel_new(n, "<i4", context)
-            _ = family_call(msel_entry("cast_elements", context), PythonObject(msel_addr(codes)),
-                            context["family_msel_codes"][codes.dtype], PythonObject(msel_addr(narrow)),
-                            PythonObject(2), PythonObject(n))
+            # The label codes narrowed to int32 by the typed parallel
+            # conversion (core/admitted_convert.mojo), not a py_call into the
+            # base binding's cast_elements.
+            if not admitted_convert_vector(msel_addr(codes), String(py=codes.dtype), msel_addr(narrow), "<i4", n):
+                raise Error("TypeError: " + name + " label codes have dtype " + String(py=codes.dtype) + ", which no int32 conversion reads")
             _ = codes  # keep the Python object alive through the native call above
             _ = narrow  # keep the Python object alive through the native call above
             codes = narrow
