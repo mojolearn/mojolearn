@@ -465,6 +465,10 @@ in the tables after the sections.
 | [`MOJOLEARN_RSVD_FAST_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, FAST + Apple) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_IDN_RSVD_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, IDENTICAL) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_RSVD_FAST_DEVSCAN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd finiteness scan, FAST + Apple) | removed (KEPT default, superseded: parallel host scan of the one admission path) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`mds_single_dev` host-word SMACOF loop](#mds-label-propagation-and-nmf-loops-on-the-bounded-device-loop-2026-11-09) | Decomposition (MDS SMACOF, GPU) | removed (superseded: the bounded device loop, `_SmacofStep`) | 2026-11-09 | [N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch](../experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch) |
+| [`nmf_mu_dev` / `nmf_cd_dev` host-word loops, `DKit.cd_rows`](#mds-label-propagation-and-nmf-loops-on-the-bounded-device-loop-2026-11-09) | Decomposition (NMF MU and CD, GPU) | removed (superseded: the bounded device loop, `_MuStep` / `_CdStep`, `DKit.cd_rows_enq`) | 2026-11-09 | [N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch](../experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch) |
+| [`MOJOLEARN_C33_FROZEN_CHUNKS` in `op_lp_iterate` (and the per-iteration stopping-sum read)](#mds-label-propagation-and-nmf-loops-on-the-bounded-device-loop-2026-11-09) | Neighbors (label propagation dense graph) | removed (superseded: one bounded device loop, `_LpDenseStep`; the define stays for DBSCAN and LPK_BATCH) | 2026-11-09 | [N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch](../experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch) |
+| [`MOJOLEARN_LP_FAST_RESIDENT_OFF`, `MOJOLEARN_IDN_LP_RESIDENT_OFF` (+ the compact-graph binding loop)](#mds-label-propagation-and-nmf-loops-on-the-bounded-device-loop-2026-11-09) | Neighbors (label propagation kNN graph) | removed (rollbacks of measured defaults; `lp_iterate_knn` on every vendor and tier) | 2026-11-09 | [N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch](../experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -4271,3 +4275,45 @@ lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Bits: none for any int32-range or
   lane/a3-admit-decomp-prep-metrics@0cb550c337.
 - `door_rows_call` (the `_arena_io._ROWS_CALL` connection in `_native_msel_dispatch.connect`): no reader after A5 deleted
   `door_rows_host`; removed from the glue and from tools/test_device_rows_door_cv.py.
+
+## MDS, label propagation and NMF loops on the bounded device loop (2026-11-09)
+
+Lane `n4-mds-labelprop-nmf-loops` (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 4, rows MDS SMACOF,
+Label propagation, NMF multiplicative / CD), branch `lane/n4-mds-labelprop-nmf-loops` from `origin/integ/pre-0867-w2`
+`f59d913b0b`. Not experiment defines except the two label-propagation rollbacks: host loops that read a word home every
+iteration, moved onto the executor's bounded device loop (`autograd/program_loop_device.mojo`, the `LoopStep` KMeans'
+Lloyd loop uses). Each body writes its carried state only through `DKit.put_gated` (x_decomp) or gated kernels
+(x_neighbors), so iterations enqueued past the stop leave it as the stopping iteration left it, and ends with a
+one-thread criterion kernel; the host reads the register block once per chunk.
+
+- MDS SMACOF (`x_decomp/mds_dev.mojo`): Y, d and the raw stress / ssd words are the state; the stop test is
+  `mds_smacof_crit_kernel` over `mds_stop_f32` and the non-metric disparity scale is a device scalar (OP_DIV, OP_SQRT
+  cells). Reads per iteration 2-3 -> 1 per 8 iterations (MDS_LOOP_CHUNK) + 1 per start.
+- NMF (`x_decomp/nmf_dev.mojo`): MU writes W, H through `put_gated` and tests `nmf_err_f32` / `nmf_mu_stop_f32` every 10
+  iterations on the device (a zero first error stops the loop with failure code 1, the driver returns NMF_ZERO_ERR0); the
+  register block is read every 10 iterations, exactly where the old loop branched. CD sweeps a copy of W / Ht
+  (`DKit.cd_rows_enq`, `cd_rows_kernel` unchanged) and writes it back gated, the coordinate order stays a device value
+  (identity uploaded once, or the Philox draw's `order_small_dev`), and `nmf_cd_crit_kernel` tests `nmf_cd_stop_f32`; one
+  read per 8 sweeps (NMF_CD_LOOP_CHUNK) instead of 1-2 per sweep. `DKit.cd_rows` (the read-home form) is deleted.
+- Label propagation dense graph (`x_neighbors/iter_device.mojo` `op_lp_iterate`): one body `_LpDenseStep` (stopping sum,
+  `loop_criterion_below` against the float32 ceiling of tol, the gated dense / raw product or the ELL SpMM op
+  `lp_ell_spmm_enqueue`, the gated clamp), one read per LPK_BATCH. Deleted: the default path's stopping-sum read every
+  iteration, the `-D MOJOLEARN_C33_FROZEN_CHUNKS` dense-only second copy, `_c33_stop` and `_c43_graph_product`. Same bits
+  (the stop decision is the float64 compare's, the ELL product is the dense product's bits).
+- Label propagation kNN graph: `lp_iterate_knn` is the only path on every vendor and tier; `lp_fast_resident` returns 1.
+  Deleted: `-D MOJOLEARN_LP_FAST_RESIDENT_OFF` (FAST + Apple default since A/B n2-lp-res-taxi, label-propagation taxi
+  6,793 -> 2,086 ms, accuracy .7016 same) and `-D MOJOLEARN_IDN_LP_RESIDENT_OFF` (IDENTICAL default since lane
+  fam2-neighbors 2026-10-04, same bits), both refused in `core/experiment_guards_cluster.mojo`; and the binding's
+  compact-graph loop in `bindings/neighbors_semi_native.mojo` (absdiff_sum read, lp_knn_product and a clamp per
+  iteration, n x C allocated per iteration) with `_lp_fast_resident`.
+
+Bits: MDS and NMF stop tests (and MDS's non-metric scale) are float32 cells (`x_decomp/cells.mojo`) on every column, the
+host twins (`x_decomp/mds.mojo`, `x_decomp/nmf.mojo`) changed with the device; they were Python's float64 tail. Outputs
+change only where the stop iteration moves (a borderline ratio) or for a zero disparity sum. Label propagation: no bit
+change.
+
+Restore: `git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch` (the reverse of the lane on the code
+files; the guard entry in `core/experiment_guards_cluster.mojo` is left out). Code recoverable at `f59d913b0b`.
+Run owed: MDS, NMF, LabelPropagation / LabelSpreading speed on NVIDIA and AMD (board and paper_compare rows) against
+`f59d913b0b`, and the identity lanes mds, nmf, label-propagation, label-spreading at the release.
+
