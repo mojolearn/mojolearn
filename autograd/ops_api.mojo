@@ -113,6 +113,7 @@ from autograd.import_api import (
 from sequence.exec_device import DeviceExec
 from autograd.block_step_ops import (
     OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, OPS_ATTN_STEP, BlockStepScratch, is_block_step, block_step_check,
+    ATTN_STEP_TAG, attn_step_train_run,
     block_step_run, block_weight_sizes, block_state_sizes, block_offsets, block_guard, block_int_words,
     block_part_floats, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
 )
@@ -593,6 +594,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             return self.buffer_kind[addr]
         except:
             return 0
+
+    def steps_address(mut self) -> Int:
+        """Address of this session's resident step entries (lane x7): the
+        backward rules of a program that trains through a step op read
+        them (autograd/rules_step_ops.mojo StepOpRules). Stable for the
+        session's life (sessions are heap-allocated, never moved)."""
+        return Int(MutPointer(to=self.steps))
 
     def upload_block(mut self, code: Int, ints: List[Int], part: Int, srcs: List[CastIn],
                      words: List[Int]) raises -> Int:
@@ -1697,7 +1705,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         device, the result a new tensor of x's shape. The state is written
         in place, so the op is not differentiable through the tape here."""
         var info = block_step_check(code, len(x), ints, fs)
-        if self.tape.is_recording():
+        var recording = self.tape.is_recording()
+        if recording and code != OPS_ATTN_STEP:
             raise Error("ValueError: ops: " + String(info.name) + " runs in an inference session (Session(record=False))")
         var bufs = List[FP](capacity=len(x))
         var counts = List[Int](capacity=len(x))
@@ -1723,6 +1732,24 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             counts.append(self.shapes[slot].count())
         var sh = self.shapes[self._slot(hs[0])]
         var out = self.tape.reserve(self.ex, sh.count())
+        if recording:
+            # Lane x7: a recorded attention step (Program.fit's replay) is
+            # the zero-state prefill with its stages kept, recorded as one
+            # custom node over [x, weights]; its VJP is StepOpRules'
+            # (autograd/rules_step_ops.mojo), keyed by the operands' storage.
+            comptime if Self.E.IS_DEVICE:
+                _ = attn_step_train_run(rebind[DeviceExec](self.ex), self.steps, bufs, counts, ints, out)
+            else:
+                raise Error("ValueError: ops: " + String(info.name) + " runs on a GPU session")
+            var saved = Args()
+            saved.p0 = bufs[1]
+            saved.p1 = bufs[2]
+            saved.p2 = bufs[3]
+            var rx = List[Tensor]()
+            rx.append(x[0])
+            rx.append(x[1])
+            var rt = self.tape.custom_nd(self.ex, rx, out, sh, ATTN_STEP_TAG, saved)
+            return self._add(rt, 0, self.tape.requires_grad(rt), 0)
         comptime if Self.E.IS_DEVICE:
             block_step_run(rebind[DeviceExec](self.ex), self.steps, code, bufs, counts, ints, fs, out)
         else:

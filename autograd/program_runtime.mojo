@@ -19,7 +19,7 @@ from autograd.program_loop import (
     fit_epochs_per_read,
 )
 from autograd.losses import mse, mae, huber, binary_cross_entropy_with_logits, cross_entropy
-from autograd.import_api import ImportRules
+from autograd.rules_step_ops import StepOpRules
 from checks.numerics import identical_div
 
 
@@ -198,7 +198,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
     target: CastIn, loss_kind: Int, delta: Float32, optimizer: Int, parameters: List[Int],
     epochs: Int, batch: Int, shuffle_rows: Bool, seed: UInt64, curve: FP,
     condition_id: Int, otherwise_id: Int, tol: Float32 = Float32(0.0), n_iter_no_change: Int = 0,
-    step_curve: Int = 0,
+    step_curve: Int = 0, grads_out: List[Int] = List[Int](),
 ) raises -> Tuple[Int, Int, Int]:
     """Program.fit: `epochs` epochs of minibatch steps as the executor's
     bounded device loop (lane x1b-executor-gated-state-chunked-loop).
@@ -221,7 +221,15 @@ def train_program_control[E: Exec & Movable & Deinitable](
     (CNNClassifier's `losses_`, lane x8-cnn-on-executor): one OP_COPY per
     minibatch into one device buffer, downloaded once at the end (the
     committed epochs' words only: integ-w3, so an epoch run past the stop
-    never reaches the curve)."""
+    never reaches the curve).
+    `grads_out`, when not empty, holds one executor address per entry of
+    `parameters` (that parameter's element count each): the LAST
+    minibatch's gradient of each trained parameter is copied there, before
+    its update (lane x7-byte-lm-on-executor: the byte LM trainer's
+    `export_gradients`, the pre-update gradient of the last step). The
+    backward's rules are StepOpRules (ImportRules plus the attention step
+    op's tag, autograd/rules_step_ops.mojo), so a program that runs
+    OPS_ATTN_STEP trains through it."""
     var p = s.program(pid)
     var conditional = condition_id > 0 and otherwise_id > 0
     if (condition_id > 0) != (otherwise_id > 0):
@@ -262,6 +270,15 @@ def train_program_control[E: Exec & Movable & Deinitable](
                 found = True
         if not found:
             raise Error("Program.fit parameter is not a parameter of this program")
+    if len(grads_out) != 0 and len(grads_out) != len(parameters):
+        raise Error("Program.fit takes one gradient destination per trained parameter")
+    # program parameter j -> its gradient destination (0: none)
+    var grad_dst = List[Int](length=len(p.params), fill=0)
+    for i in range(len(grads_out)):  # driver-loop: over chosen trainable parameters (gradient destinations)
+        for j in range(len(p.params)):  # driver-loop: over captured parameters
+            if parameters[i] == p.params[j]:
+                grad_dst[j] = grads_out[i]
+    var rules = StepOpRules(s.steps_address())
     var full = List[FP]()
     var batches = List[FP]()
     for k in range(len(srcs)):  # driver-loop: over input shape contracts
@@ -455,7 +472,15 @@ def train_program_control[E: Exec & Movable & Deinitable](
                 var loss = program_loss(s.tape, s.ex, out, y, loss_kind, delta)
                 var differentiable = s.tape.requires_grad(loss)
                 if differentiable or not conditional:
-                    s.tape.backward_scalar_with_rules(s.ex, loss, ImportRules())
+                    s.tape.backward_scalar_with_rules(s.ex, loss, rules)
+                if len(grads_out) != 0 and differentiable and e == epochs - 1 and bi == n_batches - 1:
+                    for j in range(len(params)):  # driver-loop: over trained parameters (last-step gradient copies)
+                        if grad_dst[j] == 0 or not selected[j]:
+                            continue
+                        var gc = Args()
+                        gc.p0 = s.tape.gradient(s.tensor(phs[j]))
+                        gc.p1 = FP(unsafe_from_address=grad_dst[j])
+                        s.ex.launch[OP_COPY](gc, p.param_shapes[j].count())
                 var weighted = s.tape.scale(s.ex, loss, Float32(count))
                 var a = Args()
                 a.p0 = s.tape.value(weighted)
