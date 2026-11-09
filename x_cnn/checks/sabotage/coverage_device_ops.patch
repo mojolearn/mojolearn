@@ -1,14 +1,8 @@
+diff --git a/x_cnn/device.mojo b/x_cnn/device.mojo
+index 4191e4708e..5f87ed312f 100644
 --- a/x_cnn/device.mojo
 +++ b/x_cnn/device.mojo
-@@ -1019,6 +1019,7 @@
-     launch[argmax_row_at](ctx, fp(src), fp(src), fp(src), fp(src), ip(out), ip(dp), n)
-     down_i(ctx, out, dst, n)
-     ctx.synchronize()
-+    dst[0] = (dst[0] + Int32(1)) % Int32(k)  # SABOTAGE: the first label moved to the next class
-     _ = prm^
-     _ = dp^
-     _ = out^
-@@ -1032,6 +1033,7 @@
+@@ -1014,6 +1014,7 @@ def res_download(addr: Int, dst: FP, n: Int) raises:
      var ctx = cnn_ctx()
      var b = view(ctx, FP(unsafe_from_address=addr), n)
      down(ctx, b, dst, n)
@@ -16,7 +10,7 @@
      _ = b^
      _ = ctx^
  
-@@ -1331,6 +1333,9 @@
+@@ -1313,6 +1314,9 @@ def map2_m[f: ElemFn](a: List[Int], dev: Int, na: Int, nb: Int, n_out: Int, prm:
          launch[f](ctx, fp(da), fp(da), fp(dout), fp(dout), ip(dp), ip(dp), n_out)
      m_fetch(ctx, dout, a[2], n_out, isdev(dev, 2))
      ctx.synchronize()
@@ -26,7 +20,7 @@
      _ = da^
      _ = db^
      _ = dp^
-@@ -1788,6 +1793,9 @@
+@@ -1770,6 +1774,9 @@ def batchnorm_forward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool
      m_fetch(ctx, dr, a[1], nr, isdev(dev, 1))
      m_fetch(ctx, da, a[2], na, isdev(dev, 2))
      ctx.synchronize()
@@ -36,7 +30,7 @@
      _ = dx^
      _ = dr^
      _ = dpart^
-@@ -1855,6 +1863,9 @@
+@@ -1837,6 +1844,9 @@ def batchnorm_backward_m(a: List[Int], dev: Int, prm: List[Int32], training: Boo
      m_fetch(ctx, dout, a[3], total, isdev(dev, 3))
      m_fetch(ctx, da, a[2], na, isdev(dev, 2))
      ctx.synchronize()

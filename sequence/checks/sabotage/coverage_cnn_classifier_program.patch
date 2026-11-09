@@ -1,0 +1,17 @@
+diff --git a/sequence/cnn_classifier_program.mojo b/sequence/cnn_classifier_program.mojo
+index 444ee4afcf..90950669d1 100644
+--- a/sequence/cnn_classifier_program.mojo
++++ b/sequence/cnn_classifier_program.mojo
+@@ -223,7 +223,11 @@ def _forward[E: Exec & Movable & Deinitable](
+     var wt = s.op(OPS_TRANSPOSE, ts, List[Int](), none)
+     var ls: List[Int] = [h, wt, params[2 * nb + 1]]
+     var act: List[Int] = [0]
+-    return s.op(OPS_LINEAR, ls, act, none)
++    # SABOTAGE (coverage-sequence-cnn_classifier_program): the head's logits
++    # pass through an extra ReLU, so every negative logit reads 0
++    var logits = s.op(OPS_LINEAR, ls, act, none)
++    var rl: List[Int] = [logits]
++    return s.op(OPS_RELU, rl, List[Int](), none)
+ 
+ 
+ def _download_params[E: Exec & Movable & Deinitable](

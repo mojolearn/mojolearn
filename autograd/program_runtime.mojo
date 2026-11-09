@@ -198,6 +198,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
     target: CastIn, loss_kind: Int, delta: Float32, optimizer: Int, parameters: List[Int],
     epochs: Int, batch: Int, shuffle_rows: Bool, seed: UInt64, curve: FP,
     condition_id: Int, otherwise_id: Int, tol: Float32 = Float32(0.0), n_iter_no_change: Int = 0,
+    step_curve: Int = 0,
 ) raises -> Tuple[Int, Int, Int]:
     """Program.fit: `epochs` epochs of minibatch steps as the executor's
     bounded device loop (lane x1b-executor-gated-state-chunked-loop).
@@ -214,7 +215,13 @@ def train_program_control[E: Exec & Movable & Deinitable](
     moments are shadowed behind the gate, OP_LOOP_SHADOW) and on the host
     (the optimizer's step counts, bias-correction products and schedule
     epoch go back to the stopping epoch's). Without a criterion there is no
-    read before the end. Returns (true batches, false batches, epochs run)."""
+    read before the end. Returns (true batches, false batches, epochs run).
+    `step_curve`, when not 0, is the address of epochs * ceil(n / batch)
+    float32 words that receive every minibatch's own loss in step order
+    (CNNClassifier's `losses_`, lane x8-cnn-on-executor): one OP_COPY per
+    minibatch into one device buffer, downloaded once at the end (the
+    committed epochs' words only: integ-w3, so an epoch run past the stop
+    never reaches the curve)."""
     var p = s.program(pid)
     var conditional = condition_id > 0 and otherwise_id > 0
     if (condition_id > 0) != (otherwise_id > 0):
@@ -267,6 +274,7 @@ def train_program_control[E: Exec & Movable & Deinitable](
     var indices = Optional[FP]()
     var batch_losses = Optional[FP]()
     var losses = Optional[FP]()
+    var step_losses = Optional[FP]()
     var held = Tape()
     var swapped = False
     var temps = List[Int]()
@@ -367,6 +375,8 @@ def train_program_control[E: Exec & Movable & Deinitable](
                     shadow_live.append(live[q])
                     shadow_copy.append(copy)
                     shadow_n.append(m)
+        if step_curve != 0:
+            step_losses = s.ex.alloc(epochs * n_batches)
         swap(held, s.prog_tape)
         swap(held, s.tape)
         swapped = True
@@ -451,6 +461,11 @@ def train_program_control[E: Exec & Movable & Deinitable](
                 a.p0 = s.tape.value(weighted)
                 a.p1 = batch_losses.value() + bi
                 s.ex.launch[OP_COPY](a, 1)
+                if step_losses:
+                    var sa = Args()
+                    sa.p0 = s.tape.value(loss)
+                    sa.p1 = step_losses.value() + (e * n_batches + bi)
+                    s.ex.launch[OP_COPY](sa, 1)
                 for j in range(len(params)):  # driver-loop: over optimizer parameter updates
                     if not selected[j] or not differentiable:
                         continue
@@ -500,6 +515,8 @@ def train_program_control[E: Exec & Movable & Deinitable](
             true_batches = marks[committed - chunk_start].true_batches
             false_batches = marks[committed - chunk_start].false_batches
         s.ex.download(curve, losses.value(), epochs)
+        if step_losses and committed > 0:
+            s.ex.download(FP(unsafe_from_address=step_curve), step_losses.value(), committed * n_batches)
     except err:
         if swapped:
             s._drop_temps(temps)
@@ -508,6 +525,8 @@ def train_program_control[E: Exec & Movable & Deinitable](
             swap(held, s.prog_tape)
         release_training_buffers(s.ex, full, batches, ty, yb, indices, batch_losses, losses)
         _free_loop_owned(s.ex, loop_owned)
+        if step_losses:
+            s.ex.free(step_losses.value())
         raise err
     s._drop_temps(temps)
     s.tape.no_grad()
@@ -515,6 +534,8 @@ def train_program_control[E: Exec & Movable & Deinitable](
     swap(held, s.prog_tape)
     release_training_buffers(s.ex, full, batches, ty, yb, indices, batch_losses, losses)
     _free_loop_owned(s.ex, loop_owned)
+    if step_losses:
+        s.ex.free(step_losses.value())
     return (true_batches, false_batches, committed)
 
 

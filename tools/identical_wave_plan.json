@@ -78,7 +78,6 @@
     "pca_bits",
     "import_smoke",
     "cnn_seams",
-    "cnn_epoch_adam_controls",
     "eigh_block_expected_refusal",
     "lu_result_word",
     "rf_phase_upload_lifetime"
@@ -273,20 +272,6 @@
       "kind": "mojo",
       "path": "x_cnn/checks/seams_check.mojo",
       "timeout": 7200
-    },
-    {
-      "id": "cnn_epoch_adam_controls",
-      "kind": "python",
-      "path": "tools/identical_wave_quality.py",
-      "args": [
-        "cnn_controls",
-        "--report",
-        "{report}"
-      ],
-      "arms": [
-        "on"
-      ],
-      "coverage": "Permutation n1,2,3,1000,65537 and Adam steps1..100000 at two beta pairs against a float64 NumPy reference, <=1ULP."
     },
     {
       "id": "eigh_block_expected_refusal",
