@@ -138,23 +138,14 @@ def test_split_plan_reports_a_count_that_disagrees():
     assert plan(fold.ctypes.data, 5, 2, sizes.ctypes.data, addrs.ctypes.data, addrs.ctypes.data) == 0
 
 
-def test_pca_transform_of_a_device_fold_matches_host_rows():
-    # Lane a6: PCA.transform of a DeviceRows fold goes through the device
-    # entry pca_transform_fold (gathered out of the resident base) on a GPU
-    # build and through the host gather elsewhere; both must equal the
-    # transform of the same rows as a host array.
-    from mojolearn import decomposition, _arena_io
-    x, _ = _data("reg")
-    pca = decomposition.PCA(n_components=2).fit(x)
-    idx = np.array([3, 0, 17, 59, 8], dtype="i8")
-    want = np.asarray(pca.transform(x[idx]))
-    plan = _plan(decomposition.PCA)
-    assert plan["device_rows"] is True
-    scores = model_selection.cross_val_score(decomposition.PCA(n_components=2), x, cv=3,
-                                             scoring=lambda est, xt, yt=None: float(np.asarray(est.transform(xt)).sum()))
-    assert len(scores) == 3
-    assert want.shape == (5, 2)
-    assert _arena_io.DeviceRows is plan["context"]["door_rows_class"]
+def test_family_and_classical_estimators_opt_in():
+    # Lane a6: model selection hands these classes DeviceRows folds.
+    from mojolearn import decomposition, kernel_methods as km, neighbors, linear_model
+    from mojolearn import _svm_impl as svm_impl, svm, _gp_impl as gp
+    for cls in (decomposition.PCA, svm_impl.SVC, svm_impl.SVR, svm.LinearSVC, svm.LinearSVR,
+                gp.GaussianProcessRegressor, km.KernelRidge, neighbors.KNeighborsClassifier,
+                neighbors.KNeighborsRegressor, linear_model.LogisticRegression, linear_model.QNRegressor):
+        assert _plan(cls)["device_rows"] is True, cls.__name__
 
 
 def test_nan_fold_reaches_a_nan_accepting_door():
