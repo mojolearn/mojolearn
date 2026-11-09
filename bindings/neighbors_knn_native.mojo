@@ -54,7 +54,7 @@ from bindings.family_common import (
 )
 from bindings.classical_labels import (
     LabelsView, labels_view, labels_check_rank, labels_cast, labels_all_finite, labels_helper,
-    labels_encode_labels, labels_shape_of, labels_reshape, classical_decode_labels, classical_accuracy,
+    classical_encode_labels, labels_shape_of, labels_reshape, classical_decode_labels, classical_accuracy,
     _native_labels,
 )
 from bindings.mcls_common import mc_is_integer_labels, mc_dtype_name
@@ -749,7 +749,7 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     if len(shape) == 1 and not mc_is_integer_labels(y, context) and not _whole_float_labels(y, context):
         # Labels of any other kind (str labels) vote as their dense codes in
         # `classes_` order; `predict` decodes the voted codes.
-        var encoded = labels_encode_labels(y, context)
+        var encoded = classical_encode_labels(y, context)
         var names = encoded.classes
         for i in range(len(names)):  # driver-loop: over kind test of the class labels (classes-sized: distinct classes)
             if not family_is_str(names[i]):
@@ -798,7 +798,7 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         _ = wide  # keep the Python object alive through the native call above
         _ = view  # keep the Python object alive through the native call above
         py_setitem(fields, "_y_cols", labels_reshape(y32, Python.tuple(1, n), context))
-        py_setitem(fields, "_classes_list", Python.list(labels_encode_labels(y32, context).classes))
+        py_setitem(fields, "_classes_list", Python.list(classical_encode_labels(y32, context).classes))
         return
     var yc = family_array(Python.tuple(n_out, n), "<i4", context)
     if view.c_order():

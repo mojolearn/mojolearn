@@ -38,7 +38,7 @@ from bindings.mode_metadata_native import _class_fields
 from bindings.gp_svm_records import gpsvm_no_fit_callbacks
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.classical_arrays import classical_typed
-from bindings.classical_labels import labels_cast, labels_real_type
+from bindings.classical_labels import labels_cast, labels_real_type, classical_encode_labels
 from bindings.native_array_view import native_array_ndarray_view
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from bindings.family_common import (

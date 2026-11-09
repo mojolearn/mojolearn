@@ -23,7 +23,7 @@ from bindings.family_common import (
 )
 from bindings.svm_mixture_native import _qn_scores
 from core.admitted_weights import admitted_fill
-from bindings.classical_labels import labels_real_type, labels_bool_type, labels_text_type, labels_type_name
+from bindings.classical_labels import labels_real_type, labels_bool_type, labels_text_type, labels_type_name, classical_encode_labels
 from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_isfinite, svc_base,

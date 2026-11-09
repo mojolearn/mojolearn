@@ -21,7 +21,7 @@ from bindings.arena_materialize_native import _prepared_info, _slot
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from bindings.msel_inputs import msel_admit, msel_input, msel_input_count
 from bindings.sequential_admission import _one_of
-from bindings.classical_labels import _label_list, labels_encode_labels
+from bindings.classical_labels import _label_list, classical_encode_labels
 from bindings.label_input_sources import labels_list_scalar_kind, labels_text_storage, LABELS_LIST_OTHER
 from bindings.native_typed_context import native_typed_context
 from bindings.classical_attributes import classical_connect_numpy
@@ -358,7 +358,7 @@ def msel_numeric_vector(value: PythonObject, column: Bool, context: PythonObject
 def msel_encode(value: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_labels.encode_labels(value)`: (classes, int32 codes)."""
     # A C-contiguous int32/int64/uint32 ndarray vector is encoded straight from
-    # its buffer (labels_encode_labels' one prepare_targets call). Flattening
+    # its buffer (classical_encode_labels' one prepare_targets call). Flattening
     # it first boxed and admitted every label as a Python int, which only
     # rebuilt the same int64 vector (_list_labels) for the same encoder: same
     # Python-int classes and codes, so no bits change. Every other input keeps
@@ -399,7 +399,7 @@ def msel_encode(value: PythonObject, context: PythonObject) raises -> PythonObje
     # tuples) is built once per connected context and cached there, not
     # copied and rebuilt on every encode (bindings/native_typed_context.mojo).
     var labels_context = native_typed_context(context, True, False)
-    var encoded = labels_encode_labels(flat, labels_context)
+    var encoded = classical_encode_labels(flat, labels_context)
     return Python.tuple(encoded.classes, encoded.codes)
 
 

@@ -324,7 +324,7 @@ def encode_labels(y):
     # Lane ne1-h-labels (plan NATIVE_ENTRY_POINTS_AFTER_0866 H, N413): ONE
     # native call reads y (buffer, Array, list, tuple, Series, str ndarray,
     # or any nested label sequence) and encodes it
-    # (bindings/classical_labels.mojo `labels_encode_labels`, the same
+    # (bindings/classical_labels.mojo `classical_encode_labels`, the same
     # classes, codes and refusals as the former shell steps here:
     # `_encode_labels_native`, `flatten_labels`, the list and str encoders,
     # then `sorted_classes`). The shell no longer walks or copies y.

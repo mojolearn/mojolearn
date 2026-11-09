@@ -921,7 +921,7 @@ def _numeric_label_view(y: PythonObject, context: PythonObject, mut bool_source:
 
 
 def _encode_label_view(y: PythonObject, context: PythonObject, mut bool_source: Bool) raises -> Optional[LabelsView]:
-    """The numeric label block `labels_encode_labels` encodes with one
+    """The numeric label block `classical_encode_labels` encodes with one
     native `prepare_targets` call, or None for what only the label input
     step reads. Admits `y` (`classical_admit_value`) exactly once, as
     `_numeric_label_view` does.
@@ -1162,10 +1162,18 @@ def _list_labels(y: PythonObject, context: PythonObject) raises -> Optional[Clas
     return _native_labels(_view_of_array(array), False, context)
 
 
-def labels_encode_labels(var y: PythonObject, context: PythonObject) raises -> ClassicalLabels:
-    """`_labels.encode_labels(y)`: one native `prepare_targets` call for a
+def classical_encode_labels(var y: PythonObject, context: PythonObject) raises -> ClassicalLabels:
+    """`_labels.encode_labels(y)`: `classes` the Python class list and one
+    int32 code per row (an Array). One native `prepare_targets` call for a
     numeric label vector (a buffer or a flat list of exact ints or exact
-    floats); the ORDER RULE over Python objects for str and object labels."""
+    floats); the ORDER RULE over Python objects for str and object labels.
+    THE one label encoder (lane a2-admit-family: labels_encode_labels and the
+    SVM's svc_encode_1d were second names for it)."""
+    # A context without the base binding's label helpers (an owner context
+    # that connects none) takes the label input step only, as svc_encode_1d
+    # did: the same sorted classes and codes.
+    if py_get(context, "labels_helpers") is None:
+        return _sorted_classes(_flatten_labels(y, context), context)
     var b = labels_builtins()
     y = classifier_label_list(y, context)
     var bool_source = False
@@ -2134,10 +2142,9 @@ def _owned_f32(w: LabelsMatrix, context: PythonObject) raises -> PythonObject:
 # The names the classical owners call.
 
 
-def classical_encode_labels(y: PythonObject, context: PythonObject) raises -> ClassicalLabels:
-    """`_labels.encode_labels(y)`: `classes` the Python class list and one
-    int32 code per row (an Array), the same classes, codes and refusals."""
-    return labels_encode_labels(y, context)
+# TOMBSTONE: labels_encode_labels (a second name of the one label encoder) deleted 2026-11-08 by lane a2-admit-family; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch. Its body is
+# classical_encode_labels above.
 
 
 def classical_decode_labels(classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:

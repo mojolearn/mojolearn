@@ -26,7 +26,7 @@ from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_pandas import _pd_class
 from bindings.classical_labels import _pandas_values, labels_type_name
 from bindings.classical_labels import _flatten_labels, _sorted_classes, _classification_labels, labels_shape_of, labels_label_kind
-from bindings.classical_labels import labels_encode_labels, labels_accuracy, classical_score_from_codes
+from bindings.classical_labels import labels_accuracy, classical_score_from_codes
 from bindings.label_admission_native import classifier_label_list
 from bindings.gp_svm_records import gpsvm_class_table, gpsvm_class_table_put
 from bindings.family_common import (
@@ -201,25 +201,10 @@ def svc_labels_1d(y: PythonObject, context: PythonObject) raises -> PythonObject
     return Python.tuple(svc_flatten_labels(y, context), shape)
 
 
-def svc_encode_1d(y: PythonObject, context: PythonObject) raises -> PythonObject:
-    """(classes, int32 codes, n) of a 1-D label vector, or (None, None, shape)
-    when y is not 1-D. A numeric label buffer is validated (NaN refusal
-    included) and encoded straight from its storage by the shared encoder's
-    one `prepare_targets` call; lists, str and object labels take the label
-    input step (flatten, then the ORDER RULE)."""
-    # Perf (lane perf-svm-and-msel): SVC/NuSVC/LinearSVC fit flattened y into
-    # Python objects (svc_labels_1d) and then sorted and dict-coded them
-    # (svc_sorted_classes): two Python passes per label. Numeric classes are
-    # the same sorted values and codes either way.
-    var shape = svc_shape_of(y, context)
-    if len(shape) != 1:
-        return Python.tuple(PythonObject(None), PythonObject(None), shape)
-    if py_get(context, "labels_helpers") is not None:
-        var encoded = labels_encode_labels(y, context)
-        return Python.tuple(encoded.classes, encoded.codes, PythonObject(encoded.n))
-    var labels = svc_flatten_labels(y, context)
-    var sorted = _sorted_classes(labels, context)
-    return Python.tuple(sorted.classes, sorted.codes, PythonObject(sorted.n))
+# TOMBSTONE: svc_encode_1d (the SVM's second label encoder) deleted 2026-11-08 by lane a2-admit-family; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch. Its callers
+# test the 1-D shape (svc_shape_of) and call classical_encode_labels, which
+# now carries the no-label-helpers branch it had.
 
 
 comptime _NAN_LABEL = "mojolearn: y contains a NaN label; NaN is not a class"
