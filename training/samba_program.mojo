@@ -51,6 +51,7 @@ ran once, at its first run). A decode session loads the weights once at open.
 
 No arithmetic here; no host loop over rows or elements.
 """
+from std.sys.info import has_amd_gpu_accelerator, has_apple_gpu_accelerator, has_nvidia_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.cast_in import CastIn
@@ -77,6 +78,11 @@ from training.samba_resident import (
 )
 from transformer.impl.llama.modeling_llama import LlamaDims, llama_rms_norm
 
+
+#: The program runs block step ops, which are device only: a host build
+#: registers no program entry and keeps the CPU per-layer route
+#: (bindings/samba_inference_native.mojo).
+comptime SAMBA_PROGRAM_ON = has_amd_gpu_accelerator() or has_nvidia_gpu_accelerator() or has_apple_gpu_accelerator()
 
 #: Ten carried pieces per Mamba-3 layer, in `_m3_names()` order
 #: (bindings/samba_inference_native.mojo) = `_m3_state_sizes` order: theta, h,
@@ -261,6 +267,14 @@ struct SambaStackProgram(Movable, Writable):
         if self.tie:
             return 0
         return self.norm_f_index() + 1
+
+    def first_position(self) -> Int:
+        """The first attention layer's cached tokens (0 for an all-Mamba-3
+        stack)."""
+        for i in range(len(self.kinds)):  # small-loop(kinds: one code per layer): cursor lookup, not data
+            if self.kinds[i] == SAMBA_LAYER_ATTENTION:
+                return self.cur[2 * i]
+        return 0
 
     def piece_count(self) -> Int:
         """State addresses `load_state` / `export_state` take, in stack
