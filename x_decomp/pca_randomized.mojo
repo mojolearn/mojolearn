@@ -760,12 +760,20 @@ def pca_randomized_core[E: Exec, D: RDev, RES: Bool](
 def pca_randomized_fit_run[E: Exec, D: RDev, RES: Bool](
     x: F32Ptr, components_out: F32Ptr, mean_out: F32Ptr, variance_out: F32Ptr, ratio_out: F32Ptr,
     singular_out: F32Ptr, rows: Int, cols: Int, components: Int, oversamples: Int, iterations: Int,
-    auto_iterations: Bool, seed: Int,
+    auto_iterations: Bool, seed: Int, finite_word: Int = 0,
 ) raises -> Float64:
     """`_randomized_decompose(X, components, center=True, ...)` then
     `svd_flip(u_based_decision=False)`: the five public arrays written
     (components x cols, cols, and components each), the noise variance
-    returned. `auto_iterations`: scikit-learn's `iterated_power='auto'`."""
+    returned. `auto_iterations`: scikit-learn's `iterated_power='auto'`.
+    `finite_word` (lane a8d-device-x-decomp-manifold): when nonzero, the
+    host address of one Int32 that receives X's finite status word (0 =
+    every word finite): the total of the centred squares, which the fit
+    computes anyway, is computed before the decomposition and its word read
+    back (one word down); it is NaN exactly when X holds a NaN or an
+    infinity (a finite X whose column sum overflows both ways is refused
+    too). A flagged X stops the fit (nothing written, 0.0 returned; the
+    door refuses). The same calls on the same operands: no bit change."""
     if rows < 2 or cols < 2:
         raise Error("randomized PCA needs at least two rows and two features")
     if components < 1 or components >= min(rows, cols):
@@ -784,6 +792,23 @@ def pca_randomized_fit_run[E: Exec, D: RDev, RES: Bool](
         var sums = kit.sum(original, True)
         var mean = kit.ew(_OP_SCALE, sums, scalar=1.0 / Float64(rows))
         var centered = kit.ew(_OP_SUB, original, mean)
+        var data_squared = kit.ew(_OP_SQ, centered)
+        # Perf (lane perf3-cluster-gp-gate): the two totals stay 1 x 1
+        # matrices where they were summed, as `_randomized_decompose` kept
+        # them; reading each word down and uploading it again as a constant
+        # cost a synchronizing download and upload per total on a GPU
+        # binding. The float32 word is the same either way (same bits).
+        # Lane a8d: taken before the decomposition; with `finite_word` its
+        # word is read once as X's finite test (see the docstring).
+        var total = kit.total_matrix(data_squared)
+        if finite_word != 0:
+            var t = kit.word(total)
+            var flagged = Int32(1) if t != t else Int32(0)
+            MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = flagged
+            if flagged != 0:
+                kit.close()
+                return 0.0
+        total = kit.ew(_OP_SCALE, total, scalar=1.0 / Float64(rows - 1))
         var decomposed = pca_randomized_core(kit, centered, components, oversamples, power, seed)
         var u = decomposed[0]
         var s = decomposed[1]
@@ -794,14 +819,6 @@ def pca_randomized_fit_run[E: Exec, D: RDev, RES: Bool](
         u = kit.ew(_OP_MUL, u, signst)
         var squared = kit.ew(_OP_SQ, s)
         var variance = kit.ew(_OP_SCALE, squared, scalar=1.0 / Float64(rows - 1))
-        var data_squared = kit.ew(_OP_SQ, centered)
-        # Perf (lane perf3-cluster-gp-gate): the two totals stay 1 x 1
-        # matrices where they were summed, as `_randomized_decompose` kept
-        # them; reading each word down and uploading it again as a constant
-        # cost a synchronizing download and upload per total on a GPU
-        # binding. The float32 word is the same either way (same bits).
-        var total = kit.total_matrix(data_squared)
-        total = kit.ew(_OP_SCALE, total, scalar=1.0 / Float64(rows - 1))
         var ratio = kit.ew(_OP_DIV, variance, total)
         var explained = kit.total_matrix(variance)
         var noise = kit.ew(_OP_SUB, total, explained)

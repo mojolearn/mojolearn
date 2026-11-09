@@ -70,8 +70,9 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     # parallel cast into uninitialised storage (scikit-learn wording, est PCA).
     # Lane a7d: the exact solvers' entry (pca_fit_owned) tests a borrowed X
     # on the device after its upload and returns the status word
-    # (defer_finite): no host scan of X. The randomized driver uploads X in
-    # its own executor, so that solver keeps the scan here.
+    # (defer_finite): no host scan of X. Lane a8d: the randomized driver
+    # returns the word too (its centred-square total, read before the
+    # decomposition), so no solver scans X here.
     # Lane a8d: an identical exact fit (no projection) of a cross-validation
     # fold resident on the device is gathered there by the base binding's
     # `pca_fit_fold` (no host gather, no upload of X; finite and range
@@ -82,7 +83,7 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     var identical = (mode is not None and py_type(mode) is py_type(PythonObject(""))
                      and String(py_call(py_call(mode.strip).lower)) == "identical")
     var fold_ok = fold_entry is not None and identical and not project and solver != "randomized"
-    var x = decomp_admit(source, "PCA", context, device_x=fold_ok, defer_finite=solver != "randomized")
+    var x = decomp_admit(source, "PCA", context, device_x=fold_ok, defer_finite=True)
     var on_device = x.store.active()
     var rows = x.rows
     var cols = x.cols
@@ -174,12 +175,21 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     var noise = PythonObject(None)
     var keep = count
     if randomized:
+        var rparams = Python.list(rows, cols, count, oversamples, iterations, Int(auto), Int(whiten), seed)
+        if not x.finite:
+            _ = py_call(rparams.append, PythonObject(1))
+        var got: PythonObject
         try:
-            noise = py_call_typed(entries["pca_fit_randomized"], x.address, components.address,
+            got = py_call_typed(entries["pca_fit_randomized"], x.address, components.address,
                 mean.address, variance.address, ratio.address, singular.address, projection_address,
-                Python.list(rows, cols, count, oversamples, iterations, Int(auto), Int(whiten), seed))
+                rparams)
         except error:
             raise pca_refusal(error^)
+        if not x.finite:
+            admitted_finite_refuse(Int(py=got[1]), "PCA")
+            noise = got[0]
+        else:
+            noise = got
     elif on_device:
         var fold = py_call_typed(fold_entry, Python.list(x.store.base_id, x.store.base_rows, x.store.index_id),
             Python.list(components.address, mean.address, variance.address, ratio.address, singular.address),

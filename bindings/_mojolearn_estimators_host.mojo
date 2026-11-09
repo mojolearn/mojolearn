@@ -605,7 +605,9 @@ def pca_fit_randomized_binding(
     the GPU binding's contract. params: n_rows, n_features, n_components,
     n_oversamples, power iterations, auto (1: iterated_power='auto'),
     whiten, the Philox seed mod 2^32. Returns the noise variance."""
-    if len(params) != 8:
+    # Lane a8d: an optional ninth value, the finite flag: 1 asks for X's
+    # finite status word (returned as [noise, word]; a flagged X is not fit).
+    if len(params) != 8 and len(params) != 9:
         raise Error("pca_fit_randomized: params must contain rows, features, components, oversamples, iterations, auto, whiten, seed")
     var x_address = Int(py=x_addr)
     var cp = f32_ptr(Int(py=components_addr))
@@ -623,11 +625,17 @@ def pca_fit_randomized_binding(
     var auto = Int(py=params[5]) != 0
     var whiten = Int(py=params[6]) != 0
     var s = Int(py=params[7])
+    var test = len(params) == 9 and Int(py=params[8]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     var noise = Float64(0.0)
     with GILReleased(Python()):
         noise = pca_randomized_owned_host_run(
-            x_address, cp, mp, ep, rp, sp, nr, nf, nc, oversamples, iterations, auto, s, op, oa != 0, whiten
+            x_address, cp, mp, ep, rp, sp, nr, nf, nc, oversamples, iterations, auto, s, op, oa != 0, whiten,
+            word_addr,
         )
+    if test:
+        return Python.list(PythonObject(noise), PythonObject(Int(word[0])))
     return PythonObject(noise)
 
 

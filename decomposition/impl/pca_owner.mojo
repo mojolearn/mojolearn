@@ -249,15 +249,19 @@ def pca_randomized_owned(
     out_ptr: MutPointer[Float32, MutUntrackedOrigin],
     project: Bool,
     whiten: Bool,
+    finite_word: Int = 0,
 ) raises -> Float64:
     """`svd_solver='randomized'`: the five arrays written at `n_components`
     by the decomp lane's resident driver, then with `project` X's
-    projection. Returns the noise variance."""
+    projection. Returns the noise variance. `finite_word` (lane a8d): as
+    `pca_randomized_fit_run`'s; a flagged X is neither fit nor projected."""
     var noise = pca_randomized_fit_run[DevExec, DevRDev, True](
         _f32_at(Int(x_ptr)), _f32_at(Int(components_ptr)), _f32_at(Int(mean_ptr)),
         _f32_at(Int(explained_ptr)), _f32_at(Int(ratio_ptr)), _f32_at(Int(singular_ptr)),
-        n_rows, n_features, n_components, oversamples, iterations, auto_iterations, seed,
+        n_rows, n_features, n_components, oversamples, iterations, auto_iterations, seed, finite_word,
     )
+    if finite_word != 0 and MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] != 0:
+        return 0.0
     if project:
         pca_project_owned(
             ctx, x_ptr, mean_ptr, components_ptr, singular_ptr, out_ptr, n_rows, n_features, n_components, whiten
