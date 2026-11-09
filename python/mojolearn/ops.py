@@ -1470,8 +1470,8 @@ class Program:
             step, as ``{handle: array}``; None keeps the state they hold.
         unroll : int or None
             Steps enqueued between two reads of the loop's status on the
-            host. The result is the same for every value. None reads once,
-            after the last step.
+            host. The result is the same for every value. None lets the loop
+            choose (a fixed step count reads almost only at the end).
         iteration : bool
             When true, this graph takes one more input, the number of steps
             completed so far (an integer when that input is an ids input).
