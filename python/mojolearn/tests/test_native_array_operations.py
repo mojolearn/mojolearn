@@ -2,7 +2,7 @@
 (bindings/array_native.mojo); run only against the integrated native build.
 
 Each operation is held to its retained Python definition
-(`_array._ArrayReference`, never called by the product) on C- and F-order
+(`tests/_array_reference._ArrayReference`, never called by the product) on C- and F-order
 blocks of every dtype, 0-d and empty blocks: the same result (Array bytes,
 layout and dtype; Python scalars by type and bits) or the same refusal (type
 and words). The audit checks that the public call itself runs no Python frame.
@@ -16,7 +16,8 @@ import numpy as np
 import pytest
 
 from mojolearn import _array
-from mojolearn._array import Array, _ArrayReference as R
+from mojolearn._array import Array
+from mojolearn.tests._array_reference import _ArrayReference as R
 from mojolearn._verify_native_runtime import audit_native_call
 
 _RNG = np.random.default_rng(859)

@@ -6,6 +6,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ARRAY = ROOT / 'python/mojolearn/_array.py'
+# Array's Python definitions, the oracles, live with the tests (lane
+# p5-cpu-route-relabel-and-dead-code, 2026-11-09).
+REFERENCE = ROOT / 'python/mojolearn/tests/_array_reference.py'
 NATIVE = ROOT / 'bindings/array_native.mojo'
 
 OPS = {'__init__': 'init', 'flags': 'flags', '__array_interface__': 'interface', '__array__': 'array',
@@ -16,8 +19,8 @@ OPS = {'__init__': 'init', 'flags': 'flags', '__array_interface__': 'interface',
        'from_list': 'from_list'}
 
 
-def classes():
-    tree = ast.parse(ARRAY.read_text())
+def classes(path=ARRAY):
+    tree = ast.parse(path.read_text())
     return {n.name: n for n in tree.body if isinstance(n, ast.ClassDef)}
 
 
@@ -35,18 +38,19 @@ def test_every_public_operation_is_one_native_call():
 
 
 def test_reference_definitions_are_kept_only_as_oracles():
-    reference = classes()['_ArrayReference']
+    reference = classes(REFERENCE)['_ArrayReference']
     names = {n.name for n in reference.body if isinstance(n, ast.FunctionDef)}
     assert names == set(OPS)
+    assert '_ArrayReference' not in classes()
     product = ROOT / 'python/mojolearn'
     users = set()
     for path in product.rglob('*.py'):
         if 'tests' in path.relative_to(product).parts:
             continue
-        if '_ArrayReference' in path.read_text():
+        if '_ArrayReference' in path.read_text() or '_array_reference' in path.read_text():
             users.add(path.relative_to(product).as_posix())
-    assert users == {'_array.py'}
-    text = ARRAY.read_text()
+    assert users == set()
+    text = REFERENCE.read_text()
     assert text.count('_ArrayReference.') == 4  # its docstring and the three internal oracle rewires
 
 

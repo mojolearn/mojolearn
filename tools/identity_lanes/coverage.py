@@ -965,7 +965,8 @@ def _coverage_text_tokenizers(ml):
     tk = ml.models.tokenizer
     rest = bytes(b for b in range(256) if b not in _COVERAGE_TEXT_ALPHABET)  # glue: the 192 other bytes
     tokens = [bytes([c]) for c in _COVERAGE_TEXT_ALPHABET + rest]  # glue: the 256 one-byte tokens
-    spelled = ml.tokenizer._byte_to_char()
+    from mojolearn._tokenizer_synthetic import byte_to_char
+    spelled = byte_to_char()
     vocab = {spelled[t[0]]: i for i, t in enumerate(tokens)}  # glue: GPT-2 spelling of each token
     data = dict(version="1.0", truncation=None, padding=None, added_tokens=[], normalizer=None,
                 pre_tokenizer={"type": "ByteLevel", "add_prefix_space": False, "trim_offsets": True,

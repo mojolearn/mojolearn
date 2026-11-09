@@ -32,7 +32,8 @@ def misc_checks(recorder,public,methods):
     def check(method):
         y=np.array([1,1.25,1.5,1.125,1.75,1.375,2,1.625],np.float32)
         if name in ('BpeTokenizer','GPT2Tokenizer','TrainedBpeVocabulary'):
-            from .tokenizer import BpeTokenizer, BpeVocabularyTrainer, _byte_to_char
+            from .tokenizer import BpeTokenizer, BpeVocabularyTrainer
+            from ._tokenizer_synthetic import byte_to_char as _byte_to_char
             if name=='TrainedBpeVocabulary':
                 vocab=BpeVocabularyTrainer(vocab_size=258,min_frequency=2).train(['ab ab','ab ba'])
                 return getattr(vocab,method[:-4])

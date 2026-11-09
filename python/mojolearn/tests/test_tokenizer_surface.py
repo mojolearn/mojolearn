@@ -280,7 +280,7 @@ def test_ranks_file_matches_token_bytes(tok):
 def test_from_files_spelled_vocabulary(tok):
     """The synthetic vocabulary written in the GPT-2 file format (spelled
     encoder JSON plus a merge list) loads to the same tokenizer."""
-    from mojolearn.tokenizer import _byte_to_char
+    from mojolearn._tokenizer_synthetic import byte_to_char as _byte_to_char
     spell = _byte_to_char()
     v = _vocab()
     d = tempfile.mkdtemp()
@@ -335,7 +335,7 @@ def test_trainer_mojo_backend_writes_the_python_reference_bytes(tok):
     backend must write the SAME ranks and tokenizer.json bytes as the pure
     Python reference. A binding built with -D MOJOLEARN_BPE_TRAINER_SABOTAGE=1
     fails this (reversed tie-break)."""
-    from mojolearn import _bpe_trainer as ref
+    from mojolearn.tests import _bpe_trainer as ref
     from mojolearn.tokenizer import BpeVocabularyTrainer
     bad = bytes([0xFF, 0xFE, 32, 97, 98, 0xC3, 32, 0xE2, 0x82, 32, 0x80, 97, 0xED, 0xA0, 0x80, 10])
     corpora = [([ref.fixture_corpus(n)], v, f) for n, _c, v, f in ref.FIXTURES]

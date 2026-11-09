@@ -11,6 +11,7 @@ from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.models import CausalLM
 from mojolearn.models import causal_lm
 from mojolearn.tests.test_causal_model_native_loading import _poison
+from mojolearn.tests import _mamba_block_reference
 
 DEVICE = os.environ.get("MOJOLEARN_GENERATION_DEVICE", "cpu")
 
@@ -43,8 +44,8 @@ def test_native_block_construct_forward_step_ragged(tmp_path, monkeypatch, famil
         _poison(patch)
         audit_native_call(constructor, instance, weights, **kwargs).assert_native()
     # These retained drivers independently spell kernel arguments and layout.
-    expected = instance._call(x, None, step=False)
-    wanted_ragged, _ = _ragged.ragged_forward(lambda xp: instance._call(xp, None, step=False),
+    expected = _mamba_block_reference.block_call(instance, x, None, step=False)
+    wanted_ragged, _ = _ragged.ragged_forward(lambda xp: _mamba_block_reference.block_call(instance, xp, None, step=False),
                                              Array.from_buffer(x), None, [2, 4], "<f4", "test")
     with monkeypatch.context() as patch:
         _poison(patch)

@@ -997,12 +997,9 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
         var destination = _parallel_block_fields(mods, args[0])
         var created = _parallel_causal_block(mods, args[1], _parallel_word(args[2]), args[3])
         _ = py_call(destination.update, _parallel_block_fields(mods, created))
-    elif operation == "make_blocks":
-        model_sequence(mods, args[1])
-        var result = p[].bi.list()
-        for i in range(len(args[1])):  # driver-loop: over legacy private layer-construction inputs
-            _ = py_call(result.append, _parallel_causal_block(mods, args[0], i, args[1][i]))
-        return result
+    # TOMBSTONE: operation "make_blocks" (dead code: its one caller, ParallelCausalLM._make_blocks, had no
+    # caller) deleted 2026-11-09 by 57b86ba5ac; code recoverable at 57b86ba5ac^.
+    # Restore: git apply experiments/removed/dead_code_p5_20261109.patch
     elif operation == "state_init":
         _parallel_causal_attach(mods, args[0], args[1], args[2])
     elif operation == "state_snapshot":

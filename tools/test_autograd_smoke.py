@@ -224,7 +224,7 @@ def test_the_explicit_torch_python_is_tried_before_the_identity_venv_and_the_glo
     assert smoke.torch_python_for("/identity/python", logs, str(tmp_path / "gone")) is None
 
 
-def test_the_env_var_and_the_glob_remain_fallbacks(tmp_path, monkeypatch):
+def test_the_env_var_remains_a_fallback_and_no_venv_is_globbed_from_the_evidence(tmp_path, monkeypatch):
     units = tmp_path / "units"
     glob_py = units / "adapters" / "venv" / "bin" / "python"
     glob_py.parent.mkdir(parents=True)
@@ -232,7 +232,7 @@ def test_the_env_var_and_the_glob_remain_fallbacks(tmp_path, monkeypatch):
     logs = units / "autograd" / "autograd-smoke"
     logs.mkdir(parents=True)
     _torch_world(monkeypatch, {str(glob_py.resolve())})
-    assert smoke.torch_python_for("/identity/python", logs) == str(glob_py.resolve())
+    assert smoke.torch_python_for("/identity/python", logs) is None
     env_py = tmp_path / "env-python"
     env_py.write_text("")
     _torch_world(monkeypatch, {str(env_py)})

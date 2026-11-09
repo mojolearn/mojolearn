@@ -125,7 +125,7 @@ def connect(config_cls, model_cls, training, neural, state_cls, session_cls=None
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError(f"Samba native execution requires a compiled {name}")
         entries[name] = entry
-    exact_schedule = training._lr_native("lr_schedule_exact")  # cpu-route: connects the existing exact host-scalar learning-rate entry at import; native owner evaluates one scalar per step
+    exact_schedule = training._lr_native("lr_schedule_exact")  # glue: import-time connection; connects the existing exact host-scalar learning-rate entry at import; native owner evaluates one scalar per step
     if not isinstance(exact_schedule, BuiltinFunctionType):
         raise TypeError("Samba schedule requires a compiled exact schedule entry")
     core = {}
@@ -155,7 +155,7 @@ def connect(config_cls, model_cls, training, neural, state_cls, session_cls=None
             generator_bindings[key] = symbols
     from . import _portable_math
     try:
-        # cpu-route: connect the existing portable binary64 scalar sqrt ABI;
+        # import-time: connect the existing portable binary64 scalar sqrt ABI;
         # native initializer preparation calls this C function directly.
         generator_sqrt = _portable_math._load().mojolearn_sqrt
         generator_sqrt_type = type(generator_sqrt)

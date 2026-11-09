@@ -24,8 +24,10 @@ MOJOLEARN_RELEASE_ADAPTERS=0 turns it off, the same switch that drops the adapte
 import glob
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -159,12 +161,36 @@ def summary(record):
     return "adapters=%s" % record.get("status")
 
 
-def run(vendor, base_python, out, installs, env=None, launch=None):
+def scratch_venv():
+    """A throwaway venv path under a new temp dir (the dir is the caller's to remove, `drop_venv`). The evidence
+    folder holds logs and records only: 2026-11-09, gate-apple/adapters/venv and published-apple/adapter-smoke/venv
+    left PyTorch inside the release's evidence."""
+    return Path(tempfile.mkdtemp(prefix="adapter-venv-")) / "venv"
+
+
+def drop_venv(venv):
+    """Remove a `scratch_venv` and its temp dir."""
+    if venv is not None:
+        shutil.rmtree(Path(venv).parent, ignore_errors=True)
+
+
+def run(vendor, base_python, out, installs, env=None, launch=None, venv=None):
     """Fresh venv, install, smoke, judge. Returns the record the gate keeps:
-    {enabled, status, ok, why, rc, report, frameworks, phases}. LAUNCH(argv, log) -> rc (tests swap it)."""
+    {enabled, status, ok, why, rc, report, frameworks, phases}. LAUNCH(argv, log) -> rc (tests swap it).
+    The venv is a `scratch_venv` removed before this returns, unless the caller passes VENV (a `scratch_venv` it
+    keeps for later steps and drops itself)."""
+    if venv is not None:
+        return _run(vendor, base_python, out, installs, env, launch, Path(venv))
+    venv = scratch_venv()
+    try:
+        return _run(vendor, base_python, out, installs, env, launch, venv)
+    finally:
+        drop_venv(venv)
+
+
+def _run(vendor, base_python, out, installs, env, launch, venv):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    venv = out / "venv"
 
     def default(argv, log):
         with open(log, "ab") as fh:

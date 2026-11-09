@@ -11,7 +11,8 @@ import numpy as np
 import pytest
 
 from mojolearn.models import Checkpoint, SafetensorsFile
-from mojolearn.models.safetensors import TensorInfo, write_safetensors
+from mojolearn.models.safetensors import TensorInfo
+from mojolearn._causal_lm_fixtures import write_safetensors
 from mojolearn.models.tokenizer import PATTERNS, pattern_name
 
 

@@ -809,14 +809,27 @@ class IdentityOnWheels:
         # the exact bytes; the source tree alone needs host bindings this script never built (0.8.66 run k)
         # (the installed package itself cannot emit: _identity._checkout_root() walks up from the package dir for
         # tools/identity_break.py, so the verifier runs from the frozen tree WITH the wheel's compiled artifacts placed in it)
-        packages = sorted((self.identity_dir() / "apple" / "venv" / "lib").glob("python3.*/site-packages/mojolearn/__init__.py"))
-        if packages:
-            env["ADMIT_WHEEL_PACKAGE"] = str(packages[-1].parent)
+        # (2026-11-09: the Apple column's venv is a throwaway under a temp dir, gone after the record; the package is
+        # the macOS wheel's own `mojolearn/` tree, the same bytes pip installed, unpacked into a temp dir here)
+        unpacked = None
+        wheel = self.macos_wheel()
+        if wheel and Path(wheel).is_file():
+            import tempfile
+            import zipfile
+            unpacked = Path(tempfile.mkdtemp(prefix="identity-admit-wheel-"))
+            with zipfile.ZipFile(wheel) as z:
+                z.extractall(unpacked)
+            if (unpacked / "mojolearn" / "__init__.py").is_file():
+                env["ADMIT_WHEEL_PACKAGE"] = str(unpacked / "mojolearn")
         # the script is the tooling's (HEAD), copied into the frozen tree and run there (it cds to its own root):
         # the source is frozen, the tooling runs from HEAD; the copy is never committed (only the NEXT paths are)
         shutil.copy2(ROOT / "tools" / "admit_identity_columns.sh", tree / "tools" / "admit_identity_columns.sh")
-        p = subprocess.run(["bash", "tools/admit_identity_columns.sh", "--build-host", *dirs], cwd=str(tree),
-                           env=dict(os.environ, **env), capture_output=True, text=True)
+        try:
+            p = subprocess.run(["bash", "tools/admit_identity_columns.sh", "--build-host", *dirs], cwd=str(tree),
+                               env=dict(os.environ, **env), capture_output=True, text=True)
+        finally:
+            if unpacked is not None:
+                shutil.rmtree(unpacked, ignore_errors=True)
         log.write_text((p.stdout or "") + (p.stderr or ""))
         paths = reference_refresh.parse_admit_next(p.stdout or "")
         if p.returncode != 0 or not paths:

@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 exec "${MOJOLEARN_QUALIFY_PYTHON:-python3}" - "$ROOT" "$@" <<'PY'
 # IDENTITY_PY_BEGIN
-import csv, hashlib, json, os, pathlib, re, signal, subprocess, sys, time, zipfile
+import csv, hashlib, json, os, pathlib, re, shutil, signal, subprocess, sys, tempfile, time, zipfile
 P = pathlib.Path
 PARTS = ('train', 'infer', 'model', 'batch', 'stepfull')
 
@@ -89,6 +89,8 @@ def main(argv):
         save()
         if code: raise RuntimeError(f'{name} failed ({code}); original log retained')
     save()
+    # the throwaway venv lives under a temp dir removed on exit; OUT keeps logs and receipts only (2026-11-09)
+    scratch=P(tempfile.mkdtemp(prefix='identity-installed-venv-'))
     try:
         if arch == 'sm_80':
             run('hardware', ['nvidia-smi', '--query-gpu=name,uuid,compute_cap,driver_version',
@@ -114,8 +116,8 @@ def main(argv):
             from qualify_verifier_wheel import admit_ptx_selection, admit_ptx_bindings
             admit_ptx_selection(smoke['installed'],commit)
         assert {x['wheel_sha256'] for x in smoke.get('plugins',[])}=={sha(p) for p in plugins}
-        run('create-venv',[sys.executable,'-m','venv',out/'venv'],60)
-        py=out/'venv/bin/python'
+        run('create-venv',[sys.executable,'-m','venv',scratch/'venv'],60)
+        py=scratch/'venv/bin/python'
         run('install',[py,'-m','pip','install','--disable-pip-version-check','--only-binary=:all:',
                        wheel,*plugins,'numpy>=1.24'],180)
         run('pip-check',[py,'-m','pip','check'])
@@ -155,6 +157,8 @@ print(json.dumps(dict(package=str(p),vendor=m.vendor(),gpu_arch=_backend.gpu_arc
         save();(out/'exit_code').write_text('0\n')
     except Exception as exc:
         receipt.update(status='FAILED', reason=str(exc));save();raise
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
     print(json.dumps(receipt,indent=2))
 
 if __name__ == '__main__':

@@ -38,7 +38,6 @@ from ._mode import _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
 # The splitters' random draws (lane/metrics): a module-level import, so the
 # lane selector sees model_selection reach the x_metrics binding (the native
 # owner resolves it through this binding getter).
-from ._expansion_metrics import _binding as _x_metrics_binding
 
 #: The binding the splitters' permutations and the scorers' added metrics run
 #: on (python/mojolearn/_expansion_metrics.py `_BINDING`). Named here because
@@ -481,33 +480,16 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
 # Restore: git apply experiments/removed/dead_python_loops.patch
 
 
-# ---------------------------------------------------------------------------
-# FAST + Apple cross-val candidates (recovered from
-# lane/apple-fast-resample@50b96e795, lane apple-fast-rec-resample
-# 2026-10-04). Switched by the resample binding's `resample_fast_defines`
-# mask (build-time defines), never by the environment. Off on every other
-# tier and build.
-# ---------------------------------------------------------------------------
-
-
-def _cv_fast_defines():
-    """The resample binding's FAST define mask (binding acquisition; 0 off
-    the FAST tier), read by the native cross-validation owner."""
-    from . import resample as _resample
-    return _resample.fast_defines()
+# TOMBSTONE: _cv_fast_defines, family_msel_fast_defines, family_msel_native, family_msel_xm (dead code: no native owner read the three context entries, and _cv_fast_defines fed only family_msel_fast_defines) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.
+# Restore: git apply experiments/removed/dead_code_p5_20261109.patch
 
 
 # TOMBSTONE: _cv_fast_on, _native_default_cv, _CV_TRUST_FOLDS_BIT (helpers of the deleted _prepare_folds; bindings/msel_cv.mojo msel_fast_on / msel_native_default_cv run them) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_python_loops.patch
 
 
-def _fit_score_fold(fitted, X_train, y_train, X_test, y_test, scoring):
-    """Shared serial/worker operation; the caller supplies a fresh clone."""
-    fitted.fit(X_train, y_train)
-    score = fitted.score(X_test, y_test) if scoring is None else scoring(fitted, X_test, y_test)
-    if not isinstance(score, numbers.Real):
-        raise TypeError('scoring must return a real scalar')
-    return float(score)
+# TOMBSTONE: _fit_score_fold (dead code: no caller; bindings/msel_cv.mojo fits and scores each fold natively) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.
+# Restore: git apply experiments/removed/dead_code_p5_20261109.patch
 
 
 # ===========================================================================
@@ -1430,26 +1412,8 @@ class _Scorer:
 _BINARY_PROBA = {'roc_auc', 'average_precision', 'neg_brier_score', 'neg_log_loss', 'top_k_accuracy'}
 
 
-def _proba_column1(pred):
-    """Column 1 of an (n, 2) float32 or float64 buffer as a float32 Array,
-    read on the device (`msel_proba_column`, lane cpu2-l4-modelsel): one
-    kernel takes column 1 straight out of the row-major block and narrows a
-    float64 to nearest even (the `(float)` cast), so the host makes no cast,
-    no transpose and no column copy. None (a Python list from an external
-    estimator, or another shape) hands it to the caller's route."""
-    if isinstance(pred, (list, tuple)):
-        return None
-    try:
-        a = _materialize(pred, 'pred')[0]
-    except (TypeError, ValueError):
-        return None
-    if a.ndim != 2 or a.shape[1] != 2 or a.dtype not in ('<f4', '<f8') or a.shape[0] < 1:
-        return None
-    n = a.shape[0]
-    c = a._as_c()
-    out = empty((n,), '<f4')
-    _native('msel_proba_column')(_addr_ro(c), _MSEL_CODE[c.dtype], n, 2, 1, _addr(out))
-    return out
+# TOMBSTONE: _proba_column1 (dead code: no caller; the native scorer reads column 1 itself) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.
+# Restore: git apply experiments/removed/dead_code_p5_20261109.patch
 
 
 def make_scorer(score_func, *, response_method='predict', greater_is_better=True, **kwargs):
@@ -2211,7 +2175,7 @@ _native_family_bridge.tables(
         StratifiedShuffleSplit=StratifiedShuffleSplit, PredefinedSplit=PredefinedSplit, _IterableCV=_IterableCV,
         ParameterGrid=ParameterGrid, ParameterSampler=ParameterSampler, GridSearchCV=GridSearchCV,
         RandomizedSearchCV=RandomizedSearchCV, Array=Array),
-    family_msel_native=_native, family_msel_xm=_x_metrics_binding, family_msel_miss=object(),
+    family_msel_miss=object(),
     family_msel_integral=numbers.Integral, family_msel_codes=dict(_MSEL_CODE),
     family_msel_native_code=dict(_ARRAY_CODE), family_msel_reduce_integral=_REDUCE_INTEGRAL,
     family_msel_native_encode=frozenset(_NATIVE_ENCODE),
@@ -2220,8 +2184,7 @@ _native_family_bridge.tables(
     family_msel_splitters=(KFold, StratifiedKFold, GroupKFold, StratifiedGroupKFold, TimeSeriesSplit, LeaveOneOut,
                            LeavePOut, LeaveOneGroupOut, LeavePGroupsOut, RepeatedKFold, RepeatedStratifiedKFold,
                            ShuffleSplit, GroupShuffleSplit, StratifiedShuffleSplit, PredefinedSplit, _IterableCV),
-    family_msel_schema=SPLIT_DESCRIPTOR_SCHEMA, family_msel_arena_io=_arena_io,
-    family_msel_fast_defines=_cv_fast_defines)
+    family_msel_schema=SPLIT_DESCRIPTOR_SCHEMA, family_msel_arena_io=_arena_io)
 
 from ._native_msel_inputs import connect as _connect_msel_inputs  # noqa: E402
 _connect_msel_inputs(_NATIVE_CONTEXT, _RESIDENT_CONTEXT)

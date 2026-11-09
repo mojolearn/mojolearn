@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
 
 from candidate_wheel_install import wheel_record
@@ -26,6 +27,15 @@ def host_file(site):
 
 
 def main():
+    # the throwaway venv lives under a temp dir removed on exit; OUT keeps logs and the record only (2026-11-09)
+    scratch = Path(tempfile.mkdtemp(prefix='host-boundary-venv-'))
+    try:
+        return _main(scratch)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def _main(scratch):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--bundle', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
@@ -56,8 +66,8 @@ def main():
         (out / (name + '.exit')).write_text(str(result.returncode) + '\n')
         assert result.returncode == 0, name
 
-    run('venv', [sys.executable, '-m', 'venv', out / 'venv'])
-    python = out / 'venv/bin/python'
+    run('venv', [sys.executable, '-m', 'venv', scratch / 'venv'])
+    python = scratch / 'venv/bin/python'
     run('install', [python, '-m', 'pip', 'install', *wheels, 'numpy', 'pytest'])
     run('dependencies', [python, '-m', 'pip', 'check'])
     run('self-test', [python, '-m', 'mojolearn', 'verify', '--self-test'])

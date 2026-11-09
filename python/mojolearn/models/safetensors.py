@@ -10,7 +10,6 @@ may be closed explicitly or used with a context manager.
 import json
 import mmap
 import os
-import struct
 
 from .. import lowbit as _lowbit
 from .._array import Array
@@ -164,31 +163,6 @@ class Checkpoint:
     def __repr__(self):
         return _NATIVE.checkpoint_repr(self, 2)
 
-
-def write_safetensors(path, tensors, metadata=None):
-    """WRITE a `.safetensors` file from `{name: (dtype, shape, bytes)}`, the
-    tests' synthetic-checkpoint writer. `dtype` is the safetensors spelling,
-    `bytes` the row-major little-endian payload. Kept beside the reader so
-    the two agree on the one format; not a checkpoint saver for models."""
-    header = {}
-    if metadata is not None:
-        header["__metadata__"] = dict(metadata)
-    offset = 0
-    payload = []
-    for name in sorted(tensors):  # cpu-route: verification oracle or fixture text, not a runtime route
-        dtype, shape, raw = tensors[name]
-        header[name] = {"dtype": dtype, "shape": list(shape), "data_offsets": [offset, offset + len(raw)]}
-        payload.append(raw)
-        offset += len(raw)
-    encoded = json.dumps(header, separators=(",", ":")).encode("utf-8")
-    pad = (8 - len(encoded) % 8) % 8
-    encoded += b" " * pad
-    with open(path, "wb") as fh:
-        fh.write(struct.pack("<Q", len(encoded)))
-        fh.write(encoded)
-        for raw in payload:  # cpu-route: verification oracle or fixture text, not a runtime route
-            fh.write(raw)
-    return path
 
 from .. import _linalg_impl as _checkpoint_linalg
 

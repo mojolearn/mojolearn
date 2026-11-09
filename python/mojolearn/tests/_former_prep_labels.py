@@ -10,6 +10,7 @@ import itertools
 import numbers
 
 from mojolearn._array import Array
+from mojolearn.tests._array_reference import _native_reduce
 from mojolearn._buffer import as_f32_c, full
 from mojolearn import _labels
 from mojolearn._labels import flatten_labels, sorted_classes, label_kind
@@ -114,7 +115,7 @@ def _multilabel_buffer(y, shape):
     from mojolearn._buffer import as_f64_c
     Y, _ = as_f64_c(y, ndim=2, name="y")
     refuse = ValueError("mojolearn: Multioutput target data is not supported with label binarization")
-    if not int(Y._native_reduce(_REDUCE_INTEGRAL)):
+    if not int(_native_reduce(Y, _REDUCE_INTEGRAL)):
         raise refuse
     lo, hi = Y.min(), Y.max()
     hits = (Y == lo).sum() + ((Y == hi).sum() if hi != lo else 0)  # glue: native equality and native integer sums (Array helpers)

@@ -120,9 +120,6 @@ class ParallelCausalLM(CausalLM):
              numeric_profile=None):
         return _native_parallel_causal("load", (cls, path, layer_devices, (weight_format, max_positions, numeric_profile)), _CAUSAL_CONTEXT)
 
-    def _make_blocks(self, cls, layers, kwargs):
-        return _native_parallel_causal("make_blocks", (self, layers, kwargs))
-
     def _rpc(self, device, operation, args):
         return _native_parallel_causal("rpc", (self, device, operation, args))
 
