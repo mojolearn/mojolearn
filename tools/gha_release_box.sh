@@ -54,7 +54,8 @@
 # /tooling the tooling checkout (read-only), /root/.mojolearn_bincache the URL
 # map and hot directory, /root/leg_out the results; host: /root/donor.
 # Environment: MOJOLEARN_COMMIT, GHA_BUILD_JOBS, GHA_SHARD_ONLY (shard),
-# GHA_RELEASE_MODES (MOJOLEARN_RELEASE_MODES for the route), GHA_PRUNE_HOT.
+# GHA_RELEASE_MODES (MOJOLEARN_RELEASE_MODES for the route), GHA_PRUNE_HOT,
+# GHA_BUILD_DEFINES (candidate builds only: MOJOLEARN_BUILD_DEFINES).
 set -u
 
 # swap GIB RECORD: on the runner, with sudo. The reserve keeps the build's own
@@ -101,6 +102,17 @@ JOBS=${GHA_BUILD_JOBS:-2}
 if [[ "$MODE" = shard && -z "${GHA_SHARD_ONLY:-}" ]]; then echo "a shard needs GHA_SHARD_ONLY" >&2; exit 2; fi
 mkdir -p "$OUT/GHA"
 G="$OUT/GHA"
+# CANDIDATE DEFINES (the workflow's `defines`; tools/release.py candidate): MOJOLEARN_BUILD_DEFINES for every
+# compile of this job, recorded in GHA/defines.txt. Set only when non-empty: an empty value would still be a key
+# field and move every key off the release builds'. tools/bincache.py scope_build_defines then keeps it only for
+# the builds whose closure names a define.
+unset MOJOLEARN_BUILD_DEFINES
+if [[ -n "${GHA_BUILD_DEFINES:-}" ]]; then
+    [[ "$GHA_BUILD_DEFINES" =~ ^[A-Za-z_][A-Za-z0-9_]*(=[A-Za-z0-9_.+-]*)?(,[A-Za-z_][A-Za-z0-9_]*(=[A-Za-z0-9_.+-]*)?)*$ ]] \
+        || { echo "GHA_BUILD_DEFINES must be NAME[=VALUE],..." >&2; exit 2; }
+    export MOJOLEARN_BUILD_DEFINES="$GHA_BUILD_DEFINES"
+fi
+printf 'defines=%s\n' "${MOJOLEARN_BUILD_DEFINES:-}" > "$G/defines.txt"
 ph() { printf '%s\t%s\n' "$1" "$(date +%s)" >> "$G/phases.tsv"; }
 say() { echo "[$(date -u +%T) gha-box $MODE $ARCH] $*"; }
 ph start

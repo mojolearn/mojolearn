@@ -42,7 +42,16 @@ name: Release Linux build
 # no artifact carries; host_donor_url likewise. Empty map_url: no R2; each
 # shard restores and saves its hot directory through actions/cache instead
 # (archives named by their content key, placed only after they verify).
-run-name: "release-linux-build ${{ inputs.sets }} @ ${{ inputs.commit }} [${{ inputs.tag }}]"
+#
+# CANDIDATE DEFINES (`defines`, default empty; tools/release.py candidate). A
+# define A/B's B wheel set is an ordinary candidate build of the same commit
+# with MOJOLEARN_BUILD_DEFINES set in every shard, assemble and host job
+# (tools/gha_release_box.sh, which records it in GHA/defines.txt). The binding
+# cache scopes it per build (tools/bincache.py scope_build_defines): a build
+# whose closure names no define is keyed and built without it, so it is a
+# cache hit on the A set's bytes. Empty: the variable is never set, and every
+# key is a normal release build's.
+run-name: "release-linux-build ${{ inputs.sets }} @ ${{ inputs.commit }} [${{ inputs.tag }}]${{ inputs.defines != '' && format(' defines {0}', inputs.defines) || '' }}"
 
 on:
   workflow_dispatch:
@@ -95,6 +104,10 @@ on:
         type: boolean
         required: false
         default: false
+      defines:
+        description: "candidate build defines, MOJOLEARN_BUILD_DEFINES spelling NAME=V,NAME2 (empty: none; tools/release.py candidate)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -126,8 +139,10 @@ jobs:
           IN_MODES: ${{ inputs.modes }}
           IN_REUSE_RUN: ${{ inputs.reuse_shards_run }}
           IN_COMPILE_GROUPS: ${{ inputs.compile_groups }}
+          IN_DEFINES: ${{ inputs.defines }}
         run: |
           set -eu
+          [ -z "$IN_DEFINES" ] || printf '%s' "$IN_DEFINES" | grep -Eq '^[A-Za-z_][A-Za-z0-9_]*(=[A-Za-z0-9_.+-]*)?(,[A-Za-z_][A-Za-z0-9_]*(=[A-Za-z0-9_.+-]*)?)*$' || { echo "defines must be NAME[=VALUE],... (MOJOLEARN_BUILD_DEFINES)"; exit 2; }
           printf '%s' "$IN_COMMIT" | grep -Eq '^[0-9a-f]{40}$' || { echo "commit must be 40 hex"; exit 2; }
           printf '%s' "$IN_SHARDS" | grep -Eq '^([1-9]|1[0-6])$' || { echo "shards must be 1..16"; exit 2; }
           printf '%s' "$IN_JOBS" | grep -Eq '^[1-4]$' || { echo "jobs must be 1..4"; exit 2; }
@@ -230,10 +245,11 @@ jobs:
           JOBS: ${{ inputs.jobs }}
           MODES: ${{ inputs.modes }}
           PRUNE: ${{ steps.map.outputs.r2 == 'false' && '1' || '0' }}
+          DEFINES: ${{ inputs.defines }}
         run: |
           set -u
           docker run --rm -e MOJOLEARN_COMMIT="$COMMIT" -e GHA_BUILD_JOBS="$JOBS" -e GHA_SHARD_ONLY="$ONLY" \
-            -e GHA_RELEASE_MODES="$MODES" -e GHA_PRUNE_HOT="$PRUNE" \
+            -e GHA_RELEASE_MODES="$MODES" -e GHA_PRUNE_HOT="$PRUNE" -e GHA_BUILD_DEFINES="$DEFINES" \
             -e GHA_RUNNER="$RUNNER_NAME" -e GHA_RUN="$GITHUB_RUN_ID" -e GHA_JOB="$GITHUB_JOB" \
             -v "$RUNNER_TEMP/w/mojolearn:/root/mojolearn" -v "$GITHUB_WORKSPACE/tooling:/tooling:ro" \
             -v "$RUNNER_TEMP/w/bincache:/root/.mojolearn_bincache" -v "$RUNNER_TEMP/w/out:/root/leg_out" \
@@ -342,10 +358,11 @@ jobs:
           JOBS: ${{ inputs.jobs }}
           MODES: ${{ inputs.modes }}
           REUSE_RUN: ${{ inputs.reuse_shards_run }}
+          DEFINES: ${{ inputs.defines }}
         run: |
           set -u
           docker run --rm -e MOJOLEARN_COMMIT="$COMMIT" -e GHA_BUILD_JOBS="$JOBS" -e GHA_RELEASE_MODES="$MODES" \
-            -e GHA_REUSE_SHARDS_RUN="$REUSE_RUN" \
+            -e GHA_REUSE_SHARDS_RUN="$REUSE_RUN" -e GHA_BUILD_DEFINES="$DEFINES" \
             -e GHA_RUNNER="$RUNNER_NAME" -e GHA_RUN="$GITHUB_RUN_ID" -e GHA_JOB="$GITHUB_JOB" \
             -v "$RUNNER_TEMP/w/mojolearn:/root/mojolearn" -v "$GITHUB_WORKSPACE/tooling:/tooling:ro" \
             -v "$RUNNER_TEMP/w/bincache:/root/.mojolearn_bincache" -v "$RUNNER_TEMP/w/out:/root/leg_out" \
@@ -451,11 +468,12 @@ jobs:
         env:
           COMMIT: ${{ inputs.commit }}
           REUSE_HOST_GROUPS: ${{ inputs.reuse_host_groups }}
+          DEFINES: ${{ inputs.defines }}
         run: |
           set -u
           mkdir -p "$RUNNER_TEMP/w/out"
           docker run --rm -e MOJOLEARN_COMMIT="$COMMIT" \
-            -e GHA_REUSE_HOST_GROUPS="$REUSE_HOST_GROUPS" \
+            -e GHA_REUSE_HOST_GROUPS="$REUSE_HOST_GROUPS" -e GHA_BUILD_DEFINES="$DEFINES" \
             -e GHA_RUNNER="$RUNNER_NAME" -e GHA_RUN="$GITHUB_RUN_ID" -e GHA_JOB="$GITHUB_JOB" \
             -v "$GITHUB_WORKSPACE/src:/root/mojolearn" -v "$GITHUB_WORKSPACE/tooling:/tooling:ro" \
             -v "$RUNNER_TEMP/w/donor:/root/donor:ro" -v "$RUNNER_TEMP/w/out:/root/leg_out" \
