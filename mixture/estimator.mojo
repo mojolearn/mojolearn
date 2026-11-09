@@ -103,6 +103,7 @@ from mixture.checks.estep import (
 )
 from core.device_plan import DevicePlan
 from mixture.multi_gpu import gmm_device_count, gmm_device_plan, gmm_e_step_dispatch
+from mixture.step_keep import GmmStepKeep
 from mixture.checks.sample import (
     GMM_SAMPLE_TPB,
     gmm_sample_components,
@@ -1132,8 +1133,12 @@ struct GmmEmStep(LoopStep, Movable):
     host-driven loop it replaced; then the pivot verdict joins the loop
     (`step_fail_joins_loop`), the gated commit of the parameters and the
     criterion. The E-step and M-step kernels are not gated: an iteration
-    enqueued past the stop runs and its result is never committed. The
-    buffer fields are handle copies of the fit's buffers."""
+    enqueued past the stop runs and its result is never committed (the
+    identical GEMMs, most of an iteration's work, take no gate, so
+    core/em_loop_chunk.mojo keeps heavy iterations at one per read). The
+    steps' per-call scratch is held in `keep` (mixture/step_keep.mojo), so
+    no lifetime drain runs inside a chunk. The buffer fields are handle
+    copies of the fit's buffers."""
     var dplan: DevicePlan
     var dx: DeviceBuffer[DType.float32]
     var logresp: DeviceBuffer[DType.float32]
@@ -1180,17 +1185,20 @@ struct GmmEmStep(LoopStep, Movable):
     var chol_elem_tpb: Int
     var sabotage: Int
     var cov_lo_addr: Int
+    # the E-/M-step scratch held across the loop (mixture/step_keep.mojo)
+    var keep: GmmStepKeep
 
     def enqueue_step(
         mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
     ) raises:
         var tag = gmm_iter_prefix(self.card_prefix, it)
+        var keep_addr = self.keep.address()
         gmm_e_step_dispatch(
             self.dplan, ctx, self.dx, self.means, self.prec, self.linv,
             self.log_det_chol, self.log_weights, self.escratch, self.gws,
             self.mahal, self.wlp, self.rowmax, self.lse, self.logresp,
             self.meanll, self.n, self.d, self.ncomp, self.trace, tag,
-            self.elem_tpb, self.row_tpb, self.sabotage,
+            self.elem_tpb, self.row_tpb, self.sabotage, keep_addr,
         )
         loop_lap(ctx, timers, "estep")
         gmm_m_step(
@@ -1198,7 +1206,7 @@ struct GmmEmStep(LoopStep, Movable):
             self.log_weights, self.means, self.cov, self.mscratch, self.gws,
             self.n, self.d, self.ncomp, self.reg_covar, False, self.trace,
             tag, self.elem_tpb, self.comp_tpb, self.sabotage,
-            self.cov_lo_addr,
+            self.cov_lo_addr, keep_addr,
         )
         loop_lap(ctx, timers, "mstep")
         if self.sabotage == GMM_SAB_NONE:
@@ -1540,7 +1548,7 @@ def gaussian_mixture_fit(
         c_prec.copy(), c_logdet.copy(), lb.copy(), change.copy(), chol^,
         trace^, card_prefix, n, d, ncomp, params.reg_covar, params.tol,
         elem_tpb, row_tpb, comp_tpb, solve_tpb, panel_tpb, chol_elem_tpb,
-        sabotage, cov_lo_addr,
+        sabotage, cov_lo_addr, GmmStepKeep(),
     )
     var n_iter = 0
     var converged = False

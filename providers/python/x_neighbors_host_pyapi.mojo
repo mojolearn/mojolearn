@@ -7,7 +7,6 @@ data; every number comes from the typed host kernels in x_neighbors/.
 HOST ONLY."""
 from std.python import PythonObject
 from x_neighbors.items import FP, IP
-from x_neighbors.iter_host import lp_fast_resident
 from x_neighbors.kapprox_host import kpca_resident
 from x_neighbors.kfeat_rng import op_kfeat_pcs_draw_idn_host, op_kfeat_schi2_fit_idn_host
 from x_neighbors.ocsvm_host import op_ocsvm_alpha_init, op_unit_ff
@@ -20,9 +19,8 @@ def kpca_resident_binding() raises -> PythonObject:
     return PythonObject(kpca_resident())
 
 
-def lp_fast_resident_binding() raises -> PythonObject:
-    """1: the host column takes the resident kNN-graph loop (op_lp_iterate_knn)."""
-    return PythonObject(lp_fast_resident())
+# TOMBSTONE: x_neighbors_lp_fast_resident (dead export: always 1, the resident kNN-graph loop is the only path) deleted 2026-11-09 by lane/n3b-sgd-on-program-fit; code recoverable at 5b5490960d.
+# Restore: git apply -3 experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch
 
 
 def _kfeat_args(p: PythonObject, what: String) raises -> Tuple[UInt32, Int, Int]:

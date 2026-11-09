@@ -585,7 +585,7 @@ def op_lp_iterate_knn(
     distributions, n_iter_ and the stop are the same bits as the door's
     loop. Lane ne3-g-svc-gp-neighbors (row N303): before, this column
     folded the stopping sum with the serial `absdiff_sum_item`, which is
-    not the door's fold, and `lp_fast_resident` kept it unused."""
+    not the door's fold."""
     var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
     var nc = n * c
     var cur = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
@@ -626,8 +626,5 @@ def op_lp_iterate_knn(
     _ = hs^
 
 
-def lp_fast_resident() -> Int:
-    """1: the host column takes the resident kNN-graph loop (op_lp_iterate_knn
-    above runs the door's host ops in its order, so the bits are the door
-    loop's). Lane ne3-g-svc-gp-neighbors, row N303."""
-    return 1
+# TOMBSTONE: x_neighbors_lp_fast_resident (dead export: always 1, the resident kNN-graph loop is the only path) deleted 2026-11-09 by lane/n3b-sgd-on-program-fit; code recoverable at 5b5490960d.
+# Restore: git apply -3 experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch

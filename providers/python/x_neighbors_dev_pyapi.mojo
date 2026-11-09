@@ -7,7 +7,6 @@ around the typed call. No arithmetic on data; every number comes from the
 typed kernels in x_neighbors/."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from x_neighbors.iter_device import lp_fast_resident
 from x_neighbors.kapprox_dev import kpca_resident
 from x_neighbors.kfeat_dev import (
     kfeat_first_negative,
@@ -30,9 +29,8 @@ def kpca_resident_binding() raises -> PythonObject:
     return PythonObject(kpca_resident())
 
 
-def lp_fast_resident_binding() raises -> PythonObject:
-    """1 when this binary takes the resident kNN-graph loop by default."""
-    return PythonObject(lp_fast_resident())
+# TOMBSTONE: x_neighbors_lp_fast_resident (dead export: always 1, the resident kNN-graph loop is the only path) deleted 2026-11-09 by lane/n3b-sgd-on-program-fit; code recoverable at 5b5490960d.
+# Restore: git apply -3 experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch
 
 
 def nc_fit_lean_binding() raises -> PythonObject:
