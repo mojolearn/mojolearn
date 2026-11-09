@@ -3892,3 +3892,18 @@ public runtime qualification; this entry is not release or performance evidence.
   unchanged, so the IDENTICAL `EIGH_TD_IDN` route keeps its bits), and `tools/eigh_panel_df_pair.py`.
 - Deleted by `@K0SHA_EIGH@`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch`.
   Refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry existed.
+
+### Orphan tools (no index row: tools are not experiments and leave no code site)
+
+- Lane consol-k0-dead-code scanned every top-level non-test file under `tools/` for its stem (`rg -w`) across the whole
+  repository (results trees left out), `~/mojolearn-ops`, the briefs under `~/mojolearn-evidence/briefs-2026*`, the
+  top-level evidence notes and scripts, crontab and the launchd agents. 86 had no reference outside their own file; nine
+  were kept (named by the session memory: `evidence_trim`, `treegen_box`, `amd_step_time2_leg1`,
+  `tokenizer_vocab_repro`; changed since 2026-10-25: `qualify_forest_host_component`, `s16_job`,
+  `verify_api_reference`, `identity_box_job_nvidia`; the general runner `run_source_tests`).
+- Deleted by `@K0SHA_TOOLS@` (one-off box legs, A/B bodies, probes and smokes from August to October); recoverable at
+  `41ffcec665` with `git checkout 41ffcec665 -- tools/<name>`: `amd_step_time2_cpu_check.sh`, `amd_step_time_leg1.sh`, `amd_step_time_leg2.sh`, `amd_step_time_leg3.sh`, `amd_step_time_leg4.sh`, `amd_step_time_leg5.sh`, `amd_step_time_leg6.sh`, `amd_step_time_leg7.sh`, `amd_step_time_leg8.sh`, `amd_step_time_leg_mi325x.sh`, `amd_step_time_xtarget_check.sh`, `amd_verify_job.sh`, `ann_apple3_cuda.sh`, `ann_apple3_local.sh`, `batchv_smoke.sh`, `cc_nv.sh`, `correctness_round.sh`, `decomp_nv.sh`, `direction_diag_job.sh`, `emb_moe_nv.sh`, `forest_ordered_amd_leg.sh`, `forest_ordered_apple_leg.sh`, `forest_ordered_nvidia_leg.sh`, `gap_linear_nv_probe.sh`, `garch_job.sh`, `gbdt_2661_nvidia_leg.sh`, `gnm_mac_job.sh`, `gpt3_pointwise_fusions_cv_leg.sh`, `hcid_nvidia_job.sh`, `hostgpu_job.sh`, `hostpr_job.sh`, `identical_callpath_gate.sh`, `kmeans_amd_perf_leg.sh`, `knn_amd_identity_leg.sh`, `knn_amd_smem_leg.sh`, `kpca_cross_vendor_probe_20261012.py`, `lm_t1_body.sh`, `lu_fast_mma_pair.py`, `m2_plain_trace_check.py`, `m2b1m3_smoke.sh`, `mamba_public_overhead_body.sh`, `mcd_wide_b_only.sh`, `metrics_shap_idcheck.py`, `miv_smoke.sh`, `mlp_fused_job.sh`, `ordall_smoke.sh`, `par_lm_xvendor_body.sh`, `pass4_job.sh`, `performance_full_collect.py`, `performance_full_knn.py`, `performance_ideas_gpu_watch.py`, `pr31_32_nv.sh`, `probe_gemm_host.py`, `probe_neural_lanes.py`, `prophet_diag.py`, `prophet_nv.sh`, `ptx_column_record_lq.sh`, `qr_nv.sh`, `rf_hist_columns_leg.sh`, `rmsnorm_backward_cv_leg.sh`, `seq_optimizer_resident_check.py`, `six_lane_build_ledger.py`, `six_lane_stage_regression.py`, `six_lane_stage_saved.py`, `sklearn_live_box.sh`, `sklearn_weight_equivalence.py`, `sm120_tree_identity_probe.sh`, `strides_job.sh`, `train_utils_probe.py`, `trees_apple3_cuda.sh`, `treeshap_identity.py`, `tshap_smoke.sh`, `verify_crash_loop.sh`, `w2_resample_probe.py`, `xcluster_post_idcheck.py`, `xdecomp_lle_idcheck.py`, `xlinear_weighted_idcheck.py`.
+- Also deleted: `tools/byte_lm_export_fast/` (the September byte LM export A/B leg; its `change.patch` named the deleted
+  `byte_lm_parallel_*` entries and no longer applies), and earlier in this batch `tools/kernel_pca_gpu_trial.py`,
+  `tools/mcd_g1_quality.py`, `tools/mcd_ordered_quality.py`, `tools/mcd_ordered_pair.py`, `tools/eigh_panel_df_pair.py`
+  with the code they drove.
