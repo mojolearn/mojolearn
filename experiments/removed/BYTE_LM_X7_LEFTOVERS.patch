@@ -1,0 +1,933 @@
+diff --git a/experiments/decode_resident_20261028/compile.json b/experiments/decode_resident_20261028/compile.json
+new file mode 100644
+index 0000000000..fc2afc2fc1
+--- /dev/null
++++ b/experiments/decode_resident_20261028/compile.json
+@@ -0,0 +1,172 @@
++{
++  "source_commit": "d3d06eec4929dced52af4d4cab8d31adf1d90d18",
++  "compiler_version": "Mojo 1.0.0 (ed45d567)",
++  "host": "Mac arm64 (RunPod CPU leg refused by the account pod cap: 4 live pods, cap 4)",
++  "jobs": 10,
++  "command": "bash experiments/decode_resident_20261028/compile.sh <ev> [--target-accelerator sm_89] via tools/compile_slot.sh",
++  "flags": "mojo build --optimization-level 0 -j 10 --emit shared-lib -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . -I bindings",
++  "overall_exit": 0,
++  "runtime_executed": false,
++  "not_covered": [
++    "AMD (gfx942) and Apple Metal targets",
++    "transformer/native_decode_dispatch.mojo (fails to parse on main, independent of this lane)",
++    "full binding/wheel assembly (_mojolearn_transformer, _mojolearn_mamba, _mojolearn_byte_lm)",
++    "any runtime, identity or timing run"
++  ],
++  "roots": [
++    {
++      "leg": "cpu-final",
++      "target_flags": "-D MOJOLEARN_COLUMN_CPU",
++      "entry": "experiments/decode_resident_20261028/compile_decode_resident.mojo",
++      "arm": "off",
++      "define": null,
++      "exit": 0,
++      "seconds": 28,
++      "artifact_sha256": "5c21185593cd88f5515a638ed8b861547a1b4fc010f955994ee1d80b5631e665",
++      "log": "/Users/andrewhendel/mojolearn-evidence/decode-resident-20261028/cpu-final/compile_decode_resident-off.log"
++    },
++    {
++      "leg": "cpu-final",
++      "target_flags": "-D MOJOLEARN_COLUMN_CPU",
++      "entry": "experiments/decode_resident_20261028/compile_decode_resident.mojo",
++      "arm": "on",
++      "define": "MOJOLEARN_IDN_DECODE_RESIDENT_IO=1",
++      "exit": 0,
++      "seconds": 24,
++      "artifact_sha256": "d09bbccee8c7df5272c149a05d2ecc44bf0d0fba1207dabfda92aae5a67ba3a0",
++      "log": "/Users/andrewhendel/mojolearn-evidence/decode-resident-20261028/cpu-final/compile_decode_resident-on.log"
++    },
++    {
++      "leg": "cpu-final",
++      "target_flags": "-D MOJOLEARN_COLUMN_CPU",
++      "entry": "experiments/decode_resident_20261028/compile_train_one_wait.mojo",
++      "arm": "off",
++      "define": null,
++      "exit": 0,
++      "seconds": 41,
++      "artifact_sha256": "4fe3408da90ab735c7dd5feea139e65e43d78457efb89daf38f3261bf75075d0",
++      "log": "/Users/andrewhendel/mojolearn-evidence/decode-resident-20261028/cpu-final/compile_train_one_wait-off.log"
++    },
++    {
++      "leg": "cpu-final",
++      "target_flags": "-D MOJOLEARN_COLUMN_CPU",
++      "entry": "experiments/decode_resident_20261028/compile_train_one_wait.mojo",
++      "arm": "on",
++      "define": "MOJOLEARN_IDN_TRAIN_ONE_WAIT=1",
++      "exit": 0,
++      "seconds": 46,
++      "artifact_sha256": "78babbf049f936b51f37a21a34cfc38e16e78f7898c9f33f17ae90a680d2c1d1",
++      "log": "/Users/andrewhendel/mojolearn-evidence/decode-resident-20261028/cpu-final/compile_train_one_wait-on.log"
++    },
++    {
++      "leg": "sm89-final",
++      "target_flags": "--target-accelerator sm_89 (no COLUMN_CPU; Mac cross-compile)",
++      "entry": "experiments/decode_resident_20261028/compile_decode_resident.mojo",
++      "arm": "off",
++      "define": null,
++      "exit": 0,
++      "seconds": 27,
++      "artifact_sha256": "5bbe2e2b5ecadd691ea8e54f1836bff2f7bf1c14486f2235afe8282c78ad99bc",
++      "log": "/Users/andrewhendel/mojolearn-evidence/decode-resident-20261028/sm89-final/compile_decode_resident-off.log"
++    },
++    {
++      "leg": "sm89-final",
++      "target_flags": "--target-accelerator sm_89 (no COLUMN_CPU; Mac cross-compile)",
++      "entry": "experiments/decode_resident_20261028/compile_decode_resident.mojo",
++      "arm": "on",
++      "define": "MOJOLEARN_IDN_DECODE_RESIDENT_IO=1",
++      "exit": 0,
++      "seconds": 28,
++      "artifact_sha256": "698c86ad120ca3fd6fc71e66f63f99c316a91892b8b147c6613567acfd0e5e5c",
++      "log": "/Users/andrewhendel/mojolearn-evidence/decode-resident-20261028/sm89-final/compile_decode_resident-on.log"
++    },
++    {
++      "leg": "sm89-final",
++      "target_flags": "--target-accelerator sm_89 (no COLUMN_CPU; Mac cross-compile)",
++      "entry": "experiments/decode_resident_20261028/compile_train_one_wait.mojo",
++      "arm": "off",
++      "define": null,
++      "exit": 0,
++      "seconds": 60,
++      "artifact_sha256": "11ab77db185cab85076e911998ecbeb3bc8388eed4703fbeaa7a0d8635d78cc9",
++      "log": "/Users/andrewhendel/mojolearn-evidence/decode-resident-20261028/sm89-final/compile_train_one_wait-off.log"
++    },
++    {
++      "leg": "sm89-final",
++      "target_flags": "--target-accelerator sm_89 (no COLUMN_CPU; Mac cross-compile)",
++      "entry": "experiments/decode_resident_20261028/compile_train_one_wait.mojo",
++      "arm": "on",
++      "define": "MOJOLEARN_IDN_TRAIN_ONE_WAIT=1",
++      "exit": 0,
++      "seconds": 347,
++      "artifact_sha256": "1b475a9d82bae40680cac37e6102f49c6a60a519f78c230d92a817c3d0cd29de",
++      "log": "/Users/andrewhendel/mojolearn-evidence/decode-resident-20261028/sm89-final/compile_train_one_wait-on.log"
++    }
++  ],
++  "self_merge_pod": {
++    "pod": "8jy6vhu4bfpioh (RunPod CPU, 32 vCPU, 60-min lease, --release-bincache), reaped and verified gone",
++    "tree": "7dbe8dcfcbe9d37a7aa46a6dd67dac05555efeda",
++    "roots": [
++      {
++        "leg": "pod-8jy6vhu4bfpioh-sm89",
++        "target_flags": "--target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA, -j 32",
++        "entry": "experiments/decode_resident_20261028/compile_decode_resident.mojo",
++        "arm": "off",
++        "define": null,
++        "exit": 0,
++        "seconds": 95,
++        "artifact_sha256": "053fec6e5e2e3d769206a8fd6b5126fce4550f578ba4640f8447b3d880b0d885",
++        "log": "/Users/andrewhendel/mojolearn-evidence/decode-resident-20261028/pod-selfmerge/remote/leg_out/sm89/compile_decode_resident-off.log"
++      },
++      {
++        "leg": "pod-8jy6vhu4bfpioh-sm89",
++        "target_flags": "--target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA, -j 32",
++        "entry": "experiments/decode_resident_20261028/compile_decode_resident.mojo",
++        "arm": "on",
++        "define": "MOJOLEARN_IDN_DECODE_RESIDENT_IO=1",
++        "exit": 0,
++        "seconds": 98,
++        "artifact_sha256": "9cf9e39eb7d785c9e3145c91d1440ff3132244448ab35c39af16fc682b6c3dd3",
++        "log": "/Users/andrewhendel/mojolearn-evidence/decode-resident-20261028/pod-selfmerge/remote/leg_out/sm89/compile_decode_resident-on.log"
++      },
++      {
++        "leg": "pod-8jy6vhu4bfpioh-sm89",
++        "target_flags": "--target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA, -j 32",
++        "entry": "experiments/decode_resident_20261028/compile_train_one_wait.mojo",
++        "arm": "off",
++        "define": null,
++        "exit": 0,
++        "seconds": 220,
++        "artifact_sha256": "0a1e443f959532c22fda23e57423fd77fc7452b165bc14e6e9e311f9e63f9fe9",
++        "log": "/Users/andrewhendel/mojolearn-evidence/decode-resident-20261028/pod-selfmerge/remote/leg_out/sm89/compile_train_one_wait-off.log"
++      },
++      {
++        "leg": "pod-8jy6vhu4bfpioh-sm89",
++        "target_flags": "--target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA, -j 32",
++        "entry": "experiments/decode_resident_20261028/compile_train_one_wait.mojo",
++        "arm": "on",
++        "define": "MOJOLEARN_IDN_TRAIN_ONE_WAIT=1",
++        "exit": 0,
++        "seconds": 216,
++        "artifact_sha256": "b3a4589cf2898d2bf20b3156cdbd598f591b28c34a916cf7c2c149d93275ab31",
++        "log": "/Users/andrewhendel/mojolearn-evidence/decode-resident-20261028/pod-selfmerge/remote/leg_out/sm89/compile_train_one_wait-on.log"
++      }
++    ],
++    "host_families": "46 of 46 host .so present after the smoke; byte_lm host (the only host family importing a lane file) miss+built from source rc=0; 12 families report rc 1-2 \"output already exists\"/\"destination exists\": their .so was already written by another family's cache restore in the same run (no compile error)",
++    "smoke": [
++      "smoke_after rc=0",
++      "probe_tier_dir rc=0",
++      "INTEG_BUILD total=46 ok=34"
++    ],
++    "selfmerge": [
++      "cores_affinity=32 cgroup=",
++      "git_index_rc=0",
++      "compile_sm89 rc=0",
++      "gate_no_python_runtime rc=0",
++      "gate_tombstones rc=0",
++      "pod_smoke rc=1",
++      "classical_fit_predict rc=0"
++    ],
++    "cpu_column_note": "the device-binding roots cannot be built for the CPU column on a GPU-less Linux pod (std gpu/host/info: Unknown GPU architecture, at main's mamba2_block_forward launch); the CPU column of these roots is the Mac receipt above"
++  }
++}
+diff --git a/experiments/decode_resident_20261028/compile.sh b/experiments/decode_resident_20261028/compile.sh
+new file mode 100755
+index 0000000000..91f1203eab
+--- /dev/null
++++ b/experiments/decode_resident_20261028/compile.sh
+@@ -0,0 +1,52 @@
++#!/bin/bash
++# Compile-only closure for lane decode-resident-20261028 (both arms of each define).
++# Usage: bash compile.sh <evidence_dir> [extra mojo flags...]
++#   ROOTS (default "compile_decode_resident compile_train_one_wait"), DEFINES_FOR_<root> pick the arm define.
++#   COLUMN_DEFS (default "-D MOJOLEARN_COLUMN_CPU"); on a GPU-target leg pass COLUMN_DEFS="" and
++#   --target-accelerator sm_89 as an extra flag. MOJO overrides the compiler path; MAIN the pixi manifest checkout.
++set -u
++WT=$(cd "$(dirname "$0")/../.." && pwd)
++EV=${1:?evidence dir}; shift
++MAIN=${MAIN:-/Users/andrewhendel/CascadeProjects/mojolearn}
++COMPILER=${MOJO:-$MAIN/.pixi/envs/default/bin/mojo}
++JOBS=${JOBS:-10}
++if [ -n "${POD_PIXI:-}" ]; then
++  # On a pod: the repo's own locked environment, entered through pixi so std resolves.
++  MOJO_RUN=(pixi run -e default mojo)
++elif [ -n "${NO_PIXI:-}" ]; then
++  MOJO_RUN=("$COMPILER")
++else
++  MOJO_RUN=(pixi run --manifest-path "$MAIN/pixi.toml" --environment default --locked --no-install --executable "$COMPILER")
++fi
++ROOTS=${ROOTS:-"compile_decode_resident compile_train_one_wait"}
++mkdir -p "$EV"
++cd "$WT" || exit 2
++git rev-parse HEAD > "$EV/source-commit.txt"
++"${MOJO_RUN[@]}" --version > "$EV/compiler.txt" 2>&1
++overall=0
++for root in $ROOTS; do
++  case $root in
++    compile_decode_resident) define=MOJOLEARN_IDN_DECODE_RESIDENT_IO ;;
++    compile_train_one_wait) define=MOJOLEARN_IDN_TRAIN_ONE_WAIT ;;
++    *) echo "unknown root $root"; exit 2 ;;
++  esac
++  [ -f "experiments/decode_resident_20261028/$root.mojo" ] || { echo "ROOT $root missing"; overall=1; continue; }
++  for arm in off on; do
++    defs=(-D MOJOLEARN_NUMERIC_IDENTICAL=1 ${COLUMN_DEFS--D MOJOLEARN_COLUMN_CPU})
++    [ "$arm" = on ] && defs+=(-D "$define=1")
++    tag=$root-$arm
++    t0=$(date +%s)
++    "${MOJO_RUN[@]}" build --optimization-level 0 -j "$JOBS" --emit shared-lib "${defs[@]}" "$@" -I "$WT" -I "$WT/bindings" \
++      experiments/decode_resident_20261028/$root.mojo -o "$EV/$tag.so" > "$EV/$tag.log" 2>&1
++    rc=$?
++    t1=$(date +%s)
++    sha=-
++    if [ $rc = 0 ]; then
++      sha=$( (shasum -a 256 "$EV/$tag.so" 2>/dev/null || sha256sum "$EV/$tag.so") | cut -d' ' -f1)
++    fi
++    echo "ROOT $tag rc=$rc seconds=$((t1-t0)) sha256=$sha" | tee -a "$EV/summary.txt"
++    [ $rc = 0 ] || overall=1
++  done
++done
++echo "OVERALL rc=$overall" | tee -a "$EV/summary.txt"
++exit $overall
+diff --git a/experiments/decode_resident_20261028/compile_decode_resident.mojo b/experiments/decode_resident_20261028/compile_decode_resident.mojo
+new file mode 100644
+index 0000000000..c54bb768bc
+--- /dev/null
++++ b/experiments/decode_resident_20261028/compile_decode_resident.mojo
+@@ -0,0 +1,39 @@
++# SPDX-License-Identifier: Apache-2.0
++# Compile-only root (lane decode-resident-20261028); never invoke.
++# Covers the resident decode step closures MOJOLEARN_IDN_DECODE_RESIDENT_IO
++# changes: the transformer decode session (open, open_int15, step through the
++# Python bindings) and the Mamba-2 session step. transformer/native_decode_dispatch.mojo is left
++# out: on main cbc14776d7 it fails to parse with Mojo 1.0.0 (ed45d567) at :49 (a conditional over
++# two list literals of different lengths), independent of this lane.
++from std.python._cpython import PyObjectPtr
++from std.python import PythonObject
++from bindings._mojolearn_transformer import (
++    transformer_decode_session_open_binding,
++    transformer_decode_session_open_int15_binding,
++    transformer_decode_session_step_binding,
++)
++from bindings._mojolearn_mamba import (
++    mamba2_session_open_binding,
++    mamba2_session_step_binding,
++)
++
++
++@export
++def drio_compile_session_bindings(which: Int, s: PyObjectPtr, x: PyObjectPtr, y: PyObjectPtr) abi("C") -> Int:
++    try:
++        var so = PythonObject(from_borrowed=s)
++        var xo = PythonObject(from_borrowed=x)
++        var yo = PythonObject(from_borrowed=y)
++        if which == 0:
++            _ = transformer_decode_session_open_binding(so, xo, yo)
++        elif which == 1:
++            _ = transformer_decode_session_open_int15_binding(so, xo, yo)
++        elif which == 2:
++            _ = transformer_decode_session_step_binding(so, xo, yo)
++        elif which == 3:
++            _ = mamba2_session_open_binding(so, xo, yo)
++        else:
++            _ = mamba2_session_step_binding(so, xo)
++        return 0
++    except:
++        return -1
+diff --git a/experiments/decode_resident_20261028/compile_train_one_wait.mojo b/experiments/decode_resident_20261028/compile_train_one_wait.mojo
+new file mode 100644
+index 0000000000..0417bf86f0
+--- /dev/null
++++ b/experiments/decode_resident_20261028/compile_train_one_wait.mojo
+@@ -0,0 +1,28 @@
++# SPDX-License-Identifier: Apache-2.0
++# Compile-only root (lane decode-resident-20261028); never invoke.
++# Covers the byte-LM resident train step MOJOLEARN_IDN_TRAIN_ONE_WAIT changes: the session step
++# binding (byte_session_step -> byte_train_step_resident -> _byte_step_device) and the native
++# descriptor operation (byte_owner_step), which share the step body.
++from std.python._cpython import PyObjectPtr
++from std.python import PythonObject
++from bindings._mojolearn_byte_lm import byte_lm_session_step_binding
++from training.byte_lm_native_dispatch import byte_lm_native_operation
++
++
++@export
++def drio_compile_byte_lm_operation(op: Int, a0: Int, a1: Int, a2: Int) abi("C") -> Int:
++    try:
++        return byte_lm_native_operation(op, [a0, a1, a2], [a0, a1, a2, a2], [Float64(1e-3)])
++    except:
++        return -1
++
++
++@export
++def drio_compile_byte_lm_step(s: PyObjectPtr, x: PyObjectPtr, y: PyObjectPtr, z: PyObjectPtr) abi("C") -> Int:
++    try:
++        _ = byte_lm_session_step_binding(
++            PythonObject(from_borrowed=s), PythonObject(from_borrowed=x),
++            PythonObject(from_borrowed=y), PythonObject(from_borrowed=z))
++        return 0
++    except:
++        return -1
+diff --git a/experiments/decode_resident_20261028/pod_selfmerge.sh b/experiments/decode_resident_20261028/pod_selfmerge.sh
+new file mode 100755
+index 0000000000..8ad83eb46c
+--- /dev/null
++++ b/experiments/decode_resident_20261028/pod_selfmerge.sh
+@@ -0,0 +1,36 @@
++#!/bin/bash
++# Self-merge gate leg for lane decode-resident-20261028 (runs on the RunPod CPU pod, in the repo root).
++# 1) the lane's compile roots, both arms, CPU column and sm_89, all allocated cores; 2) the two scripted
++# gates; 3) the pod smoke (copy of integration-provider-queue-20261028/scripts/pod_smoke_5b.sh) plus a tiny
++# classical fit+predict on the CPU column. Exit codes go to $LEG_OUT/selfmerge.txt.
++set -u
++OUT=${LEG_OUT:?}; mkdir -p "$OUT"
++S=$OUT/selfmerge.txt
++CORES=$(python3 -c 'import os;print(len(os.sched_getaffinity(0)))')
++echo "cores_affinity=$CORES cgroup=$(cat /sys/fs/cgroup/cpu.max 2>/dev/null)" > "$S"
++export POD_PIXI=1 JOBS=$CORES MAIN=$PWD
++# The shipped tree has no .git; the tombstone gate reads markers with `git grep` over tracked files,
++# so index exactly the shipped (tracked) files.
++if [ ! -d .git ]; then
++  git init -q . && git -c user.email=pod@local -c user.name=pod add -A > /dev/null 2>&1 \
++    && git -c user.email=pod@local -c user.name=pod commit -q -m shipped-tree > /dev/null 2>&1
++  echo "git_index_rc=$?" >> "$S"
++fi
++# No CPU-column leg here: these roots import the device bindings, and on a GPU-less Linux pod a
++# CPU-column build of them stops in std's GPU info ("Unknown GPU architecture detected", at main's own
++# mamba2_block_forward launch); the CPU column of these roots is the Mac receipt.
++COLUMN_DEFS="-D MOJOLEARN_COLUMN_NVIDIA" bash experiments/decode_resident_20261028/compile.sh "$OUT/sm89" --target-accelerator sm_89 > "$OUT/compile_sm89.out" 2>&1; echo "compile_sm89 rc=$?" >> "$S"
++pixi run -e default python tools/tests/test_no_python_runtime.py > "$OUT/gate_no_python_runtime.log" 2>&1; echo "gate_no_python_runtime rc=$?" >> "$S"
++pixi run -e default python tools/tests/test_tombstones_preserved.py > "$OUT/gate_tombstones.log" 2>&1; echo "gate_tombstones rc=$?" >> "$S"
++# --release-bincache stages host binaries before the command; the smoke builds every family through
++# the cache into python/mojolearn/host and refuses an existing output, so start it from an empty dir.
++rm -f python/mojolearn/host/_mojolearn_*.so
++LEG_OUT=$OUT/smoke bash experiments/decode_resident_20261028/pod_smoke.sh > "$OUT/pod_smoke.out" 2>&1; echo "pod_smoke rc=$?" >> "$S"
++MOJOLEARN_VENDOR=cpu pixi run -e default python -c "
++import numpy as np
++from mojolearn.linear_model import LinearRegression
++X = np.arange(40, dtype=np.float32).reshape(20, 2); y = X[:, 0] * 2 + 1
++m = LinearRegression().fit(X, y); p = m.predict(X); print('classical_fit_predict', p.shape)
++" > "$OUT/classical_fit_predict.log" 2>&1; echo "classical_fit_predict rc=$?" >> "$S"
++cat "$S"
++! grep -v '^cores' "$S" | grep -qv 'rc=0'
+diff --git a/experiments/decode_resident_20261028/pod_smoke.sh b/experiments/decode_resident_20261028/pod_smoke.sh
+new file mode 100755
+index 0000000000..890a32fed1
+--- /dev/null
++++ b/experiments/decode_resident_20261028/pod_smoke.sh
+@@ -0,0 +1,38 @@
++#!/bin/bash
++set -u
++OUT=${LEG_OUT:?}; mkdir -p "$OUT/logs" "$OUT/bin"
++CORES=$(python3 -c 'import os;print(len(os.sched_getaffinity(0)))'); PAR=4; JOBS=$(( CORES / PAR ))
++MOJO_VER=$(pixi run -e default mojo --version 2>&1 | tail -n 1)
++{ echo "cores_affinity=$CORES"; echo "cgroup_cpu_max=$(cat /sys/fs/cgroup/cpu.max 2>/dev/null)"; echo "parallel=$PAR"; echo "jobs=$JOBS"; echo "mojo_version=$MOJO_VER"; } > "$OUT/resources.txt"
++sh tokenizer/tools/gen_unicode_table.sh > "$OUT/logs/gen_unicode.log" 2>&1; echo "gen_unicode_rc=$?" >> "$OUT/resources.txt"
++find . -name '*.mojo' -not -path './.pixi/*' -print0 | sort -z | xargs -0 sha256sum > "$OUT/source-manifest.sha256"
++export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_JOBS=$JOBS MOJOLEARN_COMPILE_JOBS=$JOBS MOJOLEARN_LINUX_CPU=x86-64-v3 OUT JOBS MOJOLEARN_BINCACHE_OUT="$OUT/bincache"
++fam() { local f=$1 t0=$(date +%s); pixi run -e default python tools/bincache.py build bindings/build_${f}_host.sh > "$OUT/logs/host_$f.log" 2>&1; printf 'host\t%s\trc=%s\t%ss\n' "$f" "$?" "$(( $(date +%s)-t0 ))" >> "$OUT/results.tsv"; }
++root() { local n=$1 e=$2 t0=$(date +%s); pixi run -e default mojo build --optimization-level 0 -j $JOBS --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings "$e" -o "$OUT/bin/$n.so" > "$OUT/logs/root_$n.log" 2>&1; printf 'root\t%s\trc=%s\t%ss\n' "$n" "$?" "$(( $(date +%s)-t0 ))" >> "$OUT/results.tsv"; }
++dev() { local n=$1 e=$2 a=$3 t0=$(date +%s) ol="--optimization-level 0" col=NVIDIA; case $a in gfx*) ol=""; col=AMD;; esac; pixi run -e default mojo build $ol -j $JOBS --emit shared-lib --target-cpu x86-64-v3 --target-accelerator $a -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_$col -I . -I bindings "$e" -o "$OUT/bin/$n.so" > "$OUT/logs/dev_$n.log" 2>&1; printf 'dev\t%s\trc=%s\t%ss\n' "$n" "$?" "$(( $(date +%s)-t0 ))" >> "$OUT/results.tsv"; }
++export -f fam root dev
++{ for f in runtime_classical tokenizer x_sequence trees gbdt forest $(ls bindings/build_*_host.sh | sed 's/.*build_//; s/_host.sh//' | grep -vxE 'runtime_classical|tokenizer|x_sequence|trees|gbdt|forest'); do echo "fam $f"; done; } > "$OUT/plan.txt"
++xargs -P $PAR -L 1 bash -c '"$@"' _ < "$OUT/plan.txt"
++ls -l python/mojolearn/host/ > "$OUT/host_dir.txt" 2>&1; sha256sum python/mojolearn/host/*.so > "$OUT/so_sha256.txt" 2>/dev/null
++cat > "$OUT/smoke.py" <<'EOF'
++import sys, importlib
++import mojolearn
++mods = ["mojolearn.ensemble", "mojolearn.neighbors", "mojolearn.decomposition", "mojolearn.svm", "mojolearn.cluster", "mojolearn.linear_model", "mojolearn.preprocessing", "mojolearn.metrics"]
++failed = []
++for m in mods:
++    try: importlib.import_module(m)
++    except ModuleNotFoundError as e:
++        if e.name == m: print("absent", m); continue
++        failed.append((m, repr(e)))
++    except Exception as e: failed.append((m, repr(e)))
++missing = [n for n, v in vars(mojolearn).items() if type(v).__name__ == "_MissingUpperTier"]
++print("missing_bindings", len(missing), missing[:40])
++for f in failed: print("FAIL", f)
++sys.exit(1 if failed else 0)
++EOF
++smoke() { pixi run -e default python "$OUT/smoke.py" > "$OUT/smoke_$1.log" 2>&1; echo "smoke_$1 rc=$?" >> "$OUT/summary.txt"; }
++smoke after
++pixi run -e default python -c "import mojolearn._backend as b; print('tier_dir', b.tier_dir('identical'))" > "$OUT/probe_tier_dir.log" 2>&1; echo "probe_tier_dir rc=$?" >> "$OUT/summary.txt"
++mkdir -p "$OUT/host_so"; cp python/mojolearn/host/*.so "$OUT/host_so/" 2>/dev/null
++total=$(wc -l < "$OUT/plan.txt"); ok=$(grep -c 'rc=0' "$OUT/results.tsv"); echo "INTEG_BUILD total=$total ok=$ok" >> "$OUT/summary.txt"
++grep -q 'smoke_after rc=0' "$OUT/summary.txt" && grep -q 'probe_tier_dir rc=0' "$OUT/summary.txt" && [ "$ok" = "$total" ]
+diff --git a/experiments/grad_views_20261028/compile.json b/experiments/grad_views_20261028/compile.json
+new file mode 100644
+index 0000000000..6f5d2072c9
+--- /dev/null
++++ b/experiments/grad_views_20261028/compile.json
+@@ -0,0 +1,71 @@
++{
++ "lane": "grad-views",
++ "define": "MOJOLEARN_IDN_PARAM_GRAD_VIEWS",
++ "entry": "bindings/entry/entry__mojolearn_byte_lm.mojo (binding _mojolearn_byte_lm)",
++ "command": "pixi run --locked --no-install --executable /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib <target> <defines> -I <wt> -I <wt>/bindings <entry> -o <out> (experiments/grad_views_20261028/compile_final.sh, wrapped in tools/compile_slot.sh)",
++ "compiler_sha256": "d134bd9dfb22fc13a94cf4ba6bca58722bf5f6489e4e409c1a000632062a7979",
++ "jobs": 10,
++ "host": "Mac (M4), compile only",
++ "final_compiles": {
++  "cpu-off": {
++   "exit": 0,
++   "seconds": 346,
++   "source_commit": "b1055551c12fabdd59ea83777eb4b9eba1072a36",
++   "artifact_sha256": "3c24d4957c1f52127abc9d7018f7e37cacdaf74114f61b866366160e1c923ba1",
++   "log": "/Users/andrewhendel/mojolearn-evidence/grad-views-20261028/final-cpu-off/compile.log",
++   "target": "--target-cpu apple-m1 -D MOJOLEARN_COLUMN_CPU",
++   "defines": "-D MOJOLEARN_NUMERIC_IDENTICAL=1"
++  },
++  "cpu-on": {
++   "exit": 0,
++   "seconds": 392,
++   "source_commit": "b1055551c12fabdd59ea83777eb4b9eba1072a36",
++   "artifact_sha256": "e90bf6a4c92a1735839b84e72ba4e2ab5bcda98e9f4c4fa2ed1f323ec998b672",
++   "log": "/Users/andrewhendel/mojolearn-evidence/grad-views-20261028/final-cpu-on/compile.log",
++   "target": "--target-cpu apple-m1 -D MOJOLEARN_COLUMN_CPU",
++   "defines": "-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_IDN_PARAM_GRAD_VIEWS=1"
++  },
++  "sm89-off": {
++   "exit": 0,
++   "seconds": 469,
++   "source_commit": "b1055551c12fabdd59ea83777eb4b9eba1072a36",
++   "artifact_sha256": "64651886cda07ab69e20ffff886867a33618d6fc96d624671bfffa6b95c5960b",
++   "log": "/Users/andrewhendel/mojolearn-evidence/grad-views-20261028/final-sm89-off/compile.log",
++   "target": "--target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA",
++   "defines": "-D MOJOLEARN_NUMERIC_IDENTICAL=1"
++  },
++  "sm89-on": {
++   "exit": 0,
++   "seconds": 363,
++   "source_commit": "b1055551c12fabdd59ea83777eb4b9eba1072a36",
++   "artifact_sha256": "e100bc83f220fe3647d285b0f1766d9f9a3124f1945a9ad56cb4fcc714c9d7cc",
++   "log": "/Users/andrewhendel/mojolearn-evidence/grad-views-20261028/final-sm89-on/compile.log",
++   "target": "--target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA",
++   "defines": "-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_IDN_PARAM_GRAD_VIEWS=1"
++  }
++ },
++ "premerge_runpod_sm89": {
++  "source_commit": "9ddf59b93d",
++  "pod": "e8bh90pgp26dra (32 vCPU, deleted and verified gone by the leg tool, $0.20)",
++  "arms": {
++   "sm89-off": {
++    "exit": 0,
++    "artifact_sha256": "b0b5e9fb79bd9b41eb874d24abb15c50b11df474e0fb93f7f2bb255f048126e9",
++    "log": "/Users/andrewhendel/mojolearn-evidence/grad-views-20261028/runpod/remote/leg_out/sm89-off/compile.log"
++   },
++   "sm89-on": {
++    "exit": 0,
++    "artifact_sha256": "e5b9de79b07ca4304f9c09f470641448e43c8ea2ae3a6b778d00d156b3ce6a1d",
++    "log": "/Users/andrewhendel/mojolearn-evidence/grad-views-20261028/runpod/remote/leg_out/sm89-on/compile.log"
++   }
++  }
++ },
++ "later_merge": "4a10a3069e (origin/main tranche 4) merged after these compiles; it changes no file in the byte LM entry import closure (208 files scanned), so no recompile",
++ "runtime_executed": false,
++ "not_covered": [
++  "runtime, identity and GPU timing (RUN OWED)",
++  "AMD gfx target compile",
++  "FAST mode (define is IDENTICAL-only)",
++  "other bindings importing training/byte_lm.mojo (byte_lm_parallel/model pool) not compiled"
++ ]
++}
+\ No newline at end of file
+diff --git a/experiments/grad_views_20261028/compile_final.sh b/experiments/grad_views_20261028/compile_final.sh
+new file mode 100755
+index 0000000000..4f60892f8a
+--- /dev/null
++++ b/experiments/grad_views_20261028/compile_final.sh
+@@ -0,0 +1,12 @@
++#!/bin/bash
++# usage: compile_final.sh cpu|sm89 off|on
++tgt=$1; arm=$2; extra=""; [ "$arm" = on ] && extra="-D MOJOLEARN_IDN_PARAM_GRAD_VIEWS=1"
++if [ "$tgt" = cpu ]; then tflags="--target-cpu apple-m1 -D MOJOLEARN_COLUMN_CPU"; else tflags="--target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA"; fi
++d=/Users/andrewhendel/mojolearn-evidence/grad-views-20261028/final-$tgt-$arm; mkdir -p $d
++git -C /Users/andrewhendel/mojolearn-wt/grad-views-20261028 rev-parse HEAD > $d/source-commit.txt
++start=$(date +%s)
++pixi run --manifest-path /Users/andrewhendel/CascadeProjects/mojolearn/pixi.toml --environment default --locked --no-install --executable /Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo build --optimization-level 0 -j 10 --emit shared-lib $tflags -D MOJOLEARN_NUMERIC_IDENTICAL=1 $extra -I /Users/andrewhendel/mojolearn-wt/grad-views-20261028 -I /Users/andrewhendel/mojolearn-wt/grad-views-20261028/bindings /Users/andrewhendel/mojolearn-wt/grad-views-20261028/bindings/entry/entry__mojolearn_byte_lm.mojo -o $d/_mojolearn_byte_lm.so > $d/compile.log 2>&1
++rc=$?
++echo $rc > $d/exit; echo $(( $(date +%s) - start )) > $d/seconds
++[ $rc = 0 ] && shasum -a 256 $d/_mojolearn_byte_lm.so > $d/sha256
++exit $rc
+diff --git a/experiments/grad_views_20261028/pod_smoke_5b.sh b/experiments/grad_views_20261028/pod_smoke_5b.sh
+new file mode 100644
+index 0000000000..890a32fed1
+--- /dev/null
++++ b/experiments/grad_views_20261028/pod_smoke_5b.sh
+@@ -0,0 +1,38 @@
++#!/bin/bash
++set -u
++OUT=${LEG_OUT:?}; mkdir -p "$OUT/logs" "$OUT/bin"
++CORES=$(python3 -c 'import os;print(len(os.sched_getaffinity(0)))'); PAR=4; JOBS=$(( CORES / PAR ))
++MOJO_VER=$(pixi run -e default mojo --version 2>&1 | tail -n 1)
++{ echo "cores_affinity=$CORES"; echo "cgroup_cpu_max=$(cat /sys/fs/cgroup/cpu.max 2>/dev/null)"; echo "parallel=$PAR"; echo "jobs=$JOBS"; echo "mojo_version=$MOJO_VER"; } > "$OUT/resources.txt"
++sh tokenizer/tools/gen_unicode_table.sh > "$OUT/logs/gen_unicode.log" 2>&1; echo "gen_unicode_rc=$?" >> "$OUT/resources.txt"
++find . -name '*.mojo' -not -path './.pixi/*' -print0 | sort -z | xargs -0 sha256sum > "$OUT/source-manifest.sha256"
++export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_BUILD_JOBS=$JOBS MOJOLEARN_COMPILE_JOBS=$JOBS MOJOLEARN_LINUX_CPU=x86-64-v3 OUT JOBS MOJOLEARN_BINCACHE_OUT="$OUT/bincache"
++fam() { local f=$1 t0=$(date +%s); pixi run -e default python tools/bincache.py build bindings/build_${f}_host.sh > "$OUT/logs/host_$f.log" 2>&1; printf 'host\t%s\trc=%s\t%ss\n' "$f" "$?" "$(( $(date +%s)-t0 ))" >> "$OUT/results.tsv"; }
++root() { local n=$1 e=$2 t0=$(date +%s); pixi run -e default mojo build --optimization-level 0 -j $JOBS --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings "$e" -o "$OUT/bin/$n.so" > "$OUT/logs/root_$n.log" 2>&1; printf 'root\t%s\trc=%s\t%ss\n' "$n" "$?" "$(( $(date +%s)-t0 ))" >> "$OUT/results.tsv"; }
++dev() { local n=$1 e=$2 a=$3 t0=$(date +%s) ol="--optimization-level 0" col=NVIDIA; case $a in gfx*) ol=""; col=AMD;; esac; pixi run -e default mojo build $ol -j $JOBS --emit shared-lib --target-cpu x86-64-v3 --target-accelerator $a -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_$col -I . -I bindings "$e" -o "$OUT/bin/$n.so" > "$OUT/logs/dev_$n.log" 2>&1; printf 'dev\t%s\trc=%s\t%ss\n' "$n" "$?" "$(( $(date +%s)-t0 ))" >> "$OUT/results.tsv"; }
++export -f fam root dev
++{ for f in runtime_classical tokenizer x_sequence trees gbdt forest $(ls bindings/build_*_host.sh | sed 's/.*build_//; s/_host.sh//' | grep -vxE 'runtime_classical|tokenizer|x_sequence|trees|gbdt|forest'); do echo "fam $f"; done; } > "$OUT/plan.txt"
++xargs -P $PAR -L 1 bash -c '"$@"' _ < "$OUT/plan.txt"
++ls -l python/mojolearn/host/ > "$OUT/host_dir.txt" 2>&1; sha256sum python/mojolearn/host/*.so > "$OUT/so_sha256.txt" 2>/dev/null
++cat > "$OUT/smoke.py" <<'EOF'
++import sys, importlib
++import mojolearn
++mods = ["mojolearn.ensemble", "mojolearn.neighbors", "mojolearn.decomposition", "mojolearn.svm", "mojolearn.cluster", "mojolearn.linear_model", "mojolearn.preprocessing", "mojolearn.metrics"]
++failed = []
++for m in mods:
++    try: importlib.import_module(m)
++    except ModuleNotFoundError as e:
++        if e.name == m: print("absent", m); continue
++        failed.append((m, repr(e)))
++    except Exception as e: failed.append((m, repr(e)))
++missing = [n for n, v in vars(mojolearn).items() if type(v).__name__ == "_MissingUpperTier"]
++print("missing_bindings", len(missing), missing[:40])
++for f in failed: print("FAIL", f)
++sys.exit(1 if failed else 0)
++EOF
++smoke() { pixi run -e default python "$OUT/smoke.py" > "$OUT/smoke_$1.log" 2>&1; echo "smoke_$1 rc=$?" >> "$OUT/summary.txt"; }
++smoke after
++pixi run -e default python -c "import mojolearn._backend as b; print('tier_dir', b.tier_dir('identical'))" > "$OUT/probe_tier_dir.log" 2>&1; echo "probe_tier_dir rc=$?" >> "$OUT/summary.txt"
++mkdir -p "$OUT/host_so"; cp python/mojolearn/host/*.so "$OUT/host_so/" 2>/dev/null
++total=$(wc -l < "$OUT/plan.txt"); ok=$(grep -c 'rc=0' "$OUT/results.tsv"); echo "INTEG_BUILD total=$total ok=$ok" >> "$OUT/summary.txt"
++grep -q 'smoke_after rc=0' "$OUT/summary.txt" && grep -q 'probe_tier_dir rc=0' "$OUT/summary.txt" && [ "$ok" = "$total" ]
+diff --git a/experiments/grad_views_20261028/selfmerge_pod.sh b/experiments/grad_views_20261028/selfmerge_pod.sh
+new file mode 100644
+index 0000000000..027833f6ea
+--- /dev/null
++++ b/experiments/grad_views_20261028/selfmerge_pod.sh
+@@ -0,0 +1,28 @@
++#!/bin/bash
++# grad-views self-merge leg: gates, affected byte LM roots (both arms, CPU + sm_89), the pod smoke, a tiny classical fit.
++set -u
++cd /root/mojolearn || exit 2
++OUT=${LEG_OUT:?}; mkdir -p "$OUT/gates" "$OUT/roots"
++CORES=$(python3 -c 'import os;print(len(os.sched_getaffinity(0)))'); J=$(( CORES / 4 )); [ $J -lt 1 ] && J=1
++pixi run -e default mojo --version > "$OUT/compiler.txt" 2>&1
++echo "cores=$CORES jobs_per_root=$J" > "$OUT/resources.txt"
++pixi run -e default python3 tools/tests/test_no_python_runtime.py > "$OUT/gates/no_python_runtime.log" 2>&1; echo "gate_no_python_runtime rc=$?" >> "$OUT/summary.txt"
++pixi run -e default python3 tools/tests/test_tombstones_preserved.py > "$OUT/gates/tombstones.log" 2>&1; echo "gate_tombstones rc=$?" >> "$OUT/summary.txt"
++r() { local tgt=$1 arm=$2 extra="" tf; [ "$arm" = on ] && extra="-D MOJOLEARN_IDN_PARAM_GRAD_VIEWS=1"
++  if [ "$tgt" = cpu ]; then tf="-D MOJOLEARN_COLUMN_CPU"; else tf="--target-accelerator sm_89 -D MOJOLEARN_COLUMN_NVIDIA"; fi
++  local t0=$(date +%s)
++  pixi run -e default mojo build --optimization-level 0 -j $J --emit shared-lib --target-cpu x86-64-v3 $tf -D MOJOLEARN_NUMERIC_IDENTICAL=1 $extra -I . -I bindings bindings/entry/entry__mojolearn_byte_lm.mojo -o "$OUT/roots/$tgt-$arm.so" > "$OUT/roots/$tgt-$arm.log" 2>&1
++  local rc=$?; echo "root_${tgt}_${arm} rc=$rc s=$(( $(date +%s)-t0 ))" >> "$OUT/summary.txt"
++  [ $rc = 0 ] && sha256sum "$OUT/roots/$tgt-$arm.so" >> "$OUT/roots/sha256.txt"; }
++r cpu off & r cpu on & r sm89 off & r sm89 on & wait
++mkdir -p "$OUT/smoke"; LEG_OUT="$OUT/smoke" bash experiments/grad_views_20261028/pod_smoke_5b.sh; echo "pod_smoke rc=$?" >> "$OUT/summary.txt"
++cat > "$OUT/classical_fit.py" <<'PY'
++import numpy as np, mojolearn
++from mojolearn.linear_model import LinearRegression
++rng = np.random.default_rng(0)
++X = rng.standard_normal((64, 4)).astype(np.float32); y = X @ np.arange(1, 5, dtype=np.float32)
++m = LinearRegression().fit(X, y); p = m.predict(X)
++print("classical_fit ok", p.shape)
++PY
++MOJOLEARN_VENDOR=cpu pixi run -e default python "$OUT/classical_fit.py" > "$OUT/classical_fit.log" 2>&1; echo "classical_fit rc=$?" >> "$OUT/summary.txt"
++! grep -qv 'rc=0' <(grep -o 'rc=[0-9]*' "$OUT/summary.txt")
+diff --git a/experiments/grad_views_20261028/sm89_cmd.sh b/experiments/grad_views_20261028/sm89_cmd.sh
+new file mode 100644
+index 0000000000..bb73b9a86a
+--- /dev/null
++++ b/experiments/grad_views_20261028/sm89_cmd.sh
+@@ -0,0 +1,25 @@
++#!/bin/bash
++# grad-views lane: compile the byte LM root for sm_89 (NVIDIA column), arm off and arm on.
++set -u
++cd /root/mojolearn || exit 2
++jobs=$(python3 -c 'import os;print(len(os.sched_getaffinity(0)))')
++git rev-parse HEAD > "$LEG_OUT/source-commit.txt" 2>/dev/null || true
++.pixi/envs/default/bin/mojo --version > "$LEG_OUT/compiler.txt" 2>&1
++sha256sum .pixi/envs/default/bin/mojo > "$LEG_OUT/compiler.sha256"
++echo "$jobs" > "$LEG_OUT/jobs.txt"
++final=0
++for arm in off on; do
++  extra=""; [ "$arm" = on ] && extra="-D MOJOLEARN_IDN_PARAM_GRAD_VIEWS=1"
++  mkdir -p "$LEG_OUT/sm89-$arm"
++  s=$(date +%s)
++  pixi run --locked --no-install mojo build --optimization-level 0 -j "$jobs" --emit shared-lib \
++    --target-accelerator sm_89 --target-cpu x86-64-v3 -D MOJOLEARN_COLUMN_NVIDIA \
++    -D MOJOLEARN_NUMERIC_IDENTICAL=1 $extra -I . -I bindings \
++    bindings/entry/entry__mojolearn_byte_lm.mojo -o "$LEG_OUT/sm89-$arm/_mojolearn_byte_lm.so" \
++    > "$LEG_OUT/sm89-$arm/compile.log" 2>&1
++  rc=$?
++  echo $rc > "$LEG_OUT/sm89-$arm/exit"; echo $(( $(date +%s) - s )) > "$LEG_OUT/sm89-$arm/seconds"
++  [ $rc = 0 ] && sha256sum "$LEG_OUT/sm89-$arm/_mojolearn_byte_lm.so" > "$LEG_OUT/sm89-$arm/sha256"
++  [ $rc = 0 ] || final=$rc
++done
++exit $final
+diff --git a/training/byte_lm.mojo b/training/byte_lm.mojo
+index 09d1e1a264..1e629fb4e0 100644
+--- a/training/byte_lm.mojo
++++ b/training/byte_lm.mojo
+@@ -38,7 +38,8 @@ from core.device_scan import DeviceScanScratch, device_first_token_oob
+ from core.neural_context import neural_ctx
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from training.neural_identical_experiments import (
+-    IDN_LM_PARAM_VIEWS, IDN_TRAIN_NO_DECODE_CACHE, IDN_LM_VIEWS_ARM,
++    IDN_LM_PARAM_VIEWS, IDN_LM_OWNED_TOKENS, IDN_TRAIN_NO_DECODE_CACHE,
++    IDN_LM_VIEWS_ARM, IDN_LM_RESIDENT_TOKENS_ARM, IDN_PARAM_GRAD_VIEWS,
+ )
+ from checks.vendor import COMPILED_VENDOR
+ from training.byte_lm_afn import (
+@@ -102,8 +103,7 @@ from training.byte_lm_program import (
+ from transformer.impl.llama.fused_attention import (
+     ATTN_BWD_KV_CORNER_GUARD, ATTN_NO_BWD_CORNER, ATTN_STICKY, IDN_TRAIN_ONE_WAIT,
+ )
+-# TOMBSTONE: training/byte_lm_one_wait.mojo (ByteOneWait, the IDN_TRAIN_ONE_WAIT deferred-check scratch) and the trainer's `one_wait` field deleted 2026-11-09 by lane x7b-step-ops-host-arm (no reader since the one-wait step went with lane x7); code recoverable at the deletion commit's parent.
+-# Restore: git apply experiments/removed/BYTE_LM_X7_LEFTOVERS.patch
++from training.byte_lm_one_wait import ByteOneWait
+ from transformer.impl.llama.modeling_llama import (
+     BLOCK_ANY_SABOTAGE, LlamaDims, LlamaDeviceWeights, LlamaDeviceStages,
+     LlamaRopeTable, LlamaKVCache,
+@@ -528,6 +528,8 @@ struct ByteBuffers(Movable):
+ 
+     var emb_w: DeviceBuffer[DType.float32]  # [V, d_model]
+     var lm_w: DeviceBuffer[DType.float32]  # [V, d_model]
++    var dw_emb: DeviceBuffer[DType.float32]  # [V, d_model]
++    var dw_lm: DeviceBuffer[DType.float32]  # [V, d_model]
+ 
+     var ids: DeviceBuffer[DType.int32]  # [M]
+     var targets: DeviceBuffer[DType.int32]  # [M]
+@@ -649,8 +651,15 @@ struct ByteBuffers(Movable):
+         else:
+             self.emb_w = _zeros(ctx, V * DM)
+             self.lm_w = _zeros(ctx, V * DM)
+-        # TOMBSTONE: dw_emb / dw_lm (the hand backward's embedding and head gradients, copies or, under MOJOLEARN_IDN_PARAM_GRAD_VIEWS, views of `grad`) deleted 2026-11-09 by lane x7b-step-ops-host-arm: the program's gradient scratch is the gradient (2 x V x d_model floats freed). Code recoverable at the deletion commit's parent.
+-        # Restore: git apply experiments/removed/BYTE_LM_X7_LEFTOVERS.patch
++        comptime if BYTE_LM_EMB_HEAD_GRAD_VIEWS:
++            # Views of the flat gradient (see BYTE_LM_EMB_HEAD_GRAD_VIEWS).
++            self.dw_emb = self.grad.create_sub_buffer[DType.float32](0, V * DM)
++            self.dw_lm = self.grad.create_sub_buffer[DType.float32](
++                self.offsets[config.n_tensors() - 1], V * DM
++            )
++        else:
++            self.dw_emb = _zeros(ctx, V * DM)
++            self.dw_lm = _zeros(ctx, V * DM)
+ 
+         self.ids = _zeros_i32(ctx, M)
+         self.targets = _zeros_i32(ctx, M)
+@@ -843,26 +852,42 @@ def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
+ # assumed. These source drafts have no compile/identity/full-model A/B evidence.
+ # Rebind from the CURRENT owner each call, including after optimizer swaps.
+ # L11 (2026-10-07): NN60's arms are arms 1 and 2 of MOJOLEARN_IDN_LM_VIEWS
++# and NN51 is arm 2 of MOJOLEARN_IDN_LM_RESIDENT_TOKENS
+ # (training/neural_identical_experiments.mojo).
+ comptime NN60_EMB_HEAD_VIEWS = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and IDN_LM_VIEWS_ARM == 2
+     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+-# TOMBSTONE: MOJOLEARN_IDN_LM_RESIDENT_TOKENS (arms 1 NI32, 2 NN51: resident token validation of the hand training step; no reader since lane x7) deleted 2026-11-09 by lane x7b-step-ops-host-arm; code recoverable at the deletion commit's parent.
+-# Restore: git apply experiments/removed/BYTE_LM_X7_LEFTOVERS.patch
++comptime NN51_RESIDENT_TOKEN_VALIDATION = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++    and IDN_LM_RESIDENT_TOKENS_ARM == 2
++    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ comptime NN60_BLOCK_VIEWS = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+     and IDN_LM_VIEWS_ARM == 1
+     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ )
+-comptime BYTE_LM_BLOCK_VIEWS = AFN_LM_PARAM_VIEWS or NN60_BLOCK_VIEWS or IDN_LM_PARAM_VIEWS
++comptime BYTE_LM_BLOCK_VIEWS = AFN_LM_PARAM_VIEWS or NN60_BLOCK_VIEWS or IDN_LM_PARAM_VIEWS or IDN_PARAM_GRAD_VIEWS
+ comptime BYTE_LM_EMB_HEAD_VIEWS = (
+-    (TARGET_COLUMN == COLUMN_APPLE or NN60_EMB_HEAD_VIEWS or IDN_LM_PARAM_VIEWS)
++    (TARGET_COLUMN == COLUMN_APPLE or NN60_EMB_HEAD_VIEWS or IDN_LM_PARAM_VIEWS or IDN_PARAM_GRAD_VIEWS)
+     and not is_defined["MOJOLEARN_BYTE_LM_COPY_EMB_HEAD"]()
+ )
+-# TOMBSTONE: MOJOLEARN_IDN_PARAM_GRAD_VIEWS (every parameter and gradient of the hand train step a view of the flat owners; default off, never promoted; its step went with lane x7) deleted 2026-11-09 by lane x7b-step-ops-host-arm; code recoverable at the deletion commit's parent.
+-# Restore: git apply experiments/removed/BYTE_LM_X7_LEFTOVERS.patch
++# grad-views lane (MOJOLEARN_IDN_PARAM_GRAD_VIEWS, default OFF; same bits):
++# `dw_emb` and `dw_lm` are views of the flat `grad` at the offsets the two
++# per-step `_copy_into` calls in `_byte_backward_tape` copied them to (0 and
++# offsets[n_tensors - 1]). Why the bits hold: both are written WHOLE, once a
++# step, before anything reads that range of `grad`: the embedding backward
++# seeds every V x d cell (`emb_seed_kernel`, contract 5.5; EmbConfig.llama
++# has accumulate=False) and then folds the runs; the head dB is a GEMM
++# output (`identical_gemm_backward_b_into`) or, on the chunked v2 head,
++# zeroed then accumulated per chunk (`_chunk_dweight_kernel`). `grad` is
++# never swapped or reassigned (only `param`/m/v swap with their shadows),
++# so the views made once at construction stay bound to the current owner.
++# Nothing reads dw_emb / dw_lm after the old copy point, so the in-place
++# clip inside the update (which now also scales them) is unobservable.
++comptime BYTE_LM_EMB_HEAD_GRAD_VIEWS = IDN_PARAM_GRAD_VIEWS
+ 
+ # TOMBSTONE: MOJOLEARN_IDN_LM_LEAN_STEP (noise: lm-train-step 0.982) deleted 2026-10-11 by 8cc78c8ae; code recoverable at 8cc78c8ae^.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_LEAN_STEP.patch
+@@ -991,6 +1016,9 @@ struct ByteTrainer(Movable):
+     # Diagnostic reach witness; counts successful live-status optimizer checks.
+     var embedding_runs: List[OwnedEmbeddingRuns]
+     var live_status_steps: Int
++    var one_wait: Optional[ByteOneWait]
++    """IDN_TRAIN_ONE_WAIT: the deferred-check scratch, created by the first
++    one-wait step; None on a build without the define."""
+     var program: Optional[ByteDeviceProgram]
+     """Lane x7: the trainer's captured program (training/byte_lm_program.mojo),
+     opened by the first step, gradient or evaluation."""
+@@ -1021,6 +1049,7 @@ struct ByteTrainer(Movable):
+         self.grad_step = -1
+         self.embedding_runs = List[OwnedEmbeddingRuns]()
+         self.live_status_steps = 0
++        self.one_wait = Optional[ByteOneWait]()
+         self.program = Optional[ByteDeviceProgram]()
+         self.program_synced = False
+         # lane/neural-pass43: the session's buffers carved from arena chunks
+diff --git a/training/byte_lm_one_wait.mojo b/training/byte_lm_one_wait.mojo
+new file mode 100644
+index 0000000000..810f864726
+--- /dev/null
++++ b/training/byte_lm_one_wait.mojo
+@@ -0,0 +1,173 @@
++# SPDX-License-Identifier: Apache-2.0
++"""`-D MOJOLEARN_IDN_TRAIN_ONE_WAIT` (lane decode-resident, 2026-10-28), the
++IDENTICAL byte-LM resident train step's deferred checks. Default OFF; a build
++without the define never reaches this module's functions.
++
++The synchronous step reads, on the host, in order: the two token-range
++scans (two waits), each decoder layer's call refusal (a wait per layer),
++the per-layer completion waits (`_byte_layer_sync`), the loss, the gradient
++scan, and the four post-update state scans. Under the define the token
++range is ONE wait (it stays in front of the embedding gather: an
++out-of-range id must never be gathered), every per-layer refusal goes into
++a `LlamaDeferredChecks` window, the per-layer waits are dropped (every
++launch is on the one in-order context; the eager-scratch release enqueues
++its frees, DEVIATION 2520), and the loss, gradient, parameter, moment and
++negative-moment checks are ONE status launch (`afn_step_status_kernel`, the
++same predicates by bits) read back with the window and the loss at the
++step's last wait. When every check is clean the step's bytes are the
++synchronous step's: the same kernels ran in the same order on the same
++inputs. When any is not, the caller rolls the update back (the shadow the
++update itself takes) and replays the synchronous step, which raises
++today's message and recovers as today. No arithmetic moves: no bit moves.
++
++What still waits inside the step: the fused attention forward's regime scan
++and corner flag (kept on the host so the backward reuses the forward scan,
++IDN_ATTN_BWD_SCAN_REUSE), the autograd tape's own wait and the fused
++backward's regime reads, and the step-glue update's wait before its handle
++swaps (NVIDIA and AMD shipped arms)."""
++from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
++from core.device_scan import (
++    NONFINITE_NONE,
++    SCAN_BLOCKS,
++    SCAN_TPB,
++    _scan_blocks,
++    min_partials_kernel,
++    token_oob_partial_kernel,
++)
++from core.step_phase import (
++    step_count_d2h,
++    step_count_device_alloc,
++    step_count_host_alloc,
++    step_count_launch,
++    step_count_sync,
++)
++from transformer.impl.llama.fused_attention import IDN_TRAIN_ONE_WAIT, LlamaDeferredChecks
++from training.byte_lm_afn import (
++    AFN_SCAN_MAX_BLOCKS,
++    AFN_ST_CELLS,
++    AFN_TPB,
++    afn_reset_kernel,
++    afn_step_status_kernel,
++)
++
++comptime _OW_TOKEN_WORDS = 2
++comptime _OW_HOST_WORDS = _OW_TOKEN_WORDS + AFN_ST_CELLS + 1
++"""Pinned words: the two token-range answers, the status cells, the loss bits."""
++
++
++struct ByteOneWait(Movable):
++    """A trainer's one-wait scratch, allocated on its first deferred step."""
++
++    var window: LlamaDeferredChecks
++    var tok_part: DeviceBuffer[DType.int32]
++    var tok_res: DeviceBuffer[DType.int32]
++    var status: DeviceBuffer[DType.int32]
++    var host: HostBuffer[DType.int32]
++
++    def __init__(out self, ctx: DeviceContext) raises:
++        self.window = LlamaDeferredChecks(ctx, True, False)
++        step_count_device_alloc()
++        self.tok_part = ctx.enqueue_create_buffer[DType.int32](_OW_TOKEN_WORDS * SCAN_BLOCKS)
++        step_count_device_alloc()
++        self.tok_res = ctx.enqueue_create_buffer[DType.int32](_OW_TOKEN_WORDS)
++        step_count_device_alloc()
++        self.status = ctx.enqueue_create_buffer[DType.int32](AFN_ST_CELLS)
++        step_count_host_alloc()
++        self.host = ctx.enqueue_create_host_buffer[DType.int32](_OW_HOST_WORDS)
++
++
++def one_wait_require_tokens(
++    ctx: DeviceContext,
++    mut ow: ByteOneWait,
++    mut ids_dev: DeviceBuffer[DType.int32],
++    mut targets_dev: DeviceBuffer[DType.int32],
++    m: Int,
++    vocab: Int,
++) raises:
++    """`byte_require_tokens_device` with ONE wait: the two
++    `token_oob_partial_kernel` scans at their shipped grids, each folded on
++    the device by `min_partials_kernel`, both answers home in one copy. Same
++    message. The wait also completes the uploads queued before it."""
++    if m < 0 or m > Int(NONFINITE_NONE):
++        raise Error("byte LM: token count outside Int32 index range")
++    var blocks = 0
++    if m > 0:
++        blocks = _scan_blocks(m)
++        step_count_launch()
++        ctx.enqueue_function[token_oob_partial_kernel](
++            ow.tok_part.unsafe_ptr(), ids_dev.unsafe_ptr(), Int32(m), Int32(vocab),
++            grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
++        )
++        step_count_launch()
++        ctx.enqueue_function[token_oob_partial_kernel](
++            ow.tok_part.unsafe_ptr() + SCAN_BLOCKS, targets_dev.unsafe_ptr(), Int32(m), Int32(vocab),
++            grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
++        )
++    step_count_launch()
++    ctx.enqueue_function[min_partials_kernel](
++        ow.tok_res.unsafe_ptr(), ow.tok_part.unsafe_ptr(), Int32(blocks),
++        grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
++    )
++    step_count_launch()
++    ctx.enqueue_function[min_partials_kernel](
++        ow.tok_res.unsafe_ptr() + 1, ow.tok_part.unsafe_ptr() + SCAN_BLOCKS, Int32(blocks),
++        grid_dim=(1, 1, 1), block_dim=(SCAN_TPB, 1, 1),
++    )
++    step_count_d2h()
++    ctx.enqueue_copy(dst_ptr=ow.host.unsafe_ptr(), src_buf=ow.tok_res)
++    step_count_sync()
++    ctx.synchronize()
++    var hp = ow.host.unsafe_ptr()
++    if hp.unsafe_load(0) != NONFINITE_NONE or hp.unsafe_load(1) != NONFINITE_NONE:
++        raise Error("byte LM: token ID outside configured vocabulary")
++
++
++def one_wait_step_finish(
++    ctx: DeviceContext,
++    mut ow: ByteOneWait,
++    mut loss: DeviceBuffer[DType.float32],
++    mut grad: DeviceBuffer[DType.float32],
++    mut param: DeviceBuffer[DType.float32],
++    mut m: DeviceBuffer[DType.float32],
++    mut v: DeviceBuffer[DType.float32],
++    n: Int,
++) raises -> Tuple[Bool, Float32]:
++    """The step's ONE wait: the status launch (loss, gradients, parameters,
++    first and second moments finite; no negative second moment), its cells,
++    the loss and the deferred refusal window home in one wait. Returns
++    (clean, loss); `clean` is False when any check the synchronous step
++    makes would have refused."""
++    if n < 0 or n > Int(NONFINITE_NONE):
++        raise Error("byte LM: state length outside Int32 index range")
++    step_count_launch()
++    ctx.enqueue_function[afn_reset_kernel](
++        ow.status.unsafe_ptr(), loss.unsafe_ptr(), Int32(1), Int32(0),
++        grid_dim=(1, 1, 1), block_dim=(AFN_ST_CELLS, 1, 1),
++    )
++    var blocks = (n + AFN_TPB - 1) // AFN_TPB
++    if blocks > AFN_SCAN_MAX_BLOCKS:
++        blocks = AFN_SCAN_MAX_BLOCKS
++    if blocks < 1:
++        blocks = 1
++    step_count_launch()
++    ctx.enqueue_function[afn_step_status_kernel](
++        ow.status.unsafe_ptr(), loss.unsafe_ptr(), grad.unsafe_ptr(),
++        param.unsafe_ptr(), m.unsafe_ptr(), v.unsafe_ptr(), Int32(n),
++        grid_dim=(blocks, 1, 1), block_dim=(AFN_TPB, 1, 1),
++    )
++    var hp = ow.host.unsafe_ptr()
++    step_count_d2h()
++    ctx.enqueue_copy(dst_ptr=hp + _OW_TOKEN_WORDS, src_buf=ow.status)
++    var loss_cell = loss.create_sub_buffer[DType.float32](0, 1)
++    step_count_d2h()
++    ctx.enqueue_copy(dst_ptr=hp.bitcast[Float32]() + _OW_TOKEN_WORDS + AFN_ST_CELLS, src_buf=loss_cell)
++    ow.window.enqueue_readback(ctx)
++    step_count_sync()
++    ctx.synchronize()
++    _ = loss_cell^
++    var value = hp.bitcast[Float32]().unsafe_load(_OW_TOKEN_WORDS + AFN_ST_CELLS)
++    var clean = ow.window.clean_after_wait()
++    for c in range(AFN_ST_CELLS):  # small-loop(AFN_ST_CELLS: status cells, a constant eight): one first-index word per predicate
++        if hp.unsafe_load(_OW_TOKEN_WORDS + c) != NONFINITE_NONE:
++            clean = False
++    return (clean, value)
+diff --git a/training/neural_identical_experiments.mojo b/training/neural_identical_experiments.mojo
+index c6bf2fb750..a7a12fa2fc 100644
+--- a/training/neural_identical_experiments.mojo
++++ b/training/neural_identical_experiments.mojo
+@@ -36,8 +36,23 @@ comptime IDN_TRAIN_SWIGLU = _ENABLED and is_defined["MOJOLEARN_IDN_TRAIN_SWIGLU"
+ # (NI27). Aliases only; no arithmetic changes.
+ comptime IDN_LM_VIEWS_ARM = get_defined_int["MOJOLEARN_IDN_LM_VIEWS", 0]()
+ comptime IDN_LM_PARAM_VIEWS = _ENABLED and IDN_LM_VIEWS_ARM == 3
+-# TOMBSTONE: MOJOLEARN_IDN_PARAM_GRAD_VIEWS deleted 2026-11-09 by lane x7b-step-ops-host-arm (its train step went with lane x7); refused in core/experiment_guards_neural.mojo.
+-# TOMBSTONE: MOJOLEARN_IDN_LM_RESIDENT_TOKENS (NI32 / NN51 arms) deleted 2026-11-09 by lane x7b-step-ops-host-arm (no reader since lane x7); refused in core/experiment_guards_neural.mojo.
++# grad-views lane (REPORT 2026-10-28 idea 9, roadmap C2), default OFF:
++# -D MOJOLEARN_IDN_PARAM_GRAD_VIEWS=1 makes every parameter and gradient of
++# the byte LM train step (training/byte_lm.mojo) a view of the flat
++# `param` / `grad` owners on NVIDIA, AMD and the host column: the block
++# weights and weight gradients, the embedding and head weights, and (new
++# here) the embedding and head weight GRADIENTS, so the per-step unpack,
++# pack and the two dw_emb / dw_lm copies go. The byte LM layer pool is not
++# touched (IDN_LM_VIEWS=3 owns that). Aliases only: the same kernels read and
++# write the same values in the same order, so the bits cannot move.
++comptime IDN_PARAM_GRAD_VIEWS = _ENABLED and is_defined["MOJOLEARN_IDN_PARAM_GRAD_VIEWS"]()
++# NI32: reuse validation only inside one owned, immutable byte-training call.
++# L11 (2026-10-07): NN51 and NI32 are arms of ONE switch,
++# -D MOJOLEARN_IDN_LM_RESIDENT_TOKENS=0|1|2: 1 = NI32 (the forward's ID check
++# covers the embedding gather/backward), 2 = NN51 (arm 1 plus prerefused
++# targets in the CE forward).
++comptime IDN_LM_RESIDENT_TOKENS_ARM = get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS", 0]()
++comptime IDN_LM_OWNED_TOKENS = _ENABLED and IDN_LM_RESIDENT_TOKENS_ARM >= 1
+ # NI33: keep the original per-cell divides and the same ignored-row stores.
+ # NN52 (retired MOJOLEARN_NN52_CE_WEIGHT_GRAD) launched the same fused kernel
+ # in identical_ce_backward_into; one switch (L11, 2026-10-07).

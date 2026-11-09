@@ -1025,5 +1025,7 @@ def hidden_fast(
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch
 
 
+# Kept verbatim from inside the deleted function (tombstone markers are permanent):
+# TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
 # TOMBSTONE: ce_causal_mean_loss_fast (the threaded host loss's cross-entropy) deleted 2026-11-09 by lane x7b-step-ops-host-arm: the host training loss is the trainer's program; code recoverable at the deletion commit's parent (docs/TOMBSTONES.md "BYTE_LM_HOST_COMPOSED_STEP").
 # Restore: git apply experiments/removed/BYTE_LM_HOST_COMPOSED_STEP.patch
