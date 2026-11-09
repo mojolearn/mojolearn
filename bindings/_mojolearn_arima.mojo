@@ -82,9 +82,10 @@ from core.hostptr import f32_ptr, i32_ptr
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from arima.impl.fast_scalar_df import ARIMA_K3_DF_ON
-from arima.impl.fast_eval_df import product_df_count
-from bindings.arima_k3_df_probe import arima_k3_df_probe_binding
+# TOMBSTONE: MOJOLEARN_ARIMA_FAST_K3_DF_PROBE (never measured, deleted) deleted 2026-11-09 by @K1SHA_ARIMA@; code
+# recoverable at f59d913b0b (the `_arima_k3_df_probe` export). Same commit: MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL and its
+# `arima_product_df_count` reach counter.
+# Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch
 from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -714,10 +715,6 @@ def arima_forecast_resident_binding(
     return PythonObject(written)
 
 
-def arima_product_df_count_binding(stage: PythonObject) raises -> PythonObject:
-    return PythonObject(product_df_count(Int(py=stage)))
-
-
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_arima.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -725,11 +722,8 @@ def build__mojolearn_arima() -> PythonObject:
     comptime assert SERIES_GUARDS_OK, "invalid integrated experiment configuration (series guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_arima")
-        comptime if ARIMA_K3_DF_ON:
-            m.def_function[arima_k3_df_probe_binding]("_arima_k3_df_probe")
         m.def_function[arima_vendor_binding]("arima_vendor")
         m.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
-        m.def_function[arima_product_df_count_binding]("arima_product_df_count")
         m.def_function[arima_fit_binding]("arima_fit")
         m.def_function[arima_ic_from_loglike_binding]("arima_ic_from_loglike")
         m.def_function[arima_order_batch_enabled_binding]("arima_order_batch_enabled")

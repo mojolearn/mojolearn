@@ -4,7 +4,6 @@ Importing this module performs no builds, imports of native modules, or jobs.
 import re
 
 POLICIES = {
-    "tools/arima_k3_df_gpu_quality.py": "verified-k3-gpu-quality",
     "tools/scoped_gemm_quality.py": "verified-scoped-adapter-quality",
     "tools/resample_gpu_gather_pair.py": "verified-downstream-quality",
     "tools/resample_gpu_gather_timing.py": "verified-scoped-caller",
@@ -13,7 +12,6 @@ POLICIES = {
     "tools/arima_assoc_scan_oracle.py": "reference",
     "tools/arima_gaussian_scan_oracle.py": "reference",
     "tools/arima_k1_diagnostics.py": "reference",
-    "tools/arima_k3_df_reference.py": "reference",
     "tools/mcd_saved_oracle.py": "reference",
     "tools/catalog_gemm_quality.py": "verified-standalone-quality",
     "tools/callpath_probe_pair.py": "verified-standalone-quality",
