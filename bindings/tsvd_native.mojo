@@ -23,10 +23,9 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_typed, classical_is_f32
+from bindings.classical_arrays import classical_address, classical_typed
 from bindings.admitted_input import admit_x
-from bindings.decomp_inputs import decomp_input, decomp_copied
-from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
+from bindings.decomp_inputs import decomp_input, decomp_admit, decomp_input_copied
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 from bindings.fitted_resident_door import fitted_resident_lease, fitted_resident_drop
 from bindings.entries_verified import entries_verified, entries_mark_verified
@@ -302,20 +301,13 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
                     + "accepting the name and running the Gram arm would be a silent substitution, which is "
                     + "why this raises (decomposition/NOT_IMPLEMENTED.tsv)")
     var host = _host_only(model)
-    # A SciPy sparse X (TruncatedSVD's main input) is densified once: the
-    # conversion and the input_copied_ flag used to densify it twice. Same
-    # arrays and flag as decomp_input / decomp_copied.
-    var x = PythonObject(None)
-    var sparse = host_sparse_format(source)
-    if sparse.byte_length() > 0:
-        var dense = host_sparse_dense(source, sparse, context)
-        x = admit_x(dense, 2, "X", context)
-        py_setitem(fields, "input_copied_", PythonObject(not classical_is_f32(dense, context)))
-    else:
-        x = decomp_input(source, "TruncatedSVD", context)
-        py_setitem(fields, "input_copied_", PythonObject(decomp_copied(source, context)))
-    var rows = Int(py=x.shape[0])
-    var cols = Int(py=x.shape[1])
+    # A SciPy sparse X (TruncatedSVD's main input) is densified once, and the
+    # input_copied_ flag is read off the admission (no second view of X).
+    var admitted = decomp_admit(source, "TruncatedSVD", context)
+    py_setitem(fields, "input_copied_", PythonObject(decomp_input_copied(admitted, context)))
+    var x = admitted.array
+    var rows = admitted.rows
+    var cols = admitted.cols
     if rows < 2 or cols < 2:
         raise Error(_too_small(rows, cols))
     var nc = _components(fields, rows, cols)

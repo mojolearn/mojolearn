@@ -17,6 +17,7 @@ from providers.python.x_decomp_api_pyapi import (
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
 from x_decomp.pca_randomized import NoRDev
 from providers.python.x_decomp_tsvd_owner_pyapi import tsvd_randomized_py
+from providers.python.x_decomp_rsvd_owner_pyapi import randomized_svd_py
 from x_decomp.ipca_owner import NoIpcaDev
 from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
 from x_decomp.decomp_owner_host import HostDecomp
@@ -114,6 +115,8 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
         # TruncatedSVD(algorithm='randomized').fit, one driver (x_decomp/tsvd_owner.mojo);
         # the TSVD_QFIX route is FAST GPU only (qfix_flags is 0 here)
         m.def_function[tsvd_randomized_py[HostExec, NoRDev, False]]("x_decomp_tsvd_randomized")
+        # The public randomized_svd, one driver (x_decomp/randomized_svd_owner.mojo)
+        m.def_function[randomized_svd_py[HostExec, NoRDev, False]]("x_decomp_randomized_svd")
         # IncrementalPCA, one driver per operation (x_decomp/ipca_owner.mojo)
         m.def_function[ipca_fit_py[HostExec, NoRDev, False, NoIpcaDev]]("x_decomp_ipca_fit")
         m.def_function[ipca_partial_py[HostExec, NoRDev, False, NoIpcaDev]]("x_decomp_ipca_partial")

@@ -16,6 +16,7 @@ from providers.python.x_decomp_api_pyapi import (
 from x_decomp.device import DevExec
 from x_decomp.pca_randomized_dev import DevRDev
 from providers.python.x_decomp_tsvd_owner_pyapi import tsvd_randomized_py, tsvd_tsqr_py
+from providers.python.x_decomp_rsvd_owner_pyapi import randomized_svd_py
 from x_decomp.ipca_owner_dev import DevIpcaDev
 from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
 from x_decomp.decomp_owner_dev import DevDecomp
@@ -72,15 +73,14 @@ from providers.python.x_decomp_resident_pyapi import dev_eigh_py
 # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (the w4 alias of `dev_lu_aux_py`; "x_decomp_dev_lu_aux" is now only the
 # IDN_LU_RESIDENT entry) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
-from providers.python.x_decomp_w4_fast_pyapi import w4_flags_py
 from x_decomp.qfix import LU_QFIX
 from providers.python.x_decomp_qfix_pyapi import lu_resid_py, qfix_flags_py
 # TOMBSTONE: MOJOLEARN_TSVD_FAST_CHOLQR3 (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: TSVD_QFIX's R from shifted CholeskyQR3 on the matrix unit (x_decomp/tsvd_fast.mojo) instead of the Householder TSQR; tsvd istella +19.9% (verdicts batch 6).
 # Restore: git apply experiments/removed/MOJOLEARN_TSVD_FAST_CHOLQR3.patch; record in docs/TOMBSTONES.md.
-from x_decomp.s_linalg_fast import DECOMP_FAST_ORTH_WS, LU_FAST_RESIDENT, LU_RESIDENT_ENTRIES, RSVD_FAST_DEVSCAN
+from x_decomp.s_linalg_fast import DECOMP_FAST_ORTH_WS, LU_FAST_RESIDENT, LU_RESIDENT_ENTRIES
 from providers.python.x_decomp_s_linalg_fast_pyapi import (
-    dev_lu_factor_py, dev_lu_solve_py, dev_orth_ws_py, dev_upload_scan_py, s_flags_py,
+    dev_lu_factor_py, dev_lu_solve_py, dev_orth_ws_py, s_flags_py,
 )
 
 
@@ -154,6 +154,9 @@ def build__mojolearn_x_decomp() -> PythonObject:
         # (x_decomp/tsvd_owner.mojo; bindings/tsvd_native.mojo calls them)
         m.def_function[tsvd_randomized_py[DevExec, DevRDev, True]]("x_decomp_tsvd_randomized")
         m.def_function[tsvd_tsqr_py[DevExec, DevRDev, True]]("x_decomp_tsvd_tsqr")
+        # The public randomized_svd, one driver (x_decomp/randomized_svd_owner.mojo;
+        # bindings/linalg_decomp_native.mojo calls it)
+        m.def_function[randomized_svd_py[DevExec, DevRDev, True]]("x_decomp_randomized_svd")
         # IncrementalPCA fit / partial_fit / transform + inverse_transform, one driver each
         # (x_decomp/ipca_owner.mojo; bindings/ipca_native.mojo calls them)
         m.def_function[ipca_fit_py[DevExec, DevRDev, True, DevIpcaDev]]("x_decomp_ipca_fit")
@@ -238,19 +241,17 @@ def build__mojolearn_x_decomp() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[dev_rand_py]("x_decomp_dev_rand")
         m.def_function[dev_trisolve_py]("x_decomp_dev_trisolve")
-        # lane/apple-fast-w4-decomp (x_decomp/w4_fast.mojo): the build's w4 flags
-        # (bit 2 RSVD_FAST_DIRECT_IN / RSVD_IDN_DIRECT_IN)
-        m.def_function[w4_flags_py]("x_decomp_w4_flags")
+        # TOMBSTONE: MOJOLEARN_RSVD_FAST_DIRECT_IN and MOJOLEARN_IDN_RSVD_DIRECT_IN (KEPT defaults, superseded: randomized_svd is one driver that reads M in place; their x_decomp_w4_flags entry had no other bit) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+        # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
         # lane/apple-fast-q-linalg (x_decomp/qfix.mojo): FAST quality repairs
         # (bits TSVD_QFIX 2, LU_QFIX 4, QOLD defines restore; bit 1 SVD_QFIX deleted)
         m.def_function[qfix_flags_py]("x_decomp_qfix_flags")
         comptime if LU_QFIX:
             m.def_function[lu_resid_py]("x_decomp_lu_resid")
-        # lane/apple-fast-s-linalg (x_decomp/s_linalg_fast.mojo): bit 1 RSVD_FAST_DEVSCAN,
-        # bit 2 DECOMP_FAST_ORTH_WS, bit 4 LU_FAST_RESIDENT (FAST + Apple defaults, _OFF rollbacks)
+        # lane/apple-fast-s-linalg (x_decomp/s_linalg_fast.mojo): bit 2 DECOMP_FAST_ORTH_WS,
+        # bit 4 LU_FAST_RESIDENT (FAST + Apple defaults, _OFF rollbacks); bit 1
+        # RSVD_FAST_DEVSCAN and its x_decomp_dev_upload_scan were deleted 2026-11-08
         m.def_function[s_flags_py]("x_decomp_s_flags")
-        comptime if RSVD_FAST_DEVSCAN:
-            m.def_function[dev_upload_scan_py]("x_decomp_dev_upload_scan")
         comptime if DECOMP_FAST_ORTH_WS:
             m.def_function[dev_orth_ws_py]("x_decomp_dev_orth_ws")
         # LU_FAST_RESIDENT (FAST + Apple) or IDN_LU_RESIDENT_PAIR (IDENTICAL default, rollback _OFF)

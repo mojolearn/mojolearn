@@ -525,25 +525,15 @@ class _Kit:
             self._res_ok = r
         return r
 
-    def w4_flags(self):
-        """lane/apple-fast-w4-decomp: the binding's compiled w4 candidates
-        (`x_decomp_w4_flags`: bit 2 RSVD_FAST_DIRECT_IN on FAST + Apple or
-        RSVD_IDN_DIRECT_IN on IDENTICAL, lane fg-pca R1; bit 1, LLE_FAST_DEV_LU,
-        was deleted 2026-11-08; 0 on a binding without the entry)."""
-        f = self.__dict__.get("_w4_flags")
-        if f is None:
-            try:
-                f = int(getattr(self._raw(), "x_decomp_w4_flags")())
-            except Exception:
-                f = 0
-            self._w4_flags = f
-        return f
+    # TOMBSTONE: MOJOLEARN_RSVD_FAST_DIRECT_IN / MOJOLEARN_IDN_RSVD_DIRECT_IN (the w4_flags reader of x_decomp_w4_flags, no caller) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+    # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
 
     def s_flags(self):
         """lane/apple-fast-s-linalg: the binding's compiled speed candidates
-        (`x_decomp_s_flags`, x_decomp/s_linalg_fast.mojo: bit 1
-        RSVD_FAST_DEVSCAN, bit 2 DECOMP_FAST_ORTH_WS; 0 on a binding without
-        the entry)."""
+        (`x_decomp_s_flags`, x_decomp/s_linalg_fast.mojo: bit 2
+        DECOMP_FAST_ORTH_WS, bit 4 LU_FAST_RESIDENT, bit 8 IDN_LU_RESIDENT_PAIR;
+        bit 1, RSVD_FAST_DEVSCAN, was deleted 2026-11-08; 0 on a binding
+        without the entry)."""
         f = self.__dict__.get("_s_flags")
         if f is None:
             try:

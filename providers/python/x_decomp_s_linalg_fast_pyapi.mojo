@@ -14,14 +14,13 @@ from x_decomp.s_linalg_fast import (
     dev_lu_factor_run,
     dev_lu_solve_run,
     dev_orth_ws_run,
-    dev_upload_scan_run,
     s_flags_run,
 )
 
 
 def s_flags_py() raises -> PythonObject:
-    """Bit 1 RSVD_FAST_DEVSCAN, bit 2 DECOMP_FAST_ORTH_WS, bit 4
-    LU_FAST_RESIDENT, bit 8 IDN_LU_RESIDENT_PAIR (0 when none)."""
+    """Bit 2 DECOMP_FAST_ORTH_WS, bit 4 LU_FAST_RESIDENT, bit 8
+    IDN_LU_RESIDENT_PAIR (0 when none; bit 1 was RSVD_FAST_DEVSCAN)."""
     return PythonObject(s_flags_run())
 
 
@@ -71,17 +70,8 @@ def dev_lu_solve_py(
     return PythonObject(cells)
 
 
-def dev_upload_scan_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises -> PythonObject:
-    """`dev_upload_py` (host floats into the device matrix `id`), then the
-    first flat index of a NaN or infinity among those n device floats, or -1
-    (one device read; waits)."""
-    var cnt = Int(py=n)
-    var src = F32Ptr(unsafe_from_address=Int(py=addr))
-    var i = _id(id)
-    var r = -1
-    with GILReleased(Python()):
-        r = dev_upload_scan_run(i, src, cnt)
-    return PythonObject(r)
+# TOMBSTONE: MOJOLEARN_RSVD_FAST_DEVSCAN (its door dev_upload_scan_py, x_decomp_dev_upload_scan) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
 
 
 def dev_orth_ws_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:

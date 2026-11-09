@@ -7,7 +7,7 @@ from bindings.linalg_ops_buffers import LinAdmission, lin_admitted_c, lin_new, l
 from bindings.optimizer_public_door import base_format
 from bindings.family_common import family_repr, FAMILY_F32P, FAMILY_I32P, FAMILY_I64P
 from core.host_finite_scan import host_all_finite_f32
-from core.mcls_impl import mcls_read_i64, mcls_narrow_i32
+from core.admitted_ids import admitted_ids_i32
 
 
 def metric_vector_exact(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -45,17 +45,14 @@ def metric_i32_vector(value: PythonObject, name: String, context: PythonObject) 
     if (not signed and not unsigned) or (view.itemsize != 1 and view.itemsize != 2 and view.itemsize != 4 and view.itemsize != 8):
         raise Error("mojolearn metrics: " + name + " must be an integer label array, got "
                     + (view.dtype if view.is_array else view.fmt) + "; the ported kernels take int32 labels")
-    var words = lin_new([count], "<i8", context)
-    if not mcls_read_i64(view.addr, view.strides[0], count, view.itemsize, signed,
-                         FAMILY_I64P(unsafe_from_address=words.addr)):
-        _metric_i32_range(name)
+    # admit_ids: one parallel read narrowed to int32 in the same pass (it was
+    # a serial int64 read into a zero-filled store, then a serial narrowing).
     var output = lin_new([count], "<i4", context)
-    if not mcls_narrow_i32(FAMILY_I64P(unsafe_from_address=words.addr), count,
-                           FAMILY_I32P(unsafe_from_address=output.addr)):
+    if not admitted_ids_i32(view.addr, view.strides[0], 0, count, 1, view.itemsize, signed, False,
+                            FAMILY_I32P(unsafe_from_address=output.addr)):
         _metric_i32_range(name)
     var result = output.keep
     _ = input^
-    _ = words^
     _ = output^
     return result
 

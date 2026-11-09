@@ -1358,56 +1358,14 @@ struct DecompKit(Movable):
         var params = Python.tuple(XD_TAKE_COLS, rows * w, w, cols, 0, 0, 0, rows * cols, rows * w, w)
         return self._move(a, idx, rows, w, params, rows * w > 0 and self.use(a, idx))
 
-    # ---- orthonormal bases and small orders (randomized_svd)
-    def orth(mut self, a: Int) raises -> Int:
-        # `_Kit.orth`: a copy of A with its columns orthonormalized.
-        var rows = self.matrices[a].rows
-        var cols = self.matrices[a].cols
-        if rows * cols and self.use(a):
-            var q = self.device_output(rows, cols)
-            var da = self.device(a)
-            var name = String("x_decomp_dev_orth_ws") if (self.flags("x_decomp_s_flags") & 2) != 0 else String("x_decomp_dev_orth")
-            _ = py_call(self.entries[name], da, self.matrices[q].device, Python.list(rows, cols))
-            return q
-        var q = self.copy_host(a)
-        _ = py_call(self.entries["x_decomp_orth"], self.address(q), Python.list(rows, cols))
-        _ = q  # keep the Python object alive through the native call above
-        self.wrote_host(q)
-        return q
-
-    def order_small(mut self, a: Int) raises -> Int:
-        # `_Kit.order_small`: the stable ascending order as n x 1 exact floats.
-        var n = self.size(a)
-        if n and self.use(a):
-            var out = self.device_output(n, 1)
-            var da = self.device(a)
-            _ = py_call(self.entries["x_decomp_dev_order_small"], da, self.matrices[out].device, Python.list(n))
-            return out
-        var out = self.zeros(n, 1)
-        if n:
-            var aa = self.address(a)
-            _ = py_call(self.entries["x_decomp_order_small"], aa, self.address(out), Python.list(n))
-            _ = out  # keep the Python object alive through the native call above
-        return out
-
+    # TOMBSTONE: DecompKit.orth, order_small and grown (used only by the per-step randomized_svd, now x_decomp/randomized_svd_owner.mojo) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+    # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
     def count_gt(mut self, a: Int, s: Float64) raises -> Int:
         # `_Kit.count_gt`: how many values of A are > s.
         if not self.size(a):
             return 0
         var flags = self.ew(XD_GTS, a, scalar=s)
         return Int(self.total_word(flags))
-
-    def grown(mut self, a: Int, rows: Int, cols: Int) raises -> Int:
-        # `_M(A.s + zeros, rows, cols)`: A's words then zeros, as a host matrix.
-        var out = self.zeros(rows, cols)
-        var n = self.size(a)
-        if n:
-            var source = self.host(a)
-            memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))),
-                   src=DecompF32(unsafe_from_address=Int(py=self.address(a))), count=n)
-            _ = source  # keep the Python object alive through the native call above
-            _ = source^
-        return out
 
     # ---- the tall SVD of `_linalg_impl._svd_tall` (lstsq)
     def orth_diag(mut self, a: Int) raises -> Tuple[Int, Int]:

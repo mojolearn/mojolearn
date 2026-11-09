@@ -687,7 +687,18 @@ def pca_randomized_core[E: Exec, D: RDev, RES: Bool](
 ) raises -> Tuple[Int, Int, Int]:
     """`_rsvd_core(k, A, components, oversamples, iterations, 'auto',
     'auto', flip_sign=False, seed)`: (U, S, Vt)."""
-    var transposed = kit.r(original) < kit.c(original)
+    return pca_randomized_core(kit, original, components, oversamples, iterations, seed,
+                               kit.r(original) < kit.c(original))
+
+
+def pca_randomized_core[E: Exec, D: RDev, RES: Bool](
+    mut kit: RKit[E, D, RES], original: Int, components: Int, oversamples: Int, iterations: Int, seed: Int,
+    transposed: Bool,
+) raises -> Tuple[Int, Int, Int]:
+    """`_rsvd_core(k, A, components, oversamples, iterations, 'auto',
+    transpose, flip_sign=False, seed)` with the orientation given: the
+    sketch runs on A^T when `transposed` (the public randomized_svd's
+    transpose=True, or 'auto' on a wide A). (U, S, Vt) of A either way."""
     var a = kit.transpose(original) if transposed else original
     var rows = kit.r(a)
     var cols = kit.c(a)

@@ -20,6 +20,10 @@ from core.host_predict_threads import host_predict_task_count_work, host_predict
 # Restore: experiments/removed/A0_ADMISSION_HELPERS.patch. Now core/admitted_input.mojo `admitted_cast_f32`.
 
 
+# integ/pre-0867-w2: lane a3-admit-decomp-prep-metrics (0cb550c337) wrote a second
+# parallel min / max (_family_extreme_f32, the same serial-walk answer, NaN never
+# wins); one implementation kept, this one (lane a2-admit-family). A3's copy never
+# reached main: recoverable at 0cb550c337.
 def _family_extreme[minimum: Bool](src: MutPointer[Float32, MutUntrackedOrigin], count: Int) -> Float32:
     # The serial walk's verdict (`lo = src[0]`, then `if v < lo: lo = v`, or
     # `>` for the maximum) split into contiguous row tasks across the host's

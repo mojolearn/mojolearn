@@ -1,52 +1,56 @@
 # SPDX-License-Identifier: Apache-2.0
-# The decomposition owners' input conversion (bindings/tsvd_native.mojo,
-# bindings/ipca_native.mojo): X as C-order float32 with scikit-learn's input
-# refusals, an exact SciPy sparse container densified from its storage, as
-# the Python shells densified it before converting. Metadata reads and the
-# shared typed CastIn conversion only.
-from std.python import Python, PythonObject
+# The decomposition owners' X admission (PCA, TruncatedSVD, IncrementalPCA,
+# KernelPCA, FactorAnalysis, FastICA, NMF, LatentDirichletAllocation, the
+# random projections): the one admission path (bindings/admitted_input.mojo,
+# admit_x) with scikit-learn's refusals naming the estimator, after an exact
+# SciPy sparse container is densified from its storage, as the Python shells
+# densified it before converting. No cast or scan of its own.
+from std.python import PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call
-from bindings.classical_arrays import classical_kind, classical_is_f32
-from bindings.admitted_input import admit_x
-from bindings.classical_validate import classical_view, _cast_x, RESHAPE_HINT
+from bindings.py_balanced import py_get, py_type
+from bindings.classical_arrays import classical_address
+from bindings.admitted_input import AdmittedX, admit_x, admit_x_unrecorded
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
-from bindings.pca_exact import pca_copied
+
+# TOMBSTONE: decomp_copied (a second classical_view / memoryview of X to rediscover the input_copied_ flag the admission already knows) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch. The flag is decomp_input_copied below.
+
+
+def decomp_admit(source: PythonObject, est: String, context: PythonObject) raises -> AdmittedX:
+    """X as C-order float32 (the caller's buffer when it already is one,
+    `borrowed`); refusals name `est`. A SciPy sparse X is densified first
+    and admitted with the plain rank/empty/finite wording."""
+    var format = host_sparse_format(source)
+    if format.byte_length() > 0:
+        var dense = host_sparse_dense(source, format, context)
+        var array = admit_x(dense, 2, "X", context)
+        var address = Int(py=classical_address(array))
+        var borrowed = address == Int(py=classical_address(dense))
+        var x = AdmittedX(array, source, address, Int(py=array.shape[0]), Int(py=array.shape[1]), 2, borrowed)
+        _ = dense^
+        return x^
+    return admit_x_unrecorded(source, est, context)
 
 
 def decomp_input(source: PythonObject, est: String, context: PythonObject) raises -> PythonObject:
     """X as C-order float32 (the caller's buffer when it already is one);
     refusals name `est`."""
-    var format = host_sparse_format(source)
-    if format.byte_length() > 0:
-        var dense = host_sparse_dense(source, format, context)
-        return admit_x(dense, 2, "X", context)
-    var view = classical_view(source, context, "X")
-    var kind = classical_kind(view, context)
-    if kind == "c":
-        raise Error("Complex data not supported: " + est + " got a complex X.")
-    if kind == "b" or kind == "i" or kind == "u" or kind == "f":
-        var nd = Int(py=view.ndim)
-        # The shape's repr names a refusal only; it is built on those paths
-        # alone (it went through builtins.repr on every call; p3 rank 410).
-        if nd < 2:
-            raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape="
-                        + String(py_call(native_loaded_module("builtins").repr, view.shape)) + "). " + RESHAPE_HINT)
-        if nd == 2 and Int(py=view.shape[0]) == 0:
-            raise Error("Found array with 0 sample(s) (shape=" + String(py_call(native_loaded_module("builtins").repr, view.shape))
-                        + ") while a minimum of 1 is required by " + est + ".")
-        if nd == 2 and Int(py=view.shape[1]) == 0:
-            raise Error("Found array with 0 feature(s) (shape=" + String(py_call(native_loaded_module("builtins").repr, view.shape))
-                        + ") while a minimum of 1 is required by " + est + ".")
-    var x = _cast_x(view, est, context)
-    _ = view^
-    return x
+    var x = decomp_admit(source, est, context)
+    return x.array
 
 
-def decomp_copied(source: PythonObject, context: PythonObject) raises -> Bool:
-    """Whether X had to be copied to C-order float32 (a densified sparse X
-    counts as the dense array its storage holds)."""
-    var format = host_sparse_format(source)
-    if format.byte_length() > 0:
-        return not classical_is_f32(host_sparse_dense(source, format, context), context)
-    return pca_copied(source, context)
+def decomp_input_copied(x: AdmittedX, context: PythonObject) raises -> Bool:
+    """The public `input_copied_` flag of an admitted X: False only when the
+    kernels read the caller's own ndarray, Array or native buffer in place.
+    Sequences, pandas and Torch inputs count as copied (they are
+    materialized); a densified sparse X counts as the dense array its storage
+    holds (copied unless that is already float32)."""
+    var b = native_loaded_module("builtins")
+    if host_sparse_format(x.source).byte_length() > 0:
+        return not x.borrowed
+    var t = py_type(x.source)
+    # NumPy's keys are in the context only once NumPy is loaded
+    var ndarray = py_get(context, "ndarray")
+    var direct = ((ndarray is not None and t is ndarray) or t is context["array_class"] or t is b.memoryview or t is context["array_type"]
+                  or t is b.bytearray)
+    return not direct or not x.borrowed
