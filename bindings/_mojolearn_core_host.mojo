@@ -86,6 +86,7 @@ from bindings.msel_host import (
     msel_free_binding,
     msel_live_binding,
     msel_take_rows_binding,
+    msel_free_bytes_binding,
     msel_scatter_rows_binding,
     msel_proba_column_binding,
     msel_rebase_offsets_i32_binding,
@@ -1137,6 +1138,7 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[msel_free_binding]("msel_free")
         module.def_function[msel_live_binding]("msel_live")
         module.def_function[msel_take_rows_binding]("msel_take_rows")
+        module.def_function[msel_free_bytes_binding]("msel_free_bytes")
         module.def_function[msel_scatter_rows_binding]("msel_scatter_rows")
         module.def_function[msel_proba_column_binding]("msel_proba_column")
         module.def_function[msel_rebase_offsets_i32_binding]("msel_rebase_offsets_i32")

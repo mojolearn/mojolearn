@@ -181,6 +181,7 @@ from bindings.msel_device import (
     msel_free_binding,
     msel_live_binding,
     msel_take_rows_binding,
+    msel_free_bytes_binding,
     pca_transform_fold_binding,
     pca_fit_fold_binding,
     tsvd_fit_fold_binding,
@@ -2338,6 +2339,7 @@ def build__mojolearn() -> PythonObject:
         m.def_function[msel_free_binding]("msel_free")
         m.def_function[msel_live_binding]("msel_live")
         m.def_function[msel_take_rows_binding]("msel_take_rows")
+        m.def_function[msel_free_bytes_binding]("msel_free_bytes")
         m.def_function[pca_transform_fold_binding]("pca_transform_fold")
         m.def_function[pca_fit_fold_binding]("pca_fit_fold")
         m.def_function[tsvd_fit_fold_binding]("tsvd_fit_fold")
