@@ -165,22 +165,6 @@ def _fast_binding(*, connect_all=False):
     return module, bool(train), bool(encode), int(max_vocab)
 
 
-def _byte_to_char():
-    """The GPT-2 format's byte-to-unicode spelling (`tokenizer/impl/
-    byte_unicode.mojo` builds the same table): the printable Latin-1 runs
-    are fixed points and the other 68 bytes take U+0100 upward in byte
-    order."""
-    fixed = set(range(0x21, 0x7F)) | set(range(0xA1, 0xAD)) | set(range(0xAE, 0x100))
-    out, extra = {}, 256
-    for b in range(256):  # cpu-route: verification fixture text: the byte table the tests and identity tools compare, not a runtime route
-        if b in fixed:
-            out[b] = chr(b)
-        else:
-            out[b] = chr(extra)
-            extra += 1
-    return out
-
-
 # `encode` and `decode` for byte-level BPE in the GPT-2 format.
 #
 # Ids are in [0, n_vocab): the vocabulary's ranks, then `<|endoftext|>` at

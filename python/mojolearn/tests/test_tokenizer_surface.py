@@ -280,7 +280,7 @@ def test_ranks_file_matches_token_bytes(tok):
 def test_from_files_spelled_vocabulary(tok):
     """The synthetic vocabulary written in the GPT-2 file format (spelled
     encoder JSON plus a merge list) loads to the same tokenizer."""
-    from mojolearn.tokenizer import _byte_to_char
+    from mojolearn._tokenizer_synthetic import byte_to_char as _byte_to_char
     spell = _byte_to_char()
     v = _vocab()
     d = tempfile.mkdtemp()

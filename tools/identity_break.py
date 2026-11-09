@@ -6614,7 +6614,8 @@ def _(ml, X, yc, yr, Xh=None):
     decoded = np.frombuffer(gpt2.decode_bytes(ids["gpt2"].tolist()), dtype=np.uint8)
     cut = tk.pretokenize(text, "gpt2")
     pieces = [text[a:b] for a, b in zip(cut, cut[1:])]
-    spelled = ml.tokenizer._byte_to_char()
+    from mojolearn._tokenizer_synthetic import byte_to_char
+    spelled = byte_to_char()
     eot, eot_id = "<|endoftext|>", len(tokens)
 
     def spell(bs):

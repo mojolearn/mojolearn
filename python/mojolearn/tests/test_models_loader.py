@@ -44,7 +44,7 @@ from mojolearn.models import (CausalLM, Checkpoint, HFConfig, SafetensorsFile, T
 from mojolearn.models import causal_lm as _cl
 from mojolearn.models import tokenizer as _tk
 from mojolearn.models.safetensors import write_safetensors, widen_f16
-from mojolearn.tokenizer import _byte_to_char
+from mojolearn._tokenizer_synthetic import byte_to_char as _byte_to_char
 
 
 # ---------------------------------------------------------------- helpers
