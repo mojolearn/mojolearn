@@ -9,6 +9,8 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_report, native_descriptor_words
 from autograd.model_descriptor import MODEL_ABI_NAME, MODEL_FIT_LABELS, NativeModelRequest, model_request_execute
 from sequence.neural_model_dispatch import PROGRAM_HOST_RUN, PROGRAM_IMPORT, PROGRAM_DEVICE_RUN, SESSION_OPEN, SESSION_CLOSE, RNN_FIT, RNN_PREDICT, MLP_PREDICT, MODEL_LABELS, MODEL_ARGMAX, NeuralModelRequest, neural_model_execute
+from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT
+from sequence.cnn_classifier_program import cnn_fit_program, cnn_predict_program
 from sequence.perf3_seq_resident import seq_resident_resolve, seq_resident_unpin
 from sequence.model_outputs_device import model_output_device
 from autograd.program_device_execution import program_device_request
@@ -61,6 +63,17 @@ def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: In
                 raise Error("native session: resource belongs to another registry or executor")
             ops_session_close[DeviceExec, OPS_DEVICE](addresses[0])
             MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = 0
+            return 0
+        if op == CNN_FIT or op == CNN_PREDICT:
+            # lane x8-cnn-on-executor: CNNClassifier as one captured program
+            # (Program.fit) and its inference forward, on a fresh executor
+            var cnn = NeuralModelRequest(op, aa, na, pp, np, ff, nf)
+            var written = 0
+            if op == CNN_FIT:
+                written = cnn_fit_program[DeviceExec](DeviceExec(), cnn.addresses, cnn.options, cnn.floats)
+            else:
+                written = cnn_predict_program[DeviceExec](DeviceExec(), cnn.addresses, cnn.options)
+            MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = written
             return 0
         var ex = DeviceExec()
         var value = 0
