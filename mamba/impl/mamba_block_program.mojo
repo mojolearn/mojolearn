@@ -182,19 +182,12 @@ struct MambaBlockProgram(Movable):
         self.epoch = now
         self.w_addrs = weights.copy()
 
-    def reload_weights(mut self, weights: List[Int]) raises:
-        """The caller's arrays written into the parameter in place, whatever
-        the epoch (lane x56d: the backward door's addresses do not come
-        through the binding's freezing weight door, so their bytes are not
-        known to be unchanged; this is the one upload the replaced
-        `mamba{1,2,3}_tape_backward` made per call, without its host copy)."""
-        var wsizes = block_weight_sizes(self.code, self.ints)
-        if len(weights) != len(wsizes):
-            raise Error("mamba weights: expected " + String(len(wsizes)) + " arrays, got " + String(len(weights)))
-        self.s.load_block(self.w, self.code, self.ints, BLOCK_PART_WEIGHTS,
-                          _pieces(weights, wsizes, "mamba weights", False), List[Int]())
-        self.epoch = weight_epoch()
-        self.w_addrs = weights.copy()
+    # TOMBSTONE: reload_weights (lane x56d-mamba-samba-train-and-host@f046806502: the backward door rewrote the weights
+    # into the cached program on every call because its addresses did not come through the weight-freezing door) removed
+    # 2026-11-09 at integration (integ/pre-0867-w5): the backward door's Mamba weights now pass
+    # generation_weight_address (bindings/neural_block_public.mojo _neural_backward_prepared), so the backward call uses
+    # refresh_weights' address + epoch key like the forward. Never reached main: no patch; recoverable at
+    # lane/x56d-mamba-samba-train-and-host@f046806502.
 
     def export_weights(mut self, dsts: List[Int]) raises:
         """The parameter into the caller's arrays (piece order), one wait."""
@@ -615,7 +608,8 @@ def mamba_block_backward_call(
 ) raises:
     """One per-call zero-state block VJP on host arrays (the public
     `mamba{1,2,3}_backward` door, lane x56d): the cached program of these
-    weights (written in place from the caller's arrays), the step op's recorded
+    weights (refreshed by address + weight epoch, `refresh_weights`: an
+    unchanged weight is not uploaded again), the step op's recorded
     run and its rule (`mamba_program_backward`), d_x and the weight
     gradients into the caller's arrays, one wait. Replaces the per-call
     weight upload and forward recompute of `mamba{1,2,3}_tape_backward`."""
@@ -623,7 +617,7 @@ def mamba_block_backward_call(
     var p = claimed[0]
     var cached = claimed[1]
     try:
-        p[].reload_weights(weights)
+        p[].refresh_weights(weights)
         mamba_program_backward(p[], px, pdy, l, grads)
         p[].finish()
     except error:

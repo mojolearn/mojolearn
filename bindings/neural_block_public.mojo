@@ -21,7 +21,7 @@ from std.memory import memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
 from bindings.causal_lm_construct import _model_block, _model_profile, _model_bindings, _model_f32, _model_shape, model_recurrent_weights_check
-from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, causal_layer_allocate_fields, causal_layer_run_fields, _addr, _native_function, causal_transformer_admin, _native_has_entry, _native_entry_fields, _standalone_record_fields, causal_prepared_layer
+from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, causal_layer_allocate_fields, causal_layer_run_fields, _addr, _weight_addr, _native_function, causal_transformer_admin, _native_has_entry, _native_entry_fields, _standalone_record_fields, causal_prepared_layer
 from core.hostptr import f32_ptr
 from core.host_helpers_impl import all_finite_f32
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
@@ -1168,7 +1168,13 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
     var gradients = bi.list()
     _ = py_call(gradients.append, generation_array([b, l, d]))
     for i in range(len(weights)):  # driver-loop: over parameter buffers and their shapes
-        _ = py_call(addresses.append, _addr(weights[i], keep))
+        # Integration (integ/pre-0867-w5, lane x56d): a Mamba block's weights
+        # go through the binding's one weight door (generation_weight_address:
+        # frozen read-only, the weight epoch bumped on a new or copied
+        # weight), so the cached block program keys them by address + epoch
+        # (core/weight_epoch.mojo) and an unchanged weight is NOT re-uploaded
+        # per backward call. The transformer route keeps its own session key.
+        _ = py_call(addresses.append, _addr(weights[i], keep) if transformer else _weight_addr(weights[i], keep))
         var shape = List[Int]()
         var weight_shape = weights[i].shape  # read once, not once per axis
         for j in range(len(weight_shape)):  # driver-loop: over tensor shape metadata
