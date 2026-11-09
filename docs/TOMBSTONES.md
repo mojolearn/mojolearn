@@ -465,6 +465,8 @@ in the tables after the sections.
 | [`MOJOLEARN_RSVD_FAST_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, FAST + Apple) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_IDN_RSVD_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, IDENTICAL) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_RSVD_FAST_DEVSCAN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd finiteness scan, FAST + Apple) | removed (KEPT default, superseded: parallel host scan of the one admission path) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`MOJOLEARN_IDN_ARIMA_ASYNC_OFF`](#arima-lock-step-l-bfgs-superseded-by-the-per-series-solver-2026-11-09) | Time series (ARIMA fit, IDENTICAL) | removed (KEPT default's `_OFF`, superseded: the lock-step solver is deleted) | 2026-11-09 | [ARIMA_LOCKSTEP_LBFGS.patch](../experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch) |
+| [`MOJOLEARN_ARIMA_FAST_ASYNC_OFF`](#arima-lock-step-l-bfgs-superseded-by-the-per-series-solver-2026-11-09) | Time series (ARIMA fit, FAST) | removed (KEPT default's `_OFF`, superseded: the lock-step solver is deleted) | 2026-11-09 | [ARIMA_LOCKSTEP_LBFGS.patch](../experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -4271,3 +4273,22 @@ lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Bits: none for any int32-range or
   lane/a3-admit-decomp-prep-metrics@0cb550c337.
 - `door_rows_call` (the `_arena_io._ROWS_CALL` connection in `_native_msel_dispatch.connect`): no reader after A5 deleted
   `door_rows_host`; removed from the glue and from tools/test_device_rows_door_cv.py.
+
+## ARIMA lock-step L-BFGS superseded by the per-series solver (2026-11-09)
+
+Lane n10-dictl-arima-loops (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 4, row "ARIMA lock-step
+L-BFGS"). `arima/impl/batched_fit.mojo::batched_min_lbfgs` ran two device solvers: the per-series one
+(`arima/impl/fast_lbfgs_async.mojo::async_min_lbfgs`, ARIMA_FAST_ASYNC: FAST + Apple since lane/apple-fast-gap-arima,
+IDENTICAL on every vendor since lane/fam-timeseries, M3 A/B autoarima taxi-hourly 39,639 -> 24,563 ms and synthetic
+28,511 -> 14,918 ms, forecast_rmse identical) whenever the held evaluation workspace existed and the identity trace was off,
+and the lock-step one otherwise (prelude, a shared line search to the last series, verdict; one flag read per line-search
+step and per iteration, and the sequential evaluation drained the stream once per forward-difference point). The
+per-series solver now takes the sequential evaluation too (`arima/impl/eval_batch.mojo::arima_eval`, the held workspace
+when the fit has one), so it is the only device arm; the lock-step loop, `lbfgs_prelude_kernel`, `lbfgs_candidate_kernel`,
+`lbfgs_accept_kernel`, `lbfgs_verdict_kernel`, `_read_flag`, `_record_iter`, `_iter_tag`, `_download_i32`, the
+per-iteration identity card (`fit.init.*`, `fit.iterNNNN.*`; no reader) and the `ARIMA_FAST_ASYNC` switch with its two
+`_OFF` defines are deleted. Guards: `core/experiment_guards_series.mojo`. Bits: none (each series' iterates, `n_iter`
+and `retcode` are the lock-step solver's by construction; the sequential and held evaluations write the same bits).
+`n_eval` now counts rounds (up to `ASYNC_READ_EVERY - 1` no-op rounds past the last series), as the per-series arm always
+did. Run ids: gaparima-async-* (M3). RUN OWED: NVIDIA + AMD autoarima rows for the fits that used to take the lock-step arm.
+Recoverable at f59d913b0b; patch `experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch` (all code hunks of the deletion).
