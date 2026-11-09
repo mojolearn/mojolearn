@@ -113,7 +113,7 @@ from autograd.import_api import (
 from sequence.exec_device import DeviceExec
 from autograd.block_step_ops import (
     OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, OPS_ATTN_STEP, BlockStepScratch, is_block_step, block_step_check,
-    ATTN_STEP_TAG, attn_step_train_run,
+    ATTN_STEP_TAG, attn_step_train_run, host_attn_step_train_run, host_block_step_run,
     block_step_run, block_weight_sizes, block_state_sizes, block_offsets, block_guard, block_int_words,
     block_part_floats, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
 )
@@ -1702,7 +1702,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         """Block step op `code`: operands [x, weights, state, (words)]
         checked here (x float; weights an upload of floats; state and words
         declared state of the right kind), then the table's run on the
-        device, the result a new tensor of x's shape. The state is written
+        device (lane x7b: the host arm on a host session), the result a new tensor of x's shape. The state is written
         in place, so the op is not differentiable through the tape here."""
         var info = block_step_check(code, len(x), ints, fs)
         var recording = self.tape.is_recording()
@@ -1740,7 +1740,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             comptime if Self.E.IS_DEVICE:
                 _ = attn_step_train_run(rebind[DeviceExec](self.ex), self.steps, bufs, counts, ints, out)
             else:
-                raise Error("ValueError: ops: " + String(info.name) + " runs on a GPU session")
+                # lane x7b: the host arm, the same zero-state prefill over the
+                # host block body with its stages kept (block_step_ops).
+                _ = host_attn_step_train_run(self.steps, bufs, counts, ints, out)
             var saved = Args()
             saved.p0 = bufs[1]
             saved.p1 = bufs[2]
@@ -1753,7 +1755,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         comptime if Self.E.IS_DEVICE:
             block_step_run(rebind[DeviceExec](self.ex), self.steps, code, bufs, counts, ints, fs, out)
         else:
-            raise Error("ValueError: ops: " + String(info.name) + " runs on a GPU session")
+            host_block_step_run(self.steps, code, bufs, counts, ints, fs, out)
         var t: Tensor
         if sh.ndim == 2:
             t = self.tape.variable(self.ex, out, sh.d[0], sh.d[1], False)
