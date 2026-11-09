@@ -3191,18 +3191,26 @@ struct SymDeviceRounds(LoopStep, Movable):
         var one_hot = self.one_hot.copy()
         var plan = self.device_plan.copy()
         var gate_h = gate.copy()
+        # scalars as locals: each call below passes one `mut` field of `self`
+        # and nothing else of `self`
+        var max_depth = self.max_depth
+        var sm = self.sm
+        var score_function = self.score_function
+        var l2 = self.l2_leaf_reg
+        var tree_seed = self.tree_seeds[it - 1]
+        var n_leaves = self.n_leaves
         # TREE_OP_SEARCH: the level loop and the gate walk, nothing drained.
         # The pool of one is built on round 1's call (its one setup drain,
         # once per fit; every later round reuses it).
         _ = fit_oblivious_tree_structure_traced(
-            ctx, layout, n, self.max_depth, cindex,
+            ctx, layout, n, max_depth, cindex,
             w_plane.copy(), t_plane.copy(),
-            self.sm, Float32(1.0), self.score_function,
+            sm, Float32(1.0), score_function,
             self.pw_pool,
             no_trace, no_times, _tree_tag(it - 1),
-            self.l2_leaf_reg,
+            l2,
             score_std_dev=Float32(0.0),
-            seed=self.tree_seeds[it - 1],
+            seed=tree_seed,
             one_hot=one_hot^,
             std_scale_word=std_words^,
             device_plan=plan^,
@@ -3222,7 +3230,7 @@ struct SymDeviceRounds(LoopStep, Movable):
         var bins = self.parts.bins.copy()
         tree_op_leaf_bins(ctx, gate, structure, self.records_learn, cindex, n, bins)
         var p_status = self.p_status.copy()
-        tree_op_partition(ctx, gate, self.parts, n, self.n_leaves, p_status)
+        tree_op_partition(ctx, gate, self.parts, n, n_leaves, p_status)
         step_fail_joins_loop(ctx, gate, p_status, it)
 
     def _leaf_device(mut self, ctx: DeviceContext, mut gate: DeviceBuffer[DType.int32], it: Int) raises:
@@ -3237,12 +3245,22 @@ struct SymDeviceRounds(LoopStep, Movable):
         var cursor = self.cursor.copy()
         var rows = self.parts.vals.copy()
         var words = self.parts.d_part.copy()
+        var has_weights = self.has_weights
+        var objective = self.objective
+        var alpha = self.alpha
+        var estimator_alpha = self.estimator_alpha
+        var logloss_border = self.logloss_border
+        var l2 = self.l2_leaf_reg
+        var method = self.method
+        var num_classes = self.num_classes
+        var iters = self.iters
+        var rate = self.learning_rate
         tree_op_leaf_estimate(
             ctx, gate, self.leaf_state, rows^, words^,
-            targets, weights, self.has_weights, cursor,
-            self.objective, self.alpha, self.estimator_alpha,
-            self.logloss_border, self.l2_leaf_reg, self.method,
-            self.num_classes, self.iters, self.learning_rate,
+            targets, weights, has_weights, cursor,
+            objective, alpha, estimator_alpha,
+            logloss_border, l2, method,
+            num_classes, iters, rate,
             leaf_out, leaf_scaled, l_status,
         )
         step_fail_joins_loop(ctx, gate, l_status, it)
@@ -3255,9 +3273,10 @@ struct SymDeviceRounds(LoopStep, Movable):
         var cindex = self.cindex.copy()
         var cursor = self.cursor.copy()
         var leaf_scaled = self.leaf_scaled.copy()
+        var n = self.n_rows
         tree_op_apply(
             ctx, gate, structure, self.records_learn, cindex, leaf_scaled,
-            self.n_rows, cursor, 1, 0, root_adds=True,
+            n, cursor, 1, 0, root_adds=True,
         )
         if not self.has_test:
             return
@@ -3271,9 +3290,13 @@ struct SymDeviceRounds(LoopStep, Movable):
             t_rows, t_cursor, 1, t_rows,
         )
         var losses = self.losses_hist.copy()
+        var objective = self.objective
+        var num_classes = self.num_classes
+        var alpha = self.alpha
+        var logloss_border = self.logloss_border
         tree_op_heldout_loss(
-            ctx, gate, self.test.value(), self.objective, self.num_classes,
-            self.alpha, self.logloss_border, 1, losses, it,
+            ctx, gate, self.test.value(), objective, num_classes,
+            alpha, logloss_border, 1, losses, it,
         )
         od_op_step(ctx, gate, self.od, losses, it)
 
@@ -3366,12 +3389,24 @@ struct SymDeviceRounds(LoopStep, Movable):
         var no_trace = IdentityTrace.disabled()
         var no_times = StageTimes()
         no_times.enabled = False
+        var n_rows = self.n_rows
+        var has_weights = self.has_weights
+        var objective = self.objective
+        var alpha = self.alpha
+        var estimator_alpha = self.estimator_alpha
+        var logloss_border = self.logloss_border
+        var l2 = self.l2_leaf_reg
+        var sm = self.sm
+        var method = self.method
+        var num_classes = self.num_classes
+        var iters = self.iters
+        var rate = self.learning_rate
         _estimate_and_apply(
-            ctx, self.n_rows, 1, tree_leaves, sizes, offsets, rows,
-            targets, weights, self.has_weights, scratch,
-            self.objective, self.alpha, self.estimator_alpha,
-            self.logloss_border, self.l2_leaf_reg, self.sm, self.method,
-            self.num_classes, self.iters, self.learning_rate,
+            ctx, n_rows, 1, tree_leaves, sizes, offsets, rows,
+            targets, weights, has_weights, scratch,
+            objective, alpha, estimator_alpha,
+            logloss_border, l2, sm, method,
+            num_classes, iters, rate,
             values, not_pd, no_trace, no_times,
             _tree_tag(it - 1) + ".leaves.estimated",
             self.est_ws,
