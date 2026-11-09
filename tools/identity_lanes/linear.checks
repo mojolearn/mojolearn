@@ -2,7 +2,6 @@
 x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5000_dot_order.patch
 x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5001_flush.patch
 x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5002_cholesky_order.patch
-x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5003_jacobi_order.patch
 x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5004_shuffle_map.patch
 x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5005_last_max.patch
 x_linear/checks/seams_check.mojo	x_linear/checks/sabotage/seam_5006_host_nan.patch

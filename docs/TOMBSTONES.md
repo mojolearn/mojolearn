@@ -584,6 +584,7 @@ in the tables after the sections.
 
 | [`SAMBA_THREE_TIER_FORWARD`: `samba_resident_forward` (+ binding, descriptor op 16, `samba_resident_native_forward`), `SambaDecodeResident` (training/samba_decode_resident.mojo), the provider forward (`samba_provider_forward`, `AdmittedSambaExecution.forward`, `NativeSambaModel.forward`), the device per-layer walk of `samba_forward`, `samba_afn_norm_head_forward` (AFN_SAMBA_FUSE fused forward tail), the dead Python `SambaStack._forward*` / `_resident*` / `_afn*` routes](#samba-stack-on-one-executor-program-2026-11-09) | Neural (Samba inference) | SUPERSEDED (one executor program, `SambaStackProgram`; never A/B'd, RUN OWED) | 2026-11-09 | [SAMBA_THREE_TIER_FORWARD.patch](../experiments/removed/SAMBA_THREE_TIER_FORWARD.patch) |
 | [`TRANSFORMER_FORWARD_TAPE_API` (`TransformerBlock.forward_with_tape` / `backward_from_tape`, `TransformerForwardTape`, the session and standalone transformer tapes)](#transformer-forward-tape-api-retired-2026-11-09) | Neural (TransformerBlock training tape, Samba IDN_ACT_RETAIN=3 transformer half) | removed (superseded: the attention step op and the tape rule; `TransformerBlock.backward` is the training path) | 2026-11-09 | [TRANSFORMER_FORWARD_TAPE_API.patch](../experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch) |
+| [`X_LINEAR_JACOBI_EIG_SEAM_5003` (`x_linear/ops.mojo` `jacobi_eig`, seam check 5003, arm `seam_5003_jacobi_order.patch`)](#x_linear-jacobi_eig-and-seam-5003-2026-11-09) | Linear (BayesianRidge's former team eigensolver) | removed (dead: no product caller) | 2026-11-09 | [X_LINEAR_JACOBI_EIG_SEAM_5003.patch](../experiments/removed/X_LINEAR_JACOBI_EIG_SEAM_5003.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5430,3 +5431,20 @@ Lane x6-tape-retire (sub-lane of x6-samba-on-executor; plan docs/plans/EXECUTOR_
   default builds never reached the deleted bodies; the `transformer` lane covers the block backward.
 - Recoverable at 4f41e3d67d; restore with `git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch` (code files
   outside tools/; the tools come back from 4f41e3d67d).
+
+## x_linear jacobi_eig and seam 5003 (2026-11-09)
+
+Lane m3-linalg-and-housekeeping (follow-up of lane n9b-device-svd-qr c486f3eb49), branch
+`lane/m3-linalg-and-housekeeping` from origin/main 0ce88411d3.
+
+- What it was: `x_linear/ops.mojo` `jacobi_eig`, the cyclic Jacobi (p then q ascending, Rutishauser's rotation, the 1e-9
+  relative skip) that BayesianRidge once used for the centered Gram (DEVIATION 5003, IDENTITY_PATHS row 103), its seam
+  check `check_jacobi` in `x_linear/checks/seams_check.mojo` (6x6 fixture, card label `x_linear.seam5003.jacobi`), the
+  oracle `jacobi` and `_sign` in `x_linear/checks/seams_oracle.mojo`, the sabotage arm
+  `x_linear/checks/sabotage/seam_5003_jacobi_order.patch` and its row in `tools/identity_lanes/linear.checks`.
+- Why: lane n9b moved BayesianRidge onto the executor eigh op (`x_decomp/eigh_ops.mojo` `eigh_op_dense`, host twin
+  `eigh_op_dense_host`); after that only the seam check called `jacobi_eig`, so the check guarded code no product runs.
+- Verdict: dead code, never an A/B. No bits change (no product path reached it). The seam card loses one record
+  (`x_linear.seam5003.jacobi`); the remaining seams print "9 seams".
+- Recoverable at 0ce88411d3; restore with `git apply experiments/removed/X_LINEAR_JACOBI_EIG_SEAM_5003.patch` (the
+  code files, the arm and the checks row).

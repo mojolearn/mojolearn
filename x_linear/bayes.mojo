@@ -24,7 +24,7 @@ from std.sys.compile import is_defined
 from experiments.classical_identical_ideas.linear_controls import C15_FACTOR_SOLVE
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fsqrt, ld, st, ldi, sti, i2f, fill, copy,
-    cholesky, chol_solve, jacobi_eig, centered_gram, centered_xty, mean_of,
+    cholesky, chol_solve, centered_gram, centered_xty, mean_of,
     add_acc, axpy_acc, axpy_centered,
 )
 from std.sys.info import is_gpu, has_apple_gpu_accelerator
