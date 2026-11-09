@@ -84,7 +84,7 @@ The fix (F1, effort S, one lane, one file pair, no bit change). In `classical_ho
 
 Every caller of `classical_check_x`, `classical_host_f32`, `family_f32` and `family_cast_f32` gains at once. The call list
 has about 30 bindings (`git grep -l classical_host_f32`): Ridge, logistic, QN, PLS, LDA, NMF, ICA, FA, KPCA, IPCA, random
-projection, the prep and select natives, the metrics, and more. This one fix should return 27 of the 42 regressed cells to
+projection, the prep and select natives, the metrics, and more. This one fix should return 20 of the 42 regressed cells to
 within a few tens of ms of 0.8.55.
 
 ## 2. Secondary shared causes
@@ -249,7 +249,7 @@ rules already forbid that ("write code to run in parallel"; "a new serial loop o
 ## 5. Order
 
 1. F1 + F2 as one lane on `classical_arrays_impl.mojo`, `family_cast_impl.mojo` and `p3nc_scan.mojo`. It is one parallel
-   SIMD finite scan and one parallel typed cast. It covers about 30 of the 42 cells, including the eight worst.
+   SIMD finite scan and one parallel typed cast. It covers 25 of the 42 cells (20 by F1 and 5 by F2), including the twelve worst.
 2. F3 in the same round, in `native_array_storage.mojo`, `trees_public_inputs.mojo`, `family_common.mojo` and
    `neighbors_knn_native.mojo`: an uninitialized store, bulk zeros, and the kNN borrow.
 3. F5 with F3, since they share the store helper.
