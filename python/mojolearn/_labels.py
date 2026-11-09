@@ -528,8 +528,11 @@ class ClassLabels(list):
             codes = codes.astype("<i8")
         return decode_labels(list(self), codes)
 
-    def __reduce__(self):
-        return (ClassLabels, (list(self),))
+    # Pickle and copy take object.__reduce_ex__'s C path: NEWOBJ with no
+    # arguments, then the list items appended. `__slotnames__` is filled
+    # here so CPython never calls copyreg._slotnames (Python) for the class.
+    # The former Python `__reduce__` ran once per pickled classes_ list.
+    __slotnames__ = []
 
 
 def as_class_labels(classes):
