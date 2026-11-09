@@ -43,7 +43,8 @@ int32 word (`OP_LOOP_ITER_WORD`), so `take`/`index` can select token t of an upl
   resident session's step body), L > 1 a prefill or chunked continuation (the session's forward body). One
   op per block for `forward`, `step`, `decode`.
 - Run it like any op: `var y = s.op(OPS_M3_STEP, [x, w, st, words], [b, dm], List[Float32]())`, inside an
-  inference session (record off). It runs on a GPU session only (`Exec.IS_DEVICE`); a host session refuses it.
+  inference session (record off). It runs on a GPU session and (lane x7b-step-ops-host-arm) on a host session, where
+  the host arm runs the host block bodies (the CPU identity column's oracles) over the same packed tensors.
 - The bodies are the resident sessions' unchanged: same structs, same block forward entry, same launch set
   and order. Bits are the session's.
 - `capture` keeps a step op only when an output depends on its result (as every op). Name the block output
@@ -60,6 +61,13 @@ int32 word (`OP_LOOP_ITER_WORD`), so `take`/`index` can select token t of an upl
   that tag) runs the transformer stage rule over the kept stages and writes d_x and the packed weights' gradient.
   Program.fit backpropagates with StepOpRules; `grads_out` copies the last minibatch's gradients out. The byte LM trainer
   (`training/byte_lm_program.mojo`) is the first family on it. The Mamba step ops still refuse a recording session.
+- The host arm (lane x7b-step-ops-host-arm, 2026-11-09): `OpsSession[HostExec]` runs all four ops through
+  `host_block_step_run` (`transformer_block_oracle`, `mamba_block_oracle`, `mamba2_block_oracle`, `mamba3_block_oracle`):
+  the weights are read from the weights tensor at every run, the state is read in and written back after a successful run,
+  the integers are the words tensor's. A recorded `OPS_ATTN_STEP` on a host session is the same zero-state prefill with
+  its stages kept (`host_attn_step_train_run`), and `StepOpRules` runs `transformer_block_backward_oracle` over them
+  (`host_attn_step_backward`). Reports of a host Mamba entry: `host_block_step_reports`. A program that trains or decodes
+  through the step ops runs unchanged on the CPU column (the byte LM's `ByteLmProgram[E, KIND]` is the first).
 - Adding an op: one row in `_info`, one `_run_*` and one arm in `_step_run`; codes stay contiguous
   (`OPS_STEP_FIRST..OPS_STEP_LAST`); raise `PROGRAM_MAX_CODE` and name the op in
   `autograd/program_tools.mojo program_op_name`. No new `elif` in `_op_run_tensors`.
