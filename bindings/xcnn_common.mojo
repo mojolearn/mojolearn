@@ -18,7 +18,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_inputs import sequential_input
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.xseq_native_common import xseq_f32
+from bindings.admitted_sequence import admit_nd_f32
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.native_buffer_address import native_buffer_address
@@ -378,7 +378,7 @@ def xcnn_wrap(entries: PythonObject, array: PythonObject, context: PythonObject)
     """`DeviceTensor._wrap(b, a)`: host float32 array `a` as a tensor (one
     upload)."""
     sequential_admit_value(array, context)
-    var a = xseq_f32(sequential_input(array, context), "x", False, context)
+    var a = admit_nd_f32(sequential_input(array, context), "x", False, context)
     if not xcnn_mixed(entries):
         return xcnn_tensor(entries["module"], a.shape, PythonObject(None), a, PythonObject(None), context)
     var shape = xcnn_shape(a)
@@ -695,7 +695,7 @@ def xcnn_put_f32(dest: PythonObject, offset: Int, source: PythonObject, count: I
                  context: PythonObject) raises:
     """`dest[offset:offset + count] = source` (float32 words; `source` cast
     as NumPy assignment casts it), refused unless it holds `count` values."""
-    var a = xseq_f32(sequential_input(source, context), name, False, context)
+    var a = admit_nd_f32(sequential_input(source, context), name, False, context)
     if Int(py=a.size) != count:
         raise Error("ValueError: could not broadcast " + name + " into shape (" + String(count) + ",)")
     if count:

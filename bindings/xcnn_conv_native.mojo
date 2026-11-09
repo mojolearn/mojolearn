@@ -23,7 +23,6 @@ from bindings.xcnn_common import (
     xcnn_dev_upload, xcnn_download, xcnn_slice_f32, xcnn_put_f32, xcnn_readonly, xcnn_writable_copy,
 )
 from bindings.xcnn_bn_native import xcnn_bn_forward_dev, xcnn_bn_forward, xcnn_bn_layers, xcnn_bn_backward, xcnn_bn_backward_dev, _bn_admit
-from bindings.xseq_native_common import xseq_f32
 from x_cnn.shape_words import conv_params, CP_OH, CP_OW
 from bindings.sequential_inputs import sequential_input
 

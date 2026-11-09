@@ -30,7 +30,7 @@ from providers.python.forecast_owner_pyapi import forecast_commit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.xseq_native_common import (
-    XF32P, XI64P, xseq_entries, xseq_base, xseq_input, xseq_f32, xseq_refuse_f64, xseq_zeros, xseq_addr, xseq_f32p,
+    XF32P, XI64P, xseq_entries, xseq_base, xseq_input, xseq_refuse_f64, xseq_zeros, xseq_addr, xseq_f32p,
     xseq_reshape, xseq_copy, xseq_item, xseq_first, xseq_column_f32, xseq_column_i64, xseq_mean_dict, xseq_int,
     xseq_float, xseq_truth, xseq_mode,
 )

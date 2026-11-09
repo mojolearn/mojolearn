@@ -5,7 +5,8 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_pandas import classical_admit_value
-from bindings.xseq_native_common import xseq_input, xseq_f32, xseq_refuse_f64, xseq_zeros, xseq_f32p
+from bindings.xseq_native_common import xseq_input, xseq_refuse_f64, xseq_zeros, xseq_f32p
+from bindings.admitted_sequence import admit_nd_f32
 
 
 def _state_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -104,7 +105,7 @@ def recurrent_state(model: PythonObject, operation: String, args: PythonObject, 
                 raise Error("TypeError: recurrent parameter names require exact strings")
         packed = xseq_zeros(Python.tuple(total), context)
     else:
-        packed = xseq_f32(xseq_input(fields["params_"], context), "params_", False, context)
+        packed = admit_nd_f32(xseq_input(fields["params_"], context), "params_", False, context)
         if Int(py=packed.size) != total:
             raise Error("params_ size differs from the recurrent parameter layout")
     var base = xseq_f32p(packed)
@@ -123,7 +124,7 @@ def recurrent_state(model: PythonObject, operation: String, args: PythonObject, 
             for j in range(len(dimensions[i])):  # small-loop(admitted parameter shape words)
                 if Int(py=actual_shape[j]) != dimensions[i][j]:
                     raise Error(names[i] + ": shape differs from the recurrent parameter layout")
-            var input = xseq_f32(source, names[i], False, context)
+            var input = admit_nd_f32(source, names[i], False, context)
             memcpy(dest=base + offset, src=xseq_f32p(input), count=counts[i])
             _ = input
         else:

@@ -83,7 +83,7 @@ def test_mlp_packing_reuses_destination_address():
     # Current public weights are still read each prediction: no stale model cache.
     assert 'var coefs = fields["coefs_"]' in source
     # The read is admitted through xseq_private_input first (cf832cdf7d).
-    assert 'xseq_f32(xseq_private_input(coefs[l], context, "coefs_"), "coefs_", False, context)' in source
+    assert 'admit_nd_f32(xseq_private_input(coefs[l], context, "coefs_"), "coefs_", False, context)' in source
 
 
 def test_inventory_covers_every_current_gpu_neural_recipe():
