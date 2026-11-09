@@ -718,6 +718,12 @@ def fit_oblivious_tree_structure_traced(
     var sym_pooled_dummies = False
     comptime if SYM_BUF_ARENA:
         sym_pooled_dummies = fold_count == 1
+    # lane t2-trees-on-executor: TREE_OP_SEARCH returns without a drain, so a
+    # per-call allocation would be released while the level launches are
+    # still queued; the plain arm never reads the three, so it takes the
+    # pooled stand-ins as well (no allocation per round of a device loop).
+    if enqueue_only and fold_count == 1:
+        sym_pooled_dummies = True
     if sym_pooled_dummies:
         d_doc_ids = pool[0].d_best_ids.copy()
     elif shared_index:

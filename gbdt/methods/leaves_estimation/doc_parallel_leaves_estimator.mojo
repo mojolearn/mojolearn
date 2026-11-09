@@ -342,11 +342,28 @@ def enqueue_partition_words_u32(
 ) raises:
     """`partition_words_u32_kernel` over the partitioner's scanned words
     (after `partition_device` / `tree_op_partition`), enqueued."""
+    var words = parts.d_part.copy()
+    enqueue_partition_words_u32_from(ctx, words, n_leaves, offsets, sizes)
+
+
+def enqueue_partition_words_u32_from(
+    ctx: DeviceContext,
+    mut words: DeviceBuffer[DType.int64],
+    n_leaves: Int,
+    mut offsets: DeviceBuffer[DType.uint32],
+    mut sizes: DeviceBuffer[DType.uint32],
+) raises:
+    """`enqueue_partition_words_u32` over a handle onto the scanned words
+    (`DeviceLeafPartitioner.d_part`), so a caller holding the partitioner
+    in a struct field passes no second `mut` view of it (lane
+    t2-trees-on-executor)."""
+    if len(words) < 2 * n_leaves:
+        raise Error("enqueue_partition_words_u32: the scanned words hold fewer than " + String(n_leaves) + " leaves")
     var blocks = (n_leaves + LEAF_SCAN_TPB - 1) // LEAF_SCAN_TPB
     if blocks < 1:
         blocks = 1
     ctx.enqueue_function[partition_words_u32_kernel](  # small-launch(n_leaves: leaves): one thread per leaf, a model-structure size
-        parts.d_part.unsafe_ptr(), Int32(n_leaves), offsets.unsafe_ptr(),
+        words.unsafe_ptr(), Int32(n_leaves), offsets.unsafe_ptr(),
         sizes.unsafe_ptr(),
         grid_dim=(blocks, 1, 1), block_dim=(LEAF_SCAN_TPB, 1, 1),
     )

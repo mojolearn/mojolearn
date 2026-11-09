@@ -201,6 +201,46 @@ from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 from checks.numerics import PIN_DETERMINISM
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from gbdt.gpu_data.sym_feat_switches import GBDT_EVAL_FUSED
+# lane t2-trees-on-executor: the boosting round as one step of the executor's
+# bounded device loop (`SymDeviceRounds`, `fit_sym_rounds_on_device`)
+from autograd.program_loop import LoopTimers
+from autograd.program_loop_device import (
+    LoopRegisters,
+    LoopStep,
+    bounded_device_loop,
+    loop_lap,
+)
+from core.step_gate import STEP_DONE, step_fail_joins_loop
+from gbdt.gpu_util.kernel.transform import launch_split_planes_f32
+from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+    choose_scale_kernel,
+)
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
+    enqueue_snap_plane_dev,
+)
+from gbdt.methods.kernel.tree_gate_walk import (
+    TREE_STRUCT_DEPTH,
+    TREE_STRUCT_SPLITS,
+    TREE_STRUCT_SPLIT_WORDS,
+    TREE_STRUCT_STATUS,
+    TreeRecords,
+    tree_op_apply,
+    tree_op_leaf_bins,
+    tree_op_tree_records,
+    tree_structure_words,
+)
+from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
+    PARTITION_STATUS_OUT_OF_RANGE,
+    PARTITION_STATUS_SIZE_SUM,
+    tree_op_partition,
+)
+from gbdt.overfitting_detector.od_device import (
+    OD_DEVICE_WORDS,
+    OD_W_BEST_ITERATION,
+    OdDeviceState,
+    od_op_init,
+    od_op_step,
+)
 
 #: lane/apple-fast-trees-depthwise (2026-10-02, family `trees-ctr`),
 #: FAST + Apple DEFAULT ON (2026-10-02); `-D MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF=1`
@@ -254,6 +294,8 @@ from gbdt.gpu_util.kernel.bootstrap import (
     BOOTSTRAP_KERNEL_BERNOULLI,
     BOOTSTRAP_KERNEL_POISSON,
     launch_bootstrap,
+    tree_op_bootstrap,
+    tree_op_seed_snapshot,
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_one_byte import (
     BUILD_MODE as HIST_BUILD_MODE,
@@ -269,7 +311,7 @@ from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     DeviceLeafPartitioner,
     LeafPartition,
     compute_bins_for_model,
-    enqueue_partition_words_u32,
+    enqueue_partition_words_u32_from,
     partition_from_bins,
 )
 from ensemble.instruments import StageTimes as HostStageTimes
@@ -1445,7 +1487,8 @@ def tree_op_leaf_estimate(
     ctx: DeviceContext,
     mut gate: DeviceBuffer[DType.int32],
     mut state: LeafEstimateOpState,
-    mut parts: DeviceLeafPartitioner,
+    var row_order: DeviceBuffer[DType.uint32],
+    var part_words: DeviceBuffer[DType.int64],
     mut targets: DeviceBuffer[DType.float32],
     mut weights: DeviceBuffer[DType.float32],
     has_weights: Bool,
@@ -1465,9 +1508,11 @@ def tree_op_leaf_estimate(
 ) raises:
     """Tree op TREE_OP_LEAF_ESTIMATE (gbdt/tree_ops.mojo): one tree's leaves
     estimated on the device from the partition TREE_OP_PARTITION left in
-    `parts` (row order `parts.vals`, offsets / sizes in `parts.d_part`) at
-    `cursor`, the walk's Newton (or Gradient) steps and their stop included.
-    Enqueue only: nothing is read back and nothing drains.
+    its partitioner (`row_order` a handle onto `parts.vals`, `part_words`
+    onto `parts.d_part`: offsets / sizes; handles so a caller keeping the
+    partitioner and this state in one struct passes no two `mut` views of
+    it) at `cursor`, the walk's Newton (or Gradient) steps and their stop
+    included. Enqueue only: nothing is read back and nothing drains.
 
     Writes `leaf_out[0, n_leaves)` (the model's leaves) and
     `leaf_scaled[0, n_leaves)` (times `learning_rate`, TREE_OP_APPLY's
@@ -1495,7 +1540,7 @@ def tree_op_leaf_estimate(
         )
     var n_rows = state.n_rows
     var n_leaves = state.n_leaves
-    if parts.n_rows_cap < n_rows or parts.n_leaves_cap < n_leaves:
+    if len(row_order) < n_rows or len(part_words) < 2 * n_leaves + 2:
         raise Error("tree_op_leaf_estimate: the partitioner is smaller than the op state")
     if len(leaf_out) < n_leaves or len(leaf_scaled) < n_leaves:
         raise Error("tree_op_leaf_estimate: leaf_out / leaf_scaled hold fewer than " + String(n_leaves) + " leaves")
@@ -1516,10 +1561,9 @@ def tree_op_leaf_estimate(
     var d_p_off = state.est_ws[0].d_p_off.copy()
     var d_p_sz = state.est_ws[0].d_p_sz.copy()
     var walk = state.est_ws[0].walk.handles()
-    var row_order = parts.vals.copy()
     # the partition's offsets and sizes, on the device (the host pack and
     # its two uploads in `_estimate_and_apply`)
-    enqueue_partition_words_u32(ctx, parts, n_leaves, d_p_off, d_p_sz)
+    enqueue_partition_words_u32_from(ctx, part_words, n_leaves, d_p_off, d_p_sz)
     # target, weights and cursor into the partition's row order
     launch_gather_with_mask_f32(ctx, g_target, targets, row_order, n_rows, UInt32(0xFFFFFFFF))
     if has_weights:
@@ -2800,6 +2844,794 @@ def _launch_querywise_pointwise_target(
         raise Error("the pointwise querywise target is missing its grouped state")
 
 
+# ===========================================================================
+# lane t2-trees-on-executor (2026-11-09): THE BOOSTING ROUND ON THE EXECUTOR.
+# docs/plans/EXECUTOR_T1_TREE_OPS.md section 3. The pointwise SymmetricTree
+# round (`use_pointwise_searcher`, the doc-parallel searcher) is one
+# `LoopStep` of `autograd/program_loop_device.mojo`'s `bounded_device_loop`
+# over the tree ops of `gbdt/tree_ops.mojo`: gradients, seed snapshot,
+# bootstrap, the device scale, TREE_OP_SEARCH, TREE_OP_TREE_RECORDS,
+# TREE_OP_LEAF_BINS, TREE_OP_PARTITION, TREE_OP_LEAF_ESTIMATE, TREE_OP_APPLY
+# (learn), then TREE_OP_TREE_RECORDS / TREE_OP_APPLY (held-out),
+# TREE_OP_HELDOUT_LOSS and TREE_OP_OD_STEP as the criterion. Rounds are
+# enqueued `check_every` at a time with one register read per chunk; the
+# structure records, the leaf values, the learn and held-out loss histories
+# and the detector's best iteration come home once, after the loop.
+#
+# What this removes from every round of such a fit (the host loop's pointwise
+# arm, which still serves the fits this path refuses): the scale drain
+# (`mags` read), the searcher's structure drain (`pw.drain`), the host
+# packing and five uploads of the split records (`compute_bins_for_model`),
+# the partition drain (`partition_from_bins`), the estimator's host pack +
+# two uploads of the partition bounds, its walk drains, its tail drain and
+# `h_est` copy, the held-out apply's host packing and six uploads
+# (`_apply_last_tree_to_test`), the held-out loss drain (`_test_loss`) and the
+# host `detector.add_error` / `is_need_stop`: about 5 + iterations drains and
+# 11 uploads per round become one register read per chunk.
+#
+# Bits. One algorithm on every vendor and on the host column (this path runs
+# on any DeviceContext): (1) the leaf sums run in the partition op's order
+# (ascending row id per leaf) instead of the searcher's partition order, and
+# (2) the learn cursor takes `cursor + round(leaf * rate)` (TREE_OP_APPLY,
+# the held-out cursor's and predict's add) instead of `fma(leaf, rate,
+# cursor)` (`add_model_value_kernel`'s IDENTICAL contraction). The fma note
+# of EXECUTOR_T1_TREE_OPS.md section 4 is checked: the two are NOT the same
+# float operation, so the change is taken on every column together. The
+# pointwise-searcher symmetric GBDT identity lanes move.
+#
+# Refused here and kept on the host loop (owed, each needs its own op): the
+# grouped losses (QueryRMSE, PairLogit, YetiRank), the multiclass family and
+# MultiRMSE, the Exact and Simple methods (TREE_OP_LEAF_ESTIMATE has no op for
+# them), more than one permutation (CTR estimation permutations), feature
+# sampling (`feature_fraction < 1`: the projection drains), `random_strength
+# != 0` (the score std dev is a host reduction), an identity trace (per-round
+# host records), a multi-device plan (the shards take the scale as a launch
+# value), the greedy searcher (the DEFAULT SymmetricTree arm
+# `run_tree_layout`, which has no enqueue-only op yet), Depthwise /
+# Lossguide, and the FAST + Apple build (no leaf-op arm there: its own
+# estimator `apple_fast_est`, the SYM_ITER pool and the fused eval stay).
+#
+# A/B: `-D MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF` restores the host loop for these
+# fits until the NVIDIA + AMD board rows are measured (RUN OWED); then the
+# switch goes (the host loop's pointwise arm stays for the refused fits).
+# ===========================================================================
+comptime GBDT_DEVICE_ROUNDS_BUILD = (
+    not (EST_APPLE_ANY or SYM_ITER_ANY or SYM_BUF_ARENA or GBDT_EVAL_FUSED)
+    and not is_defined["MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF"]()
+)
+
+#: Rounds enqueued between two register reads. COST RULE, not a shape: a
+#: round is the searcher's ~15-25 + 6 x depth launches plus ~25 more, i.e.
+#: milliseconds, and a register read is one drain (~0.1-0.3 ms). Rounds
+#: enqueued past the stop recompute round-local scratch for nothing, so a
+#: chunk of C costs at most C - 1 wasted rounds once per stop against n / C
+#: drains. With an active detector (a stop is expected) C = 16 keeps the waste
+#: under 16 rounds and cuts the drains 16x; without one the loop only stops on
+#: a failure or a host-tail round (rare: the walk accepted none of its first
+#: `leaf_estimation_iterations` steps), so C = 128. Both under the 1024 bound
+#: of the fused FAST eval (EXECUTOR_T1_TREE_OPS.md section 3).
+comptime GBDT_ROUNDS_CHUNK_STOPPING = 16
+comptime GBDT_ROUNDS_CHUNK_FREE = 128
+
+
+def _rounds_copy_i32_kernel(
+    src: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+    dst: MutPointer[Int32, MutAnyOrigin],
+):
+    """`dst[i] = src[i]`, one word per thread (the round's structure record
+    into its slot of the fit's structure slab). Integer copy."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        dst.unsafe_store(i, src.unsafe_load(i))
+
+
+def _rounds_copy_f32_kernel(
+    src: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    dst: MutPointer[Float32, MutAnyOrigin],
+):
+    """`dst[i] = src[i]`, one word per thread (the host-tail round's scratch
+    cursor). Bit copy."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        dst.unsafe_store(i, src.unsafe_load(i))
+
+
+def _rounds_copy_u64_kernel(
+    src: MutPointer[UInt64, MutAnyOrigin],
+    n_in: Int32,
+    dst: MutPointer[UInt64, MutAnyOrigin],
+):
+    """`dst[i] = src[i]`, one word per thread (TREE_OP_SEED_SNAPSHOT's
+    snapshot back into the bootstrap seeds before a host-tail round).
+    Integer copy."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        dst.unsafe_store(i, src.unsafe_load(i))
+
+
+def _rounds_blocks(n: Int) -> Int:
+    """Blocks of 256 threads covering `n` words, one word per thread."""
+    var blocks = (n + 255) // 256
+    return blocks if blocks > 0 else 1
+
+
+def _tree_feat_table(
+    ctx: DeviceContext,
+    layout: CompressedIndexLayout,
+    one_hot: List[Bool],
+    n_rows: Int,
+) raises -> DeviceBuffer[DType.uint32]:
+    """The 4-words-per-feature table `(offset * n_rows, mask, shift,
+    one_hot)` TREE_OP_TREE_RECORDS reads, for a compressed index of
+    `n_rows` rows (built as the searcher pool's `d_feat_table` is; one for
+    the learn index, one for the held-out index). Once per fit."""
+    var nf = len(layout.features)
+    var table = List[UInt32]()
+    var have_oh = len(one_hot) == nf
+    for f in range(nf):  # small-loop(nf: feature layout entries, once per fit): the apply records feature table, model structure
+        table.append(UInt32(Int(layout.features[f].offset) * n_rows))
+        table.append(UInt32(layout.features[f].mask))
+        table.append(UInt32(layout.features[f].shift))
+        table.append(UInt32(1) if (have_oh and one_hot[f]) else UInt32(0))
+    if nf == 0:
+        for _ in range(4):  # small-loop(4: one empty table row): a valid buffer for a featureless layout
+            table.append(UInt32(0))
+    var d = ctx.enqueue_create_buffer[DType.uint32](len(table))
+    ctx.enqueue_copy(dst_buf=d, src_ptr=table.unsafe_ptr())
+    ctx.synchronize()
+    _ = table^  # past the drain
+    return d^
+
+
+def sym_device_rounds_eligible(
+    use_pointwise_searcher: Bool,
+    non_symmetric: Bool,
+    perm_count: Int,
+    sampled_features: Bool,
+    random_strength: Float32,
+    trace_enabled: Bool,
+    objective: Int,
+    leaf_estimation_method: Int,
+    approx_dim: Int,
+    multi_device: Bool,
+    n_estimators: Int,
+) -> Bool:
+    """True when the fit's rounds run as one device loop
+    (`fit_sym_rounds_on_device`); the refusals are listed in the block
+    above. A build switch and the fit's options, not a shape: no row,
+    feature or round count decides it."""
+    comptime if not GBDT_DEVICE_ROUNDS_BUILD:
+        return False
+    return (
+        use_pointwise_searcher
+        and not non_symmetric
+        and perm_count == 1
+        and not sampled_features
+        and random_strength == Float32(0.0)
+        and not trace_enabled
+        and not multi_device
+        and n_estimators > 0
+        and tree_op_leaf_estimate_supported(objective, leaf_estimation_method, approx_dim)
+    )
+
+
+@fieldwise_init
+struct SymDeviceRounds(LoopStep, Movable):
+    """One pointwise SymmetricTree boosting round as a step of the
+    executor's bounded loop (the block above). The buffers are handle copies
+    of the fit's (`DeviceBuffer.copy()` shares the memory) or buffers owned
+    for the loop's span; every call below passes at most one `mut` field of
+    `self`, the rest as local handles."""
+
+    var n_rows: Int
+    var max_depth: Int
+    #: `1 << max_depth`: every round's partition, walk and leaf slot width
+    var n_leaves: Int
+    #: `tree_structure_words(max_depth)`
+    var struct_words: Int
+    var objective: Int
+    var alpha: Float32
+    var estimator_alpha: Float32
+    var logloss_border: Float32
+    var l2_leaf_reg: Float32
+    var method: Int
+    var num_classes: Int
+    var iters: Int
+    var learning_rate: Float32
+    var has_weights: Bool
+    var second_order: Bool
+    var mse_blocks: Int
+    var score_function: Int
+    var sm: Int
+    var boot_kind: Int
+    var boot_param: Float32
+    var bootstrap_on: Bool
+    var stat_count: Int
+    #: the build quantizes (`_needs_magnitudes`): the scale is a device word
+    var needs_mags: Bool
+    var has_test: Bool
+    var targets: DeviceBuffer[DType.float32]
+    var weights: DeviceBuffer[DType.float32]
+    var cursor: DeviceBuffer[DType.float32]
+    var stats: DeviceBuffer[DType.float32]
+    var fv_part: DeviceBuffer[DType.float32]
+    var mag_part: DeviceBuffer[DType.float32]
+    var mags: DeviceBuffer[DType.float32]
+    var boot_mag_part: DeviceBuffer[DType.float32]
+    var boot_seeds: DeviceBuffer[DType.uint64]
+    var seed_snapshot: DeviceBuffer[DType.uint64]
+    var cindex: DeviceBuffer[DType.uint32]
+    var layout: CompressedIndexLayout
+    var one_hot: List[Bool]
+    var device_plan: DevicePlan
+    #: the per-tree seed the host loop drew from `noise_rand`, one per round
+    var tree_seeds: List[UInt64]
+    #: the weak target's two planes (`split_stat_planes`, into fixed buffers)
+    var w_plane: DeviceBuffer[DType.float32]
+    var t_plane: DeviceBuffer[DType.float32]
+    #: `(score std dev 0, fixed-point scale)`, the searcher's `std_scale_word`
+    var std_scale: DeviceBuffer[DType.float32]
+    var pw_pool: List[PointwiseTreeWorkspace]
+    var parts: DeviceLeafPartitioner
+    var p_status: DeviceBuffer[DType.int32]
+    var l_status: DeviceBuffer[DType.int32]
+    var leaf_state: LeafEstimateOpState
+    #: every round's unscaled leaves, `n_leaves` per round
+    var leaf_slab: DeviceBuffer[DType.float32]
+    #: the round's leaves times the rate (TREE_OP_APPLY's values)
+    var leaf_scaled: DeviceBuffer[DType.float32]
+    #: every round's structure record, `struct_words` per round
+    var struct_slab: DeviceBuffer[DType.int32]
+    var feat_learn: DeviceBuffer[DType.uint32]
+    var feat_test: DeviceBuffer[DType.uint32]
+    var records_learn: TreeRecords
+    var records_test: TreeRecords
+    var test: Optional[TestArm]
+    #: held-out loss per round, binary64 bit patterns (TREE_OP_HELDOUT_LOSS)
+    var losses_hist: DeviceBuffer[DType.uint64]
+    #: learn `functionValue` per round, read before the round's tree
+    var fv_hist: DeviceBuffer[DType.float32]
+    var od: OdDeviceState
+    #: the host-tail round's estimator pool and scratch cursor
+    var est_ws: List[TEstimationWorkspace]
+    var cursor_scratch: DeviceBuffer[DType.float32]
+    var not_pd_total: Int
+
+    def _front(mut self, ctx: DeviceContext, mut gate: DeviceBuffer[DType.int32], it: Int) raises:
+        """Round `it` up to and including TREE_OP_PARTITION: the gradient
+        pass (the learn loss of the cursor as it stands into
+        `fv_hist[it - 1]`), the seed snapshot and the bootstrap, the
+        fixed-point scale on the device, the planes, the search, the learn
+        records, the leaf bins and the partition, with the structure and
+        partition refusals joined to the loop. The gradient pass, the planes
+        and the search write round-local scratch only (ungated, contract of
+        EXECUTOR_T1_TREE_OPS.md section 1); the snapshot, the bootstrap and
+        every carried op are gated."""
+        var n = self.n_rows
+        var targets = self.targets.copy()
+        var weights = self.weights.copy()
+        var cursor = self.cursor.copy()
+        var stats = self.stats.copy()
+        var fv_part = self.fv_part.copy()
+        var mag_part = self.mag_part.copy()
+        var mags = self.mags.copy()
+        var mags_in = self.needs_mags and not self.bootstrap_on
+        # the host loop's `launch_approximate` arms (second-order planes or not)
+        if self.second_order:
+            launch_approximate[False, True](
+                ctx, self.objective, targets, weights, Int32(n), cursor,
+                Int32(1) if self.has_weights else Int32(0),
+                self.alpha, self.logloss_border,
+                stats, fv_part, Int32(1),
+                mag_part, Int32(1) if mags_in else Int32(0),
+                self.mse_blocks,
+            )
+        else:
+            launch_approximate[False](
+                ctx, self.objective, targets, weights, Int32(n), cursor,
+                Int32(1) if self.has_weights else Int32(0),
+                self.alpha, self.logloss_border,
+                stats, fv_part, Int32(1),
+                mag_part, Int32(1) if mags_in else Int32(0),
+                self.mse_blocks,
+            )
+        # the round's learn loss into its history slot (a round past the stop
+        # writes a slot nobody reads; a restart rewrites it)
+        ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
+            fv_part.unsafe_ptr(), Int32(self.mse_blocks),
+            self.fv_hist.unsafe_ptr() + (it - 1),
+            grid_dim=1, block_dim=256,
+        )
+        if mags_in:
+            ctx.enqueue_function[deterministic_sum_lanes_kernel[2]](
+                mag_part.unsafe_ptr(), Int32(self.mse_blocks), mags.unsafe_ptr(),
+                grid_dim=1, block_dim=256,
+            )
+        if self.bootstrap_on:
+            var seeds = self.boot_seeds.copy()
+            var snapshot = self.seed_snapshot.copy()
+            var boot_mag_part = self.boot_mag_part.copy()
+            tree_op_seed_snapshot(ctx, gate, seeds, snapshot)
+            tree_op_bootstrap(
+                ctx, gate, self.boot_kind, seeds, stats, n, self.boot_param,
+                boot_mag_part, self.needs_mags, self.stat_count,
+            )
+            if self.needs_mags:
+                ctx.enqueue_function[deterministic_sum_lanes_kernel[2]](
+                    boot_mag_part.unsafe_ptr(), Int32(bootstrap_grid_blocks(n)),
+                    mags.unsafe_ptr(),
+                    grid_dim=1, block_dim=256,
+                )
+        var w_plane = self.w_plane.copy()
+        var t_plane = self.t_plane.copy()
+        launch_split_planes_f32(ctx, w_plane, t_plane, stats, n, n)
+        var std_words = List[DeviceBuffer[DType.float32]]()
+        if self.needs_mags:
+            # `choose_scale` on the device (bit for bit, `choose_scale_kernel`)
+            # into word 1 of the searcher's `std_scale_word`; word 0 (the
+            # score std dev) stays 0 (`random_strength == 0` here). Replaces
+            # the host loop's magnitudes drain.
+            var std_scale = self.std_scale.copy()
+            var scale_word = rebind[MutPointer[Float32, MutAnyOrigin]](
+                std_scale.unsafe_ptr().unsafe_offset(1)
+            )
+            ctx.enqueue_function[choose_scale_kernel](  # small-launch(n: a scalar operand of the scale): one thread of control plane reading two magnitudes, no walk
+                mags.unsafe_ptr(), Int32(n), scale_word,
+                grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+            )
+            enqueue_snap_plane_dev(ctx, t_plane, n, scale_word)
+            std_words.append(std_scale^)
+        var no_trace = IdentityTrace.disabled()
+        var no_times = StageTimes()
+        no_times.enabled = False
+        var cindex = self.cindex.copy()
+        var layout = self.layout.copy()
+        var one_hot = self.one_hot.copy()
+        var plan = self.device_plan.copy()
+        var gate_h = gate.copy()
+        # scalars as locals: each call below passes one `mut` field of `self`
+        # and nothing else of `self`
+        var max_depth = self.max_depth
+        var sm = self.sm
+        var score_function = self.score_function
+        var l2 = self.l2_leaf_reg
+        var tree_seed = self.tree_seeds[it - 1]
+        var n_leaves = self.n_leaves
+        # TREE_OP_SEARCH: the level loop and the gate walk, nothing drained.
+        # The pool of one is built on round 1's call (its one setup drain,
+        # once per fit; every later round reuses it).
+        _ = fit_oblivious_tree_structure_traced(
+            ctx, layout, n, max_depth, cindex,
+            w_plane.copy(), t_plane.copy(),
+            sm, Float32(1.0), score_function,
+            self.pw_pool,
+            no_trace, no_times, _tree_tag(it - 1),
+            l2,
+            score_std_dev=Float32(0.0),
+            seed=tree_seed,
+            one_hot=one_hot^,
+            std_scale_word=std_words^,
+            device_plan=plan^,
+            enqueue_only=True,
+            gate=Optional(gate_h^),
+        )
+        var structure = self.pw_pool[0].d_structure.copy()
+        step_fail_joins_loop(ctx, gate, structure, it)
+        var sw = self.struct_words
+        ctx.enqueue_function[_rounds_copy_i32_kernel](  # small-launch(struct_words: the round's structure record): model structure
+            structure.unsafe_ptr(), Int32(sw),
+            self.struct_slab.unsafe_ptr() + (it - 1) * sw,
+            grid_dim=(_rounds_blocks(sw), 1, 1), block_dim=(256, 1, 1),
+        )
+        var feat_learn = self.feat_learn.copy()
+        tree_op_tree_records(ctx, gate, structure, feat_learn, self.records_learn)
+        var bins = self.parts.bins.copy()
+        tree_op_leaf_bins(ctx, gate, structure, self.records_learn, cindex, n, bins)
+        var p_status = self.p_status.copy()
+        tree_op_partition(ctx, gate, self.parts, n, n_leaves, p_status)
+        step_fail_joins_loop(ctx, gate, p_status, it)
+
+    def _leaf_device(mut self, ctx: DeviceContext, mut gate: DeviceBuffer[DType.int32], it: Int) raises:
+        """TREE_OP_LEAF_ESTIMATE into round `it`'s leaf slot and the scaled
+        leaves, its host-tail status joined to the loop."""
+        var nl = self.n_leaves
+        var leaf_out = self.leaf_slab.create_sub_buffer[DType.float32]((it - 1) * nl, nl)
+        var leaf_scaled = self.leaf_scaled.copy()
+        var l_status = self.l_status.copy()
+        var targets = self.targets.copy()
+        var weights = self.weights.copy()
+        var cursor = self.cursor.copy()
+        var rows = self.parts.vals.copy()
+        var words = self.parts.d_part.copy()
+        var has_weights = self.has_weights
+        var objective = self.objective
+        var alpha = self.alpha
+        var estimator_alpha = self.estimator_alpha
+        var logloss_border = self.logloss_border
+        var l2 = self.l2_leaf_reg
+        var method = self.method
+        var num_classes = self.num_classes
+        var iters = self.iters
+        var rate = self.learning_rate
+        tree_op_leaf_estimate(
+            ctx, gate, self.leaf_state, rows^, words^,
+            targets, weights, has_weights, cursor,
+            objective, alpha, estimator_alpha,
+            logloss_border, l2, method,
+            num_classes, iters, rate,
+            leaf_out, leaf_scaled, l_status,
+        )
+        step_fail_joins_loop(ctx, gate, l_status, it)
+
+    def _back(mut self, ctx: DeviceContext, mut gate: DeviceBuffer[DType.int32], it: Int) raises:
+        """The round after its leaves: TREE_OP_APPLY on the learn cursor, then
+        (with a held-out set) the held-out records and apply,
+        TREE_OP_HELDOUT_LOSS and TREE_OP_OD_STEP, the criterion."""
+        var structure = self.pw_pool[0].d_structure.copy()
+        var cindex = self.cindex.copy()
+        var cursor = self.cursor.copy()
+        var leaf_scaled = self.leaf_scaled.copy()
+        var n = self.n_rows
+        tree_op_apply(
+            ctx, gate, structure, self.records_learn, cindex, leaf_scaled,
+            n, cursor, 1, 0, root_adds=True,
+        )
+        if not self.has_test:
+            return
+        var feat_test = self.feat_test.copy()
+        tree_op_tree_records(ctx, gate, structure, feat_test, self.records_test)
+        var t_cindex = self.test.value().cindex.copy()
+        var t_cursor = self.test.value().cursor.copy()
+        var t_rows = self.test.value().n_rows
+        tree_op_apply(
+            ctx, gate, structure, self.records_test, t_cindex, leaf_scaled,
+            t_rows, t_cursor, 1, t_rows,
+        )
+        var losses = self.losses_hist.copy()
+        var objective = self.objective
+        var num_classes = self.num_classes
+        var alpha = self.alpha
+        var logloss_border = self.logloss_border
+        tree_op_heldout_loss(
+            ctx, gate, self.test.value(), objective, num_classes,
+            alpha, logloss_border, 1, losses, it,
+        )
+        od_op_step(ctx, gate, self.od, losses, it)
+
+    def enqueue_step(
+        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
+    ) raises:
+        self._front(ctx, registers.words, it)
+        self._leaf_device(ctx, registers.words, it)
+        self._back(ctx, registers.words, it)
+        loop_lap(ctx, timers, String("tree_round"))
+
+    def raise_failure(mut self, ctx: DeviceContext, code: Int) raises:
+        """After a loop stopped on a failure word: read the structure record
+        and the partition words once and raise by name (the searcher's and
+        `DeviceLeafPartitioner`'s messages)."""
+        var sw = self.struct_words
+        var nl = self.n_leaves
+        var h_struct = ctx.enqueue_create_host_buffer[DType.int32](sw)
+        var h_part = ctx.enqueue_create_host_buffer[DType.int64](2 * nl + 2)
+        var structure = self.pw_pool[0].d_structure.copy()
+        var words = self.parts.d_part.copy()
+        ctx.enqueue_copy(dst_buf=h_struct, src_buf=structure)
+        ctx.enqueue_copy(dst_buf=h_part, src_buf=words)
+        ctx.synchronize()
+        var status = Int(h_struct.unsafe_ptr().unsafe_load(TREE_STRUCT_STATUS))
+        if status > 0:
+            raise Error(
+                "best split is undefined at depth "
+                + String(status - 1)
+                + ": every candidate scored non-finite. Theirs raises the"
+                " same way (`:122`)."
+            )
+        if code == PARTITION_STATUS_OUT_OF_RANGE:
+            raise Error(
+                "DeviceLeafPartitioner: a row fell in a leaf at or above " + String(nl)
+            )
+        if code == PARTITION_STATUS_SIZE_SUM:
+            raise Error(
+                "DeviceLeafPartitioner: leaf sizes sum to "
+                + String(Int(h_part.unsafe_ptr().unsafe_load(2 * nl)))
+                + " for " + String(self.n_rows) + " rows"
+            )
+        raise Error("boosting rounds: tree op failure code " + String(code))
+
+    def run_host_tail_round(mut self, ctx: DeviceContext, it: Int) raises -> Bool:
+        """Round `it` with the host-driven estimator: the walk of the device
+        loop's round `it` accepted none of its first `iters` evaluations, so
+        `_estimate_and_apply` (whose walk owns the never-accepted tail) gives
+        its leaves. Every other op is the loop's, on a fresh register block;
+        the estimator's own cursor add goes to a scratch copy and the learn
+        cursor takes TREE_OP_APPLY's add, so every round of the fit updates
+        the cursor with one arithmetic. The caller restored the seeds first.
+        Returns True when the detector stops the fit at this round."""
+        var regs = LoopRegisters(ctx)
+        regs.reset(ctx)
+        self._front(ctx, regs.words, it)
+        var sw = self.struct_words
+        var nl = self.n_leaves
+        var h_struct = ctx.enqueue_create_host_buffer[DType.int32](sw)
+        var h_part = ctx.enqueue_create_host_buffer[DType.int64](2 * nl + 2)
+        var h_leaf = ctx.enqueue_create_host_buffer[DType.float32](nl)
+        var h_scaled = ctx.enqueue_create_host_buffer[DType.float32](nl)
+        var structure = self.pw_pool[0].d_structure.copy()
+        var words = self.parts.d_part.copy()
+        ctx.enqueue_copy(dst_buf=h_struct, src_buf=structure)
+        ctx.enqueue_copy(dst_buf=h_part, src_buf=words)
+        regs.read(ctx)
+        var code = regs.failure()
+        if code != 0:
+            self.raise_failure(ctx, code)
+        var depth = Int(h_struct.unsafe_ptr().unsafe_load(TREE_STRUCT_DEPTH))
+        var tree_leaves = 1 << depth
+        var hp = h_part.unsafe_ptr()
+        var offsets = List[Int]()
+        var sizes = List[Int]()
+        for leaf in range(tree_leaves):  # small-loop(tree_leaves: the tree's leaves, model structure): the partition bounds the host estimator takes
+            offsets.append(Int(hp.unsafe_load(leaf)))
+            sizes.append(Int(hp.unsafe_load(nl + leaf)))
+        var cursor = self.cursor.copy()
+        var scratch = self.cursor_scratch.copy()
+        ctx.enqueue_function[_rounds_copy_f32_kernel](
+            cursor.unsafe_ptr(), Int32(self.n_rows), scratch.unsafe_ptr(),
+            grid_dim=(_rounds_blocks(self.n_rows), 1, 1), block_dim=(256, 1, 1),
+        )
+        var rows = self.parts.vals.copy()
+        var targets = self.targets.copy()
+        var weights = self.weights.copy()
+        var values = List[Float32]()
+        var not_pd = 0
+        var no_trace = IdentityTrace.disabled()
+        var no_times = StageTimes()
+        no_times.enabled = False
+        var n_rows = self.n_rows
+        var has_weights = self.has_weights
+        var objective = self.objective
+        var alpha = self.alpha
+        var estimator_alpha = self.estimator_alpha
+        var logloss_border = self.logloss_border
+        var l2 = self.l2_leaf_reg
+        var sm = self.sm
+        var method = self.method
+        var num_classes = self.num_classes
+        var iters = self.iters
+        var rate = self.learning_rate
+        _estimate_and_apply(
+            ctx, n_rows, 1, tree_leaves, sizes, offsets, rows,
+            targets, weights, has_weights, scratch,
+            objective, alpha, estimator_alpha,
+            logloss_border, l2, sm, method,
+            num_classes, iters, rate,
+            values, not_pd, no_trace, no_times,
+            _tree_tag(it - 1) + ".leaves.estimated",
+            self.est_ws,
+        )
+        self.not_pd_total += not_pd
+        var lp = h_leaf.unsafe_ptr()
+        var sp = h_scaled.unsafe_ptr()
+        for i in range(nl):  # small-loop(n_leaves: the tree's leaves, model structure): the host estimate into the round's leaf slot
+            var v = Float32(0.0)
+            if i < len(values):
+                v = values[i]
+            lp.unsafe_store(i, v)
+            # the model's rescale (`weak.leaf_values` = leaf x rate), one
+            # correctly rounded float product: `_leaf_out_gated_kernel`'s
+            sp.unsafe_store(i, v * self.learning_rate)
+        var leaf_out = self.leaf_slab.create_sub_buffer[DType.float32]((it - 1) * nl, nl)
+        var leaf_scaled = self.leaf_scaled.copy()
+        ctx.enqueue_copy(dst_buf=leaf_out, src_buf=h_leaf)
+        ctx.enqueue_copy(dst_buf=leaf_scaled, src_buf=h_scaled)
+        self._back(ctx, regs.words, it)
+        regs.read(ctx)
+        _ = h_leaf^  # past the drain
+        _ = h_scaled^
+        _ = h_struct^
+        _ = h_part^
+        return regs.word(STEP_DONE) != 0
+
+
+def fit_sym_rounds_on_device(
+    ctx: DeviceContext,
+    mut model: TAdditiveModel,
+    mut test: Optional[TestArm],
+    mut detector: OverfittingDetector,
+    mut losses: List[Float64],
+    mut test_losses: List[Float64],
+    mut not_pd_total: Int,
+    n_rows: Int,
+    n_estimators: Int,
+    max_depth: Int,
+    layout: CompressedIndexLayout,
+    one_hot: List[Bool],
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut targets: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool,
+    mut cursor: DeviceBuffer[DType.float32],
+    mut stats: DeviceBuffer[DType.float32],
+    mut fv_part: DeviceBuffer[DType.float32],
+    mut mag_part: DeviceBuffer[DType.float32],
+    mut mags: DeviceBuffer[DType.float32],
+    mut boot_mag_part: DeviceBuffer[DType.float32],
+    mut boot_seeds: DeviceBuffer[DType.uint64],
+    objective: Int,
+    alpha: Float32,
+    estimator_alpha: Float32,
+    logloss_border: Float32,
+    l2_leaf_reg: Float32,
+    leaf_estimation_method: Int,
+    num_classes: Int,
+    leaf_estimation_iterations: Int,
+    learning_rate: Float32,
+    second_order: Bool,
+    mse_blocks: Int,
+    score_function: Int,
+    sm: Int,
+    boot_kind: Int,
+    boot_param: Float32,
+    bootstrap_on: Bool,
+    stat_count: Int,
+    needs_mags: Bool,
+    loss_norm: Float64,
+    device_plan: DevicePlan,
+    var tree_seeds: List[UInt64],
+) raises -> Bool:
+    """The rounds of a `sym_device_rounds_eligible` fit as one executor loop
+    (the block above), then the model, the learn losses in the host loop's
+    shape, the held-out losses and the detector's best iteration from one
+    download. Returns True when the detector stopped the fit early.
+
+    The host-tail rerun (EXECUTOR_T1_TREE_OPS.md section 3): when round `s`
+    stops the loop with LEAF_STATUS_HOST_TAIL, every carried op of round `s`
+    after the leaf op and every op of the later rounds was gated off, so the
+    cursors, the histories and the detector are round `s - 1`'s; the seeds
+    come back from the snapshot, round `s` runs with the host estimator
+    (`SymDeviceRounds.run_host_tail_round`) and the loop restarts at `s + 1`.
+    """
+    var nl = 1 << max_depth
+    var sw = tree_structure_words(max_depth)
+    var has_test = test.__bool__() and test.value().n_rows > 0
+    var t_rows = test.value().n_rows if has_test else 1
+    var seed_snapshot = ctx.enqueue_create_buffer[DType.uint64](len(boot_seeds))
+    var std_scale = ctx.enqueue_create_buffer[DType.float32](2)
+    enqueue_fill(ctx, std_scale, Float32(0.0))
+    var od = OdDeviceState(ctx)
+    if has_test:
+        od_op_init(ctx, od, detector)
+    var p_status = ctx.enqueue_create_buffer[DType.int32](1)
+    var l_status = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill(ctx, p_status, Int32(0))
+    enqueue_fill(ctx, l_status, Int32(0))
+    var arm = Optional[TestArm]()
+    if test:
+        arm = Optional(test.take())
+    var step = SymDeviceRounds(
+        n_rows, max_depth, nl, sw, objective, alpha, estimator_alpha,
+        logloss_border, l2_leaf_reg, leaf_estimation_method, num_classes,
+        leaf_estimation_iterations, learning_rate, has_weights, second_order,
+        mse_blocks, score_function, sm if sm > 0 else 1, boot_kind, boot_param,
+        bootstrap_on, stat_count, needs_mags, has_test,
+        targets.copy(), weights.copy(), cursor.copy(), stats.copy(),
+        fv_part.copy(), mag_part.copy(), mags.copy(), boot_mag_part.copy(),
+        boot_seeds.copy(), seed_snapshot^, cindex.copy(),
+        layout.copy(), one_hot.copy(), device_plan.copy(), tree_seeds^,
+        ctx.enqueue_create_buffer[DType.float32](n_rows),
+        ctx.enqueue_create_buffer[DType.float32](n_rows),
+        std_scale^,
+        List[PointwiseTreeWorkspace](),
+        DeviceLeafPartitioner(ctx, n_rows, nl),
+        p_status^, l_status^,
+        LeafEstimateOpState(ctx, n_rows, nl, sm),
+        ctx.enqueue_create_buffer[DType.float32](n_estimators * nl),
+        ctx.enqueue_create_buffer[DType.float32](nl),
+        ctx.enqueue_create_buffer[DType.int32](n_estimators * sw),
+        _tree_feat_table(ctx, layout, one_hot, n_rows),
+        _tree_feat_table(ctx, layout, one_hot, t_rows),
+        TreeRecords(ctx, max_depth),
+        TreeRecords(ctx, max_depth),
+        arm^,
+        ctx.enqueue_create_buffer[DType.uint64](n_estimators),
+        ctx.enqueue_create_buffer[DType.float32](n_estimators),
+        od^,
+        List[TEstimationWorkspace](),
+        ctx.enqueue_create_buffer[DType.float32](n_rows),
+        0,
+    )
+    var chunk = GBDT_ROUNDS_CHUNK_STOPPING if (has_test and detector.is_active()) else GBDT_ROUNDS_CHUNK_FREE
+    var registers = LoopRegisters(ctx)
+    var timers = LoopTimers(String("gbdt.rounds"))
+    var rounds = n_estimators
+    var stopped = False
+    var first = 1
+    while first <= n_estimators:  # driver-loop: over host-tail restarts of the round loop (each restart starts past a rerun round)
+        var outcome = bounded_device_loop(ctx, step, registers, first, n_estimators, chunk, timers)
+        if not outcome.converged:
+            break
+        var s = outcome.stop_iteration
+        var code = registers.failure()
+        if code == LEAF_STATUS_HOST_TAIL:
+            if bootstrap_on:
+                var snap = step.seed_snapshot.copy()
+                var seeds = step.boot_seeds.copy()
+                ctx.enqueue_function[_rounds_copy_u64_kernel](
+                    snap.unsafe_ptr(), Int32(len(seeds)), seeds.unsafe_ptr(),
+                    grid_dim=(_rounds_blocks(len(seeds)), 1, 1), block_dim=(256, 1, 1),
+                )
+            if step.run_host_tail_round(ctx, s):
+                rounds = s
+                stopped = True
+                break
+            first = s + 1
+            continue
+        if code != 0:
+            step.raise_failure(ctx, code)
+        # the detector's stop: round `s`'s tree is kept, as the host `break`
+        rounds = s
+        stopped = True
+        break
+    timers.report()
+
+    # ---- the one download: structures, leaves, histories, best iteration ----
+    var h_struct = ctx.enqueue_create_host_buffer[DType.int32](rounds * sw)
+    var h_leaf = ctx.enqueue_create_host_buffer[DType.float32](rounds * nl)
+    var h_fv = ctx.enqueue_create_host_buffer[DType.float32](rounds)
+    var h_losses = ctx.enqueue_create_host_buffer[DType.uint64](rounds)
+    var h_od = ctx.enqueue_create_host_buffer[DType.uint64](OD_DEVICE_WORDS)
+    ctx.enqueue_copy(dst_buf=h_struct, src_buf=step.struct_slab.create_sub_buffer[DType.int32](0, rounds * sw))
+    ctx.enqueue_copy(dst_buf=h_leaf, src_buf=step.leaf_slab.create_sub_buffer[DType.float32](0, rounds * nl))
+    ctx.enqueue_copy(dst_buf=h_fv, src_buf=step.fv_hist.create_sub_buffer[DType.float32](0, rounds))
+    if has_test:
+        ctx.enqueue_copy(dst_buf=h_losses, src_buf=step.losses_hist.create_sub_buffer[DType.uint64](0, rounds))
+        ctx.enqueue_copy(dst_buf=h_od, src_buf=step.od.words)
+    ctx.synchronize()
+    not_pd_total += step.not_pd_total
+
+    var hs = h_struct.unsafe_ptr()
+    var hl = h_leaf.unsafe_ptr()
+    for r in range(rounds):  # small-loop(rounds: the committed trees, model structure): the one download of the fit becomes the host model
+        var base = r * sw
+        var depth = Int(hs.unsafe_load(base + TREE_STRUCT_DEPTH))
+        var structure = TObliviousTreeStructure()
+        for k in range(depth):  # small-loop(depth: tree levels, at most 16): the structure record becomes the split list
+            var at = base + TREE_STRUCT_SPLITS + TREE_STRUCT_SPLIT_WORDS * k
+            structure.splits.append(
+                TBinarySplit(hs.unsafe_load(at), hs.unsafe_load(at + 1), hs.unsafe_load(at + 2))
+            )
+        var weak = TObliviousTreeModel(structure^)
+        weak.dim = 1
+        # DEVIATION 256's host rescale, as the host loop stores it
+        for i in range(1 << depth):  # small-loop(depth: tree levels, the tree has 1 << depth leaves): the stored leaf values of the host model
+            weak.leaf_values.append(hl.unsafe_load(r * nl + i) * learning_rate)
+        model.add_weak_model(weak^)
+
+    # the host loop's learn losses: round i (0-based) contributes the loss
+    # before its tree when at least one tree precedes it, and the stopping
+    # round contributes none (its `break` comes first); the final loss is the
+    # caller's one pass after the rounds
+    var last_i = rounds - 2 if stopped else rounds - 1
+    var hf = h_fv.unsafe_ptr()
+    for i in range(1, last_i + 1):  # small-loop(last_i: the committed trees, one loss word each): the fit result loss history
+        losses.append(-Float64(hf.unsafe_load(i)) / loss_norm)
+    if has_test:
+        var hb = h_losses.unsafe_ptr()
+        for r in range(rounds):  # small-loop(rounds: the committed trees, one loss word each): the fit result held-out history
+            test_losses.append(bitcast[DType.float64](hb.unsafe_load(r)))
+        detector.best_iteration = Int(h_od.unsafe_ptr().unsafe_load(OD_W_BEST_ITERATION))
+    if step.test:
+        test = Optional(step.test.take())
+    _ = h_struct^  # past the drain
+    _ = h_leaf^
+    _ = h_fv^
+    _ = h_losses^
+    _ = h_od^
+    return stopped
+
+
 def fit_with_test(
     mut model: TAdditiveModel,
     ctx: DeviceContext,
@@ -3604,7 +4436,37 @@ def fit_with_test(
     var has_deferred_tree = False
     # TOMBSTONE: MOJOLEARN_EST_SHRINK_FUSED (DROPPED-inconclusive) deleted 2026-10-09 on lane/owed-deletions-D1 (the
     # fused next-tree derivative pass); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_EST_SHRINK_FUSED.patch.
-    for iteration in range(n_estimators):
+    # lane t2-trees-on-executor: a `sym_device_rounds_eligible` fit runs every
+    # round as one executor loop (`fit_sym_rounds_on_device`, the block above
+    # it) and the host loop below runs zero iterations; every other fit takes
+    # the host loop as before.
+    var device_rounds = sym_device_rounds_eligible(
+        use_pointwise_searcher, non_symmetric, perm_count,
+        feature_fraction < 1, random_strength, trace.enabled, objective,
+        leaf_estimation_method, approx_dim, not device_plan.single(),
+        n_estimators,
+    )
+    if device_rounds:
+        # the host loop's one `noise_rand` draw per tree, in tree order (a
+        # serial RNG chain: each draw is the previous state's successor)
+        var tree_seeds = List[UInt64]()
+        for _ in range(n_estimators):  # driver-loop: over the trees' searcher seeds (one serial RNG draw each)
+            tree_seeds.append(noise_rand.next_uniform_l())
+        var needs_mags = False
+        comptime if _needs_magnitudes:
+            needs_mags = True
+        stopped_early = fit_sym_rounds_on_device(
+            ctx, model, test, detector, losses, test_losses, not_pd_total,
+            n_rows, n_estimators, max_depth, layout_for_test, one_hot,
+            cindex, targets, weights, has_weights, cursor, stats, fv_part,
+            mag_part, mags, boot_mag_part, boot_seeds,
+            objective, alpha, estimator_alpha, logloss_border, l2_leaf_reg,
+            leaf_estimation_method, num_classes, leaf_estimation_iterations,
+            learning_rate, second_order, mse_blocks, score_function,
+            est_sm, boot_kind, boot_param, bootstrap_on, stat_count,
+            needs_mags, loss_norm, device_plan, tree_seeds^,
+        )
+    for iteration in range(0 if device_rounds else n_estimators):
         var t_grad = loop_times.start()
         # ---- which permutation the STRUCTURE is searched on ----------
         #

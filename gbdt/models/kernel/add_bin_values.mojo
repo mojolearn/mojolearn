@@ -387,16 +387,19 @@ def compute_bins_and_add_gated_kernel(
     cursor: MutPointer[Float32, MutAnyOrigin],
     dim_count_in: Int32,
     cursor_stride_in: Int32,
+    root_adds: Int32,
 ):
     """Tree op TREE_OP_APPLY: `compute_bins_and_add_kernel` unchanged (the
     same leaf index, the same one add per row and dimension), depth from a
     device word, behind the gate: the cursor is carried state. A depth-0
-    tree adds nothing, as the host apply skips it
-    (`_apply_last_tree_to_test`)."""
+    tree adds nothing when `root_adds` is 0, as the held-out apply skips it
+    (`_apply_last_tree_to_test`); with `root_adds` 1 (the learn cursor,
+    lane t2-trees-on-executor) it adds its one leaf to every row, as the
+    learn cursor's estimator apply always did."""
     if gate.unsafe_load(0) != Int32(0):
         return
     var depth = depth_word.unsafe_load(0)
-    if depth <= Int32(0):
+    if depth < Int32(0) or (depth == Int32(0) and root_adds == Int32(0)):
         return
     compute_bins_and_add_kernel(
         compressed_index, feature_offset, feature_shift, feature_mask,

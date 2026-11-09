@@ -260,12 +260,15 @@ def tree_op_apply(
     mut cursor: DeviceBuffer[DType.float32],
     approx_dim: Int,
     cursor_stride: Int,
+    root_adds: Bool = False,
 ) raises:
     """Tree op TREE_OP_APPLY (the tree gather): `cursor[d * stride + i] +=
     leaf_values[leaf(i) * approx_dim + d]` for every row, the launch of
     `_apply_last_tree_to_test` (grid `min(ceil(n / 256), 1024)` x
     approx_dim). `leaf_values` already carry the learning rate. The cursor
-    is carried state, so the add is behind the gate. Enqueue only."""
+    is carried state, so the add is behind the gate. `root_adds`: a depth-0
+    tree adds its one leaf (the learn cursor) instead of nothing (the
+    held-out cursor, as `_apply_last_tree_to_test`). Enqueue only."""
     var wide = (n_rows + TREE_APPLY_BLOCK - 1) // TREE_APPLY_BLOCK
     if wide > 1024:
         wide = 1024
@@ -286,6 +289,7 @@ def tree_op_apply(
         cursor.unsafe_ptr(),
         Int32(approx_dim),
         Int32(cursor_stride),
+        Int32(1) if root_adds else Int32(0),
         grid_dim=(wide, approx_dim, 1),
         block_dim=(TREE_APPLY_BLOCK, 1, 1),
     )
