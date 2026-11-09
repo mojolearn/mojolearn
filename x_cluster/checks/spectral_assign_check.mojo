@@ -21,7 +21,7 @@ from core.identity_trace import IdentityTrace
 from x_cluster.checks.oracles import oracle_jacobi_svd
 from x_cluster.checks.seam_util import require_equal, require_separates, seam_fixture
 from x_cluster.spectral_assign import cluster_qr_labels, jacobi_svd
-from x_cluster.spectral_df64 import discretize_df64_host
+from x_cluster.host.spectral_df64_host import discretize_df64_host
 
 
 def _diff64(a: List[Float64], b: List[Float64]) -> Int:

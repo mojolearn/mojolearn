@@ -23,7 +23,7 @@ from std.sys.compile import is_defined
 from checks.numerics import ftz, identical_div, identical_mul
 from x_cluster.minibatch_cells import mb_center_update, mb_wdraw_cell
 from x_cluster.optics_xi_cells import optics_xi_host
-from x_cluster.spectral_df64 import discretize_df64_host
+from x_cluster.host.spectral_df64_host import discretize_df64_host
 from cluster.host.host_cells import ftz_v, host_cells, mul_v
 from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
 
