@@ -20,6 +20,7 @@ from x_ann.ivf_pq_core import pq_len_of
 from x_ann.abi import out_f32_to, out_i32_to
 from x_ann.host.cagra_host import cagra_build_host, cagra_search_host
 from x_ann.host.tsne_host import tsne_fit_host
+from core.host_finite_scan import host_all_finite_f32
 from x_ann.host.ivf_pq_host import X_ANN_HOST_SABOTAGE, ivf_pq_build_host, ivf_pq_search_host, ivf_sq_build_host, ivf_sq_search_host, refine_host, ivf_rabitq_build_host, ivf_rabitq_search_host
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 
@@ -91,7 +92,9 @@ def tsne_fit_binding(addrs: PythonObject, params: PythonObject) raises -> Python
     (lane apple-fast-py2mojo-cluster: mode 1 random, 2 the PCA embedding in y0 scaled,
     x_ann/tsne_init.mojo; 0 or absent y0 as given). release-0845: the factor is params[7] and the
     init tail moved from 7..9 to 8..10. Lane sk-kernels: an optional params[11], n_components
-    (1 or 2, default 2); at 1, y0 and y_out hold n floats (`tsne_init_y0`)."""
+    (1 or 2, default 2); at 1, y0 and y_out hold n floats (`tsne_init_y0`). Lane a8d: an
+    optional params[12] finite flag, as the GPU binding's: the CPU column scans its own copy
+    of X (the parallel host scan) and returns [n, status word]; a flagged X is not fit."""
     var n = p_int(params, 0)
     var d = p_int(params, 1)
     var max_iter = p_int(params, 2)
@@ -109,10 +112,18 @@ def tsne_fit_binding(addrs: PythonObject, params: PythonObject) raises -> Python
     var y0 = tsne_init_y0(
         mode, in_f32(addrs, 1, n * k) if mode != TSNE_INIT_RANDOM else List[Float32](), n, seed, k
     )
+    var test = len(params) > 12 and p_int(params, 12) != 0
+    if test and not host_all_finite_f32(
+            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(x.unsafe_ptr())), n * d):
+        return Python.list(PythonObject(n), PythonObject(1))
     var y = List[Float32]()
     var kl = Float32(0.0)
     with GILReleased(Python()):
         tsne_fit_host(x, n, d, y0, perplexity, exaggeration, lr, post_factor, max_iter, exploration, y, kl)
+    if test:
+        out_f32(tsne_first_components(y, n, k), addrs, 2)
+        out_f32([kl], addrs, 3)
+        return Python.list(PythonObject(n), PythonObject(0))
     out_f32(tsne_first_components(y, n, k), addrs, 2)
     out_f32([kl], addrs, 3)
     return PythonObject(n)
