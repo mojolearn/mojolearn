@@ -21,7 +21,7 @@
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.admitted_family import admit_family, admit_family_meta, admit_family_weights
+from bindings.admitted_family import admit_family, admit_family_meta, admit_family_weights, admit_family_fold_meta
 from bindings.native_caller_frame import native_frame_globals
 from bindings.native_loaded_module import native_loaded_module
 from bindings.trees_side_records import trees_side_get, trees_side_put
@@ -29,7 +29,7 @@ from bindings.classical_validate import classical_view
 from bindings.classical_warnings import classical_warning
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_bool
 from bindings.host_inference_scalars import host_inference_primitive_number
-from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_FLOAT, NPY_FLOAT, CastIn
+from core.cast_in import CAST_KIND_SIGNED
 from core.host_finite_scan import host_all_finite_f32_strided
 from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse, admit_rows_host_unchecked
 from bindings.device_rows_door import DoorRowsStore, door_is_device_rows, door_rows_refuse
@@ -540,13 +540,6 @@ def _krr_predict_fold(fields: PythonObject, args: PythonObject, context: PythonO
     _ = x_fit_meta^
     _ = dual_meta^
     return out
-
-
-def _km_fold_metadata(rows: Int, cols: Int) raises -> ArrayMetadata:
-    """The shape record of a device fold (no host words: address 0), for
-    the dispatcher's shape and refusal reads (lane a7a)."""
-    return ArrayMetadata(PythonObject(None), [rows, cols], CastIn(0, CAST_KIND_FLOAT, 4, rows, cols, cols * 4, 4),
-                         rows * cols, NPY_FLOAT, True, True, False, PythonObject(None), False)
 
 
 def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
@@ -1205,7 +1198,7 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
         var fx = admit_x_unrecorded(args[1], "KernelRidge", context, device_x=True, finite=False)
         fold = fx.store
         if fold.active():
-            x = _km_fold_metadata(fx.rows, fx.cols)
+            x = admit_family_fold_meta(fx.rows, fx.cols)
         else:
             x = admit_family_meta(fx.array, 2, "X", context, True)
     else:

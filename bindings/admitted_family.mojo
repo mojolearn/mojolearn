@@ -274,6 +274,14 @@ def admit_family(source: PythonObject, ndim: Int, name: String, context: PythonO
     return admitted_family_x(snapshot, source, finite and not (defer_finite and not snapshot.copied))
 
 
+def admit_family_fold_meta(rows: Int, cols: Int) raises -> ArrayMetadata:
+    """The shape record of a cross-validation fold a device kernel entry
+    gathers itself (no host words: address 0), for a family door's shape
+    and refusal reads (lanes a7a, a8a). Never read its words."""
+    return ArrayMetadata(PythonObject(None), [rows, cols], CastIn(0, CAST_KIND_FLOAT, 4, rows, cols, cols * 4, 4),
+                         rows * cols, NPY_FLOAT, True, True, False, PythonObject(None), False)
+
+
 def admit_family_copied(snapshot: ArrayMetadata, source: PythonObject) raises -> Bool:
     """The `input_copied_` flag of a fitted SVM: the admission copied the
     words, or the input was a Python list, tuple or range (always built
