@@ -668,7 +668,7 @@ def td_solve_enqueue(
     return (in stream order) w holds the eigenvalues ascending, z (n x n)
     the unit vectors in columns (not sign flipped), info[2] != 0 a refusal;
     `info` (4 floats) must be zeroed and wh, wl hold n floats. Shared by
-    `eigh_td_on` and the executor op x_decomp/eigh_ops.mojo
+    `eigh_td_enqueue` and the executor op x_decomp/eigh_ops.mojo
     `eigh_op_tridiag`; the twisted factorization's D+ / D- scratch (4 n^2
     floats) is released in stream order."""
     var g = _td_grid(n, TD_EIG_TPB)
@@ -695,18 +695,28 @@ def td_solve_enqueue(
     _ = dml^
 
 
-def eigh_td_on(
+def eigh_td_enqueue(
     ctx: DeviceContext,
     mut da: DeviceBuffer[DType.float32],
     n: Int,
     mut dz: DeviceBuffer[DType.float32],
     mut dw: DeviceBuffer[DType.float32],
-) raises -> Bool:
+    mut dinfo: DeviceBuffer[DType.float32],
+) raises:
     """The four stages on the symmetric n x n matrix in `da` (overwritten:
-    reflectors below the diagonal). On True, dw (n) holds the eigenvalues
-    ascending and dz (n x n) the unit eigenvectors in COLUMNS (not yet sign
-    flipped). False: refused (see the module note); dz / dw undefined.
-    n >= 2."""
+    reflectors below the diagonal), ENQUEUED: nothing is read back. In
+    stream order dw (n) holds the eigenvalues ascending and dz (n x n) the
+    unit eigenvectors in COLUMNS (not yet sign flipped), unless dinfo[2]
+    != 0: refused (see the module note), dz / dw undefined, and the caller
+    takes its fallback on the device (x_decomp/eigh_ops.mojo
+    `eigh_op_sym`). `dinfo` holds 4 floats (zeroed here). n >= 2.
+
+    Lane n9-decomp-eigh-families (2026-11-09): this was `eigh_td_on`,
+    which read dinfo home after stage 3 and returned the refusal as a Bool
+    (one drain per solve); the back-transform now runs whatever the
+    refusal word says (its O(n^3) is wasted only on a refusal) so the
+    choice is the device's. The TD_SYNC_PANELS waits stay: they read
+    nothing and only bound a command buffer's length."""
     var nref = n - 1
     var dV = ctx.enqueue_create_buffer[DType.float32](n * TD_NB)
     var dW = ctx.enqueue_create_buffer[DType.float32](n * TD_NB)
@@ -816,7 +826,6 @@ def eigh_td_on(
         if panel % TD_SYNC_PANELS == 0:
             ctx.synchronize()
     # 2. eigenvalues
-    var dinfo = ctx.enqueue_create_buffer[DType.float32](4)
     enqueue_fill(ctx, dinfo, Float32(0.0))
     var dwh = ctx.enqueue_create_buffer[DType.float32](n)
     var dwl = ctx.enqueue_create_buffer[DType.float32](n)
@@ -824,32 +833,6 @@ def eigh_td_on(
     # the executor's tridiagonal op's launches, `td_solve_enqueue`; the
     # drain between them read nothing and is gone)
     td_solve_enqueue(ctx, ddd, dee, dinfo, dwh, dwl, dw, dz, n)
-    var hinfo = ctx.enqueue_create_host_buffer[DType.float32](4)
-    ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
-    ctx.synchronize()
-    var refused = hinfo.unsafe_ptr().unsafe_load(2) != Float32(0.0)
-    if refused:
-        _ = dP1^
-        _ = dP2^
-        _ = dws^
-        _ = dgw^
-        _ = dV^
-        _ = dW^
-        _ = dvv^
-        _ = dy^
-        _ = dtv^
-        _ = dtau^
-        _ = ddd^
-        _ = dee^
-        _ = dx^
-        _ = dpb^
-        _ = dpart^
-        _ = dpart2^
-        _ = dinfo^
-        _ = dwh^
-        _ = dwl^
-        _ = hinfo^
-        return False
     # 4. V = Q Z
     var dS = ctx.enqueue_create_buffer[DType.float32](1 if EIGH_TD_IDN else TD_KSPLIT * TD_NB * n)
     var dS2 = ctx.enqueue_create_buffer[DType.float32](TD_NB * n)
@@ -917,7 +900,7 @@ def eigh_td_on(
         if done % TD_SYNC_PANELS == 0:
             ctx.synchronize()
         p -= 1
-    ctx.synchronize()
+    # the scratch below is released in stream order (no closing drain)
     _ = dS^
     _ = dS2^
     _ = dY^
@@ -940,8 +923,5 @@ def eigh_td_on(
     _ = dpb^
     _ = dpart^
     _ = dpart2^
-    _ = dinfo^
     _ = dwh^
     _ = dwl^
-    _ = hinfo^
-    return True

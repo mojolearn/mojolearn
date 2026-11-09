@@ -13,6 +13,17 @@ Two ops, one algorithm each on every column (NVIDIA, AMD, Apple, the host):
                      device), after the power-of-two range scale
                      (x_decomp/eigh_scale.mojo). Host twin:
                      `host_eigh_rr_sorted`, problem by problem.
+  `eigh_op_sym`      ONE dense symmetric n x n problem by the route
+                     `DevExec.eigh` always took (lane n9-decomp-eigh-families,
+                     2026-11-09): from n = TD_MIN_N (on the tridiagonal
+                     route: IDENTICAL everywhere, FAST Apple) the Householder
+                     tridiagonalization, bisection and twisted vectors on a
+                     copy, the Jacobi of the input enqueued behind it and
+                     skipped unless that solve refused, one commit kernel;
+                     below TD_MIN_N `eigh_op_dense` with a batch of one.
+                     Host twin: `eigh_op_sym_host` (`HostExec.eigh`'s
+                     route). The same words `DevExec.eigh` gave before, with
+                     no wait inside: every resident family's dense solve.
   `eigh_op_tridiag`  one symmetric tridiagonal T (diagonal d, off-diagonal
                      e; a Lanczos or Householder T): Sturm bisection in df64
                      and twisted-factorization vectors
@@ -56,8 +67,10 @@ from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
 from decomposition.spectrum_order_device import enqueue_eigh_ascending
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale
-from x_decomp.eigh_tridiag import td_solve_enqueue
+from x_decomp.eigh_tridiag import EIGH_TRIDIAG_ROUTE, eigh_td_enqueue, td_copy_kernel, td_solve_enqueue
+from x_decomp.eigh_tridiag_cells import TD_MIN_N
 from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB
+from x_decomp.rr_block import IDN_EIGH_BLOCK, rb_use
 from x_decomp.rr_batch import rr_batch_gated_kernel, rrb_cs_len, rrb_part_len
 
 comptime EO_TPB = 256
@@ -339,3 +352,107 @@ def eigh_op_status_joins_loop(
     (`LoopRegisters.failure()` holds the count). Enqueue it right after the
     op."""
     step_fail_joins_loop(ctx, words, status, it)
+
+
+def eigh_op_sym(
+    ctx: DeviceContext,
+    mut gate: DeviceBuffer[DType.int32],
+    mut a: DeviceBuffer[DType.float32],
+    mut w: DeviceBuffer[DType.float32],
+    mut v: DeviceBuffer[DType.float32],
+    mut status: DeviceBuffer[DType.int32],
+    n: Int,
+) raises:
+    """ONE dense symmetric n x n problem in `a` (row major, both triangles;
+    CONSUMED) into w (n, ascending) and v (n x n, eigenvector c in column
+    c, sign-flipped), status[0] = 1 when no route holds (0: the answer
+    holds). Enqueued only; w, v and status are written only while the gate
+    is open.
+
+    The route is `DevExec.eigh`'s (so its words): on the tridiagonal route
+    (EIGH_TRIDIAG_ROUTE) from n = TD_MIN_N, `eigh_td_enqueue` on a copy of
+    `a` after the power-of-two range scale, then the sign flip, the
+    ascending order and the unscale; the batched Jacobi of `a` itself is
+    enqueued behind it with its blocks skipped unless the tridiagonal
+    solve refused (`eo_fallback_skip_kernel`), and `eo_tridiag_commit_kernel`
+    takes the answer that holds. Below TD_MIN_N (or off the route) it is
+    `eigh_op_dense` with a batch of one: the one-block round-robin Jacobi,
+    the same words as the per-round multi-block launches it replaces
+    (x_decomp/rr_batch.mojo header)."""
+    if n < 1:
+        raise Error("eigh_op_sym: n must be positive, got " + String(n))
+    var nn = n * n
+    if len(a) < nn or len(w) < n or len(v) < nn or len(status) < 1:
+        raise Error("eigh_op_sym: a buffer is shorter than n = " + String(n))
+    comptime if IDN_EIGH_BLOCK:
+        # the quarantined block Jacobi (MOJOLEARN_IDN_EIGH_BLOCK_ON, DROPPED:
+        # observed convergence failure) has no op arm; refuse it by name
+        # rather than split the device and host columns
+        if rb_use(n):
+            raise Error(
+                "eigh_op_sym: MOJOLEARN_IDN_EIGH_BLOCK_ON is a quarantined candidate with no device op;"
+                " build without it"
+            )
+    comptime if EIGH_TRIDIAG_ROUTE:
+        if n >= TD_MIN_N:
+            _eo_sym_td(ctx, gate, a, w, v, status, n)
+            return
+    eigh_op_dense(ctx, gate, a, w, v, status, 1, n)
+
+
+def _eo_sym_td(
+    ctx: DeviceContext,
+    mut gate: DeviceBuffer[DType.int32],
+    mut a: DeviceBuffer[DType.float32],
+    mut w: DeviceBuffer[DType.float32],
+    mut v: DeviceBuffer[DType.float32],
+    mut status: DeviceBuffer[DType.int32],
+    n: Int,
+) raises:
+    """`eigh_op_sym` from n = TD_MIN_N (the former `DevExec._eigh_td_try`
+    plus its Jacobi fallback, decided on the device)."""
+    var nn = n * n
+    # 1. the tridiagonal solve on a flushed copy (`a` stays for the fallback)
+    var work = ctx.enqueue_create_buffer[DType.float32](nn)
+    ctx.enqueue_function[td_copy_kernel](
+        _fp(a), _fp(work), Int32(nn), grid_dim=_eo_blocks(nn), block_dim=EO_TPB
+    )
+    var dfac = enqueue_es_scale(ctx, _fp(work), 1, n)
+    var dz = ctx.enqueue_create_buffer[DType.float32](nn)
+    var dwt = ctx.enqueue_create_buffer[DType.float32](n)
+    var td_info = ctx.enqueue_create_buffer[DType.float32](4)
+    eigh_td_enqueue(ctx, work, n, dz, dwt, td_info)
+    _ = work^
+    ctx.enqueue_function[sign_flip_kernel](
+        dz.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
+    )
+    var w_td = ctx.enqueue_create_buffer[DType.float32](n)
+    var z_td = ctx.enqueue_create_buffer[DType.float32](nn)
+    var pos = ctx.enqueue_create_buffer[DType.int32](n)
+    enqueue_eigh_ascending(ctx, _fp(dwt), 1, _fp(dz), n, pos, _fp(w_td), _fp(z_td))
+    enqueue_es_unscale(ctx, _fp(w_td), dfac, 1, n)
+    _ = dz^
+    _ = dwt^
+    _ = pos^
+    _ = dfac^
+    # 2. the Jacobi of the untouched input, every block skipped unless refused
+    var skip = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_function[eo_fallback_skip_kernel](  # small-launch(one word): the fallback's gate
+        _ip(gate), _fp(td_info), _ip(skip), grid_dim=(1, 1, 1), block_dim=(1, 1, 1)
+    )
+    var jw = ctx.enqueue_create_buffer[DType.float32](n)
+    var jv = ctx.enqueue_create_buffer[DType.float32](nn)
+    var jmarks = ctx.enqueue_create_buffer[DType.float32](2)
+    _eo_jacobi_enqueue(ctx, skip, a, 1, n, jw, jv, jmarks)
+    # 3. the one commit
+    ctx.enqueue_function[eo_tridiag_commit_kernel](
+        _ip(gate), _fp(td_info), _fp(jmarks), _fp(w_td), _fp(z_td), _fp(jw), _fp(jv),
+        _fp(w), _fp(v), _ip(status), Int32(n), grid_dim=_eo_blocks(nn), block_dim=EO_TPB,
+    )
+    _ = td_info^
+    _ = w_td^
+    _ = z_td^
+    _ = skip^
+    _ = jw^
+    _ = jv^
+    _ = jmarks^
