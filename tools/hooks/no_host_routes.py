@@ -277,8 +277,9 @@ _DRIVER_DENY = re.compile(
 #   _V_COUNT_WORDS     a first word that makes the identifier a count of the rest
 # Before the words are read, a dict view (`.keys()`, `.values()`, `.items()`)
 # is judged by its receiver and an attribute chain by its last name.
-# A data word anywhere in the judged text makes it data; else a structure word
-# makes it structure; else the verdict is "unknown": the tag is kept, as
+# In the loop's source or variables a data word anywhere makes it data; else a
+# structure word makes it structure. In the tag text a structure word wins and
+# a data word refutes the tag only alone. Otherwise the verdict is "unknown": the tag is kept, as
 # before, and counted as "could not judge". This table is the one place to
 # extend; tools/hooks/no_compute_in_shells.py carries the same table (each hook is
 # installed as one self-contained file), keep the two in step.
@@ -328,25 +329,39 @@ def _judge_text(text, tag_text=False):
     text = re.sub(r"\.(?:keys|values|items)\(\s*\)", "", text)
     text = re.sub(r"(?<![\w.])(?:[A-Za-z_]\w*(?:\[\])?\.)+(?=[A-Za-z_])", "", text)
     struct = ""
+    data = ""
     for ident in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", text):
         words = _words(ident)
         if not words:
             continue
         if ident == "n" or ident.lower() in _V_DATA_NAMES or (words[0] in _V_DATA_NAMES and ident[:1] in "XxYy"
                                                              and len(words) > 1 and not tag_text):
-            return "data", ident
+            if not tag_text:
+                return "data", ident
+            data = data or ident
+            continue
         if words[0] in _V_COUNT_WORDS and len(words) > 1:
             rest = words[1:]
             if any(w in _V_DATA_WORDS for w in rest):
-                return "data", ident
+                if not tag_text:
+                    return "data", ident
+                data = data or ident
+                continue
             if not struct and any(w in _V_STRUCTURE_WORDS or w in _V_VALUE_WORDS for w in rest):
                 struct = ident
             continue
         if any(w in _V_DATA_WORDS for w in words) or (not tag_text and any(w in _V_VALUE_WORDS for w in words)):
-            return "data", ident
+            if not tag_text:
+                return "data", ident
+            data = data or ident
+            continue
         if not struct and any(w in _V_STRUCTURE_WORDS or (tag_text and w in _V_VALUE_WORDS) for w in words):
             struct = ident
-    return ("structure", struct) if struct else ("unknown", "")
+    # in a tag's own text a structure word wins ("the batch's classes"): the
+    # text refutes the tag only when it names data and no structure
+    if struct:
+        return "structure", struct
+    return ("data", data) if data else ("unknown", "")
 
 
 def _judge_loop(source, targets="", what=""):
@@ -2251,11 +2266,12 @@ def _owed_findings(sha):
 
 def owed_allowance(ref):
     """Owed findings a tree may carry: those already in its merge-base with the
-    owed anchor and in its merge-base with main (the larger count of each).
+    owed anchor, with the 2026-11-09 regeneration tree (_REGEN_ANCHOR: loops
+    the judged tags made visible) and with main (the larger count of each).
     Everything else of an owed rule is new CPU work and is refused."""
     allowed = collections.Counter()
     bases = set()
-    for other in (_OWED_ANCHOR, "refs/remotes/origin/main", "origin/main"):
+    for other in (_OWED_ANCHOR, _REGEN_ANCHOR, "refs/remotes/origin/main", "origin/main"):
         mb = _git("merge-base", other, ref)
         if mb.returncode == 0 and mb.stdout.strip():
             bases.add(mb.stdout.strip())
