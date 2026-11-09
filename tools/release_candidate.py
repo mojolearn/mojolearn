@@ -151,6 +151,14 @@ def main(argv=None, release=None):
     if not vendors or any(v not in VENDORS for v in vendors):
         raise SystemExit("candidate: --vendors is a comma list of nvidia, amd")
     defines = release_github_build.normalize_defines(a.defines)
+    for entry in [e for e in defines.split(",") if e]:
+        name = entry.split("=", 1)[0]
+        readers = sorted(release_reuse.define_readers(a.commit, [name], ROOT))
+        if not [r for r in readers if r.endswith(".mojo") or r.startswith("bindings/")]:
+            # no byte could change: the B set would be the A set under another version
+            raise SystemExit(f"candidate: no .mojo or bindings/ file of {a.commit[:12]} names {name}; "
+                             "that define changes nothing at this commit")
+        print(f"candidate: {name} is read by {', '.join(readers[:6])}" + (" ..." if len(readers) > 6 else ""))
     label = a.label or default_label(defines)
     if label and not LABEL_RE.fullmatch(label):
         raise SystemExit("candidate: --label is lower case letters and digits, dot separated (a PEP 440 local "
