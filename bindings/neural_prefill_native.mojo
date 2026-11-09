@@ -21,15 +21,16 @@ struct _PrefillVerdicts(Defaultable, Movable):
     # (hasattr probes and the compiled `*_forward_tape_enabled` /
     # `*_reports_optional` words, fixed for a binding), resolved once per
     # entries object instead of on every training step. -1 = not resolved.
+    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+    # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+    # (the transformer forward tape: a TransformerBlock prefill keeps no tape.)
     var entries: PythonObject
-    var tape_transformer: Int
     var tape_mamba3: Int
     var session_mamba3: Int
     var optional_mamba3: Int
 
     def __init__(out self):
         self.entries = PythonObject(None)
-        self.tape_transformer = -1
         self.tape_mamba3 = -1
         self.session_mamba3 = -1
         self.optional_mamba3 = -1
@@ -47,28 +48,24 @@ def _prefill_hold(entries: PythonObject) raises:
     var v = _PREFILL_VERDICTS.get_or_create_ptr()
     if v[].entries is None or v[].entries is not entries:
         v[].entries = entries
-        v[].tape_transformer = -1
         v[].tape_mamba3 = -1
         v[].session_mamba3 = -1
         v[].optional_mamba3 = -1
 
 
-def _prefill_tape_enabled(entries: PythonObject, kind: String) raises -> Bool:
+def _prefill_tape_enabled(entries: PythonObject) raises -> Bool:
+    """Whether the Mamba-3 binding keeps a forward tape (MOJOLEARN_IDN_ACT_RETAIN=3)."""
     _prefill_hold(entries)
     var v = _PREFILL_VERDICTS.get_or_create_ptr()
-    var known = v[].tape_transformer if kind == "transformer" else v[].tape_mamba3
-    if known >= 0:
-        return known == 1
+    if v[].tape_mamba3 >= 0:
+        return v[].tape_mamba3 == 1
     var bi = native_loaded_module("builtins")
-    var enabled = Bool(py=py_call(bi.hasattr, entries, kind + "_forward_tape_enabled"))
+    var enabled = Bool(py=py_call(bi.hasattr, entries, "mamba3_forward_tape_enabled"))
     if enabled:
-        enabled = Bool(py=_native_function(entries, kind + "_forward_tape_enabled")())
+        enabled = Bool(py=_native_function(entries, "mamba3_forward_tape_enabled")())
     _prefill_hold(entries)
     v = _PREFILL_VERDICTS.get_or_create_ptr()
-    if kind == "transformer":
-        v[].tape_transformer = 1 if enabled else 0
-    else:
-        v[].tape_mamba3 = 1 if enabled else 0
+    v[].tape_mamba3 = 1 if enabled else 0
     return enabled
 
 
@@ -183,16 +180,14 @@ def neural_prefill_forward(block: PythonObject, input: PythonObject, context: Py
         raise Error("neural prefill tape requires TransformerBlock or Mamba3Block")
     var entries = neural_training_entries(fields, context)
     var x = _neural_input(input, Int(py=fields["d_model"]), False, context)
-    var enabled = _prefill_tape_enabled(entries, kind)
     if kind == "transformer":
-        enabled = enabled and fields["_int15"] is None and not Bool(py=fields["_extended"])
-    if not enabled:
-        var out = PythonObject(None)
-        if kind == "transformer":
-            out = neural_block_forward_binding(block, x, PythonObject(None), False, PythonObject(None), context)
-        else:
-            out = _prefill_mamba3(block, x, entries)
-        return Python.tuple(out, PythonObject(None))
+        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+        # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+        # (`transformer_forward_tape`: a TransformerBlock prefill keeps no
+        # tape; its backward is `TransformerBlock.backward` on the step op.)
+        return Python.tuple(neural_block_forward_binding(block, x, PythonObject(None), False, PythonObject(None), context), PythonObject(None))
+    if not _prefill_tape_enabled(entries):
+        return Python.tuple(_prefill_mamba3(block, x, entries), PythonObject(None))
     var b = Int(py=x.shape[0])
     var l = Int(py=x.shape[1])
     var d = Int(py=x.shape[2])
@@ -205,33 +200,17 @@ def neural_prefill_forward(block: PythonObject, input: PythonObject, context: Py
         _ = py_call(shapes.append, weights[i].shape)
     _ = py_call(addresses.append, out._addr)
     var params = py_ints([b, l, d])
-    var lock = PythonObject(None)
-    if kind == "transformer":
-        for name in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate"), String("window")]:  # driver-loop: over transformer launch dimensions
-            _ = py_call(params.append, fields[name])
-        lock = fields["_runtime_lock"]
-    var native = py_get(fields, "_native_block_provider_cache" if kind == "transformer" else "_native_mamba_block_provider_cache")
-    var tape_base = 6 if kind == "transformer" else 10
-    var lock_lease = OperationLockLease(lock)
-    if lock is not None:
-        lock_lease.acquire()
+    var native = py_get(fields, "_native_mamba_block_provider_cache")
+    var tape_base = 10
     var handle = PythonObject(None)
     var opaque = 0
-    try:
-        if native is not None:
-            handle = neural_descriptor_construct(native, _native_function(entries, kind + "_tape_create_native_v1"))
-            opaque = neural_descriptor_handle(native, _native_function(entries, kind + "_tape_handle_native_v1"), handle)
-            var base = 6 if kind == "transformer" else 10
-            _ = neural_descriptor_reserved_execute(native, handle, opaque, base, base + 1, base + 2,
-                _neural_int_words(addresses), _neural_int_words(params), [])
-        else:
-            handle = py_call(_native_function(entries, kind + "_forward_tape"), addresses, params)
-        if lock is not None:
-            lock_lease.release()
-    except error:
-        if lock is not None:
-            lock_lease.release()
-        raise error
+    if native is not None:
+        handle = neural_descriptor_construct(native, _native_function(entries, "mamba3_tape_create_native_v1"))
+        opaque = neural_descriptor_handle(native, _native_function(entries, "mamba3_tape_handle_native_v1"), handle)
+        _ = neural_descriptor_reserved_execute(native, handle, opaque, tape_base, tape_base + 1, tape_base + 2,
+            _neural_int_words(addresses), _neural_int_words(params), [])
+    else:
+        handle = py_call(_native_function(entries, "mamba3_forward_tape"), addresses, params)
     return Python.tuple(out, Python.tuple(entries, handle, x.shape, py_call(bi.tuple, shapes), native, PythonObject(opaque), PythonObject(tape_base)))
 
 
@@ -239,7 +218,8 @@ def neural_prefill_backward(block: PythonObject, tape: PythonObject, grad_output
     _ = generation_initialize_binding(context["generation_classes"])
     var bi = native_loaded_module("builtins")
     var fields = py_call(bi.object.__getattribute__, block, "__dict__")
-    var kind = String(fields["_native_kind"])
+    if String(fields["_native_kind"]) != "mamba3":
+        raise Error("TypeError: immutable tape belongs to another block family")
     var dims = List[Int]()
     for i in range(len(tape[2])):  # driver-loop: over immutable input shape metadata
         dims.append(Int(py=tape[2][i]))
@@ -255,25 +235,14 @@ def neural_prefill_backward(block: PythonObject, tape: PythonObject, grad_output
     var addresses = Python.list(dy._addr)
     for i in range(len(gradients)):  # driver-loop: over gradient output addresses
         _ = py_call(addresses.append, gradients[i]._addr)
-    var lock = fields["_runtime_lock"] if kind == "transformer" else PythonObject(None)
-    var lock_lease = OperationLockLease(lock)
-    if lock is not None:
-        lock_lease.acquire()
-    try:
-        if len(tape) == 7 and tape[4] is not None:
-            var base = Int(py=tape[6])
-            if base != (6 if kind == "transformer" else 10):
-                raise Error("TypeError: immutable tape belongs to another block family")
-            _ = neural_descriptor_reserved_execute(tape[4], tape[1], Int(py=tape[5]), base, base + 1, base + 3,
-                _neural_int_words(addresses), [], [])
-        else:
-            _ = py_call(_native_function(tape[0], kind + "_backward_tape"), tape[1], addresses)
-        if lock is not None:
-            lock_lease.release()
-    except error:
-        if lock is not None:
-            lock_lease.release()
-        raise error
+    if len(tape) == 7 and tape[4] is not None:
+        var base = Int(py=tape[6])
+        if base != 10:
+            raise Error("TypeError: immutable tape belongs to another block family")
+        _ = neural_descriptor_reserved_execute(tape[4], tape[1], Int(py=tape[5]), base, base + 1, base + 3,
+            _neural_int_words(addresses), [], [])
+    else:
+        _ = py_call(_native_function(tape[0], "mamba3_backward_tape"), tape[1], addresses)
     _ = dy^  # the backward entry read `dy` by address
     var result = bi.dict()
     py_setitem(result, "x", gradients[0])
@@ -291,9 +260,7 @@ def neural_prefill_close(tape: PythonObject) raises:
         _ = neural_descriptor_reserved_execute(tape[4], tape[1], Int(py=tape[5]), base, base + 1, base + 4,
             [], [], [])
     else:
-        var bi = native_loaded_module("builtins")
-        var kind = "transformer" if Bool(py=py_call(bi.hasattr, tape[0], "transformer_close_tape")) else "mamba3"
-        _ = py_call(_native_function(tape[0], kind + "_close_tape"), tape[1])
+        _ = py_call(_native_function(tape[0], "mamba3_close_tape"), tape[1])
 
 
 # TOMBSTONE: bpe_decode, causal_lm_admit, neural_prefill_call, optimizer_finalize exports (dead native entries: no live caller of the export) deleted 2026-10-26 by 5206fc31b; code recoverable at a88745022.

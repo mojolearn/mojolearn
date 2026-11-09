@@ -1208,8 +1208,9 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
                     _ = py_call(_native_function(mods, entries, "transformer_session_backward"), fields["_native_session"], addresses, params)
                     mods.released()
             else:
-                if fields["_native_session"] is not None and _native_has_entry(mods, entries, "transformer_session_invalidate_tape"):
-                    causal_transformer_admin(mods, entries, fields["_native_session"], 12)
+                # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+                # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+                # (the session tape's invalidation before a per-call backward.)
                 var native = py_get(fields, "_native_block_provider_cache")
                 if native is not None:
                     _ = neural_descriptor_execute(native, 5, _neural_int_words(addresses), _neural_int_words(params), [])

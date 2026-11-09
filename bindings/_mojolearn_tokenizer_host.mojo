@@ -87,7 +87,6 @@ from bindings.causal_checkpoint import checkpoint_c
 from bindings.causal_operation_owner import CausalExecutionEntries
 from bindings.native_identity_type import native_identity_type
 from bindings.neural_block_public import NativeBlockPlan
-from bindings.transformer_public_native import TransformerPublicTapeOwner
 from bindings.lm_corpus_public_native import LmCorpusIteratorHandle
 from bindings.tokenizer_public_native import (
     tokenizer_public_c, tokenizer_vocab_fingerprint,
@@ -1328,7 +1327,6 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_function[vocab_fingerprint_binding]("vocab_fingerprint")
         module.def_function[sha256_hex_binding]("sha256_hex")
         module.def_py_c_function(runtime_classical_unavailable_c, "transformer_public_call")
-        _ = module.add_type[TransformerPublicTapeOwner]("_TransformerPublicTapeOwner")
         module.def_py_c_function(tokenizer_public_c, "tokenizer_public_call")
         module.def_py_c_function(runtime_classical_unavailable_c, "lm_corpus_public_call")
         module.def_py_c_function(runtime_classical_unavailable_c, "catalog_public_call")

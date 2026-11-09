@@ -721,8 +721,12 @@ def causal_transformer_admin(mut mods: NativeModules, binding: PythonObject, ses
         _ = neural_descriptor_execute(provider, operation, [], [handle], [], False)
         mods.released()
     else:
-        var name = "transformer_session_invalidate_tape" if operation == 12 else "transformer_session_close"
-        _ = py_call(_native_function(mods, binding, name), session)
+        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+        # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+        # (operation 12, the session tape's invalidation; 13, close, is the one left.)
+        if operation != 13:
+            raise Error("transformer session administration: unknown operation")
+        _ = py_call(_native_function(mods, binding, "transformer_session_close"), session)
         mods.released()
 
 def causal_layer_run(mut mods: NativeModules, model: PythonObject, i: Int, x: PythonObject, supplied_state: PythonObject, step: Bool = False) raises -> PythonObject:
