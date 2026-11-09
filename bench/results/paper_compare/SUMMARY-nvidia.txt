@@ -1,0 +1,26 @@
+PAPER-COMPARE vendor=nvidia 0.8.55->0.8.66 recipes=108 gpu NVIDIA L40S -> NVIDIA L40S
+flags: FASTER=13 FIXED=4 NOT-RUN=1 NOW-LOSES=17 NOW-WINS=2 PARAMS-DIFF=14 REGRESSION=42 SAME=48
+timed both=103 median ratio=1.03 geomean=1.88
+worst regressions:
+  48.63x trees/iforest/taxi/rows=full infer ours large (5.61 -> 273 ms)
+  46.30x classical/ols/taxi/rows=full fit ours (16.48 -> 763 ms)
+  44.96x classical/ols/istella/rows=full infer ours Xq (39.42 -> 1772 ms)
+  42.72x trees/iforest/istella/rows=full fit ours (197 -> 8422 ms)
+  41.80x trees/iforest/taxi/rows=full infer ours test (3.27 -> 137 ms)
+  38.90x classical2/tsvd/istella/rows=full fit ours (91.55 -> 3561 ms)
+  34.34x trees/rf/istella/rows=full infer ours test (52.31 -> 1797 ms)
+  34.29x trees/rf/istella/rows=full infer ours large (105 -> 3603 ms)
+biggest gains:
+  0.20x classical/svc/istella/rows=full infer ours Xq (10.96 -> 2.23 ms)
+  0.29x classical2/linearsvc/taxi/rows=full fit ours (68.73 -> 19.80 ms)
+  0.43x trees/gbdt-multiclass/taxi/rows=full infer ours test (27.66 -> 11.91 ms)
+  0.51x neural/mlp-train-step/gaussian/shape=full fit ours (1.90 -> 0.971 ms)
+  0.59x classical/dbscan/taxi/rows=full fit ours (1582293 -> 929653 ms)
+  0.66x neural/sequential-predict/synthetic/shape=full fit ours (4.27 -> 2.80 ms)
+  0.79x trees/gbdt-rank-pairlogit/istella/rows=full fit ours (2700 -> 2123 ms)
+  0.80x classical/kmeans/istella/rows=full infer ours Xq (38.56 -> 30.90 ms)
+FIXED (4): trees/gbdt-lossguide/istella/rows=full infer ours test, trees/gbdt-lossguide/istella/rows=full infer ours-gain0 test, trees/gbdt-lossguide/istella/rows=full infer ours large, trees/gbdt-lossguide/istella/rows=full infer ours-gain0 large
+NOW-WINS (2): classical2/linearsvc/taxi/rows=full fit ours, neural/mlp-train-step/gaussian/shape=full fit ours
+NOW-LOSES (17): classical/kmeans/istella/rows=full fit ours, classical/kmeans/taxi/rows=full fit ours, classical/ols/istella/rows=full fit ours, classical/ols/taxi/rows=full fit ours, classical2/knn-clf/istella/rows=full fit ours, classical2/knn-reg/istella/rows=full fit ours ...
+PARAMS-DIFF (14): neural/sequential-fit/synthetic/shape=full fit ours, neural/sequential-predict/synthetic/shape=full fit ours, trees/gbdt-depthwise/istella/rows=full fit ours-prebinned, trees/gbdt-depthwise/istella/rows=full infer ours-prebinned test, trees/gbdt-depthwise/istella/rows=full infer ours-prebinned large, trees/gbdt-depthwise/taxi/rows=full fit ours-prebinned ...
+NOT-RUN (1): classical/dbscan/istella/rows=full fit ours
