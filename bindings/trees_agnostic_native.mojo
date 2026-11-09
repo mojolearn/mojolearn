@@ -14,7 +14,10 @@ from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_attributes import classical_check_layout
 from bindings.prep_native_estimator import prep_estimator_admit, prep_estimator_has, prep_estimator_call
-from bindings.trees_public_inputs import trees_table, trees_call, trees_view, trees_vector, trees_address, trees_reshape
+from bindings.trees_public_inputs import trees_table, trees_call, trees_address, trees_reshape
+from bindings.admitted_input import admitted_vector, classical_view
+# TOMBSTONE: trees_view / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.classical_pandas import classical_admit_value
 from bindings.trees_public_forest import forest_effective_mode, _engine, _ordered_export, _resident, _family
 from bindings.trees_public_boost import _seed
@@ -130,13 +133,13 @@ def _evaluate(model: PythonObject, method: String, x: PythonObject, n: Int,
     """The model on rows x (an (n, d) Array) as a float32 (n, k) Array."""
     var out = prep_estimator_call(model, method, Python.tuple(x), context)
     classical_admit_value(out, context)
-    var view = trees_view(out, "output", context)
-    var rank = len(view.shape)
+    var view = classical_view(out, context, "output", True)
+    var rank = Int(py=view.ndim)
     if rank != 1 and rank != 2:
         raise Error("ValueError: the explained model output must be 1-D or 2-D")
-    if view.shape[0] != n:
+    if Int(py=view.shape[0]) != n:
         raise Error("ValueError: the explained model returned a different row count")
-    var k = view.shape[1] if rank == 2 else 1
+    var k = Int(py=view.shape[1]) if rank == 2 else 1
     _ = view
     # A fresh snapshot table per output: a freed output's identity may be reused.
     var flat = _snapshot(out, "<f4", rank, "output", context, Python.dict())
@@ -146,7 +149,7 @@ def _evaluate(model: PythonObject, method: String, x: PythonObject, n: Int,
 
 def _shape(phi: PythonObject, n: Int, d: Int, k: Int, context: PythonObject) raises -> PythonObject:
     if n == 0:
-        var empty = trees_vector(0, "<f8", context)
+        var empty = admitted_vector(0, "<f8", context)
         return trees_reshape(empty, Python.tuple(0, d) if k == 1 else Python.tuple(0, d, k), context)
     return trees_reshape(phi, Python.tuple(n, d) if k == 1 else Python.tuple(n, d, k), context)
 
@@ -255,7 +258,7 @@ def _construct(fields: PythonObject, args: PythonObject, permutation: Bool,
         raise Error("ValueError: " + name + " requires at least one background row")
     var out = _evaluate(model, method, bg, nb, context)
     var k = Int(py=out.shape[1])
-    var ev = trees_vector(k, "<f8", context)
+    var ev = admitted_vector(k, "<f8", context)
     _ = _call(table, "x_trees_block_mean", Python.list(PythonObject(trees_address(out)), PythonObject(trees_address(ev)),
               _ints(1, nb, k)))
     _ = out
@@ -365,10 +368,10 @@ def _kernel_values(fields: PythonObject, args: PythonObject, context: PythonObje
     if M <= 30:
         ns = min(ns, (1 << M) - 2)
     var h = max(1, M // 2)
-    var size_off = trees_vector(h + 1, "<i8", context)
-    var size_w = trees_vector(h, "<f8", context)
-    var cdf = trees_vector(h, "<f8", context)
-    var sched = trees_vector(6, "<i8", context)
+    var size_off = admitted_vector(h + 1, "<i8", context)
+    var size_w = admitted_vector(h, "<f8", context)
+    var cdf = admitted_vector(h, "<f8", context)
+    var sched = admitted_vector(6, "<i8", context)
     if M > 1:
         _ = _call(s.table, "x_trees_kshap_schedule", Python.list(Python.tuple(trees_address(size_off), trees_address(size_w), trees_address(cdf)),
                   PythonObject(trees_address(sched)), _ints(M, max(ns, 0))))
@@ -381,7 +384,7 @@ def _kernel_values(fields: PythonObject, args: PythonObject, context: PythonObje
     var wbits = Int(sp[5])
     _ = sched
     var taddr = Python.tuple(trees_address(size_off), trees_address(size_w), trees_address(cdf))
-    var phi = trees_vector(max(n * d * k, 1), "<f8", context)
+    var phi = admitted_vector(max(n * d * k, 1), "<f8", context)
     if n == 0:
         return _shape(phi, 0, d, k, context)
     var fx = _evaluate(s.model, s.method, x, n, context)   # the explained rows, one model call
@@ -402,14 +405,14 @@ def _kernel_values(fields: PythonObject, args: PythonObject, context: PythonObje
         # synthetic rows, each chunk's linked background means into one
         # float64 (n, m, k) block, then the solve over as many rows per call
         # as the budget holds (the same words as the per-chunk solve).
-        var ey = trees_vector(n * m * k, "<f8", context)
+        var ey = admitted_vector(n * m * k, "<f8", context)
         var e0 = trees_address(ey)
-        var syn = trees_vector(R * m * nb * d, "<f4", context)
+        var syn = admitted_vector(R * m * nb * d, "<f4", context)
         var r0 = 0
         while r0 < n:  # driver-loop: one binding call per row chunk
             var rows = min(R, n - r0)
             if rows < R:
-                syn = trees_vector(rows * m * nb * d, "<f4", context)
+                syn = admitted_vector(rows * m * nb * d, "<f4", context)
             _ = _call(s.table, "x_trees_kshap_synth", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0), taddr,
                       PythonObject(trees_address(syn)), _ints(rows, nb, d, nfixed, m, nfull, L, npaired, r0, s.seed, wbits)))
             var out = _model_rows(s, syn, rows * m * nb, context)
@@ -452,7 +455,7 @@ def _kernel_values(fields: PythonObject, args: PythonObject, context: PythonObje
                 if m > 0:
                     if not reuse or syn is None or Int(py=syn.size) != rows * m * nb * d:
                         syn = PythonObject(None)
-                        syn = trees_vector(rows * m * nb * d, "<f4", context)
+                        syn = admitted_vector(rows * m * nb * d, "<f4", context)
                     _ = _call(s.table, "x_trees_kshap_synth", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0), taddr,
                               PythonObject(trees_address(syn)),
                               _ints(rows, nb, d, nfixed, m, nfull, L, npaired, r0, s.seed, wbits)))
@@ -505,23 +508,23 @@ def _linear_block(s: _State, context: PythonObject) raises -> PythonObject:
     if coef is None or intercept is None:
         return PythonObject(None)
     var snaps = Python.dict()
-    var c_view = trees_view(coef, "coef_", context)
-    var c_rank = len(c_view.shape)
+    var c_view = classical_view(coef, context, "coef_")
+    var c_rank = Int(py=c_view.ndim)
     _ = c_view
     var c = _snapshot(coef, "<f4", c_rank, "coef_", context, snaps)
     var bias = PythonObject(None)
     if py_type(intercept) is _b().float or py_type(intercept) is _b().int:
         bias = _snapshot(Python.list(intercept), "<f4", 1, "intercept_", context, snaps)
     else:
-        var i_view = trees_view(intercept, "intercept_", context)
-        var i_rank = len(i_view.shape)
+        var i_view = classical_view(intercept, context, "intercept_")
+        var i_rank = Int(py=i_view.ndim)
         _ = i_view
         bias = _snapshot(intercept, "<f4", i_rank, "intercept_", context, snaps)
     var kk = Int(py=bias.size)
     var d = Int(py=c.size) // max(kk, 1)
     if kk != s.k or d != s.d or Int(py=c.size) != kk * d:
         return PythonObject(None)
-    var wb = trees_vector(kk * (d + 1), "<f4", context)
+    var wb = admitted_vector(kk * (d + 1), "<f4", context)
     var o = _F32(unsafe_from_address=trees_address(wb))
     var cp = _F32(unsafe_from_address=trees_address(c))
     var bp = _F32(unsafe_from_address=trees_address(bias))
@@ -548,7 +551,7 @@ def _permutation_values(fields: PythonObject, args: PythonObject, context: Pytho
     var npm = Int(py=args[1])
     if npm < 1:
         raise Error("ValueError: npermutations must be >= 1")
-    var phi = trees_vector(max(n * d * k, 1), "<f8", context)
+    var phi = admitted_vector(max(n * d * k, 1), "<f8", context)
     if n == 0:
         return _shape(phi, 0, d, k, context)
     var mm = npm * (2 * d + 1)
@@ -598,9 +601,9 @@ def _permutation_values(fields: PythonObject, args: PythonObject, context: Pytho
         # (coalition, background row). Three Int64 words per (coalition,
         # background row): bound them as if d were at least 16.
         var Rd = min(R, _chunk(mm * nb * max(d, 16), n))
-        var tot = trees_vector(1, "<i8", context)
+        var tot = admitted_vector(1, "<i8", context)
         var t0 = trees_address(tot)
-        var syn = trees_vector(Rd * mm * nb * d, "<f4", context)
+        var syn = admitted_vector(Rd * mm * nb * d, "<f4", context)
         var r0 = 0
         while r0 < n:  # driver-loop: one model call per row chunk
             var rows = min(Rd, n - r0)
@@ -610,7 +613,7 @@ def _permutation_values(fields: PythonObject, args: PythonObject, context: Pytho
             if nv < 0 or nv > rows * mm * nb:
                 raise Error("RuntimeError: x_trees_pshap_dsynth returned an invalid row count")
             # The first nv rows of syn, copied once into the model's input.
-            var front = trees_vector(nv * d, "<f4", context)
+            var front = admitted_vector(nv * d, "<f4", context)
             var src = _F32(unsafe_from_address=trees_address(syn))
             var dst = _F32(unsafe_from_address=trees_address(front))
             if nv * d > 0:
@@ -634,7 +637,7 @@ def _permutation_values(fields: PythonObject, args: PythonObject, context: Pytho
             var rows = min(R, n - r0)
             if not reuse or syn is None or Int(py=syn.size) != rows * mm * nb * d:
                 syn = PythonObject(None)
-                syn = trees_vector(rows * mm * nb * d, "<f4", context)
+                syn = admitted_vector(rows * mm * nb * d, "<f4", context)
             _ = _call(s.table, "x_trees_pshap_synth", Python.list(PythonObject(x0 + 4 * r0 * d), PythonObject(bg0),
                       PythonObject(trees_address(syn)), _ints(rows, nb, d, npm, r0, s.seed)))
             var out = _model_rows(s, syn, rows * mm * nb, context)

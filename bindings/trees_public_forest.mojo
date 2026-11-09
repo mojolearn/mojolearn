@@ -27,12 +27,18 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.trees_public_inputs import (
-    TREES_NONFINITE, TreesMatrix, TreesLabels, trees_builtins, trees_table, trees_entry, trees_need,
-    trees_helper, trees_env, trees_empty, trees_vector, trees_reshape, trees_freeze, trees_address,
-    trees_f32, trees_forest_layout, trees_all_finite, trees_check_sample_weight, trees_encode_labels,
+    TREES_NONFINITE, TreesLabels, trees_builtins, trees_table, trees_entry, trees_need,
+    trees_helper, trees_env, trees_reshape, trees_freeze, trees_address,
+    trees_forest_x, trees_finite_f32, trees_encode_labels,
     trees_decode_labels, trees_argmax_rows, trees_class_rows_only, trees_weighted_rows, trees_cast,
-    trees_view, trees_call,
+    trees_call,
 )
+from bindings.admitted_input import (
+    AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector, classical_view,
+)
+from bindings.classical_arrays import classical_address
+# TOMBSTONE: trees_f32 / trees_forest_layout / trees_all_finite / trees_check_sample_weight / trees_view / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.trees_side_records import trees_finite_known, trees_finite_mark, trees_side_get, trees_side_put
 from bindings.trees_resident_table import (
     TREES_RESIDENT_FOREST, TREES_RESIDENT_FOREST_STRICT, trees_resident_find, trees_resident_put, trees_resident_pin, trees_resident_unpin,
@@ -527,7 +533,7 @@ def forest_export(native: PythonObject, descriptor: PythonObject, selection: Str
         var sizes = Python.tuple(trees + 1, nodes, nodes, nodes, nodes * outputs)
         var arrays = Python.list()
         for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
-            _ = py_call(arrays.append, trees_vector(Int(py=sizes[i]), String(dtypes[i]), context))
+            _ = py_call(arrays.append, admitted_vector(Int(py=sizes[i]), String(dtypes[i]), context))
         _ = py_call_typed(trees_need(native, "forest_export", "rebuild the forest binding for caller-buffer model export"),
                           handle, PythonObject(trees_address(arrays[0])), PythonObject(trees_address(arrays[1])),
                           PythonObject(trees_address(arrays[2])), PythonObject(trees_address(arrays[3])),
@@ -598,7 +604,7 @@ struct ForestFit(Copyable, Movable):
         self.exported = exported
 
 
-def _launch(native: PythonObject, fit: ForestFit, x: TreesMatrix, y_addr: Int, params: PythonObject,
+def _launch(native: PythonObject, fit: ForestFit, x: AdmittedX, y_addr: Int, params: PythonObject,
             criterion: PythonObject, device_scan: Bool, context: PythonObject) raises -> PythonObject:
     """One fit launch and its export. Every door fit, shards included, takes
     the owned export handle (N007, ne1-a-trees: the shard fits no longer
@@ -607,7 +613,7 @@ def _launch(native: PythonObject, fit: ForestFit, x: TreesMatrix, y_addr: Int, p
     var selection = _export_selection() if fit.exported else String("")
     var name = fit.name + ("_export" if fit.exported else "")
     var entry = trees_need(native, name, "rebuild the forest binding for caller-buffer model export")
-    var args = Python.list(PythonObject(x.addr), PythonObject(y_addr), params)
+    var args = Python.list(PythonObject(x.address), PythonObject(y_addr), params)
     if fit.criterion:
         _ = py_call(args.append, criterion)
     for i in range(len(fit.tail)):  # small-loop(tail): the entry's trailing argument words
@@ -619,7 +625,7 @@ def _launch(native: PythonObject, fit: ForestFit, x: TreesMatrix, y_addr: Int, p
         if device_scan and TREES_NONFINITE in String(error):
             raise Error(TREES_NONFINITE)
         raise error^
-    _ = x.keep
+    _ = x.array
     if fit.exported:
         return forest_export(native, out, selection, context)
     return out
@@ -775,33 +781,33 @@ def _y_rows_check(n: Int, rows: Int) raises:
         raise Error("y has " + String(n) + " rows, X has " + String(rows))
 
 
-def _x_for(source: PythonObject, rowmajor: Bool, context: PythonObject) raises -> TreesMatrix:
+def _x_for(source: PythonObject, rowmajor: Bool, context: PythonObject) raises -> AdmittedX:
     """`_fit_arrays`' X: the forest layout when the fit has a row-major
     entry, else the column-major float32 copy."""
-    var x = trees_forest_layout(source, "X", context) if rowmajor else trees_f32(source, 2, "F", "X", context)
+    var x = trees_forest_x(source, "X", context) if rowmajor else admit_f32(source, 2, "X", context, order="F", allow_nonfinite=True)
     # A float32 copy of an input the public door admitted finite is finite.
-    if x.keep is not source and trees_finite_known(source):
-        trees_finite_mark(x.keep)
+    if x.array is not source and trees_finite_known(source):
+        trees_finite_mark(x.array)
     return x^
 
 
-def _finite_or_refuse(x: TreesMatrix, device_scan: Bool, context: PythonObject) raises:
+def _finite_or_refuse(x: AdmittedX, device_scan: Bool, context: PythonObject) raises:
     # The public door's classical_check_x already refused NaN and infinity
     # in this X (trees_finite_known; lane perf-trees-owed, 2026-11-06): the
     # second O(n d) scan is skipped for it, and kept for every other caller.
-    if device_scan or trees_finite_known(x.keep):
+    if device_scan or trees_finite_known(x.array):
         return
-    if not trees_all_finite(x.addr, x.rows * x.cols, False, context):
+    if not trees_finite_f32(x.address, x.rows * x.cols):
         raise Error(TREES_NONFINITE)
 
 
-def _rf_fit_arrays(fields: PythonObject, kind: String, x: TreesMatrix, y_addr: Int, y_rows: Int,
+def _rf_fit_arrays(fields: PythonObject, kind: String, x: AdmittedX, y_addr: Int, y_rows: Int,
                    classes: Int, var fit: ForestFit, rowmajor: Optional[ForestFit], rf: PythonObject,
                    context: PythonObject) raises -> PythonObject:
     """`_RandomForestBase._fit_arrays` on X already in the entry's layout
     (`_x_for`): the length and finiteness checks, the params, the launch
     and the model export. Returns the fit result tuple."""
-    if rowmajor and x.row_major:
+    if rowmajor and x.c_order:
         fit = rowmajor.value().copy()
     _y_rows_check(y_rows, x.rows)
     var device_scan = _device_scan(rf, "rf_device_finite_scan")
@@ -877,7 +883,7 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
         raise Error("y has fewer than 2 classes")
     var xtrees = trees_table(context, mode, "_mojolearn_x_trees")
     var class_weight = py_get(fields, "class_weight")
-    var weights: Optional[TreesMatrix] = None
+    var weights: Optional[AdmittedX] = None
     if sample_weight is not None:
         weights = trees_weighted_rows(sample_weight, class_weight, labels, xtrees, context)
     elif class_weight is not None:
@@ -895,11 +901,11 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
         var oob = PythonObject(None)
         var score = PythonObject(None)
         if _truthy(cfg["oob_score"]):
-            oob = trees_empty(Python.tuple(labels.n, k), "<f8", context)
-            score = trees_vector(1, "<f8", context)
+            oob = admitted_array(Python.tuple(labels.n, k), "<f8", context)
+            score = admitted_vector(1, "<f8", context)
         var x = _x_for(X, False, context)
-        var importance = trees_vector(x.cols, "<f4", context) if importances else PythonObject(None)
-        var tail = Python.list(PythonObject(0 if not weights else weights.value().addr),
+        var importance = admitted_vector(x.cols, "<f4", context) if importances else PythonObject(None)
+        var tail = Python.list(PythonObject(0 if not weights else weights.value().address),
                                PythonObject(0 if oob is None else trees_address(oob)),
                                PythonObject(0 if score is None else trees_address(score)),
                                PythonObject(0 if importance is None else trees_address(importance)))
@@ -922,7 +928,7 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
     if tree_start is not None:
         if not _has(rf, "rf_classifier_fit_shard_export"):
             raise Error("ImportError: rebuild RF binding for global tree-ID shards")
-        var tail = Python.list(tree_start, PythonObject(0 if not weights else weights.value().addr))
+        var tail = Python.list(tree_start, PythonObject(0 if not weights else weights.value().address))
         _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y_addr, labels.n, k,
                            ForestFit("rf_classifier_fit_shard", True, tail, True), None, rf, context)
         _ = labels  # retain shard labels through the address-only fit
@@ -931,7 +937,7 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
     if weights:
         if not _has(rf, "rf_classifier_fit_weighted"):
             raise Error("RuntimeError: rebuild the RF binding for class_weight support")
-        var tail = Python.list(PythonObject(weights.value().addr))
+        var tail = Python.list(PythonObject(weights.value().address))
         _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y_addr, labels.n, k,
                            ForestFit("rf_classifier_fit_weighted", True, tail, True), None, rf, context)
         _ = labels
@@ -955,14 +961,14 @@ def _reduce(addr: Int, count: Int, what: Int, context: PythonObject) raises -> P
                          PythonObject(count), PythonObject(what))
 
 
-def _check_regression_target(y: TreesMatrix, code: Int, criterion: PythonObject, family: String,
+def _check_regression_target(y: AdmittedX, code: Int, criterion: PythonObject, family: String,
                              context: PythonObject) raises:
     """The deviance criteria's target refusals (RF and ET wording)."""
     var tables = context["trees_rf_tables"] if family == "rf" else context["trees_et_tables"]
     var n = y.rows
     if code == Int(py=tables["poisson"]):
-        if (not trees_all_finite(y.addr, n, False, context) or Bool(py=_reduce(y.addr, n, 0, context) < PythonObject(0))
-                or not Bool(py=_reduce(y.addr, n, 1, context) > PythonObject(0))):
+        if (not trees_finite_f32(y.address, n) or Bool(py=_reduce(y.address, n, 0, context) < PythonObject(0))
+                or not Bool(py=_reduce(y.address, n, 1, context) > PythonObject(0))):
             if family == "rf":
                 raise Error("criterion='poisson' requires y >= 0 with a positive"
                             + " sum: PoissonGain returns -max() for a non-positive"
@@ -972,7 +978,7 @@ def _check_regression_target(y: TreesMatrix, code: Int, criterion: PythonObject,
                         + " Poisson gain is -max() for a non-positive label sum"
                         + " (objectives.cuh:251-253), which would fit a stump silently")
     elif code == Int(py=tables["gamma"]) or code == Int(py=tables["inverse_gaussian"]):
-        if not trees_all_finite(y.addr, n, False, context) or Bool(py=_reduce(y.addr, n, 0, context) <= PythonObject(0)):
+        if not trees_finite_f32(y.address, n) or Bool(py=_reduce(y.address, n, 0, context) <= PythonObject(0)):
             if family == "rf":
                 raise Error("criterion=" + _repr(criterion) + " requires y > 0: its"
                             + " gain returns -max() for a non-positive label sum"
@@ -987,7 +993,7 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
                       sample_weight: PythonObject, importances: Bool, tree_start: PythonObject, mode: String,
                       rf: PythonObject, context: PythonObject) raises -> PythonObject:
     var cfg = fields["_cfg"]
-    var y32 = trees_f32(y, 1, "C", "y", context)
+    var y32 = admit_f32(y, 1, "y", context, allow_nonfinite=True)
     var code = Int(py=cfg["criterion"])
     _check_regression_target(y32, code, fields["criterion"], "rf", context)
     var names = Python.tuple("oob_prediction_", "oob_score_", "feature_importances_")
@@ -1000,12 +1006,12 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
         if not _has(rf, "rf_regressor_fit_weighted_export"):
             raise Error("NotImplementedError: sample_weight for a regression forest needs a forest binding that exports "
                         + "rf_regressor_fit_weighted; this install's binding predates it")
-        var w = trees_check_sample_weight(sample_weight, y32.rows, context)
-        var w_max = _float(_reduce(w.addr, y32.rows, 1, context))
+        var w = admit_weight_words(sample_weight, y32.rows, context)
+        var w_max = _float(_reduce(w.address, y32.rows, 1, context))
         _ = w  # keep the Python object alive through the native call above
-        var tail = Python.list(PythonObject(w.addr), w_max)
+        var tail = Python.list(PythonObject(w.address), w_max)
         _ = w  # keep the Python object alive through the native call above
-        _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y32.addr, y32.rows, 0,
+        _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y32.address, y32.rows, 0,
                            ForestFit("rf_regressor_fit_weighted", True, tail, True), None, rf, context)
         _ = y32  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
@@ -1020,17 +1026,17 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
         var oob = PythonObject(None)
         var score = PythonObject(None)
         if _truthy(cfg["oob_score"]):
-            oob = trees_vector(y32.rows, "<f8", context)
-            score = trees_vector(1, "<f8", context)
+            oob = admitted_vector(y32.rows, "<f8", context)
+            score = admitted_vector(1, "<f8", context)
         var x = _x_for(X, False, context)
-        var importance = trees_vector(x.cols, "<f4", context) if importances else PythonObject(None)
+        var importance = admitted_vector(x.cols, "<f4", context) if importances else PythonObject(None)
         var tail = Python.list(PythonObject(0 if oob is None else trees_address(oob)),
                                PythonObject(0 if score is None else trees_address(score)),
                                PythonObject(0 if importance is None else trees_address(importance)))
         _ = oob  # keep the Python object alive through the native call above
         _ = score  # keep the Python object alive through the native call above
         _ = importance  # keep the Python object alive through the native call above
-        _ = _rf_fit_arrays(fields, kind, x, y32.addr, y32.rows, 0,
+        _ = _rf_fit_arrays(fields, kind, x, y32.address, y32.rows, 0,
                            ForestFit("rf_regressor_fit_aux", True, tail, True), None, rf, context)
         _ = importance  # keep the Python object alive through the native call above
         _ = score  # keep the Python object alive through the native call above
@@ -1045,12 +1051,12 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
     if tree_start is not None:
         if not _has(rf, "rf_regressor_fit_shard_export"):
             raise Error("ImportError: rebuild RF binding for global tree-ID shards")
-        _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y32.addr, y32.rows, 0,
+        _ = _rf_fit_arrays(fields, kind, _x_for(X, False, context), y32.address, y32.rows, 0,
                            ForestFit("rf_regressor_fit_shard", True, Python.list(tree_start), True), None, rf, context)
         _ = y32^
         return model
     _ = _rf_fit_arrays(fields, kind, _x_for(X, Bool(_rf_entries(rf, "rf_regressor_fit")), context),
-                       y32.addr, y32.rows, 0, ForestFit("rf_regressor_fit", True, Python.list(), True),
+                       y32.address, y32.rows, 0, ForestFit("rf_regressor_fit", True, Python.list(), True),
                        _rf_entries(rf, "rf_regressor_fit"), rf, context)
     _ = y32^
     return model
@@ -1064,7 +1070,7 @@ def _et_fit_arrays(fields: PythonObject, cfg: PythonObject, X: PythonObject, y_a
     fitted state with its four extra-trees fields."""
     var x = _x_for(X, Bool(rowmajor), context)
     var chosen = fit.copy()
-    if rowmajor and x.row_major:
+    if rowmajor and x.c_order:
         chosen = rowmajor.value().copy()
     _y_rows_check(y_rows, x.rows)
     var device_scan = _device_scan(et, "trees_device_finite_scan")
@@ -1103,7 +1109,7 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
         var k = len(labels.classes)
         py_setitem(fields, "n_classes_", PythonObject(k))
         # `codes.astype('<f4')`: the ET classifier reads float32 class codes.
-        var codes = trees_vector(labels.n, "<f4", context)
+        var codes = admitted_vector(labels.n, "<f4", context)
         trees_cast(trees_address(labels.codes), "<i4", trees_address(codes), "<f4", labels.n, context)
         _ = codes  # keep the Python object alive through the native call above
         var class_weight = cfg["class_weight"]
@@ -1119,13 +1125,13 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
                     raise Error("RuntimeError: rebuild the trees binding for weighted ExtraTrees shard fits")
                 _et_fit_arrays(fields, unweighted, X, trees_address(codes), labels.n, k,
                                ForestFit("et_classifier_fit_weighted_shard", False,
-                                         Python.list(PythonObject(weights.addr), tree_start), False),
+                                         Python.list(PythonObject(weights.address), tree_start), False),
                                None, et, context)
                 _ = codes  # keep the Python object alive through the native call above
                 _ = weights  # keep the Python object alive through the native call above
                 _ = weights^
                 return model
-            var tail = Python.list(PythonObject(weights.addr))
+            var tail = Python.list(PythonObject(weights.address))
             _et_fit_arrays(fields, unweighted, X, trees_address(codes), labels.n, k,
                            ForestFit("et_classifier_fit_weighted", False, tail, True),
                            _et_rowmajor(et, "et_classifier_fit_weighted", tail), et, context)
@@ -1145,24 +1151,24 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
         _ = codes  # keep the Python object alive through the native call above
         _ = codes^
         return model
-    var y32 = trees_f32(y, 1, "C", "y", context)
+    var y32 = admit_f32(y, 1, "y", context, allow_nonfinite=True)
     _check_regression_target(y32, Int(py=fields["_criterion_code"]), fields["criterion"], "et", context)
     if sample_weight is not None:
-        var weights = trees_check_sample_weight(sample_weight, y32.rows, context)
+        var weights = admit_weight_words(sample_weight, y32.rows, context)
         if not _has(et, "et_regressor_fit_weighted_export"):
             raise Error("RuntimeError: rebuild the trees binding for weighted ExtraTrees fits")
         if tree_start is not None:
             if not _has(et, "et_regressor_fit_weighted_shard"):
                 raise Error("RuntimeError: rebuild the trees binding for weighted ExtraTrees shard fits")
-            _et_fit_arrays(fields, cfg, X, y32.addr, y32.rows, 0,
+            _et_fit_arrays(fields, cfg, X, y32.address, y32.rows, 0,
                            ForestFit("et_regressor_fit_weighted_shard", False,
-                                     Python.list(PythonObject(weights.addr), tree_start), False), None, et, context)
+                                     Python.list(PythonObject(weights.address), tree_start), False), None, et, context)
             _ = y32  # keep the Python object alive through the native call above
             _ = weights  # keep the Python object alive through the native call above
             _ = weights^
             return model
-        var tail = Python.list(PythonObject(weights.addr))
-        _et_fit_arrays(fields, cfg, X, y32.addr, y32.rows, 0, ForestFit("et_regressor_fit_weighted", False, tail, True),
+        var tail = Python.list(PythonObject(weights.address))
+        _et_fit_arrays(fields, cfg, X, y32.address, y32.rows, 0, ForestFit("et_regressor_fit_weighted", False, tail, True),
                        _et_rowmajor(et, "et_regressor_fit_weighted", tail), et, context)
         _ = y32  # keep the Python object alive through the native call above
         _ = weights^
@@ -1170,11 +1176,11 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
     if tree_start is not None:
         if not _has(et, "et_regressor_fit_shard_export"):
             raise Error("ImportError: rebuild ExtraTrees binding for global tree-ID shards")
-        _et_fit_arrays(fields, cfg, X, y32.addr, y32.rows, 0,
+        _et_fit_arrays(fields, cfg, X, y32.address, y32.rows, 0,
                        ForestFit("et_regressor_fit_shard", False, Python.list(tree_start), True), None, et, context)
         _ = y32  # keep the Python object alive through the native call above
         return model
-    _et_fit_arrays(fields, cfg, X, y32.addr, y32.rows, 0, ForestFit("et_regressor_fit", False, Python.list(), True),
+    _et_fit_arrays(fields, cfg, X, y32.address, y32.rows, 0, ForestFit("et_regressor_fit", False, Python.list(), True),
                    _et_rowmajor(et, "et_regressor_fit", Python.list()), et, context)
     _ = y32  # keep the Python object alive through the native call above
     _ = y32^
@@ -1462,7 +1468,7 @@ def _strict_vote(model: PythonObject, fields: PythonObject, staged: ForestInput,
     var use = ForestHandle(handle, kept, release)
     var wrote = PythonObject(None)
     try:
-        wrote = py_call_typed(query, PythonObject(handle), PythonObject(staged.x.addr), PythonObject(trees_address(dest)),
+        wrote = py_call_typed(query, PythonObject(handle), PythonObject(staged.x.address), PythonObject(trees_address(dest)),
                               Python.list(PythonObject(staged.x.rows), PythonObject(staged.x.cols), PythonObject(outputs)))
     finally:
         forest_handle_done(use)
@@ -1476,14 +1482,14 @@ struct ForestInput(Copyable, Movable):
     three times per predict): X, the effective mode, the binding, the
     engine, whether the binding has the ordered resident export, and the
     fitted output width."""
-    var x: TreesMatrix
+    var x: AdmittedX
     var mode: String
     var native: PythonObject
     var engine: String
     var ordered_export: Bool
     var outputs: Int
 
-    def __init__(out self, var x: TreesMatrix, mode: String, native: PythonObject, engine: String,
+    def __init__(out self, var x: AdmittedX, mode: String, native: PythonObject, engine: String,
                  ordered_export: Bool, outputs: Int):
         self.x = x^
         self.mode = mode
@@ -1493,7 +1499,7 @@ struct ForestInput(Copyable, Movable):
         self.outputs = outputs
 
 
-def _stage(fields: PythonObject, kind: String, var x: TreesMatrix, context: PythonObject) raises -> ForestInput:
+def _stage(fields: PythonObject, kind: String, var x: AdmittedX, context: PythonObject) raises -> ForestInput:
     """The resolved predict state of a fitted model over an admitted X."""
     if not py_contains(fields, "_offsets"):
         raise Error("RuntimeError: this estimator is not fitted yet")
@@ -1511,7 +1517,7 @@ def _predict_input(model: PythonObject, fields: PythonObject, kind: String, X: P
     float32, the fitted width."""
     if not py_contains(fields, "_offsets"):
         raise Error("RuntimeError: this estimator is not fitted yet")
-    var x = trees_f32(X, 2, "C", "X", context)
+    var x = admit_f32(X, 2, "X", context, allow_nonfinite=True)
     var fitted = Int(py=_int(fields["n_features_in_"]))
     if x.cols != fitted:
         raise Error("X has " + String(x.cols) + " features, fit saw " + String(fitted))
@@ -1524,7 +1530,7 @@ def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: Fores
     float32, through the model's engine."""
     var rows = staged.x.rows
     var outputs = staged.outputs
-    var out = trees_vector(rows * outputs, "<f4", context)
+    var out = admitted_vector(rows * outputs, "<f4", context)
     var engine = staged.engine
     var wrote = PythonObject(None)
     if engine == "sequential" and not staged.ordered_export and trees_entry(staged.native, "forest_strict_prepare") is not None:
@@ -1544,9 +1550,9 @@ def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: Fores
             # An exact mojolearn Array's data address is its `_addr` slot, the
             # one `trees_view` reads; any other storage is viewed as before.
             var a = arrays[i]
-            var addr = trees_address(a) if py_type(a) is array_class else trees_view(a, "forest model", context).addr
+            var addr = trees_address(a) if py_type(a) is array_class else Int(py=classical_address(classical_view(a, context, "forest model")))
             _ = py_call(call.append, PythonObject(addr))
-        _ = py_call(call.append, PythonObject(staged.x.addr))
+        _ = py_call(call.append, PythonObject(staged.x.address))
         _ = py_call(call.append, PythonObject(trees_address(out)))
         _ = out  # keep the Python object alive through the native call above
         _ = py_call(call.append, dims)
@@ -1558,7 +1564,7 @@ def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: Fores
         var use = _resident_with(model, fields, staged.native, staged.mode, engine, staged.ordered_export, context)
         try:
             wrote = py_call_typed(trees_entry(staged.native, "forest_predict_resident_reuse_gpu"), PythonObject(use.handle),
-                                  PythonObject(staged.x.addr), PythonObject(trees_address(out)),
+                                  PythonObject(staged.x.address), PythonObject(trees_address(out)),
                                   Python.list(PythonObject(rows), PythonObject(staged.x.cols), PythonObject(outputs)))
         finally:
             forest_handle_done(use)
@@ -1612,11 +1618,11 @@ def _resident_labels(model: PythonObject, fields: PythonObject, staged: ForestIn
     if function is None:
         return PythonObject(None)
     var rows = staged.x.rows
-    var out = trees_vector(rows, "<i4", context)
+    var out = admitted_vector(rows, "<i4", context)
     var use = _resident_with(model, fields, staged.native, staged.mode, engine, staged.ordered_export, context)
     var wrote = PythonObject(None)
     try:
-        wrote = py_call_typed(function, PythonObject(use.handle), PythonObject(staged.x.addr), PythonObject(trees_address(out)),
+        wrote = py_call_typed(function, PythonObject(use.handle), PythonObject(staged.x.address), PythonObject(trees_address(out)),
                               Python.list(PythonObject(rows), PythonObject(staged.x.cols), PythonObject(staged.outputs)))
     finally:
         forest_handle_done(use)
@@ -1631,7 +1637,7 @@ def _resident_labels(model: PythonObject, fields: PythonObject, staged: ForestIn
 def _widen(vote: PythonObject, shape: PythonObject, context: PythonObject) raises -> PythonObject:
     """`vote.astype('<f8')` under `shape`."""
     var n = Int(py=vote.size)
-    var out = trees_empty(shape, "<f8", context)
+    var out = admitted_array(shape, "<f8", context)
     trees_cast(trees_address(vote), "<f4", trees_address(out), "<f8", n, context)
     _ = out  # keep the Python object alive through the native call above
     return out
@@ -1732,7 +1738,7 @@ def forest_predict_codes(model: PythonObject, args: PythonObject, context: Pytho
     return Python.tuple(fields["classes_"], _codes_staged(target, fields, kind, staged, context))
 
 
-def forest_public_predict(model: PythonObject, kind: String, x: TreesMatrix, proba: Bool, codes: Bool,
+def forest_public_predict(model: PythonObject, kind: String, x: AdmittedX, proba: Bool, codes: Bool,
                           context: PythonObject) raises -> PythonObject:
     """The public door's predict over the X it already admitted and checked
     (classical_check_x: C-order float32; its width against the fitted width;

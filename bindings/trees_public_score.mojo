@@ -31,11 +31,14 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_wrap_array
 from bindings.arena_prog_native import _metrics_run
 from bindings.trees_public_inputs import (
-    TreesView, TreesMatrix, trees_builtins, trees_helper, trees_table, trees_entry, trees_vector,
-    trees_address, trees_view, trees_f32, trees_f32_view, trees_check_rank, trees_all_finite, trees_cast,
-    trees_shape_repr, _view_of_array, _view_of_buffer, _pandas_values, _flatten_labels, _native_labels,
-    _encode_code,
+    trees_builtins, trees_helper, trees_table, trees_entry,
+    trees_address, trees_cast, _pandas_values, _encode_code,
 )
+from bindings.classical_labels import _flatten_labels, _native_labels
+from bindings.admitted_input import AdmittedX, admit_f32, admitted_vector, admit_c_view, admitted_dtype
+from bindings.classical_arrays import classical_address
+# TOMBSTONE: trees_f32 / trees_all_finite / TreesView / TreesMatrix / trees_vector / _view_of_array / _view_of_buffer uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32
 from bindings.metrics_native_support import metric_is_integral
 from bindings.trees_public_forest import (
@@ -155,7 +158,7 @@ def _has_float_leaf(value: PythonObject) raises -> Bool:
 # ------------------------------------------------------------ r2
 
 
-def _as_f32_1d(source: PythonObject, name: String, context: PythonObject) raises -> TreesMatrix:
+def _as_f32_1d(source: PythonObject, name: String, context: PythonObject) raises -> AdmittedX:
     """`_metrics_impl._as_f32_1d`: a 1-D (or (n, 1) column) float32 vector,
     float64 refused by name, NaN or infinity refused."""
     var shape = trees_shape_of(source, context)
@@ -171,13 +174,16 @@ def _as_f32_1d(source: PythonObject, name: String, context: PythonObject) raises
                     + "r2_score, kl_divergence and silhouette_score are NOT implemented "
                     + "(no float64 on this GPU). Cast to float32 yourself so the "
                     + "precision you run at is the one you chose.")
-    var out = trees_f32(source, len(shape), "C", name, context)
-    if not trees_all_finite(out.addr, out.rows * out.cols, False, context):
-        raise Error("mojolearn metrics: " + name + " contains NaN or infinity; refused "
-                    + "here (metrics/README.md HAND-OFF ask 3) rather than letting it "
-                    + "reach a kernel whose answer for it is a washed sentinel")
-    _ = out  # keep the Python object alive through the native calls above
-    return out^
+    # The one admission (admit_f32): the finite test rides in its cast or
+    # its one parallel scan; the metrics wording is kept.
+    try:
+        return admit_f32(source, len(shape), name, context)
+    except error:
+        if "contains NaN or infinity" in String(error):
+            raise Error("mojolearn metrics: " + name + " contains NaN or infinity; refused "
+                        + "here (metrics/README.md HAND-OFF ask 3) rather than letting it "
+                        + "reach a kernel whose answer for it is a washed sentinel")
+        raise error^
 
 
 def _reduce(addr: Int, count: Int, what: Int, context: PythonObject) raises -> PythonObject:
@@ -186,7 +192,7 @@ def _reduce(addr: Int, count: Int, what: Int, context: PythonObject) raises -> P
                          PythonObject(count), PythonObject(what))
 
 
-def trees_sample_weight_f32(source: PythonObject, n: Int, caller: String, context: PythonObject) raises -> TreesMatrix:
+def trees_sample_weight_f32(source: PythonObject, n: Int, caller: String, context: PythonObject) raises -> AdmittedX:
     """`_metrics_impl._sample_weight_f32`: one finite, non-negative float32
     weight per sample with a positive total."""
     var shape = trees_shape_of(source, context)
@@ -195,11 +201,18 @@ def trees_sample_weight_f32(source: PythonObject, n: Int, caller: String, contex
     if shape[0] != n:
         raise Error("mojolearn " + caller + ": sample_weight has " + String(shape[0]) + " entries for "
                     + String(n) + " samples")
-    var w = trees_f32(source, 1, "C", "sample_weight", context)
-    if not trees_all_finite(w.addr, n, False, context) or Bool(py=_reduce(w.addr, n, 0, context) < PythonObject(0)):
-        raise Error("mojolearn " + caller + ": sample_weight must have finite nonnegative entries")
+    var refusal = "mojolearn " + caller + ": sample_weight must have finite nonnegative entries"
+    var w = AdmittedX(PythonObject(None), PythonObject(None), 0, 0, 0, 1, False)
+    try:
+        w = admit_f32(source, 1, "sample_weight", context)
+    except error:
+        if "contains NaN or infinity" in String(error):
+            raise Error(refusal)
+        raise error^
+    if Bool(py=_reduce(w.address, n, 0, context) < PythonObject(0)):
+        raise Error(refusal)
     _ = w  # keep the Python object alive through the native calls above
-    if not Bool(py=_reduce(w.addr, n, 1, context) > PythonObject(0)):
+    if not Bool(py=_reduce(w.address, n, 1, context) > PythonObject(0)):
         raise Error("mojolearn " + caller + ": sample_weight must have positive total weight")
     _ = w  # keep the Python object alive through the native calls above
     return w^
@@ -243,14 +256,14 @@ def trees_r2(y_true: PythonObject, prediction: PythonObject, sample_weight: Pyth
     var result = PythonObject(None)
     if sample_weight is not None:
         var w = trees_sample_weight_f32(sample_weight, y.rows, "r2_score", context)
-        result = py_call_typed(metrics["r2_score_weighted"], PythonObject(y.addr), PythonObject(yh.addr),
-                               PythonObject(w.addr), Python.list(PythonObject(y.rows)))
+        result = py_call_typed(metrics["r2_score_weighted"], PythonObject(y.address), PythonObject(yh.address),
+                               PythonObject(w.address), Python.list(PythonObject(y.rows)))
         _ = yh  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
         _ = w^
     else:
-        result = py_call_typed(metrics["r2_score"], PythonObject(y.addr), PythonObject(yh.addr),
+        result = py_call_typed(metrics["r2_score"], PythonObject(y.address), PythonObject(yh.address),
                                Python.list(PythonObject(y.rows)))
         _ = yh  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
@@ -290,8 +303,7 @@ def _native_classification(values: PythonObject, context: PythonObject) raises -
     var cls = py_type(values)
     if cls is b.str or cls is b.bytes:
         return None
-    var view: TreesView
-    var bool_source = False
+    var view = PythonObject(None)
     if cls is b.list or cls is b.tuple:
         var n = len(values)
         if n == 0:
@@ -305,30 +317,28 @@ def _native_classification(values: PythonObject, context: PythonObject) raises -
             store = py_call(context["array_type"], "q", values)
         except:
             return None
-        view = _view_of_array(classical_wrap_array(store, Python.tuple(n), "<i8", "C", context))
+        view = classical_wrap_array(store, Python.tuple(n), "<i8", "C", context)
     else:
         if native_pandas_exact(values):
             return None
         if len(trees_shape_of(values, context)) != 1:
             return None
         try:
-            if cls is context["array_class"]:
-                view = _view_of_array(values)
-            else:
-                bool_source = String(py_call(b.memoryview, values).format) == "?"
-                view = _view_of_buffer(values, "input", context)
+            view = admit_c_view(values, "input", context)
+            _ = admitted_dtype(view, context)
         except:
             return None
-    if view.ndim() != 1 or view.size() < 1:
+    if Int(py=view.ndim) != 1 or Int(py=view.size) < 1:
         return None
-    var typestr = view.typestr
+    var typestr = admitted_dtype(view, context)
     if typestr == "<u2" or typestr == "<i1":
         # exact; the encoder has no 8- or 16-bit arm (`astype('<i4')`)
-        var wide = trees_vector(view.size(), "<i4", context)
-        trees_cast(view.addr, typestr, trees_address(wide), "<i4", view.size(), context)
-        _ = wide  # keep the Python object alive through the native call above
-        view = _view_of_array(wide)
-    if view.typestr != "<i4" and view.typestr != "<i8" and view.typestr != "<u4" and view.typestr != "<u1":
+        var count = Int(py=view.size)
+        var wide = admitted_vector(count, "<i4", context)
+        trees_cast(Int(py=classical_address(view)), typestr, trees_address(wide), "<i4", count, context)
+        view = wide
+        typestr = "<i4"
+    if typestr != "<i4" and typestr != "<i8" and typestr != "<u4" and typestr != "<u1":
         return None
     # A bool buffer's classes are read as the ints 0 and 1 (`int(c)`).
     var labels = _native_labels(view, False, context)
@@ -408,10 +418,10 @@ def _codes(labels: ScoreLabels, order: PythonObject, context: PythonObject) rais
     var index = Python.dict()
     for i in range(len(order)):  # driver-loop: over the distinct class labels
         py_setitem(index, order[i], PythonObject(i))
-    var out = trees_vector(labels.n, "<i4", context)
+    var out = admitted_vector(labels.n, "<i4", context)
     if labels.encoded:
         var k = len(labels.classes)
-        var table = trees_vector(k, "<i4", context)
+        var table = admitted_vector(k, "<i4", context)
         var t = _I32P(unsafe_from_address=trees_address(table))
         _ = table  # keep the Python object alive through the native call above
         for i in range(k):  # driver-loop: over the distinct class labels
@@ -563,7 +573,7 @@ def _accuracy_encoded(true: ScoreLabels, pred: ScoreLabels, sample_weight: Pytho
         raise Error("mojolearn " + caller + ": at most INT32_MAX rows")
     var n = true.n
     var weighted = sample_weight is not None
-    var w: Optional[TreesMatrix] = None
+    var w: Optional[AdmittedX] = None
     if weighted:
         w = trees_sample_weight_f32(sample_weight, n, caller, context)
     var present = py_call(b.sorted, py_call(_label_set(true).union, _label_set(pred)))
@@ -579,7 +589,7 @@ def _accuracy_encoded(true: ScoreLabels, pred: ScoreLabels, sample_weight: Pytho
     var W = _NONE
     var w_array = PythonObject(None)
     if weighted:
-        w_array = w.value().keep if py_type(w.value().keep) is context["array_class"] else _owned_f32(w.value(), context)
+        w_array = w.value().array if py_type(w.value().array) is context["array_class"] else _owned_f32(w.value(), context)
         W = prog.put(w_array, n)
     # The COUNT epilogue (x_metrics/cm_epi.mojo `_count`) reads only the
     # matched grouping's counts when unweighted, and only the folded wsum
@@ -622,15 +632,15 @@ def _accuracy_encoded(true: ScoreLabels, pred: ScoreLabels, sample_weight: Pytho
     return fraction
 
 
-def _owned_f32(w: TreesMatrix, context: PythonObject) raises -> PythonObject:
+def _owned_f32(w: AdmittedX, context: PythonObject) raises -> PythonObject:
     """A float32 Array copy of weights that borrow a foreign buffer (the
     program runner copies Arrays into its arena; `put` took `as_f32_c`'s
     Array). The bytes are copied in C (`array.array.frombytes`)."""
     # copied from the matrix's own address (its owner need not be a
     # bytes-like object: frombytes refused a viewed NumPy weight vector)
     var count = w.rows * w.cols
-    var out = trees_vector(count, "<f4", context)
-    trees_cast(w.addr, "<f4", trees_address(out), "<f4", count, context)
+    var out = admitted_vector(count, "<f4", context)
+    trees_cast(w.address, "<f4", trees_address(out), "<f4", count, context)
     _ = out  # keep the Python object alive through the native call above
     return out
 
@@ -651,7 +661,7 @@ def forest_score(model: PythonObject, args: PythonObject, context: PythonObject)
                          context)
 
 
-def forest_score_public(model: PythonObject, kind: String, x: TreesMatrix, y: PythonObject,
+def forest_score_public(model: PythonObject, kind: String, x: AdmittedX, y: PythonObject,
                         sample_weight: PythonObject, context: PythonObject) raises -> PythonObject:
     """`forest_score` over the X the public door already admitted and
     checked (no second view or width check)."""
@@ -671,8 +681,9 @@ def _score_values(model: PythonObject, prediction: PythonObject, y: PythonObject
     if rows != n:
         raise Error("score target and prediction lengths differ")
     var mode = PythonObject(forest_effective_mode(py_fields(model), context))
-    var y32 = trees_f32(y, 1, "C", "y", context)
-    var p32 = trees_f32(prediction, 1, "C", "prediction", context)
+    # NaN is refused by trees_r2's own check, with the metrics wording.
+    var y32 = admit_f32(y, 1, "y", context, allow_nonfinite=True)
+    var p32 = admit_f32(prediction, 1, "prediction", context, allow_nonfinite=True)
     var result = trees_r2(_as_array(y32, context), _as_array(p32, context), sample_weight, mode, context)
     _ = y32^
     _ = p32^
@@ -699,7 +710,7 @@ def _score_codes(model: PythonObject, pair: PythonObject, y: PythonObject, sampl
     return PythonObject(classical_score_from_codes(y, classes, codes, sample_weight, mode, context))
 
 
-def _as_array(m: TreesMatrix, context: PythonObject) raises -> PythonObject:
+def _as_array(m: AdmittedX, context: PythonObject) raises -> PythonObject:
     """The float32 vector as the Array `as_f32_c` returned (a borrowed
     foreign buffer is passed as its own owner, which reads the same)."""
-    return m.keep
+    return m.array

@@ -10,8 +10,12 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.classical_attributes import classical_check_layout
 from bindings.trees_public_forest import forest_kind, forest_effective_mode, _check_mode
 from bindings.trees_public_inputs import (
-    trees_builtins, trees_f32, trees_view, trees_empty, trees_address, trees_table, trees_need,
+    trees_builtins, trees_address, trees_table, trees_need,
 )
+from bindings.admitted_input import admit_f32, admitted_array, classical_view, admitted_dtype
+from bindings.classical_arrays import classical_address, classical_c_order
+# TOMBSTONE: trees_f32 / trees_view / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 
 
 def _field(fields: PythonObject, name: String) raises -> PythonObject:
@@ -54,12 +58,13 @@ def _model_buffers(fields: PythonObject, trees: Int, outputs: Int,
     for i in range(5):  # driver-loop: five immutable forest buffers, no numerical work
         var value = _field(fields, String(names[i]))
         classical_admit_value(value, context)
-        var view = trees_view(value, String(names[i]), context)
-        if view.ndim() != 1 or view.typestr != String(types[i]) or not view.c_order():
+        var view = classical_view(value, context, String(names[i]), True)
+        if (Int(py=view.ndim) != 1 or admitted_dtype(view, context) != String(types[i])
+                or not classical_c_order(view, context)):
             raise Error("TypeError: forest auxiliary requires flat native " + String(types[i]) + " model storage")
-        _ = py_call(addresses.append, PythonObject(view.addr))
-        _ = py_call(owners.append, view.keep)
-        sizes.append(view.size())
+        _ = py_call(addresses.append, classical_address(view))
+        _ = py_call(owners.append, view)
+        sizes.append(Int(py=view.size))
     # The kernel checks each node/child, but an address-only ABI cannot know
     # buffer lengths. Bound offsets before handing it pointers; spare trailing
     # storage remains allowed, as in a retained prefix/slice of a forest.
@@ -105,20 +110,21 @@ def forest_shape(model: PythonObject, operation: String,
     var left_object = _field(fields, "_left_child")
     classical_admit_value(offsets_object, context)
     classical_admit_value(left_object, context)
-    var offsets = trees_view(offsets_object, "offsets", context)
-    var left = trees_view(left_object, "left", context)
-    if offsets.ndim() != 1 or offsets.typestr != "<i4" or not offsets.c_order() or offsets.size() < 2:
+    var offsets = classical_view(offsets_object, context, "offsets")
+    var left = classical_view(left_object, context, "left")
+    if (Int(py=offsets.ndim) != 1 or admitted_dtype(offsets, context) != "<i4" or not classical_c_order(offsets, context)
+            or Int(py=offsets.size) < 2):
         raise Error("TypeError: tree shape requires flat int32 offsets covering the first tree")
-    if left.ndim() != 1 or left.typestr != "<i4" or not left.c_order():
+    if Int(py=left.ndim) != 1 or admitted_dtype(left, context) != "<i4" or not classical_c_order(left, context):
         raise Error("TypeError: tree shape requires flat int32 child storage")
-    var offset_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=offsets.addr)
+    var offset_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(offsets)))
     var lo = Int(offset_ptr[0])
     var hi = Int(offset_ptr[1])
-    if lo < 0 or hi <= lo or hi > left.size():
+    if lo < 0 or hi <= lo or hi > Int(py=left.size):
         raise Error("tree shape offsets exceed child storage")
-    var result = trees_empty(Python.tuple(2), "<i4", context)
+    var result = admitted_array(Python.tuple(2), "<i4", context)
     var result_address = trees_address(result)
-    _ = py_call_typed(entry, PythonObject(left.addr + 4 * lo), PythonObject(result_address), Python.list(hi - lo))
+    _ = py_call_typed(entry, PythonObject(Int(py=classical_address(left)) + 4 * lo), PythonObject(result_address), Python.list(hi - lo))
     var result_ptr = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=result_address)
     var value = Int(result_ptr[0 if operation == "trees_public_forest_depth" else 1])
     _ = result
@@ -146,7 +152,7 @@ def embedding_apply(model: PythonObject, args: PythonObject,
     if not py_contains(fields, "forest_"):
         raise Error("RuntimeError: this estimator is not fitted yet")
     classical_admit_value(args, context)
-    var x = trees_f32(args[0], 2, "C", "X", context)
+    var x = admit_f32(args[0], 2, "X", context, allow_nonfinite=True)
     var features = _dimension(fields, "n_features_in_", context)
     if x.cols != features:
         raise Error("X has " + String(x.cols) + " features, fit saw " + String(features))
@@ -167,9 +173,9 @@ def embedding_apply(model: PythonObject, args: PythonObject,
     classical_admit_value(mode, context)
     var native = trees_table(context, String(_check_mode(mode)), "_mojolearn_x_trees")
     var entry = trees_need(native, "x_trees_apply", "mojolearn: the x_trees binding has no x_trees_apply", "ImportError")
-    var out = trees_empty(Python.tuple(x.rows, trees), "<i4", context)
+    var out = admitted_array(Python.tuple(x.rows, trees), "<i4", context)
     _ = py_call_typed(entry, buffers[0][0], buffers[0][1], buffers[0][2], buffers[0][3],
-                     PythonObject(x.addr), PythonObject(trees_address(out)),
+                     PythonObject(x.address), PythonObject(trees_address(out)),
                      Python.list(x.rows, features, 0, trees))
     _ = x
     _ = buffers^
@@ -184,7 +190,7 @@ def forest_auxiliary(model: PythonObject, operation: String, args: PythonObject,
     if not py_contains(fields, "_offsets"):
         raise Error("RuntimeError: this estimator is not fitted yet")
     classical_admit_value(args, context)
-    var x = trees_f32(args[0], 2, "C", "X", context)
+    var x = admit_f32(args[0], 2, "X", context, allow_nonfinite=True)
     var features = _dimension(fields, "n_features_in_", context)
     if x.cols != features:
         raise Error("X has " + String(x.cols) + " features, fit saw " + String(features))
@@ -206,9 +212,9 @@ def forest_auxiliary(model: PythonObject, operation: String, args: PythonObject,
         leaf_requested = Bool(py=py_call_typed(trees_builtins().bool, args[1]))
         prefix_requested = Bool(py=py_call_typed(trees_builtins().bool, args[2]))
         prediction_requested = Bool(py=py_call_typed(trees_builtins().bool, args[3]))
-    var leaf = trees_empty(Python.tuple(rows, trees), "<i4", context) if leaf_requested else PythonObject(None)
-    var prefix = trees_empty(Python.tuple(rows, trees, outputs), "<f4", context) if prefix_requested else PythonObject(None)
-    var prediction = trees_empty(Python.tuple(rows, outputs), "<f4", context) if prediction_requested else PythonObject(None)
+    var leaf = admitted_array(Python.tuple(rows, trees), "<i4", context) if leaf_requested else PythonObject(None)
+    var prefix = admitted_array(Python.tuple(rows, trees, outputs), "<f4", context) if prefix_requested else PythonObject(None)
+    var prediction = admitted_array(Python.tuple(rows, outputs), "<f4", context) if prediction_requested else PythonObject(None)
     classical_admit_value(py_get(fields, "numeric_mode"), context)
     classical_admit_value(py_get(fields, "_fit_numeric_mode"), context)
     var mode = forest_effective_mode(fields, context)
@@ -219,7 +225,7 @@ def forest_auxiliary(model: PythonObject, operation: String, args: PythonObject,
     # DecisionTree retains its RF input convention, including a random tree
     # whose flat buffers came from the native inner ExtraTrees fit.
     var rf_input = not forest_kind(model, context).startswith("et_")
-    var wrote = py_call_typed(entry, buffers[0], PythonObject(x.addr),
+    var wrote = py_call_typed(entry, buffers[0], PythonObject(x.address),
                              PythonObject(trees_address(leaf) if leaf_requested else 0),
                              PythonObject(trees_address(prefix) if prefix_requested else 0),
                              PythonObject(trees_address(prediction) if prediction_requested else 0),
