@@ -81,6 +81,7 @@ from x_cnn.device import perm_gather_device, vals_t_device
 from x_cnn.device import gcn_loops_device
 # lane fam-neural (2026-10-04): the `_m` forms of the entries that had none
 from x_cnn.device import idn_flags, adaptive_pool_m, graph_op_m, gcn_norm_m, pad2d_m, chan_copy_m
+from autograd.rules_graph import gcn_backward_autograd, sage_backward_autograd
 # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
 # Tried: the fused BatchNorm entries' imports.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
@@ -1148,6 +1149,27 @@ def graph_op_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObj
     return PythonObject(n * F)
 
 
+def gcn_backward_t_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """GCNConv's resident backward on the tape in one call (autograd/rules_graph.mojo
+    `gcn_backward_autograd`): addrs = [g, x, h, out, W, gW, dx, dh, vals_t, csr_t, b, gb, ones];
+    params = [n, d, f, nnz, bias, dx resident, ones resident]."""
+    var a = _addrs(addrs, 13)
+    var p = _addrs(params, 7)
+    with GILReleased(Python()):
+        gcn_backward_autograd(a, p)
+    return PythonObject(p[0] * p[1])
+
+
+def sage_backward_t_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """SAGEConv's resident backward on the tape in one call (autograd/rules_graph.mojo
+    `sage_backward_autograd`): 23 addresses, params = [n, d, f, nnz, aggr, normalize, root, dx resident]."""
+    var a = _addrs(addrs, 23)
+    var p = _addrs(params, 8)
+    with GILReleased(Python()):
+        sage_backward_autograd(a, p)
+    return PythonObject(p[0] * p[1])
+
+
 def gcn_norm_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs = [w, vals, csr]; params = [n, F, nnz, mode] as `x_cnn_gcn_norm`'s."""
     var n = Int(py=params[0])
@@ -1605,6 +1627,8 @@ def build__mojolearn_x_cnn() -> PythonObject:
         m.def_function[pad2d_m_binding]("x_cnn_pad2d_m")
         m.def_function[chan_copy_m_binding]("x_cnn_chan_copy_m")
         m.def_function[spmm_m_binding]("x_cnn_spmm_m")
+        m.def_function[gcn_backward_t_binding]("x_cnn_gcn_backward_t")
+        m.def_function[sage_backward_t_binding]("x_cnn_sage_backward_t")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_cnn: ", e))
