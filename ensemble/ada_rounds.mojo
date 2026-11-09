@@ -226,8 +226,8 @@ def ada_predict_codes(ctx: DeviceContext, nodes: AdaNodes, x: DeviceBuffer[DType
                       codes: DeviceBuffer[DType.int32]) raises:
     """The member's class codes for the n rows of the column-major `x`."""
     ctx.enqueue_function[ada_codes_kernel](
-        nodes.offsets.unsafe_ptr(), nodes.columns.unsafe_ptr(), nodes.thresholds.unsafe_ptr(),
-        nodes.left.unsafe_ptr(), nodes.leaves.unsafe_ptr(), x.unsafe_ptr(), codes.unsafe_ptr(),
+        _ada_i32(nodes.offsets), _ada_i32(nodes.columns), _ada_f32(nodes.thresholds),
+        _ada_i32(nodes.left), _ada_f32(nodes.leaves), _ada_f32(x), _ada_i32(codes),
         Int32(n), Int32(nodes.outputs), Int32(nodes.trees),
         grid_dim=ceildiv(n, ADA_TPB), block_dim=ADA_TPB,
     )
@@ -237,11 +237,27 @@ def ada_predict_values(ctx: DeviceContext, nodes: AdaNodes, x: DeviceBuffer[DTyp
                        values: DeviceBuffer[DType.float32]) raises:
     """The member's values for the n rows of the column-major `x`."""
     ctx.enqueue_function[ada_values_kernel](
-        nodes.offsets.unsafe_ptr(), nodes.columns.unsafe_ptr(), nodes.thresholds.unsafe_ptr(),
-        nodes.left.unsafe_ptr(), nodes.leaves.unsafe_ptr(), x.unsafe_ptr(), values.unsafe_ptr(),
+        _ada_i32(nodes.offsets), _ada_i32(nodes.columns), _ada_f32(nodes.thresholds),
+        _ada_i32(nodes.left), _ada_f32(nodes.leaves), _ada_f32(x), _ada_f32(values),
         Int32(n), Int32(nodes.trees),
         grid_dim=ceildiv(n, ADA_TPB), block_dim=ADA_TPB,
     )
+
+
+def _ada_u64(b: DeviceBuffer[DType.uint64]) -> MutPointer[UInt64, MutAnyOrigin]:
+    """`b`'s device address as the element kernels' mutable pointer (the
+    buffer handle is shared; the state is passed by reference)."""
+    return b.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
+
+
+def _ada_i32(b: DeviceBuffer[DType.int32]) -> MutPointer[Int32, MutAnyOrigin]:
+    """`b`'s device address as the element kernels' mutable pointer."""
+    return b.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
+
+
+def _ada_f32(b: DeviceBuffer[DType.float32]) -> MutPointer[Float32, MutAnyOrigin]:
+    """`b`'s device address as the element kernels' mutable pointer."""
+    return b.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
 
 
 def ada_member_weights(ctx: DeviceContext, state: AdaState, dsw: DeviceBuffer[DType.float32]) raises:
@@ -253,12 +269,12 @@ def ada_member_weights(ctx: DeviceContext, state: AdaState, dsw: DeviceBuffer[DT
     var n = state.n
     var grid = max(1, min(ceildiv(n, ADA_TPB), 65535))
     ctx.enqueue_function[scale_to_f32_kernel](
-        state.w.unsafe_ptr(), Int64(n), _f64_word(Float64(n)), dsw.unsafe_ptr(),
+        _ada_u64(state.w), Int64(n), _f64_word(Float64(n)), _ada_f32(dsw),
         grid_dim=grid, block_dim=ADA_TPB,
     )
     if state.has_cw:
         ctx.enqueue_function[mul_f32_kernel](
-            dsw.unsafe_ptr(), state.cw.unsafe_ptr(), Int64(n), dsw.unsafe_ptr(),
+            _ada_f32(dsw), _ada_f32(state.cw), Int64(n), _ada_f32(dsw),
             grid_dim=grid, block_dim=ADA_TPB,
         )
 
@@ -267,6 +283,6 @@ def ada_rescale(ctx: DeviceContext, state: AdaState, total: Float64) raises:
     """w /= total in place (`ops.scale_f64`, the host's `_scale`)."""
     var n = state.n
     ctx.enqueue_function[scale_kernel](
-        state.w.unsafe_ptr(), Int64(n), _f64_word(total),
+        _ada_u64(state.w), Int64(n), _f64_word(total),
         grid_dim=max(1, min(ceildiv(n, ADA_TPB), 65535)), block_dim=ADA_TPB,
     )
