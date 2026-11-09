@@ -49,6 +49,7 @@ certified optimizer step of the byte LM and the host column's composed
 oracle step (`byte_host_train_step`); the bits changed with them on every
 column together.
 """
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from sequence.ops import FP, Args, OP_COPY, OPT_ADAMW
 from sequence.exec_trait import Exec
@@ -56,7 +57,7 @@ from sequence.exec_device import DeviceExec
 from core.cast_in import CastIn, CAST_KIND_SIGNED, CAST_KIND_FLOAT
 from autograd.ops_api import (
     OpsSession, ops_session_open, ops_session, ops_session_close, OPS_DEVICE,
-    OPS_EMBEDDING, OPS_TRANSPOSE, OPS_MATMUL, OPS_RESHAPE, OPS_CROSS_ENTROPY,
+    OPS_EMBEDDING, OPS_TRANSPOSE, OPS_MATMUL, OPS_RESHAPE, OPS_CROSS_ENTROPY, OPS_SCALE,
 )
 from autograd.block_step_ops import (
     OPS_ATTN_STEP, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS, block_weight_sizes, block_offsets,
@@ -74,6 +75,11 @@ from autograd.rules_step_ops import StepOpRules
 from autograd.small_mlp_program import _bias_powers
 from training.byte_lm_config import ByteConfig
 from training.checks.optimizer_contract import OptimizerConfig
+
+#: The CPU column's negative control (THE CPU COLUMN'S NEGATIVE CONTROL in
+#: byte_program_open_on): set only on byte LM host binding builds; it never
+#: reaches a device executor.
+comptime BYTE_LM_HOST_SABOTAGE = is_defined["MOJOLEARN_BYTE_LM_HOST_SABOTAGE"]()
 
 #: the parts of the state `_move` copies
 comptime BYTE_PART_PARAM = 0
@@ -235,6 +241,13 @@ def byte_program_open_on[E: Exec & Movable & Deinitable, KIND: Int](
         x = s[].op(OPS_ATTN_STEP, [x, e.blocks[l], e.kv[l], e.words[l]], ints, none_f)
     var t = s[].op(OPS_TRANSPOSE, [e.head], none_i, none_f)
     var logits = s[].op(OPS_MATMUL, [x, t], none_i, none_f)
+    comptime if BYTE_LM_HOST_SABOTAGE and not E.IS_DEVICE:
+        # THE CPU COLUMN'S NEGATIVE CONTROL (-D MOJOLEARN_BYTE_LM_HOST_SABOTAGE=1, byte LM host binding builds
+        # only): every logit of the training forward is scaled by 1 + 2^-20 (OPS_SCALE), so the loss, every
+        # gradient and every AdamW update after it move. Wrong on purpose: a build with it defined must fail
+        # the loss comparison, or the comparison is not reaching the training arithmetic.
+        var bump: List[Float32] = [Float32(1.00000095367431640625)]
+        logits = s[].op(OPS_SCALE, [logits], none_i, bump)
     var shape: List[Int] = [b * length, 1]
     var codes = s[].op(OPS_RESHAPE, [tgt], shape, none_f)
     var mean: List[Int] = [REDUCTION_MEAN]
