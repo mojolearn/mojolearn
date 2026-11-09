@@ -126,8 +126,9 @@ struct SharedSlot[T: Defaultable & Movable & Deinitable, name: StaticString, ver
     `get_or_create_ptr()` call returns a pointer to the `T`, after the layout
     word was checked, so no accessor can forget the check. A mismatch (a
     module built from another layout met this name in the process) stops the
-    process with `mojolearn: mixed binary versions (<name>)`: the accessor is
-    not raising, as `_Global`'s is not, and reading on would corrupt memory.
+    process with `mojolearn: mixed binary versions (<name>)` (reading on would
+    corrupt memory). The accessor raises exactly where `_Global`'s does (its
+    first-creation path), so every former `_Global` caller keeps its form.
 
     Names follow the rule above (`Mojolearn<What>V<n>`); `version` is the
     layout version folded into the word. Bump the name's `V<n>` and
@@ -138,7 +139,7 @@ struct SharedSlot[T: Defaultable & Movable & Deinitable, name: StaticString, ver
 
     @staticmethod
     @always_inline
-    def get_or_create_ptr() -> UnsafePointer[Self.T, MutUntrackedOrigin]:
+    def get_or_create_ptr() raises -> UnsafePointer[Self.T, MutUntrackedOrigin]:
         """The slot's value, created on first use and kept for the process."""
         var box = Self._SLOT.get_or_create_ptr()
         if box[].layout != shared_slot_word[Self.T](Self.version):

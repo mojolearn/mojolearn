@@ -491,15 +491,15 @@ def _query_x(model: PythonObject, fields: PythonObject, source: PythonObject, co
     return _QueryX(x, Int(py=x.shape[0]), Int(py=x.shape[1]), PythonObject(None), status)
 
 
-def _infer_fold(model: PythonObject, fields: PythonObject, q: _QueryX, out: PythonObject, mode: Int,
+def _infer_fold(model: PythonObject, fields: PythonObject, q: _QueryX, dst: PythonObject, mode: Int,
                 n_classes: Int, log_out: Bool, context: PythonObject) raises:
-    """One `qn_infer_fold` call over the fold `q` names into `out`, refused
+    """One `qn_infer_fold` call over the fold `q` names into `dst`, refused
     through door_rows_refuse on its words."""
     var params = Python.list(q.rows, q.cols, 1 if Bool(py=fields["fit_intercept"]) else 0, n_classes, mode,
                              1 if log_out else 0)
     var words = py_call_typed(context["qn_infer_fold"], q.store_ids, classical_address(fields["_w"]),
-                              PythonObject(labels_address(out)), params)
-    _ = out  # keep the Python object alive through the native call above
+                              PythonObject(labels_address(dst)), params)
+    _ = dst  # keep the Python object alive through the native call above
     door_rows_refuse(Int(py=words[0]), Int(py=words[1]), _name(model), Int(py=q.store_ids[1]))
 
 

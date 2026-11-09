@@ -488,9 +488,9 @@ def gpc_newton_device(
     last factor, `dpi` and `dwsr` the last pi and W_sr. `dgw` holds
     `identical_gemm_workspace_max_floats(n, 1, n)` floats. Raises by name
     when B's factor fails or a right-hand side is NaN."""
-    var dys = List[DeviceBuffer[DType.float32]](dy.copy())
-    var dbs = List[DeviceBuffer[DType.float32]](db.copy())
-    var dpis = List[DeviceBuffer[DType.float32]](dpi.copy())
-    var dwsrs = List[DeviceBuffer[DType.float32]](dwsr.copy())
+    var dys: List[DeviceBuffer[DType.float32]] = [dy.copy()]
+    var dbs: List[DeviceBuffer[DType.float32]] = [db.copy()]
+    var dpis: List[DeviceBuffer[DType.float32]] = [dpi.copy()]
+    var dwsrs: List[DeviceBuffer[DType.float32]] = [dwsr.copy()]
     var runs = gpc_newton_device_batch(ctx, dk, dys, dbs, dgw, dpis, dwsrs, n, max_iter_predict)
     return runs[0]

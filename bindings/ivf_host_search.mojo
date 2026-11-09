@@ -199,7 +199,12 @@ struct HostIvfRegistry(Defaultable, Movable):
         self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime HOST_IVF_REGISTRY = SharedSlot[HostIvfRegistry, ( # V2: the entry layout changed (p3-neighbors-cluster); a process-wide # global name is shared by every extension that registers it. "MojolearnIvfFlatHostResidentIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnIvfFlatHostResidentFastV3" )]
+# V2 -> V3: the entry layout changed (p3-neighbors-cluster); a process-wide
+# slot name is shared by every extension that registers it.
+comptime HOST_IVF_REGISTRY = SharedSlot[HostIvfRegistry, (
+    "MojolearnIvfFlatHostResidentIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else
+    "MojolearnIvfFlatHostResidentFastV3"
+)]
 
 
 def _host_ivf_registry() raises -> UnsafePointer[HostIvfRegistry, MutAnyOrigin]:
