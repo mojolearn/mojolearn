@@ -155,7 +155,6 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from training.neural_identical_experiments import IDN_SAMBA_FORWARD_TAPE
 from core.neural_context import neural_ctx
 from checks.vendor import COMPILED_VENDOR
 from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_ANY_BWD_SABOTAGE
@@ -192,7 +191,7 @@ from autograd.kernels.transformer import (
     BWD_ANY_SABOTAGE,
     LlamaBackwardStages,
 )
-# The session and saved-tape backwards below run on the autograd tape.
+# The session backward below runs on the autograd tape.
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
 from autograd.rules_transformer import llama_decoder_layer_backward, llama_decoder_layer_backward_autograd
@@ -228,8 +227,6 @@ from transformer.session_native_dispatch import TRANSFORMER_NATIVE_API, transfor
 from transformer.lean_stages import transformer_lean_stages, _lean_for
 # Typed kernel side of this shell (thin-shell move, pure, no bit change).
 from transformer.transformer_binding_impl import (
-    _session_forward_tape_run,
-    _session_backward_tape_run,
     _NEURAL_CTX,
     _optional_upload,
     _f32_ptr,
@@ -244,19 +241,9 @@ from transformer.transformer_binding_impl import (
     _lean_for_w,
     _workspace_key,
     TransformerWorkspace,
-    TransformerBackwardWorkspace,
     TransformerSession,
-    _weights_key,
-    _base_weight_lens,
-    _weights_same_bits,
-    _weights_host_copy,
-    _weights_recopy,
-    _stage_reset_on,
     _session_retain_cap_bytes,
-    _session_weights,
     _transformer_run_session,
-    TransformerForwardTape,
-    _transformer_saved_backward,
     _transformer_run_session_backward,
     INT15_ENTRY_ADDRS,
     INT15_ENTRY_PARAMS,
@@ -411,84 +398,10 @@ def transformer_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-def transformer_forward_tape_enabled_binding() -> PythonObject:
-    return PythonObject(IDN_SAMBA_FORWARD_TAPE)
-
-
-def transformer_forward_tape_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """[x, nine weights, y], [B,L,dm,nh,nkv,hd,it,window] -> owned tape."""
-    comptime if not IDN_SAMBA_FORWARD_TAPE:
-        raise Error("transformer forward tape: IDENTICAL opt-in is disabled")
-    var incoming = _read_addrs_tail(addrs, 11, String("transformer_forward_tape"))
-    # _read_addrs_tail always returns 11 + BLOCK_OPTION_ADDRS slots (zeros
-    # where no options tail was sent), so the old `len(incoming) != 11` test
-    # refused every call. Default options means the tail slots are all zero.
-    for i in range(11, len(incoming)):  # small-loop(incoming: the block options tail slots): validated tensor addresses, not data
-        if incoming[i] != 0:
-            raise Error("transformer forward tape: default options only (no block options tail)")
-    var p = _read_params(params, 8, String("transformer_forward_tape"))
-    if len(p) != 8:
-        raise Error("transformer forward tape: expected 8 shape scalars")
-    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
-        if incoming[i] == 0:
-            raise Error("transformer forward tape: null address at slot " + String(i))
-    var a = List[Int]()
-    for i in range(10):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
-        a.append(incoming[i])
-    a.append(0)
-    a.append(0)
-    a.append(incoming[10])
-    var tape = TransformerForwardTape(p)
-    with GILReleased(Python()):
-        try:
-            _ = _transformer_run_session[True, True](tape.session, a,
-                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[1], 0, p[7], BlockOptions())
-        except error:
-            tape.close()
-            raise error
-    return PythonObject(alloc=tape^)
-
-
-def transformer_backward_tape_binding(tape: PythonObject, addrs: PythonObject) raises -> PythonObject:
-    comptime if not IDN_SAMBA_FORWARD_TAPE:
-        raise Error("transformer backward tape: IDENTICAL opt-in is disabled")
-    var owner = tape.downcast_value_ptr[TransformerForwardTape]()
-    if owner[].busy or owner[].consumed:
-        raise Error("transformer forward tape: busy, closed or already consumed")
-    var a = _read_addrs_tail(addrs, 11, String("transformer_backward_tape"))
-    # _read_addrs_tail pads to 11 + BLOCK_OPTION_ADDRS slots, so the old
-    # `len(a) != 11` test refused every call (the forward tape entry had the
-    # same fault). The backward takes no options: the tail must be zero.
-    for i in range(11, len(a)):  # small-loop(a: the block options tail slots): validated tensor addresses, not data
-        if a[i] != 0:
-            raise Error("transformer backward tape: expected dy and ten outputs, no block options tail")
-    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
-        if a[i] == 0:
-            raise Error("transformer backward tape: null address at slot " + String(i))
-    owner[].busy = True
-    owner[].consumed = True
-    try:
-        with GILReleased(Python()):
-            try:
-                _transformer_saved_backward(owner[], a)
-            except error:
-                owner[].close()
-                raise error
-            owner[].close()
-    except error:
-        owner[].busy = False
-        raise error
-    owner[].busy = False
-    return PythonObject(0)
-
-
-def transformer_close_tape_binding(tape: PythonObject) raises -> PythonObject:
-    var owner = tape.downcast_value_ptr[TransformerForwardTape]()
-    if owner[].busy:
-        raise Error("transformer forward tape: busy")
-    with GILReleased(Python()):
-        owner[].close()
-    return PythonObject(0)
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (the standalone tape entries `transformer_forward_tape_enabled`,
+# `transformer_forward_tape`, `transformer_backward_tape`, `transformer_close_tape`.)
 
 def transformer_session_forward_fresh_binding(
     session: PythonObject, addrs: PythonObject, params: PythonObject,
@@ -498,8 +411,8 @@ def transformer_session_forward_fresh_binding(
     10 and 11 ZERO, the same 10 (+17) params with `smax = L` and
     `cached_tokens = 0`. The cache is the session's retained buffers,
     zero-filled on the device; nothing of it crosses the host boundary. This
-    is `transformer_forward_fresh` on a session: weights retained across
-    calls (`_session_weights`), workspace retained under the budget."""
+    is `transformer_forward_fresh` on a session: the block's attention step
+    op arm retained across calls under the budget."""
     var owner = session.downcast_value_ptr[TransformerSession]()
     if owner[].busy or owner[].closed:
         raise Error("transformer: session is busy or closed")
@@ -616,14 +529,9 @@ from providers.python.causal_lm_program_pyapi import CausalProgramOwner, causal_
 
 
 
-def transformer_tape_create_native_binding() raises -> PythonObject:
-    # Empty typed lifetime admission only; all forward work uses the provider.
-    return PythonObject(alloc=TransformerForwardTape(List[Int]()))
-
-
-def transformer_tape_handle_native_binding(tape: PythonObject) raises -> PythonObject:
-    # Exact registered owner, never an inferred extension object layout.
-    return PythonObject(Int(tape.downcast_value_ptr[TransformerForwardTape]()))
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (`transformer_tape_create_native_v1`, `transformer_tape_handle_native_v1`.)
 
 def transformer_block_api_binding() raises -> PythonObject:
     # Same common named-table transport used by other native sibling entries.
@@ -1495,28 +1403,9 @@ def transformer_backward_binding(
 
 
 
-def transformer_session_discard_tape_binding(session: PythonObject,ticket: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[TransformerSession]()
-    if owner[].busy:
-        raise Error("transformer tape: session is busy")
-    if len(ticket) != 2:
-        raise Error("transformer tape: owner and epoch required")
-    var cookie = Int(py=ticket[0])
-    var epoch = Int(py=ticket[1])
-    if cookie != Int(owner):
-        raise Error("transformer tape: foreign session")
-    # Closing an older ticket cannot discard a newer forward in this session.
-    if not owner[].closed and epoch == owner[].tape_generation:
-        owner[].invalidate_tape()
-    return PythonObject(0)
-
-
-def transformer_session_invalidate_tape_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[TransformerSession]()
-    if owner[].busy or owner[].closed:
-        raise Error("transformer tape: session is busy or closed")
-    owner[].invalidate_tape()
-    return PythonObject(0)
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (`transformer_session_discard_tape`, `transformer_session_invalidate_tape`.)
 
 
 def transformer_arithmetic_profile_changed_binding() raises -> PythonObject:
@@ -1527,85 +1416,9 @@ def transformer_arithmetic_profile_binding() raises -> PythonObject:
     return PythonObject(transformer_arithmetic_profile())
 
 
-def transformer_session_forward_tape_binding(
-    session: PythonObject, addrs: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """11 buffers x/9 weights/y; ten scalars shape/window/budget/cost.
-
-    Returns native session cookie, epoch, retained flag, counted stage bytes.
-    Copies finish before return. The weight snapshot belongs to this epoch;
-    any subsequent session operation invalidates the unconsumed ticket.
-    """
-    var owner = session.downcast_value_ptr[TransformerSession]()
-    if owner[].busy or owner[].closed:
-        raise Error("transformer tape: session is busy or closed")
-    if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("transformer tape: IDENTICAL only")
-    if len(addrs) != 11 or len(params) != 10:
-        raise Error("transformer tape: expected 11 addresses and 10 scalars")
-    var a = List[Int]()
-    var p = List[Int]()
-    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
-        var address = Int(py=addrs[i])
-        if address == 0:
-            raise Error("transformer tape: null buffer address")
-        a.append(address)
-    for i in range(10):  # small-loop(params: fixed scalar list of this entry): argument words, not data
-        p.append(Int(py=params[i]))
-    if p[0] <= 0 or p[1] <= 0 or p[7] < 0 or p[8] < 0 or p[9] < 0:
-        raise Error("transformer tape: invalid shape/window/activation budget/cost")
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            try:
-                _session_forward_tape_run(Int(owner), a, p)
-            except error:
-                owner[].clear()
-                raise error
-    except error:
-        owner[].busy = False
-        raise error
-    owner[].busy = False
-    var ticket = Python.list()
-    ticket.append(PythonObject(Int(owner)))
-    ticket.append(PythonObject(owner[].tape_generation))
-    ticket.append(PythonObject(Int(owner[].tape.value().retained)))
-    ticket.append(PythonObject(owner[].tape.value().retained_bytes))
-    return ticket
-
-
-def transformer_session_backward_tape_binding(
-    session: PythonObject, addrs: PythonObject, ticket: PythonObject,
-) raises -> PythonObject:
-    """Eleven addresses: dy, dx, norm1,norm2,Q,K,V,O,gate,up,down gradients."""
-    var owner = session.downcast_value_ptr[TransformerSession]()
-    if owner[].busy or owner[].closed:
-        raise Error("transformer tape: session is busy or closed")
-    if len(addrs) != 11 or len(ticket) != 2:
-        raise Error("transformer tape backward: expected 11 addresses and owner/epoch")
-    var cookie = Int(py=ticket[0])
-    var generation = Int(py=ticket[1])
-    if cookie != Int(owner) or generation != owner[].tape_generation or not owner[].tape:
-        raise Error("transformer tape: stale, foreign or already consumed ticket")
-    var a = List[Int]()
-    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
-        var address = Int(py=addrs[i])
-        if address == 0:
-            raise Error("transformer tape backward: null buffer address")
-        a.append(address)
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            try:
-                _session_backward_tape_run(Int(owner), a, generation)
-            except error:
-                owner[].clear()
-                raise error
-    except error:
-        owner[].busy = False
-        raise error
-    owner[].busy = False
-    return PythonObject(0)
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (`transformer_session_forward_tape`, `transformer_session_backward_tape`.)
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_transformer.mojo
@@ -1646,12 +1459,8 @@ def build__mojolearn_transformer() -> PythonObject:
         )
     try:
         var m = PythonModuleBuilder("_mojolearn_transformer")
-        m.def_function[transformer_session_discard_tape_binding]("transformer_session_discard_tape")
-        m.def_function[transformer_session_invalidate_tape_binding]("transformer_session_invalidate_tape")
         m.def_function[transformer_arithmetic_profile_changed_binding]("transformer_arithmetic_profile_changed")
         m.def_function[transformer_arithmetic_profile_binding]("transformer_arithmetic_profile")
-        m.def_function[transformer_session_forward_tape_binding]("transformer_session_forward_tape")
-        m.def_function[transformer_session_backward_tape_binding]("transformer_session_backward_tape")
         m.def_function[transformer_vendor_binding]("transformer_vendor")
         m.def_function[transformer_flash_call_count_binding]("transformer_flash_call_count")
         m.def_function[transformer_numeric_mode_binding](
@@ -1668,8 +1477,6 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[transformer_session_forward_binding]("transformer_session_forward")
         m.def_function[transformer_native_api_binding]("transformer_native_api_v1")
         m.def_function[transformer_block_api_binding]("transformer_block_api_v1")
-        m.def_function[transformer_tape_create_native_binding]("transformer_tape_create_native_v1")
-        m.def_function[transformer_tape_handle_native_binding]("transformer_tape_handle_native_v1")
         m.def_function[transformer_native_session_handle_binding]("transformer_native_session_handle_v1")
         # lane/neural-net-experiment: the stateless prefill on a session.
         m.def_function[transformer_session_forward_fresh_binding]("transformer_session_forward_fresh")
@@ -1680,11 +1487,6 @@ def build__mojolearn_transformer() -> PythonObject:
             "transformer_decode_step"
         )
         m.def_function[transformer_backward_binding]("transformer_backward")
-        _ = m.add_type[TransformerForwardTape]("_TransformerForwardTape")
-        m.def_function[transformer_forward_tape_enabled_binding]("transformer_forward_tape_enabled")
-        m.def_function[transformer_forward_tape_binding]("transformer_forward_tape")
-        m.def_function[transformer_backward_tape_binding]("transformer_backward_tape")
-        m.def_function[transformer_close_tape_binding]("transformer_close_tape")
         # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by 79853ceba; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_transformer.patch
         # DEVIATION 2940: the resident decode session.

@@ -61,21 +61,8 @@ def samba_resident_address(fields: PythonObject, session: PythonObject) raises -
     return Int(py=fields["_resident_native_address"])
 
 
-def samba_resident_native_forward(fields: PythonObject, config: PythonObject, entries: PythonObject, ids: PythonObject) raises -> PythonObject:
-    var provider = samba_resident_provider(fields, entries)
-    if provider is None:
-        return PythonObject(None)
-    if Float64(py=config["dropout"]) != 0.0 or neural_descriptor_execute(provider, 24, [], [], [], False) == 0:
-        return PythonObject(None)
-    var session = samba_resident_session(fields, config, provider)
-    var handle = samba_resident_address(fields, session)
-    var shape = ids.shape
-    var b = Int(py=shape[0])
-    var l = Int(py=shape[1])
-    var output = generation_array([b, l, Int(py=config["vocab"])])
-    _ = neural_descriptor_reserved_execute(provider, session, handle, 14, 15, 16,
-        [Int(py=fields["flat"]._addr), Int(py=ids._addr), Int(py=output._addr)], [b, l], [])
-    return output
+# TOMBSTONE: SAMBA_THREE_TIER_FORWARD samba_resident_native_forward (descriptor op 16 forward) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
 
 
 def samba_resident_native_step(fields: PythonObject, config: PythonObject, provider: PythonObject,

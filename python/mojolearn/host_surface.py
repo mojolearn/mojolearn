@@ -591,7 +591,6 @@ TRAINING_LANE_NAMES = {
     "mamba3-decode-session": "the resident Mamba-3 decode session",
     "transformer-decode-session": "the resident Transformer decode session",
     "transformer-decode-load-state": "the Transformer decode session reloaded from its state",
-    "transformer-forward-tape": "the Transformer block's forward tape, its backward and its close",
     # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
     # variants of families that already had a host path, every one in the
     # 136-lane record and IDENTICAL x4 against its three GPU columns on the
@@ -3411,10 +3410,7 @@ FAMILIES = (
                         # the same entries the `transformer` lane hashes
                         "transformer-decode-session",
                         # lane/verify-coverage-audit (2026-10-21): the session's load_state
-                        "transformer-decode-load-state",
-                        # lane verify-coverage-20261024: forward_with_tape,
-                        # backward_from_tape and the tape's close
-                        "transformer-forward-tape"),
+                        "transformer-decode-load-state"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("TransformerBlock",),
@@ -3434,8 +3430,7 @@ FAMILIES = (
             "transformer_decode_step", "transformer_decode_steps", "transformer_backward",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "transformer_arithmetic_profile_changed", "transformer_arithmetic_profile", "transformer_session_create",
-            "transformer_session_close", "transformer_session_discard_tape", "transformer_session_invalidate_tape",
-            "transformer_session_forward_tape", "transformer_session_backward_tape",
+            "transformer_session_close",
             # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
             "transformer_block_api_v1", "transformer_native_session_handle_v1",
         ),
@@ -4390,7 +4385,6 @@ PUBLIC_PENDING_LANES = {
     "gp-lml-theta": "unwatched",
     "cross-vendor-fold": "unwatched",
     "transformer-decode-load-state": "unwatched",
-    "transformer-forward-tape": "unwatched",
     "scaler-fit-transform": "unwatched",
     "safetensors-widen-f16": "unwatched",
     "hf-causal-lm-stream": "unwatched",

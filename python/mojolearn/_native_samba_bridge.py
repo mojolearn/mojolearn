@@ -109,12 +109,13 @@ def connect(config_cls, model_cls, training, neural, state_cls, session_cls=None
         "optimizer_step", "optimizer_resident_download", "optimizer_resident_upload",
         "optimizer_resident_open", "optimizer_resident_close", "optimizer_resident_step",
         "optimizer_resident_step_io", "optimizer_maximize_dev", "accumulation_is_aligned",
-        "samba_resident_enabled", "samba_resident_open", "samba_resident_forward", "samba_resident_step",
+        "samba_resident_enabled", "samba_resident_open", "samba_resident_step",
         "samba_resident_accumulated_step", "samba_resident_native_handle_v1",
+        "samba_program_enabled", "samba_program_open", "samba_program_shape", "samba_program_forward",
         "samba_decode_open", "samba_decode_step", "samba_decode_tokens", "samba_decode_export", "samba_decode_load",
         "optimizer_parallel_available", "accumulate_parallel_available", "clip_parallel_available",
         "samba_head_loss", "training_chunked_lm_head_enabled", "chunked_lm_head_v2_train",
-        "samba_afn_norm_head_forward", "samba_afn_tail_train", "samba_afn_embedding_backward_tied",
+        "samba_afn_tail_train", "samba_afn_embedding_backward_tied",
     )
     for name in names:  # glue: connect existing compiled symbols at package import
         try:

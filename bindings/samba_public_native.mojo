@@ -15,6 +15,7 @@ from bindings.samba_inference_native import samba_forward, samba_allocate, samba
 from bindings.samba_checkpoint_native import samba_checkpoint_save, samba_checkpoint_load, samba_checkpoint_read
 from bindings.samba_cpu_inference import samba_inference_construct, samba_inference_parameters, samba_inference_checkpoint, samba_inference_repr
 from bindings.samba_admission import samba_admit
+from core.weight_epoch import weight_epoch_bump
 from bindings.samba_decode_native import (
     samba_decode_open, samba_decode_init, samba_decode_step, samba_decode_tokens, samba_decode_sync, samba_decode_load,
     samba_decode_close, samba_decode_drop, samba_decode_is_open, samba_decode_state, samba_decode_device,
@@ -41,7 +42,18 @@ def _samba_public_items(value: PythonObject) raises -> PythonObject:
     return PythonObject(items)
 
 
+def _samba_writes_registry(operation: String) -> Bool:
+    """The operations that write the stack's flat registry in place (integ-w4,
+    lane x45c's weight key in SambaStackProgram): each one moves the weight
+    epoch, so a resident program reloads at its next call. The registry stays
+    writable (the optimizer needs writable parameters), so these bumps, not a
+    read-only freeze, keep the key honest."""
+    return (operation == "model_train_step" or operation == "apply" or operation == "publish"
+            or operation == "checkpoint_load" or operation == "load_weights")
+
+
 def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    var writes = False
     try:
         var args = PythonObject(from_borrowed=args_ptr)
         var operation = String(args[0])
@@ -54,13 +66,16 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
             except:
                 return PythonObject(None).steal_data()
         samba_admit(operation, values, context)
+        writes = _samba_writes_registry(operation)
+        if writes:
+            weight_epoch_bump()
         var result = PythonObject(None)
         if operation == "model_train_step":
             result = samba_train_step(values[0], values[1], values[2], context)
         elif operation == "forward":
-            result = samba_forward(values[0], values[1], values[2], values[3], False, True, context)
+            result = samba_forward(values[0], values[1], values[2], values[3], False, context)
         elif operation == "step":
-            result = samba_forward(values[0], values[1], values[2], PythonObject(None), True, True, context)
+            result = samba_forward(values[0], values[1], values[2], PythonObject(None), True, context)
         elif operation == "allocate_state":
             result = samba_allocate(values[0], values[1], values[2], context)
         elif operation == "state_construct":
@@ -80,9 +95,9 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         elif operation == "inference_checkpoint":
             result = samba_inference_checkpoint(values[0], values[1], context)
         elif operation == "inference_forward":
-            result = samba_forward(values[0], values[1], values[2], values[3], False, False, context)
+            result = samba_forward(values[0], values[1], values[2], values[3], False, context)
         elif operation == "inference_step":
-            result = samba_forward(values[0], values[1], values[2], PythonObject(None), True, False, context)
+            result = samba_forward(values[0], values[1], values[2], PythonObject(None), True, context)
         elif operation == "decode_session_open":
             result = samba_decode_open(values[0], values[1], context)
         elif operation == "decode_session_init":
@@ -143,8 +158,16 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
             result = samba_gradients(values[0], values[1], values[2], _samba_public_items(values[3]), values[4], Int(py=values[5]), context)
         else:
             raise Error("Samba: unknown native state operation")
+        if writes:
+            weight_epoch_bump()
         return result.steal_data()
     except error:
+        if writes:
+            # a failed write may have changed part of the registry
+            try:
+                weight_epoch_bump()
+            except:
+                pass
         var message = String(error)
         if message.startswith("NotImplementedError:"):
             return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))

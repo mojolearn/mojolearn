@@ -2409,13 +2409,10 @@ class OursBlock(Ours):
                 self.decode_session = self.block.decode_session(self.decode_state)
             self.info["operation_scope"] = ("zero-state token-by-token decode of the whole input, "
                                             "one public step call per token")
-        if self.operation == "transformer_forward_vjp_tape":
-            if lane != "transformer-forward":
-                raise RuntimeError("REFUSED: transformer tape operation requires transformer-forward")
-            self.info["call"] = "TransformerBlock.forward_with_tape(x); backward_from_tape(tape, x)"
-            self.info["operation_scope"] = "full declared block forward plus VJP; no loss or optimizer"
-            self.neural_ab_runtime["cotangent_source"] = "same immutable full input x"
-        elif self.operation == "transformer_windowed_forward":
+        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+        # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+        # (the `transformer_forward_vjp_tape` board operation over forward_with_tape.)
+        if self.operation == "transformer_windowed_forward":
             if lane != "transformer-forward" or window <= 0:
                 raise RuntimeError("REFUSED: windowed operation needs transformer-forward and transformer_window > 0")
             self.window_state = self.block.allocate_state(int(self.x.shape[0]), int(self.x.shape[1]))
@@ -2437,22 +2434,9 @@ class OursBlock(Ours):
                 installed_generation=generation, installation_boundary="preparation_in_cold_total")
 
     def call(self):
-        if self.operation == "transformer_forward_vjp_tape":
-            self.out, tape = self.block.forward_with_tape(self.x,
-                activation_budget_bytes=int(self.runtime.get("activation_budget_bytes", 536870912)),
-                minimum_replay_ops_per_byte=int(self.runtime.get("minimum_replay_ops_per_byte", 0)))
-            self.neural_ab_runtime.update(retained=bool(tape.retained),
-                stage_bytes=int(tape.stage_bytes), profile=str(tape.profile))
-            expected = self.runtime.get("expect_retained")
-            if expected is not None and bool(tape.retained) != bool(expected):
-                tape.close()
-                raise RuntimeError("REFUSED: tape retained/replay selection did not reach the declared A/B arm")
-            try:
-                self.gradients = self.block.backward_from_tape(tape, self.x)
-            finally:
-                tape.close()
-            self.neural_ab_runtime["vjp_completed"] = True
-        elif self.operation == "mamba_forward_vjp":
+        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+        # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+        if self.operation == "mamba_forward_vjp":
             self.out = self.block.forward(self.x)
             self.gradients = self.block.backward(self.x, self.x)
             self.neural_ab_runtime["vjp_completed"] = True
@@ -5266,7 +5250,7 @@ def build_runner(lane, arm, shape, data, ab_config=None):
     operation = _neural_ab_operation(ab_config)
     if "optimize" in (ab_config or {}).get("runtime", {}) and operation != "program_optimize":
         raise ValueError("REFUSED: runtime.optimize requires program_optimize")
-    supported = ("model_default", "transformer_configured_forward", "transformer_windowed_forward", "transformer_forward_vjp_tape", "mamba3_owned_forward", "lm_chunked_head_v2",
+    supported = ("model_default", "transformer_configured_forward", "transformer_windowed_forward", "mamba3_owned_forward", "lm_chunked_head_v2",
                  "residual_dropout_forward_vjp", "mlp_inference_sessions", "samba_training_config", "mamba_forward_vjp",
                  "program_eager", "program_optimize", "decode_n")
     if operation not in supported:
@@ -5313,8 +5297,6 @@ def build_runner(lane, arm, shape, data, ab_config=None):
             raise RuntimeError("REFUSED: lm_chunked_head_v2 requires lm-train-step and its config flag")
         if operation == "transformer_windowed_forward" and (lane != "transformer-forward" or int(runtime.get("transformer_window", 0)) <= 0):
             raise RuntimeError("REFUSED: windowed operation requires transformer-forward and a positive configured window")
-        if operation == "transformer_forward_vjp_tape" and model != "transformer":
-            raise RuntimeError("REFUSED: tape operation requires a transformer block")
         if operation == "mamba3_owned_forward" and model != "mamba3":
             raise RuntimeError("REFUSED: owned-weight operation requires Mamba3")
         if operation == "mamba_forward_vjp" and model not in ("mamba1", "mamba2", "mamba3"):
@@ -6382,7 +6364,7 @@ def race(args):
             result["quality"] = quality(lane, data, scored, shape=args.shape)
             if scored is not outs:
                 result["quality"].pop(TORCH_REFERENCE_ARM, None)    # the reference is not a raced arm
-        if operation in ("transformer_forward_vjp_tape", "mamba_forward_vjp"):
+        if operation == "mamba_forward_vjp":
             result["experimental_quality"] = {
                 "forward": "ordinary host forward comparator only",
                 "vjp": "not_qualified_by_forward_quality",

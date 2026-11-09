@@ -106,49 +106,9 @@ def test_state_buffer_protocol_is_not_invoked():
     assert calls == []
 
 
-def test_tape_lifecycle_and_gradient_shapes():
-    block = _block()
-    x = np.full((1, 2, 16), .01, dtype=np.float32)
-    y, tape = block.forward_with_tape(x, activation_budget_bytes=0)
-    assert y.shape == x.shape and tape.shape == x.shape
-    with pytest.raises(TypeError):
-        pickle.dumps(tape)
-    gradients = block.backward_from_tape(tape, np.ones_like(x))
-    assert gradients["x"].shape == x.shape
-    assert set(gradients) == {"x", *block._W_NAMES}
-    with pytest.raises(ValueError):
-        block.backward_from_tape(tape, np.ones_like(x))
-    tape.close()
-
-
-def test_tape_close_does_not_discard_newer_ticket():
-    block = _block()
-    x = np.full((1, 2, 16), .01, dtype=np.float32)
-    _, old = block.forward_with_tape(x)
-    _, current = block.forward_with_tape(x)
-    old.close()
-    assert block.backward_from_tape(current, np.ones_like(x))["x"].shape == x.shape
-
-
-def test_tape_rejects_input_and_mutable_model_hooks():
-    block = _block()
-    calls = []
-    class ArrayHook(np.ndarray):
-        @property
-        def shape(self):
-            calls.append("shape")
-            return (1, 2, 16)
-    with pytest.raises(TypeError):
-        block.forward_with_tape(np.ones((1, 2, 16), dtype=np.float32).view(ArrayHook))
-    assert calls == []
-    class ScalarHook:
-        def __int__(self):
-            calls.append("int")
-            return 16
-    block.d_model = ScalarHook()
-    with pytest.raises(TypeError):
-        block.forward_with_tape(np.ones((1, 2, 16), dtype=np.float32))
-    assert calls == []
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (the forward_with_tape / backward_from_tape lifecycle, ticket and hook tests.)
 
 
 def test_decode_session_state_roundtrip_and_original_route_bits():
@@ -236,18 +196,6 @@ def test_decode_rejects_replaced_session_owners():
         session.discard()
 
 
-def test_budget_aware_tape_retention_and_replay_keep_outputs_and_gradients():
-    block = _block()
-    rng = np.random.default_rng(271)
-    x = rng.normal(0, .01, (1, 2, 16)).astype(np.float32)
-    dy = rng.normal(0, .01, x.shape).astype(np.float32)
-    replay_y, replay = block.forward_with_tape(x, activation_budget_bytes=0)
-    replay_gradients = block.backward_from_tape(replay, dy)
-    retained_y, retained = block.forward_with_tape(x, activation_budget_bytes=536870912)
-    retained_gradients = block.backward_from_tape(retained, dy)
-    assert np.asarray(replay_y).tobytes() == np.asarray(retained_y).tobytes()
-    for name in replay_gradients:
-        assert np.asarray(replay_gradients[name]).tobytes() == np.asarray(retained_gradients[name]).tobytes()
-    # Retention still depends on the established compile-time experiment
-    # policy; the caller budget never promises to override that policy.
-    assert isinstance(retained.retained, bool) and retained.stage_bytes >= 0
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (the budget-aware tape retention and replay test.)
