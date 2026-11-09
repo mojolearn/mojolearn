@@ -92,7 +92,7 @@ from x_decomp.dict_fast import DECOMP_FAST_DICT_DEV, dict_update_dev
 from x_decomp.qr_bounded import QRB_CELLS
 from x_decomp.moves_device import launch_move
 from x_decomp.select_dev import enqueue_sel_reduce, order_small_kernel
-from x_decomp.select_ops import SEL_ORDER_MAX
+from x_decomp.select_ops import SEL_ORDER_MAX, order_rank
 
 #: `_expansion_decomp._F64_EPS`, the `adds` of LDA's `norm_phi`
 comptime _F64_EPS: Float64 = 2.220446049250313e-16
@@ -216,6 +216,16 @@ def logdet_sign_kernel(diag: F32Ptr, piv: I32Ptr, n: Int32, dst: I32Ptr):
             c += 1
         if c != Int32(0):
             _ = Atomic.fetch_add(dst.unsafe_offset(1), c)
+
+
+def order_small_i32_kernel(src: F32Ptr, dst: I32Ptr, n: Int32):
+    """`order_small_kernel`'s stable ascending order stored as int32 words
+    (dst[rank(i)] = i), the coordinate order `cd_rows_kernel` reads: the same
+    rank, the same integer the host read back as `Int(Float32(i))`."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nn = Int(n)
+    if i < nn:
+        dst.unsafe_store(order_rank(src, nn, i), Int32(i))
 
 
 # ---- the resident matrix
@@ -780,26 +790,46 @@ struct DKit(Movable):
             res[i] = Int32(Int(h.d[i]))
         return res^
 
-    def cd_rows(mut self, W: DMat, HHt: DMat, XHt: DMat, perm: List[Int32]) raises -> Float64:
+    def order_small_dev(mut self, A: DMat) raises -> DMat:
+        """`order_small` kept on the device: the stable ascending order of A's
+        words as int32 bits in a (n, 1) matrix, enqueued (no download)."""
+        var n = A.n()
+        if n > SEL_ORDER_MAX:
+            raise Error("x_decomp: order_small exceeds its bound")
+        var out = DMat(n, 1)
+        if n > 0:
+            self.ctx.enqueue_function[order_small_i32_kernel](
+                A.p(), out.p().bitcast[Int32](), Int32(n), grid_dim=_blocks(n), block_dim=TPB
+            )
+        return out^
+
+    def iota_i32(mut self, n: Int) raises -> DMat:
+        """The identity coordinate order 0..n-1 as int32 bits, uploaded once."""
+        var out = DMat(n, 1)
+        var words = List[Float32](length=max(n, 1), fill=Float32(0))
+        for j in range(n):  # small-loop(n: components): the identity order's int32 bits as upload words
+            words[j] = bitcast[DType.float32](Int32(j))
+        self.upload_into(out, words^)
+        return out^
+
+    def cd_rows(mut self, W: DMat, HHt: DMat, XHt: DMat, perm: DMat) raises -> Float64:
         """`_Kit.cd_rows` on device matrices (`cd_rows_kernel`): W swept in
-        place, the violation folded by `total` and read."""
+        place, the violation folded by `total` and read. `perm` is the
+        coordinate order's W.c int32 words, resident (`order_small_dev`,
+        `iota_i32`; lane consol-n0-readmission: the order came home and went
+        back up on every half sweep)."""
         var n = W.r
         var kc = W.c
         var viol = DMat(n, 1)
         if n * kc > 0:
-            var pd = DMat(kc, 1)
-            var words = List[Float32](length=max(kc, 1), fill=Float32(0))
-            for j in range(kc):  # small-loop(kc: components): the permutation's int32 bits as upload words
-                words[j] = bitcast[DType.float32](perm[j])
-            self.upload_into(pd, words^)
+            if perm.n() < kc:
+                raise Error("x_decomp: cd_rows needs a coordinate order of W's columns")
             self.ctx.enqueue_function[cd_rows_kernel](
-                W.p(), HHt.p(), XHt.p(), pd.p().bitcast[Int32](), viol.p(), Int32(n), Int32(kc),
+                W.p(), HHt.p(), XHt.p(), perm.p().bitcast[Int32](), viol.p(), Int32(n), Int32(kc),
                 grid_dim=_blocks(n), block_dim=TPB,
             )
             var tv = self.total(viol)
-            var w = self.word(tv)
-            _ = pd^
-            return w
+            return self.word(tv)
         return 0.0
 
     def mm(self, A: DMat, B: DMat, ta: Bool, tb: Bool) raises -> DMat:
