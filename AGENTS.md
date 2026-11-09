@@ -104,7 +104,7 @@ retired with a reason within two weeks. Applies to hardware, firmware and softwa
 
 - We fix everything we can before a release. We do not release while there is more work to incorporate: known
   regressions, planned refactors, owed fixes and owed deletions all go in first. No piecemeal releases.
-- Measure before the release: time the candidate build on NVIDIA and AMD against the last release and the paper
+- Measure before the release: time the measurement build on NVIDIA and AMD against the last release and the paper
   baseline, fix every regression found, and measure again. Only a candidate with no open regression is frozen.
 - Order: all code in, one compile, measure, fix, measure again until clean, freeze, the one verification, publish.
 - A "measurement build" (`tools/release.py candidate`) is wheels built from a commit to measure them. It is NOT a

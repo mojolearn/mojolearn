@@ -933,7 +933,7 @@ RENTED_BUILD_BACKENDS = ("cpu-box", "gpu-legs")
 
 
 def candidate_defines(ctx):
-    """The candidate build's defines (tools/release.py candidate --defines; MOJOLEARN_BUILD_DEFINES spelling),
+    """The measurement build's defines (tools/release.py candidate --defines; MOJOLEARN_BUILD_DEFINES spelling),
     empty for a release."""
     return getattr(getattr(ctx, "args", None), "candidate_defines", "") or ""
 
@@ -3879,7 +3879,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
         if os.environ.get("MOJOLEARN_RELEASE_ADAPTERS", "1") != "0":
             args += ["--require-adapters"]
         if getattr(self.args, "candidate_version", ""):
-            # a candidate build (tools/release.py candidate): the local version and the defines, never the release's
+            # a measurement build (tools/release.py candidate): the local version and the defines, never the release's
             args += ["--local-version", self.args.candidate_version]
             if candidate_defines(self):
                 args += ["--candidate-defines", candidate_defines(self)]
@@ -6780,7 +6780,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
 
 
 def release_parser():
-    """The release CLI (main); `tools/release.py candidate` parses its Release arguments with it too."""
+    """The release CLI (main); `tools/release.py candidate` (a measurement build, never a release candidate) parses
+    its Release arguments with it too."""
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     ap.add_argument("version")
