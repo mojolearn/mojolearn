@@ -20,7 +20,6 @@ from bindings.samba_training_native import samba_ids
 from bindings.neural_block_public import neural_training_entries, neural_block_allocate_binding, neural_block_forward_binding, _neural_lengths, neural_mamba_session_call
 from bindings.neural_prefill_native import _prefill_mamba3
 from bindings.causal_lm_public import _native_function, _mutable, _writeback
-from bindings.samba_admission import samba_admit_value
 from bindings.causal_lm_construct import _model_bindings
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
 from bindings.byte_perf_helpers import byte_view_bytes
@@ -316,7 +315,7 @@ def _samba_program_call(model: PythonObject, fields: PythonObject, config: Pytho
                     Python.list(), Python.list())
         _ = ids  # keep the Python object alive through the native call above
         return output
-    samba_admit_value(state, context["admission"])
+    # The state was admitted at the public door (samba_admit).
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
     var words = samba_state_words(model, state, "SambaStack", keep, copies)
