@@ -614,13 +614,6 @@ def _lp_alpha_f32(fields: PythonObject, spreading: Bool) raises -> Float64:
     return _semi_f32_scalar(_semi_float(family_field(fields, "alpha")))
 
 
-def _lp_fast_resident(binding: PythonObject) raises -> Bool:
-    """`_lp_fast_resident`: the resident kNN-graph loop compiled in."""
-    var b = _semi_b()
-    var fn_obj = family_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_lp_fast_resident"), PythonObject(None))
-    return fn_obj is not None and _semi_int(family_call(fn_obj)) != 0
-
-
 def _lp_build_graph(model: PythonObject, fields: PythonObject, binding: PythonObject, x: PythonObject,
                     spreading: Bool, context: PythonObject) raises -> PythonObject:
     """`_build_graph` of the dense kernel: the RBF affinity, then
@@ -728,8 +721,11 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         _semi_op(binding, "lp_clamp",
                  Python.list(_semi_addr(ld), _semi_addr(ld), _semi_addr(unlabeled), _semi_addr(ystatic)),
                  Python.list(PythonObject(n), PythonObject(nc)), Python.list(), context)
-    if knn and _lp_fast_resident(binding):
-        # The kNN-graph loop as one resident op (`lp_iterate_knn`).
+    if knn:
+        # The kNN-graph loop as one resident op (`lp_iterate_knn`), on every
+        # binding (lane n4-mds-labelprop-nmf-loops, 2026-11-09).
+        # TOMBSTONE: label-propagation compact-graph binding loop (REFACTORED: lp_iterate_knn on every vendor and tier) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+        # Restore: git show f59d913b0b:bindings/neighbors_semi_native.mojo; record in docs/TOMBSTONES.md.
         var cols = graph[0]
         var vals = graph[1]
         var info = _semi_out(Python.tuple(2), "<i4", context)
@@ -750,65 +746,25 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         _ = info  # keep the Python object alive through the read above
         _lp_finish(fields, binding, x, classes, ld, resident_iter, context)
         return
-    if not knn:
-        # The dense loop as one resident op (`lp_iterate`).
-        var info = _semi_out(Python.tuple(2), "<i4", context)
-        var words = _semi_tol_words(fields)
-        var max_iter = _semi_int(family_field(fields, "max_iter"))
-        var mode = (1 if spreading else 0) + (2 if _semi_truth(py_get(fields, PythonObject("_classical_raw_graph"),
-                                                                         PythonObject(False))) else 0)
-        var alpha_f = _lp_alpha_f32(fields, spreading)
-        _semi_op(binding, "lp_iterate",
-                 Python.list(_semi_addr(dense), _semi_addr(ld), _semi_addr(ystatic), _semi_addr(unlabeled),
-                             _semi_addr(info)),
-                 Python.list(PythonObject(n), PythonObject(nc), PythonObject(max_iter), PythonObject(mode),
-                             PythonObject(words[0]), PythonObject(words[1])),
-                 Python.list(PythonObject(alpha_f)), context)
-        _ = dense  # keep the Python object alive through the native call above
-        _ = ystatic  # keep the Python object alive through the native call above
-        _ = unlabeled  # keep the Python object alive through the native call above
-        var dense_iter = Int(FAMILY_I32P(unsafe_from_address=Int(py=_semi_addr(info)))[0])
-        _ = info  # keep the Python object alive through the read above
-        _lp_finish(fields, binding, x, classes, ld, dense_iter, context)
-        return
-    # The compact graph without the resident op: one device step per
-    # iteration, the stopping sum read back before each step.
-    var prev = _semi_out(Python.tuple(n, nc), "<f4", context)
-    var s = _semi_out(Python.tuple(1), "<f4", context)
-    var n_iter = 0
-    var converged = False
-    var steps = _semi_int(family_field(fields, "max_iter"))
-    # tol and alpha are read once per fit, not once per iteration (lane
-    # perf-sweep-msel-nbr-svc); the same float(tol) and float32(alpha).
-    var tol = _semi_float(family_field(fields, "tol"))
-    var alpha_step = _lp_alpha_f32(fields, True) if spreading else 0.0
-    for it in range(steps):  # driver-loop: over propagation iterations, one device step each
-        n_iter = it
-        _semi_op(binding, "absdiff_sum", Python.list(_semi_addr(ld), _semi_addr(prev), _semi_addr(s)),
-                 Python.list(PythonObject(n * nc)), Python.list(), context)
-        _ = prev  # keep the Python object alive through the native call above
-        var change = Float64(FAMILY_F32P(unsafe_from_address=Int(py=_semi_addr(s)))[0])
-        _ = s  # keep the Python object alive through the read above
-        if change < tol:
-            converged = True
-            break
-        prev = ld
-        var nxt = _lp_knn_product(binding, graph, n, ld, context)
-        var out = _semi_out(Python.tuple(n, nc), "<f4", context)
-        if not spreading:
-            _semi_op(binding, "lp_clamp",
-                     Python.list(_semi_addr(nxt), _semi_addr(ystatic), _semi_addr(unlabeled), _semi_addr(out)),
-                     Python.list(PythonObject(n), PythonObject(nc)), Python.list(), context)
-        else:
-            _semi_op(binding, "ls_clamp", Python.list(_semi_addr(nxt), _semi_addr(ystatic), _semi_addr(out)),
-                     Python.list(PythonObject(n * nc)), Python.list(PythonObject(alpha_step)), context)
-        _ = nxt  # keep the Python object alive through the native call above
-        _ = ystatic  # keep the Python object alive through the native call above
-        _ = unlabeled  # keep the Python object alive through the native call above
-        ld = out
-    if not converged:
-        n_iter += 1
-    _lp_finish(fields, binding, x, classes, ld, n_iter, context)
+    # The dense loop as one resident op (`lp_iterate`).
+    var info = _semi_out(Python.tuple(2), "<i4", context)
+    var words = _semi_tol_words(fields)
+    var max_iter = _semi_int(family_field(fields, "max_iter"))
+    var mode = (1 if spreading else 0) + (2 if _semi_truth(py_get(fields, PythonObject("_classical_raw_graph"),
+                                                                     PythonObject(False))) else 0)
+    var alpha_f = _lp_alpha_f32(fields, spreading)
+    _semi_op(binding, "lp_iterate",
+             Python.list(_semi_addr(dense), _semi_addr(ld), _semi_addr(ystatic), _semi_addr(unlabeled),
+                         _semi_addr(info)),
+             Python.list(PythonObject(n), PythonObject(nc), PythonObject(max_iter), PythonObject(mode),
+                         PythonObject(words[0]), PythonObject(words[1])),
+             Python.list(PythonObject(alpha_f)), context)
+    _ = dense  # keep the Python object alive through the native call above
+    _ = ystatic  # keep the Python object alive through the native call above
+    _ = unlabeled  # keep the Python object alive through the native call above
+    var dense_iter = Int(FAMILY_I32P(unsafe_from_address=Int(py=_semi_addr(info)))[0])
+    _ = info  # keep the Python object alive through the read above
+    _lp_finish(fields, binding, x, classes, ld, dense_iter, context)
 
 
 def _lp_dense_available(binding: PythonObject) raises -> Bool:
