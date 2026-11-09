@@ -3444,14 +3444,14 @@ def glm_accept_kernel(res: FP, trial: FP, m: Int32):
         st(res, j, ld(trial, j))
 
 
-def _glm_grid_objective(
-    mut ctx: DeviceContext, theta: FP, x: FP, y: FP, eta: FP, lt: FP, tw: FP, fparts: FP, sc: FP,
-    sc_buf: DeviceBuffer[DType.float32], hsc: FP,
+def _glm_grid_objective_enqueue(
+    mut ctx: DeviceContext, theta: FP, x: FP, y: FP, eta: FP, lt: FP, fparts: FP, sc: FP,
     n: Int, d: Int, fi: Int, power: Float32, link: Int, sw: Int, alpha: Float32, rows_grid: Int,
     mut wit: Witness, gr: FP, hr: FP,
-) raises -> Float32:
-    """`_objective_team` at theta on the grid (map) and one block (fold); eta
-    holds its linear predictor afterwards."""
+) raises:
+    """`_objective_team` at theta into sc[1], enqueued (the map on the grid,
+    the fold); eta holds its linear predictor afterwards. Off Apple nothing
+    waits; on Apple the witness checks each try."""
     var tries = 0
     while True:
         var nonce = wit.begin()
@@ -3470,12 +3470,41 @@ def _glm_grid_objective(
         tries += 1
         if tries >= WITNESS_TRIES:
             wit.fail()
-    ctx.synchronize()
-    var v = Float32(0)
+
+
+def _glm_grid_objective(
+    mut ctx: DeviceContext, theta: FP, x: FP, y: FP, eta: FP, lt: FP, tw: FP, fparts: FP, sc: FP,
+    sc_buf: DeviceBuffer[DType.float32], hsc: FP,
+    n: Int, d: Int, fi: Int, power: Float32, link: Int, sw: Int, alpha: Float32, rows_grid: Int,
+    mut wit: Witness, gr: FP, hr: FP,
+) raises -> Float32:
+    """`_glm_grid_objective_enqueue`, then the value home behind one wait
+    (lane n2-cd-qn-glm-loops: a bare `synchronize` before the ordered copy
+    read nothing and is gone)."""
+    _glm_grid_objective_enqueue(ctx, theta, x, y, eta, lt, fparts, sc, n, d, fi, power, link, sw, alpha,
+                                rows_grid, wit, gr, hr)
     ctx.enqueue_copy(dst_ptr=hsc, src_buf=sc_buf)
     ctx.synchronize()
-    v = hsc.unsafe_load(1)
-    return v
+    return hsc.unsafe_load(1)
+
+
+def glm_ls_first_kernel(sc: FP, res: FP, trial: FP, m: Int32, f: Float32, tt: Float32):
+    """The line search's first trial decided on the device (lane
+    n2-cd-qn-glm-loops): when the step flag sc[2] is 0, the host's Armijo
+    test (`ft == ft and ft <= f + 1e-4 * tt * slope`, the same fa / fm
+    roundings) on the trial objective sc[1] and the slope sc[3]; accepted,
+    the trial goes into res (one thread a coefficient). sc[5] = 1 accepted,
+    else 0. Every thread reads the same three words, written by earlier
+    launches."""
+    var ok = False
+    if ld(sc, 2) == Float32(0):
+        var ft = ld(sc, 1)
+        ok = ft == ft and ft <= fa(f, fm(fm(Float32(1e-4), tt), ld(sc, 3)))
+    var j = _gt()
+    if ok and j < Int(m):
+        st(res, j, ld(trial, j))
+    if j == 0:
+        st(sc, 5, Float32(1) if ok else Float32(0))
 
 
 def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
@@ -3614,6 +3643,21 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
                          FP(unsafe_from_address=Int(dl_.unsafe_ptr())), FP(unsafe_from_address=Int(dyv.unsafe_ptr())),
                          FP(unsafe_from_address=Int(dslp.unsafe_ptr())), IP(unsafe_from_address=Int(dgm.unsafe_ptr())),
                          FP(unsafe_from_address=Int(dsc.unsafe_ptr())), m, d, alpha, tol)
+        # lane n2-cd-qn-glm-loops: the first trial (tt = 1) is enqueued behind
+        # the step and decided on the device (`glm_ls_first_kernel`), so the
+        # step's flag and slope, the trial objective and the verdict come home
+        # behind ONE wait; a Newton step that is accepted at once (the common
+        # case) costs one wait an iteration where it cost two (three with the
+        # objective's bare sync). A rejected first trial halves on the host as
+        # before. Same launches, same words: no bit moves. At a converged or
+        # failed step the trial objective is computed and never read.
+        ctx.enqueue_function[glm_trial_kernel](dstep.unsafe_ptr(), dres.unsafe_ptr(), dtrial.unsafe_ptr(), Int32(m),
+                                               Float32(1), grid_dim=_xg_blocks(m), block_dim=XG_TPB)
+        _glm_grid_objective_enqueue(ctx, FP(unsafe_from_address=Int(dtrial.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), n, d, fi, power, link, sw, alpha, rows_grid, wit, FP(unsafe_from_address=Int(dgr.unsafe_ptr())), FP(unsafe_from_address=Int(dhr.unsafe_ptr())))
+        ctx.enqueue_function[glm_ls_first_kernel](FP(unsafe_from_address=Int(dsc.unsafe_ptr())),
+                                                  FP(unsafe_from_address=Int(dres.unsafe_ptr())),
+                                                  FP(unsafe_from_address=Int(dtrial.unsafe_ptr())), Int32(m), f,
+                                                  Float32(1), grid_dim=_xg_blocks(m), block_dim=XG_TPB)
         ctx.enqueue_copy(dst_ptr=hscp, src_buf=dsc)
         ctx.synchronize()
         var flag = Int(hscp.unsafe_load(2))
@@ -3626,7 +3670,17 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
             break
         var tt = Float32(1)
         var accepted = False
-        for _ in range(40):
+        if hscp.unsafe_load(5) != Float32(0):
+            var ft1 = hscp.unsafe_load(1)
+            if ft1 == f:
+                stall += 1
+            else:
+                stall = 0
+            f = ft1
+            accepted = True
+        else:
+            tt = fm(tt, Float32(0.5))
+        for _ in range(39 if not accepted else 0):
             ctx.enqueue_function[glm_trial_kernel](dstep.unsafe_ptr(), dres.unsafe_ptr(), dtrial.unsafe_ptr(), Int32(m), tt,
                                                    grid_dim=_xg_blocks(m), block_dim=XG_TPB)
             var ft = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dtrial.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit, FP(unsafe_from_address=Int(dgr.unsafe_ptr())), FP(unsafe_from_address=Int(dhr.unsafe_ptr())))
