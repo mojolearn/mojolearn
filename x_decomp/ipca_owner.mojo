@@ -13,7 +13,9 @@ entry the Python kit called, with the same broadcast modes and float32
 scalars; the binary64 scalars (1 / total, seen / n, the sqrt of the mean
 correction) are the same IEEE operations CPython performed. The Gram's
 eigendecomposition is resident where `_Kit.eigh` was (an IDENTICAL GPU build
-with `x_decomp_dev_eigh`, `IpcaDev.has_eigh`), else the host-address entry.
+with `x_decomp_dev_eigh`, `IpcaDev.has_eigh`): `IpcaDev.eigh_desc` leaves the
+descending w and V on the device (lane n9-decomp-eigh-families); else the
+host-address entry and the host column reversal.
 
 The running state between batches and calls is the public arrays (the
 exact words the Python kit's matrices held); each step re-reads them, so a
@@ -52,15 +54,20 @@ comptime _MV_PLACE_COLS = 2
 
 
 trait IpcaDev:
-    """The resident eigendecomposition the Python kit reached on a GPU
-    binding (`x_decomp_dev_eigh`, registered only with IDN_EIGH_RESIDENT)."""
+    """The resident eigendecomposition on a GPU binding (registered with
+    IDN_EIGH_RESIDENT): the Gram's descending spectrum straight into device
+    matrices (lane n9-decomp-eigh-families, 2026-11-09)."""
 
     @staticmethod
     def has_eigh() -> Bool:
         ...
 
     @staticmethod
-    def eigh(a: Int, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
+    def eigh_desc(a: Int, w: Int, v: Int, n: Int) raises:
+        """The n x n device matrix `a` (left as it is) into the device
+        matrices w (1 x n, eigenvalues DESCENDING) and v (n x n, the
+        matching eigenvectors in columns): `DevExec.eigh`'s solve with its
+        ascending answer's columns reversed on the device."""
         ...
 
 
@@ -72,32 +79,31 @@ struct NoIpcaDev(IpcaDev):
         return False
 
     @staticmethod
-    def eigh(a: Int, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
+    def eigh_desc(a: Int, w: Int, v: Int, n: Int) raises:
         raise Error("x_decomp: no resident matrices on the host binding")
 
 
-def _eigh[E: Exec, D: RDev, RES: Bool, X: IpcaDev](mut kit: RKit[E, D, RES], a: Int) raises -> Tuple[Int, Int]:
-    """`_Kit.eigh(A)`: (w 1 x n ascending, v n x n eigenvectors in columns),
-    both host words; a resident operand is solved on a device copy where
-    the build exports `x_decomp_dev_eigh`."""
+def _eigh[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int) raises -> Tuple[Int, Int]:
+    """`_Kit.eigh(A)` of a host operand: (w 1 x n ascending, v n x n
+    eigenvectors in columns), both host words (the host-address entry)."""
     var n = kit.r(a)
     var w = kit.zeros(1, n)
     var v = kit.zeros(n, n)
     var pw = kit.ptr(w)
     var pv = kit.ptr(v)
-    var resident = False
-    comptime if RES:
-        resident = X.has_eigh() and n >= 1 and kit.c(a) == n and kit.mats[a].dev >= 0
-    if resident:
-        X.eigh(kit.mats[a].dev, pw, pv, n, 0)
-    else:
-        eigh_run[E](kit.ptr(a), pw, pv, n, 0)
+    eigh_run[E](kit.ptr(a), pw, pv, n, 0)
     return (w, v)
+
+
+# TOMBSTONE: the resident Gram eigh's host words (`IpcaDev.eigh` -> `dev_eigh_run`: w and V downloaded, reversed on
+# the host by `_reversed_columns`, uploaded again by the next step) deleted 2026-11-09 by lane n9-decomp-eigh-families;
+# `_gram_svd` keeps the resident answer on the device (`IpcaDev.eigh_desc`). Code recoverable at the deletion commit's parent.
 
 
 def _reversed_columns[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int) raises -> Int:
     """`A.take_cols(range(c - 1, -1, -1))` of a host matrix: one strided
-    copy per column (data movement)."""
+    copy per column (data movement). The host binding's (and a host
+    operand's) route; a resident Gram is reversed on the device."""
     var rows = kit.r(a)
     var cols = kit.c(a)
     var out = kit.zeros(rows, cols)
@@ -151,10 +157,23 @@ def _gram_svd[E: Exec, D: RDev, RES: Bool, X: IpcaDev](mut kit: RKit[E, D, RES],
     """`_gram_svd(k, Z)`: S descending (1 x d) and Vt (d x d) through the
     eigendecomposition of Z^T Z, then svd_flip(u_based_decision=False)."""
     var gram = kit.mm(z, z, ta=True)
-    var eig = _eigh[E, D, RES, X](kit, gram)
-    var w = _reversed_columns(kit, eig[0])
+    var n = kit.r(gram)
+    var resident = False
+    comptime if RES:
+        resident = X.has_eigh() and n >= 1 and kit.c(gram) == n and kit.mats[gram].dev >= 0
+    var w: Int
+    var v: Int
+    if resident:
+        # lane n9-decomp-eigh-families: w and V stay on the device, already
+        # descending (the same words `_reversed_columns` copied on the host)
+        w = kit.device_output(1, n)
+        v = kit.device_output(n, n)
+        X.eigh_desc(kit.mats[gram].dev, kit.mats[w].dev, kit.mats[v].dev, n)
+    else:
+        var eig = _eigh(kit, gram)
+        w = _reversed_columns(kit, eig[0])
+        v = _reversed_columns(kit, eig[1])
     var s = kit.ew(_OP_SQRT, w)
-    var v = _reversed_columns(kit, eig[1])
     var vt = kit.transpose(v)
     var signs = kit.absmax_signs(vt, False)
     vt = kit.ew(_OP_MUL, vt, signs)
