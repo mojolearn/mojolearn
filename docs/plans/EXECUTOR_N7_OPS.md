@@ -101,6 +101,16 @@ iteration goes, and so does `SelectScratch` once its last caller moves.
   mani_decomp_native.mojo projected solve, lle_iter_dev.mojo), `HostExec.eigh_batch`'s serial loop over problems
   (replace with `eigh_op_dense_host`), and `DevExec._eigh_par_on`'s per-sweep three-scalar read for the k x k
   callers.
+- SMO (assigned to N8 on 2026-11-08; NOT moved by lane n8-gp-krr-smo, owed to its own lane): the drained count in
+  `select_i32` is the only drain of an outer iteration, and the host reads `diff` / `inner` (`return_buff`) on that
+  same drain for `check_stopping_condition` (diff_prev, n_small_diff, n_increased_diff and the max_iter budget that
+  `launch_block_solve` takes as a launch argument). Removing the count drain alone saves nothing. The move is all of:
+  the stop rule's state as device words with one criterion kernel; the block solve reading its iteration budget from
+  a device word; `fold_order_rank_kernel`, the row gather and both fused update_f kernels (`fast_update_f`,
+  `idn_update_f`) bounded by `compact_count_bound` over n_ws; and the non-fused tile path (poly / sigmoid /
+  precomputed / multi-device), whose `kernel_matrix_dispatch` over nnz rows would have to run over n_ws rows: up to
+  n_ws / nnz times the tile GEMM per outer iteration, which can cost more than the drain it removes. Measure that
+  arm (svc / svr board rows, late iterations where nnz << n_ws) before choosing it.
 - SMO, Spectral discretize, dictionary learning, ARIMA lock-step (N10): the drained count, the host n x k loops
   of `x_cluster/spectral_assign.mojo:232-275` (`jacobi_svd` on the host).
 

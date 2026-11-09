@@ -162,6 +162,7 @@ from cholesky.checks.potrf import (
 )
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve
 from cholesky.chol_ops import chol_op_cho_solve, chol_op_factor
+from cholesky.multi_gpu import chol_device_count
 from core.device_zero import enqueue_fill
 from core.identity_trace import IdentityTrace
 from kernel_methods.checks.km_sabotage import (
@@ -314,7 +315,7 @@ def kernel_ridge_solve(
     # MOJOLEARN_STAGE_TIMES=1: factor and solve walls (drained), timing only.
     var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
     var t0 = Int(perf_counter_ns())
-    if not trace.enabled:
+    if kernel_ridge_ops_route(trace):
         # The executor's Cholesky ops (lane n8-gp-krr-smo): the factor and
         # the solve enqueued read-free, the solve skipped on the device when
         # the factor fails (so `y` keeps the targets), `info` read once here.
@@ -329,8 +330,10 @@ def kernel_ridge_solve(
         _ = hinfo^
         _ = dinfo^
         return info
-    # The identity-trace route (km_check): `potrf_lower`'s per-panel records
-    # (`chol.panelNNN.*`) and `cho_solve`'s. The same words as the ops.
+    # The identity-trace route (km_check: `potrf_lower`'s per-panel records,
+    # `chol.panelNNN.*`, and `cho_solve`'s) and the multi-GPU owner set
+    # (the parallel kernel-method driver's plan, cholesky/multi_gpu.mojo:
+    # the trailing rows across owners). The same words as the ops.
     var run = potrf_lower(
         ctx,
         k,
@@ -357,6 +360,13 @@ def kernel_ridge_solve(
               + " cho_solve_ms=" + String((Int(perf_counter_ns()) - t1) // 1000000))
     trace.record_device(ctx, "krr.dual_coef", y, n * n_targets)
     return 0
+
+
+def kernel_ridge_ops_route(trace: IdentityTrace) raises -> Bool:
+    """True when the factor and the solve run as the executor's Cholesky ops
+    (one device, no identity trace); False on the trace route and under a
+    multi-GPU Cholesky plan, which keep `potrf_lower` / `cho_solve`."""
+    return not trace.enabled and chol_device_count() == 1
 
 
 def kernel_ridge_factor_solve_enqueue(

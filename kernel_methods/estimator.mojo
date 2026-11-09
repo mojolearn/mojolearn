@@ -127,6 +127,7 @@ from kernel_methods.impl.kernel_ridge.kernel_ridge import (
     KRR_RIDGE_TPB,
     add_ridge_diag,
     kernel_ridge_factor_solve_enqueue,
+    kernel_ridge_ops_route,
     kernel_ridge_solve,
     kernel_ridge_workspace_floats,
 )
@@ -989,10 +990,11 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
     # n8-gp-krr-smo, the executor's Cholesky ops); `info` comes home with
     # the dual coefficients and a failed factor raises after that one drain
     # (before: a drain inside the factor for `info`, then the download's).
-    # The identity-trace route keeps `kernel_ridge_solve`'s records.
+    # The identity-trace route and a multi-GPU plan keep `kernel_ridge_solve`'s
+    # `potrf_lower` (its records; the trailing rows across owners).
     var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
     var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
-    if trace.enabled:
+    if not kernel_ridge_ops_route(trace):
         var info0 = kernel_ridge_solve(
             ctx, dk, dy, cws, n_samples, n_targets, alpha, trace,
             CHOL_PANEL_TPB, CHOL_ELEM_TPB, CHOL_SOLVE_TPB, KRR_RIDGE_TPB, KMSAB_NONE,
