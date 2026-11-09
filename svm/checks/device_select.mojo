@@ -34,12 +34,8 @@ from std.atomic import Atomic
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
-from gbdt.gpu_util.kernel.reorder_one_bit import (
-    REORDER_BLOCK,
-    add_block_carry_kernel,
-    block_scan_flags_kernel,
-    scan_block_sums_kernel,
-)
+from core.compact_ops import CompactScratch, compact_f32_kernel, compact_i32_kernel, compact_scan_enqueue
+from core.step_gate import step_gate_open_word
 from checks.numerics import ftz
 
 
@@ -88,19 +84,6 @@ def gather_u8_by_u32_kernel(
         dst.unsafe_store(i, src.unsafe_load(Int(idx.unsafe_load(i))))
 
 
-def scatter_flagged_i32_kernel(
-    dst: MutPointer[Int32, MutAnyOrigin],
-    src: MutPointer[Int32, MutAnyOrigin],
-    flags: MutPointer[UInt8, MutAnyOrigin],
-    offsets: MutPointer[Int32, MutAnyOrigin],
-    n_in: Int32,
-):
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_in):
-        if flags.unsafe_load(i) != UInt8(0):
-            dst.unsafe_store(Int(offsets.unsafe_load(i)), src.unsafe_load(i))
-
-
 def scatter_flagged_u32_as_i32_kernel(
     dst: MutPointer[Int32, MutAnyOrigin],
     src: MutPointer[UInt32, MutAnyOrigin],
@@ -116,34 +99,6 @@ def scatter_flagged_u32_as_i32_kernel(
             dst.unsafe_store(
                 Int(offsets.unsafe_load(i)), Int32(Int(src.unsafe_load(i)))
             )
-
-
-def scatter_flagged_f32_kernel(
-    dst: MutPointer[Float32, MutAnyOrigin],
-    src: MutPointer[Float32, MutAnyOrigin],
-    flags: MutPointer[UInt8, MutAnyOrigin],
-    offsets: MutPointer[Int32, MutAnyOrigin],
-    n_in: Int32,
-):
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_in):
-        if flags.unsafe_load(i) != UInt8(0):
-            dst.unsafe_store(Int(offsets.unsafe_load(i)), src.unsafe_load(i))
-
-
-def count_flagged_kernel(
-    d_count: MutPointer[Int32, MutAnyOrigin],
-    offsets: MutPointer[Int32, MutAnyOrigin],
-    flags: MutPointer[UInt8, MutAnyOrigin],
-    n_in: Int32,
-):
-    """`d_num_selected = offsets[n-1] + flags[n-1]`, launched over all n
-    (no one-thread launch): the thread at index `n - 1` writes it."""
-    var n = Int(n_in)
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i == n - 1:
-        var last = Int32(Int(flags.unsafe_load(i)) & 1)
-        d_count.unsafe_store(0, offsets.unsafe_load(i) + last)
 
 
 def flag_nonzero_f32_kernel(
@@ -296,10 +251,13 @@ def gather_rows_kernel(
 
 struct SelectScratch(Movable):
     """`cub_storage` + `d_num_selected`: the scan's offsets, the block sums
-    and the one-int count, sized once for a capacity of `n` elements."""
+    and the one-int count, sized once for a capacity of `n` elements. The
+    scan is the executor's compaction op's (core/compact_ops.mojo
+    `compact_scan_enqueue`, lane n7-device-linalg-ops) behind an always-open
+    gate; this form adds the one read of the count."""
 
-    var offsets: DeviceBuffer[DType.int32]
-    var block_sums: DeviceBuffer[DType.int32]
+    var cs: CompactScratch
+    var gate: DeviceBuffer[DType.int32]
     var d_count: DeviceBuffer[DType.int32]
     var h_count: HostBuffer[DType.int32]
     var capacity: Int
@@ -309,10 +267,8 @@ struct SelectScratch(Movable):
         if cap < 1:
             cap = 1
         self.capacity = cap
-        self.offsets = ctx.enqueue_create_buffer[DType.int32](cap)
-        self.block_sums = ctx.enqueue_create_buffer[DType.int32](
-            (cap + REORDER_BLOCK - 1) // REORDER_BLOCK
-        )
+        self.cs = CompactScratch(ctx, cap)
+        self.gate = step_gate_open_word(ctx)
         self.d_count = ctx.enqueue_create_buffer[DType.int32](1)
         self.h_count = ctx.enqueue_create_host_buffer[DType.int32](1)
         ctx.synchronize()
@@ -323,9 +279,10 @@ struct SelectScratch(Movable):
         mut flags: DeviceBuffer[DType.uint8],
         n: Int,
     ) raises -> Int:
-        """Exclusive prefix sum of the flag bytes into `offsets`; returns
+        """Exclusive prefix sum of the flag bytes into `cs.offsets`; returns
         the count. DRAINS (reads one int back), exactly where theirs does
-        (`d_num_selected.value(stream)` + `sync_stream`)."""
+        (`d_num_selected.value(stream)` + `sync_stream`). A step op keeps
+        the count on the device instead (`compact_op_*`)."""
         if n > self.capacity:
             raise Error(
                 "svm SelectScratch: n=" + String(n)
@@ -333,25 +290,7 @@ struct SelectScratch(Movable):
             )
         if n <= 0:
             return 0
-        var n_blocks = (n + REORDER_BLOCK - 1) // REORDER_BLOCK
-        ctx.enqueue_function[block_scan_flags_kernel](
-            flags.unsafe_ptr(), Int32(0), Int32(n),
-            self.offsets.unsafe_ptr(), self.block_sums.unsafe_ptr(),
-            grid_dim=n_blocks, block_dim=REORDER_BLOCK,
-        )
-        ctx.enqueue_function[scan_block_sums_kernel](
-            self.block_sums.unsafe_ptr(), Int32(n_blocks),
-            grid_dim=1, block_dim=1,
-        )
-        ctx.enqueue_function[add_block_carry_kernel](
-            self.offsets.unsafe_ptr(), self.block_sums.unsafe_ptr(), Int32(n),
-            grid_dim=n_blocks, block_dim=REORDER_BLOCK,
-        )
-        ctx.enqueue_function[count_flagged_kernel](
-            self.d_count.unsafe_ptr(), self.offsets.unsafe_ptr(),
-            flags.unsafe_ptr(), Int32(n),
-            grid_dim=_grid(n), block_dim=SEL_TPB,
-        )
+        compact_scan_enqueue(ctx, self.gate, flags, n, self.cs, self.d_count)
         ctx.enqueue_copy(dst_ptr=self.h_count.unsafe_ptr(), src_buf=self.d_count)
         ctx.synchronize()
         return Int(self.h_count.unsafe_ptr().unsafe_load(0))
@@ -367,9 +306,9 @@ struct SelectScratch(Movable):
         """`cub::DeviceSelect::Flagged(src, flags, out, d_num_selected, n)`."""
         var count = self.scan(ctx, flags, n)
         if n > 0:
-            ctx.enqueue_function[scatter_flagged_i32_kernel](
-                out.unsafe_ptr(), src.unsafe_ptr(), flags.unsafe_ptr(),
-                self.offsets.unsafe_ptr(), Int32(n),
+            ctx.enqueue_function[compact_i32_kernel](
+                self.gate.unsafe_ptr(), src.unsafe_ptr(), flags.unsafe_ptr(),
+                self.cs.offsets.unsafe_ptr(), out.unsafe_ptr(), Int32(n),
                 grid_dim=_grid(n), block_dim=SEL_TPB,
             )
         return count
@@ -386,7 +325,7 @@ struct SelectScratch(Movable):
         if n > 0:
             ctx.enqueue_function[scatter_flagged_u32_as_i32_kernel](
                 out.unsafe_ptr(), src.unsafe_ptr(), flags.unsafe_ptr(),
-                self.offsets.unsafe_ptr(), Int32(n),
+                self.cs.offsets.unsafe_ptr(), Int32(n),
                 grid_dim=_grid(n), block_dim=SEL_TPB,
             )
         return count
@@ -402,9 +341,9 @@ struct SelectScratch(Movable):
         """`select_f32` for flags the LAST scan of this scratch already
         covered (same buffer, same n): the offsets are reused, no drain."""
         if n > 0:
-            ctx.enqueue_function[scatter_flagged_f32_kernel](
-                out.unsafe_ptr(), src.unsafe_ptr(), flags.unsafe_ptr(),
-                self.offsets.unsafe_ptr(), Int32(n),
+            ctx.enqueue_function[compact_f32_kernel](
+                self.gate.unsafe_ptr(), src.unsafe_ptr(), flags.unsafe_ptr(),
+                self.cs.offsets.unsafe_ptr(), out.unsafe_ptr(), Int32(n),
                 grid_dim=_grid(n), block_dim=SEL_TPB,
             )
 
@@ -418,9 +357,9 @@ struct SelectScratch(Movable):
     ) raises -> Int:
         var count = self.scan(ctx, flags, n)
         if n > 0:
-            ctx.enqueue_function[scatter_flagged_f32_kernel](
-                out.unsafe_ptr(), src.unsafe_ptr(), flags.unsafe_ptr(),
-                self.offsets.unsafe_ptr(), Int32(n),
+            ctx.enqueue_function[compact_f32_kernel](
+                self.gate.unsafe_ptr(), src.unsafe_ptr(), flags.unsafe_ptr(),
+                self.cs.offsets.unsafe_ptr(), out.unsafe_ptr(), Int32(n),
                 grid_dim=_grid(n), block_dim=SEL_TPB,
             )
         return count
