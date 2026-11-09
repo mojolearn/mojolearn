@@ -39,7 +39,7 @@ from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_
 # Lane x7b: the block step ops' host arm (its imports reach the step-op
 # layouts of autograd/block_step_ops.mojo; no GPU binding imports this file).
 from autograd.block_step_host import (
-    HostStepScratch, host_step_run, host_attn_step_backward, host_block_step_reports,
+    HostStepScratch, host_step_run, host_step_backward, host_block_step_reports,
 )
 from sequence.ops import (
     FP,
@@ -481,7 +481,7 @@ struct HostExec(Exec, Movable):
         host_step_run(self.steps, code, bufs, counts, ints, fs, y_out, record)
 
     def step_backward(mut self, w: FP, s: FP, q: FP, d_out: FP, d_x: FP, d_w: FP) raises:
-        host_attn_step_backward(self.steps, w, s, q, d_out, d_x, d_w)
+        host_step_backward(self.steps, w, s, q, d_out, d_x, d_w)
 
     def step_reports(mut self, code: Int, w_addr: Int, s_addr: Int, dsts: List[Int]) raises:
         host_block_step_reports(self.steps, code, w_addr, s_addr, dsts)
