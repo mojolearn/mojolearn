@@ -1754,9 +1754,10 @@ struct LlamaDeviceStages(Movable):
     False: `aexp` does not hold the eager stage); cleared at the start of
     every `eager_attention_forward` and by `attention_eager_core`, the only
     other writer of `aexp`, on every build (a host integer nothing on a
-    shipped build reads). `llama_decoder_layer_backward_device` hands it
-    with `aexp` to `fused_backward_launch_estash_ran`, which runs the
-    DEVIATION 2650 backward only when it equals this call's cell count."""
+    shipped build reads). The hand layer backward that handed it with `aexp`
+    to `fused_backward_launch_estash_ran` (which runs the DEVIATION 2650
+    backward only when it equals this call's cell count) was deleted
+    2026-10-19; the checks and attention benches still call that launcher."""
     var defer_addr: Int
     """IDN_DECODE_RESIDENT_IO / IDN_TRAIN_ONE_WAIT (lane decode-resident,
     2026-10-28): the address of the owner's `LlamaDeferredChecks` while a
