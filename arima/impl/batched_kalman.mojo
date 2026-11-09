@@ -1313,7 +1313,6 @@ def fast_kalman_into(
     mut ws: KalmanWorkspace,
     kalman_tpb: Int = KALMAN_TPB,
     has_exog: Int = 0,
-    capture_stages: Bool = False,
     observation_batch: Int = 0,
 ) raises:
     """lane/apple-fast-tsa (`-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1`, FAST on
@@ -1332,13 +1331,13 @@ def fast_kalman_into(
     fast_kalman_init_into(ctx, params, order, batch_size, ws)
     var kl_done = False
     comptime if KALMAN_LL_ONLY:
-        # F16 actual-stage compensated tail needs the production innovations
-        # and variances. False keeps the original LL_ONLY path unchanged.
-        if not capture_stages:
-            _launch_loop_ll_only(
-                ctx, d_ys, params, ws, rd, nobs, batch_size, order.k, n_diff, kalman_tpb, has_exog, observation_batch
-            )
-            kl_done = True
+        # TOMBSTONE: MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL (never measured, deleted) deleted 2026-11-09 by eff59d1b88;
+        # code recoverable at f59d913b0b. Its `capture_stages` argument (store the innovations for the compensated tail) went
+        # with it. Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch
+        _launch_loop_ll_only(
+            ctx, d_ys, params, ws, rd, nobs, batch_size, order.k, n_diff, kalman_tpb, has_exog, observation_batch
+        )
+        kl_done = True
     if not kl_done:
         var grid = _grid(batch_size, kalman_tpb)
         var fast_rd = False

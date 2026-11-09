@@ -21,19 +21,14 @@ from x_decomp.ipca_owner_dev import DevIpcaDev
 from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
 from x_decomp.decomp_owner_dev import DevDecomp
 from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, kpca_eig_py, rp_fit_py, rp_project_py
-from x_decomp.mcd_experiments import mcd_experiment_count
-from x_decomp.mcd_bmma import mcd_fast_batch_count
 
-from experiments.apple_fast.gemm.scoped_dispatch import shared_sub_count
+# TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+# f59d913b0b (its reach counter x_decomp_shared_sub_count, with MOJOLEARN_CHOL_FAST_SHARED_SUB).
+# Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 
-def x_decomp_shared_sub_count_py() raises -> PythonObject:
-    return PythonObject(shared_sub_count(False))
-
-def mcd_experiment_count_py(stage: PythonObject) raises -> PythonObject:
-    return PythonObject(mcd_experiment_count(Int(py=stage)))
-
-def mcd_fast_batch_count_py() raises -> PythonObject:
-    return PythonObject(mcd_fast_batch_count())
+# TOMBSTONE: MOJOLEARN_MCD_FAST_ACTIVE_COMPACT (never measured, deleted) deleted 2026-11-09 by 45d8034353; code recoverable
+# at f59d913b0b (the F06 reach counters mcd_experiment_count and mcd_fast_batch_count).
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch
 
 
 # TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (its witnesses mcd_g1_gram_on, mcd_g1_gram_count, mcd_g1_gram_last) deleted 2026-11-08 by a2159de2cb; code recoverable at 41ffcec665.
@@ -105,7 +100,6 @@ def build__mojolearn_x_decomp() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_decomp")
         m.def_function[x_decomp_native_api_v1_binding]("x_decomp_native_api_v1")
         # F02 audit belongs to the independent LU route as well as MCD.
-        m.def_function[x_decomp_shared_sub_count_py]("x_decomp_shared_sub_count")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
@@ -304,8 +298,6 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[vendor_py[DevExec]]("x_decomp_vendor")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
-        m.def_function[mcd_fast_batch_count_py]("mcd_fast_batch_count")
-        m.def_function[mcd_experiment_count_py]("mcd_experiment_count")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_decomp: ", e))

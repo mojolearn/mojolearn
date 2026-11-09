@@ -14,11 +14,10 @@ from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAI
 # DEVIATION 2486: shared byte-preserving host copies.
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
 from std.os import abort
-from experiments.apple_fast.gemm.scoped_dispatch import (
-    AUDIT as SCOPED_AUDIT, GRAM as SCOPED_GRAM, SPLITS as SCOPED_SPLITS,
-    PCA as SCOPED_PCA, TALL as SCOPED_TALL, DENSE as SCOPED_DENSE,
-    NARROW as SCOPED_NARROW, scoped_count, scoped_last,
-)
+# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+# f59d913b0b (its witnesses scoped_gemm_flags, scoped_gemm_count, scoped_gemm_metadata, and the MOJOLEARN_SOFTMAX_G2_AUDIT
+# witnesses softmax_g2_state / _count / _last / _reset with bindings/softmax_g2_observe.mojo).
+# Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -28,8 +27,6 @@ from providers.python.core_py2mojo_rows_pyapi import py2mojo_rows_device_binding
 from core.py2mojo_linear import py2mojo_linear_flags
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from experiments.apple_fast.gemm.softmax_narrow import SOFTMAX_AUDIT
-from bindings.softmax_g2_observe import softmax_g2_state_binding, softmax_g2_count_binding, softmax_g2_last_binding, softmax_g2_reset_binding
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import NUMERIC_FAST as _OLS_FAST
 from std.sys.compile import is_defined
@@ -140,10 +137,9 @@ from core.estimators_impl import (
 )
 
 
-from decomposition.impl.linalg.detail.pca import pca_compensated_cov_count
-
-def pca_compensated_cov_count_py() raises -> PythonObject:
-    return PythonObject(pca_compensated_cov_count())
+# TOMBSTONE: MOJOLEARN_PCA_FAST_COMPENSATED_COV (never measured, deleted) deleted 2026-11-09 by e4e58162e9; code
+# recoverable at f59d913b0b (its reach counter export pca_compensated_cov_count).
+# Restore: git apply experiments/removed/MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
@@ -1634,18 +1630,6 @@ def dbscan_core_arrays_binding(
     return dbscan_core_arrays_device(ctx, x_addr, labels_addr, core_addr, params)
 
 
-def scoped_gemm_flags_binding() raises -> PythonObject:
-    return PythonObject(Int(SCOPED_TALL) + 2 * Int(SCOPED_DENSE) + 4 * Int(SCOPED_GRAM) + 8 * Int(SCOPED_NARROW) + 16 * Int(SCOPED_SPLITS) + 32 * Int(SCOPED_PCA))
-
-
-def scoped_gemm_count_binding(route: PythonObject, arm: PythonObject) raises -> PythonObject:
-    return PythonObject(scoped_count(Int(py=route), Int(py=arm)))
-
-
-def scoped_gemm_metadata_binding(index: PythonObject) raises -> PythonObject:
-    return PythonObject(scoped_last(Int(py=index)))
-
-
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_estimators.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -1653,7 +1637,6 @@ def build__mojolearn_estimators() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_estimators")
-        m.def_function[pca_compensated_cov_count_py]("pca_compensated_cov_count")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
@@ -1677,10 +1660,6 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[kde_fast_immutable_fit_binding]("kde_fast_immutable_fit")
         m.def_function[kde_fit_release_binding]("kde_fit_release")
         m.def_function[kde_score_samples_resident_binding]("kde_score_samples_resident")
-        comptime if SCOPED_AUDIT:
-            m.def_function[scoped_gemm_flags_binding]("scoped_gemm_flags")
-            m.def_function[scoped_gemm_count_binding]("scoped_gemm_count")
-            m.def_function[scoped_gemm_metadata_binding]("scoped_gemm_metadata")
         m.def_function[pca_fit_binding]("pca_fit")
         # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_estimators.patch
@@ -1725,11 +1704,6 @@ def build__mojolearn_estimators() -> PythonObject:
         comptime if MULTIOUT_RIDGE:
             m.def_function[ridge_fit_multi_binding]("ridge_fit_multi")
             m.def_function[ridge_predict_multi_binding]("ridge_predict_multi")
-        comptime if SOFTMAX_AUDIT:
-            m.def_function[softmax_g2_state_binding]("softmax_g2_state")
-            m.def_function[softmax_g2_count_binding]("softmax_g2_count")
-            m.def_function[softmax_g2_last_binding]("softmax_g2_last")
-            m.def_function[softmax_g2_reset_binding]("softmax_g2_reset")
         m.def_function[qn_fit_binding]("qn_fit")
         comptime if QN_OVR_ONE_UPLOAD:
             m.def_function[qn_fit_ovr_binding]("qn_fit_ovr")

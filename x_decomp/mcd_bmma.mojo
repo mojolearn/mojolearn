@@ -24,12 +24,9 @@ through f32 atomics (order free, as on main). A candidate whose gate word
 is 0 (inactive; for the weighted Gram, pinvh did not run) launches no work:
 main zeroed its operands and discarded its output (guarded publication).
 """
-from std.ffi import _Global
-from std.atomic import Atomic
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from x_decomp.mcd_experiments import MCD_FAST_ACTIVE_COMPACT, McdCompactWorkspace, compact_candidate_count, mcd_experiment_hit
+# TOMBSTONE: MOJOLEARN_MCD_FAST_ACTIVE_COMPACT (never measured, deleted) deleted 2026-11-09 by 45d8034353; code recoverable
+# at f59d913b0b. Same commit (F06): MOJOLEARN_MCD_FAST_COV_REUSE, MOJOLEARN_MCD_FAST_BOUND_BATCH, x_decomp/mcd_experiments.mojo
+# and the mcd_experiment_count / mcd_fast_batch_count exports. Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch
 
 # TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (NEUTRAL: rab3-mcdg1 istella +0.1%, taxi -1.2%) and its audit / window defines
 # MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT, MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM deleted 2026-11-08 by a2159de2cb; code recoverable at
@@ -50,29 +47,6 @@ from x_decomp.device import DFG_BLOCK_TARGET, DFG_MIN_SPLIT_STEPS
 # 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 
-# Bound the queued candidate plane independently of features/datasets. This
-# scheduling experiment preserves inactive-candidate gates and input strides;
-# it changes neither support selection nor candidate count.
-# NEVER RUN — PENDING MEASUREMENT: bounded MCD candidate batches.
-# F06 M3 2026-10-06 MEASURED bounded batching: eight task timings B/A
-# 0.9859..1.1788, quality equal; mostly regression, keep OFF. One warmup+score,
-# ab-20261006/repairs-54c1f35a5/results/F06/default.
-comptime MCD_FAST_BOUND_BATCH = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_MCD_FAST_BOUND_BATCH"]())
-comptime MCD_CANDIDATE_BATCH = 32
-
-struct McdBatchAudit(Defaultable, Movable):
-    var launches: Int
-    def __init__(out self):
-        self.launches = 0
-
-comptime BATCH_STATE = _Global[StorageType=McdBatchAudit, name="McdCandidateBatchAudit", init_fn=McdBatchAudit.__init__]
-
-def mcd_fast_batch_count() raises -> Int:
-    return BATCH_STATE.get_or_create_ptr()[].launches
-
-
 #: AFN_TILE_SQUARE's shape (`afn_launch_tile_aux`'s default branch).
 comptime MB_SGM = 2
 comptime MB_SGN = 2
@@ -84,7 +58,7 @@ comptime MB_NT = MB_SGM * MB_SGN * 32
 comptime MB_ZERO_TPB = 256
 
 
-def mcd_bmma_kernel[SPLIT: Bool, COMPACT: Bool = False](
+def mcd_bmma_kernel[SPLIT: Bool](
     c_in: F32Ptr,
     a_in: F32Ptr,
     b_in: F32Ptr,
@@ -101,7 +75,6 @@ def mcd_bmma_kernel[SPLIT: Bool, COMPACT: Bool = False](
     a_bs_in: Int32,
     b_bs_in: Int32,
     c_bs_in: Int32,
-    ids: I32Ptr,
 ):
     """`afn_gemm_mma_kernel[2, 2, 4, 4, AFN_GEMM_KB, f32, f32, SPLIT,
     AFN_EPI_NONE]` for candidate `block_idx.z`: C_z (+)= A_z . B_z with
@@ -128,8 +101,6 @@ def mcd_bmma_kernel[SPLIT: Bool, COMPACT: Bool = False](
     )
     comptime assert KB % 8 == 0, "mcd_bmma_kernel: whole 8-step fragments"
     var z = Int(block_idx.z)
-    comptime if COMPACT:
-        z = Int(ids.unsafe_load(z))
     if gate_all == 0 and gate.unsafe_load(z) == 0:
         return
     var a = a_in + z * Int(a_bs_in)
@@ -238,7 +209,6 @@ def mcd_bmma_zero_kernel(c: F32Ptr, gate: I32Ptr, gate_all: Int32, nc: Int32, ce
 def launch_gemm_mma_batched(
     ctx: DeviceContext, a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool,
     nc: Int, a_bs: Int, b_bs: Int, c_bs: Int, gate: I32Ptr, gate_all: Bool,
-    compact: Optional[McdCompactWorkspace] = None,
 ) raises:
     """`_launch_gemm_mma(ctx, a + z a_bs, b + z b_bs, c + z c_bs, m, k, n,
     ta, tb)` for every candidate z < nc whose gate word is set (all when
@@ -258,27 +228,6 @@ def launch_gemm_mma_batched(
     # TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (the TN self-Gram route, its audit counters and legacy window) deleted
     # 2026-11-08 by a2159de2cb; code recoverable at 41ffcec665.
     # Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
-    # F06 PENDING: reduced active grid is an explicit FAST Apple experiment.
-    # Count-read completion/scan overhead is included in whole-call timing.
-    # Original IDs own output slots, gate rechecks and split-K windows/seeds.
-    comptime if MCD_FAST_ACTIVE_COMPACT:
-        if Bool(compact) and not gate_all:
-            var live = compact_candidate_count(ctx, compact[], gate, nc)
-            mcd_experiment_hit(0)
-            if live == 0: return
-            var ids = I32Ptr(unsafe_from_address=Int(compact[].ids.unsafe_ptr()))
-            if splits > 1:
-                var per = ((k + splits - 1)//splits + AFN_GEMM_KB - 1)//AFN_GEMM_KB*AFN_GEMM_KB
-                splits = (k + per - 1)//per
-                ctx.enqueue_function[mcd_bmma_zero_kernel](c, gate, ga, Int32(nc), Int32(m*n), Int32(c_bs), grid_dim=max((nc*m*n+MB_ZERO_TPB-1)//MB_ZERO_TPB,1), block_dim=MB_ZERO_TPB)
-                ctx.enqueue_function[mcd_bmma_kernel[True, True]](
-                    c, a, b, gate, ga, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per), Int32(a_bs), Int32(b_bs), Int32(c_bs), ids,
-                    grid_dim=(tiles,splits,live), block_dim=(MB_NT,1,1))
-            else:
-                ctx.enqueue_function[mcd_bmma_kernel[False, True]](
-                    c, a, b, gate, ga, Int32(m), Int32(n), Int32(k), Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(k), Int32(a_bs), Int32(b_bs), Int32(c_bs), ids,
-                    grid_dim=(tiles,1,live), block_dim=(MB_NT,1,1))
-            return
     if splits > 1:
         var per = (k + splits - 1) // splits
         per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
@@ -290,26 +239,14 @@ def launch_gemm_mma_batched(
         ctx.enqueue_function[mcd_bmma_kernel[True]](
             c, a, b, gate, ga, Int32(m), Int32(n), Int32(k),
             Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(per),
-            Int32(a_bs), Int32(b_bs), Int32(c_bs), gate,
+            Int32(a_bs), Int32(b_bs), Int32(c_bs),
             grid_dim=(tiles, splits, nc), block_dim=(MB_NT, 1, 1),
         )
     else:
-        comptime if MCD_FAST_BOUND_BATCH:
-            for first in range(0, nc, MCD_CANDIDATE_BATCH):
-                var count = min(MCD_CANDIDATE_BATCH, nc - first)
-                ctx.enqueue_function[mcd_bmma_kernel[False]](
-                    c + first * c_bs, a + first * a_bs, b + first * b_bs, gate + first, ga,
-                    Int32(m), Int32(n), Int32(k),
-                    Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(k),
-                    Int32(a_bs), Int32(b_bs), Int32(c_bs), gate,
-                    grid_dim=(tiles, 1, count), block_dim=(MB_NT, 1, 1),
-                )
-                BATCH_STATE.get_or_create_ptr()[].launches += 1
-            return
         ctx.enqueue_function[mcd_bmma_kernel[False]](
             c, a, b, gate, ga, Int32(m), Int32(n), Int32(k),
             Int32(a_si), Int32(a_sp), Int32(b_sp), Int32(b_sj), Int32(k),
-            Int32(a_bs), Int32(b_bs), Int32(c_bs), gate,
+            Int32(a_bs), Int32(b_bs), Int32(c_bs),
             grid_dim=(tiles, 1, nc), block_dim=(MB_NT, 1, 1),
         )
 

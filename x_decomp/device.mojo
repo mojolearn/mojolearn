@@ -25,7 +25,10 @@ from gemm.afn_apple_fast import (
     afn_launch_tile,
     afn_zero_kernel,
 )
-from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
+# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+# f59d913b0b. Same commit: the whole scoped G1/G2 adapter family (MOJOLEARN_SCOPED_GEMM_G1_TALL, _G1_DENSE, _G1_GRAM,
+# _G2_NARROW, _SPLIT, _PCA, MOJOLEARN_LEGACY_NARROW_SCOPED_GEMM; experiments/apple_fast/gemm/scoped_dispatch.mojo) and the
+# try_scoped_gemm arms here. Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 from decomposition.linalg_public_device import device_qr_r
 from decomposition.linalg_types import _validate_shape
 from experiments.classical_identical_ideas.linear_controls import C14_GROUP_RHS, C28_BUCKET_SOLVES
@@ -1916,21 +1919,13 @@ def _launch_gemm_mma(
             grid_dim=((m * n + 4 * AFN_ZERO_TPB - 1) // (4 * AFN_ZERO_TPB), 1, 1),
             block_dim=(AFN_ZERO_TPB, 1, 1),
         )
-        # OPEN: scoped source28f06e19 passed28 mechanism fixtures on M3
-        # (scoped-r2-all-q-v1, bound5e-6, zero error-regression allowance).
-        # Split-boundary PASS is not downstream fitted quality or a speed
-        # claim; broad default stays OFF. See GEMM_INLINE_OUTCOMES.md.
-        if not try_scoped_gemm[True, 1](ctx, c, a, b, m, n, k, a_si, a_sp, b_sp, b_sj, splits, per):
-            afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
-                ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, splits, per
-            )
+        afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
+            ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, splits, per
+        )
     else:
-        # OPEN: non-split G1/G2 mechanism PASS has no actual AFN timing
-        # admission. SDK catalog wins cannot promote this caller by analogy.
-        if not try_scoped_gemm[False, 0](ctx, c, a, b, m, n, k, a_si, a_sp, b_sp, b_sj, 1, k):
-            afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_NONE](
-                ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, 1, k
-            )
+        afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_NONE](
+            ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, 1, k
+        )
 
 
 def launch_gemm(

@@ -30,6 +30,12 @@ def _check_configuration() -> Bool:
     # on every cell (docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md, experiments/removed/*.patch).
     # Promoted: the old positive define is refused; -D <NAME>_OFF restores the old path.
     comptime assert not is_defined["MOJOLEARN_IDN_ETS_TEAM"](), "promoted 2026-10-11 (lane/w2-decide-neural): the ETS(A, A|Ad, N) team is the IDENTICAL default (damped-ets 0.014-0.017x, bits change NV==AMD, forecast_rmse equal, nv2 v0099 / amd a1681); drop -D MOJOLEARN_IDN_ETS_TEAM, -D MOJOLEARN_IDN_ETS_TEAM_OFF restores op_ets"
+    # Lane k1-delete-unverdicted-fast (2026-11-09): Apple FAST experiments with no verdict, never to be measured (Apple FAST
+    # investment stopped); deleted (docs/TOMBSTONES.md "Unverdicted FAST experiments deleted (lane K1)").
+    # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch (both defines)
+    comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_K3_DF_PROBE"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_ARIMA_FAST_K3_DF_PROBE, the private Apple FAST double-float K3 likelihood probe (`_arima_k3_df_probe`, arima/impl/fast_scalar_df.mojo), was never measured on a fit (private-kernel quality only) and never will be; code at f59d913b0b; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL (F16), the Apple FAST compensated Kalman likelihood and finite-difference tail (arima/impl/fast_eval_df.mojo), had no verdict row (F16 M3 one-sample B/A 1.13 / 1.04 / 1.01, left off) and will not be measured; code at f59d913b0b; see docs/TOMBSTONES.md"
+
     return True
 
 

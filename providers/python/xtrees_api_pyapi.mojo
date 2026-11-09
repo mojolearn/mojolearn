@@ -1292,15 +1292,10 @@ comptime _XT_IDN_ADA_SESSION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not 
 #: (xtrees/agnostic_device.mojo MOJOLEARN_IDN_SHAP_DEVICE_MODEL). Moves no
 #: bit. `-D MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF` clears it.
 comptime _XT_AGN_DEVICE_MODEL = XTREES_DEVICE_OPS and agn_dev.AGN_IDN_DEVICE_MODEL
-#: lane apple-fast-round2 (2026-10-07), FAST + Apple experiments, default
-#: off: bit 1024 MOJOLEARN_KSHAP_FAST_DEVICE_MODEL, bit 2048
-#: MOJOLEARN_PSHAP_FAST_DEVICE_MODEL (xtrees/agnostic_device.mojo): the
-#: FAST explainers take the device-model route of bit 64. The model-route
-#: exports below compile when any of the three is on; bit 64 stays the
-#: IDENTICAL switch alone.
-comptime _XT_KSHAP_FAST_DEVICE_MODEL = XTREES_DEVICE_OPS and agn_dev.KSHAP_FAST_DEVICE_MODEL
-comptime _XT_PSHAP_FAST_DEVICE_MODEL = XTREES_DEVICE_OPS and agn_dev.PSHAP_FAST_DEVICE_MODEL
-comptime _XT_AGN_ANY_DEVICE_MODEL = XTREES_DEVICE_OPS and agn_dev.AGN_ANY_DEVICE_MODEL
+# TOMBSTONE: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL (never measured, deleted) deleted 2026-11-09 by e2adeea367; code
+# recoverable at f59d913b0b. Same commit: its twin MOJOLEARN_PSHAP_FAST_DEVICE_MODEL (bits 1024 / 2048, always 0 now); the
+# model-route exports below compile under bit 64 alone.
+# Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch
 comptime XTREES_FAST_SWITCHES = (
     (1 if _XT_NATIVE_SPLITS else 0)
     + (2 if _XT_ADA_SESSION else 0)
@@ -1310,8 +1305,6 @@ comptime XTREES_FAST_SWITCHES = (
     + (32 if agn_dev.PSHAP_DELTA else 0)
     + (64 if _XT_AGN_DEVICE_MODEL else 0)
     + (128 if _XT_IDN_ADA_SESSION else 0)
-    + (1024 if _XT_KSHAP_FAST_DEVICE_MODEL else 0)
-    + (2048 if _XT_PSHAP_FAST_DEVICE_MODEL else 0)
 )
 
 
@@ -1327,8 +1320,8 @@ def fast_switches_binding() raises -> PythonObject:
     because main took 32 for PSHAP_DELTA), bit 256 the deleted
     MOJOLEARN_KSHAP_FAST_OVERLAP (always 0), bit 512 the deleted MOJOLEARN_PSHAP_FAST_OVERLAP (always 0)
     (xtrees/agnostic_device.mojo; were 64 and 128 before the 2026-10-05 merge),
-    bit 1024 MOJOLEARN_KSHAP_FAST_DEVICE_MODEL, bit 2048
-    MOJOLEARN_PSHAP_FAST_DEVICE_MODEL (FAST + Apple experiments)."""
+    bits 1024 and 2048 the deleted MOJOLEARN_KSHAP_FAST_DEVICE_MODEL and
+    MOJOLEARN_PSHAP_FAST_DEVICE_MODEL (always 0)."""
     return PythonObject(XTREES_FAST_SWITCHES)
 
 
@@ -1577,7 +1570,7 @@ def agn_model_load_binding(forest: PythonObject, bg: PythonObject, params: Pytho
     var p = _agn_ints(params, 6, "x_trees_agn_model_load")
     if len(forest) != 5:
         raise Error("x_trees_agn_model_load: forest must hold 5 arrays")
-    comptime if _XT_AGN_ANY_DEVICE_MODEL:
+    comptime if _XT_AGN_DEVICE_MODEL:
         agn_dev.model_load(Int(py=forest[0]), Int(py=forest[1]), Int(py=forest[2]), Int(py=forest[3]),
                            Int(py=forest[4]), Int(py=bg), p[0], p[1], p[2], p[3], p[4], p[5] != 0)
     else:
@@ -1589,7 +1582,7 @@ def agn_model_release_binding() raises -> PythonObject:
     """MOJOLEARN_IDN_SHAP_DEVICE_MODEL: frees the device forest and
     background (`x_trees_agn_model_load`); the Python explainers call it
     when `shap_values` ends. Nothing to free in a build without the define."""
-    comptime if _XT_AGN_ANY_DEVICE_MODEL:
+    comptime if _XT_AGN_DEVICE_MODEL:
         agn_dev.model_release()
     return PythonObject(0)
 
@@ -1607,7 +1600,7 @@ def kshap_solve_model_binding(x: PythonObject, fx: PythonObject, fnull: PythonOb
     _kshap_check(p, "x_trees_kshap_solve_model")
     if p[11] < 1:
         raise Error("x_trees_kshap_solve_model: needs outputs")
-    comptime if _XT_AGN_ANY_DEVICE_MODEL:
+    comptime if _XT_AGN_DEVICE_MODEL:
         agn_dev.kshap_solve_model(Int(py=x), Int(py=fx), Int(py=fnull), Int(py=tables[0]), Int(py=tables[1]),
                                   Int(py=tables[2]), Int(py=phi), p[0], p[1], p[2], p[11], p[4], p[3], p[5], p[7],
                                   p[6], p[9], p[8], UInt64(p[10]), p[12] != 0)
@@ -1652,7 +1645,7 @@ def pshap_values_model_binding(x: PythonObject, phi: PythonObject, params: Pytho
     var p = _agn_ints(params, 7, "x_trees_pshap_values_model")
     if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1:
         raise Error("x_trees_pshap_values_model: bad counts")
-    comptime if _XT_AGN_ANY_DEVICE_MODEL:
+    comptime if _XT_AGN_DEVICE_MODEL:
         agn_dev.pshap_values_model(Int(py=x), Int(py=phi), p[0], p[1], p[2], p[6], p[3], p[5], p[4])
     else:
         raise Error("x_trees_pshap_values_model: built without MOJOLEARN_IDN_SHAP_DEVICE_MODEL")

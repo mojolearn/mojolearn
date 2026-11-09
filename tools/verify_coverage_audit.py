@@ -1534,7 +1534,6 @@ ANNOTATIONS = {
     "ops_shape": ("n/a", [], "the verifier's own native-session boundary probe (_verify_graph)"),
     "device_plan_log": ("n/a", [], "read only by the retired `verify --par` two-device placement witness "
                         "(_verify_par PoolWitness, removed 2026-10-31): device groups, no data value"),
-    "covariance": ("n/a", [], "Apple FAST quality probe binding (tools/scoped_gemm_quality.py)"),
     **{e: ("covered", ["mamba2-decode-session"], _MAMBA_SESSION)
        for e in ("mamba2_session_export_state", "mamba2_session_load_state", "mamba2_session_open")},
     **{e: ("covered", ["mamba3-decode-session"], _MAMBA_SESSION)

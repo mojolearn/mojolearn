@@ -19,7 +19,6 @@ from std.memory import stack_allocation
 
 from core.gemm import gemm_nt, gemm_tn
 from std.sys.compile import is_defined
-from std.ffi import _Global
 from gemm.afn_apple_fast import (
     AFN_EPI_NONE,
     AFN_GEMM_APPLE,
@@ -30,7 +29,10 @@ from gemm.afn_apple_fast import (
     afn_strides,
     afn_zero_kernel,
 )
-from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
+# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+# f59d913b0b. Same commit: the whole scoped G1/G2 adapter family (MOJOLEARN_SCOPED_GEMM_G1_TALL, _G1_DENSE, _G1_GRAM,
+# _G2_NARROW, _SPLIT, _PCA, MOJOLEARN_LEGACY_NARROW_SCOPED_GEMM; experiments/apple_fast/gemm/scoped_dispatch.mojo) and the
+# try_scoped_gemm arms here. Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 from gemm.contract import OP_TN
 
 #: lane/apple-fast-gap-linalg2-pca (2026-10-03): PCA_FAST_GRAM_MMA, the FAST +
@@ -95,109 +97,9 @@ from decomposition.checks.jacobi_eigh_device import (
 )
 
 
-# Default-off FAST experiment: compensate only centered covariance products.
-# One writer per covariance cell; no atomic/split-policy race, host arithmetic,
-# or input shift/restore pass. Performance admission belongs to full PCA fit.
-# MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
-# Scored FAST quality: 12/12 metrics within the existing bands; PASS.
-# F11/compensated-pca M3 2026-10-06: 12 retained public-caller timings;
-# B/A range 0.8987..2.1360, mixed/regressing; FAST candidate stays OFF.
-# One excluded warmup/one score; caller67d0efb29; compile/identity reused.
-# Scored quality metrics and per-arm build/hash provenance retained at
-# ~/mojolearn-evidence/ab-overnight-20261006/m3/artifacts/results/F11/compensated-pca.
-# No combined-switch or full-board default claim from these component cases.
-# Full Istella PCA operation, M3 FAST, source ec3c8c850 (2026-10-06):
-# F11/compensated-pca A=716.473 ms, B=1955.869 ms, B/A=2.72986.
-# All 2,043,304 training rows and 500,000 query rows; preparation, fit,
-# transform, inverse and consumed outputs included. One excluded warmup and
-# one scored sample per arm; reconstruction gate passed, model/output hashes
-# retained. Full taxi also measured all 5,250,086 training/500,000 query rows:
-# A=107.864 ms, B=1777.204 ms, B/A=16.47638; reconstruction gate passed.
-# These full-workload regressions keep the switch OFF. Downstream LLE and
-# interactions remain pending; no campaign-wide claim.
-# Evidence: experiments/performance_ideas/measurements/full_ab_20261006/
-# pca-full-summary.json (full receipts linked by the measurement board).
-comptime PCA_COMPENSATED_COV = AFN_GEMM_APPLE and is_defined["MOJOLEARN_PCA_FAST_COMPENSATED_COV"]()
-
-# AFCL-L07: NEVER RUN — PENDING MEASUREMENT. Uncompiled/unverified, OFF.
-# Requires the compensated covariance route in BOTH arms. Each partial
-# centers before multiplying and uses compensation; the finish compensates
-# the partial fold too. 2048-row nominal chunks expose row parallelism.
-# Partial scratch is bounded by 16 MiB or one covariance matrix, whichever
-# is larger; fewer chunks handle wider matrices without a shape-specific gate.
-comptime AFCL_L07 = AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFCL_L07"]()
-comptime AFCL_PCA_PART_WORDS = 4 * 1024 * 1024
-
-
-def pca_compensated_cov_part_kernel(
-    x: F32Ptr, mu: F32Ptr, part: F32Ptr, rows_in: Int32,
-    cols_in: Int32, chunk_rows_in: Int32,
-):
-    var rows = Int(rows_in)
-    var cols = Int(cols_in)
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= cols * cols:
-        return
-    var ch = Int(block_idx.y)
-    var lo = ch * Int(chunk_rows_in)
-    var hi = min(rows, lo + Int(chunk_rows_in))
-    var i = cell // cols
-    var j = cell % cols
-    var mi = mu[i]
-    var mj = mu[j]
-    var total = Float32(0)
-    var correction = Float32(0)
-    for r in range(lo, hi):
-        var product = (x[r * cols + i] - mi) * (x[r * cols + j] - mj)
-        var adjusted = product - correction
-        var updated = total + adjusted
-        correction = (updated - total) - adjusted
-        total = updated
-    part[ch * cols * cols + cell] = total
-
-
-def pca_compensated_cov_finish_kernel(
-    part: F32Ptr, cov: F32Ptr, rows_in: Int32, cells_in: Int32, chunks_in: Int32,
-):
-    var cells = Int(cells_in)
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= cells:
-        return
-    var total = Float32(0)
-    var correction = Float32(0)
-    for ch in range(Int(chunks_in)):
-        var adjusted = part[ch * cells + cell] - correction
-        var updated = total + adjusted
-        correction = (updated - total) - adjusted
-        total = updated
-    cov[cell] = total / Float32(Int(rows_in) - 1)
-
-struct PcaCovAudit(Defaultable, Movable):
-    var calls: Int
-    def __init__(out self):
-        self.calls = 0
-comptime PCA_COV_STATE = _Global[StorageType=PcaCovAudit, name="PcaCompensatedCovAudit", init_fn=PcaCovAudit.__init__]
-
-def pca_compensated_cov_count() raises -> Int:
-    return PCA_COV_STATE.get_or_create_ptr()[].calls
-
-def pca_compensated_cov_kernel(x: F32Ptr, mu: F32Ptr, cov: F32Ptr, rows_in: Int32, cols_in: Int32):
-    var rows = Int(rows_in)
-    var cols = Int(cols_in)
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= cols * cols:
-        return
-    var i = cell // cols
-    var j = cell % cols
-    var total = Float32(0)
-    var correction = Float32(0)
-    for r in range(rows):
-        var product = (x[r * cols + i] - mu[i]) * (x[r * cols + j] - mu[j])
-        var adjusted = product - correction
-        var updated = total + adjusted
-        correction = (updated - total) - adjusted
-        total = updated
-    cov[cell] = total / Float32(rows - 1)
+# TOMBSTONE: MOJOLEARN_PCA_FAST_COMPENSATED_COV (never measured, deleted) deleted 2026-11-09 by e4e58162e9; code recoverable
+# at f59d913b0b (the compensated covariance kernels, the pca_compensated_cov_count reach counter and the AFCL-L07 chunked
+# form MOJOLEARN_AFCL_L07 that needed it in both arms). Restore: git apply experiments/removed/MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch
 
 
 @fieldwise_init
@@ -233,38 +135,6 @@ def compute_covariance(
     var cells = n_rows * n_cols
     # TOMBSTONE: MOJOLEARN_CLASSICAL_PCA_COV=4 (arm c04, slower) deleted 2026-10-10 by lane/grid-act-6; code recoverable at 328b0ae58.
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_PCA_COV-arm4.patch; record in docs/TOMBSTONES.md.
-    comptime if PCA_COMPENSATED_COV:
-        PCA_COV_STATE.get_or_create_ptr()[].calls += 1
-        comptime if AFCL_L07:
-            var cov_cells = n_cols * n_cols
-            var max_chunks = max(1, AFCL_PCA_PART_WORDS // max(cov_cells, 1))
-            var chunks = min(max(1, (n_rows + 2047) // 2048), max_chunks)
-            var chunk_rows = (n_rows + chunks - 1) // chunks
-            var part = ctx.enqueue_create_buffer[DType.float32](chunks * cov_cells)
-            ctx.enqueue_function[pca_compensated_cov_part_kernel](
-                x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                Int32(n_rows), Int32(n_cols), Int32(chunk_rows),
-                grid_dim=((cov_cells + 255) // 256, chunks, 1), block_dim=(256, 1, 1),
-            )
-            ctx.enqueue_function[pca_compensated_cov_finish_kernel](
-                part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                cov.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                Int32(n_rows), Int32(cov_cells), Int32(chunks),
-                grid_dim=((cov_cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
-            )
-            ctx.synchronize()
-            _ = part^
-            return
-        ctx.enqueue_function[pca_compensated_cov_kernel](
-            x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            mu.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-            cov.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n_rows), Int32(n_cols),
-            grid_dim=((n_cols * n_cols + 255) // 256, 1, 1), block_dim=(256, 1, 1),
-        )
-        ctx.synchronize()
-        return
     comptime if PCA_FAST_GRAM_MMA:
         if not gram_splitk_applies(n_cols, n_cols, n_rows):
             ctx.enqueue_function[shift_columns_kernel](
@@ -289,19 +159,10 @@ def compute_covariance(
             var per = (n_rows + splits - 1) // splits
             per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
             splits = (n_rows + per - 1) // per
-            # Opt-in scoped G1 fit remains HOLD (2026-10-04), source201fe736,
-            # scoped-pca-fit-istella-q-v1: singular/noise oracle errors worsen
-            # under zero allowance. Report serialization incomplete; no PASS
-            # or timing admission. Existing accepted AFN default is fallback.
-            # PCA transform/inverse evidence uses another route/contract;
-            # see docs/apple-fast/GEMM_INLINE_OUTCOMES.md before any retry.
-            if not try_scoped_gemm[True, 2](
-                ctx, cp, xp, xp, n_cols, n_cols, n_rows, 1, n_cols, n_cols, 1, splits, per,
-            ):
-                afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
-                    ctx, AFN_TILE_SQUARE, cp, xp, xp, cp, cp,
-                    n_cols, n_cols, n_rows, afn_strides(OP_TN, n_cols, n_cols, n_rows), splits, per,
-                )
+            afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
+                ctx, AFN_TILE_SQUARE, cp, xp, xp, cp, cp,
+                n_cols, n_cols, n_rows, afn_strides(OP_TN, n_cols, n_cols, n_rows), splits, per,
+            )
             ctx.enqueue_function[scale_in_place_kernel](
                 cov.unsafe_ptr(),
                 Int32(n_cols * n_cols),
