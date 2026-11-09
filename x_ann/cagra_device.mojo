@@ -20,7 +20,7 @@ from x_ann.fast_env import CAGRA_FAST_IVFG, CAGRA_FAST_IVFG_PROBES, CAGRA_FAST_I
 from x_ann.cagra_fast_knn import cg_ivfg_enqueue
 from max.gpu.host import DeviceBuffer
 
-from x_ann.io import upload_f32, upload_i32, download_f32, download_i32
+from x_ann.io import upload_f32, upload_i32, download_f32, download_i32, enqueue_query_status
 from x_ann.cagra_core import F32P, I32P, cg_dist, cg_search_cell, cg_seed_node, cg_search_budget
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -602,7 +602,7 @@ def cagra_search_device(
 def cagra_search_on(
     ctx: DeviceContext, dx: F32P, n: Int, d: Int, dg: I32P, deg: Int, queries: List[Float32], m: Int,
     k: Int, L: Int, width: Int, max_iter_in: Int, n_seeds_in: Int,
-    mut out_d: List[Float32], mut out_i: List[Int32], rs: Int = 0,
+    mut out_d: List[Float32], mut out_i: List[Int32], rs: Int = 0, status_addr: Int = 0,
 ) raises:
     """The search over a dataset and graph already on the device
     (`cagra_search_device` uploads them first; `x_ann/resident.mojo` holds
@@ -614,6 +614,9 @@ def cagra_search_on(
     var n_seeds = budget[0]
     var max_iter = budget[1]
     var dq = upload_f32(ctx, queries)
+    # Lane a8b-device-x-neighbors-rest: the queries' finite status behind
+    # their upload, read back by the downloads below (no new sync).
+    var dst = enqueue_query_status(ctx, dq, m * d, status_addr)
     var bd = ctx.enqueue_create_buffer[DType.float32](m * L)
     var bi = ctx.enqueue_create_buffer[DType.int32](m * L)
     var bx = ctx.enqueue_create_buffer[DType.int32](m * L)
@@ -649,3 +652,4 @@ def cagra_search_on(
     _ = bi^
     _ = bd^
     _ = dq^
+    _ = dst^

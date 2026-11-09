@@ -33,9 +33,12 @@ THE ADDRESSES (mirrored in python/mojolearn/_expansion_ann.py):
                     params n, d, graph_degree
   search(handle, addrs, params)
     IVF kinds       addrs queries, out_d, out_i, out_n[, filter (n int32)]
-                    params m, k, n_probes
+                    params m, k, n_probes[, status]
     CAGRA           addrs queries, out_d, out_i
-                    params m, k, itopk_size, search_width, max_iterations, n_seeds[, rs]
+                    params m, k, itopk_size, search_width, max_iterations, n_seeds[, rs[, status]]
+                    (status, lane a8b-device-x-neighbors-rest: the host address of
+                    an int32 word that receives the queries' finite status, tested
+                    behind their upload; 0 or absent: not asked)
   release(handle)
 """
 from std.ffi import _Global
@@ -328,17 +331,20 @@ def x_ann_index_search(h: Int, addrs: List[Int], params: List[Int]) raises -> In
         var max_iter = params[4]
         var n_seeds = params[5]
         var rs = params[6] if len(params) > 6 else 0
+        var cstatus = params[7] if len(params) > 7 else 0
         if rs < 0:
             raise Error("CAGRA search: rs must be >= 0")
         if m <= 0 or k <= 0 or L < k or width < 1 or max_iter < 1 or n_seeds < 1 or n_seeds > e.n:
             raise Error("CAGRA search: need k >= 1, itopk_size >= k, search_width >= 1, max_iterations >= 1, 1 <= n_seeds <= n")
         var q = _in_f32(addrs, 0, m * e.dim)
-        cagra_search_on(ctx, _p(e.f0), e.n, e.dim, _p(e.i0), e.a, q, m, k, L, width, max_iter, n_seeds, od, oi, rs)
+        cagra_search_on(ctx, _p(e.f0), e.n, e.dim, _p(e.i0), e.a, q, m, k, L, width, max_iter, n_seeds, od, oi, rs,
+                        cstatus)
         out_f32_to(od, addrs[1])
         out_i32_to(oi, addrs[2])
         _ = ctx^
         return m
     var n_probes = params[2]
+    var status = params[3] if len(params) > 3 else 0
     check_search(e.n_lists, m, k, n_probes)
     var q = _in_f32(addrs, 0, m * e.dim)
     var on = List[Int32]()
@@ -351,15 +357,15 @@ def x_ann_index_search(h: Int, addrs: List[Int], params: List[Int]) raises -> In
     if e.kind == KIND_PQ:
         ivf_pq_search_on(ctx, _p(e.f0), _p(e.i0), _p(e.i1), _p(e.f1), _p(e.i2), mask, e.offsets, e.n_lists,
                          e.dim, e.a, e.b, q, m, k, n_probes, od, oi, on,
-                         e.pre, _p(e.g_codes), _p(e.g_a), _p(e.g_b), mask_pre)
+                         e.pre, _p(e.g_codes), _p(e.g_a), _p(e.g_b), mask_pre, status)
     elif e.kind == KIND_SQ:
         ivf_sq_search_on(ctx, _p(e.f0), _p(e.i0), _p(e.i1), _p(e.f1), _p(e.f2), _p(e.i2), mask, e.offsets,
                          e.n_lists, e.dim, q, m, k, n_probes, od, oi, on,
-                         e.pre, _p(e.g_codes), _p(e.g_a), _p(e.g_b), mask_pre)
+                         e.pre, _p(e.g_codes), _p(e.g_a), _p(e.g_b), mask_pre, status)
     else:
         ivf_rabitq_search_on(ctx, _p(e.f0), _p(e.i0), _p(e.i1), _p(e.i2), _p(e.f1), _p(e.f2), mask, e.offsets,
                              e.n_lists, e.dim, e.a, q, m, k, n_probes, od, oi, on,
-                             e.pre, _p(e.g_codes), _p(e.g_a), _p(e.g_b), mask_pre)
+                             e.pre, _p(e.g_codes), _p(e.g_a), _p(e.g_b), mask_pre, status)
     out_f32_to(od, addrs[1])
     out_i32_to(oi, addrs[2])
     out_i32_to(on, addrs[3])
