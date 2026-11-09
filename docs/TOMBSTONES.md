@@ -404,7 +404,7 @@ in the tables after the sections.
 | [`MOJOLEARN_AUTOGRAD_TRANSFORMER`](#mojolearn_autograd_transformer) | Neural | PROMOTED (hand arm deleted) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_TRANSFORMER.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch) |
 | [`MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN`](#mojolearn_idn_mamba1_chunked_scan) | Neural | REJECTED (breaks decode==prefill) | 2026-10-28 | none (recoverable at lane/mamba-folds@db803a1337) |
 | [`MOJOLEARN_PAR_VERIFY`](#mojolearn_par_verify) | Verification (multi-GPU: par-* identity lanes, `verify --par`, multi-gpu release rows) | retired (owner decision) | 2026-10-31 | [MOJOLEARN_PAR_VERIFY.patch](../experiments/removed/MOJOLEARN_PAR_VERIFY.patch) |
-| Executor loop driver loops (no define): k-means Lloyd chunk loop, `kmeans_conv_step_kernel`, program `_copy_state` | Cluster / Autograd executor | REFACTORED (onto the executor's bounded loop) | 2026-11-08 | [EXECUTOR_LOOP_DRIVER_LOOPS.patch](../experiments/removed/EXECUTOR_LOOP_DRIVER_LOOPS.patch) |
+| [Executor loop driver loops (no define): k-means Lloyd chunk loop, `kmeans_conv_step_kernel`, program `_copy_state`](#executor-loop-driver-loops-2026-11-08) | Cluster / Autograd executor | REFACTORED (onto the executor's bounded loop) | 2026-11-08 | [EXECUTOR_LOOP_DRIVER_LOOPS.patch](../experiments/removed/EXECUTOR_LOOP_DRIVER_LOOPS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
