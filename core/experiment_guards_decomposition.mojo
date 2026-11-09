@@ -69,6 +69,10 @@ def _check_configuration() -> Bool:
     # Lane k1-delete-unverdicted-fast (2026-11-09): Apple FAST experiments with no verdict, never to be measured.
     # Restore: git apply experiments/removed/MOJOLEARN_FA_FAST_GRAM_SPREAD.patch
     comptime assert not is_defined["MOJOLEARN_FA_FAST_GRAM_SPREAD"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_FA_FAST_GRAM_SPREAD, FactorAnalysis's FAST + Apple Gram pass with rows per partial shrunk with n (x_decomp/fa_fast.mojo fa_gram_rows), was OPEN (M3 A/B owed, never run) and will not be measured; every Gram pass keeps FG_ROWS; code at f59d913b0b; see docs/TOMBSTONES.md"
+    # Lane k1-delete-unverdicted-fast (2026-11-09): Apple FAST experiments with no verdict, never to be measured.
+    # Restore: git apply experiments/removed/MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch
+    comptime assert not is_defined["MOJOLEARN_PCA_FAST_COMPENSATED_COV"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_PCA_FAST_COMPENSATED_COV, F11, the Apple FAST compensated PCA covariance (decomposition/impl/linalg/detail/pca.mojo), had no verdict row; its one-sample full-workload runs were slower (istella B/A 2.73, taxi 16.48) and it will not be measured again; code at f59d913b0b; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_AFCL_L07"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_AFCL_L07, the chunked form of MOJOLEARN_PCA_FAST_COMPENSATED_COV (never run), deleted with it; code at f59d913b0b; see docs/TOMBSTONES.md"
     return True
 
 

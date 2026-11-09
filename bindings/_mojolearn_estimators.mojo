@@ -140,10 +140,9 @@ from core.estimators_impl import (
 )
 
 
-from decomposition.impl.linalg.detail.pca import pca_compensated_cov_count
-
-def pca_compensated_cov_count_py() raises -> PythonObject:
-    return PythonObject(pca_compensated_cov_count())
+# TOMBSTONE: MOJOLEARN_PCA_FAST_COMPENSATED_COV (never measured, deleted) deleted 2026-11-09 by @K1SHA_PCA@; code
+# recoverable at f59d913b0b (its reach counter export pca_compensated_cov_count).
+# Restore: git apply experiments/removed/MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
@@ -1651,7 +1650,6 @@ def build__mojolearn_estimators() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_estimators")
-        m.def_function[pca_compensated_cov_count_py]("pca_compensated_cov_count")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
