@@ -1526,6 +1526,30 @@ def logdet_kernel(
     by the aligned tree, level by level through parts[0, nb) and
     parts[nb, 2 nb), then the doubling `identical_mul(2.0, root)` (exact,
     written so no codegen contracts it). `logdet_serial` is the same tree."""
+    _logdet_tree_body(parts, out_scalar, nb_in)
+
+
+def logdet_guarded_kernel(
+    info: MutPointer[Int32, MutAnyOrigin],
+    parts: MutPointer[Float32, MutAnyOrigin],
+    out_scalar: MutPointer[Float32, MutAnyOrigin],
+    nb_in: Int32,
+):
+    """`logdet_kernel` when the factor succeeded (`info[0] == 0`); nothing
+    otherwise, so a failed factor or a closed executor gate leaves
+    `out_scalar` as it was (cholesky/chol_ops.mojo). The whole block
+    returns before any barrier."""
+    if info[0] != Int32(0):
+        return
+    _logdet_tree_body(parts, out_scalar, nb_in)
+
+
+@always_inline
+def _logdet_tree_body(
+    parts: MutPointer[Float32, MutAnyOrigin],
+    out_scalar: MutPointer[Float32, MutAnyOrigin],
+    nb_in: Int32,
+):
     var nb = Int(nb_in)
     var tid = Int(thread_idx.x)
     var nt = Int(block_dim.x)
@@ -1577,6 +1601,27 @@ def enqueue_logdet(
     )
     ctx.enqueue_function[logdet_kernel](  # small-launch(nb: diagonal blocks): one block folds the n over 256 block partials by the aligned tree
         parts, out_scalar, Int32(nb), grid_dim=(1, 1, 1), block_dim=(LOGDET_TPB, 1, 1),
+    )
+
+
+def enqueue_logdet_guarded(
+    ctx: DeviceContext,
+    info: MutPointer[Int32, MutAnyOrigin],
+    diag: MutPointer[Float32, MutAnyOrigin],
+    parts: MutPointer[Float32, MutAnyOrigin],
+    out_scalar: MutPointer[Float32, MutAnyOrigin],
+    n: Int,
+) raises:
+    """`enqueue_logdet` whose tree stores `out_scalar` only when
+    `info[0] == 0` (the partials are scratch). Same words."""
+    var nb = logdet_blocks(n)
+    ctx.enqueue_function[logdet_part_kernel](
+        diag, parts, Int32(n),
+        grid_dim=((nb + LOGDET_TPB - 1) // LOGDET_TPB, 1, 1),
+        block_dim=(LOGDET_TPB, 1, 1),
+    )
+    ctx.enqueue_function[logdet_guarded_kernel](  # small-launch(nb: diagonal blocks): one block folds the n over 256 block partials by the aligned tree
+        info, parts, out_scalar, Int32(nb), grid_dim=(1, 1, 1), block_dim=(LOGDET_TPB, 1, 1),
     )
 
 
@@ -1779,6 +1824,107 @@ def _strip_update(
         )
 
 
+def chol_strips_enqueue(
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32],
+    mut dinfo: DeviceBuffer[DType.int32],
+    n: Int,
+) raises:
+    """The strip schedule's launches (`_potrf_lower_strips`), ENQUEUED and
+    read-free: every launch returns at once when `dinfo[0]` is nonzero, so a
+    failing panel freezes the matrix where the per-panel read would have
+    stopped, and a caller that set `dinfo[0]` before the call (the executor
+    op's closed gate, cholesky/chol_ops.mojo) makes the whole factor a
+    no-op. Shared by `potrf_lower` and the executor op (lane
+    n7-device-linalg-ops). n >= CS_NB."""
+    var j_strip = 0
+    while j_strip < n:  # driver-loop: over the factor's column strips
+        var sw = min(CHOL_STRIP_W, n - j_strip)
+        var s_end = j_strip + sw
+        _strip_update(ctx, a, dinfo, n, j_strip, s_end, 0, j_strip // CS_NB, True)
+        var q0 = j_strip
+        while q0 < s_end:  # driver-loop: over the strip's column panels
+            var w = min(CS_NB, n - q0)
+            var n_trail = n - q0 - w
+            ctx.enqueue_function[chol_strip_diag_kernel](  # small-launch(n: leading dimension only): factors the w x w diagonal block (w <= CS_NB) in threadgroup memory, n is the row stride
+                a.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(q0), Int32(w),
+                grid_dim=(1, 1, 1), block_dim=(CS_DIAG_TPB, 1, 1),
+            )
+            if n_trail > 0:
+                ctx.enqueue_function[chol_strip_trsm_kernel](
+                    a.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(q0),
+                    Int32(n_trail),
+                    grid_dim=((n_trail + CS_TRSM_TPB - 1) // CS_TRSM_TPB, 1, 1),
+                    block_dim=(CS_TRSM_TPB, 1, 1),
+                )
+                var p = q0 // CS_NB
+                _strip_update(ctx, a, dinfo, n, q0 + w, s_end, p, p + 1, True)
+            q0 += CS_NB
+        j_strip = s_end
+
+
+def chol_left_enqueue_deferred(
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32],
+    mut dinfo: DeviceBuffer[DType.int32],
+    n: Int,
+    nb: Int,
+    panel_tpb: Int = CHOL_PANEL_TPB,
+    solve_tpb: Int = CHOL_SOLVE_TPB,
+) raises -> Int:
+    """The Apple left-looking factor (CHOL_APPLE_LEFT) under CHOL_DEFER_INFO,
+    ENQUEUED and read-free: per panel the guarded left update of its column
+    block (pairs under CHOL_LEFT_LOOKAHEAD), the guarded panel factor and
+    the guarded panel solve; every launch returns at once when `dinfo[0]` is
+    nonzero. Returns the panel count. `potrf_lower`'s deferred route and the
+    executor op (cholesky/chol_ops.mojo) both run it (lane
+    n7-device-linalg-ops; before, the loop below carried a `defer` arm at
+    each of the three launches)."""
+    comptime if not CHOL_APPLE_LEFT:
+        raise Error("chol_left_enqueue_deferred: the left-looking route is the Apple IDENTICAL column's only")
+    var p = 0
+    var j0 = 0
+    while j0 < n:  # driver-loop: over the factor's column panels
+        var w = min(nb, n - j0)
+        var n_trail = n - j0 - w
+        if p > 0:
+            comptime if CHOL_LEFT_LOOKAHEAD:
+                # Pairs of column blocks: an even block p takes panels
+                # 0 .. p-1 together with block p+1, and block p+1 takes
+                # panel p alone once p is factored (potrf_lower's order).
+                comptime LW = CHOL_LEFT_GROUP
+                var r = p % LW
+                if r == 0:
+                    _chol_left_update_guarded(ctx, a, dinfo, n, j0, min(LW * nb, n - j0), p)
+                else:
+                    _chol_left_update_guarded(ctx, a, dinfo, n, j0, w, p, p - r)
+            else:
+                _chol_left_update_guarded(ctx, a, dinfo, n, j0, w, p)
+        ctx.enqueue_function[panel_factor_guarded_kernel](  # small-launch(n: leading dimension only): factors the w x w diagonal panel block, columns serial, rows across the block; n is the row stride
+            a.unsafe_ptr(),
+            dinfo.unsafe_ptr(),
+            Int32(n),
+            Int32(j0),
+            Int32(w),
+            grid_dim=(1, 1, 1),
+            block_dim=(panel_tpb, 1, 1),
+        )
+        if n_trail > 0:
+            ctx.enqueue_function[trsm_panel_guarded_kernel](
+                a.unsafe_ptr(),
+                dinfo.unsafe_ptr(),
+                Int32(n),
+                Int32(j0),
+                Int32(w),
+                Int32(n_trail),
+                grid_dim=((n_trail + solve_tpb - 1) // solve_tpb, 1, 1),
+                block_dim=(solve_tpb, 1, 1),
+            )
+        p += 1
+        j0 += nb
+    return p
+
+
 def _potrf_lower_strips(
     ctx: DeviceContext,
     mut a: DeviceBuffer[DType.float32],
@@ -1798,30 +1944,7 @@ def _potrf_lower_strips(
     var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
     hinfo.unsafe_ptr().unsafe_store(0, Int32(0))
     ctx.enqueue_copy(dst_buf=dinfo, src_ptr=hinfo.unsafe_ptr())
-    var j_strip = 0
-    while j_strip < n:
-        var sw = min(CHOL_STRIP_W, n - j_strip)
-        var s_end = j_strip + sw
-        _strip_update(ctx, a, dinfo, n, j_strip, s_end, 0, j_strip // CS_NB, True)
-        var q0 = j_strip
-        while q0 < s_end:
-            var w = min(CS_NB, n - q0)
-            var n_trail = n - q0 - w
-            ctx.enqueue_function[chol_strip_diag_kernel](  # small-launch(n: leading dimension only): factors the w x w diagonal block (w <= CS_NB) in threadgroup memory, n is the row stride
-                a.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(q0), Int32(w),
-                grid_dim=(1, 1, 1), block_dim=(CS_DIAG_TPB, 1, 1),
-            )
-            if n_trail > 0:
-                ctx.enqueue_function[chol_strip_trsm_kernel](
-                    a.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(q0),
-                    Int32(n_trail),
-                    grid_dim=((n_trail + CS_TRSM_TPB - 1) // CS_TRSM_TPB, 1, 1),
-                    block_dim=(CS_TRSM_TPB, 1, 1),
-                )
-                var p = q0 // CS_NB
-                _strip_update(ctx, a, dinfo, n, q0 + w, s_end, p, p + 1, True)
-            q0 += CS_NB
-        j_strip = s_end
+    chol_strips_enqueue(ctx, a, dinfo, n)
     comptime if IDN_CHOL_ONE_WAIT:
         ctx.enqueue_function[zero_upper_guarded_kernel](
             a.unsafe_ptr(),
@@ -2033,6 +2156,12 @@ def potrf_lower(
     var tq = 0
     var tu = 0
     var tk = Int(perf_counter_ns())
+    # CHOL_DEFER_INFO: the whole factor enqueued read-free by the shared
+    # left-looking route (the executor op runs the same launches); the
+    # loop below is the per-panel-read form.
+    if defer:
+        p = chol_left_enqueue_deferred(ctx, a, dinfo, n, nb, panel_tpb, solve_tpb)
+        j0 = n
     while j0 < n:
         var w = nb
         if j0 + w > n:
@@ -2052,20 +2181,11 @@ def potrf_lower(
                 comptime LW = CHOL_LEFT_GROUP
                 var r = p % LW
                 if r == 0:
-                    if defer:
-                        _chol_left_update_guarded(ctx, a, dinfo, n, j0, min(LW * nb, n - j0), p)
-                    else:
-                        _chol_left_update(ctx, a, n, j0, min(LW * nb, n - j0), p)
+                    _chol_left_update(ctx, a, n, j0, min(LW * nb, n - j0), p)
                 else:
-                    if defer:
-                        _chol_left_update_guarded(ctx, a, dinfo, n, j0, w, p, p - r)
-                    else:
-                        _chol_left_update(ctx, a, n, j0, w, p, p - r)
+                    _chol_left_update(ctx, a, n, j0, w, p, p - r)
             else:
-                if defer:
-                    _chol_left_update_guarded(ctx, a, dinfo, n, j0, w, p)
-                else:
-                    _chol_left_update(ctx, a, n, j0, w, p)
+                _chol_left_update(ctx, a, n, j0, w, p)
             if ctim:
                 ctx.synchronize()
                 tu += Int(perf_counter_ns()) - tk
@@ -2099,16 +2219,6 @@ def potrf_lower(
             fast_diag_factor(
                 ctx, a, dinfo, n, j0, w, inv_linv, inv_praw, inv_pk,
                 inv_shape, panel_tpb, elem_tpb,
-            )
-        elif defer:
-            ctx.enqueue_function[panel_factor_guarded_kernel](  # small-launch(n: leading dimension only): factors the w x w diagonal panel block, columns serial, rows across the block; n is the row stride
-                a.unsafe_ptr(),
-                dinfo.unsafe_ptr(),
-                Int32(n),
-                Int32(j0),
-                Int32(w),
-                grid_dim=(1, 1, 1),
-                block_dim=(panel_tpb, 1, 1),
             )
         else:
             ctx.enqueue_function[panel_factor_kernel](  # small-launch(n: leading dimension only): factors the w x w diagonal panel block, columns serial, rows across the block; n is the row stride
@@ -2196,17 +2306,6 @@ def potrf_lower(
                     a.unsafe_ptr(), Int32(n), Int32(j0), Int32(w), Int32(n_trail),
                     grid_dim=((n_trail * 32 + 255) // 256, 1, 1),
                     block_dim=(256, 1, 1),
-                )
-            elif defer:
-                ctx.enqueue_function[trsm_panel_guarded_kernel](
-                    a.unsafe_ptr(),
-                    dinfo.unsafe_ptr(),
-                    Int32(n),
-                    Int32(j0),
-                    Int32(w),
-                    Int32(n_trail),
-                    grid_dim=(solve_grid, 1, 1),
-                    block_dim=(solve_tpb, 1, 1),
                 )
             else:
                 ctx.enqueue_function[trsm_panel_kernel](
