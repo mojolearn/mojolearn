@@ -178,7 +178,7 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
         var rparams = Python.list(rows, cols, count, oversamples, iterations, Int(auto), Int(whiten), seed)
         if not x.finite:
             _ = py_call(rparams.append, PythonObject(1))
-        var got: PythonObject
+        var got = PythonObject(None)
         try:
             got = py_call_typed(entries["pca_fit_randomized"], x.address, components.address,
                 mean.address, variance.address, ratio.address, singular.address, projection_address,
