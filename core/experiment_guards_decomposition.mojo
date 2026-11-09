@@ -73,6 +73,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch
     comptime assert not is_defined["MOJOLEARN_PCA_FAST_COMPENSATED_COV"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_PCA_FAST_COMPENSATED_COV, F11, the Apple FAST compensated PCA covariance (decomposition/impl/linalg/detail/pca.mojo), had no verdict row; its one-sample full-workload runs were slower (istella B/A 2.73, taxi 16.48) and it will not be measured again; code at f59d913b0b; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_AFCL_L07"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_AFCL_L07, the chunked form of MOJOLEARN_PCA_FAST_COMPENSATED_COV (never run), deleted with it; code at f59d913b0b; see docs/TOMBSTONES.md"
+    # Lane k1-delete-unverdicted-fast (2026-11-09): Apple FAST experiments with no verdict, never to be measured.
+    # Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch
+    comptime assert not is_defined["MOJOLEARN_MCD_FAST_ACTIVE_COMPACT"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_MCD_FAST_ACTIVE_COMPACT, F06, MinCovDet's Apple FAST active-candidate compaction (x_decomp/mcd_experiments.mojo), had no verdict row (one-sample M3 B/A 0.98-1.23, mostly slower) and will not be measured; code at f59d913b0b; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_MCD_FAST_COV_REUSE"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_MCD_FAST_COV_REUSE, F06, MinCovDet's Apple FAST phase-local covariance reuse, had no verdict row (one-sample M3 B/A 1.01-1.12) and will not be measured; code at f59d913b0b; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_MCD_FAST_BOUND_BATCH"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_MCD_FAST_BOUND_BATCH, F06, MinCovDet's Apple FAST bounded candidate batches (x_decomp/mcd_bmma.mojo), had no verdict row (one-sample M3 B/A 0.99-1.18) and will not be measured; code at f59d913b0b; see docs/TOMBSTONES.md"
     return True
 
 

@@ -78,7 +78,9 @@ from x_decomp.kit import Mat
 from x_decomp.cells import FOLD_BLOCK
 from x_decomp.mcd_compat import mc_compact_kernel, mc_moment_kernel, mc_pinvh_kernel
 from x_decomp.mcd_bmma import launch_gemm_mma_batched
-from x_decomp.mcd_experiments import MCD_FAST_ACTIVE_COMPACT, MCD_FAST_COV_REUSE, MCD_EXPERIMENT_CANDIDATES, McdCompactWorkspace, McdCovReuseWorkspace, reuse_covariance_kernel, mcd_experiment_hit
+# TOMBSTONE: MOJOLEARN_MCD_FAST_COV_REUSE (never measured, deleted) deleted 2026-11-09 by @K1SHA_MCD@; code recoverable at
+# f59d913b0b (with MOJOLEARN_MCD_FAST_ACTIVE_COMPACT: the phase's compact / reuse workspaces and their arms below).
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch
 from x_decomp.jacobi2 import dev_barrier
 
 # FAILED gap26-mcdcompat-taxi at 948c4e7b1: B rejected by the batched
@@ -913,8 +915,6 @@ def mf_mma_chunk(nc: Int, r: Int, d: Int) -> Int:
 struct MfPhase(Movable):
     """One phase: nc candidates in groups of `per`, each over r rows (row
     group g of `rows`, or the identity), support size h, n_iter steps."""
-    var compact: Optional[McdCompactWorkspace]
-    var reuse: Optional[McdCovReuseWorkspace]
     var nc: Int
     var per: Int
     var r: Int
@@ -949,12 +949,6 @@ struct MfPhase(Movable):
 
     def __init__(out self, ctx: DeviceContext, nc: Int, per: Int, r: Int, ident: Int, h: Int, n_iter: Int, d: Int,
                  npair: Int) raises:
-        self.compact = None
-        self.reuse = None
-        comptime if MCD_FAST_ACTIVE_COMPACT and MCD_BMMA:
-            if nc <= MCD_EXPERIMENT_CANDIDATES: self.compact = McdCompactWorkspace(ctx, nc)
-        comptime if MCD_FAST_COV_REUSE and MCD_BMMA:
-            if nc <= MCD_EXPERIMENT_CANDIDATES: self.reuse = McdCovReuseWorkspace(ctx, nc)
         self.nc = nc
         self.per = per
         self.r = r
@@ -1029,7 +1023,7 @@ def _mma_precision(ctx: DeviceContext, ph: MfPhase, d: Int) raises:
     comptime if MCD_BMMA:
         # gate = mm_ran (pinvh ran for the candidate), the publication's mask
         launch_gemm_mma_batched(ctx, _f(ph.mm_vw), _f(ph.mm_v), _f(ph.mm_out), d, d, d, False, True,
-                                ph.nc, d*d, d*d, d*d, _i(ph.mm_ran), False, ph.compact)
+                                ph.nc, d*d, d*d, d*d, _i(ph.mm_ran), False)
     else:
         for c in range(ph.nc):
             var off = c*d*d
@@ -1044,8 +1038,6 @@ def _mma_precision(ctx: DeviceContext, ph: MfPhase, d: Int) raises:
 def _mma_covariance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.float32],
                     rows: DeviceBuffer[DType.int32], d: Int, par: Int, hinv: Float32) raises:
     var gate = _i(ph.active)
-    comptime if MCD_FAST_COV_REUSE:
-        if Bool(ph.reuse): gate = _i(ph.reuse[].gate)
     var one = ph.mchunk >= ph.nc
     var c0 = 0
     while c0 < ph.nc:
@@ -1065,7 +1057,7 @@ def _mma_covariance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.floa
             # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
             if one:
                 launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
-                                        cn, ph.r*d, ph.r*d, d*d, gate, False, ph.compact)
+                                        cn, ph.r*d, ph.r*d, d*d, gate, False)
             else:
                 launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
                                         cn, ph.r*d, ph.r*d, d*d, gate + c0, False)
@@ -1100,7 +1092,7 @@ def _mma_distance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.float3
             # gate = active, every candidate for the final distances (use_fin)
             if one:
                 launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.pm), _f(ph.mm_y), ph.r, d, d, False, False,
-                                        cn, ph.r*d, d*d, ph.r*d, _i(ph.active), use_fin, ph.compact)
+                                        cn, ph.r*d, d*d, ph.r*d, _i(ph.active), use_fin)
             else:
                 launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.pm) + c0*d*d, _f(ph.mm_y), ph.r, d, d, False, False,
                                         cn, ph.r*d, d*d, ph.r*d, _i(ph.active) + c0, use_fin)
@@ -1211,9 +1203,6 @@ def _run_phase(
     var tp = Float64(0)
     var t0 = Float64(0)
     var steps = 0
-    var hreused = List[Int32]()
-    comptime if MCD_FAST_COV_REUSE and MCD_BMMA:
-        hreused = List[Int32](length=1, fill=Int32(0))
     comptime if MCD_PROFILE:
         t0 = _pms(ctx)
         tp = t0
@@ -1247,17 +1236,6 @@ def _run_phase(
         var par = s % 2
         steps += 1
         var moment_gate = _i(ph.active)
-        comptime if MCD_FAST_COV_REUSE and MCD_BMMA:
-            if Bool(ph.reuse):
-                ph.reuse[].reused.enqueue_fill(Int32(0))
-                ctx.enqueue_function[reuse_covariance_kernel](
-                    _i(ph.mask1) if par == 1 else _i(ph.mask0), _i(ph.mask0) if par == 1 else _i(ph.mask1),
-                    _i(ph.active), _i(ph.reuse[].gate),
-                    _f(ph.loc1) if par == 1 else _f(ph.loc0), _f(ph.loc0) if par == 1 else _f(ph.loc1),
-                    _f(ph.cov1) if par == 1 else _f(ph.cov0), _f(ph.cov0) if par == 1 else _f(ph.cov1),
-                    _i(ph.reuse[].reused), Int32(r), Int32(d), Int32(s), grid_dim=nc, block_dim=256)
-                moment_gate = _i(ph.reuse[].gate)
-                mcd_experiment_hit(1)
         comptime if MCD_BATCH_COMPAT:
             ctx.enqueue_function[mc_compact_kernel](
                 _i(ph.mask1) if par == 1 else _i(ph.mask0), _i(ph.selected), Int32(r), moment_gate,
@@ -1303,12 +1281,8 @@ def _run_phase(
         _det(ctx, ph, d, s, err)
         ctx.enqueue_function[mf_fill_i_kernel](_i(anyb), Int32(1), Int32(0), grid_dim=1, block_dim=MF_TPB)
         ctx.enqueue_function[mf_any_kernel](_i(ph.active), Int32(nc), _i(anyb), grid_dim=_blocks(nc), block_dim=MF_TPB)
-        comptime if MCD_FAST_COV_REUSE and MCD_BMMA:
-            if Bool(ph.reuse): ctx.enqueue_copy(dst_ptr=hreused.unsafe_ptr(), src_buf=ph.reuse[].reused)
         ctx.enqueue_copy(dst_ptr=hany.unsafe_ptr(), src_buf=anyb)
         ctx.synchronize()
-        comptime if MCD_FAST_COV_REUSE and MCD_BMMA:
-            if Bool(ph.reuse): mcd_experiment_hit(2, Int(hreused[0]))
         _lap(ctx, prof, 2, tp)
         comptime if MCD_SKIP_PINVH:
             # nobody reads this phase's final distances: the pinvh that only
