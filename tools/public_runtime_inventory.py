@@ -2325,7 +2325,7 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None, door=Tru
 C_SLOT_ENTRIES = frozenset({"object.__getattribute__", "object.__setattr__", "object.__new__"})
 DOOR_LEVELS = ("native", "glue-heavy", "python-on-path")
 DOOR_RANK = {"native": 0, "glue-heavy": 1, "python-on-path": 2, "unresolved": 3}
-DOOR_COLUMNS = ("endpoint", "kind", "family", "python_status", "door", "b", "b_table", "c_loops", "c_data_loops",
+DOOR_COLUMNS = ("endpoint", "kind", "family", "python_status", "door", "b", "b_unresolved", "b_table", "c_loops", "c_data_loops",
                 "c_inline", "a", "a_native", "entries", "worst")
 
 
@@ -2449,7 +2449,7 @@ def door_classify(index, rows, root, door=None):
             level = merged.level()
         row["door"] = level
         counts = merged.counts()
-        row["door_counts"] = {k: counts.get(k, 0) for k in ("a", "a-native", "b", "b-table", "c-loops",
+        row["door_counts"] = {k: counts.get(k, 0) for k in ("a", "a-native", "b", "b?", "b-table", "c-loops",
                                                               "c-loops-data", "c-inline")}
         row["door_entries"] = sorted(set(entries))
         row["door_worst"] = (worst + merged.worst())[:6]
@@ -2485,7 +2485,7 @@ def door_tsv(rows):
     for r in rows:
         c = r.get("door_counts") or {}
         lines.append("\t".join(str(v) for v in (
-            r["endpoint"], r["kind"], r["family"], r["runtime_status"], r["door"], c.get("b", 0), c.get("b-table", 0),
+            r["endpoint"], r["kind"], r["family"], r["runtime_status"], r["door"], c.get("b", 0), c.get("b?", 0), c.get("b-table", 0),
             c.get("c-loops", 0), c.get("c-loops-data", 0), c.get("c-inline", 0), c.get("a", 0), c.get("a-native", 0),
             ",".join(r.get("door_entries") or []), " | ".join(r.get("door_worst") or []).replace("\t", " "))))
     return "\n".join(lines) + "\n"
@@ -2502,7 +2502,7 @@ def door_check(current, baseline):
             problems.append(f"{level} endpoints grew {then[level]} -> {now[level]}")
         elif now[level] < then[level]:
             notes.append(f"{level} endpoints shrank {then[level]} -> {now[level]}: refresh with --baseline")
-    for key in ("b", "c_data_loops", "c_inline"):
+    for key in ("b", "b_unresolved", "c_data_loops", "c_inline"):
         a = sum(int(r.get(key, 0) or 0) for r in current)
         b = sum(int(r.get(key, 0) or 0) for r in baseline)
         if a > b:

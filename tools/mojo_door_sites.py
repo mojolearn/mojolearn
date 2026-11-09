@@ -18,8 +18,11 @@ Every door line that touches Python gets one class:
   a-native   a compiled Mojo entry called through the CPython call protocol
              (`py_call(entries["x"], ...)`, `_native_function(...)`, `*_entry(...)`)
   b          a call into Python code: a Python-coded module (`numpy`, `os`, `mojolearn._mode`,
-             ...), a numpy callable, a method on a caller or package object, a table entry the
-             Python side fills with a Python def/lambda/class, any other callable
+             ...), a numpy function, a value read off the caller's object and called (a user
+             callable such as KMeans' `init`), a method on a caller-provided PythonObject
+             parameter, a table entry the Python side fills with a Python def/lambda/class
+  b?         a call into a callable this static reading cannot resolve (a local of unknown origin,
+             a descriptor's `__get__`, a stored constructor): usually C, never proved either way
   b-table    `py_call(context["k"], ...)` whose key the Python side fills only with C builtins
              or compiled entries (or never: filled in Mojo)
   c-inline   Python iteration inside one expression (`b.sorted`, `b.map`, `.tolist`, `b.zip`,
@@ -162,6 +165,11 @@ def is_door(path):
 
 def _code_and_comment(line):
     """(code without the trailing comment, comment text), keeping string literals in the code."""
+    if "#" not in line:
+        return line, ""
+    if '"' not in line and "'" not in line:
+        i = line.index("#")
+        return line[:i], line[i:]
     quote, i = None, 0
     while i < len(line):
         c = line[i]
@@ -224,12 +232,32 @@ def _call_target(code, start):
     return code[start:].strip()
 
 
+# Locals that hold the caller's own objects: a value read off them and called is user code.
+CALLER_NAMES = frozenset({"model", "estimator", "self_", "obj", "user", "callback", "fields", "params", "py_self"})
+CALLER_READ = re.compile(r"^(?:py_get|py_getattr|py_attr|native_fitted_get|py_get_item)\s*\(\s*(?P<recv>\w+)\b|"
+                         r"^(?P<recv2>\w+)\s*(?:\[\s*\"|\.\s*(?!__)\w+\s*$)")
+
+
+_NAMES_RE = {}
+_IDENT_USE = re.compile(r"(?<![\w.])(\w+)\s*[.\[(]")
+_IN_NAME = re.compile(r"\bin\s+(\w+)\b")
+
+
+def _names_regex(names, template):
+    key = (names, template)
+    r = _NAMES_RE.get(key)
+    if r is None:
+        r = _NAMES_RE[key] = re.compile(template % "|".join(sorted(map(re.escape, names))))
+    return r
+
+
 class Names:
     """The PythonObject-typed names of one function, with one compiled alternation."""
-    __slots__ = ("names", "_re")
+    __slots__ = ("names", "_re", "params")
 
     def __init__(self, names=()):
         self.names, self._re = set(names), None
+        self.params = frozenset(names)
 
     def add(self, *names):
         new = [n for n in names if n not in self.names]
@@ -239,23 +267,30 @@ class Names:
 
     def regex(self):
         if self._re is None:
-            self._re = re.compile(r"(?<![\w.])(?:%s)\s*[.\[(]" % "|".join(sorted(map(re.escape, self.names)))) \
-                if self.names else False
+            self._re = _names_regex(frozenset(self.names), r"(?<![\w.])(?:%s)\s*[.\[(]") if self.names else False
         return self._re
 
+    def in_regex(self):
+        return _names_regex(frozenset(self.names), r"\bin\s+(?:%s)\b") if self.names else None
+
     def used(self, code):
-        r = self.regex()
-        return bool(r and r.search(code))
+        if not self.names:
+            return False
+        return any(m.group(1) in self.names for m in _IDENT_USE.finditer(code))
+
+    def iterated(self, head):
+        return any(m.group(1) in self.names for m in _IN_NAME.finditer(head))
 
 
-def classify_line(code, names=None, python_tables=None, origins=None):
+def classify_line(code, names=None, python_tables=None, origins=None, call_re=None):
     """[(class, what)] for one door code line (comments stripped). Empty when it touches no Python.
     `origins` maps a local name to the (class, what) of the expression it was bound to, so a
     call through a local (`var list_type = py_type(Python.list())`) is classed by its origin."""
     names = names if names is not None else Names()
     bare = STRING.sub('""', code)          # string contents never read as code
     sites = []
-    if not (PY_TOUCH.search(bare) or names.used(bare) or INLINE.search(code) or NUMPY.search(bare)):
+    if not (PY_TOUCH.search(bare) or names.used(bare) or INLINE.search(code) or NUMPY.search(bare)
+            or (call_re is not None and call_re.search(bare))):
         return sites
     for m in IMPORT_MODULE.finditer(code):
         if m["m"] not in C_MODULES:
@@ -273,7 +308,7 @@ def classify_line(code, names=None, python_tables=None, origins=None):
     m = INLINE.search(code)
     if m:
         sites.append(("c-inline", "inline Python iteration: " + m.group(0)[:40]))
-    calls = [mm.end() for mm in PY_CALL.finditer(code)]
+    calls = [mm.end() for mm in (call_re or PY_CALL).finditer(code)]
     for start in calls:
         target = _call_target(code, start)
         if origins and target in origins:
@@ -284,7 +319,10 @@ def classify_line(code, names=None, python_tables=None, origins=None):
         for mm in re.finditer(r"(?<![\w.])(?P<recv>\w+)\s*\.\s*(?P<attr>\w+)\s*\(", bare):
             if (mm["recv"] in names.names and mm["attr"] not in C_METHODS
                     and not BUILTIN_HANDLES.match(mm["recv"] + ".")):
-                sites.append(("b", f"method call {mm['recv']}.{mm['attr']}(...) on a PythonObject"))
+                caller = mm["recv"] in getattr(names, "params", ()) or mm["recv"] in CALLER_NAMES
+                sites.append(("b" if caller else "b?",
+                              f"method call {mm['recv']}.{mm['attr']}(...) on a "
+                              f"{'caller-provided ' if caller else ''}PythonObject"))
     if not sites:
         sites.append(("a", "object layer"))
     return sites
@@ -323,7 +361,7 @@ def _classify_target(target, python_tables=None):
     dotted = re.match(r"^(?P<recv>[\w\[\]\".()]+?)\s*\.\s*(?P<attr>\w+)$", t)
     if dotted and dotted["attr"] in C_METHODS:
         return ("a", "C-type method " + dotted["attr"])
-    return ("b", "py_call into " + t[:50])
+    return ("b?", "py_call into " + t[:50])
 
 
 class Func:
@@ -342,7 +380,28 @@ class Func:
         return (self.path, self.name)
 
 
-def scan_file(path, text, python_tables=None):
+CALL_HELPER = re.compile(r"^[ \t]*(?:def|fn)\s+(?P<name>\w+)\s*\(\s*(?P<param>\w+)\s*:\s*(?:read\s+|owned\s+)?PythonObject\b",
+                         re.MULTILINE)
+
+
+def call_helpers(text):
+    """Door functions that call their first PythonObject parameter (`family_call(callable, *args)`):
+    a call to one is classed like `py_call(callable, ...)`."""
+    found = set()
+    for m in CALL_HELPER.finditer(text):
+        body = text[m.end():m.end() + 1500]
+        nxt = re.search(r"^(?:def|fn|struct)\s", body, re.MULTILINE)
+        body = body[:nxt.start()] if nxt else body
+        if re.search(r"(?:\bpy_call\w*|PyObject_Call\w*|PyObject_Vectorcall\w*)\s*\(\s*%s\b" % re.escape(m["param"]), body):
+            found.add(m["name"])
+    return found
+
+
+def call_regex(helpers):
+    return _names_regex(frozenset({"py_call"} | set(helpers)), r"(?<![\w.])(?:%s)\s*\(\s*")
+
+
+def scan_file(path, text, python_tables=None, call_re=None):
     """(funcs, imports {alias: (module path, name)}, registrations [(python name, fn name)])."""
     lines = _logical_lines(text)
     imports, registrations = {}, []
@@ -390,10 +449,14 @@ def scan_file(path, text, python_tables=None):
         a = ASSIGNED.match(code) or re.match(r"^\s*(?P<name>\w+)\s*=\s*(?P<rhs>[^=].*)$", code)
         if a:
             rhs = a["rhs"].strip()
-            if not rhs.startswith(("py_call(", "py_get(")) and not re.search(r"\)\s*$", rhs) or rhs.startswith(
+            cr = CALLER_READ.match(rhs)
+            recv = cr and (cr["recv"] or cr["recv2"])
+            if recv and (recv in names.params or recv in CALLER_NAMES) and recv not in ("context", "ctx", "mods"):
+                origins[a["name"]] = ("b", f"calls a value read off the caller's object ({rhs[:40]})")
+            elif not rhs.startswith(("py_call(", "py_get(")) and not re.search(r"\)\s*$", rhs) or rhs.startswith(
                     ("py_type(", "native_numpy_type(")):
                 origin = _classify_target(rhs, python_tables)
-                if origin[0] == "b" and origin[1].startswith("py_call into"):
+                if origin[0] == "b?":
                     origins.pop(a["name"], None)
                 else:
                     origins[a["name"]] = origin
@@ -402,7 +465,7 @@ def scan_file(path, text, python_tables=None):
             head = re.match(r"(?P<recv>\w+)\s*[.\[]", rhs)
             if PY_RHS.match(rhs) or (head and head["recv"] in names.names and not re.match(r"\w+\s*\.\s*__\w+__", rhs)):
                 names.add(a["name"])
-        for cls, what in classify_line(code, names, python_tables, origins):
+        for cls, what in classify_line(code, names, python_tables, origins, call_re):
             f.sites.append((n, cls, what))
         for c in CALLEE.finditer(code):
             name = c["name"]
@@ -425,8 +488,7 @@ def scan_file(path, text, python_tables=None):
                 tag = ("driver" if TAG_DRIVER.search(tags) else "small" if TAG_SMALL.search(tags)
                        else "cpu-route" if TAG_CPU.search(tags) else "untagged")
                 head = lm["head"]
-                pyiter = bool(PY_TOUCH.search(head)) or names.used(head + "(") or bool(
-                    re.search(r"\bin\s+(?:%s)\b" % "|".join(map(re.escape, names.names)), head) if names.names else False)
+                pyiter = bool(PY_TOUCH.search(head)) or names.used(head + "(") or names.iterated(head)
                 data = bool(DATA_WORDS.search(head + " " + tags))
                 f.loops.append((n, tag, pyiter, data, code.strip()[:100]))
         im = IF_KEY.match(code)
@@ -449,53 +511,60 @@ def TYPED_NAMES(code):
 
 
 def _scan_one(job):
-    path, text, tables = job
-    return path, scan_file(path, text, tables)
+    path, text, tables, helpers = job
+    return path, scan_file(path, text, tables, call_regex(helpers))
 
 
 # ---------------------------------------------------------------- the index
 
-def python_table_entries(root):
-    """{key: 'module:line name'} of string keys the Python package fills with a Python
-    def, lambda or class of its own (dict literals, dict(k=v), .update(k=v), x["k"] = v)."""
-    base = Path(root) / "python" / "mojolearn"
+def _table_entries_of(job):
+    """The python_table_entries rows of one Python file."""
+    path, rel = job
+    try:
+        tree = ast.parse(Path(path).read_text(encoding="utf-8", errors="replace"))
+    except SyntaxError:
+        return {}
+    defined = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
+
+    def python_value(v):
+        if isinstance(v, ast.Lambda):
+            return "lambda"
+        if isinstance(v, ast.Name) and v.id in defined:
+            return v.id
+        return None
+
     out = {}
-    for path in sorted(base.rglob("*.py")):
-        if "/tests/" in path.as_posix():
-            continue
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
-        except SyntaxError:
-            continue
-        defined = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
+    for node in ast.walk(tree):
+        pairs = []
+        if isinstance(node, ast.Dict):
+            pairs = [(k.value, v) for k, v in zip(node.keys, node.values)
+                     if isinstance(k, ast.Constant) and isinstance(k.value, str)]
+        elif isinstance(node, ast.Call) and (
+                (isinstance(node.func, ast.Name) and node.func.id == "dict") or
+                (isinstance(node.func, ast.Attribute) and node.func.attr in ("update", "tables"))):
+            pairs = [(kw.arg, kw.value) for kw in node.keywords if kw.arg]
+        elif isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Subscript) and isinstance(t.slice, ast.Constant) and isinstance(t.slice.value, str):
+                    pairs.append((t.slice.value, node.value))
+        for key, value in pairs:
+            what = python_value(value)
+            if what:
+                out.setdefault(key, f"{rel}:{value.lineno} {what}")
+    return out
 
-        def python_value(v):
-            if isinstance(v, ast.Lambda):
-                return "lambda"
-            if isinstance(v, ast.Name) and v.id in defined:
-                return v.id
-            if isinstance(v, ast.Attribute) and isinstance(v.value, ast.Name) and v.value.id == "self":
-                return None
-            return None
 
-        rel = path.relative_to(root).as_posix()
-        for node in ast.walk(tree):
-            pairs = []
-            if isinstance(node, ast.Dict):
-                pairs = [(k.value, v) for k, v in zip(node.keys, node.values)
-                         if isinstance(k, ast.Constant) and isinstance(k.value, str)]
-            elif isinstance(node, ast.Call) and (
-                    (isinstance(node.func, ast.Name) and node.func.id == "dict") or
-                    (isinstance(node.func, ast.Attribute) and node.func.attr == "update")):
-                pairs = [(kw.arg, kw.value) for kw in node.keywords if kw.arg]
-            elif isinstance(node, ast.Assign):
-                for t in node.targets:
-                    if isinstance(t, ast.Subscript) and isinstance(t.slice, ast.Constant) and isinstance(t.slice.value, str):
-                        pairs.append((t.slice.value, node.value))
-            for key, value in pairs:
-                what = python_value(value)
-                if what:
-                    out.setdefault(key, f"{rel}:{value.lineno} {what}")
+def python_table_entries(root, pool=None):
+    """{key: 'module:line name'} of string keys the Python package fills with a Python
+    def, lambda or class of its own (dict literals, dict(k=v), .update(k=v), .tables(k=v),
+    x["k"] = v). One task per file, across every core."""
+    base = Path(root) / "python" / "mojolearn"
+    jobs = [(str(p), p.relative_to(root).as_posix()) for p in sorted(base.rglob("*.py")) if "/tests/" not in p.as_posix()]
+    results = pool.map(_table_entries_of, jobs, chunksize=8) if pool else map(_table_entries_of, jobs)
+    out = {}
+    for part in results:
+        for k, v in part.items():
+            out.setdefault(k, v)
     return out
 
 
@@ -511,13 +580,25 @@ class DoorIndex:
                     rel = p.relative_to(self.root).as_posix()
                     if is_door(rel):
                         files[rel] = p.read_text(encoding="utf-8", errors="replace")
-        self.tables = python_table_entries(self.root) if python_tables is None else python_tables
-        jobs = [(p, t, self.tables) for p, t in sorted(files.items())]
         workers = workers or os.cpu_count() or 1
-        if workers > 1 and len(jobs) > 8:
+        pool = ProcessPoolExecutor(max_workers=workers) if workers > 1 and len(files) > 8 else None
+        try:
+            self._build(files, python_tables, pool)
+        finally:
+            if pool:
+                pool.shutdown()
+
+    def _build(self, files, python_tables, pool):
+        self.tables = python_table_entries(self.root, pool) if python_tables is None else python_tables
+        helpers = set()
+        texts = [files[p] for p in sorted(files)]
+        for found in (pool.map(call_helpers, texts, chunksize=8) if pool else map(call_helpers, texts)):
+            helpers |= found
+        self.call_helpers = sorted(helpers - {"py_call"})
+        jobs = [(p, t, self.tables, frozenset(helpers)) for p, t in sorted(files.items())]
+        if pool:
             # one file per task, across every core (files are independent)
-            with ProcessPoolExecutor(max_workers=workers) as pool:
-                results = list(pool.map(_scan_one, jobs, chunksize=max(1, len(jobs) // (workers * 4))))
+            results = list(pool.map(_scan_one, jobs, chunksize=4))
         else:
             results = [_scan_one(j) for j in jobs]
         self.funcs = {}                       # (path, name) -> Func (first definition)
@@ -639,6 +720,7 @@ class Reach:
     def worst(self, limit=6):
         """The b sites first, then data-sized loops, as 'path:line what'."""
         out = [f"{p}:{n} {w}" for (p, n, cls, w) in sorted(self.sites) if cls == "b"]
+        out += [f"{p}:{n} unresolved: {w}" for (p, n, cls, w) in sorted(self.sites) if cls == "b?"][:2]
         out += [f"{p}:{n} {t}-loop{' data' if d else ''}: {h}" for (p, n), (t, py, d, h) in sorted(self.loops.items())
                 if d or t in ("cpu-route", "untagged")]
         return out[:limit]

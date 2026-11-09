@@ -39,7 +39,7 @@ class ClassifyLineTest(unittest.TestCase):
         self.assertEqual(classes('var x = native_loaded_module(name)'), ["b"])
         self.assertEqual(classes('var a = py_call(context["ndarray"], shape)'), ["a"])   # numpy C type
         self.assertEqual(classes('var a = py_call(context["np"].unique, y)'), ["b"])
-        self.assertEqual(classes('var c = py_call(init, x, k)'), ["b"])
+        self.assertEqual(classes('var c = py_call(init, x, k)'), ["b?"])     # origin unknown here
         self.assertEqual(classes('var r = model.fit(x)', ("model",)), ["b"])
         self.assertEqual(classes('var r = model.append(x)', ("model",)), ["a"])   # C-type method: object layer
         self.assertIn("b", classes('var y = np.asarray(x)'))
@@ -49,9 +49,16 @@ class ClassifyLineTest(unittest.TestCase):
         self.assertEqual([c for c, _ in mds.classify_line("var l = py_call(list_type, x)", None, None, origins)], ["a"])
         self.assertEqual([c for c, _ in mds.classify_line("var l = py_call(init, x)", None, None, origins)], ["b"])
         text = ("def f(x: PythonObject) raises:\n    var list_type = py_type(Python.list())\n"
-                "    var l = py_call(list_type, x)\n    var g = py_call(user_init, x)\n")
-        funcs, _, _ = mds.scan_file("bindings/f.mojo", text, {})
-        self.assertEqual([c for _, c, _ in funcs[0].sites if c in ("a", "b")], ["a", "a", "b"])
+                "    var l = py_call(list_type, x)\n    var g = py_call(user_init, x)\n"
+                "    var init = py_get(x, \"init\")\n    var r = family_call(init, x)\n")
+        funcs, _, _ = mds.scan_file("bindings/f.mojo", text, {}, mds.call_regex({"family_call"}))
+        self.assertEqual([c for _, c, _ in funcs[0].sites if c in ("a", "b", "b?")], ["a", "a", "b?", "a", "b"])
+
+    def test_call_helpers(self):
+        text = ("def family_call(callable: PythonObject, *args: PythonObject) raises -> PythonObject:\n"
+                "    ref cpy = Python().cpython()\n    var r = cpy.PyObject_Call(callable, t, k)\n    return r\n"
+                "def other(x: PythonObject) raises:\n    _ = py_get(x, \"a\")\n")
+        self.assertEqual(mds.call_helpers(text), {"family_call"})
 
     def test_table_entries(self):
         self.assertEqual(classes('var g = py_call(context["fields_get"], v)'), ["b-table"])
@@ -77,7 +84,8 @@ def entry_fit(model: PythonObject, operation: String, args: PythonObject) raises
             _ = py_call(b.float, x[i])
         return x
     if operation == "family_predict":
-        _ = py_call(model_hook, x)
+        var hook = py_get(model, "hook")
+        _ = family_call(hook, x)
         return x
     gemm_kernel(x)
     return x
@@ -89,7 +97,11 @@ def build_mod() -> PythonObject:
     m.def_py_c_function(entry_c, "entry_c_call")
     return m.finalize()
 '''
-HELPER = '''def admit(args: PythonObject) raises -> PythonObject:
+HELPER = '''def family_call(callable: PythonObject, *args: PythonObject) raises -> PythonObject:
+    return py_call(callable, args)
+
+
+def admit(args: PythonObject) raises -> PythonObject:
     for k in range(3):  # small-loop(3): the argument slots
         _ = py_get(args, k)
     return args
@@ -124,10 +136,11 @@ class IndexTest(unittest.TestCase):
         self.assertIn(("bindings/helper.mojo", "admit"), fit.functions)
         self.assertNotIn(("bindings/helper.mojo", "unrelated"), fit.functions)
         predict = self.index.reach("entry_fit", "family_predict", keys)
-        self.assertEqual(predict.level(), "python-on-path")      # calls an unresolved Python callable
+        self.assertEqual(predict.level(), "python-on-path")      # calls a value read off the caller's model
         self.assertEqual(predict.counts()["c-loops-data"], 0)
         whole = self.index.reach("entry_fit", None, keys)
         self.assertEqual(whole.level(), "python-on-path")
+        self.assertIn("family_call", self.index.call_helpers)
         self.assertIsNone(self.index.reach("not_an_entry", None, keys))
 
     def test_loops_and_tags(self):
