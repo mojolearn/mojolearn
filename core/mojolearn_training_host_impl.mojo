@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Typed code moved word for word from bindings/_mojolearn_training_host.mojo."""
 from training.neural_arithmetic_profile import neural_training_profile
-from training.neural_session_mlp_host import nn_mlp_sessions_host
 from std.os import abort
 from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from checks.kernel_matrix import (
@@ -44,13 +43,7 @@ from training.checks.chunked_lm_head_oracle import (
 )
 from mamba.host.device_shim import DeviceContext as HostDeviceContext
 from mamba.host.gen.philox_neural import neural_rng_host
-from training.host.mlp_oracle import (
-    MLP_ORACLE_HOST_SABOTAGE,
-    host_mlp_bias_activation,
-    host_mlp_relu_backward,
-    host_mlp_sum_rows,
-    host_mlp_validate_shape,
-)
+from training.host.mlp_oracle import MLP_ORACLE_HOST_SABOTAGE
 from training.neural_identical_experiments import IDN_CHUNKED_LM_HEAD_V2
 from gemm.contract import CONTRACT_K_LEAF_MIN
 
@@ -165,36 +158,8 @@ def clip_grad_norm_host_into(gp: MutPointer[Float32, MutUntrackedOrigin], op: Mu
     return n_total
 
 
-def mlp_sum_rows_host_into(x_address: Int, op: MutPointer[Float32, MutUntrackedOrigin], rows: Int, cols: Int) raises -> Int:
-    var count = 0
-    var x = read_f32(x_address, rows * cols)
-    var out = host_mlp_sum_rows(x, rows, cols)
-    for i in range(len(out)):
-        op[i] = out[i]
-    count = len(out)
-    return count
-
-
-def mlp_relu_backward_host_into(a_address: Int, g_address: Int, op: MutPointer[Float32, MutUntrackedOrigin], rows: Int, cols: Int) raises -> Int:
-    var count = 0
-    var a = read_f32(a_address, rows * cols)
-    var g = read_f32(g_address, rows * cols)
-    var out = host_mlp_relu_backward(a, g, rows, cols)
-    for i in range(len(out)):
-        op[i] = out[i]
-    count = len(out)
-    return count
-
-
-def mlp_bias_activation_host_into(x_address: Int, b_address: Int, op: MutPointer[Float32, MutUntrackedOrigin], rows: Int, cols: Int, relu_flag: Int) raises -> Int:
-    var count = 0
-    var x = read_f32(x_address, rows * cols)
-    var b = read_f32(b_address, cols)
-    var out = host_mlp_bias_activation(x, b, rows, cols, relu_flag)
-    for i in range(len(out)):
-        op[i] = out[i]
-    count = len(out)
-    return count
+# TOMBSTONE: mlp_sum_rows_host_into, mlp_relu_backward_host_into, mlp_bias_activation_host_into (the CPU column's small-MLP primitive entries) deleted 2026-11-09 by lane/m2-neural-leftovers; code recoverable at 0ce88411d3.
+# Restore: git apply experiments/removed/M2_SMALL_MLP_PRIMITIVES.patch
 
 
 def ce_loss_host_into(

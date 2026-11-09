@@ -3,20 +3,15 @@
 """CPU binding for the `_mojolearn_training` family: the small MLP's training
 step (the mlp lane, 2026-09-14).
 
-HOST ONLY. No DeviceContext, no kernel launch, no GPU. `SmallMLPTrainer`
-(`python/mojolearn/_mlp_impl.py`) composes a training step from the pinned
-GEMM (`_mojolearn_linalg`, already served by the linalg host binding), the
-three small MLP operations, the cross-entropy loss and its gradient, and one
-AdamW update. This binding carries the last three under the GPU training
+HOST ONLY. No DeviceContext, no kernel launch, no GPU. The cross-entropy
+loss and its gradient and the AdamW update of the training lane run on the
+CPU column through this binding. It carries them under the GPU training
 binding's names (`bindings/_mojolearn_training.mojo`), with the SAME address
 contracts and params lists, so the trainer runs unchanged on a CPU-only
 install through `_backend._HOST_MODULES` (`"_mojolearn_training":
 "_mojolearn_training_host"`), the way `LanguageModelHostTrainer` composes the
 byte LM step from the same normative oracles:
 
-  `mlp_bias_activation`, `mlp_relu_backward`, `mlp_sum_rows`
-                  `training/host/mlp_oracle.mojo`, `training/mlp_ops.mojo`
-                  restated.
   `ce_loss`       `training/checks/loss_oracle.mojo::ce_forward_oracle` and
                   `ce_backward_oracle`, THE NORMATIVE ANSWER of
                   `mojolearn.identical.loss.ce.fp32.v1` the device loss is
@@ -59,17 +54,15 @@ probes) is deliberately ABSENT, so those surfaces refuse BY NAME through
 `_HostBinding`.
 
 The sabotage arm (`training_host_sabotage`) is
-`training/host/mlp_oracle.mojo::MLP_ORACLE_HOST_SABOTAGE`: every row sum is
-walked descending; the same define walks every `gemm_oracle` leaf descending
-(`GEMM_ORACLE_HOST_SABOTAGE`), which moves the clip, the loss, the linear
-operations and the RMSNorm weight gradient.
+`training/host/mlp_oracle.mojo::MLP_ORACLE_HOST_SABOTAGE`: the define walks
+every `gemm_oracle` leaf descending (`GEMM_ORACLE_HOST_SABOTAGE`), which moves
+the clip, the loss, the linear operations and the RMSNorm weight gradient.
 """
 
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from training.neural_arithmetic_profile import neural_training_profile
 from bindings.residual_dropout_boundary_host import residual_dropout_binding, residual_dropout_backward_binding
 from bindings.neural_gemm_boundary_host import neural_gemm_binding
-from training.neural_session_mlp_host import nn_mlp_sessions_host
 
 from std.os import abort
 from training.host.native_primitive_dispatch import NATIVE_HOST_TRAINING_PRIMITIVE_API
@@ -85,9 +78,6 @@ from core.mojolearn_training_host_impl import (
     _host_refuse_hyperparameters,
     _write_f32,
     neural_rng_host_into,
-    mlp_sum_rows_host_into,
-    mlp_relu_backward_host_into,
-    mlp_bias_activation_host_into,
     ce_loss_host_into,
     optimizer_step_host_into,
 )
@@ -142,13 +132,7 @@ from training.checks.chunked_lm_head_oracle import (
 )
 from mamba.host.device_shim import DeviceContext as HostDeviceContext
 from mamba.host.gen.philox_neural import neural_rng_host
-from training.host.mlp_oracle import (
-    MLP_ORACLE_HOST_SABOTAGE,
-    host_mlp_bias_activation,
-    host_mlp_relu_backward,
-    host_mlp_sum_rows,
-    host_mlp_validate_shape,
-)
+from training.host.mlp_oracle import MLP_ORACLE_HOST_SABOTAGE
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -316,65 +300,8 @@ def ce_loss_binding(
 # ===========================================================================
 
 
-def mlp_bias_activation_binding(
-    input_addr: PythonObject, bias_addr: PythonObject,
-    out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """C-row-major f32 bias + optional ReLU; params=[rows,cols,relu_flag].
-    Returns rows*cols; IDENTICAL only."""
-    if len(params) != 3:
-        raise Error("mlp_bias_activation params must be [rows,cols,relu_flag]")
-    var rows = _index(params[0])
-    var cols = _index(params[1])
-    var relu_flag = _index(params[2])
-    host_mlp_validate_shape(rows, cols)
-    if relu_flag != 0 and relu_flag != 1:
-        raise Error("mlp_bias_activation relu_flag must be 0 or 1")
-    var x_address = _index(input_addr)
-    var b_address = _index(bias_addr)
-    var op = f32_ptr(_index(out_addr))
-    var count = 0
-    with GILReleased(Python()):
-        count = mlp_bias_activation_host_into(x_address, b_address, op, rows, cols, relu_flag)
-    return PythonObject(count)
-
-
-def mlp_relu_backward_binding(
-    activation_addr: PythonObject, incoming_addr: PythonObject,
-    out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params=[rows,cols]; the derivative is incoming where activation > 0,
-    otherwise +0. Returns rows*cols; IDENTICAL only."""
-    if len(params) != 2:
-        raise Error("mlp_relu_backward params must be [rows,cols]")
-    var rows = _index(params[0])
-    var cols = _index(params[1])
-    host_mlp_validate_shape(rows, cols)
-    var a_address = _index(activation_addr)
-    var g_address = _index(incoming_addr)
-    var op = f32_ptr(_index(out_addr))
-    var count = 0
-    with GILReleased(Python()):
-        count = mlp_relu_backward_host_into(a_address, g_address, op, rows, cols)
-    return PythonObject(count)
-
-
-def mlp_sum_rows_binding(
-    input_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params=[rows,cols]; returns cols after the ascending row sum;
-    IDENTICAL only."""
-    if len(params) != 2:
-        raise Error("mlp_sum_rows params must be [rows,cols]")
-    var rows = _index(params[0])
-    var cols = _index(params[1])
-    host_mlp_validate_shape(rows, cols)
-    var x_address = _index(input_addr)
-    var op = f32_ptr(_index(out_addr))
-    var count = 0
-    with GILReleased(Python()):
-        count = mlp_sum_rows_host_into(x_address, op, rows, cols)
-    return PythonObject(count)
+# TOMBSTONE: the small-MLP primitives mlp_bias_activation, mlp_relu_backward, mlp_sum_rows (training/mlp_ops.mojo _mlp_kernel and its *_host functions; on the CPU column training/host/mlp_oracle.mojo host_mlp_relu_backward / host_mlp_sum_rows and core/mojolearn_training_host_impl.mojo *_host_into) and the mlp_sessions / mlp_sessions_rows entries (MOJOLEARN_NN64_SESSION_PACK) deleted 2026-11-09 by lane/m2-neural-leftovers; code recoverable at 0ce88411d3. Their callers (ParallelNeuralTrainer's shard gradient, SmallMLPTrainer's inference sessions) run the trainer's captured program (autograd/small_mlp_program.mojo).
+# Restore: git apply experiments/removed/M2_SMALL_MLP_PRIMITIVES.patch
 
 
 # TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
@@ -472,49 +399,6 @@ def rms_norm_backward_binding(
     var count = 0
     with GILReleased(Python()):
         count = rms_norm_backward_host_into(a, m, dm, eps)
-    return PythonObject(count)
-
-
-def mlp_sessions_rows_binding(shapes: PythonObject, width: PythonObject) raises -> PythonObject:
-    """Output sizing for `mlp_sessions`: `shapes` is the session inputs'
-    shape tuples (metadata only, never row values) and `width` the model's
-    input width. Checks every session is a (rows, width) matrix and returns
-    the total row count, so the caller sizes the output from Mojo's number
-    (no Python `sum` over session rows)."""
-    var w = Int(py=width)
-    var n = len(shapes)
-    if n == 0:
-        raise Error("MLP sessions require at least one (rows, width) input")
-    var total = 0
-    for i in range(n):  # small-loop(n: session shape tuples): reads caller metadata, not data
-        var shape = shapes[i]
-        if len(shape) != 2 or Int(py=shape[1]) != w or Int(py=shape[0]) < 0:
-            raise Error("MLP sessions require at least one (rows, width) input")
-        total += Int(py=shape[0])
-    return PythonObject(total)
-
-
-def mlp_sessions_binding(addresses: PythonObject, input_addresses: PythonObject,
-                         shapes: PythonObject, dims: PythonObject) raises -> PythonObject:
-    """Native whole-model A/B: shared weights, independent session row batches.
-    `shapes` is the session inputs' shape tuples; the rows are their first
-    entries (`mlp_sessions_rows` checked them and sized the output)."""
-    var a = _addrs(addresses, 5, "mlp_sessions")
-    _params(dims, 3, "mlp_sessions")
-    var n_sessions = len(shapes)
-    if len(input_addresses) != n_sessions:
-        raise Error("neural MLP sessions: metadata length mismatch")
-    var inputs = List[Int]()
-    var rows = List[Int]()
-    for i in range(n_sessions):  # small-loop(n_sessions: session handles): reads buffer addresses and shapes, not data
-        inputs.append(Int(py=input_addresses[i]))
-        rows.append(Int(py=shapes[i][0]))
-    var in_width = Int(py=dims[0])
-    var hidden = Int(py=dims[1])
-    var out_width = Int(py=dims[2])
-    var count = 0
-    with GILReleased(Python()):
-        count = nn_mlp_sessions_host(inputs, rows, f32_ptr(a[1]), f32_ptr(a[2]), f32_ptr(a[3]), f32_ptr(a[4]), f32_ptr(a[0]), in_width, hidden, out_width)
     return PythonObject(count)
 
 
@@ -714,9 +598,6 @@ def build__mojolearn_training_host() -> PythonObject:
         module.def_function[optimizer_resident_download_host_binding]("optimizer_resident_download")
         module.def_function[optimizer_resident_upload_host_binding]("optimizer_resident_upload")
         module.def_function[ce_loss_binding]("ce_loss")
-        module.def_function[mlp_bias_activation_binding]("mlp_bias_activation")
-        module.def_function[mlp_relu_backward_binding]("mlp_relu_backward")
-        module.def_function[mlp_sum_rows_binding]("mlp_sum_rows")
         # TOMBSTONE: clip_grad_norm, clip_pool_fault_available, optimizer_resident_copy_dev exports (dead native entries: no live caller; clip_grad_norm_ runs optimizer_door_clip) deleted 2026-10-26 by c76141c5c; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_training.patch
         module.def_function[accumulate_binding]("accumulate")
@@ -727,8 +608,6 @@ def build__mojolearn_training_host() -> PythonObject:
         module.def_function[rms_norm_backward_binding]("rms_norm_backward")
         module.def_function[linear_forward_binding]("linear_forward")
         module.def_function[neural_gemm_binding]("neural_gemm")
-        module.def_function[mlp_sessions_binding]("mlp_sessions")
-        module.def_function[mlp_sessions_rows_binding]("mlp_sessions_rows")
         module.def_function[residual_dropout_binding]("residual_dropout")
         module.def_function[residual_dropout_backward_binding]("residual_dropout_backward")
         module.def_function[linear_backward_binding]("linear_backward")
