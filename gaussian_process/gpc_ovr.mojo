@@ -156,6 +156,18 @@ def gpc_targets_kernel(codes: _GI, y: _GP, seen: _GI, k: Int32, n: Int32):
             _ = Atomic[DType.int32].min(seen, Int32(i))
 
 
+def gpc_one_class_kernel(seen: _GI, g: Int32, n: Int32, bad: _GI):
+    """One thread: the lowest class c of the group whose targets hold one
+    value only (`seen[2c]` or `seen[2c + 1]` still n), else -1."""
+    if _tid() != 0:
+        return
+    for c in range(Int(g)):
+        if seen.unsafe_load(2 * c) >= n or seen.unsafe_load(2 * c + 1) >= n:
+            bad.unsafe_store(0, Int32(c))
+            return
+    bad.unsafe_store(0, Int32(-1))
+
+
 def gpc_mean_codes_kernel(mean: _GP, dst: _GL, n: Int32):
     """The binary `predict`: 1 where the float32 latent mean is > 0
     (`_gpc.py:287-290`; a NaN takes 0), as int64
@@ -330,7 +342,8 @@ def gpc_fit_all_device(
         var dpis = List[DeviceBuffer[DType.float32]](capacity=g)
         var dwsrs = List[DeviceBuffer[DType.float32]](capacity=g)
         var dseen = ctx.enqueue_create_buffer[DType.int32](2 * g)
-        var hseen = ctx.enqueue_create_host_buffer[DType.int32](2 * g)
+        var dbad = ctx.enqueue_create_buffer[DType.int32](1)
+        var hbad = ctx.enqueue_create_host_buffer[DType.int32](1)
         enqueue_fill(ctx, dseen, Int32(n))
         for c in range(g):  # driver-loop: over the group's classes (model structure)
             var dy = ctx.enqueue_create_buffer[DType.float32](n)
@@ -343,17 +356,19 @@ def gpc_fit_all_device(
             dbs.append(ctx.enqueue_create_buffer[DType.float32](n * n))
             dpis.append(ctx.enqueue_create_buffer[DType.float32](n))
             dwsrs.append(ctx.enqueue_create_buffer[DType.float32](n))
-        ctx.enqueue_copy(dst_ptr=hseen.unsafe_ptr(), src_buf=dseen)
+        ctx.enqueue_function[gpc_one_class_kernel](  # small-launch(g: the group's classes): one thread finds the first one-class column
+            _ip(dseen), Int32(g), Int32(n), _ip(dbad), grid_dim=1, block_dim=1,
+        )
+        ctx.enqueue_copy(dst_ptr=hbad.unsafe_ptr(), src_buf=dbad)
         ctx.synchronize()
-        for c in range(g):  # driver-loop: over the group's classes (model structure)
-            var sp0 = hseen.unsafe_ptr() + 2 * c
-            if Int(sp0.unsafe_load(0)) >= n or Int(sp0.unsafe_load(1)) >= n:
-                raise Error(
-                    "gpc_fit_host: a binary Laplace fit requires 2 classes; got 1"
-                    " (one-vs-rest class "
-                    + String(class_ks[j0 + c])
-                    + ")"
-                )
+        var bad = Int(hbad.unsafe_ptr().unsafe_load(0))
+        if bad >= 0:
+            raise Error(
+                "gpc_fit_host: a binary Laplace fit requires 2 classes; got 1"
+                " (one-vs-rest class "
+                + String(class_ks[j0 + bad])
+                + ")"
+            )
         var runs = gpc_newton_device_batch(ctx, dk, dys, dbs, dgw, dpis, dwsrs, n, max_iter_predict)
         for c in range(g):  # driver-loop: over the group's classes (model structure)
             var j = j0 + c
@@ -372,7 +387,8 @@ def gpc_fit_all_device(
         _ = dpis^
         _ = dwsrs^
         _ = dseen^
-        _ = hseen^
+        _ = dbad^
+        _ = hbad^
         j0 += g
     ctx.synchronize()
     _ = dk^
