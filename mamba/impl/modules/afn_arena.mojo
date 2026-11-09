@@ -40,6 +40,9 @@ struct MambaArena(Movable):
     var guard: Int
     var views: Int
     var reset_view: Optional[DeviceBuffer[DType.float32]]
+    #: False for an arena laid over storage that already holds its values
+    #: (`over`): neither the constructor nor `take` fills anything.
+    var fills: Bool
 
     @staticmethod
     def slot(n: Int, guard: Int) -> Int:
@@ -68,6 +71,7 @@ struct MambaArena(Movable):
         self.guard = guard
         self.views = 0
         self.reset_view = None
+        self.fills = True
         comptime if _AFN_POISON:
             self.base.enqueue_fill(bitcast[DType.float32](UInt32(0x7FC00000)))
         else:
@@ -75,6 +79,23 @@ struct MambaArena(Movable):
             # no wait; every reader is enqueued after it on the same
             # in-order context).
             self.base.enqueue_fill(Float32(0.0))
+
+    def __init__(out self, *, var over: DeviceBuffer[DType.float32], cap: Int, guard: Int) raises:
+        """An arena over caller storage that already holds its values: the
+        executor's block step ops (autograd/block_step_ops.mojo) lay a
+        block's weights and state out in `slot` order inside one session
+        tensor, and the block structs built over this arena read and write
+        that tensor in place. Nothing is allocated or filled here or in
+        `take`."""
+        if cap < 1 or len(over) < cap:
+            raise Error("MambaArena: the storage holds fewer floats than the layout")
+        self.base = over^
+        self.cap = cap
+        self.off = 0
+        self.guard = guard
+        self.views = 0
+        self.reset_view = None
+        self.fills = False
 
     def reset(mut self, used: Int, retained: Int = 0, retained_views: Int = 0) raises:
         """Reuse after the previous call synchronized and dropped transient views.
@@ -115,11 +136,13 @@ struct MambaArena(Movable):
         comptime if _AFN_POISON:
             # The view's BODY is zero (mamba_zeros's meaning); the band
             # stays NaN. The poison build is never timed: wait here so the
-            # local sub-buffer outlives its fill.
-            var body = view.create_sub_buffer[DType.float32](0, want)
-            body.enqueue_fill(Float32(0.0))
-            ctx.synchronize()
-            _ = body^
+            # local sub-buffer outlives its fill. An arena `over` caller
+            # values keeps them.
+            if self.fills:
+                var body = view.create_sub_buffer[DType.float32](0, want)
+                body.enqueue_fill(Float32(0.0))
+                ctx.synchronize()
+                _ = body^
         self.off += need
         self.views += 1
         return view^
