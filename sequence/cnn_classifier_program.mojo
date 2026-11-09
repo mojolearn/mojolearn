@@ -18,9 +18,21 @@ splitmix64 seed. Every forward and backward kernel is the tape's (the rank-4
 conv, pool and layout ops of autograd/rankn_conv.mojo, the tape's linear and
 loss), one fold order on the host and on every vendor.
 
-predict / predict_proba: the same forward in an inference session over row
-chunks, then `OPS_SOFTMAX` and, for predict, `OPS_ARGMAX` of the
-probabilities (int32 codes).
+predict / predict_proba (lane x8b-cnn-resident-predict): the fitted
+parameters live ONCE in a resident registry session (CNN_OPEN, made at the
+model's first predict after a fit, a weight replacement or an unpickle, and
+closed with the binding's lifetime owner through SESSION_CLOSE) as the
+parameters of one captured program, the forward and its `OPS_SOFTMAX`. Each
+CNN_PREDICT uploads only the images, once, replays that program over row
+chunks on the executor (each chunk's probabilities copied into one (n, k)
+buffer), and makes ONE download: the probabilities, or the int32
+`OPS_ARGMAX` codes of the whole buffer. The same kernels and fold order as
+the per-call forward it replaces, so no word changes.
+
+TOMBSTONE: the per-call CNN predict (cnn_predict_program uploading every
+parameter at each call and downloading each chunk) deleted 2026-11-09 by
+lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575 (it never
+reached main).
 
 Python reaches these through the x_sequence whole-model descriptor ABI
 (sequence/neural_model_dispatch.mojo CNN_FIT, CNN_PREDICT); no Python runs
@@ -34,16 +46,19 @@ code recoverable at f59d913b0b.
 Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 """
 from sequence.exec_trait import Exec
-from sequence.ops import FP, OPT_SGD, OPT_ADAM, OPT_ADAMW
+from sequence.ops import FP, Args, OP_COPY, OPT_SGD, OPT_ADAM, OPT_ADAMW
 from core.cast_in import CastIn, CAST_KIND_SIGNED
 from autograd.rankn import ShapeN
 from autograd.rankn_api import rn_shape
 from autograd.model import SCHED_CONSTANT
 from autograd.ops_api import (
     OpsSession, OPS_CONV2D, OPS_RELU, OPS_MAXPOOL2D, OPS_RESHAPE_N, OPS_TRANSPOSE, OPS_LINEAR, OPS_SOFTMAX,
-    OPS_ARGMAX,
+    OPS_ARGMAX, ops_session_open, ops_session_close, ops_session, ops_session_registry_token,
 )
-from autograd.program_runtime import train_program_control
+from autograd.program_runtime import train_program_control, parameter_buffers, replay_values_prepared
+from autograd.program_replay_metadata import PreparedProgramReplay
+from autograd.tape import Tape
+from autograd.cast_ops import upload_cast
 
 # Program.fit's loss kind 5: cross_entropy over (rows, 1) class codes.
 comptime _LOSS_CROSS_ENTROPY = 5
@@ -58,11 +73,18 @@ comptime _LOSS_CROSS_ENTROPY = 5
 comptime CNN_FIT_HEAD = 15
 comptime CNN_FIT_FLOATS = 7
 comptime CNN_FIT_ARRAYS = 4
-# CNN_PREDICT options: [n, C, H, W, k, nb, ks, ps, codes (0 proba, 1 codes),
-# chunk rows, oc_0 .., pool_0 ..]; addresses [X, dst (n, k) float32 or (n)
-# int32, then the parameters as for CNN_FIT].
-comptime CNN_PREDICT_HEAD = 10
+# CNN_OPEN options: [1, C, H, W, k, nb, ks, ps, oc_0 .., pool_0 ..];
+# addresses [scope (two words written: registry token, executor kind), then
+# the parameters as for CNN_FIT]. Returns the session id.
+comptime CNN_OPEN_HEAD = 8
+comptime CNN_OPEN_ARRAYS = 1
+# CNN_PREDICT options: [registry token, executor kind, session id, n, codes
+# (0 proba, 1 codes), chunk rows]; addresses [X (n, C*H*W) float32 C order,
+# dst (n, k) float32 or (n) int32].
+comptime CNN_PREDICT_WORDS = 6
 comptime CNN_PREDICT_ARRAYS = 2
+# the resident session's one program: the forward and its softmax
+comptime _RESIDENT_PROGRAM = 1
 
 
 struct CnnGeometry(Copyable, Movable):
@@ -272,44 +294,138 @@ def cnn_fit_program[E: Exec & Movable & Deinitable](
     return epochs * ((n + batch - 1) // batch)
 
 
-def cnn_predict_program[E: Exec & Movable & Deinitable](
+
+
+def cnn_open_program[E: Exec & Movable & Deinitable, KIND: Int](
     var ex: E, addresses: List[Int], ints: List[Int],
 ) raises -> Int:
+    """CNNClassifier's resident predict session (CNN_OPEN): a registry
+    inference session on `ex` that holds every fitted parameter, uploaded
+    once, and the captured forward (the conv blocks, the head and the row
+    softmax, program 1) that reads them in place. Writes the registry token
+    and the executor kind to the two scope words at addresses[0] (the
+    SESSION_CLOSE context the binding's lifetime owner keeps) and returns
+    the session id. A later CNN_PREDICT uploads only the images."""
+    var g = CnnGeometry(ints, CNN_OPEN_HEAD)
+    if len(addresses) < CNN_OPEN_ARRAYS or addresses[0] == 0:
+        raise Error("native CNN: null session scope address")
+    var sid = ops_session_open[E, KIND](ex^, False)
+    try:
+        var sp = ops_session[E, KIND](sid)
+        var params = _upload_params(sp[], g, addresses, CNN_OPEN_ARRAYS)
+        # The forward is captured from one eager pass over one zero image;
+        # every op is per row, so the program replays at any chunk size.
+        var zeros = List[Float32](length=g.row(), fill=Float32(0))
+        var x0 = sp[].upload_nd(CastIn.f32_c(Int(zeros.unsafe_ptr()), 1, g.row()), g.image_shape(1), False)
+        var logits = _forward(sp[], x0, params, g)
+        var ls: List[Int] = [logits]
+        var proba = sp[].op(OPS_SOFTMAX, ls, List[Int](), List[Float32]())
+        var ins: List[Int] = [x0]
+        var outs: List[Int] = [proba]
+        var pid = sp[].capture(ins, outs)
+        _ = len(zeros)  # keep-alive past the staging copy and the eager pass
+        if pid != _RESIDENT_PROGRAM:
+            raise Error("native CNN: the resident session must hold only the forward program")
+        sp[].free(x0)
+        sp[].reset()
+    except err:
+        ops_session_close[E, KIND](sid)
+        raise err^
+    var scope = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=addresses[0])
+    scope[0] = ops_session_registry_token()
+    scope[1] = KIND
+    return sid
+
+
+def _resident_predict[E: Exec & Movable & Deinitable](
+    mut s: OpsSession[E], x_addr: Int, dst: Int, n: Int, codes: Bool, chunk: Int,
+) raises:
+    """Replay the resident forward over the n images at x_addr (uploaded
+    once) in chunks of `chunk` rows, each chunk's (m, k) probabilities
+    copied on the executor into one (n, k) buffer, then ONE download: the
+    probabilities, or (codes) the int32 OPS_ARGMAX of the whole buffer.
+    The parameters are the session's, read in place; nothing else moves."""
+    if len(s.programs) != _RESIDENT_PROGRAM:
+        raise Error("native CNN: the resident session holds no forward program")
+    var p = s.program(_RESIDENT_PROGRAM)
+    if p.n_in != 1 or len(p.outs) != 1 or p.in_shapes[0].ndim != 4 or p.out_shapes[0].ndim != 2:
+        raise Error("native CNN: the resident program is not a classifier forward")
+    var shape = p.in_shapes[0]
+    var row = shape.count() // shape.d[0]
+    var k = p.out_shapes[0].d[1]
+    var params = parameter_buffers(s, p)
+    var trainable = List[Bool](length=len(p.params), fill=False)
+    var prepared = PreparedProgramReplay(p)
+    var temps = List[Int]()
+    var phs = List[Int]()
+    var none = List[Float32]()
+    var xb = s.ex.alloc(n * row)
+    try:
+        var ob = s.ex.alloc(n * k)
+        # the scratch tape in, the session tape aside (Session.run_program's
+        # order): the replay's tensors never touch the parameters' tape
+        var held = Tape()
+        swap(held, s.prog_tape)
+        swap(held, s.tape)
+        try:
+            s.tape.reset()
+            upload_cast(s.ex, xb, CastIn.f32_c(x_addr, n, row))
+            var start = 0
+            while start < n:  # driver-loop: over prediction chunks (rows in device-sized batches)
+                var m = min(chunk, n - start)
+                s._drop_temps(temps)
+                temps.clear()
+                phs.clear()
+                s.tape.reset()
+                var ins: List[FP] = [xb + start * row]
+                shape.d[0] = m
+                var shapes: List[ShapeN] = [shape]
+                var outs = replay_values_prepared(s, p, prepared, ins, shapes, params, trainable, temps, phs)
+                var a = Args()
+                a.p0 = s.tape.value_of(s.ex, s.tensor(outs[0]))
+                a.p1 = ob + start * k
+                s.ex.launch[OP_COPY](a, m * k)
+                start += m
+            s._drop_temps(temps)
+            temps.clear()
+            s.tape.reset()
+            if codes:
+                var ph = s._leaf(ob, ShapeN.matrix(n, k))
+                temps.append(ph)
+                var hs: List[Int] = [ph]
+                var am_ints: List[Int] = [1, 0, 0]
+                var am = s.run_op(OPS_ARGMAX, hs, am_ints, none)
+                temps.append(am)
+                s.download(am, FP(unsafe_from_address=dst))
+            else:
+                s.ex.download(FP(unsafe_from_address=dst), ob, n * k)
+        finally:
+            s._drop_temps(temps)
+            s.tape.reset()
+            swap(held, s.tape)
+            swap(held, s.prog_tape)
+            s.ex.free(ob)
+    finally:
+        s.ex.free(xb)
+
+
+def cnn_predict_program[E: Exec & Movable & Deinitable, KIND: Int](
+    addresses: List[Int], ints: List[Int],
+) raises -> Int:
     """CNNClassifier.predict_proba (codes 0: (n, k) float32 probabilities)
-    or predict (codes 1: (n) int32 class codes) in an inference session over
-    row chunks; returns n."""
-    var g = CnnGeometry(ints, CNN_PREDICT_HEAD)
-    var n = ints[0]
-    var codes = ints[8] != 0
-    var chunk = ints[9]
+    or predict (codes 1: (n) int32 class codes) on the resident session
+    `ints[2]` that CNN_OPEN made (header); returns n."""
+    if len(ints) != CNN_PREDICT_WORDS:
+        raise Error("native CNN: invalid predict descriptor")
+    if ints[0] != ops_session_registry_token() or ints[1] != KIND:
+        raise Error("native CNN: the resident session belongs to another registry or executor")
+    var n = ints[3]
+    var codes = ints[4] != 0
+    var chunk = ints[5]
     if n < 1 or chunk < 1:
         raise Error("native CNN: predict needs rows and a positive chunk size")
-    if len(addresses) < CNN_PREDICT_ARRAYS or addresses[0] == 0 or addresses[1] == 0:
+    if len(addresses) != CNN_PREDICT_ARRAYS or addresses[0] == 0 or addresses[1] == 0:
         raise Error("native CNN: null data address")
-    var none = List[Float32]()
-    var s = OpsSession[E](ex^, False)
-    try:
-        var params = _upload_params(s, g, addresses, CNN_PREDICT_ARRAYS)
-        var row = g.row()
-        var start = 0
-        while start < n:  # driver-loop: over prediction chunks (rows in device-sized batches)
-            var m = min(chunk, n - start)
-            var xh = s.upload_nd(CastIn.f32_c(addresses[0] + 4 * start * row, m, row), g.image_shape(m), False)
-            var logits = _forward(s, xh, params, g)
-            var ls: List[Int] = [logits]
-            var proba = s.op(OPS_SOFTMAX, ls, List[Int](), none)
-            if codes:
-                var ps: List[Int] = [proba]
-                var am_ints: List[Int] = [1, 0, 0]
-                var am = s.op(OPS_ARGMAX, ps, am_ints, none)
-                s.download(am, FP(unsafe_from_address=addresses[1] + 4 * start))
-            else:
-                s.download(proba, FP(unsafe_from_address=addresses[1] + 4 * start * g.k))
-            s.free(xh)
-            s.reset()
-            start += m
-    except err:
-        s.close()
-        raise err^
-    s.close()
+    var sp = ops_session[E, KIND](ints[2])
+    _resident_predict(sp[], addresses[0], addresses[1], n, codes, chunk)
     return n
