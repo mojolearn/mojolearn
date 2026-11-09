@@ -198,7 +198,7 @@ def admitted_storage(shape: PythonObject, typestr: String, context: PythonObject
         return classical_wrap_array(native_array_zeros(_store_code(typestr), count), shape, typestr, order, context)
     var width = 4 if typestr == "<f4" else 8
     var storage = native_scratch_bytes(count * width)
-    return py_call(context["ndarray"], shape, dtype=context[PythonObject(key)], buffer=storage, order=order)
+    return py_call(context["ndarray"], shape, dtype=context[PythonObject(key)], buffer=storage, order=PythonObject(order))
 
 
 def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject, column_target: Bool = False,
@@ -415,7 +415,12 @@ def _admitted_x(source: PythonObject, est: String, context: PythonObject, admitt
             # The gather writes C-order fresh storage; an F-order or Array
             # request re-admits those rows through the cast below.
             var rows_x = _admitted_rows(source, est, context, False)
-            return _admitted_x(rows_x.array, est, context, True, defer_finite, False, order, as_array)
+            var ordered = _admitted_x(rows_x.array, est, context, True, defer_finite, False, order, as_array)
+            ordered.source = source
+            ordered.device_rows = True
+            ordered.rows_base = rows_x.rows_base
+            ordered.rows_indices = rows_x.rows_indices
+            return ordered^
         return _admitted_rows(source, est, context, device_x)
     classical_refuse_sparse(source, est)
     var view = classical_view(source, context, "X", admitted)
