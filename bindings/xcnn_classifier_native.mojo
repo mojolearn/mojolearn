@@ -11,8 +11,10 @@ ONE call of the x_sequence whole-model door of the model's tier (CNN_FIT,
 sequence/cnn_classifier_program.mojo): the layer stack captured as one
 program on the program executor and trained by Program.fit; the trained
 words come back into the layers' arrays. predict_proba / predict: one
-CNN_PREDICT call, the same forward with the softmax (and argmax) in an
-inference session, then classes_[codes] by the base gathers.
+CNN_PREDICT call on the model's resident session (the fitted parameters
+uploaded once, by CNN_OPEN at the first predict; lane
+x8b-cnn-resident-predict), the captured forward with the softmax (and
+argmax), then classes_[codes] by the base gathers.
 
 Lane x8-cnn-on-executor (2026-11-09): the hand epoch on the x_cnn resident
 entries (x_cnn_fit_d / x_cnn_fit_epoch_d / x_cnn_fit_epoch_r, the Python
@@ -23,7 +25,7 @@ Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 from std.math import sqrt
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.xcnn_common import xcnn_builtins, xcnn_entries, xcnn_f32, xcnn_addr
+from bindings.xcnn_common import xcnn_builtins, xcnn_entries, xcnn_f32, xcnn_addr, xcnn_readonly
 from bindings.xseq_native_common import XseqStream, xseq_neural_provider
 from bindings.neural_labels_native import neural_encode_labels, neural_decode_labels
 from bindings.mode_metadata_native import _fields
@@ -39,7 +41,10 @@ from bindings.native_model_records import (
     RECORDS_PREPARED, ContentRecord, content_fields, content_object, records_stampable, records_stamped_get,
     records_stamped_put,
 )
-from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT
+from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT, CNN_OPEN, SESSION_CLOSE
+from providers.python.neural_descriptor_pyapi import neural_descriptor_adopt, NativeDescriptorResource
+from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
+from bindings.native_identity_key import NativeIdentityKey
 
 #: rows per predict pass on the device (every op is per row, so the chunk
 #: never changes a word)
@@ -423,6 +428,10 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     if Int(py=yi.size) != n:
         raise Error("ValueError: X and y must contain the same number of rows")
     var k = len(encoded[0])
+    # lane x8b: the refit publishes new weights; close the old resident
+    # predict session now rather than at the next predict
+    var drop_mods = NativeModules()
+    prepared_drop(drop_mods, _PREDICT_SLOT, model)
     _build(fields, k, context)
     var optimizer = String(py=fields["optimizer"])
     var seed64 = XseqStream(fields["random_state"], context).seed
@@ -457,10 +466,13 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
         _ = neural_descriptor_execute(xseq_neural_provider(labels), CNN_FIT, addresses, ints, floats)
         _ = x  # keep the Python objects alive through the native call above
         _ = yi
-        # the trained words are in `arrays`; publish them on their layers
+        # the trained words are in `arrays`; publish them on their layers,
+        # read-only (lane x8b: the resident predict session keys on these
+        # objects; an in-place edit raises, an assigned array is uploaded
+        # again at the next predict)
         var params = _params(fields)
         for i in range(len(params)):  # driver-loop: over the layer parameter list (model structure)
-            py_setitem(_fields(params[i][0]), params[i][1], arrays[i])
+            py_setitem(_fields(params[i][0]), params[i][1], xcnn_readonly(arrays[i], PythonObject(None), context))
         losses_all = py_call(steps.tolist)
         curve_out = py_call(curve.tolist)
     py_setitem(fields, "losses_", losses_all)
@@ -472,9 +484,106 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
 
 # ---------------------------------------------------------------- predict
 
+# Lane x8b-cnn-resident-predict: the resident predict record. The fitted
+# parameters live ONCE in a resident registry session of the model's tier
+# (sequence/cnn_classifier_program.mojo CNN_OPEN: every parameter uploaded,
+# the forward and its softmax captured as the session's one program). The
+# record is (identity key of the tier's binding entries, `_blocks`, `head_`,
+# `classes_`, every predict layer and its `weight_` / `bias_`; the session's
+# lifetime owner, which closes it through SESSION_CLOSE when dropped). It is
+# kept in the prepared registry (weak on the model, outside its `__dict__`):
+# released with the model, never pickled or deep-copied (a copy opens its
+# own at its first predict), dropped by a refit. It is reused while the key
+# matches and every weight is still read-only (the first predict marks them
+# so: an in-place edit raises NumPy's read-only error, an assigned array
+# misses the key and opens a new session). The record is taken out of the
+# registry while a call uses it, so two concurrent predicts never share one
+# session (the second opens its own; the record put back last stays).
+comptime _PREDICT_SLOT = "xcnn_clf_predict_v2"
+
+
+def _predict_layers(fields: PythonObject) raises -> PythonObject:
+    """The layers whose weights the resident session holds: every block's
+    conv, then the head (`_params` order)."""
+    var layers = _b().list()
+    var blocks = fields["_blocks"]
+    for i in range(len(blocks)):  # driver-loop: over the conv layers
+        _ = py_call(layers.append, blocks[i][0])
+    _ = py_call(layers.append, fields["head_"])
+    return layers
+
+
+def _weights_frozen(layers: PythonObject, freeze: Bool, context: PythonObject) raises -> Bool:
+    """Whether every layer's `weight_` / `bias_` is a read-only exact ndarray
+    (marked so first when `freeze`). One flags read per array."""
+    var b = _b()
+    for i in range(len(layers)):  # driver-loop: over the predict layers (model structure)
+        var lf = _fields(layers[i])
+        for name in ["weight_", "bias_"]:  # small-loop(the two learned arrays)
+            var arr = lf[PythonObject(name)]
+            if py_type(arr) is not context["ndarray"]:
+                return False
+            var flags = arr.flags
+            if freeze and Bool(py=flags.writeable):
+                _ = py_call(b.setattr, flags, "writeable", PythonObject(False))
+            if Bool(py=flags.writeable):
+                return False
+    return True
+
+
+def _predict_key(mut mods: NativeModules, fields: PythonObject, layers: PythonObject,
+                 labels: PythonObject) raises -> NativeIdentityKey:
+    var key = NativeIdentityKey(mods)
+    key.add_identity(labels)
+    key.add_identity(fields["_blocks"])
+    key.add_identity(fields["head_"])
+    key.add_identity(fields["classes_"])
+    for i in range(len(layers)):  # driver-loop: over the predict layers (model structure)
+        var lf = _fields(layers[i])
+        key.add_identity(layers[i])
+        key.add_identity(lf["weight_"])
+        key.add_identity(lf["bias_"])
+    return key^
+
+
+def _predict_key_matches(record: PythonObject, fields: PythonObject, layers: PythonObject,
+                         labels: PythonObject) raises -> Bool:
+    if py_type(record) is not _b().tuple or len(record) != 2:
+        return False
+    var key = record[0].downcast_value_ptr[NativeIdentityKey]()
+    var offset = 0
+    if not key[].matches_identity(labels, offset) or not key[].matches_identity(fields["_blocks"], offset):
+        return False
+    if not key[].matches_identity(fields["head_"], offset) or not key[].matches_identity(fields["classes_"], offset):
+        return False
+    for i in range(len(layers)):  # driver-loop: over the predict layers (model structure)
+        var lf = _fields(layers[i])
+        if (not key[].matches_identity(layers[i], offset) or not key[].matches_identity(lf["weight_"], offset)
+                or not key[].matches_identity(lf["bias_"], offset)):
+            return False
+    return key[].complete(offset)
+
+
+def _open_resident(fields: PythonObject, provider: PythonObject, k: Int, context: PythonObject) raises -> PythonObject:
+    """One CNN_OPEN call: the resident session holding every fitted
+    parameter; returns its lifetime owner (SESSION_CLOSE on release). The
+    registry mutation keeps the GIL, as SESSION_OPEN does."""
+    var arrays = _param_arrays(fields, context)
+    var scope = List[Int](length=2, fill=0)
+    var addresses: List[Int] = [Int(scope.unsafe_ptr())]
+    for i in range(len(arrays)):  # driver-loop: over the layer parameter arrays (model structure)
+        addresses.append(Int(py=xcnn_addr(arrays[i])))
+    var ints = _geometry(fields, 1, k)
+    _block_words(fields, ints)
+    var sid = neural_descriptor_execute(provider, CNN_OPEN, addresses, ints, List[Float64](), False)
+    _ = arrays  # keep the Python objects alive through the native call above
+    return neural_descriptor_adopt(provider, sid, SESSION_CLOSE, scope^)
+
+
 def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context: PythonObject) raises -> PythonObject:
     """`_run_predict(X, codes)`: probabilities (n, k) float32, or with
-    `codes` each row's class index (int32): one CNN_PREDICT call."""
+    `codes` each row's class index (int32): one CNN_PREDICT call on the
+    model's resident session (opened first when the record misses)."""
     var fields = _classifier_fields(model, context, True)
     var x = _contiguous(_images(fields, source, context), context)
     var n = Int(py=x.shape[0])
@@ -484,17 +593,34 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
     if n == 0:
         return out
     var labels = _engine(fields, context)
-    var arrays = _param_arrays(fields, context)
+    var provider = xseq_neural_provider(labels)
+    var mods = NativeModules()
+    var layers = _predict_layers(fields)
+    var record = prepared_get(mods, _PREDICT_SLOT, model)
+    if record is not None:
+        prepared_drop(mods, _PREDICT_SLOT, model)  # this call owns it now
+        if not _predict_key_matches(record, fields, layers, labels) or not _weights_frozen(layers, False, context):
+            record = PythonObject(None)  # its lifetime owner closes the stale session
+    var keep = True
+    if record is None:
+        # read-only first, so the words uploaded are the words kept
+        keep = _weights_frozen(layers, True, context)
+        var lifetime = _open_resident(fields, provider, k, context)
+        var key = _predict_key(mods, fields, layers, labels)
+        keep = keep and not key.retains(model)
+        record = Python.tuple(PythonObject(alloc=key^), lifetime)
+    var resource = record[1].downcast_value_ptr[NativeDescriptorResource]()
+    if resource[].handle == 0 or len(resource[].context) != 2:
+        raise Error("RuntimeError: CNN resident session is closed")
     var addresses: List[Int] = [Int(py=xcnn_addr(x)), Int(py=xcnn_addr(out))]
-    for i in range(len(arrays)):  # driver-loop: over the layer parameter arrays (model structure)
-        addresses.append(Int(py=xcnn_addr(arrays[i])))
-    var ints = _geometry(fields, n, k)
-    ints.append(1 if codes else 0)
-    ints.append(_PREDICT_ROWS)
-    _block_words(fields, ints)
-    _ = neural_descriptor_execute(xseq_neural_provider(labels), CNN_PREDICT, addresses, ints, List[Float64]())
+    var ints: List[Int] = [resource[].context[0], resource[].context[1], resource[].handle, n, 1 if codes else 0,
+                           _PREDICT_ROWS]
+    _ = neural_descriptor_execute(provider, CNN_PREDICT, addresses, ints, List[Float64]())
     _ = x  # keep the Python objects alive through the native call above
-    _ = arrays
+    # the session stays for the next predict while every weight is read-only;
+    # otherwise the record goes here and its owner closes the session
+    if keep:
+        prepared_put(mods, _PREDICT_SLOT, model, record)
     return out
 
 
