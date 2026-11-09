@@ -78,6 +78,8 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_BALANCED_TASKS.patch
     comptime assert not is_defined["MOJOLEARN_IVF_FAST_BALANCED_TASKS"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_IVF_FAST_BALANCED_TASKS, F14, the Apple FAST IVF search through the bounded list tasks of ivf_balanced_scan, was never run (pending measurement) and will not be measured; code at f59d913b0b; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_IVF_FAST_BALANCED_AUDIT, the reach counter of MOJOLEARN_IVF_FAST_BALANCED_TASKS (ivf_fast_balanced_hits), deleted with it; code at f59d913b0b; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MINIBATCH_GROUP_OFF"](), "removed 2026-11-09 (lane n3-sgd-minibatch-loops): MiniBatchKMeans' per-step loop (one upload, one wait and a centers download a step) is gone; the group loop with device draws and the device center shift is the only path (docs/TOMBSTONES.md)"
     return True
 
 

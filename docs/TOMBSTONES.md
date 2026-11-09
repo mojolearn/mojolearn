@@ -505,6 +505,8 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_GPC_NEWTON_LOGDET_OFF`](#gp-gpc-and-krr-on-the-executors-cholesky-ops-2026-11-09) | Gaussian process classification (Newton loop log-determinant, IDENTICAL) | removed (KEPT default, superseded: the Newton loop is one device loop, log-determinant always on the device) | 2026-11-09 | [N8_GPC_NEWTON_ONE_LOOP.patch](../experiments/removed/N8_GPC_NEWTON_ONE_LOOP.patch) |
 | [`gpc_b_matrix_kernel`, `gpc_w_kernel`, `gpc_rhs_kernel`, `gpc_scale_nan_kernel`, `gpc_a_kernel`, `gpc_lml_part_kernel`, `gpc_lml_fin_kernel` and the two Newton loop copies](#gp-gpc-and-krr-on-the-executors-cholesky-ops-2026-11-09) | Gaussian process classification (binary and one-vs-rest Newton loops) | REFACTORED (one gated device loop, gaussian_process/gpc_newton.mojo) | 2026-11-09 | [N8_GPC_NEWTON_ONE_LOOP.patch](../experiments/removed/N8_GPC_NEWTON_ONE_LOOP.patch) |
 | [`gp_opt_run_end_kernel` and the per-evaluation host loop of `gpr_optimize_device`](#gp-gpc-and-krr-on-the-executors-cholesky-ops-2026-11-09) | Gaussian process regression (hyperparameter optimizer) | REFACTORED (device run sequencer, `gp_opt_advance_kernel`) | 2026-11-09 | [N8_GP_OPT_DEVICE_RUNS.patch](../experiments/removed/N8_GP_OPT_DEVICE_RUNS.patch) |
+| [`MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS`](#sgd-epoch-re-gather-and-minibatchkmeans-per-step-loop-2026-11-09) | Linear (SGD minibatch, IDENTICAL) | removed (default off, never measured) | 2026-11-09 | [MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS.patch) |
+| [`MOJOLEARN_IDN_MINIBATCH_GROUP_OFF`](#sgd-epoch-re-gather-and-minibatchkmeans-per-step-loop-2026-11-09) | Cluster (MiniBatchKMeans step loop) | removed (superseded by the one group loop) | 2026-11-09 | [MOJOLEARN_IDN_MINIBATCH_GROUP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP_OFF.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -4600,3 +4602,31 @@ device word that gates the later launches (CHOL_DEFER_INFO on every vendor) and 
   `_OFF` arm), `git apply -3` once the base has moved.
 - **Guard / records**: `MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF` refused in core/experiment_guards_cluster.mojo; no
   `grid_controls` entry existed. Rows in `docs/apple-fast/EXPERIMENTS.md`.
+## SGD epoch re-gather and MiniBatchKMeans per-step loop (2026-11-09)
+
+Lane n3-sgd-minibatch-loops (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 4, rows SGD / Perceptron /
+PassiveAggressive and MiniBatchKMeans generic), base integ/pre-0867-w2 `f59d913b0b`.
+
+- `MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS` (lane/classical-structural, 2026-10-07, IDENTICAL, default off). Tried: once per
+  epoch and problem, right after `sgd_perm_kernel`, two launches (`sgd_gather_x_kernel`, `sgd_gather_vec_kernel`) wrote
+  permuted copies of X, y and the sample weights plus an identity order, so the minibatch kernels read contiguous rows.
+  Cost: an n x d device-to-device copy every epoch. Verdict: never A/B'd on its own (it only rode in all-on grid
+  combinations), so the default gathered-load route is kept (the rule: no measurement, keep today's bits-defining path).
+  Files: `x_linear/device.mojo` (the define, the two kernels, the buffers and memory gate in `_sgd_mb_grid`, the
+  per-epoch block). Bits: none. Recoverable at integ/pre-0867-w2 `f59d913b0b`; patch
+  `experiments/removed/MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS.patch`; refusal in `core/experiment_guards_linear.mojo`;
+  `grid_controls/classical-structural.json` entry moved to `removed`.
+- `MOJOLEARN_IDN_MINIBATCH_GROUP_OFF` (fam2-cluster, 2026-10-04): restored MiniBatchKMeans' per-step loop (a host id
+  upload, a wait and the centers download every step), which also ran in FAST off Apple and in every build with
+  `MOJOLEARN_IDN_ALL_OFF`. The group loop in `x_cluster/minibatch.mojo` is now the one loop in every mode and column, and
+  it moves the rest of its per-step host work to the ops: the weighted batch draws (`ClusterOps.mb_wdraw`, the cumulative
+  weights uploaded once per fit, `minibatch_cells.mb_wdraw_cell` in soft binary64 on both columns: the host loop's
+  indices) and the tol > 0 squared center shift (`ClusterOps.fold_sqdiff_at`, the new float-float fold mode
+  `FM_SQDIFF`). The g x k x d centers are no longer downloaded per group: a stop restores the stopping step's centers
+  and counts from the device history (`copy_from`, what `MOJOLEARN_C39_RETAIN_STATE` did for the minibatch half; the
+  bisecting half of C39 is unchanged), and only a reassigning step downloads its k x d centers. Bits: the center shift
+  was an ascending Float64 chain on the host and is now the FM_SQDIFF fold, so a tol > 0 fit can stop one step earlier
+  or later (tol = 0 is unchanged); FAST off Apple now uses the float-float batch inertia. No A/B (superseded, not an
+  experiment loss). Recoverable at integ/pre-0867-w2 `f59d913b0b`; patch
+  `experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP_OFF.patch` (the whole `x_cluster/minibatch.mojo` reversal);
+  refusal in `core/experiment_guards_cluster.mojo`; no grid_controls entry existed.

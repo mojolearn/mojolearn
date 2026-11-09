@@ -21,7 +21,7 @@ from std.memory import bitcast, memcpy
 from std.sys.compile import is_defined
 
 from checks.numerics import ftz, identical_div, identical_mul
-from x_cluster.minibatch_cells import mb_center_update
+from x_cluster.minibatch_cells import mb_center_update, mb_wdraw_cell
 from x_cluster.optics_xi_cells import optics_xi_host
 from cluster.host.host_cells import ftz_v, host_cells, mul_v
 from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
@@ -62,6 +62,7 @@ from x_cluster.bgmm_device import bgmm_host_step
 from x_cluster.post_bodies import (
     FM_MIN,
     FM_PROD,
+    FM_SQDIFF,
     FM_VAL,
     FM_WMIN,
     FOLD_CHUNK,
@@ -785,6 +786,26 @@ struct HostOps(ClusterOps):
         var pi = self._ip(idx)
         for t in range(m):
             pi[t] = Int32(Int(splitmix_at(state, UInt64(t + 1)) % UInt64(n)))
+
+    def mb_wdraw(mut self, idx: Int, m: Int, cum: Int, n: Int, state: UInt64) raises:
+        var pi = self._ip(idx)
+        var pc = self._ip(cum)
+
+        def body(t: Int) {imm pi, imm pc, imm n, imm state}:
+            mb_wdraw_cell(pi, pc, n, state, t)
+
+        # a draw is a binary search over n words in soft binary64
+        host_cells(body, m, 64)
+
+    def fold_sqdiff_at(
+        mut self, a: Int, a_off: Int, b: Int, b_off: Int, n: Int, dst: Int, off: Int, th: Int, tl: Int
+    ) raises:
+        var pa = self._fp(a) + a_off
+        var pb = self._fp(b) + b_off
+        var v = ff_fold_host(FM_SQDIFF, pa, pb, pa, n)
+        var po = self._fp(dst)
+        po[off] = v.hi
+        po[off + 1] = v.lo
 
     def fold_at(mut self, a: Int, n: Int, mode: Int, dst: Int, off: Int, th: Int, tl: Int) raises:
         var pa = self._fp(a)

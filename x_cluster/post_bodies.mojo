@@ -37,6 +37,9 @@ comptime FM_MIN = 3
 comptime FM_WMIN = 4
 #: the float-float value (a[t], b[t]) (a fold of chunk totals)
 comptime FM_FF = 5
+#: (a[t] - b[t])^2, the difference rounded once (float32), its square exact
+#: (two-product): MiniBatchKMeans' squared center shift (lane n3)
+comptime FM_SQDIFF = 6
 
 
 @always_inline
@@ -56,6 +59,9 @@ def ff_elem(mode: Int, a: FPtr, b: FPtr, c: FPtr, t: Int) -> FF:
         return FF(ftz(_min_sel(a[t], b[t])), Float32(0))
     if mode == FM_WMIN:
         return two_prod(c[t], _min_sel(a[t], b[t]))
+    if mode == FM_SQDIFF:
+        var e = ftz(a[t] - b[t])
+        return two_prod(e, e)
     return FF(a[t], b[t])
 
 

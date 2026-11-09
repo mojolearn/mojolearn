@@ -248,6 +248,22 @@ trait ClusterOps(Movable):
         (fam2-cluster)."""
         ...
 
+    def mb_wdraw(mut self, idx: Int, m: Int, cum: Int, n: Int, state: UInt64) raises:
+        """idx[t] = draw t + 1 of the splitmix64 stream whose state is
+        `state`, weighted: `common.weighted_draw` over the n ascending Float64
+        cumulative weights held as 2 n words in the int slot `cum`
+        (`minibatch_cells.mb_cum_word`), t < m (lane n3: the weighted batch
+        rows drawn where the data is; `minibatch_cells.mb_wdraw_cell`)."""
+        ...
+
+    def fold_sqdiff_at(
+        mut self, a: Int, a_off: Int, b: Int, b_off: Int, n: Int, dst: Int, off: Int, th: Int, tl: Int
+    ) raises:
+        """The float-float fold (FM_SQDIFF) of (a[a_off + t] - b[b_off + t])^2,
+        t < n, left in dst[off], dst[off + 1]; `th`, `tl` as `fold_at`
+        (lane n3: MiniBatchKMeans' squared center shift on the device)."""
+        ...
+
     def fold_at(mut self, a: Int, n: Int, mode: Int, dst: Int, off: Int, th: Int, tl: Int) raises:
         """`fold_into` of the one slot `a` (FM_VAL, FM_SQRT: the modes that
         read `a` alone) left in dst[off], dst[off + 1]; `th`, `tl` float
