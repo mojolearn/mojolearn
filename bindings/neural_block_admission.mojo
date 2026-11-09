@@ -359,7 +359,7 @@ def neural_model_weights(mut mods: NativeModules, values: PythonObject, context:
 #                    zero-filled Array per call before the copy).
 #   BLOCK_OPERATION  kept for this operation (weights, grad_output, session
 #                    pieces): a C-order float32 Array is used as it is, any
-#                    other input is the operation's own copy (a native Array).
+#                    other input is the operation's own copy.
 #   BLOCK_RETAINED   kept by the model (constructor weights): always the
 #                    model's own C-order copy, so a later in-place write into
 #                    the caller's array cannot reach a resident session.
@@ -385,10 +385,11 @@ def _neural_dtype_refusal(name: String, code: String) -> String:
 
 
 def _block_view(mut mods: NativeModules, store: PythonObject, address: Int, dims: List[Int], count: Int,
-                context: PythonObject) raises -> PythonObject:
-    """A read-only C-order float32 Array over `store` (a native memoryview
-    of `count` float32 words at `address`), assembled from its slots: the
-    view holds the one export for the call, no Array callback runs."""
+                context: PythonObject, readonly: Bool = True) raises -> PythonObject:
+    """A C-order float32 Array over `store` (a native memoryview of `count`
+    float32 words at `address`), assembled from its slots: the view holds
+    the one export, no Array callback runs. `readonly` marks a view of the
+    caller's words (or a read-only copy) that no kernel may write."""
     var b = mods.module("builtins")
     var slots = neural_array_slots(mods, context)
     var result = py_call(b.object.__new__, context["array_class"])
@@ -404,7 +405,7 @@ def _block_view(mut mods: NativeModules, store: PythonObject, address: Int, dims
     py_call(slots["_pin"].__set__, result, PythonObject(None))
     py_call(slots["_mv"].__set__, result, typed)
     py_call(slots["_addr"].__set__, result, PythonObject(address))
-    py_call(slots["_readonly"].__set__, result, PythonObject(True))
+    py_call(slots["_readonly"].__set__, result, PythonObject(readonly))
     py_call(slots["shape"].__set__, result, py_call(b.tuple, py_ints(dims)))
     py_call(slots["dtype"].__set__, result, PythonObject("<f4"))
     py_call(slots["ndim"].__set__, result, PythonObject(len(dims)))
@@ -418,16 +419,18 @@ def _block_view(mut mods: NativeModules, store: PythonObject, address: Int, dims
 
 def _block_destination(mut mods: NativeModules, dims: List[Int], count: Int, use: Int,
                        context: PythonObject) raises -> PythonObject:
-    """The C-order float32 destination of one copy of `count` words. A
-    BLOCK_READ copy never outlives the operation and is written in full
-    before any kernel reads it, so it is UNINITIALISED storage (a read-only
-    Array view over a native scratch store); a kept copy is a native Array
-    (its array.array store has no uninitialised constructor)."""
-    if use != BLOCK_READ or count == 0:
-        return generation_array(dims)
+    """The C-order float32 destination of one copy of `count` words: the
+    copy writes every word before anything reads it, so the store is
+    UNINITIALISED (a bytearray-backed Array over a native scratch store; the
+    former `generation_array` zero-filled it first, REGRESSIONS C5 / audit
+    R7). The Array owns the store through its `_store` memoryview, so a
+    BLOCK_OPERATION or BLOCK_RETAINED copy may outlive the call; only a
+    BLOCK_READ copy is marked read-only."""
+    if count == 0:
+        return generation_array(dims)  # no words: nothing is filled
     var scratch = native_scratch_bytes(count * 4)
     var store = py_call(mods.module("builtins").memoryview, scratch)
-    return _block_view(mods, store, native_scratch_address(scratch), dims, count, context)
+    return _block_view(mods, store, native_scratch_address(scratch), dims, count, context, use == BLOCK_READ)
 
 
 def admit_block_f32(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject,
@@ -447,7 +450,7 @@ def admit_block_f32(mut mods: NativeModules, value: PythonObject, name: String, 
         if String(captured.order) == "C":
             if use != BLOCK_RETAINED:
                 return captured
-            var owned = generation_array(dims)
+            var owned = _block_destination(mods, dims, count, use, context)
             if count > 0:
                 memcpy(dest=f32_ptr(Int(py=owned._addr)), src=f32_ptr(Int(py=captured._addr)), count=count)
             _ = captured^

@@ -28,8 +28,9 @@ from bindings.py_balanced import py_call
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind
 from bindings.sequential_arrays import sequential_address
-from bindings.native_array_storage import native_scratch_bytes, native_array_zeros
-from bindings.arena_materialize_native import _owned
+from bindings.native_array_storage import native_scratch_bytes
+from bindings.native_buffer_owner import native_buffer_view
+from bindings.arena_materialize_native import _array
 from core.cast_in import cast_in_kind
 from core.admitted_input_nd import admitted_cast_nd_f32
 
@@ -109,10 +110,13 @@ def admit_nd_owned_f32(source: PythonObject, dims: List[Int], name: String,
     output_shape = py_call(native_loaded_module("builtins").tuple, output_shape)
     if count < 0 or count > 9223372036854775807 // 4:
         raise Error("ValueError: " + name + " exceeds native indexing bounds")
-    # A retained Array: its array.array store has no uninitialised
-    # constructor, so it keeps the zero-filled store (as admitted_storage_f32
-    # does without NumPy).
-    var result = _owned(native_array_zeros("f", count), output_shape, "<f4", context)
+    # The cast writes every word, so the retained Array's store is an
+    # UNINITIALISED bytearray (native_scratch_bytes) behind a float32 view
+    # (the former tsa_array zero-filled an array.array first; audit R7).
+    # The Array owns the store (`_store`) for as long as the model keeps it.
+    var store = native_scratch_bytes(count * 4) if count > 0 else py_call(native_loaded_module("builtins").bytearray)
+    var view = py_call(py_call(native_buffer_view(store).cast, "B").cast, "f")
+    var result = _array(output_shape, "<f4", view, store, PythonObject(None), context, PythonObject(None))
     var pointer = _AS_F32P(unsafe_from_address=Int(py=classical_address(result)))
     # One pass: the cast's own finite flag replaces the second scan.
     if not admitted_cast_nd_f32(Int(py=classical_address(value)), dims, native_strides, item, kind, pointer):

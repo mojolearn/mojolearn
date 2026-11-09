@@ -107,7 +107,7 @@ def test_host_trainer_public_frontdoors_and_shared_metadata():
     # whose finite flag is the refusal.
     shared = (ROOT / 'bindings/admitted_sequence.mojo').read_text().split('def admit_nd_owned_f32(')[1]
     assert shared.count('value.shape') == 1 and shared.count('value.strides') == 1
-    assert 'native_strides, item, kind, True, pointer)' in shared
+    assert 'native_strides, item, kind, pointer)' in shared
 
 
 def test_host_inference_operations_are_one_native_call():
