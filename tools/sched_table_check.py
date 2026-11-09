@@ -9,11 +9,16 @@ with rigorous error bounds and falls back to the exact route per step; its
 answer must be the exact route's float32 bit for bit. This driver walks the
 board's schedules (tools/bench_board_extra.py SCHED) and edge shapes (short
 spans, warmup 0, total == warmup, three phases, linear annealing, pct_start
-at 0 and 1) over every step, compares `lr_at(t)` with `_lr_at_slow(t)`, and,
+at 0 and 1) over every step, compares `lr_at(t)` with the exact route `slow(t)`, and,
 on a stride, with the slow route under MOJOLEARN_LR_EXACT_ONLY=1 (the pure
 rational route). Prints one line per case with the fallback count and
 `SCHED_TABLE_CHECK PASS` or `... FAIL`; exits 1 on FAIL. Host Python only;
 runs through `lq add <box> CMD`.
+
+The exact routes are this tool's own (lane p5-cpu-route-relabel-and-dead-code,
+2026-11-09: they left the product, where nothing called them): the training
+schedules through `lr_schedule_exact` (sequence/lr_exact.mojo, independent of
+the table), OneCycleLR through `lr_schedule_at` with the exact-only kind.
 """
 import os
 import struct
@@ -25,6 +30,29 @@ sys.path.insert(0, str(ROOT / "python"))
 
 from mojolearn import _training_impl as T  # noqa: E402
 from mojolearn._x_sequence_sched import OneCycleLR  # noqa: E402
+
+
+#: sequence/lr_table.mojo `LR_EXACT_ONLY`, added to a kind word
+LR_EXACT_ONLY = 100
+#: `LrSpec` kind codes of the training schedules (sequence/lr_table.mojo)
+KIND_CODE = {"constant": 0, "linear": 1, "cosine": 2}
+
+
+def slow_route(sch):
+    """The exact route of one ONE-BASED step of `sch`, one native call."""
+    if isinstance(sch, OneCycleLR):
+        ip, fp = sch._lr_spec()
+        entry = T._lr_native("lr_schedule_at")
+        return lambda t: entry([ip[0] + LR_EXACT_ONLY] + ip[1:], fp, t, sch._LR_STYLE)
+    ip = [KIND_CODE[sch.kind], sch.warmup_steps, -1 if sch.total_steps is None else sch.total_steps]
+    fp = [float(sch.peak_lr), float(sch.min_lr)]
+    entry = T._lr_native("lr_schedule_exact")
+
+    def slow(t):
+        st, v = entry(ip + [int(t)], fp)
+        T._lr_status(st)
+        return float(v)
+    return slow
 
 
 def bits(x):
@@ -61,12 +89,11 @@ def main():
     fails = 0
     for name, sch, last in cases():
         slow_calls = [0]
-        slow = sch._lr_at_slow
+        exact = slow_route(sch)
 
-        def counted(t, slow=slow):
+        def slow(t, exact=exact):
             slow_calls[0] += 1
-            return slow(t)
-        sch._lr_at_slow = counted
+            return exact(t)
         bad = None
         for t in range(1, last + 1):
             a = sch.lr_at(t)

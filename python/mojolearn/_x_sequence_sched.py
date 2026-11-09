@@ -26,7 +26,7 @@ Not carried (sequence/NOT_IMPLEMENTED.tsv): OneCycleLR's momentum cycling
 (cycle_momentum, base_momentum, max_momentum); per-group learning rates;
 `last_epoch` resumption (evaluate `lr_at` at the step you resume from)."""
 from ._training_impl import _OPT_NATIVE, _OPT_CONTEXT
-from ._training_impl import _LR_BEYOND, _LR_EXACT_ONLY, _LR_ONE_BASED, _LrTable, _lr_native, _lr_status
+from ._training_impl import _LR_BEYOND, _LR_ONE_BASED, _LrTable, _lr_status
 
 
 #: `LrSpec` kind codes (sequence/lr_table.mojo)
@@ -220,12 +220,6 @@ class OneCycleLR(_Sched):
         if st == _LR_BEYOND:
             raise ValueError(f"OneCycleLR: step {t} is beyond total_steps {self.total_steps} + 1 (torch refuses it too)")
         _Sched._lr_refuse(self, st, t)
-
-    def _lr_at_slow(self, t):
-        """The exact route of one step (sequence/lr_exact.mojo
-        `onecycle_exact`), one native call: the table's reference."""
-        ip, fp = self._lr_spec()
-        return _lr_native("lr_schedule_at")([ip[0] + _LR_EXACT_ONLY] + ip[1:], fp, t, self._LR_STYLE)  # glue: the kind word with the exact-only flag
 
 # Import-time registration of built-in schedule identities, never a runtime hook.
 from . import _training_impl as _schedule_training
