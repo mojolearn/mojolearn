@@ -263,6 +263,9 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_DATA"](), "removed 2026-11-08 (lane/x3-mlp-rnn-predict-on-tape, 75825f479c): rnn_fit always takes its epoch order from autograd/data.mojo epoch_order (same launches, same key); the inline launches are deleted. Drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch"
     # ---- end lane x3-mlp-rnn-predict-on-tape
+    # TOMBSTONE: MOJOLEARN_NI18_FUSED_EPOCH_GATHER (removed with its route) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+    # Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
+    comptime assert not is_defined["MOJOLEARN_NI18_FUSED_EPOCH_GATHER"](), "removed 2026-11-09 (lane/x8-cnn-on-executor): MOJOLEARN_NI18_FUSED_EPOCH_GATHER fused the CNNClassifier device epoch's row gather, which is deleted (the classifier is a captured program on the executor); never measured; recoverable at f59d913b0b, see docs/TOMBSTONES.md"
     return True
 
 

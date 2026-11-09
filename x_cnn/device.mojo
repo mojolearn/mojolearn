@@ -77,11 +77,8 @@ from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, ada
 from x_cnn.ops import (
     IDN_BN_GRID_STATS, BN_GS_LANES, bn_gs_chunks, bn_gs_lane, bn_gs_mean_at, bn_gs_var_at, bn_gs_red_fin_at,
 )
-# lane fam2-neural (2026-10-04): the device loss fold, epoch order and Adam step scalars
-from x_cnn.ops import (
-    IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan, EP_LEN, epoch_rows_at, epoch_row_val, epoch_rows_prm,
-    AH_ROW, adam_hyper_at,
-)
+# lane fam2-neural (2026-10-04): the device loss fold
+from x_cnn.ops import IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan
 
 comptime TPB = 256
 # Neural 2026-10-06 source-only experiment controls. Every new control is
@@ -105,7 +102,8 @@ comptime NI12_IMPLICIT_CONV = _NI_CNN_ENABLED and not is_defined["MOJOLEARN_NI12
 comptime NI14_BOUNDED_COL2IM = _NI_CNN_ENABLED and NI14_COL2IM == NI14_COL2IM_BOUNDED  # arm 1 of MOJOLEARN_NI14_COL2IM (x_cnn/neural_col2im.mojo)
 comptime NI15_BIAS_NO_ONES = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI15_BIAS_NO_ONES"]()
 comptime NI16_CONV_RELU_FUSED = _NI_CNN_ENABLED and IDN_CNN_CONV_RELU_ARM == 2  # arm 2 of MOJOLEARN_IDN_CNN_CONV_RELU (x_cnn/ops.mojo)
-comptime NI18_FUSED_EPOCH_GATHER = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI18_FUSED_EPOCH_GATHER"]()
+# TOMBSTONE: MOJOLEARN_NI18_FUSED_EPOCH_GATHER (removed with its route, the classifier device epoch) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
 # Tried: IDN_CNN_BN_FUSE, the BasicBlock's BatchNorm epilogues fused (x_cnn_idn_flags bit 6); resnet-block NV 0.94x / AMD 1.02x, conv2d NV 1.14x / AMD 1.03x: noise / slower.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
@@ -2533,207 +2531,8 @@ def res_gather_pair(
     _ = ctx^
 
 
-# ------------------------------------------------ lane fam2-neural: the device epoch
-# IDN_CNN_EPOCH_DEV (x_cnn/ops.mojo): the pieces `x_cnn_fit_epoch_d` runs so
-# a fit epoch has no host arithmetic and one download (its losses).
-
-
-def epoch_rows_download(dst: IP, n: Int, pos: Int, count: Int, shuffle: Bool, key: UInt64) raises:
-    """Host dst[0:count] = positions pos .. pos + count - 1 of the epoch's
-    order over n rows (`epoch_rows_at` on the device, then down): for the
-    trainers whose batch is gathered from host memory."""
-    if count <= 0:
-        return
-    var ctx = cnn_ctx()
-    var prm = epoch_rows_prm(n, pos, shuffle, key)
-    var dp = put_prm(ctx, 1, prm)
-    var out = ws_i(ctx, 0, count)
-    var none = ws(ctx, 2, 1)
-    launch[epoch_rows_at](ctx, fp(none), fp(none), fp(none), fp(none), ip(out), ip(dp), count)
-    down_i(ctx, out, dst, count)
-    ctx.synchronize()
-    _ = prm^
-    _ = dp^
-    _ = out^
-    _ = none^
-    _ = ctx^
-
-
-def _ni18_epoch_gather_kernel(src: FP, dst: FP, src2: FP, dst2: FP, p: IP):
-    """One block per sampled row: compute its key once, copy both buffers.
-
-    Resource schedule only: threads stride over row bytes. The permutation
-    is the same shared integer function as the host and reference device
-    paths, and all tensors are copied as Int32 words (including NaN bits).
-    """
-    var row_index = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var selected = stack_allocation[1, Int32, address_space=AddressSpace.SHARED]()
-    if tid == 0:
-        selected[0] = epoch_row_val(row_index, p)
-    barrier()
-    var chosen = Int(selected[0])
-    var row = Int(p.unsafe_load(EP_LEN))
-    var row2 = Int(p.unsafe_load(EP_LEN + 1))
-    var i = tid
-    while i < row:
-        dst.bitcast[Int32]().unsafe_store(row_index * row + i, src.bitcast[Int32]().unsafe_load(chosen * row + i))
-        i += TPB
-    i = tid
-    while i < row2:
-        dst2.bitcast[Int32]().unsafe_store(row_index * row2 + i, src2.bitcast[Int32]().unsafe_load(chosen * row2 + i))
-        i += TPB
-
-
-def res_gather_pair_perm(
-    dst_addr: Int, src_addr: Int, row: Int, dst2_addr: Int, src2_addr: Int, row2: Int, n: Int, pos: Int,
-    m: Int, shuffle: Bool, key: UInt64,
-) raises:
-    """`res_gather_pair` with the step's rows computed on the device
-    (`epoch_rows_at`, positions pos .. pos + m - 1 of the epoch over n rows)
-    instead of uploaded: nothing crosses the bus."""
-    if m <= 0:
-        return
-    var ctx = cnn_ctx()
-    var prm = epoch_rows_prm(n, pos, shuffle, key)
-    prm.append(Int32(row))
-    prm.append(Int32(row2))
-    var dp = put_prm(ctx, 1, prm)
-    var pp = ip(dp)
-    comptime if NI18_FUSED_EPOCH_GATHER:
-        ctx.enqueue_function[_ni18_epoch_gather_kernel](
-            FP(unsafe_from_address=src_addr), FP(unsafe_from_address=dst_addr),
-            FP(unsafe_from_address=src2_addr), FP(unsafe_from_address=dst2_addr), pp,
-            grid_dim=(m, 1, 1), block_dim=(TPB, 1, 1),
-        )
-        ctx.synchronize()
-        _ = prm^
-        _ = dp^
-        _ = ctx^
-        return
-    var di = ws_i(ctx, 0, m)
-    launch[epoch_rows_at](
-        ctx, FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr),
-        FP(unsafe_from_address=dst_addr), ip(di), pp, m,
-    )
-    if row > 0:
-        launch[gather_rows_at](
-            ctx, FP(unsafe_from_address=src_addr), FP(unsafe_from_address=dst_addr),
-            FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr), ip(di), pp + EP_LEN, m * row,
-        )
-    if row2 > 0:
-        launch[gather_rows_at](
-            ctx, FP(unsafe_from_address=src2_addr), FP(unsafe_from_address=dst2_addr),
-            FP(unsafe_from_address=dst2_addr), FP(unsafe_from_address=dst2_addr), ip(di), pp + EP_LEN + 1,
-            m * row2,
-        )
-    ctx.synchronize()
-    _ = prm^
-    _ = di^
-    _ = dp^
-    _ = ctx^
-
-
-def adam_hyper_resident(base: List[Float32], step0: Int, nsteps: Int, dst_addr: Int) raises:
-    """Resident dst[9 t : 9 t + 9] = Adam's hyper block of 1-based step
-    step0 + t for t < nsteps (`adam_hyper_at`, one thread per step)."""
-    if nsteps <= 0:
-        return
-    var ctx = cnn_ctx()
-    var db = put_hyper(ctx, 3, base)
-    var prm: List[Int32] = [Int32(step0)]
-    var dp = put_prm(ctx, 4, prm)
-    var dst = FP(unsafe_from_address=dst_addr)
-    launch[adam_hyper_at](ctx, fp(db), dst, dst, dst, ip(dp), ip(dp), nsteps)
-    ctx.synchronize()
-    _ = prm^
-    _ = db^
-    _ = dp^
-    _ = ctx^
-
-
-def adam_hyper_download(base: List[Float32], step0: Int, nsteps: Int, dst: FP) raises:
-    """Host dst[0 : 9 nsteps] = the same blocks (for the per-step entries,
-    which take the block from the caller)."""
-    if nsteps <= 0:
-        return
-    var ctx = cnn_ctx()
-    var db = put_hyper(ctx, 3, base)
-    var prm: List[Int32] = [Int32(step0)]
-    var dp = put_prm(ctx, 4, prm)
-    var out = ws(ctx, 5, nsteps * AH_ROW)
-    launch[adam_hyper_at](ctx, fp(db), fp(out), fp(out), fp(out), ip(dp), ip(dp), nsteps)
-    down(ctx, out, dst, nsteps * AH_ROW)
-    ctx.synchronize()
-    _ = prm^
-    _ = db^
-    _ = dp^
-    _ = out^
-    _ = ctx^
-
-
-def opt_many_resident_h[adam: Bool](
-    ws_: List[Int], gs: List[Int], bs: List[Int], ns: List[Int], hyper_addr: Int
-) raises:
-    """`opt_many_resident` with the step's hyper block already on the device
-    at `hyper_addr` (a row of the epoch's resident block): no upload."""
-    var ctx = cnn_ctx()
-    var prm = List[Int32]()
-    for j in range(len(ns)):  # small-loop(ns: parameter tensors of the model): per-launch length list for the device
-        prm.append(Int32(ns[j]))
-    var dp = put_prm(ctx, 4, prm)
-    var pp = ip(dp)
-    var ph = FP(unsafe_from_address=hyper_addr)
-    for j in range(len(ns)):
-        var pw = FP(unsafe_from_address=ws_[j])
-        var pg = FP(unsafe_from_address=gs[j])
-        var pb = FP(unsafe_from_address=bs[j])
-        comptime if adam:
-            launch[adam_at](ctx, pw, pg, pb, ph, pp + j, pp + j, ns[j])
-        else:
-            launch[sgd_at](ctx, pw, pg, pb, ph, pp + j, pp + j, ns[j])
-    ctx.synchronize()
-    _ = prm^
-    _ = dp^
-    _ = ctx^
-
-
-def softmax_xent_res_loss(
-    logits: FP, labels: IP, n: Int, k: Int, grad_out: FP, proba_out: FP, loss_addr: Int, index: Int
-) raises:
-    """`softmax_xent_into[True]` with the mean loss left on the device:
-    resident loss[index] = the blocked fold of the row losses over n
-    (`blk_fold_at`, what `softmax_xent_into` returns under
-    IDN_XENT_DEV_FOLD). Nothing comes down."""
-    if n <= 0:
-        return
-    var ctx = cnn_ctx()
-    var dl = view(ctx, logits, n * k)
-    var dy = view_i(ctx, labels, n)
-    var prm: List[Int32] = [Int32(n), Int32(k)]
-    var dp = put_prm(ctx, 2, prm)
-    var grad = view(ctx, grad_out, n * k)
-    var proba = view(ctx, proba_out, n * k)
-    var rl = ws(ctx, 5, n)
-    grad.enqueue_fill(Float32(0))
-    rl.enqueue_fill(Float32(0))
-    launch[softmax_xent_row_at](ctx, fp(dl), fp(grad), fp(proba), fp(rl), ip(dy), ip(dp), n)
-    var fprm = fold_plan(n, n, index)
-    var dfp = put_prm(ctx, 7, fprm)
-    var pong = ws(ctx, 6, (n + LOSS_FOLD_BLOCK - 1) // LOSS_FOLD_BLOCK)
-    fold_launch(ctx, fp(rl), fp(pong), FP(unsafe_from_address=loss_addr), ip(dfp), n)
-    ctx.synchronize()
-    _ = fprm^
-    _ = prm^
-    _ = dfp^
-    _ = pong^
-    _ = dl^
-    _ = dy^
-    _ = dp^
-    _ = grad^
-    _ = proba^
-    _ = rl^
-    _ = ctx^
+# TOMBSTONE: the classifier's device epoch pieces (epoch_rows_download, res_gather_pair_perm and its gather kernel, adam_hyper_resident, adam_hyper_download, opt_many_resident_h, softmax_xent_res_loss) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 
 
 # ------------------------------------------------------------ the conv block

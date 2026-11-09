@@ -1207,29 +1207,6 @@
    ],
    "note": "bits_change not re-assessed by L11 (unchanged switch)"
   },
-  "ni18_epoch_gather": {
-   "define": "MOJOLEARN_NI18_FUSED_EPOCH_GATHER",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_NI18_FUSED_EPOCH_GATHER=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_cnn/device.mojo:87"
-   ],
-   "binding": "_mojolearn_x_cnn",
-   "bits_change": false,
-   "status": "kept",
-   "entries": [
-    "NI18"
-   ],
-   "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
-   "note": "bits_change not re-assessed by L11 (unchanged switch)",
-   "reach": "neural:cnn-clf: x_cnn/device.mojo:2643 res_gather_pair_perm on the fit_epoch_d route (bindings/_mojolearn_x_cnn.mojo:1465)"
-  },
   "ni52_mlp_epoch_order": {
    "define": "MOJOLEARN_IDN_MLP_DEVICE_EPOCH_ORDER",
    "kind": "switch",
@@ -1716,6 +1693,10 @@
   {
    "define": "MOJOLEARN_IDN_M1_SCAN=1",
    "reason": "removed 2026-10-11 (lane/owed-decide): affine_prefix (NN34) LOSER, mamba1-forward gaussian NV 5.40 -> 10.41 ms (1.93x), AMD 3.14 -> 8.38 ms (2.67x), avg 2.30x, hash 602f9ec5 -> 045beb0b; guard refuses =1; patch experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch"
+  },
+  {
+   "define": "MOJOLEARN_NI18_FUSED_EPOCH_GATHER",
+   "reason": "deleted 2026-11-09 by lane/x8-cnn-on-executor with the CNNClassifier device epoch it fused (res_gather_pair_perm); the classifier is a captured program on the executor (Program.fit gather_rows); never measured; recoverable at f59d913b0b (guard refuses)"
   }
  ],
  "notes": {
