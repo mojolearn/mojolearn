@@ -4303,6 +4303,11 @@ per element in both paths; a borrowed float32 C-order input is borrowed in both)
   the ones vector).
 - `labels_all_finite` / `trees_all_finite`: `core/host_finite_scan.mojo` directly where a label vector is tested.
 - `trees_encode_labels`: the trees copy of the encoder is gone; it returns `classical_encode_labels`' classes and codes.
+  Behaviour: str-subclass labels, which the trees copy refused, are encoded like str (the shared encoder's rule).
+- Trees internals (`trees_public_boost` `_gather_view` / `_gather_codes_view` / `_gather_vec_view`, `trees_public_meta`
+  `_place_view`, `trees_explainer_native` `_snapshot`'s serial strided copy, `trees_public_iforest` `_copied`): the
+  helpers take the Arrays themselves; meta Y and explainer snapshots are read in C order (one C-order copy of an
+  F-ordered or strided input; same values).
 - `decomp_input_snapshot` (PLS's own cast and scan): `_pls_input` in `bindings/pls_native.mojo`.
 - `core/admitted_transpose.mojo`: no caller left.
 - The prep_labels multilabel F-order arm (base `transpose_f32`) and the KNeighborsClassifier column-major y branch: y is
