@@ -68,37 +68,37 @@ def compact_zero_count_kernel(gate: StepI32, count: StepI32):
     count.unsafe_store(0, Int32(0))
 
 
-def compact_index_kernel(gate: StepI32, flags: _B, offsets: StepI32, out: StepI32, n_in: Int32):
-    """out[offsets[i]] = i for flagged i, while the gate is open."""
+def compact_index_kernel(gate: StepI32, flags: _B, offsets: StepI32, dst: StepI32, n_in: Int32):
+    """dst[offsets[i]] = i for flagged i, while the gate is open."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= Int(n_in):
         return
     if gate.unsafe_load(0) != Int32(0):
         return
     if flags.unsafe_load(i) != UInt8(0):
-        out.unsafe_store(Int(offsets.unsafe_load(i)), Int32(i))
+        dst.unsafe_store(Int(offsets.unsafe_load(i)), Int32(i))
 
 
-def compact_i32_kernel(gate: StepI32, src: StepI32, flags: _B, offsets: StepI32, out: StepI32, n_in: Int32):
-    """out[offsets[i]] = src[i] for flagged i, while the gate is open."""
+def compact_i32_kernel(gate: StepI32, src: StepI32, flags: _B, offsets: StepI32, dst: StepI32, n_in: Int32):
+    """dst[offsets[i]] = src[i] for flagged i, while the gate is open."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= Int(n_in):
         return
     if gate.unsafe_load(0) != Int32(0):
         return
     if flags.unsafe_load(i) != UInt8(0):
-        out.unsafe_store(Int(offsets.unsafe_load(i)), src.unsafe_load(i))
+        dst.unsafe_store(Int(offsets.unsafe_load(i)), src.unsafe_load(i))
 
 
-def compact_f32_kernel(gate: StepI32, src: _F, flags: _B, offsets: StepI32, out: _F, n_in: Int32):
-    """out[offsets[i]] = src[i] for flagged i, while the gate is open."""
+def compact_f32_kernel(gate: StepI32, src: _F, flags: _B, offsets: StepI32, dst: _F, n_in: Int32):
+    """dst[offsets[i]] = src[i] for flagged i, while the gate is open."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= Int(n_in):
         return
     if gate.unsafe_load(0) != Int32(0):
         return
     if flags.unsafe_load(i) != UInt8(0):
-        out.unsafe_store(Int(offsets.unsafe_load(i)), src.unsafe_load(i))
+        dst.unsafe_store(Int(offsets.unsafe_load(i)), src.unsafe_load(i))
 
 
 def compact_flag_nonzero_kernel(src: _F, flags: _B, n_in: Int32):
@@ -167,16 +167,16 @@ def compact_op_indices(
     mut flags: DeviceBuffer[DType.uint8],
     n: Int,
     mut scratch: CompactScratch,
-    mut out: DeviceBuffer[DType.int32],
+    mut dst: DeviceBuffer[DType.int32],
     mut count: DeviceBuffer[DType.int32],
 ) raises:
-    """out[0, count) = the flagged indices of [0, n) ascending; count[0] on
+    """dst[0, count) = the flagged indices of [0, n) ascending; count[0] on
     the device. Enqueued only."""
     compact_scan_enqueue(ctx, gate, flags, n, scratch, count)
     if n > 0:
         ctx.enqueue_function[compact_index_kernel](
             StepI32(unsafe_from_address=Int(gate.unsafe_ptr())), flags.unsafe_ptr(), scratch.offsets.unsafe_ptr(),
-            out.unsafe_ptr(), Int32(n), grid_dim=_co_blocks(n), block_dim=CO_TPB,
+            dst.unsafe_ptr(), Int32(n), grid_dim=_co_blocks(n), block_dim=CO_TPB,
         )
 
 
@@ -187,15 +187,15 @@ def compact_op_i32(
     mut flags: DeviceBuffer[DType.uint8],
     n: Int,
     mut scratch: CompactScratch,
-    mut out: DeviceBuffer[DType.int32],
+    mut dst: DeviceBuffer[DType.int32],
     mut count: DeviceBuffer[DType.int32],
 ) raises:
-    """out[0, count) = src's flagged elements in index order. Enqueued only."""
+    """dst[0, count) = src's flagged elements in index order. Enqueued only."""
     compact_scan_enqueue(ctx, gate, flags, n, scratch, count)
     if n > 0:
         ctx.enqueue_function[compact_i32_kernel](
             StepI32(unsafe_from_address=Int(gate.unsafe_ptr())), src.unsafe_ptr(), flags.unsafe_ptr(),
-            scratch.offsets.unsafe_ptr(), out.unsafe_ptr(), Int32(n), grid_dim=_co_blocks(n), block_dim=CO_TPB,
+            scratch.offsets.unsafe_ptr(), dst.unsafe_ptr(), Int32(n), grid_dim=_co_blocks(n), block_dim=CO_TPB,
         )
 
 
@@ -206,13 +206,13 @@ def compact_op_f32(
     mut flags: DeviceBuffer[DType.uint8],
     n: Int,
     mut scratch: CompactScratch,
-    mut out: DeviceBuffer[DType.float32],
+    mut dst: DeviceBuffer[DType.float32],
     mut count: DeviceBuffer[DType.int32],
 ) raises:
-    """out[0, count) = src's flagged elements in index order. Enqueued only."""
+    """dst[0, count) = src's flagged elements in index order. Enqueued only."""
     compact_scan_enqueue(ctx, gate, flags, n, scratch, count)
     if n > 0:
         ctx.enqueue_function[compact_f32_kernel](
             StepI32(unsafe_from_address=Int(gate.unsafe_ptr())), src.unsafe_ptr(), flags.unsafe_ptr(),
-            scratch.offsets.unsafe_ptr(), out.unsafe_ptr(), Int32(n), grid_dim=_co_blocks(n), block_dim=CO_TPB,
+            scratch.offsets.unsafe_ptr(), dst.unsafe_ptr(), Int32(n), grid_dim=_co_blocks(n), block_dim=CO_TPB,
         )

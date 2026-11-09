@@ -38,7 +38,7 @@ def _arg_copy_row(src: _ARG_U32P, dst: _ARG_U32P, n: Int) -> Bool:
     """Copy `n` words and return True when every one is finite."""
     var exp1 = UInt32(0x7F800000)
     var exp = SIMD[DType.uint32, _ARG_W](exp1)
-    var bad = SIMD[DType.bool, _ARG_W](False)
+    var bad = SIMD[DType.bool, _ARG_W](fill=False)
     var i = 0
     var body = n - n % _ARG_W
     while i < body:

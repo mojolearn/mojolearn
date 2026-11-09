@@ -524,7 +524,7 @@ def _expect(code: Int, what: String, have: Int, want: Int) raises:
 
 
 def _run_m1(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
-            out: FP) raises:
+            y_out: FP) raises:
     var ctx = ex.ctx.copy()
     var b = ints[0]
     var dm = ints[1]
@@ -541,7 +541,7 @@ def _run_m1(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     ref blk = sc.m1[e]
     var n = b * l * dm
     var x = _view(ex, bufs[0], n)
-    var y = _view(ex, out, n)
+    var y = _view(ex, y_out, n)
     var trace = IdentityTrace.disabled()
     if l == 1:
         # `_m1_session_step_run`: x into the resident buffer, mamba_step on
@@ -562,7 +562,7 @@ def _run_m1(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
 
 
 def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
-            fs: List[Float32], out: FP) raises:
+            fs: List[Float32], y_out: FP) raises:
     var ctx = ex.ctx.copy()
     var b = ints[0]
     var dm = ints[1]
@@ -582,7 +582,7 @@ def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     var dims = Mamba2Dims.of(dm)
     var n = b * l * dm
     var x = _view(ex, bufs[0], n)
-    var y = _view(ex, out, n)
+    var y = _view(ex, y_out, n)
     var trace = IdentityTrace.disabled()
     # `_m2_session_step_run`: call-shaped stages at the open chunk's length.
     var stages = Mamba2DeviceStages(ctx, b, l, blk.st.buf_len, dims)
@@ -606,7 +606,7 @@ def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
 
 
 def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
-            out: FP) raises:
+            y_out: FP) raises:
     var ctx = ex.ctx.copy()
     var b = ints[0]
     var dm = ints[1]
@@ -626,7 +626,7 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     var dims = Mamba3Dims.of(dm)
     var n = b * l * dm
     var x = _view(ex, bufs[0], n)
-    var y = _view(ex, out, n)
+    var y = _view(ex, y_out, n)
     var trace = IdentityTrace.disabled()
     # `_m3_session_step_run` (its default arm: stages built per call at the
     # open chunk's length).
@@ -653,7 +653,7 @@ def _same_ints(a: List[Int], b: List[Int]) -> Bool:
 
 
 def _run_attn(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
-              out: FP) raises:
+              y_out: FP) raises:
     var ctx = ex.ctx.copy()
     var b = ints[0]
     var dm = ints[1]
@@ -672,7 +672,7 @@ def _run_attn(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], coun
     ref blk = sc.attn[e]
     var n = b * l * dm
     var x = _view(ex, bufs[0], n)
-    var y = _view(ex, out, n)
+    var y = _view(ex, y_out, n)
     var trace = IdentityTrace.disabled()
     var pos0 = blk.kv.s
     if l == 1:
@@ -704,16 +704,16 @@ def _run_attn(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], coun
 
 def _step_run[CODE: Int](
     mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
-    fs: List[Float32], out: FP,
+    fs: List[Float32], y_out: FP,
 ) raises:
     comptime if CODE == OPS_M1_STEP:
-        _run_m1(ex, sc, bufs, counts, ints, out)
+        _run_m1(ex, sc, bufs, counts, ints, y_out)
     elif CODE == OPS_M2_STEP:
-        _run_m2(ex, sc, bufs, counts, ints, fs, out)
+        _run_m2(ex, sc, bufs, counts, ints, fs, y_out)
     elif CODE == OPS_M3_STEP:
-        _run_m3(ex, sc, bufs, counts, ints, out)
+        _run_m3(ex, sc, bufs, counts, ints, y_out)
     else:
-        _run_attn(ex, sc, bufs, counts, ints, out)
+        _run_attn(ex, sc, bufs, counts, ints, y_out)
 
 
 def block_step_check(code: Int, n_tensors: Int, ints: List[Int], fs: List[Float32]) raises -> StepOpInfo:
@@ -731,18 +731,18 @@ def block_step_check(code: Int, n_tensors: Int, ints: List[Int], fs: List[Float3
 
 def block_step_run(
     mut ex: DeviceExec, mut sc: BlockStepScratch, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int],
-    fs: List[Float32], out: FP,
+    fs: List[Float32], y_out: FP,
 ) raises:
     """Run step op `code` (operands checked by the session): `bufs` / `counts`
     are the tensor operands' storage and element counts in the table's
-    order, `out` the result's b * L * d_model floats. A failed run drops the
+    order, `y_out` the result's b * L * d_model floats. A failed run drops the
     pair's entry (its state is what the failed call left), so the next run
     rebuilds it from the session tensors."""
     try:
         comptime for i in range(N_STEP_OPS):  # driver-loop: over the step-op table (four rows, compile time)
             comptime CODE = OPS_STEP_FIRST + i
             if code == CODE:
-                _step_run[CODE](ex, sc, bufs, counts, ints, fs, out)
+                _step_run[CODE](ex, sc, bufs, counts, ints, fs, y_out)
                 return
     except err:
         for k in range(1, len(bufs)):  # small-loop(bufs: the op's three or four operands): entry eviction, no data
