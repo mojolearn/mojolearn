@@ -73,7 +73,7 @@ def test_kde_refuses_non_finite_at_fit():
     x = _x()
     xn = x.copy()
     xn[0, 0] = np.nan
-    _raises(ValueError, "X contains a NaN or an infinity", KernelDensity().fit, xn)
+    _raises(ValueError, "Input X contains NaN or infinity (KernelDensity).", KernelDensity().fit, xn)
     assert np.isfinite(np.asarray(KernelDensity().fit(x).score_samples(x))).all()
 
 
