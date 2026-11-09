@@ -3,6 +3,7 @@
 # numerical owner retains operation-local input descriptors through completion.
 from std.python import Python, PythonObject
 from std.math import isfinite
+from bindings.admitted_family import admit_family_meta
 from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.mode_metadata_native import _fields, _fitted
@@ -24,8 +25,9 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields
 from bindings.native_array_view import native_array_ndarray_view
-from bindings.family_common import family_f32_snapshot, family_array
-from core.family_cast_impl import family_all_finite_f32, family_cast_rows_f64
+from bindings.family_common import family_array
+from core.admitted_input import admitted_cast_f64
+from core.host_finite_scan import host_all_finite_f32
 from core.cast_in import CAST_KIND_FLOAT
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from providers.python.estimator_lifecycle_pyapi import estimator_feature_check
@@ -198,7 +200,7 @@ def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
 
 
 def kernel_public_finite(value: ArrayMetadata, name: String) raises:
-    if not family_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=value.source.addr), value.count):
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=value.source.addr), value.count):
         raise Error("ValueError: Input " + name + " contains NaN or infinity")
     _ = value
 
@@ -321,14 +323,14 @@ def kernel_public_result(result: PythonObject, prediction: Bool, outside: Bool,
         var rows = Int(py=shape[0])
         var cols = Int(py=shape[1]) if rank == 2 else 1
         var widened = family_array(shape, "<f8", context)
-        family_cast_rows_f64(Int(py=classical_address(result)), cols * 4, 4, rows, cols, 4, CAST_KIND_FLOAT,
+        admitted_cast_f64(Int(py=classical_address(result)), cols * 4, 4, rows, cols, 4, CAST_KIND_FLOAT,
                              MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(widened))))
         _ = result
         return native_array_ndarray_view(widened, context)
-    var value = family_f32_snapshot(result, -1, "prediction", context)
+    var value = admit_family_meta(result, -1, "prediction", context)
     var wide = family_array(value.python_shape(), "<f8", context)
     var source = value.source
-    family_cast_rows_f64(source.addr, source.s0, source.s1, source.rows, source.cols,
+    admitted_cast_f64(source.addr, source.s0, source.s1, source.rows, source.cols,
                          source.itemsize, source.kind,
                          MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(wide))))
     _ = value^

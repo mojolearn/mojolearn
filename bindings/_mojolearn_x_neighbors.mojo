@@ -22,7 +22,6 @@ from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_prod
 from x_neighbors.ocsvm_dev import op_ocsvm
 from x_neighbors.graph_dev import op_louvain, op_pr_csr, op_louvain_csr
 from providers.python.x_neighbors_dev_pyapi import kpca_resident_binding
-from providers.python.x_neighbors_dev_pyapi import lp_fast_resident_binding
 from providers.python.x_neighbors_dev_pyapi import nc_fit_lean_binding
 from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES
 from providers.python.x_neighbors_dev_pyapi import ocsvm_resident_binding
@@ -1191,7 +1190,6 @@ def build__mojolearn_x_neighbors() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_neighbors")
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
-        m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
         m.def_function[nc_fit_lean_binding]("x_neighbors_nc_fit_lean")
         # TOMBSTONE: x_neighbors_purity_flags (dead native entry: no reader of the PURITY_3/PURITY_6 switch word) deleted 2026-10-26 by 1d3757533; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/x_neighbors_purity_flags.patch

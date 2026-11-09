@@ -112,7 +112,7 @@ struct _ContextKeeper(Defaultable, Movable):
 
 
 comptime BYTE_LM_CONTEXT_KEEPER = _Global[StorageType=_ContextKeeper,
-    name="MojoByteLMContextKeeperIdentical", init_fn=_ContextKeeper.__init__]
+    name="MojolearnByteLMContextKeeperIdenticalV2", init_fn=_ContextKeeper.__init__]
 
 
 

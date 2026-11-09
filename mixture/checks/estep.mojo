@@ -89,6 +89,10 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.gemm import gemm_nt
 from core.identity_trace import IdentityTrace
+from mixture.step_keep import (
+    GMM_KEEP_BATCH_MU, GMM_KEEP_BATCH_PREC, GMM_KEEP_BATCH_WS, GMM_KEEP_BATCH_Y, GMM_KEEP_STACK_MU, GMM_KEEP_STACK_PREC,
+    GMM_KEEP_STACK_WS, GMM_KEEP_STACK_Y, gmm_keep_buffer,
+)
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
@@ -1169,6 +1173,7 @@ def gmm_e_step(
     elem_tpb: Int = GMM_ELEM_TPB,
     row_tpb: Int = GMM_ROW_TPB,
     sabotage: Int = GMM_SAB_NONE,
+    keep_addr: Int = 0,
 ) raises:
     """**THE E-STEP.** Given the parameters, produce `mahal`, `wlp`,
     `rowmax`, `lse`, `logresp` and the mean log likelihood.
@@ -1293,11 +1298,12 @@ def gmm_e_step(
             # their own row stride. Both GEMMs and the consumer are stream
             # ordered before the next batch reuses these buffers.
             var kdmax = width*d
-            var pbatch = ctx.enqueue_create_buffer[DType.float32](d*kdmax)
-            var ybatch = ctx.enqueue_create_buffer[DType.float32](n*kdmax)
-            var mbatch = ctx.enqueue_create_buffer[DType.float32](width*kdmax)
+            # held by the EM loop's keep (mixture/step_keep.mojo): no drain
+            var pbatch = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_BATCH_PREC, d*kdmax)
+            var ybatch = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_BATCH_Y, n*kdmax)
+            var mbatch = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_BATCH_MU, width*kdmax)
             var wsmax = gmm_component_batch_workspace(n,d,width)
-            var bws = ctx.enqueue_create_buffer[DType.float32](wsmax)
+            var bws = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_BATCH_WS, wsmax)
             for first in range(0,ncomp,width):
                 var count = min(width,ncomp-first)
                 var kd = count*d
@@ -1308,7 +1314,8 @@ def gmm_e_step(
                 identical_gemm_into(ctx,mbatch,mus,pbatch,bws,count,kd,d,OP_NN)
                 ctx.enqueue_function[mahal_component_batch_kernel](ybatch.unsafe_ptr(),mbatch.unsafe_ptr(),mahal.unsafe_ptr(),Int32(n),Int32(d),Int32(ncomp),Int32(first),Int32(count),grid_dim=((n*count+row_tpb-1)//row_tpb,1,1),block_dim=(row_tpb,1,1))
                 _ = ps^; _ = mus^
-            ctx.synchronize()
+            if keep_addr == 0:
+                ctx.synchronize()
             _ = pbatch^; _ = ybatch^; _ = mbatch^; _ = bws^
     var stacked = False
     comptime if GMM_ESTEP_STACK:
@@ -1319,12 +1326,12 @@ def gmm_e_step(
         )
     if stacked:
         var kd = ncomp * d
-        var pstack = ctx.enqueue_create_buffer[DType.float32](d * kd)
-        var ystack = ctx.enqueue_create_buffer[DType.float32](n * kd)
-        var mstack = ctx.enqueue_create_buffer[DType.float32](ncomp * kd)
+        var pstack = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_STACK_PREC, d * kd)
+        var ystack = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_STACK_Y, n * kd)
+        var mstack = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_STACK_MU, ncomp * kd)
         var w1 = identical_gemm_workspace_max_floats(n, kd, d)
         var w2 = identical_gemm_workspace_max_floats(ncomp, kd, d)
-        var sws = ctx.enqueue_create_buffer[DType.float32](max(w1, w2))
+        var sws = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_STACK_WS, max(w1, w2))
         ctx.enqueue_function[stack_prec_kernel](
             prec.unsafe_ptr(), pstack.unsafe_ptr(), Int32(d), Int32(ncomp),
             grid_dim=((d * kd + 255) // 256, 1, 1), block_dim=(256, 1, 1),
@@ -1337,7 +1344,8 @@ def gmm_e_step(
             grid_dim=((n * ncomp + row_tpb - 1) // row_tpb, 1, 1),
             block_dim=(row_tpb, 1, 1),
         )
-        ctx.synchronize()
+        if keep_addr == 0:
+            ctx.synchronize()
         _ = pstack^
         _ = ystack^
         _ = mstack^

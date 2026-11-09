@@ -7,12 +7,10 @@ SOURCE = ROOT / "python/mojolearn/_transformer_impl.py"
 NATIVE = (ROOT / "bindings/transformer_public_native.mojo").read_text()
 
 
-def test_public_state_and_tape_methods_are_one_native_call():
+def test_public_state_methods_are_one_native_call():
     tree = ast.parse(SOURCE.read_text())
     expected = {
         "TransformerState": ("__init__", "capacity", "keys", "values"),
-        "TransformerForwardTape": ("__init__", "__reduce__", "close"),
-        "TransformerBlock": ("forward_with_tape", "backward_from_tape"),
     }
     for cls in tree.body:
         if not isinstance(cls, ast.ClassDef) or cls.name not in expected:
@@ -33,7 +31,7 @@ def test_state_admits_storage_before_buffer_export_and_preserves_view_copy_split
     assert constructor.index("admit_native_buffer_exporter(store)") < constructor.index("AdmittedBorrowedBuffer(store)")
     assert "self.owner = value" in constructor and "self.store = store" in constructor
     assert "_transformer_array_slots(mods, context)" in constructor
-    state = NATIVE.split("def transformer_state_read(", 1)[1].split("struct TransformerPublicTapeOwner", 1)[0]
+    state = NATIVE.split("def transformer_state_read(", 1)[1].split("def _transformer_configuration", 1)[0]
     assert 'if window == 0:\n        return _transformer_cache_view(mods, buffer, dims, context)' in state
     assert "var start = (cached - held) % window" in state
     assert "count=first * hd" in state and "count=(held - first) * hd" in state
@@ -43,28 +41,22 @@ def test_state_admits_storage_before_buffer_export_and_preserves_view_copy_split
     assert 'py_setitem(fields, "_pin", view)' in view
 
 
-def test_tape_owns_native_metadata_and_uses_original_budget_aware_session_route():
-    owner = NATIVE.split("struct TransformerPublicTapeOwner", 1)[1].split("def _transformer_configuration", 1)[0]
-    for field in ("block: PythonObject", "session: PythonObject", "provider: PythonObject", "handle: Int", "token: List[Int]", "configuration: List[Int]", "weight_shapes: List[List[Int]]", "consumed: Bool"):
-        assert field in owner
-    forward = NATIVE.split("def transformer_forward_with_tape(", 1)[1].split("def transformer_tape_init", 1)[0]
-    assert "transformer_session_tape_forward(provider, session, handle, addresses, params)" in forward
-    assert "configuration[5], budget, cost]" in forward
-    assert '"transformer_forward_tape"' not in forward
-    backward = NATIVE.split("def transformer_backward_from_tape(", 1)[1].split("def transformer_tape_close", 1)[0]
-    assert backward.index("owner[].consumed = True") < backward.index("transformer_session_tape_backward(owner[].provider")
-    assert "owner[].session is not fields[\"_native_session\"]" in backward
-    assert "_transformer_same_words(owner[].configuration" in backward
-    assert backward.count("lease.release()") == 2
-    assert "_ = dy^" in backward and "_ = hobj" in backward
+def test_tape_api_is_gone():
+    # TRANSFORMER_FORWARD_TAPE_API (docs/TOMBSTONES.md): no tape ticket, owner or door.
+    tree = ast.parse(SOURCE.read_text())
+    names = {node.name for node in ast.walk(tree) if isinstance(node, (ast.ClassDef, ast.FunctionDef))}
+    assert not names & {"TransformerForwardTape", "forward_with_tape", "backward_from_tape"}
+    live = "\n".join(line for line in NATIVE.splitlines() if not line.lstrip().startswith("#"))
+    for spelling in ("TransformerPublicTapeOwner", '"forward_tape"', '"backward_tape"', '"tape_init"',
+                     '"tape_close"', "transformer_session_tape_"):
+        assert spelling not in live
 
 
-def test_public_state_and_tape_use_connected_modules_without_import_callbacks():
+def test_public_state_uses_connected_modules_without_import_callbacks():
     assert 'Python.import_module(' not in NATIVE
     assert 'from bindings.native_loaded_module import native_loaded_module' in NATIVE
     # Per-operation NativeModules.module() resolves through native_loaded_module.
     assert 'mods.module("builtins")' in NATIVE
-    assert 'mods.module("types")' in NATIVE
     loaded = (ROOT / "bindings/native_loaded_module.mojo").read_text()
     assert 'var module = native_loaded_module(name)' in loaded.split("struct NativeModules(Movable):", 1)[1]
     allocation = (ROOT / "bindings/generation_buffers.mojo").read_text()

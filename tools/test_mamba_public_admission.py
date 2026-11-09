@@ -31,12 +31,14 @@ def test_all_mamba_state_constructors_are_one_native_operation():
 
 
 def test_decode_session_properties_lifecycle_and_outputs_are_native():
-    for cls in ("Mamba1DecodeSession", "_Mamba2DecodeSession", "_Mamba3DecodeSession"):
+    for cls in ("Mamba1DecodeSession", "Mamba2DecodeSession", "Mamba3DecodeSession"):
         for method, operation in (("state", "session_state"), ("__enter__", "session_enter"),
                                   ("__exit__", "session_exit"), ("__del__", "session_drop")):
             _single_native_call(cls, method, operation)
-    for cls in ("_Mamba2DecodeSession", "_Mamba3DecodeSession"):
+    for cls in ("Mamba2DecodeSession", "Mamba3DecodeSession"):
         _single_native_call(cls, "step", "session_step_public")
+    for cls in ("Mamba1DecodeSession", "Mamba2DecodeSession", "Mamba3DecodeSession"):
+        _single_native_call(cls, "decode", "session_decode_public")
 
 
 def test_record_fields_are_admitted_before_attribute_access():
@@ -66,7 +68,7 @@ def test_mutable_state_buffers_have_retained_operation_snapshots():
 
 
 def test_session_reports_are_retained_before_returning_output():
-    body = NATIVE.split('if operation == "session_step_public":')[1].split('elif operation != "setstate":')[0]
+    body = NATIVE.split('if operation == "session_step_public" or operation == "session_decode_public":')[1].split('elif operation != "setstate":')[0]
     assert body.index('py_setitem(block_fields, "h_last_", result[1])') < body.index("return result[0]")
     for name in ("k_last_", "v_last_", "theta_last_"):
         assert f'py_setitem(block_fields, "{name}"' in body

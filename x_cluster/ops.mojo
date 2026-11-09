@@ -163,6 +163,15 @@ trait ClusterOps(Movable):
         """dst (na x nb) = the metric's distances (`bodies.pdist_cell`)."""
         ...
 
+    def spectral_discretize(
+        mut self, x: List[Float32], n: Int, k: Int, seed: UInt64, max_svd_restarts: Int, n_iter_max: Int,
+        mut n_iter: Int,
+    ) raises -> List[Int32]:
+        """SpectralClustering's discretize labels of the n x k embedding x in
+        float-float (x_cluster/spectral_df64.mojo): the device driver on the
+        GPU binding, its host column on the host binding; n_iter set."""
+        ...
+
     def fast_device(self) -> Bool:
         """True on the one column that takes the FAST device-round paths
         (lane cluster-apple3): the GPU binding built FAST. The host column
@@ -248,6 +257,22 @@ trait ClusterOps(Movable):
         (fam2-cluster)."""
         ...
 
+    def mb_wdraw(mut self, idx: Int, m: Int, cum: Int, n: Int, state: UInt64) raises:
+        """idx[t] = draw t + 1 of the splitmix64 stream whose state is
+        `state`, weighted: `common.weighted_draw` over the n ascending Float64
+        cumulative weights held as 2 n words in the int slot `cum`
+        (`minibatch_cells.mb_cum_word`), t < m (lane n3: the weighted batch
+        rows drawn where the data is; `minibatch_cells.mb_wdraw_cell`)."""
+        ...
+
+    def fold_sqdiff_at(
+        mut self, a: Int, a_off: Int, b: Int, b_off: Int, n: Int, dst: Int, off: Int, th: Int, tl: Int
+    ) raises:
+        """The float-float fold (FM_SQDIFF) of (a[a_off + t] - b[b_off + t])^2,
+        t < n, left in dst[off], dst[off + 1]; `th`, `tl` as `fold_at`
+        (lane n3: MiniBatchKMeans' squared center shift on the device)."""
+        ...
+
     def fold_at(mut self, a: Int, n: Int, mode: Int, dst: Int, off: Int, th: Int, tl: Int) raises:
         """`fold_into` of the one slot `a` (FM_VAL, FM_SQRT: the modes that
         read `a` alone) left in dst[off], dst[off + 1]; `th`, `tl` float
@@ -266,6 +291,13 @@ trait ClusterOps(Movable):
         """dst[t] = `bodies.sq_dist_rows` of row t of `a` to row lab[t] of
         `c` where j < 0 or lab[t] == j, else 0 (t < n; `lab` an int slot):
         each row's distance to its OWN center (fam2-cluster)."""
+        ...
+
+    def loop_check_every(self, n: Int, k: Int, d: Int) -> Int:
+        """EM iterations a device loop enqueues between two reads of its
+        stop word (lane n1-gmm-bgmm-loops): the GPU column's cost rule
+        (core/em_loop_chunk.mojo); the host column answers 1 (its read is a
+        pointer load, a chunk would only run discarded iterations)."""
         ...
 
     def agglo_on_device(self) -> Bool:

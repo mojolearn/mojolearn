@@ -4,7 +4,7 @@
 Host addresses in, host addresses out; the work is x_cnn/device.mojo. The CPU
 twin is bindings/_mojolearn_x_cnn_host.mojo, same names, same contract."""
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
-from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
+from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32, copy_f32
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
@@ -48,9 +48,6 @@ from x_cnn.device import (
     res_free,
     res_upload,
     res_download,
-    res_argmax,
-    res_gather,
-    res_gather_pair,
     opt_many_resident,
     gemm_m,
     conv2d_forward_m,
@@ -81,31 +78,21 @@ from x_cnn.device import perm_gather_device, vals_t_device
 from x_cnn.device import gcn_loops_device
 # lane fam-neural (2026-10-04): the `_m` forms of the entries that had none
 from x_cnn.device import idn_flags, adaptive_pool_m, graph_op_m, gcn_norm_m, pad2d_m, chan_copy_m
+from autograd.rules_graph import gcn_backward_autograd, sage_backward_autograd
 # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
 # Tried: the fused BatchNorm entries' imports.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
-# lane fam2-neural (2026-10-04): the device epoch (order, Adam scalars and losses on the device)
-from x_cnn.ops import idn2_flags, epoch_key, adam_hyper_base, AH_ROW, neural_tape_budget_bytes, neural_numerical_profile
-from x_cnn.device import (
-    epoch_rows_download, res_gather_pair_perm, adam_hyper_resident, adam_hyper_download, opt_many_resident_h,
-    softmax_xent_res_loss,
-)
-from x_cnn.device import cnn_ctx
-# the step backward on the tape (autograd/rules_cnn.mojo)
+from x_cnn.ops import idn2_flags, neural_tape_budget_bytes, neural_numerical_profile
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch; record in docs/TOMBSTONES.md.
-from autograd.rules_cnn import cnn_backward_autograd
-from core.device_zero import enqueue_fill
+# TOMBSTONE: autograd/rules_cnn.mojo and the device epoch imports (lane x8-cnn-on-executor) deleted 2026-11-09; code recoverable at f59d913b0b.
+# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 from std.memory import memcpy
 # The typed bodies (lane thin-trees-metrics, 2026-10-21), moved word for word
 # out of this shell.
 from x_cnn.device_entries_impl import (
     _device_int_check,
     csr_checked_device,
-    fit_epoch_r_device,
-    fit_epoch_d_device,
-    sgd_base_rows,
-    widen_f32_into,
 )
 
 
@@ -725,41 +712,12 @@ def res_upload_binding(h: PythonObject, src_addr: PythonObject, n: PythonObject)
     return PythonObject(nn)
 
 
-def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """Resident dst rows = resident src rows[r] (int32 host indices); params = [n, row words].
-    lane/cnn-apple2: dst and src may be two-handle LISTS with params = [n,
-    row words, row2 words] (the batch and its labels in one entry)."""
-    var n = Int(py=params[0])
-    if _is_list(dst):
-        if Int(py=len(dst)) != 2 or Int(py=len(src)) != 2 or Int(py=len(params)) != 3:
-            raise Error("x_cnn res_gather: the pair form is [dst, dst2], [src, src2], [n, row, row2]")
-        var d0 = Int(py=dst[0]); var d1 = Int(py=dst[1])
-        var s0 = Int(py=src[0]); var s1 = Int(py=src[1])
-        var r0 = Int(py=params[1]); var r1 = Int(py=params[2])
-        var rq = _ip(rows_addr)
-        with GILReleased(Python()):
-            res_gather_pair(d0, s0, r0, d1, s1, r1, rq, n)
-        return PythonObject(n)
-    var row = Int(py=params[1])
-    var d = Int(py=dst)
-    var sr = Int(py=src)
-    var rp = _ip(rows_addr)
-    with GILReleased(Python()):
-        res_gather(d, sr, rp, n, row)
-    return PythonObject(n)
+# TOMBSTONE: x_cnn_res_gather (the GPU entry; unused: no caller since lane x8, only python/mojolearn/tests/test_x_cnn_repeat.py) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/XCNN_RES_GATHER.patch
 
 
-def res_argmax_binding(h: PythonObject, dst_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """dst (int32, n) = each row's first largest column of the resident
-    n x k block h (params [n, k]), computed on the device; only the labels
-    come down (lane pyglue-numeric: the classifier's numpy argmax)."""
-    var n = Int(py=params[0])
-    var k = Int(py=params[1])
-    var hh = Int(py=h)
-    var dst = _ip(dst_addr)
-    with GILReleased(Python()):
-        res_argmax(hh, dst, n, k)
-    return PythonObject(n)
+# TOMBSTONE: x_cnn_res_argmax (CNNClassifier.predict's device argmax; the classifier predicts on the x_sequence program executor since lane x8) deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
+# Restore: git apply experiments/removed/X8B_XCNN_RES_ARGMAX.patch
 
 
 def res_download_binding(h: PythonObject, dst_addr: PythonObject, n: PythonObject) raises -> PythonObject:
@@ -1148,6 +1106,30 @@ def graph_op_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObj
     return PythonObject(n * F)
 
 
+def gcn_backward_t_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """GCNConv's backward on the tape in one call (autograd/rules_graph.mojo
+    `gcn_backward_autograd`): addrs = [g, x, h, out, W, gW, dx, dh, vals_t, csr_t, b, gb, ones];
+    params = [n, d, f, nnz, bias, dx resident, ones resident(, resident)] (an eighth word 0:
+    the host form, every address a host array)."""
+    var a = _addrs(addrs, 13)
+    var p = _addrs(params, Int(py=len(params)))
+    with GILReleased(Python()):
+        gcn_backward_autograd(a, p)
+    return PythonObject(p[0] * p[1])
+
+
+def sage_backward_t_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """SAGEConv's backward on the tape in one call (autograd/rules_graph.mojo
+    `sage_backward_autograd`): 23 addresses and params = [n, d, f, nnz, aggr, normalize, root,
+    dx resident] (the resident form), or 33 addresses and those plus [resident, project] (the
+    host form; autograd/graph_tape.mojo `sage_cfg`)."""
+    var a = _addrs(addrs, Int(py=len(addrs)))
+    var p = _addrs(params, Int(py=len(params)))
+    with GILReleased(Python()):
+        sage_backward_autograd(a, p)
+    return PythonObject(p[0] * p[1])
+
+
 def gcn_norm_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs = [w, vals, csr]; params = [n, F, nnz, mode] as `x_cnn_gcn_norm`'s."""
     var n = Int(py=params[0])
@@ -1205,101 +1187,8 @@ def chan_copy_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonOb
     return PythonObject(N * cg * HW)
 
 
-# ------------------------------------------------------------ the fit epoch
-# lane/py-misc (2026-09-28, audit rank 10): CNNClassifier.fit's steps looped
-# HERE instead of in Python. `x_cnn_fit_epoch_r` runs a run of trainer steps
-# on the resident arrays: per step the pair gather of the step's rows, each
-# block's resident forward, the head, the softmax, the head's backward, each
-# block's backward (last to first) and the list-form optimizer, which are
-# the very calls `_expansion_cnn.CNNClassifier.fit` makes one binding call
-# at a time (the same `_into[True]` functions, the same arguments, the same
-# order, each still ending in its own wait). The step's loss is written as
-# the Float64 of the Float32 the softmax entry returns, which is what the
-# Python loop stored. The optimizer's hyper rows (Adam's step scalars in
-# double, SGD's first-step flag) come from Python, computed as before. No
-# kernel, operand or order changes: the bits cannot move.
-
-
-def _epoch_plan(
-    obj: PythonObject, nb: Int, mut cs: List[List[List[Int32]]], mut ps: List[List[List[Int32]]],
-    mut pools: List[List[Bool]],
-) raises:
-    """Appends one plan: [[conv params, pool params] per block] -> the blocks' parameter blocks."""
-    if Int(py=len(obj)) != nb:
-        raise Error("x_cnn fit epoch: one [conv, pool] plan per block")
-    var c = List[List[Int32]]()
-    var p = List[List[Int32]]()
-    var o = List[Bool]()
-    for j in range(nb):  # small-loop(nb: conv blocks of the network): one plan entry per block, not data
-        var t = _block_prms(obj[j][0], obj[j][1])
-        c.append(t[0].copy())
-        p.append(t[1].copy())
-        o.append(t[2])
-    cs.append(c^)
-    ps.append(p^)
-    pools.append(o^)
-
-
-def fit_epoch_r_binding(
-    spec: PythonObject, rows_addr: PythonObject, hyper_addr: PythonObject, losses_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """params = [n, batch, adam (0/1)]: ceil(n / batch) steps over host int32
-    rows[0:n] (the epoch's order), step t on rows[t*batch : t*batch + m];
-    hyper = float64 rows of 9 (Adam) or 6 (SGD) per step; losses = float64 per
-    step. spec: blocks [[w, b, gw, gb, out, idx, gout, cols, conv out] per
-    block], head [w, b, gw, gb], a [x, y, logits, glog, proba, ghead], opt
-    [params, grads, buffers, counts], data [X, y, row words], dims [flat, k],
-    plan_full / plan_last [[conv params, pool params] per block] at the batch
-    and at the last step's rows."""
-    var n = Int(py=params[0])
-    var batch = Int(py=params[1])
-    var adam = Int(py=params[2]) != 0
-    if n <= 0 or batch <= 0:
-        raise Error("x_cnn fit epoch: positive rows and batch required")
-    var nh = 9 if adam else 6
-    var blocks = spec["blocks"]
-    var nb = Int(py=len(blocks))
-    var bh = List[List[Int]]()
-    for j in range(nb):  # small-loop(nb: conv blocks of the network): one handle list per block, not data
-        var h = _ints(blocks[j])
-        if len(h) != 9:
-            raise Error("x_cnn fit epoch: a block is [w, b, gw, gb, out, idx, gout, cols, conv out]")
-        bh.append(h^)
-    var head = _ints(spec["head"])
-    var a = _ints(spec["a"])
-    var data = _ints(spec["data"])
-    var dims = _ints(spec["dims"])
-    var opt = spec["opt"]
-    var t = _many(opt[0], opt[1], opt[2], opt[3])
-    # plan 0 at the batch, plan 1 at the last step's rows
-    var cs = List[List[List[Int32]]]()
-    var ps = List[List[List[Int32]]]()
-    var pools = List[List[Bool]]()
-    _epoch_plan(spec["plan_full"], nb, cs, ps, pools)
-    _epoch_plan(spec["plan_last"], nb, cs, ps, pools)
-    var flat = dims[0]
-    var k = dims[1]
-    var steps = (n + batch - 1) // batch
-    var rows = _ip(rows_addr)
-    var hyp = f64_ptr(Int(py=hyper_addr))
-    var losses = f64_ptr(Int(py=losses_addr))
-    with GILReleased(Python()):
-        fit_epoch_r_device(
-            n, batch, adam, nh, nb, steps, flat, k, bh, head, a, data, t, cs, ps, pools, rows, hyp, losses,
-        )
-    return PythonObject(steps)
-
-
-# ------------------------------------------------ lane fam2-neural: the device epoch
-# `x_cnn_fit_epoch_d` is `x_cnn_fit_epoch_r` with nothing computed on the
-# host and nothing crossing the bus inside the epoch: each step's rows come
-# from `epoch_rows_at` on the device (was the CPU's Fisher-Yates order,
-# uploaded per step), Adam's step scalars from `adam_hyper_at` into a
-# resident block (was `adam_hyper_f64` on the CPU, uploaded per step), and
-# each step's mean loss stays in a resident block (`blk_fold_at`; was n row
-# losses down per step and a host fold) that comes down once at the end.
-# The forward, backward and optimizer launches are the `_r` entry's.
+# TOMBSTONE: x_cnn_fit_epoch_r / x_cnn_fit_epoch_d / x_cnn_fit_d / x_cnn_predict_r / x_cnn_epoch_rows / x_cnn_adam_hyper_d (CNNClassifier's hand epoch and resident predict; the classifier is a captured program on the executor, sequence/cnn_classifier_program.mojo) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 
 
 def idn2_flags_binding() raises -> PythonObject:
@@ -1312,202 +1201,6 @@ def neural_tape_budget_binding() raises -> PythonObject:
 
 def neural_numerical_profile_binding() raises -> PythonObject:
     return PythonObject(neural_numerical_profile())
-
-
-def _seed64(lo: PythonObject, hi: PythonObject) raises -> UInt64:
-    return (UInt64(Int(py=hi)) << UInt64(32)) | UInt64(Int(py=lo))
-
-
-def epoch_rows_binding(dst_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """Host int32 dst[0:n] = epoch `epoch`'s row order. params = [n, epoch,
-    shuffle (0/1), seed low 32 bits, seed high 32 bits]."""
-    var n = Int(py=params[0])
-    if n < 1 or n >= 2147483647:
-        raise Error("x_cnn epoch rows: 1 <= n < 2^31 - 1")
-    var key = epoch_key(_seed64(params[3], params[4]), Int(py=params[1]))
-    var shuffle = Int(py=params[2]) != 0
-    var dst = _ip(dst_addr)
-    with GILReleased(Python()):
-        epoch_rows_download(dst, n, 0, n, shuffle, key)
-    return PythonObject(n)
-
-
-def _adam_base(fparams: PythonObject) raises -> List[Float32]:
-    if Int(py=len(fparams)) != 6:
-        raise Error("x_cnn adam hyper: fparams is [lr, beta1, beta2, eps, weight_decay, decoupled]")
-    return adam_hyper_base(
-        Float64(py=fparams[0]), Float64(py=fparams[1]), Float64(py=fparams[2]), Float64(py=fparams[3]),
-        Float64(py=fparams[4]), Float64(py=fparams[5]),
-    )
-
-
-def adam_hyper_d_binding(dst_addr: PythonObject, params: PythonObject, fparams: PythonObject) raises -> PythonObject:
-    """Host float64 dst[0 : 9 nsteps] = `adam_at`'s hyper blocks of 1-based
-    steps step0 .. step0 + nsteps - 1, computed on the device in float32
-    pairs (`adam_hyper_at`) and widened. params = [step0, nsteps]; fparams
-    = [lr, beta1, beta2, eps, weight_decay, decoupled]."""
-    var step0 = Int(py=params[0])
-    var nsteps = Int(py=params[1])
-    if step0 < 1 or nsteps < 0:
-        raise Error("x_cnn adam hyper: step0 >= 1, nsteps >= 0")
-    var base = _adam_base(fparams)
-    var out = List[Float32](length=nsteps * AH_ROW + 1, fill=Float32(0))
-    var po = out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    with GILReleased(Python()):
-        adam_hyper_download(base, step0, nsteps, po)
-    var dst = f64_ptr(Int(py=dst_addr))
-    widen_f32_into(dst, out, nsteps * AH_ROW)
-    _ = base^
-    _ = out^
-    return PythonObject(nsteps)
-
-
-def fit_epoch_d_binding(
-    spec: PythonObject, losses_addr: PythonObject, params: PythonObject, fparams: PythonObject,
-) raises -> PythonObject:
-    """params = [n, batch, adam (0/1), steps already taken, epoch, shuffle
-    (0/1), seed low 32 bits, seed high 32 bits]; fparams = Adam's [lr,
-    beta1, beta2, eps, weight_decay, decoupled] or SGD's [lr, momentum,
-    weight_decay, dampening, nesterov, 0]; losses = float64 per step; spec
-    as `x_cnn_fit_epoch_r`."""
-    return _fit_d_epochs(spec, losses_addr, params, fparams, 1)
-
-
-def fit_d_binding(
-    spec: PythonObject, losses_addr: PythonObject, params: PythonObject, fparams: PythonObject,
-) raises -> PythonObject:
-    """N099 (ne3-c-cnn, 2026-11-07): the whole device fit in one call.
-    params = `x_cnn_fit_epoch_d`'s eight words (the epoch word is the first
-    epoch) plus the epoch count; losses = float64 (epochs x steps), epoch e's
-    step losses at e * steps. The spec and both plans are parsed once; each
-    epoch is exactly `x_cnn_fit_epoch_d`'s epoch e (the same device function,
-    the same words, steps already taken = done + e * steps), so no bit
-    moves. Returns the steps per epoch."""
-    if Int(py=len(params)) != 9:
-        raise Error("x_cnn fit: params is the epoch entry's eight words and the epoch count")
-    var epochs = Int(py=params[8])
-    if epochs < 0:
-        raise Error("x_cnn fit: a nonnegative epoch count required")
-    return _fit_d_epochs(spec, losses_addr, params, fparams, epochs)
-
-
-def _fit_d_epochs(
-    spec: PythonObject, losses_addr: PythonObject, params: PythonObject, fparams: PythonObject, epochs: Int,
-) raises -> PythonObject:
-    """`epochs` device epochs from epoch params[4] on, the spec parsed once."""
-    var n = Int(py=params[0])
-    var batch = Int(py=params[1])
-    var adam = Int(py=params[2]) != 0
-    var done = Int(py=params[3])
-    var epoch = Int(py=params[4])
-    var shuffle = Int(py=params[5]) != 0
-    if n <= 0 or batch <= 0 or n >= 2147483647 or done < 0:
-        raise Error("x_cnn fit epoch: positive rows and batch required")
-    var seed = _seed64(params[6], params[7])
-    var blocks = spec["blocks"]
-    var nb = Int(py=len(blocks))
-    var bh = List[List[Int]]()
-    for j in range(nb):  # small-loop(nb: conv blocks of the network): one handle list per block, not data
-        var h = _ints(blocks[j])
-        if len(h) != 9:
-            raise Error("x_cnn fit epoch: a block is [w, b, gw, gb, out, idx, gout, cols, conv out]")
-        bh.append(h^)
-    var head = _ints(spec["head"])
-    var a = _ints(spec["a"])
-    var data = _ints(spec["data"])
-    var dims = _ints(spec["dims"])
-    var opt = spec["opt"]
-    var t = _many(opt[0], opt[1], opt[2], opt[3])
-    var cs = List[List[List[Int32]]]()
-    var ps = List[List[List[Int32]]]()
-    var pools = List[List[Bool]]()
-    _epoch_plan(spec["plan_full"], nb, cs, ps, pools)
-    _epoch_plan(spec["plan_last"], nb, cs, ps, pools)
-    var flat = dims[0]
-    var k = dims[1]
-    var steps = (n + batch - 1) // batch
-    var losses_base = Int(py=losses_addr)
-    for ep in range(epochs):  # driver-loop: over the fit's epochs (training structure, one device epoch each)
-        var key = epoch_key(seed, epoch + ep)
-        var losses = f64_ptr(losses_base + 8 * ep * steps)
-        # the hyper rows: Adam's from the device kernel; SGD's two rows (the
-        # first step's, flag 1, then every later step's), words only. Built
-        # per epoch exactly as the one-epoch entry builds them.
-        var base = List[Float32]()
-        if adam:
-            base = _adam_base(fparams)
-        else:
-            if Int(py=len(fparams)) != 6:
-                raise Error("x_cnn fit epoch: SGD's fparams is [lr, momentum, weight_decay, dampening, nesterov, 0]")
-            var f5 = List[Float64]()
-            for e in range(5):  # small-loop(the five sgd hyper words)
-                f5.append(Float64(py=fparams[e]))
-            sgd_base_rows(base, f5)
-        var l32 = List[Float32](length=steps, fill=Float32(0))
-        var taken = done + ep * steps
-        with GILReleased(Python()):
-            fit_epoch_d_device(
-                n, batch, adam, taken, nb, steps, flat, k, shuffle, key, bh, head, a, data, t, cs, ps, pools, base, l32,
-            )
-        widen_f32_into(losses, l32, steps)
-        _ = base^
-        _ = l32^
-    return PythonObject(steps)
-
-
-def predict_r_binding(
-    spec: PythonObject, x_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """N090 (ne3-c-cnn, 2026-11-07): the classifier's whole resident predict
-    in one call. params = [n, cap, row words, codes (0/1)]: n host float32
-    rows of `row` words at x, cap rows per chunk; out = int32 (n) class
-    indices (codes) or float32 (n, k) probabilities. spec: blocks [[w, b,
-    out, idx, saved] per block], head [w, b], a [x, y, logits, glog, proba]
-    (y holds -1 targets), dims [flat, k], plans [full, last] ([[conv
-    params, pool params] per block] at cap rows and at the last chunk's).
-    Per chunk exactly the launches the per-launch entries ran from Python
-    (`x_cnn_res_upload`, `x_cnn_conv_block_forward_r` per block,
-    `x_cnn_linear_forward_r`, `x_cnn_softmax_xent_r`, `x_cnn_res_argmax` or
-    `x_cnn_res_download`), the same functions with the same words in the
-    same order, so no bit moves; only the interpreter crossings are gone."""
-    if Int(py=len(params)) != 4:
-        raise Error("x_cnn predict: params is [n, cap, row, codes]")
-    var n = Int(py=params[0])
-    var cap = Int(py=params[1])
-    var row = Int(py=params[2])
-    var codes = Int(py=params[3]) != 0
-    if n < 0 or cap <= 0 or row <= 0:
-        raise Error("x_cnn predict: nonnegative rows, a positive chunk and row size required")
-    var blocks = spec["blocks"]
-    var head = spec["head"]
-    var a = spec["a"]
-    var dims = spec["dims"]
-    var plans = spec["plans"]
-    var nb = Int(py=len(blocks))
-    if Int(py=len(plans)) != 2 or Int(py=len(plans[0])) != nb or Int(py=len(plans[1])) != nb:
-        raise Error("x_cnn predict: plans is [full, last], one [conv, pool] pair per block")
-    var flat = Int(py=dims[0])
-    var k = Int(py=dims[1])
-    var x0 = Int(py=x_addr)
-    var o0 = Int(py=out_addr)
-    var s = 0
-    while s < n:  # driver-loop: over the prediction chunks (cap rows each)
-        var m = min(cap, n - s)
-        var plan = plans[0] if m == cap else plans[1]
-        _ = res_upload_binding(a[0], PythonObject(x0 + 4 * s * row), PythonObject(m * row))
-        var src = a[0]
-        for j in range(nb):  # driver-loop: one launch per conv block (model structure)
-            var bj = blocks[j]
-            _ = conv_block_forward_r_binding(src, bj[0], bj[1], bj[2], bj[3], plan[j][0], plan[j][1], bj[4])
-            src = bj[2]
-        _ = linear_forward_binding[True](src, head[0], head[1], a[2], Python.list(m, flat, k))
-        _ = softmax_xent_binding[True](a[2], a[1], a[3], a[4], Python.list(m, k))
-        if codes:
-            _ = res_argmax_binding(a[4], PythonObject(o0 + 4 * s), Python.list(m, k))
-        else:
-            _ = res_download_binding(a[4], PythonObject(o0 + 4 * s * k), PythonObject(m * k))
-        s += m
-    return PythonObject(n)
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -1559,16 +1252,14 @@ def build__mojolearn_x_cnn() -> PythonObject:
         m.def_function[res_free_binding]("x_cnn_res_free")
         m.def_function[res_upload_binding]("x_cnn_res_upload")
         m.def_function[res_download_binding]("x_cnn_res_download")
-        m.def_function[res_argmax_binding]("x_cnn_res_argmax")
+        # TOMBSTONE: x_cnn_res_argmax deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
         m.def_function[conv_block_forward_r_binding]("x_cnn_conv_block_forward_r")
         m.def_function[conv_block_backward_r_binding]("x_cnn_conv_block_backward_r")
-        m.def_function[res_gather_binding]("x_cnn_res_gather")
         m.def_function[linear_forward_binding[True]]("x_cnn_linear_forward_r")
         m.def_function[linear_backward_binding[True]]("x_cnn_linear_backward_r")
         m.def_function[softmax_xent_binding[True]]("x_cnn_softmax_xent_r")
         m.def_function[sgd_binding[True]]("x_cnn_sgd_r")
         m.def_function[adam_binding[True]]("x_cnn_adam_r")
-        m.def_function[fit_epoch_r_binding]("x_cnn_fit_epoch_r")
         m.def_function[gemm_m_binding]("x_cnn_gemm_m")
         m.def_function[conv2d_forward_m_binding]("x_cnn_conv2d_forward_m")
         m.def_function[conv2d_backward_m_binding]("x_cnn_conv2d_backward_m")
@@ -1594,17 +1285,14 @@ def build__mojolearn_x_cnn() -> PythonObject:
         m.def_function[idn2_flags_binding]("x_cnn_idn2_flags")
         m.def_function[neural_tape_budget_binding]("x_cnn_neural_tape_budget_bytes")
         m.def_function[neural_numerical_profile_binding]("x_cnn_numerical_profile")
-        m.def_function[epoch_rows_binding]("x_cnn_epoch_rows")
-        m.def_function[adam_hyper_d_binding]("x_cnn_adam_hyper_d")
-        m.def_function[fit_epoch_d_binding]("x_cnn_fit_epoch_d")
-        m.def_function[fit_d_binding]("x_cnn_fit_d")
-        m.def_function[predict_r_binding]("x_cnn_predict_r")
         m.def_function[adaptive_pool_m_binding]("x_cnn_adaptive_pool_m")
         m.def_function[graph_op_m_binding]("x_cnn_graph_op_m")
         m.def_function[gcn_norm_m_binding]("x_cnn_gcn_norm_m")
         m.def_function[pad2d_m_binding]("x_cnn_pad2d_m")
         m.def_function[chan_copy_m_binding]("x_cnn_chan_copy_m")
         m.def_function[spmm_m_binding]("x_cnn_spmm_m")
+        m.def_function[gcn_backward_t_binding]("x_cnn_gcn_backward_t")
+        m.def_function[sage_backward_t_binding]("x_cnn_sage_backward_t")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_cnn: ", e))

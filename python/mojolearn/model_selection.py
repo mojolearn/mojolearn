@@ -32,7 +32,7 @@ from . import _arena_io
 from ._array import Array
 from ._buffer import _materialize, _native, empty
 from ._arrays import _addr, _addr_ro
-from ._labels import is_bool, flatten_labels
+from ._labels import is_bool
 from . import _user_objects
 from ._mode import _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
 # The splitters' random draws (lane/metrics): a module-level import, so the
@@ -477,48 +477,8 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
                    _NATIVE_CONTEXT)
 
 
-def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
-    """Validate every fold before serial or GPU-worker fitting begins."""
-    if not isinstance(error_score, str) or error_score != 'raise':
-        raise NotImplementedError("cross_val_score supports error_score='raise' only")
-    if isinstance(scoring, str):
-        scoring = get_scorer(scoring)   # lane/metrics: scikit-learn's scorer names
-    if scoring is not None and not callable(scoring):
-        raise TypeError('scoring must be None, a scorer name or a callable')
-    X = _materialize(X, "X")[0]
-    if getattr(y, "ndim", 1) != 1:
-        raise ValueError("y must be 1-D and match X rows")
-    try:
-        y = _materialize(y, "y")[0]
-    except TypeError:
-        y = flatten_labels(y)
-    if X.ndim != 2 or not X.shape[0] or not X.shape[1]:
-        raise ValueError('X must be a nonempty dense 2-D buffer array')
-    if len(y) != len(X):
-        raise ValueError('y must be a 1-D buffer array matching X rows')
-    if groups is not None:
-        if getattr(groups, "ndim", 1) != 1 or len(groups) != len(X):
-            raise ValueError('groups must be 1-D and match X rows')
-    # CV_FAST_TRUST_FOLDS (FAST + Apple build of the resample binding,
-    # default ON since 2026-10-04, rollback -D MOJOLEARN_CV_FAST_TRUST_FOLDS_OFF;
-    # resample/estimator.mojo CV_FAST_TRUST_FOLDS): the
-    # native default folds (`fold_ids` + `select_fold_i64`) are a partition
-    # of the rows by construction, so `_indices`' range/duplicate pass and
-    # `_overlap` on every fold's two int64 arrays are skipped. A splitter,
-    # groups, a bool cv or the sabotage control: validated as before.
-    if _cv_fast_on(_CV_TRUST_FOLDS_BIT) and _native_default_cv(cv, groups):
-        # n_splits >= 2 is checked inside, so this is never empty.
-        return X, y, _native_default_folds(y, 5 if cv is None else cv, _classifier(estimator))
-    folds = []
-    for train, test in _folds(cv, estimator, X, y, groups):  # glue: one validated index pair per fold (n_splits sized)
-        train = _indices(train, len(X), 'train')
-        test = _indices(test, len(X), 'test')
-        if _overlap(train, test, len(X)):
-            raise ValueError('train and test indices overlap')
-        folds.append((train, test))
-    if not folds:
-        raise ValueError('cv must produce at least one fold')
-    return X, y, folds
+# TOMBSTONE: _prepare_folds (dead Python fold validation: cross_val_score runs family_msel_cross_val_score, bindings/msel_cv.mojo) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_python_loops.patch
 
 
 # ---------------------------------------------------------------------------
@@ -529,8 +489,6 @@ def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
 # tier and build.
 # ---------------------------------------------------------------------------
 
-_CV_TRUST_FOLDS_BIT = 64  # CV_FAST_TRUST_FOLDS (default; _OFF rolls back)
-
 
 def _cv_fast_defines():
     """The resample binding's FAST define mask (binding acquisition; 0 off
@@ -539,15 +497,8 @@ def _cv_fast_defines():
     return _resample.fast_defines()
 
 
-def _cv_fast_on(bit):
-    return bool(_cv_fast_defines() & bit)
-
-
-def _native_default_cv(cv, groups):
-    """Whether `_folds` takes `_native_default_folds` for this cv: the
-    default (None) or an integer, no groups, no sabotage control."""
-    return (groups is None and (cv is None or isinstance(cv, numbers.Integral))
-            and not is_bool(cv) and not _sabotage_requested())
+# TOMBSTONE: _cv_fast_on, _native_default_cv, _CV_TRUST_FOLDS_BIT (helpers of the deleted _prepare_folds; bindings/msel_cv.mojo msel_fast_on / msel_native_default_cv run them) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_python_loops.patch
 
 
 def _fit_score_fold(fitted, X_train, y_train, X_test, y_test, scoring):

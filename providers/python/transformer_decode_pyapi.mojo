@@ -19,7 +19,6 @@ from bindings.transformer_public_native import _transformer_fields, _transformer
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from providers.python.generation_metadata_pyapi import GenerationLayerSnapshot
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_module_fields
-from providers.python.transformer_resident_pyapi import transformer_resident_decode_handle, transformer_resident_decode_call_handle
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME
 from core.hostptr import f32_ptr
 from transformer.block_options import BlockOptions
@@ -41,9 +40,6 @@ struct TransformerDecodeHandle(Movable, Writable):
     var optional: List[List[Float32]]
     var k_cache: List[Float32]
     var v_cache: List[Float32]
-    # N186: the provider's native handle of `device`, resolved once at open
-    # (0 when no provider route). `device` retains its owner.
-    var native_handle: Int
     # N181: the compiled entries a step, state transfer or close calls,
     # resolved once at open by _TRANSFORMER_DECODE_* index (None when the
     # binding lacks one; the use raises the same refusal as before).
@@ -74,7 +70,6 @@ struct TransformerDecodeHandle(Movable, Writable):
         self.optional = List[List[Float32]]()
         self.k_cache = List[Float32]()
         self.v_cache = List[Float32]()
-        self.native_handle = 0
         self.entries = List[PythonObject]()
         self.block_generation = 0
         self.state_generation = 0
@@ -163,13 +158,16 @@ comptime _TRANSFORMER_DECODE_EXPORT = 3
 comptime _TRANSFORMER_DECODE_CLOSE = 4
 comptime _TRANSFORMER_DECODE_HOST_STEP = 5
 comptime _TRANSFORMER_DECODE_HOST_FORWARD = 6
+comptime _TRANSFORMER_DECODE_DECODE = 7
+comptime _TRANSFORMER_DECODE_HOST_DECODE = 8
 
 
 def _transformer_decode_entry_names() -> List[String]:
     # Indexed by the _TRANSFORMER_DECODE_* words above.
     return [String("transformer_decode_session_step"), String("transformer_decode_session_forward"),
             String("transformer_decode_session_load_state"), String("transformer_decode_session_export_state"),
-            String("transformer_decode_session_close"), String("transformer_decode_step"), String("transformer_forward")]
+            String("transformer_decode_session_close"), String("transformer_decode_step"), String("transformer_forward"),
+            String("transformer_decode_session_decode"), String("transformer_decode_steps")]
 
 
 def _transformer_decode_keep_entries(mut handle: TransformerDecodeHandle) raises:
@@ -179,7 +177,7 @@ def _transformer_decode_keep_entries(mut handle: TransformerDecodeHandle) raises
     var function_type = py_type(native_loaded_module("builtins").len)
     var names = _transformer_decode_entry_names()
     handle.entries.clear()
-    for name in names:  # small-loop(seven fixed decode entry names)
+    for name in names:  # small-loop(nine fixed decode entry names)
         var entry = py_get(handle.binding, PythonObject(name))
         handle.entries.append(entry if py_type(entry) is function_type else PythonObject(None))
 
@@ -556,15 +554,12 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
             if i != 1:
                 open_p.append(p[i])
         handle.device = _transformer_decode_entry(binding, "transformer_decode_session_create")()
-        if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1" and String(fields["numeric_mode"]) == "identical":
-            handle.provider = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
-                _transformer_decode_entry(binding, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
-            handle.native_handle = transformer_resident_decode_handle(handle.provider, handle.device)
-            cached = transformer_resident_decode_call_handle(handle.provider, handle.device, handle.native_handle,
-                19 if packed else 18, a, open_p)
-        else:
-            cached = Int(py=py_call(_transformer_decode_entry(binding, "transformer_decode_session_open_int15" if packed else "transformer_decode_session_open"),
-                handle.device, py_ints(a), py_ints(open_p)))
+        # TOMBSTONE: TransformerDecodeHandle.native_handle (the public decode session's descriptor-provider arm under MOJOLEARN_NEURAL_NATIVE_DISPATCH, SUPERSEDED by the step-op session) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
+        # Restore: git apply experiments/removed/TRANSFORMER_DECODE_PROVIDER_ARM.patch
+        # One device open: a float32 session runs on the attention step op
+        # (`transformer_decode_session_open_step_op`); fixed15_v1 keeps its planes.
+        cached = Int(py=py_call(_transformer_decode_entry(binding, "transformer_decode_session_open_int15" if packed else "transformer_decode_session_open_step_op"),
+            handle.device, py_ints(a), py_ints(open_p)))
     else:
         if getenv("MOJOLEARN_NEURAL_NATIVE_DISPATCH", "0") == "1":
             handle.provider = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
@@ -594,6 +589,12 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
 
 
 def transformer_decode_run(session: PythonObject, input: PythonObject, step: Bool, context: PythonObject) raises -> PythonObject:
+    return transformer_decode_run(session, input, step, False, context)
+
+
+def transformer_decode_run(session: PythonObject, input: PythonObject, step: Bool, decode: Bool, context: PythonObject) raises -> PythonObject:
+    # `decode` (D2): x is (B, N, d_model) and the N tokens run as N steps in
+    # one call; `step` is the one-token case, neither is a forward of L tokens.
     var hobj = _transformer_decode_owner(session, context)
     var h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
     if not h[].open:
@@ -629,14 +630,15 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
     var live = h[].live_state
     var cached = Int(py=live["cached_tokens"]) if kept else Int(py=slots["cached_tokens"])
     h = hobj.downcast_value_ptr[TransformerDecodeHandle]()
-    if h[].device is not None:
+    if h[].device is not None and decode:
+        # The provider descriptor wraps the same session object; the decode
+        # entry is called on it directly.
+        cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_DECODE),
+            h[].device, py_ints([px, py]), py_ints([length, cached])))
+    elif h[].device is not None:
         var p: List[Int] = [cached] if step else [length, cached]
-        if h[].provider is not None:
-            cached = transformer_resident_decode_call_handle(h[].provider, h[].device, h[].native_handle,
-                20 if step else 21, [px, py], p)
-        else:
-            cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_STEP if step else _TRANSFORMER_DECODE_FORWARD),
-                h[].device, py_ints([px, py]), py_ints(p)))
+        cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_STEP if step else _TRANSFORMER_DECODE_FORWARD),
+            h[].device, py_ints([px, py]), py_ints(p)))
     else:
         var a: List[Int] = [px]
         for i in range(len(h[].weights)):  # driver-loop: native session-owned weight addresses
@@ -651,7 +653,11 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
             p = _transformer_decode_params(fields, slots, batch, length)
         for i in range(len(h[].optional)):  # driver-loop: native optional-weight address slots
             a.append(0 if len(h[].optional[i]) == 0 else Int(h[].optional[i].unsafe_ptr()))
-        if h[].provider is not None:
+        if decode:
+            # TOMBSTONE: _transformer_decode_host_tokens (the door's per-token loop of host step calls, SUPERSEDED by transformer_decode_steps) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
+            # Restore: git apply experiments/removed/TRANSFORMER_DECODE_HOST_TOKEN_LOOP.patch
+            cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_HOST_DECODE), py_ints(a), py_ints(p)))
+        elif h[].provider is not None:
             cached = neural_descriptor_execute(h[].provider, 33, a, p, [])
         else:
             if step:
@@ -698,10 +704,7 @@ def transformer_decode_state(session: PythonObject, load: Bool, context: PythonO
     if h[].device is not None:
         var a: List[Int] = [pieces[0], pieces[1]]
         var p: List[Int] = [cached] if load else []
-        if h[].provider is not None:
-            cached = transformer_resident_decode_call_handle(h[].provider, h[].device, h[].native_handle,
-                23 if load else 22, a, p)
-        elif load:
+        if load:
             cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_LOAD), h[].device, py_ints(a), py_ints(p)))
         else:
             cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_EXPORT), h[].device, py_ints(a)))
@@ -738,10 +741,7 @@ def transformer_decode_release(session: PythonObject, context: PythonObject) rai
     h[].open = False
     py_setitem(state_fields, "_resident_session", PythonObject(None))
     if h[].device is not None:
-        if h[].provider is not None:
-            _ = transformer_resident_decode_call_handle(h[].provider, h[].device, h[].native_handle, 24, [], [])
-        else:
-            _ = py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_CLOSE), h[].device)
+        _ = py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_CLOSE), h[].device)
     h[].weights.clear(); h[].optional.clear(); h[].k_cache.clear(); h[].v_cache.clear()
 
 
@@ -758,6 +758,8 @@ def transformer_decode_native_call(operation: String, values: PythonObject, cont
         return transformer_decode_init(session, values[1], values[2], context)
     if operation == "step" or operation == "forward":
         return transformer_decode_run(session, values[1], operation == "step", context)
+    if operation == "decode":
+        return transformer_decode_run(session, values[1], False, True, context)
     if operation == "sync" or operation == "load":
         return transformer_decode_state(session, operation == "load", context)
     if operation == "state":

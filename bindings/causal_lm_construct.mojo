@@ -22,7 +22,7 @@ from bindings.causal_model_config import config_load_binding, model_plan_for_bin
 from bindings.causal_checkpoint import checkpoint_array, checkpoint_zeros, checkpoint_open_binding, checkpoint_index_binding, checkpoint_read_binding, checkpoint_close_binding, _info_snapshot
 from bindings.native_json import native_path, native_path_exists
 from bindings.mode_metadata_native import _fields, _class_fields
-from bindings.neural_block_admission import neural_block_f32, neural_array_snapshot, neural_array_slots, neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys, neural_metadata_snapshot, neural_model_weights, neural_block_fields, neural_block_weight_names
+from bindings.neural_block_admission import admit_block_f32, BLOCK_OPERATION, neural_array_snapshot, neural_array_slots, neural_record_fields, neural_native_scalar, neural_plain_value, neural_string_keys, neural_metadata_snapshot, neural_model_weights, neural_block_fields, neural_block_weight_names
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from core.native_descriptor_abi import MAMBA_STATE_ABI_NAME
 from providers.python.neural_descriptor_pyapi import neural_descriptor_cached
@@ -54,7 +54,7 @@ def _model_dtype_refusal(name: String, code: String) -> String:
 def _model_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     # Shared native admission captures the original Array slots/export once,
     # retains their owner and preserves C-view versus F/foreign-copy behavior.
-    return neural_block_f32(value, name, context)
+    return admit_block_f32(value, name, context, BLOCK_OPERATION)
 
 
 def _model_native_buffer(mut mods: NativeModules, value: PythonObject, code: String, context: PythonObject) raises -> PythonObject:

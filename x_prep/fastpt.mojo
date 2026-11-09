@@ -7,7 +7,8 @@ _OFF since lane/apple-fast-batchv; docs/apple-fast/ab/ptimpute.md):
 
   (-D MOJOLEARN_PT_FOLD_NOX, pt_fold_fast_kernel reading X only at K = 0,
    was deleted 2026-10-09: DROP; see the TOMBSTONE below.)
-  -D MOJOLEARN_PT_COLBATCH        the (pt_map, pt_fold) pair as `pt_tile_kernel`
+  PT_COLBATCH (no define of its own since 2026-11-08; on with PT_SCORE)
+                                  the (pt_map, pt_fold) pair as `pt_tile_kernel`
                                   + `pt_tile_finish_kernel`: no T block, no LG
                                   block, one coalesced read of X per evaluation.
   (-D MOJOLEARN_PT_SPEC, COLBATCH's kernel over the speculated search, was
@@ -76,7 +77,10 @@ comptime PT_SCORE = _FAST_APPLE and (is_defined["MOJOLEARN_PT_SCORE"]() or PT_SC
 # COLBATCH + FUSED_TRANSFORM + SI_ONEPASS: 2262 -> 425 / 305 -> 54.5 ms.
 # M2 quality attributes the 9.5e-3 relative lambda shift to COLBATCH;
 # SI alone keeps lambdas exact. See docs/apple-fast/EXPERIMENTS.md.
-comptime PT_COLBATCH = _FAST_APPLE and (is_defined["MOJOLEARN_PT_COLBATCH"]() or PT_SCORE)
+# TOMBSTONE: MOJOLEARN_PT_COLBATCH (DROP quality: the opt-in name alone; its kernels stay as the PT_SCORE default path)
+# deleted 2026-11-08 by 4da10a301b; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_PT_COLBATCH.patch
+comptime PT_COLBATCH = _FAST_APPLE and PT_SCORE
 # TOMBSTONE: MOJOLEARN_PT_FUSED_TRANSFORM (DROP quality, with COLBATCH: batchv-pt-nospec-* lambda shift 9.5e-3; never A/B-ed
 # alone; off under the default PT_SCORE_STABLE) deleted 2026-10-09 on lane/owed-deletions-D2; code recoverable at
 # b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PT_FUSED_TRANSFORM.patch

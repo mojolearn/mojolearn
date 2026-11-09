@@ -20,7 +20,7 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.host_logistic_native import host_logistic_classes
 from core.scaler_fit_impl import scaler_cast
 from core.host_inference_impl import host_inference_finite, host_inference_raw_finite
-from core.classical_arrays_impl import classical_check_weights
+from core.admitted_input import admitted_check_weights_f32
 from core.host_sparse_impl import host_sparse_uint64_bound
 
 
@@ -246,7 +246,7 @@ def _kde_weights(source: PythonObject, rows: Int, context: PythonObject) raises 
         host_inference_finite(Int(py=classical_address(converted)), 1 if scalar else rows)
     except:
         raise Error("Input sample_weight contains NaN or infinity.")
-    var positive = classical_check_weights(
+    var positive = admitted_check_weights_f32(
         MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(converted))),
         MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))), rows, scalar)
     if not positive:

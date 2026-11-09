@@ -34,6 +34,7 @@ from std.math import isfinite
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.admitted_family import admit_family, admit_family_meta, admit_family_owned
 from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _fields
@@ -49,14 +50,16 @@ from providers.python.array_metadata_pyapi import ArrayMetadata
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute
 from bindings.family_common import (
     FAMILY_F32P, family_repr, family_str, family_is_str, family_isinstance, family_call, family_array,
-    family_as_f32, family_as_f32_dense, family_owned, family_field,
-    family_f32_snapshot, family_owned_snapshot, family_snapshot_min,
+    family_field, family_snapshot_min,
 )
 from bindings.classical_labels import (
-    LabelsView, labels_view, labels_check_rank, labels_cast, labels_all_finite, labels_helper,
-    labels_encode_labels, labels_shape_of, labels_reshape, classical_decode_labels, classical_accuracy,
-    _native_labels,
+    labels_cast, labels_reduce_stat, labels_prepare_targets,
+    classical_encode_labels, labels_shape_of, labels_reshape, classical_decode_labels, classical_accuracy,
+    classical_encode_words,
 )
+from bindings.admitted_input import admit_c_view, admitted_dtype, admitted_finite_refuse, admitted_finite_wording
+from bindings.device_rows_door import door_is_device_rows
+from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64, host_finite_status
 from bindings.mcls_common import mc_is_integer_labels, mc_dtype_name
 from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.host_archive_native import host_archive_rbc_metric_object
@@ -286,8 +289,7 @@ def _class_name(model: PythonObject) raises -> String:
 def _reduce(addr: Int, code: Int, count: Int, what: Int, context: PythonObject) raises -> PythonObject:
     """`Array.min()` / `max()` / the integral test: the core helper
     `reduce_stat` over a contiguous block of `count` elements."""
-    return family_call(labels_helper(context, "reduce_stat"), PythonObject(addr), PythonObject(code),
-                       PythonObject(count), PythonObject(what))
+    return labels_reduce_stat(context, addr, code, count, what)
 
 
 def knn_door(binding: PythonObject, name: String) raises -> PythonObject:
@@ -365,11 +367,60 @@ def knn_release(model: PythonObject) raises:
         pass
 
 
+# ------------------------------------------------------------------ finite
+#
+# Lane a7b-device-x-neighbors (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md
+# section 3.2 step 3): the k-NN doors admit a borrowed float32 X with NO host
+# scan (`defer_finite`). The GPU entries test the words they upload anyway and
+# return the status word: the fit index behind `knn_index_prepare`'s one
+# upload, the queries behind the resident search/classify/regress upload,
+# both behind `radius_neighbors_count`'s (core/admitted_finite_status.mojo).
+# A cast X is refused by its cast and a model-selection fold by its gather.
+# The CPU column (a binding without `knn_index_prepare`) and the RBC search
+# (host addresses) keep one parallel host scan (`knn_host_finite`). Every
+# refusal is `admitted_finite_refuse`'s wording. Before this lane the k-NN
+# doors did not refuse a NaN X at all (behaviour: now refused, as
+# scikit-learn does).
+
+
+def knn_admit_x(source: PythonObject, model: PythonObject, context: PythonObject) raises -> ArrayMetadata:
+    """A k-NN door's X (the fit index or the queries): dense float32 C
+    order, borrowed when it already is; a cast or a fold refused in
+    `admitted_finite_wording`, a borrowed X left to the entry's status word."""
+    return admit_family_meta(source, 2, "X", context, True, True, False, False,
+                             admitted_finite_wording(_class_name(model), "X"), True)
+
+
+def knn_x_tested(x: ArrayMetadata, source: PythonObject, context: PythonObject) raises -> Bool:
+    """True when admission already tested X: a cast copy or a gathered fold."""
+    return x.copied or door_is_device_rows(source, context)
+
+
+def knn_device_tests(binding: PythonObject) raises -> Bool:
+    """True when the binding's entries return the finite status word (the
+    GPU binding: it has the resident index entries)."""
+    return knn_door(binding, "knn_index_prepare") is not None
+
+
+def knn_host_finite(model: PythonObject, x: ArrayMetadata) raises:
+    """The CPU column's (and RBC's) finite test of a borrowed X: one
+    parallel SIMD scan (core/host_finite_scan.mojo)."""
+    # parallel: host_finite_status splits the words across the host's cores
+    admitted_finite_refuse(Int(host_finite_status(x.source.addr, x.count)), _class_name(model))
+
+
+def knn_with_status(dist: PythonObject, status: List[Int32]) raises -> PythonObject:
+    """`dist` (`_dist_params`) with the status word's host address as its
+    fourth value (bindings/_mojolearn.mojo `_dist_status`)."""
+    return Python.list(dist[0], dist[1], dist[2], PythonObject(Int(status.unsafe_ptr())))
+
+
 def _resident_handle(model: PythonObject, binding: PythonObject, idx: PythonObject) raises -> PythonObject:
     """`NearestNeighbors._resident_index_handle(binding, idx)`: the handle of
     the device-resident copy of `idx`, prepared on the first call and reused
     while the index keeps its address and shape; None where the binding has
-    no `knn_index_prepare`."""
+    no `knn_index_prepare`. The prepare tests the index behind its upload
+    (lane a7b): a non-finite index is refused and nothing is held."""
     var b = _b()
     var prepare = knn_door(binding, "knn_index_prepare")
     if prepare is None:
@@ -397,10 +448,14 @@ def _resident_handle(model: PythonObject, binding: PythonObject, idx: PythonObje
         return cached[1]
     if cached is not None:
         knn_release(model)
+    var status = List[Int32](length=1, fill=Int32(0))
     var handle = family_call(b.int, family_call(prepare, key[0],
                                                 Python.list(family_call(b.int, idx.shape[0]),
-                                                            family_call(b.int, idx.shape[1]))))
+                                                            family_call(b.int, idx.shape[1]),
+                                                            PythonObject(Int(status.unsafe_ptr())))))
     _ = idx  # keep the Python object alive through the native call above
+    admitted_finite_refuse(Int(status[0]), _class_name(model))
+    _ = status^
     # The minting binding travels with the handle: the release (here, and
     # the native finalizer when the instance is dropped) is its own
     # `knn_index_release`.
@@ -611,16 +666,19 @@ def _check_metric_input(cls_name: String, value: Int, x: PythonObject, context: 
     # public operation snapshot. Keep that internal ABI while their owner
     # migrates; plain operations above consume the retained snapshot directly.
     if value == _DIST_JS:
-        var snapshot = family_f32_snapshot(x, 2, "X", context)
+        var snapshot = admit_family_meta(x, 2, "X", context)
         _check_metric_input(cls_name, value, snapshot)
 
 
 # ------------------------------------------------------------------ fit
 
 
-def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject) raises:
+def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject,
+            binding: PythonObject) raises:
     """`NearestNeighbors.fit(X)`: the refusals, the release of the last
-    fit's device index, then the float32 points held on the instance."""
+    fit's device index, then the float32 points held on the instance.
+    `binding`: the search binding the index is prepared on (None: the
+    model's `_mojolearn` binding, the one its queries resolve)."""
     var fields = py_fields(model)
     var cls_name = _class_name(model)
     _check_refusals(model, context)
@@ -634,13 +692,23 @@ def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject) 
     # 0.8.66 regression C3 (knn fit 8.5x on istella): 0.8.55 and
     # scikit-learn's brute NearestNeighbors keep the caller's block; the
     # zero-filled copy is gone.
-    var input = family_f32_snapshot(x_source, 2, "X", context, True)
+    var input = knn_admit_x(x_source, model, context)
     var idx: PythonObject
     if input.f32_c() and not input.copied:
         idx = input.keep
     else:
-        idx = family_owned_snapshot(input, context)
-    if not _eq(family_field(fields, "algorithm"), PythonObject("rbc")):
+        idx = admit_family_owned(input, context)
+    var rbc = _eq(family_field(fields, "algorithm"), PythonObject("rbc"))
+    if not knn_x_tested(input, x_source, context):
+        # Lane a7b: the fit's finite test. On the GPU binding the index is
+        # uploaded here once (the resident copy every query searches) and
+        # tested behind that upload; the CPU column and RBC scan on the host.
+        var search = binding if binding is not None else estimator_binding(model, "_mojolearn", context)
+        if not rbc and knn_device_tests(search):
+            _ = _resident_handle(model, search, idx)
+        else:
+            knn_host_finite(model, input)
+    if not rbc:
         var resolved = knn_resolve_metric(cls_name, family_field(fields, "metric"), family_field(fields, "p"), context)
         _check_metric_input(cls_name, Int(py=resolved[0]), input)
     py_setitem(fields, "_index", idx)
@@ -694,27 +762,29 @@ def _whole_float_labels(y: PythonObject, context: PythonObject) raises -> Bool:
     `prepare_targets` found (`_all_finite`, then `_integral`)."""
     if not _is_float_buffer(y, context):
         return False
-    var finite_view = labels_view(y, "X", context)
-    if finite_view.typestr == "<f4" or finite_view.typestr == "<f8":
-        var finite = labels_all_finite(finite_view.addr, finite_view.size(), finite_view.typestr == "<f8", context)
-        _ = finite_view  # keep the Python object alive through the native call above
-        if not finite:
+    # The labels in their own dtype, C order (bindings/admitted_input.mojo
+    # admit_c_view; lane a1b: was two labels_view reads of the same y).
+    var view = admit_c_view(y, "y", context)
+    var typestr = admitted_dtype(view, context)
+    var n = Int(py=view.size)
+    var addr = Int(py=classical_address(view))
+    if typestr == "<f4" or typestr == "<f8":
+        var finite = (host_all_finite_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr), n)
+                      if typestr == "<f8" else
+                      host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr), n))
+        if n > 0 and not finite:
             return False
-    _ = finite_view^
-    var view = labels_view(y, "y", context)
-    var n = view.size()
     var big = 0
-    for k in range(view.ndim()):  # driver-loop: over array rank metadata
-        if view.shape[k] > big:
-            big = view.shape[k]
-    if (view.typestr != "<f4" and view.typestr != "<f8") or n == 0 or n != big:
+    for k in range(Int(py=view.ndim)):  # driver-loop: over array rank metadata
+        if Int(py=view.shape[k]) > big:
+            big = Int(py=view.shape[k])
+    if (typestr != "<f4" and typestr != "<f8") or n == 0 or n != big:
         return True
     var classes_store = family_array(Python.tuple(n), "<f8", context)
     var codes = family_array(Python.tuple(n), "<i4", context)
-    var n_distinct = Int(py=family_call(labels_helper(context, "prepare_targets"), PythonObject(view.addr),
-                               PythonObject(_CODE_F32 if view.typestr == "<f4" else _CODE_F64), PythonObject(n),
-                               classical_address(classes_store), classical_address(codes),
-                               PythonObject(0), PythonObject(0), PythonObject(0)))
+    var n_distinct = labels_prepare_targets(context, addr, _CODE_F32 if typestr == "<f4" else _CODE_F64, n,
+                                            Int(py=classical_address(classes_store)), Int(py=classical_address(codes)),
+                                            0, 0, 0)
     _ = view  # keep the Python object alive through the native call above
     _ = codes  # keep the Python object alive through the native call above
     var integral = _truth(_reduce(Int(py=classical_address(classes_store)), _CODE_F64, n_distinct, _REDUCE_INTEGRAL, context))
@@ -725,12 +795,8 @@ def _whole_float_labels(y: PythonObject, context: PythonObject) raises -> Bool:
 def _encode_column(y_cols: PythonObject, row: Int, n: Int, context: PythonObject) raises -> PythonObject:
     """`encode_labels(y_cols[row])[0]`: the sorted classes of one int32
     label column (the native encoder over the row of the column block)."""
-    var shape = List[Int]()
-    shape.append(n)
-    var strides = List[Int]()
-    strides.append(4)
-    var view = LabelsView(y_cols, Int(py=classical_address(y_cols)) + 4 * row * n, shape^, strides^, "<i4", 4)
-    var labels = _native_labels(view, False, context)
+    var labels = classical_encode_words(y_cols, Int(py=classical_address(y_cols)) + 4 * row * n, n, "<i4", False,
+                                        context)
     _ = y_cols  # keep the Python object alive through the native call above
     return labels.classes
 
@@ -740,7 +806,7 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     (POLICY 6: `n_outputs` contiguous columns) and the classes per column."""
     var b = _b()
     var xn = args[0]
-    _nn_fit(model, args[1], context)
+    _nn_fit(model, args[1], context, PythonObject(None))
     var fields = py_fields(model)
     var y = args[2]
     var shape = _y_shape(y, fields, context)
@@ -749,7 +815,7 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     if len(shape) == 1 and not mc_is_integer_labels(y, context) and not _whole_float_labels(y, context):
         # Labels of any other kind (str labels) vote as their dense codes in
         # `classes_` order; `predict` decodes the voted codes.
-        var encoded = labels_encode_labels(y, context)
+        var encoded = classical_encode_labels(y, context)
         var names = encoded.classes
         for i in range(len(names)):  # driver-loop: over kind test of the class labels (classes-sized: distinct classes)
             if not family_is_str(names[i]):
@@ -764,15 +830,17 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                     + "your labels")
     # `as_i64_c(y, ndim=len(shape), name="y")`: the labels as int64 in the
     # view's storage order (the input itself when it already is int64).
-    var view = labels_view(y, "y", context)
-    labels_check_rank(view, len(shape), "y")
-    var count = view.size()
+    var view = admit_c_view(y, "y", context)
+    if Int(py=view.ndim) != len(shape):
+        raise Error("mojolearn: y must be " + String(len(shape)) + "-D, got " + String(Int(py=view.ndim)) + "-D")
+    var count = Int(py=view.size)
+    var y_typestr = admitted_dtype(view, context)
     var wide = PythonObject(None)
-    var wide_addr = view.addr
-    if view.typestr != "<i8":
+    var wide_addr = Int(py=classical_address(view))
+    if y_typestr != "<i8":
         wide = family_array(Python.tuple(count), "<i8", context)
         wide_addr = Int(py=classical_address(wide))
-        labels_cast(view.addr, view.typestr, wide_addr, "<i8", count, context)
+        labels_cast(Int(py=classical_address(view)), y_typestr, wide_addr, "<i8", count, context)
         _ = wide  # keep the Python object alive through the native call above
     _ = view  # keep the Python object alive through the native call above
     var low = _reduce(wide_addr, _CODE_I64, count, _REDUCE_MIN, context)
@@ -798,31 +866,23 @@ def _clf_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         _ = wide  # keep the Python object alive through the native call above
         _ = view  # keep the Python object alive through the native call above
         py_setitem(fields, "_y_cols", labels_reshape(y32, Python.tuple(1, n), context))
-        py_setitem(fields, "_classes_list", Python.list(labels_encode_labels(y32, context).classes))
+        py_setitem(fields, "_classes_list", Python.list(classical_encode_labels(y32, context).classes))
         return
     var yc = family_array(Python.tuple(n_out, n), "<i4", context)
-    if view.c_order():
-        # The narrowing is a C-level copy (exact after the range check) and
-        # the transpose a device op (`xn_p2m_transpose_i`; the host binding's
-        # same op on a CPU-only install).
-        var y32 = family_array(Python.tuple(n, n_out), "<i4", context)
-        labels_cast(wide_addr, "<i8", Int(py=classical_address(y32)), "<i4", count, context)
+    # admit_c_view hands the labels in C order (an F-ordered y is one
+    # C-order copy), so the narrowing is a C-level copy (exact after the
+    # range check) and the transpose a device op (`xn_p2m_transpose_i`; the
+    # host binding's same op on a CPU-only install). Integers: the same
+    # column words as the former storage-order narrowing of an F-ordered y.
+    var y32 = family_array(Python.tuple(n, n_out), "<i4", context)
+    labels_cast(wide_addr, "<i8", Int(py=classical_address(y32)), "<i4", count, context)
+    _ = wide  # keep the Python object alive through the native call above
+    _ = view  # keep the Python object alive through the native call above
+    if n:
+        xn_execute(xn, "p2m_transpose_i", Python.list(classical_address(y32), classical_address(yc)),
+                   Python.list(PythonObject(n), PythonObject(n_out)), Python.list())
         _ = y32  # keep the Python object alive through the native call above
-        _ = wide  # keep the Python object alive through the native call above
-        _ = view  # keep the Python object alive through the native call above
-        if n:
-            xn_execute(xn, "p2m_transpose_i", Python.list(classical_address(y32), classical_address(yc)),
-                       Python.list(PythonObject(n), PythonObject(n_out)), Python.list())
-            _ = y32  # keep the Python object alive through the native call above
-            _ = yc  # keep the Python object alive through the native call above
-    else:
-        # A column-major y already stores the `n_outputs` contiguous columns:
-        # its narrowing in storage order IS the column block the transpose of
-        # its C-order copy produced (integers, so the same words).
-        labels_cast(wide_addr, "<i8", Int(py=classical_address(yc)), "<i4", count, context)
         _ = yc  # keep the Python object alive through the native call above
-        _ = wide  # keep the Python object alive through the native call above
-        _ = view  # keep the Python object alive through the native call above
     py_setitem(fields, "_y_cols", yc)
     var classes = Python.list()
     for j in range(n_out):  # driver-loop: over output columns, one native encoding each
@@ -835,9 +895,9 @@ def _reg_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     columns (POLICY 6)."""
     var b = _b()
     var xn = args[0]
-    _nn_fit(model, args[1], context)
+    _nn_fit(model, args[1], context, PythonObject(None))
     var fields = py_fields(model)
-    var target = family_f32_snapshot(args[2], -1, "y", context)
+    var target = admit_family_meta(args[2], -1, "y", context)
     var shape = target.shape.copy()
     if len(shape) != 1 and len(shape) != 2:
         raise Error("mojolearn: y must be 1-D or 2-D, got " + String(len(shape)) + "-D")
@@ -849,7 +909,7 @@ def _reg_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var n_out = 1 if len(shape) == 1 else shape[1]
     if n_out == 1:
         # One column IS one contiguous row of the transposed layout.
-        py_setitem(fields, "_y_cols", labels_reshape(family_owned_snapshot(target, context), Python.tuple(1, n), context))
+        py_setitem(fields, "_y_cols", labels_reshape(admit_family_owned(target, context), Python.tuple(1, n), context))
     else:
         # The transpose on the device (`xn_p2m_transpose`; the host binding's
         # same op on a CPU-only install).
@@ -876,7 +936,7 @@ def _queries(model: PythonObject, x_source: PythonObject, mut dist: PythonObject
     if (py_get(fields, PythonObject("_index"), PythonObject(None)) is None
             or py_get(fields, PythonObject("_y_cols"), PythonObject(None)) is None):
         raise Error("mojolearn: call fit before predict")
-    var q = family_f32_snapshot(x_source, 2, "X", context, True)
+    var q = knn_admit_x(x_source, model, context)
     dist = _dist_params(model, context)
     _check_metric_input(_class_name(model), Int(py=dist[0]), q)
     var features = family_field(fields, "n_features_in_")
@@ -930,17 +990,25 @@ def _classify(model: PythonObject, binding: PythonObject, x_source: PythonObject
                              PythonObject(n_out), PythonObject(1 if want_proba else 0))
     _ = py_call(params.extend, n_classes)
     var used: PythonObject
+    var tested = knn_x_tested(query, x_source, context)
+    var status = List[Int32](length=1, fill=Int32(0))
     if handle is not None:
         # The handle rides at the front of `params`: a binding takes at most
         # eight arguments and the classifier uses all eight.
         var front = Python.list(handle)
         _ = py_call(front.extend, params)
+        # Lane a7b: the queries are tested behind the entry's upload.
         used = family_call(resident, classical_address(idx), PythonObject(query.source.addr), classical_address(y_cols),
-                           classical_address(labels), classical_address(proba), classical_address(uniq), front, dist)
+                           classical_address(labels), classical_address(proba), classical_address(uniq), front,
+                           dist if tested else knn_with_status(dist, status))
     else:
+        if not tested:
+            knn_host_finite(model, query)
         used = family_call(knn_door(binding, "knn_classify"), classical_address(idx),
                            PythonObject(query.source.addr), classical_address(y_cols), classical_address(labels),
                            classical_address(proba), classical_address(uniq), params, dist)
+    admitted_finite_refuse(Int(status[0]), _class_name(model))
+    _ = status^
     _ = idx  # keep the Python object alive through the native call above
     _ = q  # keep the Python object alive through the native call above
     _ = query  # retain snapshot owners through execution
@@ -1062,12 +1130,19 @@ def _reg_predict(model: PythonObject, binding: PythonObject, x_source: PythonObj
     var params = Python.list(idx.shape[0], PythonObject(nq), idx.shape[1], k, family_field(fields, "query_tile"),
                              PythonObject(n_out))
     var used: PythonObject
+    var tested = knn_x_tested(query, x_source, context)
+    var status = List[Int32](length=1, fill=Int32(0))
     if handle is not None:
+        # Lane a7b: the queries are tested behind the entry's upload.
         used = family_call(resident, handle, classical_address(idx), PythonObject(query.source.addr), classical_address(y_cols),
-                           classical_address(out), params, dist)
+                           classical_address(out), params, dist if tested else knn_with_status(dist, status))
     else:
+        if not tested:
+            knn_host_finite(model, query)
         used = family_call(knn_door(binding, "knn_regress"), classical_address(idx),
                            PythonObject(query.source.addr), classical_address(y_cols), classical_address(out), params, dist)
+    admitted_finite_refuse(Int(status[0]), _class_name(model))
+    _ = status^
     _ = idx  # keep the Python object alive through the native call above
     _ = q  # keep the Python object alive through the native call above
     _ = query  # retain snapshot owners through execution
@@ -1095,8 +1170,8 @@ def _reg_score(model: PythonObject, args: PythonObject, context: PythonObject) r
     (`as_f32_c(y, ndim=None)`), the prediction as float32, then
     `metrics.r2_score(..., numeric_mode=...)` through the metrics owner;
     args[4] is the metrics binding `_get_binding` resolved."""
-    var truth = family_as_f32(args[2], -1, "y", context)
-    var prediction = family_as_f32(_reg_predict(model, args[0], args[1], context), -1, "prediction", context)
+    var truth = admit_family(args[2], -1, "y", context).array
+    var prediction = admit_family(_reg_predict(model, args[0], args[1], context), -1, "prediction", context).array
     var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
     var metrics = args[4] if args[4] is not None else estimator_binding(model, "_mojolearn_metrics", context)
     return mcls_cluster_operation("family_mcls_r2", Python.tuple(metrics, truth, prediction, args[3],
@@ -1117,7 +1192,7 @@ def _neighbors_knn_operation(model: PythonObject, operation: String, var args: P
         args = estimator_arguments(model, "_mojolearn", args, context)
     if operation == "family_xn_knn_nn_fit":
         # args = (X,)
-        _nn_fit(model, args[0], context)
+        _nn_fit(model, args[0], context, PythonObject(None))
         return model
     if operation == "family_xn_knn_clf_fit":
         # args = (x_neighbors binding, X, y)

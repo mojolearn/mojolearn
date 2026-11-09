@@ -158,8 +158,7 @@ if has ab; then
   env $G $P "$EV/ab_arms.py" 2>&1 | tee -a "$EV/phases.raw.log" | grep -E '^ARM'
   env $C $P "$EV/ab_arms.py" 2>&1 | tee -a "$EV/phases.raw.log" | grep -E '^ARM'
   env $G $P "$EV/svc_equal.py" 2>&1 | tee -a "$EV/phases.raw.log" | grep -E 'FAIL|EQUAL RESULT' | tail -6 | sed 's/^/SVC_EQUAL gpu /'
-  benchmark env $G $P tools/py_misc/cnn_epoch.py "$T" 20000 1 2>&1 | tee -a "$EV/phases.raw.log" | grep -E 'PYMISC-(SAME|TIME)' | sed 's/^/CNN gpu /'
-  benchmark env $C $P tools/py_misc/cnn_epoch.py "$T" 2000 1 2>&1 | tee -a "$EV/phases.raw.log" | grep -E 'PYMISC-(SAME|TIME)' | sed 's/^/CNN cpu /'
+  # TOMBSTONE: tools/py_misc/cnn_epoch.py (the hand CNN epoch's before/after arms) deleted 2026-11-09 by lane/x8-cnn-on-executor; recoverable at f59d913b0b.
 fi
 
 if has timing; then

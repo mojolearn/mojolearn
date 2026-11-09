@@ -48,14 +48,14 @@ def test_manifold_kit_refuses_proxies_before_looking_up_cells():
 def test_manifold_input_copy_uses_snapshot_words_and_keeps_original_owner():
     source = _source("bindings/mani_kit.mojo")
     capture = source.split("def mk_from_input(", 1)[1]
-    assert capture.count("family_f32_snapshot(") == 1
+    assert capture.count("admit_family_meta(") == 1
     assert "mk_from_snapshot(snapshot, name, ctx)" in capture
     assert "_ = source" in capture
     copy = source.split("def mk_from_snapshot(", 1)[1].split("def mk_from_input(", 1)[0]
     for forbidden in (".shape[", ".ndim", "classical_address(value)"):
         assert forbidden not in copy
     assert "value.source.addr" in copy
-    assert "family_all_finite_f32(src, r * c)" in copy
+    assert "host_all_finite_f32(src, r * c)" in copy
 
 
 def test_tsne_pca_and_optimizer_share_one_x_snapshot():
@@ -63,7 +63,7 @@ def test_tsne_pca_and_optimizer_share_one_x_snapshot():
     entry = _source("bindings/manifold_native.mojo")
     assert entry.count('manifold_input(source, name, not tsne, context)') == 1
     assert 'snapshot: ArrayMetadata' in source
-    assert 'family_f32_snapshot(args[2]' not in source
+    assert 'admit_family_meta(args[2]' not in source
     assert "_tsne_pca_start(estimators, x_address, n, d, k, context)" in source
     assert "family_call(fit, Python.list(PythonObject(x_address)," in source
     assert "x.shape" not in source
@@ -105,7 +105,7 @@ def test_native_lifecycle_owns_checks_and_finished_results():
     assert 'return manifold_finish(settings, result, method, names, context)' in entry
     source = _source("bindings/manifold_lifecycle_native.mojo")
     conversion = source.split('def _cast(', 1)[1].split('def _target_finite(', 1)[0]
-    assert conversion.index('if not snapshot.castable:') < conversion.index('family_cast_rows(')
+    assert conversion.index('if not snapshot.castable:') < conversion.index('admitted_cast_f32(')
     assert 'snapshot.source.kind' not in source.split('def _target_finite(', 1)[1].split('def manifold_input(', 1)[0]
     assert 'parallel_public_result(result, method, PythonObject(None), context)' in source
     for forbidden in ('before_fit(', 'before_call(', '._mojolearn_after_fit(', '.warnings.warn('):

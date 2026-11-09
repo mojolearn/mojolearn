@@ -44,10 +44,8 @@ def independent_gradient(state, x, y):
     return loss, [dh.T @ x, dh.sum(axis=0), dl.T @ h, dl.sum(axis=0)]
 
 
-@pytest.mark.parametrize('fused', ['0', '1'])
 @pytest.mark.parametrize('integer_dtype', [np.int16, np.int32, np.int64, np.uint64])
-def test_gradient_matches_independent_calculus_and_preserves_input(monkeypatch, fused, integer_dtype):
-    monkeypatch.setenv('MOJOLEARN_MLP_FUSED', fused)
+def test_gradient_matches_independent_calculus_and_preserves_input(integer_dtype):
     model = model_fixture()
     state = checked('snapshot', model)
     x = np.zeros((3, 8), np.float32)

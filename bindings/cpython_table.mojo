@@ -42,6 +42,13 @@ from std.ffi import _Global, c_int
 from std.python import Python
 from std.python._cpython import ExternalFunction, PyObjectPtr
 
+from core.shared_slot import shared_slot_check, shared_slot_word
+
+#: Layout version of `CPythonTable` (core/shared_slot.mojo rule; the slot
+#: name carries it too). V8: the layout word.
+comptime _CPYTHON_TABLE_LAYOUT = 8
+comptime _CPYTHON_TABLE_NAME = "MojolearnCPythonTableV8"
+
 # PyObject *PyImport_GetModuleDict(void)  (borrowed)
 comptime _PyImport_GetModuleDict = ExternalFunction[
     "PyImport_GetModuleDict", def() thin abi("C") -> PyObjectPtr]
@@ -280,6 +287,8 @@ comptime _PyCapsule_IsValid = ExternalFunction[
 
 
 struct CPythonTable(Movable):
+    # first field: the layout word every reader checks (core/shared_slot.mojo)
+    var layout: Int
     var PyImport_GetModuleDict: _PyImport_GetModuleDict.type
     var PyDict_GetItem: _PyDict_GetItem.type
     var PyDict_Size: _PyDict_Size.type
@@ -351,6 +360,9 @@ struct CPythonTable(Movable):
     var PyCapsule_IsValid: _PyCapsule_IsValid.type
 
     def __init__(out self):
+        # loads symbol addresses only: running twice is harmless (the
+        # runtime may, core/shared_slot.mojo first creation)
+        self.layout = shared_slot_word[CPythonTable](_CPYTHON_TABLE_LAYOUT)
         ref cpy = Python().cpython()
         var lib = cpy.lib.borrow()
         self.PyImport_GetModuleDict = _PyImport_GetModuleDict.load(lib)
@@ -425,15 +437,19 @@ struct CPythonTable(Movable):
 
 
 # The named global is shared by every Mojo extension in the process (all of
-# them load the same interpreter library). Bump the name's version whenever a
-# field is added, removed or reordered.
+# them load the same interpreter library). Bump the name's version and
+# `_CPYTHON_TABLE_LAYOUT` whenever a field is added, removed or reordered; the
+# layout word refuses a table made by a binary that forgot to.
 comptime CPYTHON_TABLE = _Global[
-    StorageType=CPythonTable, name="MojolearnCPythonTableV7",
+    StorageType=CPythonTable, name=_CPYTHON_TABLE_NAME,
     init_fn=CPythonTable.__init__,
 ]
 
 
 def cpython_table() raises -> UnsafePointer[CPythonTable, MutAnyOrigin]:
-    """The process-wide table, filled at first use."""
+    """The process-wide table, filled at first use; refused when its creator
+    had another layout."""
     # Same typed form as x_cnn/device.mojo `_slots` (compiles on main).
-    return CPYTHON_TABLE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var table = CPYTHON_TABLE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    shared_slot_check(table[].layout, shared_slot_word[CPythonTable](_CPYTHON_TABLE_LAYOUT), _CPYTHON_TABLE_NAME)
+    return table

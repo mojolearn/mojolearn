@@ -111,4 +111,4 @@ struct SvcNativeAPI(Defaultable, Movable):
 
 
 comptime SVC_NATIVE_API = _Global[StorageType=SvcNativeAPI,
-    name="MojoSvcNativeAPIv1", init_fn=SvcNativeAPI.__init__]
+    name=("MojolearnSvcNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnSvcNativeAPIFastV2"), init_fn=SvcNativeAPI.__init__]

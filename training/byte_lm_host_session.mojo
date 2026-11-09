@@ -1,12 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native CPU counterpart of the former _byte_lm_trainer_host session owner.
-# This owns admission, transactional state and rollback, never new arithmetic:
-# every forward/backward/AdamW operation uses byte_lm_host_execution unchanged.
+# This owns admission, transactional state and rollback, never new arithmetic.
+# Lane x7b-step-ops-host-arm (2026-11-09): training and evaluation run the
+# trainer's captured program on a resident host session (ByteHostProgram,
+# training/byte_lm_program.mojo), the GPU trainer's algorithm and its call
+# shape: `train_steps` is ONE Program.fit and a refused call commits none of
+# its steps; logits and next bytes keep byte_lm_host_execution's forward.
+from std.math import isfinite
 from std.memory import memcpy, memcmp, bitcast
 from core.hostptr import read_f32, read_i32, f32_ptr, i32_ptr
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_io import all_finite_f32_scan
-from training.byte_lm_host_execution import byte_host_train_native, byte_host_loss_native, byte_host_logits_native, byte_host_next_native
+from training.byte_lm_host_execution import byte_host_logits_native, byte_host_next_native, byte_host_optimizer
+from training.byte_lm_program import byte_program_fit, byte_program_eval
+from training.byte_lm_host_program import (
+    ByteHostProgram, byte_host_program_open, byte_host_program_load, byte_host_program_store,
+)
 from core.training_state_validation import training_admit_moments_and_flags
 from core.host_helpers_impl import argmax_rows_f32
 
@@ -96,12 +105,17 @@ struct ByteHostSession(Movable, Writable):
     var shadow_p: List[Float32]
     var shadow_m: List[Float32]
     var shadow_v: List[Float32]
+    var shadow_flags: List[Int32]
     var completed: Int
     var grad_step: Int
     var shadow_step: Int
     var opened: Bool
     var usable: Bool
     var busy: Bool
+    #: the trainer's program (opened at the first training or evaluation
+    #: call) and whether it holds the committed p, m, v and step
+    var program: Optional[ByteHostProgram]
+    var synced: Bool
 
     def __init__(out self):
         self.p = List[Float32]()
@@ -114,12 +128,15 @@ struct ByteHostSession(Movable, Writable):
         self.shadow_p = List[Float32]()
         self.shadow_m = List[Float32]()
         self.shadow_v = List[Float32]()
+        self.shadow_flags = List[Int32]()
         self.completed = -1
         self.grad_step = -1
         self.shadow_step = -1
         self.opened = False
         self.usable = True
         self.busy = False
+        self.program = Optional[ByteHostProgram]()
+        self.synced = False
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("ByteHostSession")
@@ -138,6 +155,9 @@ struct ByteHostSession(Movable, Writable):
         self.shadow_p = List[Float32]()
         self.shadow_m = List[Float32]()
         self.shadow_v = List[Float32]()
+        self.shadow_flags = List[Int32]()
+        self.program = None
+        self.synced = False
         self.opened = False
         self.usable = False
         self.completed = -1
@@ -182,6 +202,8 @@ struct ByteHostSession(Movable, Writable):
         self.grad_step = -1
         self.shadow_step = -1
         self.grad = List[Float32]()
+        self.program = None
+        self.synced = False
         self.opened = True
         self.usable = True
         return completed
@@ -199,27 +221,53 @@ struct ByteHostSession(Movable, Writable):
         self.shadow_p = List[Float32]()
         self.shadow_m = List[Float32]()
         self.shadow_v = List[Float32]()
+        self.shadow_flags = List[Int32]()
 
-    def step(mut self, a: List[Int], cfg: ByteConfig, opt: List[Float64], completed: Int) raises -> Int:
-        if len(a) != 4 or a[2] == 0 or a[3] == 0:
-            raise Error("byte LM: byte_lm_session_step expects four non-null addresses")
-        if completed >= 999999:
-            raise Error("byte LM: completed step outside admitted bound")
-        host_tokens(a[0], cfg.batch * (cfg.length + 1), cfg.vocab_size)
-        self.admit(cfg, opt, completed, a[1])
+    def _cfg(self) raises -> ByteConfig:
+        if len(self.shape) != 10:
+            raise Error("byte LM: resident model shape mismatch")
+        return ByteConfig(self.shape[0], self.shape[1], self.shape[2], self.shape[3], self.shape[4],
+            self.shape[5], self.shape[6], self.shape[7], self.shape[8], self.shape[9] == 1)
+
+    def _ready(mut self) raises:
+        """The program, opened at its first use and loaded from the
+        committed lists whenever they were written outside it (open,
+        rollback, a refused call)."""
+        var cfg = self._cfg()
+        if not self.program:
+            self.program = byte_host_program_open(cfg, byte_host_optimizer(self.optimizer))
+            self.synced = False
+        if not self.synced:
+            byte_host_program_load(self.program.value(), Int(self.p.unsafe_ptr()), Int(self.m.unsafe_ptr()),
+                                   Int(self.v.unsafe_ptr()), self.completed)
+            self.synced = True
+
+    def _fit(mut self, ids: Int, n_steps: Int, losses: Int, completed: Int) raises -> Int:
+        """`n_steps` training steps as ONE Program.fit (the GPU trainer's
+        `byte_steps_device`): `ids` the n_steps batches of batch * (length +
+        1) int32 ids in order, `losses` n_steps float32 step losses. A
+        non-finite loss or a state that fails the after-scans refuses the
+        whole call: nothing of it is committed. Returns completed + n_steps."""
+        var cfg = self._cfg()
+        var n = cfg.n_total()
         self.clear_shadow()
         self.grad_step = -1
-        var n = cfg.n_total()
-        var grad = List[Float32](length=n, fill=0)
+        self._ready()
+        self.synced = False
+        self.busy = True
         var p = List[Float32](length=n, fill=0)
         var m = List[Float32](length=n, fill=0)
         var v = List[Float32](length=n, fill=0)
-        self.busy = True
-        var loss = 0
+        var grad = List[Float32](length=n, fill=0)
+        # AdamW writes every tensor's moments: every momentum flag is set
+        var flags = List[Int32](length=len(self.flags), fill=Int32(1))
         try:
-            loss = host_loss_bits(byte_host_train_native([Int(self.p.unsafe_ptr()), Int(self.m.unsafe_ptr()),
-                Int(self.v.unsafe_ptr()), a[0], Int(grad.unsafe_ptr()), Int(p.unsafe_ptr()), Int(m.unsafe_ptr()),
-                Int(v.unsafe_ptr())], cfg, opt, completed))
+            var mean = byte_program_fit(self.program.value(), ids, n_steps, losses)
+            if not isfinite(mean):
+                raise Error("byte LM: nonfinite loss")
+            byte_host_program_store(self.program.value(), Int(p.unsafe_ptr()), Int(m.unsafe_ptr()),
+                                    Int(v.unsafe_ptr()), Int(grad.unsafe_ptr()))
+            host_state_validate(p, m, v, flags, completed + n_steps)
         except error:
             self.busy = False
             raise error
@@ -233,22 +281,35 @@ struct ByteHostSession(Movable, Writable):
         var old_v = self.v^
         self.v = v^
         self.shadow_v = old_v^
+        var old_flags = self.flags^
+        self.flags = flags^
+        self.shadow_flags = old_flags^
         self.shadow_step = completed
         self.grad = grad^
-        self.completed = completed + 1
+        self.completed = completed + n_steps
         self.grad_step = self.completed
-        host_copy_i32(a[3], self.flags)
-        MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=a[2])[0] = UInt32(loss)
+        self.synced = True
         return self.completed
 
+    def step(mut self, a: List[Int], cfg: ByteConfig, opt: List[Float64], completed: Int) raises -> Int:
+        """One training step: a = [ids, flags_in, out_loss, out_flags]."""
+        if len(a) != 4 or a[2] == 0 or a[3] == 0:
+            raise Error("byte LM: byte_lm_session_step expects four non-null addresses")
+        if completed >= 999999:
+            raise Error("byte LM: completed step outside admitted bound")
+        host_tokens(a[0], cfg.batch * (cfg.length + 1), cfg.vocab_size)
+        self.admit(cfg, opt, completed, a[1])
+        var step = self._fit(a[0], 1, a[2], completed)
+        host_copy_i32(a[3], self.flags)
+        return step
+
     def steps(mut self, a: List[Int], n_steps: Int, completed: Int) raises -> Int:
-        """The host column of device operation 12: `n_steps` training steps
-        from the shape, optimizer and flags this session admitted at open.
-        a = [in_ids_i32 (n_steps batches of batch * (length + 1), one after
-        the other), out_loss (n_steps), out_flags_i32 (n_tensors)]. Every
-        batch is admitted first; the steps run in order through `step`, so
-        the bits equal those of n_steps single steps. A failure in step k
-        leaves the k earlier steps committed. Returns completed + n_steps."""
+        """`n_steps` training steps in ONE call from the shape, optimizer and
+        flags this session admitted at open. a = [in_ids_i32 (n_steps
+        batches of batch * (length + 1), one after the other), out_loss
+        (n_steps), out_flags_i32 (n_tensors)]. Every batch is admitted
+        first; a refused call commits none of its steps (the GPU trainer's
+        rule). Returns completed + n_steps."""
         self.require_open()
         if len(a) != 3 or a[0] == 0 or a[1] == 0 or a[2] == 0:
             raise Error("byte LM: the multi-step entry expects three non-null addresses")
@@ -258,19 +319,10 @@ struct ByteHostSession(Movable, Writable):
             raise Error("byte LM: resident completed-step mismatch")
         if completed + n_steps > 999999:
             raise Error("byte LM: completed step outside admitted bound")
-        if len(self.shape) != 10:
-            raise Error("byte LM: resident model shape mismatch")
-        var cfg = ByteConfig(self.shape[0], self.shape[1], self.shape[2], self.shape[3], self.shape[4],
-            self.shape[5], self.shape[6], self.shape[7], self.shape[8], self.shape[9] == 1)
-        var opt = self.optimizer.copy()
-        var n_ids = cfg.batch * (cfg.length + 1)
-        for k in range(n_steps):  # driver-loop: over the training steps of one call
-            host_tokens(a[0] + k * n_ids * 4, n_ids, cfg.vocab_size)
+        var cfg = self._cfg()
+        host_tokens(a[0], n_steps * cfg.batch * (cfg.length + 1), cfg.vocab_size)
+        var step = self._fit(a[0], n_steps, a[1], completed)
         host_copy_i32(a[2], self.flags)
-        var step = completed
-        for k in range(n_steps):  # driver-loop: over the training steps of one call
-            var flags_in = Int(self.flags.unsafe_ptr())
-            step = self.step([a[0] + k * n_ids * 4, flags_in, a[1] + k * 4, a[2]], cfg, opt, step)
         return step
 
     def evaluate(mut self, a: List[Int], cfg: ByteConfig, opt: List[Float64], completed: Int) raises -> Int:
@@ -279,7 +331,8 @@ struct ByteHostSession(Movable, Writable):
         host_tokens(a[0], cfg.batch * (cfg.length + 1), cfg.vocab_size)
         self.admit(cfg, opt, completed, a[1])
         self.clear_shadow()
-        var loss = host_loss_bits(byte_host_loss_native([Int(self.p.unsafe_ptr()), a[0]], cfg, 0, 1))
+        self._ready()
+        var loss = host_loss_bits(Int(bitcast[DType.uint32](byte_program_eval(self.program.value(), a[0]))))
         MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=a[2])[0] = UInt32(loss)
         return self.completed
 
@@ -293,10 +346,14 @@ struct ByteHostSession(Movable, Writable):
             self.shadow_m = List[Float32]()
             self.v = self.shadow_v^
             self.shadow_v = List[Float32]()
+            self.flags = self.shadow_flags^
+            self.shadow_flags = List[Int32]()
             self.completed = self.shadow_step
             self.shadow_step = -1
             self.grad = List[Float32]()
             self.grad_step = -1
+        # the program holds the call's state, not the committed one
+        self.synced = False
         return self.completed
 
     def export_state(self, a: List[Int], cfg: ByteConfig) raises -> Int:

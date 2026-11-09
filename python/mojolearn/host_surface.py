@@ -591,7 +591,6 @@ TRAINING_LANE_NAMES = {
     "mamba3-decode-session": "the resident Mamba-3 decode session",
     "transformer-decode-session": "the resident Transformer decode session",
     "transformer-decode-load-state": "the Transformer decode session reloaded from its state",
-    "transformer-forward-tape": "the Transformer block's forward tape, its backward and its close",
     # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
     # variants of families that already had a host path, every one in the
     # 136-lane record and IDENTICAL x4 against its three GPU columns on the
@@ -922,6 +921,7 @@ TRAINING_LANE_NAMES = {
     "public-set-params": "native constructor, parameter reset and refit across estimator families",
     "neural-trainer-unfused": "the parallel neural trainer's unfused MLP gradient route",
     "samba-optimizer-state": "the Samba stack's optimizer state resumed, and maximize",
+    "samba-decode-session": "the resident Samba stack decode session",
     "optim-adam-clip": "Adam and AdamW with the gradient clip and accumulation",
     # lane/neural (2026-09-27): maximize= on SGD, Adam and AdamW
     # (DEVIATION 6200, training/maximize.mojo) through the same host binding;
@@ -1608,7 +1608,9 @@ FAMILIES = (
         display="the byte LM forward pass and one training step",
         host_modules=(
             "training/byte_lm_host.mojo",
-            "training/byte_lm_host_backward.mojo",
+            "training/byte_lm_host_program.mojo",
+            "training/byte_lm_program.mojo",
+            "autograd/block_step_host.mojo",
             "training/byte_lm_host_kernels.mojo",
             "gemm/host/gemm_oracle.mojo",
         ),
@@ -2972,11 +2974,14 @@ FAMILIES = (
                         # lane verify-coverage-owed (2026-10-21): chunked_lm_head_loss,
                         # mlp_inference_sessions, the Samba optimizer's resident state
                         "training-chunked-lm-head", "training-mlp-sessions", "samba-optimizer-state",
+                        # lane fix-d1-decode-sessions (2026-11-08): SambaStack.decode_session;
+                        # on the host its steps are the per-call SambaStack.step
+                        "samba-decode-session",
                         # lane verify-coverage-20261024: residual_dropout and its backward,
                         # vendor_used and the numeric helpers the 2026-10-23 audit found
                         # no lane for (tools/identity_lanes/public_gap_methods.py)
                         "public-residual-dropout", "public-numeric-metadata",
-                        # the unfused MLP gradient route (MOJOLEARN_MLP_FUSED=0)
+                        # ParallelNeuralTrainer's per-layer MLP gradient route
                         "neural-trainer-unfused"),
         inference_lanes=(),
         forest_kinds=(),
@@ -3405,10 +3410,7 @@ FAMILIES = (
                         # the same entries the `transformer` lane hashes
                         "transformer-decode-session",
                         # lane/verify-coverage-audit (2026-10-21): the session's load_state
-                        "transformer-decode-load-state",
-                        # lane verify-coverage-20261024: forward_with_tape,
-                        # backward_from_tape and the tape's close
-                        "transformer-forward-tape"),
+                        "transformer-decode-load-state"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("TransformerBlock",),
@@ -3425,11 +3427,10 @@ FAMILIES = (
             "transformer_host_column", "transformer_host_sabotage",
             "transformer_vendor", "transformer_numeric_mode",
             "transformer_forward", "transformer_forward_fresh",
-            "transformer_decode_step", "transformer_backward",
+            "transformer_decode_step", "transformer_decode_steps", "transformer_backward",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "transformer_arithmetic_profile_changed", "transformer_arithmetic_profile", "transformer_session_create",
-            "transformer_session_close", "transformer_session_discard_tape", "transformer_session_invalidate_tape",
-            "transformer_session_forward_tape", "transformer_session_backward_tape",
+            "transformer_session_close",
             # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
             "transformer_block_api_v1", "transformer_native_session_handle_v1",
         ),
@@ -4384,7 +4385,6 @@ PUBLIC_PENDING_LANES = {
     "gp-lml-theta": "unwatched",
     "cross-vendor-fold": "unwatched",
     "transformer-decode-load-state": "unwatched",
-    "transformer-forward-tape": "unwatched",
     "scaler-fit-transform": "unwatched",
     "safetensors-widen-f16": "unwatched",
     "hf-causal-lm-stream": "unwatched",
@@ -4396,6 +4396,7 @@ PUBLIC_PENDING_LANES = {
     "training-chunked-lm-head": "unwatched",
     "training-mlp-sessions": "unwatched",
     "samba-optimizer-state": "unwatched",
+    "samba-decode-session": "unwatched",
     # lane verify-coverage-20261024: the public-gap lanes of the training
     # family; no release record yet.
     "public-residual-dropout": "unwatched",

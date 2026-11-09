@@ -33,6 +33,16 @@ from std.memory import memcpy
 from core.hostptr import copy_f32, list_f32, list_i32
 from ensemble.device_layout import device_has_nan_f32, upload_forest_x
 from ensemble.dart_member import launch_dart_member_x, launch_dart_member_y
+from ensemble.ada_rounds import (
+    AdaState,
+    ada_member_weights,
+    ada_predict_codes,
+    ada_predict_values,
+    ada_rescale,
+    ada_upload_nodes,
+)
+from xtrees.ops_device import weighted_sample_on
+from xtrees.ops_device_boost import r2_step_on, samme_step_on
 from xtrees.dart_device import DART_SESSIONS, _DART_CTX
 from ensemble.nan_refusal import RF_NAN_REFUSAL
 
@@ -65,7 +75,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoRfContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoRfContextFast"
+comptime _DEVCTX_SLOT = "MojolearnRfContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnRfContextFastV2"
 
 
 from ensemble.decisiontree.batched_levelalgo.bins import (
@@ -783,6 +793,9 @@ struct RfDataSession(Movable):
     var host_x: Int
     var share_tables: Bool
     var prep: List[ForestPrep]
+    # AdaBoost's resident state (`rf_ada_open`), at most one; dropped with
+    # the session (lane n5-prophet-adaboost-loops)
+    var ada: List[AdaState]
 
     def __init__(
         out self,
@@ -800,6 +813,7 @@ struct RfDataSession(Movable):
         self.host_x = host_x
         self.share_tables = share_tables
         self.prep = List[ForestPrep]()
+        self.ada = List[AdaState]()
 
 
 struct RfSessionRegistry(Defaultable, Movable):
@@ -1285,6 +1299,355 @@ def _rf_weighted_session_fit(
         _ = ctx^
     _ = weights^
     return forest^
+
+
+# ------------------------------------------------------------ AdaBoost --
+# Lane n5-prophet-adaboost-loops (2026-11-09; plan
+# docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 4, row "AdaBoost").
+# The ensemble's boosting state stays on the device for the whole fit
+# (ensemble/ada_rounds.mojo): one call per round fits the member on the
+# session's X from the resident weights, predicts the training X on the
+# device and runs the SAMME / R2 step there. Before, every round rebuilt the
+# float32 weights on the host (`_w32` + `trees_weighted_rows`), uploaded them
+# into the member fit, downloaded the member's predictions, uploaded weights,
+# predictions and labels into the step, downloaded the weights, rescaled
+# them on the host and (R2) drew and gathered the rows on the host and
+# uploaded them with their targets.
+
+
+def _u64_ptr(addr: Int) raises -> MutPointer[UInt64, MutUntrackedOrigin]:
+    if addr == 0:
+        raise Error("mojolearn: null float64 buffer address")
+    return MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=addr)
+
+
+def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
+    if addr == 0:
+        raise Error("mojolearn: null float64 buffer address")
+    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr)
+
+
+def rf_ada_open_binding(
+    handle: PythonObject, w_addr: PythonObject, y_addr: PythonObject,
+    cw_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """Keep an AdaBoost fit's state on a data session's device: `w` (float64,
+    the normalized starting weights), `y` (int32 class codes when
+    `params[1]` = k >= 2; float32 targets when k = 0), `cw` (float32
+    class_weight row weights, or 0 for none). `params` = [n, k]; n must be
+    the session's row count. Every array is borrowed through this call
+    only. Replaces an earlier state of the session."""
+    if len(params) != 2:
+        raise Error("rf_ada_open: params must hold [n, k]")
+    var n = Int(py=params[0])
+    var k = Int(py=params[1])
+    if k == 1 or k < 0:
+        raise Error("rf_ada_open: k must be 0 (regressor) or >= 2")
+    var wa = Int(py=w_addr)
+    var ya = Int(py=y_addr)
+    var ca = Int(py=cw_addr)
+    var wp = _u64_ptr(wa)
+    if ya == 0:
+        raise Error("rf_ada_open: null label buffer address")
+    if ca != 0 and k == 0:
+        raise Error("rf_ada_open: class weights belong to a classifier")
+    var session_id = Int(py=handle)
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var si = reg[].find(session_id)
+    if reg[].sessions[si].n_rows != n or n <= 0:
+        raise Error("rf_ada_open: n must be the session's row count")
+    var made = List[AdaState]()
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var dw = ctx.enqueue_create_buffer[DType.uint64](n)
+        ctx.enqueue_copy(dst_buf=dw, src_ptr=wp)
+        var dc = ctx.enqueue_create_buffer[DType.int32](n if k > 0 else 1)
+        var dv = ctx.enqueue_create_buffer[DType.float32](n if k == 0 else 1)
+        if k > 0:
+            ctx.enqueue_copy(dst_buf=dc, src_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=ya))
+        else:
+            ctx.enqueue_copy(dst_buf=dv, src_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=ya))
+        var dcw = ctx.enqueue_create_buffer[DType.float32](n if ca != 0 else 1)
+        if ca != 0:
+            ctx.enqueue_copy(dst_buf=dcw, src_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=ca))
+        # the borrows end with this call
+        ctx.synchronize()
+        made.append(AdaState(n, k, dw^, dc^, dv^, dcw^, ca != 0))
+        _ = ctx^
+    var back = RF_SESSIONS.get_or_create_ptr()
+    var bi = back[].find(session_id)
+    back[].sessions[bi].ada = List[AdaState]()
+    back[].sessions[bi].ada.append(made.pop())
+    return PythonObject(None)
+
+
+def _ada_state_of(session_id: Int, k_needed: Bool, name: String) raises -> AdaState:
+    """A copy of the session's AdaBoost state (buffer handles: the device
+    memory is shared), taken under the GIL (hazard B)."""
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var si = reg[].find(session_id)
+    if len(reg[].sessions[si].ada) != 1:
+        raise Error(name + ": the session holds no AdaBoost state (rf_ada_open first)")
+    ref st = reg[].sessions[si].ada[0]
+    if (st.k >= 2) != k_needed:
+        raise Error(name + ": the session's AdaBoost state is the other estimator's")
+    return AdaState(st.n, st.k, st.w.copy(), st.codes.copy(), st.values.copy(), st.cw.copy(), st.has_cw)
+
+
+def rf_classifier_fit_ada_round_binding(
+    handle: PythonObject, params: PythonObject, criterion: PythonObject,
+    round_params: PythonObject, stats_addr: PythonObject,
+) raises -> PythonObject:
+    """One AdaBoostClassifier (SAMME) round on a data session holding the
+    fit's state (`rf_ada_open`): the member's weights from the resident
+    boosting weights, the weighted member fit on the session's X (same
+    params, checks and export descriptor as
+    `rf_classifier_fit_weighted_session_export`), its predictions of the
+    training X and the SAMME step, all on the device. `round_params` =
+    [learning_rate, last]; `stats` (float64, 4) gets [status, alpha, error,
+    total]. The weights are rescaled by the total in place when the round
+    moved them and the total is positive (the next round's start)."""
+    if not _rf_params_len_ok(params):
+        raise Error(
+            "rf_classifier_fit_ada_round: params must hold "
+            + String(N_RF_FIT_PARAMS)
+            + " values, got "
+            + String(len(params))
+        )
+    if len(round_params) != 2:
+        raise Error("rf_classifier_fit_ada_round: round_params must hold [learning_rate, last]")
+    var n_rows = Int(py=params[0])
+    var n_cols = Int(py=params[1])
+    var n_classes = Int(py=params[2])
+    if n_classes < 2:
+        raise Error("rf_classifier_fit_ada_round: n_classes must be >= 2")
+    var crit = Int(py=criterion)
+    _check_criterion("rf_classifier_fit_ada_round", crit, _cls_criteria())
+    var rf_params = _rf_params_from(params, crit)
+    var mw_frac = _rf_min_weight_fraction(params)
+    var lr = Float64(py=round_params[0])
+    var last = Int(py=round_params[1]) != 0
+    var stats = _f64_ptr(Int(py=stats_addr))
+    var session_id = Int(py=handle)
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var si = reg[].find(session_id)
+    _session_shape_check(
+        "rf_classifier_fit_ada_round", reg[].sessions[si].n_rows,
+        reg[].sessions[si].n_cols, n_rows, n_cols,
+    )
+    var share_tables = reg[].sessions[si].share_tables
+    var host_x = reg[].sessions[si].host_x
+    var session_dx = reg[].sessions[si].dx.copy()
+    var state = _ada_state_of(session_id, True, "rf_classifier_fit_ada_round")
+    if state.k != n_classes:
+        raise Error("rf_classifier_fit_ada_round: n_classes differs from the session's AdaBoost state")
+    var prep = List[ForestPrep]()
+    swap(prep, reg[].sessions[si].prep)
+    var forest: RandomForestMetaData[DT, CLT]
+    try:
+        forest = _rf_ada_classifier_round(
+            session_dx, state, n_rows, n_cols, n_classes, rf_params^, mw_frac,
+            prep, share_tables, host_x, lr, last, stats,
+        )
+    except error:
+        _rf_session_restore_prep(session_id, prep)
+        raise error^
+    _rf_session_restore_prep(session_id, prep)
+    var export_trees = forest.trees^
+    forest.trees = RFExportTrees()
+    return _retain_rf_export(export_trees^, forest.notices)
+
+
+def _rf_ada_classifier_round(
+    session_dx: DeviceBuffer[DT],
+    state: AdaState,
+    n_rows: Int,
+    n_cols: Int,
+    n_classes: Int,
+    var rf_params: RF_params,
+    mw_frac: Float64,
+    mut prep: List[ForestPrep],
+    share_tables: Bool,
+    host_x: Int,
+    lr: Float64,
+    last: Bool,
+    stats: MutPointer[Float64, MutUntrackedOrigin],
+) raises -> RandomForestMetaData[DT, CLT]:
+    """The GIL-released body of `rf_classifier_fit_ada_round_binding`: the
+    branches of `_rf_weighted_session_fit` with the weights built on the
+    device, then the member's codes and the SAMME step."""
+    var forest: RandomForestMetaData[DT, CLT]
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var dxv = session_dx.create_sub_buffer[DT](0, n_rows * n_cols)
+        var dfull = session_dx.create_sub_buffer[DT](0, n_rows * n_cols)
+        # the fit owns its labels (a zero-weight compaction replaces them)
+        var dy = ctx.enqueue_create_buffer[CLT](n_rows)
+        ctx.enqueue_copy(dst_buf=dy, src_buf=state.codes)
+        var dsw = ctx.enqueue_create_buffer[DT](n_rows)
+        ada_member_weights(ctx, state, dsw)
+        var wscan = device_scan_weights(ctx, dsw, n_rows)
+        if wscan.bad:
+            raise Error("class weights must be finite and nonnegative")
+        if wscan.total <= 0:
+            raise Error("class weights must have positive total")
+        # sk-weq-trees, as in `_rf_weighted_session_fit`: zero-weight rows
+        # leave a fit without bootstrap; the kept weights then come home
+        # once (the compaction's copy), the only host weights of a round.
+        var weights = List[Float32]()
+        var n_fit = n_rows
+        if not rf_params.bootstrap and not wscan.all_unit:
+            n_fit = _rf_drop_zero_weight_rows[CLT](
+                ctx, dxv, dy, dsw, weights, n_rows, n_cols
+            )
+            if n_fit < n_rows:
+                wscan = device_scan_weights(ctx, dsw, n_fit)
+        var weight_total = wscan.total
+        if wscan.all_unit:
+            weights = List[Float32]()
+        if n_fit < n_rows:
+            if len(weights) > 0:
+                var cscale = choose_scale(weight_total, n_fit)
+                if cscale < Float64(1.1754943508222875e-38) or cscale > Float64(3.4028234663852886e38):
+                    raise Error("class weights exceed Float32 fixed-point scale range")
+                forest = fit_forest[WeightedClsObj](
+                    ctx, dxv, dy, dsw, n_fit, n_cols, n_classes, rf_params,
+                    BinScales(Float32(1), Float32(cscale)),
+                    sample_weight_host=weights, host_x_addr=0,
+                    min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
+                    notices_to_stderr=False,
+                )
+            else:
+                _rf_fold_min_weight_count(rf_params, mw_frac, n_fit)
+                forest = fit_forest[ClsObj](
+                    ctx, dxv, dy, dsw, n_fit, n_cols, n_classes, rf_params,
+                    sample_weight_host=weights, host_x_addr=0,
+                    notices_to_stderr=False,
+                )
+        elif not wscan.all_unit and not rf_params.bootstrap:
+            var scale = choose_scale(weight_total, n_rows)
+            if scale < Float64(1.1754943508222875e-38) or scale > Float64(3.4028234663852886e38):
+                raise Error("class weights exceed Float32 fixed-point scale range")
+            forest = fit_forest_prepared[WeightedClsObj](
+                ctx, dxv, dy, dsw, n_rows, n_cols, n_classes, rf_params,
+                prep, share_tables, BinScales(Float32(1), Float32(scale)),
+                host_x_addr=host_x,
+                min_weight_leaf=_rf_min_weight_leaf(mw_frac, weight_total),
+                notices_to_stderr=False, weights_on_device=True,
+            )
+        else:
+            _rf_fold_min_weight_count(rf_params, mw_frac, n_rows)
+            forest = fit_forest_prepared[ClsObj](
+                ctx, dxv, dy, dsw, n_rows, n_cols, n_classes, rf_params,
+                prep, share_tables, host_x_addr=host_x,
+                notices_to_stderr=False, weights_on_device=not wscan.all_unit,
+            )
+        # the member's codes of every training row, then the SAMME step on
+        # the resident weights
+        var nodes = ada_upload_nodes(ctx, forest.trees)
+        var dpred = ctx.enqueue_create_buffer[DType.int32](n_rows)
+        ada_predict_codes(ctx, nodes, dfull, n_rows, dpred)
+        var moved = samme_step_on(ctx, state.w, dpred, state.codes, n_rows, n_classes, lr, last, stats)
+        var total = stats[unsafe_offset=3]
+        if moved and total > 0:
+            ada_rescale(ctx, state, total)
+        ctx.synchronize()
+        _ = nodes^
+        _ = dpred^
+        _ = dxv^
+        _ = dfull^
+        _ = dy^
+        _ = dsw^
+        _ = weights^
+        _ = ctx^
+    return forest^
+
+
+def rf_regressor_fit_ada_round_binding(
+    handle: PythonObject, params: PythonObject, criterion: PythonObject,
+    round_params: PythonObject, stats_addr: PythonObject,
+) raises -> PythonObject:
+    """One AdaBoostRegressor (AdaBoost.R2) round on a data session holding
+    the fit's state (`rf_ada_open`, k = 0): n rows drawn with probability
+    w / sum(w) on the device (`x_trees_weighted_sample`'s cdf and draws,
+    stream = the round), the session's X and the targets gathered at them,
+    the squared-error member fit (as `rf_regressor_fit_session_rows_export`:
+    same params, checks and export descriptor), its predictions of the
+    training X and the R2 step, all on the device. `round_params` = [seed,
+    round, loss, learning_rate, last]; `stats` (float64, 4) gets [status,
+    alpha, error, total]; the weights are rescaled by the total in place
+    when the round moved them and the total is positive."""
+    if not _rf_params_len_ok(params):
+        raise Error(
+            "rf_regressor_fit_ada_round: params must hold "
+            + String(N_RF_FIT_PARAMS)
+            + " values, got "
+            + String(len(params))
+        )
+    if Int(py=params[2]) != 0:
+        raise Error("rf_regressor_fit_ada_round: n_classes (slot 2) must be 0")
+    if len(round_params) != 5:
+        raise Error("rf_regressor_fit_ada_round: round_params must hold [seed, round, loss, learning_rate, last]")
+    var n_rows = Int(py=params[0])
+    var n_cols = Int(py=params[1])
+    var crit = Int(py=criterion)
+    _check_criterion("rf_regressor_fit_ada_round", crit, _reg_criteria())
+    var rf_params = _rf_params_from(params, crit)
+    _rf_fold_min_weight_count(rf_params, _rf_min_weight_fraction(params), n_rows)
+    var seed = Int(py=round_params[0])
+    var round = Int(py=round_params[1])
+    var loss = Int(py=round_params[2])
+    var lr = Float64(py=round_params[3])
+    var last = Int(py=round_params[4]) != 0
+    var stats = _f64_ptr(Int(py=stats_addr))
+    var session_id = Int(py=handle)
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var si = reg[].find(session_id)
+    _session_shape_check(
+        "rf_regressor_fit_ada_round", reg[].sessions[si].n_rows,
+        reg[].sessions[si].n_cols, n_rows, n_cols,
+    )
+    var session_dx = reg[].sessions[si].dx.copy()
+    var state = _ada_state_of(session_id, False, "rf_regressor_fit_ada_round")
+    var forest: RandomForestMetaData[DT, RLT]
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var drows = ctx.enqueue_create_buffer[CLT](n_rows)
+        weighted_sample_on(ctx, state.w, n_rows, drows, n_rows, seed, round)
+        var dxg = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
+        launch_gather_rows_colmajor(ctx, session_dx, drows, dxg, n_rows, n_rows, n_cols)
+        var dy = ctx.enqueue_create_buffer[RLT](n_rows)
+        var dvals = state.values.copy()
+        launch_dart_member_y(ctx, dvals, drows, dy, n_rows)
+        var dsw = ctx.enqueue_create_buffer[DT](1)
+        # the label scale, as `_rf_regressor_fit` chooses it, on the device
+        var mag = device_abs_sum_blocked(ctx, dy, n_rows)
+        var scales = BinScales(Float32(choose_scale(mag, n_rows)), Float32(1.0))
+        forest = fit_forest[RegObj](
+            ctx, dxg, dy, dsw, n_rows, n_cols, 1, rf_params, scales,
+            notices_to_stderr=False,
+        )
+        var nodes = ada_upload_nodes(ctx, forest.trees)
+        var dpred = ctx.enqueue_create_buffer[DType.float32](n_rows)
+        var dfull = session_dx.create_sub_buffer[DT](0, n_rows * n_cols)
+        ada_predict_values(ctx, nodes, dfull, n_rows, dpred)
+        var moved = r2_step_on(ctx, state.w, dpred, state.values, n_rows, loss, lr, last, stats)
+        var total = stats[unsafe_offset=3]
+        if moved and total > 0:
+            ada_rescale(ctx, state, total)
+        ctx.synchronize()
+        _ = nodes^
+        _ = dpred^
+        _ = dfull^
+        _ = dxg^
+        _ = drows^
+        _ = dy^
+        _ = dvals^
+        _ = dsw^
+        _ = ctx^
+    var export_trees = forest.trees^
+    forest.trees = RFExportTrees()
+    return _retain_rf_export(export_trees^, forest.notices)
 
 
 def rf_regressor_fit_rowmajor_binding[EXPORT: Bool = False](
@@ -1796,6 +2159,9 @@ def build__mojolearn_rf() -> PythonObject:
         m.def_function[rf_regressor_fit_session_rows_binding]("rf_regressor_fit_session_rows_export")
         m.def_function[rf_regressor_fit_dart_binding]("rf_regressor_fit_dart_export")
         m.def_function[rf_classifier_fit_weighted_session_binding]("rf_classifier_fit_weighted_session_export")
+        m.def_function[rf_ada_open_binding]("rf_ada_open")
+        m.def_function[rf_classifier_fit_ada_round_binding]("rf_classifier_fit_ada_round_export")
+        m.def_function[rf_regressor_fit_ada_round_binding]("rf_regressor_fit_ada_round_export")
         m.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
         m.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
         m.def_function[rf_classifier_fit_shard_export_binding]("rf_classifier_fit_shard_export")

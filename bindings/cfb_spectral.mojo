@@ -13,14 +13,14 @@
 from std.math import isinf
 from std.python import Python, PythonObject
 from providers.python.host_estimator_binding_pyapi import host_estimator_binding
+from bindings.admitted_family import admit_family, admit_family_f64, admit_family_input
+from bindings.admitted_input import admit_typed
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields, py_get
-from bindings.classical_arrays import classical_address, classical_dtype_str, classical_c_order
-from core.family_cast_impl import family_all_finite_f32
-from core.p3nc_scan import p3nc_all_finite_f32
-from core.cfb_impl import cfb_f64_to_i32
+from bindings.classical_arrays import classical_address
+from core.host_finite_scan import host_all_finite_f32
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_repr, family_str, family_call,
-    family_array, family_as_f32, family_as_f32_dense, family_view, family_cast_view_f64, family_field, family_is_str, family_min,
+    FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_call, family_array,
+    family_field, family_is_str, family_min,
 )
 from bindings.cluster_native import _reference_queries, _xc_array
 from bindings.cluster_resident_table import CRES_SPECTRAL, cres_lookup, cres_store, cres_forget
@@ -93,20 +93,12 @@ def _square(shape: PythonObject) raises -> Bool:
 def _as_i32(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`_buffer.as_i32_c(source, ndim=1, name=name)`: the rank and emptiness
     refusals, then the vector itself when it is already C-order int32, else
-    one int32 copy."""
-    var view = family_view(source, 1, name, context)
-    if classical_dtype_str(view, context) == "<i4" and classical_c_order(view, context):
-        return view
-    var wide = family_cast_view_f64(view, name, context)
-    var n = Int(py=wide.size)
-    var out = family_array(Python.tuple(n), "<i4", context)
-    cfb_f64_to_i32(FAMILY_F64P(unsafe_from_address=Int(py=classical_address(wide))),
-                   FAMILY_I32P(unsafe_from_address=Int(py=classical_address(out))), n)
-    _ = wide  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = wide^
-    _ = view^
-    return out
+    one int32 conversion by Array.astype's rules (truncation toward zero, a
+    value outside int32 refused), split across the host's cores."""
+    # TOMBSTONE: the family_view + float64 widen + serial cfb_f64_to_i32 cast (core/cfb_impl.mojo) deleted 2026-11-09 by lane a6-device-x-family-classical; code recoverable at f59d913b0b.
+    # Restore: experiments/removed/A6_FAMILY_VIEW.patch. The multi-dtype
+    # admission (bindings/admitted_input.mojo admit_typed) casts once in parallel.
+    return admit_typed(source, "<i4", 1, name, context).keep
 
 
 def _tocoo(obj: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -141,7 +133,7 @@ def _coo_of_triples(rows: PythonObject, cols: PythonObject, vals: PythonObject, 
                     + "must be square, got shape " + family_repr(shape))
     var r = _as_i32(rows, "rows", context)
     var c = _as_i32(cols, "cols", context)
-    var v = family_as_f32(vals, 1, "vals", context)
+    var v = admit_family(vals, 1, "vals", context).array
     return _Coo(r, c, v, _int(shape[0]))
 
 
@@ -173,9 +165,10 @@ def _coo_triples(source: PythonObject, who: String, base: PythonObject, context:
         raise Error("mojolearn " + who + ": with affinity='precomputed', X "
                     + "must be a square affinity matrix or a sparse matrix with "
                     + "`tocoo()`, got shape " + family_repr(shape))
-    var view = family_view(source, 2, "X", context)
-    var dense = family_cast_view_f64(view, "X", context)
-    _ = view^
+    # The metadata step of the one admission path (rank and emptiness
+    # refusals), then the float64 widen of the same view (family_view deleted).
+    var snapshot = admit_family_input(source, 2, "X", context)
+    var dense = admit_family_f64(snapshot.keep, "X", context)
     var n = _int(shape[0])
     var size = Int(py=dense.size)
     var nnz = 0
@@ -259,8 +252,8 @@ def _x_decomp_input(source: PythonObject, context: PythonObject) raises -> Pytho
             and Bool(py=family_call(b.hasattr, x, PythonObject("nnz")))
             and Bool(py=family_call(b.hasattr, x, PythonObject("format")))):
         x = family_call(py_call(b.getattr, x, PythonObject("toarray")))
-    var a = family_as_f32_dense(x, 2, "X", context)
-    if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a))), Int(py=a.size)):
+    var a = admit_family(x, 2, "X", context, dense=True).array
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a))), Int(py=a.size)):
         raise Error("X: input must be finite; NaN/inf are unsupported")
     _ = a  # keep the Python object alive through the native calls above
     return a
@@ -381,12 +374,12 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
             raise Error("mojolearn SpectralEmbedding: the precomputed distance graph must be square")
         rows = _as_i32(triples[0], "rows", context)
         cols = _as_i32(triples[1], "cols", context)
-        vals = family_as_f32(triples[2], 1, "data", context)
+        vals = admit_family(triples[2], 1, "data", context).array
         if not (Int(py=rows.shape[0]) == Int(py=cols.shape[0]) and Int(py=cols.shape[0]) == Int(py=vals.shape[0])):
             raise Error("mojolearn SpectralEmbedding: the precomputed graph's row, col and data differ in length")
         nnz = Int(py=vals.shape[0])
     else:
-        dense = family_as_f32(source, 2, "X", context)
+        dense = admit_family(source, 2, "X", context).array
         n = Int(py=dense.shape[0])
         if Int(py=dense.shape[1]) != n:
             raise Error("mojolearn SpectralEmbedding: the precomputed distance matrix must be square")
@@ -643,7 +636,7 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
                 raise Error("mojolearn SpectralClustering: with affinity='precomputed', X "
                             + "must be a square affinity matrix or a sparse matrix with "
                             + "`tocoo()`, got shape " + family_repr(shape))
-            dense = family_as_f32(source, 2, "X", context)
+            dense = admit_family(source, 2, "X", context).array
     elif affinity == "rbf":
         var x = _x_decomp_input(source, context)
         var aff = _rbf_affinity(x, Float64(py=family_field(fields, "_gamma")), args[1], context)
@@ -701,7 +694,7 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
             raise Error("mojolearn SpectralClustering: the precomputed affinity "
                         + "matrix has no nonzero entries")
         var vp = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(coo.vals)))
-        if not p3nc_all_finite_f32(vp, nnz):
+        if not host_all_finite_f32(vp, nnz):
             raise Error("mojolearn SpectralClustering: the precomputed affinity "
                         + "matrix has a non-finite entry (the implemented path refuses "
                         + "it by name, because sqrt of a non-finite degree is a "
@@ -739,9 +732,9 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
             _ = coo.cols
             _ = coo.vals
     else:
-        var x = family_as_f32(source, 2, "X", context)
+        var x = admit_family(source, 2, "X", context).array
         py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
-        if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
+        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
             raise Error("mojolearn SpectralClustering: X contains NaN or "
                         + "infinity (the implemented path refuses it by name before any "
                         + "recorded stage)")
@@ -895,10 +888,10 @@ def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject
                         + "'precomputed', X must be the affinity between the new rows "
                         + "and the " + String(n_train) + " training rows, shape (n_new, " + String(n_train) + "); "
                         + "got shape " + family_repr(shape))
-        q = family_as_f32(a, 2, "X", context)
+        q = admit_family(a, 2, "X", context).array
         if Int(py=q.shape[0]) < 1:
             raise Error("mojolearn SpectralClustering.predict: X has no rows; refused by name")
-        if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(q))), Int(py=q.size)):
+        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(q))), Int(py=q.size)):
             raise Error("mojolearn SpectralClustering.predict: the affinity has a "
                         + "non-finite entry; refused by name")
         _ = q  # keep the Python object alive through the native calls above
@@ -1026,7 +1019,7 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
             raise Error("mojolearn SpectralEmbedding: with affinity='precomputed', X "
                         + "must be a square affinity matrix or a sparse matrix with "
                         + "`tocoo()`, got shape " + family_repr(shape))
-        dense = family_as_f32(source, 2, "X", context)
+        dense = admit_family(source, 2, "X", context).array
     if affinity == "rbf":
         var x = _x_decomp_input(source, context)
         var d = Int(py=x.shape[1])
@@ -1072,7 +1065,7 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
         # the rbf affinity is exp of a finite value, finite and >= 0 by
         # construction (`exp_c` clamps), so its two scans are skipped
         if affinity == "precomputed":
-            if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(coo.vals))), nnz):
+            if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(coo.vals))), nnz):
                 raise Error("mojolearn SpectralEmbedding: the precomputed affinity "
                             + "matrix has a non-finite entry")
             if family_min(coo.vals) < 0:
@@ -1097,9 +1090,9 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
         _ = coo.cols
         _ = coo.vals
     else:
-        var x = family_as_f32(source, 2, "X", context)
+        var x = admit_family(source, 2, "X", context).array
         py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
-        if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
+        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
             raise Error("mojolearn SpectralEmbedding: X contains NaN or infinity")
         _ = x  # keep the Python object alive through the native calls above
         var n = Int(py=x.shape[0])

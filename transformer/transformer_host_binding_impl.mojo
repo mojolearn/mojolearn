@@ -9,6 +9,7 @@ binding (thin-shell lane, 2026-10-21): same operations, same order.
 """
 
 from std.os import abort
+from std.memory import memcpy
 
 from core.hostptr import copy_f32, f32_ptr, read_f32
 from checks.kernel_matrix import (
@@ -63,7 +64,6 @@ from transformer.block_options import (
     BLOCK_OPTION_PARAMS,
     BlockOptions,
 )
-from transformer.host.attention_tape import HostAttentionTape
 from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
 
 
@@ -118,6 +118,39 @@ def _host_weights_from(
     )
 
 
+def _run_decode_steps(
+    a: List[Int], b: Int, n: Int, dm: Int, nh: Int, nkv: Int, hd: Int,
+    it: Int, smax: Int, s0: Int, window: Int, opts: BlockOptions,
+) raises -> Int:
+    """`n` decode tokens per row on the host in one call (lane x4: replaces
+    the decode door's per-token call of `transformer_decode_step`): `a` is
+    `_run_forward`'s layout with x and y_out the caller's (B, n, d_model)
+    slabs. Token t of every row is copied into a (B, d_model) buffer, the
+    block runs at L = 1 on the carried caches, and the row results are
+    copied back, so the bytes are n `transformer_decode_step` calls'.
+    Serial by nature: each token reads the cache the previous one wrote."""
+    if b <= 0 or n <= 0 or dm <= 0:
+        raise Error("transformer decode: B, n_tokens and d_model must be positive")
+    var row = b * dm
+    var xt = List[Float32](length=row, fill=Float32(0.0))
+    var yt = List[Float32](length=row, fill=Float32(0.0))
+    var src = f32_ptr(a[0])
+    var dst = f32_ptr(a[12])
+    var at = a.copy()
+    at[0] = Int(xt.unsafe_ptr())
+    at[12] = Int(yt.unsafe_ptr())
+    var cached = s0
+    for t in range(n):  # driver-loop: over autoregressive decode tokens (each reads the cache the previous one wrote)
+        for r in range(b):  # driver-loop: over the batch rows, token t's row copy in
+            memcpy(dest=xt.unsafe_ptr() + r * dm, src=src + (r * n + t) * dm, count=dm)
+        cached = _run_forward(at, b, 1, dm, nh, nkv, hd, it, smax, cached, window, True, opts)
+        for r in range(b):  # driver-loop: over the batch rows, token t's row copy out
+            memcpy(dest=dst + (r * n + t) * dm, src=yt.unsafe_ptr() + r * dm, count=dm)
+    _ = xt^
+    _ = yt^
+    return cached
+
+
 def _run_forward(
     a: List[Int], b: Int, l: Int, dm: Int, nh: Int, nkv: Int, hd: Int,
     it: Int, smax: Int, s0: Int, window: Int, carried: Bool,
@@ -160,14 +193,13 @@ def _run_forward(
 
 
 struct HostTransformerSession(Movable, Writable):
-    var tape: Optional[HostAttentionTape]
-    var generation: Int
+    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+    # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+    # (the session's `tape` / `generation` and `invalidate_tape`.)
     var busy: Bool
     var closed: Bool
 
     def __init__(out self):
-        self.tape = None
-        self.generation = 1
         self.busy = False
         self.closed = False
 
@@ -176,10 +208,6 @@ struct HostTransformerSession(Movable, Writable):
 
     def write_repr_to(self,mut writer: Some[Writer]):
         writer.write("HostTransformerSession")
-
-    def invalidate_tape(mut self):
-        self.tape = None
-        self.generation += 1
 
 
 def _backward_run(
@@ -204,33 +232,6 @@ def _backward_run(
         _write(a[11 + i], grads[i])
 
 
-def _session_forward_tape_run(owner_addr: Int, a: List[Int], p: List[Int]) raises:
-    """`transformer_session_forward_tape`'s GIL-free half: build the host
-    weights, run the taped forward, write y and seal the tape. `owner_addr`
-    is the session handle's address."""
-    var owner = MutPointer[HostTransformerSession, MutUntrackedOrigin](unsafe_from_address=owner_addr)
-    owner[].invalidate_tape()
-    var dm=p[2]
-    var qw=p[3]*p[5]
-    var kw=p[4]*p[5]
-    var it=p[6]
-    var w = transformer_host_weights(dm,p[3],p[4],p[5],it,p[1],
-        read_f32(a[1],dm),read_f32(a[2],dm),read_f32(a[3],qw*dm),
-        read_f32(a[4],kw*dm),read_f32(a[5],kw*dm),read_f32(a[6],dm*qw),
-        read_f32(a[7],it*dm),read_f32(a[8],it*dm),read_f32(a[9],dm*it))
-    var x=read_f32(a[0],p[0]*p[1]*dm)
-    owner[].tape = HostAttentionTape(w^,x^,p[0],p[1],p[7],owner[].generation)
-    _write(a[10],owner[].tape.value().stages.value().residual2_out)
-    owner[].tape.value().seal(p[8],p[9])
-
-
-def _session_backward_tape_run(owner_addr: Int, a: List[Int], generation: Int) raises:
-    """`transformer_session_backward_tape`'s GIL-free half: replay the tape
-    and write the ten gradients. `owner_addr` is the session handle's address."""
-    var owner = MutPointer[HostTransformerSession, MutUntrackedOrigin](unsafe_from_address=owner_addr)
-    ref tape = owner[].tape.value()
-    var dy=read_f32(a[0],tape.b*tape.l*tape.weights.dims.d_model)
-    var gradients=tape.backward(dy,generation)
-    for i in range(10):
-        _write(a[i+1],gradients[i])
-    owner[].invalidate_tape()
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (`_session_forward_tape_run` / `_session_backward_tape_run` over HostAttentionTape.)

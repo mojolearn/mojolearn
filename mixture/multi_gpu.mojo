@@ -147,6 +147,7 @@ def gmm_e_step_dispatch(
     elem_tpb: Int = GMM_ELEM_TPB,
     row_tpb: Int = GMM_ROW_TPB,
     sabotage: Int = GMM_SAB_NONE,
+    keep_addr: Int = 0,
 ) raises:
     """Reads the device plan once and runs the planned overload below."""
     gmm_e_step_dispatch(
@@ -174,6 +175,7 @@ def gmm_e_step_dispatch(
         elem_tpb,
         row_tpb,
         sabotage,
+        keep_addr,
     )
 
 
@@ -202,8 +204,11 @@ def gmm_e_step_dispatch(
     elem_tpb: Int = GMM_ELEM_TPB,
     row_tpb: Int = GMM_ROW_TPB,
     sabotage: Int = GMM_SAB_NONE,
+    keep_addr: Int = 0,
 ) raises:
     """`gmm_e_step`, or its row-sharded form when MOJOLEARN_GMM_DEVICE_COUNT > 1.
+    `keep_addr`: the EM loop's scratch keep (mixture/step_keep.mojo), used by
+    the single-device step; the sharded form drains per call as before.
 
     Same buffers, same stages, same postconditions. A single row, or a device
     count of one, runs the original entry unchanged.
@@ -213,7 +218,7 @@ def gmm_e_step_dispatch(
         gmm_e_step(
             ctx, x, means, prec_input, linv_input, log_det_chol, log_weights,
             scratch, gws, mahal, wlp, rowmax, lse, logresp, meanll, n, d,
-            ncomp, trace, tag, elem_tpb, row_tpb, sabotage,
+            ncomp, trace, tag, elem_tpb, row_tpb, sabotage, keep_addr,
         )
         return
     if sabotage != GMM_SAB_NONE:

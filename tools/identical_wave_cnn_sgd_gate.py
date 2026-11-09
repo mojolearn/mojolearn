@@ -35,7 +35,7 @@ def main():
     parser.add_argument('--vendor', required=True, choices=('cuda', 'hip', 'metal', 'cpu'))
     parser.add_argument('--arm', required=True, choices=('on', 'off'))
     parser.add_argument('--size', choices=('small', 'medium'), default='small')
-    parser.add_argument('--suite', required=True, choices=('cnn-primitives', 'cnn-training', 'sgd'))
+    parser.add_argument('--suite', required=True, choices=('cnn-training', 'sgd'))
     parser.add_argument('--out', required=True, type=Path)
     args = parser.parse_args()
     if not re.fullmatch('[0-9a-f]{40}', args.sha): parser.error('exact full source SHA required')
@@ -95,54 +95,14 @@ def main():
         dump(receipt, report)
         print('CNN_SGD_GATE', name, report['cases'][name]['status'], flush=True)
 
-    if args.suite.startswith('cnn'):
-        from mojolearn import _expansion_cnn as cnn
-        binding = ml.CNNClassifier(input_shape=(1, 4, 4))._binding()
-        bind(binding, 'x_cnn')
-        flags = int(binding.x_cnn_idn2_flags())
-        report['cnn_idn2_flags'] = flags
-        if args.arm == 'on' and flags & 3 != 3: raise RuntimeError('ON fold/epoch routing not enabled')
-        if args.arm == 'off' and flags & 3: raise RuntimeError('master-OFF fold/epoch routing still enabled')
-
-    if args.suite == 'cnn-primitives':
-        for n in (33, 1024, 1025):
-            def xent(n=n):
-                logits = (((np.arange(n*7, dtype=np.int32) % 31)-15).astype(np.float32)/np.float32(8)).reshape(n, 7)
-                labels = np.arange(n, dtype=np.int32) % 7
-                loss, gradient, probabilities = cnn._softmax_xent(binding, logits, labels)
-                shifted = logits.astype(np.float64)-logits.max(axis=1, keepdims=True)
-                expected = np.exp(shifted); expected /= expected.sum(axis=1, keepdims=True)
-                expected_loss = -np.log(expected[np.arange(n), labels]).mean()
-                expected_gradient = expected.copy(); expected_gradient[np.arange(n), labels] -= 1; expected_gradient /= n
-                np.testing.assert_allclose(probabilities, expected, rtol=1e-5, atol=1e-6)
-                np.testing.assert_allclose(gradient, expected_gradient, rtol=1e-5, atol=1e-6)
-                np.testing.assert_allclose(loss, expected_loss, rtol=1e-5, atol=1e-6)
-                return {'loss': np.asarray(loss, dtype=np.float64), 'gradient': gradient, 'probabilities': probabilities}
-            case('xent-'+str(n), xent)
-        for n in (1, 2, 3, 1000, 65537):
-            def permutation(n=n):
-                values = {}
-                for epoch in (0, 1):
-                    order = np.empty(n, dtype=np.int32)
-                    binding.x_cnn_epoch_rows(order.ctypes.data, [n, epoch, 1, 0x12345678, 0x9ABCDEF0])
-                    np.testing.assert_array_equal(np.sort(order), np.arange(n, dtype=np.int32))
-                    values['epoch-'+str(epoch)] = order
-                return values
-            case('epoch-'+str(n), permutation)
-        for index, betas in enumerate(((0.9, 0.999), (0.5, 0.9999))):
-            def hyper(betas=betas):
-                values = {}
-                for step in (1, 2, 3, 31, 1024, 99999, 100000):
-                    output = np.empty((1, 9), dtype=np.float64)
-                    binding.x_cnn_adam_hyper_d(output.ctypes.data, [step, 1], [0.001, *betas, 1e-8, 0.01, 1.0])
-                    if not np.isfinite(output).all(): raise AssertionError('nonfinite Adam hyperparameter')
-                    # Primary requirement here is current-version cross-column bits;
-                    # this deliberately does not require legacy float64 scalar bits.
-                    values['step-'+str(step)] = output
-                return values
-            case('adam-hyper-'+str(index), hyper)
-        expected_count = 10
-    elif args.suite == 'cnn-training':
+    # TOMBSTONE: the cnn-primitives suite (xent through _softmax_xent, x_cnn_epoch_rows permutations,
+    # x_cnn_adam_hyper_d) and the x_cnn_idn2_flags fold/epoch arm check deleted 2026-11-09 by
+    # lane/x8b-cnn-resident-predict: those entries went with the CNNClassifier hand epoch
+    # (lane/x8-cnn-on-executor); CNNClassifier trains and predicts on the program executor of the
+    # x_sequence binding, which no x_cnn switch reaches. Code recoverable at 7c9d9d5575.
+    if args.suite == 'cnn-training':
+        from mojolearn import _backend
+        bind(_backend.binding('_mojolearn_x_sequence', 'identical'), 'x_sequence')
         for optimizer in ('sgd', 'adam'):
             def train(optimizer=optimizer):
                 n, side, channels, batch = (65, 4, 2, 33) if args.size == 'small' else (257, 16, 4, 128)
@@ -155,7 +115,6 @@ def main():
                           'loss_curve': np.asarray(model.loss_curve_, dtype=np.float64),
                           'probabilities': np.asarray(model.predict_proba(x))}
                 for index, array in enumerate(model.weights()): values['weight-'+str(index)] = np.asarray(array)
-                for index, array in enumerate(model._bufs): values['optimizer-'+str(index)] = np.asarray(array)
                 if not all(np.isfinite(v).all() for v in values.values()): raise AssertionError('nonfinite CNN state')
                 return values
             case('cnn-'+optimizer, train)

@@ -31,15 +31,17 @@ class NativeMetadataSnapshotSourceTests(unittest.TestCase):
 
     def test_prepared_helpers_use_native_metadata_and_retain_owners(self):
         cases = (
-            ('bindings/trees_public_boost.mojo', '_gather_view', ('rows', 'cols')),
-            ('bindings/trees_public_boost.mojo', '_gather_codes_view', ('codes', 'rows')),
-            ('bindings/trees_public_meta.mojo', '_place_view', ('dst', 'rows', 'blk')),
+            ('bindings/trees_public_boost.mojo', '_gather', ('rows', 'cols')),
+            ('bindings/trees_public_boost.mojo', '_gather_codes', ('codes', 'rows')),
+            ('bindings/trees_public_meta.mojo', '_place', ('dst', 'rows')),
             ('bindings/trees_public_meta.mojo', '_indicator', ('codes',)),
         )
         for path, name, owners in cases:
             with self.subTest(name=name):
                 source = function(path, name)
-                self.assertNotRegex(source, r'len\(|trees_address\(|_view_of_array\(')
+                # Lane a1b: the helpers take the Arrays themselves and read each
+                # one's address slot once (trees_address); no view struct.
+                self.assertNotRegex(source, r'len\(|_view_of_array\(')
                 after_call = source[source.index('    _ = py_call_typed'):]
                 for owner in owners:
                     self.assertIn('    _ = ' + owner + '\n', after_call.replace('  #', '\n#'))
@@ -50,15 +52,7 @@ class NativeMetadataSnapshotSourceTests(unittest.TestCase):
         self.assertNotIn('_rows(', source)
         self.assertIn('n: Int, binary: Bool', source)
 
-    def test_admission_reads_shape_and_strides_once(self):
-        for name, value in (('_view_of_array', 'value'), ('_view_of_buffer', 'view')):
-            with self.subTest(name=name):
-                source = function('bindings/trees_public_inputs.mojo', name)
-                self.assertEqual(source.count(value + '.shape'), 1)
-                self.assertEqual(source.count(value + '.strides'), 1)
-                loop = source[source.index('    for k in range(rank):'):]
-                self.assertNotIn(value + '.shape', loop)
-                self.assertNotIn(value + '.strides', loop)
+    # TOMBSTONE: test_admission_reads_shape_and_strides_once (classical_labels _view_of_array / _view_of_buffer) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear: the helpers are gone (bindings/admitted_input.mojo admit_c_view reads the exporter's view once).
 
     def test_known_array_lengths_do_not_reappear_in_glue(self):
         for path, names in (

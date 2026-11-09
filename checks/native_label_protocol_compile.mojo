@@ -5,7 +5,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import raise_python_exception
 from bindings.classical_labels import (
     _label_list, _flatten_labels, _sorted_classes, labels_label_kind,
-    labels_encode_labels, labels_decode_labels, _classification_labels, labels_class_weight_rows,
+    classical_encode_labels, labels_decode_labels, _classification_labels, labels_class_weight_rows,
 )
 from bindings.classifier_public_lifecycle import classifier_label_list, _public_labels
 from bindings.svc_native import svc_operation
@@ -31,7 +31,7 @@ def native_label_compile(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> 
             return labels.values.steal_data()
         if operation == "public":
             return _public_labels(classifier_label_list(value, context), context).steal_data()
-        var encoded = _sorted_classes(value, context) if operation == "sort" else labels_encode_labels(value, context)
+        var encoded = _sorted_classes(value, context) if operation == "sort" else classical_encode_labels(value, context)
         if operation == "weights":
             return labels_class_weight_rows(a[3], encoded, a[4], context).steal_data()
         return Python.tuple(encoded.classes, encoded.codes).steal_data()

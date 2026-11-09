@@ -147,7 +147,8 @@ def pca_project_owned(
             n_rows, n_features, n_components, n_rows, device_checks=True,
         )
     elif n_components > 0:
-        pca_transform_host(ctx, x_ptr, mean_ptr, components_ptr, out_ptr, n_rows, n_features, n_components)
+        # fit_transform: X was admitted (and tested finite) by the fit.
+        _ = pca_transform_host(ctx, x_ptr, mean_ptr, components_ptr, out_ptr, n_rows, n_features, n_components)
     ctx.synchronize()
 
 
@@ -168,11 +169,15 @@ def pca_fit_owned(
     out_ptr: MutPointer[Float32, MutUntrackedOrigin],
     project: Bool,
     whiten: Bool,
+    finite_word: Int = 0,
 ) raises -> Tuple[Int, Float64]:
     """The whole exact fit: the five arrays written at `n_components`, then
     (for a float or "mle" `n_components`) the kept count and the dropped
     tail's noise variance, then with `project` X's projection onto the kept
-    components. Returns (kept count, noise variance)."""
+    components. Returns (kept count, noise variance). `finite_word` (lane
+    a7d): when nonzero, the host address of one Int32 that receives X's
+    finite status word, tested on the device after the fit's upload; a
+    flagged X stops the fit (nothing written, (0, 0.0) returned)."""
     if keep_mode != PCA_KEEP_COUNT and keep_mode != PCA_KEEP_FRACTION and keep_mode != PCA_KEEP_MLE:
         raise Error("pca_fit_owned: unknown n_components mode")
     var noise: Float64
@@ -180,14 +185,16 @@ def pca_fit_owned(
         pca_full_validate(n_rows, n_features, n_components)
         noise = pca_fit_full_host(
             ctx, x_ptr, components_ptr, mean_ptr, explained_ptr, ratio_ptr, singular_ptr,
-            n_rows, n_features, n_components,
+            n_rows, n_features, n_components, finite_word,
         )
     else:
         noise = pca_fit_host(
             ctx, x_ptr, components_ptr, mean_ptr, explained_ptr, ratio_ptr, singular_ptr,
-            n_rows, n_features, n_components,
+            n_rows, n_features, n_components, finite_word,
         )
     ctx.synchronize()
+    if finite_word != 0 and MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] != 0:
+        return (0, 0.0)
     var keep = n_components
     if keep_mode != PCA_KEEP_COUNT:
         var keep_in = -1

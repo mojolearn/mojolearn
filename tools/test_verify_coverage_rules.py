@@ -101,7 +101,7 @@ def test_constant_probe():
 
 
 def test_valueless_definitions():
-    assert audit_tool._valueless('comptime _DEVCTX_SLOT = "MojoCoreContextIdentical"')
+    assert audit_tool._valueless('comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV2"')
     assert audit_tool._valueless("@fieldwise_init\nstruct Handle(Movable):\n    var id: Int")
     assert audit_tool._valueless("def __init__(out self):\n    pass", ("m", "f.mojo", "Store", "__init__"))
     assert not audit_tool._valueless("def gather(x: Int) -> Int:\n    return x + 1", ("t", "f.mojo", "gather"))
@@ -180,8 +180,9 @@ def test_import_installed_entries_name_their_lanes():
 
 def test_dead_and_probe_entries_read_sabotage_na():
     # lane coverage-sabotage-arms-20261025: the 0.8.57 owed sabotage rows; lane
-    # dead-native-entries-0859 deleted the dead ones, the two reach probes remain
-    for entry in ("km_rbf_staged", "x_decomp_mcd_cov_reach"):
+    # dead-native-entries-0859 deleted the dead ones; lane consol-k0-dead-code deleted
+    # x_decomp_mcd_cov_reach with MCD_ORDERED_COV (docs/TOMBSTONES.md batch 3)
+    for entry in ("km_rbf_staged",):
         st, why = audit_tool.sabotage_of(_row(entry, changed_kernel=["core/x.mojo:k"], n_changed=1))
         assert st == "n/a" and why, entry
     # a reaching arm still wins over the table

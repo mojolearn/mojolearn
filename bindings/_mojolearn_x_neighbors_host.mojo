@@ -25,7 +25,6 @@ from providers.python.x_neighbors_host_pyapi import unit_ff_binding
 from providers.python.x_neighbors_host_pyapi import ocsvm_labels_binding, nc_labels_binding, nc_proba_binding, lp_dense_proba_binding
 from x_neighbors.graph_host import op_louvain, op_pr_csr, op_louvain_csr
 from providers.python.x_neighbors_host_pyapi import kpca_resident_binding
-from providers.python.x_neighbors_host_pyapi import lp_fast_resident_binding
 from x_neighbors.kfeat_rng import XN_IDN_SKETCH_CTR
 from providers.python.x_neighbors_host_pyapi import kfeat_pcs_draw_idn_host_binding, kfeat_schi2_fit_idn_host_binding
 
@@ -1193,7 +1192,6 @@ def build__mojolearn_x_neighbors_host() -> PythonObject:
         m.def_function[x_neighbors_host_sabotage_binding]("x_neighbors_host_sabotage")
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
-        m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
         # TOMBSTONE: x_neighbors_purity_flags (dead native entry: no reader of the PURITY_3/PURITY_6 switch word) deleted 2026-10-26 by 1d3757533; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/x_neighbors_purity_flags.patch
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")

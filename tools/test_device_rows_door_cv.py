@@ -32,6 +32,7 @@ def _estimators():
     from mojolearn import _gp_impl as gp
     from mojolearn import kernel_methods as km
     from mojolearn import _gbdt_adapters as boosting
+    from mojolearn import _svm_impl as svm_impl, neighbors
     return [
         ("classical-ols", lambda: linear_model.LinearRegression(), "reg"),
         ("classical-ridge", lambda: linear_model.Ridge(alpha=1.0), "reg"),
@@ -44,7 +45,30 @@ def _estimators():
         ("linear-svc", lambda: svm.LinearSVC(max_iter=200), "clf"),
         ("gp", lambda: gp.GaussianProcessRegressor(), "reg"),
         ("kernel-ridge", lambda: km.KernelRidge(alpha=1.0), "reg"),
+        # lane a6: the family / classical opt-ins
+        ("svc", lambda: svm_impl.SVC(), "clf"),
+        ("svr", lambda: svm_impl.SVR(), "reg"),
+        ("linear-svr", lambda: svm.LinearSVR(max_iter=200), "reg"),
+        ("knn-clf", lambda: neighbors.KNeighborsClassifier(n_neighbors=3), "clf"),
+        ("knn-reg", lambda: neighbors.KNeighborsRegressor(n_neighbors=3), "reg"),
+        ("qn", lambda: linear_model.QNRegressor(), "reg"),
+        # lane a7c: the x_linear door's opt-ins
+        ("lasso", lambda: _cd().Lasso(alpha=0.1), "reg"),
+        ("elastic-net", lambda: _cd().ElasticNet(alpha=0.1), "reg"),
+        ("huber", lambda: _xl().HuberRegressor(max_iter=50), "reg"),
+        ("sgd-clf", lambda: _xl().SGDClassifier(max_iter=5, random_state=0), "clf"),
+        ("ridge-clf", lambda: _xl().RidgeClassifier(), "clf"),
     ]
+
+
+def _cd():
+    from mojolearn import _solver_impl
+    return _solver_impl
+
+
+def _xl():
+    from mojolearn import _expansion_linear
+    return _expansion_linear
 
 
 def _data(task):
@@ -91,7 +115,6 @@ def test_device_rows_door_recognizes_only_the_exact_class():
     plan = _plan(linear_model.LinearRegression)
     context = plan["context"]
     assert context["door_rows_class"] is _arena_io.DeviceRows
-    assert context["door_rows_call"] is _arena_io._ROWS_CALL
     assert context["door_rows_context"] is _arena_io._ROWS_CONTEXT
 
 
@@ -129,3 +152,35 @@ def test_split_plan_reports_a_count_that_disagrees():
     buf = np.zeros(5, dtype="i8")
     addrs = np.array([buf.ctypes.data, buf.ctypes.data], dtype="i8")
     assert plan(fold.ctypes.data, 5, 2, sizes.ctypes.data, addrs.ctypes.data, addrs.ctypes.data) == 0
+
+
+def test_family_and_classical_estimators_opt_in():
+    # Lane a6: model selection hands these classes DeviceRows folds.
+    from mojolearn import decomposition, kernel_methods as km, neighbors, linear_model
+    from mojolearn import _svm_impl as svm_impl, svm, _gp_impl as gp
+    for cls in (decomposition.PCA, svm_impl.SVC, svm_impl.SVR, svm.LinearSVC, svm.LinearSVR,
+                gp.GaussianProcessRegressor, km.KernelRidge, neighbors.KNeighborsClassifier,
+                neighbors.KNeighborsRegressor, linear_model.LogisticRegression, linear_model.QNRegressor):
+        assert _plan(cls)["device_rows"] is True, cls.__name__
+
+
+def test_nan_fold_reaches_a_nan_accepting_door():
+    # Lane a6: a door that accepts NaN in X (its spec does not scan) gets a
+    # NaN fold unrefused; a scanning door refuses it with admit_x's wording.
+    from mojolearn import linear_model
+    x, y = _data("reg")
+    x = x.copy()
+    x[4, 1] = np.nan
+    with pytest.raises(ValueError, match="NaN"):
+        model_selection.cross_val_score(linear_model.Ridge(alpha=1.0), x, y, cv=3, error_score="raise")
+
+
+def test_x_linear_estimators_opt_in():
+    # Lane a7c: Lasso, ElasticNet and the x_linear door's estimators take
+    # DeviceRows folds; the *CV estimators (own splitter) do not.
+    xl, cd = _xl(), _cd()
+    for cls in (cd.Lasso, cd.ElasticNet, xl.SGDClassifier, xl.SGDRegressor, xl.HuberRegressor,
+                xl.BayesianRidge, xl.RidgeClassifier, xl.QuantileRegressor):
+        assert _plan(cls)["device_rows"] is True, cls.__name__
+    for cls in (xl.RidgeCV, xl.LassoCV, xl.ElasticNetCV, xl.LogisticRegressionCV):
+        assert not _plan(cls).get("device_rows"), cls.__name__

@@ -6,7 +6,7 @@
 from core.hostptr import f32_ptr, i32_ptr
 from max.gpu.host import DeviceContext
 from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP
-from training.samba_resident import SambaResidentSession, samba_resident_forward, samba_resident_train_step, samba_resident_accumulated_step
+from training.samba_resident import SambaResidentSession, samba_resident_train_step, samba_resident_accumulated_step
 from training.optimizer_public import OPT_POOL, opt_pool_handle, resident_open, resident_close, resident_download, resident_upload, per_call_step, resident_step, resident_step_io
 
 
@@ -18,8 +18,8 @@ def native_resident_arity(op: Int, na: Int, np: Int, nf: Int) raises:
         valid = na == 1 and np == 1 and nf == 0
     elif op == 14 or op == 15:
         valid = na == 0 and np == 1 and nf == 0
-    elif op == 16:
-        valid = na == 3 and np == 3 and nf == 0
+    # TOMBSTONE: SAMBA_THREE_TIER_FORWARD operation 16 (the resident forward; SambaStack.forward runs SambaStackProgram) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
+    # Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
     elif op == 17:
         valid = na == 7 and np == 8 and nf == 8
     elif op == 18:
@@ -101,8 +101,6 @@ def native_resident_operation(ctx: DeviceContext, op: Int, a: List[Int], p: List
         if op == 15:
             owner[].busy = False
             return 0
-        if op == 16:
-            return samba_resident_forward(owner[], f32_ptr(a[0]), i32_ptr(a[1]), f32_ptr(a[2]), p[1], p[2])
         var pool = OPT_POOL.get_or_create_ptr()
         var h = p[1]
         if op == 17:

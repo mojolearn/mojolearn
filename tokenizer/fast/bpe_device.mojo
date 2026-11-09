@@ -636,7 +636,7 @@ def bpe_encode_counts_kernel(dp: I32P, pfx: I32P, counts: I64P, ndocs: Int64):
 def bpe_ctx() raises -> DeviceContext:
     """ONE process-lifetime DeviceContext for this binding (buffers must not outlive their context,
     and a context per call exhausts Metal's queues)."""
-    return process_ctx["MojoTokenizerFastContext"]()
+    return process_ctx["MojolearnTokenizerFastContextV2"]()
 
 
 @fieldwise_init

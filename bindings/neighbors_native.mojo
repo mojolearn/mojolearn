@@ -23,8 +23,7 @@ from providers.python.pcs_public_lifecycle_pyapi import pcs_public_begin, pcs_fe
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
-    family_repr, family_call, family_call_kw, family_array,
-    family_field, family_f32_snapshot, family_owned_snapshot,
+    family_repr, family_call, family_call_kw, family_array, family_field,
 )
 from providers.python.radius_public_lifecycle_pyapi import radius_fit, radius_refusals
 from bindings.neighbors_knn_native import neighbors_knn_operation, knn_release

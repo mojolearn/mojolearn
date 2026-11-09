@@ -11,7 +11,8 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_address, classical_host_f32
+from bindings.classical_arrays import classical_address
+from bindings.admitted_input import admit_x
 from bindings.decomp_inputs import decomp_input
 from bindings.entries_verified import entries_verified, entries_mark_verified
 from bindings.decomp_owner_common import (
@@ -212,8 +213,8 @@ def _alpha_scale(model: PythonObject, fields: PythonObject, near: PythonObject, 
                  context: PythonObject) raises -> PythonObject:
     """`_alpha_scale(divide)`: the eigenvectors scaled by sqrt(eigenvalue)
     (0) or divided by it (1), on `xn_kpca_alpha_scale`."""
-    var v = classical_host_f32(decomp_attr(model, fields, "eigenvectors_"), 2, "eigenvectors_", context)
-    var w = classical_host_f32(decomp_attr(model, fields, "eigenvalues_"), 1, "eigenvalues_", context)
+    var v = admit_x(decomp_attr(model, fields, "eigenvectors_"), 2, "eigenvectors_", context)
+    var w = admit_x(decomp_attr(model, fields, "eigenvalues_"), 1, "eigenvalues_", context)
     var rows = Int(py=v.shape[0])
     var cols = Int(py=v.shape[1])
     var out = decomp_f32(Python.tuple(rows, cols), context)
@@ -241,7 +242,7 @@ def kpca_transform(model: PythonObject, source: PythonObject, context: PythonObj
     var q = decomp_input(source, "KernelPCA", context)
     var nq = Int(py=q.shape[0])
     var width = Int(py=q.shape[1])
-    var fit_x = classical_host_f32(decomp_attr(model, fields, "_fit_X"), 2, "_fit_X", context)
+    var fit_x = admit_x(decomp_attr(model, fields, "_fit_X"), 2, "_fit_X", context)
     var nf = Int(py=fit_x.shape[0])
     var near = _near(_mode(fields, context), context)
     var alphas = _alpha_scale(model, fields, near, 1, context)
@@ -251,8 +252,8 @@ def kpca_transform(model: PythonObject, source: PythonObject, context: PythonObj
     if pre and width != nf:
         raise Error("KernelPCA: a precomputed kernel needs " + String(nf) + " columns (the fitted rows), got "
                     + String(width))
-    var fit_cols = classical_host_f32(decomp_attr(model, fields, "_fit_cols"), 1, "_fit_cols", context)
-    var fit_all = classical_host_f32(decomp_attr(model, fields, "_fit_all"), 1, "_fit_all", context)
+    var fit_cols = admit_x(decomp_attr(model, fields, "_fit_cols"), 1, "_fit_cols", context)
+    var fit_all = admit_x(decomp_attr(model, fields, "_fit_all"), 1, "_fit_all", context)
     var gamma = decomp_float(decomp_attr(model, fields, "_gamma"))
     var coef0 = decomp_float(fields["coef0"])
     var degree = decomp_int(fields["degree"])

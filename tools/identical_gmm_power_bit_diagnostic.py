@@ -38,9 +38,9 @@ def child(root, out, vendor, gate):
             for method in ('predict', 'predict_proba', 'score_samples'):
                 save(prefix + '-' + method, getattr(estimator, method)(x[:129]))
             routes.append({'shape': [n, d], 'path': 'public full-covariance fit',
-                'guard': 'IDENTICAL default, GMM_SAB_NONE, d<=GMM_IDN_CHOL_MAX_D=256',
+                'guard': 'IDENTICAL default, d<=GMM_IDN_CHOL_MAX_D=256 (mixture/chol_order.mojo gmm_idn_chol_applies)',
                 'kernel': 'idn_precision_cholesky_kernel',
-                'source': 'mixture/checks/mstep.mojo::gmm_precision_cholesky',
+                'source': 'mixture/checks/mstep.mojo::gmm_precision_enqueue',
                 'guard_file_sha256': hashlib.sha256((root / 'mixture/chol_order.mojo').read_bytes()).hexdigest()})
     else:
         from mojolearn._expansion_prep import PowerTransformer

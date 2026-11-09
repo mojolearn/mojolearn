@@ -41,10 +41,14 @@ are never raced, so GPU decode work had no row before these):
                        state (load_state) per round.
   mamba1-decode        Mamba1Block(weights).decode_session(state).step(x_t).
   mamba2-decode / mamba3-decode
-                       Mamba{2,3}Block(weights).step(x_t, state) (their
-                       resident sessions are private, so the public
-                       per-call step), fresh allocate_state per round.
-  samba-decode         SambaStack(config, weights).step(ids_t, state).
+                       Mamba{2,3}Block(weights).decode_session(state).step(x_t)
+                       (public since 2026-11-08; until then the per-call
+                       step with a fresh allocate_state per round).
+  samba-decode         SambaStack(config, weights).decode_session(state).step(ids_t)
+                       (2026-11-08; until then SambaStack.step(ids_t, state)).
+                       A/B operation `decode_n` (decode plan D2) on every
+                       decode lane: the same session, one decode(x) call for
+                       all L tokens instead of one step per token.
                        Peers (2026-10-22): transformer-decode transformers'
                        DynamicCache loop; mamba1/2-decode mamba_ssm's own
                        Mamba/Mamba2 step over InferenceParams (MambaSsmArm);
@@ -972,15 +976,16 @@ LANE_TEXT = {
                       "mamba-ssm-*: mamba_ssm Block(Mamba, layer_idx 0) over InferenceParams, one token "
                       "per call (Mamba.step: causal_conv1d_update + selective_state_update), states "
                       "zeroed per round; x uploaded once, outputs .cpu() once"),
-    "mamba2-decode": ("mojolearn.Mamba2Block(weights): state = allocate_state(B); "
-                      "step(x[:, t:t+1], state) for t < L",
+    "mamba2-decode": ("mojolearn.Mamba2Block(weights).decode_session(state): load_state(); "
+                      "step(x[:, t:t+1]) for t < L (resident GPU decode)",
                       "mamba-ssm-*: mamba_ssm Block(Mamba2, layer_idx 0) over InferenceParams, one "
                       "token per call (Mamba2.step: causal_conv1d_update + selective_state_update, "
                       "gated RMSNorm), states zeroed per round; x uploaded once, outputs .cpu() once"),
-    "mamba3-decode": ("mojolearn.Mamba3Block(weights): state = allocate_state(B); "
-                      "step(x[:, t:t+1], state) for t < L", "none (ours alone)"),
-    "samba-decode": ("mojolearn.SambaStack(config, weights): state = allocate_state(B, L); "
-                     "step(ids[:, t], state) for t < L -> logits (B, L, vocab)", "none (ours alone)"),
+    "mamba3-decode": ("mojolearn.Mamba3Block(weights).decode_session(state): load_state(); "
+                      "step(x[:, t:t+1]) for t < L (resident GPU decode)", "none (ours alone)"),
+    "samba-decode": ("mojolearn.SambaStack(config, weights).decode_session(allocate_state(B, L)): "
+                     "load_state(); step(ids[:, t]) for t < L -> logits (B, L, vocab) (resident GPU decode)",
+                     "none (ours alone)"),
     "mlp-predict": ("mojolearn.SmallMLPTrainer(w1, b1, w2, b2).predict_logits(X) (GPU)",
                     "F.linear, ReLU, F.linear on the GPU; .cpu()"),
     # 2026-10-19 (lane ag-bench): whole fits through the tape
@@ -2391,7 +2396,10 @@ class OursBlock(Ours):
             self.decode_tokens = [np.ascontiguousarray(self.x[:, t:t + 1, :]) for t in range(length)]
             if model == "transformer":
                 self.decode_state = self.block.allocate_state(batch, length)
-            elif model == "mamba1":
+            elif model in ("mamba1", "mamba2", "mamba3"):
+                # lane fix-d1-decode-sessions (2026-11-08): Mamba-2/3 open the
+                # public resident session too (0.8.66 mamba3-decode 2.17x on the
+                # per-call step); the same bytes as the per-call step.
                 self.decode_state = self.block.allocate_state(batch)
             if self.decode_state is not None:
                 # The public resident session: weights uploaded once, here,
@@ -2401,13 +2409,10 @@ class OursBlock(Ours):
                 self.decode_session = self.block.decode_session(self.decode_state)
             self.info["operation_scope"] = ("zero-state token-by-token decode of the whole input, "
                                             "one public step call per token")
-        if self.operation == "transformer_forward_vjp_tape":
-            if lane != "transformer-forward":
-                raise RuntimeError("REFUSED: transformer tape operation requires transformer-forward")
-            self.info["call"] = "TransformerBlock.forward_with_tape(x); backward_from_tape(tape, x)"
-            self.info["operation_scope"] = "full declared block forward plus VJP; no loss or optimizer"
-            self.neural_ab_runtime["cotangent_source"] = "same immutable full input x"
-        elif self.operation == "transformer_windowed_forward":
+        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+        # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+        # (the `transformer_forward_vjp_tape` board operation over forward_with_tape.)
+        if self.operation == "transformer_windowed_forward":
             if lane != "transformer-forward" or window <= 0:
                 raise RuntimeError("REFUSED: windowed operation needs transformer-forward and transformer_window > 0")
             self.window_state = self.block.allocate_state(int(self.x.shape[0]), int(self.x.shape[1]))
@@ -2429,22 +2434,9 @@ class OursBlock(Ours):
                 installed_generation=generation, installation_boundary="preparation_in_cold_total")
 
     def call(self):
-        if self.operation == "transformer_forward_vjp_tape":
-            self.out, tape = self.block.forward_with_tape(self.x,
-                activation_budget_bytes=int(self.runtime.get("activation_budget_bytes", 536870912)),
-                minimum_replay_ops_per_byte=int(self.runtime.get("minimum_replay_ops_per_byte", 0)))
-            self.neural_ab_runtime.update(retained=bool(tape.retained),
-                stage_bytes=int(tape.stage_bytes), profile=str(tape.profile))
-            expected = self.runtime.get("expect_retained")
-            if expected is not None and bool(tape.retained) != bool(expected):
-                tape.close()
-                raise RuntimeError("REFUSED: tape retained/replay selection did not reach the declared A/B arm")
-            try:
-                self.gradients = self.block.backward_from_tape(tape, self.x)
-            finally:
-                tape.close()
-            self.neural_ab_runtime["vjp_completed"] = True
-        elif self.operation == "mamba_forward_vjp":
+        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+        # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+        if self.operation == "mamba_forward_vjp":
             self.out = self.block.forward(self.x)
             self.gradients = self.block.backward(self.x, self.x)
             self.neural_ab_runtime["vjp_completed"] = True
@@ -2458,8 +2450,12 @@ class OursBlock(Ours):
             if hasattr(self.decode_state, "cached_tokens"):
                 self.decode_state.cached_tokens = 0      # position is API metadata
             self.decode_session.load_state()
-            step = self.decode_session.step
-            self.out = [step(xt) for xt in self.decode_tokens]
+            if self.operation == "decode_n":
+                # D2: one native call decodes every token, (B, L, D) out.
+                self.out = self.decode_session.decode(self.x)
+            else:
+                step = self.decode_session.step
+                self.out = [step(xt) for xt in self.decode_tokens]
         elif self.decode_tokens is not None:
             state = self.block.allocate_state(int(self.x.shape[0]))
             step = self.block.step
@@ -2470,6 +2466,8 @@ class OursBlock(Ours):
 
     def _y(self):
         np = self.np
+        if self.decode_tokens is not None and self.operation == "decode_n":
+            return np.asarray(self.out)        # already (B, L, D)
         if self.decode_tokens is not None:     # after the clock: (B, 1, D) per token -> (B, L, D)
             return np.concatenate([np.asarray(y).reshape(self.x.shape[0], 1, -1) for y in self.out],
                                   axis=1)
@@ -2505,6 +2503,7 @@ class OursSamba(Ours):
         w = {k: np.ascontiguousarray(v) for k, v in _weights(data).items()}
         self.lane = lane
         runtime = ab_runtime or {}
+        self.operation = runtime.get("operation", "model_default")
         max_norm = runtime.get("samba_max_norm")
         accumulation_steps = int(runtime.get("samba_accumulation_steps", 1))
         if (max_norm is not None or accumulation_steps != 1) and lane != "samba-train-step":
@@ -2538,6 +2537,14 @@ class OursSamba(Ours):
         # samba-decode: the per-token ids, made before the clock
         self.decode_ids = ([np.ascontiguousarray(self.ids[:, t]) for t in range(self.ids.shape[1])]
                            if lane == "samba-decode" else None)
+        # lane fix-d1-decode-sessions (2026-11-08): the public resident
+        # session, opened before the clock as transformer/mamba decode do
+        # (parameters uploaded once). The state's host arrays stay zero
+        # (never synced), so load_state() is the per-round zero reset.
+        self.decode_session = None
+        if self.decode_ids is not None:
+            self.decode_session = self.model.decode_session(
+                self.model.allocate_state(int(self.ids.shape[0]), int(self.ids.shape[1])))
 
     def call(self):
         np = self.np
@@ -2547,14 +2554,20 @@ class OursSamba(Ours):
             self.losses.append(float(res["loss"]))
             self.k += 1
         elif self.decode_ids is not None:
-            state = self.model.allocate_state(int(self.ids.shape[0]), int(self.ids.shape[1]))
-            step = self.model.step
-            self.out = [step(t, state) for t in self.decode_ids]
+            self.decode_session.load_state()
+            if self.operation == "decode_n":
+                # D2: one native call decodes every token, (B, L, vocab) out.
+                self.out = self.decode_session.decode(self.ids)
+            else:
+                step = self.decode_session.step
+                self.out = [step(t) for t in self.decode_ids]
         else:
             self.out = self.model.forward(self.ids)
         self.neural_ab_runtime["public_calls_completed"] += 1
 
     def _y(self):
+        if self.decode_ids is not None and self.operation == "decode_n":
+            return self.np.asarray(self.out)   # already (B, L, V)
         if self.decode_ids is not None:        # after the clock: (B, V) per token -> (B, L, V)
             return self.np.stack([self.np.asarray(y) for y in self.out], axis=1)
         return self.np.asarray(self.out)
@@ -5237,9 +5250,9 @@ def build_runner(lane, arm, shape, data, ab_config=None):
     operation = _neural_ab_operation(ab_config)
     if "optimize" in (ab_config or {}).get("runtime", {}) and operation != "program_optimize":
         raise ValueError("REFUSED: runtime.optimize requires program_optimize")
-    supported = ("model_default", "transformer_configured_forward", "transformer_windowed_forward", "transformer_forward_vjp_tape", "mamba3_owned_forward", "lm_chunked_head_v2",
+    supported = ("model_default", "transformer_configured_forward", "transformer_windowed_forward", "mamba3_owned_forward", "lm_chunked_head_v2",
                  "residual_dropout_forward_vjp", "mlp_inference_sessions", "samba_training_config", "mamba_forward_vjp",
-                 "program_eager", "program_optimize")
+                 "program_eager", "program_optimize", "decode_n")
     if operation not in supported:
         raise RuntimeError("REFUSED: no actual public workload implementation for neural A/B operation " + str(operation))
     if arm in OUR_ARMS:
@@ -5284,12 +5297,14 @@ def build_runner(lane, arm, shape, data, ab_config=None):
             raise RuntimeError("REFUSED: lm_chunked_head_v2 requires lm-train-step and its config flag")
         if operation == "transformer_windowed_forward" and (lane != "transformer-forward" or int(runtime.get("transformer_window", 0)) <= 0):
             raise RuntimeError("REFUSED: windowed operation requires transformer-forward and a positive configured window")
-        if operation == "transformer_forward_vjp_tape" and model != "transformer":
-            raise RuntimeError("REFUSED: tape operation requires a transformer block")
         if operation == "mamba3_owned_forward" and model != "mamba3":
             raise RuntimeError("REFUSED: owned-weight operation requires Mamba3")
         if operation == "mamba_forward_vjp" and model not in ("mamba1", "mamba2", "mamba3"):
             raise RuntimeError("REFUSED: Mamba VJP operation requires a Mamba block")
+        if operation == "decode_n" and lane not in DECODE_LANES:
+            # Decode plan D2: the whole decode as one session.decode call (N
+            # tokens per native call), the A/B arm against one step per token.
+            raise RuntimeError("REFUSED: decode_n requires a decode lane")
         if model == "lm":
             return OursLM(lane, shape, data, ab_runtime=runtime)
         if model == "samba":
@@ -6349,7 +6364,7 @@ def race(args):
             result["quality"] = quality(lane, data, scored, shape=args.shape)
             if scored is not outs:
                 result["quality"].pop(TORCH_REFERENCE_ARM, None)    # the reference is not a raced arm
-        if operation in ("transformer_forward_vjp_tape", "mamba_forward_vjp"):
+        if operation == "mamba_forward_vjp":
             result["experimental_quality"] = {
                 "forward": "ordinary host forward comparator only",
                 "vjp": "not_qualified_by_forward_quality",

@@ -1,0 +1,1715 @@
+diff --git a/bindings/neighbors_semi_native.mojo b/bindings/neighbors_semi_native.mojo
+index 5ea725d20e..4d2382b990 100644
+--- a/bindings/neighbors_semi_native.mojo
++++ b/bindings/neighbors_semi_native.mojo
+@@ -614,6 +614,13 @@ def _lp_alpha_f32(fields: PythonObject, spreading: Bool) raises -> Float64:
+     return _semi_f32_scalar(_semi_float(family_field(fields, "alpha")))
+ 
+ 
++def _lp_fast_resident(binding: PythonObject) raises -> Bool:
++    """`_lp_fast_resident`: the resident kNN-graph loop compiled in."""
++    var b = _semi_b()
++    var fn_obj = family_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_lp_fast_resident"), PythonObject(None))
++    return fn_obj is not None and _semi_int(family_call(fn_obj)) != 0
++
++
+ def _lp_build_graph(model: PythonObject, fields: PythonObject, binding: PythonObject, x: PythonObject,
+                     spreading: Bool, context: PythonObject) raises -> PythonObject:
+     """`_build_graph` of the dense kernel: the RBF affinity, then
+@@ -721,11 +728,8 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
+         _semi_op(binding, "lp_clamp",
+                  Python.list(_semi_addr(ld), _semi_addr(ld), _semi_addr(unlabeled), _semi_addr(ystatic)),
+                  Python.list(PythonObject(n), PythonObject(nc)), Python.list(), context)
+-    if knn:
+-        # The kNN-graph loop as one resident op (`lp_iterate_knn`), on every
+-        # binding (lane n4-mds-labelprop-nmf-loops, 2026-11-09).
+-        # TOMBSTONE: label-propagation compact-graph binding loop (REFACTORED: lp_iterate_knn on every vendor and tier) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+-        # Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
++    if knn and _lp_fast_resident(binding):
++        # The kNN-graph loop as one resident op (`lp_iterate_knn`).
+         var cols = graph[0]
+         var vals = graph[1]
+         var info = _semi_out(Python.tuple(2), "<i4", context)
+@@ -746,25 +750,65 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
+         _ = info  # keep the Python object alive through the read above
+         _lp_finish(fields, binding, x, classes, ld, resident_iter, context)
+         return
+-    # The dense loop as one resident op (`lp_iterate`).
+-    var info = _semi_out(Python.tuple(2), "<i4", context)
+-    var words = _semi_tol_words(fields)
+-    var max_iter = _semi_int(family_field(fields, "max_iter"))
+-    var mode = (1 if spreading else 0) + (2 if _semi_truth(py_get(fields, PythonObject("_classical_raw_graph"),
+-                                                                     PythonObject(False))) else 0)
+-    var alpha_f = _lp_alpha_f32(fields, spreading)
+-    _semi_op(binding, "lp_iterate",
+-             Python.list(_semi_addr(dense), _semi_addr(ld), _semi_addr(ystatic), _semi_addr(unlabeled),
+-                         _semi_addr(info)),
+-             Python.list(PythonObject(n), PythonObject(nc), PythonObject(max_iter), PythonObject(mode),
+-                         PythonObject(words[0]), PythonObject(words[1])),
+-             Python.list(PythonObject(alpha_f)), context)
+-    _ = dense  # keep the Python object alive through the native call above
+-    _ = ystatic  # keep the Python object alive through the native call above
+-    _ = unlabeled  # keep the Python object alive through the native call above
+-    var dense_iter = Int(FAMILY_I32P(unsafe_from_address=Int(py=_semi_addr(info)))[0])
+-    _ = info  # keep the Python object alive through the read above
+-    _lp_finish(fields, binding, x, classes, ld, dense_iter, context)
++    if not knn:
++        # The dense loop as one resident op (`lp_iterate`).
++        var info = _semi_out(Python.tuple(2), "<i4", context)
++        var words = _semi_tol_words(fields)
++        var max_iter = _semi_int(family_field(fields, "max_iter"))
++        var mode = (1 if spreading else 0) + (2 if _semi_truth(py_get(fields, PythonObject("_classical_raw_graph"),
++                                                                         PythonObject(False))) else 0)
++        var alpha_f = _lp_alpha_f32(fields, spreading)
++        _semi_op(binding, "lp_iterate",
++                 Python.list(_semi_addr(dense), _semi_addr(ld), _semi_addr(ystatic), _semi_addr(unlabeled),
++                             _semi_addr(info)),
++                 Python.list(PythonObject(n), PythonObject(nc), PythonObject(max_iter), PythonObject(mode),
++                             PythonObject(words[0]), PythonObject(words[1])),
++                 Python.list(PythonObject(alpha_f)), context)
++        _ = dense  # keep the Python object alive through the native call above
++        _ = ystatic  # keep the Python object alive through the native call above
++        _ = unlabeled  # keep the Python object alive through the native call above
++        var dense_iter = Int(FAMILY_I32P(unsafe_from_address=Int(py=_semi_addr(info)))[0])
++        _ = info  # keep the Python object alive through the read above
++        _lp_finish(fields, binding, x, classes, ld, dense_iter, context)
++        return
++    # The compact graph without the resident op: one device step per
++    # iteration, the stopping sum read back before each step.
++    var prev = _semi_out(Python.tuple(n, nc), "<f4", context)
++    var s = _semi_out(Python.tuple(1), "<f4", context)
++    var n_iter = 0
++    var converged = False
++    var steps = _semi_int(family_field(fields, "max_iter"))
++    # tol and alpha are read once per fit, not once per iteration (lane
++    # perf-sweep-msel-nbr-svc); the same float(tol) and float32(alpha).
++    var tol = _semi_float(family_field(fields, "tol"))
++    var alpha_step = _lp_alpha_f32(fields, True) if spreading else 0.0
++    for it in range(steps):  # driver-loop: over propagation iterations, one device step each
++        n_iter = it
++        _semi_op(binding, "absdiff_sum", Python.list(_semi_addr(ld), _semi_addr(prev), _semi_addr(s)),
++                 Python.list(PythonObject(n * nc)), Python.list(), context)
++        _ = prev  # keep the Python object alive through the native call above
++        var change = Float64(FAMILY_F32P(unsafe_from_address=Int(py=_semi_addr(s)))[0])
++        _ = s  # keep the Python object alive through the read above
++        if change < tol:
++            converged = True
++            break
++        prev = ld
++        var nxt = _lp_knn_product(binding, graph, n, ld, context)
++        var out = _semi_out(Python.tuple(n, nc), "<f4", context)
++        if not spreading:
++            _semi_op(binding, "lp_clamp",
++                     Python.list(_semi_addr(nxt), _semi_addr(ystatic), _semi_addr(unlabeled), _semi_addr(out)),
++                     Python.list(PythonObject(n), PythonObject(nc)), Python.list(), context)
++        else:
++            _semi_op(binding, "ls_clamp", Python.list(_semi_addr(nxt), _semi_addr(ystatic), _semi_addr(out)),
++                     Python.list(PythonObject(n * nc)), Python.list(PythonObject(alpha_step)), context)
++        _ = nxt  # keep the Python object alive through the native call above
++        _ = ystatic  # keep the Python object alive through the native call above
++        _ = unlabeled  # keep the Python object alive through the native call above
++        ld = out
++    if not converged:
++        n_iter += 1
++    _lp_finish(fields, binding, x, classes, ld, n_iter, context)
+ 
+ 
+ def _lp_dense_available(binding: PythonObject) raises -> Bool:
+diff --git a/x_decomp/kit_device.mojo b/x_decomp/kit_device.mojo
+index d27a237735..bdd202badb 100644
+--- a/x_decomp/kit_device.mojo
++++ b/x_decomp/kit_device.mojo
+@@ -108,15 +108,6 @@ def gather_rows_kernel(src: F32Ptr, idx: I32Ptr, dst: F32Ptr, m: Int32, c: Int32
+         dst.unsafe_store(t, src.unsafe_load(Int(idx.unsafe_load(a)) * Int(c) + j))
+ 
+ 
+-def put_gated_kernel(gate: I32Ptr, dst: F32Ptr, src: F32Ptr, n: Int32):
+-    """dst[i] = src[i] while the loop's done word gate[0] is 0 (`DKit.put_gated`)."""
+-    if gate.unsafe_load(0) != Int32(0):
+-        return
+-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+-    if i < Int(n):
+-        dst.unsafe_store(i, src.unsafe_load(i))
+-
+-
+ def diag_kernel(a: F32Ptr, dst: F32Ptr, n: Int32):
+     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+     if i < Int(n):
+@@ -799,7 +790,7 @@ struct DKit(Movable):
+             res[i] = Int32(Int(h.d[i]))
+         return res^
+ 
+-    def order_small_dev(self, A: DMat) raises -> DMat:
++    def order_small_dev(mut self, A: DMat) raises -> DMat:
+         """`order_small` kept on the device: the stable ascending order of A's
+         words as int32 bits in a (n, 1) matrix, enqueued (no download)."""
+         var n = A.n()
+@@ -821,43 +812,25 @@ struct DKit(Movable):
+         self.upload_into(out, words^)
+         return out^
+ 
+-    def cd_rows_enq(self, W: DMat, HHt: DMat, XHt: DMat, perm: DMat) raises -> DMat:
+-        """`_Kit.cd_rows` on device matrices (`cd_rows_kernel`), enqueued: W
+-        swept in place, the violation folded by `total` into a (1, 1) matrix
+-        that stays on the device. `perm` is the coordinate order's W.c int32
+-        words, resident (`order_small_dev`, `iota_i32`).
+-        Lane n4-mds-labelprop-nmf-loops (2026-11-09): NMF's CD sweep runs as
+-        the executor's bounded loop, so the violation is the loop's criterion
+-        operand on the device; `cd_rows`, which read it home on every half
+-        sweep, is gone."""
+-        # TOMBSTONE: DKit.cd_rows (REFACTORED onto the bounded device loop) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+-        # Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
++    def cd_rows(mut self, W: DMat, HHt: DMat, XHt: DMat, perm: DMat) raises -> Float64:
++        """`_Kit.cd_rows` on device matrices (`cd_rows_kernel`): W swept in
++        place, the violation folded by `total` and read. `perm` is the
++        coordinate order's W.c int32 words, resident (`order_small_dev`,
++        `iota_i32`; lane consol-n0-readmission: the order came home and went
++        back up on every half sweep)."""
+         var n = W.r
+         var kc = W.c
+-        if n * kc == 0:
+-            return self.zeros(1, 1)
+-        if perm.n() < kc:
+-            raise Error("x_decomp: cd_rows needs a coordinate order of W's columns")
+         var viol = DMat(n, 1)
+-        self.ctx.enqueue_function[cd_rows_kernel](
+-            W.p(), HHt.p(), XHt.p(), perm.p().bitcast[Int32](), viol.p(), Int32(n), Int32(kc),
+-            grid_dim=_blocks(n), block_dim=TPB,
+-        )
+-        return self.total(viol)
+-
+-    def put_gated(self, gate: I32Ptr, dst: DMat, src: DMat) raises:
+-        """src's words into dst (same shape) while the bounded device loop
+-        whose register block is `gate` runs (word 0, the done word, is 0);
+-        nothing once it has stopped. The carried state of a loop body is
+-        written only through this, so iterations enqueued past the stop leave
+-        it as the stopping iteration left it."""
+-        if dst.r != src.r or dst.c != src.c:
+-            raise Error("x_decomp: put_gated needs equal shapes")
+-        var n = src.n()
+-        if n > 0:
+-            self.ctx.enqueue_function[put_gated_kernel](
+-                gate, dst.p(), src.p(), Int32(n), grid_dim=_blocks(n), block_dim=TPB
++        if n * kc > 0:
++            if perm.n() < kc:
++                raise Error("x_decomp: cd_rows needs a coordinate order of W's columns")
++            self.ctx.enqueue_function[cd_rows_kernel](
++                W.p(), HHt.p(), XHt.p(), perm.p().bitcast[Int32](), viol.p(), Int32(n), Int32(kc),
++                grid_dim=_blocks(n), block_dim=TPB,
+             )
++            var tv = self.total(viol)
++            return self.word(tv)
++        return 0.0
+ 
+     def mm(self, A: DMat, B: DMat, ta: Bool, tb: Bool) raises -> DMat:
+         var m = A.c if ta else A.r
+diff --git a/x_decomp/mds.mojo b/x_decomp/mds.mojo
+index 24a3b5eda7..4653a0ea21 100644
+--- a/x_decomp/mds.mojo
++++ b/x_decomp/mds.mojo
+@@ -4,17 +4,12 @@
+ MDS._single` (metric and non-metric, the latter's disparities through
+ x_decomp/mds_iso.mojo's setup and isotonic step, `_nm_native`'s host form)
+ and `fit_transform`'s restart pick (the first strictly smaller stress),
+-statement for statement on `Kit[E]`: the same cells and float32 scalars.
+-x_decomp/mds_dev.mojo runs the same on resident matrices with
+-x_decomp/mds_iso_dev.mojo's kernels, as the executor's bounded device loop.
+-Lane n4-mds-labelprop-nmf-loops (2026-11-09): the per-iteration stop test
+-(`mds_stop_f32`) and the non-metric disparity scale (`mds_disp_scale_f32`)
+-are float32 cells (x_decomp/cells.mojo), the functions the GPU loop's
+-criterion kernel and ew cells compute, so every column stops at the same
+-iteration; they were Python's float64 tests, which a Metal kernel cannot
+-run. The final normalized stress stays float64 (read once per start)."""
++statement for statement on `Kit[E]`: the same cells and float32 scalars and
++Python's float64 stress tests in the same order, so the IDENTICAL words are
++the Python driver's. x_decomp/mds_dev.mojo runs the same on resident
++matrices with x_decomp/mds_iso_dev.mojo's kernels."""
+ from std.math import sqrt
+-from x_decomp.cells import F32Ptr, I32Ptr, div0, mul, sqrt0, sub
++from x_decomp.cells import F32Ptr, I32Ptr
+ from x_decomp.exec_trait import Exec
+ from x_decomp.kit import (
+     Kit, Mat, OP_ADD, OP_DIV, OP_FMA, OP_SCALE, OP_SELECT, OP_SQ, OP_SQDIFF, OP_SQRT, mat_const, mat_eye,
+@@ -23,35 +18,6 @@ from x_decomp.kit import (
+ from x_decomp.mds_iso import mds_disp_host, mds_setup_host
+ 
+ 
+-@always_inline
+-def mds_half_f32(w: Float32) -> Float32:
+-    """A summed word halved (the stress, `sum (d - disp)^2 / 2`)."""
+-    return mul(w, Float32(0.5))
+-
+-
+-@always_inline
+-def mds_stop_f32(old: Float32, stress: Float32, ssd: Float32, eps: Float32) -> Bool:
+-    """`(old - stress) / (ssd / 2) < eps` in float32 cells. A zero ssd keeps
+-    IEEE's quotient sign: a negative numerator stops, any other does not."""
+-    var num = sub(old, stress)
+-    var half = mds_half_f32(ssd)
+-    if half == Float32(0):
+-        return num < Float32(0)
+-    return div0(num, half) < eps
+-
+-
+-@always_inline
+-def mds_disp_scale_f32(half_pairs: Float32, ss: Float32) -> Float32:
+-    """The non-metric disparities' scale `sqrt((n (n - 1) / 2) / ss)` as the
+-    ew cells compute it (OP_DIV then OP_SQRT: 0 for a zero ss)."""
+-    return sqrt0(div0(half_pairs, ss))
+-
+-
+-def mds_half_pairs(n: Int) -> Float32:
+-    """n (n - 1) / 2 rounded once to float32."""
+-    return Float32(Float64(n * (n - 1)) / 2)
+-
+-
+ struct MdsArgs(Copyable, Movable):
+     var max_iter: Int
+     var metric: Bool
+@@ -120,22 +86,19 @@ def mds_single[E: Exec](k: Kit[E], Dis: Mat, var Y: Mat, a: MdsArgs, mut stress:
+     var nm = _NmHost(Dis) if native else _NmHost(Mat(1, 1))
+     var disp = Dis.copy()
+     var d = _dist(k, Y)
+-    var old = Float32(0)
++    var old = 0.0
+     var have_old = False
+     var it = 0
+     var eye = mat_eye(n)
+     var floor = mat_const(1e-5, 1, 1)
+-    var eps32 = Float32(a.eps)
+-    var half_pairs = mds_half_pairs(n)
+-    var stress32 = Float32(0)
+     stress = 0.0
+     for i in range(1, a.max_iter + 1):
+         it = i
+         if native:
+             var P = Mat(n, n)
+             mds_disp_host(d.p(), P.p(), nm.addrs(), n, nm.m, nm.G, i == 1)
+-            var ss = Float32(k.word(k.total(k.ew1(OP_SQ, P, 0.0))))
+-            P = k.ew1(OP_SCALE, P, Float64(mds_disp_scale_f32(half_pairs, ss)))
++            var ss = k.word(k.total(k.ew1(OP_SQ, P, 0.0)))
++            P = k.ew1(OP_SCALE, P, sqrt((Float64(n * (n - 1)) / 2) / ss))
+             disp = k.ew2(OP_ADD, P, mat_t(P))
+         var dz = k.ew3(OP_SELECT, d, d, floor, 0.0)
+         var ratio = k.ew2(OP_DIV, disp, dz)
+@@ -144,14 +107,13 @@ def mds_single[E: Exec](k: Kit[E], Dis: Mat, var Y: Mat, a: MdsArgs, mut stress:
+         B = k.ew3(OP_FMA, eye, rs, B, 0.0)
+         Y = k.ew1(OP_SCALE, k.mm(B, Y, False, False), 1.0 / Float64(n))
+         d = _dist(k, Y)
+-        stress32 = mds_half_f32(Float32(k.word(k.total(k.ew2(OP_SQDIFF, d, disp)))))
++        stress = k.word(k.total(k.ew2(OP_SQDIFF, d, disp))) / 2
+         if have_old:
+-            var ssd = Float32(k.word(k.total(k.ew1(OP_SQ, d, 0.0))))
+-            if mds_stop_f32(old, stress32, ssd, eps32):
++            var ssd = k.word(k.total(k.ew1(OP_SQ, d, 0.0)))
++            if (old - stress) / (ssd / 2) < a.eps:
+                 break
+-        old = stress32
++        old = stress
+         have_old = True
+-    stress = Float64(stress32)
+     if a.norm:
+         var ssd = k.word(k.total(k.ew1(OP_SQ, d, 0.0)))
+         stress = sqrt(stress / (ssd / 2)) if ssd != 0.0 else 0.0
+diff --git a/x_decomp/mds_dev.mojo b/x_decomp/mds_dev.mojo
+index 4addfc617d..a97dac1753 100644
+--- a/x_decomp/mds_dev.mojo
++++ b/x_decomp/mds_dev.mojo
+@@ -3,43 +3,16 @@
+ """x_decomp/mds.mojo's SMACOF on resident device matrices (lane
+ py-runtime-b): the same statements on `DKit`, non-metric disparities by
+ x_decomp/mds_iso_dev.mojo's setup and isotonic kernels (`_nm_native`'s
+-resident form). GPU binding only.
+-
+-Lane n4-mds-labelprop-nmf-loops (2026-11-09): one start's iterations run as
+-the executor's bounded device loop (autograd/program_loop_device.mojo). Y,
+-the distances d and the raw stress and ssd words are the loop's carried
+-state, written only through `DKit.put_gated`; the stop test is
+-`mds_smacof_crit_kernel` (`mds_stop_f32`, the host column's function) and
+-the non-metric scale is a device scalar (`mds_disp_scale_f32`'s cells), so
+-no word comes home inside the loop. The host reads the register block once
+-per MDS_LOOP_CHUNK iterations and the stress once per start; before, every
+-iteration read two or three words (the stress, ssd and the disparities'
+-sum of squares)."""
+-# TOMBSTONE: mds-smacof-host-word-loop (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+-# Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
++resident form), each stress word home where Python read it. GPU binding only."""
+ from std.math import sqrt
+-from std.gpu import block_idx, thread_idx
+-from max.gpu.host import DeviceContext
+-from autograd.program_loop import LoopTimers
+-from autograd.program_loop_device import LoopRegisters, LoopStep, bounded_device_loop, loop_lap
+-from core.step_gate import STEP_DONE, STEP_ITER, STEP_STOP_ITER
+-from x_decomp.cells import F32Ptr, I32Ptr
+-from x_decomp.device import xd_ctx
++from x_decomp.cells import F32Ptr
+ from x_decomp.kit import (
+-    Mat, OP_ADD, OP_DIV, OP_FMA, OP_MUL, OP_SCALE, OP_SELECT, OP_SQ, OP_SQDIFF, OP_SQRT, mat_const, mat_eye,
+-    mat_from,
++    Mat, OP_ADD, OP_DIV, OP_FMA, OP_SCALE, OP_SELECT, OP_SQ, OP_SQDIFF, OP_SQRT, mat_const, mat_eye, mat_from,
+ )
+ from x_decomp.kit_device import DKit, DMat
+-from x_decomp.mds import MdsArgs, mds_half_f32, mds_half_pairs, mds_stop_f32
++from x_decomp.mds import MdsArgs
+ from x_decomp.mds_iso_dev import mds_disp_dev, mds_setup_dev
+ 
+-#: SMACOF iterations enqueued between two reads of the loop's register
+-#: block. The stop is tested every iteration on the device; up to this many
+-#: minus one iterations run gated past it (their state writes are no-ops).
+-#: A cost rule, not a shape: one drain per eight iterations against at most
+-#: seven wasted ones (KMeans' Lloyd loop reads every 8 as well).
+-comptime MDS_LOOP_CHUNK = 8
+-
+ 
+ struct _NmDev(Movable):
+     var bufs: List[DMat]
+@@ -90,136 +63,44 @@ def _dist_dev(k: DKit, Y: DMat) raises -> DMat:
+     return k.ew1(OP_SQRT, k.sqdist(Y, Y), 0.0)
+ 
+ 
+-def _view(D: DMat) -> DMat:
+-    """A non-owning view of all of D."""
+-    return DMat(rows_of=D, row0=0, rows=D.r)
+-
+-
+-def mds_smacof_crit_kernel(words: I32Ptr, stress_w: F32Ptr, ssd_w: F32Ptr, old: F32Ptr, eps: Float32, it: Int32):
+-    """One thread, while the loop runs: the stress (half the raw word) against
+-    the previous one by `mds_stop_f32` (from the second iteration on, as
+-    `have_old`), else the stress kept as the next `old`."""
+-    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+-        return
+-    if words.unsafe_load(STEP_DONE) != Int32(0):
+-        return
+-    words.unsafe_store(STEP_ITER, it)
+-    var stress = mds_half_f32(stress_w.unsafe_load(0))
+-    if it > Int32(1) and mds_stop_f32(old.unsafe_load(0), stress, ssd_w.unsafe_load(0), eps):
+-        words.unsafe_store(STEP_STOP_ITER, it)
+-        words.unsafe_store(STEP_DONE, Int32(1))
+-        return
+-    old.unsafe_store(0, stress)
+-
+-
+-struct _SmacofStep(LoopStep, Movable):
+-    """One `MDS._single` iteration as a step of the bounded device loop."""
+-    var k: DKit
+-    var Dis: DMat
+-    var Y: DMat
+-    var d: DMat
+-    var stress_w: DMat
+-    var ssd_w: DMat
+-    var old: DMat
+-    var P: DMat
+-    var nm: _NmDev
+-    var native: Bool
+-    var n: Int
+-    var eye: DMat
+-    var floor: DMat
+-    var half_pairs: DMat
+-    var eps: Float32
+-
+-    def __init__(out self, Dis: DMat, Y0: DMat, a: MdsArgs) raises:
+-        var n = Dis.r
+-        var native = not a.metric
+-        var k = DKit()
+-        var nm = _NmDev(Dis, native)
+-        var Y = k.copy(Y0)
+-        var d = _dist_dev(k, Y)
+-        # the state before the first iteration: stress 0, ssd of the start's
+-        # distances (what the final normalization reads when nothing ran)
+-        var stress_w = k.zeros(1, 1)
+-        var ssd_w = k.total(k.ew1(OP_SQ, d, 0.0))
+-        var eye = k.upload(mat_eye(n))
+-        var floor = k.upload(mat_const(1e-5, 1, 1))
+-        var half_pairs = k.upload(mat_const(Float64(mds_half_pairs(n)), 1, 1))
+-        var P = DMat(0, 0)
+-        if native:
+-            P = DMat(n, n)
+-        self.k = k^
+-        self.Dis = _view(Dis)
+-        self.Y = Y^
+-        self.d = d^
+-        self.stress_w = stress_w^
+-        self.ssd_w = ssd_w^
+-        self.old = DMat(1, 1)
+-        self.P = P^
+-        self.nm = nm^
+-        self.native = native
+-        self.n = n
+-        self.eye = eye^
+-        self.floor = floor^
+-        self.half_pairs = half_pairs^
+-        self.eps = Float32(a.eps)
+-
+-    def enqueue_step(
+-        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
+-    ) raises:
+-        var gate: I32Ptr = registers.words.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+-        var n = self.n
+-        var disp: DMat
+-        if self.native:
+-            mds_disp_dev(
+-                self.P.id if it == 1 else self.d.id, self.P.id, self.nm.ids(), n, self.nm.m, self.nm.G, it == 1
+-            )
+-            var ss = self.k.total(self.k.ew1(OP_SQ, self.P, 0.0))
+-            var f = self.k.ew1(OP_SQRT, self.k.ew2(OP_DIV, self.half_pairs, ss), 0.0)
+-            var Ps = self.k.ew2(OP_MUL, self.P, f)
+-            disp = self.k.ew2(OP_ADD, Ps, self.k.t(Ps))
+-            loop_lap(ctx, timers, "disparities")
+-        else:
+-            disp = _view(self.Dis)
+-        var dz = self.k.ew3(OP_SELECT, self.d, self.d, self.floor, 0.0)
+-        var ratio = self.k.ew2(OP_DIV, disp, dz)
+-        var B = self.k.ew1(OP_SCALE, ratio, -1.0)
+-        var rs = self.k.rowsum(ratio)
+-        B = self.k.ew3(OP_FMA, self.eye, rs, B, 0.0)
+-        var Yn = self.k.ew1(OP_SCALE, self.k.mm(B, self.Y, False, False), 1.0 / Float64(n))
+-        var dn = _dist_dev(self.k, Yn)
+-        var sw = self.k.total(self.k.ew2(OP_SQDIFF, dn, disp))
+-        var ssd = self.k.total(self.k.ew1(OP_SQ, dn, 0.0))
+-        self.k.put_gated(gate, self.Y, Yn)
+-        self.k.put_gated(gate, self.d, dn)
+-        self.k.put_gated(gate, self.stress_w, sw)
+-        self.k.put_gated(gate, self.ssd_w, ssd)
+-        loop_lap(ctx, timers, "guttman")
+-        self.k.ctx.enqueue_function[mds_smacof_crit_kernel](
+-            gate, self.stress_w.p(), self.ssd_w.p(), self.old.p(), self.eps, Int32(it), grid_dim=1, block_dim=1,
+-        )
+-        loop_lap(ctx, timers, "criterion")
+-
+-
+ def mds_single_dev(mut k: DKit, Dis: DMat, var Y: DMat, a: MdsArgs, mut stress: Float64, mut it: Int) raises -> DMat:
+-    """One start's SMACOF run: the final Y, its stress (normalized when
+-    `a.norm`) and the iteration count."""
+-    var ctx = xd_ctx()
+-    var registers = LoopRegisters(ctx)
+-    var step = _SmacofStep(Dis, Y, a)
+-    var timers = LoopTimers("mds.smacof")
+-    var outcome = bounded_device_loop(ctx, step, registers, 1, a.max_iter, MDS_LOOP_CHUNK, timers)
+-    timers.report()
+-    it = outcome.stop_iteration if outcome.converged else max(a.max_iter, 0)
+-    # the start's one read: its stress and ssd words
+-    var hs = k.get(step.stress_w)
+-    var hd = k.get(step.ssd_w)
+-    k.sync()
+-    step.k.sync()  # the step kit's held uploads, before it goes
+-    stress = Float64(mds_half_f32(hs.d[0]))
++    var n = Dis.r
++    var native = not a.metric
++    var nm = _NmDev(Dis, native)
++    var disp = k.copy(Dis)
++    var d = _dist_dev(k, Y)
++    var old = 0.0
++    var have_old = False
++    it = 0
++    var eye = k.upload(mat_eye(n))
++    var floor = k.upload(mat_const(1e-5, 1, 1))
++    stress = 0.0
++    for i in range(1, a.max_iter + 1):
++        it = i
++        if native:
++            var P = DMat(n, n)
++            mds_disp_dev(P.id if i == 1 else d.id, P.id, nm.ids(), n, nm.m, nm.G, i == 1)
++            var ss = k.word(k.total(k.ew1(OP_SQ, P, 0.0)))
++            P = k.ew1(OP_SCALE, P, sqrt((Float64(n * (n - 1)) / 2) / ss))
++            disp = k.ew2(OP_ADD, P, k.t(P))
++        var dz = k.ew3(OP_SELECT, d, d, floor, 0.0)
++        var ratio = k.ew2(OP_DIV, disp, dz)
++        var B = k.ew1(OP_SCALE, ratio, -1.0)
++        var rs = k.rowsum(ratio)
++        B = k.ew3(OP_FMA, eye, rs, B, 0.0)
++        Y = k.ew1(OP_SCALE, k.mm(B, Y, False, False), 1.0 / Float64(n))
++        d = _dist_dev(k, Y)
++        stress = k.word(k.total(k.ew2(OP_SQDIFF, d, disp))) / 2
++        if have_old:
++            var ssd = k.word(k.total(k.ew1(OP_SQ, d, 0.0)))
++            if (old - stress) / (ssd / 2) < a.eps:
++                break
++        old = stress
++        have_old = True
+     if a.norm:
+-        var ssd = Float64(hd.d[0])
++        var ssd = k.word(k.total(k.ew1(OP_SQ, d, 0.0)))
+         stress = sqrt(stress / (ssd / 2)) if ssd != 0.0 else 0.0
+-    return k.copy(step.Y)
++    return Y^
+ 
+ 
+ def mds_fit_dev_run(
+diff --git a/x_decomp/nmf.mojo b/x_decomp/nmf.mojo
+index 33dd3e2b67..e12580693a 100644
+--- a/x_decomp/nmf.mojo
++++ b/x_decomp/nmf.mojo
+@@ -5,19 +5,15 @@
+ `_expansion_decomp.NMF`, statement for statement on `Kit[E]`
+ (x_decomp/kit.mojo): the same cells with the same operands, broadcast modes
+ and float32 scalars (each Python double rounded once, as the binding
+-boundary rounded it). The scalar tail (the error, the convergence ratios,
+-the violation sums) is float32 cells (`nmf_err_f32`, `nmf_mu_stop_f32`,
+-`nmf_cd_stop_f32`, x_decomp/cells.mojo arithmetic), the functions the GPU
+-loop's criterion kernels call, so every column stops at the same iteration
+-(lane n4-mds-labelprop-nmf-loops, 2026-11-09: the GPU loop decides on the
+-device; this was Python's float64 tail, which a Metal kernel cannot run).
+-The GPU binding runs x_decomp/nmf_dev.mojo, the same statements on resident
+-matrices.
++boundary rounded it), and Python's float64 scalar tail (the error, the
++convergence ratios, the violation sums) in Float64 in the same order. So the
++IDENTICAL words are the Python driver's on every column. The GPU binding
++runs x_decomp/nmf_dev.mojo, the same statements on resident matrices.
+ 
+ A zero first error (`err0`) made Python's convergence ratio raise
+ ZeroDivisionError; the drivers return NMF_ZERO_ERR0 and the caller raises it."""
+ from experiments.classical_identical_ideas.linear_controls import C26_PRODUCTS, C26_UPDATE_FUSED
+-from x_decomp.cells import F32Ptr, OP_CLASSICAL_MU_IS, add, div0, mul, sqrt0, sub
++from x_decomp.cells import F32Ptr, OP_CLASSICAL_MU_IS
+ from std.math import sqrt
+ from x_decomp.exec_trait import Exec
+ from x_decomp.kit import (
+@@ -32,51 +28,6 @@ comptime NMF_F32_EPS: Float64 = 1.1920928955078125e-07
+ comptime NMF_LOG_FLOOR: Float64 = 1.1754943508222875e-38
+ #: the driver's return when err0 is 0 (Python's ZeroDivisionError)
+ comptime NMF_ZERO_ERR0 = -1
+-#: `_err`'s three forms: beta 2 (Frobenius), 1 (KL), 0 (IS)
+-comptime NMF_ERR_FRO = 0
+-comptime NMF_ERR_KL = 1
+-comptime NMF_ERR_IS = 2
+-
+-
+-def nmf_err_kind(beta: Float64) -> Int:
+-    """The `_err` form of beta (2, 1, else 0)."""
+-    if beta == 2.0:
+-        return NMF_ERR_FRO
+-    if beta == 1.0:
+-        return NMF_ERR_KL
+-    return NMF_ERR_IS
+-
+-
+-@always_inline
+-def nmf_err_f32(kind: Int, a: Float32, b: Float32, c: Float32, mc: Float32) -> Float32:
+-    """`_err` from its summed words, in float32 cells (host and device alike).
+-    FRO: a is already sqrt(sum (X - WH)^2). KL: a = sum X log(X / WH),
+-    b = sum WH, c = sum X, res = (a + b) - c. IS: a = sum X / WH,
+-    b = sum log(X / WH), res = (a - mc) - b with mc the element count.
+-    The error is sqrt(2 res), 0 when res <= 0."""
+-    if kind == NMF_ERR_FRO:
+-        return a
+-    var res: Float32
+-    if kind == NMF_ERR_KL:
+-        res = sub(add(a, b), c)
+-    else:
+-        res = sub(sub(a, mc), b)
+-    return sqrt0(mul(Float32(2), res))
+-
+-
+-@always_inline
+-def nmf_mu_stop_f32(prev: Float32, err: Float32, err0: Float32, tol: Float32) -> Bool:
+-    """`(prev - err) / err0 < tol` in float32 cells (err0 != 0)."""
+-    return div0(sub(prev, err), err0) < tol
+-
+-
+-@always_inline
+-def nmf_cd_stop_f32(viol: Float32, v_init: Float32, tol: Float32) -> Bool:
+-    """`_cd`'s stop: a zero first violation, or `viol / v_init <= tol`, in
+-    float32 cells."""
+-    if v_init == Float32(0):
+-        return True
+-    return div0(viol, v_init) <= tol
+ 
+ 
+ struct NmfArgs(Copyable, Movable):
+@@ -107,24 +58,24 @@ struct NmfArgs(Copyable, Movable):
+         self.seed = seed
+ 
+ 
+-def nmf_err[E: Exec](k: Kit[E], M: Mat, W: Mat, H: Mat, beta: Float64) raises -> Float32:
+-    """`NMF._err`: sklearn `_beta_divergence(..., square_root=True)`, the
+-    summed words combined by `nmf_err_f32`."""
+-    var kind = nmf_err_kind(beta)
+-    if kind == NMF_ERR_FRO:
+-        var e = Float32(k.word(k.ew1(OP_SQRT, k.total(k.ew2(OP_SQDIFF, M, k.mm(W, H, False, False))), 0.0)))
+-        return nmf_err_f32(kind, e, Float32(0), Float32(0), Float32(0))
++def nmf_err[E: Exec](k: Kit[E], M: Mat, W: Mat, H: Mat, beta: Float64) raises -> Float64:
++    """`NMF._err`: sklearn `_beta_divergence(..., square_root=True)`."""
++    if beta == 2.0:
++        return k.word(k.ew1(OP_SQRT, k.total(k.ew2(OP_SQDIFF, M, k.mm(W, H, False, False))), 0.0))
+     var WH = k.ew1(OP_MAXS, k.mm(W, H, False, False), NMF_F32_EPS)
+     var keep = k.ew1(OP_GTS, M, NMF_F32_EPS)
+     var div = k.ew2(OP_DIV, M, WH)
+-    if kind == NMF_ERR_KL:
+-        var sum_wh = Float32(k.word(k.mm(k.colsum(W), k.rowsum(H), False, False)))
+-        var xlog = Float32(k.word(k.total(k.ew2(OP_MUL, k.ew2(OP_MUL, M, k.ew1(OP_LOGS, div, NMF_LOG_FLOOR)), keep))))
+-        var xs = Float32(k.word(k.total(k.ew2(OP_MUL, M, keep))))
+-        return nmf_err_f32(kind, xlog, sum_wh, xs, Float32(0))
+-    var dsum = Float32(k.word(k.total(k.ew2(OP_MUL, div, keep))))
+-    var lsum = Float32(k.word(k.total(k.ew2(OP_MUL, k.ew1(OP_LOGS, div, NMF_LOG_FLOOR), keep))))
+-    return nmf_err_f32(kind, dsum, lsum, Float32(0), Float32(M.r * M.c))
++    var res: Float64
++    if beta == 1.0:
++        var sum_wh = k.word(k.mm(k.colsum(W), k.rowsum(H), False, False))
++        var xlog = k.word(k.total(k.ew2(OP_MUL, k.ew2(OP_MUL, M, k.ew1(OP_LOGS, div, NMF_LOG_FLOOR)), keep)))
++        var xs = k.word(k.total(k.ew2(OP_MUL, M, keep)))
++        res = xlog + sum_wh - xs
++    else:
++        var dsum = k.word(k.total(k.ew2(OP_MUL, div, keep)))
++        var lsum = k.word(k.total(k.ew2(OP_MUL, k.ew1(OP_LOGS, div, NMF_LOG_FLOOR), keep)))
++        res = dsum - Float64(M.r * M.c) - lsum
++    return sqrt(2 * res) if res > 0 else 0.0
+ 
+ 
+ def _mu_ratio[E: Exec](k: Kit[E], M: Mat, W: Mat, H: Mat, beta: Float64, mut P: Mat) raises -> Mat:
+@@ -221,9 +172,9 @@ def nmf_mu[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
+                     H = k.ew2(OP_MUL, H, delta)
+         if a.tol > 0 and i % 10 == 0:
+             var err = nmf_err(k, M, W, H, beta)
+-            if err0 == Float32(0):
++            if err0 == 0.0:
+                 return NMF_ZERO_ERR0
+-            if nmf_mu_stop_f32(prev, err, err0, Float32(a.tol)):
++            if (prev - err) / err0 < a.tol:
+                 break
+             prev = err
+     return it
+@@ -257,7 +208,7 @@ def nmf_cd[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
+     var k = Kit[E]()
+     var draws = 0
+     var Ht = mat_t(H)
+-    var v_init = Float32(0)
++    var v_init = 0.0
+     var have_init = False
+     var it = 0
+     var fixed_gram = Mat(0, 0)
+@@ -273,17 +224,19 @@ def nmf_cd[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
+     for i in range(1, a.max_iter + 1):
+         it = i
+         var perm = _perm(k, W.c, a, draws)
+-        var viol = Float32(0)
++        var viol = 0.0
+         if C26_PRODUCTS and not a.update_h:
+-            viol = Float32(k.cd_rows(W, fixed_gram, fixed_cross, perm))
++            viol = k.cd_rows(W, fixed_gram, fixed_cross, perm)
+         else:
+-            viol = Float32(_cd_side(k, M, W, Ht, a.l1w, a.l2w, perm, False))
++            viol = _cd_side(k, M, W, Ht, a.l1w, a.l2w, perm, False)
+         if a.update_h:
+-            viol = add(viol, Float32(_cd_side(k, M, Ht, W, a.l1h, a.l2h, _perm(k, W.c, a, draws), True)))
++            viol += _cd_side(k, M, Ht, W, a.l1h, a.l2h, _perm(k, W.c, a, draws), True)
+         if not have_init:
+             v_init = viol
+             have_init = True
+-        if nmf_cd_stop_f32(viol, v_init, Float32(a.tol)):
++        if v_init == 0:
++            break
++        if viol / v_init <= a.tol:
+             break
+     if a.update_h:
+         H = mat_t(Ht)
+diff --git a/x_decomp/nmf_dev.mojo b/x_decomp/nmf_dev.mojo
+index 43908e1172..6c8b3b901a 100644
+--- a/x_decomp/nmf_dev.mojo
++++ b/x_decomp/nmf_dev.mojo
+@@ -3,128 +3,40 @@
+ """x_decomp/nmf.mojo's NMF solver loops on resident device matrices (lane
+ py-runtime-b): the same statements on `DKit` (x_decomp/kit_device.mojo),
+ the same cells on the same values, so the same words as the host column.
+-GPU binding only.
+-
+-Lane n4-mds-labelprop-nmf-loops (2026-11-09): both solvers run as the
+-executor's bounded device loop (autograd/program_loop_device.mojo). W and H
+-(Ht for CD) are the loop's carried state, written in place only through
+-`DKit.put_gated`; the stopping test is a one-thread criterion kernel over the
+-summed words on the device (`nmf_err_f32`, `nmf_mu_stop_f32`,
+-`nmf_cd_stop_f32` of x_decomp/nmf.mojo, the host column's functions). The host
+-reads the loop's register block once per chunk: MU every 10 iterations (its
+-criterion period, so no iteration runs past the stop), CD every
+-NMF_CD_LOOP_CHUNK. Before, MU read 1-3 error words home per 10 iterations and
+-CD 1-2 violation words per iteration."""
+-# TOMBSTONE: nmf-mu-cd-host-word-loops (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+-# Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
++Each scalar Python read (an error, a violation sum, a shuffle order) is one
++word home, where Python read it. GPU binding only."""
+ from experiments.classical_identical_ideas.linear_controls import C26_PRODUCTS, C26_UPDATE_FUSED
+-from std.gpu import block_idx, thread_idx
+-from max.gpu.host import DeviceContext
+-from autograd.program_loop import LoopTimers
+-from autograd.program_loop_device import LoopRegisters, LoopStep, bounded_device_loop, loop_lap
+-from core.step_gate import STEP_DONE, STEP_FAIL, STEP_ITER, STEP_STOP_ITER
+-from x_decomp.cells import F32Ptr, I32Ptr, OP_CLASSICAL_MU_IS, add
+-from x_decomp.device import xd_ctx
++from x_decomp.cells import F32Ptr, OP_CLASSICAL_MU_IS
++from std.math import sqrt
+ from x_decomp.kit import (
+     Mat, OP_ABS, OP_ADD, OP_ADDS, OP_AXPY, OP_DIV, OP_GTS, OP_LOGS, OP_MAXS, OP_MUL, OP_MUZ, OP_RECIP,
+     OP_MINS, OP_SCALE, OP_SELECT, OP_SQ, OP_SQDIFF, OP_SQRT, mat_const, mat_eye, mat_from,
+ )
+ from x_decomp.kit_device import DKit, DMat
+-from x_decomp.nmf import (
+-    NMF_ERR_FRO, NMF_ERR_KL, NMF_F32_EPS, NMF_LOG_FLOOR, NMF_ZERO_ERR0, NmfArgs, _f32_prod, _nrm_or0,
+-    nmf_cd_stop_f32, nmf_err_f32, nmf_err_kind, nmf_mu_stop_f32,
+-)
+-
+-#: CD's iterations enqueued between two reads of the loop's register block.
+-#: The stop is tested every iteration on the device; up to this many minus
+-#: one sweeps run gated past it (their state writes are no-ops). A cost
+-#: rule, not a shape: one drain per eight sweeps against at most seven
+-#: wasted sweeps (KMeans' Lloyd loop reads every 8 as well).
+-comptime NMF_CD_LOOP_CHUNK = 8
+-#: MU tests its error every 10 iterations (`_mu`'s period).
+-comptime NMF_MU_CHECK_PERIOD = 10
+-#: The failure code the MU criterion stores when the first error is 0.
+-comptime NMF_FAIL_ZERO_ERR0 = 1
+-
++from x_decomp.nmf import NMF_F32_EPS, NMF_LOG_FLOOR, NMF_ZERO_ERR0, NmfArgs, _f32_prod, _nrm_or0
+ 
+-def _view(D: DMat) -> DMat:
+-    """A non-owning view of all of D (the loop writes D's own buffer)."""
+-    return DMat(rows_of=D, row0=0, rows=D.r)
+ 
+-
+-def _gate(mut registers: LoopRegisters) -> I32Ptr:
+-    return registers.words.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+-
+-
+-def _err_words_dev(k: DKit, M: DMat, W: DMat, H: DMat, kind: Int) raises -> List[DMat]:
+-    """`NMF._err`'s summed words, on the device, in `nmf_err_f32`'s order."""
+-    var out = List[DMat]()
+-    if kind == NMF_ERR_FRO:
+-        out.append(k.ew1(OP_SQRT, k.total(k.ew2(OP_SQDIFF, M, k.mm(W, H, False, False))), 0.0))
+-        return out^
++def nmf_err_dev(mut k: DKit, M: DMat, W: DMat, H: DMat, beta: Float64) raises -> Float64:
++    """`NMF._err`: sklearn `_beta_divergence(..., square_root=True)`."""
++    if beta == 2.0:
++        return k.word(k.ew1(OP_SQRT, k.total(k.ew2(OP_SQDIFF, M, k.mm(W, H, False, False))), 0.0))
+     var WH = k.ew1(OP_MAXS, k.mm(W, H, False, False), NMF_F32_EPS)
+     var keep = k.ew1(OP_GTS, M, NMF_F32_EPS)
+     var div = k.ew2(OP_DIV, M, WH)
+-    if kind == NMF_ERR_KL:
+-        out.append(k.total(k.ew2(OP_MUL, k.ew2(OP_MUL, M, k.ew1(OP_LOGS, div, NMF_LOG_FLOOR)), keep)))
+-        out.append(k.mm(k.colsum(W), k.rowsum(H), False, False))
+-        out.append(k.total(k.ew2(OP_MUL, M, keep)))
+-        return out^
+-    out.append(k.total(k.ew2(OP_MUL, div, keep)))
+-    out.append(k.total(k.ew2(OP_MUL, k.ew1(OP_LOGS, div, NMF_LOG_FLOOR), keep)))
+-    return out^
+-
+-
+-def nmf_mu_crit_kernel(
+-    words: I32Ptr, a: F32Ptr, b: F32Ptr, c: F32Ptr, state: F32Ptr, kind: Int32, mc: Float32, tol: Float32,
+-    it: Int32,
+-):
+-    """One thread. it == 0 (before the loop): the first error into state[0]
+-    (err0) and state[1] (prev). Else, while the loop runs: a zero err0 stops
+-    it with NMF_FAIL_ZERO_ERR0 (Python's ZeroDivisionError), `nmf_mu_stop_f32`
+-    stops it, otherwise prev = err."""
+-    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+-        return
+-    var err = nmf_err_f32(Int(kind), a.unsafe_load(0), b.unsafe_load(0), c.unsafe_load(0), mc)
+-    if it == Int32(0):
+-        state.unsafe_store(0, err)
+-        state.unsafe_store(1, err)
+-        return
+-    if words.unsafe_load(STEP_DONE) != Int32(0):
+-        return
+-    words.unsafe_store(STEP_ITER, it)
+-    var err0 = state.unsafe_load(0)
+-    if err0 == Float32(0):
+-        words.unsafe_store(STEP_FAIL, Int32(NMF_FAIL_ZERO_ERR0))
+-        words.unsafe_store(STEP_STOP_ITER, it)
+-        words.unsafe_store(STEP_DONE, Int32(1))
+-        return
+-    if nmf_mu_stop_f32(state.unsafe_load(1), err, err0, tol):
+-        words.unsafe_store(STEP_STOP_ITER, it)
+-        words.unsafe_store(STEP_DONE, Int32(1))
+-        return
+-    state.unsafe_store(1, err)
+-
+-
+-def nmf_cd_crit_kernel(words: I32Ptr, v1: F32Ptr, v2: F32Ptr, two: Int32, state: F32Ptr, tol: Float32, it: Int32):
+-    """One thread, while the loop runs: the sweep's violation (both halves
+-    summed when `two`), the first one kept in state[0], and `nmf_cd_stop_f32`."""
+-    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+-        return
+-    if words.unsafe_load(STEP_DONE) != Int32(0):
+-        return
+-    words.unsafe_store(STEP_ITER, it)
+-    var v = v1.unsafe_load(0)
+-    if two != Int32(0):
+-        v = add(v, v2.unsafe_load(0))
+-    if it == Int32(1):
+-        state.unsafe_store(0, v)
+-    if nmf_cd_stop_f32(v, state.unsafe_load(0), tol):
+-        words.unsafe_store(STEP_STOP_ITER, it)
+-        words.unsafe_store(STEP_DONE, Int32(1))
++    var res: Float64
++    if beta == 1.0:
++        var sum_wh = k.word(k.mm(k.colsum(W), k.rowsum(H), False, False))
++        var xlog = k.word(k.total(k.ew2(OP_MUL, k.ew2(OP_MUL, M, k.ew1(OP_LOGS, div, NMF_LOG_FLOOR)), keep)))
++        var xs = k.word(k.total(k.ew2(OP_MUL, M, keep)))
++        res = xlog + sum_wh - xs
++    else:
++        var dsum = k.word(k.total(k.ew2(OP_MUL, div, keep)))
++        var lsum = k.word(k.total(k.ew2(OP_MUL, k.ew1(OP_LOGS, div, NMF_LOG_FLOOR), keep)))
++        res = dsum - Float64(M.r * M.c) - lsum
++    return sqrt(2 * res) if res > 0 else 0.0
+ 
+ 
+-def _mu_ratio_dev(k: DKit, M: DMat, W: DMat, H: DMat, beta: Float64, mut P: DMat) raises -> DMat:
++def _mu_ratio_dev(mut k: DKit, M: DMat, W: DMat, H: DMat, beta: Float64, mut P: DMat) raises -> DMat:
+     """`NMF._mu_ratio`: X / WH (KL) or X / WH^2 (IS) with WH clamped at
+     EPSILON; P = WH^-1 for IS."""
+     var WH = k.ew1(OP_MAXS, k.mm(W, H, False, False), NMF_F32_EPS)
+@@ -134,287 +46,164 @@ def _mu_ratio_dev(k: DKit, M: DMat, W: DMat, H: DMat, beta: Float64, mut P: DMat
+     return k.ew2(OP_DIV, k.ew2(OP_DIV, M, WH), WH)
+ 
+ 
+-struct _MuStep(LoopStep, Movable):
+-    """One `_mu` / `_mu_beta` iteration as a step of the bounded device loop:
+-    W and H (views of the caller's matrices) written through `put_gated`,
+-    then every NMF_MU_CHECK_PERIOD iterations (tol > 0) the error words and
+-    the criterion kernel."""
+-    var k: DKit
+-    var M: DMat
+-    var W: DMat
+-    var H: DMat
+-    var a: NmfArgs
+-    var kind: Int
+-    var eps: DMat
+-    var one: DMat
+-    var frozen_num: DMat
+-    var frozen_gram: DMat
+-    var state: DMat
+-
+-    def __init__(out self, M: DMat, W: DMat, H: DMat, a: NmfArgs) raises:
+-        var k = DKit()
+-        var eps = k.upload(mat_const(NMF_F32_EPS, 1, 1))
+-        var one = k.upload(mat_const(1.0, 1, 1))
+-        var frozen_num = DMat(0, 0)
+-        var frozen_gram = DMat(0, 0)
+-        comptime if C26_PRODUCTS:
+-            if not a.update_h and a.beta == 2.0:
+-                frozen_num = k.mm(M, H, False, True)
+-                frozen_gram = k.mm(H, H, False, True)
+-        self.k = k^
+-        self.M = _view(M)
+-        self.W = _view(W)
+-        self.H = _view(H)
+-        self.a = a.copy()
+-        self.kind = nmf_err_kind(a.beta)
+-        self.eps = eps^
+-        self.one = one^
+-        self.frozen_num = frozen_num^
+-        self.frozen_gram = frozen_gram^
+-        self.state = DMat(1, 2)
+-
+-    def criterion(self, mut registers: LoopRegisters, it: Int) raises:
+-        """The error words of the current W, H and the criterion kernel
+-        (it == 0: err0, before the loop)."""
+-        var w = _err_words_dev(self.k, self.M, self.W, self.H, self.kind)
+-        var pa = w[0].p()
+-        var pb = pa
+-        var pc = pa
+-        if len(w) > 1:
+-            pb = w[1].p()
+-        if len(w) > 2:
+-            pc = w[2].p()
+-        self.k.ctx.enqueue_function[nmf_mu_crit_kernel](
+-            _gate(registers), pa, pb, pc, self.state.p(), Int32(self.kind), Float32(self.M.r * self.M.c),
+-            Float32(self.a.tol), Int32(it), grid_dim=1, block_dim=1,
+-        )
+-        _ = w^
+-
+-    def enqueue_step(
+-        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
+-    ) raises:
+-        var gate = _gate(registers)
+-        var beta = self.a.beta
++def nmf_mu_dev(M: DMat, mut W: DMat, mut H: DMat, a: NmfArgs) raises -> Int:
++    """`NMF._mu` (and `_mu_beta` for beta 1 / 0). Returns the iteration
++    count, or NMF_ZERO_ERR0."""
++    var k = DKit()
++    var beta = a.beta
++    var err0 = nmf_err_dev(k, M, W, H, beta)
++    var prev = err0
++    var it = 0
++    var eps = k.upload(mat_const(NMF_F32_EPS, 1, 1))
++    var one = k.upload(mat_const(1.0, 1, 1))
++    var frozen_num = DMat(0, 0)
++    var frozen_gram = DMat(0, 0)
++    comptime if C26_PRODUCTS:
++        if not a.update_h and beta == 2.0:
++            frozen_num = k.mm(M, H, False, True)
++            frozen_gram = k.mm(H, H, False, True)
++    for i in range(1, a.max_iter + 1):
++        it = i
+         if beta == 2.0:
+             var num: DMat
+             var den: DMat
+-            if C26_PRODUCTS and not self.a.update_h:
+-                num = _view(self.frozen_num)
+-                den = self.k.mm(self.W, self.frozen_gram, False, False)
++            if C26_PRODUCTS and not a.update_h:
++                num = k.copy(frozen_num)
++                den = k.mm(W, frozen_gram, False, False)
+             else:
+-                num = self.k.mm(self.M, self.H, False, True)
+-                den = self.k.mm(self.W, self.k.mm(self.H, self.H, False, True), False, False)
+-            if self.a.l1w > 0:
+-                den = self.k.ew1(OP_ADDS, den, self.a.l1w)
+-            if self.a.l2w > 0:
+-                den = self.k.ew2s(OP_AXPY, den, self.W, self.a.l2w)
+-            self.k.put_gated(gate, self.W, self.k.ew3(OP_MUZ, self.W, num, den, NMF_F32_EPS))
+-            if self.a.update_h:
+-                num = self.k.mm(self.W, self.M, True, False)
+-                den = self.k.mm(self.k.mm(self.W, self.W, True, False), self.H, False, False)
+-                if self.a.l1h > 0:
+-                    den = self.k.ew1(OP_ADDS, den, self.a.l1h)
+-                if self.a.l2h > 0:
+-                    den = self.k.ew2s(OP_AXPY, den, self.H, self.a.l2h)
+-                self.k.put_gated(gate, self.H, self.k.ew3(OP_MUZ, self.H, num, den, NMF_F32_EPS))
++                num = k.mm(M, H, False, True)
++                den = k.mm(W, k.mm(H, H, False, True), False, False)
++            if a.l1w > 0:
++                den = k.ew1(OP_ADDS, den, a.l1w)
++            if a.l2w > 0:
++                den = k.ew2s(OP_AXPY, den, W, a.l2w)
++            W = k.ew3(OP_MUZ, W, num, den, NMF_F32_EPS)
++            if a.update_h:
++                num = k.mm(W, M, True, False)
++                den = k.mm(k.mm(W, W, True, False), H, False, False)
++                if a.l1h > 0:
++                    den = k.ew1(OP_ADDS, den, a.l1h)
++                if a.l2h > 0:
++                    den = k.ew2s(OP_AXPY, den, H, a.l2h)
++                H = k.ew3(OP_MUZ, H, num, den, NMF_F32_EPS)
+         else:
+             var P = DMat(0, 0)
+-            var R = _mu_ratio_dev(self.k, self.M, self.W, self.H, beta, P)
+-            var num = self.k.mm(R, self.H, False, True)
++            var R = _mu_ratio_dev(k, M, W, H, beta, P)
++            var num = k.mm(R, H, False, True)
+             var den: DMat
+             if beta == 1.0:
+-                den = self.k.ew2(OP_ADD, self.k.zeros(self.W.r, self.W.c), self.k.vec_t(self.k.rowsum(self.H)))
++                den = k.ew2(OP_ADD, k.zeros(W.r, W.c), k.vec_t(k.rowsum(H)))
+             else:
+-                den = self.k.mm(P, self.H, False, True)
+-            if self.a.l1w > 0:
+-                den = self.k.ew1(OP_ADDS, den, self.a.l1w)
+-            if self.a.l2w > 0:
+-                den = self.k.ew2s(OP_AXPY, den, self.W, self.a.l2w)
++                den = k.mm(P, H, False, True)
++            if a.l1w > 0:
++                den = k.ew1(OP_ADDS, den, a.l1w)
++            if a.l2w > 0:
++                den = k.ew2s(OP_AXPY, den, W, a.l2w)
+             comptime if C26_UPDATE_FUSED:
+-                self.k.put_gated(
+-                    gate, self.W, self.k.ew3(OP_CLASSICAL_MU_IS if beta == 0.0 else OP_MUZ, self.W, num, den, NMF_F32_EPS)
+-                )
++                W = k.ew3(OP_CLASSICAL_MU_IS if beta == 0.0 else OP_MUZ, W, num, den, NMF_F32_EPS)
+             else:
+-                den = self.k.ew3(OP_SELECT, self.k.ew1(OP_ABS, den, 0.0), den, self.eps, 0.0)
+-                var delta = self.k.ew2(OP_DIV, num, den)
++                den = k.ew3(OP_SELECT, k.ew1(OP_ABS, den, 0.0), den, eps, 0.0)
++                var delta = k.ew2(OP_DIV, num, den)
+                 if beta == 0.0:
+-                    delta = self.k.ew1(OP_SQRT, delta, 0.0)
+-                self.k.put_gated(gate, self.W, self.k.ew2(OP_MUL, self.W, delta))
+-            if self.a.update_h:
+-                R = _mu_ratio_dev(self.k, self.M, self.W, self.H, beta, P)
+-                num = self.k.mm(self.W, R, True, False)
++                    delta = k.ew1(OP_SQRT, delta, 0.0)
++                W = k.ew2(OP_MUL, W, delta)
++            if a.update_h:
++                R = _mu_ratio_dev(k, M, W, H, beta, P)
++                num = k.mm(W, R, True, False)
+                 if beta == 1.0:
+-                    var ws = self.k.colsum(self.W)
+-                    ws = self.k.ew3(OP_SELECT, self.k.ew1(OP_ABS, ws, 0.0), ws, self.one, 0.0)
+-                    den = self.k.ew2(OP_ADD, self.k.zeros(self.H.r, self.H.c), self.k.vec_t(ws^))
++                    var ws = k.colsum(W)
++                    ws = k.ew3(OP_SELECT, k.ew1(OP_ABS, ws, 0.0), ws, one, 0.0)
++                    den = k.ew2(OP_ADD, k.zeros(H.r, H.c), k.vec_t(ws^))
+                 else:
+-                    den = self.k.mm(self.W, P, True, False)
+-                if self.a.l1h > 0:
+-                    den = self.k.ew1(OP_ADDS, den, self.a.l1h)
+-                if self.a.l2h > 0:
+-                    den = self.k.ew2s(OP_AXPY, den, self.H, self.a.l2h)
++                    den = k.mm(W, P, True, False)
++                if a.l1h > 0:
++                    den = k.ew1(OP_ADDS, den, a.l1h)
++                if a.l2h > 0:
++                    den = k.ew2s(OP_AXPY, den, H, a.l2h)
+                 comptime if C26_UPDATE_FUSED:
+-                    self.k.put_gated(
+-                        gate, self.H,
+-                        self.k.ew3(OP_CLASSICAL_MU_IS if beta == 0.0 else OP_MUZ, self.H, num, den, NMF_F32_EPS),
+-                    )
++                    H = k.ew3(OP_CLASSICAL_MU_IS if beta == 0.0 else OP_MUZ, H, num, den, NMF_F32_EPS)
+                 else:
+-                    den = self.k.ew3(OP_SELECT, self.k.ew1(OP_ABS, den, 0.0), den, self.eps, 0.0)
+-                    var delta = self.k.ew2(OP_DIV, num, den)
++                    den = k.ew3(OP_SELECT, k.ew1(OP_ABS, den, 0.0), den, eps, 0.0)
++                    var delta = k.ew2(OP_DIV, num, den)
+                     if beta == 0.0:
+-                        delta = self.k.ew1(OP_SQRT, delta, 0.0)
+-                    self.k.put_gated(gate, self.H, self.k.ew2(OP_MUL, self.H, delta))
+-        loop_lap(ctx, timers, "mu_update")
+-        if self.a.tol > 0 and it % NMF_MU_CHECK_PERIOD == 0:
+-            self.criterion(registers, it)
+-            loop_lap(ctx, timers, "criterion")
+-
+-
+-def nmf_mu_dev(M: DMat, mut W: DMat, mut H: DMat, a: NmfArgs) raises -> Int:
+-    """`NMF._mu` (and `_mu_beta` for beta 1 / 0): W and H updated in place.
+-    Returns the iteration count, or NMF_ZERO_ERR0."""
+-    var ctx = xd_ctx()
+-    var registers = LoopRegisters(ctx)
+-    var step = _MuStep(M, W, H, a)
+-    if a.tol > 0:
+-        step.criterion(registers, 0)
+-    # tol <= 0 has no criterion: the whole bound is one chunk, one read
+-    var check = NMF_MU_CHECK_PERIOD if a.tol > 0 else max(a.max_iter, 1)
+-    var timers = LoopTimers("nmf.mu")
+-    var outcome = bounded_device_loop(ctx, step, registers, 1, a.max_iter, check, timers)
+-    timers.report()
+-    step.k.sync()  # the step kit's held uploads, before it goes
+-    if outcome.converged:
+-        if registers.failure() == NMF_FAIL_ZERO_ERR0:
+-            return NMF_ZERO_ERR0
+-        return outcome.stop_iteration
+-    return max(a.max_iter, 0)
++                        delta = k.ew1(OP_SQRT, delta, 0.0)
++                    H = k.ew2(OP_MUL, H, delta)
++        if a.tol > 0 and i % 10 == 0:
++            var err = nmf_err_dev(k, M, W, H, beta)
++            if err0 == 0.0:
++                return NMF_ZERO_ERR0
++            if (prev - err) / err0 < a.tol:
++                break
++            prev = err
++    return it
+ 
+ 
+-def _cd_sweep_dev(k: DKit, gate: I32Ptr, W: DMat, G: DMat, C: DMat, perm: DMat) raises -> DMat:
+-    """`cd_rows` on a copy of W, the copy written back through `put_gated`;
+-    the violation word stays on the device."""
+-    var Wc = k.copy(W)
+-    var v = k.cd_rows_enq(Wc, G, C, perm)
+-    k.put_gated(gate, W, Wc)
+-    return v^
++def _perm_dev(mut k: DKit, ident: DMat, kc: Int, a: NmfArgs, mut draws: Int) raises -> DMat:
++    """`NMF._perm`: the identity (`ident`, uploaded once per fit), or with
++    shuffle a Philox draw's stable order, kept on the device as int32 words
++    (lane consol-n0-readmission: the order came home through a sync and was
++    uploaded again for every half sweep)."""
++    if not a.shuffle:
++        return DMat(rows_of=ident, row0=0, rows=ident.r)  # a view: cd_rows only reads it
++    draws += 1
++    return k.order_small_dev(k.rand(1, kc, a.seed, 200 + draws, 0))
+ 
+ 
+-def _cd_side_dev(k: DKit, gate: I32Ptr, M: DMat, W: DMat, Ht: DMat, l1: Float64, l2: Float64,
+-                 perm: DMat, eye: DMat, trans: Bool) raises -> DMat:
+-    """`NMF._cd_side`: one half sweep of W against Ht (W's buffer, gated).
+-    `eye` is the k x k identity, uploaded once per fit when an l2 term is set."""
++def _cd_side_dev(mut k: DKit, M: DMat, mut W: DMat, Ht: DMat, l1: Float64, l2: Float64,
++                      perm: DMat, eye: DMat, trans: Bool) raises -> Float64:
++    """`NMF._cd_side`: one half sweep of W against Ht (W in place). `eye` is
++    the k x k identity, uploaded once per fit when an l2 term is set."""
+     var HHt = k.mm(Ht, Ht, True, False)
+     var XHt = k.mm(M, Ht, trans, False)
+     if l2 != 0.0:
+         HHt = k.ew2s(OP_AXPY, HHt, eye, l2)
+     if l1 != 0.0:
+         XHt = k.ew1(OP_ADDS, XHt, -l1)
+-    return _cd_sweep_dev(k, gate, W, HHt, XHt, perm)
+-
+-
+-struct _CdStep(LoopStep, Movable):
+-    """One `_cd` iteration as a step of the bounded device loop: the W half
+-    sweep (and with update_H the Ht half sweep), each on a copy written back
+-    through `put_gated`, then the violation criterion kernel. The coordinate
+-    order is the identity (uploaded once) or a Philox draw's stable order,
+-    both on the device; the draw counter advances per enqueued half sweep in
+-    the host column's order."""
+-    var k: DKit
+-    var M: DMat
+-    var W: DMat
+-    var Ht: DMat
+-    var a: NmfArgs
+-    var kc: Int
+-    var draws: Int
+-    var ident: DMat
+-    var eye: DMat
+-    var fixed_gram: DMat
+-    var fixed_cross: DMat
+-    var state: DMat
+-
+-    def __init__(out self, M: DMat, W: DMat, Ht: DMat, a: NmfArgs) raises:
+-        var k = DKit()
+-        var kc = W.c
+-        # the per-fit constants, up once
+-        var ident = k.iota_i32(kc) if not a.shuffle else DMat(0, 0)
+-        var eye = k.upload(mat_eye(kc)) if (a.l2w != 0.0 or a.l2h != 0.0) else DMat(0, 0)
+-        var fixed_gram = DMat(0, 0)
+-        var fixed_cross = DMat(0, 0)
+-        comptime if C26_PRODUCTS:
+-            if not a.update_h:
+-                fixed_gram = k.mm(Ht, Ht, True, False)
+-                fixed_cross = k.mm(M, Ht, False, False)
+-                if a.l2w != 0.0:
+-                    fixed_gram = k.ew2s(OP_AXPY, fixed_gram, eye, a.l2w)
+-                if a.l1w != 0.0:
+-                    fixed_cross = k.ew1(OP_ADDS, fixed_cross, -a.l1w)
+-        self.k = k^
+-        self.M = _view(M)
+-        self.W = _view(W)
+-        self.Ht = _view(Ht)
+-        self.a = a.copy()
+-        self.kc = kc
+-        self.draws = 0
+-        self.ident = ident^
+-        self.eye = eye^
+-        self.fixed_gram = fixed_gram^
+-        self.fixed_cross = fixed_cross^
+-        self.state = DMat(1, 1)
+-
+-    def _perm(mut self) raises -> DMat:
+-        """`NMF._perm`: a view of the identity, or the next Philox draw's
+-        stable order (int32 words, on the device)."""
+-        if not self.a.shuffle:
+-            return _view(self.ident)
+-        self.draws += 1
+-        var r = self.k.rand(1, self.kc, self.a.seed, 200 + self.draws, 0)
+-        return self.k.order_small_dev(r)
+-
+-    def enqueue_step(
+-        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
+-    ) raises:
+-        var gate = _gate(registers)
+-        var p1 = self._perm()
+-        var v1: DMat
+-        if C26_PRODUCTS and not self.a.update_h:
+-            v1 = _cd_sweep_dev(self.k, gate, self.W, self.fixed_gram, self.fixed_cross, p1)
+-        else:
+-            v1 = _cd_side_dev(self.k, gate, self.M, self.W, self.Ht, self.a.l1w, self.a.l2w, p1, self.eye, False)
+-        loop_lap(ctx, timers, "cd_w")
+-        var two = self.a.update_h
+-        var v2 = DMat(0, 0)
+-        if two:
+-            var p2 = self._perm()
+-            v2 = _cd_side_dev(self.k, gate, self.M, self.Ht, self.W, self.a.l1h, self.a.l2h, p2, self.eye, True)
+-            loop_lap(ctx, timers, "cd_h")
+-        var p1v = v1.p()
+-        var p2v = p1v
+-        if two:
+-            p2v = v2.p()
+-        self.k.ctx.enqueue_function[nmf_cd_crit_kernel](
+-            gate, p1v, p2v, Int32(1 if two else 0), self.state.p(), Float32(self.a.tol),
+-            Int32(it), grid_dim=1, block_dim=1,
+-        )
+-        loop_lap(ctx, timers, "criterion")
++    return k.cd_rows(W, HHt, XHt, perm)
+ 
+ 
+ def nmf_cd_dev(M: DMat, mut W: DMat, mut H: DMat, a: NmfArgs) raises -> Int:
+-    """`NMF._cd`: W and (update_H) H updated. Returns the iteration count."""
++    """`NMF._cd`: W and (update_H) H replaced. Returns the iteration count."""
+     var k = DKit()
++    var draws = 0
+     var Ht = k.t(H)
+-    var ctx = xd_ctx()
+-    var registers = LoopRegisters(ctx)
+-    var step = _CdStep(M, W, Ht, a)
+-    var timers = LoopTimers("nmf.cd")
+-    var outcome = bounded_device_loop(ctx, step, registers, 1, a.max_iter, NMF_CD_LOOP_CHUNK, timers)
+-    timers.report()
+-    step.k.sync()  # the step kit's held uploads, before it goes
++    var v_init = 0.0
++    var have_init = False
++    var it = 0
++    var kc = W.c
++    # the per-fit constants, up once (they were uploaded on every half sweep)
++    var ident = k.iota_i32(kc) if not a.shuffle else DMat(0, 0)
++    var eye = k.upload(mat_eye(kc)) if (a.l2w != 0.0 or a.l2h != 0.0) else DMat(0, 0)
++    var fixed_gram = DMat(0, 0)
++    var fixed_cross = DMat(0, 0)
++    comptime if C26_PRODUCTS:
++        if not a.update_h:
++            fixed_gram = k.mm(Ht, Ht, True, False)
++            fixed_cross = k.mm(M, Ht, False, False)
++            if a.l2w != 0.0:
++                fixed_gram = k.ew2s(OP_AXPY, fixed_gram, eye, a.l2w)
++            if a.l1w != 0.0:
++                fixed_cross = k.ew1(OP_ADDS, fixed_cross, -a.l1w)
++    for i in range(1, a.max_iter + 1):
++        it = i
++        var perm = _perm_dev(k, ident, kc, a, draws)
++        var viol = 0.0
++        if C26_PRODUCTS and not a.update_h:
++            viol = k.cd_rows(W, fixed_gram, fixed_cross, perm)
++        else:
++            viol = _cd_side_dev(k, M, W, Ht, a.l1w, a.l2w, perm, eye, False)
++        if a.update_h:
++            viol += _cd_side_dev(k, M, Ht, W, a.l1h, a.l2h, _perm_dev(k, ident, kc, a, draws), eye, True)
++        if not have_init:
++            v_init = viol
++            have_init = True
++        if v_init == 0:
++            break
++        if viol / v_init <= a.tol:
++            break
+     if a.update_h:
+         H = k.t(Ht)
+-    if outcome.converged:
+-        return outcome.stop_iteration
+-    return max(a.max_iter, 0)
++    return it
+ 
+ 
+ def nmf_solve_dev_run(
+diff --git a/x_neighbors/iter_device.mojo b/x_neighbors/iter_device.mojo
+index 4833c84ae7..f5e78d6ff6 100644
+--- a/x_neighbors/iter_device.mojo
++++ b/x_neighbors/iter_device.mojo
+@@ -70,9 +70,7 @@ from x_neighbors.device_ops import (
+     p2m_sign_label_kernel,
+ )
+ from x_neighbors.items import K_RBF, U_IDENTITY
+-from x_neighbors.lp_spmm import lp_ell_fill_kernel, lp_ell_spmm_enqueue, lp_rowcount_kernel
+-from autograd.program_loop import LoopTimers
+-from autograd.program_loop_device import LoopRegisters, LoopStep, bounded_device_loop, loop_criterion_below, loop_lap
++from x_neighbors.lp_spmm import lp_ell_fill_kernel, lp_nonfinite_kernel, lp_prod_kernel, lp_rowcount_kernel
+ from core.device_zero import enqueue_fill
+ from core.pinned_reduce import pinned_block_sum
+ from core.scratch_pool import take_host_i32, give_host_i32
+@@ -119,24 +117,26 @@ def xn_tree_fold_kernel(part: FP, res: FP, nb_: Int64):
+         res.unsafe_store(0, sh[0])
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_C33_FROZEN_CHUNKS in op_lp_iterate (REFACTORED: the frozen-chunk body is the only path, on autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+-# Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
+-def lp_dense_product_gated(gate: IP, graph: FP, cur: FP, nxt: FP, n: Int32, c: Int32, degree: FP, raw_graph: Int32, variant: Int32):
+-    """The dense graph product (`matmul_item`, or the raw affinity's
+-    `classical_graph_product`) while the bounded loop runs (gate[0] == 0)."""
++def _c33_stop(sum: FP, state: IP, threshold: Float32, iteration: Int32):
++    # First convergence wins, including which ping-pong buffer owns it.
++    if state[0] == 0 and sum[0] < threshold:
++        state[0] = 1
++        state[1] = iteration
++        state[2] = iteration % 2
++
++
++def _c33_product(state: IP, graph: FP, cur: FP, nxt: FP, n: Int32, c: Int32, degree: FP, raw_graph: Int32, variant: Int32):
+     var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+-    if gate[0] == 0 and t < Int(n)*Int(c):
++    if state[0] == 0 and t < Int(n)*Int(c):
+         if raw_graph != 0:
+             classical_graph_product(t,graph,degree,cur,nxt,Int(n),Int(c),Int(variant))
+         else:
+             matmul_item(t,graph,cur,nxt,Int(n),Int(n),Int(c))
+ 
+ 
+-def lp_clamp_gated(gate: IP, nxt: FP, ys: FP, unl: IP, output: FP, n: Int32, c: Int32, variant: Int32, alpha: Float32):
+-    """`lp_clamp_item` per row (variant 0) or `ls_clamp_item` per cell while
+-    the bounded loop runs."""
++def _c33_clamp(state: IP, nxt: FP, ys: FP, unl: IP, output: FP, n: Int32, c: Int32, variant: Int32, alpha: Float32):
+     var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+-    if gate[0] != 0:
++    if state[0] != 0:
+         return
+     if variant == 0:
+         if t < Int(n):
+@@ -151,95 +151,10 @@ def _c43_graph_degree(a: FP,degree: FP,n: Int32,variant: Int32):
+         classical_graph_degree(t,a,degree,Int(n),Int(variant))
+ 
+ 
+-struct _LpDenseStep(LoopStep, Movable):
+-    """One iteration of `_LabelPropagationBase.fit` over the dense (or raw
+-    affinity) graph as a step of the bounded device loop: the stopping sum
+-    (`absdiff_sum`'s blocked fold) and its criterion first, then the gated
+-    product (the ELL SpMM op over G's nonzeros when sparse) and the gated
+-    clamp into the buffer the old prev held. The ping-pong pair is chosen by
+-    the iteration's parity, so a stop at iteration `it` leaves the last
+-    distributions in a when (it - 1) is even."""
+-    var graph: FP
+-    var degree: FP
+-    var a: FP
+-    var b: FP
+-    var nxt: FP
+-    var ys: FP
+-    var unl: IP
+-    var part: FP
+-    var cnt: IP
+-    var cols: IP
+-    var vals: FP
+-    var s: DeviceBuffer[DType.float32]
+-    var flag: DeviceBuffer[DType.int32]
+-    var n: Int
+-    var c: Int
+-    var maxk: Int
+-    var raw_graph: Bool
+-    var use_sparse: Bool
+-    var variant: Int
+-    var alpha: Float32
+-    var threshold: Float32
+-
+-    def __init__(
+-        out self, graph: FP, degree: FP, a: FP, b: FP, nxt: FP, ys: FP, unl: IP, part: FP, cnt: IP, cols: IP,
+-        vals: FP, s: DeviceBuffer[DType.float32], flag: DeviceBuffer[DType.int32], n: Int, c: Int, maxk: Int,
+-        raw_graph: Bool, use_sparse: Bool, variant: Int, alpha: Float32, threshold: Float32,
+-    ):
+-        self.graph = graph
+-        self.degree = degree
+-        self.a = a
+-        self.b = b
+-        self.nxt = nxt
+-        self.ys = ys
+-        self.unl = unl
+-        self.part = part
+-        self.cnt = cnt
+-        self.cols = cols
+-        self.vals = vals
+-        self.s = s.copy()
+-        self.flag = flag.copy()
+-        self.n = n
+-        self.c = c
+-        self.maxk = maxk
+-        self.raw_graph = raw_graph
+-        self.use_sparse = use_sparse
+-        self.variant = variant
+-        self.alpha = alpha
+-        self.threshold = threshold
+-
+-    def enqueue_step(
+-        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
+-    ) raises:
+-        var nc = self.n * self.c
+-        var even = (it - 1) % 2 == 0
+-        var cur = self.a if even else self.b
+-        var prev = self.b if even else self.a
+-        var sp: FP = self.s.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+-        _absdiff_launch(ctx, cur, prev, sp, self.part, nc)
+-        loop_criterion_below(ctx, registers, self.s, self.threshold, it)
+-        loop_lap(ctx, timers, "stopping_sum")
+-        var gate: IP = registers.words.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+-        if self.use_sparse:
+-            var cnt = self.cnt
+-            var cols = self.cols
+-            var vals = self.vals
+-            var graph = self.graph
+-            var nxt = self.nxt
+-            lp_ell_spmm_enqueue(ctx, gate, self.flag, cnt, cols, vals, self.maxk, graph, cur, nxt, self.n, self.c, BLOCK)
+-        else:
+-            ctx.enqueue_function[lp_dense_product_gated](
+-                gate, self.graph, cur, self.nxt, Int32(self.n), Int32(self.c), self.degree,
+-                Int32(1 if self.raw_graph else 0), Int32(self.variant), grid_dim=_grid(nc), block_dim=BLOCK,
+-            )
+-        loop_lap(ctx, timers, "product")
+-        # prev = ld; ld = clamp(nxt): the clamp writes over the buffer the old
+-        # prev held; the next iteration's parity swaps the two names.
+-        ctx.enqueue_function[lp_clamp_gated](
+-            gate, self.nxt, self.ys, self.unl, prev, Int32(self.n), Int32(self.c), Int32(self.variant), self.alpha,
+-            grid_dim=_grid(nc), block_dim=BLOCK,
+-        )
+-        loop_lap(ctx, timers, "clamp")
++def _c43_graph_product(a: FP,degree: FP,x: FP,dst: FP,n: Int32,c: Int32,variant: Int32):
++    var t=_tid()
++    if t < Int(n)*Int(c):
++        classical_graph_product(t,a,degree,x,dst,Int(n),Int(c),Int(variant))
+ 
+ 
+ def op_lp_iterate(
+@@ -252,16 +167,14 @@ def op_lp_iterate(
+     the initial label distributions, out: the last. info (int32 x 2): the
+     fit's n_iter_ and converged.
+ 
+-    Everything on the device: the stopping sum is the blocked `absdiff_sum`
+-    fold (`absdiff_sum_item`'s bits), compared against the float32 ceiling of
+-    tol on the device (the same decision as Python's float64 compare of the
+-    float32 sum); G's nonzeros are found on the device, once, and the product
+-    runs over them while the distributions are finite (the ELL SpMM op, the
+-    dense product's bits). Lane n4-mds-labelprop-nmf-loops (2026-11-09): the
+-    iterations run as the executor's bounded device loop, one register read
+-    per LPK_BATCH iterations; before, the default path read the stopping sum
+-    home every iteration and the frozen-chunk body
+-    (`-D MOJOLEARN_C33_FROZEN_CHUNKS`) was a second, dense-only copy."""
++    Everything on the device (lane/cgr-kernel): the stopping sum is the
++    blocked `absdiff_sum` fold (`absdiff_sum_item`'s bits) with only the
++    scalar read back; G's nonzeros are found on the device, once, and the
++    product runs over them while the distributions are finite
++    (`lp_prod_kernel`, the dense product's bits). Before, the host scanned
++    G for its CSR and downloaded the distributions every iteration for the
++    stopping sum and the finiteness test (and `-D MOJOLEARN_XN_LP_BATCH`,
++    `_DENSE` and `_DEVICE_FOLD` chose other routes; they are gone)."""
+     var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
+     var raw_graph = C43_RESIDENT_NORMALIZATION and variant >= 2
+     var clamp_variant = variant % 2
+@@ -279,6 +192,12 @@ def op_lp_iterate(
+     var d_unl = _buf_i(ctx, unlabeled, n, True)
+     var d_s = _buf(ctx, 0, 1, False)
+     var d_part = ctx.enqueue_create_buffer[DType.float32](max(xn_fold_blocks(nc), 1))
++    var hs = List[Float32](length=1, fill=Float32(0))
++    var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var prev: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var cur_is_a = True
++    var n_iter = 0
++    var converged = False
+     # G's nonzeros per row (sparse only when it pays: under an eighth
+     # nonzero), counted and laid out on the device; two integers come back
+     var d_cnt = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+@@ -304,29 +223,77 @@ def op_lp_iterate(
+             d_g.unsafe_ptr(), Int64(n), Int64(maxk), d_cols.unsafe_ptr(), d_vals.unsafe_ptr(),
+             grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+         )
+-    var step = _LpDenseStep(
+-        _p(d_g), _p(d_degree), _p(d_a), _p(d_b), _p(d_nxt), _p(d_ys),
+-        d_unl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+-        d_cnt.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_cols.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+-        d_vals.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_s, d_flag, n, c, maxk, raw_graph, use_sparse,
+-        clamp_variant, alpha, _lpki_tol_ceil(tol),
+-    )
+-    var registers = LoopRegisters(ctx)
+-    var timers = LoopTimers("label_propagation.dense")
+-    var outcome = bounded_device_loop(ctx, step, registers, 1, max_iter, LPK_BATCH, timers)
+-    timers.report()
+-    var converged = outcome.converged
+-    var n_iter: Int
+-    var cur_is_a: Bool
+-    if converged:
+-        # the stop at 1-based iteration s: s - 1 steps taken, the current
+-        # distributions where the parity left them
+-        n_iter = outcome.stop_iteration - 1
+-        cur_is_a = n_iter % 2 == 0
++    comptime if C33_FROZEN_CHUNKS:
++        # Upward Float32 threshold gives exactly Float64(sum) < tol.
++        var threshold = Float32(tol)
++        if Float64(threshold) < tol:
++            threshold = bitcast[DType.float32](bitcast[DType.uint32](threshold) + UInt32(1))
++        var state = ctx.enqueue_create_buffer[DType.int32](3)
++        ctx.enqueue_memset(state,Int32(0))
++        var status = List[Int32](length=3,fill=Int32(0))
++        for chunk in range(0,max_iter,C33_CHUNK):
++            for it in range(chunk,min(chunk+C33_CHUNK,max_iter)):
++                n_iter = it
++                _absdiff_launch(ctx,cur,prev,_p(d_s),_p(d_part),nc)
++                ctx.enqueue_function[_c33_stop](_p(d_s),state.unsafe_ptr(),threshold,Int32(it),grid_dim=1,block_dim=1)
++                ctx.enqueue_function[_c33_product](state.unsafe_ptr(),_p(d_g),cur,_p(d_nxt),Int32(n),Int32(c),_p(d_degree),Int32(raw_graph),Int32(clamp_variant),grid_dim=_grid(nc),block_dim=BLOCK)
++                ctx.enqueue_function[_c33_clamp](state.unsafe_ptr(),_p(d_nxt),_p(d_ys),d_unl.unsafe_ptr(),prev,Int32(n),Int32(c),Int32(clamp_variant),alpha,grid_dim=_grid(nc),block_dim=BLOCK)
++                var tmp = cur
++                cur = prev
++                prev = tmp
++                cur_is_a = not cur_is_a
++            ctx.enqueue_copy(dst_ptr=status.unsafe_ptr(),src_buf=state)
++            ctx.synchronize()
++            if status[0] != 0:
++                converged = True
++                n_iter = Int(status[1])
++                cur_is_a = status[2] == 0
++                break
++        _ = state^
+     else:
+-        # every step ran (n_iter_ = max_iter; the loop over nothing reports 1)
+-        n_iter = max_iter if max_iter > 0 else 1
+-        cur_is_a = max_iter <= 0 or max_iter % 2 == 0
++        for it in range(max_iter):
++            n_iter = it
++            _absdiff_launch(ctx, cur, prev, _p(d_s), _p(d_part), nc)
++            ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_s)
++            ctx.synchronize()
++            if Float64(hs[0]) < tol:
++                converged = True
++                break
++            if raw_graph:
++                ctx.enqueue_function[_c43_graph_product](_p(d_g),_p(d_degree),cur,_p(d_nxt),Int32(n),Int32(c),Int32(clamp_variant),grid_dim=_grid(nc),block_dim=BLOCK)
++            elif use_sparse:
++                ctx.enqueue_memset(d_flag, Int32(0))
++                ctx.enqueue_function[lp_nonfinite_kernel](
++                    cur, Int64(nc), d_flag.unsafe_ptr(), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
++                )
++                ctx.enqueue_function[lp_prod_kernel](
++                    d_flag.unsafe_ptr(), d_cnt.unsafe_ptr(), d_cols.unsafe_ptr(), d_vals.unsafe_ptr(), Int64(maxk),
++                    d_g.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), Int64(n), Int64(c),
++                    grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
++                )
++            else:
++                ctx.enqueue_function[matmul_kernel](
++                    d_g.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), Int64(n), Int64(n), Int64(c),
++                    grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
++                )
++            # prev = ld; ld = clamp(nxt): the clamp writes over the buffer the
++            # old prev held, then the two names swap.
++            if clamp_variant == 0:
++                ctx.enqueue_function[lp_clamp_kernel](
++                    d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), d_unl.unsafe_ptr(), prev, Int64(n), Int64(c),
++                    grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
++                )
++            else:
++                ctx.enqueue_function[ls_clamp_kernel](
++                    d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), prev, Int64(nc), alpha,
++                    grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
++                )
++            var t = cur
++            cur = prev
++            prev = t
++            cur_is_a = not cur_is_a
++    if not converged:
++        n_iter += 1
+     if cur_is_a:
+         _down(ctx, d_a, ld, nc)
+     else:
+@@ -335,7 +302,7 @@ def op_lp_iterate(
+     var inf = IP(unsafe_from_address=info)
+     inf.unsafe_store(0, Int32(n_iter))
+     inf.unsafe_store(1, Int32(1 if converged else 0))
+-    _ = step^
++    _ = hs^
+     _ = hst^
+     _ = d_cnt^
+     _ = d_stats^
+@@ -3198,7 +3165,7 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
+ 
+ # ---------------------------------------------------------------- lp_iterate_knn
+ #: LP_FAST_RESIDENT (lane/apple-fast-neighbors2, 2026-10-02; FAST + Apple
+-#: default; every vendor and tier since 2026-11-09): LabelPropagation /
++#: default, `-D MOJOLEARN_LP_FAST_RESIDENT_OFF` off): LabelPropagation /
+ #: LabelSpreading's fit loop over the compact kNN graph as ONE resident op.
+ #: Cause: with kernel='knn' `_LabelPropagationBase.fit`
+ #: (python/mojolearn/_expansion_neighbors.py) runs the loop in Python, three
+@@ -3218,34 +3185,43 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
+ comptime LPK_TPB = 256
+ comptime LPK_BATCH = C33_CHUNK if C33_FROZEN_CHUNKS else 16
+ comptime LPK_FAST_BUILD = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+-#: The resident loop is the only kNN-graph path on every vendor and tier
+-#: (lane n4-mds-labelprop-nmf-loops, 2026-11-09). It was the measured
+-#: default: FAST + Apple since the M3 A/B n2-lp-res-taxi (label-propagation
+-#: taxi 6,793 -> 2,086 ms, -69%, accuracy .7016 same), IDENTICAL on every
+-#: vendor since lane/fam2-neighbors (2026-10-04, no bit change). The
+-#: rollbacks `-D MOJOLEARN_LP_FAST_RESIDENT_OFF` and
+-#: `-D MOJOLEARN_IDN_LP_RESIDENT_OFF` (and IDN_ALL_OFF's arm here) kept the
+-#: binding's per-iteration loop alive, which allocated n x C per iteration;
+-#: both are refused now (core/experiment_guards_cluster.mojo).
+-# TOMBSTONE: MOJOLEARN_LP_FAST_RESIDENT_OFF (rollback of a measured winner) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+-# Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: MOJOLEARN_IDN_LP_RESIDENT_OFF (rollback of a measured default) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+-# Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
+-#: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor: the loop
+-#: resident in IDENTICAL, every launch the op's own item:
++#: LP_FAST_RESIDENT: the default on FAST + Apple since the M3 A/B
++#: (n2-lp-res-taxi: label-propagation taxi 6,793 -> 2,086 ms, -69%, accuracy
++#: .7016 same). `-D MOJOLEARN_LP_FAST_RESIDENT_OFF` keeps the Python loop;
++#: the old `MOJOLEARN_LP_FAST_RESIDENT` env name is harmless (no longer
++#: read). The Python layer asks `x_neighbors_lp_fast_resident()`.
++comptime LP_FAST_RESIDENT = (
++    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
++    and has_apple_gpu_accelerator()
++    and not is_defined["MOJOLEARN_LP_FAST_RESIDENT_OFF"]()
++)
++
++
++#: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor, default ON:
++#: the same loop resident in IDENTICAL. The Python loop paid three binding
++#: calls per iteration (absdiff_sum, lp_knn_product, lp_clamp / ls_clamp:
++#: the distributions up and down three times, a host finiteness walk over
++#: them, `lp_knn_finite`, and a scalar readback every iteration). Here the
++#: graph goes up once and every launch is the op's own item:
+ #: `absdiff_part_item` + `absdiff_fin_item` (the `absdiff_sum` op's bits),
+ #: the stopping test against the float32 ceiling of tol (the same decision
+ #: as Python's float64 compare of a float32 sum), the finiteness scan on the
+ #: device, `lp_knn_product_item`, `lp_clamp_item` / `ls_clamp_item`. The
+ #: stop flag gates the later launches of the batch; LPK_BATCH iterations per
+-#: drain. The host column runs the same items (x_neighbors/iter_host.mojo).
+-comptime LP_IDN_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
++#: drain. No bit changes: the host column keeps the Python loop over the
++#: same items. -D MOJOLEARN_IDN_LP_RESIDENT_OFF (or MOJOLEARN_IDN_ALL_OFF)
++#: restores the Python loop.
++comptime LP_IDN_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
++    is_defined["MOJOLEARN_IDN_LP_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
++)
+ 
+ 
+ def lp_fast_resident() -> Int:
+-    """1: this binary takes the resident kNN-graph loop (`lp_iterate_knn`),
+-    on every vendor and tier."""
+-    return 1
++    """1 when this binary takes the resident kNN-graph loop by default
++    (LP_FAST_RESIDENT on FAST + Apple, LP_IDN_RESIDENT on IDENTICAL)."""
++    comptime if LP_FAST_RESIDENT or LP_IDN_RESIDENT:
++        return 1
++    return 0
+ 
+ 
+ def lpki_absdiff_part_kernel(a: FP, b: FP, part: FP, flag: IP, count_: Int64):
+@@ -3464,10 +3440,13 @@ def op_lp_iterate_knn(
+     out: the last. info (int32 x 2): n_iter_, converged. tol is Python's
+     float64 bits."""
+     comptime if not LPK_FAST_BUILD:
+-        _op_lp_iterate_knn_idn(
+-            cols, vals, ld, ystatic, unlabeled, info, n, k, c, max_iter, variant,
+-            bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo)), alpha,
+-        )
++        comptime if LP_IDN_RESIDENT:
++            _op_lp_iterate_knn_idn(
++                cols, vals, ld, ystatic, unlabeled, info, n, k, c, max_iter, variant,
++                bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo)), alpha,
++            )
++        else:
++            raise Error("lp_iterate_knn: the FAST tier only (LP_FAST_RESIDENT), or IDENTICAL without MOJOLEARN_IDN_LP_RESIDENT_OFF")
+     else:
+         var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
+         var nc = n * c
+diff --git a/x_neighbors/lp_spmm.mojo b/x_neighbors/lp_spmm.mojo
+index a3850c0441..5c2b422f75 100644
+--- a/x_neighbors/lp_spmm.mojo
++++ b/x_neighbors/lp_spmm.mojo
+@@ -8,7 +8,6 @@ because acc starts at +0.0 and an fma returns -0.0 only from (-0) + (-0),
+ so acc is never -0.0: exact against the dense product while x is finite,
+ which `lp_nonfinite_kernel` tests every iteration."""
+ from std.atomic import Atomic, Ordering
+-from max.gpu.host import DeviceBuffer, DeviceContext
+ from std.gpu import block_dim, block_idx, thread_idx
+ from std.memory import bitcast
+ 
+@@ -65,14 +64,11 @@ def lp_nonfinite_kernel(x: FP, count_: Int64, flag: IP):
+ 
+ 
+ def lp_prod_kernel(
+-    gate: IP, flag: IP, cnt: IP, cols: IP, vals: FP, maxk_: Int64, g: FP, x: FP, res: FP, n_: Int64, c_: Int64,
++    flag: IP, cnt: IP, cols: IP, vals: FP, maxk_: Int64, g: FP, x: FP, res: FP, n_: Int64, c_: Int64,
+ ):
+     """G x: over G's nonzeros (the sparse fma chain, exact when x is
+     finite), or `matmul_item` over every column when flag[0] says x holds
+-    an Inf or NaN. The same bits as the dense product either way. Nothing
+-    once the bounded loop's done word gate[0] is set."""
+-    if gate.unsafe_load(0) != Int32(0):
+-        return
++    an Inf or NaN. The same bits as the dense product either way."""
+     var n = Int(n_)
+     var c = Int(c_)
+     var maxk = Int(maxk_)
+@@ -89,25 +85,3 @@ def lp_prod_kernel(
+         var q = i * maxk + e
+         acc = ftz(identical_mul_add(ftz(vals.unsafe_load(q)), ftz(x.unsafe_load(Int(cols.unsafe_load(q)) * c + j)), acc))
+     res.unsafe_store(t, acc)
+-
+-
+-def lp_ell_spmm_enqueue(
+-    ctx: DeviceContext, gate: IP, mut flag: DeviceBuffer[DType.int32], cnt: IP, cols: IP, vals: FP, maxk: Int,
+-    g: FP, x: FP, res: FP, n: Int, c: Int, block: Int,
+-) raises:
+-    """The ELL SpMM op of label propagation's bounded loop (lane
+-    n4-mds-labelprop-nmf-loops, 2026-11-09): res = G x over the row-padded
+-    nonzeros (`lp_ell_fill_kernel`), with x's finiteness tested on the device
+-    first, so the product is the dense one's bits. `gate` is the loop's
+-    register block (word 0 the done word); the product writes nothing once
+-    the loop has stopped. Enqueue only, no read."""
+-    var nc = n * c
+-    var grid = (nc + block - 1) // block if nc > 0 else 1
+-    ctx.enqueue_memset(flag, Int32(0))
+-    ctx.enqueue_function[lp_nonfinite_kernel](
+-        x, Int64(nc), flag.unsafe_ptr(), grid_dim=grid, block_dim=(block if nc > 1 else 1),
+-    )
+-    ctx.enqueue_function[lp_prod_kernel](
+-        gate, flag.unsafe_ptr(), cnt, cols, vals, Int64(maxk), g, x, res, Int64(n), Int64(c),
+-        grid_dim=grid, block_dim=(block if nc > 1 else 1),
+-    )

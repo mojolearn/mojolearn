@@ -22,7 +22,8 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_wrap_array, classical_host_f32, classical_typed
+from bindings.classical_arrays import classical_address, classical_wrap_array, classical_typed
+from bindings.admitted_input import admit_x
 from bindings.classical_validate import classical_view
 from bindings.prep_lda_admission import (
     lda_native_fields, lda_native_labels, lda_native_context, lda_native_initialize,
@@ -36,7 +37,8 @@ from bindings.classical_metadata import classical_is_fitted
 from bindings.classical_pandas import classical_admit_value
 from bindings.msel_fixed_owner import fixed_owner_context, fixed_owner_fields, fixed_owner_set_params
 from bindings.scaler_lifecycle_native import _public_result
-from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_accuracy, labels_check_sample_weight
+from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_accuracy
+from bindings.admitted_input import admit_weight_words
 from bindings.x_prep_native_inputs import _values, _rows_fields
 from bindings.arena_cache_release import arena_cache_release_operation
 from bindings.prep_classify_prog import ClsProg, NONE, f32_array, i32_array, f32_input
@@ -138,9 +140,9 @@ def _weights(sample_weight: PythonObject, n: Int, context: PythonObject) raises 
     not given): the words `_nb_weights` put."""
     if sample_weight is None:
         return PythonObject(None)
-    var m = labels_check_sample_weight(sample_weight, n, context)
+    var m = admit_weight_words(sample_weight, n, context)
     var w = f32_array(n, context)
-    memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(w))), src=F32P(unsafe_from_address=m.addr), count=n)
+    memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(w))), src=F32P(unsafe_from_address=m.address), count=n)
     _ = w  # keep the Python object alive through the native call above
     _ = m  # keep the Python object alive through the native call above
     _ = m^

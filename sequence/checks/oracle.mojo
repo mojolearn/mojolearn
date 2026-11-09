@@ -242,9 +242,8 @@ def o_bptt_dw(dgx: List[Float32], x: List[Float32], T: Int, B: Int, GH: Int, D: 
 
 # ---------------------------------------------------------------- 5505
 def o_ce(logits: List[Float32], labels: List[Int], B: Int, C: Int, scale: Float32, alt: Bool) -> List[Float32]:
-    """[grad (B C), loss (B)] of softmax cross entropy, the max first."""
+    """grad (B C) of softmax cross entropy, the max first (op_ce stores no row loss since lane m1-followups-misc)."""
     var grad = List[Float32]()
-    var loss = List[Float32]()
     for b in range(B):
         var base = b * C
         var mx = _z(logits[base])
@@ -255,16 +254,12 @@ def o_ce(logits: List[Float32], labels: List[Int], B: Int, C: Int, scale: Float3
         for cc in range(C):
             var c = C - 1 - cc if alt else cc
             s = _a(s, _z(identical_exp(_s(logits[base + c], mx))))
-        var ls = _z(identical_log(s))
         var y = labels[b]
-        loss.append(_s(ls, _s(logits[base + y], mx)))
         for c in range(C):
             var p = _d(_z(identical_exp(_s(logits[base + c], mx))), s)
             if c == y:
                 p = _s(p, Float32(1.0))
             grad.append(_m(p, scale))
-    for i in range(len(loss)):
-        grad.append(loss[i])
     return grad^
 
 

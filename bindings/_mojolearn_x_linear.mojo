@@ -94,11 +94,15 @@ def decision_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonOb
     var link = Int(py=dims[3])
     if n < 0 or d < 0 or k <= 0:
         raise Error("x_linear: positive dimensions required")
+    # dims[4] (optional): the host address of the deferred finite status
+    # word of X (lane a1b; core/admitted_finite_status.mojo), 0 or absent
+    # when the door tested X.
+    var status = Int(py=dims[4]) if len(dims) > 4 else 0
     var x = _fp(Int(py=x_addr))
     var wb = _fp(Int(py=wb_addr))
     var out = _fp(Int(py=out_addr))
     with GILReleased(Python()):
-        decision_device(x, wb, n, d, k, link, out)
+        decision_device(x, wb, n, d, k, link, out, status)
     return PythonObject(n * k)
 
 
@@ -116,11 +120,13 @@ def decision_codes_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: Py
     var above = Int(py=dims[6])
     if n < 0 or d < 0 or k <= 0:
         raise Error("x_linear: positive dimensions required")
+    # dims[7] (optional): the deferred finite status word's host address.
+    var status = Int(py=dims[7]) if len(dims) > 7 else 0
     var x = _fp(Int(py=x_addr))
     var wb = _fp(Int(py=wb_addr))
     var out = IP(unsafe_from_address=Int(py=out_addr))
     with GILReleased(Python()):
-        decision_codes_device(x, wb, n, d, k, link, strict, below, above, out)
+        decision_codes_device(x, wb, n, d, k, link, strict, below, above, out, status)
     return PythonObject(n)
 
 
@@ -134,20 +140,21 @@ def decision_rows_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: Pyt
     `rows_mode` (2 SGD_PROBA, 3 LRCV_PROBA) on the device; dims = [n, d, k,
     link, rows_mode]; out float32 n x max(k, 2). Returns n."""
     # ne2-g-linear (N362): the scores stay on the device between the two steps.
-    if len(dims) != 5:
-        raise Error("x_linear_decision_rows: dims must contain n, d, k, link, rows_mode")
+    if len(dims) != 5 and len(dims) != 6:
+        raise Error("x_linear_decision_rows: dims must contain n, d, k, link, rows_mode (and the status address)")
     var n = Int(py=dims[0])
     var d = Int(py=dims[1])
     var k = Int(py=dims[2])
     var link = Int(py=dims[3])
     var mode = Int(py=dims[4])
+    var status = Int(py=dims[5]) if len(dims) > 5 else 0
     if n < 0 or d < 0 or k <= 0:
         raise Error("x_linear: positive dimensions required")
     var x = _fp(Int(py=x_addr))
     var wb = _fp(Int(py=wb_addr))
     var out = _fp(Int(py=out_addr))
     with GILReleased(Python()):
-        decision_rows_device(x, wb, n, d, k, link, mode, out)
+        decision_rows_device(x, wb, n, d, k, link, mode, out, status)
     return PythonObject(n)
 
 

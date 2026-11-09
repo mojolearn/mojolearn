@@ -4,6 +4,8 @@ bodies.mojo` body for index `t`; nothing is folded across threads, so no
 launch shape can move a bit. Only the GPU binding imports this file."""
 from experiments.classical_identical_ideas.stats_controls import C53_BGMM_STATS
 from mixture.checks.mstep import center_pair_kernel
+from core.em_loop_chunk import em_loop_check_every
+from x_cluster.spectral_df64_device import discretize_df64_device
 from experiments.classical_identical_ideas.graph_controls import XCLUSTER_ROW_ASSIGN, XCLUSTER_ROW_ASSIGN_ROWS
 #: Rows per thread of `_xc_nearest_group` (MOJOLEARN_XCLUSTER_ROW_ASSIGN=2|4).
 comptime XC_ASSIGN_ROWS = XCLUSTER_ROW_ASSIGN_ROWS if XCLUSTER_ROW_ASSIGN_ROWS > 0 else 2
@@ -147,11 +149,11 @@ from x_cluster.device_post import (
     set_diag_kernel,
     sign_side_kernel,
 )
-from x_cluster.post_bodies import FM_FF, FM_MIN, FM_PROD, FM_VAL, FM_WMIN, FOLD_CHUNK, ff_of_f64
+from x_cluster.post_bodies import FM_FF, FM_MIN, FM_PROD, FM_SQDIFF, FM_VAL, FM_WMIN, FOLD_CHUNK, ff_of_f64
 from x_cluster.bgmm_kernels import bgmm_launch
 from std.gpu import WARP_SIZE
 from std.gpu.primitives.warp import shuffle_idx
-from x_cluster.minibatch_cells import mb_center_wsum, mb_center_word
+from x_cluster.minibatch_cells import mb_center_wsum, mb_center_word, mb_wdraw_cell
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 
 comptime TPB = 128
@@ -1682,7 +1684,7 @@ struct _ClusterContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojoXClusterContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXClusterContextFast"
+comptime _CTX_NAME = "MojolearnXClusterContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXClusterContextFastV2"
 comptime X_CLUSTER_CONTEXT = _Global[StorageType=_ClusterContext, name=_CTX_NAME, init_fn=_ClusterContext.__init__]
 
 
@@ -2438,6 +2440,12 @@ struct DeviceOps(ClusterOps):
         )
         self._ph1("pdist")
 
+    def spectral_discretize(
+        mut self, x: List[Float32], n: Int, k: Int, seed: UInt64, max_svd_restarts: Int, n_iter_max: Int,
+        mut n_iter: Int,
+    ) raises -> List[Int32]:
+        return discretize_df64_device(self.ctx, x, n, k, seed, max_svd_restarts, n_iter_max, n_iter)
+
     def fast_device(self) -> Bool:
         return GLOBAL_NUMERIC_MODE == NUMERIC_FAST
 
@@ -2538,6 +2546,9 @@ struct DeviceOps(ClusterOps):
                 grid_dim=_grid((n + g - 1) // g), block_dim=TPB,
             )
         self._ph1("dot_groups")
+
+    def loop_check_every(self, n: Int, k: Int, d: Int) -> Int:
+        return em_loop_check_every(n, k, d)
 
     def agglo_on_device(self) -> Bool:
         return True
@@ -2773,13 +2784,32 @@ struct DeviceOps(ClusterOps):
         )
         self._ph1("mb_draw")
 
+    def mb_wdraw(mut self, idx: Int, m: Int, cum: Int, n: Int, state: UInt64) raises:
+        self._ph0()
+        self.ctx.enqueue_function[_mb_wdraw_kernel](
+            self._ip(idx), Int32(m), self._ip(cum), Int32(n), state, grid_dim=_grid(m), block_dim=TPB,
+        )
+        self._ph1("mb_wdraw")
+
+    def fold_sqdiff_at(
+        mut self, a: Int, a_off: Int, b: Int, b_off: Int, n: Int, dst: Int, off: Int, th: Int, tl: Int
+    ) raises:
+        self._ph0()
+        self._fold_at2(FM_SQDIFF, self._fp(a) + a_off, self._fp(b) + b_off, n, dst, off, th, tl)
+        self._ph1("fold_sqdiff_at")
+
     def fold_at(mut self, a: Int, n: Int, mode: Int, dst: Int, off: Int, th: Int, tl: Int) raises:
         self._ph0()
-        var po = self._fp(dst)
         var pa = self._fp(a)
+        self._fold_at2(mode, pa, pa, n, dst, off, th, tl)
+        self._ph1("fold_at")
+
+    def _fold_at2(mut self, mode: Int, pa: FPtr, pb: FPtr, n: Int, dst: Int, off: Int, th: Int, tl: Int) raises:
+        """`fold_at`'s levels over the element pair (pa[t], pb[t])."""
+        var po = self._fp(dst)
         if n <= FOLD_CHUNK:
             # one chunk (or none): `_fold` allocates nothing
-            self._fold(mode, pa, pa, pa, n, po, po + 1, off)
+            self._fold(mode, pa, pb, pa, n, po, po + 1, off)
         else:
             # `_fold`'s levels with the partials in the caller's two scratch
             # slots (level by level, each after the last) and no allocation
@@ -2788,7 +2818,7 @@ struct DeviceOps(ClusterOps):
             var nch = (n + FOLD_CHUNK - 1) // FOLD_CHUNK
             var md = mode
             var xa = pa
-            var xb = pa
+            var xb = pb
             var cnt = n
             var so = 0
             while nch > 1:
@@ -2804,7 +2834,6 @@ struct DeviceOps(ClusterOps):
             self.ctx.enqueue_function[ff_chunk_kernel](
                 Int32(md), xa, xb, xa, Int32(cnt), po, po + 1, Int32(off), grid_dim=1, block_dim=RTPB,
             )
-        self._ph1("fold_at")
 
     def copy_from(mut self, src: Int, off: Int, n: Int, dst: Int) raises:
         # C39 restore the accepted history state without a host round trip.
@@ -3483,6 +3512,15 @@ def _mb_draw_kernel(idx: IPtr, m: Int32, n: Int32, state: UInt64):
     var t = _tid()
     if t < Int(m):
         idx[t] = Int32(Int(splitmix_at(state, UInt64(t + 1)) % UInt64(Int(n))))
+
+
+def _mb_wdraw_kernel(idx: IPtr, m: Int32, cum: IPtr, n: Int32, state: UInt64):
+    """idx[t] = `minibatch_cells.mb_wdraw_cell` (lane n3: the weighted batch
+    rows of a step group, drawn where the data is; the host column runs the
+    same cell)."""
+    var t = _tid()
+    if t < Int(m):
+        mb_wdraw_cell(idx, cum, Int(n), state, t)
 
 
 def _copy_at_kernel(src: FPtr, n: Int32, dst: FPtr, off: Int32):

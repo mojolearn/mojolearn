@@ -64,16 +64,8 @@ def transformer_resident_lm_run(provider: PythonObject, session: PythonObject, l
     return _transformer_resident_lm_execute(provider, session, layers, Int(run), addresses^, parameters^)
 
 
-def transformer_resident_lm_read(provider: PythonObject, session: PythonObject, layers: PythonObject,
-                                 var addresses: List[Int], var parameters: List[Int]) raises -> Int:
-    return _transformer_resident_lm_execute(provider, session, layers, 2, addresses^, parameters^)
-
-
-def transformer_resident_lm_sampling_read(provider: PythonObject, session: PythonObject, layers: PythonObject,
-                                          var addresses: List[Int], var parameters: List[Int]) raises -> Int:
-    # Operation 3 shares the ordinary group reservation and owner pins. Its
-    # descriptor owns sampling progress and committed-KV recovery destinations.
-    return _transformer_resident_lm_execute(provider, session, layers, 3, addresses^, parameters^)
+# TOMBSTONE: transformer_resident_lm_read / transformer_resident_lm_sampling_read (REFACTORED: CausalLM reads run as the decode program, transformer/causal_lm_program.mojo) deleted 2026-11-09 by lane/x45c-causal-generate-program-decode; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch; record in docs/TOMBSTONES.md.
 
 
 def _transformer_resident_lm_execute(provider: PythonObject, session: PythonObject, layers: PythonObject,

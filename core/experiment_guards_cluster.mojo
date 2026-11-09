@@ -13,6 +13,9 @@ from std.sys.compile import is_defined, get_defined_int
 
 
 def _check_configuration() -> Bool:
+    # Deleted 2026-11-09 (lane n4-mds-labelprop-nmf-loops): the resident kNN-graph label-propagation loop is the only path
+    # on every vendor and tier; the rollbacks kept the binding's per-iteration loop. Recoverable at f59d913b0b.
+    comptime assert not (is_defined["MOJOLEARN_LP_FAST_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_LP_RESIDENT_OFF"]()), "removed 2026-11-09 (lane/n4-mds-labelprop-nmf-loops): the resident kNN-graph loop (lp_iterate_knn) is LabelPropagation / LabelSpreading's only path on every vendor and tier (FAST + Apple A/B n2-lp-res-taxi 6,793 -> 2,086 ms, accuracy same; IDENTICAL default since 2026-10-04, same bits); the per-iteration binding loop is gone"
     # Deleted 2026-10-08 (lane gap-graph, plan 5.3): the batched CC rounds + device relabel are the only path on every vendor; the C33 CC chunking (never compiled) went with it. Recoverable at origin/main 02f7aed95.
     comptime assert not (is_defined["MOJOLEARN_CC_FAST_OFF"]() or is_defined["MOJOLEARN_CC_FAST"]()), "removed: connected_components' batched rounds with the device relabel are the only path (lane gap-graph 2026-10-08); the per-round-wait path is gone"
     # Deleted 2026-10-07 (lane serial-cleanup): forbidden serial shape; incumbent kNN selectors are parallel. Recoverable at origin/integration/switches-20261007 608a7cf4a.
@@ -23,6 +26,7 @@ def _check_configuration() -> Bool:
     comptime assert not (is_defined["MOJOLEARN_PURITY_3_OFF"]() or is_defined["MOJOLEARN_PURITY_6_OFF"]()), "removed: MOJOLEARN_PURITY_3_OFF / MOJOLEARN_PURITY_6_OFF only changed x_neighbors_purity_flags, which nothing read"
     # Deleted 2026-10-08 (lane grid-losers-1): IDENTICAL grid ge123e6f9 losers (docs/apple-fast/EXPERIMENTS.md). Recoverable at main ad7ed2370.
     # C25_PROJECTION_REUSE: deleted 2026-10-08 above, restored 2026-10-10 (lane c25-restore-promote) from the tombstone patch after grid pass 2.
+    comptime assert not is_defined["MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF"](), "removed: MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF retired 2026-11-09 (lane n1-gmm-bgmm-loops): GaussianMixture EM is the executor's bounded device loop with the criterion on the device, so no meanll copy or per-iteration drain is left to move; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_IDN_GMM_COV_SYM"](), "removed: MOJOLEARN_IDN_GMM_COV_SYM retired 2026-10-08: slower, NV 1.84x / AMD 1.45x on gmm taxi, and mean log-likelihood -0.78% (grid ge123e6f9); see EXPERIMENTS.md"
     comptime assert not is_defined["MOJOLEARN_IDN_KMEANS_CENTROID_FOLD"](), "promoted 2026-10-08 (grid ge123e6f9, lane/grid-flips-1): two-level centroid fold is the IDENTICAL default; drop -D MOJOLEARN_IDN_KMEANS_CENTROID_FOLD, use -D MOJOLEARN_IDN_KMEANS_CENTROID_FOLD_OFF for the old path"
     comptime assert not is_defined["MOJOLEARN_IVF_DIRECT_DISTANCE"](), "promoted 2026-10-08 (grid ge123e6f9, lane/grid-flips-1): IVF direct distance is the IDENTICAL default; drop -D MOJOLEARN_IVF_DIRECT_DISTANCE, use -D MOJOLEARN_IVF_DIRECT_DISTANCE_OFF for the old path"
@@ -73,6 +77,16 @@ def _check_configuration() -> Bool:
     # one warmup + one scored fit per arm (docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md). Code recoverable at 1a76955b5^.
     # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch (or MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch)
     comptime assert not is_defined["MOJOLEARN_IVF_FAST_STRIDED_COARSE"](), "removed 2026-10-15 (lane/tombstone-qsample-ivfstride, 1a76955b5): IVF_FAST_STRIDED_COARSE (FAST coarse quantizer on the IDENTICAL strided trainset and start) was DROPPED-noise: M4 IVFSQIndex 500,000 x 128, n_lists 1024, n_probes 32 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183. Restore with experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch."
+    # Lane k1-delete-unverdicted-fast (2026-11-09): Apple FAST experiments with no verdict, never to be measured.
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_BALANCED_TASKS.patch
+    comptime assert not is_defined["MOJOLEARN_IVF_FAST_BALANCED_TASKS"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_IVF_FAST_BALANCED_TASKS, F14, the Apple FAST IVF search through the bounded list tasks of ivf_balanced_scan, was never run (pending measurement) and will not be measured; code at f59d913b0b; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_IVF_FAST_BALANCED_AUDIT, the reach counter of MOJOLEARN_IVF_FAST_BALANCED_TASKS (ivf_fast_balanced_hits), deleted with it; code at f59d913b0b; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_IDN_MINIBATCH_GROUP_OFF"](), "removed 2026-11-09 (lane n3-sgd-minibatch-loops): MiniBatchKMeans' per-step loop (one upload, one wait and a centers download a step) is gone; the group loop with device draws and the device center shift is the only path (docs/TOMBSTONES.md)"
+    # Lane m1-followups-misc (2026-11-09): the IDENTICAL IVF balanced-task opt-in, measured slower on NVIDIA and AMD (I16).
+    # TOMBSTONE: MOJOLEARN_IVF_BALANCED_TASKS (loser) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_BALANCED_TASKS.patch
+    comptime assert not is_defined["MOJOLEARN_IVF_BALANCED_TASKS"](), "removed 2026-11-09 (lane/m1-followups-misc): MOJOLEARN_IVF_BALANCED_TASKS, the IDENTICAL IVF search through ivf_balanced_scan's bounded list tasks, measured slower on NVIDIA L40S (1.20x-4.17x) and AMD MI325X (3.25x-16.5x) in I16; code at 5b5490960d; see docs/TOMBSTONES.md"
     return True
 
 

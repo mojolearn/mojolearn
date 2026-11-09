@@ -9,7 +9,8 @@ from bindings.native_array_storage import native_array_empty, native_array_zeros
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
-from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array, classical_is_array, classical_host_f32
+from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array, classical_is_array
+from bindings.admitted_input import admit_x
 from bindings.arena_prog_native import prep_run_words
 from bindings.x_prep_native_owner import xprep_r3, xprep_take, xprep_address
 
@@ -52,7 +53,7 @@ def f32_input(value: PythonObject, context: PythonObject) raises -> PythonObject
     if classical_is_array(value, context) and String(value.dtype) == "<f4" and (String(value.order) == "C" or Int(py=value.ndim) < 2):
         return value
     var nd = Int(py=value.ndim)
-    return classical_host_f32(value, 1 if nd < 2 else 2, "input", context)
+    return admit_x(value, 1 if nd < 2 else 2, "input", context)
 
 
 struct ClsProg(Movable):

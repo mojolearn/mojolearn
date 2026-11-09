@@ -21,6 +21,7 @@ from core.forest_inference import (
 )
 from core.forest_inference_pool import PooledForest, forest_device_count
 from core.neural_context import process_ctx
+from core.admitted_finite_status import enqueue_finite_status
 from core.forest_experiments import T34_CHUNK_FOLD, T35_LEAF_REUSE, T36_FINITE_STAGE, T37_WORKSPACE, T38_FUSED_LABELS
 
 
@@ -223,11 +224,11 @@ comptime ET_IO = _Global[StorageType=ForestIOWorkspace,
     name=("MojoETResidentIOIdentical" if GLOBAL_NUMERIC_MODE == 1 else
           "MojoETResidentIOFast"), init_fn=ForestIOWorkspace.__init__]
 comptime RF_CTX_SLOT = (
-    "MojoRFResidentContextIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-    "MojoRFResidentContextFast")
+    "MojolearnRFResidentContextIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else
+    "MojolearnRFResidentContextFastV2")
 comptime ET_CTX_SLOT = (
-    "MojoETResidentContextIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-    "MojoETResidentContextFast")
+    "MojolearnETResidentContextIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else
+    "MojolearnETResidentContextFastV2")
 
 
 struct ResidentForest(Movable):
@@ -685,11 +686,23 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
     _ = stage
     comptime if FOREST_PROFILE:
         t1 = Int(perf_counter_ns())
+    # The input's finite test (lane a7c): the status word of the words just
+    # uploaded (core/admitted_finite_status.mojo), copied back with the
+    # output under the one synchronize below; the separate scan with its
+    # own drain (`device_all_finite`) is gone. The public doors defer their
+    # host scan of a borrowed X to this test (trees_public_forest
+    # `_public_deferred`). Numerics: none (a predicate on bits).
+    var scan_input = not uploaded and not T36_FINITE_STAGE
+    var dstat = ctx.enqueue_create_buffer[DType.int32](1)
+    var hstat = ctx.enqueue_create_host_buffer[DType.int32](1)
     try:
         if not uploaded:
             ctx.enqueue_copy(dst_buf=dx.create_sub_buffer[DType.float32](0, rows*features), src_ptr=x)
-            if not T36_FINITE_STAGE and not device_all_finite(ctx, dx, rows * features):
-                raise Error("resident forest requires finite Float32 values")
+        if scan_input:
+            dstat.enqueue_fill(Int32(0))
+            enqueue_finite_status(ctx, dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), rows * features,
+                                  dstat.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0)
+            ctx.enqueue_copy(dst_ptr=hstat.unsafe_ptr(), src_buf=dstat)
         comptime if FOREST_PROFILE:
             ctx.synchronize()
             t2 = Int(perf_counter_ns())
@@ -704,11 +717,15 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
             t3 = Int(perf_counter_ns())
         ctx.enqueue_copy(dst_ptr=output, src_buf=dout.create_sub_buffer[DType.float32](0, rows*outputs))
         ctx.synchronize()
+        if scan_input and hstat.unsafe_ptr().unsafe_load(0) != 0:
+            raise Error("resident forest requires finite Float32 values")
         if not device_all_finite(ctx, dout, rows * outputs):
             raise Error("resident forest requires finite Float32 values")
     except e:
         ctx.synchronize()
         raise e
+    _ = dstat^
+    _ = hstat^
     comptime if FOREST_PROFILE:
         t4 = Int(perf_counter_ns())
     comptime if FOREST_PROFILE:

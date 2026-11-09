@@ -19,11 +19,10 @@ from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_onc
 from bindings.classical_validate import classical_view
 from bindings.manifold_lifecycle_native import _cast
 from bindings.spectral_umap_routes import spectral_umap_entry as family_entry, spectral_umap_optional_entry
-from core.family_cast_impl import family_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32
 from bindings.family_common import (
-    family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call,
-    family_array, family_f32_snapshot, family_field, family_view, family_cast_view, family_shape_repr,
-    FAMILY_F32P,
+    family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call, family_array,
+    family_field, family_shape_repr, FAMILY_F32P,
 )
 
 comptime _TSNE_EXPLORATION_MAX_ITER = 250
@@ -91,7 +90,7 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var x_address = snapshot.source.addr
     var n = snapshot.source.rows
     var d = snapshot.source.cols
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=x_address), snapshot.count):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=x_address), snapshot.count):
         raise Error("Input X contains NaN or infinity")
     if n < 2:
         # scikit-learn's TSNE validates X with ensure_min_samples=2

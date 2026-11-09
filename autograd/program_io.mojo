@@ -28,7 +28,10 @@ struct HostArray(Movable):
     """One float32 result downloaded to the host, row-major, with its shape."""
     var data: List[Float32]
     var shape: ShapeN
+    #: the words are int32 values (token ids, positions), not float32
+    var int_words: Bool
 
     def __init__(out self, shape: ShapeN):
         self.shape = shape
         self.data = List[Float32](length=shape.count(), fill=Float32(0))
+        self.int_words = False

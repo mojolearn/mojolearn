@@ -467,7 +467,7 @@ def _label_lists():
 @pytest.mark.parametrize("name", list(_label_lists()))
 def test_encode_labels_list_matches_the_order_rule(name):
     # Since lane ne1-h-labels (N413) encode_labels is ONE native call
-    # (labels_encode_labels), which no longer goes through the
+    # (classical_encode_labels), which no longer goes through the
     # prepare_targets helper: no helper is expected; the outcomes are still
     # compared, and test_labels_native_entry.py pins the native contract.
     y = _label_lists()[name]

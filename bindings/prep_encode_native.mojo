@@ -30,11 +30,12 @@ from bindings.prep_entry_cache import prep_entry_word, prep_entry_text
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 from bindings.classical_validate import classical_estimator_name
-from core.family_cast_impl import family_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32
 from bindings.prep_stateless_native import _fam, _int_like, _repr, _name, _take_f, _select_transform
-from bindings.classical_labels import (
-    LabelsView, ClassicalLabels, labels_view, labels_vector, labels_address, labels_cast, labels_all_finite,
-    labels_f32, classical_encode_labels)
+from bindings.classical_labels import ClassicalLabels, labels_address, labels_cast, classical_encode_labels
+from bindings.admitted_input import admit_c_view, admitted_dtype, admit_f32, admit_ids, admitted_vector
+from bindings.classical_arrays import classical_address
+from core.host_finite_scan import host_all_finite_f64
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 alias I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -751,7 +752,7 @@ def _kbins_finite(values: PythonObject) raises:
     if Int(py=values[0]) != 0:
         return
     var count = Int(py=values[3]) * Int(py=values[4])
-    if not family_all_finite_f32(F32P(unsafe_from_address=Int(py=classical_address(values[1]))), count):
+    if not host_all_finite_f32(F32P(unsafe_from_address=Int(py=classical_address(values[1]))), count):
         raise Error("Input X contains NaN or infinity (KBinsDiscretizer).")
 
 
@@ -2371,12 +2372,28 @@ struct TargetInfo(Copyable, Movable):
         self.size = size
 
 
-def _view_or_none(y: PythonObject, context: PythonObject) -> Optional[LabelsView]:
-    # `_materialize(y)`, or None where it refuses (str labels, objects).
+def _view_or_none(y: PythonObject, context: PythonObject) -> Optional[PythonObject]:
+    # `_materialize(y)`: y in its own dtype, C order (bindings/admitted_input
+    # admit_c_view; lane a1b: was labels_view), or None where it refuses
+    # (str labels, objects, a dtype without an Array typestr).
     try:
-        return labels_view(y, "y", context)
+        var view = admit_c_view(y, "y", context)
+        _ = admitted_dtype(view, context)
+        return view
     except:
         return None
+
+
+def _v_type(view: PythonObject, context: PythonObject) raises -> String:
+    return admitted_dtype(view, context)
+
+
+def _v_size(view: PythonObject) raises -> Int:
+    return Int(py=view.size)
+
+
+def _v_addr(view: PythonObject) raises -> Int:
+    return Int(py=classical_address(view))
 
 
 def _numeric_dtype(typestr: String) -> Bool:
@@ -2385,48 +2402,52 @@ def _numeric_dtype(typestr: String) -> Bool:
             or typestr == "<u1" or typestr == "<i2" or typestr == "<u2" or typestr == "<i1")
 
 
-def _is_vector(view: LabelsView) -> Bool:
+def _is_vector(view: PythonObject) raises -> Bool:
     var big = 0
-    for k in range(view.ndim()):  # driver-loop: over array rank metadata
-        big = max(big, view.shape[k])
-    return view.ndim() >= 1 and view.size() == big
+    var nd = Int(py=view.ndim)
+    for k in range(nd):  # driver-loop: over array rank metadata
+        big = max(big, Int(py=view.shape[k]))
+    return nd >= 1 and _v_size(view) == big
 
 
-def _flat_copy(view: LabelsView, context: PythonObject) raises -> PythonObject:
+def _flat_copy(view: PythonObject, context: PythonObject) raises -> PythonObject:
     # The flat Array of a contiguous label vector, its own dtype (`num`).
-    var n = view.size()
-    var out = labels_vector(n, view.typestr, context)
+    var n = _v_size(view)
+    var out = admitted_vector(n, _v_type(view, context), context)
     if n > 0:
         memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=labels_address(out)),
-               src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=view.addr), count=n * view.item)
+               src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=_v_addr(view)),
+               count=n * Int(py=view.itemsize))
         _ = out  # keep the Python object alive through the native call above
     return out
 
 
-def _f32_target(view: LabelsView, context: PythonObject) raises -> PythonObject:
+def _f32_target(view: PythonObject, context: PythonObject) raises -> PythonObject:
     # `num.astype("<f4")`: the flat float32 target (cast_elements).
-    var n = view.size()
-    var out = labels_vector(n, "<f4", context)
-    if view.typestr == "<f4":
-        memcpy(dest=_ptr(out), src=F32P(unsafe_from_address=view.addr), count=n)
+    var n = _v_size(view)
+    var out = admitted_vector(n, "<f4", context)
+    var t = _v_type(view, context)
+    if t == "<f4":
+        memcpy(dest=_ptr(out), src=F32P(unsafe_from_address=_v_addr(view)), count=n)
         _ = out  # keep the Python object alive through the native call above
     else:
-        labels_cast(view.addr, view.typestr, labels_address(out), "<f4", n, context)
+        labels_cast(_v_addr(view), t, labels_address(out), "<f4", n, context)
         _ = out  # keep the Python object alive through the native call above
     return out
 
 
-def _all_integral(view: LabelsView, vector: Bool, context: PythonObject) raises -> Bool:
+def _all_integral(view: PythonObject, vector: Bool, context: PythonObject) raises -> Bool:
     """`_all_integral`: every float32 / float64 value finite and an integer,
     on the device (c2_integral by chunks, c2_isum, one word read back)."""
-    var kind = 0 if view.typestr == "<f4" else 4
-    var per = 1 if view.typestr == "<f4" else 2
-    var n = view.size()
+    var t = _v_type(view, context)
+    var kind = 0 if t == "<f4" else 4
+    var per = 1 if t == "<f4" else 2
+    var n = _v_size(view)
     # `vector`: `_target_arrays` tests y as it is; `_target_kind` its flat copy
-    if (view.typestr != "<f4" and view.typestr != "<f8") or n == 0 or (vector and not _is_vector(view)) or n * per > 1073741824:
+    if (t != "<f4" and t != "<f8") or n == 0 or (vector and not _is_vector(view)) or n * per > 1073741824:
         raise Error("TypeError: mojolearn: the integral test takes a float32 or float64 vector")
     var words = classical_typed(Python.tuple(n * per), "<f4", context["output_context"])
-    memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=view.addr), count=n * per)
+    memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=_v_addr(view)), count=n * per)
     _ = words  # keep the Python object alive through the native call above
     var ch = max(4096, (n + 4095) // 4096)
     var nch = (n + ch - 1) // ch
@@ -2460,32 +2481,36 @@ def _target_info(y: PythonObject, target_type: String, context: PythonObject) ra
     var has_view = Bool(found)
     if not listed and has_view:
         # `_target_arrays`
-        var view = found.value().copy()
-        var t = view.typestr
+        var view = found.value()
+        var t = _v_type(view, context)
         var kind = String(t[byte=1]) if t.byte_length() > 1 else String("")
-        if view.size() > 0 and _is_vector(view) and (kind == "f" or kind == "i" or kind == "u"):
+        if _v_size(view) > 0 and _is_vector(view) and (kind == "f" or kind == "i" or kind == "u"):
             var floating = kind == "f"
             var ok = True
             if floating:
-                ok = (t == "<f4" or t == "<f8") and labels_all_finite(view.addr, view.size(), t == "<f8", context)
+                # A label vector's finite test: the one host scan.
+                ok = ((t == "<f4" and host_all_finite_f32(F32P(unsafe_from_address=_v_addr(view)), _v_size(view)))
+                      or (t == "<f8" and host_all_finite_f64(
+                          MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=_v_addr(view)), _v_size(view))))
                 _ = view  # keep the Python object alive through the native call above
             if ok:
                 var cont = target_type == "continuous" or (target_type == "auto" and floating and not _all_integral(view, True, context))
                 if cont:
-                    return TargetInfo("continuous", PythonObject(None), _f32_target(view, context), 1, view.size())
+                    return TargetInfo("continuous", PythonObject(None), _f32_target(view, context), 1, _v_size(view))
                 return _class_target(classical_encode_labels(y, context), target_type)
     # `_target_kind`
-    var numeric = has_view and _numeric_dtype(found.value().typestr)
+    var numeric = has_view and _numeric_dtype(_v_type(found.value(), context))
     var continuous = target_type == "continuous"
     if not continuous and target_type == "auto" and numeric:
-        var view = found.value().copy()
-        if view.size() > 0 and (view.typestr == "<f4" or view.typestr == "<f8"):
+        var view = found.value()
+        var vt = _v_type(view, context)
+        if _v_size(view) > 0 and (vt == "<f4" or vt == "<f8"):
             continuous = not _all_integral(view, False, context)
     if continuous:
         if not numeric:
             raise Error("mojolearn: a continuous TargetEncoder target must be numeric")
-        var view = found.value().copy()
-        return TargetInfo("continuous", PythonObject(None), _f32_target(view, context), 1, view.size())
+        var view = found.value()
+        return TargetInfo("continuous", PythonObject(None), _f32_target(view, context), 1, _v_size(view))
     if numeric and listed:
         # a list's numbers as `_materialize` packed them (a bool leaf is the int 0 or 1)
         return _class_target(classical_encode_labels(_flat_copy(found.value(), context), context), target_type)
@@ -2722,19 +2747,11 @@ struct IndexI64(Copyable, Movable):
             self.size = len(store)
             self.addr = Int(py=py_call(store.buffer_info)[0])
             return
-        var view = labels_view(values, name, context)
-        var count = view.size()
-        if view.typestr == "<i8":
-            self.keep = view.keep
-            self.addr = view.addr
-            self.size = count
-            return
-        var out = labels_vector(count, "<i8", context)
-        labels_cast(view.addr, view.typestr, labels_address(out), "<i8", count, context)
-        _ = view  # keep the Python object alive through the native call above
+        # The one integer admission (lane a1b: was labels_view + labels_cast).
+        var out = admit_ids(values, name, context)
         self.keep = out
         self.addr = labels_address(out)
-        self.size = count
+        self.size = Int(py=out.size)
 
 
 def _assign_fold(idx: IndexI64, rows: Int, fold: Int, folds: I32P) -> Int:
@@ -2797,7 +2814,7 @@ def _target_splitter_folds(model: PythonObject, x: PythonObject, y: PythonObject
     var F = len(splits)
     if F < 1:
         raise Error(cover)
-    var fold = labels_vector(n, "<i4", context)
+    var fold = admitted_vector(n, "<i4", context)
     var fp = I32P(unsafe_from_address=labels_address(fold))
     for i in range(n):  # cpu-route: the row -> fold table the user splits fill (rows)
         fp[i] = -1
@@ -2910,11 +2927,11 @@ def _pearson(mut p: EncProg, values: PythonObject, y: PythonObject, mode: Python
     blocked frb_* order). Returns (scores, p-values, correlations)."""
     var n = Int(py=values[3])
     var d = Int(py=values[4])
-    var target = labels_f32(y, 1, "C", "y", context)
+    var target = admit_f32(y, 1, "y", context, finite=False)
     if target.rows != n:
         raise Error("mojolearn: X and y have different numbers of rows")
-    var yv = labels_vector(n, "<f4", context)
-    memcpy(dest=_ptr(yv), src=F32P(unsafe_from_address=target.addr), count=n)
+    var yv = admitted_vector(n, "<f4", context)
+    memcpy(dest=_ptr(yv), src=F32P(unsafe_from_address=target.address), count=n)
     _ = yv  # keep the Python object alive through the native call above
     _ = target  # keep the Python object alive through the native call above
     var xo = p.put_x(values)
@@ -2955,8 +2972,8 @@ def _score_words(scores: PythonObject, d: Int, context: PythonObject) raises -> 
     if not (cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes):
         var found = _view_or_none(scores, context)
         if found:
-            var view = found.value().copy()
-            var t = view.typestr
+            var view = found.value()
+            var t = _v_type(view, context)
             var kind = -1
             if t == "<f4":
                 kind = 0
@@ -2966,10 +2983,10 @@ def _score_words(scores: PythonObject, d: Int, context: PythonObject) raises -> 
                 kind = 3
             elif t == "<f8":
                 kind = 4
-            if kind >= 0 and view.size() == d and _is_vector(view):
+            if kind >= 0 and _v_size(view) == d and _is_vector(view):
                 var per = 1 if kind <= 1 else 2
                 var words = classical_typed(Python.tuple(d * per), "<f4", context["output_context"])
-                memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=view.addr), count=d * per)
+                memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=_v_addr(view)), count=d * per)
                 _ = words  # keep the Python object alive through the native call above
                 _ = view  # keep the Python object alive through the native call above
                 return (words, kind)

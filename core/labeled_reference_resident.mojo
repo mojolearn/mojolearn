@@ -37,7 +37,7 @@ from dbscan.impl.neighbors.epsilon_neighborhood import (
 
 #: The estimators binding's ONE process-lifetime DeviceContext slot (the
 #: same name `bindings/_mojolearn_estimators.mojo` uses).
-comptime _DEVCTX_SLOT = "MojoEstimatorsContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoEstimatorsContextFast"
+comptime _DEVCTX_SLOT = "MojolearnEstimatorsContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnEstimatorsContextFastV2"
 
 
 struct ResidentLabeledReference(Movable):

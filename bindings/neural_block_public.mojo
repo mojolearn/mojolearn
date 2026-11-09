@@ -8,7 +8,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from bindings.neural_block_admission import (
-    neural_block_fields, neural_block_f32, neural_block_f32_input, neural_record_fields, neural_string_keys,
+    neural_block_fields, admit_block_f32, BLOCK_READ, BLOCK_OPERATION, neural_record_fields, neural_string_keys,
     neural_plain_value, neural_array_snapshot, neural_array_slots, neural_admit_weights,
     neural_native_scalar, neural_model_weights, neural_block_snapshot, neural_block_weight_names, neural_metadata_snapshot,
 )
@@ -25,7 +25,6 @@ from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allo
 from core.hostptr import f32_ptr
 from core.host_helpers_impl import all_finite_f32
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
-from core.native_mamba_workspace_abi import MAMBA2_WORKSPACE_CREATE, MAMBA2_WORKSPACE_CLOSE
 from providers.python.operation_lock_pyapi import OperationLockLease, operation_lock_create
 from bindings.native_model_records import bump_model_generation
 from providers.python.neural_descriptor_pyapi import (
@@ -52,8 +51,6 @@ struct NativeBlockPlan(Movable, Writable):
     var state_scalars: PythonObject
     var state_buffers: PythonObject
     var state_fields: PythonObject
-    var mamba2_workspace_provider: PythonObject
-    var mamba2_workspace: PythonObject
 
     def __init__(out self, owner: PythonObject, layer: PythonObject) raises:
         self.context = owner._native_context
@@ -63,8 +60,6 @@ struct NativeBlockPlan(Movable, Writable):
         self.numeric_profile = owner.numeric_profile
         self.packed = owner._head_int15 is not None
         self.layer = layer
-        self.mamba2_workspace_provider = py_get(self.entries, "mamba2_workspace_provider")
-        self.mamba2_workspace = PythonObject(None)
         # Immutable schema belongs to the retained execution plan. Live class
         # hooks, scalar values and Array metadata are still admitted each call.
         self.state_scalars = Python.tuple("batch_size", "n_kv_heads", "head_dim", "max_tokens", "window", "cached_tokens",
@@ -180,10 +175,6 @@ def _neural_owner_key(mut mods: NativeModules, block: PythonObject, live: Python
     if entries is None or py_type(entries) is not bi.dict:
         return PythonObject(None)
     key.add(entries)
-    if String(kind) == "mamba2" and String(route) == "gpu":
-        # A same-module capability replacement/addition/removal invalidates the
-        # retained provider/resource too; module identity alone is insufficient.
-        key.add_identity(py_get(_native_entry_fields(mods, entries["mamba2"]), "mamba2_workspace_api_v1"))
     key.watch_arrays(mods, context)
     if key.retains(block):
         return PythonObject(None)
@@ -203,9 +194,6 @@ def _neural_owner_matches(mut mods: NativeModules, key: PythonObject, block: Pyt
     var entries = py_get(table, binding_key)
     if not native.matches(entries, offset):
         return False
-    if String(live["_native_kind"]) == "mamba2" and String(live["_native_route"]) == "gpu":
-        if not native.matches_identity(py_get(_native_entry_fields(mods, entries["mamba2"]), "mamba2_workspace_api_v1"), offset):
-            return False
     return native.complete(offset) and native.arrays_match(mods, context)
 
 
@@ -421,24 +409,13 @@ def _neural_allocate(mut mods: NativeModules, owner: NativeBlockExecution, b: In
 
 
 def _neural_layer_run(mut mods: NativeModules, owner: NativeBlockExecution, x: PythonObject, state: PythonObject, step: Bool) raises -> PythonObject:
+    # TOMBSTONE: the Mamba-2 public-step workspace owner (Mamba2PublicWorkspace, mamba2_workspace_api_v1) (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by 08332f3665; code recoverable at 25e5650c14.
+    # Restore: git apply experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch
+    # Every Mamba step and forward reaches the cached block program through
+    # the one native Mamba descriptor (mamba/native_state_dispatch.mojo).
     ref plan = owner.plan.downcast_value_ptr[NativeBlockPlan]()[]
-    var workspace = PythonObject(None)
-    if step and plan.kind == "mamba2" and plan.mamba2_workspace_provider is not None:
-        if plan.mamba2_workspace is None:
-            # Creation is native metadata allocation only, under the GIL. Thus
-            # concurrent calls cannot publish competing owners into this plan.
-            # Adoption closes the handle if boxing fails. Device allocation and
-            # live-byte refresh happen inside the actual public step operation.
-            var handle = neural_descriptor_execute(plan.mamba2_workspace_provider,
-                MAMBA2_WORKSPACE_CREATE, [], [], [], False)
-            if handle == 0:
-                raise Error("Mamba2 public workspace: native create returned a null owner")
-            plan.mamba2_workspace = neural_descriptor_adopt(plan.mamba2_workspace_provider,
-                handle, MAMBA2_WORKSPACE_CLOSE, [])
-        workspace = plan.mamba2_workspace
     var result = causal_layer_run_fields(mods, owner.fields, plan.entries, plan.kind, plan.d_model,
-        plan.packed, plan.layer, x, state, step, workspace)
-    _ = workspace  # pin the native resource/image through the complete call
+        plan.packed, plan.layer, x, state, step)
     _ = owner
     return result
 
@@ -466,8 +443,9 @@ def neural_block_allocate_binding(block: PythonObject, batch: PythonObject, capa
 
 def _neural_input(mut mods: NativeModules, value: PythonObject, d_model: Int, step: Bool, context: PythonObject) raises -> PythonObject:
     # 0.8.66 regression C5: x is only read; a C-contiguous float32 export is
-    # read in place (neural_block_f32_input), not copied per call.
-    var x = neural_block_f32_input(mods, value, "x", context)
+    # read in place (admit_block_f32 BLOCK_READ), not copied per call; any
+    # other x is one copy into uninitialised storage.
+    var x = admit_block_f32(mods, value, "x", context, BLOCK_READ)
     var bi = mods.module("builtins")
     if step and len(x.shape) == 2:
         var shaped = py_call(bi.object.__new__, context["array_class"])
@@ -658,7 +636,10 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
     if supplied_state is not None and py_get(_fields(mods, supplied_state), "_resident_session") is not None:
         raise Error("neural block: state is owned by a resident decode session")
     var e = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].entries
-    var reuse = transformer and py_contains(e, "forward_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
+    # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP / MOJOLEARN_TRANSFORMER_SESSION_FRESH (runtime switches, SUPERSEDED by the block session) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
+    # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch
+    # A binding with the session entries always runs on the block's session.
+    var reuse = transformer and py_contains(e, "forward_session")
     var lock = py_get(fields, "_runtime_lock") if transformer else PythonObject(None)
     var lock_lease = OperationLockLease(lock)
     var locked = transformer and (reuse or fields["_native_session"] is not None or fields["_int15"] is not None)
@@ -671,7 +652,7 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
             py_setitem(fields, "_native_session", PythonObject(None))
             py_setitem(fields, "_session_binding", PythonObject(None))
         if transformer and supplied_state is None and not step and fields["_int15"] is None:
-            var fresh_session = reuse and py_contains(e, "transformer_session_forward_fresh") and String(getenv("MOJOLEARN_TRANSFORMER_SESSION_FRESH")) != "0"
+            var fresh_session = reuse and py_contains(e, "transformer_session_forward_fresh")
             if fresh_session or py_contains(e, "transformer_forward_fresh"):
                 var y = generation_array([b, l, d])
                 var keep = List[PythonObject]()
@@ -1111,7 +1092,7 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
     var x = _neural_input(mods, input, d, False, context)
     var b = Int(py=x.shape[0])
     var l = Int(py=x.shape[1])
-    var dy = neural_block_f32(mods, grad_output, "grad_output", context)
+    var dy = admit_block_f32(mods, grad_output, "grad_output", context, BLOCK_OPERATION)
     _model_shape(dy, [b, l, d], "grad_output")
     var weights = fields["_w"]
     if not transformer:
@@ -1205,7 +1186,7 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
         lock_lease.acquire()
         mods.released()
         try:
-            var session = _native_has_entry(mods, entries, "transformer_session_backward") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
+            var session = _native_has_entry(mods, entries, "transformer_session_backward")
             if session:
                 if fields["_native_session"] is not None and fields["_session_binding"] is not entries.canonical:
                     causal_transformer_admin(mods, fields["_session_binding"], fields["_native_session"], 13)
@@ -1227,8 +1208,9 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
                     _ = py_call(_native_function(mods, entries, "transformer_session_backward"), fields["_native_session"], addresses, params)
                     mods.released()
             else:
-                if fields["_native_session"] is not None and _native_has_entry(mods, entries, "transformer_session_invalidate_tape"):
-                    causal_transformer_admin(mods, entries, fields["_native_session"], 12)
+                # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+                # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+                # (the session tape's invalidation before a per-call backward.)
                 var native = py_get(fields, "_native_block_provider_cache")
                 if native is not None:
                     _ = neural_descriptor_execute(native, 5, _neural_int_words(addresses), _neural_int_words(params), [])

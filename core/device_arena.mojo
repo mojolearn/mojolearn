@@ -30,6 +30,12 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.ctx_key import ctx_cache_key
+from core.shared_slot import shared_slot_check, shared_slot_word
+
+#: Layout version of `_ArenaPool` (core/shared_slot.mojo rule). V2: the
+#: layout word and `chunk_ctx`, the context key a chunk was created on.
+comptime _ARENA_LAYOUT = 2
 
 #: a chunk's floats (256 MB) and a view's alignment (256 B)
 comptime ARENA_CHUNK_FLOATS = 1 << 26
@@ -37,8 +43,15 @@ comptime ARENA_ALIGN_FLOATS = 64
 
 
 struct _ArenaPool(Defaultable, Movable):
+    # first field: the layout word (core/shared_slot.mojo)
+    var layout: Int
     var chunks: List[DeviceBuffer[DType.float32]]
     var chunk_n: List[Int]
+    # the `ctx_cache_key` of the context each chunk was created on: the
+    # arena is one slot per process and tier, reached by every neural
+    # binding, and each binding runs its own context (its own stream or
+    # queue), so a chunk is handed only to a session on the same context
+    var chunk_ctx: List[Int]
     var owner: List[Int]
     var active: Int
     var cur: Int
@@ -47,8 +60,10 @@ struct _ArenaPool(Defaultable, Movable):
     var views: Int
 
     def __init__(out self):
+        self.layout = shared_slot_word[_ArenaPool](_ARENA_LAYOUT)
         self.chunks = List[DeviceBuffer[DType.float32]]()
         self.chunk_n = List[Int]()
+        self.chunk_ctx = List[Int]()
         self.owner = List[Int]()
         self.active = -1
         self.cur = -1
@@ -57,8 +72,19 @@ struct _ArenaPool(Defaultable, Movable):
         self.views = 0
 
 
-comptime _ARENA_NAME = "MojoDeviceArenaIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDeviceArenaFast"
+comptime _ARENA_NAME_IDN: StaticString = "MojolearnDeviceArenaIdenticalV2"
+comptime _ARENA_NAME_OTHER: StaticString = "MojolearnDeviceArenaFastV2"
+# typed StaticString arms: a conditional of two literals is a String value,
+# which shared_slot_check (StaticString) does not take
+comptime _ARENA_NAME: StaticString = _ARENA_NAME_IDN if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else _ARENA_NAME_OTHER
 comptime DEVICE_ARENA = _Global[StorageType=_ArenaPool, name=_ARENA_NAME, init_fn=_ArenaPool.__init__]
+
+
+def _arena() raises -> UnsafePointer[_ArenaPool, MutAnyOrigin]:
+    """The process-wide arena, refused when its creator had another layout."""
+    var pool = DEVICE_ARENA.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    shared_slot_check(pool[].layout, shared_slot_word[_ArenaPool](_ARENA_LAYOUT), _ARENA_NAME)
+    return pool
 
 
 def device_arena_on() -> Bool:
@@ -77,7 +103,7 @@ def arena_begin() raises -> Int:
     construction that raised without ending is simply superseded."""
     if not device_arena_on():
         return -1
-    var pool = DEVICE_ARENA.get_or_create_ptr()
+    var pool = _arena()
     var id = pool[].next_id
     pool[].next_id += 1
     pool[].active = id
@@ -90,7 +116,7 @@ def arena_end(id: Int) raises:
     """Stop taking views for arena `id` (its chunks stay owned)."""
     if id < 0:
         return
-    var pool = DEVICE_ARENA.get_or_create_ptr()
+    var pool = _arena()
     if pool[].active == id:
         pool[].active = -1
         pool[].cur = -1
@@ -103,7 +129,7 @@ def arena_release(id: Int) raises:
     are destroyed, and the next session reuses them."""
     if id < 0:
         return
-    var pool = DEVICE_ARENA.get_or_create_ptr()
+    var pool = _arena()
     for i in range(len(pool[].chunks)):  # small-loop(chunks: arena chunks): a handful of grow-only device chunks, no data
         if pool[].owner[i] == id:
             pool[].owner[i] = -1
@@ -117,14 +143,14 @@ def arena_active() raises -> Bool:
     """Whether an allocation helper should take a view right now."""
     if not device_arena_on():
         return False
-    return DEVICE_ARENA.get_or_create_ptr()[].active >= 0
+    return _arena()[].active >= 0
 
 
 def arena_take(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
     """A view of `n` floats (at least 1) in the active arena: the current
     chunk when it fits, else a free chunk that fits, else a new chunk of
     max(n, ARENA_CHUNK_FLOATS)."""
-    var pool = DEVICE_ARENA.get_or_create_ptr()
+    var pool = _arena()
     var id = pool[].active
     if id < 0:
         raise Error("device arena: no active arena")
@@ -132,10 +158,11 @@ def arena_take(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]
     if want < 1:
         want = 1
     var need = ((want + ARENA_ALIGN_FLOATS - 1) // ARENA_ALIGN_FLOATS) * ARENA_ALIGN_FLOATS
-    if pool[].cur < 0 or pool[].off + need > pool[].chunk_n[pool[].cur]:
+    var key = ctx_cache_key(ctx)
+    if pool[].cur < 0 or pool[].off + need > pool[].chunk_n[pool[].cur] or pool[].chunk_ctx[pool[].cur] != key:
         var pick = -1
-        for i in range(len(pool[].chunks)):
-            if pool[].owner[i] < 0 and pool[].chunk_n[i] >= need:
+        for i in range(len(pool[].chunks)):  # small-loop(chunks: arena chunks): a handful of grow-only device chunks, no data
+            if pool[].owner[i] < 0 and pool[].chunk_n[i] >= need and pool[].chunk_ctx[i] == key:
                 pick = i
                 break
         if pick < 0:
@@ -144,6 +171,7 @@ def arena_take(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]
                 size = ARENA_CHUNK_FLOATS
             pool[].chunks.append(ctx.enqueue_create_buffer[DType.float32](size))
             pool[].chunk_n.append(size)
+            pool[].chunk_ctx.append(key)
             pool[].owner.append(id)
             pick = len(pool[].chunks) - 1
         else:
@@ -158,7 +186,7 @@ def arena_take(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]
 
 def arena_stats() raises -> List[Int]:
     """[chunks, chunks in use, floats allocated, views taken] for a probe."""
-    var pool = DEVICE_ARENA.get_or_create_ptr()
+    var pool = _arena()
     var used = 0
     var floats = 0
     for i in range(len(pool[].chunks)):  # small-loop(chunks: arena chunks): a handful of grow-only device chunks, no data

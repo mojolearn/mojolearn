@@ -183,10 +183,8 @@ from ._native_labels_bridge import label_context as _label_context  # noqa: E402
 _native_family_bridge.tables(**_label_context())
 # TOMBSTONE: MOJOLEARN_XN_FAST_TILED_RBF (DROPPED-noise) deleted 2026-10-03 by f103d7381; code recoverable at f103d7381^.
 # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_TILED_RBF.patch; record in docs/TOMBSTONES.md.
-#: lane/apple-fast-neighbors2 (2026-10-02): LabelPropagation /
-#: LabelSpreading's kNN-graph loop as one resident op (`lp_iterate_knn`) is
-#: the FAST + Apple default, read back from the binding (`_lp_fast_resident`,
-#: no env read).
+# LabelPropagation / LabelSpreading's kNN-graph loop is one resident op
+# (`lp_iterate_knn`) on every binary.
 
 
 def _kfeat_flags(est):
@@ -210,12 +208,8 @@ def _classical_graph_normalization(est):
     return flag is not None and bool(flag())
 
 
-def _lp_fast_resident(est):
-    """Whether the bound binary takes the resident kNN-graph loop
-    (x_neighbors/iter_device.mojo LP_FAST_RESIDENT: FAST + Apple, off with
-    `-D MOJOLEARN_LP_FAST_RESIDENT_OFF`). 0 on IDENTICAL and the host column."""
-    fn = getattr(est._bind(), "x_neighbors_lp_fast_resident", None)
-    return fn is not None and int(fn()) != 0
+# TOMBSTONE: x_neighbors_lp_fast_resident (dead export: always 1) deleted 2026-11-09 by lane/n3b-sgd-on-program-fit; code recoverable at 5b5490960d.
+# Restore: git apply -3 experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch
 
 
 def _p2m_relabel(est, lab, name=None):

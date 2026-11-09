@@ -61,7 +61,6 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
 )
 from ensemble.decisiontree.batched_levelalgo.kernels.level_loop_kernels import (
     LOOP_HDR_WORDS,
-    LOOP_H_DEPTH,
     LOOP_H_CUR,
     LOOP_H_HEAD,
     LOOP_H_NODES,
@@ -1459,6 +1458,28 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     var loop_batch: Int
     # the tree in flight runs on the device queue
     var loop_active: Bool
+    # Tree op TREE_OP_FOREST_FINISH (lane t1b-tree-leaf-and-node-ops,
+    # gbdt/tree_ops.mojo): a device-loop tree's finish is ENQUEUED only -- node table to
+    # `SparseTreeNode`s, leaf pass, the two downloads -- and its host model
+    # is assembled by `collect_finished` after the caller's next drain,
+    # instead of the finish draining on its own. `tree_tag` is the caller's
+    # name for the tree being grown (its forest index); the `pending_*`
+    # fields are the one finish in flight; `finished` / `finished_tags` the
+    # collected trees the caller has not taken yet.
+    var tree_tag: Int
+    var pending_nodes: Int
+    var pending_out: Int
+    var pending_tag: Int
+    var pending_treeid: Int32
+    var pending_num_outputs: Int32
+    var pending_h_depth: HostBuffer[DType.int32]
+    var pending_keep_d8: List[DeviceBuffer[DType.uint8]]
+    var pending_keep_h8: List[HostBuffer[DType.uint8]]
+    var pending_keep_dl: List[DeviceBuffer[Self.O.DataT]]
+    var pending_keep_hl: List[HostBuffer[Self.O.DataT]]
+    var pending_keep_di: List[DeviceBuffer[DType.int32]]
+    var finished: List[TreeMetaDataNode[Self.O.DataT]]
+    var finished_tags: List[Int]
 
     def __init__(
         out self,
@@ -1728,6 +1749,20 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         self.loop_cap = 0
         self.loop_batch = 0
         self.loop_active = False
+        self.tree_tag = -1
+        self.pending_nodes = 0
+        self.pending_out = 0
+        self.pending_tag = -1
+        self.pending_treeid = Int32(-1)
+        self.pending_num_outputs = Int32(0)
+        self.pending_h_depth = ctx.enqueue_create_host_buffer[DType.int32](1)
+        self.pending_keep_d8 = List[DeviceBuffer[DType.uint8]]()
+        self.pending_keep_h8 = List[HostBuffer[DType.uint8]]()
+        self.pending_keep_dl = List[DeviceBuffer[Self.O.DataT]]()
+        self.pending_keep_hl = List[HostBuffer[Self.O.DataT]]()
+        self.pending_keep_di = List[DeviceBuffer[DType.int32]]()
+        self.finished = List[TreeMetaDataNode[Self.O.DataT]]()
+        self.finished_tags = List[Int]()
         var cap = 2 * n_sampled_rows + 1
         if Int(params.max_depth) < 29:
             var dense = (1 << (Int(params.max_depth) + 1)) - 1
@@ -3370,7 +3405,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         (`loop_tree_kernel`), the leaf kernels run over them, and the
         finished model -- nodes in node-id order (the order
         `NodeQueue::Push` appends in) and the leaf values -- crosses to
-        the host once, as bulk copies into the tree's own lists.
+        the host once, as bulk copies ENQUEUED here; `collect_finished`
+        builds the tree's lists from them after the caller's next drain
+        (TREE_OP_FOREST_FINISH; `ts.tree` stays empty on this path).
         `leaf_counter` is 1 plus one per split (`:111`, every split adds
         two nodes); `depth_counter` is the deepest child's depth
         (`:133-134`), which is the LAST node's: the FIFO hands out ids in
@@ -3378,6 +3415,8 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         comptime if RETAINED_COUNT_HIST:
             if self.retained_counts and not self.retained_counts_reset:
                 self.retained_counts.value().publish_audit(ctx)
+        # a deferred finish still in flight owns the leaf staging below
+        self._settle_pending(ctx)
         var n_out = Int(ts.ds.num_outputs)
         var t0 = instr.times.start()
         self._ensure_leaf_capacity(ctx, n_nodes, n_out)
@@ -3411,23 +3450,49 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         var d_depth = self.loop_nodes_i.create_sub_buffer[DType.int32](
             (n_nodes - 1) * LOOP_NODE_INTS + 5, 1
         )
-        var h_depth = self.loop_h_hdr.create_sub_buffer[DType.int32](
-            LOOP_H_DEPTH, 1
-        )
         log_launch_ctx(ctx, "xfer_loop_tree")
         ctx.enqueue_copy(dst_buf=ht, src_buf=dt)
         log_launch_ctx(ctx, "xfer_leaf_download")
         ctx.enqueue_copy(dst_buf=hl, src_buf=dl)
-        ctx.enqueue_copy(dst_buf=h_depth, src_buf=d_depth)
-        ctx.synchronize()
+        # TREE_OP_FOREST_FINISH: enqueued only; the depth word gets its own
+        # host word (the next tree's header download rewrites `loop_h_hdr`),
+        # and the host model is `collect_finished`'s after the caller's next
+        # drain. The views ride along until then. Deleted by lane
+        # t1b-tree-leaf-and-node-ops (2026-11-09, no define): this finish's own
+        # `ctx.synchronize()` and its in-place host assembly into `ts.tree`
+        # (one drain per finished tree) are deleted; the assembly is
+        # `collect_finished`'s, statement for statement.
+        ctx.enqueue_copy(dst_buf=self.pending_h_depth, src_buf=d_depth)
+        self.pending_nodes = n_nodes
+        self.pending_out = n_out
+        self.pending_tag = self.tree_tag
+        self.pending_treeid = self.treeid
+        self.pending_num_outputs = ts.queue.tree.num_outputs
+        self.pending_keep_d8.append(dt^)
+        self.pending_keep_h8.append(ht^)
+        self.pending_keep_dl.append(dl^)
+        self.pending_keep_hl.append(hl^)
+        self.pending_keep_di.append(d_depth^)
+        instr.times.stop_host("leaf_values", t0)
+        ts.done = True
+
+    def collect_finished(mut self) raises:
+        """TREE_OP_FOREST_FINISH's host half: after a drain that covered a
+        deferred `_finish_tree_device`'s downloads, the tree's host model
+        (the same bulk copies, the same fields) lands in `finished` with its
+        tag in `finished_tags`. Nothing pending: nothing happens."""
+        if self.pending_nodes <= 0:
+            return
+        var n_nodes = self.pending_nodes
+        var n_out = self.pending_out
         var tree = TreeMetaDataNode[Self.O.DataT](
-            self.treeid,
-            self.loop_h_hdr.unsafe_ptr().unsafe_load(LOOP_H_DEPTH),
+            self.pending_treeid,
+            self.pending_h_depth.unsafe_ptr().unsafe_load(0),
             Int32(1 + (n_nodes - 1) // 2),
             Float64(0),
             List[Scalar[Self.O.DataT]](),
             List[SparseTreeNode[Self.O.DataT]](),
-            ts.queue.tree.num_outputs,
+            self.pending_num_outputs,
         )
         tree.sparsetree.resize(n_nodes, SparseTreeNode[Self.O.DataT]())
         tree.vector_leaf.resize(n_nodes * n_out, Scalar[Self.O.DataT](0))
@@ -3443,15 +3508,23 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             src=self.leaf_h_leaves.unsafe_ptr(),
             count=n_nodes * n_out,
         )
-        _ = dt^
-        _ = ht^
-        _ = dl^
-        _ = hl^
-        _ = d_depth^
-        _ = h_depth^
-        instr.times.stop(ctx, "leaf_values", t0)
-        ts.tree = tree^
-        ts.done = True
+        self.finished.append(tree^)
+        self.finished_tags.append(self.pending_tag)
+        self.pending_nodes = 0
+        self.pending_keep_d8.clear()
+        self.pending_keep_h8.clear()
+        self.pending_keep_dl.clear()
+        self.pending_keep_hl.clear()
+        self.pending_keep_di.clear()
+
+    def _settle_pending(mut self, ctx: DeviceContext) raises:
+        """A deferred finish still in flight is drained and collected before
+        anything reuses the leaf staging (the next finish, or a host-queue
+        tree's `set_leaf_predictions`). The forest cycle collects after every
+        drain, so on its path this never drains."""
+        if self.pending_nodes > 0:
+            ctx.synchronize()
+            self.collect_finished()
 
     def shared_memory_config(self) raises -> SharedMemoryConfig:
         """`Builder::computeSharedMemoryConfig`, `:522-551`, with this
@@ -3691,10 +3764,20 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # change behavior under an exported trace variable. Traced fits go
         # through `fit_forest`.
         var instr = FitInstruments.disabled()
+        self.tree_tag = 0
         var ts = self.begin_tree[sabotage](ctx, dataset, quantiles, instr)
         while not ts.done:
             ctx.synchronize()
             _ = self.advance_tree[sabotage](ctx, quantiles, ts, instr)
+        if self.pending_nodes > 0:
+            # a device-loop tree (TREE_OP_FOREST_FINISH): its model lands
+            # after the drain that settles the finish
+            ctx.synchronize()
+            self.collect_finished()
+            var done = self.finished[len(self.finished) - 1].copy()
+            self.finished.clear()
+            self.finished_tags.clear()
+            return done^
         var tree = ts.tree.copy()
         return tree^
 
@@ -3849,6 +3932,8 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         DEVIATION 402 times the leaf pass here, where it runs, because
         `set_leaf_predictions` carries its own per-batch syncs and its
         wall time is real device work."""
+        # a deferred device finish still in flight owns the leaf staging
+        self._settle_pending(ctx)
         # DEVIATION 2510 -- the tree copy out of the queue is host work,
         # stamped without a drain.
         var t_copy = instr.times.start()

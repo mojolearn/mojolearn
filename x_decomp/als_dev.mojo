@@ -14,26 +14,29 @@ from x_decomp.kit import (
 from x_decomp.kit_device import DKit, DMat
 
 
-def als_half_dev(k: DKit, C: DMat, Y: DMat, reg: Float64, trans: Bool) raises -> DMat:
-    """`_Kit.als(C, Y, reg, trans)` with C resident."""
+def als_half_dev(k: DKit, C: DMat, Y: DMat, reg: Float64, trans: Bool, sink: DMat) raises -> DMat:
+    """`_Kit.als(C, Y, reg, trans)` with C resident. `sink` (>= n words)
+    takes the kernel's per-row singular flags, which this fit never reads."""
     var n = C.c if trans else C.r
     var m = C.r if trans else C.c
     var f = Y.c
     var YtY = k.mm(Y, Y, True, False)
     var X = DMat(n, f)
-    var flags = DMat(n, 1)
     var su = 1 if trans else C.c
     var si = C.c if trans else 1
     if n > 0:
         var ns = als_scratch(n, f)
         var S = DMat(max(ns, 1), 1)
-        launch_als_rows(k.ctx, C.p(), Y.p(), YtY.p(), X.p(), S.p(), flags.p(), n, m, f, su, si, Float32(reg))
-        k.ctx.synchronize()
+        launch_als_rows(k.ctx, C.p(), Y.p(), YtY.p(), X.p(), S.p(), sink.p(), n, m, f, su, si, Float32(reg))
+        # no wait here: the next launch on the one in-order stream reads X,
+        # and S goes back to the stream-ordered pool (lane
+        # consol-n0-readmission; a bare synchronize() that read nothing)
     return X^
 
 
-def als_cg_half_dev(k: DKit, C: DMat, Y: DMat, X0: DMat, reg: Float64, cg: Int) raises -> DMat:
-    """`_Kit.als_cg(C, Y, X0, reg, cg)` (the CG kernel DevExec launches)."""
+def als_cg_half_dev(k: DKit, C: DMat, Y: DMat, X0: DMat, reg: Float64, cg: Int, sink: DMat) raises -> DMat:
+    """`_Kit.als_cg(C, Y, X0, reg, cg)` (the CG kernel DevExec launches).
+    `sink` (>= n words) takes the kernel's per-row step counts, never read."""
     var n = C.r
     var m = C.c
     var f = Y.c
@@ -41,12 +44,11 @@ def als_cg_half_dev(k: DKit, C: DMat, Y: DMat, X0: DMat, reg: Float64, cg: Int) 
     var X = k.copy(X0)
     if n > 0:
         var S = DMat(max(n * 3 * f, 1), 1)
-        var steps = DMat(n, 1)
         k.ctx.enqueue_function[als_cg_kernel](
-            C.p(), Y.p(), YtY.p(), X.p(), S.p(), steps.p(), Int32(n), Int32(m), Int32(f), Float32(reg), Int32(cg),
+            C.p(), Y.p(), YtY.p(), X.p(), S.p(), sink.p(), Int32(n), Int32(m), Int32(f), Float32(reg), Int32(cg),
             grid_dim=_blocks(n), block_dim=TPB,
         )
-        k.ctx.synchronize()
+        # no wait here (as `als_half_dev`)
     return X^
 
 
@@ -74,17 +76,20 @@ def als_fit_dev_run(
     var X = k.upload(mat_from(px, n, nf))
     var Y = k.upload(mat_from(py_, m, nf))
     var losses = List[Float64]()
+    # one write-only sink for every half-sweep's per-row flags / step counts
+    # (was a fresh buffer per half-sweep)
+    var sink = DMat(max(max(n, m), 1), 1)
     if a.use_cg:
         var Ct = k.t(C)
         for _ in range(a.iterations):
-            X = als_cg_half_dev(k, C, Y, X, a.reg, a.cg_steps)
-            Y = als_cg_half_dev(k, Ct, X, Y, a.reg, a.cg_steps)
+            X = als_cg_half_dev(k, C, Y, X, a.reg, a.cg_steps, sink)
+            Y = als_cg_half_dev(k, Ct, X, Y, a.reg, a.cg_steps, sink)
             if a.calc_loss:
                 losses.append(als_loss_dev(k, C, X, Y, a.reg))
     else:
         for _ in range(a.iterations):
-            X = als_half_dev(k, C, Y, a.reg, False)
-            Y = als_half_dev(k, C, X, a.reg, True)
+            X = als_half_dev(k, C, Y, a.reg, False, sink)
+            Y = als_half_dev(k, C, X, a.reg, True, sink)
             if a.calc_loss:
                 losses.append(als_loss_dev(k, C, X, Y, a.reg))
     var hx = k.get(X)

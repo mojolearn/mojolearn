@@ -5,18 +5,23 @@ from std.ffi import _Global
 from std.math import isfinite
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family, admit_family_meta
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_labels import labels_cast, labels_reshape, labels_view, labels_check_rank, classical_decode_labels
-from bindings.family_common import family_call, family_entry, family_array, family_as_f32_dense, family_f32_snapshot
+from bindings.classical_labels import labels_cast, labels_reshape, classical_decode_labels
+from bindings.admitted_input import admit_ids
+from bindings.family_common import family_call, family_entry, family_array
 from bindings.parallel_shard_common import shard_model, shard_rows, shard_dtype, shard_item, shard_array
 from bindings.host_archive_native import host_archive_rbc_metric_object
 from bindings.neighbors_knn_native import (
     _nn_fit, _dist_params, _check_metric_input, _resident_handle, _report, knn_release,
     _clf_predict, _clf_predict_proba, _reg_predict, knn_door, _reduce,
+    knn_admit_x, knn_x_tested, knn_device_tests, knn_host_finite, knn_with_status,
 )
+from bindings.admitted_input import admitted_finite_refuse
+from core.host_finite_scan import host_finite_status
 from bindings.neighbors_kde_native import _kde_scores, _kde_release
 from bindings.neighbors_ann_native import _ivf_metric, _ann_key_entry
 from bindings.host_inference_scalars import host_inference_scalar
@@ -84,7 +89,7 @@ def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: Python
     # dispatch address. In particular Jensen-Shannon must not recapture the
     # same converted Array merely to read its minimum. No metadata is cached
     # across public calls or shard requests; mutable/released inputs re-admit.
-    var query = family_f32_snapshot(source, 2, "X", context, True)
+    var query = knn_admit_x(source, model, context)
     var rbc = String(fields["algorithm"]) == "rbc"
     var params = PythonObject(None)
     if not rbc:
@@ -98,7 +103,13 @@ def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: Python
     var nq = query.shape[0]
     var dist = family_array(Python.tuple(nq, k), "<f4", context)
     var ids = family_array(Python.tuple(nq, k), "<i4" if rbc else "<u4", context)
+    # Lane a7b: a borrowed query is tested behind the resident entry's upload
+    # (status word); RBC and the CPU column scan it on the host.
+    var tested = knn_x_tested(query, source, context)
+    var status = List[Int32](length=1, fill=Int32(0))
     try:
+        if not tested and (rbc or not knn_device_tests(binding)):
+            knn_host_finite(model, query)
         if rbc:
             var metric = host_archive_rbc_metric_object(String(py_type(model).__name__), fields["metric"], fields["p"], context)
             var count = family_call(family_entry(binding, "rbc_knn_search", context),
@@ -118,7 +129,9 @@ def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: Python
                     classical_address(dist), classical_address(ids), sizes, params)
             else:
                 used = family_call(family_entry(binding, "knn_search_resident", context), handle,
-                    classical_address(index), PythonObject(query.source.addr), classical_address(dist), classical_address(ids), sizes, params)
+                    classical_address(index), PythonObject(query.source.addr), classical_address(dist), classical_address(ids), sizes,
+                    params if tested else knn_with_status(params, status))
+            admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
             _report(fields, "used_query_tile_", used)
     finally:
         # family_call may release the GIL or raise; keep the admitted source
@@ -153,14 +166,35 @@ def _radius(model: PythonObject, source: PythonObject, kwargs: PythonObject,
     var sort = _flag(py_get(kwargs, "sort_results", False), "sort_results", context)
     if sort and not distances:
         raise Error("ValueError: sort_results=True requires return_distance=True")
-    var q = index if source is None else family_as_f32_dense(source, 2, "X", context)
+    # Lane a7b: the index (the radius fit does not test it) and a borrowed
+    # query are tested behind radius_neighbors_count's uploads (one status
+    # word); on the CPU column by one parallel host scan each.
+    var q = index
+    var status = List[Int32](length=1, fill=Int32(0))
+    var count_params = Python.list(index.shape[0], PythonObject(0), index.shape[1], r, fields["_metric_value"],
+                                   fields["_metric_arg"])
+    var device = knn_device_tests(binding)
+    if device:
+        _ = py_call(count_params.append, PythonObject(Int(status.unsafe_ptr())))
+    else:
+        # parallel: host_finite_status splits the words across the host's cores
+        admitted_finite_refuse(Int(host_finite_status(Int(py=classical_address(index)), Int(py=index.size))),
+                               String(py_type(model).__name__))
+    if source is not None:
+        var query = knn_admit_x(source, model, context)
+        q = query.keep
+        if not device and not knn_x_tested(query, source, context):
+            knn_host_finite(model, query)
+        _ = query^
     if Int(py=q.shape[1]) != Int(py=index.shape[1]):
         raise Error("ValueError: input feature count differs from fit")
     var nq = Int(py=q.shape[0])
+    py_setitem(count_params, PythonObject(1), PythonObject(nq))
     var ptr = family_array(Python.tuple(nq + 1), "<i4", context)
     var nnz = Int(py=family_call(family_entry(binding, "radius_neighbors_count", context),
-        classical_address(index), classical_address(q), classical_address(ptr),
-        Python.list(index.shape[0], nq, index.shape[1], r, fields["_metric_value"], fields["_metric_arg"])))
+        classical_address(index), classical_address(q), classical_address(ptr), count_params))
+    admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
+    _ = status^
     var ids = family_array(Python.tuple(nnz), "<i4", context)
     var dist = family_array(Python.tuple(nnz), "<f4", context)
     if nnz > 0:
@@ -316,7 +350,7 @@ def _release(token: PythonObject, tables: PythonObject, context: PythonObject) r
 
 def _ivf_partial(model: PythonObject, source: PythonObject, tables: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
-    var q = family_as_f32_dense(source, 2, "queries", context)
+    var q = admit_family(source, 2, "queries", context, dense=True).array
     if Int(py=q.shape[1]) != Int(py=fields["n_features_in_"]):
         raise Error("ValueError: query features differ from index")
     var m = Int(py=q.shape[0])
@@ -356,7 +390,7 @@ def parallel_neighbor_worker(operation: String, args: PythonObject, tables: Pyth
     var b = native_loaded_module("builtins")
     if operation == "reference_shard":
         var model = shard_model(tables["nearest_class"], args[0])
-        _nn_fit(model, args[1], context)
+        _nn_fit(model, args[1], context, neighbor_binding(tables, "neighbors_base"))
         try:
             return neighbor_kneighbors(model, args[2], args[3], PythonObject(True), neighbor_binding(tables, "neighbors_base"), context)
         finally:
@@ -366,7 +400,7 @@ def parallel_neighbor_worker(operation: String, args: PythonObject, tables: Pyth
         # under the driver's token until its "release" (pass 3, rank 108).
         _release(args[0], tables, context)
         var stored = shard_model(tables["nearest_class"], args[1])
-        _nn_fit(stored, args[2], context)
+        _nn_fit(stored, args[2], context, neighbor_binding(tables, "neighbors_base"))
         py_setitem(_snapshots(), args[0], stored)
         return PythonObject(None)
     if operation == "reference_vote":
@@ -442,23 +476,9 @@ def parallel_neighbor_worker(operation: String, args: PythonObject, tables: Pyth
 
 
 def _i32_vector(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    var view = labels_view(source, name, context)
-    labels_check_rank(view, 1, name)
-    var n = view.size()
-    var out = family_array(Python.tuple(n), "<i4", context)
-    var src = view.addr
-    var contiguous = PythonObject(None)
-    if view.strides[0] != view.item:
-        contiguous = family_array(Python.tuple(n), view.typestr, context)
-        var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(contiguous)))
-        for i in range(n):  # driver-loop: gather a strided metadata vector before one native cast
-            memcpy(dest=dst + i * view.item,
-                   src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=src + i * view.strides[0]), count=view.item)
-        src = Int(py=classical_address(contiguous))
-    labels_cast(src, view.typestr, Int(py=classical_address(out)), "<i4", n, context)
-    _ = view.keep
-    _ = contiguous
-    return out
+    # The one integer admission (lane a1b: was labels_view, a serial strided
+    # gather and labels_cast): one parallel read of the exporter's strides.
+    return admit_ids(source, name, context, wide=False)
 
 
 def parallel_ivf_admit(index: PythonObject, tables: PythonObject, context: PythonObject) raises -> PythonObject:

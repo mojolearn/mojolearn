@@ -400,41 +400,6 @@
    "tags": [],
    "note": "Review said dead; wrong: training/checks/loss.mojo identical_ce_backward_into is the shipped CE backward (byte_lm.mojo:78, :1707). NN52 and NI33 launched the same fused kernel."
   },
-  "lm_resident_tokens": {
-   "define": "MOJOLEARN_IDN_LM_RESIDENT_TOKENS",
-   "kind": "arms",
-   "arms": {
-    "0": [],
-    "1": [
-     "MOJOLEARN_IDN_LM_RESIDENT_TOKENS=1"
-    ],
-    "2": [
-     "MOJOLEARN_IDN_LM_RESIDENT_TOKENS=2"
-    ]
-   },
-   "default": "0",
-   "source": [
-    "training/neural_identical_experiments.mojo:39",
-    "training/byte_lm.mojo:1393",
-    "training/byte_lm.mojo:1800"
-   ],
-   "binding": "_mojolearn_byte_lm",
-   "bits_change": false,
-   "status": "rewritten",
-   "entries": [
-    "NN51",
-    "NI32"
-   ],
-   "board": "lm-train-step",
-   "tags": [
-    "peripheral"
-   ],
-   "arm_names": {
-    "0": "revalidate",
-    "1": "ni32_ids",
-    "2": "nn51_ids_and_targets"
-   }
-  },
   "lm_views": {
    "define": "MOJOLEARN_IDN_LM_VIEWS",
    "kind": "arms",
@@ -1207,29 +1172,6 @@
    ],
    "note": "bits_change not re-assessed by L11 (unchanged switch)"
   },
-  "ni18_epoch_gather": {
-   "define": "MOJOLEARN_NI18_FUSED_EPOCH_GATHER",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_NI18_FUSED_EPOCH_GATHER=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_cnn/device.mojo:87"
-   ],
-   "binding": "_mojolearn_x_cnn",
-   "bits_change": false,
-   "status": "kept",
-   "entries": [
-    "NI18"
-   ],
-   "board": "neural:cnn-clf (board lane cnn-clf; fit route x_cnn_fit_epoch_d)",
-   "note": "bits_change not re-assessed by L11 (unchanged switch)",
-   "reach": "neural:cnn-clf: x_cnn/device.mojo:2643 res_gather_pair_perm on the fit_epoch_d route (bindings/_mojolearn_x_cnn.mojo:1465)"
-  },
   "ni52_mlp_epoch_order": {
    "define": "MOJOLEARN_IDN_MLP_DEVICE_EPOCH_ORDER",
    "kind": "switch",
@@ -1458,7 +1400,6 @@
    "controls": [
     "ce_token_fold",
     "ce_grad_fused",
-    "lm_resident_tokens",
     "lm_views",
     "train_scratch",
     "train_live_status",
@@ -1472,10 +1413,6 @@
     [
      "lm_views",
      "train_scratch"
-    ],
-    [
-     "lm_resident_tokens",
-     "nn50_owned_runs"
     ]
    ]
   },
@@ -1716,6 +1653,14 @@
   {
    "define": "MOJOLEARN_IDN_M1_SCAN=1",
    "reason": "removed 2026-10-11 (lane/owed-decide): affine_prefix (NN34) LOSER, mamba1-forward gaussian NV 5.40 -> 10.41 ms (1.93x), AMD 3.14 -> 8.38 ms (2.67x), avg 2.30x, hash 602f9ec5 -> 045beb0b; guard refuses =1; patch experiments/removed/MOJOLEARN_IDN_M1_SCAN_1.patch"
+  },
+  {
+   "define": "MOJOLEARN_NI18_FUSED_EPOCH_GATHER",
+   "reason": "deleted 2026-11-09 by lane/x8-cnn-on-executor with the CNNClassifier device epoch it fused (res_gather_pair_perm); the classifier is a captured program on the executor (Program.fit gather_rows); never measured; recoverable at f59d913b0b (guard refuses)"
+  },
+  {
+   "define": "MOJOLEARN_IDN_LM_RESIDENT_TOKENS",
+   "reason": "removed 2026-11-09 (lane x7b-step-ops-host-arm): arms 1 (NI32) and 2 (NN51) validated the hand byte LM training step's resident tokens; no reader after lane x7 moved the step onto the executor; never promoted (docs/TOMBSTONES.md BYTE_LM_X7_LEFTOVERS)"
   }
  ],
  "notes": {

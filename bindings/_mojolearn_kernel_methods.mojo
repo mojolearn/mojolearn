@@ -35,6 +35,7 @@ from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from std.os import abort
 from std.math import sqrt
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
+from core.device_query_x import QueryFold
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -322,11 +323,14 @@ def kernel_ridge_predict_ptr_binding(
     `kernel_ridge_predict_binding`'s `addrs` and `params`, exactly, with
     X_fit, the dual and the query read from their addresses on the device
     and `out` written by the device copy (`kernel_ridge_predict_ptr_into`).
-    Returns 0."""
-    if len(addrs) != 4:
+    `addrs` may carry three more words (lane a7a): a cross-validation fold's
+    store ids [base id, base rows, index id]; x_new is then 0 and the query
+    rows are gathered on the device. Returns [finite word, range word] of
+    the query (0, 0: finite and in range; the door refuses otherwise)."""
+    if len(addrs) != 4 and len(addrs) != 7:
         raise Error(
             "kernel_ridge_predict: addrs must contain 4 addresses (x_fit,"
-            " dual, x_new, out), got "
+            " dual, x_new, out) or 7 (and a fold's base id, base rows, index id), got "
             + String(len(addrs))
         )
     if len(params) != 10:
@@ -337,7 +341,10 @@ def kernel_ridge_predict_ptr_binding(
         )
     var xfaddr = Int(_f32_ptr(Int(py=addrs[0])))
     var daddr = Int(_f32_ptr(Int(py=addrs[1])))
-    var xnaddr = Int(_f32_ptr(Int(py=addrs[2])))
+    var fold = QueryFold.none()
+    if len(addrs) == 7:
+        fold = QueryFold(Int(py=addrs[4]), Int(py=addrs[5]), Int(py=addrs[6]))
+    var xnaddr = 0 if fold.active() else Int(_f32_ptr(Int(py=addrs[2])))
     var op = _f32_ptr(Int(py=addrs[3]))
     var n = Int(py=params[0])
     var d = Int(py=params[1])
@@ -349,11 +356,12 @@ def kernel_ridge_predict_ptr_binding(
         Float64(py=params[6]),
     )
     var q = Int(py=params[9])
+    var words: Tuple[Int32, Int32]
     with GILReleased(Python()):
         var trace = IdentityTrace()
-        kernel_ridge_predict_ptr_into(xfaddr, daddr, xnaddr, n, d, t, kp, q, op, trace)
+        words = kernel_ridge_predict_ptr_into(xfaddr, daddr, xnaddr, n, d, t, kp, q, op, trace, fold)
         _ = xfaddr  # keep the Python object alive through the native call above
-    return PythonObject(0)
+    return Python.list(Int(words[0]), Int(words[1]))
 
 
 def kernel_ridge_resident_prepare_binding(
@@ -387,7 +395,8 @@ def kernel_ridge_predict_resident_binding(
     handle: PythonObject, addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
     """`kernel_ridge_predict_ptr` over a resident fit: `addrs` is `[x_new,
-    out]`, `params` `kernel_ridge_predict_binding`'s ten values. Returns 0."""
+    out]`, `params` `kernel_ridge_predict_binding`'s ten values. Returns
+    [finite word, range word] of the query (lane a7a)."""
     if len(addrs) != 2:
         raise Error(
             "kernel_ridge_predict_resident: addrs must contain 2 addresses (x_new, out), got "
@@ -412,10 +421,11 @@ def kernel_ridge_predict_resident_binding(
     )
     var q = Int(py=params[9])
     var h = Int(py=handle)
+    var words: Tuple[Int32, Int32]
     with GILReleased(Python()):
         var trace = IdentityTrace()
-        kernel_ridge_predict_resident(h, xnaddr, n, d, t, kp, q, op, trace)
-    return PythonObject(0)
+        words = kernel_ridge_predict_resident(h, xnaddr, n, d, t, kp, q, op, trace)
+    return Python.list(Int(words[0]), Int(words[1]))
 
 
 def nystroem_fit_transform_ptr_binding(

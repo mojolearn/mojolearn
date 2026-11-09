@@ -50,15 +50,30 @@ from autograd.rankn_api import rn_dims, rn_shape
 # the input shapes; a program whose inputs are all PROGRAM_IN_FLOAT is still
 # written as version 1, word for word what it was, and both versions load.
 comptime PROGRAM_RECORD_VERSION_1 = 1
-comptime PROGRAM_RECORD_VERSION = 2
+comptime PROGRAM_RECORD_VERSION_2 = 2
+# Version 3 (lane x1-executor-state-and-step-ops) writes the input kind words
+# always, adds one kind word per parameter after the parameter shapes
+# (PROGRAM_PARAM_*), and admits the block step op codes 81..84. It is written
+# only by a program that holds a step op or a state parameter; every other
+# program is still written as version 1 or 2, word for word what it was.
+comptime PROGRAM_RECORD_VERSION = 3
 # The kind of a program input: float32 values, or int32 words (embedding and
 # take ids), each cast from the caller's array at every run.
 comptime PROGRAM_IN_FLOAT = 0
 comptime PROGRAM_IN_IDS = 1
+# The kind of a program parameter (version 3): a weight read in place, or
+# carried state written in place by a step op (float values, or int32 words).
+comptime PROGRAM_PARAM_WEIGHT = 0
+comptime PROGRAM_PARAM_STATE = 1
+comptime PROGRAM_PARAM_STATE_WORDS = 2
 # The largest operation code a program may hold (autograd/ops_api.mojo OPS_*):
 # OPS_INDEX 76 ends the import family; 77..80 are captured Transformer
-# RMSNorm, rotary, projection and ascending-key softmax. Code 47 stays reserved.
-comptime PROGRAM_MAX_CODE = 80
+# RMSNorm, rotary, projection and ascending-key softmax; 81..84 the block step
+# ops (autograd/block_step_ops.mojo), 85..86 the generation pick and decode
+# condition (autograd/generation_ops.mojo, lane x45c), version 3 records
+# only. Code 47 stays reserved.
+comptime PROGRAM_MAX_CODE_V2 = 80
+comptime PROGRAM_MAX_CODE = 86
 
 
 struct OpsLog(Movable):
@@ -128,6 +143,8 @@ struct OpsProgram(Copyable, Movable):
     #: session handles of the parameters, and the shapes they had at capture
     var params: List[Int]
     var param_shapes: List[ShapeN]
+    #: PROGRAM_PARAM_* per parameter; a shorter list means weights for the rest
+    var param_kinds: List[Int]
     var code: List[Int]
     var a_at: List[Int]
     var args: List[Int]
@@ -145,6 +162,7 @@ struct OpsProgram(Copyable, Movable):
         self.in_kinds = List[Int]()
         self.params = List[Int]()
         self.param_shapes = List[ShapeN]()
+        self.param_kinds = List[Int]()
         self.code = List[Int]()
         self.a_at = List[Int]()
         self.args = List[Int]()
@@ -164,6 +182,12 @@ struct OpsProgram(Copyable, Movable):
     def n_values(self) -> Int:
         """Inputs plus node results (the non-negative refs)."""
         return self.n_in + len(self.code)
+
+    def param_kind(self, j: Int) -> Int:
+        """PROGRAM_PARAM_* of parameter j."""
+        if j < len(self.param_kinds):
+            return self.param_kinds[j]
+        return PROGRAM_PARAM_WEIGHT
 
     def end_node(mut self):
         """Close the node whose code, args, ints and floats were just appended."""
@@ -222,17 +246,28 @@ def program_words(p: OpsProgram) -> Tuple[List[Int64], List[Float32]]:
     for k in range(len(p.in_kinds)):  # driver-loop: over program inputs
         if p.in_kinds[k] != PROGRAM_IN_FLOAT:
             any_ids = True
-    var version: Int = PROGRAM_RECORD_VERSION if any_ids else PROGRAM_RECORD_VERSION_1
+    var v3 = False
+    for k in range(len(p.params)):  # driver-loop: over program parameters
+        if p.param_kind(k) != PROGRAM_PARAM_WEIGHT:
+            v3 = True
+    for k in range(p.n_nodes()):  # driver-loop: over program nodes
+        if p.code[k] > PROGRAM_MAX_CODE_V2:
+            v3 = True
+    var version: Int = PROGRAM_RECORD_VERSION if v3 else (
+        PROGRAM_RECORD_VERSION_2 if any_ids else PROGRAM_RECORD_VERSION_1)
     xi.append(Int64(version))
     xi.append(Int64(p.n_in))
     for k in range(p.n_in):  # driver-loop: over program inputs
         _put_shape(xi, p.in_shapes[k])
-    if any_ids:
+    if any_ids or v3:
         for k in range(p.n_in):  # driver-loop: over program inputs
             xi.append(Int64(p.in_kinds[k]))
     xi.append(Int64(len(p.params)))
     for k in range(len(p.params)):  # driver-loop: over program parameters
         _put_shape(xi, p.param_shapes[k])
+    if v3:
+        for k in range(len(p.params)):  # driver-loop: over program parameters
+            xi.append(Int64(p.param_kind(k)))
     var nn = p.n_nodes()
     xi.append(Int64(nn))
     for k in range(nn):  # driver-loop: over program nodes
@@ -283,8 +318,9 @@ def program_from_words(xi: List[Int64], xf: List[Float32], what: String) raises 
     caller's to fill: `params` holds one 0 per parameter shape."""
     var r = _Reader(len(xi))
     var version = r.take(xi, what)
-    if version != PROGRAM_RECORD_VERSION_1 and version != PROGRAM_RECORD_VERSION:
+    if version != PROGRAM_RECORD_VERSION_1 and version != PROGRAM_RECORD_VERSION_2 and version != PROGRAM_RECORD_VERSION:
         raise Error(what + ": an unknown program record version")
+    var max_code = PROGRAM_MAX_CODE if version == PROGRAM_RECORD_VERSION else PROGRAM_MAX_CODE_V2
     var p = OpsProgram()
     var n_in = r.take(xi, what)
     if n_in < 1:
@@ -294,7 +330,7 @@ def program_from_words(xi: List[Int64], xf: List[Float32], what: String) raises 
         p.in_shapes.append(r.shape(xi, what))
     for _ in range(n_in):  # driver-loop: over program inputs
         var kind: Int = PROGRAM_IN_FLOAT
-        if version == PROGRAM_RECORD_VERSION:
+        if version != PROGRAM_RECORD_VERSION_1:
             kind = r.take(xi, what)
             if kind != PROGRAM_IN_FLOAT and kind != PROGRAM_IN_IDS:
                 raise Error(what + ": a program input has an unknown kind")
@@ -305,13 +341,20 @@ def program_from_words(xi: List[Int64], xf: List[Float32], what: String) raises 
     for _ in range(n_p):  # driver-loop: over program parameters
         p.params.append(0)
         p.param_shapes.append(r.shape(xi, what))
+    for _ in range(n_p):  # driver-loop: over program parameters
+        var pk: Int = PROGRAM_PARAM_WEIGHT
+        if version == PROGRAM_RECORD_VERSION:
+            pk = r.take(xi, what)
+            if pk != PROGRAM_PARAM_WEIGHT and pk != PROGRAM_PARAM_STATE and pk != PROGRAM_PARAM_STATE_WORDS:
+                raise Error(what + ": a program parameter has an unknown kind")
+        p.param_kinds.append(pk)
     var nn = r.take(xi, what)
     if nn < 0:
         raise Error(what + ": a damaged node count")
     var nf_total = 0
     for k in range(nn):  # driver-loop: over program nodes
         var code = r.take(xi, what)
-        if code < 1 or code > PROGRAM_MAX_CODE or code == 47:
+        if code < 1 or code > max_code or code == 47:
             raise Error(what + ": node " + String(k) + " holds an unknown operation code " + String(code))
         p.code.append(code)
         var na = r.take(xi, what)

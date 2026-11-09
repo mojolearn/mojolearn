@@ -23,11 +23,9 @@ def ica_norm_dev(mut k: DKit, v: DMat) raises -> Float64:
 
 def sym_decorrelation_dev(mut k: DKit, W: DMat) raises -> DMat:
     var e = k.eigh(k.mm(W, W, False, True))
-    var top = Float64(e.wh.d[e.wh.c - 1]) * ICA_F32_EPS
-    var floor = ICA_FLT_MIN
-    if top > floor:
-        floor = top
-    var w = k.ew1(OP_MAXS, e.wd, floor)
+    # lane n9-decomp-eigh-families: the floor max(w[-1] eps, FLT_MIN) and
+    # OP_MAXS on the device (was w home and a sync per decorrelation)
+    var w = k.eig_floor(e.wd, ICA_F32_EPS, ICA_FLT_MIN)
     var ui = k.ew2(OP_MUL, e.vd, k.ew1(OP_RECIP, k.ew1(OP_SQRT, w, 0.0), 0.0))
     return k.mm(k.mm(ui, e.vd, False, True), W, False, False)
 

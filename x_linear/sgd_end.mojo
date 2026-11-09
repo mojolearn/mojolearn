@@ -18,16 +18,26 @@ State words, mini-batch (one problem): parity p at 4p: best, no-improve
 (bits), eta, 0; flags at 8: stop, failed.
 Per-sample (P problems): parity p, problem c at (p P + c) * SGD_END_ST:
 best, no-improve (bits), eta, active (bits), epochs (bits), failed (bits).
+
+Lane n3b-sgd-on-program-fit (2026-11-09): the epochs run as the executor's
+bounded device loop (autograd/program_loop_device.mojo `bounded_device_loop`,
+the device loop Program.fit runs on): every epoch kernel takes the loop's
+gate (`gate[0]`, the register block's done word, core/step_gate.mojo) and
+does nothing once it is set, and the stop is a criterion kernel here
+(`sgd_flags_crit_kernel`, `sgd_live_crit_kernel`) instead of words the host
+read after every epoch. A gated kernel still writes its witness word, so a
+Metal witness check over an epoch past the stop passes.
 """
 from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.atomic import Atomic
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from x_linear.ops import FP, IP, ld, st, fa, fs, fm, fd, fabs, i2f, perm_at, perm_key
+from x_linear.ops import FP, IP, ld, st, ldi, sti, fa, fs, fm, fd, fabs, i2f, perm_at, perm_key
 from x_linear.team import team_at, team_barrier
 from x_linear.sgd import mb_penalty_t, ws_mul, oc_offset, LR_ADAPTIVE
 from x_linear.witness import witness_end
+from core.step_gate import STEP_DONE, STEP_FAIL, STEP_ITER, STEP_STOP_ITER
 
 comptime SGD_END_TPB = 256
 comptime SGD_END_ST = 6
@@ -53,9 +63,15 @@ def _ok(v: Float32) -> Bool:
 def sgd_mb_end_kernel(
     w: FP, bias: FP, obj: FP, stt: FP, cf: FP, parts: FP, d: Int32, n: Int32, alpha: Float32, l1r: Float32,
     penalty: Int32, tol: Float32, nic: Int32, lr: Int32, need_obj: Int32, one_class: Int32, par: Int32,
-    wf: IP, woff: Int32, nonce: Int32,
+    gate: IP, act: IP, wf: IP, woff: Int32, nonce: Int32,
 ):
-    """One block: sgd_mb_one's epoch end. cf[4] gets the next epoch's rate."""
+    """One block: sgd_mb_one's epoch end. cf[4] gets the next epoch's rate.
+    Nothing runs once the loop is done (`gate[0]`) or the problem stopped
+    (`act[0] == 0`, the one-vs-rest problems' activity word); neither is
+    written here, so a witness rerun is idempotent."""
+    if ldi(gate, 0) != 0 or ldi(act, 0) == 0:
+        witness_end(wf, woff, nonce)
+        return
     var tid = Int(thread_idx.x)
     var t = team_at(tid, Int(block_dim.x), parts, 0, 0, 0)
     var dd = Int(d)
@@ -133,10 +149,15 @@ def sgd_mb_res_kernel(w: FP, bias: FP, res: FP, c: Int32, d: Int32, problems: In
 def sgd_ps_end_kernel(
     w: FP, ps: FP, act: IP, pf: FP, stt: FP, live: IP, d: Int32, n: Int32, problems: Int32, tol: Float32,
     nic: Int32, lr: Int32, need_obj: Int32, par: Int32, epoch: Int32, ps_st: Int32,
-    wf: IP, woff: Int32, nonce: Int32,
+    gate: IP, wf: IP, woff: Int32, nonce: Int32,
 ):
     """Block c: sgd_one's epoch end for problem c. pf[3c] gets its next rate,
-    act[c] its activity; a live problem adds one to live[0]."""
+    act[c] its activity; a live problem adds one to live[0]. Nothing runs
+    once the loop is done (`gate[0]`): the state stays at the stopping
+    epoch's parity."""
+    if ldi(gate, 0) != 0:
+        witness_end(wf, woff, nonce)
+        return
     var tid = Int(thread_idx.x)
     var c = Int(block_idx.x)
     var dd = Int(d)
@@ -256,10 +277,13 @@ def sgd_iota_kernel(idx: IP, n: Int32, problems: Int32):
         idx.unsafe_store(q, Int32(q % nn))
 
 
-def sgd_perm_kernel(idx: IP, n: Int32, seed_lo: Int32, seed_hi: Int32, epoch: Int32, c0: Int32, problems: Int32):
+def sgd_perm_kernel(idx: IP, n: Int32, seed_lo: Int32, seed_hi: Int32, epoch: Int32, c0: Int32, problems: Int32,
+                    gate: IP):
     """The epoch order of problems c0 .. c0 + problems - 1 (seed + 1000003 c),
     a thread a row: `perm_at` (x_linear/ops.mojo, DEVIATION 5004 revised),
-    the host column's `perm_fill` order."""
+    the host column's `perm_fill` order. Nothing once the loop is done."""
+    if ldi(gate, 0) != 0:
+        return
     var q = Int(block_idx.x) * SGD_END_TPB + Int(thread_idx.x)
     var nn = Int(n)
     if q < nn * Int(problems):
@@ -268,3 +292,88 @@ def sgd_perm_kernel(idx: IP, n: Int32, seed_lo: Int32, seed_hi: Int32, epoch: In
         var seed = (UInt64(UInt32(seed_hi)) << 32) | UInt64(UInt32(seed_lo))
         var sc = seed + UInt64(1000003) * UInt64(Int(c0) + cl)
         idx.unsafe_store(q, Int32(perm_at(i, nn, perm_key(sc, Int(epoch)))))
+
+
+# ------------------------------------------------ the epoch loop's activity words and criteria
+def sgd_mb_ovr_act_kernel(
+    stt: FP, act: IP, epw: IP, live: IP, problems: Int32, epoch: Int32, gate: IP, wf: IP, woff: Int32,
+    nonce: Int32,
+):
+    """The one-vs-rest epoch's activity, one thread a problem (SGD_END_TPB a
+    block), after every problem's `sgd_mb_end_kernel`: a problem that ran
+    this epoch records it (epw[c] = epoch + 1, the host loop's epoch count)
+    and stops on its stop or failed word (act[c] = 0), else adds one to
+    live[0]. The caller zeroes live[0] first, in the same witness unit (a
+    rerun recounts the same problems). Nothing once the loop is done."""
+    if ldi(gate, 0) == 0:
+        var c = Int(block_idx.x) * SGD_END_TPB + Int(thread_idx.x)
+        if c < Int(problems) and ldi(act, c) != 0:
+            sti(epw, c, Int(epoch) + 1)
+            var o = c * SGD_MB_WORDS + SGD_MB_FLAGS
+            if ld(stt, o) != Float32(0) or ld(stt, o + 1) != Float32(0):
+                sti(act, c, 0)
+            else:
+                _ = Atomic[DType.int32].fetch_add(live, Int32(1))
+    witness_end(wf, woff, nonce)
+
+
+def sgd_mb_ovr_res_kernel(w: FP, bias: FP, stt: FP, epw: IP, res: FP, d: Int32, problems: Int32):
+    """The one-vs-rest minibatch fit's result words on the device, one thread
+    a word: coef row c and intercept c (`sgd_mb_res_kernel`'s, zeros for a
+    problem whose failed word is set), then the epochs maximum over the
+    problems that did not fail and the status (-1 when one failed) by one
+    thread, as `sgd_ps_res_kernel` writes them."""
+    var q = Int(block_idx.x) * SGD_END_TPB + Int(thread_idx.x)
+    var dd = Int(d)
+    var pp = Int(problems)
+    if q < pp * dd:
+        var c = q // dd
+        var failed = ld(stt, c * SGD_MB_WORDS + SGD_MB_FLAGS + 1) != Float32(0)
+        st(res, q, Float32(0) if failed else ld(w, q))
+    elif q < pp * dd + pp:
+        var c = q - pp * dd
+        var failed = ld(stt, c * SGD_MB_WORDS + SGD_MB_FLAGS + 1) != Float32(0)
+        st(res, q, Float32(0) if failed else ld(bias, c))
+    elif q == pp * dd + pp:
+        var mx = 0
+        var status = 0
+        for c in range(pp):
+            if ld(stt, c * SGD_MB_WORDS + SGD_MB_FLAGS + 1) != Float32(0):
+                status = -1
+            else:
+                mx = max(mx, ldi(epw, c))
+        st(res, q, i2f(mx))
+        st(res, q + 1, i2f(status))
+
+
+def sgd_flags_crit_kernel(words: IP, flags: FP, it: Int32):
+    """The minibatch loop's criterion, one thread, after the epoch end:
+    while the loop runs it stores the iteration (`it`, 1-based) and, when
+    the epoch end raised its stop or failed word (flags[0], flags[1]), the
+    stopping iteration and the done word; failed also lands in STEP_FAIL
+    (code 1). Once done it changes nothing."""
+    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+        return
+    if ldi(words, STEP_DONE) != 0:
+        return
+    sti(words, STEP_ITER, Int(it))
+    var failed = ld(flags, 1) != Float32(0)
+    if failed or ld(flags, 0) != Float32(0):
+        if failed:
+            sti(words, STEP_FAIL, 1)
+        sti(words, STEP_STOP_ITER, Int(it))
+        sti(words, STEP_DONE, 1)
+
+
+def sgd_live_crit_kernel(words: IP, live: IP, it: Int32):
+    """The one-vs-rest and per-sample loops' criterion, one thread: done
+    when no problem is live (live[0] == 0) after epoch `it`. Once done it
+    changes nothing."""
+    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+        return
+    if ldi(words, STEP_DONE) != 0:
+        return
+    sti(words, STEP_ITER, Int(it))
+    if ldi(live, 0) == 0:
+        sti(words, STEP_STOP_ITER, Int(it))
+        sti(words, STEP_DONE, 1)

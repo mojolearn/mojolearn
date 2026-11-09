@@ -22,7 +22,7 @@ from x_decomp.fa_em import FaArgs, dsum_f32_run, fa_em_main_check
 from x_decomp.pca_randomized import RDev, RKit
 from x_decomp.decomp_owner_kit import (
     DecompDev, OP_ADD, OP_ADDS, OP_DIV, OP_LOGS, OP_MAXS, OP_MINS, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT, OP_SUB,
-    kit_colmean, kit_diag_add, kit_eigh, kit_eye, kit_inv, kit_logdet, kit_reversed_columns, kit_rows,
+    kit_colmean, kit_diag_add, kit_eigh, kit_eigh_desc, kit_eye, kit_inv, kit_logdet, kit_reversed_columns, kit_rows,
 )
 
 comptime LOG_2PI = 1.8378770664093453
@@ -84,11 +84,10 @@ def _gram_loop[E: Exec, D: RDev, RES: Bool, X: DecompDev](
         var sqrt_psi_t = kit.transpose(sqrt_psi)
         var both = kit.ew(OP_DIV, left, sqrt_psi_t)
         var scaled = kit.ew(OP_SCALE, both, scalar=1.0 / Float64(n))
-        var eig = kit_eigh[E, D, RES, X](kit, scaled)
-        var ev = kit_reversed_columns(kit, eig[0])
-        var s2 = kit.ew(OP_MAXS, ev, scalar=0.0)
-        var v_rev = kit_reversed_columns(kit, eig[1])
-        var vfull = kit.transpose(v_rev)
+        # lane n9-decomp-eigh-families: descending and resident (no w / V round trip)
+        var eig = kit_eigh_desc[E, D, RES, X](kit, scaled)
+        var s2 = kit.ew(OP_MAXS, eig[0], scalar=0.0)
+        var vfull = kit.transpose(eig[1])
         var lead = kit_rows(kit, vfull, 0, nc)
         var signs = kit.absmax_signs(lead, False)
         var vt = kit.ew(OP_MUL, lead, signs)

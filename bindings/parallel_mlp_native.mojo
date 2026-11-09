@@ -60,7 +60,7 @@ def mlp_initialize(model_cls: PythonObject, opt_cls: PythonObject, binding: Pyth
     b[].entries = b[].bi.dict()
     for name in [String("neural_gemm"), String("mlp_bias_activation"), String("mlp_relu_backward"),  # small-loop(the fixed training entry names)
                  String("mlp_sum_rows"), String("ce_loss"), String("accumulate"), String("optimizer_step"),
-                 String("training_numeric_mode"), String("training_vendor"), String("mlp_train_step"),
+                 String("training_numeric_mode"), String("training_vendor"),
                  String("optimizer_parallel_available"), String("accumulate_parallel_available"),
                  String("clip_parallel_available")]:
         var entry = PythonObject(None)
@@ -272,56 +272,8 @@ def _mlp_sum(values: PythonObject, rows: Int, columns: Int) raises -> PythonObje
     return out
 
 
-def _mlp_fused_enabled() raises -> Bool:
-    # The process environment read natively: os.environ assignment (and
-    # monkeypatch.setenv) updates the C environment through putenv, so this
-    # reads the same values the os.environ._data lookup did, with no Python
-    # string encoding or mapping calls per training step.
-    var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
-    return (b[].entries["mlp_train_step"] is not None and getenv("MOJOLEARN_MLP_FUSED", "1") != "0"
-            and getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1") == "1")
-
-
-def _mlp_fused_gradients(checked: PythonObject, x: PythonObject, y: PythonObject) raises -> PythonObject:
-    var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
-    var rows = Int(py=x.shape[0])
-    var owners = b[].bi.list()
-    _ = py_call(owners.append, x)
-    _ = py_call(owners.append, y)
-    var names = _mlp_names()
-    for i in range(4):  # driver-loop: over fused MLP parameter registry entries
-        _ = py_call(owners.append, checked["weights"][names[i]])
-    _ = py_call(owners.append, generation_array([1]))
-    _ = py_call(owners.append, generation_array([1]))
-    _ = py_call(owners.append, generation_array([4], "i"))
-    _ = py_call(owners.append, generation_array([1]))
-    _ = py_call(owners.append, generation_array([rows, 3]))
-    var gradients = b[].bi.list()
-    for i in range(4):  # driver-loop: over fused MLP gradient output owners
-        var grad = generation_array(_mlp_dims(i))
-        _ = py_call(owners.append, grad)
-        _ = py_call(gradients.append, grad)
-    _ = py_call(owners.append, generation_array([1]))
-    _ = py_call(owners.append, generation_array([3]))
-    var addresses = b[].bi.list()
-    for i in range(len(owners)):  # driver-loop: over the existing fused MLP ABI pointer registry
-        _ = py_call(addresses.append, owners[i]._addr)
-    var config = checked["config"]
-    var params = py_ints([rows, 1, 1])
-    for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:  # small-loop(the five optimizer config words)
-        _ = py_call(params.append, config[name])
-    _ = py_call(params.append, 0)
-    var written = py_call(b[].entries["mlp_train_step"], addresses, params)
-    if Int(py=written) != rows * 3:
-        raise Error("RuntimeError: SmallMLPTrainer fused gradient returned incomplete output")
-    _mlp_finite(owners[9], "loss")
-    for i in range(4):  # driver-loop: over the four MLP parameter tensors
-        _mlp_finite(gradients[i], "parameter gradient")
-    var result = b[].bi.list()
-    _ = py_call(result.append, Float64(Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=owners[9]._addr))[0]))
-    _ = py_call(result.append, gradients)
-    _ = owners^
-    return py_call(b[].bi.tuple, result)
+# TOMBSTONE: the fused-gradient route through mlp_train_step (the deleted hand small-MLP step, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b. The worker gradients take the per-operation primitives below.
+# Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
 
 
 def mlp_gradients_from_state(state: PythonObject, inputs: PythonObject, targets: PythonObject) raises -> PythonObject:
@@ -336,8 +288,6 @@ def mlp_gradients_from_checked(checked: PythonObject, inputs: PythonObject, targ
     var x = mlp_batch(inputs)
     var rows = Int(py=x.shape[0])
     var y = mlp_targets(targets, rows)
-    if _mlp_fused_enabled():
-        return _mlp_fused_gradients(checked, x, y)
     var w = checked["weights"]
     var hidden = _mlp_bias(_mlp_gemm(x, w["weight1"], rows, 16, 8, 1), w["bias1"], rows, 16, True)
     var logits = _mlp_bias(_mlp_gemm(hidden, w["weight2"], rows, 3, 16, 1), w["bias2"], rows, 3, False)

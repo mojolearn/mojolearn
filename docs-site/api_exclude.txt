@@ -40,9 +40,7 @@ ExperimentalTwoLevelFeatureFreq	name marks it experimental (unfinished)
 OrderedRMSE	needs installed-artifact qualification (unverified)
 GPT2Tokenizer	deprecated alias of BpeTokenizer; its page renders blank
 # Members (Class.member or module.member): skipped by conf.py's autodoc-skip-member hook.
-SmallMLPTrainer.train_steps	Apple FAST multistep build only; raises RuntimeError elsewhere
-TransformerBlock.forward_with_tape	tape API not in the shipped binding; unverified
-TransformerBlock.backward_from_tape	tape API not in the shipped binding; unverified
+SmallMLPTrainer.train_steps	now on every vendor (captured program); no NVIDIA and AMD reference records yet
 Mamba3Block.install_owned_weights	owned-weights build only; raises RuntimeError elsewhere
 Mamba3Block.export_owned_weights	owned-weights build only; raises RuntimeError elsewhere
 Mamba3Block.release_owned_weights	owned-weights build only; raises RuntimeError elsewhere
@@ -109,3 +107,5 @@ mojolearn.ops.Session.rms_norm
 mojolearn.ops.Session.rotary
 SmallByteLanguageModelTrainer.train_steps	new multi-step entry: no NVIDIA and AMD reference records yet
 LanguageModelTrainer.train_steps	new multi-step entry: no NVIDIA and AMD reference records yet
+Program.decode	new device decode loop: not compiled or run yet
+mojolearn.ops.Session.state	new carried-state upload: not compiled or run yet

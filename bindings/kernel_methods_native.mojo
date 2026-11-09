@@ -21,6 +21,7 @@
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.admitted_family import admit_family, admit_family_meta, admit_family_weights
 from bindings.native_caller_frame import native_frame_globals
 from bindings.native_loaded_module import native_loaded_module
 from bindings.trees_side_records import trees_side_get, trees_side_put
@@ -28,7 +29,10 @@ from bindings.classical_validate import classical_view
 from bindings.classical_warnings import classical_warning
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_bool
 from bindings.host_inference_scalars import host_inference_primitive_number
-from core.cast_in import CAST_KIND_SIGNED
+from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_FLOAT, NPY_FLOAT, CastIn
+from core.host_finite_scan import host_all_finite_f32_strided
+from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse, admit_rows_host_unchecked
+from bindings.device_rows_door import DoorRowsStore, door_is_device_rows, door_rows_refuse
 from providers.python.estimator_binding_pyapi import estimator_arguments, estimator_binding
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin, estimator_fit_end
 from providers.python.kernel_public_lifecycle_pyapi import kernel_public_admit, kernel_public_finite, kernel_public_ignored_target, kernel_public_result, kernel_public_column_target, kernel_public_refusal, kernel_public_feature_snapshot, kernel_public_fit_complete
@@ -48,9 +52,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.mode_metadata_native import _fields
 from bindings.public_attributes_native import _string_keys
 from bindings.family_common import (
-    family_repr, family_call,
-    family_entry, family_array,
-    family_owned_snapshot, family_f32_snapshot, family_snapshot_min, family_sample_weight_snapshot, family_field, family_f32,
+    family_repr, family_call, family_entry, family_array, family_snapshot_min, family_field,
 )
 
 comptime _KM_MODE_SLOT = "p3_km_binding_mode_checked_v1"
@@ -245,7 +247,7 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
     var d = x_meta.source.cols
     if args[2] is None:
         raise Error("ValueError: KernelRidge requires y to be passed, but the target y is None.")
-    var target = family_f32_snapshot(args[2], -1, "y", context)
+    var target = admit_family_meta(args[2], -1, "y", context)
     kernel_public_finite(target, "y")
     var rank = len(target.shape)
     var t = 1
@@ -274,7 +276,7 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
     var weights_owner = PythonObject(None)
     var weights_address = 0
     if args[3] is not None:
-        var snapshot = family_sample_weight_snapshot(args[3], n, False, context, wide=True)
+        var snapshot = admit_family_weights(args[3], n, False, context, wide=True)
         weights = snapshot.keep
         weights_owner = snapshot.owner
         weights_address = snapshot.source.addr
@@ -332,11 +334,20 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
 
 
 def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
-                 xq_meta: ArrayMetadata, resident: Bool = True) raises -> PythonObject:
+                 xq_meta: ArrayMetadata, resident: Bool = True,
+                 fold: DoorRowsStore = DoorRowsStore.none()) raises -> PythonObject:
     """`KernelRidge.predict(X)`: K(X, X_fit_) @ dual_coef_. `resident=False`
     (the multi-GPU driver) skips the device copy of the fit: a copy minted on
     a device plan's root would outlive the call on that device. The resident
-    and the per-call predict run the same kernels on the same bytes."""
+    and the per-call predict run the same kernels on the same bytes.
+
+    The query (lane a7a): `fold` active is a cross-validation fold
+    (`xq_meta` then holds no host words) that `kernel_ridge_predict_ptr`
+    gathers on the device; a route that cannot take it (a chi2 kernel, whose
+    sign test reads host words; the descriptor route; a binding without the
+    pointer entry) gathers its host rows here instead. The GPU entries test
+    the query and return its status words; the other routes are tested here
+    first (`_krr_query_scan`); one refusal wording either way."""
     classical_connect_numpy(context)
     var where = String("KernelRidge")
     var b = native_loaded_module("builtins")
@@ -353,14 +364,26 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
     var t = _km_int(family_field(fields, "n_targets_"), "n_targets_")
     var kp = _km_params(fields, True, context)
     var kernel = Int(py=kp[0])
-    _km_chi2_input(xq_meta, kernel, where)
-    var dual_obj = family_field(fields, "dual_coef_")
-    var squeeze = _km_bool(family_field(fields, "_squeeze"), "_squeeze")
     var admission = _km_extension(fields, args[0], where, context)
     var binding = admission[0]
     var native = admission[1]
     var flags = admission[2]
+    var ptr_entry = neural_descriptor_entry(binding, "kernel_ridge_predict_ptr", False) if native is None else PythonObject(None)
+    if fold.active():
+        if kernel == _KERNEL_CHI2 or kernel == _KERNEL_ADDITIVE_CHI2 or ptr_entry is None:
+            # This route reads host words: the fold's host rows, gathered in
+            # parallel out of model selection's host base (unchecked: the
+            # query is tested below like any host query).
+            var rows = admit_family_meta(admit_rows_host_unchecked(args[1], context), 2, "X", context, True)
+            return _krr_predict(model, args, context, rows, resident)
+        return _krr_predict_fold(fields, args, context, ptr_entry, kp, fold, q, d, t)
+    _km_chi2_input(xq_meta, kernel, where)
+    var dual_obj = family_field(fields, "dual_coef_")
+    var squeeze = _km_bool(family_field(fields, "_squeeze"), "_squeeze")
     var info = PythonObject(_km_int(family_field(fields, "info_"), "info_"))
+    if native is not None or ptr_entry is None:
+        # The descriptor route and the list entry return no status word.
+        _krr_query_scan(xq_meta, where)
     if resident:
         # Resident hit first: the held key retains X_fit_ and dual_coef_ by
         # identity with the shape they were admitted with at upload, so the
@@ -375,15 +398,16 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
             if native is not None:
                 _ = kernel_method_execute(native, "kernel_ridge_predict_resident", hit_addresses, hit_params, Int(py=hit_handle))
             else:
-                _ = family_call(family_entry(binding, "kernel_ridge_predict_resident", context), hit_handle, hit_addresses, hit_params)
+                var hit_words = family_call(family_entry(binding, "kernel_ridge_predict_resident", context), hit_handle, hit_addresses, hit_params)
+                admitted_finite_refuse(Int(py=hit_words[0]), where)
             _ = hit_out  # keep the Python object alive through the native call above
             _ = xq  # keep the Python object alive through the native call above
             _ = xq_meta
             return hit_out
-    var x_fit_meta = family_f32_snapshot(x_fit_obj, 2, "X_fit_", context)
+    var x_fit_meta = admit_family_meta(x_fit_obj, 2, "X_fit_", context)
     var x_fit = x_fit_meta.keep
     var n = x_fit_meta.source.rows
-    var dual_meta = family_f32_snapshot(dual_obj, -1, "dual_coef_", context)
+    var dual_meta = admit_family_meta(dual_obj, -1, "dual_coef_", context)
     var dual = dual_meta.keep
     if t < 1 or x_fit_meta.source.cols != d or dual_meta.count != n * t:
         raise Error("ValueError: KernelRidge fitted arrays do not match the fitted dimensions")
@@ -400,7 +424,8 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
         if native is not None:
             _ = kernel_method_execute(native, "kernel_ridge_predict_resident", output_addresses, params, Int(py=handle))
         else:
-            _ = family_call(family_entry(binding, "kernel_ridge_predict_resident", context), handle, output_addresses, params)
+            var words = family_call(family_entry(binding, "kernel_ridge_predict_resident", context), handle, output_addresses, params)
+            admitted_finite_refuse(Int(py=words[0]), where)
         _ = out  # keep the Python object alive through the native call above
         _ = xq  # keep the Python object alive through the native call above
         _ = x_fit^
@@ -421,7 +446,10 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
     if native is not None:
         _ = kernel_method_execute(native, "kernel_ridge_predict_ptr" if (flags & 1) != 0 else "kernel_ridge_predict", addresses, params)
     else:
-        _ = family_call(predict, addresses, params)
+        var result = family_call(predict, addresses, params)
+        if ptr_entry is not None:
+            # kernel_ridge_predict_ptr's [finite, range] words (lane a7a)
+            admitted_finite_refuse(Int(py=result[0]), where)
     _ = out  # keep the Python object alive through the native call above
     _ = x_fit^
     _ = dual^
@@ -430,6 +458,53 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
     _ = x_fit_meta^
     _ = dual_meta^
     return out
+
+
+def _krr_query_scan(xq_meta: ArrayMetadata, where: String) raises:
+    """The finite test of a query whose entry returns no status word (the
+    descriptor route, the list entry): one parallel host pass over the
+    admitted float32 words, scikit-learn's wording (lane a7a)."""
+    var src = xq_meta.source
+    if src.rows > 0 and src.cols > 0 and not host_all_finite_f32_strided(src.addr, src.s0, src.s1, src.rows, src.cols):
+        admitted_finite_refuse(1, where)
+
+
+def _krr_predict_fold(fields: PythonObject, args: PythonObject, context: PythonObject, entry: PythonObject,
+                      kp: PythonObject, fold: DoorRowsStore, q: Int, d: Int, t: Int) raises -> PythonObject:
+    """`KernelRidge.predict` of a cross-validation fold (lane a7a): one
+    `kernel_ridge_predict_ptr` call that gathers the fold's rows on the
+    device out of model selection's resident base (no host gather, no
+    upload of X) with the fitted X_fit_ and dual_coef_ uploaded from their
+    host words; the fold's status words refused in admit_x's wording."""
+    var where = String("KernelRidge")
+    var x_fit_meta = admit_family_meta(family_field(fields, "X_fit_"), 2, "X_fit_", context)
+    var n = x_fit_meta.source.rows
+    var dual_meta = admit_family_meta(family_field(fields, "dual_coef_"), -1, "dual_coef_", context)
+    if t < 1 or x_fit_meta.source.cols != d or dual_meta.count != n * t:
+        raise Error("ValueError: KernelRidge fitted arrays do not match the fitted dimensions")
+    var squeeze = _km_bool(family_field(fields, "_squeeze"), "_squeeze")
+    var info = PythonObject(_km_int(family_field(fields, "info_"), "info_"))
+    var out = family_array(Python.tuple(q) if squeeze else Python.tuple(q, t), "<f4", context)
+    var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(t), kp[0], kp[1], kp[2], kp[3], kp[4],
+                             info, PythonObject(q))
+    # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_predict_ptr_binding:
+    # x_fit, dual, x_new (0: the fold), out, then the fold's store ids.
+    var addresses = Python.list(PythonObject(x_fit_meta.source.addr), PythonObject(dual_meta.source.addr), PythonObject(0),
+                                classical_address(out), PythonObject(fold.base_id), PythonObject(fold.base_rows),
+                                PythonObject(fold.index_id))
+    var words = family_call(entry, addresses, params)
+    _ = out  # keep the Python object alive through the native call above
+    door_rows_refuse(Int(py=words[0]), Int(py=words[1]), where, fold.base_rows)
+    _ = x_fit_meta^
+    _ = dual_meta^
+    return out
+
+
+def _km_fold_metadata(rows: Int, cols: Int) raises -> ArrayMetadata:
+    """The shape record of a device fold (no host words: address 0), for
+    the dispatcher's shape and refusal reads (lane a7a)."""
+    return ArrayMetadata(PythonObject(None), [rows, cols], CastIn(0, CAST_KIND_FLOAT, 4, rows, cols, cols * 4, 4),
+                         rows * cols, NPY_FLOAT, True, True, False, PythonObject(None), False)
 
 
 def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
@@ -565,7 +640,7 @@ def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     var fitted = _km_int(family_field(fields, "n_features_in_"), "n_features_in_")
     if d != fitted:
         raise Error("mojolearn " + where + ": X has " + String(d) + " features, the fit had " + String(fitted))
-    var components_meta = family_f32_snapshot(family_field(fields, "components_"), 2, "components_", context)
+    var components_meta = admit_family_meta(family_field(fields, "components_"), 2, "components_", context)
     var components = components_meta.keep
     var q = components_meta.source.rows
     var kp = _km_params(fields, False, context)
@@ -573,11 +648,11 @@ def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     var out = family_array(Python.tuple(m, q), "<f4", context)
     var indices_meta = _km_i32_snapshot(family_field(fields, "component_indices_"), q, context)
     var indices = indices_meta.keep
-    var normalization_meta = family_f32_snapshot(family_field(fields, "normalization_"), 2, "normalization_", context)
+    var normalization_meta = admit_family_meta(family_field(fields, "normalization_"), 2, "normalization_", context)
     var normalization = normalization_meta.keep
-    var eigenvalues_meta = family_f32_snapshot(family_field(fields, "eigenvalues_"), 1, "eigenvalues_", context)
+    var eigenvalues_meta = admit_family_meta(family_field(fields, "eigenvalues_"), 1, "eigenvalues_", context)
     var eigenvalues = eigenvalues_meta.keep
-    var eigenvectors_meta = family_f32_snapshot(family_field(fields, "eigenvectors_"), 2, "eigenvectors_", context)
+    var eigenvectors_meta = admit_family_meta(family_field(fields, "eigenvectors_"), 2, "eigenvectors_", context)
     var eigenvectors = eigenvectors_meta.keep
     if (components_meta.source.cols != d or normalization_meta.source.rows != q or normalization_meta.source.cols != q
             or eigenvalues_meta.count != q or eigenvectors_meta.source.rows != q or eigenvectors_meta.source.cols != q):
@@ -643,12 +718,12 @@ def _rbf_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     var fitted = _km_int(family_field(fields, "n_features_in_"), "n_features_in_")
     if d != fitted:
         raise Error("mojolearn " + where + ": X has " + String(d) + " features, the fit had " + String(fitted))
-    var weights_meta = family_f32_snapshot(family_field(fields, "random_weights_"), 2, "random_weights_", context)
+    var weights_meta = admit_family_meta(family_field(fields, "random_weights_"), 2, "random_weights_", context)
     var weights = weights_meta.keep
     var q = weights_meta.source.cols
     var params_in = _km_tuple(family_field(fields, "_params"), 2, "_params")
     var params = Python.tuple(_km_number(params_in[0], "gamma", context), _km_int(params_in[1], "random_state"))
-    var offset_meta = family_f32_snapshot(family_field(fields, "random_offset_"), 1, "random_offset_", context)
+    var offset_meta = admit_family_meta(family_field(fields, "random_offset_"), 1, "random_offset_", context)
     var offset = offset_meta.keep
     if weights_meta.source.rows != d or offset_meta.count != q:
         raise Error("ValueError: RBFSampler fitted arrays do not match the fitted dimensions")
@@ -1005,7 +1080,7 @@ def _km_par_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
         raise Error("ValueError: KernelRidge fit requires y")
     var devices = plan_devices(args[3], "km_fit", True, context)
     var binding = args[0]
-    var x = family_f32_snapshot(args[1], 2, "X", context, True)
+    var x = admit_family_meta(args[1], 2, "X", context, True)
     plan_enter(binding, devices, _KM_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)
     try:
         if ridge:
@@ -1025,7 +1100,7 @@ def _km_par_apply(model: PythonObject, args: PythonObject, context: PythonObject
     var ridge = _km_par_admit(model, context)
     var devices = plan_devices(args[2], "km_apply", True, context)
     var binding = args[0]
-    var x = family_f32_snapshot(args[1], 2, "X", context, True)
+    var x = admit_family_meta(args[1], 2, "X", context, True)
     var out = PythonObject(None)
     plan_enter(binding, devices, _KM_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)
     try:
@@ -1074,7 +1149,22 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
     elif operation.endswith("score"):
         method = "score"
     var fields = kernel_public_admit(model, method, fitting, args[1], context)
-    var x = family_f32_snapshot(args[1], 2, "X", context, True)
+    # Lane a7a: a KernelRidge predict / score of a cross-validation fold
+    # keeps the fold on the device (admit_x `device_x`: its store ids, no
+    # host gather); `_krr_predict` gathers it there or, on a route that
+    # reads host words, gathers its host rows.
+    var fold = DoorRowsStore.none()
+    var krr_query = operation == "family_km_krr_predict" or operation == "family_km_krr_score"
+    var x: ArrayMetadata
+    if krr_query and door_is_device_rows(args[1], context):
+        var fx = admit_x_unrecorded(args[1], "KernelRidge", context, device_x=True, finite=False)
+        fold = fx.store
+        if fold.active():
+            x = _km_fold_metadata(fx.rows, fx.cols)
+        else:
+            x = admit_family_meta(fx.array, 2, "X", context, True)
+    else:
+        x = admit_family_meta(args[1], 2, "X", context, True)
     if operation.startswith("family_km_rbf_"):
         kernel_public_finite(x, "X")
     if fitting and not operation.startswith("family_km_krr_"):
@@ -1085,7 +1175,7 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
     var depth = estimator_fit_begin(fields) if fitting else 0
     var result = PythonObject(None)
     try:
-        result = _kernel_methods_operation(model, operation, admitted, context, x)
+        result = _kernel_methods_operation(model, operation, admitted, context, x, fold)
     except error:
         var failure = kernel_public_refusal(error, fitting, depth > 0, x.source.rows, x.source.cols, model)
         raise failure^
@@ -1100,15 +1190,16 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
 
 
 def _kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
-                              context: PythonObject, x: ArrayMetadata) raises -> PythonObject:
+                              context: PythonObject, x: ArrayMetadata,
+                              fold: DoorRowsStore = DoorRowsStore.none()) raises -> PythonObject:
     if operation == "family_km_krr_fit":
         _krr_fit(model, args, context, x)
         return model
     if operation == "family_km_krr_predict":
-        return _krr_predict(model, args, context, x)
+        return _krr_predict(model, args, context, x, True, fold)
     if operation == "family_km_krr_score":
-        var truth = family_f32(args[2], -1, "y", context)
-        var prediction = _krr_predict(model, args, context, x)
+        var truth = admit_family(args[2], -1, "y", context, finite=True).array
+        var prediction = _krr_predict(model, args, context, x, True, fold)
         var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
         var metrics = estimator_binding(model, "_mojolearn_metrics", context)
         return mcls_cluster_operation("family_mcls_r2", Python.tuple(metrics, truth, prediction, args[3],

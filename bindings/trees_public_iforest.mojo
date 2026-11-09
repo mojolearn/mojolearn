@@ -33,11 +33,17 @@ from bindings.py_typed_call import py_call_typed
 from core.host_parallel_copy import host_parallel_copy_bytes
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.trees_public_inputs import (
-    TreesMatrix, trees_builtins, trees_table, trees_entry, trees_vector, trees_empty, trees_address, trees_f32,
-    trees_all_finite, trees_call,
+    trees_builtins, trees_table, trees_entry, trees_address, trees_call,
 )
+from bindings.admitted_input import AdmittedX, admit_f32, admitted_words, admitted_vector, classical_view
+from bindings.classical_arrays import classical_is_f32, classical_c_order
+from core.host_finite_scan import host_all_finite_f32
+# TOMBSTONE: trees_f32 / trees_all_finite / TreesMatrix / trees_vector / trees_empty uses and _copied (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.trees_lifetime import trees_resident_new
-from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop
+from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_finite_known
+from bindings.native_buffer_owner import native_buffer_view
+from bindings.native_array_storage import native_scratch_bytes, native_scratch_address
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.metrics_native_support import metric_is_integral, metric_is_bool
 
@@ -201,18 +207,18 @@ def _release(model: PythonObject, fields: PythonObject) raises:
         _ = py_call(fields.pop, "_if_lifetime", PythonObject(None))
 
 
-def _run(model: PythonObject, fields: PythonObject, x: TreesMatrix, train: PythonObject, want: Int, fresh: Bool,
+def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonObject, want: Int, fresh: Bool,
          context: PythonObject) raises -> PythonObject:
     """`IsolationForest._run` on a converted query: one fit-and-score
     `iforest_run`, the resident token kept or renewed, `offset_` and
     `max_samples_` read back. Returns the float32 scores or int32 labels."""
     var n_query = x.rows
     var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
-    var values = PythonObject(None) if want == _WANT_PREDICT else trees_vector(n_query, "<f4", context)
-    var labels = trees_vector(n_query, "<i4", context) if want == _WANT_PREDICT else PythonObject(None)
+    var values = PythonObject(None) if want == _WANT_PREDICT else admitted_vector(n_query, "<f4", context)
+    var labels = admitted_vector(n_query, "<i4", context) if want == _WANT_PREDICT else PythonObject(None)
     var probe = trees_entry(svm, "iforest_resident")
     var resident = probe is not None and Int(py=py_call_typed(probe)) == 1
-    var info = trees_vector(4 if resident else 3, "<f8", context)
+    var info = admitted_vector(4 if resident else 3, "<f8", context)
     var params = _params(model, fields, Int(py=train.shape[0]), Int(py=train.shape[1]), n_query, want, context)
     # The held record: (token, the training matrix it was minted for, its
     # lifetime). A record for another training matrix is not this forest's.
@@ -230,7 +236,7 @@ def _run(model: PythonObject, fields: PythonObject, x: TreesMatrix, train: Pytho
     var run = py_get(svm, "iforest_run")
     if run is None:
         raise Error("ImportError: mojolearn: the svm binding has no iforest_run")
-    _ = trees_call(run, Python.list(PythonObject(trees_address(train)), PythonObject(x.addr),
+    _ = trees_call(run, Python.list(PythonObject(trees_address(train)), PythonObject(x.address),
                                     PythonObject(0 if values is None else trees_address(values)),
                                     PythonObject(0 if labels is None else trees_address(labels)),
                                     PythonObject(trees_address(info)), params))
@@ -261,24 +267,24 @@ def _run(model: PythonObject, fields: PythonObject, x: TreesMatrix, train: Pytho
             # A model without weak references keeps no record: the record
             # (and its lifetime) is dropped here, releasing the token.
             _ = trees_side_put(_TOKEN_SLOT, model, Python.list(PythonObject(token), train, lifetime, svm))
-    _ = x.keep
+    _ = x.array
     return labels if want == _WANT_PREDICT else values
 
 
-def _as_array(x: TreesMatrix, context: PythonObject) raises -> PythonObject:
+def _as_array(x: AdmittedX, context: PythonObject) raises -> PythonObject:
     """The float32 C-order X as a mojolearn Array (what `as_f32_c`
     returned): the converted copy, the caller's Array, or a zero-copy Array
     view of the caller's buffer (`Array.from_buffer`)."""
     var b = trees_builtins()
-    if py_type(x.keep) is context["array_class"]:
-        return x.keep
-    var view = x.keep
+    if py_type(x.array) is context["array_class"]:
+        return x.array
+    var view = x.array
     var array = native_storage_allocate(context["array_class"])
     py_setattr(array, "_store", view.obj)
     py_setattr(array, "_base", PythonObject(None))
     py_setattr(array, "_pin", view)
     py_setattr(array, "_mv", py_call(py_call(view.cast, "B").cast, "f"))
-    py_setattr(array, "_addr", PythonObject(x.addr))
+    py_setattr(array, "_addr", PythonObject(x.address))
     py_setattr(array, "_readonly", view.readonly)
     py_setattr(array, "shape", Python.tuple(x.rows, x.cols))
     py_setattr(array, "dtype", PythonObject("<f4"))
@@ -289,15 +295,6 @@ def _as_array(x: TreesMatrix, context: PythonObject) raises -> PythonObject:
     py_setattr(array, "strides", Python.tuple(x.cols * 4, 4))
     py_setattr(array, "order", PythonObject("C"))
     return array
-
-
-def _copied(x: TreesMatrix, source: PythonObject) raises -> Bool:
-    """`as_f32_c`'s copy flag: False when X was borrowed in place."""
-    if x.keep is source:
-        return False
-    if py_type(x.keep) is trees_builtins().memoryview and x.keep.obj is source:
-        return False
-    return True
 
 
 def _device_scan(fields: PythonObject, context: PythonObject) raises -> Bool:
@@ -312,17 +309,37 @@ def _device_scan(fields: PythonObject, context: PythonObject) raises -> Bool:
     return False
 
 
+def iforest_device_scan(model: PythonObject, context: PythonObject) raises -> Bool:
+    """True when the model's binary tests every X it uploads on the device
+    (the fit's training matrix and the query rows of score_samples /
+    decision_function / predict: `_raise_first_nonfinite_device`), so a
+    door may defer its finite test of a borrowed X to it (lane a7c). The
+    CPU column's host query tests nothing: False there."""
+    return _device_scan(py_fields(model), context)
+
+
 def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
          copy_source: PythonObject) raises -> PythonObject:
     """`fit` (want < 0: the one-row fresh run) or `fit_predict` (one fresh
     run that predicts X)."""
     var fields = py_fields(model)
     iforest_validate(model, fields, context)
-    var x = trees_f32(X, 2, "C", "X", context)
-    var copied = _copied(x, X if copy_source is None else copy_source)
+    # `input_copied_`: False when the conversion would borrow X in place (a
+    # float32 C-order 2-D input). The admission hands a mojolearn Array
+    # (as_array): a fresh copy of anything but the caller's own Array, which
+    # the fit copies below (the training matrix is the fit's own).
+    var view = classical_view(X, context, "X")
+    var copied = not ((view is X or view is copy_source) and Int(py=view.ndim) == 2
+                      and classical_is_f32(view, context) and classical_c_order(view, context))
     py_setitem(fields, "input_copied_", PythonObject(copied))
+    var x = admit_f32(view, 2, "X", context, finite=False, as_array=True, admitted=True)
+    _ = view^
     var device_scan = _device_scan(fields, context)
-    if not device_scan and not trees_all_finite(x.addr, x.rows * x.cols, False, context):
+    # The public door's admission (admit_x) already refused NaN and
+    # infinity in this X (trees_finite_known, as the forest fit): no second
+    # scan of it (lane A1 admit-trees-labels).
+    if not device_scan and not trees_finite_known(X) and not host_all_finite_f32(
+            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x.address), x.rows * x.cols):
         raise Error(_NONFINITE)
     _ = x  # keep the Python object alive through the native calls above
     # Caller-aliased input (hazard A, p3-trees): a float32 C-order X arrives
@@ -338,14 +355,21 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     # keyed on `_x`), so X is used after fit returns. 0.8.66 regression C3
     # (iforest fit 39.6x on istella, with C1): the copy is now one parallel
     # copy across host cores instead of one serial memcpy.
-    if not copied:
+    # Lane A1 admit-trees-labels (REGRESSIONS C3: the zero fill of the
+    # 1.8 GB destination before the copy overwrote it): the copy lands in
+    # one uninitialised byte store, which `_as_array` wraps as the fitted
+    # Array (the shape `Array.from_buffer` gives a borrowed buffer). The
+    # same float32 bytes: no bit change.
+    # TOMBSTONE: iforest fit zero-filled trees_empty copy destination deleted 2026-11-08 by lane a1-admit-trees-labels; code recoverable at f7d10d2b09.
+    # Restore: experiments/removed/A1_ADMIT_TREES_LABELS.patch.
+    if x.borrowed:
         var count = x.rows * x.cols
-        var owned = trees_empty(Python.tuple(x.rows, x.cols), "<f4", context)
-        var dst = trees_address(owned)
+        var owned = native_scratch_bytes(count * 4)
+        var dst = native_scratch_address(owned)
         if count > 0:
-            host_parallel_copy_bytes(dst, x.addr, count * 4)
+            host_parallel_copy_bytes(dst, x.address, count * 4)
         _ = x  # keep the caller's buffer alive through the copy above
-        x = TreesMatrix(owned, dst, x.rows, x.cols, True)
+        x = admitted_words(native_buffer_view(owned), dst, x.rows, x.cols)
     var had = Python.dict()
     var kept = Python.tuple("_x", "n_features_in_")
     for i in range(2):  # small-loop(kept): the two fitted field names restored on a refusal
@@ -357,7 +381,7 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     py_setitem(fields, "n_features_in_", PythonObject(x.cols))
     # `fit` scores the training matrix's first row (the Python `x[:1]`
     # copy: the same bytes, read in place); `fit_predict` predicts X.
-    var query = TreesMatrix(train, x.addr, 1 if want < 0 else x.rows, x.cols, True)
+    var query = admitted_words(train, x.address, 1 if want < 0 else x.rows, x.cols)
     _ = x  # keep the Python object alive through the native call above
     var out = PythonObject(None)
     try:
@@ -379,7 +403,7 @@ def _score(model: PythonObject, X: PythonObject, want: Int, context: PythonObjec
     var fields = py_fields(model)
     if not py_contains(fields, "_x"):
         raise Error(_PREFIX + "call fit() first")
-    var x = trees_f32(X, 2, "C", "X", context)
+    var x = admit_f32(X, 2, "X", context, finite=False)
     var fitted = Int(py=py_call(trees_builtins().int, fields["n_features_in_"]))
     if x.cols != fitted:
         raise Error(_PREFIX + "X has " + String(x.cols) + " features, fit saw " + String(fitted))

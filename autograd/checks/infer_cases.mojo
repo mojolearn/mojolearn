@@ -10,7 +10,7 @@ from autograd.ops import MULTIPLY, SCALE, SOFTMAX, TANH
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from sequence.mlp import ACT_SOFTMAX
-from sequence.mlp_fit import MLPNet, mlp_forward_autograd, mlp_predict, mlp_predict_autograd
+from sequence.mlp_fit import MLPNet, mlp_forward_autograd, mlp_predict
 from autograd.checks.support import check_values
 
 
@@ -241,22 +241,23 @@ def _mlp_case[E: Exec](mut ex: E, name: String, var sizes: List[Int], act: Int, 
     _same_bits(name, recorded, inferred)
     tape.record()
     tape.release(ex)
-    # mlp_predict_autograd in chunks of 3 rows (3, 3, 1): each row's value
-    # depends on its row only, so it must equal the full-batch forward.
+    # mlp_predict (the tape forward in inference mode) in chunks of 3 rows
+    # (3, 3, 1): each row's value depends on its row only, so it must equal
+    # the full-batch forward.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by c3b7dc42e6; code recoverable at c3b7dc42e6^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
+    # The hand mlp_predict it was compared with is deleted; proba2 is checked against [1 - p, p] of the prediction.
     var predicted = List[Float32](length=N * O, fill=0)
-    mlp_predict_autograd(ex, net, _ptr(x), N, _ptr(params), _ptr(predicted), 3)
+    mlp_predict(ex, net, _ptr(x), N, _ptr(params), _ptr(predicted), 3)
     _same_bits(name + "_predict", recorded, predicted)
-    # The fused hand forward folds bias and activation into its GEMM, so it is
-    # compared within tolerance, not bit for bit.
-    var hand = List[Float32](length=N * O, fill=0)
-    mlp_predict(ex, net, _ptr(x), N, _ptr(params), _ptr(hand), 3)
-    check_values(name + "_hand", predicted, hand)
     if O == 1:
         var two = List[Float32](length=N * 2, fill=0)
-        var two_hand = List[Float32](length=N * 2, fill=0)
-        mlp_predict_autograd(ex, net, _ptr(x), N, _ptr(params), _ptr(two), 3, True)
-        mlp_predict(ex, net, _ptr(x), N, _ptr(params), _ptr(two_hand), 3, True)
-        check_values(name + "_proba2", two, two_hand)
+        var two_want = List[Float32](length=N * 2, fill=0)
+        for r in range(N):  # check-side reference, not runtime
+            two_want[2 * r] = Float32(1.0) - predicted[r]
+            two_want[2 * r + 1] = predicted[r]
+        mlp_predict(ex, net, _ptr(x), N, _ptr(params), _ptr(two), 3, True)
+        check_values(name + "_proba2", two, two_want)
     _ = x^
     _ = params^
 

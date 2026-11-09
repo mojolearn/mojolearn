@@ -404,6 +404,186 @@ in the tables after the sections.
 | [`MOJOLEARN_AUTOGRAD_TRANSFORMER`](#mojolearn_autograd_transformer) | Neural | PROMOTED (hand arm deleted) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_TRANSFORMER.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch) |
 | [`MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN`](#mojolearn_idn_mamba1_chunked_scan) | Neural | REJECTED (breaks decode==prefill) | 2026-10-28 | none (recoverable at lane/mamba-folds@db803a1337) |
 | [`MOJOLEARN_PAR_VERIFY`](#mojolearn_par_verify) | Verification (multi-GPU: par-* identity lanes, `verify --par`, multi-gpu release rows) | retired (owner decision) | 2026-10-31 | [MOJOLEARN_PAR_VERIFY.patch](../experiments/removed/MOJOLEARN_PAR_VERIFY.patch) |
+| [Executor loop driver loops (no define): k-means Lloyd chunk loop, `kmeans_conv_step_kernel`, program `_copy_state`](#executor-loop-driver-loops-2026-11-08) | Cluster / Autograd executor | REFACTORED (onto the executor's bounded loop) | 2026-11-08 | [EXECUTOR_LOOP_DRIVER_LOOPS.patch](../experiments/removed/EXECUTOR_LOOP_DRIVER_LOOPS.patch) |
+| [EM driver loops: GaussianMixture host EM loop, BGMM per-iteration scalar read, the fused precision Cholesky host reads](#em-driver-loops-onto-the-device-loop-2026-11-09) | Cluster (mixture, x_cluster) | REFACTORED (onto the executor's bounded device loop) | 2026-11-09 | [EXECUTOR_EM_DRIVER_LOOPS.patch](../experiments/removed/EXECUTOR_EM_DRIVER_LOOPS.patch) |
+| [`MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF`](#em-driver-loops-onto-the-device-loop-2026-11-09) | Cluster (GaussianMixture EM, IDENTICAL) | removed (KEPT default, superseded: no meanll copy or per-iteration drain left) | 2026-11-09 | [EXECUTOR_EM_DRIVER_LOOPS.patch](../experiments/removed/EXECUTOR_EM_DRIVER_LOOPS.patch) |
+| [`classical_host_f32` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Classical admission (X/y/weight cast) | removed (superseded: `admit_x`, same signature) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`classical_host_weights` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Classical admission (sample_weight) | removed (zero callers; `admit_weights`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`classical_cast_rows` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Classical admission (cast + finite) | removed (merged: `admitted_check_f32`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`classical_check_weights` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Classical admission (weight sign test) | removed (merged: `admitted_check_weights_f32`, now in row tasks) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`family_raw_word` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Family admission (typed item load) | removed (moved: `admitted_raw_word`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`family_cast_rows` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Family admission (float32 cast) | removed (merged: `admitted_cast_f32`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`family_cast_rows_finite` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Family admission (cast + finite) | removed (merged: `admitted_cast_f32`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`family_cast_rows_f64` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Family admission (float64 cast) | removed (moved: `admitted_cast_f64`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`family_all_finite_f32` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Family admission (finiteness scan) | removed (second name of `host_all_finite_f32`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`p3nc_all_finite_f32` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Neighbor/cluster admission (finiteness scan) | removed (second name of `host_all_finite_f32`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [trees_public_inputs array helpers copy (`trees_view`, `trees_f32`, `TreesView`, `TreesMatrix`)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Trees admission (TreesView/TreesMatrix copy of classical_labels) | removed (duplicate; the trees_* names import the one copy) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`labels_cast` / `trees_cast` Python call into the base `cast_elements`](#tree-and-label-door-admission-in-process-2026-11-08) | Trees and label admission (cast) | removed (in process: `core/admitted_cast_elements.mojo`, element ranges across cores) | 2026-11-08 | [A1_ADMIT_TREES_LABELS.patch](../experiments/removed/A1_ADMIT_TREES_LABELS.patch) |
+| [`labels_f32_view` base `cast_f64_to_f32` / `transpose_f32` / `cast_colmajor_f64_to_f32` calls](#tree-and-label-door-admission-in-process-2026-11-08) | Trees and label admission (cast, F-order layout) | removed (in process: `cast_elements` ranges and `core/admitted_transpose.mojo`, no device round trip) | 2026-11-08 | [A1_ADMIT_TREES_LABELS.patch](../experiments/removed/A1_ADMIT_TREES_LABELS.patch) |
+| [`labels_all_finite` / `trees_all_finite` base device scan](#tree-and-label-door-admission-in-process-2026-11-08) | Trees and label admission (finite) | removed (in process: `core/host_finite_scan.mojo`; X was uploaded only to be scanned) | 2026-11-08 | [A1_ADMIT_TREES_LABELS.patch](../experiments/removed/A1_ADMIT_TREES_LABELS.patch) |
+| [`labels_prepare_weights` / `trees_prepare_weights` base `prepare_targets` call](#tree-and-label-door-admission-in-process-2026-11-08) | Trees and label admission (sample_weight) | removed (in process: `host_all_finite_f32` + `admitted_check_weights_f32`) | 2026-11-08 | [A1_ADMIT_TREES_LABELS.patch](../experiments/removed/A1_ADMIT_TREES_LABELS.patch) |
+| [IsolationForest fit zero-filled copy destination](#tree-and-label-door-admission-in-process-2026-11-08) | Trees (IsolationForest fit) | removed (uninitialised store; REGRESSIONS C3) | 2026-11-08 | [A1_ADMIT_TREES_LABELS.patch](../experiments/removed/A1_ADMIT_TREES_LABELS.patch) |
+| [forest door second `trees_f32` view of the admitted X](#tree-and-label-door-admission-in-process-2026-11-08) | Trees (forest predict) | removed (the `AdmittedX` words go to predict) | 2026-11-08 | [A1_ADMIT_TREES_LABELS.patch](../experiments/removed/A1_ADMIT_TREES_LABELS.patch) |
+| [`labels_empty` / `labels_vector` / `LabelsView` / `labels_view` / `labels_check_rank` / `LabelsMatrix` / `labels_f32` / `labels_f32_view` / `labels_forest_layout` / `labels_all_finite` / `labels_check_sample_weight` / `labels_prepare_weights` and their `trees_*` aliases](#labels-and-trees-admission-copy-onto-the-one-path-2026-11-09) | Label and tree admission (the second admission path) | removed (onto `bindings/admitted_input.mojo`: `admit_x_unrecorded`, `admit_f32`, `admit_weight_words`, `admit_c_view`, `admit_ids`, `admitted_array` / `admitted_vector`) | 2026-11-09 | [A1B_LABELS_ADMISSION_COPY.patch](../experiments/removed/A1B_LABELS_ADMISSION_COPY.patch) |
+| [`trees_encode_labels` copy of the label encoder (`_native_labels`, `_sorted_classes`, `_numeric_label_view`, `_list_labels` and walks)](#labels-and-trees-admission-copy-onto-the-one-path-2026-11-09) | Trees (labels) | removed (folded into `classical_encode_labels`, the one encoder) | 2026-11-09 | [A1B_LABELS_ADMISSION_COPY.patch](../experiments/removed/A1B_LABELS_ADMISSION_COPY.patch) |
+| [`decomp_input_snapshot` (`providers/python/decomp_input_pyapi.mojo`)](#labels-and-trees-admission-copy-onto-the-one-path-2026-11-09) | PLS admission | removed (`_pls_input`: `admit_x_unrecorded` / `admit_f32`, then `array_metadata_once`) | 2026-11-09 | [A1B_LABELS_ADMISSION_COPY.patch](../experiments/removed/A1B_LABELS_ADMISSION_COPY.patch) |
+| [`core/admitted_transpose.mojo`](#labels-and-trees-admission-copy-onto-the-one-path-2026-11-09) | Label admission (F-order cast) | removed (no caller; `admit_x` order "F" is the one cast-and-transpose) | 2026-11-09 | [A1B_LABELS_ADMISSION_COPY.patch](../experiments/removed/A1B_LABELS_ADMISSION_COPY.patch) |
+| [prep_labels multilabel base `transpose_f32` call](#labels-and-trees-admission-copy-onto-the-one-path-2026-11-09) | Prep (LabelBinarizer multilabel y) | removed (y read in C order through `admit_c_view`) | 2026-11-09 | [A1B_LABELS_ADMISSION_COPY.patch](../experiments/removed/A1B_LABELS_ADMISSION_COPY.patch) |
+| [KNeighborsClassifier column-major y narrowing branch](#labels-and-trees-admission-copy-onto-the-one-path-2026-11-09) | Neighbors (multi-output y) | removed (y read in C order through `admit_c_view`) | 2026-11-09 | [A1B_LABELS_ADMISSION_COPY.patch](../experiments/removed/A1B_LABELS_ADMISSION_COPY.patch) |
+| [`xseq_cast_nd` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Sequence / TSA / forecast / embedding admission (N-d float32 cast) | removed (merged: `admitted_cast_nd_f32`, parallel) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`xseq_f32` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | xseq neural, recurrent, xcnn admission (float32 ndarray) | removed (moved: `admit_nd_f32`) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`training_f32_cast_owned` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Byte-LM host trainer (owned float32 buffers) | removed (moved: `admit_nd_owned_f32`) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`xseq_all_finite_f32` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | xseq score / training (finiteness scan) | removed (second name of `host_all_finite_f32`) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`neural_cast_i32_2d` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Byte-LM trainers (token ids) | removed (merged: `admitted_ids_i32`, parallel) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`admitted_ids_i32` in `core/admitted_input_nd.mojo` (second int32 id cast)](#one-int32-id-cast-2026-11-09) | Byte-LM trainers (token ids) | removed (merged: `core/admitted_ids.mojo` `admitted_ids_i32`, lane A3) | 2026-11-09 | none (never reached main; recoverable at lane/a4-admit-sequence-tsa-neural@be7d3f4fb2) |
+| [`neural_block_f32` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Neural block / Mamba / Transformer / CausalLM inputs | removed (merged: `admit_block_f32` BLOCK_OPERATION) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`neural_block_f32_owned` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Neural constructor weights | removed (merged: `admit_block_f32` BLOCK_RETAINED) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`neural_block_f32_input` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Neural block x (forward / step / backward) | removed (merged: `admit_block_f32` BLOCK_READ; copy into uninitialised storage, C5) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`_series_major` in `python/mojolearn/_tsa_impl.py` (dead Python)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | TSA kpss_test / select_d | removed (zero callers; native door) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`byte_lm_parallel_open` + 9 sibling entries (native entries)](#dead-native-entries-batch-3-2026-11) | Byte LM (the legacy per-entry parallel trainer: open, open_pooled, close, rollback, shard_gradient, apply_gradient, reduction_pool_available, fold_reset, shard_gradient_fold, fold_add) | removed (dead native entries: no live caller) | 2026-11-08 | [dead_entries_byte_lm_parallel.patch](../experiments/removed/dead_entries_byte_lm_parallel.patch) |
+| [`vocab_encode_public` + 4 sibling entries (native entries)](#dead-native-entries-batch-3-2026-11) | Tokenizer host (vocab_encode_public, vocab_decode_public, vocab_pretrained_public, vocab_pretokenize_public, vocab_pattern_name) | removed (dead native entries: no live caller) | 2026-11-08 | [dead_entries_tokenizer_vocab_public.patch](../experiments/removed/dead_entries_tokenizer_vocab_public.patch) |
+| [`classical_host_weights`, `pca_query_fields`, `prep_check_info`, `prep_scalar_dtype` (orphan functions)](#dead-native-entries-batch-3-2026-11) | Classical arrays, PCA and preprocessing providers | removed (orphan functions: no caller) | 2026-11-08 | [dead_entries_orphan_functions.patch](../experiments/removed/dead_entries_orphan_functions.patch) |
+| [`_rsvd_core`, `_randomized_decompose`, `_lanczos_top`, `_prepare_folds` (dead Python loops)](#dead-native-entries-batch-3-2026-11) | Decomposition and model selection (Python glue the native owners replaced) | removed (dead Python: no caller) | 2026-11-08 | [dead_python_loops.patch](../experiments/removed/dead_python_loops.patch) |
+| [`MOJOLEARN_PT_COLBATCH`](#mojolearn_pt_colbatch) | Prep | DROP (quality); the opt-in name only | 2026-11-08 | [MOJOLEARN_PT_COLBATCH.patch](../experiments/removed/MOJOLEARN_PT_COLBATCH.patch) |
+| [`MOJOLEARN_MCD_BATCH_COMPAT`](#mojolearn_mcd_batch_compat) | Decomp | HOLD-quality; the opt-in name only | 2026-11-08 | [MOJOLEARN_MCD_BATCH_COMPAT.patch](../experiments/removed/MOJOLEARN_MCD_BATCH_COMPAT.patch) |
+| [`MOJOLEARN_CHOL_FAST_NB512`](#mojolearn_chol_fast_nb512) | Linear (Cholesky) | HOLD-speed | 2026-11-08 | [MOJOLEARN_CHOL_FAST_NB512.patch](../experiments/removed/MOJOLEARN_CHOL_FAST_NB512.patch) |
+| [`MOJOLEARN_LLE_FAST_DEV_LU`](#mojolearn_lle_fast_dev_lu) | Decomp | HOLD-quality | 2026-11-08 | [MOJOLEARN_LLE_FAST_DEV_LU.patch](../experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch) |
+| [`MOJOLEARN_MCD_FAST_G1_GRAM`](#mojolearn_mcd_fast_g1_gram) | Decomp (+ MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT, MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM) | NEUTRAL | 2026-11-08 | [MOJOLEARN_MCD_FAST_G1_GRAM.patch](../experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch) |
+| [`MOJOLEARN_MCD_ORDERED_COV`](#mojolearn_mcd_ordered_cov) | Decomp (+ x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) | NEUTRAL | 2026-11-08 | [MOJOLEARN_MCD_ORDERED_COV.patch](../experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch) |
+| [`MOJOLEARN_EIGH_FAST_PANEL_DF`](#mojolearn_eigh_fast_panel_df) | Decomp (+ MOJOLEARN_EIGH_FAST_PANEL_DF_OFF) | DROPPED-slower | 2026-11-08 | [MOJOLEARN_EIGH_FAST_PANEL_DF.patch](../experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch) |
+| [`door_rows_host` (DeviceRows door)](#devicerows-fold-download-and-host-scan-removed-2026-11-08) | Model selection folds (CV, search, learning_curve) | removed (R13: device gather, download, host scan, re-upload; `admit_x` reads the fold) | 2026-11-08 | [A5_DOOR_ROWS_HOST.patch](../experiments/removed/A5_DOOR_ROWS_HOST.patch) |
+| [`door_x` (DeviceRows door)](#devicerows-fold-download-and-host-scan-removed-2026-11-08) | Model selection folds | removed (zero callers; wrapper of `door_rows_host`) | 2026-11-08 | [A5_DOOR_ROWS_HOST.patch](../experiments/removed/A5_DOOR_ROWS_HOST.patch) |
+| [`family_f32_snapshot` + `family_f32`, `family_cast_f32`, `family_input_snapshot`, `family_snapshot_f32`, `family_as_f32`, `family_as_f32_dense` (admission helpers)](#family-admission-helpers-moved-onto-the-one-path-2026-11-08) | Family admission (X cast) | removed (merged: `admit_family_meta` / `admit_family`) | 2026-11-08 | [A2_FAMILY_ADMISSION_HELPERS.patch](../experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch) |
+| [`family_cast_view` + `family_cast_view_f64` (admission helpers)](#family-admission-helpers-moved-onto-the-one-path-2026-11-08) | Family admission (view cast) | removed (merged: `admit_family` / `admit_family_f64`) | 2026-11-08 | [A2_FAMILY_ADMISSION_HELPERS.patch](../experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch) |
+| [`family_owned_snapshot` + `family_owned` (admission helpers)](#family-admission-helpers-moved-onto-the-one-path-2026-11-08) | Family admission (fitted copy) | removed (merged: `admit_family_owned`, uninitialised destination) | 2026-11-08 | [A2_FAMILY_ADMISSION_HELPERS.patch](../experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch) |
+| [`family_sample_weight` + `family_sample_weight_snapshot`, `_family_weight_buffer`, `_family_weight_scalar`, `family_weight_status`, `family_fill_f32` (`core/family_weights_impl.mojo`)](#family-admission-helpers-moved-onto-the-one-path-2026-11-08) | Family admission (sample_weight) | removed (merged: `admit_family_weights`, `core/admitted_weights.mojo` in row tasks) | 2026-11-08 | [A2_FAMILY_ADMISSION_HELPERS.patch](../experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch) |
+| [`svc_snapshot` + `svc_f32` (admission helpers)](#family-admission-helpers-moved-onto-the-one-path-2026-11-08) | SVM admission (X cast) | removed (second copy of the family admission) | 2026-11-08 | [A2_FAMILY_ADMISSION_HELPERS.patch](../experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch) |
+| [`labels_encode_labels` + `svc_encode_1d` (label encoders)](#family-admission-helpers-moved-onto-the-one-path-2026-11-08) | Labels (encode) | removed (second names of `classical_encode_labels`) | 2026-11-08 | [A2_FAMILY_ADMISSION_HELPERS.patch](../experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch) |
+| [`MOJOLEARN_AUTOGRAD_PREDICT`](#mojolearn_autograd_predict) | Neural (MLP + GRU/LSTM/RNN predict) | folded in (the tape forward is the one predict path) | 2026-11-08 | [MOJOLEARN_AUTOGRAD_PREDICT.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch) |
+| [`MOJOLEARN_AUTOGRAD_LOSS`](#mojolearn_autograd_loss) | Neural (rnn_fit, mlp_fit reported loss) | rnn_fit promoted (blocked fold), mlp_fit opt-in arm removed | 2026-11-08 | [MOJOLEARN_AUTOGRAD_LOSS.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch) |
+| [`MOJOLEARN_AUTOGRAD_OPTIM`](#mojolearn_autograd_optim) | Neural (mlp_fit, rnn_fit update) | promoted (executor optimizer), hand arm removed | 2026-11-08 | [MOJOLEARN_AUTOGRAD_OPTIM.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch) |
+| [`MOJOLEARN_AUTOGRAD_DATA`](#mojolearn_autograd_data) | Neural (rnn_fit epoch order) | promoted (autograd/data.mojo), hand launches removed | 2026-11-08 | [MOJOLEARN_AUTOGRAD_DATA.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch) |
+| [`_gather_cls` (RFE gather program per round)](#rfe-one-program-per-elimination-round-2026-11-09) | Prep (RFE fit rounds; + the host support list per round, the no-scope fallback) | removed (superseded: one program per round, `_stage_block` + `c2_rfe_keep`) | 2026-11-09 | [W1_RFE_GATHER_PROGRAM_PER_ROUND.patch](../experiments/removed/W1_RFE_GATHER_PROGRAM_PER_ROUND.patch) |
+| [`pca_input_snapshot` (admission helper)](#admission-helpers-of-the-decomposition-preprocessing-and-metrics-doors-2026-11-08) | PCA admission (X cast + finite) | removed (superseded: `decomp_admit` / `admit_x_unrecorded`) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`decomp_copied` (admission helper)](#admission-helpers-of-the-decomposition-preprocessing-and-metrics-doors-2026-11-08) | TruncatedSVD admission (input_copied_ flag) | removed (superseded: `decomp_input_copied`, read off the admission) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`pca_exact_fit`, `pca_input`, `pca_keep_fit`, `pca_prefix`, `pca_solver_checks`, `PCADimensions`](#admission-helpers-of-the-decomposition-preprocessing-and-metrics-doors-2026-11-08) | PCA (pre-owner exact door) | removed (dead: zero callers) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`mcls_read_i64` / `mcls_narrow_i32` (admission helpers)](#admission-helpers-of-the-decomposition-preprocessing-and-metrics-doors-2026-11-08) | Metrics label admission | removed (merged: `admit_ids`, core/admitted_ids.mojo) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`ann_candidates_i32` (core/neighbors_ann_impl.mojo)](#admission-helpers-of-the-decomposition-preprocessing-and-metrics-doors-2026-11-08) | ANN candidate id admission | removed (merged: `admitted_ids_i32`) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`randomized_svd` per-step DecompKit sequence (`_flip_u`, `_same_mode`, `DecompKit.orth` / `order_small` / `grown`)](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (public randomized_svd) | REFACTORED (one driver, `x_decomp_randomized_svd`) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`MOJOLEARN_RSVD_FAST_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, FAST + Apple) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`MOJOLEARN_IDN_RSVD_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, IDENTICAL) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`MOJOLEARN_RSVD_FAST_DEVSCAN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd finiteness scan, FAST + Apple) | removed (KEPT default, superseded: parallel host scan of the one admission path) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [Executor per-iteration status read of a body with a block step op; Program.fit ungated epoch loop (no define)](#executor-gated-state-and-chunked-loop-2026-11-08) | Autograd executor | REFACTORED (in-place state shadowed behind the gate; Program.fit as the bounded device loop) | 2026-11-08 | [EXECUTOR_GATED_STATE_CHUNKED_LOOP.patch](../experiments/removed/EXECUTOR_GATED_STATE_CHUNKED_LOOP.patch) |
+| [`LinAdmission` / `lin_admitted_c` / `lin_borrow_array` / `lin_convert` / `lin_typed` / `metric_input_snapshot`](#one-multi-dtype-admission-family_view-and-family_fill_i32-2026-11-09) | Admission (linalg ops, low-bit, resample, metrics inputs) | removed (moved onto the one admission path: `AdmittedTyped` / `admitted_typed_c` / `admit_typed` / `admitted_snapshot`) | 2026-11-09 | [A6_LIN_ADMISSION.patch](../experiments/removed/A6_LIN_ADMISSION.patch) |
+| [`family_view` / `cfb_f64_to_i32`](#one-multi-dtype-admission-family_view-and-family_fill_i32-2026-11-09) | Admission (family doors: KMeans init, HDBSCAN, Scaler shards, spectral, metrics, mixture) | removed (second admission of a view; the one path refuses with the same wording) | 2026-11-09 | [A6_FAMILY_VIEW.patch](../experiments/removed/A6_FAMILY_VIEW.patch) |
+| [`family_fill_i32`](#one-multi-dtype-admission-family_view-and-family_fill_i32-2026-11-09) | Clustering (empty-model predict labels) | removed (serial fill; `admitted_fill[DType.int32]` in row tasks) | 2026-11-09 | [A6_FAMILY_FILL_I32.patch](../experiments/removed/A6_FAMILY_FILL_I32.patch) |
+| [`MOJOLEARN_ARIMA_FAST_K3_DF_PROBE`](#mojolearn_arima_fast_k3_df_probe) | Series (ARIMA) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch) |
+| [`MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL`](#mojolearn_arima_fast_k3_df_probe) | Series (ARIMA, F16) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch) |
+| [`MOJOLEARN_KSHAP_FAST_DEVICE_MODEL`](#mojolearn_kshap_fast_device_model) | Trees (KernelExplainer) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch](../experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch) |
+| [`MOJOLEARN_PSHAP_FAST_DEVICE_MODEL`](#mojolearn_kshap_fast_device_model) | Trees (PermutationExplainer) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch](../experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch) |
+| [`MOJOLEARN_FA_FAST_GRAM_SPREAD`](#mojolearn_fa_fast_gram_spread) | Decomp (FactorAnalysis) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_FA_FAST_GRAM_SPREAD.patch](../experiments/removed/MOJOLEARN_FA_FAST_GRAM_SPREAD.patch) |
+| [`MOJOLEARN_IVF_FAST_BALANCED_TASKS`](#mojolearn_ivf_fast_balanced_tasks) | Neighbors (IVF, F14) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_IVF_FAST_BALANCED_TASKS.patch](../experiments/removed/MOJOLEARN_IVF_FAST_BALANCED_TASKS.patch) |
+| [`MOJOLEARN_IVF_FAST_BALANCED_AUDIT`](#mojolearn_ivf_fast_balanced_tasks) | Neighbors (IVF, F14 reach counter) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_IVF_FAST_BALANCED_TASKS.patch](../experiments/removed/MOJOLEARN_IVF_FAST_BALANCED_TASKS.patch) |
+| [`MOJOLEARN_PCA_FAST_COMPENSATED_COV`](#mojolearn_pca_fast_compensated_cov) | Decomp (PCA, F11) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch](../experiments/removed/MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch) |
+| [`MOJOLEARN_AFCL_L07`](#mojolearn_pca_fast_compensated_cov) | Decomp (PCA, AFCL-L07) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch](../experiments/removed/MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch) |
+| [`MOJOLEARN_MCD_FAST_ACTIVE_COMPACT`](#mojolearn_mcd_fast_active_compact) | Decomp (MinCovDet, F06) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch](../experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch) |
+| [`MOJOLEARN_MCD_FAST_COV_REUSE`](#mojolearn_mcd_fast_active_compact) | Decomp (MinCovDet, F06) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch](../experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch) |
+| [`MOJOLEARN_MCD_FAST_BOUND_BATCH`](#mojolearn_mcd_fast_active_compact) | Decomp (MinCovDet, F06) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch](../experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch) |
+| [`MOJOLEARN_SCOPED_GEMM_AUDIT`](#mojolearn_scoped_gemm_audit) | GEMM (scoped G1/G2 adapter, F01/F02) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_SCOPED_GEMM_G1_TALL`](#mojolearn_scoped_gemm_audit) | GEMM (scoped adapter) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_SCOPED_GEMM_G1_DENSE`](#mojolearn_scoped_gemm_audit) | GEMM (scoped adapter) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_SCOPED_GEMM_G1_GRAM`](#mojolearn_scoped_gemm_audit) | GEMM (scoped adapter) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_SCOPED_GEMM_G2_NARROW`](#mojolearn_scoped_gemm_audit) | GEMM (scoped adapter) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_SCOPED_GEMM_SPLIT`](#mojolearn_scoped_gemm_audit) | GEMM (scoped adapter) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_SCOPED_GEMM_PCA`](#mojolearn_scoped_gemm_audit) | GEMM (scoped adapter on PCA) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_LEGACY_NARROW_SCOPED_GEMM`](#mojolearn_scoped_gemm_audit) | GEMM (scoped adapter windows) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_SOFTMAX_FAST_G2_NARROW`](#mojolearn_scoped_gemm_audit) | Linear (QN multiclass forward, F05) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_SOFTMAX_G2_AUDIT`](#mojolearn_scoped_gemm_audit) | Linear (F05 reach counter) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_LEGACY_NARROW_SOFTMAX_G2`](#mojolearn_scoped_gemm_audit) | Linear (F05 window) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_LU_FAST_SHARED_SUB`](#mojolearn_scoped_gemm_audit) | Decomp (LU, F02) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_CHOL_FAST_SHARED_SUB`](#mojolearn_scoped_gemm_audit) | Linear (Cholesky, F02) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_IDN_GPC_NEWTON_LOGDET_OFF`](#gp-gpc-and-krr-on-the-executors-cholesky-ops-2026-11-09) | Gaussian process classification (Newton loop log-determinant, IDENTICAL) | removed (KEPT default, superseded: the Newton loop is one device loop, log-determinant always on the device) | 2026-11-09 | [N8_GPC_NEWTON_ONE_LOOP.patch](../experiments/removed/N8_GPC_NEWTON_ONE_LOOP.patch) |
+| [`gpc_b_matrix_kernel`, `gpc_w_kernel`, `gpc_rhs_kernel`, `gpc_scale_nan_kernel`, `gpc_a_kernel`, `gpc_lml_part_kernel`, `gpc_lml_fin_kernel` and the two Newton loop copies](#gp-gpc-and-krr-on-the-executors-cholesky-ops-2026-11-09) | Gaussian process classification (binary and one-vs-rest Newton loops) | REFACTORED (one gated device loop, gaussian_process/gpc_newton.mojo) | 2026-11-09 | [N8_GPC_NEWTON_ONE_LOOP.patch](../experiments/removed/N8_GPC_NEWTON_ONE_LOOP.patch) |
+| [`gp_opt_run_end_kernel` and the per-evaluation host loop of `gpr_optimize_device`](#gp-gpc-and-krr-on-the-executors-cholesky-ops-2026-11-09) | Gaussian process regression (hyperparameter optimizer) | REFACTORED (device run sequencer, `gp_opt_advance_kernel`) | 2026-11-09 | [N8_GP_OPT_DEVICE_RUNS.patch](../experiments/removed/N8_GP_OPT_DEVICE_RUNS.patch) |
+| [`MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS`](#sgd-epoch-re-gather-and-minibatchkmeans-per-step-loop-2026-11-09) | Linear (SGD minibatch, IDENTICAL) | removed (default off, never measured) | 2026-11-09 | [MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS.patch) |
+| [`MOJOLEARN_IDN_MINIBATCH_GROUP_OFF`](#sgd-epoch-re-gather-and-minibatchkmeans-per-step-loop-2026-11-09) | Cluster (MiniBatchKMeans step loop) | removed (superseded by the one group loop) | 2026-11-09 | [MOJOLEARN_IDN_MINIBATCH_GROUP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP_OFF.patch) |
+| [`mds_single_dev` host-word SMACOF loop](#mds-label-propagation-and-nmf-loops-on-the-bounded-device-loop-2026-11-09) | Decomposition (MDS SMACOF, GPU) | removed (superseded: the bounded device loop, `_SmacofStep`) | 2026-11-09 | [N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch](../experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch) |
+| [`nmf_mu_dev` / `nmf_cd_dev` host-word loops, `DKit.cd_rows`](#mds-label-propagation-and-nmf-loops-on-the-bounded-device-loop-2026-11-09) | Decomposition (NMF MU and CD, GPU) | removed (superseded: the bounded device loop, `_MuStep` / `_CdStep`, `DKit.cd_rows_enq`) | 2026-11-09 | [N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch](../experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch) |
+| [`MOJOLEARN_C33_FROZEN_CHUNKS` in `op_lp_iterate` (and the per-iteration stopping-sum read)](#mds-label-propagation-and-nmf-loops-on-the-bounded-device-loop-2026-11-09) | Neighbors (label propagation dense graph) | removed (superseded: one bounded device loop, `_LpDenseStep`; the define stays for DBSCAN and LPK_BATCH) | 2026-11-09 | [N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch](../experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch) |
+| [`MOJOLEARN_LP_FAST_RESIDENT_OFF`, `MOJOLEARN_IDN_LP_RESIDENT_OFF` (+ the compact-graph binding loop)](#mds-label-propagation-and-nmf-loops-on-the-bounded-device-loop-2026-11-09) | Neighbors (label propagation kNN graph) | removed (rollbacks of measured defaults; `lp_iterate_knn` on every vendor and tier) | 2026-11-09 | [N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch](../experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch) |
+| [`lbfgs_prophet_host` + `_prophet_fg_dev` (host driver)](#fast-prophet-host-l-bfgs-driver-2026-11-09) | Sequence (Prophet FAST, N >= 16384) | removed (superseded: the L-BFGS runs on the device) | 2026-11-09 | [PROPHET_FAST_HOST_LBFGS.patch](../experiments/removed/PROPHET_FAST_HOST_LBFGS.patch) |
+| [`MOJOLEARN_IDN_ARIMA_ASYNC_OFF`](#arima-lock-step-l-bfgs-superseded-by-the-per-series-solver-2026-11-09) | Time series (ARIMA fit, IDENTICAL) | removed (KEPT default's `_OFF`, superseded: the lock-step solver is deleted) | 2026-11-09 | [ARIMA_LOCKSTEP_LBFGS.patch](../experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch) |
+| [`MOJOLEARN_ARIMA_FAST_ASYNC_OFF`](#arima-lock-step-l-bfgs-superseded-by-the-per-series-solver-2026-11-09) | Time series (ARIMA fit, FAST) | removed (KEPT default's `_OFF`, superseded: the lock-step solver is deleted) | 2026-11-09 | [ARIMA_LOCKSTEP_LBFGS.patch](../experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch) |
+| [dictionary learning per-iteration host reads (`resample_atom_dev`, `cost_dev`, the used-atom count, A[j, j] per atom)](#dictionary-learning-loops-as-device-programs-2026-11-09) | Decomposition (DictionaryLearning, MiniBatchDictionaryLearning, GPU) | REFACTORED (device program, one read per DL_CHECK_EVERY iterations) | 2026-11-09 | [DICTL_HOST_READS.patch](../experiments/removed/DICTL_HOST_READS.patch) |
+| [`MOJOLEARN_AUTOGRAD_MOE_OFF`](#moe-backward-on-the-forwards-ops-2026-11-09) | Neural (MoEBlock backward) | removed (the tape is the only MoE backward) | 2026-11-09 | [MOJOLEARN_AUTOGRAD_MOE_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch) |
+| [`OP_MOEB_HIDDEN_FWD` / `OP_MOEB_OUT_FWD` (op codes 2900, 2901)](#moe-backward-on-the-forwards-ops-2026-11-09) | Neural (MoEBlock training forward) | removed (duplicate codes of `OP_MOE_HIDDEN` / `OP_MOE_OUT`) | 2026-11-09 | [MOJOLEARN_AUTOGRAD_MOE_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch) |
+| [`_gcn_backward_dev` / `_sage_backward_dev` hand entry chains (no define)](#gcnconv-and-sageconv-resident-backward-on-the-tape-2026-11-09) | Neural (GCNConv / SAGEConv resident backward) | removed (superseded by the tape: one native call) | 2026-11-09 | [XCNN_GRAPH_HAND_BACKWARD.patch](../experiments/removed/XCNN_GRAPH_HAND_BACKWARD.patch) |
+| [`GCNConv._backward_dev` / `SAGEConv._backward_dev` (Python, no define)](#gcnconv-and-sageconv-resident-backward-on-the-tape-2026-11-09) | Neural (GCNConv / SAGEConv, dead Python copy) | removed (0 callers) | 2026-11-09 | [XCNN_GRAPH_HAND_BACKWARD.patch](../experiments/removed/XCNN_GRAPH_HAND_BACKWARD.patch) |
+| [`MOJOLEARN_AFN_MLP_FUSED_STEP`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (Apple FAST small MLP fused step) | removed (superseded by the captured program; merged-unmeasured) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
+| [`MOJOLEARN_AFN_MLP_RESIDENT`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (Apple FAST small MLP resident session) | removed (superseded by the captured program; merged-unmeasured) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
+| [`MOJOLEARN_AFN_MLP_MULTISTEP`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (Apple FAST small MLP k-step session) | removed (superseded: train_steps on the program, every vendor) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
+| [`MOJOLEARN_AFN_MLP_ALL`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (Apple FAST small MLP umbrella) | removed (superseded) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
+| [`MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (small MLP step GEMM leaf) | removed (its step deleted; program A/B RUN OWED) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
+| [`mlp_train_step_host (hand step, tape rules, MOJOLEARN_MLP_FUSED=0 route)`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (SmallMLPTrainer) | removed (one path: the captured program, plan row X2) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
+| [`MOJOLEARN_NI18_FUSED_EPOCH_GATHER`](#cnnclassifier-hand-epoch-replaced-by-one-captured-program-2026-11-09) | Neural (CNNClassifier device epoch row gather, IDENTICAL) | removed with its route (never measured; the epoch is a captured program) | 2026-11-09 | [X8_CNN_HAND_EPOCH.patch](../experiments/removed/X8_CNN_HAND_EPOCH.patch) |
+| [`MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF`](#cnnclassifier-hand-epoch-replaced-by-one-captured-program-2026-11-09) | Neural (CNNClassifier epoch order and Adam scalars host vs device) | removed with its route (the classifier trains through Program.fit) | 2026-11-09 | [X8_CNN_HAND_EPOCH.patch](../experiments/removed/X8_CNN_HAND_EPOCH.patch) |
+| [`x_cnn_fit_epoch_r`, `x_cnn_fit_epoch_d`, `x_cnn_fit_d`, `x_cnn_predict_r`, `x_cnn_epoch_rows`, `x_cnn_adam_hyper_d`, `cnn_backward_autograd` (CNNClassifier hand epoch)](#cnnclassifier-hand-epoch-replaced-by-one-captured-program-2026-11-09) | Neural (CNNClassifier fit / predict) | removed (replaced by one captured program and Program.fit on the executor) | 2026-11-09 | [X8_CNN_HAND_EPOCH.patch](../experiments/removed/X8_CNN_HAND_EPOCH.patch) |
+| [`x_cnn_res_argmax` (`res_argmax`, `argmax_rows_into`, `argmax_row_at`) and the per-call CNN predict](#cnnclassifier-predict-on-a-resident-session-2026-11-09) | Neural (CNNClassifier predict) | removed (the predict replays the forward on a resident session; its argmax is OPS_ARGMAX on the executor) | 2026-11-09 | [X8B_XCNN_RES_ARGMAX.patch](../experiments/removed/X8B_XCNN_RES_ARGMAX.patch) |
+| [`tools/identical_wave_quality.py cnn_controls`, `tools/identical_wave_cnn_sgd_gate.py --suite cnn-primitives`](#cnnclassifier-predict-on-a-resident-session-2026-11-09) | Neural (CNN gate fixtures) | removed (their entries went with the CNNClassifier hand epoch) | 2026-11-09 | none (recoverable at `7c9d9d5575`) |
+| [`_mamba1_run`, `_mamba2_run`, `_mamba3_run`, their arena twins, `Mamba2PublicWorkspace` and the three Mamba decode-session bodies](#mamba-blocks-on-the-block-step-op-2026-11-09) | Mamba (per-call doors, decode sessions, Mamba-2 public step) | removed (superseded: one body, the block step op) | 2026-11-09 | [X5_MAMBA_PER_CALL_BODIES.patch](../experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch) |
+| [`MOJOLEARN_IDN_DECODE_RESIDENT_IO` (transformer decode session arm)](#transformer-on-the-attention-step-op-2026-11-09) | Neural (TransformerDecodeSession step) | removed (superseded: the session runs the attention step op; default off, never measured) | 2026-11-09 | [MOJOLEARN_IDN_DECODE_RESIDENT_IO_TRANSFORMER.patch](../experiments/removed/MOJOLEARN_IDN_DECODE_RESIDENT_IO_TRANSFORMER.patch) |
+| [`MOJOLEARN_TRANSFORMER_FRESH_PREFILL` / `MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL`](#transformer-on-the-attention-step-op-2026-11-09) | Neural (TransformerBlock stateless forward, GPU per-call entry) | removed (superseded: the block session's fresh prefill) | 2026-11-09 | [MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch) |
+| [`MOJOLEARN_TRANSFORMER_LEGACY_SETUP` / `MOJOLEARN_TRANSFORMER_SESSION_FRESH` (runtime switches)](#transformer-on-the-attention-step-op-2026-11-09) | Neural (TransformerBlock forward / backward setup) | removed (superseded: the block session is the one path) | 2026-11-09 | [MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch) |
+| [`TransformerBlock._call_impl` (Python call paths)](#transformer-on-the-attention-step-op-2026-11-09) | Neural (TransformerBlock Python glue) | removed (dead: no caller) | 2026-11-09 | [TRANSFORMER_BLOCK_PY_CALL_PATHS.patch](../experiments/removed/TRANSFORMER_BLOCK_PY_CALL_PATHS.patch) |
+| [`_transformer_decode_host_tokens` (decode door host loop)](#transformer-on-the-attention-step-op-2026-11-09) | Neural (TransformerDecodeSession.decode, host) | removed (superseded: `transformer_decode_steps`, one call) | 2026-11-09 | [TRANSFORMER_DECODE_HOST_TOKEN_LOOP.patch](../experiments/removed/TRANSFORMER_DECODE_HOST_TOKEN_LOOP.patch) |
+| [`TransformerDecodeHandle.native_handle` (public session provider arm)](#transformer-on-the-attention-step-op-2026-11-09) | Neural (TransformerDecodeSession, MOJOLEARN_NEURAL_NATIVE_DISPATCH) | removed (superseded: the step-op session) | 2026-11-09 | [TRANSFORMER_DECODE_PROVIDER_ARM.patch](../experiments/removed/TRANSFORMER_DECODE_PROVIDER_ARM.patch) |
+| [`TransformerDecodeSession` block structs and `TransformerSession.backward` (session-owned runtimes)](#transformerblock-causallm-layers-and-fixed15-sessions-on-the-attention-step-op-2026-11-09) | Neural (TransformerBlock, TransformerDecodeSession, CausalLM layers) | removed (superseded: the attention step op) | 2026-11-09 | [TRANSFORMER_DECODE_SESSION_STRUCTS.patch](../experiments/removed/TRANSFORMER_DECODE_SESSION_STRUCTS.patch) |
+
+| [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
+| [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
+| [`MOJOLEARN_IDN_EIGH_SMALL_N128`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
+| [`MOJOLEARN_IDN_EIGH_BLOCK_ON` device arm (`DevExec._eigh_block_on`, `rr_block_device.mojo`)](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (quarantined block Jacobi) | removed (DROPPED candidate; the op refuses the define at run time) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
+| [`DevExec._eigh_par_on`, `_eigh_td_try`, `_eigh_par_test`, `_rr_batch_enq` / `_rr_batch_on` / `_rr_batch_check`, `xd_first_where2_enq`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (host-driven dense eigh drivers) | REFACTORED (every dense eigh on `eigh_op_sym` / `eigh_op_dense`) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
+| [`DKit.eigh` host words, `IpcaDev.eigh` resident host words, `pinv_mask_kernel`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | FastICA / FactorAnalysis / rotation / MinCovDet / IncrementalPCA / MDS-Isomap-KPCA dense eigh | REFACTORED (w and V stay on the device) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
+| [`moe_backward_impl` / `moe_backward_run_impl`, `moe_backward_run` (Python door)](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Neural (MoE backward entry) | removed (superseded: `autograd/route_ops.mojo` `moe_backward_addrs`, the tape step) | 2026-11-09 | [MOE_BACKWARD_IMPL_CHAIN.patch](../experiments/removed/MOE_BACKWARD_IMPL_CHAIN.patch) |
+| [GCNConv / SAGEConv host-form backward hand chains (`_gcn_backward` / `_sage_backward` host branches)](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Neural (graph layers, CPU binding, SAGE project=True, non-resident FAST) | removed (superseded: the tape entries `x_cnn_gcn_backward_t` / `x_cnn_sage_backward_t`) | 2026-11-09 | [XCNN_GRAPH_HOST_HAND_BACKWARD.patch](../experiments/removed/XCNN_GRAPH_HOST_HAND_BACKWARD.patch) |
+| [`MOJOLEARN_IVF_BALANCED_TASKS` (+ run-time `MOJOLEARN_IVF_BALANCED_TASKS_OFF`)](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Neighbors (IVF search, IDENTICAL opt-in) | removed (loser: I16 NV 1.20x-4.17x, AMD 3.25x-16.5x slower) | 2026-11-09 | [MOJOLEARN_IVF_BALANCED_TASKS.patch](../experiments/removed/MOJOLEARN_IVF_BALANCED_TASKS.patch) |
+| [`x_cnn_res_gather` (`res_gather`, `res_gather_pair`, `gather_rows_at`, `gather_rows_f32`)](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Neural (CNN resident batch gather) | removed (dead: no caller since lane x8) | 2026-11-09 | [XCNN_RES_GATHER.patch](../experiments/removed/XCNN_RES_GATHER.patch) |
+| [`LS_LOG_PROB` / `LS_BINARY_LOG_PROB` loss kinds](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Autograd losses | removed (dead: reached only from autograd/checks/losses.mojo) | 2026-11-09 | [AUTOGRAD_LOSS_LOG_PROB_KINDS.patch](../experiments/removed/AUTOGRAD_LOSS_LOG_PROB_KINDS.patch) |
+| [`OP_MSE` / `OP_CE` p3 loss stores and the RNN workspace `w.sq`](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Sequence (rnn_fit loss seed) | removed (dead stores: the reported loss is `loss_value_into`) | 2026-11-09 | [SEQ_LOSS_SEED_UNREAD_STORES.patch](../experiments/removed/SEQ_LOSS_SEED_UNREAD_STORES.patch) |
+| [`MOJOLEARN_TE_ADA_SESSION_OFF` / `MOJOLEARN_IDN_ADA_SESSION_OFF`, the `MOJOLEARN_FOREST_SESSION` AdaBoost choice](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Trees (AdaBoost members data session) | removed (escapes from the measured-winner session) | 2026-11-09 | [MOJOLEARN_IDN_ADA_SESSION_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch) |
+| [`tsa_buffer` (TSA owners own admission)](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | TSA admission (kpss, select_d, Holt-Winters, scalar settings) | removed (superseded: `admit_view`, the one admission) | 2026-11-09 | [TSA_BUFFER_ADMISSION.patch](../experiments/removed/TSA_BUFFER_ADMISSION.patch) |
+| [neural label `_numeric` own capture (`sequential_input` + borrowed buffer)](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Neural labels (`neural_encode_labels`) | removed (superseded: `admit_view`) | 2026-11-09 | [NEURAL_LABELS_OWN_ADMISSION.patch](../experiments/removed/NEURAL_LABELS_OWN_ADMISSION.patch) |
+| [`mlp_require_result_finite` scans of the SmallMLPTrainer step (logits, gradients, input gradient; no define)](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Neural (SmallMLPTrainer step) | REFACTORED (device OP_MLP_NONFINITE flags) | 2026-11-09 | none (in place) |
+| [Lanczos projected T host assembly (`kpca_owner`, `mani_decomp_native`)](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | KernelPCA / Isomap | REFACTORED (`eigh_op_tridiag`; bits change) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
+| [`labels_helper` / `labels_call` and the `labels_helpers` callables table (`_native_labels_bridge._helpers`)](#labels-steps-on-the-native-device-or-host-selector-2026-11-09) | Labels (prepare_targets, reduce_stat, argmax_rows, gather, class_ratio, fsum) | removed (onto `labels_native_api_v1`, `bindings/labels_native_abi.mojo`, and the in-process host column) | 2026-11-09 | [S1_LABELS_PY_CALL_SELECTOR.patch](../experiments/removed/S1_LABELS_PY_CALL_SELECTOR.patch) |
+| [Synchronising query finite scans of the SVM / GP / KernelRidge predict entries](#svm-gp-and-kernelridge-queries-on-the-device-query-x-2026-11-09) | SVC / SVR / GaussianProcessRegressor / GaussianProcessClassifier / KernelRidge | REFACTORED (status word read back with the result; fold gathered on the device; no bit change) | 2026-11-09 | lane only (lane/a7a-device-x-svm-gp-krr from 5b5490960d) |
+| [`_kmeans_nonfinite` / `_kmeans_f32` and the KMeans query host scan of X](#kmeans-tsvd-pca-deferred-finite-tests-and-fold-entries-2026-11-09) | KMeans (fit, predict, transform) | removed (the kernel entry tests X over its own upload and returns the status word; one refusal wording) | 2026-11-09 | [A7D_KMEANS_HOST_FINITE.patch](../experiments/removed/A7D_KMEANS_HOST_FINITE.patch) |
+| [`DKit.svd_host`, `svd_desc`, LLE's host-address `DevExec.geqrf` / `orgqr` round trip](#n9b-device-svd-and-qr-ops-2026-11-09) | FactorAnalysis EM / LLE subspace iteration / PLS (resident SVD and QR) | REFACTORED (`svd_op_tall` / `qr_op_q`; same words) | 2026-11-09 | [N9B_RESIDENT_SVD.patch](../experiments/removed/N9B_RESIDENT_SVD.patch) |
+| [KernelPCA `_cols_desc` host-built index list](#n9b-device-svd-and-qr-ops-2026-11-09) | KernelPCA (descending columns) | REFACTORED (the REV_COLS move; same words) | 2026-11-09 | [N9B_RESIDENT_SVD.patch](../experiments/removed/N9B_RESIDENT_SVD.patch) |
+| [`MOJOLEARN_X_LINEAR_JACOBI_LEAD` (with `t_jacobi_eig`)](#n9b-device-svd-and-qr-ops-2026-11-09) | BayesianRidge (eigh of the centered Gram) | removed (superseded: the executor eigh op; bits change) | 2026-11-09 | [N9B_BAYES_EIGH.patch](../experiments/removed/N9B_BAYES_EIGH.patch) |
+| [`bayes_prep`'s device team branch](#n9b-device-svd-and-qr-ops-2026-11-09) | BayesianRidge (dead since cgr-linear) | removed (dead code) | 2026-11-09 | [N9B_BAYES_EIGH.patch](../experiments/removed/N9B_BAYES_EIGH.patch) |
+| [`discretize_labels` (binary64 host discretize)](#n9b-device-svd-and-qr-ops-2026-11-09) | SpectralClustering assign_labels='discretize' | REFACTORED (float-float on every column, device driver; bits change) | 2026-11-09 | [N9B_SPECTRAL_DISCRETIZE.patch](../experiments/removed/N9B_SPECTRAL_DISCRETIZE.patch) |
+
+| [`_sgd_mb_grid` / `_sgd_mb_ovr_grid` / `_sgd_ps_grid` host epoch loops (a drain and stop words home per epoch; PA row norms per epoch)](#sgd-epochs-and-knn-label-propagation-on-the-bounded-device-loop-2026-11-09) | Linear (SGD, Perceptron, PassiveAggressive, SGDOneClassSVM; GPU) | removed (superseded: the bounded device loop, `_SgdMbEpochs` / `_SgdOvrEpochs` / `_SgdPsEpochs`) | 2026-11-09 | [N3B_SGD_HOST_EPOCH_LOOPS.patch](../experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch) |
+| [`_op_lp_iterate_knn_idn` and the FAST kNN hand chunk loop (own flag / step-count words)](#sgd-epochs-and-knn-label-propagation-on-the-bounded-device-loop-2026-11-09) | Neighbors (label propagation kNN graph) | removed (superseded: the bounded device loop, `_LpKnnStep`) | 2026-11-09 | [N3B_SGD_HOST_EPOCH_LOOPS.patch](../experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch) |
+| [`x_neighbors_lp_fast_resident` export (`lp_fast_resident`, both providers, both bindings, generator, manifest row, `_lp_fast_resident`)](#sgd-epochs-and-knn-label-propagation-on-the-bounded-device-loop-2026-11-09) | Neighbors (label propagation) | removed (dead: always 1) | 2026-11-09 | [N3B_SGD_HOST_EPOCH_LOOPS.patch](../experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch) |
+
+| [`_byte_forward_loss`, `_byte_layer_forward_deferred`, `_byte_backward_tape` (byte LM hand step, 8 `llama_decoder_layer_forward` sites)](#smallbytelanguagemodeltrainer-on-the-executor-2026-11-09) | Neural (SmallByteLanguageModelTrainer) | removed (one path: the captured program on Program.fit, plan row X7) | 2026-11-09 | [BYTE_LM_HAND_STEP.patch](../experiments/removed/BYTE_LM_HAND_STEP.patch) |
+| [`autograd/rules_lm.mojo` (`byte_backward_autograd`, `LmRules`), `training/checks/lm_tape_backward_check.mojo` + digests](#smallbytelanguagemodeltrainer-on-the-executor-2026-11-09) | Neural (byte LM tape backward) | removed (no caller after the move) | 2026-11-09 | [BYTE_LM_HAND_STEP.patch](../experiments/removed/BYTE_LM_HAND_STEP.patch) |
+| [`byte_owner_steps`, operation 12 (device and host columns), the binding's `while k < n_steps` driver](#smallbytelanguagemodeltrainer-on-the-executor-2026-11-09) | Neural (byte LM train_steps) | removed (operation 1 takes n_steps: one Program.fit) | 2026-11-09 | [BYTE_LM_HAND_STEP.patch](../experiments/removed/BYTE_LM_HAND_STEP.patch) |
+| [`MOJOLEARN_IDN_TRAIN_ONE_WAIT`, `MOJOLEARN_AFN_LM_NOSYNC`, `MOJOLEARN_AFN_LM_HEAD_FUSE` (+ AFN26 spellings)](#smallbytelanguagemodeltrainer-on-the-executor-2026-11-09) | Neural (byte LM hand-step arms) | removed (their step deleted; default off, never promoted) | 2026-11-09 | [BYTE_LM_HAND_STEP.patch](../experiments/removed/BYTE_LM_HAND_STEP.patch) |
+| [`_byte_glue_update`, `_byte_live_status_*`, eager-release helpers, the trainer's certified optimizer step](#smallbytelanguagemodeltrainer-on-the-executor-2026-11-09) | Neural (byte LM step glue) | removed (the program's AdamW is the update) | 2026-11-09 | [BYTE_LM_HAND_STEP.patch](../experiments/removed/BYTE_LM_HAND_STEP.patch) |
+| [`byte_host_train_step`, `byte_host_gradient`, `training/byte_lm_host_backward.mojo` (the CPU column's composed oracle step)](#byte-lm-cpu-column-on-the-executor-and-x7-leftovers-2026-11-09) | Neural (byte LM CPU column) | removed (one path: the trainer's program on a host session, the step ops' host arm) | 2026-11-09 | [BYTE_LM_HOST_COMPOSED_STEP.patch](../experiments/removed/BYTE_LM_HOST_COMPOSED_STEP.patch) |
+| [`byte_host_loss`, `ce_causal_mean_loss_fast`, `training/chunked_lm_head_host.mojo`, `training/chunked_lm_head_gemm_host.mojo`, `training/loss_host_rows.mojo`](#byte-lm-cpu-column-on-the-executor-and-x7-leftovers-2026-11-09) | Neural (byte LM CPU loss) | removed (the loss is the program's forward) | 2026-11-09 | [BYTE_LM_HOST_COMPOSED_STEP.patch](../experiments/removed/BYTE_LM_HOST_COMPOSED_STEP.patch) |
+| [`ByteOneWait` (`training/byte_lm_one_wait.mojo`), ByteBuffers `dw_emb` / `dw_lm`, `experiments/decode_resident_20261028`, `experiments/grad_views_20261028`](#byte-lm-cpu-column-on-the-executor-and-x7-leftovers-2026-11-09) | Neural (byte LM, lane x7 leftovers) | removed (no reader after lane x7) | 2026-11-09 | [BYTE_LM_X7_LEFTOVERS.patch](../experiments/removed/BYTE_LM_X7_LEFTOVERS.patch) |
+| [`MOJOLEARN_IDN_PARAM_GRAD_VIEWS`, `MOJOLEARN_IDN_LM_RESIDENT_TOKENS` (NI32 / NN51)](#byte-lm-cpu-column-on-the-executor-and-x7-leftovers-2026-11-09) | Neural (byte LM hand-step arms) | removed (their step deleted; default off, never promoted) | 2026-11-09 | [BYTE_LM_X7_LEFTOVERS.patch](../experiments/removed/BYTE_LM_X7_LEFTOVERS.patch) |
+
+| [CausalLM resident greedy / sampling reads and the generation engine token loop (host-driven token loops)](#causallm-generate-as-one-programdecode-2026-11-09) | Neural (CausalLM.generate, streams) | removed (superseded: one Program.decode over one session) | 2026-11-09 | [CAUSAL_GENERATE_RESIDENT_READS.patch](../experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch) |
+| [Per-call weight byte compare of block sessions and Mamba programs (weight versioning)](#causallm-generate-as-one-programdecode-2026-11-09) | Neural (TransformerBlock, Mamba blocks) | removed (superseded: address + weight epoch key) | 2026-11-09 | [WEIGHT_BYTE_COMPARE.patch](../experiments/removed/WEIGHT_BYTE_COMPARE.patch) |
+
+| [`SAMBA_THREE_TIER_FORWARD`: `samba_resident_forward` (+ binding, descriptor op 16, `samba_resident_native_forward`), `SambaDecodeResident` (training/samba_decode_resident.mojo), the provider forward (`samba_provider_forward`, `AdmittedSambaExecution.forward`, `NativeSambaModel.forward`), the device per-layer walk of `samba_forward`, `samba_afn_norm_head_forward` (AFN_SAMBA_FUSE fused forward tail), the dead Python `SambaStack._forward*` / `_resident*` / `_afn*` routes](#samba-stack-on-one-executor-program-2026-11-09) | Neural (Samba inference) | SUPERSEDED (one executor program, `SambaStackProgram`; never A/B'd, RUN OWED) | 2026-11-09 | [SAMBA_THREE_TIER_FORWARD.patch](../experiments/removed/SAMBA_THREE_TIER_FORWARD.patch) |
+| [`TRANSFORMER_FORWARD_TAPE_API` (`TransformerBlock.forward_with_tape` / `backward_from_tape`, `TransformerForwardTape`, the session and standalone transformer tapes)](#transformer-forward-tape-api-retired-2026-11-09) | Neural (TransformerBlock training tape, Samba IDN_ACT_RETAIN=3 transformer half) | removed (superseded: the attention step op and the tape rule; `TransformerBlock.backward` is the training path) | 2026-11-09 | [TRANSFORMER_FORWARD_TAPE_API.patch](../experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -2614,6 +2794,47 @@ One section for the three label-binarizer switches (`MOJOLEARN_IDN_LAB_UNIQUE_HI
 
 ## Neural
 
+### MOJOLEARN_AUTOGRAD_PREDICT
+
+- What it was: `-D MOJOLEARN_AUTOGRAD_PREDICT` (lane ag-forward, default off, never A/B'd) routed `mlp_predict_impl` to `mlp_predict_autograd` (the tape forward in inference mode) instead of the hand `mlp_predict` over the hand `mlp_forward` (`gemm_epi` EPI_BIAS_ACT a layer on the one-thread OP_GEMM_EPI, `_act_launch` for softmax). The recurrent predict had no switch: `rnn_predict` ran the hand `forward` + `head` of `sequence/recurrent.mojo`.
+- Verdict: folded in. The tape forward is the one forward for fit and predict: `mlp_predict` is the former `mlp_predict_autograd`; `rnn_predict` moved to `autograd/rules_recurrent.mojo` and runs `rnn_forward_autograd` (now taking the head's output buffer) with `tape.no_grad()`. Deleted: hand `mlp_predict`, `mlp_forward`, `gemm_epi`, `_act_launch` (no other caller), recurrent `forward`, `head`, the old `rnn_predict`. Commits `c3b7dc42e6` (MLP) and `9a9a8e3148` (recurrent).
+- Lane: `lane/x3-mlp-rnn-predict-on-tape` from `origin/integ/pre-0867` (`f7d10d2b09`), plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` rows X3 and 5.6. Recoverable at `c3b7dc42e6^` (= `f7d10d2b09`, every deleted arm intact).
+- Files the patch restores: `sequence/mlp_fit.mojo`, `sequence/ops_impl.mojo`, `autograd/checks/infer_cases.mojo` (the hand-vs-tape tolerance case), `sequence/recurrent.mojo`, `autograd/rules_recurrent.mojo`.
+- Bits: recurrent predict runs the hand chain's launches argument for argument (same bits). MLP predict moves from OP_GEMM_EPI to the tape's tiled GEMM with the same epilogue, op_gemm's chain term for term, so the expected digest is unchanged; the one pre-release identity run (lanes `mlp`, the gru/lstm/rnn lanes) is the proof.
+- Numbers: none. RUN OWED NVIDIA + AMD, one run per arm: arm A `f7d10d2b09`, arm B the lane head, board rows mlp-predict, sequential-predict, gru/lstm/rnn predict.
+- The four lane patches (PREDICT, LOSS, OPTIM, DATA) are each the reverse of the whole lane restricted to the files listed, so they share hunks in `sequence/mlp_fit.mojo` and `sequence/recurrent.mojo`: apply one of them (`git apply -3` once main moves), not several.
+- Guard refusal: `core/experiment_guards_neural.mojo`, block "lane x3-mlp-rnn-predict-on-tape". No grid_controls entry existed. EXPERIMENTS.md: section "Hand-path deletions (2026-10-19)", the lane's rows.
+
+### MOJOLEARN_AUTOGRAD_LOSS
+
+- What it was: `-D MOJOLEARN_AUTOGRAD_LOSS` (lane ag-loss, default off, EXPERIMENTS row PENDING, never measured) computed the reported loss through `autograd/losses.mojo` `loss_value_into` (the tape's blocked fold): in `rnn_fit` instead of `sum_into` (one-thread ascending OP_SUM), in `mlp_fit` beside the loss block as a handed-in data sum (`mlp_loss_block` `data` / `data_parts`, OP_MLP_LB_PART i3 = 2, OP_MLP_BLOSS i5 = 1).
+- Verdict (Andrew 2026-11-08: bits may change between versions; never keep a serial fold for old bits): rnn_fit PROMOTED, `sum_into` deleted, new bits in the reported `losses[]` only (gradients and parameters unchanged; all columns together). mlp_fit: the opt-in arm deleted (its default loss block is already a blocked fold; the arm only added launches), with the handed-in sum parameters of `mlp_loss_block`, the kernel's i3 = 2 arm and the check case for it. Commit `dbab55bea7`.
+- Lane: `lane/x3-mlp-rnn-predict-on-tape` from `origin/integ/pre-0867` (`f7d10d2b09`), plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` rows X3 and 5.6. Recoverable at `c3b7dc42e6^` (= `f7d10d2b09`, every deleted arm intact).
+- Files the patch restores: `sequence/mlp_fit.mojo`, `sequence/mlp.mojo`, `autograd/checks/lossblock_cases.mojo`, `sequence/recurrent.mojo`.
+- Numbers: none. RUN OWED NVIDIA + AMD: gru-fit, lstm-fit, rnn fit (losses[] digest moves), mlp-fit (no bit change expected).
+- The four lane patches (PREDICT, LOSS, OPTIM, DATA) are each the reverse of the whole lane restricted to the files listed, so they share hunks in `sequence/mlp_fit.mojo` and `sequence/recurrent.mojo`: apply one of them (`git apply -3` once main moves), not several.
+- Guard refusal: `core/experiment_guards_neural.mojo`, block "lane x3-mlp-rnn-predict-on-tape". No grid_controls entry existed. EXPERIMENTS.md: section "Hand-path deletions (2026-10-19)", the lane's rows.
+
+### MOJOLEARN_AUTOGRAD_OPTIM
+
+- What it was: `-D MOJOLEARN_AUTOGRAD_OPTIM` (lane ag-optim, default off, never measured) updated `mlp_fit` and `rnn_fit` through `autograd/optim.mojo` (`OptimizerState` + `step_lr`, `step_lr_finish` for the composed MLP graph) instead of the hand-built OP_OPT launch (mlp_fit: inline Adam running products and word assembly; rnn_fit: `opt_step`).
+- Verdict: PROMOTED (one optimizer implementation, the one Sequential and ops.Session use); the hand arms deleted (`opt_step` / `opt_scalars` stay for their other callers). Same OP_OPT launch with the same words, so the same bits by construction. Commit `75825f479c` (an intermediate commit `dbab55bea7` had kept the hand arm; superseded the same night).
+- Lane: `lane/x3-mlp-rnn-predict-on-tape` from `origin/integ/pre-0867` (`f7d10d2b09`), plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` rows X3 and 5.6. Recoverable at `c3b7dc42e6^` (= `f7d10d2b09`, every deleted arm intact).
+- Files the patch restores: `sequence/mlp_fit.mojo`, `sequence/recurrent.mojo`, `autograd/optim.mojo` (comment).
+- Numbers: none. RUN OWED NVIDIA + AMD: mlp-fit, gru-fit, lstm-fit (ms per fit; digests must not move).
+- The four lane patches (PREDICT, LOSS, OPTIM, DATA) are each the reverse of the whole lane restricted to the files listed, so they share hunks in `sequence/mlp_fit.mojo` and `sequence/recurrent.mojo`: apply one of them (`git apply -3` once main moves), not several.
+- Guard refusal: `core/experiment_guards_neural.mojo`, block "lane x3-mlp-rnn-predict-on-tape". No grid_controls entry existed. EXPERIMENTS.md: section "Hand-path deletions (2026-10-19)", the lane's rows.
+
+### MOJOLEARN_AUTOGRAD_DATA
+
+- What it was: `-D MOJOLEARN_AUTOGRAD_DATA` (default off, never measured) took `rnn_fit`'s epoch order from `autograd/data.mojo` `epoch_order` instead of its inline OP_MLP_PERM / OP_SEQ_IOTA launches.
+- Verdict: PROMOTED (the data layer `distributed_program` and `partition_runtime` use); the inline launches deleted. Same launches with the same `mlp_epoch_key(seed, epoch)`, same bits. Commit `75825f479c`.
+- Lane: `lane/x3-mlp-rnn-predict-on-tape` from `origin/integ/pre-0867` (`f7d10d2b09`), plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` rows X3 and 5.6. Recoverable at `c3b7dc42e6^` (= `f7d10d2b09`, every deleted arm intact).
+- Files the patch restores: `sequence/recurrent.mojo`.
+- Numbers: none. RUN OWED with OPTIM (gru-fit, lstm-fit).
+- The four lane patches (PREDICT, LOSS, OPTIM, DATA) are each the reverse of the whole lane restricted to the files listed, so they share hunks in `sequence/mlp_fit.mojo` and `sequence/recurrent.mojo`: apply one of them (`git apply -3` once main moves), not several.
+- Guard refusal: `core/experiment_guards_neural.mojo`, block "lane x3-mlp-rnn-predict-on-tape". No grid_controls entry existed. EXPERIMENTS.md: section "Hand-path deletions (2026-10-19)", the lane's rows.
+
 ### MOJOLEARN_AUTOGRAD_RNN_OFF
 
 - What it was: the recurrent trainer's hand-written backward glue, `sequence/recurrent.mojo::backward` (head dW / db, the zeroed h_T delta, per layer the cell or scan backward, dW / db of both projections and the input-projection delta) and its step `HandStep` behind the `RnnStep` seam of `rnn_fit`; `-D MOJOLEARN_AUTOGRAD_RNN_OFF` selected it (the old opt-in spelling `-D MOJOLEARN_AUTOGRAD_RNN` selected the tape). The tape step (`autograd/rules_recurrent.mojo`, `AutogradRnnStep` + `RecurrentRules`) runs the same launches with the same arguments and is now `rnn_fit`'s only backward. The kernels stay: `OP_CELL_FWD_H` / `OP_CELL_BWD_H`, the scan `OP_CELL_FWD_SCAN` / `OP_CELL_BWD_SCAN`, `wgrad_blocked`, the forward and `head` (rnn_predict). `Work` lost the hand-only `dgx`, `dhout0`, `dhout1` buffers.
@@ -3216,8 +3437,8 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_HDBSCAN2_ALL` | EXPERIMENTS.md:490 DROP (as a bundle) (lane/apple-fast-hdbscan2 @ 2fdb9114f) | `hdbscan/impl/detail/fast_apple.mojo:8` |
 | `MOJOLEARN_HDB_CORE_TILE` | EXPERIMENTS.md:491 DROP (lane/apple-fast-batchv @ c7ede6e47) | `hdbscan/impl/detail/core_tile.mojo:5` |
 | `MOJOLEARN_HDB_DEV_BORUVKA` | EXPERIMENTS.md:492 DROPPED-noise (lane/apple-fast-hdbscan2 @ 2fdb9114f) | `hdbscan/impl/cluster/detail/fast_mr_mst_device.mojo:4` |
-| `MOJOLEARN_HDB_ONE_SYNC` | EXPERIMENTS.md:494 DROP (lane/apple-fast-batchv @ c8251211d) | `hdbscan/impl/detail/fast_apple.mojo:71` |
-| `MOJOLEARN_HDB_SELECT_DEVICE` | EXPERIMENTS.md:495 DROPPED-noise (lane/apple-fast-hdbscan2 @ 2fdb9114f) | `hdbscan/impl/detail/fast_apple.mojo:95` |
+| `MOJOLEARN_HDB_ONE_SYNC` | EXPERIMENTS.md:494 DROP (lane/apple-fast-batchv @ c8251211d) | `hdbscan/impl/detail/fast_apple.mojo:71` **KEPT, owed row withdrawn**: see "Owed deletions reviewed and kept" below and the later EXPERIMENTS.md KEPT row (correction, lane k1-delete-unverdicted-fast, 2026-11-09) |
+| `MOJOLEARN_HDB_SELECT_DEVICE` | EXPERIMENTS.md:495 DROPPED-noise (lane/apple-fast-hdbscan2 @ 2fdb9114f) | `hdbscan/impl/detail/fast_apple.mojo:95` **KEPT, owed row withdrawn**: see "Owed deletions reviewed and kept" below and the later EXPERIMENTS.md KEPT row (correction, lane k1-delete-unverdicted-fast, 2026-11-09) |
 | `MOJOLEARN_IVF_COARSE_FAISS_INIT` | EXPERIMENTS.md:1219 DROPPED-quality (lane/apple-fast-q-misc @ ab9acf0e8) | `ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:183` |
 | `MOJOLEARN_IVF_COARSE_INIT_QOLD` | EXPERIMENTS.md:1219 DROPPED-quality (lane/apple-fast-q-misc @ ab9acf0e8) | `ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:186` |
 | `MOJOLEARN_IVF_REFINE_TEAM` | EXPERIMENTS.md:326 DROPPED-noise (lane/apple-fast-batch @ 3150d75c1) | `x_ann/vsearch_fast.mojo:69` |
@@ -3279,7 +3500,7 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_SYM_PART_STATS_PAR` | EXPERIMENTS.md:191 DROPPED-noise (lane/apple-fast-sym-hist @ 3bb4db314) | `gbdt/methods/kernel/pointwise_scores.mojo:1954` |
 | `MOJOLEARN_SYM_REUSE_PARTITION` | EXPERIMENTS.md:193 DROPPED-noise (lane/apple-fast-sym-iter @ 4956a2234) | `gbdt/methods/sym_iter_fast.mojo:21` |
 | `MOJOLEARN_SYM_SCAN_SUB_FUSED` | EXPERIMENTS.md:194 DROPPED-noise (lane/apple-fast-sym-hist @ 3bb4db314) | `gbdt/methods/kernel/split_properties_helpers.mojo:483` |
-| `MOJOLEARN_TREES_T29` | EXPERIMENTS.md:1710 DROP (slower), code deleted (main @ 42d1e42c6 (deleted on lane/grid-act-2)) | `gbdt/trees_identical_switches.mojo:74` |
+| `MOJOLEARN_TREES_T29` | EXPERIMENTS.md:1710 DROP (slower), code deleted (main @ 42d1e42c6 (deleted on lane/grid-act-2)) | `gbdt/trees_identical_switches.mojo:74` **KEPT, owed row withdrawn**: see "Owed deletions reviewed and kept" below and the later EXPERIMENTS.md KEPT row (correction, lane k1-delete-unverdicted-fast, 2026-11-09) |
 | `MOJOLEARN_TSA2_KPSS` | EXPERIMENTS.md:544 DROPPED-noise (lane/apple-fast-gap-tsa @ e9da47064) | `tsa/impl/timeSeries/kpss_fused.mojo:7` |
 | `MOJOLEARN_YETI_TREE_SEARCH_SCORE_GRID` | EXPERIMENTS.md:150 DROPPED-noise (lane/apple-fast-yetirank @ c7b35fd7c) | `gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2945` |
 
@@ -3754,3 +3975,1458 @@ public runtime qualification; this entry is not release or performance evidence.
   historical box legs that mention par lanes (`tools/two_device_par_class_amd_leg.sh`, `tools/gap_column_leg.sh`,
   `tools/par_lm_xvendor*.py`/`.sh`), and the 531 par-* cells of the shipped reference table (preserved history; the
   admission guard refuses edits to unselected rows, and no harness lane reads them).
+
+## Executor loop driver loops (2026-11-08)
+
+- **What it was**: three hand-written loop drivers replaced by the executor's bounded loop
+  (`autograd/program_loop.mojo`, `autograd/program_loop_device.mojo`; docs/plans/AUTOGRAD_API.md "Bounded loops").
+  (1) The IDENTICAL k-means Lloyd chunk loop in `cluster/impl/detail/kmeans.mojo::kmeans_fit_main_traced`
+  (`IDN_KMEANS_DEVICE_CONV`: gated assignment, gated row-block accumulations, finalize, shift, gated copy back and the
+  device criterion, enqueued KMEANS_CONV_CHUNK iterations per flag read). It is now the step op `LloydStep` run by
+  `bounded_device_loop`: the same kernels, arguments and order, so no bit moves. (2) `kmeans_conv_step_kernel`
+  (`cluster/checks/reduce_by_key.mojo`), merged into the generic criterion op `loop_below_kernel`, which also stores the
+  iteration register (a word no k-means output reads). (3) `_copy_state` in `autograd/program_control.mojo`: the
+  program `while_loop` copied every carried state tensor into a fresh buffer and drained the executor per iteration,
+  after a host read of the condition (two drains per iteration). The loop now carries the state in place
+  (OP_LOOP_COMMIT, a gated bit copy), tests the condition on the device (OP_LOOP_TICK) and reads the register block
+  every `check_every` iterations (one drain per iteration at the default 1). Same outputs, `iterations` and `stopped`.
+- **Versions and measurements**: the k-means loop had two IDENTICAL forms, the device-criterion chunk loop (default since
+  fam2-cluster, 0372975724, 2026-10-04) and the per-iteration drain (`-D MOJOLEARN_IDN_KMEANS_DEVICE_CONV_OFF`). No
+  standalone A/B of the two exists; the chunk loop is the form behind every recorded kmeans cell (paper 0.8.55
+  istella fit 405.7 ms, taxi 191.6 ms on MI300X) and the chunk size 8 kept by A08 (chunk 1: AMD 0.83-0.99x, NVIDIA mixed;
+  `cluster/impl/detail/kmeans.mojo` KMEANS_CONV_CHUNK note). Kept: the chunk loop's order, now on the executor. The
+  per-iteration drain stays as the `_OFF` B arm and as the form for `inertia_check`, the identity trace, multi-device
+  assignment and FAST. A/B owed: DEVICE_CONV on vs off on NVIDIA and AMD (kmeans istella, taxi, one non-board shape).
+  The program `while_loop` had one form; no measurement exists; bits are unchanged by construction.
+- **Verdict**: REFACTORED (no define removed, no bit change). Quality: unchanged (same words).
+- **Run ids**: none (lanes never run; RUN OWED in the lane reply).
+- **Recoverable**: `22ac89b54c` (origin/main at the lane's base); deleted on lane/fix-d3-executor-loops.
+- **Patch**: `experiments/removed/EXECUTOR_LOOP_DRIVER_LOOPS.patch`, `git diff <lane head> 22ac89b54c --
+  cluster/impl/detail/kmeans.mojo cluster/checks/reduce_by_key.mojo autograd/program_control.mojo`; `git apply`
+  restores the three files on the lane head, `git apply -3` once main has moved.
+- **Guard / records**: no `-D` define was removed, so no guard refusal and no `grid_controls` entry moves. One row in
+  `docs/apple-fast/EXPERIMENTS.md`.
+
+## Admission helpers merged into the one path (2026-11-08)
+
+Lane `consol-a0-admission` (A0 of `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 3), branch
+`lane/consol-a0-admission` from main `ef4bce3a7e`. Not experiment defines: duplicate admission helpers that cast, scan or
+check a caller's X, y and sample_weight. No A/B and no bit change: every deleted helper was a word-for-word copy, a thin
+wrapper or a serial form of the kept one, so the same float32 bytes reach the same kernels and every refusal keeps its
+wording. Kept, and why (no measurement separates copies that run the same code; the kept one is the bits-defining one):
+
+- `admit_x` / `admit_y` / `admit_weights` and `AdmittedX` (`bindings/admitted_input.mojo`): the bodies of
+  `classical_host_f32`, `classical_check_x`, `classical_check_y` and `classical_check_weights_input` moved here;
+  `classical_validate.mojo` keeps its names as thin callers and re-exports. A cast destination is now uninitialised
+  (`admitted_storage_f32`: an ndarray over an uninitialised bytearray with NumPy; the zero-filled Array without NumPy),
+  since the cast writes every word (REGRESSIONS F3/C3).
+- `core/admitted_input.mojo`: `admitted_cast_f32` (was `family_cast_rows_finite`, the parallel one of the 0.8.66 F1 fix;
+  `family_cast_rows` was a wrapper of it), `admitted_cast_f64` (was `family_cast_rows_f64`), `admitted_check_f32` (was
+  `classical_cast_rows`), `admitted_raw_word` (was `family_raw_word`), `admitted_check_weights_f32` (was the serial
+  `classical_check_weights`; now row tasks with the same verdicts).
+- `core/host_finite_scan.mojo` `host_all_finite_f32`: `family_all_finite_f32` and `p3nc_all_finite_f32` were one-line
+  wrappers of it (lane fix-c1-c2-parallel-finite); 29 callers now read it directly.
+- `bindings/classical_labels.mojo` lines 174-607 (`labels_view`, `labels_f32`, `LabelsView`, `LabelsMatrix`, ...): the
+  one copy of the array admission helpers. `bindings/trees_public_inputs.mojo` kept a near-verbatim copy (81 of ~415
+  lines differed after renaming); the merged copy takes the trees copy's uninitialised scratch destination, forest layout
+  and once-read shape tuples, and this copy's native array stores (no `array.array` constructor call), type names
+  through the C descriptor and its one scalar-weight classification. `trees_public_inputs.mojo` imports the names under
+  `trees_*`. Behaviour change for trees doors only at the edges: a scalar `sample_weight` is classified by exact type
+  (`int`, `float` or a NumPy floating scalar) rather than `isinstance(int, float)`.
+
+Restore: `git apply -3 experiments/removed/A0_ADMISSION_HELPERS.patch` (the reverse of the lane's `.mojo` changes from
+`ef4bce3a7e`; it restores every helper and its callers together). Run owed: one identity record of every lane at the
+release (the door is on every path) and the classical/trees/family test suites.
+## Family admission helpers moved onto the one path (2026-11-08)
+
+Lane `a2-admit-family` (A2 of `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 3.3), branch
+`lane/a2-admit-family` from `origin/integ/pre-0867` `f7d10d2b09`. Not experiment defines: the family doors' own copy of
+the admission (clustering, neighbors, SVM, GP, mixture, kernel methods, manifold, model selection, parallel_shard). No A/B
+and no bit change: the same classical_f32_bits words reach the same kernels, and every refusal keeps its wording. Kept,
+and why (no measurement separates copies that run the same cast; the kept one is A0's bits-defining core):
+
+- `bindings/admitted_family.mojo`: `admit_family_input` (the metadata read once, the family rank / empty / rank-above-2
+  refusals), `admit_family_cast` (borrow a float32 C-order input, else one `admitted_cast_f32` in row tasks into an
+  uninitialised owned Array, `admitted_array`), `admit_family_meta` / `admit_family` (both steps; `finite=True` takes the
+  verdict from the cast instead of a second scan; a DeviceRows fold goes to `admit_x` unchanged), `admit_family_f64`,
+  `admit_family_owned` (the borrow rule of a fitted copy), `admit_family_weights` (one parallel status pass).
+  `family_f32` used to read the metadata twice (`family_view`, then `admit_x` re-ran the admission walk); the lifecycle
+  doors (family, neighbors, hierarchy) scanned X again after the snapshot; `family_array` zero-filled every destination
+  the cast or copy then overwrote (regression audit R6). All three are gone.
+- `core/admitted_weights.mojo`: `admitted_weight_status` / `admitted_fill`, the serial `core/family_weights_impl.mojo`
+  walks in row tasks with the same verdicts in the same precedence.
+- `bindings/classical_labels.mojo` `classical_encode_labels`: the body of `labels_encode_labels` (it was the wrapper's
+  only body) plus `svc_encode_1d`'s branch for a context without label helpers; the SVM doors test the 1-D shape first,
+  as `svc_encode_1d` did.
+
+Restore: `git apply -3 experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch` (the reverse of the lane's `.mojo` changes
+from `f7d10d2b09`; it restores every helper and its callers together). Run owed: the identity record of every family lane
+at the release and the classical family test suites; NVIDIA and AMD timing of kmeans fit/infer and knn fit (paper rows 10-12).
+## Tree and label door admission in process (2026-11-08)
+
+Lane `a1-admit-trees-labels` (A1 of `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` sections 3.3 and 4), branch
+`lane/a1-admit-trees-labels` from `integ/pre-0867` `f7d10d2b09`. Not experiment defines: the tree and label doors'
+admission steps that reached the base binding through Python calls (`labels_helper` / `trees_helper`), where they ran
+one task (`cast_elements`, `_tasks = 1`) or a device round trip (`cast_f64_to_f32`, `transpose_f32`,
+`cast_colmajor_f64_to_f32`, `all_finite_f32/_f64`: the whole X uploaded only to be cast or scanned, then uploaded again
+by the kernel), plus two copies on the forest and IsolationForest doors. No A/B: no measurement separates them; the
+in-process forms run the same single conversion per element, so no output bit changes, and every refusal keeps its
+wording.
+
+- `labels_cast` (`trees_cast`): `core/admitted_cast_elements.mojo`, the same `cast_elements` kernel over element ranges
+  across the host's cores. The base binding's own export keeps its one task (GPU-binding code; the host-route fence
+  refuses host threads there).
+- `labels_f32_view` (`trees_f32`, `trees_forest_layout`): same-order casts through the above; the F-order layout and the
+  C-order layout of an F source through `core/admitted_transpose.mojo` (row bands of 128 x 64 tiles across cores, the
+  tile of `tiled_transpose_to_f32`). The staging store of a cast-then-transpose is always uninitialised scratch.
+- `labels_all_finite` (`trees_all_finite`): `core/host_finite_scan.mojo` (the one host scan).
+- `labels_prepare_weights` (`trees_prepare_weights`): `host_all_finite_f32`, then `admitted_check_weights_f32`; the
+  refusals in `prepare_targets`' order (non-finite, negative, all zero).
+- IsolationForest fit (`trees_public_iforest.mojo` `_fit`): no second finiteness scan of the X its door admitted
+  (`trees_finite_known`, as the forest fit); the owned copy lands in an uninitialised byte store wrapped as the fitted
+  Array instead of a zero-filled `trees_empty`.
+- Forest door (`trees_public_lifecycle_native.mojo`): predict takes the `AdmittedX` words; the second `trees_f32` view
+  is gone.
+- Added, not removed: `bindings/admitted_held.mojo`, the hold scope of a meta-estimator operation (its finite X and the
+  stacking fold matrices admitted once for every member door that reads X through `admitted_held_x`).
+
+Restore: `git apply -3 experiments/removed/A1_ADMIT_TREES_LABELS.patch` (the reverse of the lane's `.mojo` changes from
+`f7d10d2b09`). Run owed: the trees rows of the board on NVIDIA and AMD (rf, iforest, gbdt fit and infer on istella and
+taxi), the meta-estimator rows, and the release's one identity record.
+
+## Sequence and neural admission helpers merged into the one path (2026-11-08)
+
+Lane `a4-admit-sequence-tsa-neural` (A4 of `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 3.3), branch
+`lane/a4-admit-sequence-tsa-neural` from `integ/pre-0867` `f7d10d2b09`. Not experiment defines: duplicate or serial input
+admission helpers of the TSA, forecast, embedding, xcnn, xseq_neural, byte-LM trainer and neural block doors. No A/B: the
+kept forms do the same work in parallel and without the zero fill. Kept, and why:
+
+- `core/admitted_input_nd.mojo` `admitted_cast_nd_f32`: the N-d member of the one cast (`admitted_cast_f32`'s row tasks
+  across the host's cores with the grain floor, one typed load per item, the finite test in the same pass). It replaces
+  the serial byte-assembling odometer `xseq_cast_nd` at all nine sites. `admitted_ids_i32` replaces the serial
+  `neural_cast_i32_2d` (same `cast_i32_bits` words).
+- `bindings/admitted_sequence.mojo`: `admit_nd_f32` (was `xseq_f32`; destination now an uninitialised bytearray-backed
+  ndarray, `admitted_ndarray_f32`, also used by the VAR / forecast matrices), `admit_nd_owned_f32` (was
+  `training_f32_cast_owned` plus a second `xseq_all_finite_f32` pass; now one pass).
+- `bindings/neural_block_admission.mojo` `admit_block_f32` with a use (BLOCK_READ, BLOCK_OPERATION, BLOCK_RETAINED):
+  the three copies `neural_block_f32`, `neural_block_f32_owned`, `neural_block_f32_input` were one door with three
+  borrow rules. Every copy (a BLOCK_READ x that cannot be borrowed, an operation or retained weight copy) goes into an
+  uninitialised bytearray-backed Array (REGRESSIONS C5, audit R7; was a zero-filled `generation_array`).
+- `admitted_array_f32` (`bindings/admitted_sequence.mojo`): the uninitialised float32 Array of the owned training
+  buffers, the Holt-Winters endog and the ARIMA series (was `tsa_array`, zero-filled then overwritten in full).
+- `xseq_all_finite_f32` was a one-line second name of `host_all_finite_f32`; callers read it directly.
+- TSA `kpss_test` / `select_d` series-major y: one parallel cast into an uninitialised scratch store (was a zero-filled
+  Array).
+
+Bit change (allowed between versions, owner rule 2026-11-08): `xseq_cast_nd` had two integer rules. The doors that used
+NumPy's direct integer -> float32 rounding (`xseq_f32` by default, the VAR / forecast matrices) now take the one
+admission rule, integer -> double -> float32 (`classical_f32_bits`, as `admit_x`). The two differ only for an integer
+input of magnitude above 2^53; float and bool inputs keep their words. The host column runs the same code, so every
+vendor changes together.
+
+Restore: `git apply -3 experiments/removed/A4_ADMISSION_HELPERS.patch` (the reverse of the lane's code changes from
+`f7d10d2b09`). Run owed: one identity record of every lane at the release and the sequence / TSA / neural test suites.
+## Dead native entries, batch 3 (2026-11)
+
+- Lane consol-k0-dead-code (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 5) re-checked each
+  entry with `rg -w` over the tree (Python, tools, bench, packaging, CI, bindings and providers, including Mojo-side
+  string callers) at `41ffcec665` and deleted the ones with no caller, one commit per group. Verdict: removed as dead
+  code, not an experiment, unless a row names a define verdict. No live path changed, so no identity bits move.
+
+### Byte LM parallel trainer entries
+
+| entries | where | deleted by | why they were dead | restore |
+|---|---|---|---|---|
+| `byte_lm_parallel_open`, `_open_pooled`, `_close`, `_rollback`, `_shard_gradient`, `_apply_gradient`, `_reduction_pool_available`, `_fold_reset`, `_shard_gradient_fold`, `_fold_add` | `bindings/_mojolearn_byte_lm.mojo` (wrappers + registrations) | `f41ec913f2` | no Python, tool, test or Mojo string caller: `parallel_training.py` reaches the trainer through `parallel_shard_call` (`bindings/_mojolearn_runtime_parallel_host.mojo`); the only other mention was the stale September A/B patch `tools/byte_lm_export_fast/change.patch`. `ByteParallelTrainer` and its methods stay (the runtime parallel host and `training/checks/*` use them); `_create`, `_step`, `_export`, `_set_lr`, `_ownership`, `_fold_export` keep their tool callers | `experiments/removed/dead_entries_byte_lm_parallel.patch` |
+
+### Tokenizer host vocab exports
+
+| entries | where | deleted by | why they were dead | restore |
+|---|---|---|---|---|
+| `vocab_encode_public`, `vocab_decode_public`, `vocab_pretrained_public`, `vocab_pretokenize_public`, `vocab_pattern_name` | `bindings/_mojolearn_tokenizer_host.mojo` (wrappers, the `_vocab_public_c` arms 3, 4, 5, 6 and 8, registrations) + the orphan `tokenizer_vocab_pretokenize` wrapper in `bindings/tokenizer_public_native.mojo` | `00a4418230` | `Tokenizer` reaches every operation through `tokenizer_public_call` (`vocab_encode`, `vocab_decode`, `vocab_pretrained`, `vocab_pretokenize`, `vocab_pattern`); no Python, tool, test or Mojo string caller named the five exports (the 2026-10-27 inventories under `experiments/` are records). The tokenizer host group is the largest compile, so every deletion there helps. `vocab_init_public`, `_spelled_public`, `_json_public`, `vocab_pretokenize_pattern` and `native_json_parse` keep their arms and indices | `experiments/removed/dead_entries_tokenizer_vocab_public.patch` |
+
+### Orphan functions
+
+| symbols | where | deleted by | why they were dead | restore |
+|---|---|---|---|---|
+| `classical_host_weights` | `bindings/classical_arrays.mojo` (+ its now-unused `classical_check_weights` import) | `7b2e1d1d83` | no caller anywhere; the classical doors admit `sample_weight` through their own family paths | `experiments/removed/dead_entries_orphan_functions.patch` |
+| `pca_query_fields` | `providers/python/pca_model_pyapi.mojo` | `7b2e1d1d83` | no caller; the PCA owners call `_pca_query_fields_from` directly (kept) | same patch |
+| `prep_check_info`, `prep_scalar_dtype` | `providers/python/prep_metadata_pyapi.mojo` (+ its now-unused `sequence_dtype_native` import) | `7b2e1d1d83` | no caller anywhere | same patch |
+
+- Left (plan 5.2): `rankn_mean` / `rankn_softmax` (`autograd/rankn_fold.mojo`) are called by `autograd/checks/rankn_fold_cases.mojo`, which `tools/autograd_smoke.py` runs; deleting them edits a live check, and routing `OPS_MEAN_N` / `OPS_SOFTMAX_N` to them is executor work. The ALS `flags` buffer and the two bare `synchronize()` calls in `x_decomp/als_dev.mojo` belong to lane N0 `readmission-defects` (plan section 8), which owns that file.
+
+### Dead Python loops
+
+| symbols | where | deleted by | why they were dead | restore |
+|---|---|---|---|---|
+| `_rsvd_core` (the `range(n_iter)` power iteration over `k.mm` / `k.orth`), `_randomized_decompose`, and their helpers `_seed_of`, `_orthonormal_cols`, `_flip_u` | `python/mojolearn/_expansion_decomp.py` | `bddde2ea2e` | public `randomized_svd` routes to the native linalg door; PCA / TruncatedSVD `algorithm='randomized'` run in `x_decomp/pca_randomized.mojo` / `x_decomp/tsvd_owner.mojo`; no caller was left. `test_pca_exact_native_owner.py` no longer patches the two names (it still forbids `_Kit`) | `experiments/removed/dead_python_loops.patch` |
+| `_lanczos_top`, `_lanczos_batch`, `_kdot`, `_LANCZOS_TOL`, `_LANCZOS_MAX_M`, `_LANCZOS_DEV_MAX_FLOATS` | `python/mojolearn/_expansion_decomp.py` | `bddde2ea2e` | the top-eigenpair route runs in `bindings/mani_decomp_native.mojo` and `x_decomp/kpca_owner.mojo`; the only caller was the one-off `tools/kernel_pca_gpu_trial.py`, deleted with it (`bench/decomp_fast_quality.py` uses the public estimators and stays) | same patch |
+| `_prepare_folds` and its helpers `_cv_fast_on`, `_native_default_cv`, `_CV_TRUST_FOLDS_BIT` | `python/mojolearn/model_selection.py` | `bddde2ea2e` | `cross_val_score` runs `family_msel_cross_val_score`; `bindings/msel_cv.mojo` (`msel_fast_on`, `msel_native_default_cv`) does the fold validation. `_cv_fast_defines` stays (the native context reads it) | same patch |
+
+### MOJOLEARN_PT_COLBATCH
+
+- What it tried: `-D MOJOLEARN_PT_COLBATCH` turned the FAST + Apple PowerTransformer (pt_map, pt_fold) pair into the
+  row-tiled `pt_tile_kernel` + `pt_tile_finish_kernel` (x_prep/fastpt.mojo).
+- Verdict: DROP (quality), EXPERIMENTS.md row 377 (lane/apple-fast-batchv @ 30aa43339): istella 2,262 -> 425 ms, taxi 305 ->
+  54.5 ms, but the lambdas move up to 9.5e-3 relative against define-off. Listed in "Owed deletions" above; lane
+  owed-deletions-D2 kept it because `PT_SCORE` (FAST + Apple default through `PT_SCORE_STABLE`) turns the same kernels on.
+- Deleted: the opt-in name only. `PT_COLBATCH` is now `_FAST_APPLE and PT_SCORE`, so every default build keeps its bits;
+  the only configuration that goes is the define on with `PT_SCORE` off. `tools/batchv_quality.sh` lost its `ptns` arm.
+- Deleted by `4da10a301b`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_PT_COLBATCH.patch`
+  (x_prep/fastpt.mojo). Refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry existed.
+
+### MOJOLEARN_MCD_BATCH_COMPAT
+
+- What it tried: `-D MOJOLEARN_MCD_BATCH_COMPAT` ran MinCovDet's fast_mcd C-steps on the device with the compact-support,
+  FMA-cell and round-robin eigensolve repairs (x_decomp/mcd_fast.mojo), without the MMA route.
+- Verdict: HOLD-quality, EXPERIMENTS.md (lane/apple-fast-mcd-exact @ ab4265c9a, gap26-mcdrepair-small-ready): taxi cap3000
+  5595.80 -> 828.96 ms, covariance relative difference .0857, precision .9998, support Jaccard .941 (bar .99), final
+  covariance rank 7 -> 6.
+- Deleted: the opt-in name only. The same code is the accepted FAST + Apple `MCD_BATCH_MMA` default, so
+  `MCD_BATCH_COMPAT` is now `MCD_BATCH_MMA`; no default build changes. `tools/mcd_compat_ab.sh` now needs `MCD_DEFINE`.
+- Deleted by `ca0d1c0c53`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_MCD_BATCH_COMPAT.patch`
+  (x_decomp/mcd_fast.mojo). Refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry existed.
+
+### MOJOLEARN_CHOL_FAST_NB512
+
+- What it tried: a 512-column FAST Cholesky panel (`CHOL_FAST_NB`, cholesky/checks/potrf.mojo) instead of 256.
+- Verdict: HOLD-speed, EXPERIMENTS.md (lane/apple-fast-w4-linalg 19bb1c7a1): quality PASS, w2-cholnb512-synthetic 260.4 ->
+  265.7 ms, no benefit.
+- Deleted by `c981cff480`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_CHOL_FAST_NB512.patch`.
+  Refusal in `core/experiment_guards_linear.mojo`; no `grid_controls` entry existed. NB64 / NB128 stay as they were.
+
+### MOJOLEARN_LLE_FAST_DEV_LU
+
+- What it tried: LocallyLinearEmbedding's shift-invert factor F0 factored where it lives (`dev_lu_aux_run` in
+  x_decomp/w4_fast.mojo: copy, `launch_lu`, the lu_aux launches), instead of the kit `lu` + `lu_aux` pair, FAST + Apple.
+- Verdict: HOLD-quality, EXPERIMENTS.md (lane/apple-fast-w4-decomp-harness-r1 e9d72edb5): lle taxi 1783.8 -> 1039.0 ms but
+  trustworthiness_k15 0.8662 -> 0.8410 against FAST main; the 2026-10-05 re-check with NULL_CANON (rab14) moved istella
+  0.8851 -> 0.8615 (-2.7%), and Andrew kept it off.
+- Deleted: the define, `w4_copy_kernel`, `dev_lu_aux_run`, the w4 `dev_lu_aux_py` door and its binding alias and
+  registration, bit 1 of `x_decomp_w4_flags`, the LLE arm in `bindings/mani_decomp_native.mojo`, and the two kit
+  `lu_dev_aux` methods (`bindings/mani_kit.mojo`, `_expansion_decomp._Kit`). The `x_decomp_dev_lu_aux` name stays the
+  IDENTICAL `IDN_LU_RESIDENT` entry (x_decomp/resident.mojo), which this did not touch.
+- Deleted by `ed9ba6e7a1`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch`.
+  Refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry existed.
+
+### MOJOLEARN_MCD_FAST_G1_GRAM
+
+- What it tried: MinCovDet / EllipticEnvelope's batched TN self-Gram (C = A^T A per candidate) through the non-split
+  `scoped_kernel[64, 64, False]` (`mcd_g1_gram_batched_kernel`, x_decomp/mcd_bmma.mojo) where the incumbent plan picks
+  one split, FAST + Apple. `MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT` counted its reach; `MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM`
+  restored the benchmark-tuned d 129..256 / K 128..1023 window (removed as dimension targeting on 2026-10-04).
+- Verdict: NEUTRAL, EXPERIMENTS.md (lane/apple-fast-mcd-g1-gram-remote; rab3-mcdg1, Verdicts batch 4): istella +0.1%, taxi
+  -1.2%; the later F02/mcd measurement (B/A 0.83-0.95, ab-20261006) was never admitted on fitted state.
+- Deleted: the three defines, the kernel, the audit struct and counters, the three witness exports `mcd_g1_gram_on`,
+  `mcd_g1_gram_count`, `mcd_g1_gram_last` (and their `coverage_declared.tsv` rows), and `tools/mcd_g1_quality.py`.
+- Deleted by `a2159de2cb`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch`
+  (x_decomp/mcd_bmma.mojo, bindings/_mojolearn_x_decomp.mojo); apply `MOJOLEARN_MCD_ORDERED_COV.patch` first (it was deleted
+  later in the same files). Refusal in `core/experiment_guards_decomposition.mojo`; no
+  `grid_controls` entry existed. The F02 manifests under `experiments/performance_ideas/F02/` are records and still name it.
+
+### MOJOLEARN_MCD_ORDERED_COV
+
+- What it tried: MinCovDet / EllipticEnvelope's raw C-step batched Gram and final masked covariance as split-K partials in
+  disjoint storage, folded per cell in split order with Neumaier compensation (`launch_mcd_cov_ordered`,
+  `mcd_cov_fold_kernel`, the `ORDERED` parameter of `mcd_bmma_kernel`, x_decomp/mcd_bmma.mojo), FAST + Apple.
+- Verdict: NEUTRAL, EXPERIMENTS.md (lane/apple-fast-mcd-ordered-quality-r3 @ f35a57bd4; rab3-mcdord, Verdicts batch 4): EE
+  istella -0.3%, MCD istella +0.4%, taxi -2.3%; quality HOLD (mcd-ordered-direct-q-r3). Batch 1 of the dead native entries
+  above kept its reach probe "until its experiment goes".
+- Deleted: the define and its kernels and helpers, `mcd_bmma_kernel`'s `ORDERED` parameter (the compact launches now pass
+  `[SPLIT, True]`), the reach counters and `x_decomp_mcd_cov_reach` (with `providers/python/x_decomp_mcd_bmma_pyapi.mojo`),
+  the Apple-only test seam `x_decomp_mcd_cov_probe`, `x_decomp_dev_mcd_cov` and its arm in `bindings/mcd_native.mojo`, the
+  `dev_mcd_cov` kit-bridge name, the three `coverage_declared.tsv` rows that named them, the `SABOTAGE_NA_ENTRIES` row,
+  `tools/mcd_ordered_quality.py` and `tools/mcd_ordered_pair.py`.
+- Deleted by `65b756872d`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch`
+  (eight code files, the deleted pyapi file included). Refusal in `core/experiment_guards_decomposition.mojo`; no
+  `grid_controls` entry existed.
+
+### MOJOLEARN_EIGH_FAST_PANEL_DF
+
+- What it tried: the FAST + Apple panel tridiagonalization of `eigh` with the trailing matrix kept as double-float (hi in A,
+  lo in an n x n buffer): the rank-2 tile update (`td_syr2k_kernel`), the column read (`_td_cell_df`) and the GEMV row dot
+  (`td_gemv_kernel`) in double-float (x_decomp/eigh_tridiag.mojo).
+- Verdict: DROPPED-slower, EXPERIMENTS.md (lane/apple-fast-eigh-panel-df @ 21eeacf90; rab3-eighdf, Verdicts batch 4):
+  693.09 -> 1107.60 ms (+59.8%), max_eigenvalue_error 4.27e-7 -> 1.71e-7.
+- Deleted: the define and its `_OFF`, `_td_cell_df` / `_td_cell_any`, the double-float arms, the low-word buffer and the
+  now-unused `alo` argument of `td_col_kernel`, `td_gemv_kernel` and `td_syr2k_kernel` (their other arithmetic is
+  unchanged, so the IDENTICAL `EIGH_TD_IDN` route keeps its bits), and `tools/eigh_panel_df_pair.py`.
+- Deleted by `27c5e3aff3`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch`.
+  Refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry existed.
+
+### Orphan tools (no index row: tools are not experiments and leave no code site)
+
+- Lane consol-k0-dead-code scanned every top-level non-test file under `tools/` for its stem (`rg -w`) across the whole
+  repository (results trees left out), `~/mojolearn-ops`, the briefs under `~/mojolearn-evidence/briefs-2026*`, the
+  top-level evidence notes and scripts, crontab and the launchd agents. 86 had no reference outside their own file; nine
+  were kept (named by the session memory: `evidence_trim`, `treegen_box`, `amd_step_time2_leg1`,
+  `tokenizer_vocab_repro`; changed since 2026-10-25: `qualify_forest_host_component`, `s16_job`,
+  `verify_api_reference`, `identity_box_job_nvidia`; the general runner `run_source_tests`).
+- Deleted by `cba7b5c352` (one-off box legs, A/B bodies, probes and smokes from August to October); recoverable at
+  `41ffcec665` with `git checkout 41ffcec665 -- tools/<name>`: `amd_step_time2_cpu_check.sh`, `amd_step_time_leg1.sh`, `amd_step_time_leg2.sh`, `amd_step_time_leg3.sh`, `amd_step_time_leg4.sh`, `amd_step_time_leg5.sh`, `amd_step_time_leg6.sh`, `amd_step_time_leg7.sh`, `amd_step_time_leg8.sh`, `amd_step_time_leg_mi325x.sh`, `amd_step_time_xtarget_check.sh`, `amd_verify_job.sh`, `ann_apple3_cuda.sh`, `ann_apple3_local.sh`, `batchv_smoke.sh`, `cc_nv.sh`, `correctness_round.sh`, `decomp_nv.sh`, `direction_diag_job.sh`, `emb_moe_nv.sh`, `forest_ordered_amd_leg.sh`, `forest_ordered_apple_leg.sh`, `forest_ordered_nvidia_leg.sh`, `gap_linear_nv_probe.sh`, `garch_job.sh`, `gbdt_2661_nvidia_leg.sh`, `gnm_mac_job.sh`, `gpt3_pointwise_fusions_cv_leg.sh`, `hcid_nvidia_job.sh`, `hostgpu_job.sh`, `hostpr_job.sh`, `identical_callpath_gate.sh`, `kmeans_amd_perf_leg.sh`, `knn_amd_identity_leg.sh`, `knn_amd_smem_leg.sh`, `kpca_cross_vendor_probe_20261012.py`, `lm_t1_body.sh`, `lu_fast_mma_pair.py`, `m2_plain_trace_check.py`, `m2b1m3_smoke.sh`, `mamba_public_overhead_body.sh`, `mcd_wide_b_only.sh`, `metrics_shap_idcheck.py`, `miv_smoke.sh`, `mlp_fused_job.sh`, `ordall_smoke.sh`, `par_lm_xvendor_body.sh`, `pass4_job.sh`, `performance_full_collect.py`, `performance_full_knn.py`, `performance_ideas_gpu_watch.py`, `pr31_32_nv.sh`, `probe_gemm_host.py`, `probe_neural_lanes.py`, `prophet_diag.py`, `prophet_nv.sh`, `ptx_column_record_lq.sh`, `qr_nv.sh`, `rf_hist_columns_leg.sh`, `rmsnorm_backward_cv_leg.sh`, `seq_optimizer_resident_check.py`, `six_lane_build_ledger.py`, `six_lane_stage_regression.py`, `six_lane_stage_saved.py`, `sklearn_live_box.sh`, `sklearn_weight_equivalence.py`, `sm120_tree_identity_probe.sh`, `strides_job.sh`, `train_utils_probe.py`, `trees_apple3_cuda.sh`, `treeshap_identity.py`, `tshap_smoke.sh`, `verify_crash_loop.sh`, `w2_resample_probe.py`, `xcluster_post_idcheck.py`, `xdecomp_lle_idcheck.py`, `xlinear_weighted_idcheck.py`.
+- Also deleted: `tools/byte_lm_export_fast/` (the September byte LM export A/B leg; its `change.patch` named the deleted
+  `byte_lm_parallel_*` entries and no longer applies), and earlier in this batch `tools/kernel_pca_gpu_trial.py`,
+  `tools/mcd_g1_quality.py`, `tools/mcd_ordered_quality.py`, `tools/mcd_ordered_pair.py`, `tools/eigh_panel_df_pair.py`
+  with the code they drove.
+
+
+## DeviceRows fold download and host scan removed (2026-11-08)
+
+Lane `a5-admit-core-followup` (A0 follow-up of `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 3.2 steps 3-4;
+`docs/plans/REGRESSIONS_0866_VS_0855.md` rows R1, R4, R13), branch `lane/a5-admit-core-followup` from
+`origin/integ/pre-0867` `f7d10d2b09`. Not experiment defines; no A/B define.
+
+- Deleted: `door_rows_host` and `door_x` (`bindings/device_rows_door.mojo`). A model-selection fold's X
+  (`_arena_io.DeviceRows`) reached a host-address kernel as a device gather out of the resident base, a DOWNLOAD of
+  the rows, a host finiteness scan of them and the kernel's re-upload. `admit_x` (`bindings/admitted_input.mojo`
+  `_admitted_rows`) now reads the fold itself: with `device_x=True` it returns the handle (base, indices) with no host
+  words, for an entry that gathers on the device; otherwise it gathers the rows on the host straight out of the host
+  base in row tasks across the cores, finite-tested in the copy (`core/admitted_rows_gather.mojo`). `admit_rows_host`
+  is the array-returning form for a door that still hands its owners an array.
+- Bits: none. The fold rows are copied word for word in the same order as the device gather, so the same float32 bytes
+  reach the kernel. Refusals keep their wording; an out-of-range index is now refused at the door (`IndexError`).
+- Kept beside it (not deleted): `DoorRows`, `door_is_device_rows`. The glue connection `door_rows_call` is unused by
+  this module now; it goes when the last `materialize` caller (`providers/python/family_public_lifecycle_pyapi.mojo`,
+  lane A2) moves to `admit_x`.
+- Measurement owed (RUN OWED): `cross_validate`, GridSearchCV and RandomizedSearchCV of ridge, logistic and k-means on
+  NVIDIA and AMD, before (`f7d10d2b09`) and after.
+- Recoverable at `f7d10d2b09`; restore with `git apply experiments/removed/A5_DOOR_ROWS_HOST.patch`.
+## RFE one program per elimination round (2026-11-09)
+
+Lane `w1-readmission-rfe` (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 4, row RFE), branch
+`lane/w1-readmission-rfe` from `origin/integ/pre-0867` `f7d10d2b09`; deletion commit `d6f2d5ed09`. Not an experiment
+define: a re-admission defect. `bindings/prep_select_native.mojo` ran two x_prep programs per elimination round (a
+gather program `_gather_cls` putting X and gathering the active columns, then the importance keys + `c2_rfe_step` +
+`c2_rfe_rank`), one more gather program for the final fit, rebuilt the active-column list and the support mask on the
+host every round, and fell back silently to putting X every round when the resident scope could not be entered.
+
+Now one program per round: the importance keys, `c2_rfe_step`, `c2_rfe_rank`, then `_stage_block` (the new x_prep op
+`c2_rfe_keep` 271, the supported columns compacted on the device, and `gather_cols` from the resident X) stages the next
+round's block in the same program; program 0 stages the first block. The resident scope is required (entering it only
+records the scope; the rows owner connects when the package imports `model_selection`). The support is read on the host
+once, after the last round. Programs per fit: 2R + 1 -> R + 1. No bit change: the same stages on the same words, and the
+gather is bit for bit. Deleted: `_gather_cls`, the per-round host `features` / `mask` lists, the no-scope fallback.
+
+Restore: `git apply -3 experiments/removed/W1_RFE_GATHER_PROGRAM_PER_ROUND.patch` (the reverse of `d6f2d5ed09` on
+`bindings/prep_select_native.mojo`; op 271 may stay). Run owed: RFE speed on NVIDIA and AMD (paper_compare / board RFE
+rows) against `f7d10d2b09`, and the RFE identity lane at the release.
+## Admission helpers of the decomposition, preprocessing and metrics doors (2026-11-08)
+
+Lane `a3-admit-decomp-prep-metrics` (A3 of `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 3.3), branch
+`lane/a3-admit-decomp-prep-metrics` from `origin/integ/pre-0867` `f7d10d2b09`. Not experiment defines: admission helpers
+that a door kept beside the one admission path, and a dead door. No A/B: the refusal text of PCA's own snapshot was the
+shared `admit_x` text with `est` = PCA, the id reads write the same words, and nothing reached the dead door.
+
+- `pca_input_snapshot` (`providers/python/pca_input_pyapi.mojo`): PCA fit and transform read `decomp_admit`
+  (`bindings/decomp_inputs.mojo`, `admit_x_unrecorded` after an exact SciPy sparse X is densified). Its cast destination
+  was a zero-filled `sequential_array`; the shared path casts into uninitialised storage (REGRESSIONS F3).
+- `decomp_copied`: TruncatedSVD's `input_copied_` flag took a second `classical_view` / memoryview of X; it is now
+  `decomp_input_copied(x)`, read off the admitted X. `decomp_input` became a thin caller of `decomp_admit`.
+- `pca_exact_fit`, `pca_input`, `pca_keep_fit`, `pca_prefix`, `pca_solver_checks`, `PCADimensions`
+  (`bindings/pca_exact.mojo`): the pre-owner PCA exact door; `bindings/pca_fit_native.mojo` owns fit, nothing called it.
+- `mcls_read_i64`, `mcls_narrow_i32` (`core/mcls_impl.mojo`) and `ann_candidates_i32` (`core/neighbors_ann_impl.mojo`,
+  file deleted): serial byte walks over integer labels and candidate ids. Now `admit_ids` (`core/admitted_ids.mojo`:
+  `admitted_ids_i64`, `admitted_ids_i32`, `admitted_narrow_i32`), one typed load per item, row tasks across the host's
+  cores, the verdict an AND over tasks. `metric_i32_vector` reads and narrows in one pass (it went through a zero-filled
+  int64 store first); ANN's check and its narrowing copy are one pass.
+- Kept: `decomp_input_snapshot` (PLS is its only caller; PLS belongs to lane A1), `LinAdmission` / `lin_admitted_c` /
+  `lin_borrow_array` / `lin_convert` (the multi-dtype linalg/metrics admission: `admit_x` is float32-only; `lin_convert`
+  now runs in element tasks across cores), `metric_input_snapshot` (a dtype-preserving freeze of every metric argument
+  before dispatch, not a float32 admission), `TensorView` (the optimizer door's, neural lanes).
+
+Restore: `git apply -3 experiments/removed/A3_ADMISSION_HELPERS.patch` (the reverse of the lane's `.mojo` / `.py` changes
+from `f7d10d2b09`; it restores every helper, switch and caller together). Run owed: the release identity record of the
+decomposition, metrics, prep, ANN and randomized_svd lanes.
+
+## randomized_svd route switches superseded by its one driver (2026-11-08)
+
+Same lane. The public `randomized_svd` (`bindings/linalg_decomp_native.mojo`) sequenced `_rsvd_core` and `_flip_u`
+through the binding decomp kit: one py_call into an x_decomp entry per step (about 40 for n_iter 4), with `_flip_u`
+moving U and Vt to the process-default mode's kit when the selected mode differed. It is now ONE call,
+`x_decomp_randomized_svd` (`x_decomp/randomized_svd_owner.mojo`, door `providers/python/x_decomp_rsvd_owner_pyapi.mojo`,
+device and host bindings): `pca_randomized_core` on `RKit` (the kit PCA and TruncatedSVD randomized already run on) with
+the orientation given, then `svd_flip(u_based_decision=True)` in the selected mode. The switches below only chose how
+the old sequence moved M; the driver always reads M in place and uploads it once, so no route is left to select.
+
+- `MOJOLEARN_RSVD_FAST_DIRECT_IN` (FAST + Apple default, M3 `e9d72edb5`: istella 517.3 -> 501.3 ms) and
+  `MOJOLEARN_IDN_RSVD_DIRECT_IN` (IDENTICAL default, grid `g50ebe26a5`: the `_OFF` arm 1.931x slower combined): M from the
+  caller's buffer straight into a pooled device matrix. Deleted with their `x_decomp_w4_flags` entry (no other bit was
+  left), its door `w4_flags_py` and the uncalled Python `w4_flags` reader; `x_decomp/w4_fast.mojo` and
+  `providers/python/x_decomp_w4_fast_pyapi.mojo` keep their tombstones only. `grid_controls/fg-pca.json`
+  `rsvd_idn_direct_in` moved to `removed`.
+- `MOJOLEARN_RSVD_FAST_DEVSCAN` (FAST + Apple default, rab15: istella 490.1 -> 435.1 ms with ORTH_WS): the finiteness
+  refusal on the device copy instead of the serial host scan. The serial scan it beat is gone (the one admission path's
+  parallel host scan); deleted with `dev_upload_scan_run`, `dev_upload_scan_py`, `x_decomp_dev_upload_scan` and bit 1 of
+  `x_decomp_s_flags`.
+- Also deleted: `DecompKit.orth`, `order_small`, `grown` and `_same_mode` (only the old sequence used them).
+- Refusal of the `_OFF` names in `core/experiment_guards_decomposition.mojo`. Bits: randomized_svd's may change (the sign
+  flip now runs in the selected mode's binding; every step follows RKit's residency), the same on NVIDIA, AMD and Apple
+  within the version. RUN OWED: the randomized-svd row on NVIDIA and AMD (speed), the randomized_svd identity lane.
+- Code recoverable at `f7d10d2b09`; patch `experiments/removed/A3_ADMISSION_HELPERS.patch`.
+
+## One int32 id cast (2026-11-09)
+
+Integrator integ/pre-0867-w2 (merge of lanes A3 a3-admit-decomp-prep-metrics 0cb550c337 and A4
+a4-admit-sequence-tsa-neural be7d3f4fb2). Both lanes wrote a parallel int32 id cast with the same name
+`admitted_ids_i32`: A3 in `core/admitted_ids.mojo` (`admit_ids`: signed / byte-swap flags, an int32 range verdict, used
+by the classification metric labels and the ANN candidate ids) and A4 in `core/admitted_input_nd.mojo` (`cast_i32_bits`:
+saturated outside int32, no verdict, used by the Byte-LM token ids). A3's is the survivor: it covers A4's 2-D strided
+integer and bool case, and it now writes an out-of-range id saturated (-2^31 or 2^31 - 1) besides returning False, so
+the Byte-LM callers (which keep the words; the embedding check refuses both saturated values by position) read the
+same words as before. The five Byte-LM call sites in `bindings/byte_lm_trainer_native.mojo` and
+`bindings/byte_lm_host_trainer_native.mojo` call it with `signed = kind == CAST_KIND_SIGNED`, `swap = False`.
+A4's copy is deleted with an inline TOMBSTONE. No patch: the code never reached main (recoverable at
+lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Bits: none for any int32-range or bool id.
+
+## Integration integ/pre-0867-w2 reconciliations (2026-11-09)
+
+- `bindings/admitted_held.mojo` (lane A1 076abee5ea): its registry struct, global and scope / hold / lookup functions were
+  a second copy of lane A5's `bindings/admitted_registry.mojo` (moved there word for word). The file is deleted; the tree
+  doors call `admit_x_unrecorded` (which consults the held registry) where they called `admitted_held_x`, and
+  `bindings/trees_public_meta.mojo` imports the scope functions from `bindings/admitted_registry.mojo`. Never reached
+  main: recoverable at lane/a1-admit-trees-labels@076abee5ea.
+- `_family_extreme_f32` in `core/family_cast_impl.mojo` (lane A3 0cb550c337): a second parallel min / max with the same
+  serial-walk answer as lane A2's `_family_extreme`; A2's is kept. Never reached main: recoverable at
+  lane/a3-admit-decomp-prep-metrics@0cb550c337.
+- `door_rows_call` (the `_arena_io._ROWS_CALL` connection in `_native_msel_dispatch.connect`): no reader after A5 deleted
+  `door_rows_host`; removed from the glue and from tools/test_device_rows_door_cv.py.
+
+## Executor gated state and chunked loop (2026-11-08)
+
+- **What it was**: two loop mechanisms that the executor's gate now makes unnecessary (lane
+  x1b-executor-gated-state-chunked-loop; docs/plans/EXECUTOR_X1_API.md section 5). (1) In
+  `autograd/program_control.mojo control_prepare`, a `while_loop` body holding a block step op (`is_block_step`) with
+  a condition was forced to `check_every = 1`: one status read per iteration, because the step op writes the
+  session's state in place, not behind the gate. Every solver loop moved onto the executor with in-place state was
+  therefore no better than its hand loop (which polls every 8-16 iterations). Now every declared state parameter of
+  the body is shadowed behind the gate (`OP_LOOP_SHADOW` after each body: open, the shadow takes the value; closed,
+  the live tensor gets the committed value back), resident step entries are rebuilt after bodies past the stop, a
+  blind body's error past the stop is dropped, and the loop reads once per chunk for every body; `check_every` /
+  `unroll` default to the chunk rule (`loop_auto_chunk`). (2) `autograd/program_runtime.mojo
+  train_program_control`'s epoch loop: an ungated host loop with no stopping criterion (the loss curve an ungated
+  copy, no iteration register). It is now the bounded device loop: `OP_LOOP_OPEN` per epoch, a gated loss commit,
+  `OP_LOOP_FIT_TICK` (the device iteration register and scikit-learn SGD's `tol` / `n_iter_no_change` rule), one
+  read per `fit_epochs_per_read` epochs, parameters and optimizer moments shadowed and the host optimizer scalars
+  restored for epochs past the stop. Returns the epochs run.
+- **Versions and measurements**: one form each; no measurement exists. Kept: the gated forms. The per-iteration
+  read stays reachable as `check_every=1` (and is what the chunk rule picks for a body whose in-place state is
+  above `LOOP_DRAIN_FLOATS`). A/B owed: a Mamba-1 / Mamba-3 decode `while_loop` with an EOS condition, default
+  vs `check_every=1`, and Program.fit with and without `tol` (SGD shapes of lane N3b), on NVIDIA and AMD.
+- **Verdict**: REFACTORED (no define removed). Bits: none for any existing program (the shadows and gates are bit
+  copies; the fit's curve copy is now a gated bit copy of the same value; the optimizer steps are unchanged).
+  Quality: unchanged.
+- **Run ids**: none (lanes never run; RUN OWED in the lane reply).
+- **Recoverable**: `f59d913b0b` (origin/integ/pre-0867-w2 at the lane's base; the forced read never reached main,
+  the fit loop did); deleted on lane/x1b-executor-gated-state-chunked-loop.
+- **Patch**: `experiments/removed/EXECUTOR_GATED_STATE_CHUNKED_LOOP.patch`, `git diff <lane head> f59d913b0b --`
+  the lane's code files (autograd/program_control.mojo, program_runtime.mojo, program_entries.mojo,
+  program_loop.mojo, the three providers/python doors, python/mojolearn/ops.py, the two experiments compile
+  wrappers); `git apply` restores them on the lane head, `git apply -3` once main has moved.
+- **Guard / records**: no `-D` define was removed, so no guard refusal and no `grid_controls` entry moves. One row in
+  `docs/apple-fast/EXPERIMENTS.md`.
+## Labels and trees admission copy onto the one path (2026-11-09)
+
+Lane `a1b-doors-opt-in-trees-linear` (A1b of `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 3.3, finishing
+A1 on A5's `admit_x` options), branch `lane/a1b-doors-opt-in-trees-linear` from `integ/pre-0867-w2` `f59d913b0b`. Not
+experiment defines: the second admission path in `bindings/classical_labels.mojo` (and its `trees_*` aliases in
+`bindings/trees_public_inputs.mojo`), a cast-and-view copy beside `bindings/admitted_input.mojo` with its own view
+struct, no finite test of X and zero-filled destinations. No A/B: the same words reach every kernel (one conversion
+per element in both paths; a borrowed float32 C-order input is borrowed in both).
+
+- `labels_f32` / `trees_f32` / `labels_f32_view` / `labels_forest_layout`: `admit_x_unrecorded` for a public X,
+  `admit_f32` (the array form as an `AdmittedX`, `ndim` -1 any rank up to 2) for targets, fitted arrays and published
+  predictions, `order="F"` for the F-order layouts. Where the old path tested nothing, `allow_nonfinite=True` keeps that.
+- `LabelsMatrix` / `TreesMatrix`: `AdmittedX` (now `Copyable`); the constructor is `admitted_words`.
+- `labels_empty` / `labels_vector` / `trees_empty` / `trees_vector`: `admitted_array` / `admitted_vector`, the one
+  zero-filled Array allocator (`admitted_storage(..., as_array=True)` is the same call).
+- `labels_view` / `LabelsView` / `trees_view` / `TreesView` / `_view_of_array` / `_view_of_buffer` /
+  `labels_check_rank` / `labels_shape_repr`: `admit_c_view` (any numeric dtype in C order: the exporter's view, or one
+  C-order copy of a strided export) with `admitted_dtype`; integer vectors through `admit_ids` (one parallel read of the
+  exporter's strides, `core/admitted_ids.mojo`). The label encoder reads its block through `admit_c_view`
+  (`classical_encode_words` is the encoder over a contiguous block); an F-ordered label matrix is now its C-order copy
+  (the same values in the same order as the label input step, so the same classes and codes).
+- `labels_check_sample_weight` / `labels_prepare_weights` / `trees_*`: `admit_weight_words` (`admit_weights`; None is
+  the ones vector).
+- `labels_all_finite` / `trees_all_finite`: `core/host_finite_scan.mojo` directly where a label vector is tested.
+- `trees_encode_labels`: the trees copy of the encoder is gone; it returns `classical_encode_labels`' classes and codes.
+  Behaviour: str-subclass labels, which the trees copy refused, are encoded like str (the shared encoder's rule).
+- Trees internals (`trees_public_boost` `_gather_view` / `_gather_codes_view` / `_gather_vec_view`, `trees_public_meta`
+  `_place_view`, `trees_explainer_native` `_snapshot`'s serial strided copy, `trees_public_iforest` `_copied`): the
+  helpers take the Arrays themselves; meta Y and explainer snapshots are read in C order (one C-order copy of an
+  F-ordered or strided input; same values).
+- `decomp_input_snapshot` (PLS's own cast and scan): `_pls_input` in `bindings/pls_native.mojo`.
+- `core/admitted_transpose.mojo`: no caller left.
+- The prep_labels multilabel F-order arm (base `transpose_f32`) and the KNeighborsClassifier column-major y branch: y is
+  read in C order.
+
+Also in the lane (not removals): the x_linear decision entries (`x_linear_decision` / `_codes` / `_rows`, GPU and host
+column) take an optional status-word address as their last dims element and test the X they upload
+(`core/admitted_finite_status.mojo`); x_linear fit and predict doors and the forest / IsolationForest fit doors pass
+`defer_finite=True` (their entries test the upload); the array form of `admit_x` consults the meta-estimator registry.
+
+Restore: `git apply -3 experiments/removed/A1B_LABELS_ADMISSION_COPY.patch` (the reverse of the lane's code changes
+from `f59d913b0b`). Run owed: the linear (sgd, ridge, huber, glm, enet, lasso, logistic), trees (rf, extratrees,
+iforest, gbdt, meta) and prep / neighbors rows of the board on NVIDIA and AMD, and the release's one identity record.
+## One multi-dtype admission, family_view and family_fill_i32 (2026-11-09)
+
+Lane a6-device-x-family-classical (part 3, branch lane/a6-device-x-family-classical-e, base integ/pre-0867-w2
+f59d913b0b). Not experiments: admission helpers that duplicated the one admission path (plan
+docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.3, lanes A2 / A3 follow-ups).
+
+- The multi-dtype admission moved onto the one path, word for word: `LinAdmission` -> `AdmittedTyped`,
+  `lin_admitted_c` -> `admitted_typed_c`, `lin_borrow_array` -> `_typed_borrow_array`, `lin_convert` ->
+  `admitted_typed_convert`, `lin_typed` -> `admit_typed`, `lin_admitted_output` -> `admitted_typed_output`,
+  `lin_admit_exporter` -> `admitted_typed_exporter`, `LinBuf` -> `AdmittedBuf`, `LinBufferPin` /
+  `register_lin_buffer_pin` -> `AdmittedBufferPin` / `register_admitted_buffer_pin` (Python type `_AdmittedBufferPin`),
+  `lin_new` / `lin_array` -> `admitted_zeros`, `lin_width` -> `admitted_width`, `lin_tuple` -> `admitted_shape_tuple`,
+  all in `bindings/admitted_input.mojo`; `metric_input_snapshot` (`providers/python/metric_input_snapshot_pyapi.mojo`,
+  file deleted) -> `admitted_snapshot`, and resample's `_row_dtype_admit` -> `admitted_dtype_admit`. `lin_view` and
+  `lin_c_order` had no caller. `TensorView` and its pure helpers moved to `bindings/tensor_view.mojo` (the optimizer
+  door imports them). `bindings/linalg_ops_buffers.mojo` keeps `lin_truth`, `lin_is_f32`, `lin_dtype_name`.
+- `family_view` (`bindings/family_common.mojo`): the rank / emptiness refusals on a view that the caller then
+  admitted a second time. Callers read `admit_family`, `admit_family_input` + `admit_family_cast`, `admit_typed` or
+  `admit_family_refuse_empty`, same wording. One wording change: a rank-3 Scaler shard input is refused "must be at
+  most 2-D" before the float32 dtype test. `cfb_f64_to_i32` (`core/cfb_impl.mojo`, a serial COO index cast) went with
+  spectral's `_as_i32`, now `admit_typed(source, "<i4", 1, ...)` (Array.astype's rules: a NaN or an out-of-int32 index is
+  refused where it was undefined).
+- `family_fill_i32` (`core/family_cast_impl.mojo`, serial): `admitted_fill[DType.int32]`.
+- Also replaced (no deletion): the base binding `cast_elements` py_calls in `svc_ocsvm_native.mojo`,
+  `svc_kernel_native.mojo`, `msel_common.mojo` (2) and `msel_search.mojo` by `admitted_convert_vector`
+  (`core/admitted_convert.mojo`).
+- Bits: none (the same words reach every kernel). Code recoverable at `f59d913b0b`; patches above.
+## Unverdicted FAST experiments deleted (lane K1, 2026-11-09)
+
+Lane k1-delete-unverdicted-fast (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 5.5, the "no verdict" row and the
+F16 / scoped-gemm probe rows K0 left for a decision), branch `lane/k1-delete-unverdicted-fast` from `origin/integ/pre-0867-w2`
+`f59d913b0b`. Apple FAST investment is stopped (AGENTS.md 2026-10-22), so these default-off FAST switches will never get an A/B;
+Andrew decided 2026-11-08: delete. Verdict for every define: **never measured, deleted**. Every define was default off and FAST +
+Apple only, so no default build changes and no identity bits move on any vendor or the host column. Each define now refuses in
+its family guard module (`core/experiment_guards_<family>.mojo`); a restore removes that refusal by hand.
+
+Patch order: the scoped commit touched files the earlier ones did, so restore with `git apply -3`, or apply
+`MOJOLEARN_SCOPED_GEMM_AUDIT.patch` first, then any other (checked: each applies after it).
+
+Kept, not deleted (plan 5.5 last row): `MOJOLEARN_HDB_ONE_SYNC`, `MOJOLEARN_HDB_SELECT_DEVICE`, `MOJOLEARN_TREES_T29` stay (later
+KEPT rows in EXPERIMENTS.md; see "Owed deletions reviewed and kept"); their rows in the owed table now say so. Not deleted either:
+the 19 `device_plan_log` registrations the plan listed as reader-less: tools/logical_shard_identity.py and
+tools/parallel_gram_check.py (the one-GPU multi-device gate) still read them.
+
+### MOJOLEARN_ARIMA_FAST_K3_DF_PROBE
+
+- Defines: MOJOLEARN_ARIMA_FAST_K3_DF_PROBE (+ MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL).
+- What it tried: the Apple FAST double-float ARIMA likelihood: the private K3 probe (`_arima_k3_df_probe`, arima/impl/fast_scalar_df.mojo, arima/k3_df_probe_impl.mojo, bindings/arima_k3_df_probe.mojo) and F16, the compensated Kalman likelihood and finite-difference tail on the production innovations (arima/impl/fast_eval_df.mojo, its arms in arima/impl/fast_eval_ws.mojo, the `capture_stages` argument of `fast_kalman_into`, arima/checks/product_df_quality_check.mojo, the `arima_product_df_count` counter).
+- Verdict: never measured, deleted. K3: private-kernel quality PASS only (arima-k3-df-gpu-q-v1), never a fit, forecast or timing. F16: no verdict row; the one-sample M3 search/forecast B/A 1.1328 / 1.0416 / 1.0132 (n 129 / 257 / 509, ab-20261006/repairs-54c1f35a5/F16) left it off.
+- Also removed: tools/arima_k3_df_gpu_quality.py, tools/arima_k3_df_reference.py (and their apple_fast_job_policy entries), the two coverage rows.
+- Deleted by `eff59d1b88`; code recoverable at `f59d913b0b` (= `eff59d1b88^` for this group). Patch `experiments/removed/MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch` (code files only; the guard refusal is not in it). Records: guard refusal, EXPERIMENTS.md row, this section.
+
+### MOJOLEARN_KSHAP_FAST_DEVICE_MODEL
+
+- Defines: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL (+ MOJOLEARN_PSHAP_FAST_DEVICE_MODEL).
+- What it tried: KernelExplainer / PermutationExplainer on the FAST tier taking the IDENTICAL device-model route for a built-in flat forest (xtrees/agnostic_device.mojo, x_trees switch bits 1024 / 2048 in providers/python/xtrees_api_pyapi.mojo, the FAST arm of `_device_forest` in bindings/trees_agnostic_native.mojo). `AGN_ANY_DEVICE_MODEL` went with them: the model-route exports compile under the IDENTICAL `MOJOLEARN_IDN_SHAP_DEVICE_MODEL` (bit 64) alone.
+- Verdict: never measured, deleted. OPEN (EXPERIMENTS.md, lane/apple-fast-round2 @ db19e2107); afr2-kshap-dm-rf / afr2-pshap-dm-rf never ran; the board rows explain a NumPy ridge closure, which never reached the switch.
+- Also removed: the grid controls (grid_controls/apple-fast-round2.json, grid-fast/controls/apple-fast-round2.json) moved to `removed`.
+- Deleted by `e2adeea367`; code recoverable at `f59d913b0b` (= `e2adeea367^` for this group). Patch `experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch` (code files only; the guard refusal is not in it). Records: guard refusal, EXPERIMENTS.md row, this section.
+
+### MOJOLEARN_FA_FAST_GRAM_SPREAD
+
+- Defines: MOJOLEARN_FA_FAST_GRAM_SPREAD.
+- What it tried: FactorAnalysis's FAST + Apple Gram pass with rows per partial shrunk with n (`fa_gram_rows`, `FG_MIN_PARTS`, `FG_MIN_ROWS`, x_decomp/fa_fast.mojo); every Gram pass keeps `FG_ROWS`.
+- Verdict: never measured, deleted. OPEN (EXPERIMENTS.md, lane/apple-slow-paths @ 1b5eb2a48); the M3 FAST A/B was never run.
+- Also removed: the grid control (grid_controls/apple-slow-paths.json) moved to `removed`.
+- Deleted by `a831c2008d`; code recoverable at `f59d913b0b` (= `a831c2008d^` for this group). Patch `experiments/removed/MOJOLEARN_FA_FAST_GRAM_SPREAD.patch` (code files only; the guard refusal is not in it). Records: guard refusal, EXPERIMENTS.md row, this section.
+
+### MOJOLEARN_IVF_FAST_BALANCED_TASKS
+
+- Defines: MOJOLEARN_IVF_FAST_BALANCED_TASKS (+ MOJOLEARN_IVF_FAST_BALANCED_AUDIT).
+- What it tried: F14: the Apple FAST IVF search through the bounded list tasks of `ivf_balanced_scan` (ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo) and its reach counter `ivf_fast_balanced_hits` (bindings/_mojolearn_ivf.mojo). `ivf_balanced_scan` stays for `C35_PACKED_LISTS` and the IDENTICAL `MOJOLEARN_IVF_BALANCED_TASKS` opt-in.
+- Verdict: never measured, deleted. never run ("NEVER RUN, PENDING MEASUREMENT"); no EXPERIMENTS.md row.
+- Also removed: the `device_only` entry in python/mojolearn/tests/test_cpu_training_embedding_ivf.py and the coverage row.
+- Deleted by `0c3399062b`; code recoverable at `f59d913b0b` (= `0c3399062b^` for this group). Patch `experiments/removed/MOJOLEARN_IVF_FAST_BALANCED_TASKS.patch` (code files only; the guard refusal is not in it). Records: guard refusal, EXPERIMENTS.md row, this section.
+
+### MOJOLEARN_PCA_FAST_COMPENSATED_COV
+
+- Defines: MOJOLEARN_PCA_FAST_COMPENSATED_COV (+ MOJOLEARN_AFCL_L07).
+- What it tried: F11: the Apple FAST compensated (Kahan) PCA covariance, one writer per cell (decomposition/impl/linalg/detail/pca.mojo `pca_compensated_cov_kernel`, the AFCL-L07 chunked part / finish kernels, `PcaCovAudit`, the `pca_compensated_cov_count` export).
+- Verdict: never measured, deleted. no EXPERIMENTS.md row; one-sample M3 runs were slower: component B/A 0.90-2.14, full istella PCA 716.5 -> 1955.9 ms (2.73x), full taxi 107.9 -> 1777.2 ms (16.48x) (experiments/performance_ideas/measurements/full_ab_20261006/pca-full-summary.json). AFCL-L07 never ran.
+- Also removed: tools/performance_full_pca.py (the full-PCA A/B arm reading this counter and the scoped GEMM counters), the coverage row.
+- Deleted by `e4e58162e9`; code recoverable at `f59d913b0b` (= `e4e58162e9^` for this group). Patch `experiments/removed/MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch` (code files only; the guard refusal is not in it). Records: guard refusal, EXPERIMENTS.md row, this section.
+
+### MOJOLEARN_MCD_FAST_ACTIVE_COMPACT
+
+- Defines: MOJOLEARN_MCD_FAST_ACTIVE_COMPACT (+ MOJOLEARN_MCD_FAST_COV_REUSE, MOJOLEARN_MCD_FAST_BOUND_BATCH).
+- What it tried: F06, MinCovDet / EllipticEnvelope on the FAST + Apple batched C-steps: active-candidate compaction (a count read, then a reduced grid), phase-local covariance reuse for identical supports, and bounded 32-candidate launches. Deleted: x_decomp/mcd_experiments.mojo, the phase's compact / reuse workspaces in x_decomp/mcd_fast.mojo, `mcd_bmma_kernel`'s `COMPACT` parameter and `ids` argument and `launch_gemm_mma_batched`'s `compact` argument (x_decomp/mcd_bmma.mojo), the `mcd_experiment_count` / `mcd_fast_batch_count` exports, and experiments/performance_ideas/F06/native_check.mojo (in the scoped commit `0a1dfdf971`; it imported the deleted module).
+- Verdict: never measured, deleted. no EXPERIMENTS.md row; one-sample M3 task timings (ab-20261006/repairs-54c1f35a5/results/F06), quality equal: compaction B/A 0.98-1.23, reuse 1.01-1.12, bounded batches 0.99-1.18; mostly slower.
+- Also removed: two coverage rows.
+- Deleted by `45d8034353`; code recoverable at `f59d913b0b` (= `45d8034353^` for this group). Patch `experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch` (code files only; the guard refusal is not in it). Records: guard refusal, EXPERIMENTS.md row, this section.
+
+### MOJOLEARN_SCOPED_GEMM_AUDIT
+
+- Defines: MOJOLEARN_SCOPED_GEMM_AUDIT (+ the scoped adapter family, F02 shared subtract, F05 narrow softmax).
+- What it tried: the Apple FAST strided G1/G2 GEMM adapter (experiments/apple_fast/gemm/scoped_dispatch.mojo: `scoped_kernel`, `try_scoped_gemm`, the TALL / DENSE / GRAM / NARROW / SPLIT / PCA arms, the benchmark-tuned LEGACY windows and the AUDIT counters) with every caller arm (core/gemm.mojo `gemm_nt` / `gemm_nt_gram`, gemm/checks/gemm_identical.mojo `_fast_vendor_gemm`, x_decomp/device.mojo, the PCA covariance); F02, the LU and Cholesky trailing subtract through its SUBTRACT epilogue (x_decomp/lu_fast_mma.mojo, cholesky/checks/fast_trsm.mojo, `gp_shared_sub_count`, `x_decomp_shared_sub_count`); F05, the QN multiclass linear forward through its 32x32 kernel (experiments/apple_fast/gemm/softmax_narrow.mojo, glm/impl/qn/glm_base.mojo now calls `gemm_nt`, bindings/softmax_g2_observe.mojo and the `softmax_g2_*` witnesses); the quality probe binding `_mojolearn_scoped_gemm_probe` (bindings/_mojolearn_scoped_gemm_probe.mojo, its entry and build script; not in the release build) and the `scoped_gemm_*` witnesses.
+- Verdict: never measured, deleted. no EXPERIMENTS.md verdict row for any of the thirteen defines. Recorded one-sample M3 evidence (2026-10-06, kept in the deleted comments): F01 task B/A 0.48-1.21, full PCA istella 717.3 -> 710.4 ms, taxi 102.6 -> 97.1 ms; scoped PCA fit HOLD-quality (scoped-pca-fit-istella-q-v1); F02 LU factor B/A 0.62-0.96 (slower), Cholesky fit 0.95 / solve 0.98 with mixed controls; F05 0.89-1.12, quality equal. Mixed, never admitted, and will not be measured.
+- Also removed: tools/scoped_gemm_quality.py, scoped_gemm_preflight_spec.py, test_scoped_gemm_readiness.py, scoped_pca_fit.py, scoped_pca_fit_spec.py, scoped_pca_recover.py, test_scoped_pca_fit_contract.py, softmax_g2_quality.py, the probe binding row of tools/verify_coverage_audit.py, the apple_fast_job_policy entries and nine coverage rows. tools/test_release_no_hands.py keeps listing `identical/_mojolearn_scoped_gemm_probe.so` as a stale artifact to remove.
+- Deleted by `0a1dfdf971`; code recoverable at `f59d913b0b` (= `0a1dfdf971^` for this group). Patch `experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch` (code files only; the guard refusal is not in it). Records: guard refusal, EXPERIMENTS.md row, this section.
+<a id="n9-every-dense-eigh-on-the-executor-ops-2026-11-09"></a>
+
+## N9: every dense eigh on the executor ops (2026-11-09)
+
+Lane n9-decomp-eigh-families (branch lane/n9-decomp-eigh-families, base origin/integ/pre-0867-w2 f59d913b0b;
+docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 4, docs/plans/EXECUTOR_N7_OPS.md).
+
+- What moved: `DevExec.eigh` / `_eigh_on` / `eigh_batch` / `lle_local` and every resident kit's eigh run the N7 ops
+  (x_decomp/eigh_ops.mojo): `eigh_op_sym` (new: `DevExec.eigh`'s own route, the tridiagonal solve from TD_MIN_N on a
+  copy with the Jacobi of the input enqueued behind it and chosen on the device on a refusal, the one-block Jacobi
+  below) and `eigh_op_dense` (batched one-block Jacobi). `eigh_td_on` became `eigh_td_enqueue` (no refusal drain).
+  The host column runs `eigh_op_sym_host` / `eigh_op_dense_host` (`HostExec.eigh_batch` is now parallel over the
+  problems). Resident kits keep w and V on the device: `DKit.eigh` (FastICA symmetric decorrelation, FactorAnalysis EM,
+  the rotation, MinCovDet's pinvh with its cut taken on the device), `IpcaDev.eigh_desc` / `DecompDev.eigh_desc`
+  (`dev_eigh_desc_run`: IncrementalPCA, FastICA whitening, the FactorAnalysis owner), `x_decomp_dev_eigh_to`
+  (DecompKit / MKit: MinCovDet, ClassicalMDS, Isomap and KernelPCA dense top eigenpairs). The KernelPCA / Isomap
+  Lanczos T solve is `eigh_op_tridiag` on the device alphas / betas (`x_decomp_dev_eigh_tridiag`), the host column
+  `eigh_op_tridiag_host` (`x_decomp_eigh_tridiag`). The spectral Lanczos projected solve keeps the Jacobi at every ncv
+  (`DevExec._eigh_jacobi_on` on `eigh_op_dense`), as its host oracle.
+- Deleted: `DevExec._eigh_td_try`, `_eigh_par_on` (two launches a round, a three-scalar wait before every sweep),
+  `_eigh_block_on`, `_eigh_par_test`, `_eigh_block_test`, `_rr_batch_enq` / `_rr_batch_on` / `_rr_batch_check`,
+  `xd_first_where2_enq` / `xd_first_where2_kernel`, x_decomp/rr_block_device.mojo (the device arm of the quarantined
+  `MOJOLEARN_IDN_EIGH_BLOCK_ON`: `eigh_op_sym` and `eigh_op_sym_host` refuse that define at run time by name; its host
+  solver and wave tools stay), `HostExec`'s `_host_eigh_rr_one` and its inline route, the `IDN_EIGH_SMALL` switches
+  (`MOJOLEARN_IDN_EIGH_SMALL_OFF`, `_N64`, `_N128`: refused in core/experiment_guards_decomposition.mojo), `_Eig.wh`
+  and `DKit.eigh`'s w / V download + upload, `pinv_mask_kernel` (replaced by `pinv_mask_dev_kernel`), the IPCA resident
+  host-word route, the Lanczos host T assembly in `x_decomp/kpca_owner.mojo` and `bindings/mani_decomp_native.mojo`.
+- Measurement that decided it: none yet. The one-launch Jacobi was already the measured IDENTICAL default below
+  n = 32 (lane fam-decomp, IDN_EIGH_SMALL); for 32 <= n < TD_MIN_N it replaces the per-round launches with the same
+  words (x_decomp/rr_batch.mojo header), UNMEASURED: RUN OWED.
+- Bits: unchanged by contract for every caller already on `DevExec.eigh` / `HostExec.eigh` (same route and words).
+  CHANGE on every column together for kernel-pca and isomap (Lanczos T: bisection + twisted vectors). FAST Apple:
+  `DKit.eigh` took the Jacobi at every n under FAST; it now takes the op's route (quality only).
+- Grid controls: none named these defines. EXPERIMENTS.md row added.
+- Code recoverable at f59d913b0b. Patches: `experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch` (x_decomp/device.mojo,
+  host.mojo, eigh_tridiag.mojo, rr_block_device.mojo), `experiments/removed/N9_RESIDENT_EIGH.patch` (the kits,
+  owners, entries and the spectral Lanczos).
+## GP, GPC and KRR on the executor's Cholesky ops (2026-11-09)
+
+Lane n8-gp-krr-smo (docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 4, rows "GP regressor / GPC Laplace"
+and "KRR"; the ops are lane N7's, docs/plans/EXECUTOR_N7_OPS.md). Every Gaussian process and kernel ridge Cholesky now
+runs `chol_op_factor` / `chol_op_cho_solve` / `chol_op_logdet` (cholesky/chol_ops.mojo): the factor's `info` stays in a
+device word that gates the later launches (CHOL_DEFER_INFO on every vendor) and comes home at the family's own sync.
+
+- `MOJOLEARN_IDN_GPC_NEWTON_LOGDET_OFF` (the `_OFF` arm of GPC_IDN_NEWTON_LOGDET, fam2-kernel-gp 2026-10-04, IDENTICAL
+  default ON, no A/B of its own: the default kept log|B| on the device, the arm read it home per iteration through
+  `chol_logdet`). The Newton loop is now one bounded device loop, so the host read the arm restored has nowhere to go;
+  the log-determinant is always `chol_op_logdet`. No `grid_controls` entry existed. Refusal in
+  `core/experiment_guards_kernel.mojo`.
+- The two copies of the Laplace Newton loop (`classifier.mojo::_gpc_fit_binary_device` and
+  `gpc_ovr.mojo::gpc_newton_device`, the same launches in the same order) and the seven ungated kernels only they
+  launched (`gpc_b_matrix_kernel`, `gpc_w_kernel`, `gpc_rhs_kernel`, `gpc_scale_nan_kernel`, `gpc_a_kernel`,
+  `gpc_lml_part_kernel`, `gpc_lml_fin_kernel`, plus `gpc_ovr.mojo::gpc_lml_fin_dev_kernel`): replaced by
+  `gaussian_process/gpc_newton.mojo` (`GPCNewtonStep` on `bounded_device_loop`, the same items gated on the loop's done
+  word, the NaN guard and DEVIATION 2830's stop test as one criterion kernel). Per fit: 2-3 drains per Newton iteration
+  became one register read per 8 iterations plus one read of the likelihood. The `+0.0` `add_jitter` launch on B was
+  dropped: B's diagonal is `ftz(1 + cell)`, never -0.0, so it changed no bit.
+- `gp_opt_run_end_kernel` and `gpr_optimize_device`'s per-run host loop (the stop word read after every evaluation,
+  the Cholesky's `info` read inside `potrf_lower`): replaced by `gp_opt_advance_kernel` (`gp_opt_advance_item`: a stopped
+  run's record and the next run's start on the device) and a done word read once per 8 evaluations
+  (`GP_OPT_EVAL_CHECK`).
+- Also moved, no record of their own: `gpr_resident.mojo::gpr_fit_ptr_device`, `estimator.mojo::gpr_fit_host`,
+  `gpr_lml_grad_host` (four drains to one) and `gpr_sample_y_host`; KRR's `kernel_ridge_solve` off the trace route and
+  `kernel_ridge_fit_ptr` (info read with the dual download; new `kernel_ridge_factor_solve_enqueue`).
+  `chol_op_zero_on_fail` was added to cholesky/chol_ops.mojo for the failed-fit zero dual.
+- Bits: none intended on NVIDIA, AMD or Apple IDENTICAL (the ops run `potrf_lower`'s strip / left-looking launches and
+  `cho_solve`'s chains, and the GPC items and block sizes are unchanged). A failed factor's returned L is the one frozen
+  at the failing panel rather than LAPACK's completed partial factor. Apple FAST GP / GPC / KRR words change (strip
+  schedule instead of the vendor-GEMM panel route; FAST needs quality only).
+- Code recoverable at `f59d913b0b`; patches `experiments/removed/N8_GPC_NEWTON_ONE_LOOP.patch` (classifier.mojo,
+  gpc_ovr.mojo) and `experiments/removed/N8_GP_OPT_DEVICE_RUNS.patch` (gp_optim.mojo, gp_optim_items.mojo).
+
+## EM driver loops onto the device loop (2026-11-09)
+
+- **What it was**: lane n1-gmm-bgmm-loops (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 4, rows GMM EM
+  and BayesianGMM). (1) `mixture/estimator.mojo::gaussian_mixture_fit`'s host EM loop: E-step, M-step and
+  `gmm_precision_cholesky` per iteration, the mean log-likelihood copied home and `abs(change) < tol` decided on the host
+  (one drain per iteration, plus the pivot-flag drain of the precision Cholesky), the `MOJOLEARN_STAGE_TIMES` phase
+  timers, and `IDN_GMM_ONE_DRAIN` (`-D MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF`), which moved the meanll copy onto the pivot
+  drain. It is now the step op `GmmEmStep` run by `bounded_device_loop` (autograd/program_loop_device.mojo): the same
+  E-step, M-step and precision kernels, the pivot verdict as a device word that joins the loop (`step_fail_joins_loop`),
+  a gated commit of the parameters (`gmm_em_commit_kernel`) and the criterion on the device
+  (`gmm_em_criterion_kernel`: the same `gmm_convergence_change` / `gmm_converged` float32 comparison). Per-op timing is
+  `-D MOJOLEARN_EXECUTOR_TIMERS` (`loop_lap`). (2) The one-launch precision factors (IDN fused, FAST fused, FAST big) and
+  their host readback of the pivot flags moved from `gmm_precision_cholesky` to `gmm_precision_enqueue`
+  (mixture/checks/mstep.mojo); at d above those kernels' range the per-component chain runs on the N7 Cholesky ops
+  (`chol_op_factor`, `chol_op_logdet`, `chol_op_solve_lower`) instead of `potrf_lower` / `chol_logdet` / `trsm_lower`
+  with their per-panel `info` and logdet reads; `gmm_precision_cholesky` keeps the sabotage arms only. (3)
+  `x_cluster/bgmm.mojo::bgmm_fit`'s read of the scalar block every iteration: the loop now ends each iteration with a
+  gated commit of the workspace (ST_COMMIT) and a stop word (ST_FREEZE), and reads the two-word freeze pair once per
+  `check_every` iterations. The read interval is `core/em_loop_chunk.mojo` (8 below 2**24 multiply-adds an iteration,
+  else 1; host column 1; trace, sabotage and row-sharded E-step 1).
+- **Versions and measurements**: one form of each loop existed (plus the ONE_DRAIN `_OFF` arm: I21 2026-10-06 OFF/ON
+  NVIDIA 1.010/1.020/1.532, AMD 0.987/1.000/1.010, kept ON). No A/B of the device loop exists; at the board shapes
+  (gmm / bayesian-gmm istella, taxi: above the work bound) the interval is 1, one read per iteration as before.
+- **Verdict**: REFACTORED. Bits: unchanged by construction for every fit whose precision Cholesky took a fused kernel
+  (IDENTICAL d <= 256, FAST Apple d <= 256) and for BGMM; the committed parameters are the stopping iteration's for any
+  interval. At d above the fused range the chain's words are the N7 ops' (potrf_lower's launches at the pinned width,
+  the default trsm kernels, the logdet fold): expected equal, re-recorded with the gmm identity lane at the release run.
+- **Recoverable**: `f59d913b0b` (origin/integ/pre-0867-w2 at the lane's base); deleted on lane/n1-gmm-bgmm-loops.
+- **Patch**: `experiments/removed/EXECUTOR_EM_DRIVER_LOOPS.patch`, `git diff <lane head> f59d913b0b --
+  mixture/estimator.mojo mixture/checks/mstep.mojo x_cluster/bgmm.mojo`; `git apply` restores the three files on the
+  lane head (drop the `MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF` refusal in core/experiment_guards_cluster.mojo to build the
+  `_OFF` arm), `git apply -3` once the base has moved.
+- **Guard / records**: `MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF` refused in core/experiment_guards_cluster.mojo; no
+  `grid_controls` entry existed. Rows in `docs/apple-fast/EXPERIMENTS.md`.
+## SGD epoch re-gather and MiniBatchKMeans per-step loop (2026-11-09)
+
+Lane n3-sgd-minibatch-loops (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 4, rows SGD / Perceptron /
+PassiveAggressive and MiniBatchKMeans generic), base integ/pre-0867-w2 `f59d913b0b`.
+
+- `MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS` (lane/classical-structural, 2026-10-07, IDENTICAL, default off). Tried: once per
+  epoch and problem, right after `sgd_perm_kernel`, two launches (`sgd_gather_x_kernel`, `sgd_gather_vec_kernel`) wrote
+  permuted copies of X, y and the sample weights plus an identity order, so the minibatch kernels read contiguous rows.
+  Cost: an n x d device-to-device copy every epoch. Verdict: never A/B'd on its own (it only rode in all-on grid
+  combinations), so the default gathered-load route is kept (the rule: no measurement, keep today's bits-defining path).
+  Files: `x_linear/device.mojo` (the define, the two kernels, the buffers and memory gate in `_sgd_mb_grid`, the
+  per-epoch block). Bits: none. Recoverable at integ/pre-0867-w2 `f59d913b0b`; patch
+  `experiments/removed/MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS.patch`; refusal in `core/experiment_guards_linear.mojo`;
+  `grid_controls/classical-structural.json` entry moved to `removed`.
+- `MOJOLEARN_IDN_MINIBATCH_GROUP_OFF` (fam2-cluster, 2026-10-04): restored MiniBatchKMeans' per-step loop (a host id
+  upload, a wait and the centers download every step), which also ran in FAST off Apple and in every build with
+  `MOJOLEARN_IDN_ALL_OFF`. The group loop in `x_cluster/minibatch.mojo` is now the one loop in every mode and column, and
+  it moves the rest of its per-step host work to the ops: the weighted batch draws (`ClusterOps.mb_wdraw`, the cumulative
+  weights uploaded once per fit, `minibatch_cells.mb_wdraw_cell` in soft binary64 on both columns: the host loop's
+  indices) and the tol > 0 squared center shift (`ClusterOps.fold_sqdiff_at`, the new float-float fold mode
+  `FM_SQDIFF`). The g x k x d centers are no longer downloaded per group: a stop restores the stopping step's centers
+  and counts from the device history (`copy_from`, what `MOJOLEARN_C39_RETAIN_STATE` did for the minibatch half; the
+  bisecting half of C39 is unchanged), and only a reassigning step downloads its k x d centers. Bits: the center shift
+  was an ascending Float64 chain on the host and is now the FM_SQDIFF fold, so a tol > 0 fit can stop one step earlier
+  or later (tol = 0 is unchanged); FAST off Apple now uses the float-float batch inertia. No A/B (superseded, not an
+  experiment loss). Recoverable at integ/pre-0867-w2 `f59d913b0b`; patch
+  `experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP_OFF.patch` (the whole `x_cluster/minibatch.mojo` reversal);
+  refusal in `core/experiment_guards_cluster.mojo`; no grid_controls entry existed.
+## MDS, label propagation and NMF loops on the bounded device loop (2026-11-09)
+
+Lane `n4-mds-labelprop-nmf-loops` (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 4, rows MDS SMACOF,
+Label propagation, NMF multiplicative / CD), branch `lane/n4-mds-labelprop-nmf-loops` from `origin/integ/pre-0867-w2`
+`f59d913b0b`. Not experiment defines except the two label-propagation rollbacks: host loops that read a word home every
+iteration, moved onto the executor's bounded device loop (`autograd/program_loop_device.mojo`, the `LoopStep` KMeans'
+Lloyd loop uses). Each body writes its carried state only through `DKit.put_gated` (x_decomp) or gated kernels
+(x_neighbors), so iterations enqueued past the stop leave it as the stopping iteration left it, and ends with a
+one-thread criterion kernel; the host reads the register block once per chunk.
+
+- MDS SMACOF (`x_decomp/mds_dev.mojo`): Y, d and the raw stress / ssd words are the state; the stop test is
+  `mds_smacof_crit_kernel` over `mds_stop_f32` and the non-metric disparity scale is a device scalar (OP_DIV, OP_SQRT
+  cells). Reads per iteration 2-3 -> 1 per 8 iterations (MDS_LOOP_CHUNK) + 1 per start.
+- NMF (`x_decomp/nmf_dev.mojo`): MU writes W, H through `put_gated` and tests `nmf_err_f32` / `nmf_mu_stop_f32` every 10
+  iterations on the device (a zero first error stops the loop with failure code 1, the driver returns NMF_ZERO_ERR0); the
+  register block is read every 10 iterations, exactly where the old loop branched. CD sweeps a copy of W / Ht
+  (`DKit.cd_rows_enq`, `cd_rows_kernel` unchanged) and writes it back gated, the coordinate order stays a device value
+  (identity uploaded once, or the Philox draw's `order_small_dev`), and `nmf_cd_crit_kernel` tests `nmf_cd_stop_f32`; one
+  read per 8 sweeps (NMF_CD_LOOP_CHUNK) instead of 1-2 per sweep. `DKit.cd_rows` (the read-home form) is deleted.
+- Label propagation dense graph (`x_neighbors/iter_device.mojo` `op_lp_iterate`): one body `_LpDenseStep` (stopping sum,
+  `loop_criterion_below` against the float32 ceiling of tol, the gated dense / raw product or the ELL SpMM op
+  `lp_ell_spmm_enqueue`, the gated clamp), one read per LPK_BATCH. Deleted: the default path's stopping-sum read every
+  iteration, the `-D MOJOLEARN_C33_FROZEN_CHUNKS` dense-only second copy, `_c33_stop` and `_c43_graph_product`. Same bits
+  (the stop decision is the float64 compare's, the ELL product is the dense product's bits).
+- Label propagation kNN graph: `lp_iterate_knn` is the only path on every vendor and tier; `lp_fast_resident` returns 1.
+  Deleted: `-D MOJOLEARN_LP_FAST_RESIDENT_OFF` (FAST + Apple default since A/B n2-lp-res-taxi, label-propagation taxi
+  6,793 -> 2,086 ms, accuracy .7016 same) and `-D MOJOLEARN_IDN_LP_RESIDENT_OFF` (IDENTICAL default since lane
+  fam2-neighbors 2026-10-04, same bits), both refused in `core/experiment_guards_cluster.mojo`; and the binding's
+  compact-graph loop in `bindings/neighbors_semi_native.mojo` (absdiff_sum read, lp_knn_product and a clamp per
+  iteration, n x C allocated per iteration) with `_lp_fast_resident`.
+
+Bits: MDS and NMF stop tests (and MDS's non-metric scale) are float32 cells (`x_decomp/cells.mojo`) on every column, the
+host twins (`x_decomp/mds.mojo`, `x_decomp/nmf.mojo`) changed with the device; they were Python's float64 tail. Outputs
+change only where the stop iteration moves (a borderline ratio) or for a zero disparity sum. Label propagation: no bit
+change.
+
+Restore: `git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch` (the reverse of the lane on the code
+files; the guard entry in `core/experiment_guards_cluster.mojo` is left out). Code recoverable at `f59d913b0b`.
+Run owed: MDS, NMF, LabelPropagation / LabelSpreading speed on NVIDIA and AMD (board and paper_compare rows) against
+`f59d913b0b`, and the identity lanes mds, nmf, label-propagation, label-spreading at the release.
+
+## FAST Prophet host L-BFGS driver (2026-11-09)
+
+Lane n5-prophet-adaboost-loops (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 4, row "Prophet FAST").
+
+- Tried / was: `sequence/ops_impl.mojo` `lbfgs_prophet_host` and `_prophet_fg_dev`, FAST's (apple2) long-series fit
+  (N >= `PROPHET_FAST_MIN_N`): the L-BFGS two-loop, Armijo backtracking and stopping rules on the host, one series at a
+  time; every objective evaluation uploaded theta (P floats), ran the chunked likelihood (`OP_PROPHET_FG_PART` /
+  `OP_PROPHET_FG_SUM`), downloaded the gradient and sse and synchronized, then added the priors on the host. The series'
+  scaling (max |y|, y / scale) ran on the host and re-uploaded y per series.
+- Now: `sequence/prophet.mojo` `op_prophet_lb_ymax`, `op_prophet_lb_init`, `op_prophet_lb_ydiv`, `op_prophet_lb_step`,
+  `op_prophet_lb_active`, `op_prophet_lb_out` (codes 82-87): every series of the batch at once, its workspace row resident,
+  the trial point read in place by the likelihood; the driver reads one running-series word per `PROPHET_LB_CHUNK` (8)
+  evaluations. Same statements in the same order (`_dot`, `_fg_prior_v`, the chunk-ordered sums).
+- Verdict: superseded by the device body (no define; nothing to A/B against: same FAST arithmetic). RUN OWED: Apple FAST
+  timing of the Prophet N >= 16384 row before -> after.
+- Bits: none intended (FAST only; IDENTICAL never reached this path).
+- Code recoverable at `f59d913b0b` (= `b70c3eda7c^`); patch `experiments/removed/PROPHET_FAST_HOST_LBFGS.patch` (reverse of
+  `b70c3eda7c`, `sequence/ops_impl.mojo` only; the new kernels in `sequence/prophet.mojo` are additions).
+## ARIMA lock-step L-BFGS superseded by the per-series solver (2026-11-09)
+
+Lane n10-dictl-arima-loops (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 4, row "ARIMA lock-step
+L-BFGS"). `arima/impl/batched_fit.mojo::batched_min_lbfgs` ran two device solvers: the per-series one
+(`arima/impl/fast_lbfgs_async.mojo::async_min_lbfgs`, ARIMA_FAST_ASYNC: FAST + Apple since lane/apple-fast-gap-arima,
+IDENTICAL on every vendor since lane/fam-timeseries, M3 A/B autoarima taxi-hourly 39,639 -> 24,563 ms and synthetic
+28,511 -> 14,918 ms, forecast_rmse identical) whenever the held evaluation workspace existed and the identity trace was off,
+and the lock-step one otherwise (prelude, a shared line search to the last series, verdict; one flag read per line-search
+step and per iteration, and the sequential evaluation drained the stream once per forward-difference point). The
+per-series solver now takes the sequential evaluation too (`arima/impl/eval_batch.mojo::arima_eval`, the held workspace
+when the fit has one), so it is the only device arm; the lock-step loop, `lbfgs_prelude_kernel`, `lbfgs_candidate_kernel`,
+`lbfgs_accept_kernel`, `lbfgs_verdict_kernel`, `_read_flag`, `_record_iter`, `_iter_tag`, `_download_i32`, the
+per-iteration identity card (`fit.init.*`, `fit.iterNNNN.*`; no reader) and the `ARIMA_FAST_ASYNC` switch with its two
+`_OFF` defines are deleted. Guards: `core/experiment_guards_series.mojo`. Bits: none (each series' iterates, `n_iter`
+and `retcode` are the lock-step solver's by construction; the sequential and held evaluations write the same bits).
+`n_eval` now counts rounds (up to `ASYNC_READ_EVERY - 1` no-op rounds past the last series), as the per-series arm always
+did. Run ids: gaparima-async-* (M3). RUN OWED: NVIDIA + AMD autoarima rows for the fits that used to take the lock-step arm.
+Recoverable at f59d913b0b; patch `experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch` (all code hunks of the deletion).
+
+## Dictionary learning loops as device programs (2026-11-09)
+
+Lane n10-dictl-arima-loops (plan section 4, row "Dictionary learning"). `x_decomp/dictl_dev.mojo`'s two loops read
+3 + 2 nc words home per iteration: the used-atom count (`count_gt` of A's diagonal), A[j, j] per atom (`cols` with a
+drain and `word`), the resample's draw and std (`resample_atom_dev`), the two cost words (`cost_dev`), and per
+MiniBatch step the dictionary change; every row solve (`DKit._code_rows`) also drained. Now each loop enqueues
+`DL_CHECK_EVERY` = 4 iterations (state in a ring of slots, cost words in a device array) and reads once; the host
+replays the float64 error, forgetting average and stop tests over the chunk in order and takes the stopping slot. The
+atom test, the Philox draw, the row pick, the noise and the code column's zeroing are `x_decomp/dictl_resample.mojo`
+(the FAST fused update, `x_decomp/dict_fast.mojo`, runs the same kernel between its two launches, so it no longer needs
+the used-atom count). Deleted: `resample_atom_dev`, `cost_dev`, the per-atom reads, `_code_rows`'s drain. Bits: none on
+an update without an unused atom (same cells, same order; the row std is the same per-row folds computed for every row
+at once). A resampled atom's noise scale is now one float32 product `mul(0.01f, std or 1)` on the device and in the host
+column (`x_decomp/dictl.mojo::resample_atom`), where it was the float64 product rounded to float32; that changes the bits
+of a resampled atom only, on every vendor and the host column together (identity lanes: dictionary-learning,
+minibatch-dictionary-learning, sparse-coder when an atom goes unused). Recoverable at f59d913b0b; patch
+`experiments/removed/DICTL_HOST_READS.patch` (all code hunks).
+## MoE backward on the forward's ops (2026-11-09)
+
+- What it was: the MoE block's training step (`moe_tape_train_step`, `autograd/route_ops.mojo`, reached by
+  `MoEBlock.backward` through `moe_backward`) ran its forward through two op codes of its own, `OP_MOEB_HIDDEN_FWD` (2900)
+  and `OP_MOEB_OUT_FWD` (2901) in `autograd/kernels/moe.mojo`, whose bodies were `op_moe_hidden` and `op_moe_out`, the
+  item bodies of the forward's own `OP_MOE_HIDDEN` / `OP_MOE_OUT`. The `AUTOGRAD_MOE` switch (default on;
+  `-D MOJOLEARN_AUTOGRAD_MOE_OFF` made `moe_backward` raise "the backward pass is not available in this build") was the
+  last rollback arm of the tape backward.
+- Now: the training forward launches `OP_MOE_ROUTE`, the grouping, `OP_MOE_HIDDEN` and `OP_MOE_OUT` with `a.i4 = a.i6 = 0`
+  (the item form on every executor, h in pair order as the VJPs index it) and records them on the tape; the tape is the
+  only MoE backward. The grouped / register-tiled device forward forms store h in slot order and stay forward-only.
+- Files: `autograd/kernels/moe.mojo`, `autograd/route_ops.mojo`, `sequence/dispatch.mojo` (comment).
+- Verdict: removed (plan row X9, docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md). Not an A/B loser: the same bodies run
+  under the forward's codes, so the words are unchanged by construction (identity lane `sequence-moe` owes nothing new).
+  No timing: the launch set is one for one.
+- Deleted 2026-11-09 by lane/x9-moe-gcn-rules; recoverable at origin/integ/pre-0867-w2 `f59d913b0b`.
+- Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch` (all code hunks of the deletion: both op codes, their
+  dispatch arms and the switch; `git apply` restores them together).
+- Guard: `MOJOLEARN_AUTOGRAD_MOE_OFF` refused in `autograd/route_ops.mojo` (`moe_tape_train_step`) and in
+  `core/experiment_guards_neural.mojo`. No `grid_controls` entry existed.
+
+## GCNConv and SAGEConv resident backward on the tape (2026-11-09)
+
+- What it was: `bindings/xcnn_graph_native.mojo` `_gcn_backward_dev` and `_sage_backward_dev`, the resident (GPU binding)
+  backward of the two graph layers, chained the x_cnn `_m` entries by hand from the door, one Python crossing each: GCN
+  [bias gemm], transposed spmm, dW gemm, dX gemm (up to 4); SAGE [normalisation graph_op], linear backward, [mean spmm],
+  transposed spmm or max graph_op, [root gemm, gemm, add | download] (up to 9). `GCNConv._backward_dev` and
+  `SAGEConv._backward_dev` in `python/mojolearn/_expansion_cnn.py` were an older Python copy of the same chains with 0
+  callers (`backward` goes through the native door).
+- Now: `autograd/rules_graph.mojo` records each layer's forward (GRAPH_DENSE, GRAPH_AGG the one sparse aggregate op,
+  GRAPH_MAX, GRAPH_SAGE_OUT, GRAPH_L2) and runs one tape backward whose rules launch the same entries' bodies on the same
+  arguments, reached by one call each (`x_cnn_gcn_backward_t`, `x_cnn_sage_backward_t`). The SAGE root's two GEMMs run
+  before the aggregate's transposed fold (independent outputs). The host-form backward (the CPU binding, and SAGE with
+  `project=True` or a non-resident FAST form) keeps its host entry chain.
+- Files: `bindings/xcnn_graph_native.mojo`, `python/mojolearn/_expansion_cnn.py` (deleted); `autograd/rules_graph.mojo`,
+  `bindings/_mojolearn_x_cnn.mojo`, `python/mojolearn/_native_xcnn_bridge.py` (added).
+- Verdict: removed (plan row X9). No A/B yet: RUN OWED on NVIDIA and AMD, identity lane x-cnn-gcn / x-cnn-sage (the
+  same words by construction) and the per-call backward ms (one crossing instead of up to nine).
+- Deleted 2026-11-09 by lane/x9-moe-gcn-rules; recoverable at origin/integ/pre-0867-w2 `f59d913b0b`.
+- Patch: `experiments/removed/XCNN_GRAPH_HAND_BACKWARD.patch` (the two code files; it does not remove the new rules file
+  or entries, which may stay beside the restored chains).
+- Guard: no define. No `grid_controls` entry.
+## SmallMLPTrainer on the executor (2026-11-09)
+
+Lane x2-small-mlp-on-executor, plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` row X2. `SmallMLPTrainer` now runs
+ONE path: a captured program on the executor (`autograd/small_mlp_program.mojo`, the x_sequence bindings' `small_mlp_program`
+entry): transpose, `OPS_LINEAR` (relu), transpose, `OPS_LINEAR`, then the mean cross-entropy, the tape backward and one AdamW
+`step_lr` per weight through the session optimizer; `predict_logits` is the same program with recording off. The four weights
+are the program's parameters (uploaded once, updated in place), so the session is the trainer's resident copy.
+
+What was deleted (all of it superseded by the program, none of it measured against it yet):
+
+- `training/mlp_ops.mojo::mlp_train_step_host`, its `_gemm` / `_MlpStepKernels` / `_max_ws` and the `MLP_GEMM_LEAF128` step
+  dispatch (`MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF`; grid ge123e6f9 had promoted leaf 128 for this step, NV 2.0 -> 1.7 ms, AMD
+  3.5 -> 3.1 ms, same bits), with `gemm/neural_dispatch.mojo::neural_model_leaf_into` (its only caller).
+- `autograd/rules_small_mlp.mojo` (the step's tape rules) and `training/checks/mlp_tape_step_check.mojo` + its digests
+  (`pixi run check-mlp-tape-step`, the `autograd-small-mlp-tape` smoke entry), `tools/mlp_step_check.py`.
+- `training/mlp_fast.mojo`: the Apple FAST fused step and resident session (`MOJOLEARN_AFN_MLP_FUSED_STEP`, `_RESIDENT`,
+  `_MULTISTEP`, `_ALL`; merged unmeasured, default off), the training binding's `mlp_train_step`, `mlp_resident_*` and
+  `mlp_sessions_resident` entries, and the `registry` argument of `nn_mlp_sessions_device`.
+- `training/small_mlp_dispatch.mojo` (the `small_mlp_api_v1` provider), the door's fused, per-operation
+  (`MOJOLEARN_MLP_FUSED=0`) and resident routes in `bindings/small_mlp_native.mojo`, and the parallel MLP worker's fused
+  gradient route (`bindings/parallel_mlp_native.mojo`; it takes the per-operation primitives, which stay).
+
+Bits: the small MLP's bits changed on every column together (one algorithm: the tape's linear, cross-entropy and OP_OPT
+bodies). Identity lane owed: `mlp` (and every lane that trains a SmallMLPTrainer: `par-mlp`; `neural-trainer-unfused`
+keeps its route). RUN OWED: mlp-train-step and mlp-predict, program vs the 0.8.66 path (0.971 ms on NV and AMD), one run
+per arm on NVIDIA and AMD.
+
+- Guard: `core/experiment_guards_neural.mojo` refuses the five defines; `mlp_gemm_leaf128` moved to `removed` in
+  `experiments/six_lane_integration/grid_controls/neural-gemm-attn-dedupe.json`; rows in `docs/apple-fast/EXPERIMENTS.md`.
+- Code recoverable at `f59d913b0b`; patch `experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch` (the reverse of the
+  lane's change to the code files; `git apply` restores the old routes and removes the program door).
+## CNNClassifier hand epoch replaced by one captured program (2026-11-09)
+
+Lane `x8-cnn-on-executor` (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` row X8), branch
+`lane/x8-cnn-on-executor` from `integ/pre-0867-w2` `f59d913b0b`.
+
+- **What moved.** `CNNClassifier.fit` is one captured program (`sequence/cnn_classifier_program.mojo`): per block
+  `OPS_CONV2D` (stride 1, padding k // 2), `OPS_RELU`, `OPS_MAXPOOL2D` where the map holds a window, then
+  `OPS_RESHAPE_N` and `OPS_LINEAR` over `OPS_TRANSPOSE` of the (classes, flat) head weight, trained by `Program.fit`
+  (`train_program_control`: loss kind 5 cross-entropy on the class codes, the session optimizer with SGD dampening as
+  an optional eighth float, the OP_MLP_PERM epoch order with the classifier's splitmix64 seed, every minibatch loss
+  through the new `step_curve`). `predict` / `predict_proba` run the same forward in an inference session over 2048-row
+  chunks, then `OPS_SOFTMAX` and `OPS_ARGMAX`. Python reaches both through the x_sequence whole-model door
+  (`sequence/neural_model_dispatch.mojo` `CNN_FIT` = 18, `CNN_PREDICT` = 19) on the device and the host column alike.
+- **What was deleted.** `x_cnn/device_entries_impl.mojo` `fit_epoch_r_device`, `fit_epoch_d_device`,
+  `sgd_base_rows`, `widen_f32_into`, `_tape_words`; `autograd/rules_cnn.mojo` (`CnnRules`, `cnn_backward_autograd`,
+  tags 96-98 free) and its check `x_cnn/checks/tape_check.mojo` + `tape_check_digests.tsv`; the device-epoch pieces of
+  `x_cnn/device.mojo` (`epoch_rows_download`, `res_gather_pair_perm` and its NI18 kernel, `adam_hyper_resident`,
+  `adam_hyper_download`, `opt_many_resident_h`, `softmax_xent_res_loss`); the element functions of `x_cnn/ops.mojo`
+  (`epoch_key`, `epoch_rows_prm`, `epoch_rows_at`, `epoch_row_val`, `adam_hyper_at`, `adam_hyper_base` and their
+  double-float32 helpers, `IDN_CNN_EPOCH_DEV`; `x_cnn_idn2_flags` bit 1 is reserved, 0); the entries
+  `x_cnn_fit_epoch_r`, `x_cnn_fit_epoch_d`, `x_cnn_fit_d`, `x_cnn_predict_r`, `x_cnn_epoch_rows`, `x_cnn_adam_hyper_d`
+  of both `_mojolearn_x_cnn` and `_mojolearn_x_cnn_host` (and the host helpers `epoch_rows_fill`, `adam_rows`,
+  `widen_f32_into`, `widen_f32_list_into`, `sgd_hyper_rows`, `fit_epoch_r_into`); in
+  `bindings/xcnn_classifier_native.mojo` the resident-array planner, the Python step-loop arm
+  (`MOJOLEARN_XCNN_PY_STEPS`, `_EPOCH_ENTRY`, `_LEGACY_STEP`), the resident predict record (`xcnn_clf_predict_v1`) and
+  the per-step optimizer plumbing; the dead `CNNClassifier` Python helpers (`_params`, `_plan`, `_resident`,
+  `_forward_r`, `_images`); `tools/py_misc/cnn_epoch.py`, `tools/py_misc/cnn_job.sh`,
+  `python/mojolearn/tests/test_x_cnn_native_sessions.py`. The per-layer resident primitives
+  (`x_cnn_conv_block_forward_r` / `_backward_r`, `x_cnn_linear_*_r`, `x_cnn_softmax_xent_r`, `x_cnn_sgd_r`,
+  `x_cnn_adam_r`, `x_cnn_res_*`) stay as the primitive API.
+- **Defines.** `MOJOLEARN_NI18_FUSED_EPOCH_GATHER` (default off, never measured) and `MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF`
+  lost their only code with the epoch; both are refused in `core/experiment_guards_neural.mojo`; NI18 moved to
+  `removed` in `experiments/six_lane_integration/grid_controls/neural-seq-train-dedupe.json`.
+- **Verdict / bits.** Not measured (lanes never time). Bits change for CNNClassifier on every column together: the
+  tape's rank-4 conv (im2col + OP_GEMM, autograd/rankn_conv.mojo) replaces the CNN's pinned GEMM plan, the tape linear
+  and cross-entropy replace `linear_forward_into` / `softmax_xent_into`, OP_OPT through `step_lr` replaces
+  `opt_many_resident` and its device Adam scalars. The epoch order is the same Feistel order (OP_MLP_PERM equals the
+  deleted `epoch_rows_at`). `loss_curve_` is now Program.fit's sample-weighted epoch mean (it was the unweighted mean
+  of the step losses); `losses_` is still every minibatch's mean loss. The layers no longer carry `grad_weight_` /
+  `grad_bias_` and the model no longer carries `_bufs` after a classifier fit. Identity lanes `x-cnn-trainer` and
+  `x-cnn-trainer-options` re-record at the one pre-release run. RUN OWED: board rows `algos/cnn-clf/synthetic` fit and
+  infer on NVIDIA and AMD, program vs `f59d913b0b`.
+- Code recoverable at `f59d913b0b`; patch `experiments/removed/X8_CNN_HAND_EPOCH.patch`.
+
+## CNNClassifier predict on a resident session (2026-11-09)
+
+Lane `x8b-cnn-resident-predict` (follow-up of row X8 of `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md`), branch
+`lane/x8b-cnn-resident-predict` from `lane/x8-cnn-on-executor` `7c9d9d5575`.
+
+- **What moved.** X8's `predict` / `predict_proba` opened a fresh session and uploaded every fitted parameter at each
+  call, then downloaded each 2048-row chunk. Now the parameters live once in a resident registry session
+  (`sequence/cnn_classifier_program.mojo` `cnn_open_program`, the x_sequence door's new `CNN_OPEN` = 20): uploaded
+  at the model's first predict after a fit, a weight replacement or an unpickle, with the forward and its
+  `OPS_SOFTMAX` captured as the session's one program. `CNN_PREDICT` (= 19, same number, new descriptor
+  `[token, kind, sid, n, codes, chunk]`) uploads the images once, replays the program over row chunks with
+  `replay_values_prepared` (each chunk's probabilities copied on the executor into one (n, k) buffer) and makes ONE
+  download: the probabilities or the `OPS_ARGMAX` codes of the whole buffer. The binding
+  (`bindings/xcnn_classifier_native.mojo`) keeps the session in the prepared registry (`xcnn_clf_predict_v2`: weak on
+  the model, outside `__dict__`, so it is released with the model and never pickled or deep-copied), keyed on the
+  tier's binding entries, `_blocks`, `head_`, `classes_`, every layer and its `weight_` / `bias_`; fit drops it and
+  publishes the weights read-only (an in-place edit raises; an assigned array misses the key and reopens). A call
+  takes the record out while it runs, so concurrent predicts never share one session.
+- **What was deleted.** The per-call parameter-upload predict (X8's `cnn_predict_program` body; never reached main,
+  recoverable at `7c9d9d5575`). `x_cnn_res_argmax` of both `_mojolearn_x_cnn` and `_mojolearn_x_cnn_host`
+  (`x_cnn/device.mojo` `res_argmax`, `x_cnn/host/binding_entries_impl.mojo` `argmax_rows_into`, the shared element
+  function `x_cnn/ops.mojo` `argmax_row_at`, the bridge and surface names): its only caller was the CNNClassifier
+  predict, which left the x_cnn binding in lane x8. The argmax hunks of the sabotage patches
+  `coverage_device_ops.patch` and `coverage_host_binding_entries_impl.patch` went with it. The gate fixtures whose
+  entries X8 deleted: `tools/identical_wave_quality.py cnn_controls` (and its `identical_wave_plan.json` gate
+  `cnn_epoch_adam_controls`), `tools/identical_wave_cnn_sgd_gate.py --suite cnn-primitives` (xent via the deleted
+  `_softmax_xent`, `x_cnn_epoch_rows`, `x_cnn_adam_hyper_d`), the gate's `x_cnn_idn2_flags` fold/epoch arm check and
+  its read of the deleted `_bufs`.
+- **Sabotage.** New arm `coverage-sequence-cnn_classifier_program` (an extra ReLU on the head logits in `_forward`,
+  device and host) for `x-cnn-trainer`, `x-cnn-trainer-options` and `public-cnn-classifier-predict`; the x_cnn
+  `device_ops` arm no longer names `public-cnn-classifier-predict`.
+- **Verdict / bits.** Not measured (lanes never time). No bits change against X8: the same program nodes, kernels
+  and fold order run per row, the chunking is per row, and the argmax reads the same probabilities. RUN OWED:
+  board rows `algos/cnn-clf/synthetic` infer on NVIDIA and AMD (resident vs X8 `7c9d9d5575`).
+- Code recoverable at `7c9d9d5575`; patch `experiments/removed/X8B_XCNN_RES_ARGMAX.patch`.
+
+## Mamba blocks on the block step op (2026-11-09)
+
+Lane x5-mamba-on-executor (docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X5), deletion commits
+`844ea17a80` (the bodies) and `08332f3665` (the doors and the Mamba-2 workspace), code recoverable at `25e5650c14`.
+Every Mamba-1/2/3 block call now runs the block step op of autograd/block_step_ops.mojo (`OPS_M1_STEP` 81,
+`OPS_M2_STEP` 82, `OPS_M3_STEP` 83) on one executor program per block (`MambaBlockProgram`,
+mamba/impl/mamba_block_program.mojo: the weights one uploaded parameter tensor, the carried state one declared state
+tensor, the carried integers one int32-word state tensor). The decode sessions own their program; the per-call doors
+share a process-wide cache of programs (at most 64, least recently used idle one evicted) whose weights stay on the
+device while the caller's bytes are unchanged (a memcmp against the program's host copy, the Mamba-3 prefill
+session's rule). What went:
+
+| symbols | where | why |
+|---|---|---|
+| `_mamba1_run`, `_mamba1_run_arena` | mamba/impl/mamba_shell_impl.mojo | the per-call Mamba-1 body: ten weight uploads, two state uploads, x, three downloads per call; now `mamba_block_call(OPS_M1_STEP, ...)` |
+| `_mamba2_run`, `_mamba2_run_arena`, `_mamba2_arena_execute`, `_mamba2_arena_execute_prepared` | same | the per-call Mamba-2 body and its arena twins (nine weight uploads per call) |
+| `Mamba2PublicWorkspace`, `_mamba2_workspace_step` (both overloads), mamba/native_workspace_dispatch.mojo, core/native_mamba_workspace_abi.mojo, `mamba2_workspace_api_v1`, the `mamba2_workspace_provider` entry and `NativeBlockPlan.mamba2_workspace*` | mamba, core, bindings/_mojolearn_mamba.mojo, bindings/causal_lm_public.mojo, bindings/neural_block_public.mojo, bindings/causal_operation_owner.mojo | the Mamba-2 public step's retained storage that still re-uploaded every weight per call; the cached program is that storage with the weights resident |
+| `_mamba3_run`, `_mamba3_check_state_words`, `_mamba3_run_on`, `_mamba3_run_arena` | mamba/impl/mamba_shell_impl.mojo | the per-call Mamba-3 body (nine weight and ten state uploads, fifteen downloads per call: regression C4's device half); the discard-state prefill is `mamba_block_call(..., fresh=True)` |
+| the bodies of `Mamba1DecodeSession`, `Mamba2DecodeSession`, `Mamba3DecodeSession` and their `_m{1,2,3}_session_*_run` helpers, `_m2_session_download_direct`, the Mamba-2 site of `MOJOLEARN_IDN_DECODE_RESIDENT_IO` (`IDN_DECODE_RESIDENT_IO_M2`) | same | the sessions duplicated the step op's device-copy wrapper; they are thin owners of a `MambaBlockProgram` now. The Mamba-2 session returns y and h_last straight into the caller's arrays behind one wait, which was that define's ON arm; the define stays for the transformer session |
+
+Kept and moved, not deleted: `MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE` (NI47, default off) is now an arm of the one Mamba-3
+step body in autograd/block_step_ops.mojo; `_mamba3_run_owned` (NN40, default off) keeps its name and runs the cached
+program over the installed snapshot's host copy. `MOJOLEARN_AFN_MAMBA_ARENA` / `IDN_MAMBA_ARENA` stay (the block
+structs' arena constructors); only the per-call bodies that used them went.
+
+Bits: the step op is the session bodies' launch set, so a decode step and a prefill are the same kernels in the same
+order. One possible change: a per-call Mamba-1 forward with L = 1 now runs `mamba_step` (the L = 1 arm of the op)
+where `_mamba1_run` ran `mamba_block_forward` at L = 1; every vendor and the host column move together if the two
+round differently. A/B owed: the per-call program against the 0.8.66 arena bodies on mamba1-forward, mamba2-forward,
+mamba3-forward, mamba3-decode, mamba2-decode and samba-decode (NVIDIA and AMD, one run per arm).
+## Transformer on the attention step op (2026-11-09)
+
+Lane x4-transformer-on-executor (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X4), on
+origin/integ/pre-0867-w2 f59d913b0b.
+
+- The public `TransformerDecodeSession` on a GPU runs on `OPS_ATTN_STEP` (autograd/block_step_ops.mojo, lane X1):
+  `transformer/attn_step_session.mojo` packs the weights into the op's one weight buffer, the caches into its state
+  buffer and the position into its state word; step, forward, decode, export and load run `attn_step_run`, the body
+  `OpsSession._block_step` runs. The session's own LlamaDeviceWeights / KV cache / rotary table / stages are no longer
+  built for it (they stay for CausalLM layer sessions and fixed15_v1 until those move).
+- `MOJOLEARN_IDN_DECODE_RESIDENT_IO`, the transformer session arm (`_session_step_run_deferred`,
+  `_session_resident_io_open`, the deferred window and the two cache snapshots): default off, EXPERIMENTS.md row PENDING,
+  never measured; the session step it wrapped is now the step op's. Mamba-2's arm of the same define stays (X5).
+  Patch `experiments/removed/MOJOLEARN_IDN_DECODE_RESIDENT_IO_TRANSFORMER.patch` (transformer_binding_impl.mojo).
+- The GPU binding's per-call `transformer_forward_fresh` (`transformer_forward_fresh_binding`, descriptor op 4, the
+  `discard_cache` parameter of `_transformer_run`) and its build defines `MOJOLEARN_TRANSFORMER_FRESH_PREFILL` /
+  `MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL`, with `tools/transformer_fresh_prefill_leg.sh`: reached only under the
+  runtime switches `MOJOLEARN_TRANSFORMER_SESSION_FRESH=0` or `MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1`, which are removed
+  too (`bindings/neural_block_public.mojo` forward and backward, the `tools/neural_experiments.py` arms). The host
+  binding keeps its own `transformer_forward_fresh`. No measurement picked the session fresh prefill over the per-call
+  one on NVIDIA; the session is today's default and bits. RUN OWED: transformer-forward on NVIDIA (0.8.66 1.44x slower
+  than 0.8.55). Patch `experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch`; refusal in
+  `core/experiment_guards_neural.mojo`; no `grid_controls` entry existed.
+- `TransformerBlock._call`, `_call_impl`, `_call_fresh`, `_call_fresh_session`, `_call_int15`, `_admit_state_profile`,
+  `_weight_addrs` and the module helpers `_state_buf`, `_batch_tokens`, `_refuse_resident` in
+  `python/mojolearn/_transformer_impl.py`: no caller (forward, step and backward are the native `neural_block_*` door).
+  Patch `experiments/removed/TRANSFORMER_BLOCK_PY_CALL_PATHS.patch`.
+- `_transformer_decode_host_tokens` (`providers/python/transformer_decode_pyapi.mojo`): the decode door's host loop, one
+  `transformer_decode_step` Python call per token; replaced by the host binding's `transformer_decode_steps`
+  (`_run_decode_steps`, one call for N tokens, same bytes). Patch
+  `experiments/removed/TRANSFORMER_DECODE_HOST_TOKEN_LOOP.patch`.
+- The public decode session's descriptor-provider arm (`MOJOLEARN_NEURAL_NATIVE_DISPATCH=1`: open 18/19, step 20,
+  forward 21, export 22, load 23, close 24 through `transformer_resident_decode_call_handle`, `TransformerDecodeHandle
+  .native_handle`) and the descriptor decode ops 5 / 6 (step, forward) of `transformer/native_decode_dispatch.mojo`,
+  which only it called. CausalLM layer sessions keep open / export / load / close. Patch
+  `experiments/removed/TRANSFORMER_DECODE_PROVIDER_ARM.patch`.
+- Bits: none intended. The step op's body is the session's (EXECUTOR_X1_API.md section 2); a default-options block now
+  takes the options constructor with default options (the op's), which X1 states is the same words. Identity lanes
+  that read the public decode session: `transformer-decode-session`, `transformer-decode-load-state`
+  (tools/identity_lanes/coverage.py), re-recorded at the one pre-release verify.
+
+## TransformerBlock, CausalLM layers and fixed15 sessions on the attention step op (2026-11-09)
+
+Lane x4b-transformer-block-and-generate (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X4), on
+origin/lane/x4-transformer-on-executor c0b21c971c.
+
+- What moved: `TransformerBlock.forward` / `.step` (the block session's stateless prefill and the calls over a caller's
+  state, also CausalLM's per-layer forward) and `.backward` run on `OPS_ATTN_STEP` through the block session's
+  `AttnStepArm` (transformer/attn_step_session.mojo: `block_forward`, `block_backward`). The backward is the zero-state
+  prefill through the op (stages kept by the arm) and the transformer stage rule
+  (`llama_decoder_layer_backward_autograd`) over the op's kept stages, weights, rotary table and input. Every
+  `TransformerDecodeSession` (public, CausalLM layer, fixed15_v1) is an arm on the op; the fixed15_v1 planes are handed
+  to the op as an adopted entry (`attn_step_adopt`). `_lm_layers_run` runs each layer through `AttnStepArm.run_device`
+  on one shared prefill workspace.
+- Deleted: the decode session's own block structs (`w`, `kv`, `rope`, `stages`, `dx`) and the bodies over them
+  (`_session_step_run_sync`, the fixed15_v1 per-token loop of `_session_decode_run`, the struct arms of
+  `_session_forward_run` / export / load), `_session_open_step_op` (one open, `_session_open_run`, for both door names),
+  `_lm_prefill_stage_matches`, the "a decoder session opened on the step op is not a layer session" refusals,
+  `TransformerSession.backward` / `backward_workspaces` (the arm keeps the backward stages). Kept for the forward tape
+  only (lane X6 deletes them with `forward_with_tape` / `backward_from_tape`): `_transformer_run_session`'s
+  `retain_tape` body, `TransformerWorkspace`, `TransformerBackwardWorkspace`, `_session_weights` and its byte-compare
+  helpers, `TransformerForwardTape`, `_transformer_saved_backward`.
+- Fixed on the way: `_AttnBlock` viewed the value cache at `s + cache_n`; the packed layout (`block_offsets`, which
+  `AttnStepArm` and `upload_block` write) starts it at the next 256-byte slot, so any cache length that is not a
+  multiple of 64 floats read the wrong values. The step-op state words are written by a device fill, not a staged
+  executor upload per call.
+- Verdict: superseded, never A/B'd. RUN OWED: transformer-forward, transformer-decode, lm-forward, lm-train-step and
+  CausalLM generate on NVIDIA and AMD, step op (this lane) vs c0b21c971c.
+- Bits: the step op's body is the sessions' (same entry, same launches). The block forward still takes
+  `forward_only`; the CausalLM prefill keeps its shared workspace. A cache length off the 64-float slot changes bits
+  (it was wrong before). Identity lanes: `transformer`, `transformer-decode-session`, `transformer-decode-load-state`,
+  the CausalLM generate lanes, re-recorded at the one pre-release verify.
+- Recoverable at c0b21c971c; restore with `git apply experiments/removed/TRANSFORMER_DECODE_SESSION_STRUCTS.patch`
+  (transformer/transformer_binding_impl.mojo, bindings/_mojolearn_transformer.mojo,
+  transformer/native_lm_resident_dispatch.mojo).
+
+## Labels steps on the native device-or-host selector (2026-11-09)
+
+Lane `s1-shared-state-hardening-and-selector` (S3 of `~/mojolearn-evidence/design-shared-process-state.md`, A7c item
+4), branch `lane/s1-shared-state-hardening-and-selector` from `integ/pre-0867-w3` `4f41e3d67d`. Not an experiment
+define: the label path's call-back into the base binding through Python. `bindings/classical_labels.mojo`
+`labels_helper(context, name)` read a `_buffer._native` callable out of the context table `labels_helpers`
+(`python/mojolearn/_native_labels_bridge.py` `_helpers`, 18 names) and `labels_call` / `py_call_typed` /
+`family_call` called it, one boxed argument tuple and one `PyObject_CallObject` per step, from
+`classical_labels.mojo`, `neighbors_knn_native.mojo`, `neighbors_local_native.mojo` and `prep_labels_native.mojo`.
+
+- Now: the GPU base binding (`bindings/_mojolearn.mojo`) exports `labels_native_api_v1` on the `bindings/kit_call.mojo`
+  descriptor ABI (`mojolearn.labels.v1`: PREPARE_TARGETS, REDUCE_STAT, ARGMAX_F32/F64, GATHER_I32/I64/F64,
+  CLASS_RATIO_F64) over the same entries the callables were. The label path connects it once per process into the
+  named slot `MojolearnLabelsProviderV1` and makes one `kit_call` per step; with no GPU base binding
+  (`labels_base_binding` False) it runs the same host bodies in-process (`bindings/labels_host_ops.mojo`, moved word
+  for word out of `bindings/_mojolearn_core_host.mojo`, and the host helpers that binding exports). `fsum_f64` is a host
+  helper in both base bindings, so it is called in-process everywhere.
+- Verdict: removed, no A/B (the same entries in the same order). RUN OWED: the classification rows of paper_compare
+  on NVIDIA and AMD (logistic, RF, SVC, KNN, GaussianNB / LDA priors, the label metrics).
+- Bits: none.
+- Recoverable at `91863cfb35^`; restore with `git apply experiments/removed/S1_LABELS_PY_CALL_SELECTOR.patch`
+  (bindings/classical_labels.mojo, bindings/neighbors_knn_native.mojo, bindings/neighbors_local_native.mojo,
+  bindings/prep_labels_native.mojo, python/mojolearn/_native_labels_bridge.py).
+
+## SVM, GP and KernelRidge queries on the device query X (2026-11-09)
+
+Lane a7a-device-x-svm-gp-krr (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2 steps 3-4), on
+origin/integ/pre-0867-w3 5b5490960d.
+
+- What it did: every GPU query entry of SVC / SVR (`svc_predict_resident`, `svr_predict_resident`),
+  GaussianProcessRegressor (`gpr_predict_resident`), GaussianProcessClassifier (`gpc_predict_all`,
+  `gpc_predict_all_resident`) and KernelRidge (`kernel_ridge_predict_ptr`, `kernel_ridge_predict_resident`) takes its
+  query as a `DeviceQueryX` (core/device_query_x.mojo): the host words copied once with `enqueue_finite_status`, or a
+  cross-validation fold gathered on the device out of model selection's resident base (`msel_device_x_f32`), the
+  finite and range words read back with the result. The doors refuse in one wording, 'Input X contains NaN or
+  infinity (<est>).' (`admitted_finite_refuse`, `door_rows_refuse`); routes whose entry returns no word test the
+  query on the host first (`gp_query_scan`, `_krr_query_scan`, the SVC/SVR host-list and descriptor routes through
+  `admit_family_meta(finite=True)`).
+- Deleted from those entries: the synchronising first-non-finite scans of the query and their refusal texts
+  (svm `check_finite_device` "predict X ... DEVIATION 636" in `_svm_resident_decide`; gp `_gpc_upload_checked`
+  "X_star ... DEVIATION 1768" in `gpr_predict_resident_device` and `gpc_predict_all_device`; kernel_methods
+  `_upload_checked` "predict X ... DEVIATION 1686" in `kernel_ridge_predict_ptr_into` and
+  `kernel_ridge_predict_resident`). The GP door's host scan of a borrowed predict X (`classical_check_x`) is now
+  `defer_finite`. The functions themselves stay (fit uploads and other callers use them).
+- Verdict: refactor, no define. Bits: none (the same words reach the same kernels). RUN OWED: SVC / SVR / GPR / GPC
+  / KernelRidge predict and cross_validate on NVIDIA and AMD against 5b5490960d.
+- Never reached main: recoverable at 5b5490960d (no patch).
+
+## KMeans, TSVD, PCA: deferred finite tests and fold entries (2026-11-09)
+
+Lane a7d-device-x-decomp-cluster (branch `lane/a7d-device-x-decomp-cluster` from `integ/pre-0867-w3` 5b5490960d). Not an
+experiment: a host scan of X whose decision moved into the kernel entry (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md
+section 3.2 steps 3 and 4; docs/plans/REGRESSIONS_0866_VS_0855.md rows C1 / C2 for kmeans, tsvd and pca).
+
+- Removed from `bindings/kmeans_native.mojo`: `_kmeans_nonfinite` (KMeans' own "X contains a NaN or an infinity; a non-finite
+  row has no distance to any center, so it is refused by name" wording), `_kmeans_f32` (admit with the finite scan, then the
+  reworded refusal) and the predict / transform host scan of the admitted snapshot (`host_all_finite_f32` over X). X is now
+  admitted once by `_kmeans_x` (a borrowed X is not scanned; a cast X is tested in the cast) and `kmeans_fit`,
+  `kmeans_fit_transform`, `kmeans_predict`, `kmeans_transform` and their resident forms take a finite flag and return the
+  status word (`core/admitted_finite_status.mojo` on the GPU, `host_all_finite_f32` in the core host binding). The refusal is
+  the one admission wording, "Input X contains NaN or infinity (KMeans)." (init_centroids: "Input init_centroids contains
+  NaN or infinity (KMeans).").
+- Added, no deletion: `cluster/kmeans_fold.mojo` (`kmeans_fit_fold`, `kmeans_query_fold`) and the base binding's
+  `kmeans_fit_fold` / `kmeans_predict_fold` / `kmeans_transform_fold` (`bindings/msel_device.mojo`): a resident
+  cross-validation fold is gathered on the device. `kmeans_fit_device` (cluster/estimator.mojo) is `kmeans_fit`'s unit-weight
+  path after its upload. The family lifecycle's `device_x` spec hands such a fold to the owner as the DeviceRows.
+- PCA (exact solvers) and TruncatedSVD (Gram fit, fit_explained, transform, resident transform) test X at their upload's own
+  synchronisation (`finite_word`); their doors admit with `defer_finite`. The TSVD TSQR and randomized arms and PCA's
+  randomized solver keep a parallel host scan (their drivers upload X in their own executors).
+- Bits: none (the same words reach every kernel; the finite kernel only reads X). Code recoverable at `5b5490960d`;
+  restore with `git apply experiments/removed/A7D_KMEANS_HOST_FINITE.patch`.
+<a id="n9b-device-svd-and-qr-ops-2026-11-09"></a>
+
+## N9b: device SVD and QR ops, their families, BayesianRidge's eigh, float-float discretize (2026-11-09)
+
+Lane `n9b-device-svd-qr` (branch `lane/n9b-device-svd-qr`, base `origin/integ/pre-0867-w3` 5b5490960d; code
+recoverable at 5b5490960d). Not measured (lanes never measure); RUN OWED below.
+
+- **`DKit.svd_host`, `svd_desc`, LLE's host-address QR.** Tried: the resident kit's SVD ran `DevExec._svd_on` into host
+  memory (a wait every XD_SVD_GROUP sweeps), ordered s and V on the host (`svd_desc`, a second copy of
+  `x_decomp/kit.mojo` `svd_order`) and uploaded both again (FactorAnalysis EM n >= d every iteration, LLE every
+  iteration, PLS every `_pinv` / `_thin_svd`); LLE's orthonormalization brought each block home for
+  `DevExec.geqrf` / `orgqr` and uploaded Q. Now: `x_decomp/svd_ops.mojo` `svd_op_tall` (the bounded QR / TSQR, the
+  round-robin one-sided Jacobi as one block, `rs_block_gated_kernel` in `x_decomp/rr_svd_device.mojo`, the
+  descending order on the device) and `qr_op_q`, both resident (`DKit.svd`, `DKit.qr_q`); PLS's pinv cut is a device
+  kernel (`DKit.pinv_inv`). Verdict: REFACTORED, same words (the one-block solve adds the round launches' pairs in
+  their tree; the order is `svd_order`'s). Files: x_decomp/kit_device.mojo, fa_em.mojo, fa_em_dev.mojo,
+  lle_iter.mojo, lle_iter_dev.mojo, pls_dev.mojo. Patch: `experiments/removed/N9B_RESIDENT_SVD.patch`.
+- **KernelPCA `_cols_desc`'s index list.** Tried: the descending column indices built on the host and uploaded per
+  call. Now the REV_COLS move (`x_decomp/moves.mojo` MOVE_REV_COLS, no index). REFACTORED, same words. File:
+  x_decomp/kpca_owner.mojo. Patch: `experiments/removed/N9B_RESIDENT_SVD.patch`.
+- **`MOJOLEARN_X_LINEAR_JACOBI_LEAD`, `t_jacobi_eig`, `bayes_prep`'s device branch.** Tried: BayesianRidge's centered
+  Gram eigendecomposition by the team's cyclic Jacobi inside `bayes_eig_kernel` (the define restored the lead-only
+  call); the device team branch of `bayes_prep` had no caller since cgr-linear. Now: `eigh_op_dense` (device) /
+  `eigh_op_dense_host` (host column), placed by `bayes_eig_place`. Verdict: removed (superseded); bits change on
+  every column (the round-robin Jacobi's words, ascending order): identity lane bayesian-ridge. Files:
+  x_linear/bayes.mojo, bayes_host.mojo, tops.mojo, device.mojo. Refusal: core/experiment_guards_linear.mojo. Patch:
+  `experiments/removed/N9B_BAYES_EIGH.patch`.
+- **`discretize_labels`.** Tried: SpectralClustering assign_labels='discretize' in binary64 on the host (n x k loops
+  after the device embedding). Now `x_cluster/spectral_df64.mojo` (bodies), `spectral_df64_device.mojo` (the GPU
+  binding) and `host/spectral_df64_host.mojo` (the host column), float-float throughout, through
+  `ClusterOps.spectral_discretize`. Verdict: REFACTORED, bits change (labels can move where classes tie within
+  float-float rounding): identity lane spectral-clustering (discretize). Patch:
+  `experiments/removed/N9B_SPECTRAL_DISCRETIZE.patch`.
+- RUN OWED: NVIDIA + AMD board rows factor-analysis, locally-linear-embedding, pls (svd/canonical/regression),
+  kernel-pca, bayesian-ridge, spectral-clustering (discretize), plus one non-board shape each; identity re-record of
+  bayesian-ridge and spectral-clustering on every column at the release's one verify.
+
+## SGD epochs and kNN label propagation on the bounded device loop (2026-11-09)
+
+Lane `n3b-sgd-on-program-fit`, plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` rows "SGD / Perceptron / PA" and
+"Label propagation", `docs/plans/EXECUTOR_X1_API.md` section 5. Base `integ/pre-0867-w3` 5b5490960d.
+
+- SGD (`x_linear/device.mojo`): the three drivers ran each epoch on the host and drained the stream to read the stop
+  words (minibatch: stop + failed; one-vs-rest: every problem's words, then an activity upload; per-sample: the live
+  count). Each epoch is now one step of `bounded_device_loop` (the device loop Program.fit runs on): `_SgdMbEpochs`,
+  `_SgdOvrEpochs`, `_SgdPsEpochs`. Every epoch kernel takes the loop's done word as its gate (it still writes its Metal
+  witness word); the stop is a criterion kernel (`sgd_flags_crit_kernel`, `sgd_live_crit_kernel`); the one-vs-rest
+  activity, epoch counts and result words are device values (`sgd_mb_ovr_act_kernel`, `sgd_mb_ovr_res_kernel`). Reads:
+  once per `sgd_loop_check_every` epochs (no tolerance: once at the bound; with one: Program.fit's
+  `fit_epochs_per_read` over the epoch's launches). Deleted: the three host epoch loops, the per-epoch `ctx.synchronize()`
+  and stop-word copies, the one-vs-rest host activity lists and `dact` re-uploads, and the per-epoch PA row-norm launch
+  (`sgd_rowsq_kernel` once a fit, `_sgd_rowsq_once`). Same kernels, order and operands: no bit change.
+- Label propagation kNN graph (`x_neighbors/iter_device.mojo`): IDENTICAL's item loop and FAST's block-sum loop are one
+  step `_LpKnnStep` on `bounded_device_loop` (the check kernels are the criteria); their hand chunk loops, flag words and
+  step counters are deleted (steps taken = the loop's stop iteration - 1). No bit change.
+- `x_neighbors_lp_fast_resident` (always 1) deleted with `lp_fast_resident` (device and host), both provider bindings,
+  both binding registrations, `x_neighbors/gen.py`, the `_surface_neighbors.py` manifest row, `_lp_fast_resident` and its
+  test use.
+- GaussianMixture: no deletion; the E-/M-step per-call scratch is held in `mixture/step_keep.mojo` `GmmStepKeep` inside
+  the EM loop, so the lifetime drains in `gmm_e_step` / `gmm_m_step` run only without a keep.
+
+Restore: `git apply -3 experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch` (the reverse of the lane on the code files).
+Code recoverable at `5b5490960d`. A/B define: `-D MOJOLEARN_SGD_LOOP_CHECK_EVERY=<k>` (1 = the old per-epoch read).
+Run owed: SGDClassifier / SGDRegressor / Perceptron / PassiveAggressive / SGDOneClassSVM fit and LabelPropagation /
+LabelSpreading (knn) fit on NVIDIA and AMD against 5b5490960d, arm B `-D MOJOLEARN_SGD_LOOP_CHECK_EVERY=1`, plus one
+non-board shape; identity lanes sgd-*, perceptron, passive-aggressive, label-propagation, label-spreading at the release.
+
+## m1-followups-misc: leftovers of the executor lanes (2026-11-09)
+
+Lane m1-followups-misc (brief `briefs-20261108/m1-followups-misc.md`), on `origin/integ/pre-0867-w3` 5b5490960d. Every
+item below is recoverable at 5b5490960d; each patch is the reverse of its deletion commit restricted to code files.
+
+- **MoE backward (X9 leftover).** `sequence/ops_impl.mojo` `moe_backward_impl` / `moe_backward_run_impl` (upload, the tape
+  step, download; their own shape checks) and the Python door `moe_backward_run` are deleted. Every binding (CPU and GPU,
+  with or without a `moe_weights_put` handle) calls `autograd/route_ops.mojo` `moe_backward_addrs`, the tape step's one
+  address entry; the shape check is `moe_backward_shape_check`, shared with `moe_tape_train_step`. The hand VJP chain was
+  already gone (X9). Same uploads, launches and downloads: no bit moves. Deleted by d4b19c12a0. Patch
+  `experiments/removed/MOE_BACKWARD_IMPL_CHAIN.patch`.
+- **Graph layers' host-form backward (X9 leftover).** `bindings/xcnn_graph_native.mojo` `_gcn_backward` / `_sage_backward`
+  host branches (up to ten `x_cnn_*` entry crossings: gemm, spmm, graph_op, linear_backward, relu_backward, add) are
+  deleted. The host form (the CPU binding, SAGE `project=True`, a forward kept on the host in FAST) runs the same tape as
+  the resident form: the recording moved to `autograd/graph_tape.mojo` (with the projection as `GRAPH_PROJ`), the GPU
+  binding's rules (`autograd/rules_graph.mojo`) run with device masks 0 over host arrays, the CPU binding has host rules
+  (`autograd/rules_graph_host.mojo`, the same host bodies and output seam `out_f32`) and the tape entries
+  `x_cnn_gcn_backward_t` / `x_cnn_sage_backward_t`. Bits: the CPU column runs the same host bodies on the same arguments;
+  the GPU host form runs `_m` entries (gemm_m, spmm_m, graph_op_m, linear_backward_m, map2_m) where the hand chain ran
+  the `x_cnn_*` entries (gemm_into = gemm_m mask 0; `x_cnn_linear_backward` was `linear_backward_into`, now
+  `linear_backward_m`): the GPU host-form words may move on every GPU together. Identity lanes x-cnn-gcn, x-cnn-sage
+  (host form). RUN OWED: GCN / SAGE backward ms on NVIDIA and AMD, host form, vs 5b5490960d. Deleted by ba9adf41e1. Patch
+  `experiments/removed/XCNN_GRAPH_HOST_HAND_BACKWARD.patch`.
+- **`MOJOLEARN_IVF_BALANCED_TASKS` (K1 owed).** The IDENTICAL opt-in IVF search through `ivf_balanced_scan`'s bounded list
+  tasks and its run-time `MOJOLEARN_IVF_BALANCED_TASKS_OFF` getenv. Verdict LOSER (I16, 2026-10-06): NVIDIA L40S
+  balanced / baseline 1.20x-4.17x time, AMD MI325X 3.25x-16.5x (rows 100000, 128 queries, features 7/33/65, three
+  occupancy cases); default off, so no bit moves. `ivf_balanced_scan` stays for `C35_PACKED_LISTS`. Guard refusal in
+  `core/experiment_guards_cluster.mojo`. Deleted by 293c788be4. Patch `experiments/removed/MOJOLEARN_IVF_BALANCED_TASKS.patch`.
+- **`x_cnn_res_gather` (X8b leftover).** Dead since lane x8 (the classifier gathers on the executor): `res_gather`,
+  `res_gather_pair`, `gather_rows_at`, the CPU `gather_rows_f32`, both entries, the bridge / surface names and the
+  test block in `python/mojolearn/tests/test_x_cnn_repeat.py`. Deleted by 5f8eaad629. Patch `experiments/removed/XCNN_RES_GATHER.patch`.
+- **Dead loss words (X3 leftover).** `LS_LOG_PROB` / `LS_BINARY_LOG_PROB` (codes 5 and 6 left unused) and their check;
+  `op_mse` / `op_ce`'s p3 stores (the squared error, the row loss) and the RNN workspace `w.sq` nobody read (the
+  reported loss is `loss_value_into`'s). The gradient seeds are unchanged: no bit moves. The seams check's CE oracle
+  compares the gradient only. Deleted by ab4f415ff8. Patches `experiments/removed/AUTOGRAD_LOSS_LOG_PROB_KINDS.patch`,
+  `experiments/removed/SEQ_LOSS_SEED_UNREAD_STORES.patch`.
+- **AdaBoost session escapes (N5 leftover).** `MOJOLEARN_TE_ADA_SESSION_OFF` (switch bit 2), `MOJOLEARN_IDN_ADA_SESSION_OFF`
+  (bit 128) and the `MOJOLEARN_FOREST_SESSION` run-time choice are deleted: every build opens the members' data session
+  (`_ada_session_choice`: 'share' only in FAST + Apple with `MOJOLEARN_TE_ADA_SESSION_SHARE`), so a GPU binary runs every
+  best-splitter tree member's round on the device (`rf_*_fit_ada_round_export`); the CPU column (no `rf_ada_open`) and
+  non-tree bases keep the per-round steps. The session was the measured winner (M3: adaboost-clf -9.0%, adaboost-reg -42%)
+  and moves no bit in IDENTICAL. Guard refusals in `core/experiment_guards_trees.mojo`. Deleted by 4876d88164. Patch
+  `experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch`.
+- **`tsa_buffer` and the neural label capture onto the one admission (A1b / A4 leftover).** `bindings/admitted_input.mojo`
+  gained `admit_view` (the capture `admit_typed` reads, at the source dtype; a ctypes-backed Array is read from its slots
+  with its storage owners retained) and `admitted_view_kind`. `tsa_buffer` (classical_view, a hand repack of ctypes-backed
+  Arrays, arena `_prepare`, a second pinned view) is deleted; the TSA scalar settings, flags, component indices, the
+  kpss / select_d series, the Holt-Winters endog, packed fits and archive statistics read the captured view.
+  `neural_encode_labels`' numeric path reads `admit_view` instead of `sequential_input`. Deleted by 251a3b3b11. Patches
+  `experiments/removed/TSA_BUFFER_ADMISSION.patch`, `experiments/removed/NEURAL_LABELS_OWN_ADMISSION.patch`.
+- **SmallMLPTrainer non-finite refusal (X2 leftover, no define).** The binding's host scans of the downloaded logits,
+  gradients and input gradient are replaced by `OP_MLP_NONFINITE` flag words on the device, read with the step's one
+  wait (`autograd/small_mlp_program.mojo`). No bit moves.
+- **Tools (item 8).** `tools/identical_gmm_power_bit_diagnostic.py` names the fit's precision enqueue
+  (`gmm_precision_enqueue`, N1). `tools/removed_defines.py` reads the guard modules' refusals; the grid prebuild and the
+  lq renderer skip / refuse an old plan's pack that names a refused define (the plans under
+  `experiments/six_lane_integration/grid/` stay as history).
+
+## SmallByteLanguageModelTrainer on the executor (2026-11-09)
+
+Lane x7-byte-lm-on-executor, plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` row X7. Every step, gradient, update and
+evaluation of `SmallByteLanguageModelTrainer` (and of ParallelByteLM's shard trainers) runs on ONE captured program per trainer
+(`training/byte_lm_program.mojo`): `OPS_EMBEDDING`, one `OPS_ATTN_STEP` per decoder layer (the layer's nine weights packed in one
+step-op weights tensor, its keys/values as declared state), `OPS_TRANSPOSE` + `OPS_MATMUL` for the head and the mean
+`OPS_CROSS_ENTROPY`. `train_step` / `train_steps` are ONE `Program.fit` (`train_program_control`) over the call's batches; a
+recorded attention step is a zero-state prefill with its stages kept, recorded as one custom tape node whose VJP is the transformer
+stage rule (`autograd/rules_step_ops.mojo` `StepOpRules`, tag 108). The trainer's flat buffers stay the committed state (export,
+logits, rollback); a call's result is copied in after the shadow point and re-scanned.
+
+What was deleted:
+
+- `training/byte_lm.mojo`: the per-layer hand forward `_byte_forward_loss` and `_byte_layer_forward_deferred` (eight
+  `llama_decoder_layer_forward` sites), `_byte_backward_tape`, the `IDN_TRAIN_ONE_WAIT` step (`_byte_step_one_wait`), the Apple
+  FAST no-sync step (`_afn_byte_step_nosync`), the step-glue update arms (`_byte_glue_update`, `_byte_live_status_launch` /
+  `_finish`), the eager-scratch release helpers, the per-layer training stage lists, and the trainer's certified optimizer step
+  (`identical_optimizer_step` is no longer called by the trainer; `byte_glue_update_launch` stays for the pooled trainers).
+- `autograd/rules_lm.mojo` (`byte_backward_autograd`, `LmRules`, `byte_lm_tape_eligible`), `training/checks/lm_tape_backward_check.mojo`
+  and its digests, the `check-lm-tape-backward` pixi task and the `autograd-lm-tape` smoke entry.
+- `byte_owner_steps` and operation 12 on the device (`training/byte_lm_native_dispatch.mojo`) and host
+  (`training/byte_lm_host_trainer_dispatch.mojo`) columns, and the binding's `while k < n_steps` driver
+  (`bindings/byte_lm_trainer_native.mojo` `_run_steps`): operation 1 takes the step count (`p[14]`), opens the session when it is
+  not open and exports a 'full' result's gradient, so `train_steps` is one native call. The stateless route keeps one whole-state
+  call per batch by design.
+
+Behaviour: a refused `train_steps` call (non-finite loss, a state failing the after-scans) now commits none of its steps on the
+device column (it committed the steps before the failed one); the host column still commits step by step and the binding
+reconciles either from the session status.
+
+Bits: the byte LM's bits changed on every GPU column together (the executor's embedding, GEMM, cross-entropy and OP_OPT AdamW
+bodies replace the trainer's identical embedding, head GEMM / chunked head v2, CE and optimizer kernels; the blocks keep their
+forward body and stage rule). The host column (`training/byte_lm_host_*`) was NOT moved and no longer matches: identity lane
+`byte-lm` owes the host column on the host executor (an `OPS_ATTN_STEP` host arm), or the column is recorded as differing.
+RUN OWED: lm-train-step (bytes) and lm-eval, program vs the 0.8.66 path, one run per arm on NVIDIA and AMD; ParallelByteLM step.
+
+- Guard: `core/experiment_guards_neural.mojo` refuses `MOJOLEARN_IDN_TRAIN_ONE_WAIT`, `MOJOLEARN_AFN_LM_NOSYNC`,
+  `MOJOLEARN_AFN_LM_HEAD_FUSE` and their AFN26 spellings; no `grid_controls` entry existed; row in `docs/apple-fast/EXPERIMENTS.md`.
+- Code recoverable at `5b5490960d` (the lane's base); patch `experiments/removed/BYTE_LM_HAND_STEP.patch` (the reverse of the
+  lane's change to the code files; `git apply` restores the hand step and removes the program route).
+
+## Byte LM CPU column on the executor and X7 leftovers (2026-11-09)
+
+Lane x7b-step-ops-host-arm (branched from lane/x7-byte-lm-on-executor at `5fff22515a`), plan row X7 follow-up. Lane x7 moved
+the byte LM's GPU training onto ONE captured program (`training/byte_lm_program.mojo`) but left the CPU column on its composed
+oracle step, so the CPU column no longer gave the GPUs' bits. This lane gives the four block step ops a host arm
+(`autograd/block_step_host.mojo`, reached through the host executor's `Exec.step_*` hooks: `host_block_step_run`,
+`host_attn_step_train_run`, `host_attn_step_backward`, `host_block_step_reports`; the host block bodies `transformer_block_oracle` / `transformer_block_backward_oracle`,
+`mamba_block_oracle`, `mamba2_block_oracle`, `mamba3_block_oracle` over the same packed weights, state and words tensors),
+makes the program generic over the executor (`ByteLmProgram[E, KIND]`: `ByteDeviceProgram`, `ByteHostProgram`), and runs the
+CPU column's training step, `train_steps` and loss on a host session of the same program (`training/byte_lm_host_session.mojo`,
+`training/byte_lm_host_execution.mojo`).
+
+What was deleted:
+
+- The CPU column's composed step: `training/byte_lm_host_backward.mojo` (`byte_host_train_step`, `byte_host_gradient`,
+  `ByteHostStep`, `byte_host_split_ids`, `byte_host_step_rows` and `MOJOLEARN_BYTE_LM_HOST_STEP_ROWS`), its probe
+  `training/checks/byte_lm_host_bwd_probe.mojo`, `tools/byte_lm_host_step_profile.mojo` and the rows-vs-oracle comparison
+  `tools/byte_lm_host_step_check.py` (and its line in `tools/hostpr_both.sh`).
+- The CPU column's training loss: `byte_host_loss` (`training/byte_lm_host.mojo`), `ce_causal_mean_loss_fast` and its check,
+  the host chunked-head files `training/chunked_lm_head_host.mojo` and `training/chunked_lm_head_gemm_host.mojo`, and
+  `training/loss_host_rows.mojo` (`ce_host_rows`). Logits and next bytes keep the host inference forward.
+- Lane x7's leftovers: `training/byte_lm_one_wait.mojo` (`ByteOneWait`) and the trainer's `one_wait` field; ByteBuffers
+  `dw_emb` / `dw_lm` (2 x V x d_model floats); the dead arms `MOJOLEARN_IDN_LM_RESIDENT_TOKENS` (NI32, NN51) and
+  `MOJOLEARN_IDN_PARAM_GRAD_VIEWS`; the harnesses `experiments/decode_resident_20261028` (compiled the removed
+  `MOJOLEARN_IDN_TRAIN_ONE_WAIT`) and `experiments/grad_views_20261028`.
+
+Behaviour: the CPU column now follows the GPU trainer's call rules: `train_steps` is ONE Program.fit, a refused call commits none
+of its steps, every momentum flag is set after a step (AdamW writes every tensor's moments), and rollback restores the flags with
+p, m and v.
+
+Bits: the CPU column's byte LM bits change to the GPU columns' (one algorithm: the executor's host embedding, GEMM,
+cross-entropy and OP_OPT AdamW bodies, and the host block bodies, which equal their device blocks). Identity lane `byte-lm`
+is checked once in the global verify. The `MOJOLEARN_BYTE_LM_HOST_SABOTAGE` negative control no longer reaches the loss (it
+reverses the inference head fold only).
+
+- Guard: `core/experiment_guards_neural.mojo` refuses `MOJOLEARN_IDN_PARAM_GRAD_VIEWS` and any nonzero
+  `MOJOLEARN_IDN_LM_RESIDENT_TOKENS`; `lm_resident_tokens` moved to `removed` in
+  `experiments/six_lane_integration/grid_controls/neural-seq-train-dedupe.json`; rows in `docs/apple-fast/EXPERIMENTS.md`.
+- Code recoverable at `5fff22515a` (the lane's base); patches `experiments/removed/BYTE_LM_HOST_COMPOSED_STEP.patch` and
+  `experiments/removed/BYTE_LM_X7_LEFTOVERS.patch` (the reverse of the lane's change to the code files; `git apply` restores
+  them).
+
+## CausalLM generate as one Program.decode (2026-11-09)
+
+Lane x45c-causal-generate-program-decode (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X4, follow-ups
+X4b, X5, D2), on origin/integ/pre-0867-w3 5b5490960d. Every GPU read of a float32 CausalLM (transformer, Mamba-1,
+Mamba-2 layers; greedy or the FP32 sampler) is ONE `Program.decode` over ONE `OpsSession`
+(transformer/causal_lm_program.mojo): embedding, one block step op per layer (every layer's weights, state and words are
+tensors of that session), final norm, head and the pick (`OPS_LM_PICK`, autograd/generation_ops.mojo, the documented
+lowest-index / non-finite rule and the eos / pad / lengths rows as declared state) are session ops; the condition
+`OPS_LM_ALIVE` stops the loop on the device. What went:
+
+| symbols | where | why |
+|---|---|---|
+| `_read_resident`, `_resident_acquire_read`, `_read_sampling_resident`, `_sampling_read_progress`, `_sampling_read_state`, `_sampling_read_cache_valid`, `_read_engine`, `_engine_publish_stream`, the resident shortcut of `_generate_complete` | bindings/causal_lm_public.mojo | the three host-chosen read routes (resident greedy, resident sampling, native engine) |
+| `NativeGenerationProgress`, `native_generation_read` | transformer/native_generation_engine.mojo | the engine's token x layer loop (a host round trip per layer per token) |
+| `_lm_read_argmax_kernel`, `_lm_read_status_kernel`, `_lm_read_sample_kernel`, `_lm_read_progress`, `_LMSamplingCheckpoint`, `_lm_sampling_outputs`, the read modes of `_lm_run`, group operations 2 and 3 | transformer/transformer_binding_impl.mojo, transformer/native_lm_resident_dispatch.mojo | the resident read loop (one wait per token); the pick rule now is `OPS_LM_PICK` |
+| `causal_lm_resident_read_v1`, `causal_lm_resident_sampling_v1`, `transformer_resident_lm_read`, `transformer_resident_lm_sampling_read`, core/resident_generation_read.mojo, core/resident_sampling_read.mojo | bindings, providers, core | capability words and descriptors of the deleted reads |
+| `AttnStepArm` host weight copy + `_same_bits` / `_host_copy`; `MambaBlockProgram.w_host` + `_same_bits` / `_host_copy` and the cache's byte-match fallback; `MAMBA_PROGRAM_CACHE_CAP` | transformer/attn_step_session.mojo, mamba/impl/mamba_block_program.mojo | the per-call compare of every weight byte (~7 MB per call); now `WeightKey` (core/weight_epoch.mojo), the cache bounded by device bytes |
+| the fixed15_v1 block forward's own workspace body (`TransformerSession.planes` / `planes_key`) | transformer/transformer_binding_impl.mojo | it now runs on the attention step op (adopted entry) |
+
+- Verdict: superseded, never A/B'd. RUN OWED on NVIDIA and AMD: CausalLM generate / stream rows (lm-generate, decode
+  rows of paper_compare: mamba3-decode is not a CausalLM kind; samba-decode is X6's), transformer-forward fixed15,
+  mamba1/2 forward/step per-call doors, program vs 5b5490960d.
+- Bits: the logits of a generate read now come from `OPS_RMS_NORM` and `OPS_TRANSFORMER_LINEAR` (the resident read
+  used `llama_rms_norm` and the role-head GEMM): the CausalLM generate identity lanes re-record. The non-finite refusal
+  of a read names the logit (`non-finite logit at token i`), no longer the rms_norm or linear input.
+- Contract change: a weight a kernel has read is read-only (an Array's flag, an ndarray's writeable flag); assign a new
+  array to change it.
+- Recoverable at 5b5490960d; restore with `git apply experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch` and
+  `git apply experiments/removed/WEIGHT_BYTE_COMPARE.patch`.
+
+## Samba stack on one executor program (2026-11-09)
+
+Lane x6-samba-on-executor (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X6, owed row N094), on
+origin/integ/pre-0867-w3 5b5490960d.
+
+- What moved: every device-build Samba inference call (`SambaStack.forward` stateless or with a state,
+  `SambaStack.step`, every `SambaDecodeSession`) runs `SambaStackProgram` (training/samba_program.mojo): one inference
+  `OpsSession` holding the flat registry (one upload, one device scan per load), each layer's packed weights
+  (`upload_block`, filled device to device from the registry), state and state words, and one `OPS_M3_STEP` /
+  `OPS_ATTN_STEP` per layer, the hidden state never leaving the device; embedding, final RMSNorm and the `OP_NT` head
+  are the kernels the resident forward launched, over views of the registry tensor. Entries `samba_program_open`,
+  `samba_program_shape`, `samba_program_forward`, and the `samba_decode_*` entries now on the program
+  (bindings/_mojolearn_training.mojo). The CPU per-layer route stays for host builds and the CPU inference model.
+- Deleted: the three device tiers of `samba_forward` (bindings/samba_inference_native.mojo: `_samba_resident_forward`,
+  the provider call, the device per-layer walk, the resident flag), `samba_resident_forward` with its binding, the
+  descriptor op 16 and `samba_resident_native_forward`, the forward-only arms of `_forward_blocks` / `_norm_head_forward`,
+  training/samba_decode_resident.mojo (`SambaDecodeResident` and its five entries' bodies), the decode door's
+  identical-only / descriptor gates (`_decode_device_arm`: with `_native_primitives` always installed the resident
+  decode never ran), `samba_provider_forward`, `AdmittedSambaExecution.forward`, `NativeSambaModel.forward`,
+  `samba_afn_norm_head_forward` (AFN_SAMBA_FUSE's forward tail; its two training entries stay), and the Python
+  `SambaStack._forward`, `_forward_state`, `_forward_resident`, `_resident`, `_resident_session`, `_afn*`, `_ids`,
+  `_head_weight`, `_block`, `_make_block`, `_init_tensor`, `_count_targets` (no caller; Python compute).
+- Kept, and why: the resident train step (`samba_resident_train_step`, `samba_resident_accumulated_step`, the
+  `rules_samba` tape) and the gradients routes (provider gradients, the per-layer fallback walk in
+  bindings/samba_training_native.mojo): training through the step ops needs the backward through a step op (lane X5b)
+  and a FAST/CPU train route; the fallback walk is the Apple FAST and CPU training path today.
+- Verdict: superseded, never A/B'd. RUN OWED: samba-forward, samba-decode (per-call `step` and `decode_session`), lm
+  rows untouched; NVIDIA and AMD, program vs 5b5490960d; Apple FAST samba-forward on the M3 (FAST now runs the program).
+- Bits: the Mamba-3 layers run the decode session's body (same launches as the resident forward's zero-state prefill);
+  the attention layers run the step op's `forward_only=False` launch set over the options-constructor weights (the
+  resident forward ran `forward_only=True`). Identity lane `samba` may change; every vendor and the host column move
+  together.
+- Recoverable at 5b5490960d; patch experiments/removed/SAMBA_THREE_TIER_FORWARD.patch.
+## Transformer forward tape API retired (2026-11-09)
+
+Lane x6-tape-retire (sub-lane of x6-samba-on-executor; plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X4,
+"the excluded tape API"; the leftovers lane x4b listed), branch `lane/x6-tape-retire` from `origin/integ/pre-0867-w3`
+4f41e3d67d. Deleted by e49d0ee90d (inline markers named at 745d04805e).
+
+- What it was: a training forward that kept its stages for a later backward, in two forms. The public one,
+  `TransformerBlock.forward_with_tape` / `backward_from_tape` and the `TransformerForwardTape` ticket (excluded from the
+  docs as "tape API not in the shipped binding; unverified"), ran a budget-aware session tape
+  (`BorrowedAttentionTape`, training/neural_attention_owner.mojo; the host twin `HostAttentionTape`,
+  transformer/host/attention_tape.mojo) through block-table ops 36..40, `transformer_session_{forward,backward,
+  discard,invalidate}_tape` and providers/python/transformer_session_tape_pyapi.mojo. The standalone one,
+  `transformer_forward_tape` / `_backward_tape` / `_close_tape` and `transformer_tape_{create,handle}_native_v1`
+  (ops 6..10 and 14, transformer/native_tape_dispatch.mojo), was the transformer half of
+  `MOJOLEARN_IDN_ACT_RETAIN=3` (`IDN_SAMBA_FORWARD_TAPE`) for the Samba training prefill.
+- Deleted with it: `_transformer_run_session`'s `retain_tape` parameter and workspace body,
+  `TransformerBackwardWorkspace`, `TransformerForwardTape`, `_transformer_saved_backward`, the session's retained
+  float32 `weights` and their byte-compare helpers (`_session_weights`, `_weights_same_bits`, `_weights_host_copy`,
+  `_weights_recopy`, `_weights_key`, `_base_weight_lens`), `_stage_reset_on` and the `MOJOLEARN_TRANSFORMER_STAGE_RESET`
+  / `MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS` reads (the env global is now `MojolearnTransformerSessionEnvV2`), the
+  session `tape` / `tape_generation` / `invalidate_tape` (GPU and host) and op 12, the public
+  `TransformerPublicTapeOwner` and its doors in bindings/transformer_public_native.mojo, the identity lane
+  `transformer-forward-tape` (tools/identity_lanes/coverage.py, its reference-table cells and admission,
+  lane_select_reviewed, verify_coverage_audit), the board operation `transformer_forward_vjp_tape`, tools
+  transformer_tape_arm_check.py + transformer_tape_arm_digests.json and test_transformer_session_tape_provider.py, the
+  api_exclude entries and the support-matrix lane lists.
+- Kept: `TransformerWorkspace` (and `_workspace_key`, `session.workspace`): the fixed15_v1 forward
+  `_transformer_run_session_int15` still runs on it (lane X45c moves that forward onto the op). The Mamba-3 tape
+  (`MOJOLEARN_IDN_ACT_RETAIN=3` for Mamba-3) is unchanged. `TransformerBlock.backward` (the step op plus
+  `llama_decoder_layer_backward_autograd`) needed nothing from the tape.
+- Verdict: superseded, never A/B'd (the tape's default arm was off: ACT_RETAIN defaults to 2). No bits change: the
+  default builds never reached the deleted bodies; the `transformer` lane covers the block backward.
+- Recoverable at 4f41e3d67d; restore with `git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch` (code files
+  outside tools/; the tools come back from 4f41e3d67d).

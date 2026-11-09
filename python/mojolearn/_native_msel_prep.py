@@ -155,6 +155,61 @@ def connect(context, register, registry):
         add(cls, neighbors._NATIVE, neighbors._NATIVE_CONTEXT, methods,
             initial={'_index': None, '_y_cols': None})
 
+    # Lane a7d: the clustering, mixture and decomposition families' fixed
+    # owner ABIs, so cross_validate / GridSearchCV / RandomizedSearchCV /
+    # learning_curve reach them natively (they were pending migration).
+    # Every constructor stores its parameters only (field copy, init None).
+    from . import cluster, mixture, decomposition, _expansion_cluster as xcluster, _expansion_decomp as xdecomp
+    native = constant(None)
+    add(cluster.KMeans, cluster._NATIVE, cluster._NATIVE_CONTEXT, {
+        'fit': ('family_kmeans_fit', (native, arg(0), keyword('sample_weight'))),
+        'predict': ('family_kmeans_predict', (native, arg(0))),
+        'transform': ('family_kmeans_transform', (native, arg(0))),
+    })
+    for cls, fit, predict in ((xcluster.MiniBatchKMeans, 'family_cfa_mbk_fit', 'family_xc_predict'),  # glue: fixed ABI metadata connected once during package import
+                              (xcluster.BisectingKMeans, 'family_cfa_bisect_fit', 'family_xc_bisect_predict')):
+        add(cls, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
+            'fit': (fit, (native, arg(0), keyword('sample_weight'), arg(1))),
+            'predict': (predict, (native, arg(0))),
+            'transform': ('family_xc_transform', (native, arg(0))),
+            'score': ('family_xc_score', (native, arg(0))),
+        })
+    add(xcluster.MeanShift, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
+        'fit': ('family_cfa_meanshift_fit', (native, arg(0), arg(1))),
+        'predict': ('family_xc_predict', (native, arg(0))),
+    })
+    add(xcluster.AffinityPropagation, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
+        'fit': ('family_cfa_ap_fit', (native, arg(0), arg(1))),
+        'predict': ('family_xc_ap_predict', (native, arg(0))),
+    })
+    add(xcluster.BayesianGaussianMixture, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
+        'fit': ('family_mix_bgmm_fit', (native, arg(0), arg(1))),
+        'predict': ('family_mix_bgmm_predict', (native, arg(0))),
+        'predict_proba': ('family_mix_bgmm_predict_proba', (native, arg(0))),
+        'score': ('family_mix_bgmm_score', (native, arg(0))),
+    })
+    add(mixture.GaussianMixture, mixture._NATIVE, mixture._NATIVE_CONTEXT, {
+        'fit': ('family_mix_gmm_public_fit', (arg(0), arg(1))),
+        'predict': ('family_mix_gmm_public_predict', (arg(0),)),
+        'predict_proba': ('family_mix_gmm_public_predict_proba', (arg(0),)),
+        'score': ('family_mix_gmm_public_score', (arg(0),)),
+    })
+    add(decomposition.TruncatedSVD, decomposition._TSVD_ENTRY, decomposition._TSVD_CONTEXT, {
+        'fit': ('fit', (arg(0), arg(1))),
+        'transform': ('transform', (arg(0),)),
+    })
+    add(xdecomp.IncrementalPCA, xdecomp._IPCA_CALL, xdecomp._IPCA_CONTEXT, {
+        'fit': ('fit', (arg(0),)),
+        'transform': ('transform', (arg(0),)),
+    })
+    for cls, score in ((xdecomp.FactorAnalysis, True), (xdecomp.LatentDirichletAllocation, True),  # glue: fixed ABI metadata connected once during package import
+                       (xdecomp.FastICA, False)):
+        methods = {'fit': ('fit', (arg(0),)), 'transform': ('transform', (arg(0),) if cls is not xdecomp.LatentDirichletAllocation
+                                                            else (arg(0), constant(True)))}
+        if score:
+            methods['score'] = ('score', (arg(0),))
+        add(cls, xdecomp._DECOMP_CALL, xdecomp._DECOMP_CONTEXT, methods)
+
     for name in ('VotingClassifier', 'VotingRegressor', 'StackingClassifier', 'StackingRegressor',  # glue: fixed meta-estimator ABIs at import
                  'MultiOutputRegressor', 'MultiOutputClassifier', 'OneVsRestClassifier', 'CalibratedClassifierCV'):  # glue: exact meta-estimator ABIs at import
         methods = {
@@ -241,8 +296,45 @@ def _connect_device_rows(registry):
     # transform through x_prep_native_owner.xprep_values, which keeps the
     # rows on the device. The same rows in the same order reach the same
     # kernels: no bit changes (tools/test_device_rows_door_cv.py).
-    from . import linear_model, _expansion_prep as prep
-    for cls in (linear_model.LinearRegression, linear_model.Ridge, prep.MaxAbsScaler, prep.RobustScaler):  # glue: fixed ABI metadata connected once during package import
+    # Lane a6: every family and classical estimator whose CV methods admit X
+    # through the one path (admit_x / admit_family_meta / family_lifecycle_begin
+    # / classical_view, each of which resolves a DeviceRows) opts in, so its
+    # folds are never downloaded: a host-address kernel takes the rows
+    # gathered on the host out of model selection's host base (row tasks
+    # across the cores), a device-X entry gathers them on the device out of
+    # the resident base (core/msel_device_x.mojo). The same rows in the same
+    # order: no bit changes.
+    # Lane a7d: the clustering, mixture and decomposition families. KMeans'
+    # fit, predict and transform gather a resident fold on the device
+    # (cluster/kmeans_fold.mojo through the family lifecycle's device_x);
+    # the others read the fold through their one-path doors (KMeans-family
+    # and mixture: classical_check_x / admit_family_meta; decomposition:
+    # decomp_admit), which gather its rows on the host out of the host base.
+    # Lane a7c: the x_linear door is on admit_x (lane A1b), so Lasso,
+    # ElasticNet and every x_linear estimator whose CV methods admit X only
+    # through it (_xl_matrix / classical_view / admit_x, each resolving a
+    # DeviceRows) join. The *CV estimators stay out: their fit hands X to
+    # their own splitter (prep_native_split), which takes no fold handle.
+    from . import linear_model, _expansion_prep as prep, decomposition
+    from . import _svm_impl as svm, svm as linear_svm, _gp_impl as gp, kernel_methods as km, neighbors
+    from . import _expansion_linear as linear, _solver_impl as cd
+    xl = tuple(getattr(linear, name) for name in (  # glue: fixed ABI metadata connected once during package import
+        'SGDClassifier', 'SGDRegressor', 'PoissonRegressor', 'GammaRegressor', 'TweedieRegressor',
+        'HuberRegressor', 'BayesianRidge', 'ARDRegression', 'Lars', 'LassoLars', 'QuantileRegressor',
+        'Perceptron', 'PassiveAggressiveClassifier', 'PassiveAggressiveRegressor', 'RidgeClassifier'))
+    from . import _gpc_impl as gpc
+    # Lane a7a: GaussianProcessClassifier opts in (its door admits X through
+    # admit_x; predict / predict_proba gather a fold on the device).
+    from . import cluster, mixture, _expansion_cluster as xcluster, _expansion_decomp as xdecomp
+    for cls in (linear_model.LinearRegression, linear_model.Ridge, prep.MaxAbsScaler, prep.RobustScaler,  # glue: fixed ABI metadata connected once during package import
+                decomposition.PCA, svm.SVC, svm.SVR, linear_svm.LinearSVC, linear_svm.LinearSVR,
+                gp.GaussianProcessRegressor, gpc.GaussianProcessClassifier, km.KernelRidge,
+                neighbors.KNeighborsClassifier, neighbors.KNeighborsRegressor,
+                linear_model.LogisticRegression, linear_model.QNRegressor, cd.Lasso, cd.ElasticNet,
+                cluster.KMeans, xcluster.MiniBatchKMeans, xcluster.BisectingKMeans, xcluster.MeanShift,
+                xcluster.AffinityPropagation, xcluster.BayesianGaussianMixture, mixture.GaussianMixture,
+                decomposition.TruncatedSVD, xdecomp.IncrementalPCA, xdecomp.FactorAnalysis,
+                xdecomp.LatentDirichletAllocation, xdecomp.FastICA) + xl:
         if cls in registry:
             registry[cls]['device_rows'] = True
 

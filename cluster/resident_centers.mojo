@@ -42,8 +42,10 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx, neural_device_plan
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from cluster.estimator import kmeans_predict_device, kmeans_transform_device
+from core.device_zero import enqueue_fill
+from core.admitted_finite_status import enqueue_finite_status
 
-comptime _DEVCTX_SLOT = "MojoCoreContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoCoreContextFast"
+comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV2"
 
 
 struct ResidentKMeansCenters(Movable):
@@ -277,9 +279,13 @@ def kmeans_predict_resident(
     n_clusters: Int,
     out_labels_ptr: MutPointer[UInt32, MutUntrackedOrigin],
     metric: Int,
+    finite_word: Int = 0,
 ) raises:
     """`kmeans_predict` with the handle's centroids: X uploaded, the same
-    device pass (`kmeans_predict_device`), the labels read back."""
+    device pass (`kmeans_predict_device`), the labels read back.
+    `finite_word` (lane a7d): when nonzero, the host address of one Int32
+    that receives X's finite status word, tested on the device after the
+    upload and read back with the labels (no new synchronisation)."""
     if n_samples < 1 or n_features < 1 or n_clusters < 1:
         raise Error(
             "kmeans_predict needs n_samples, n_features and n_clusters >= 1: got "
@@ -289,11 +295,21 @@ def kmeans_predict_resident(
     var x = view.ctx.enqueue_create_buffer[DType.float32](n_samples * n_features)
     var labels = view.ctx.enqueue_create_buffer[DType.uint32](n_samples)
     view.ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    var status = view.ctx.enqueue_create_buffer[DType.int32](1)
+    var word = view.ctx.enqueue_create_host_buffer[DType.int32](1)
+    if finite_word != 0:
+        enqueue_fill[DType.int32](view.ctx, status, Int32(0))
+        enqueue_finite_status(view.ctx, x.unsafe_ptr(), n_samples * n_features, status.unsafe_ptr(), 0)
+        view.ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
     kmeans_predict_device(
         view.ctx, x, n_samples, n_features, n_clusters, view.centers, labels, metric
     )
     view.ctx.enqueue_copy(dst_ptr=out_labels_ptr, src_buf=labels)
     view.ctx.synchronize()
+    if finite_word != 0:
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = word.unsafe_ptr()[0]
+    _ = word^
+    _ = status^
     _ = x^
     _ = labels^
     _ = view^
@@ -307,9 +323,11 @@ def kmeans_transform_resident(
     n_clusters: Int,
     out_ptr: MutPointer[Float32, MutUntrackedOrigin],
     metric: Int,
+    finite_word: Int = 0,
 ) raises:
     """`kmeans_transform` with the handle's centroids: X uploaded, the same
-    device body (`kmeans_transform_device`) writing `out_ptr`."""
+    device body (`kmeans_transform_device`) writing `out_ptr`.
+    `finite_word`: as `kmeans_predict_resident`'s."""
     if n_samples < 1 or n_features < 1 or n_clusters < 1:
         raise Error(
             "kmeans_transform needs n_samples, n_features and n_clusters >= 1: got "
@@ -319,8 +337,19 @@ def kmeans_transform_resident(
     var x = view.ctx.enqueue_create_buffer[DType.float32](n_samples * n_features)
     view.ctx.synchronize()
     view.ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    var status = view.ctx.enqueue_create_buffer[DType.int32](1)
+    var word = view.ctx.enqueue_create_host_buffer[DType.int32](1)
+    if finite_word != 0:
+        enqueue_fill[DType.int32](view.ctx, status, Int32(0))
+        enqueue_finite_status(view.ctx, x.unsafe_ptr(), n_samples * n_features, status.unsafe_ptr(), 0)
+        view.ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
+    # kmeans_transform_device synchronises before it returns.
     kmeans_transform_device(
         view.ctx, x, n_samples, n_features, n_clusters, view.centers, out_ptr, metric
     )
+    if finite_word != 0:
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = word.unsafe_ptr()[0]
+    _ = word^
+    _ = status^
     _ = x^
     _ = view^

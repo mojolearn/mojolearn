@@ -24,6 +24,8 @@ from providers.python.autograd_owned_program_factory_pyapi import owned_program_
 from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py
 from autograd.session_lifetime import SessionLifetime
 from providers.python.autograd_session_lifetime_pyapi import ops_session_create_py
+from providers.python.small_mlp_program_pyapi import small_mlp_program_open_py, small_mlp_program_run_py
+from autograd.small_mlp_program import SMALL_MLP_PROGRAM_OPEN
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
@@ -81,7 +83,7 @@ from providers.python.autograd_import_lower_pyapi import onnx_import_py, onnx_im
 from providers.python.autograd_model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
 from providers.python.autograd_model_checkpoint_pyapi import model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py
 from providers.python.sequence_pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
-from providers.python.sequence_pyapi import moe_backward_py, moe_backward_run
+from providers.python.sequence_pyapi import moe_backward_py, moe_backward_resident
 from providers.python.sequence_opt_resident_pyapi import adafactor_resident_step_dev_py, lamb_resident_step_dev_py, opt_resident_step_dev_py
 from providers.python.sequence_seq_tensor_pyapi import (
     seq_tensor_alloc_py, seq_tensor_copy_py, seq_tensor_download_py, seq_tensor_free_py, seq_tensor_upload_py,
@@ -233,7 +235,7 @@ def mlp_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonO
 
 
 comptime SESSION_PUBLIC_API = _Global[StorageType=NativeSessionPublicAPI[DeviceExec, OPS_DEVICE],
-    name="MojoSessionPublicOPS_DEVICEAPIv1", init_fn=NativeSessionPublicAPI[DeviceExec, OPS_DEVICE].__init__]
+    name=("MojolearnSessionPublicOPS_DEVICEAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnSessionPublicOPS_DEVICEAPIFastV2"), init_fn=NativeSessionPublicAPI[DeviceExec, OPS_DEVICE].__init__]
 
 
 def session_public_api_binding() raises -> PythonObject:
@@ -313,6 +315,15 @@ def model_import_params_binding(
 
 # The operation session (autograd/ops_api.mojo): one DeviceExec and one tape kept
 # between calls, tensors by handle.
+def small_mlp_program_binding(op: PythonObject, addresses: PythonObject, ints: PythonObject,
+    floats: PythonObject) raises -> PythonObject:
+    """SmallMLPTrainer's captured program (autograd/small_mlp_program.mojo)."""
+    var code = Int(py=op)
+    if code == SMALL_MLP_PROGRAM_OPEN:
+        return small_mlp_program_open_py[DeviceExec, OPS_DEVICE](DeviceExec(), addresses, ints, floats)
+    return small_mlp_program_run_py[DeviceExec, OPS_DEVICE](code, addresses, ints)
+
+
 def ops_session_create_binding(record: PythonObject) raises -> PythonObject:
     return ops_session_create_py[DeviceExec, OPS_DEVICE](DeviceExec(), record)
 
@@ -426,7 +437,7 @@ def ops_distributed_close_binding(id: PythonObject) raises -> PythonObject:
 
 
 comptime OWNED_PROGRAM_PUBLIC_API = _Global[StorageType=NativeOwnedProgramPublicAPI,
-    name="MojoOwnedProgramPublicOPS_DEVICEAPIv1", init_fn=NativeOwnedProgramPublicAPI.__init__]
+    name=("MojolearnOwnedProgramPublicOPS_DEVICEAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnOwnedProgramPublicOPS_DEVICEAPIFastV2"), init_fn=NativeOwnedProgramPublicAPI.__init__]
 
 
 def owned_program_public_native_binding(
@@ -735,23 +746,14 @@ def moe_forward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonO
 
 
 def moe_backward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """`moe_backward` (providers/python/sequence_pyapi.mojo moe_backward_py): ip = [T, D, F,
+    """`moe_backward` (autograd/route_ops.mojo moe_backward_addrs, the tape step): ip = [T, D, F,
     E, k, renormalise]; a seventh entry > 0 is a `moe_weights_put` handle
-    whose device copies are read instead of addrs[1..3]."""
-    if len(ip) == 7 and ival(ip, 6) > 0:
-        if len(addrs) != 13:
-            raise Error("moe_backward: requires 13 addresses and 7 integer parameters")
-        var T = ival(ip, 0)
-        var D = ival(ip, 1)
-        var F = ival(ip, 2)
-        var En = ival(ip, 3)
-        var k = ival(ip, 4)
-        if T < 1 or D < 1 or F < 1 or En < 1 or k < 1 or k > En:
-            raise Error("moe_backward: T, D, F, E >= 1 and 1 <= k <= E")
-        var w = moe_weights_ptrs(ival(ip, 6))
-        var ex = DeviceExec()
-        return moe_backward_run(ex, addrs, T, D, F, En, k, ival(ip, 5), w[0], w[1], w[2])
+    whose device copies are read instead of addrs[1..3]. The argument
+    checks are the entry's."""
     var ex = DeviceExec()
+    if len(ip) == 7 and ival(ip, 6) > 0:
+        var w = moe_weights_ptrs(ival(ip, 6))
+        return moe_backward_resident(ex, addrs, ip, [Int(w[0]), Int(w[1]), Int(w[2])])
     return moe_backward_py(ex, addrs, ip)
 
 
@@ -858,6 +860,7 @@ def build__mojolearn_x_sequence() -> PythonObject:
         # the operation session (autograd/ops_api.mojo)
         _ = m.add_type[SessionLifetime[DeviceExec, OPS_DEVICE]]("_OpsSessionLifetime")
         m.def_function[ops_session_create_binding]("ops_session_create")
+        m.def_function[small_mlp_program_binding]("small_mlp_program")
         # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         m.def_function[ops_shape_binding]("ops_shape")

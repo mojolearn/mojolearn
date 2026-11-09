@@ -12,10 +12,11 @@
 # whose results it never read. Same kernels: the bits do not move.
 from std.memory import memcpy, bitcast
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family_f64
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_contains, py_get, py_type, py_setitem
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_array, family_str, family_view, family_cast_view_f64,
+    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_array, family_str,
 )
 from bindings.classical_arrays import classical_address, classical_is_array, classical_dtype_str
 from bindings.classical_validate import classical_view
@@ -156,7 +157,7 @@ def _auc_values(v: PythonObject, name: String, context: PythonObject) raises -> 
                 _ = out  # keep the Python object alive through the native call above
             return out
     var view = classical_view(values, context, name)
-    var flat = family_cast_view_f64(view, name, context)
+    var flat = admit_family_f64(view, name, context)
     _ = view^
     return flat
 

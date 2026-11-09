@@ -17,6 +17,7 @@ from providers.python.x_decomp_api_pyapi import (
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
 from x_decomp.pca_randomized import NoRDev
 from providers.python.x_decomp_tsvd_owner_pyapi import tsvd_randomized_py
+from providers.python.x_decomp_rsvd_owner_pyapi import randomized_svd_py
 from x_decomp.ipca_owner import NoIpcaDev
 from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
 from x_decomp.decomp_owner_host import HostDecomp
@@ -28,7 +29,7 @@ from providers.python.x_decomp_mds_pyapi import mds_fit_py
 from providers.python.x_decomp_lle_iter_pyapi import lle_iterate_py
 from providers.python.x_decomp_pls_pyapi import pls_fit_py
 from providers.python.x_decomp_dictl_pyapi import dict_learning_py, minibatch_py
-from providers.python.x_decomp_lanczos_host_pyapi import lanczos_py
+from providers.python.x_decomp_lanczos_host_pyapi import eigh_tridiag_py, lanczos_py
 from providers.python.x_decomp_graph_host_pyapi import (
     graph_knn_py, graph_knn_dense_py, graph_radius_py, graph_radius_geo_py, graph_lle_iw_py, graph_components_py, graph_join_py, graph_dijkstra_py,
 )
@@ -114,6 +115,8 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
         # TruncatedSVD(algorithm='randomized').fit, one driver (x_decomp/tsvd_owner.mojo);
         # the TSVD_QFIX route is FAST GPU only (qfix_flags is 0 here)
         m.def_function[tsvd_randomized_py[HostExec, NoRDev, False]]("x_decomp_tsvd_randomized")
+        # The public randomized_svd, one driver (x_decomp/randomized_svd_owner.mojo)
+        m.def_function[randomized_svd_py[HostExec, NoRDev, False]]("x_decomp_randomized_svd")
         # IncrementalPCA, one driver per operation (x_decomp/ipca_owner.mojo)
         m.def_function[ipca_fit_py[HostExec, NoRDev, False, NoIpcaDev]]("x_decomp_ipca_fit")
         m.def_function[ipca_partial_py[HostExec, NoRDev, False, NoIpcaDev]]("x_decomp_ipca_partial")
@@ -161,6 +164,7 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
         m.def_function[reduce_py]("x_decomp_reduce")
         m.def_function[order_small_py]("x_decomp_order_small")
         m.def_function[lanczos_py]("x_decomp_lanczos")
+        m.def_function[eigh_tridiag_py]("x_decomp_eigh_tridiag")
         m.def_function[dsum_sq_py]("x_decomp_dsum_sq")
         m.def_function[order_f_py]("x_decomp_order_f")
         m.def_function[select_smallest_py]("x_decomp_select_smallest")

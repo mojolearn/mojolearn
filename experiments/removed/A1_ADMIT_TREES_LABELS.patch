@@ -1,0 +1,711 @@
+diff --git a/bindings/admitted_held.mojo b/bindings/admitted_held.mojo
+deleted file mode 100644
+index 0e31078ba5..0000000000
+--- a/bindings/admitted_held.mojo
++++ /dev/null
+@@ -1,129 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-# A meta-estimator's X admitted once for all its members (lane A1
+-# admit-trees-labels, plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md
+-# section 4).
+-#
+-#   admitted_scope_begin() -> mark / admitted_scope_end(mark)
+-#                     the hold scope of one meta-estimator operation
+-#   admitted_hold(array, address, rows, cols)
+-#                     hold an admitted finite float32 C-order matrix
+-#   admitted_is_held(array) -> Bool
+-#   admitted_held_x(source, est, context, admitted) -> AdmittedX
+-#                     a held matrix as it is, or bindings/admitted_input.mojo
+-#                     `admit_x_unrecorded` for anything else
+-#
+-# The tree doors (forest, IsolationForest) read X through
+-# `admitted_held_x`. Doors in other bindings still call admit_x directly
+-# (bindings/admitted_input.mojo belongs to lane A5); the one-line hook there
+-# (`_admitted_x` consulting `admitted_held_index`) is owed to that lane.
+-from std.ffi import _Global
+-from std.python import PythonObject
+-from bindings.admitted_input import AdmittedX, admit_x_unrecorded
+-
+-
+-# ------------------------------------------------- admitted once per call
+-#
+-# Lane A1 admit-trees-labels (plan section 4, meta-estimators): a
+-# meta-estimator (Stacking, Voting, OneVsRest, MultiOutput,
+-# CalibratedClassifierCV) admits X once and hands the same float32 C-order
+-# matrix to every member's public fit and predict. Each member door used to
+-# admit it again (its view, its checks and one finiteness scan per member,
+-# per fold). The meta-estimator's operation now opens a scope
+-# (`admitted_scope_begin` ... `admitted_scope_end` in a `finally`), holds
+-# the matrices it admitted inside it (`admitted_hold`), and the doors that
+-# read X through `admitted_held_x` return a held matrix as it is: no view, no
+-# check, no scan.
+-#
+-# A matrix is held only inside an open scope and only after it was
+-# admitted finite, 2-D, non-empty and float32 C-order; entries are strong
+-# references (no address reuse while held), matched by identity, and the
+-# scope's end drops every entry made inside it, so nothing outlives the
+-# call that admitted it. Any other object is admitted as before. A binding
+-# that does not see the holder's registry (another extension module) admits
+-# the matrix as before: the same verdict, one more scan. Numerics: none.
+-
+-
+-struct AdmittedHeld(Defaultable, Movable):
+-    var items: List[PythonObject]
+-    var addresses: List[Int]
+-    var rows: List[Int]
+-    var cols: List[Int]
+-    var depth: Int
+-
+-    def __init__(out self):
+-        self.items = List[PythonObject]()
+-        self.addresses = List[Int]()
+-        self.rows = List[Int]()
+-        self.cols = List[Int]()
+-        self.depth = 0
+-
+-
+-comptime ADMITTED_HELD = _Global[StorageType=AdmittedHeld, name="MojolearnAdmittedHeldV1",
+-                                 init_fn=AdmittedHeld.__init__]
+-
+-
+-def admitted_scope_begin() raises -> Int:
+-    """Open a hold scope; returns the mark `admitted_scope_end` takes."""
+-    var g = ADMITTED_HELD.get_or_create_ptr()
+-    g[].depth += 1
+-    return len(g[].items)
+-
+-
+-def admitted_scope_end(mark: Int) raises:
+-    """Close the scope `mark` opened: drop every entry held inside it."""
+-    var g = ADMITTED_HELD.get_or_create_ptr()
+-    # Hold the references while the registry shrinks, so no destructor runs
+-    # while it is being changed.
+-    var dropped = List[PythonObject]()
+-    while len(g[].items) > mark:  # small-loop(items: the held matrices of the running calls, a few)
+-        dropped.append(g[].items.pop())
+-        _ = g[].addresses.pop()
+-        _ = g[].rows.pop()
+-        _ = g[].cols.pop()
+-    if g[].depth > 0:
+-        g[].depth -= 1
+-    _ = dropped^
+-
+-
+-def admitted_hold(array: PythonObject, address: Int, rows: Int, cols: Int) raises:
+-    """Hold `array` (admitted finite: rows x cols float32 C-order words at
+-    `address`) until the open scope ends, so member doors reuse its
+-    admission. Outside a scope nothing is held."""
+-    var g = ADMITTED_HELD.get_or_create_ptr()
+-    if g[].depth <= 0:
+-        return
+-    g[].items.append(array)
+-    g[].addresses.append(address)
+-    g[].rows.append(rows)
+-    g[].cols.append(cols)
+-
+-
+-def admitted_scope_open() raises -> Bool:
+-    """True inside a hold scope."""
+-    return ADMITTED_HELD.get_or_create_ptr()[].depth > 0
+-
+-
+-def admitted_is_held(array: PythonObject) raises -> Bool:
+-    return admitted_held_index(array) >= 0
+-
+-
+-def admitted_held_index(source: PythonObject) raises -> Int:
+-    """The registry row holding `source` (identity), or -1."""
+-    var g = ADMITTED_HELD.get_or_create_ptr()
+-    for k in range(len(g[].items)):  # small-loop(items: the held matrices of the running calls, a few)
+-        if g[].items[k] is source:
+-            return k
+-    return -1
+-
+-
+-def admitted_held_x(source: PythonObject, est: String, context: PythonObject,
+-                    admitted: Bool = False) raises -> AdmittedX:
+-    """X for a door: a matrix the running meta-estimator holds, as it is
+-    (borrowed, already refused-checked and finite), else the one admission
+-    (`admit_x_unrecorded`, the same refusals and words)."""
+-    var held = admitted_held_index(source)
+-    if held >= 0:
+-        var g = ADMITTED_HELD.get_or_create_ptr()
+-        return AdmittedX(source, source, g[].addresses[held], g[].rows[held], g[].cols[held], 2, True)
+-    return admit_x_unrecorded(source, est, context, admitted)
+diff --git a/bindings/classical_labels.mojo b/bindings/classical_labels.mojo
+index 73a20468dd..75e8767685 100644
+--- a/bindings/classical_labels.mojo
++++ b/bindings/classical_labels.mojo
+@@ -47,10 +47,6 @@ from bindings.str_labels_native import StrTable, _read, _sorted
+ from bindings.cpython_table import cpython_table
+ from bindings.perf3_label_doors_text import labels_all_exact_str
+ from bindings.label_input_sources import LABELS_LIST_INT
+-from core.admitted_cast_elements import admitted_cast_elements
+-from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64
+-from core.admitted_input import admitted_check_weights_f32
+-from core.admitted_transpose import admitted_transpose_to_f32
+ from bindings.p3_labels_metrics_native import (
+     p3_call_object, p3_decode_list, p3_text_codes, p3_text_classes, p3_text_lookup, p3_dict_codes,
+     p3_integral_list, p3_item, p3_type_word, P3_TEXT_OK, P3_TEXT_NOT_STR)
+@@ -455,17 +451,13 @@ def _native_code(typestr: String) raises -> Int:
+ 
+ def labels_cast(src: Int, source: String, dst: Int, target: String, count: Int, context: PythonObject) raises:
+     """`Array.astype(target)` of a contiguous block (`_native_astype`): the
+-    core cast `cast_elements` in process, one conversion per element in
+-    storage order, element tasks across the host's cores."""
+-    # Lane A1 admit-trees-labels: this was a Python call into the base
+-    # binding's `cast_elements` (one task, `_tasks = 1`); the same typed
+-    # kernel now runs in process (core/admitted_cast_elements.mojo), split
+-    # across cores. Same conversion per element: no bit change.
+-    # TOMBSTONE: labels_cast / trees_cast py_call into the base binding's cast_elements deleted 2026-11-08 by lane a1-admit-trees-labels; code recoverable at f7d10d2b09.
+-    # Restore: experiments/removed/A1_ADMIT_TREES_LABELS.patch.
++    core helper `cast_elements`, one conversion per element in storage
++    order."""
+     if count == 0:
+         return
+-    var refused = admitted_cast_elements(src, _native_code(source), dst, _native_code(target), count)
++    var refused = Int(py=py_call_typed(labels_helper(context, "cast_elements"), PythonObject(src),
++                                      PythonObject(_native_code(source)), PythonObject(dst),
++                                      PythonObject(_native_code(target)), PythonObject(count)))
+     if refused != 0:
+         raise Error("TypeError: mojolearn: an element does not fit " + target)
+ 
+@@ -530,28 +522,25 @@ def labels_f32_view(var view: LabelsView, order: String, context: PythonObject,
+     _ = out  # keep the Python object alive through the native call above
+     var contiguous_c = view.c_order()
+     var contiguous_f = view.f_order()
+-    # Lane A1 admit-trees-labels: every conversion below runs in process,
+-    # across the host's cores: the cast through core `cast_elements` (it was
+-    # a Python call into the base binding, one task; float64 sources went
+-    # through the base `cast_f64_to_f32`, a device round trip) and the
+-    # transpose through core/admitted_transpose.mojo (it was the base
+-    # `transpose_f32` / `cast_colmajor_f64_to_f32`, a device round trip).
+-    # Each element gets the same single conversion: no bit change.
+-    # TOMBSTONE: labels_f32_view py_call casts and transposes (base cast_f64_to_f32, transpose_f32, cast_colmajor_f64_to_f32) deleted 2026-11-08 by lane a1-admit-trees-labels; code recoverable at f7d10d2b09.
+-    # Restore: experiments/removed/A1_ADMIT_TREES_LABELS.patch.
+     if (view.typestr == "<f8" or view.typestr == "<f4") and (contiguous_c or contiguous_f):
+         if two and not view.both_orders() and contiguous_f != want_f:
+-            # The one fused cast-and-transpose (or the float32 transpose)
+-            # over the source's [rows, cols] storage layout.
++            # `_native_to_f32`: the one fused cast-and-transpose (or the
++            # float32 transpose) over the source's [rows, cols] layout.
+             var r = rows
+             var c = cols
+             if contiguous_f:
+                 r = cols
+                 c = rows
+-            if view.typestr == "<f8":
+-                admitted_transpose_to_f32[DType.float64](view.addr, dst, r, c)
+-            else:
+-                admitted_transpose_to_f32[DType.float32](view.addr, dst, r, c)
++            var fn_obj = labels_helper(context, "cast_colmajor_f64_to_f32" if view.typestr == "<f8" else "transpose_f32")
++            _ = py_call_typed(fn_obj, PythonObject(view.addr), PythonObject(dst), PythonObject(r), PythonObject(c))
++            _ = out  # keep the Python object alive through the native call above
++            _ = view  # keep the Python object alive through the native call above
++            return LabelsMatrix(out, dst, rows, cols, not want_f)
++        if view.typestr == "<f8":
++            # The flat cast keeps the source's storage order, which is the
++            # requested one here (or the two coincide).
++            _ = py_call_typed(labels_helper(context, "cast_f64_to_f32"), PythonObject(view.addr), PythonObject(dst),
++                              PythonObject(view.size()))
+             _ = out  # keep the Python object alive through the native call above
+             _ = view  # keep the Python object alive through the native call above
+             return LabelsMatrix(out, dst, rows, cols, not want_f)
+@@ -564,15 +553,17 @@ def labels_f32_view(var view: LabelsView, order: String, context: PythonObject,
+         return LabelsMatrix(out, dst, rows, cols, not want_f)
+     # The staging store is written in full by the cast and read only by the
+     # transpose below; it never escapes, so it needs no fill either.
+-    var staged = native_scratch_bytes(view.size() * 4)
+-    var staged_addr = native_scratch_address(staged)
++    var staged = native_scratch_bytes(view.size() * 4) if scratch else labels_vector(view.size(), "<f4", context)
++    var staged_addr = native_scratch_address(staged) if scratch else labels_address(staged)
+     labels_cast(view.addr, view.typestr, staged_addr, "<f4", view.size(), context)
++    _ = staged  # keep the Python object alive through the native call above
++    _ = view  # keep the Python object alive through the native call above
+     var r = cols if contiguous_f else rows
+     var c = rows if contiguous_f else cols
+-    admitted_transpose_to_f32[DType.float32](staged_addr, dst, r, c)
++    _ = py_call_typed(labels_helper(context, "transpose_f32"), PythonObject(staged_addr), PythonObject(dst),
++                      PythonObject(r), PythonObject(c))
+     _ = staged  # keep the Python object alive through the native call above
+     _ = out  # keep the Python object alive through the native call above
+-    _ = view  # keep the Python object alive through the native call above
+     _ = staged^
+     return LabelsMatrix(out, dst, rows, cols, not want_f)
+ 
+@@ -591,19 +582,11 @@ def labels_forest_layout(source: PythonObject, name: String, context: PythonObje
+ 
+ 
+ def labels_all_finite(addr: Int, count: Int, wide: Bool, context: PythonObject) raises -> Bool:
+-    """`_buffer.all_finite`: the one host finiteness scan
+-    (core/host_finite_scan.mojo), SIMD words in tasks across the host's
+-    cores."""
+-    # Lane A1 admit-trees-labels: this was a Python call into the base
+-    # binding's `all_finite_f32/_f64`, which uploaded the words to the device
+-    # to scan them there. A predicate: no bit changes.
+-    # TOMBSTONE: labels_all_finite / trees_all_finite py_call into the base binding's device scan deleted 2026-11-08 by lane a1-admit-trees-labels; code recoverable at f7d10d2b09.
+-    # Restore: experiments/removed/A1_ADMIT_TREES_LABELS.patch.
+-    if count <= 0:
++    """`_buffer.all_finite`: the base binding's scan."""
++    if count == 0:
+         return True
+-    if wide:
+-        return host_all_finite_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr), count)
+-    return host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr), count)
++    var fn_obj = labels_helper(context, "all_finite_f64" if wide else "all_finite_f32")
++    return Int(py=py_call_typed(fn_obj, PythonObject(addr), PythonObject(count))) == 1
+ 
+ 
+ # ---------------------------------------------------------------- weights
+@@ -664,22 +647,16 @@ def labels_check_sample_weight(source: PythonObject, n: Int, context: PythonObje
+ 
+ 
+ def labels_prepare_weights(addr: Int, n: Int, context: PythonObject) raises:
+-    """The finiteness, sign and all-zero tests of `n` float32 weights,
+-    refused with scikit-learn's wording, in that order: the one weight
+-    admitter's tests (core/admitted_input.mojo `admitted_check_weights_f32`
+-    after the one host finiteness scan), tasks across the host's cores."""
+-    # Lane A1 admit-trees-labels: this was a Python call into the base
+-    # binding's `prepare_targets(None, w, n)` (one serial pass). Same
+-    # verdicts in the same order (-3 non-finite, -4 negative, -5 all zero).
+-    # TOMBSTONE: labels_prepare_weights / trees_prepare_weights py_call into the base binding's prepare_targets deleted 2026-11-08 by lane a1-admit-trees-labels; code recoverable at f7d10d2b09.
+-    # Restore: experiments/removed/A1_ADMIT_TREES_LABELS.patch.
+-    if n <= 0:
+-        return
+-    var w = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
+-    if not host_all_finite_f32(w, n):
++    """`prepare_targets(None, w, n)` on float32 weights: the weight scan,
++    refused with scikit-learn's wording."""
++    var status = Int(py=py_call_typed(labels_helper(context, "prepare_targets"), PythonObject(0), PythonObject(0),
++                                     PythonObject(n), PythonObject(0), PythonObject(0), PythonObject(addr),
++                                     PythonObject(0), PythonObject(0)))
++    if status == -3:
+         raise Error("Input sample_weight contains NaN or infinity.")
+-    # A vector weight: `output` is not written.
+-    if not admitted_check_weights_f32(w, w, n, False):
++    if status == -4:
++        raise Error("Negative values in data passed to `sample_weight`")
++    if status == -5:
+         raise Error("Sample weights must contain at least one non-zero number.")
+ 
+ 
+diff --git a/bindings/iforest_public_lifecycle.mojo b/bindings/iforest_public_lifecycle.mojo
+index 5282927744..666b5f5258 100644
+--- a/bindings/iforest_public_lifecycle.mojo
++++ b/bindings/iforest_public_lifecycle.mojo
+@@ -10,8 +10,6 @@ from bindings.native_loaded_module import NativeModules
+ from bindings.native_class_admission import class_record, class_admit
+ from bindings.classical_attributes import _type_mro
+ from bindings.classical_pandas import classical_admit_value
+-from bindings.trees_side_records import trees_finite_mark, trees_finite_clear
+-from bindings.admitted_held import admitted_held_x
+ from bindings.classical_validate import classical_check_x, classical_check_width, classical_estimator_name, classical_view
+ from bindings.classical_labels import labels_shape_of
+ from bindings.classical_exceptions import classical_require_fitted
+@@ -124,9 +122,7 @@ def iforest_public_operation(model: PythonObject, operation: String, args: Pytho
+         classical_require_fitted(model, False, method, context)
+     var name = classical_estimator_name(model)
+     var source = args[0]
+-    # A matrix the running meta-estimator holds is taken as it is
+-    # (bindings/admitted_held.mojo); anything else is admitted once.
+-    var x = admitted_held_x(source, name, context).array
++    var x = classical_check_x(source, name, context)
+     var shape = labels_shape_of(x, context)
+     var rows = shape[0]
+     var columns = shape[1]
+@@ -139,11 +135,6 @@ def iforest_public_operation(model: PythonObject, operation: String, args: Pytho
+     var outside = estimator_outside()
+     var depth = estimator_fit_begin(fields) if fitting else 0
+     var result = PythonObject(None)
+-    # classical_check_x refused NaN and infinity in x: the fit skips its
+-    # second scan of it (trees_side_records `trees_finite_known`; lane A1
+-    # admit-trees-labels).
+-    if fitting:
+-        trees_finite_mark(x)
+     try:
+         result = iforest_operation_with_source(model, "trees_iforest_" + method, Python.tuple(x), context, source)
+     except error:
+@@ -151,7 +142,6 @@ def iforest_public_operation(model: PythonObject, operation: String, args: Pytho
+         raise refused^
+     finally:
+         if fitting:
+-            trees_finite_clear()
+             estimator_fit_end(model, depth)
+     if fitting:
+         estimator_fit_complete(model, source, False, context)
+diff --git a/bindings/trees_public_iforest.mojo b/bindings/trees_public_iforest.mojo
+index a96a6e5eff..27ede2350e 100644
+--- a/bindings/trees_public_iforest.mojo
++++ b/bindings/trees_public_iforest.mojo
+@@ -37,9 +37,7 @@ from bindings.trees_public_inputs import (
+     trees_all_finite, trees_call,
+ )
+ from bindings.trees_lifetime import trees_resident_new
+-from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_finite_known
+-from bindings.native_buffer_owner import native_buffer_view
+-from bindings.native_array_storage import native_scratch_bytes, native_scratch_address
++from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop
+ from bindings.host_inference_scalars import host_inference_scalar
+ from bindings.metrics_native_support import metric_is_integral, metric_is_bool
+ 
+@@ -324,10 +322,7 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
+     var copied = _copied(x, X if copy_source is None else copy_source)
+     py_setitem(fields, "input_copied_", PythonObject(copied))
+     var device_scan = _device_scan(fields, context)
+-    # The public door's admission (admit_x) already refused NaN and
+-    # infinity in this X (trees_finite_known, as the forest fit): no second
+-    # scan of it (lane A1 admit-trees-labels).
+-    if not device_scan and not trees_finite_known(X) and not trees_all_finite(x.addr, x.rows * x.cols, False, context):
++    if not device_scan and not trees_all_finite(x.addr, x.rows * x.cols, False, context):
+         raise Error(_NONFINITE)
+     _ = x  # keep the Python object alive through the native calls above
+     # Caller-aliased input (hazard A, p3-trees): a float32 C-order X arrives
+@@ -343,21 +338,14 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
+     # keyed on `_x`), so X is used after fit returns. 0.8.66 regression C3
+     # (iforest fit 39.6x on istella, with C1): the copy is now one parallel
+     # copy across host cores instead of one serial memcpy.
+-    # Lane A1 admit-trees-labels (REGRESSIONS C3: the zero fill of the
+-    # 1.8 GB destination before the copy overwrote it): the copy lands in
+-    # one uninitialised byte store, which `_as_array` wraps as the fitted
+-    # Array (the shape `Array.from_buffer` gives a borrowed buffer). The
+-    # same float32 bytes: no bit change.
+-    # TOMBSTONE: iforest fit zero-filled trees_empty copy destination deleted 2026-11-08 by lane a1-admit-trees-labels; code recoverable at f7d10d2b09.
+-    # Restore: experiments/removed/A1_ADMIT_TREES_LABELS.patch.
+     if not copied:
+         var count = x.rows * x.cols
+-        var owned = native_scratch_bytes(count * 4)
+-        var dst = native_scratch_address(owned)
++        var owned = trees_empty(Python.tuple(x.rows, x.cols), "<f4", context)
++        var dst = trees_address(owned)
+         if count > 0:
+             host_parallel_copy_bytes(dst, x.addr, count * 4)
+         _ = x  # keep the caller's buffer alive through the copy above
+-        x = TreesMatrix(native_buffer_view(owned), dst, x.rows, x.cols, True)
++        x = TreesMatrix(owned, dst, x.rows, x.cols, True)
+     var had = Python.dict()
+     var kept = Python.tuple("_x", "n_features_in_")
+     for i in range(2):  # small-loop(kept): the two fitted field names restored on a refusal
+diff --git a/bindings/trees_public_lifecycle_native.mojo b/bindings/trees_public_lifecycle_native.mojo
+index 2251bfb2d9..57edc9a337 100644
+--- a/bindings/trees_public_lifecycle_native.mojo
++++ b/bindings/trees_public_lifecycle_native.mojo
+@@ -8,8 +8,7 @@ from bindings.native_loaded_module import native_loaded_module
+ from bindings.classical_attributes import classical_check_layout
+ from bindings.classical_arrays import classical_is_array
+ from bindings.classical_pandas import classical_admit_value
+-from bindings.classical_validate import classical_check_y, classical_check_width, classical_estimator_name
+-from bindings.admitted_held import admitted_held_x
++from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_width, classical_estimator_name
+ from bindings.classical_labels import labels_shape_of, _flatten_labels
+ from bindings.classical_exceptions import classical_require_fitted
+ from bindings.classifier_public_lifecycle import classifier_after_fit, _feature_names
+@@ -19,7 +18,7 @@ from providers.python.estimator_lifecycle_pyapi import estimator_outside as _out
+ from bindings.sequential_inputs import sequential_input
+ from bindings.trees_public_forest import forest_fit, forest_public_predict, forest_kind, forest_get_params, forest_check_fit_device
+ from bindings.trees_public_score import forest_score_public
+-from bindings.trees_public_inputs import trees_empty, trees_address, trees_cast, TreesMatrix
++from bindings.trees_public_inputs import trees_empty, trees_address, trees_cast, trees_f32
+ from bindings.trees_public_auxiliary import forest_auxiliary, forest_shape
+ from bindings.trees_public_state import forest_restore_state, tree_is_fitted
+ from bindings.trees_side_records import trees_admit_parameters, trees_finite_mark, trees_finite_clear
+@@ -84,21 +83,15 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
+         classical_require_fitted(model, False, "score" if operation.endswith("score") else "predict", context)
+     # `args` (X among them) was admitted just above: the X check reuses that
+     # admission instead of walking X again (perf3-nbr-msel-trees).
+-    # The one admission of X (bindings/admitted_input.mojo): refused with
+-    # scikit-learn's wording and borrowed when it already is C-order float32
+-    # (one parallel finiteness scan, no cast), otherwise one parallel cast;
+-    # a matrix the running meta-estimator holds is taken as it is
+-    # (bindings/admitted_held.mojo).
+-    var admitted = admitted_held_x(args[0], name, context, True)
+-    var x = admitted.array
++    var x = classical_check_x(args[0], name, context, True)
+     var kind = forest_kind(model, context)
+     var classifier = kind.endswith("_classifier")
+     var result = PythonObject(None)
+     if not fitting:
+-        # The admitted X is the predict's matrix as is (lane A1
+-        # admit-trees-labels: it was viewed a second time through trees_f32;
+-        # lane perf-trees-owed, 2026-11-06, had removed the third).
+-        var matrix = TreesMatrix(admitted.array, admitted.address, admitted.rows, admitted.cols, True)
++        # classical_check_x returned C-order float32 X: view it once here and
++        # hand that view to the predict (lane perf-trees-owed, 2026-11-06;
++        # the forest re-viewed X and re-checked the fitted state and width).
++        var matrix = trees_f32(x, 2, "C", "X", context)
+         classical_check_width(matrix.cols, Int(py=fields["n_features_in_"]), name)
+         _feature_check(model, fields, args[0], context)
+         if operation == "trees_public_forest_predict":
+@@ -111,7 +104,8 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
+             raise Error("unknown native public forest operation " + operation)
+         _ = matrix^
+         return _public_result(result, operation, classifier, context)
+-    var rows = admitted.rows
++    var shape = labels_shape_of(x, context)
++    var rows = shape[0]
+     if fitting:
+         var y = args[1]
+         if classifier:
+@@ -126,7 +120,7 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
+             raise Error("TypeError: native forest fit depth must be an exact integer")
+         var depth = Int(py=depth_object)
+         py_setitem(fields, "_mojolearn_fitting", PythonObject(depth + 1))
+-        # admit_x refused NaN and infinity in x: the fit skips its
++        # classical_check_x refused NaN and infinity in x: the fit skips its
+         # second scan of it (trees_side_records `trees_finite_known`).
+         trees_finite_mark(x)
+         try:
+diff --git a/bindings/trees_public_meta.mojo b/bindings/trees_public_meta.mojo
+index e0ee387062..dbff18339d 100644
+--- a/bindings/trees_public_meta.mojo
++++ b/bindings/trees_public_meta.mojo
+@@ -27,11 +27,10 @@ from bindings.py_attr import py_attr
+ from bindings.native_loaded_module import native_loaded_module
+ from bindings.py_typed_call import py_call_typed
+ from bindings.classical_arrays import classical_wrap_array, _store_code
+-from bindings.admitted_held import admitted_scope_begin, admitted_scope_end, admitted_scope_open, admitted_hold, admitted_is_held
+ from bindings.trees_public_inputs import (
+     TreesMatrix, TreesLabels, TreesView, _view_of_array, trees_builtins, trees_table, trees_entry, trees_helper, trees_empty,
+     trees_vector, trees_reshape, trees_address, trees_f32, trees_view, trees_check_rank, trees_itemsize,
+-    trees_check_sample_weight, trees_encode_labels, trees_decode_labels, trees_cast, trees_all_finite,
++    trees_check_sample_weight, trees_encode_labels, trees_decode_labels, trees_cast,
+ )
+ from bindings.trees_public_forest import (
+     _check_mode, _repr, _str, _truthy, _is_bool, _is_integral, _refuse, forest_kind, _classifier,
+@@ -131,32 +130,9 @@ def _f64_word(array: PythonObject, index: Int) raises -> Float64:
+ 
+ 
+ def _x_array(X: PythonObject, context: PythonObject) raises -> PythonObject:
+-    """`as_f32_c(X, ndim=2, name="X")` as the Array the members read. Inside
+-    the operation's hold scope (meta_admitted_operation) a finite matrix is
+-    held once (bindings/admitted_held.mojo `admitted_hold`): every member
+-    door then reads it as admitted, with no second view, check or scan."""
+-    if admitted_is_held(X):
+-        return X
++    """`as_f32_c(X, ndim=2, name="X")` as the Array the members read."""
+     var m = _x_f32(X, context)
+-    var Xa = _as_array(m, Python.tuple(m.rows, m.cols), context)
+-    _hold_finite(Xa, context)
+-    return Xa
+-
+-
+-def _hold_finite(Xa: PythonObject, context: PythonObject) raises:
+-    """Hold the float32 C-order Array `Xa` for the members when it is
+-    finite (one scan for the whole call, instead of one per member door).
+-    A non-finite matrix is not held: each member refuses or accepts it as
+-    its own door does."""
+-    if not admitted_scope_open() or admitted_is_held(Xa):
+-        return
+-    var rows = _rows(Xa)
+-    var cols = _cols(Xa)
+-    if rows < 1 or cols < 1:
+-        return
+-    var address = trees_address(Xa)
+-    if trees_all_finite(address, rows * cols, False, context):
+-        admitted_hold(Xa, address, rows, cols)
++    return _as_array(m, Python.tuple(m.rows, m.cols), context)
+ 
+ 
+ def _rows(array: PythonObject) raises -> Int:
+@@ -907,11 +883,6 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
+         _ = Xa  # keep the Python object alive through the native call above
+         var Xte = _gather_view(xt, x_view.addr, n, d, te_view, cols_view, context)
+         _ = Xa  # keep the Python object alive through the native call above
+-        if admitted_is_held(Xa):
+-            # Rows of a held (finite) X are finite: the fold's members read
+-            # the fold matrices as admitted too.
+-            admitted_hold(Xtr, trees_address(Xtr), tr_view.shape[0], d)
+-            admitted_hold(Xte, trees_address(Xte), te_view.shape[0], d)
+         for i in range(len(active.ests)):  # driver-loop: over members
+             var e = _clone(active.ests[i], context)
+             _fit_member(e, Xtr, y_tr, w_tr, context)
+@@ -2100,27 +2071,19 @@ def meta_admitted_operation(model: PythonObject, kind: String, operation: String
+     to pay that admission twice, the second time inside meta_operation).
+     A prediction (predict, predict_proba, transform, score) stages X once
+     for its forest members (lane perf-sweep-trees, 2026-11-05)."""
+-    # X is admitted once for the whole operation (lane A1
+-    # admit-trees-labels): the matrices the meta-estimator admits inside this
+-    # scope are held for its members' doors and dropped when it ends.
+-    var mark = admitted_scope_begin()
+-    var result = PythonObject(None)
+-    try:
+-        if (operation == "trees_meta_predict" or operation == "trees_meta_predict_proba"
+-                or operation == "trees_meta_transform" or operation == "trees_meta_score"):
+-            var prepared = _staged_input(model, kind, args[0], context)
+-            var call = Python.list(prepared[0])
+-            for i in range(1, len(args)):  # small-loop(args): the call's remaining positional arguments
+-                _ = py_call(call.append, args[i])
+-            try:
+-                result = _meta_dispatch(model, kind, operation, py_call(trees_builtins().tuple, call), context)
+-            finally:
+-                trees_unstage(prepared[1])
+-        else:
+-            result = _meta_dispatch(model, kind, operation, args, context)
+-    finally:
+-        admitted_scope_end(mark)
+-    return result
++    if (operation == "trees_meta_predict" or operation == "trees_meta_predict_proba"
++            or operation == "trees_meta_transform" or operation == "trees_meta_score"):
++        var prepared = _staged_input(model, kind, args[0], context)
++        var call = Python.list(prepared[0])
++        for i in range(1, len(args)):  # small-loop(args): the call's remaining positional arguments
++            _ = py_call(call.append, args[i])
++        var result = PythonObject(None)
++        try:
++            result = _meta_dispatch(model, kind, operation, py_call(trees_builtins().tuple, call), context)
++        finally:
++            trees_unstage(prepared[1])
++        return result
++    return _meta_dispatch(model, kind, operation, args, context)
+ 
+ 
+ def _meta_dispatch(model: PythonObject, kind: String, operation: String, args: PythonObject,
+diff --git a/core/admitted_cast_elements.mojo b/core/admitted_cast_elements.mojo
+deleted file mode 100644
+index 811aaae5f8..0000000000
+--- a/core/admitted_cast_elements.mojo
++++ /dev/null
+@@ -1,69 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""`cast_elements` of the tree and label doors, split across the host's cores
+-(no Python import).
+-
+-Lane A1 admit-trees-labels: bindings/classical_labels.mojo `labels_cast`
+-(the trees_* `trees_cast`) reached the base binding's `cast_elements` through
+-a Python call, one task (`_tasks = 1`, core/hotpath_impl.mojo). It now runs
+-the same typed kernel in process over contiguous element ranges, one range
+-per task (core/host_predict_threads.mojo, with its grain floor). The base
+-binding's own `cast_elements` export keeps its one task: it is GPU-binding
+-code, where the host-route fence refuses host threads.
+-
+-    admitted_cast_elements(sa, sc, da, dc, count) -> Int
+-        dst[i] = <dc>(src[i]) for i in [0, count); 0, or 1 when an element
+-        is one the Python conversion refuses (`cast_elements`' contract)
+-
+-Numerics: every element is converted on its own by the same conversion, so
+-the split moves no output bit; the refusal is the OR of the ranges'.
+-"""
+-from core.hotpath_impl import cast_elements
+-from core.host_parallel import host_parallelize
+-from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+-
+-
+-@always_inline
+-def _width(code: Int) -> Int:
+-    """Bytes per element of a hotpath dtype code (HP_*)."""
+-    if code == 1 or code == 3:
+-        return 8
+-    if code == 0 or code == 2 or code == 4:
+-        return 4
+-    if code == 6 or code == 8:
+-        return 2
+-    return 1
+-
+-
+-def admitted_cast_elements(sa: Int, sc: Int, da: Int, dc: Int, count: Int) raises -> Int:
+-    # parallel: element ranges across host cores (lane A1: one task through the base binding)
+-    if count <= 0:
+-        return 0
+-    var tasks = host_predict_task_count_work(count, count)
+-    if tasks <= 1:
+-        return cast_elements(sa, sc, da, dc, count)
+-    # Whole SIMD runs (8 elements) per range but the last.
+-    var chunk = ((host_predict_chunk(count, tasks) + 7) // 8) * 8
+-    var ws = _width(sc)
+-    var wd = _width(dc)
+-    var flags = List[UInt8](length=tasks, fill=UInt8(0))
+-    var flag_ptr = rebind[MutPointer[UInt8, MutUntrackedOrigin]](flags.unsafe_ptr())
+-
+-    def _range(t: Int) {imm sa, imm sc, imm da, imm dc, imm count, imm chunk, imm ws, imm wd, imm flag_ptr}:
+-        var lo = t * chunk
+-        if lo >= count:
+-            return
+-        var n = min(chunk, count - lo)
+-        try:
+-            if cast_elements(sa + lo * ws, sc, da + lo * wd, dc, n) != 0:
+-                flag_ptr.unsafe_store(t, UInt8(1))
+-        except:
+-            flag_ptr.unsafe_store(t, UInt8(1))
+-
+-    host_parallelize(_range, tasks)
+-    var refused = 0
+-    for t in range(tasks):  # driver-loop: over the element tasks' flags (at most one per core)
+-        if flags[t] != UInt8(0):
+-            refused = 1
+-    _ = flags^
+-    return refused
+diff --git a/core/admitted_transpose.mojo b/core/admitted_transpose.mojo
+deleted file mode 100644
+index 826beb7c9b..0000000000
+--- a/core/admitted_transpose.mojo
++++ /dev/null
+@@ -1,68 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""The parallel tiled transpose of admitted input words (no Python import).
+-
+-Lane A1 admit-trees-labels (docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md
+-section 3.3): the tree and label doors (bindings/classical_labels.mojo
+-`labels_f32_view`) asked for an F-order float32 X (or a C-order X of an
+-F-order source) through a Python call into the base binding's
+-`transpose_f32` / `cast_colmajor_f64_to_f32` (bindings/_mojolearn.mojo),
+-which uploaded X to the device, transposed it there and downloaded it. They
+-now call this in process.
+-
+-    admitted_transpose_to_f32[S](src, dst, nr, nc)
+-        dst[c * nr + r] = Float32(src[r * nc + c]) for the C-contiguous
+-        nr x nc block of Scalar[S] at `src` (S = float32: a pure move;
+-        S = float64: the one narrowing per element). Blocks of
+-        _AT_TILE_ROWS source rows are split into contiguous tasks across the
+-        host's cores (core/host_predict_threads.mojo, with its grain floor).
+-
+-Numerics: each element is written once, to its own cell, by the same single
+-cast `tiled_transpose_to_f32` (core/mojolearn_shell_impl.mojo) and the device
+-transpose make, so neither the tile shape nor the split changes an output
+-bit.
+-"""
+-from core.host_parallel import host_parallelize
+-from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+-
+-comptime _AT_TILE_ROWS = 128
+-comptime _AT_TILE_COLS = 64
+-"""The tile of `tiled_transpose_to_f32`: 64 KB of float64 in, 32 KB of
+-float32 out, so the strided side of the transpose hits a core's L1."""
+-
+-
+-def admitted_transpose_to_f32[S: DType](src: Int, dst: Int, nr: Int, nc: Int):
+-    """The column-major float32 layout of the C-contiguous nr x nc block of
+-    Scalar[S] at byte address `src`, written to `dst` (no overlap). The same
+-    call turns a column-major block into C order: pass nr = cols,
+-    nc = rows. Every cell of `dst` is written, so it may be uninitialised."""
+-    # parallel: row bands of tiles across host cores (lane A1: the device round trip through the base binding)
+-    if nr <= 0 or nc <= 0:
+-        return
+-    var sp = MutPointer[Scalar[S], MutUntrackedOrigin](unsafe_from_address=src)
+-    var dp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst)
+-    var bands = (nr + _AT_TILE_ROWS - 1) // _AT_TILE_ROWS
+-    var tasks = host_predict_task_count_work(bands, nr * nc)
+-    var chunk = host_predict_chunk(bands, tasks)
+-
+-    def _bands(t: Int) {imm sp, imm dp, imm nr, imm nc, imm chunk}:
+-        var r0 = t * chunk * _AT_TILE_ROWS
+-        var stop = min((t + 1) * chunk * _AT_TILE_ROWS, nr)
+-        while r0 < stop:
+-            var r1 = min(r0 + _AT_TILE_ROWS, stop)
+-            var c0 = 0
+-            while c0 < nc:
+-                var c1 = min(c0 + _AT_TILE_COLS, nc)
+-                # One column at a time inside the tile: contiguous writes,
+-                # strided reads within the tile's rows (already in cache).
+-                for c in range(c0, c1):
+-                    var base = c * nr
+-                    for r in range(r0, r1):
+-                        dp.unsafe_store(base + r, sp.unsafe_load(r * nc + c).cast[DType.float32]())
+-                c0 = c1
+-            r0 = r1
+-
+-    if tasks <= 1:
+-        _bands(0)
+-    else:
+-        host_parallelize(_bands, tasks)

@@ -6,6 +6,11 @@
 from std.memory import bitcast
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_COPY
+from autograd.program_loop import (
+    LOOP_DONE, LOOP_ITER, LOOP_STOPPED, LOOP_BAD, LOOP_WORDS, LOOP_MAX_EXACT, EXECUTOR_TIMERS, LOOP_CHECK_AUTO,
+    OP_LOOP_TICK, OP_LOOP_COMMIT, OP_LOOP_ADVANCE, OP_LOOP_APPEND, OP_LOOP_ITER_WORD, OP_LOOP_SHADOW, LoopTimers,
+    loop_check_every, loop_auto_chunk,
+)
 from autograd.ops_api import OpsSession, ops_session
 from autograd.program import OpsProgram, PROGRAM_IN_IDS
 from autograd.program_optimize import program_optimize
@@ -54,35 +59,145 @@ def _predicate[E: Exec & Movable & Deinitable](
     return value != 0
 
 
-def _copy_state[E: Exec & Movable & Deinitable](
-    mut s: OpsSession[E], body: OpsProgram, outputs: List[Int],
-) raises -> Tuple[List[FP], List[ShapeN]]:
-    var buffers = List[FP]()
-    var shapes = List[ShapeN]()
-    try:
-        for k in range(len(outputs)):  # driver-loop: over loop-carried state tensors
-            var slot = s._slot(outputs[k])
-            var sh = s.shapes[slot]
-            if s.int_words[slot]:
-                raise Error("ValueError: while_loop state outputs must hold floating-point values")
-            if sh.ndim != body.in_shapes[k].ndim:
-                raise Error("while_loop body must preserve each state tensor's rank")
-            var t = s.tensors[slot]
-            var src = s.tape.value_of(s.ex, t)
-            var dst = s.ex.alloc(sh.count())
-            buffers.append(dst)
-            shapes.append(sh)
-            var args = Args()
-            args.p0 = src
-            args.p1 = dst
-            s.ex.launch[OP_COPY](args, sh.count())
-        # Reusing scratch after this point cannot overwrite a state copy.
+def _shadow_mask[E: Exec & Movable & Deinitable](mut s: OpsSession[E], body: OpsProgram) raises -> List[Bool]:
+    """Which body parameters the loop's gate shadows (lane x1b): declared
+    state, except (lane x45c) append-only state, a full-causal KV cache
+    whose position word is a shadowed parameter of the same body. A body
+    run past the stop writes such a cache only at the position its word
+    holds, in slots no committed position reads; the gate restores the
+    word, so the next write lands there again. The cache is neither copied
+    per iteration nor counted against LOOP_DRAIN_FLOATS, so a decode body
+    over many layers keeps its chunk."""
+    var params = parameter_buffers(s, body)
+    var n = len(body.params)
+    var mask = List[Bool](length=n, fill=False)
+    for j in range(n):  # driver-loop: over body parameters (declared state)
+        mask[j] = s.is_state(body.params[j])
+    for j in range(n):  # driver-loop: over body parameters (append-only state)
+        if not mask[j]:
+            continue
+        var q = s.append_words_of(Int(params[j]))
+        if q == 0:
+            continue
+        for k in range(n):  # driver-loop: over body parameters (the position word of an append-only cache)
+            if k != j and mask[k] and Int(params[k]) == q and s.append_words_of(Int(params[k])) == 0:
+                mask[j] = False
+    return mask^
+
+
+# TOMBSTONE: _copy_state (REFACTORED: per-iteration copy of the carried state into fresh buffers plus a drain) deleted 2026-11-08 by lane/fix-d3-executor-loops; code recoverable at 22ac89b54c.
+# The bounded loop now carries its state in place (`_commit_state`, OP_LOOP_COMMIT) and stops on the device (OP_LOOP_TICK).
+# Restore: git apply experiments/removed/EXECUTOR_LOOP_DRIVER_LOOPS.patch; record in docs/TOMBSTONES.md.
+
+
+def _lap[E: Exec & Movable & Deinitable](mut s: OpsSession[E], mut timers: LoopTimers, name: String) raises:
+    """Per-op timer mark (`MOJOLEARN_EXECUTOR_TIMERS`): drain the executor and
+    charge the time since the last mark to `name`. Compiled out when off."""
+    comptime if EXECUTOR_TIMERS:
         s.ex.sync()
-    except err:
-        for k in range(len(buffers)):  # driver-loop: over acquired state owners
+        timers.lap(name)
+
+
+def _free_loop_owners[E: Exec & Movable & Deinitable](
+    mut s: OpsSession[E], extras: List[FP], scratch: List[FP], scratch_n: List[Int],
+):
+    """Return the loop's register block and staging buffers (quiet: this runs
+    on the error path too)."""
+    for k in range(len(scratch_n)):  # driver-loop: over loop-carried state tensors (staging slots)
+        if scratch_n[k] > 0:
+            try:
+                s.ex.free(scratch[k])
+            except:
+                pass
+    for k in range(len(extras)):  # driver-loop: over the loop's register blocks
+        try:
+            s.ex.free(extras[k])
+        except:
+            pass
+
+
+def _overlaps(addr: Int, n: Int, base: Int, m: Int) -> Bool:
+    """[addr, addr + n) and [base, base + m) (float32 words) share a word."""
+    return addr < base + 4 * m and base < addr + 4 * n
+
+
+def _commit_state[E: Exec & Movable & Deinitable](
+    mut s: OpsSession[E], body: OpsProgram, outputs: List[Int], words: FP,
+    mut buffers: List[FP], mut shapes: List[ShapeN], mut scratch: List[FP], mut scratch_n: List[Int],
+    gated_only: Bool,
+) raises:
+    """Write the body's outputs into the carried state buffers in place, each
+    behind the register block's gate (OP_LOOP_COMMIT, a bit copy). An output
+    that reads another state buffer is staged first, so no commit overwrites
+    a value a later commit still reads. With `gated_only` (several iterations
+    between flag reads) every output must keep its state tensor's shape;
+    otherwise (the gate is known open) a resized output takes a new buffer."""
+    var n_state = len(outputs)
+    var srcs = List[FP]()
+    var out_shapes = List[ShapeN]()
+    for k in range(n_state):  # driver-loop: over loop-carried state tensors
+        var slot = s._slot(outputs[k])
+        var sh = s.shapes[slot]
+        # lane x1: int32-word state (token ids, positions) is carried like
+        # float state; each output keeps its state input's kind.
+        if s.int_words[slot] != (body.in_kinds[k] == PROGRAM_IN_IDS):
+            raise Error("ValueError: while_loop state output " + String(k) + " must hold the kind of its state input"
+                        + " (integer ids for an ids input, floating-point values otherwise)")
+        if sh.ndim != body.in_shapes[k].ndim:
+            raise Error("while_loop body must preserve each state tensor's rank")
+        if gated_only and not sh.same(shapes[k]):
+            raise Error("ValueError: while_loop with check_every above 1 needs a body that keeps each state tensor's shape")
+        srcs.append(s.tape.value_of(s.ex, s.tensors[slot]))
+        out_shapes.append(sh)
+    # Stage the outputs that read a state buffer other than their own (or a
+    # shifted view of their own): every staging copy is enqueued before the
+    # first commit.
+    for k in range(n_state):  # driver-loop: over loop-carried state tensors
+        var addr = Int(srcs[k])
+        var n = out_shapes[k].count()
+        var staged = False
+        for j in range(n_state):  # driver-loop: over loop-carried state tensors (alias test, addresses only)
+            if j == k and addr == Int(buffers[k]):
+                continue
+            if _overlaps(addr, n, Int(buffers[j]), shapes[j].count()):
+                staged = True
+        if staged:
+            # One staging buffer per state slot, made at its first use and
+            # kept for the loop (`scratch_n[k]` words; 0 = none yet).
+            if scratch_n[k] < n:
+                if scratch_n[k] > 0:
+                    s.ex.free(scratch[k])
+                scratch[k] = s.ex.alloc(n)
+                scratch_n[k] = n
+            var a = Args()
+            a.p0 = srcs[k]
+            a.p1 = scratch[k]
+            s.ex.launch[OP_COPY](a, n)
+            srcs[k] = scratch[k]
+    for k in range(n_state):  # driver-loop: over loop-carried state tensors
+        if Int(srcs[k]) == Int(buffers[k]):
+            if not gated_only:
+                shapes[k] = out_shapes[k]
+            continue
+        var n = out_shapes[k].count()
+        if n != shapes[k].count():
+            # Only reached with the gate known open (gated_only is False).
+            var fresh = s.ex.alloc(n)
+            var c = Args()
+            c.p0 = srcs[k]
+            c.p1 = fresh
+            s.ex.launch[OP_COPY](c, n)
             s.ex.free(buffers[k])
-        raise err
-    return (buffers^, shapes^)
+            buffers[k] = fresh
+            shapes[k] = out_shapes[k]
+            continue
+        var a = Args()
+        a.p0 = srcs[k]
+        a.p1 = buffers[k]
+        a.p2 = words
+        s.ex.launch[OP_LOOP_COMMIT](a, n)
+        if not gated_only:
+            shapes[k] = out_shapes[k]
 
 
 # ---------------------------------------------------------------- entries
@@ -96,61 +211,116 @@ struct ControlPlan(Movable):
     var other: OpsProgram
     var is_loop: Bool
     var maximum: Int
+    #: iterations between two host reads of the loop's register block
+    var check_every: Int
+    #: the body and the condition take the iteration register as a last input
+    var iteration_input: Bool
+    #: lane x1: False for a loop with no condition program (it runs to the
+    #: bound: a decode of a fixed token count)
+    var has_condition: Bool
+    #: lane x1: record state 0 after every committed iteration (the tokens
+    #: of a decode loop), returned as ControlResult.history
+    var history: Bool
+    #: lane x1b: `check_every` came from the chunk rule (check_every 0): the
+    #: first iteration is read first, and the loop keeps `check_every` only
+    #: when that iteration kept every state tensor's shape (1 otherwise)
+    var auto_chunk: Bool
+    #: lane x1b: iterations can run past the stop (a condition and a chunk
+    #: above 1) and the body writes declared state in place: the loop
+    #: shadows that state behind the gate (OP_LOOP_SHADOW)
+    var shadow: Bool
 
     def __init__(out self, var body: OpsProgram, var condition: OpsProgram, var other: OpsProgram,
-                 is_loop: Bool, maximum: Int):
+                 is_loop: Bool, maximum: Int, check_every: Int = 1, iteration_input: Bool = False,
+                 has_condition: Bool = True, history: Bool = False, auto_chunk: Bool = False,
+                 shadow: Bool = False):
         self.body = body^
         self.condition = condition^
         self.other = other^
         self.is_loop = is_loop
         self.maximum = maximum
+        self.check_every = check_every
+        self.iteration_input = iteration_input
+        self.has_condition = has_condition
+        self.history = history
+        self.auto_chunk = auto_chunk
+        self.shadow = shadow
 
 
 struct ControlResult(Movable):
     var outputs: List[HostArray]
     var iterations: Int
     var stopped: Bool
+    #: ControlPlan.history: (iterations, state 0's element count), one row a
+    #: committed iteration; empty otherwise
+    var history: List[HostArray]
 
     def __init__(out self):
         self.outputs = List[HostArray]()
         self.iterations = 0
         self.stopped = False
+        self.history = List[HostArray]()
 
 
 def control_prepare[E: Exec & Movable & Deinitable, KIND: Int](
     sid: Int, body_id: Int, condition_id: Int, other_id: Int, condition_sid: Int, other_sid: Int,
-    maximum: Int, optimize: Bool,
+    maximum: Int, optimize: Bool, check_every: Int = 1, iteration_input: Bool = False, history: Bool = False,
 ) raises -> ControlPlan:
     # other_id >= 1 selects if/else; other_id == 0 selects a bounded while.
+    # condition_id == 0 (a loop only, lane x1): no condition, the loop runs
+    # to max_iterations (Program.decode).
     if condition_sid != sid or other_sid != sid:
         raise Error("control-flow programs must belong to the same session")
     var s = ops_session[E, KIND](sid)
     if s[].tape.is_recording():
         raise Error("control flow requires an inference session")
     var body = s[].program(body_id)
-    var condition = s[].program(condition_id)
-    var other = body.copy()
     var is_loop = other_id == 0
+    var has_condition = condition_id != 0
+    if not has_condition and not is_loop:
+        raise Error("ValueError: run_if needs a condition program")
+    if history and not is_loop:
+        raise Error("ValueError: a token record needs a loop")
+    var condition = s[].program(condition_id) if has_condition else body.copy()
+    var other = body.copy()
     if not is_loop:
         other = s[].program(other_id)
         _signature(body, other)
     elif maximum < 0:
         raise Error("while_loop max_iterations must be nonnegative")
-    _signature(body, condition)
-    if len(condition.outs) != 1:
-        raise Error("control-flow condition must return one scalar")
+    if has_condition:
+        _signature(body, condition)
+        if len(condition.outs) != 1:
+            raise Error("control-flow condition must return one scalar")
+    var every = 1
     if is_loop:
-        if len(body.outs) != body.n_in:
+        every = loop_check_every(check_every, "while_loop")
+        # TOMBSTONE: the forced per-iteration status read of a body with a block step op (REFACTORED: in-place state is shadowed behind the gate, OP_LOOP_SHADOW) deleted 2026-11-08 by lane/x1b-executor-gated-state-chunked-loop; code recoverable at f59d913b0b.
+        # Restore: git apply experiments/removed/EXECUTOR_GATED_STATE_CHUNKED_LOOP.patch; record in docs/TOMBSTONES.md.
+        if maximum > LOOP_MAX_EXACT:
+            raise Error("ValueError: while_loop max_iterations must be at most " + String(LOOP_MAX_EXACT)
+                        + ", got " + String(maximum))
+        var n_state = body.n_in - (1 if iteration_input else 0)
+        if iteration_input:
+            # The register is one value: a float (exact below 2**24) or, for
+            # an ids input (lane x1), an int32 word `take`/`index` can read.
+            if body.n_in < 1 or body.in_shapes[n_state].count() != 1:
+                raise Error("ValueError: while_loop with iteration=True needs a last body input of one value")
+        if len(body.outs) != n_state:
             raise Error("while_loop body must return one tensor per input")
-        for k in range(body.n_in):  # driver-loop: over state input kinds
-            if body.in_kinds[k] == PROGRAM_IN_IDS:
-                raise Error("ValueError: while_loop state inputs must hold floating-point values")
-        for k in range(len(body.outs)):  # driver-loop: over int32-word outputs cannot become float state
+        if history and n_state < 1:
+            raise Error("ValueError: a token record needs at least one state input")
+        # lane x1: int32-word state is carried as it is; each output must
+        # keep its input's kind (an int32 argmax cannot become float state,
+        # nor a float value ids state). The rest is checked at each commit.
+        for k in range(len(body.outs)):  # driver-loop: over int32-word argmax outputs and their state kinds
             var value_ref = body.outs[k]
             if value_ref >= body.n_in:
                 var node = value_ref - body.n_in
-                if body.code[node] == 72 and body.ints[body.i_at[node] + 2] == 0:
-                    raise Error("ValueError: while_loop state outputs must hold floating-point values")
+                var int_argmax = body.code[node] == 72 and body.ints[body.i_at[node] + 2] == 0
+                if int_argmax and body.in_kinds[k] != PROGRAM_IN_IDS:
+                    raise Error("ValueError: while_loop state output " + String(k)
+                                + " holds integer ids; its state input must be ids")
     if optimize:
         var body_plan = program_optimize(body)
         var condition_plan = program_optimize(condition)
@@ -158,7 +328,25 @@ def control_prepare[E: Exec & Movable & Deinitable, KIND: Int](
         body = body_plan.program.copy()
         condition = condition_plan.program.copy()
         other = other_plan.program.copy()
-    return ControlPlan(body^, condition^, other^, is_loop, maximum)
+    var auto_chunk = False
+    var shadow = False
+    if is_loop:
+        # lane x1b: the declared state the body writes in place (a block step
+        # op's state, kv and words are its parameters; state is a property of
+        # the buffer, OpsSession.buffer_kind).
+        var shadow_floats = 0
+        var shadowed = _shadow_mask(s[], body)
+        for j in range(len(body.params)):  # driver-loop: over body parameters, for declared state written in place
+            if shadowed[j]:
+                shadow_floats += body.param_shapes[j].count()
+        if every == LOOP_CHECK_AUTO:
+            auto_chunk = True
+            every = loop_auto_chunk(maximum, has_condition, shadow_floats)
+        # Bodies past the stop exist only when a condition can stop the loop
+        # between two reads; with none every enqueued body commits.
+        shadow = has_condition and every > 1 and shadow_floats > 0
+    return ControlPlan(body^, condition^, other^, is_loop, maximum, every, iteration_input, has_condition, history,
+                       auto_chunk, shadow)
 
 
 def control_run[E: Exec & Movable & Deinitable, KIND: Int](
@@ -199,26 +387,219 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
     var result = ControlResult()
     var iterations = 0
     var stopped = False
+    # The loop's register block and staging slots (freed with the state).
+    var extras = List[FP]()
+    var scratch = List[FP]()
+    var scratch_n = List[Int]()
+    # lane x1b: the declared state the body writes in place, its shadows
+    # (owned by `extras`) and their float counts.
+    var shadow_live = List[FP]()
+    var shadow_copy = List[FP]()
+    var shadow_n = List[Int]()
     try:
         s[].tape.no_grad()
         if is_loop:
-            while True:  # driver-loop: over control-flow iterations, bounded by the explicit iteration limit
-                if not _predicate(s[], condition, condition_replay, buffers, shapes, temps):
-                    stopped = True
-                    break
-                if iterations == maximum:
-                    break
-                var outputs = _execute(s[], body, body_replay, buffers, shapes, temps)
-                var next_state = _copy_state(s[], body, outputs)
-                for k in range(len(buffers)):  # driver-loop: over previous state owners
-                    s[].ex.free(buffers[k])
-                buffers = next_state[0].copy()
-                shapes = next_state[1].copy()
-                iterations += 1
+            # Lane fix-d3-executor-loops (2026-11-08): the executor's bounded
+            # loop (autograd/program_loop.mojo). The carried state stays in
+            # the uploaded buffers and is updated in place (OP_LOOP_COMMIT);
+            # the condition goes to the register block on the device
+            # (OP_LOOP_TICK) and the iteration register counts committed
+            # iterations (OP_LOOP_ADVANCE). The host reads the block once
+            # every `check_every` iterations, after a tick and before its
+            # body, so with check_every = 1 no body runs after the stop and
+            # the loop drains once per iteration (the former loop drained
+            # twice: the condition read and the state copy). Iterations
+            # enqueued past the stop leave the state as the stopping
+            # iteration left it (closed gate), so the outputs, `iterations`
+            # and `stopped` do not depend on `check_every`.
+            #
+            # Lane x1b (2026-11-08): the same holds for a body that writes
+            # declared state in place (a block step op): its state is
+            # shadowed behind the gate (OP_LOOP_SHADOW after every body), so
+            # no body op needs the gate and the loop reads its status once
+            # per chunk for every body. `check_every` 0 is the chunk rule
+            # (`loop_auto_chunk`, autograd/program_loop.mojo); the committed
+            # count is the device's iteration register.
+            var every = plan.check_every
+            var chunk = 1 if plan.auto_chunk else every
+            var probing = plan.auto_chunk and every > 1
+            var n_state = len(buffers)
+            var first_shapes = shapes.copy()
+            var words = s[].ex.alloc(LOOP_WORDS)
+            extras.append(words)
+            for _k in range(n_state):  # driver-loop: over loop-carried state tensors (staging slots)
+                scratch.append(words)
+                scratch_n.append(0)
+            var mirror = List[Float32](length=LOOP_WORDS, fill=Float32(0))
+            var mirror_p = FP(unsafe_from_address=Int(mirror.unsafe_ptr()))
+            var register = FP(unsafe_from_address=Int(words) + 4 * LOOP_ITER)
+            # lane x1: an ids iteration input reads an int32 copy of the
+            # register (OP_LOOP_ITER_WORD before each iteration's condition).
+            var iter_words = plan.iteration_input and body.in_kinds[n_state] == PROGRAM_IN_IDS
+            if iter_words:
+                register = s[].ex.alloc(1)
+                extras.append(register)
+            # lane x1: a loop with no condition ticks on a constant 1.
+            var one = words
+            if not plan.has_condition:
+                one = s[].ex.alloc(1)
+                extras.append(one)
+                var one_host = List[Float32](length=1, fill=Float32(1.0))
+                s[].ex.upload(one, FP(unsafe_from_address=Int(one_host.unsafe_ptr())), 1)
+                _ = len(one_host)  # keep-alive past the staging copy
+            # lane x1: the record of state 0 after every committed iteration.
+            var record = words
+            var per_token = shapes[0].count() if n_state > 0 else 0
+            if plan.history and maximum > 0:
+                record = s[].ex.alloc(maximum * per_token)
+                extras.append(record)
+            if plan.shadow:
+                # Each shadow starts as the state before the first body.
+                var params = parameter_buffers(s[], body)
+                var shadowed = _shadow_mask(s[], body)
+                for j in range(len(body.params)):  # driver-loop: over body parameters (declared state shadows)
+                    if shadowed[j]:
+                        var n = body.param_shapes[j].count()
+                        var copy = s[].ex.alloc(n)
+                        extras.append(copy)
+                        shadow_live.append(params[j])
+                        shadow_copy.append(copy)
+                        shadow_n.append(n)
+                        var c = Args()
+                        c.p0 = params[j]
+                        c.p1 = copy
+                        s[].ex.launch[OP_COPY](c, n)
+            var timers = LoopTimers("while_loop")
+            var done = False
+            #: bodies enqueued so far; never more than the bound
+            var enqueued = 0
+            while not done:  # driver-loop: over flag-read chunks of the bounded loop, bounded by max_iterations
+                var j = 0
+                while j < chunk:  # driver-loop: over loop iterations enqueued between two flag reads
+                    var in_buffers = buffers.copy()
+                    var in_shapes = shapes.copy()
+                    if plan.iteration_input:
+                        if iter_words:
+                            var iw = Args()
+                            iw.p0 = words
+                            iw.p1 = register
+                            s[].ex.launch[OP_LOOP_ITER_WORD](iw, 1)
+                        in_buffers.append(register)
+                        in_shapes.append(body.in_shapes[n_state])
+                    var tick = Args()
+                    tick.p0 = words
+                    tick.p1 = one
+                    tick.i0 = maximum
+                    if plan.has_condition:
+                        var cout = _execute(s[], condition, condition_replay, in_buffers, in_shapes, temps)
+                        if len(cout) != 1 or s[].shapes[s[]._slot(cout[0])].count() != 1:
+                            raise Error("control-flow condition must return one scalar")
+                        tick.p1 = s[].tape.value_of(s[].ex, s[].tensors[s[]._slot(cout[0])])
+                    s[].ex.launch[OP_LOOP_TICK](tick, 1)
+                    _lap(s[], timers, "condition")
+                    j += 1
+                    var known_open = j == chunk or enqueued >= maximum
+                    if known_open:
+                        # at the bound the tick has stopped the loop: read it
+                        # rather than enqueue a body past max_iterations
+                        s[].ex.download(mirror_p, words, LOOP_WORDS)
+                        s[].steps.release_parked()
+                        iterations = Int(mirror[LOOP_ITER])
+                        _lap(s[], timers, "read_flag")
+                        if mirror[LOOP_DONE] != Float32(0.0):
+                            done = True
+                            break
+                    var outputs = List[Int]()
+                    var past_stop = False
+                    try:
+                        outputs = _execute(s[], body, body_replay, in_buffers, in_shapes, temps)
+                    except err:
+                        if known_open:
+                            raise err
+                        # lane x1b: a body enqueued between two reads may
+                        # run after the stop (a step op's host position past
+                        # its cache, say). Read the block: when the loop had
+                        # stopped, that body was never committed and the
+                        # per-iteration loop would not have run it, so its
+                        # error is not the loop's. Its in-place writes are
+                        # undone by the closed gate's shadow.
+                        s[].ex.download(mirror_p, words, LOOP_WORDS)
+                        iterations = Int(mirror[LOOP_ITER])
+                        if mirror[LOOP_DONE] == Float32(0.0):
+                            raise err
+                        past_stop = True
+                    if past_stop:
+                        for k in range(len(shadow_live)):  # driver-loop: over declared state shadows
+                            var r = Args()
+                            r.p0 = shadow_live[k]
+                            r.p1 = shadow_copy[k]
+                            r.p2 = words
+                            s[].ex.launch[OP_LOOP_SHADOW](r, shadow_n[k])
+                        enqueued += 1
+                        done = True
+                        break
+                    enqueued += 1
+                    _lap(s[], timers, "body")
+                    # The gate is known open right after a read; between
+                    # reads it is the device's, so shapes must hold.
+                    _commit_state(s[], body, outputs, words, buffers, shapes, scratch, scratch_n, not known_open)
+                    for k in range(len(shadow_live)):  # driver-loop: over declared state shadows
+                        var sh = Args()
+                        sh.p0 = shadow_live[k]
+                        sh.p1 = shadow_copy[k]
+                        sh.p2 = words
+                        s[].ex.launch[OP_LOOP_SHADOW](sh, shadow_n[k])
+                    if plan.history and maximum > 0:
+                        if shapes[0].count() != per_token:
+                            raise Error("ValueError: a token record needs a body that keeps state 0's shape")
+                        var rec = Args()
+                        rec.p0 = buffers[0]
+                        rec.p1 = record
+                        rec.p2 = words
+                        rec.i0 = per_token
+                        s[].ex.launch[OP_LOOP_APPEND](rec, per_token)
+                    var advance = Args()
+                    advance.p0 = words
+                    s[].ex.launch[OP_LOOP_ADVANCE](advance, 1)
+                    _lap(s[], timers, "commit")
+                if probing and not done:
+                    # The chunk rule's first iteration ran known open: keep
+                    # its chunk only when the body kept every state shape.
+                    probing = False
+                    var kept = True
+                    for k in range(n_state):  # driver-loop: over loop-carried state tensors (shape test)
+                        kept = kept and shapes[k].same(first_shapes[k])
+                    chunk = every if kept else 1
+                    if chunk == 1 and len(shadow_live) > 0:
+                        # no body runs past the stop now: no more shadow
+                        # copies (the buffers go with `extras`)
+                        shadow_live.clear()
+                        shadow_copy.clear()
+                        shadow_n.clear()
+            if enqueued > iterations:
+                # lane x1b: bodies ran after the stop. Their in-place state
+                # writes were undone on the device, but a block step op's
+                # resident entry advanced its host integers (positions,
+                # chunk fill): drop it, so the next run rebuilds it from the
+                # state words the stopping iteration left.
+                for k in range(len(shadow_live)):  # driver-loop: over declared state shadows
+                    s[].steps_forget(Int(shadow_live[k]))
+            if mirror[LOOP_BAD] != Float32(0.0):
+                raise Error("control-flow condition must be finite")
+            stopped = mirror[LOOP_STOPPED] != Float32(0.0)
+            timers.report()
             for k in range(len(buffers)):  # driver-loop: over final state download
                 var a = HostArray(shapes[k])
+                a.int_words = body.in_kinds[k] == PROGRAM_IN_IDS
                 s[].ex.download(FP(unsafe_from_address=Int(a.data.unsafe_ptr())), buffers[k], shapes[k].count())
                 result.outputs.append(a^)
+            if plan.history:
+                var rows = iterations if maximum > 0 else 0
+                var h = HostArray(ShapeN.matrix(rows, per_token))
+                h.int_words = body.in_kinds[0] == PROGRAM_IN_IDS
+                if rows > 0:
+                    s[].ex.download(FP(unsafe_from_address=Int(h.data.unsafe_ptr())), record, rows * per_token)
+                result.history.append(h^)
         else:
             var take_body = _predicate(s[], condition, condition_replay, buffers, shapes, temps)
             var outputs = _execute(s[], body, body_replay, buffers, shapes, temps) if take_body else _execute(
@@ -233,6 +614,9 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
         swap(held, s[].prog_tape)
         for k in range(len(buffers)):  # driver-loop: over current state owners
             s[].ex.free(buffers[k])
+        for k in range(len(shadow_live)):  # driver-loop: over declared state shadows (resident entries rebuild)
+            s[].steps_forget(Int(shadow_live[k]))
+        _free_loop_owners(s[], extras, scratch, scratch_n)
         var message = String(err)
         var context = "program control flow after " + String(iterations) + " iterations: "
         if message.startswith("ValueError: "):
@@ -243,6 +627,7 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
     swap(held, s[].prog_tape)
     for k in range(len(buffers)):  # driver-loop: over current state owners
         s[].ex.free(buffers[k])
+    _free_loop_owners(s[], extras, scratch, scratch_n)
     result.iterations = iterations
     result.stopped = stopped
     return result^

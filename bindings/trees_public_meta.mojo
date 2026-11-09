@@ -27,17 +27,25 @@ from bindings.py_attr import py_attr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_wrap_array, _store_code
+from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end, admitted_scope_open, admitted_hold, admitted_is_held
 from bindings.trees_public_inputs import (
-    TreesMatrix, TreesLabels, TreesView, _view_of_array, trees_builtins, trees_table, trees_entry, trees_helper, trees_empty,
-    trees_vector, trees_reshape, trees_address, trees_f32, trees_view, trees_check_rank, trees_itemsize,
-    trees_check_sample_weight, trees_encode_labels, trees_decode_labels, trees_cast,
+    TreesLabels, trees_builtins, trees_table, trees_entry, trees_helper,
+    trees_reshape, trees_address, trees_itemsize,
+    trees_encode_labels, trees_decode_labels, trees_cast, trees_finite_f32,
 )
+from bindings.admitted_input import (
+    AdmittedX, admit_f32, admit_weight_words, admit_ids, admitted_words, admitted_array, admitted_vector,
+    admit_c_view, admitted_dtype,
+)
+from bindings.classical_arrays import classical_address
+# TOMBSTONE: TreesView / _view_of_array / trees_view / trees_check_rank / trees_f32 / trees_check_sample_weight / trees_all_finite / trees_vector / trees_empty uses and _place_view (the trees admission aliases; internal Arrays are read as themselves) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.trees_public_forest import (
     _check_mode, _repr, _str, _truthy, _is_bool, _is_integral, _refuse, forest_kind, _classifier,
 )
 from bindings.trees_public_boost import (
     _mode, _xt, _x, _P, _F, _A, _x_f32, _as_array, _fsum, _arange, _class_major, _gather, _gather_codes,
-    _gather_vec, _gather_view, _gather_codes_view, _gather_vec_view, _argmax, _scale, _member_codes,
+    _gather_vec, _argmax, _scale, _member_codes,
 )
 from bindings.trees_public_score import (
     trees_accuracy, trees_r2, _classification_encoded as score_classification_encoded, _codes as score_codes_into,
@@ -130,9 +138,32 @@ def _f64_word(array: PythonObject, index: Int) raises -> Float64:
 
 
 def _x_array(X: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`as_f32_c(X, ndim=2, name="X")` as the Array the members read."""
+    """`as_f32_c(X, ndim=2, name="X")` as the Array the members read. Inside
+    the operation's hold scope (meta_admitted_operation) a finite matrix is
+    held once (bindings/admitted_registry.mojo `admitted_hold`): every member
+    door then reads it as admitted, with no second view, check or scan."""
+    if admitted_is_held(X):
+        return X
     var m = _x_f32(X, context)
-    return _as_array(m, Python.tuple(m.rows, m.cols), context)
+    var Xa = _as_array(m, Python.tuple(m.rows, m.cols), context)
+    _hold_finite(Xa, context)
+    return Xa
+
+
+def _hold_finite(Xa: PythonObject, context: PythonObject) raises:
+    """Hold the float32 C-order Array `Xa` for the members when it is
+    finite (one scan for the whole call, instead of one per member door).
+    A non-finite matrix is not held: each member refuses or accepts it as
+    its own door does."""
+    if not admitted_scope_open() or admitted_is_held(Xa):
+        return
+    var rows = _rows(Xa)
+    var cols = _cols(Xa)
+    if rows < 1 or cols < 1:
+        return
+    var address = trees_address(Xa)
+    if trees_finite_f32(address, rows * cols):
+        admitted_hold(Xa, address, rows, cols)
 
 
 def _rows(array: PythonObject) raises -> Int:
@@ -145,11 +176,12 @@ def _cols(array: PythonObject) raises -> Int:
 
 def _i32_vec(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`as_i32_c(value, ndim=1, name=name)` of a member's predicted codes."""
-    var view = trees_view(value, name, context)
-    trees_check_rank(view, 1, name)
-    var n = view.shape[0]
-    var out = trees_vector(n, "<i4", context)
-    trees_cast(view.addr, view.typestr, trees_address(out), "<i4", n, context)
+    var view = admit_c_view(value, name, context)
+    if Int(py=view.ndim) != 1:
+        raise Error("mojolearn: " + name + " must be 1-D, got " + String(Int(py=view.ndim)) + "-D")
+    var n = Int(py=view.shape[0])
+    var out = admitted_vector(n, "<i4", context)
+    trees_cast(Int(py=classical_address(view)), admitted_dtype(view, context), trees_address(out), "<i4", n, context)
     _ = out  # keep the Python object alive through the native call above
     _ = view  # keep the Python object alive through the native call above
     _ = view^
@@ -158,21 +190,21 @@ def _i32_vec(value: PythonObject, name: String, context: PythonObject) raises ->
 
 def _f32_array(value: PythonObject, ndim: Int, name: String, context: PythonObject) raises -> PythonObject:
     """`as_f32_c(value, ndim=ndim, name=name)` as an Array."""
-    var m = trees_f32(value, ndim, "C", name, context)
+    var m = admit_f32(value, ndim, name, context, finite=False)
     var shape = Python.tuple(m.rows, m.cols) if ndim == 2 else Python.tuple(m.rows)
     return _as_array(m, shape, context)
 
 
-def _out2d(x: PythonObject, n: Int, context: PythonObject) raises -> TreesMatrix:
+def _out2d(x: PythonObject, n: Int, context: PythonObject) raises -> AdmittedX:
     """`_trees_output_2d(x, n)`: a member's output as a float32 (n, c) block
     (a 1-D output is c = 1)."""
     var shape = _attr(x, "shape", Python.tuple())
     if len(shape) == 2:
-        return trees_f32(x, 2, "C", "output", context)
-    var v = trees_f32(x, 1, "C", "output", context)
+        return admit_f32(x, 2, "output", context, finite=False)
+    var v = admit_f32(x, 1, "output", context, finite=False)
     if v.rows != n:
         raise Error("cannot reshape Array of size " + String(v.rows) + " into shape (" + String(n) + ", 1)")
-    var _keep_ret_v = TreesMatrix(v.keep, v.addr, n, 1, True)
+    var _keep_ret_v = admitted_words(v.array, v.address, n, 1)
     _ = v  # keep the Python object alive through the native call above
     return _keep_ret_v^
 
@@ -242,11 +274,11 @@ def _index_of_one(member: PythonObject, context: PythonObject) raises -> Int:
     return Int(py=_member_class_codes(member, context)[3])
 
 
-def _one_col(xt: PythonObject, p: TreesMatrix, j: Int, context: PythonObject) raises -> PythonObject:
+def _one_col(xt: PythonObject, p: AdmittedX, j: Int, context: PythonObject) raises -> PythonObject:
     """Column j of a float32 (n, c) block as an (n, 1) Array (`_gather`)."""
     var rows = _arange(xt, p.rows, context)
     var col = _codes_array(Python.list(PythonObject(j)), context)
-    return _gather(xt, p.addr, p.rows, p.cols, rows, col, context)
+    return _gather(xt, p.address, p.rows, p.cols, rows, col, context)
 
 
 # ------------------------------------------------------------- x_trees glue
@@ -254,19 +286,18 @@ def _one_col(xt: PythonObject, p: TreesMatrix, j: Int, context: PythonObject) ra
 
 def _acc_cols_w(xt: PythonObject, acc: PythonObject, x: PythonObject, cols: PythonObject, n: Int, k: Int,
                 weight: Float64, context: PythonObject) raises:
-    var xa = trees_f32(x, 2, "C", "sub-estimator output", context)
-    var cols_view = _view_of_array(cols)
-    _ = py_call_typed(_x(xt, "x_trees_accumulate_cols"), _A(acc), _P(xa.addr), _P(cols_view.addr),
-                      Python.list(_P(n), _P(k), _P(cols_view.shape[0]), _F(weight)))
-    _ = cols_view
+    var xa = admit_f32(x, 2, "sub-estimator output", context, finite=False)
+    _ = py_call_typed(_x(xt, "x_trees_accumulate_cols"), _A(acc), _P(xa.address), _P(trees_address(cols)),
+                      Python.list(_P(n), _P(k), _P(Int(py=cols.shape[0])), _F(weight)))
+    _ = cols
     _ = xa  # keep the Python object alive through the native call above
     _ = xa^
 
 
 def _acc_w(xt: PythonObject, acc: PythonObject, x: PythonObject, n: Int, weight: Float64,
            context: PythonObject) raises:
-    var xa = trees_f32(x, 1, "C", "sub-estimator output", context)
-    _ = py_call_typed(_x(xt, "x_trees_accumulate"), _A(acc), _P(xa.addr), Python.list(_P(n), _F(weight)))
+    var xa = admit_f32(x, 1, "sub-estimator output", context, finite=False)
+    _ = py_call_typed(_x(xt, "x_trees_accumulate"), _A(acc), _P(xa.address), Python.list(_P(n), _F(weight)))
     _ = xa  # keep the Python object alive through the native call above
     _ = xa^
 
@@ -276,25 +307,20 @@ def _acc_votes(xt: PythonObject, acc: PythonObject, codes: PythonObject, n: Int,
                       Python.list(_P(n), _P(k), _F(on), _F(0.0)))
 
 
-def _place_view(xt: PythonObject, dst: TreesView, n_rows: Int, n_cols: Int, blk: TreesMatrix, rows: TreesView,
-                col0: Int) raises -> Int:
-    """Scatter a block using retained, operation-local Array metadata."""
-    _ = py_call_typed(_x(xt, "x_trees_scatter"), _P(dst.addr), _P(blk.addr), _P(rows.addr),
-                      Python.list(_P(n_rows), _P(n_cols), _P(rows.shape[0]), _P(blk.cols), _P(col0)))
+def _place(xt: PythonObject, dst: PythonObject, n_rows: Int, n_cols: Int, blk: AdmittedX, rows: PythonObject,
+           col0: Int) raises -> Int:
+    """`_TreesWrapperBase._place`: the block's columns into dst (an Array)
+    at col0, at the rows of `rows` (an int32 Array)."""
+    _ = py_call_typed(_x(xt, "x_trees_scatter"), _P(trees_address(dst)), _P(blk.address), _P(trees_address(rows)),
+                      Python.list(_P(n_rows), _P(n_cols), _P(Int(py=rows.shape[0])), _P(blk.cols), _P(col0)))
     _ = dst
     _ = rows
     _ = blk  # retain every address owner until the native call completes
     return blk.cols
 
 
-def _place(xt: PythonObject, dst: PythonObject, n_rows: Int, n_cols: Int, blk: TreesMatrix, rows: PythonObject,
-           col0: Int) raises -> Int:
-    """`_TreesWrapperBase._place`: the block's columns into dst at col0."""
-    return _place_view(xt, _view_of_array(dst), n_rows, n_cols, blk, _view_of_array(rows), col0)
-
-
 def _zeros(count: Int, context: PythonObject) raises -> PythonObject:
-    return trees_vector(count, "<f8", context)
+    return admitted_vector(count, "<f8", context)
 
 
 def _class_zero(xt: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
@@ -302,7 +328,7 @@ def _class_zero(xt: PythonObject, n: Int, context: PythonObject) raises -> Pytho
     zero bytes, +0.0), without the separate fill program it used to run
     (lane perf-sweep-trees, 2026-11-05). Same bits."""
     _ = xt
-    return trees_vector(n, "<f8", context)
+    return admitted_vector(n, "<f8", context)
 
 
 # ---------------------------------------------------------------- members
@@ -367,7 +393,7 @@ def _member_weights(names: PythonObject, ests: PythonObject, sample_weight: Pyth
         if not _takes_weights(ests[i], context):
             var who = String("") if names[i] is None else " " + _str(names[i])
             raise Error("Underlying estimator" + who + " does not support sample weights.")
-    var w = trees_check_sample_weight(sample_weight, n, context)
+    var w = admit_weight_words(sample_weight, n, context)
     return _as_array(w, Python.tuple(n), context)
 
 
@@ -466,13 +492,12 @@ def _cv_value(cv: PythonObject, context: PythonObject) raises -> PythonObject:
 def _index_i64(v: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_trees_index_i64`: a cv index list as an int64 Array."""
     try:
-        var view = trees_view(v, "cv rows", context)
-        var n = view.size()
-        var out = trees_vector(n, "<i8", context)
-        trees_cast(view.addr, view.typestr, trees_address(out), "<i8", n, context)
-        _ = out  # keep the Python object alive through the native call above
+        var view = admit_c_view(v, "cv rows", context)
+        var n = Int(py=view.size)
+        var out = admitted_vector(n, "<i8", context)
+        trees_cast(Int(py=classical_address(view)), admitted_dtype(view, context), trees_address(out), "<i8", n,
+                   context)
         _ = view  # keep the Python object alive through the native call above
-        _ = view^
         return out
     except:
         var store = py_call(context["array_type"], PythonObject("q"), v)
@@ -483,8 +508,8 @@ def _native_folds(xt: PythonObject, n_splits: Int, n: Int, codes: PythonObject, 
                   context: PythonObject) raises -> PythonObject:
     """`_trees_native_folds`: the fold rows the device made, each fold's
     (train rows, test rows) as int32 Arrays."""
-    var counts = trees_vector(n_splits + 1, "<i4", context)
-    var rows = trees_vector(n_splits * n, "<i4", context)
+    var counts = admitted_vector(n_splits + 1, "<i4", context)
+    var rows = admitted_vector(n_splits * n, "<i4", context)
     var c32 = counts
     var k = 0
     if codes is not None:
@@ -532,8 +557,8 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
     var n_x = msel_input_count(X, prep_native_context(context))
     var n_y = n
     if codes is not None:
-        var codes_view = _view_of_array(codes)
-        n_y = codes_view.shape[0]
+        var codes_view = codes
+        n_y = Int(py=codes_view.shape[0])
     if n != n_x or n != n_y or n_x != n_y:
         raise Error("Found input variables with inconsistent numbers of samples: [" + String(n_x) + ", "
                     + String(n_y) + "]")
@@ -543,7 +568,7 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
     if py_contains(prep_native_context(context)["family_msel_splitter_layouts"], py_type(c)):
         pairs = prep_native_split(c, X, y, context)
     var out = Python.list()
-    var seen = trees_vector(n if n > 1 else 1, "<i8", context)
+    var seen = admitted_vector(n if n > 1 else 1, "<i8", context)
     var check = trees_helper(context, "check_indices_i64")
     var bincount = trees_helper(context, "bincount_i64")
     for pair in pairs:  # cpu-route: user cv splitter or iterable of index pairs, validated natively per pair
@@ -565,8 +590,8 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
         _ = py_call_typed(bincount, _A(te), _P(3), _P(nte), _P(n), _A(seen), _P(1))
         _ = te  # keep the Python object alive through the native call above
         _ = seen  # keep the Python object alive through the native call above
-        var tr32 = trees_vector(ntr, "<i4", context)
-        var te32 = trees_vector(nte, "<i4", context)
+        var tr32 = admitted_vector(ntr, "<i4", context)
+        var te32 = admitted_vector(nte, "<i4", context)
         trees_cast(trees_address(tr), "<i8", trees_address(tr32), "<i4", ntr, context)
         _ = tr32  # keep the Python object alive through the native call above
         _ = tr  # keep the Python object alive through the native call above
@@ -662,13 +687,13 @@ def _voting_soft(model: PythonObject, xt: PythonObject, Xa: PythonObject, contex
         var blocks = Python.list()
         for i in range(len(members)):  # driver-loop: over members
             var e = members[i]
-            var xa = trees_f32(prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), 2, "C",
-                               "sub-estimator output", context)
+            var xa = admit_f32(prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), 2,
+                               "sub-estimator output", context, finite=False)
             var cols = _sub_cols(e, context)
-            var cols_view = _view_of_array(cols)
-            _ = py_call(keep.append, xa.keep)
+            var cols_view = cols
+            _ = py_call(keep.append, xa.array)
             _ = py_call(keep.append, cols)
-            _ = py_call(blocks.append, Python.tuple(_P(xa.addr), _P(cols_view.addr), _P(cols_view.shape[0]),
+            _ = py_call(blocks.append, Python.tuple(_P(xa.address), _P(trees_address(cols_view)), _P(Int(py=cols_view.shape[0])),
                                                     _F(Float64(py=w[i]))))
             _ = cols_view
             _ = xa^
@@ -731,7 +756,7 @@ def _voting_transform(model: PythonObject, X: PythonObject, classifier: Bool, co
         if soft:
             var p = _zeros(n * k, context)
             _acc_cols_w(xt, p, prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), _sub_cols(e, context), n, k, 1.0, context)
-            var blk = trees_f32(trees_reshape(p, Python.tuple(n, k), context), 2, "C", "p", context)
+            var blk = admit_f32(trees_reshape(p, Python.tuple(n, k), context), 2, "p", context, finite=False)
             _ = _place(xt, out, n, width, blk, rows, j * k)
             _ = blk^
         else:
@@ -814,10 +839,10 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     var Xa = _x_array(X, context)
     # This call owns the admitted X, y and optional weight storage. Member
     # fits cannot replace these local owners. A subsequent fit admits afresh.
-    var x_view = _view_of_array(Xa)
-    var y_view = _view_of_array(y_full)
-    var n = x_view.shape[0]
-    var d = x_view.shape[1]
+    var x_view = Xa
+    var y_view = y_full
+    var n = Int(py=x_view.shape[0])
+    var d = Int(py=x_view.shape[1])
     var active = _active(_attr(model, "estimators", PythonObject(None)), owner, context)
     _require_member(final, owner, context)
     var all_names = py_call(trees_builtins().list, active.names)
@@ -844,7 +869,7 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     var binary = _truthy(_attr(model, "_binary", PythonObject(False)))
     var passthrough = _truthy(_attr(model, "passthrough", PythonObject(False)))
     var head_n = n if n < 2 else 2
-    var head = _gather(xt, x_view.addr, n, d, _arange(xt, head_n, context), _arange(xt, d, context), context)
+    var head = _gather(xt, trees_address(x_view), n, d, _arange(xt, head_n, context), _arange(xt, d, context), context)
     _ = Xa  # keep the Python object alive through the native call above
     var widths = Python.list()
     var native_widths = List[Int]()
@@ -858,13 +883,13 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
         _ = blk^
     var width = total + (d if passthrough else 0)
     var meta = _zeros(n * width, context)
-    var meta_view = _view_of_array(meta)
-    var cols_view = _view_of_array(_arange(xt, d, context))
+    var meta_view = meta
+    var cols_view = _arange(xt, d, context)
     for f in range(len(splits)):  # driver-loop: over the cv folds
         # Each fold has different index buffers; snapshot them once here,
         # then share the retained native descriptors across all its members.
-        var tr_view = _view_of_array(splits[f][0])
-        var te_view = _view_of_array(splits[f][1])
+        var tr_view = splits[f][0]
+        var te_view = splits[f][1]
         var col0 = 0
         # The fold's train/test gathers are the same for every member: made
         # once per fold, not once per member (p3-trees; folds x members host
@@ -872,31 +897,36 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
         # inputs (the scikit-learn fit contract), so sharing them is safe.
         var y_tr: PythonObject
         if codes:
-            y_tr = _gather_codes_view(xt, y_view, tr_view, context)
+            y_tr = _gather_codes(xt, y_view, tr_view, context)
         else:
-            y_tr = _gather_vec_view(xt, y_view.addr, y_view.shape[0], tr_view, context)
+            y_tr = _gather_vec(xt, trees_address(y_view), Int(py=y_view.shape[0]), tr_view, context)
         var w_tr = PythonObject(None)
         if sw is not None:
-            w_tr = _gather_vec_view(xt, sw_addr, n, tr_view, context)
+            w_tr = _gather_vec(xt, sw_addr, n, tr_view, context)
             _ = sw  # keep the Python object alive through the native call above
-        var Xtr = _gather_view(xt, x_view.addr, n, d, tr_view, cols_view, context)
+        var Xtr = _gather(xt, trees_address(x_view), n, d, tr_view, cols_view, context)
         _ = Xa  # keep the Python object alive through the native call above
-        var Xte = _gather_view(xt, x_view.addr, n, d, te_view, cols_view, context)
+        var Xte = _gather(xt, trees_address(x_view), n, d, te_view, cols_view, context)
         _ = Xa  # keep the Python object alive through the native call above
+        if admitted_is_held(Xa):
+            # Rows of a held (finite) X are finite: the fold's members read
+            # the fold matrices as admitted too.
+            admitted_hold(Xtr, trees_address(Xtr), Int(py=tr_view.shape[0]), d)
+            admitted_hold(Xte, trees_address(Xte), Int(py=te_view.shape[0]), d)
         for i in range(len(active.ests)):  # driver-loop: over members
             var e = _clone(active.ests[i], context)
             _fit_member(e, Xtr, y_tr, w_tr, context)
-            var blk = _out2d(_stack_out(xt, e, native_methods[i], Xte, te_view.shape[0], binary, context), te_view.shape[0], context)
+            var blk = _out2d(_stack_out(xt, e, native_methods[i], Xte, Int(py=te_view.shape[0]), binary, context), Int(py=te_view.shape[0]), context)
             _ = Xa  # keep the Python object alive through the native call above
-            var got = _place_view(xt, meta_view, n, width, blk, te_view, col0)
+            var got = _place(xt, meta_view, n, width, blk, te_view, col0)
             _ = blk^
             if got != native_widths[i]:
                 raise Error("a member's output width changed between folds (a class missing from a fold)")
             col0 += got
     if passthrough:
-        var xb = TreesMatrix(Xa, x_view.addr, n, d, True)
+        var xb = admitted_words(Xa, trees_address(x_view), n, d)
         _ = Xa  # keep the Python object alive through the native call above
-        _ = _place_view(xt, meta_view, n, width, xb, _view_of_array(_arange(xt, n, context)), total)
+        _ = _place(xt, meta_view, n, width, xb, _arange(xt, n, context), total)
         _ = Xa  # keep the Python object alive through the native call above
         _ = xb^
         _ = Xa  # keep the Python object alive through the native call above
@@ -917,9 +947,9 @@ def _stacking_transform(model: PythonObject, X: PythonObject, context: PythonObj
     """`_StackingBase.transform`: the meta features (float64)."""
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
-    var x_view = _view_of_array(Xa)
-    var n = x_view.shape[0]
-    var d = x_view.shape[1]
+    var x_view = Xa
+    var n = Int(py=x_view.shape[0])
+    var d = Int(py=x_view.shape[1])
     var widths = _attr(model, "_widths_", Python.list())
     var total = 0
     for i in range(len(widths)):  # driver-loop: over members
@@ -927,20 +957,20 @@ def _stacking_transform(model: PythonObject, X: PythonObject, context: PythonObj
     var passthrough = _truthy(_attr(model, "passthrough", PythonObject(False)))
     var width = total + (d if passthrough else 0)
     var meta = _zeros(n * width, context)
-    var meta_view = _view_of_array(meta)
-    var rows_view = _view_of_array(_arange(xt, n, context))
+    var meta_view = meta
+    var rows_view = _arange(xt, n, context)
     var binary = _truthy(_attr(model, "_binary", PythonObject(False)))
     var col0 = 0
     var members = _attr(model, "estimators_", Python.list())
     var methods = _attr(model, "stack_method_", Python.list())
     for i in range(len(members)):  # driver-loop: over members
         var blk = _out2d(_stack_out(xt, members[i], String(methods[i]), Xa, n, binary, context), n, context)
-        col0 += _place_view(xt, meta_view, n, width, blk, rows_view, col0)
+        col0 += _place(xt, meta_view, n, width, blk, rows_view, col0)
         _ = blk^
     if passthrough:
-        var xb = TreesMatrix(Xa, x_view.addr, n, d, True)
+        var xb = admitted_words(Xa, trees_address(x_view), n, d)
         _ = Xa  # keep the Python object alive through the native call above
-        _ = _place_view(xt, meta_view, n, width, xb, rows_view, col0)
+        _ = _place(xt, meta_view, n, width, xb, rows_view, col0)
         _ = Xa  # keep the Python object alive through the native call above
         _ = xb^
         _ = Xa  # keep the Python object alive through the native call above
@@ -1060,19 +1090,19 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
         _ = py_call_typed(trees_entry(table, "lm_col_sums"), _A(Xa), _A(sums), Python.list(_P(n), _P(d)))
         _ = sums  # keep the Python object alive through the native call above
         var m64 = _zeros(d, context)
-        xm = trees_vector(d, "<f4", context)
+        xm = admitted_vector(d, "<f4", context)
         _ = py_call_typed(trees_entry(table, "lm_means_finish"), _A(sums), _A(m64), _A(xm),
                           Python.list(_P(d), _P(n), _P(0)), _F(0.0))
         _ = m64  # keep the Python object alive through the native call above
         _ = sums  # keep the Python object alive through the native call above
-        work_x = trees_empty(Python.tuple(n, d), "<f4", context)
+        work_x = admitted_array(Python.tuple(n, d), "<f4", context)
         _ = py_call_typed(trees_entry(table, "lm_center"), _A(Xa), _A(xm), _A(work_x), Python.list(_P(n), _P(d)))
         _ = work_x  # keep the Python object alive through the native call above
     else:
-        xm = trees_vector(d, "<f4", context)
-    var coef = trees_vector(m * d, "<f4", context)
-    var ymean = trees_vector(m, "<f4", context)
-    var icpt32 = trees_vector(m, "<f4", context)
+        xm = admitted_vector(d, "<f4", context)
+    var coef = admitted_vector(m * d, "<f4", context)
+    var ymean = admitted_vector(m, "<f4", context)
+    var icpt32 = admitted_vector(m, "<f4", context)
     var params = Python.list(_P(n), _P(d), _P(m), py_call_typed(trees_builtins().float, _attr(est, "alpha", PythonObject(1.0))),
                              _P(1 if intercept else 0))
     if intercept:
@@ -1149,7 +1179,7 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
     var mr = _attr(model, "_multi_ridge", PythonObject(None))
     if mr is not None:
         var outputs = Int(py=mr[2])
-        var out = trees_empty(Python.tuple(n, outputs), "<f4", context)
+        var out = admitted_array(Python.tuple(n, outputs), "<f4", context)
         var table = trees_table(context, _mode(py_fields(members[0]), context), "_mojolearn_estimators")
         _ = py_call_typed(trees_entry(table, "ridge_predict_multi"), _A(Xa), _A(mr[0]), _A(mr[1]), _A(out),
                           Python.list(_P(n), _P(_cols(Xa)), _P(outputs)))
@@ -1196,29 +1226,24 @@ def _label_columns(Y: PythonObject, xt: PythonObject, context: PythonObject) rai
         return PythonObject(None)
     var target = String("<f8") if k == "f" else String("<i8")
     try:
-        var view = trees_view(Y, "Y", context)
-        if view.ndim() != 2:
+        # Y in C order (admit_c_view: an F-ordered or strided Y is one
+        # C-order copy, so the column-major arm is gone).
+        var view = admit_c_view(Y, "Y", context)
+        var vt = admitted_dtype(view, context)
+        if Int(py=view.ndim) != 2:
             return PythonObject(None)
-        if k != "f" and view.typestr != "<i1" and view.typestr != "<i4" and view.typestr != "<i8" and view.typestr != "|i1" and view.typestr != "|u1" and view.typestr != "<u1" and view.typestr != "<u2" and view.typestr != "<u4":
+        if k != "f" and vt != "<i1" and vt != "<i4" and vt != "<i8" and vt != "<u1" and vt != "<u2" and vt != "<u4":
             return PythonObject(None)
-        var n = view.shape[0]
-        var m = view.shape[1]
-        var T = trees_vector(m * n, target, context)
-        if view.c_order():
-            var W = trees_vector(n * m, target, context)
-            trees_cast(view.addr, view.typestr, trees_address(W), target, n * m, context)
-            _ = W  # keep the Python object alive through the native call above
-            _ = view  # keep the Python object alive through the native call above
-            _ = py_call_typed(_x(xt, "x_trees_transpose_f64"), _A(W), _A(T), Python.list(_P(n), _P(m)))
-            _ = W  # keep the Python object alive through the native call above
-            _ = T  # keep the Python object alive through the native call above
-        elif view.f_order():
-            # a column-major buffer's storage is already the (m, n) columns
-            trees_cast(view.addr, view.typestr, trees_address(T), target, n * m, context)
-            _ = T  # keep the Python object alive through the native call above
-            _ = view  # keep the Python object alive through the native call above
-        else:
-            return PythonObject(None)
+        var n = Int(py=view.shape[0])
+        var m = Int(py=view.shape[1])
+        var T = admitted_vector(m * n, target, context)
+        var W = admitted_vector(n * m, target, context)
+        trees_cast(Int(py=classical_address(view)), vt, trees_address(W), target, n * m, context)
+        _ = W  # keep the Python object alive through the native call above
+        _ = view  # keep the Python object alive through the native call above
+        _ = py_call_typed(_x(xt, "x_trees_transpose_f64"), _A(W), _A(T), Python.list(_P(n), _P(m)))
+        _ = W  # keep the Python object alive through the native call above
+        _ = T  # keep the Python object alive through the native call above
         _ = view^
         return Python.tuple(T, n, m)
     except:
@@ -1328,7 +1353,7 @@ def _multioutput_assemble(model: PythonObject, Xa: PythonObject, codes: PythonOb
         for j in range(len(cols)):  # driver-loop: over members
             var col = cols[j]
             if String(col.dtype) != kind:
-                var wide = trees_vector(n, kind, context)
+                var wide = admitted_vector(n, kind, context)
                 trees_cast(trees_address(col), String(col.dtype), trees_address(wide), kind, n, context)
                 _ = wide  # keep the Python object alive through the native call above
                 _ = col  # keep the Python object alive through the native call above
@@ -1336,7 +1361,7 @@ def _multioutput_assemble(model: PythonObject, Xa: PythonObject, codes: PythonOb
             _ = py_call(keep.append, col)
             _ = py_call(addrs.append, _A(col))
             _ = col  # keep the Python object alive through the native call above
-        var out = trees_vector(n * len(cols), kind, context)
+        var out = admitted_vector(n * len(cols), kind, context)
         _ = py_call_typed(_x(xt, "x_trees_stack_w64"), addrs, _A(out), Python.list(_P(n)))
         _ = out  # keep the Python object alive through the native call above
         _ = keep
@@ -1394,11 +1419,11 @@ def _multioutput_classifier_score(model: PythonObject, X: PythonObject, y: Pytho
     if py_type(pred) is not context["array_class"]:
         # Label objects no Array holds (str classes): scored in codes.
         return _multioutput_score_codes(model, codes, _rows(Xa), y, sample_weight, context)
-    var truth = trees_view(y, "y", context)
+    var truth = admit_c_view(y, "y", context)
     var shown = py_call(b.tuple, pred.shape)
     var truth_shape = Python.list()
-    for k in range(truth.ndim()):  # driver-loop: over array rank metadata
-        _ = py_call(truth_shape.append, PythonObject(truth.shape[k]))
+    for k in range(Int(py=truth.ndim)):  # driver-loop: over array rank metadata
+        _ = py_call(truth_shape.append, PythonObject(Int(py=truth.shape[k])))
     if not Bool(py=py_call(b.tuple, truth_shape) == shown):
         raise Error("y has shape " + _repr(py_call(b.tuple, truth_shape)) + ", the predictions have shape " + _repr(shown))
     var n = _rows(pred)
@@ -1407,14 +1432,14 @@ def _multioutput_classifier_score(model: PythonObject, X: PythonObject, y: Pytho
     # one exact dtype), one any-mismatch flag per row (`x_trees_rows_any_unset`),
     # then the (weighted) accuracy of those flags.
     var pdt = String(pred.dtype)
-    var tdt = truth.typestr
+    var tdt = admitted_dtype(truth, context)
     var t_int = tdt == "<i4" or tdt == "<i8" or tdt == "<u4" or tdt == "<u1" or tdt == "<u2" or tdt == "<i1"
     var p_int = pdt == "<i8"
     var size = n * m
     var eq = py_call(context["array_type"], PythonObject("B"), py_call(context["native_bytes_type"], size))
     var equal = trees_helper(context, "equal_elements")
-    var tc = trees_vector(size, "<i8" if t_int else "<f8", context)
-    trees_cast(truth.addr, tdt, trees_address(tc), "<i8" if t_int else "<f8", size, context)
+    var tc = admitted_vector(size, "<i8" if t_int else "<f8", context)
+    trees_cast(Int(py=classical_address(truth)), tdt, trees_address(tc), "<i8" if t_int else "<f8", size, context)
     _ = tc  # keep the Python object alive through the native call above
     _ = truth  # keep the Python object alive through the native call above
     if t_int == p_int:
@@ -1442,12 +1467,12 @@ def _multioutput_rows_score(model: PythonObject, eq: PythonObject, n: Int, m: In
     all-match flags against ones counted, with the same weights: the same
     score bits."""
     var xt = _xt(py_fields(model), context)
-    var miss = trees_vector(n, "<i4", context)
+    var miss = admitted_vector(n, "<i4", context)
     _ = py_call_typed(_x(xt, "x_trees_rows_any_unset"), py_call(eq.buffer_info)[0], _A(miss),
                       Python.list(_P(n), _P(m), _P(1 if col_major else 0)))
     _ = eq  # keep the flag store alive through the native call above
     _ = miss  # keep the Python object alive through the native call above
-    var zero = trees_vector(n, "<i4", context)
+    var zero = admitted_vector(n, "<i4", context)
     var mode = py_get(py_fields(model), "numeric_mode")
     return PythonObject(trees_accuracy(zero, miss, sample_weight, mode, context))
 
@@ -1492,11 +1517,12 @@ def _multioutput_score_codes(model: PythonObject, codes: PythonObject, n: Int, y
 # --------------------------------------------------------------- OneVsRest
 
 
-def _indicator(xt: PythonObject, codes: TreesView, j: Int, context: PythonObject) raises -> PythonObject:
-    """`OneVsRestClassifier._indicator`: the 0/1 targets of class j."""
-    var n = codes.shape[0]
-    var yj = trees_vector(n, "<i4", context)
-    _ = py_call_typed(_x(xt, "x_trees_indicator_codes"), _P(codes.addr), _A(yj), _P(0), Python.list(_P(n), _P(j)))
+def _indicator(xt: PythonObject, codes: PythonObject, j: Int, context: PythonObject) raises -> PythonObject:
+    """`OneVsRestClassifier._indicator`: the 0/1 targets of class j (codes:
+    the encoder's int32 Array)."""
+    var n = Int(py=codes.shape[0])
+    var yj = admitted_vector(n, "<i4", context)
+    _ = py_call_typed(_x(xt, "x_trees_indicator_codes"), _P(trees_address(codes)), _A(yj), _P(0), Python.list(_P(n), _P(j)))
     _ = codes
     _ = yj  # keep the owners alive through the native call above
     return yj
@@ -1517,7 +1543,7 @@ def _ovr_fit(model: PythonObject, X: PythonObject, y: PythonObject, context: Pyt
     if k == 2:
         _ = py_call(targets.append, labels.codes)
     else:
-        var codes_view = _view_of_array(labels.codes)
+        var codes_view = labels.codes
         for j in range(k):  # driver-loop: over the classes (one native indicator each)
             _ = py_call(targets.append, _indicator(xt, codes_view, j, context))
     var fitted = Python.list()
@@ -1539,7 +1565,7 @@ def _proba_positive(xt: PythonObject, e: PythonObject, Xa: PythonObject, context
     var at = _index_of_one(e, context)
     if at < 0:
         _ = p^
-        return trees_vector(n, "<f4", context)
+        return admitted_vector(n, "<f4", context)
     var col = _one_col(xt, p, at, context)
     _ = p^
     return trees_reshape(col, Python.tuple(n), context)
@@ -1568,16 +1594,16 @@ def _ovr_fused(xt: PythonObject, fused: PythonObject, members: PythonObject, Xa:
         if decision and prep_estimator_has(e, "decision_function", context):
             var score = _f32_array(prep_estimator_call(e, "decision_function", Python.tuple(Xa), context), 1, "score", context)
             var blk = _out2d(score, n, context)
-            _ = py_call(keep.append, blk.keep)
-            _ = py_call(columns.append, Python.tuple(_P(blk.addr), _P(blk.cols), _P(0)))
+            _ = py_call(keep.append, blk.array)
+            _ = py_call(columns.append, Python.tuple(_P(blk.address), _P(blk.cols), _P(0)))
             _ = blk^
         else:
             var p = _out2d(prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), n, context)
             var at = _index_of_one(e, context)
-            _ = py_call(keep.append, p.keep)
-            _ = py_call(columns.append, Python.tuple(_P(p.addr), _P(p.cols), _P(at)))
+            _ = py_call(keep.append, p.array)
+            _ = py_call(columns.append, Python.tuple(_P(p.address), _P(p.cols), _P(at)))
             _ = p^
-    var out = trees_vector(n, "<i4", context) if finish == 2 else trees_vector(n * k, "<f8", context)
+    var out = admitted_vector(n, "<i4", context) if finish == 2 else admitted_vector(n * k, "<f8", context)
     _ = py_call_typed(fused, _A(out), columns, Python.list(_P(n), _P(k), _P(finish)))
     _ = out  # keep the Python object alive through the native call above
     _ = keep  # keep the members' blocks alive through the native call above
@@ -1620,7 +1646,7 @@ def _ovr_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
     if k == 2:
         # `_trees_binary_proba`: rows (1 - p, p) of the positive column
         var p = _f32_array(_proba_positive(xt, members[0], Xa, context), 1, "p", context)
-        var out = trees_vector(2 * n, "<f8", context)
+        var out = admitted_vector(2 * n, "<f8", context)
         _ = py_call_typed(_x(xt, "x_trees_binary_proba"), _A(p), _A(out), Python.list(_P(n)))
         _ = out  # keep the Python object alive through the native call above
         _ = p  # keep the Python object alive through the native call above
@@ -1668,7 +1694,7 @@ def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: Pyth
     if k == 2:
         var acc = _zeros(n, context)
         if blk.cols == 1:
-            _ = py_call_typed(_x(xt, "x_trees_accumulate"), _A(acc), _P(blk.addr), Python.list(_P(n), _F(1.0)))
+            _ = py_call_typed(_x(xt, "x_trees_accumulate"), _A(acc), _P(blk.address), Python.list(_P(n), _F(1.0)))
             _ = acc  # keep the Python object alive through the native call above
             _ = blk  # keep the Python object alive through the native call above
         else:
@@ -1685,7 +1711,7 @@ def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: Pyth
     # Keep the freshly allocated class-index array until accumulate_cols has
     # consumed it. _A(_sub_cols(...)) returned only an address to a temporary.
     var sub_cols = _sub_cols(e, context)
-    _ = py_call_typed(_x(xt, "x_trees_accumulate_cols"), _A(acc), _P(blk.addr), _A(sub_cols),
+    _ = py_call_typed(_x(xt, "x_trees_accumulate_cols"), _A(acc), _P(blk.address), _A(sub_cols),
                       Python.list(_P(n), _P(k), _P(len(_attr(e, "classes_", Python.list()))), _F(1.0)))
     _ = sub_cols
     _ = acc  # keep the Python object alive through the native call above
@@ -1702,13 +1728,13 @@ def _fit_calibrators(model: PythonObject, xt: PythonObject, S: PythonObject, cod
     var sigmoid = String(_attr(model, "method", PythonObject("sigmoid"))) == "sigmoid"
     var St = S
     if c > 1:
-        St = trees_vector(c * n, "<f8", context)
+        St = admitted_vector(c * n, "<f8", context)
         _ = py_call_typed(_x(xt, "x_trees_transpose_f64"), _A(S), _A(St), Python.list(_P(n), _P(c)))
         _ = St  # keep the Python object alive through the native call above
-    var yj = trees_vector(n, "<i4", context)
+    var yj = admitted_vector(n, "<i4", context)
     var y64 = PythonObject(None)
     if not sigmoid:
-        y64 = trees_vector(n, "<f8", context)
+        y64 = admitted_vector(n, "<f8", context)
     var cals = Python.list()
     for j in range(c):  # driver-loop: over the class columns (one calibrator each)
         var cls = 1 if c == 1 else j
@@ -1719,7 +1745,7 @@ def _fit_calibrators(model: PythonObject, xt: PythonObject, S: PythonObject, cod
         _ = yj  # keep the Python object alive through the native call above
         _ = y64  # keep the Python object alive through the native call above
         if sigmoid:
-            var ab = trees_vector(2, "<f8", context)
+            var ab = admitted_vector(2, "<f8", context)
             _ = py_call_typed(_x(xt, "x_trees_platt_fit"), _P(f), _A(yj), _A(ab), Python.list(_P(n)))
             _ = ab  # keep the Python object alive through the native call above
             _ = yj  # keep the Python object alive through the native call above
@@ -1727,8 +1753,8 @@ def _fit_calibrators(model: PythonObject, xt: PythonObject, S: PythonObject, cod
             _ = py_call(cals.append, Python.tuple(PythonObject("sigmoid"),
                                                   Python.tuple(PythonObject(_f64_word(ab, 0)), PythonObject(_f64_word(ab, 1)))))
         else:
-            var kx = trees_vector(n, "<f8", context)
-            var ky = trees_vector(n, "<f8", context)
+            var kx = admitted_vector(n, "<f8", context)
+            var ky = admitted_vector(n, "<f8", context)
             var m = Int(py=py_call_typed(_x(xt, "x_trees_isotonic_fit"), _P(f), _A(y64), _A(kx), _A(ky), Python.list(_P(n))))
             _ = ky  # keep the Python object alive through the native call above
             _ = kx  # keep the Python object alive through the native call above
@@ -1752,7 +1778,7 @@ def _calibrated_probs(model: PythonObject, xt: PythonObject, e: PythonObject, ca
     var S = _cal_scores(model, xt, e, Xa, context)
     var c = _cols(S)
     var w = 2 if k == 2 else k
-    var acc = trees_vector(n * w, "<f8", context)
+    var acc = admitted_vector(n * w, "<f8", context)
     for j in range(len(cals)):  # driver-loop: over the class columns (one calibrator each)
         var entry = cals[j]
         var col = 1 if k == 2 else j
@@ -1823,7 +1849,7 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
             _ = Xa  # keep the Python object alive through the native call above
             var Xte = _gather(xt, trees_address(Xa), n, d, te, cols, context)
             _ = Xa  # keep the Python object alive through the native call above
-            var blk = trees_f32(_cal_scores(model, xt, e, Xte, context), 2, "C", "scores", context)
+            var blk = admit_f32(_cal_scores(model, xt, e, Xte, context), 2, "scores", context, finite=False)
             _ = Xa  # keep the Python object alive through the native call above
             _ = _place(xt, S, n, c, blk, te, 0)
             _ = blk^
@@ -1855,7 +1881,7 @@ def _calibrated_fused(model: PythonObject, xt: PythonObject, fused: PythonObject
         else:
             out = prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context)
         var blk = _out2d(out, n, context)
-        _ = py_call(keep.append, blk.keep)
+        _ = py_call(keep.append, blk.array)
         var at = 0
         var cols_addr = 0
         var ks = 0
@@ -1879,9 +1905,9 @@ def _calibrated_fused(model: PythonObject, xt: PythonObject, fused: PythonObject
                 _ = py_call(keep.append, par[0])
                 _ = py_call(keep.append, par[1])
                 _ = py_call(described.append, Python.tuple(_P(1), _F(0.0), _F(0.0), _A(par[0]), _A(par[1]), par[2]))
-        _ = py_call(rows.append, Python.tuple(_P(blk.addr), _P(blk.cols), _P(at), _P(cols_addr), _P(ks), described))
+        _ = py_call(rows.append, Python.tuple(_P(blk.address), _P(blk.cols), _P(at), _P(cols_addr), _P(ks), described))
         _ = blk^
-    var acc = trees_vector(n * k, "<f8", context)
+    var acc = admitted_vector(n * k, "<f8", context)
     _ = py_call_typed(fused, _A(acc), rows, Python.list(_P(n), _P(k)))
     _ = acc  # keep the Python object alive through the native call above
     _ = keep  # keep the members' blocks, class codes and knots alive through the native call above
@@ -1926,9 +1952,9 @@ def _regressor_score(model: PythonObject, prediction: PythonObject, y: PythonObj
                      context: PythonObject) raises -> PythonObject:
     """`RegressorScoreMixin.score`: the float32 R^2 of the prediction."""
     var mode = py_get(py_fields(model), "numeric_mode")
-    var truth = trees_f32(y, -1, "C", "y", context)
-    var pred = trees_f32(prediction, -1, "C", "prediction", context)
-    if len(_attr(pred.keep, "shape", Python.tuple(0))) == 2 or len(_attr(truth.keep, "shape", Python.tuple(0))) == 2:
+    var truth = admit_f32(y, -1, "y", context, finite=False)
+    var pred = admit_f32(prediction, -1, "prediction", context, finite=False)
+    if len(_attr(pred.array, "shape", Python.tuple(0))) == 2 or len(_attr(truth.array, "shape", Python.tuple(0))) == 2:
         # 2-D targets: the metrics family's public r2_score (its multioutput
         # program), on the same float32 blocks.
         var metrics = context["native_meta_metrics"]
@@ -1937,12 +1963,12 @@ def _regressor_score(model: PythonObject, prediction: PythonObject, y: PythonObj
         if py_type(binding) is trees_builtins().str:
             raise Error(String(binding))
         var result = prep_entry_call(metrics[0], Python.tuple(PythonObject(None), "family_mcls_r2",
-                                     Python.tuple(binding, truth.keep, pred.keep, sample_weight,
+                                     Python.tuple(binding, truth.array, pred.array, sample_weight,
                                                   "uniform_average", True, mode), metrics[1]))
         _ = truth^
         _ = pred^
         return result
-    var result = trees_r2(truth.keep, pred.keep, sample_weight, mode, context)
+    var result = trees_r2(truth.array, pred.array, sample_weight, mode, context)
     _ = truth^
     _ = pred^
     return PythonObject(result)
@@ -2071,19 +2097,27 @@ def meta_admitted_operation(model: PythonObject, kind: String, operation: String
     to pay that admission twice, the second time inside meta_operation).
     A prediction (predict, predict_proba, transform, score) stages X once
     for its forest members (lane perf-sweep-trees, 2026-11-05)."""
-    if (operation == "trees_meta_predict" or operation == "trees_meta_predict_proba"
-            or operation == "trees_meta_transform" or operation == "trees_meta_score"):
-        var prepared = _staged_input(model, kind, args[0], context)
-        var call = Python.list(prepared[0])
-        for i in range(1, len(args)):  # small-loop(args): the call's remaining positional arguments
-            _ = py_call(call.append, args[i])
-        var result = PythonObject(None)
-        try:
-            result = _meta_dispatch(model, kind, operation, py_call(trees_builtins().tuple, call), context)
-        finally:
-            trees_unstage(prepared[1])
-        return result
-    return _meta_dispatch(model, kind, operation, args, context)
+    # X is admitted once for the whole operation (lane A1
+    # admit-trees-labels): the matrices the meta-estimator admits inside this
+    # scope are held for its members' doors and dropped when it ends.
+    var mark = admitted_scope_begin()
+    var result = PythonObject(None)
+    try:
+        if (operation == "trees_meta_predict" or operation == "trees_meta_predict_proba"
+                or operation == "trees_meta_transform" or operation == "trees_meta_score"):
+            var prepared = _staged_input(model, kind, args[0], context)
+            var call = Python.list(prepared[0])
+            for i in range(1, len(args)):  # small-loop(args): the call's remaining positional arguments
+                _ = py_call(call.append, args[i])
+            try:
+                result = _meta_dispatch(model, kind, operation, py_call(trees_builtins().tuple, call), context)
+            finally:
+                trees_unstage(prepared[1])
+        else:
+            result = _meta_dispatch(model, kind, operation, args, context)
+    finally:
+        admitted_scope_end(mark)
+    return result
 
 
 def _meta_dispatch(model: PythonObject, kind: String, operation: String, args: PythonObject,

@@ -31,10 +31,13 @@ from std.math import isfinite
 from std.memory import memcpy
 from core.trees_gbdt_metadata import gbdt_tree_metadata
 from bindings.trees_public_inputs import (
-    TreesMatrix, trees_builtins, trees_table, trees_entry, trees_need, trees_helper, trees_empty,
-    trees_vector, trees_reshape, trees_address, trees_f32, trees_forest_layout, trees_all_finite,
-    trees_cast, trees_decode_labels, trees_call, trees_view, trees_check_rank,
+    trees_builtins, trees_table, trees_entry, trees_need, trees_helper,
+    trees_reshape, trees_address, trees_forest_x, trees_finite_f32,
+    trees_cast, trees_decode_labels, trees_call,
 )
+from bindings.admitted_input import AdmittedX, admit_f32, admit_ids, admitted_array, admitted_vector
+# TOMBSTONE: trees_f32 / trees_forest_layout / trees_all_finite / TreesMatrix / trees_view / trees_check_rank / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 
 comptime _PREDICT_RAW = 0
 comptime _PREDICT_SOFTMAX = 1
@@ -190,22 +193,22 @@ def gbdt_resident(fields: PythonObject, table: PythonObject) raises -> Int:
     return handle
 
 
-def _fitted_x(fields: PythonObject, X: PythonObject, layout: Bool, before: String, context: PythonObject) raises -> TreesMatrix:
+def _fitted_x(fields: PythonObject, X: PythonObject, layout: Bool, before: String, context: PythonObject) raises -> AdmittedX:
     """`_check_fitted_layout` (layout) / `_check_fitted`: the fitted check,
     X in the entry's layout, the fitted width."""
     if fields["model_"] is None:
         raise Error("RuntimeError: mojolearn: " + before + " before fit()")
-    var x = trees_forest_layout(X, "X", context) if layout else trees_f32(X, 2, "F", "X", context)
+    var x = trees_forest_x(X, "X", context) if layout else admit_f32(X, 2, "X", context, order="F", finite=False)
     var fitted = _int(fields["n_features_in_"])
     if x.cols != fitted:
         raise Error("mojolearn: model was fitted on " + String(fitted) + " features, got " + String(x.cols))
     return x^
 
 
-def _resident_call(table: PythonObject, handle: Int, x: TreesMatrix, out_buf: PythonObject, mode: Int) raises -> Int:
+def _resident_call(table: PythonObject, handle: Int, x: AdmittedX, out_buf: PythonObject, mode: Int) raises -> Int:
     var entry = trees_need(table, "gbdt_resident_predict", "mojolearn: this gbdt binding has no gbdt_resident_predict")
-    return _int(py_call_typed(entry, PythonObject(handle), PythonObject(x.addr), PythonObject(trees_address(out_buf)),
-                              Python.list(PythonObject(x.rows), PythonObject(mode), PythonObject(1 if x.row_major else 0))))
+    return _int(py_call_typed(entry, PythonObject(handle), PythonObject(x.address), PythonObject(trees_address(out_buf)),
+                              Python.list(PythonObject(x.rows), PythonObject(mode), PythonObject(1 if x.c_order else 0))))
 
 
 # --------------------------------------------------------------- predict
@@ -227,7 +230,7 @@ def gbdt_predict(model: PythonObject, X: PythonObject, context: PythonObject) ra
     var handle = gbdt_resident(fields, table)
     if handle >= 0:
         var x = _fitted_x(fields, X, True, "predict()", context)
-        var out = trees_vector(x.rows * dim, "<f4", context)
+        var out = admitted_vector(x.rows * dim, "<f4", context)
         var width = _resident_call(table, handle, x, out, _PREDICT_RAW)
         if width != dim:
             raise Error("RuntimeError: mojolearn: predict wrote width " + String(width) + ", expected " + String(dim))
@@ -236,9 +239,9 @@ def gbdt_predict(model: PythonObject, X: PythonObject, context: PythonObject) ra
         return trees_reshape(out, Python.tuple(x.rows, width), context)
     var x = _fitted_x(fields, X, False, "predict()", context)
     if dim > 1:
-        var out = trees_vector(x.rows * dim, "<f4", context)
+        var out = admitted_vector(x.rows * dim, "<f4", context)
         var width = _int(py_call_typed(trees_need(table, "gbdt_predict_multi", "mojolearn: this gbdt binding has no gbdt_predict_multi"),
-                                       text, PythonObject(x.addr), PythonObject(trees_address(out)),
+                                       text, PythonObject(x.address), PythonObject(trees_address(out)),
                                        Python.list(PythonObject(x.rows), PythonObject(_PREDICT_RAW))))
         _ = out  # keep the Python object alive through the native call above
         _ = x  # keep the Python object alive through the native call above
@@ -249,9 +252,9 @@ def gbdt_predict(model: PythonObject, X: PythonObject, context: PythonObject) ra
         _ = out  # keep the Python object alive through the native calls above
         _ = x  # keep the Python object alive through the native calls above
         return trees_reshape(out, Python.tuple(x.rows, width), context)
-    var out = trees_vector(x.rows, "<f4", context)
+    var out = admitted_vector(x.rows, "<f4", context)
     var wrote = _int(py_call_typed(trees_need(table, "gbdt_predict", "mojolearn: this gbdt binding has no gbdt_predict"),
-                                   text, PythonObject(x.addr), PythonObject(trees_address(out)), Python.list(PythonObject(x.rows))))
+                                   text, PythonObject(x.address), PythonObject(trees_address(out)), Python.list(PythonObject(x.rows))))
     _ = out  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     if wrote != x.rows:
@@ -288,14 +291,14 @@ def gbdt_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
         if handle >= 0:
             var x = _fitted_x(fields, X, True, "predict()", context)
             rows = x.rows
-            out = trees_vector(rows * classes, "<f4", context)
+            out = admitted_vector(rows * classes, "<f4", context)
             width = _resident_call(table, handle, x, out, mode)
         else:
             var x = _fitted_x(fields, X, False, "predict()", context)
             rows = x.rows
-            out = trees_vector(rows * classes, "<f4", context)
+            out = admitted_vector(rows * classes, "<f4", context)
             width = _int(py_call_typed(trees_need(table, "gbdt_predict_multi", "mojolearn: this gbdt binding has no gbdt_predict_multi"),
-                                       fields["model_"], PythonObject(x.addr), PythonObject(trees_address(out)),
+                                       fields["model_"], PythonObject(x.address), PythonObject(trees_address(out)),
                                        Python.list(PythonObject(rows), PythonObject(mode))))
             _ = x  # keep the Python object alive through the native call above
             _ = out  # keep the Python object alive through the native call above
@@ -313,21 +316,21 @@ def gbdt_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
     var handle = gbdt_resident(fields, table)
     if handle >= 0:
         var x = _fitted_x(fields, X, True, "predict()", context)
-        var out = trees_empty(Python.tuple(x.rows, 2), "<f8", context)
+        var out = admitted_array(Python.tuple(x.rows, 2), "<f8", context)
         var width = _resident_call(table, handle, x, out, _PREDICT_SIGMOID_PAIR)
         if width != 2:
             raise Error("RuntimeError: mojolearn: predict_proba wrote width " + String(width) + ", expected 2")
         return out
     var raw32 = gbdt_predict(model, X, context)
     var n = Int(py=raw32.shape[0])
-    var raw = trees_vector(Int(py=raw32.size), "<f8", context)
+    var raw = admitted_vector(Int(py=raw32.size), "<f8", context)
     trees_cast(trees_address(raw32), "<f4", trees_address(raw), "<f8", Int(py=raw32.size), context)
     _ = raw  # keep the Python object alive through the native call above
     _ = raw32  # keep the Python object alive through the native call above
     var pair = trees_entry(table, "gbdt_sigmoid_pair")
     if pair is None:
         raise Error("RuntimeError: mojolearn: this gbdt binding predates gbdt_sigmoid_pair; rebuild it")
-    var out = trees_empty(Python.tuple(n, 2), "<f8", context)
+    var out = admitted_array(Python.tuple(n, 2), "<f8", context)
     var wrote = _int(py_call_typed(pair, PythonObject(trees_address(raw)), PythonObject(trees_address(out)), PythonObject(n)))
     _ = out  # keep the Python object alive through the native call above
     _ = raw  # keep the Python object alive through the native call above
@@ -364,7 +367,7 @@ def _argmax_rows(scores: PythonObject, context: PythonObject) raises -> PythonOb
     """`_labels.argmax_rows` of a C-order float32 or float64 block."""
     var rows = Int(py=scores.shape[0])
     var cols = Int(py=scores.shape[1])
-    var out = trees_vector(rows, "<i8", context)
+    var out = admitted_vector(rows, "<i8", context)
     if rows == 0:
         return out
     var wide = String(scores.dtype) == "<f8"
@@ -392,10 +395,10 @@ def gbdt_predict_classes(model: PythonObject, X: PythonObject, context: PythonOb
                 var handle = gbdt_resident(fields, table)
                 if handle >= 0:
                     var x = _fitted_x(fields, X, True, "predict()", context)
-                    var out = trees_vector(x.rows, "<i8", context)
-                    var wrote = _int(py_call_typed(direct, PythonObject(handle), PythonObject(x.addr),
+                    var out = admitted_vector(x.rows, "<i8", context)
+                    var wrote = _int(py_call_typed(direct, PythonObject(handle), PythonObject(x.address),
                                                    PythonObject(trees_address(out)),
-                                                   Python.list(PythonObject(x.rows), PythonObject(1 if x.row_major else 0))))
+                                                   Python.list(PythonObject(x.rows), PythonObject(1 if x.c_order else 0))))
                     _ = x  # keep the Python object alive through the native call above
                     _ = out  # keep the Python object alive through the native call above
                     if wrote != x.rows:
@@ -411,7 +414,7 @@ def gbdt_predict_classes(model: PythonObject, X: PythonObject, context: PythonOb
             var handle = gbdt_resident(fields, table)
             if handle >= 0:
                 var x = _fitted_x(fields, X, True, "predict()", context)
-                var out = trees_vector(x.rows, "<i8", context)
+                var out = admitted_vector(x.rows, "<i8", context)
                 var mode = _PREDICT_CLASSES_PINNED if Bool(py=loss == PythonObject("MultiClass")) else _PREDICT_CLASSES_OVA
                 var width = _resident_call(table, handle, x, out, mode)
                 if width != 1:
@@ -453,7 +456,7 @@ def _adapter_binary(model: PythonObject, X: PythonObject, probabilities: Bool, c
         return gbdt_predict_classes(learner, X, context)
     var margins = adapter_decision_function(model, X, context)
     if (Int(py=margins.ndim) != 1 or String(margins.dtype) != "<f4"
-            or not trees_all_finite(trees_address(margins), Int(py=margins.size), False, context)):
+            or not trees_finite_f32(trees_address(margins), Int(py=margins.size))):
         raise Error("Classifier margins must be finite scalar Float32 values")
     _ = margins  # keep the Python object alive through the native calls above
     var n = Int(py=margins.size)
@@ -461,13 +464,13 @@ def _adapter_binary(model: PythonObject, X: PythonObject, probabilities: Bool, c
     var output = PythonObject(None)
     var wrote = 0
     if probabilities:
-        output = trees_empty(Python.tuple(n, 2), "<f4", context)
+        output = admitted_array(Python.tuple(n, 2), "<f4", context)
         wrote = _int(py_call_typed(trees_need(table, "gbdt_binary_probabilities", "mojolearn: this gbdt binding has no gbdt_binary_probabilities"),
                                    PythonObject(trees_address(margins)), PythonObject(trees_address(output)), Python.list(PythonObject(n))))
         _ = output  # keep the Python object alive through the native call above
         _ = margins  # keep the Python object alive through the native call above
     else:
-        output = trees_vector(n, "<i4", context)
+        output = admitted_vector(n, "<i4", context)
         wrote = _int(py_call_typed(trees_need(table, "gbdt_binary_classes", "mojolearn: this gbdt binding has no gbdt_binary_classes"),
                                    PythonObject(trees_address(margins)), PythonObject(trees_address(output)), Python.list(PythonObject(n))))
         _ = output  # keep the Python object alive through the native call above
@@ -507,14 +510,14 @@ def gbdt_tree_metadata_op(model: PythonObject, which: String, context: PythonObj
     var parsed = gbdt_tree_metadata(String(py_call(trees_builtins().str, text)))
     if which == "counts":
         var n = len(parsed.counts)
-        var out = trees_vector(n, "<u4", context)
+        var out = admitted_vector(n, "<u4", context)
         if n:
             memcpy(dest=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(out)),
                    src=parsed.counts.unsafe_ptr(), count=n)
             _ = out  # keep the Python object alive through the native call above
         return out
     var n = len(parsed.values)
-    var out = trees_vector(n, "<f8", context)
+    var out = admitted_vector(n, "<f8", context)
     if n:
         memcpy(dest=MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=trees_address(out)),
                src=parsed.values.unsafe_ptr(), count=n)
@@ -603,21 +606,21 @@ def _reduce(addr: Int, code: Int, n: Int, what: Int, context: PythonObject) rais
                          PythonObject(n), PythonObject(what))
 
 
-def _checked_weights(source: PythonObject, n: Int, wrap: Bool, context: PythonObject) raises -> TreesMatrix:
+def _checked_weights(source: PythonObject, n: Int, wrap: Bool, context: PythonObject) raises -> AdmittedX:
     """The OrderedRMSE / FeatureFreq weight checks: one value per row,
     finite, non-negative, a positive sum."""
-    var w: TreesMatrix
+    var w: AdmittedX
     try:
-        w = trees_f32(source, 1, "C", "sample_weight", context)
+        w = admit_f32(source, 1, "sample_weight", context, finite=False)
     except error:
         if wrap and _type_or_value(error):
             raise Error("mojolearn: sample_weight must have one value per row")
         raise error^
     if w.rows != n:
         raise Error("mojolearn: sample_weight must have one value per row")
-    if not trees_all_finite(w.addr, n, False, context) or Bool(py=_reduce(w.addr, 0, n, 0, context) < PythonObject(0)):
+    if not trees_finite_f32(w.address, n) or Bool(py=_reduce(w.address, 0, n, 0, context) < PythonObject(0)):
         raise Error("mojolearn: sample_weight must be finite and non-negative")
-    if not Bool(py=_reduce(w.addr, 0, n, 1, context) > PythonObject(0)):
+    if not Bool(py=_reduce(w.address, 0, n, 1, context) > PythonObject(0)):
         raise Error("mojolearn: sample_weight must have positive sum")
     return w^
 
@@ -638,23 +641,23 @@ def ordered_rmse_fit(model: PythonObject, args: PythonObject, context: PythonObj
     var b = trees_builtins()
     var fields = py_fields(model)
     _ordered_options(fields, model, context)
-    var x = trees_f32(args[0], 2, "F", "X", context)
+    var x = admit_f32(args[0], 2, "X", context, order="F", finite=False)
     var n = x.rows
     if n < 4 or n > 4294967295 or x.cols < 1:
         raise Error("mojolearn: ordered RMSE requires >=4 rows and >=1 feature")
-    if not trees_all_finite(x.addr, n * x.cols, False, context):
+    if not trees_finite_f32(x.address, n * x.cols):
         raise Error("mojolearn: ordered RMSE X must be finite")
     _ = x  # keep the Python object alive through the native calls above
-    var y: TreesMatrix
+    var y: AdmittedX
     try:
-        y = trees_f32(args[1], 1, "C", "y", context)
+        y = admit_f32(args[1], 1, "y", context, finite=False)
     except error:
         if _type_or_value(error):
             raise Error("mojolearn: y must be one-dimensional with one value per row")
         raise error^
     if y.rows != n:
         raise Error("mojolearn: y must be one-dimensional with one value per row")
-    if not trees_all_finite(y.addr, n, False, context):
+    if not trees_finite_f32(y.address, n):
         raise Error("mojolearn: y must be finite")
     var permutation = args[2]
     var bijection = String("mojolearn: permutation must be an integer bijection of row ids")
@@ -698,16 +701,16 @@ def ordered_rmse_fit(model: PythonObject, args: PythonObject, context: PythonObj
                                              PythonObject(trees_address(order64)), PythonObject(n), PythonObject(n))) != 0:
         raise Error(bijection)
     _ = order64  # keep the Python object alive through the native calls above
-    var order = trees_vector(n, "<u4", context)
+    var order = admitted_vector(n, "<u4", context)
     trees_cast(trees_address(order64), "<i8", trees_address(order), "<u4", n, context)
     _ = order  # keep the Python object alive through the native call above
     _ = order64  # keep the Python object alive through the native call above
-    var w_addr = y.addr
+    var w_addr = y.address
     var n_weights = 0
-    var weights: Optional[TreesMatrix] = None
+    var weights: Optional[AdmittedX] = None
     if args[3] is not None:
         weights = _checked_weights(args[3], n, True, context)
-        w_addr = weights.value().addr
+        w_addr = weights.value().address
         n_weights = n
     var table = gbdt_table(fields, context)
     var entry = trees_entry(table, "gbdt_fit_ordered_rmse")
@@ -720,10 +723,10 @@ def ordered_rmse_fit(model: PythonObject, args: PythonObject, context: PythonObj
                              py_call_typed(b.int, _field(fields, model, "border_count")),
                              py_call_typed(b.float, _field(fields, model, "learning_rate")),
                              py_call_typed(b.float, _field(fields, model, "l2_leaf_reg")))
-    var text = py_call_typed(entry, PythonObject(x.addr), PythonObject(y.addr), PythonObject(w_addr),
+    var text = py_call_typed(entry, PythonObject(x.address), PythonObject(y.address), PythonObject(w_addr),
                              PythonObject(trees_address(order)), params)
     _ = x  # keep the Python object alive through the native call above
-    # y owns the float32 target copy (y.keep) whose address the fit reads;
+    # y owns the float32 target copy (y.array) whose address the fit reads;
     # without this its last named use was the argument list and Mojo freed
     # it before the native read (garbage targets: "must be finite" on HIP).
     _ = y  # keep the Python object alive through the native call above
@@ -744,22 +747,16 @@ def trees_view_i64(source: PythonObject, context: PythonObject) raises -> Python
     if py_type(source) is b.range:
         # `_materialize` lists a range's ints (a C iteration).
         prepared = py_call(b.list, source)
-    var view = trees_view(prepared, "permutation", context)
-    trees_check_rank(view, 1, "permutation")
-    var n = view.size()
-    var out = trees_vector(n, "<i8", context)
-    trees_cast(view.addr, view.typestr, trees_address(out), "<i8", n, context)
-    _ = out  # keep the Python object alive through the native call above
-    _ = view  # keep the Python object alive through the native call above
-    _ = view^
-    return out
+    # The one integer admission (admit_ids: a TypeError for a float or
+    # text input, which the caller refuses as a non-bijection).
+    return admit_ids(prepared, "permutation", context)
 
 
 def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`ExperimentalTwoLevelFeatureFreq.fit(X, y, sample_weight=)`."""
     var b = trees_builtins()
     var fields = py_fields(model)
-    var x = trees_f32(args[0], 2, "F", "X", context)
+    var x = admit_f32(args[0], 2, "X", context, order="F", finite=False)
     var n = x.rows
     var d = x.cols
     if n == 0 or d < 2:
@@ -769,14 +766,14 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
         var f = _int(sources[i])
         if f < 0 or f >= d:
             raise Error("mojolearn: sources " + _repr(sources) + " outside " + String(d) + " features")
-    if not trees_all_finite(x.addr, n * d, False, context):
+    if not trees_finite_f32(x.address, n * d):
         raise Error("mojolearn: experimental FeatureFreq X must be finite")
     _ = x  # keep the Python object alive through the native calls above
     var is_source = List[Bool](length=d, fill=False)
     for i in range(len(sources)):  # driver-loop: over the named source columns, one native stat set each
         var f = _int(sources[i])
         is_source[f] = True
-        var col = x.addr + 4 * f * n
+        var col = x.address + 4 * f * n
         _ = x  # keep the Python object alive through the native call above
         var hi = Float64(py=_reduce(col, 0, n, 1, context))
         _ = x  # keep the Python object alive through the native call above
@@ -787,11 +784,11 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
         var k = Int(hi) + 1
         var dense = 2 <= k and k <= n
         if dense:
-            var codes = trees_vector(n, "<i8", context)
+            var codes = admitted_vector(n, "<i8", context)
             trees_cast(col, "<f4", trees_address(codes), "<i8", n, context)
             _ = codes  # keep the Python object alive through the native call above
             _ = x  # keep the Python object alive through the native call above
-            var counts = trees_vector(k, "<i8", context)
+            var counts = admitted_vector(k, "<i8", context)
             _ = py_call_typed(trees_helper(context, "bincount_i64"), PythonObject(trees_address(codes)), PythonObject(3),
                               PythonObject(n), PythonObject(k), PythonObject(trees_address(counts)), PythonObject(0))
             _ = codes  # keep the Python object alive through the native call above
@@ -805,27 +802,27 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
     for f in range(d):  # driver-loop: over the feature columns, one native stat pair each
         if is_source[f]:
             continue
-        var col = x.addr + 4 * f * n
+        var col = x.address + 4 * f * n
         _ = x  # keep the Python object alive through the native call above
         if Bool(py=py_call(b.float, _reduce(col, 0, n, 0, context)) == py_call(b.float, _reduce(col, 0, n, 1, context))):
             raise Error("mojolearn: experimental FeatureFreq numeric columns "
                         + "must vary; column " + String(f) + " is constant")
         _ = x  # keep the Python object alive through the native calls above
-    var y = trees_f32(args[1], 1, "C", "y", context)
-    if y.rows != n or not trees_all_finite(y.addr, n, False, context):
+    var y = admit_f32(args[1], 1, "y", context, finite=False)
+    if y.rows != n or not trees_finite_f32(y.address, n):
         raise Error("mojolearn: y must be finite with one value per row")
     _ = y  # keep the Python object alive through the native calls above
-    var w_addr = y.addr
+    var w_addr = y.address
     _ = y  # keep the Python object alive through the native call above
     var n_weights = 0
-    var weights: Optional[TreesMatrix] = None
+    var weights: Optional[AdmittedX] = None
     if args[2] is not None:
         weights = _checked_weights(args[2], n, False, context)
-        w_addr = weights.value().addr
+        w_addr = weights.value().address
         _ = y  # keep the Python object alive through the native call above
         n_weights = n
     var k = len(sources)
-    var source_array = trees_vector(k, "<u4", context)
+    var source_array = admitted_vector(k, "<u4", context)
     var sp = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(source_array))
     _ = source_array  # keep the Python object alive through the native call above
     for i in range(k):  # driver-loop: over the named source columns
@@ -838,7 +835,7 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
                              py_call_typed(b.float, _field(fields, model, "learning_rate")),
                              py_call_typed(b.float, _field(fields, model, "l2_leaf_reg")),
                              py_call_typed(b.int, _field(fields, model, "random_state")))
-    var text = py_call_typed(entry, PythonObject(x.addr), PythonObject(y.addr), PythonObject(w_addr),
+    var text = py_call_typed(entry, PythonObject(x.address), PythonObject(y.address), PythonObject(w_addr),
                              PythonObject(trees_address(source_array)), params)
     _ = y  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above

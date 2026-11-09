@@ -19,6 +19,7 @@
 # all the metrics read, so the programs below see the same words.
 from std.memory import memcpy, bitcast
 from core.metrics_program_plan import MetricProgramPlan
+from bindings.admitted_family import admit_family
 from bindings.metrics_plan_admission import MetricPlanOpcodes, MetricArenaOwner
 from std.python import Python, PythonObject
 from providers.python.metrics_vector_input_pyapi import metric_vector_exact
@@ -35,15 +36,15 @@ from bindings.classical_validate import classical_view
 from bindings.arena_prog_native import _metrics_run_plan
 from bindings.optimizer_public_words import stash_python_error
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance,
-    family_call, family_call_kw, family_array, family_shape_repr, family_cast_view, family_view,
+    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance, family_call,
+    family_call_kw, family_array, family_shape_repr,
 )
 from bindings.metrics_reg_native import _reg_weights
 from bindings.metrics_native_support import (
     metric_is_real, metric_float, metric_integer, metric_is_integral, metric_is_integral_type, metric_warn, metric_undefined,
 )
 from bindings.metrics_native_inputs import metric_shape, metric_flatten
-from core.family_cast_impl import family_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32
 from core.cast_in import CastIn, CAST_KIND_FLOAT, label_kind_of
 from core.label_cast import host_unique_inverse_cast
 from core.metrics_exp_impl import mexp_gather_i32
@@ -676,7 +677,7 @@ def mx_f32_view(source: PythonObject, name: String, context: PythonObject) raise
             except:
                 buffered = False
         if listed or not buffered:
-            view = family_cast_view(view, name, context)
+            view = admit_family(view, -1, name, context, admitted=True, empty=True).array
             typestr = "<f4"
     return (view, typestr)
 
@@ -709,9 +710,9 @@ def mx_scores(source: PythonObject, n: Int, caller: String, ndim: Int, name: Str
                     + mx_shape_text(view, rows, cols, nd))
     if rows != n:
         raise Error("mojolearn " + caller + ": " + name + " has " + String(rows) + " rows for " + String(n) + " samples")
-    var checked = family_view(view, -1, name, context)
-    var a = family_cast_view(checked, name, context)
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a))), rows * cols):
+    # the rank and emptiness refusals and the cast in one admission (family_view deleted)
+    var a = admit_family(view, -1, name, context).array
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a))), rows * cols):
         raise Error("mojolearn " + caller + ": " + name + " must be finite")
     _ = a  # keep the Python object alive through the native calls above
     return MxMat(a, rows, cols, nd)

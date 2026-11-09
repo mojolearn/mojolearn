@@ -27,8 +27,11 @@ use and kept for the process. Same kernels, same launches, same order on one
 stream, every entry still synchronizes before it returns, so no bit moves.
 
 Storage: `std.ffi._Global` (x_cnn/device.mojo's pattern). The caller passes
-the slot NAME, one per binding and numeric tier, so a FAST and an IDENTICAL
-.so in one process never share a slot and no two bindings share one.
+the slot NAME, one per binding and numeric tier. A `_Global` is one slot per
+process per NAME (core/shared_slot.mojo): every module of any .so that spells
+the same name shares the one context, and two names are two contexts (and two
+streams) on the same GPU, so a buffer made under one name is read under the
+same name (core/msel_device_x.mojo `msel_device_x_context` is the model).
 
 THE ONE ACCESSOR FOR EVERY BINDING (lane/devctx-lifetime, 2026-09-28).
 `process_ctx[name]()` is the process-lifetime context of every binding entry,
@@ -39,8 +42,9 @@ per-call `DeviceContext()` in a binding entry onto this accessor (the proof is
 tools/devctx_lifetime_proof.sh). Rules for a caller:
 
   * One slot name per binding .so and numeric tier, spelled
-    `"Mojo<Binding>ContextIdentical" if <mode> == IDENTICAL else
-    "Mojo<Binding>ContextFast"`. A library module reached by one GPU binding
+    `"Mojolearn<Binding>ContextIdenticalV2" if <mode> == IDENTICAL else
+    "Mojolearn<Binding>ContextFastV2"` (V2: `_NeuralContext` layout 2; every
+    name moves together when the layout version moves). A library module reached by one GPU binding
     takes THAT binding's name, so the binding holds one context in all.
   * Call it only on a device path. A CPU-only install never reaches it: the
     host bindings do not call it, and nothing here runs at import, so no
@@ -63,20 +67,30 @@ device enters no value: the same kernels run in the same order on it.
 from std.ffi import _Global
 from max.gpu.host import DeviceContext
 
-from std.atomic import Atomic, Ordering
-
 from core.device_plan import DevicePlan, device_plan_current
+from core.shared_slot import shared_slot_check, shared_slot_lock, shared_slot_unlock, shared_slot_word
+
+#: Layout version of `_NeuralContext` (core/shared_slot.mojo rule): bump on
+#: any field change. V2 added the layout word and the root branch's use of
+#: the lock word.
+comptime _NEURAL_CONTEXT_LAYOUT = 2
 
 
 struct _NeuralContext(Defaultable, Movable):
+    # first field: the layout word every accessor checks (core/shared_slot.mojo)
+    var layout: Int
     var ctx: Optional[DeviceContext]
     var device_ids: List[Int]
     var device_contexts: List[DeviceContext]
-    # guards the per-device lists: two threads running drivers with different
-    # roots in one binding may open their contexts at the same time
+    # guards the root context and the per-device lists: two threads entering
+    # GPU-released entries of any module naming the slot, or running drivers
+    # with different roots, may open a context at the same time
     var device_lock: List[Int64]
 
     def __init__(out self):
+        # side-effect free: the runtime may run it twice and destroy the
+        # loser (core/shared_slot.mojo, first creation); no context here
+        self.layout = shared_slot_word[_NeuralContext](_NEURAL_CONTEXT_LAYOUT)
         self.ctx = Optional[DeviceContext]()
         self.device_ids = List[Int]()
         self.device_contexts = List[DeviceContext]()
@@ -101,33 +115,39 @@ def process_ctx[name: StaticString](dplan: DevicePlan) raises -> DeviceContext:
     """`process_ctx` on the root of a plan the entry already read."""
     comptime SLOT = _Global[StorageType=_NeuralContext, name=name, init_fn=_NeuralContext.__init__]
     var slot = SLOT.get_or_create_ptr()
+    shared_slot_check(slot[].layout, shared_slot_word[_NeuralContext](_NEURAL_CONTEXT_LAYOUT), name)
+    var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].device_lock.unsafe_ptr())
     var root = dplan.root
     if root > 0:
-        var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](slot[].device_lock.unsafe_ptr())
-        while True:  # driver-loop: spin on the per-device list's lock word
-            var expected = Int64(0)
-            if Atomic.compare_exchange[
-                success_ordering=Ordering.SEQUENTIAL,
-                failure_ordering=Ordering.RELAXED,
-            ](lock, expected, Int64(1)):
-                break
+        shared_slot_lock(lock)
         try:
             for i in range(len(slot[].device_ids)):  # driver-loop: over the devices this binding has opened
                 if slot[].device_ids[i] == root:
                     var found = slot[].device_contexts[i].copy()
-                    Atomic.store[ordering=Ordering.RELEASE](lock, Int64(0))
+                    shared_slot_unlock(lock)
                     return found^
             var ctx = DeviceContext(device_id=root)
             slot[].device_contexts.append(ctx.copy())
             slot[].device_ids.append(root)
-            Atomic.store[ordering=Ordering.RELEASE](lock, Int64(0))
+            shared_slot_unlock(lock)
             return ctx^
         except error:
-            Atomic.store[ordering=Ordering.RELEASE](lock, Int64(0))
+            shared_slot_unlock(lock)
             raise error^
-    if not slot[].ctx:
-        slot[].ctx = DeviceContext()
-    return slot[].ctx.value().copy()
+    # the root context: one creation under concurrent first use (two threads
+    # in GPU-released entries of any module naming this slot would otherwise
+    # both create one and drop one while its kernels may still run). The
+    # test is under the lock too: an Optional is not read while it is written.
+    shared_slot_lock(lock)
+    try:
+        if not slot[].ctx:
+            slot[].ctx = DeviceContext()
+        var root_ctx = slot[].ctx.value().copy()
+        shared_slot_unlock(lock)
+        return root_ctx^
+    except error:
+        shared_slot_unlock(lock)
+        raise error^
 
 
 def neural_ctx[name: StaticString]() raises -> DeviceContext:

@@ -1,0 +1,62 @@
+diff --git a/bindings/device_rows_door.mojo b/bindings/device_rows_door.mojo
+index 75eaecfac0..c1226e1f5c 100644
+--- a/bindings/device_rows_door.mojo
++++ b/bindings/device_rows_door.mojo
+@@ -12,9 +12,16 @@
+ #                                        False for a context without it
+ #   DoorRows(value, context)             the resolution with no host words:
+ #                                        base, indices, row count, row width
+-#   (the door then reads the rows through `admit_x`, bindings/admitted_input.mojo:
+-#   the handle itself for an entry that gathers on the device (`device_x`), or
+-#   a parallel host gather out of the host base; never a download)
++#   door_rows_host(value, context)       the host Array of the rows, for a door
++#                                        whose kernels read host addresses: the
++#                                        DeviceRows' own native materializer,
++#                                        which gathers on the device out of the
++#                                        resident base (model selection's take)
++#                                        and keeps the result on the object, so
++#                                        it runs at most once per object
++#   door_x(value, context)               the value itself, or door_rows_host of
++#                                        a DeviceRows: what the classical and
++#                                        family-lifecycle X checks continue with
+ #
+ # A family whose kernels read a device store slot resolves a DeviceRows to a
+ # slot through the arena runner (`bindings/arena_prog_native.mojo` `_rows_gather`:
+@@ -25,14 +32,11 @@
+ # every owner context model selection calls): `door_rows_class`
+ # (`_arena_io.DeviceRows`), `door_rows_call` (`_arena_io._ROWS_CALL`, the
+ # compiled DeviceRows owner) and `door_rows_context` (`_arena_io._ROWS_CONTEXT`).
+-# This module reads `door_rows_class` and `door_rows_context` only; the
+-# `door_rows_call` connection went with door_rows_host (remove it from the
+-# glue once no door calls materialize).
+ #
+ # Numerics: none. The rows a DeviceRows names are the rows model selection's
+ # host path gathers (the same device gather, the same order), so a fit or a
+ # score through this door gets the same bytes as through a host Array.
+-from std.python import PythonObject
++from std.python import Python, PythonObject
+ from bindings.py_balanced import py_call, py_type, py_get
+ 
+ 
+@@ -77,8 +81,16 @@ struct DoorRows(Movable):
+         self.row_words = Int(py=fields["row_words"])
+ 
+ 
+-# TOMBSTONE: door_rows_host and door_x (the DeviceRows materialize for host-address
+-# kernels: device gather, download, host finite scan, kernel re-upload; REGRESSIONS
+-# R13) deleted 2026-11-08 by lane a5-admit-core-followup; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A5_DOOR_ROWS_HOST.patch. admit_x / admit_rows_host
+-# (bindings/admitted_input.mojo) read a DeviceRows without the round trip.
++def door_rows_host(value: PythonObject, context: PythonObject) raises -> PythonObject:
++    """The rows of a DeviceRows as a host Array, through its compiled owner's
++    `materialize` (the device gather out of model selection's resident base;
++    kept on the object, so a second call returns the same Array)."""
++    var call = context["door_rows_call"]
++    return py_call(call, value, PythonObject("materialize"), Python.tuple(), context["door_rows_context"])
++
++
++def door_x(value: PythonObject, context: PythonObject) raises -> PythonObject:
++    """`value`, or the host rows of a DeviceRows (`door_rows_host`)."""
++    if door_is_device_rows(value, context):
++        return door_rows_host(value, context)
++    return value

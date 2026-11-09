@@ -1334,13 +1334,15 @@ NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backwa
                        "x-metrics-classification-report", "x-metrics-permutation-test-score",
                        "classical-float16-sequences",
                        # lane verify-coverage-20261024
-                       "transformer-forward-tape", "public-cnn-classifier-predict", "public-cnn-layer-fit",
+                       "public-cnn-classifier-predict", "public-cnn-layer-fit",
                        "public-numeric-metadata", "public-randomized-search", "public-residual-dropout",
                        "public-scorer-factories", "public-sparse-encode", "public-theta-variants",
                        "public-validation-learning-curves", "scaler-fit-transform", "multioutput-ridge",
                        "x-ridge-cv-kfold", "neural-trainer-unfused", "svc-gamma-scale",
                        # lane coverage-gap-lanes-20261025
-                       "public-set-params"})
+                       "public-set-params",
+                       # lane fix-d1-decode-sessions (2026-11-08)
+                       "samba-decode-session"})
 
 #: What each new lane is for: the endpoints only it reaches.
 NEW_LANE_PURPOSE = {
@@ -1350,7 +1352,7 @@ NEW_LANE_PURPOSE = {
     "sequence-moe-backward": "MoEBlock.backward: `moe_backward`",
     "sequence-export-roundtrip": "Sequential.export, Sequential.load, predict and predict_proba",
     "sequence-onnx-import": "mojolearn.import_model on an ONNX file: `onnx_import`, the Mojo ONNX reader",
-    "transformer-decode-load-state": "TransformerDecodeSession.load_state: `transformer_decode_session_load_state`",
+    "transformer-decode-load-state": "TransformerDecodeSession.load_state and decode: `transformer_decode_session_load_state`, `transformer_decode_session_decode`",
     "safetensors-widen-f16": "float16 checkpoint weights (models.safetensors.widen_f16): `from_f16`, device and host",
     "sequence-program-save-load": "ops.Program.save and Session.load_program (the public `ops.Program` class)",
     "hf-causal-lm-stream": "CausalLM.stream and models.GenerationStream.read, greedy and sampled",
@@ -1358,11 +1360,15 @@ NEW_LANE_PURPOSE = {
                       "the host column (`ivf_out_of_bounds_distance`)",
     "sequence-device-tensor": "resident sequence tensors (`seq_tensor_alloc`, `seq_tensor_upload`, "
                               "`seq_tensor_download`, `seq_tensor_copy`) through RMSprop",
-    "mamba2-decode-session": "Mamba2Block's resident decode session: step, sync_state and load_state "
-                             "(`mamba2_session_open`, `mamba2_session_export_state`, `mamba2_session_load_state`)",
-    "mamba3-decode-session": "Mamba3Block's resident decode session: step, sync_state and load_state "
-                             "(`mamba3_session_open`, `mamba3_session_step`, `mamba3_session_export_state`, "
-                             "`mamba3_session_load_state`)",
+    "mamba2-decode-session": "Mamba2Block's resident decode session: step, decode, sync_state and load_state "
+                             "(`mamba2_session_open`, `mamba2_session_decode`, `mamba2_session_export_state`, "
+                             "`mamba2_session_load_state`)",
+    "mamba3-decode-session": "Mamba3Block's resident decode session: step, decode, sync_state and load_state "
+                             "(`mamba3_session_open`, `mamba3_session_step`, `mamba3_session_decode`, "
+                             "`mamba3_session_export_state`, `mamba3_session_load_state`)",
+    "samba-decode-session": "SambaStack.decode_session: step, decode, sync_state and load_state "
+                            "(`samba_decode_open`, `samba_decode_step`, `samba_decode_tokens`, "
+                            "`samba_decode_export`, `samba_decode_load`)",
     "training-chunked-lm-head": "training.chunked_lm_head_loss with and without gradients: "
                                 "`chunked_lm_head_v2_loss`, `chunked_lm_head_v2_train`",
     "training-mlp-sessions": "training.mlp_inference_sessions: `mlp_sessions`",
@@ -1393,9 +1399,6 @@ NEW_LANE_PURPOSE = {
                                    "float16 rows: the classical input door's `sequence_widen_halves` / "
                                    "`sequence_narrow_halves` and the scalers' `scaler_cast`",
     # lane verify-coverage-20261024
-    "transformer-forward-tape": "TransformerBlock.forward_with_tape, backward_from_tape and "
-                                "TransformerForwardTape.close: `transformer_session_forward_tape`, "
-                                "`transformer_session_backward_tape`, `transformer_session_discard_tape`",
     "public-cnn-layer-fit": "Conv1d, Conv2d, BatchNorm1d and BatchNorm2d fit",
     "public-cnn-classifier-predict": "CNNClassifier.predict and predict_proba",
     "public-numeric-metadata": "training.vendor_used, ensemble.catboost_auto_learning_rate and "
@@ -1411,7 +1414,7 @@ NEW_LANE_PURPOSE = {
     "multioutput-ridge": "MultiOutputRegressor over Ridge: `ridge_predict_multi`",
     "x-ridge-cv-kfold": "RidgeCV with an integer cv: `x_linear_best_alpha`",
     "svc-gamma-scale": "SVC and SVR with gamma='scale': `scale_gamma_limbs`",
-    "neural-trainer-unfused": "ParallelNeuralTrainer with MOJOLEARN_MLP_FUSED=0: `mlp_bias_activation`, "
+    "neural-trainer-unfused": "ParallelNeuralTrainer (its per-layer gradient route): `mlp_bias_activation`, "
                               "`mlp_relu_backward`, `mlp_sum_rows`",
 }
 
@@ -1486,7 +1489,7 @@ _BYTE_SESSION = ("covered", ["byte-lm", "byte-lm-resident"],
 # lane verify-coverage-owed (2026-10-21): the rows the migration lanes left
 # owed, each checked in the source after they landed.
 _MAMBA_SESSION = ("bindings/mamba_public_native.mojo composes `<kind> + \"_session_<op>\"` and calls the "
-                  "binding entry from Mojo (Mamba2Block._decode_session / Mamba3Block._decode_session -> "
+                  "binding entry from Mojo (Mamba2Block.decode_session / Mamba3Block.decode_session -> "
                   "mamba_native_call 'session_open', 'session_step', 'session_sync', 'session_load')")
 _SAMBA_OWNER = ("the native Samba owner (bindings/samba_*_native.mojo) is handed the entry at import "
                 "(_native_samba_bridge.connect) and calls it by name")
@@ -1528,12 +1531,16 @@ ANNOTATIONS = {
     "ops_shape": ("n/a", [], "the verifier's own native-session boundary probe (_verify_graph)"),
     "device_plan_log": ("n/a", [], "read only by the retired `verify --par` two-device placement witness "
                         "(_verify_par PoolWitness, removed 2026-10-31): device groups, no data value"),
-    "covariance": ("n/a", [], "Apple FAST quality probe binding (tools/scoped_gemm_quality.py)"),
     **{e: ("covered", ["mamba2-decode-session"], _MAMBA_SESSION)
        for e in ("mamba2_session_export_state", "mamba2_session_load_state", "mamba2_session_open")},
     **{e: ("covered", ["mamba3-decode-session"], _MAMBA_SESSION)
        for e in ("mamba3_session_export_state", "mamba3_session_load_state", "mamba3_session_open",
                  "mamba3_session_step")},
+    **{e: ("covered", ["samba-decode-session"],
+           _SAMBA_OWNER + ": SambaStack.decode_session -> bindings/samba_decode_native.mojo "
+           "(open, step, decode, sync_state, load_state)")
+       for e in ("samba_decode_open", "samba_decode_step", "samba_decode_tokens", "samba_decode_export",
+                 "samba_decode_load")},
     "samba_head_loss": ("covered", ["samba-untied-dropout-accum"],
                         _SAMBA_OWNER + ": samba_gradients runs the fused head (`fused`) whenever the "
                         "resident Samba step does not take the step (dropout or accumulation) and the "
@@ -2270,9 +2277,6 @@ ANNOTATIONS.update({
                                               "it returns nothing a digest can hold"),
     "causal_lm_blocks": ("n/a", [], "an accessor: CausalLM.blocks returns list(model._blocks), no arithmetic; the "
                                     "blocks it returns are the ones every hf-causal-lm forward runs"),
-    "transformer_session_discard_tape": ("covered", ["transformer-forward-tape"],
-                                         "TransformerForwardTape.close; the lane closes a tape, requires the "
-                                         "backward to refuse it and the next tape's gradients to be unchanged"),
     "var_forecast": ("covered", ["sequence-var"],
                      "VAR.fit's owner (bindings/xseq_forecast_native.mojo) builds the VARResults the bridge "
                      "registered (_native_xseq_bridge.register(xseq_var_results=...)); its forecast calls "
@@ -2465,7 +2469,7 @@ SABOTAGE_NA_ENTRIES = {
         "forest_release_gpu", "moe_weights_free", "x_trees_dart_open", "x_trees_dart_close",
         "x_trees_tree_shap_cache_release", "causal_lm_session_create", "causal_lm_session_close",
         "msel_alloc", "msel_free", "x_prep_dev_free", "seq_tensor_alloc",
-        "mlp_resident_open", "mlp_resident_close", "rf_data_session_open", "rf_data_session_close")},
+        "rf_data_session_open", "rf_data_session_close")},
     **{e: _METADATA for e in (
         "byte_lm_arithmetic_suffix", "byte_lm_host_arithmetic_suffix", "byte_lm_profile", "byte_lm_step_glue_arm",
         "cholesky_profile_jitter", "bpe_n_vocab", "bpe_max_token_bytes", "x_prep_dev_live",
@@ -2490,15 +2494,14 @@ SABOTAGE_NA_ENTRIES.update({
 # dead-native-entries-0859 (2026-10-26) deleted the nine with no live caller
 # (adam_hyper_f64, lr_schedule_fill, gp_log64, gbdt_sigmoid,
 # forest_host_gbdt_sigmoid, the device x_decomp_knn_select, byte_lm_launch_probe,
-# x_neighbors_purity_flags, sched_exp_block; docs/TOMBSTONES.md). The two left
-# are A/B tools' reach probes of FAST switches still in the tree.
+# x_neighbors_purity_flags, sched_exp_block; docs/TOMBSTONES.md). The one left
+# is an A/B tool's reach probe of a FAST switch still in the tree (lane
+# consol-k0-dead-code deleted x_decomp_mcd_cov_reach with MCD_ORDERED_COV).
 _REACH_PROBE = "a quality/A-B tool's build or reach probe, no data value: "
 SABOTAGE_NA_ENTRIES.update({
     "km_rbf_staged": _REACH_PROBE + ("1 when KM_FAST_RBF_STAGED is compiled in (tools/kfeat_quality.py, "
                                      "tools/kfeat_pair.py REACH_EXTRA), registered only under "
                                      "KM_FAST_RBF_RESIDENT (FAST + Apple)"),
-    "x_decomp_mcd_cov_reach": _REACH_PROBE + ("MCD_ORDERED_COV's flag and reach counters "
-                                              "(tools/mcd_ordered_quality.py)"),
 })
 #: (entry, binding) -> reason, for one registration of an entry its twin covers.
 SABOTAGE_NA_BY_SRC = {

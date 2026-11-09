@@ -17,6 +17,7 @@
 from std.math import isinf
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family, admit_family_weights
 from bindings.native_loaded_module import native_loaded_module
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
@@ -26,8 +27,7 @@ from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_is_str, family_is_int, family_isinstance,
-    family_type_name, family_call, family_array, family_view, family_cast_view,
-    family_f32, family_as_f32, family_nonfinite, family_sample_weight, family_shape_repr,
+    family_type_name, family_call, family_array, family_nonfinite, family_shape_repr,
 )
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
 from bindings.cluster_native import cluster_operation, xc_call_floats, _xc_array
@@ -141,7 +141,7 @@ def _f32(source: PythonObject, name: String, context: PythonObject) raises -> Py
     """`_expansion_cluster._f32(source, name)`: `as_f32_c(ndim=2)` and the
     by-name NaN/inf refusal."""
     try:
-        return family_f32(source, 2, name, context)
+        return admit_family(source, 2, name, context, finite=True).array
     except error:
         if family_nonfinite(error, name):
             raise Error("mojolearn: " + name + " contains NaN or infinity")
@@ -167,7 +167,7 @@ def _weights(sample_weight: PythonObject, n: Int, context: PythonObject) raises 
     `check_sample_weight(sample_weight, n, allow_negative=True)`."""
     if sample_weight is None:
         return PythonObject(None)
-    return family_sample_weight(sample_weight, n, True, context)
+    return admit_family_weights(sample_weight, n, True, context).keep
 
 
 def _aux(parts: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -178,7 +178,7 @@ def _aux(parts: PythonObject, context: PythonObject) raises -> PythonObject:
     for t in range(len(parts)):  # small-loop(the aux block's parts): at most three
         var part = parts[t]
         if part is not None:
-            var a = family_as_f32(part, -1, "aux", context)
+            var a = admit_family(part, -1, "aux", context).array
             total += Int(py=a.size)
             _ = py_call(arrays.append, a)
     if total == 0:
@@ -242,7 +242,7 @@ def _mbk_fit(model: PythonObject, binding: PythonObject, source: PythonObject, s
     var devscan = _mbk_devscan(binding)
     var x: PythonObject
     if devscan:
-        x = family_as_f32(source, 2, "X", context)
+        x = admit_family(source, 2, "X", context).array
     else:
         x = _f32(source, "X", context)
     var n = Int(py=x.shape[0])
@@ -721,13 +721,12 @@ def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
                  context: PythonObject) raises:
     """`HDBSCAN.fit(X)`."""
     var b = native_loaded_module("builtins")
-    var view = family_view(source, 2, "X", context)
-    var x = family_cast_view(view, "X", context)
+    # The one admission path: the rank and emptiness refusals, then the
+    # borrow or the cast (family_view deleted).
+    var admitted = admit_family(source, 2, "X", context)
+    var x = admitted.array
     # `as_f32_c`'s `copied`: the cast made new storage.
-    var copied = Int(py=classical_address(x)) != Int(py=classical_address(view))
-    _ = x  # keep the Python object alive through the native call above
-    _ = view  # keep the Python object alive through the native call above
-    _ = view^
+    var copied = not admitted.borrowed
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     if n < 2:

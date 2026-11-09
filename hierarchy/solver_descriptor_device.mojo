@@ -16,7 +16,7 @@ from hierarchy.solver_descriptor_schema import (
 
 
 # Exactly bindings/_mojolearn_solver.mojo's slot; no second device context.
-comptime _DEVCTX_SLOT = "MojoSolverContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoSolverContextFast"
+comptime _DEVCTX_SLOT = "MojolearnSolverContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnSolverContextFastV2"
 
 
 def hierarchy_solver_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
@@ -56,4 +56,4 @@ struct HierarchySolverDeviceAPI(Defaultable, Movable):
 
 # PyCapsule borrows both table and name: the module image owns them for life.
 comptime HIERARCHY_SOLVER_DEVICE_API = _Global[StorageType=HierarchySolverDeviceAPI,
-    name="MojoHierarchySolverDeviceAPIv1", init_fn=HierarchySolverDeviceAPI.__init__]
+    name=("MojolearnHierarchySolverDeviceAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnHierarchySolverDeviceAPIFastV2"), init_fn=HierarchySolverDeviceAPI.__init__]

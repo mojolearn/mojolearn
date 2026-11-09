@@ -79,9 +79,9 @@ def test_svc_score_compares_codes():
 
 def test_host_lp_resident_loop_runs_the_door_ops():
     host = _read('x_neighbors/iter_host.mojo')
-    loop = host[host.index('def op_lp_iterate_knn('):host.index('def lp_fast_resident() -> Int:')]
+    start = host.index('def op_lp_iterate_knn(')
+    loop = host[start:host.index('\n\n\n', start)]
     assert '_host_absdiff_sum(' in loop and 'op_lp_knn_product(' in loop
     assert '_host_lp_clamp(' in loop and '_host_ls_clamp(' in loop
     assert 'absdiff_sum_item(' not in loop
-    tail = host[host.index('def lp_fast_resident() -> Int:'):]
-    assert 'return 1' in tail.split('\n\n')[0]
+    assert 'def lp_fast_resident(' not in host

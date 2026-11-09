@@ -181,6 +181,11 @@ from bindings.msel_device import (
     msel_free_binding,
     msel_live_binding,
     msel_take_rows_binding,
+    pca_transform_fold_binding,
+    qn_fit_fold_binding,
+    kmeans_fit_fold_binding,
+    kmeans_predict_fold_binding,
+    kmeans_transform_fold_binding,
     msel_scatter_rows_binding,
     msel_proba_column_binding,
     msel_rebase_offsets_i32_binding,
@@ -195,6 +200,17 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
+from std.ffi import _Global
+from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
+from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from bindings.labels_native_abi import (
+    LABELS_NATIVE_ABI_NAME, LABELS_CAP_DEVICE, LABELS_OP_MODE, LABELS_OP_CAPABILITIES,
+    LABELS_OP_PREPARE_TARGETS, LABELS_OP_REDUCE_STAT, LABELS_OP_ARGMAX_F32, LABELS_OP_ARGMAX_F64,
+    LABELS_OP_GATHER_I32, LABELS_OP_GATHER_I64, LABELS_OP_GATHER_F64, LABELS_OP_CLASS_RATIO_F64,
+    labels_reduce_stat_encode,
+)
+
 from checks.vendor import COMPILED_VENDOR
 
 from max.gpu.host import DeviceContext
@@ -203,7 +219,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoCoreContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoCoreContextFast"
+comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnCoreContextFastV2"
 
 
 from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform
@@ -295,17 +311,40 @@ def _i32_ptr(addr: Int) raises -> MutPointer[Int32, MutUntrackedOrigin]:
 
 
 def _dist_triple(dist_params: PythonObject) raises -> Tuple[Int, Float32, Int]:
-    """`dist_params` -> `(metric, metric_arg, weights)`, length-checked."""
-    if len(dist_params) != 3:
+    """`dist_params` -> `(metric, metric_arg, weights)`, length-checked. A
+    fourth value is the host address of the finite status word
+    (`_dist_status`)."""
+    if len(dist_params) != 3 and len(dist_params) != 4:
         raise Error(
             "knn: dist_params must hold 3 values (metric, metric_arg,"
-            " weights), got " + String(len(dist_params))
+            " weights) and optionally a status address, got " + String(len(dist_params))
         )
     return (
         Int(py=dist_params[0]),
         Float32(Float64(py=dist_params[1])),
         Int(py=dist_params[2]),
     )
+
+
+def _dist_status(dist_params: PythonObject) raises -> Int:
+    """The optional fourth `dist_params` value (lane a7b-device-x-neighbors):
+    the host address of an int32 word that receives the finite status of the
+    queries the entry uploads (core/admitted_finite_status.mojo; 0 = finite).
+    0 (or absent): not asked; the door tested its X itself."""
+    if len(dist_params) < 4:
+        return 0
+    var address = Int(py=dist_params[3])
+    if address < 0 or address % 4 != 0:
+        raise Error("knn: the status address must be a positive int32-aligned address")
+    return address
+
+
+def _refuse_status(dist_params: PythonObject, what: String) raises:
+    """The per-call entries (index uploaded every call) do not test their
+    words: the doors reach them only on the host binding; a status request
+    here is refused rather than left unanswered."""
+    if _dist_status(dist_params) != 0:
+        raise Error(what + ": the finite status word is answered by the resident entries only")
 
 
 def knn_search_binding(
@@ -352,6 +391,7 @@ def knn_search_binding(
     var sq = Int(py=params[4]) != 0
     var qt = Int(py=params[5])
     var dt = _dist_triple(dist_params)
+    _refuse_status(dist_params, "knn_search")
 
     var used: Int
     with GILReleased(Python()):
@@ -371,17 +411,24 @@ def knn_index_prepare_binding(
     `knn_search_resident` searches through. `params` is `[n_index,
     n_features]`; the bytes at `index_addr` are copied to the device
     inside this call and never read again by a search except for the
-    host-side refusals. Release with `knn_index_release`."""
-    if len(params) != 2:
-        raise Error("knn_index_prepare: params must hold n_index, n_features")
+    host-side refusals. Release with `knn_index_release`.
+
+    A third `params` value (lane a7b-device-x-neighbors) is the host address
+    of an int32 word that receives the finite status of the uploaded index
+    (0 = finite); on a non-finite index nothing is kept and the handle is 0."""
+    if len(params) != 2 and len(params) != 3:
+        raise Error("knn_index_prepare: params must hold n_index, n_features and optionally a status address")
     var ip = _f32_ptr(Int(py=index_addr))
     var ni = Int(py=params[0])
     var nf = Int(py=params[1])
+    var status = 0 if len(params) == 2 else Int(py=params[2])
     if ni <= 0 or nf <= 0:
         raise Error("knn_index_prepare: n_index and n_features must be positive")
+    if status < 0 or status % 4 != 0:
+        raise Error("knn_index_prepare: the status address must be a positive int32-aligned address")
     var handle: Int
     with GILReleased(Python()):
-        handle = knn_index_prepare(ip, ni, nf)
+        handle = knn_index_prepare(ip, ni, nf, status)
     return PythonObject(handle)
 
 
@@ -422,11 +469,12 @@ def knn_search_resident_binding(
     var qt = Int(py=params[5])
     var dt = _dist_triple(dist_params)
     var h = Int(py=handle)
+    var status = _dist_status(dist_params)
     var used: Int
     with GILReleased(Python()):
         used = knn_index_search(
             h, ip, ni, qp, nq, nf, kk, dp, xp, sq, qt, KNN_METHOD_AUTO,
-            dt[0], dt[1], True,
+            dt[0], dt[1], True, status,
         )
     return PythonObject(used)
 
@@ -494,6 +542,7 @@ def knn_classify_binding(
     var pp = _f32_ptr(Int(py=out_proba_addr))
     var up = _i32_ptr(Int(py=out_uniq_addr))
     var dt = _dist_triple(dist_params)
+    _refuse_status(dist_params, "knn_classify")
 
     var used: Int
     # The binding entry reads the neighbors device plan once and passes it down.
@@ -549,6 +598,7 @@ def knn_regress_binding(
     var qt = Int(py=params[4])
     var no = Int(py=params[5])
     var dt = _dist_triple(dist_params)
+    _refuse_status(dist_params, "knn_regress")
 
     var used: Int
     with GILReleased(Python()):
@@ -606,11 +656,12 @@ def knn_classify_resident_binding(
     var pp = _f32_ptr(Int(py=out_proba_addr))
     var up = _i32_ptr(Int(py=out_uniq_addr))
     var dt = _dist_triple(dist_params)
+    var status = _dist_status(dist_params)
     var used: Int
     with GILReleased(Python()):
         used = knn_index_classify(
             h, ip, ni, qp, nq, nf, kk, yp, no, n_classes, lp, pp, up,
-            want_proba, qt, dt[0], dt[1], dt[2],
+            want_proba, qt, dt[0], dt[1], dt[2], status,
         )
     return PythonObject(used)
 
@@ -643,10 +694,11 @@ def knn_regress_resident_binding(
     var qt = Int(py=params[4])
     var no = Int(py=params[5])
     var dt = _dist_triple(dist_params)
+    var status = _dist_status(dist_params)
     var used: Int
     with GILReleased(Python()):
         used = knn_index_regress(
-            h, ip, ni, qp, nq, nf, kk, yp, no, op, qt, dt[0], dt[1], dt[2]
+            h, ip, ni, qp, nq, nf, kk, yp, no, op, qt, dt[0], dt[1], dt[2], status
         )
     return PythonObject(used)
 
@@ -686,10 +738,15 @@ def kmeans_fit_binding(
     `inertia_check` (False by default, per cuVS) governs only the IN-LOOP
     cost. This docstring used to say "0.0 when it was NEVER COMPUTED",
     which was false (corrected 2026-08-23).
+
+    `params[11]` (OPTIONAL, lane a7d-device-x-decomp-cluster): 1 asks for
+    X's finite status word, tested on the device after the upload; it is
+    then the fifth value returned (0 = finite; a nonzero word means the fit
+    stopped before it ran and the door refuses).
     """
-    if len(params) != 10 and len(params) != 11:
+    if len(params) != 10 and len(params) != 11 and len(params) != 12:
         raise Error(
-            "kmeans_fit: params must hold 10 or 11 values, got "
+            "kmeans_fit: params must hold 10, 11 or 12 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -711,8 +768,11 @@ def kmeans_fit_binding(
     var ii = Int(py=params[8])
     var mm = Int(py=params[9])
     var ovs = Float64(2.0)
-    if len(params) == 11:
+    if len(params) >= 11:
         ovs = Float64(py=params[10])
+    var test = len(params) == 12 and Int(py=params[11]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
 
     var inertia = Float64(0.0)
     var n_iter = 0
@@ -727,6 +787,7 @@ def kmeans_fit_binding(
             # Tried: the lazy convergence read (shift tested every KMEANS_LAZY_EVERY iterations) on the KMeans estimator's fits; kmeans istella 1451.5 -> 1527.7 ms, taxi 977.6 -> 974.8, inertia equal.
             # Restore: git apply experiments/removed/MOJOLEARN_KMEANS_FAST_LAZY_SHIFT.patch; record in docs/TOMBSTONES.md.
             lazy_shift=False,
+            finite_word=word_addr,
         )
         inertia = r.inertia
         n_iter = r.n_iter
@@ -739,6 +800,8 @@ def kmeans_fit_binding(
     out.append(PythonObject(n_iter))
     out.append(PythonObject(sum_scale))
     out.append(PythonObject(weight_scale))
+    if test:
+        out.append(PythonObject(Int(word[0])))
     return out
 
 
@@ -755,10 +818,12 @@ def kmeans_predict_binding(
     2 n_clusters, 3 metric. `out_labels_addr` is `n_samples` uint32 (the
     caller's int32 array is the same bytes). The pass is `kmeans_fit`'s
     final assignment (`cluster/estimator.mojo::kmeans_predict`), so predict
-    on the training rows is `labels_`."""
-    if len(params) != 4:
+    on the training rows is `labels_`. `params[4]` (OPTIONAL, lane a7d): 1
+    asks for X's finite status word over the upload, returned instead of
+    n_samples (0 = finite)."""
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kmeans_predict: params must hold 4 values, got "
+            "kmeans_predict: params must hold 4 or 5 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -768,10 +833,15 @@ def kmeans_predict_binding(
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
     var mm = Int(py=params[3])
+    var test = len(params) == 5 and Int(py=params[4]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        kmeans_predict(ctx, xp, ns, nf, nc, cp, lp, mm)
+        kmeans_predict(ctx, xp, ns, nf, nc, cp, lp, mm, finite_word=word_addr)
         ctx.synchronize()
+    if test:
+        return PythonObject(Int(word[0]))
     return PythonObject(ns)
 
 
@@ -786,10 +856,11 @@ def kmeans_transform_binding(
 
     `params` is, in this exact order: 0 n_samples, 1 n_features,
     2 n_clusters, 3 metric. `out_addr` is `n_samples x n_clusters` float32,
-    row-major (`cluster/estimator.mojo::kmeans_transform`)."""
-    if len(params) != 4:
+    row-major (`cluster/estimator.mojo::kmeans_transform`). `params[4]`
+    (OPTIONAL, lane a7d): as `kmeans_predict`'s."""
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kmeans_transform: params must hold 4 values, got "
+            "kmeans_transform: params must hold 4 or 5 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -799,10 +870,15 @@ def kmeans_transform_binding(
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
     var mm = Int(py=params[3])
+    var test = len(params) == 5 and Int(py=params[4]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        kmeans_transform(ctx, xp, ns, nf, nc, cp, op, mm)
+        kmeans_transform(ctx, xp, ns, nf, nc, cp, op, mm, finite_word=word_addr)
         ctx.synchronize()
+    if test:
+        return PythonObject(Int(word[0]))
     return PythonObject(ns)
 
 
@@ -820,10 +896,11 @@ def kmeans_fit_transform_binding(
     `out_transform_addr` is `n_samples x n_clusters` float32, written with
     the distances to the final centroids from the design and centroids
     already on the device (`cluster/estimator.mojo::kmeans_transform_device`,
-    the same kernels and bytes as a separate `kmeans_transform`)."""
-    if len(params) != 10 and len(params) != 11:
+    the same kernels and bytes as a separate `kmeans_transform`).
+    `params[11]` (OPTIONAL, lane a7d): as `kmeans_fit_binding`'s."""
+    if len(params) != 10 and len(params) != 11 and len(params) != 12:
         raise Error(
-            "kmeans_fit: params must hold 10 or 11 values, got "
+            "kmeans_fit: params must hold 10, 11 or 12 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -842,8 +919,11 @@ def kmeans_fit_transform_binding(
     var ii = Int(py=params[8])
     var mm = Int(py=params[9])
     var ovs = Float64(2.0)
-    if len(params) == 11:
+    if len(params) >= 11:
         ovs = Float64(py=params[10])
+    var test = len(params) == 12 and Int(py=params[11]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     var inertia = Float64(0.0)
     var n_iter = 0
     var sum_scale = Float64(0.0)
@@ -855,6 +935,7 @@ def kmeans_fit_transform_binding(
             0.0, ovs,
             lazy_shift=False,
             transform_out=tp,
+            finite_word=word_addr,
         )
         inertia = r.inertia
         n_iter = r.n_iter
@@ -866,6 +947,8 @@ def kmeans_fit_transform_binding(
     out.append(PythonObject(n_iter))
     out.append(PythonObject(sum_scale))
     out.append(PythonObject(weight_scale))
+    if test:
+        out.append(PythonObject(Int(word[0])))
     return out
 
 
@@ -900,10 +983,12 @@ def kmeans_predict_resident_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """`kmeans_predict` over resident centroids: the same `params`
-    (n_samples, n_features, n_clusters, metric). Returns n_samples."""
-    if len(params) != 4:
+    (n_samples, n_features, n_clusters, metric, and the optional finite
+    flag of lane a7d). Returns n_samples, or the finite status word when
+    the flag asks for it."""
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kmeans_predict: params must hold 4 values, got "
+            "kmeans_predict: params must hold 4 or 5 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -913,8 +998,13 @@ def kmeans_predict_resident_binding(
     var nc = Int(py=params[2])
     var mm = Int(py=params[3])
     var h = Int(py=handle)
+    var test = len(params) == 5 and Int(py=params[4]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
-        kmeans_predict_resident(h, xp, ns, nf, nc, lp, mm)
+        kmeans_predict_resident(h, xp, ns, nf, nc, lp, mm, finite_word=word_addr)
+    if test:
+        return PythonObject(Int(word[0]))
     return PythonObject(ns)
 
 
@@ -925,10 +1015,12 @@ def kmeans_transform_resident_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """`kmeans_transform` over resident centroids: the same `params`
-    (n_samples, n_features, n_clusters, metric). Returns n_samples."""
-    if len(params) != 4:
+    (n_samples, n_features, n_clusters, metric, and the optional finite
+    flag of lane a7d). Returns n_samples, or the finite status word when
+    the flag asks for it."""
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kmeans_transform: params must hold 4 values, got "
+            "kmeans_transform: params must hold 4 or 5 values, got "
             + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
@@ -938,8 +1030,13 @@ def kmeans_transform_resident_binding(
     var nc = Int(py=params[2])
     var mm = Int(py=params[3])
     var h = Int(py=handle)
+    var test = len(params) == 5 and Int(py=params[4]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
-        kmeans_transform_resident(h, xp, ns, nf, nc, op, mm)
+        kmeans_transform_resident(h, xp, ns, nf, nc, op, mm, finite_word=word_addr)
+    if test:
+        return PythonObject(Int(word[0]))
     return PythonObject(ns)
 
 
@@ -985,9 +1082,9 @@ def radius_neighbors_count_binding(
     That is why there are two of these and not one; the reasoning is in
     `neighbors/estimator.mojo`'s RADIUS NEIGHBOURS banner.
     """
-    if len(params) != 6:
+    if len(params) != 6 and len(params) != 7:
         raise Error(
-            "radius_neighbors_count: params must hold 6 values, got "
+            "radius_neighbors_count: params must hold 6 values and optionally a status address, got "
             + String(len(params))
         )
     var ip = _f32_ptr(Int(py=index_addr))
@@ -999,12 +1096,18 @@ def radius_neighbors_count_binding(
     var rad = Float32(Float64(py=params[3]))
     var mtr = Int(py=params[4])
     var marg = Float32(Float64(py=params[5]))
+    # Lane a7b-device-x-neighbors: params[6], when present, is the host
+    # address of the int32 finite status word of the uploaded index and
+    # queries (0 = finite; the door refuses otherwise).
+    var status = 0 if len(params) == 6 else Int(py=params[6])
+    if status < 0 or status % 4 != 0:
+        raise Error("radius_neighbors_count: the status address must be a positive int32-aligned address")
 
     var nnz: Int
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         nnz = radius_neighbors_count(
-            ctx, ip, ni, qp, nq, nf, rad, ap, mtr, marg
+            ctx, ip, ni, qp, nq, nf, rad, ap, mtr, marg, status
         )
         ctx.synchronize()
     return PythonObject(nnz)
@@ -2047,6 +2150,95 @@ def prepare_targets_binding(
     return PythonObject(k)
 
 
+# ===========================================================================
+# labels_native_api_v1 (lane s1, S3; bindings/labels_native_abi.mojo): the
+# label path's base-binding steps over THIS binding's device helpers, on the
+# kit_call descriptor ABI. Each operation calls the same entry the Python
+# callable table called (same validation, same kernels, same order), so no
+# byte moves. The caller keeps the GIL (kit_call release_gil=False): every
+# entry below releases it around its own kernel launch.
+# ===========================================================================
+
+
+def _lw(v: Int) -> PythonObject:
+    return PythonObject(v)
+
+
+def labels_native_operation(op: Int, a: List[Int], p: List[Int]) raises -> Int:
+    if op == LABELS_OP_MODE:
+        return Int(GLOBAL_NUMERIC_MODE)
+    if op == LABELS_OP_CAPABILITIES:
+        return LABELS_CAP_DEVICE
+    if op == LABELS_OP_PREPARE_TARGETS:
+        if len(a) != 4 or len(p) != 4:
+            raise Error("labels native ABI: prepare_targets takes 4 addresses and 4 words")
+        return Int(py=prepare_targets_binding(_lw(a[0]), _lw(p[0]), _lw(p[1]), _lw(a[1]), _lw(a[2]),
+                                              _lw(a[3]), _lw(p[2]), _lw(p[3])))
+    if op == LABELS_OP_REDUCE_STAT:
+        if len(a) != 2 or len(p) != 3:
+            raise Error("labels native ABI: reduce_stat takes 2 addresses and 3 words")
+        return labels_reduce_stat_encode(reduce_stat_binding(_lw(a[0]), _lw(p[0]), _lw(p[1]), _lw(p[2])), a[1])
+    if op == LABELS_OP_ARGMAX_F32 or op == LABELS_OP_ARGMAX_F64:
+        if len(a) != 2 or len(p) != 2:
+            raise Error("labels native ABI: argmax_rows takes 2 addresses and 2 words")
+        if op == LABELS_OP_ARGMAX_F64:
+            _ = argmax_rows_f64_binding(_lw(a[0]), _lw(p[0]), _lw(p[1]), _lw(a[1]))
+        else:
+            _ = argmax_rows_f32_binding(_lw(a[0]), _lw(p[0]), _lw(p[1]), _lw(a[1]))
+        return 0
+    if op == LABELS_OP_GATHER_I32 or op == LABELS_OP_GATHER_I64 or op == LABELS_OP_GATHER_F64:
+        if len(a) != 3 or len(p) != 2:
+            raise Error("labels native ABI: gather takes 3 addresses and 2 words")
+        if op == LABELS_OP_GATHER_I32:
+            _ = gather_i32_binding(_lw(a[0]), _lw(p[0]), _lw(a[1]), _lw(p[1]), _lw(a[2]))
+        elif op == LABELS_OP_GATHER_I64:
+            _ = gather_i64_binding(_lw(a[0]), _lw(p[0]), _lw(a[1]), _lw(p[1]), _lw(a[2]))
+        else:
+            _ = gather_f64_binding(_lw(a[0]), _lw(p[0]), _lw(a[1]), _lw(p[1]), _lw(a[2]))
+        return 0
+    if op == LABELS_OP_CLASS_RATIO_F64:
+        if len(a) != 2 or len(p) != 3:
+            raise Error("labels native ABI: class_ratio_f64 takes 2 addresses and 3 words")
+        return Int(py=class_ratio_f64_binding(_lw(a[0]), _lw(p[0]), _lw(p[1]), _lw(p[2]), _lw(a[1])))
+    raise Error("labels native ABI: unknown operation")
+
+
+def labels_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
+                     result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    try:
+        if result == 0 or nf != 0:
+            raise Error("labels native ABI: invalid result or scalar span")
+        var a = native_descriptor_words(aa, na)
+        var p = native_descriptor_words(pp, np)
+        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = labels_native_operation(op, a, p)
+        return 0
+    except problem:
+        native_descriptor_report(problem, context, sink)
+        return 1
+
+
+struct LabelsNativeTable(Defaultable, Movable):
+    var name: String
+    var entries: List[NativeDescriptorCall]
+
+    def __init__(out self):
+        self.name = String(LABELS_NATIVE_ABI_NAME)
+        self.entries = List[NativeDescriptorCall]()
+        self.entries.append(labels_native_v1)
+
+
+# The slot holds THIS module's dispatch pointer: tier-keyed so a FAST and an
+# IDENTICAL build never hand out each other's code (core/shared_slot.mojo).
+comptime LABELS_NATIVE_TABLE = _Global[StorageType=LabelsNativeTable,
+    name=("MojolearnLabelsNativeTableIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV1"),
+    init_fn=LabelsNativeTable.__init__]
+
+
+def labels_native_api_v1_binding() raises -> PythonObject:
+    var table = LABELS_NATIVE_TABLE.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -2055,6 +2247,7 @@ def build__mojolearn() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn")
         m.def_function[mojolearn_vendor_binding]("mojolearn_vendor")
+        m.def_function[labels_native_api_v1_binding]("labels_native_api_v1")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
@@ -2106,6 +2299,11 @@ def build__mojolearn() -> PythonObject:
         m.def_function[msel_free_binding]("msel_free")
         m.def_function[msel_live_binding]("msel_live")
         m.def_function[msel_take_rows_binding]("msel_take_rows")
+        m.def_function[pca_transform_fold_binding]("pca_transform_fold")
+        m.def_function[qn_fit_fold_binding]("qn_fit_fold")
+        m.def_function[kmeans_fit_fold_binding]("kmeans_fit_fold")
+        m.def_function[kmeans_predict_fold_binding]("kmeans_predict_fold")
+        m.def_function[kmeans_transform_fold_binding]("kmeans_transform_fold")
         m.def_function[msel_scatter_rows_binding]("msel_scatter_rows")
         m.def_function[msel_proba_column_binding]("msel_proba_column")
         m.def_function[msel_rebase_offsets_i32_binding]("msel_rebase_offsets_i32")

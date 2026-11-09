@@ -11,7 +11,7 @@ enqueued launch, with no sync:
 
 - the launch sequences are DevExec's own (`launch_ew`, `launch_gemm`,
   `launch_colsum`, `launch_rowsum`, `launch_lu`, `rand_kernel`,
-  `gamma_kernel`, `launch_lda_rows`, `DevExec._eigh_par_on`), so every value
+  `gamma_kernel`, `launch_lda_rows`, `DevExec.eigh_enq`), so every value
   is the same bits as `Kit[DevExec]`, which is the same bits as the CPU
   column's kit (every x-decomp lane's GPU == CPU claim);
 - the host reads a value only where the search branches on it: a C-step's
@@ -33,7 +33,12 @@ from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from x_decomp.cells import F32Ptr, I32Ptr
-from x_decomp.eigh_tridiag_cells import EIGH_TD_IDN
+from checks.numerics import ftz, identical_mul
+from x_decomp.cells import ew_cell
+from x_decomp.rr import RR_EIGH_SWEEPS
+from x_decomp.cells import X_DECOMP_SVD_SWEEPS
+from x_decomp.svd_ops import qr_op_q, svd_op_tall
+from core.step_gate import step_gate_open_word
 from x_decomp.device import (
     DevExec,
     LU_SCAL_LEN,
@@ -65,7 +70,7 @@ from x_decomp.device import (
     xd_ctx,
 )
 from x_decomp.kit import (
-    Mat, OP_GTS, OP_SELECT, mat_const, svd_order, OP_ABS, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, OP_SUB,
+    Mat, OP_GTS, OP_SELECT, mat_const, OP_ABS, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, OP_SUB,
     mat_from,
 )
 from x_decomp.classical_device import contrast_kernel
@@ -89,10 +94,9 @@ from x_decomp.resident import X_DECOMP_POOL, _ptr, pool_alloc, pool_free
 from x_decomp.moves import MOVE_FILL0, MOVE_TAKE_COLS, MOVE_TRANSPOSE
 from x_decomp.cells import LARS_ROW_EXTRA
 from x_decomp.dict_fast import DECOMP_FAST_DICT_DEV, dict_update_dev
-from x_decomp.qr_bounded import QRB_CELLS
 from x_decomp.moves_device import launch_move
 from x_decomp.select_dev import enqueue_sel_reduce, order_small_kernel
-from x_decomp.select_ops import SEL_ORDER_MAX
+from x_decomp.select_ops import SEL_ORDER_MAX, order_rank
 
 #: `_expansion_decomp._F64_EPS`, the `adds` of LDA's `norm_phi`
 comptime _F64_EPS: Float64 = 2.220446049250313e-16
@@ -108,23 +112,105 @@ def gather_rows_kernel(src: F32Ptr, idx: I32Ptr, dst: F32Ptr, m: Int32, c: Int32
         dst.unsafe_store(t, src.unsafe_load(Int(idx.unsafe_load(a)) * Int(c) + j))
 
 
+def put_gated_kernel(gate: I32Ptr, dst: F32Ptr, src: F32Ptr, n: Int32):
+    """dst[i] = src[i] while the loop's done word gate[0] is 0 (`DKit.put_gated`)."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        dst.unsafe_store(i, src.unsafe_load(i))
+
+
 def diag_kernel(a: F32Ptr, dst: F32Ptr, n: Int32):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
         dst.unsafe_store(i, a.unsafe_load(i * Int(n) + i))
 
 
-def pinv_mask_kernel(keep: F32Ptr, w: F32Ptr, dst: F32Ptr, n: Int32, cut: Float32):
-    """dst[j] = keep[j] where |w[j]| > cut, else 0 (`_pinvh`'s mask). The
-    comparison is on the bit patterns of the two non-negative values, which
-    order them as IEEE does (subnormals included, NaN never above), so no
-    flush-to-zero can move it."""
+def pinv_mask_dev_kernel(keep: F32Ptr, w: F32Ptr, dst: F32Ptr, n: Int32, eps: Float32):
+    """dst[j] = keep[j] where |w[j]| > cut, else 0 (`_pinvh`'s mask; the
+    comparison on the bit patterns of the two non-negative values, which
+    order them as IEEE does, subnormals included, NaN never above), with
+    the cut taken on the device from the
+    ascending w (lane n9-decomp-eigh-families: was two words home and a
+    sync): wmax = |w[0]|, replaced by |w[n-1]| when larger (Python max()),
+    cut = (wmax n) eps. In binary64 on the host that product was exact
+    (24-bit wmax times n < 2^29) and eps = 2^-23 an exact scale, so the
+    float32 product's one rounding then the exact scale is the same word."""
     var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if j < Int(n):
-        var ab = bitcast[DType.uint32](w.unsafe_load(j)) & UInt32(0x7FFFFFFF)
-        var cb = bitcast[DType.uint32](cut) & UInt32(0x7FFFFFFF)
-        var take = ab <= UInt32(0x7F800000) and cb <= UInt32(0x7F800000) and ab > cb
-        dst.unsafe_store(j, keep.unsafe_load(j) if take else Float32(0))
+    var nn = Int(n)
+    if j >= nn:
+        return
+    var wmax = abs(w.unsafe_load(0))
+    var a_last = abs(w.unsafe_load(nn - 1))
+    if a_last > wmax:
+        wmax = a_last
+    var cut = (wmax * Float32(nn)) * eps
+    var ab = bitcast[DType.uint32](w.unsafe_load(j)) & UInt32(0x7FFFFFFF)
+    var cb = bitcast[DType.uint32](cut) & UInt32(0x7FFFFFFF)
+    var take = ab <= UInt32(0x7F800000) and cb <= UInt32(0x7F800000) and ab > cb
+    dst.unsafe_store(j, keep.unsafe_load(j) if take else Float32(0))
+
+
+def pinv_inv_dev_kernel(s: F32Ptr, inv: F32Ptr, r_in: Int32, mx: Float32, eps: Float32):
+    """inv[j] = `ew1(OP_RECIP, ew3(OP_SELECT, S, S, 0, cut))` cell j with
+    cut = f32(s[0] mx eps) taken here (PLS's `_pinv`; lane n9b-device-svd-qr:
+    was s[0] home and the product in binary64). mx < 2^24 is exact in
+    float32 and s[0] has 24 bits, so the binary64 product s[0] mx was exact
+    and its one rounding is the float32 product's; eps = 2^-23 is an exact
+    scale."""
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j >= Int(r_in):
+        return
+    var cut = ftz(identical_mul(ftz(identical_mul(s.unsafe_load(0), mx)), eps))
+    var kept = ew_cell(OP_SELECT, s.unsafe_load(j), s.unsafe_load(j), Float32(0), cut)
+    inv.unsafe_store(j, ew_cell(OP_RECIP, kept, Float32(0), Float32(0), Float32(0)))
+
+
+def dk_eig_sticky_kernel(status: I32Ptr, dst: F32Ptr):
+    """One thread: the first nonzero eigh status word since the kit's last
+    sync lands in dst[0] (read at `DKit.sync`)."""
+    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+        return
+    var st = status.unsafe_load(0)
+    if st != Int32(0) and dst.unsafe_load(0) == Float32(0):
+        dst.unsafe_store(0, Float32(st))
+
+
+def dk_rev_vec_kernel(src: F32Ptr, dst: F32Ptr, n: Int32):
+    """dst[i] = src[n - 1 - i]: an ascending spectrum descending (a copy)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        dst.unsafe_store(i, src.unsafe_load(Int(n) - 1 - i))
+
+
+def dk_rev_cols_t_kernel(src: F32Ptr, dst: F32Ptr, n: Int32):
+    """dst = (src with its columns reversed)^T for an n x n src: row i of
+    dst is column n - 1 - i of src (`mat_t(rev_cols(V))`, a copy)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nn = Int(n)
+    if t >= nn * nn:
+        return
+    var i = t // nn
+    var j = t - i * nn
+    dst.unsafe_store(t, src.unsafe_load(j * nn + (nn - 1 - i)))
+
+
+def dk_eig_floor_kernel(w: F32Ptr, dst: F32Ptr, n: Int32, eps: Float32, fmin: Float32):
+    """FastICA's floored spectrum on the device (lane n9-decomp-eigh-families:
+    was w home and a sync): floor = max(w[n-1] eps, fmin), dst[i] =
+    OP_MAXS(w[i], floor). eps = 2^-23 is an exact scale, so the float32
+    product is the binary64 product's word."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nn = Int(n)
+    if i >= nn:
+        return
+    var top = ftz(w.unsafe_load(nn - 1)) * eps
+    var fl = fmin
+    if top > fl:
+        fl = top
+    var x = ftz(w.unsafe_load(i))
+    dst.unsafe_store(i, x if x > fl else fl)
 
 
 
@@ -218,6 +304,16 @@ def logdet_sign_kernel(diag: F32Ptr, piv: I32Ptr, n: Int32, dst: I32Ptr):
             _ = Atomic.fetch_add(dst.unsafe_offset(1), c)
 
 
+def order_small_i32_kernel(src: F32Ptr, dst: I32Ptr, n: Int32):
+    """`order_small_kernel`'s stable ascending order stored as int32 words
+    (dst[rank(i)] = i), the coordinate order `cd_rows_kernel` reads: the same
+    rank, the same integer the host read back as `Int(Float32(i))`."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nn = Int(n)
+    if i < nn:
+        dst.unsafe_store(order_rank(src, nn, i), Int32(i))
+
+
 # ---- the resident matrix
 struct DMat(Movable):
     """A row-major float32 matrix in a pooled device buffer, or a view of
@@ -270,12 +366,13 @@ def _mode(xr: Int, xc: Int, ar: Int, ac: Int) raises -> Int:
 
 
 struct _Eig(Movable):
-    var wh: Mat
+    """`DKit.eigh`'s answer, resident: w (1 x n ascending) and V (n x n,
+    vectors in columns). Nothing comes home (lane n9-decomp-eigh-families:
+    the host copy `wh` and its sync are gone)."""
     var wd: DMat
     var vd: DMat
 
-    def __init__(out self, var wh: Mat, var wd: DMat, var vd: DMat):
-        self.wh = wh^
+    def __init__(out self, var wd: DMat, var vd: DMat):
         self.wd = wd^
         self.vd = vd^
 
@@ -292,6 +389,16 @@ struct DKit(Movable):
     var nan_word: DMat
     var nan_host: List[Int32]
     var nan_pending: Bool
+    # the eigh op's status words (`eigh` below), sticky until the next
+    # `sync` reads them (lane n9-decomp-eigh-families)
+    var eig_word: DMat
+    var eig_host: List[Float32]
+    var eig_pending: Bool
+    # the SVD op's status words (`svd` below), sticky the same way (lane
+    # n9b-device-svd-qr)
+    var svd_word: DMat
+    var svd_host_word: List[Float32]
+    var svd_pending: Bool
 
     def __init__(out self) raises:
         self.ctx = xd_ctx()
@@ -301,6 +408,12 @@ struct DKit(Movable):
         self.nan_word = DMat(1, 1)
         self.nan_host = List[Int32](length=1, fill=Int32(0))
         self.nan_pending = False
+        self.eig_word = DMat(1, 1)
+        self.eig_host = List[Float32](length=1, fill=Float32(0))
+        self.eig_pending = False
+        self.svd_word = DMat(1, 1)
+        self.svd_host_word = List[Float32](length=1, fill=Float32(0))
+        self.svd_pending = False
         # the unused broadcast operand: Kit's `one`, a 0
         var z = List[Float32](length=1, fill=Float32(0))
         var pool = X_DECOMP_POOL.get_or_create_ptr()
@@ -312,6 +425,12 @@ struct DKit(Movable):
         var nv = pool[].bufs[self.nan_word.id].create_sub_buffer[DType.float32](0, 1)
         enqueue_fill(self.ctx, nv, Float32(0))
         _ = nv^
+        var ev = pool[].bufs[self.eig_word.id].create_sub_buffer[DType.float32](0, 1)
+        enqueue_fill(self.ctx, ev, Float32(0))
+        _ = ev^
+        var sv = pool[].bufs[self.svd_word.id].create_sub_buffer[DType.float32](0, 1)
+        enqueue_fill(self.ctx, sv, Float32(0))
+        _ = sv^
 
     # ---- movement
     def _sub(self, D: DMat) raises -> DeviceBuffer[DType.float32]:
@@ -343,15 +462,44 @@ struct DKit(Movable):
 
     def sync(mut self) raises:
         var check = self.nan_pending
+        var echeck = self.eig_pending
+        var scheck = self.svd_pending
         if check:
             var pool = X_DECOMP_POOL.get_or_create_ptr()
             self.ctx.enqueue_copy(
                 dst_ptr=F32Ptr(unsafe_from_address=Int(self.nan_host.unsafe_ptr())),
                 src_buf=pool[].bufs[self.nan_word.id].create_sub_buffer[DType.float32](0, 1),
             )
+        if echeck:
+            var pool = X_DECOMP_POOL.get_or_create_ptr()
+            self.ctx.enqueue_copy(
+                dst_ptr=F32Ptr(unsafe_from_address=Int(self.eig_host.unsafe_ptr())),
+                src_buf=pool[].bufs[self.eig_word.id].create_sub_buffer[DType.float32](0, 1),
+            )
+        if scheck:
+            var pool = X_DECOMP_POOL.get_or_create_ptr()
+            self.ctx.enqueue_copy(
+                dst_ptr=F32Ptr(unsafe_from_address=Int(self.svd_host_word.unsafe_ptr())),
+                src_buf=pool[].bufs[self.svd_word.id].create_sub_buffer[DType.float32](0, 1),
+            )
         self.ctx.synchronize()
         self.hold_f.clear()
         self.hold_i.clear()
+        if echeck:
+            self.eig_pending = False
+            if self.eig_host[0] != Float32(0):
+                raise Error(
+                    "eigh: a resident solve did not converge in " + String(RR_EIGH_SWEEPS) + " sweeps."
+                    " An unconverged decomposition is not returned as if it were one (DEVIATION 590)."
+                )
+        if scheck:
+            self.svd_pending = False
+            if self.svd_host_word[0] != Float32(0):
+                raise Error(
+                    "x_decomp svd: a resident solve did not converge in " + String(X_DECOMP_SVD_SWEEPS) + " sweeps"
+                    " or a singular value is NaN (a NaN input, or a device launch cut short). An unconverged"
+                    " decomposition is not returned as if it were one (DEVIATION 590)."
+                )
         if check:
             self.nan_pending = False
             if self.nan_host[0] != Int32(0):
@@ -552,21 +700,9 @@ struct DKit(Movable):
         var view = DMat(rows_of=D, row0=a, rows=b - a)
         return self.copy(view)
 
-    def svd_host(mut self, A: DMat, mut s: Mat, mut v: Mat) raises:
-        """`_Kit.svd`'s solve of a resident tall A (m >= n): DevExec's
-        launches (`_svd_on`, the resident entry's sequence) on a device copy,
-        s (1 x n) and v (n x n, vectors in columns) home, unordered."""
-        var m = A.r
-        var n = A.c
-        if n <= 0 or m < n:
-            raise Error("x_decomp: svd needs m >= n >= 1 (a tall matrix)")
-        s = Mat(1, n)
-        v = Mat(n, n)
-        var da = self.ctx.enqueue_create_buffer[DType.float32](m * n)
-        self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
-        DevExec._svd_on(self.ctx, da, m, n, s.p(), v.p(), QRB_CELLS)
-        _ = da^
-        self.sync()
+    # TOMBSTONE: `DKit.svd_host` (s and V home through `DevExec._svd_on`, a wait per XD_SVD_GROUP sweeps, the
+    # order on the host, both uploaded again) deleted 2026-11-09 by lane n9b-device-svd-qr; code recoverable at
+    # the lane's base origin/integ/pre-0867-w3 (5b5490960d). Restore: git apply experiments/removed/N9B_RESIDENT_SVD.patch
 
     def sqdist(self, A: DMat, B: DMat) raises -> DMat:
         """`_Kit.sqdist(A, B)` on the device (`launch_sqdist`)."""
@@ -639,16 +775,71 @@ struct DKit(Movable):
         return Int(self.word(self.total(self.ew1(OP_GTS, A, s))))
 
     def svd(mut self, A: DMat, mut S: DMat, mut Vt: DMat) raises:
-        """`_Kit.svd` of a resident tall A: DevExec's solve, the descending
-        order of the values home (`svd_order`), S and Vt back up."""
-        var s = Mat(0, 0)
-        var v = Mat(0, 0)
-        self.svd_host(A, s, v)
-        var sh = Mat(0, 0)
-        var vh = Mat(0, 0)
-        svd_order(s, v, sh, vh)
-        S = self.upload(sh)
-        Vt = self.upload(vh)
+        """`_Kit.svd` of a resident tall A (m >= n >= 1): the executor op
+        `svd_op_tall` (x_decomp/svd_ops.mojo) on a device copy, S (1 x n,
+        descending) and Vt (n x n, row a the right singular vector of S[a])
+        left resident, ENQUEUED. The status word is sticky until the next
+        `sync`, which raises on an unconverged or NaN solve.
+
+        Lane n9b-device-svd-qr (2026-11-09): this ran `DevExec._svd_on` into
+        host Mats (a wait every XD_SVD_GROUP sweeps), ordered them on the host
+        (`svd_order`) and uploaded both again; FactorAnalysis EM, LLE's
+        subspace iteration and PLS read them on the device now. The same
+        words (the op's one-block Jacobi is the round launches' pairs, fold
+        and tree; the order is `svd_order`'s)."""
+        var m = A.r
+        var n = A.c
+        if n <= 0 or m < n:
+            raise Error("x_decomp: svd needs m >= n >= 1 (a tall matrix)")
+        S = DMat(1, n)
+        Vt = DMat(n, n)
+        var da = self.ctx.enqueue_create_buffer[DType.float32](m * n)
+        self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
+        var gate = step_gate_open_word(self.ctx)
+        var status = self.ctx.enqueue_create_buffer[DType.int32](1)
+        var ds = self._sub(S)
+        var dv = self._sub(Vt)
+        svd_op_tall(self.ctx, gate, da, ds, dv, status, m, n)
+        self.ctx.enqueue_function[dk_eig_sticky_kernel](
+            I32Ptr(unsafe_from_address=Int(status.unsafe_ptr())), self.svd_word.p(),
+            grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+        )  # small-launch(one word): the op's status, sticky to the next sync
+        self.svd_pending = True
+        _ = da^
+        _ = gate^
+        _ = status^
+        _ = ds^
+        _ = dv^
+
+    def pinv_inv(self, S: DMat, r: Int, mx: Int) raises -> DMat:
+        """PLS's pinv weights: 1 / s over s > f32(s[0] mx 2^-23), else 0, on
+        the device (`pinv_inv_dev_kernel`); mx = max(shape)."""
+        if mx < 1 or mx >= 1 << 24:
+            raise Error("x_decomp: the pinv cut needs 1 <= max(shape) < 2^24")
+        var inv = DMat(1, r)
+        if r > 0:
+            self.ctx.enqueue_function[pinv_inv_dev_kernel](
+                S.p(), inv.p(), Int32(r), Float32(mx), Float32(_F32_EPS), grid_dim=_blocks(r), block_dim=TPB
+            )
+        return inv^
+
+    def qr_q(mut self, A: DMat, qc: Int) raises -> DMat:
+        """The first qc columns of Q of the sliced Householder QR of a
+        resident A (`DevExec.geqrf` + `DevExec.orgqr`'s launches, the executor
+        op `qr_op_q`) on a device copy, resident, ENQUEUED (lane
+        n9b-device-svd-qr: was A home, the host-address forms, Q up again)."""
+        var Q = DMat(A.r, qc)
+        if A.n() == 0 or qc <= 0:
+            return Q^
+        var da = self.ctx.enqueue_create_buffer[DType.float32](A.n())
+        self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
+        var gate = step_gate_open_word(self.ctx)
+        var dq = self._sub(Q)
+        qr_op_q(self.ctx, gate, da, dq, A.r, A.c, qc)
+        _ = da^
+        _ = gate^
+        _ = dq^
+        return Q^
 
     def lda_bound(self, X: DMat, ddt: DMat, dcomp: DMat, floor: Float64) raises -> DMat:
         """The `_approx_bound` term matrix (`lda_bound_kernel`)."""
@@ -712,7 +903,9 @@ struct DKit(Movable):
                     G.p(), Q.p(), W.p(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k), Int32(a),
                     grid_dim=_blocks(n), block_dim=TPB,
                 )
-        self.ctx.synchronize()
+        # lane n10-dictl-arima-loops: no drain; the scratch goes back in
+        # stream order after the solve (as `DevExec._rr_batch_enq`'s), so a
+        # caller's loop reads nothing home per encode
         _ = dn^
         _ = ds^
 
@@ -730,13 +923,18 @@ struct DKit(Movable):
         self._code_rows(2, G, Q, W, nnz, 0, 0.0, 0.0)
         return W^
 
-    def dict_fused(self, D: DMat, A: DMat, B: DMat, mut Dn: DMat) raises -> Bool:
-        """`_Kit._dict_dev`'s fused atom update (FAST builds), else False."""
+    def dict_fused(self, D: DMat, A: DMat, B: DMat, Y: DMat, ystd: DMat, code: DMat, counter: DMat, seed: Int,
+                   mut Dn: DMat) raises -> Bool:
+        """`_Kit._dict_dev`'s fused atom update (FAST builds), else False. An
+        unused atom is resampled from Y's rows on the device (its per-row std
+        `ystd`, `code`'s column zeroed, the resample count word `counter`)."""
         comptime if DECOMP_FAST_DICT_DEV:
             if D.n() == 0:
                 return False
             Dn = DMat(D.r, D.c)
-            _ = dict_update_dev(D.id, A.id, B.id, Dn.id, D.r, D.c)
+            _ = dict_update_dev(
+                D.id, A.id, B.id, Dn.id, D.r, D.c, Y.p(), ystd.p(), Y.r, code.p(), code.r, counter.p(), seed,
+            )
             return True
         else:
             return False
@@ -780,27 +978,65 @@ struct DKit(Movable):
             res[i] = Int32(Int(h.d[i]))
         return res^
 
-    def cd_rows(mut self, W: DMat, HHt: DMat, XHt: DMat, perm: List[Int32]) raises -> Float64:
-        """`_Kit.cd_rows` on device matrices (`cd_rows_kernel`): W swept in
-        place, the violation folded by `total` and read."""
+    def order_small_dev(self, A: DMat) raises -> DMat:
+        """`order_small` kept on the device: the stable ascending order of A's
+        words as int32 bits in a (n, 1) matrix, enqueued (no download)."""
+        var n = A.n()
+        if n > SEL_ORDER_MAX:
+            raise Error("x_decomp: order_small exceeds its bound")
+        var out = DMat(n, 1)
+        if n > 0:
+            self.ctx.enqueue_function[order_small_i32_kernel](
+                A.p(), out.p().bitcast[Int32](), Int32(n), grid_dim=_blocks(n), block_dim=TPB
+            )
+        return out^
+
+    def iota_i32(mut self, n: Int) raises -> DMat:
+        """The identity coordinate order 0..n-1 as int32 bits, uploaded once."""
+        var out = DMat(n, 1)
+        var words = List[Float32](length=max(n, 1), fill=Float32(0))
+        for j in range(n):  # small-loop(n: components): the identity order's int32 bits as upload words
+            words[j] = bitcast[DType.float32](Int32(j))
+        self.upload_into(out, words^)
+        return out^
+
+    def cd_rows_enq(self, W: DMat, HHt: DMat, XHt: DMat, perm: DMat) raises -> DMat:
+        """`_Kit.cd_rows` on device matrices (`cd_rows_kernel`), enqueued: W
+        swept in place, the violation folded by `total` into a (1, 1) matrix
+        that stays on the device. `perm` is the coordinate order's W.c int32
+        words, resident (`order_small_dev`, `iota_i32`).
+        Lane n4-mds-labelprop-nmf-loops (2026-11-09): NMF's CD sweep runs as
+        the executor's bounded loop, so the violation is the loop's criterion
+        operand on the device; `cd_rows`, which read it home on every half
+        sweep, is gone."""
+        # TOMBSTONE: DKit.cd_rows (REFACTORED onto the bounded device loop) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+        # Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
         var n = W.r
         var kc = W.c
+        if n * kc == 0:
+            return self.zeros(1, 1)
+        if perm.n() < kc:
+            raise Error("x_decomp: cd_rows needs a coordinate order of W's columns")
         var viol = DMat(n, 1)
-        if n * kc > 0:
-            var pd = DMat(kc, 1)
-            var words = List[Float32](length=max(kc, 1), fill=Float32(0))
-            for j in range(kc):  # small-loop(kc: components): the permutation's int32 bits as upload words
-                words[j] = bitcast[DType.float32](perm[j])
-            self.upload_into(pd, words^)
-            self.ctx.enqueue_function[cd_rows_kernel](
-                W.p(), HHt.p(), XHt.p(), pd.p().bitcast[Int32](), viol.p(), Int32(n), Int32(kc),
-                grid_dim=_blocks(n), block_dim=TPB,
+        self.ctx.enqueue_function[cd_rows_kernel](
+            W.p(), HHt.p(), XHt.p(), perm.p().bitcast[Int32](), viol.p(), Int32(n), Int32(kc),
+            grid_dim=_blocks(n), block_dim=TPB,
+        )
+        return self.total(viol)
+
+    def put_gated(self, gate: I32Ptr, dst: DMat, src: DMat) raises:
+        """src's words into dst (same shape) while the bounded device loop
+        whose register block is `gate` runs (word 0, the done word, is 0);
+        nothing once it has stopped. The carried state of a loop body is
+        written only through this, so iterations enqueued past the stop leave
+        it as the stopping iteration left it."""
+        if dst.r != src.r or dst.c != src.c:
+            raise Error("x_decomp: put_gated needs equal shapes")
+        var n = src.n()
+        if n > 0:
+            self.ctx.enqueue_function[put_gated_kernel](
+                gate, dst.p(), src.p(), Int32(n), grid_dim=_blocks(n), block_dim=TPB
             )
-            var tv = self.total(viol)
-            var w = self.word(tv)
-            _ = pd^
-            return w
-        return 0.0
 
     def mm(self, A: DMat, B: DMat, ta: Bool, tb: Bool) raises -> DMat:
         var m = A.c if ta else A.r
@@ -912,36 +1148,71 @@ struct DKit(Movable):
         pool_free(sid)
         pool_free(iid)
 
+    # TOMBSTONE: `DKit.eigh`'s host words (`_Eig.wh`, w and V home through `DevExec._eigh_on`, uploaded again) deleted
+    # 2026-11-09 by lane n9-decomp-eigh-families; code recoverable at f59d913b0b.
+    # Restore: git apply experiments/removed/N9_RESIDENT_EIGH.patch
     def eigh(mut self, A: DMat) raises -> _Eig:
-        """`Kit.eigh`: DevExec.eigh's solve on a device copy of A (one sync,
-        inside the solve), then w and V back on the device."""
+        """`Kit.eigh` on the device: the executor op `eigh_op_sym` (through
+        `DevExec.eigh_enq`, `DevExec.eigh`'s route and words) on a device
+        copy of A, w and V left resident, ENQUEUED. The status word is
+        sticky until the next `sync`, which raises on an unconverged solve.
+
+        Lane n9-decomp-eigh-families (2026-11-09): this ran `DevExec._eigh_on`
+        into host Mats (a wait every sweep, w and V home) and uploaded both
+        again; FastICA, FactorAnalysis, the rotation and MinCovDet's pinvh
+        read them on the device now. FAST: the op's route (the tridiagonal
+        solve from TD_MIN_N on Apple FAST, as `DevExec.eigh`) replaces the
+        Jacobi this kit kept at every n under FAST (quality only)."""
         var n = A.r
-        var wh = Mat(1, n)
-        var vh = Mat(n, n)
-        # DevExec.eigh's round-robin solve on a device copy of A (one sync a
-        # sweep inside the solve); cgr-decomp: the one-block jacobi2 route
-        # this took is deleted, so the resident kit and DevExec agree
-        var da = self.ctx.enqueue_create_buffer[DType.float32](max(n * n, 1))
-        if n > 0:
-            self.ctx.enqueue_copy(dst_buf=da.create_sub_buffer[DType.float32](0, n * n), src_buf=self._sub(A))
-        # IDENTICAL: DevExec.eigh's route, `_eigh_on` (the tridiagonal solve
-        # from n = TD_MIN_N, the Jacobi below it or on a refusal), so the
-        # resident kit and `DevExec.eigh` agree again and both equal the host
-        # column's `HostExec.eigh` (lane apple-neighbors-gpu-cpu, 2026-10-13).
-        # Since EIGH_TD_IDN became the default (2026-10-11) this call kept the
-        # Jacobi at every n while `DevExec.eigh` did not, so the resident
-        # FastICA / rotation / FactorAnalysis / MinCovDet routes and their
-        # Kit[DevExec] twins differed from n = 64. FAST keeps the Jacobi here.
-        comptime if EIGH_TD_IDN:
-            DevExec._eigh_on(self.ctx, da, wh.p(), vh.p(), n, 0)
-        else:
-            _ = DevExec._eigh_par_on(self.ctx, da, wh.p(), vh.p(), n)
+        var wd = DMat(1, n)
+        var vd = DMat(n, n)
+        if n == 0:
+            return _Eig(wd^, vd^)
+        var da = self.ctx.enqueue_create_buffer[DType.float32](n * n)
+        self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
+        var dw = self._sub(wd)
+        var dv = self._sub(vd)
+        var status = DevExec.eigh_enq(self.ctx, da, dw, dv, n)
+        self.ctx.enqueue_function[dk_eig_sticky_kernel](
+            I32Ptr(unsafe_from_address=Int(status.unsafe_ptr())), self.eig_word.p(),
+            grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+        )  # small-launch(one word): the op's status, sticky to the next sync
+        self.eig_pending = True
         _ = da^
-        self.hold_f.clear()
-        self.hold_i.clear()
-        var wd = self.upload(wh)
-        var vd = self.upload(vh)
-        return _Eig(wh^, wd^, vd^)
+        _ = dw^
+        _ = dv^
+        _ = status^
+        return _Eig(wd^, vd^)
+
+    def rev_vec(self, A: DMat) raises -> DMat:
+        """A 1 x n (or n x 1) vector's words reversed, on the device."""
+        var out = DMat(A.r, A.c)
+        if A.n() > 0:
+            self.ctx.enqueue_function[dk_rev_vec_kernel](
+                A.p(), out.p(), Int32(A.n()), grid_dim=_blocks(A.n()), block_dim=TPB
+            )
+        return out^
+
+    def rev_cols_t(self, A: DMat) raises -> DMat:
+        """`mat_t(rev_cols(A))` of a square A on the device: row i is column
+        n - 1 - i (an ascending eigenvector matrix as descending rows)."""
+        var n = A.r
+        var out = DMat(n, n)
+        if n > 0:
+            self.ctx.enqueue_function[dk_rev_cols_t_kernel](
+                A.p(), out.p(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
+            )
+        return out^
+
+    def eig_floor(self, w: DMat, eps: Float64, fmin: Float64) raises -> DMat:
+        """FastICA's `max(w, max(w[-1] eps, fmin))` on the device."""
+        var out = DMat(w.r, w.c)
+        if w.n() > 0:
+            self.ctx.enqueue_function[dk_eig_floor_kernel](
+                w.p(), out.p(), Int32(w.n()), Float32(eps), Float32(fmin),
+                grid_dim=_blocks(w.n()), block_dim=TPB,
+            )
+        return out^
 
     def lu_logdet(mut self, A: DMat) raises -> Float64:
         """`_fast_logdet` over `_slogdet`: getrf on a copy (DevExec.lu's
@@ -1023,23 +1294,17 @@ struct DMcd:
         return self.k.rowsum(self.k.ew2(OP_MUL, self.k.mm(Xc, P, False, False), Xc))
 
     def pinvh(mut self, A: DMat) raises -> DMat:
-        """`_pinvh`: V diag(1/w) V^T over |w| > max|w| * n * float32 eps."""
+        """`_pinvh`: V diag(1/w) V^T over |w| > max|w| * n * float32 eps,
+        the cut taken on the device from the ascending w's two ends
+        (`pinv_mask_dev_kernel`; lane n9-decomp-eigh-families: was w home
+        and a sync)."""
         var n = A.r
         var e = self.k.eigh(A)
-        var wmax: Float64 = 0.0
-        if n > 0:
-            # w is ascending (the solve's own permutation), so max|w| is at
-            # an end: no host walk over the n eigenvalues (lane cpu3-core)
-            wmax = abs(Float64(e.wh.d[0]))
-            var a_last = abs(Float64(e.wh.d[n - 1]))
-            if a_last > wmax:                 # Python max(): replace on >
-                wmax = a_last
-        var cut = Float32((wmax * Float64(n)) * _F32_EPS)
         var keep = self.k.ew1(OP_RECIP, e.wd, 0.0)
         var inv = DMat(1, n)
         if n > 0:
-            self.k.ctx.enqueue_function[pinv_mask_kernel](
-                keep.p(), e.wd.p(), inv.p(), Int32(n), cut, grid_dim=_blocks(n), block_dim=TPB
+            self.k.ctx.enqueue_function[pinv_mask_dev_kernel](
+                keep.p(), e.wd.p(), inv.p(), Int32(n), Float32(_F32_EPS), grid_dim=_blocks(n), block_dim=TPB
             )
         return self.k.mm(self.k.ew2(OP_MUL, e.vd, inv), e.vd, False, True)
 
@@ -1475,19 +1740,22 @@ def _dirichlet(k: DKit, A: DMat) raises -> DMat:
     return k.ew2(OP_SUB, k.ew1(OP_DIGAMMA, A, 0.0), k.ew1(OP_DIGAMMA, k.rowsum(A), 0.0))
 
 
-def lda_online_dev(
-    X: Mat, mut comps: Mat, mut exp_dir: Mat, bs: Int, max_doc_iter: Int, seed: Int, mut draw: Int,
+def lda_online_pass_dev(
+    mut k: DKit, Xd: DMat, mut C: DMat, mut ED: DMat, bs: Int, max_doc_iter: Int, seed: Int, mut draw: Int,
     mut n_batch_iter: Int, doc_prior: Float64, topic_prior: Float64, offset: Float64, decay: Float64,
     tol: Float64, total_samples: Float64,
 ) raises:
-    """`lda_online_pass` (x_decomp/lda_online.mojo) with X, the components
-    and their Dirichlet expectation resident: the same cells per mini-batch.
-    The pass's weights (one per mini-batch, each `offset + n_batch_iter`
-    rounded once to float32 then logs, scale and exp, elementwise cells)
-    are computed in one vector and read in one sync before the loop."""
-    var k = DKit()
-    var n = X.r
-    var nc = comps.r
+    """`lda_online_pass` (x_decomp/lda_online.mojo) on X, the components and
+    their Dirichlet expectation already resident: the same cells per
+    mini-batch. The pass's weights (one per mini-batch, each
+    `offset + n_batch_iter` rounded once to float32 then logs, scale and
+    exp, elementwise cells) are computed in one vector and read in one sync
+    before the loop. C and ED are replaced by the pass's resident results;
+    nothing is downloaded (the fit loop keeps X, C and ED on the device
+    across epochs: lane consol-n0-readmission, X was re-uploaded and C, ED
+    went home and back every epoch)."""
+    var n = Xd.r
+    var nc = C.r
     var nb = (n + bs - 1) // bs if n > 0 else 0
     var wts = Mat(nb, 1)
     if nb > 0:
@@ -1498,12 +1766,9 @@ def lda_online_dev(
         var wd = k.ew1(OP_EXP, k.ew1(OP_SCALE, k.ew1(OP_LOGS, bd, 1e-30), -decay), 0.0)
         wts = k.get(wd)
         k.sync()
-    var Xd = k.upload(X)
-    var C = k.upload(comps)
-    var ED = k.upload(exp_dir)
     var a = 0
     var j = 0
-    while a < n:
+    while a < n:  # driver-loop: over the pass's mini-batches
         var b = min(a + bs, n)
         var Xb = DMat(rows_of=Xd, row0=a, rows=b - a)
         # _e_step(k, Xb, cal_sstats=True, random_init=True)
@@ -1523,6 +1788,22 @@ def lda_online_dev(
         n_batch_iter += 1
         j += 1
         a = b
+
+
+def lda_online_dev(
+    X: Mat, mut comps: Mat, mut exp_dir: Mat, bs: Int, max_doc_iter: Int, seed: Int, mut draw: Int,
+    mut n_batch_iter: Int, doc_prior: Float64, topic_prior: Float64, offset: Float64, decay: Float64,
+    tol: Float64, total_samples: Float64,
+) raises:
+    """One online pass over host matrices (`partial_fit`): X, the components
+    and their Dirichlet expectation up once, `lda_online_pass_dev`, the two
+    results home."""
+    var k = DKit()
+    var Xd = k.upload(X)
+    var C = k.upload(comps)
+    var ED = k.upload(exp_dir)
+    lda_online_pass_dev(k, Xd, C, ED, bs, max_doc_iter, seed, draw, n_batch_iter, doc_prior, topic_prior,
+                        offset, decay, tol, total_samples)
     comps = k.get(C)
     exp_dir = k.get(ED)
     k.sync()

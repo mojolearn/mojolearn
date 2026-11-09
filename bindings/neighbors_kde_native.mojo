@@ -27,6 +27,7 @@ from providers.python.estimator_binding_pyapi import estimator_arguments
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family, admit_family_weights
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop, prepared_key_add, prepared_key_same
 from bindings.mode_metadata_native import _fields
@@ -36,15 +37,17 @@ from bindings.classical_attributes import classical_connect_numpy, classical_che
 from bindings.classical_pandas import classical_admit_value
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.family_common import (
-    FAMILY_F32P, family_repr, family_str, family_call, family_array, family_as_f32, family_sample_weight,
-    family_field, family_is_str,
+    FAMILY_F32P, family_repr, family_str, family_call, family_array, family_field, family_is_str,
 )
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense, _sparse_fields
 from bindings.native_buffer_owner import native_buffer_view
-from bindings.classical_labels import _any_contiguous_address
+# TOMBSTONE: _any_contiguous_address use (the labels admission copy's buffer address read) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.neighbors_knn_native import knn_door
-from core.family_cast_impl import family_all_finite_f32
-from core.p3nc_scan import p3nc_all_finite_f32
+from core.host_finite_scan import host_finite_status
+from core.admitted_input import admitted_cast_f32
+from core.cast_in import CAST_KIND_FLOAT
+from bindings.admitted_input import admitted_finite_refuse, admitted_finite_wording
 from bindings.p3nc_fitted_freeze import fitted_freeze
 
 
@@ -119,10 +122,9 @@ def _kde_borrowed(source: PythonObject, x: PythonObject, context: PythonObject) 
     if py_type(source) is context["array_class"]:
         return address == Int(py=classical_address(source))
     try:
-        var view = native_buffer_view(source)
-        var same = _any_contiguous_address(view) == address
-        _ = view^
-        return same
+        # The exporter's own data address (classical_address: an ndarray's,
+        # or a buffer export's first element).
+        return Int(py=classical_address(source)) == address
     except:
         return False
 
@@ -137,9 +139,14 @@ def _kde_dense(source: PythonObject, context: PythonObject) raises -> PythonObje
     if sparse.byte_length() > 0:
         if not py_contains(context, PythonObject("output_context")):
             py_setitem(context, "output_context", context)
-        var dense = family_as_f32(host_sparse_dense(source, sparse, context), 2, "X", context)
+        var dense = admit_family(host_sparse_dense(source, sparse, context), 2, "X", context, False, True,
+                                 refusal=admitted_finite_wording("KernelDensity", "X"), defer_finite=True).array
         return Python.tuple(dense, PythonObject(not _kde_sparse_f32(source, sparse)))
-    var x = family_as_f32(source, 2, "X", context)
+    # Lane a7b-device-x-neighbors: a cast X is refused from the cast's own
+    # verdict; a borrowed one by the fit's copy (`_kde_copy_finite`) or the
+    # score entry's status word.
+    var x = admit_family(source, 2, "X", context, False, True,
+                         refusal=admitted_finite_wording("KernelDensity", "X"), defer_finite=True).array
     var copied = not _kde_borrowed(source, x, context)
     return Python.tuple(x, PythonObject(copied))
 
@@ -152,6 +159,24 @@ def _kde_copy(value: PythonObject, context: PythonObject) raises -> PythonObject
            src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(value))), count=Int(py=value.size))
     _ = result  # keep the Python object alive through the native call above
     _ = value  # keep the Python object alive through the native call above
+    return result
+
+
+def _kde_copy_finite(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_kde_copy` of a borrowed fit set with the finite test in the same
+    pass (lane a7b-device-x-neighbors: was a serial scan and then a memcpy):
+    one parallel row-task copy (core/admitted_input.mojo admitted_cast_f32,
+    float32 to float32: the same bits) whose verdict refuses a NaN or an
+    infinity in `admitted_finite_refuse`'s wording."""
+    var b = native_loaded_module("builtins")
+    var result = family_array(py_call(b.tuple, value.shape), "<f4", context)
+    var rows = Int(py=value.shape[0])
+    var cols = Int(py=value.shape[1])
+    # parallel: the copy and the finiteness verdict over row tasks across host cores
+    var ok = admitted_cast_f32(Int(py=classical_address(value)), cols * 4, 4, rows, cols, 4, CAST_KIND_FLOAT,
+                               FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))))
+    _ = value  # keep the Python object alive through the native call above
+    admitted_finite_refuse(0 if ok else 1, "KernelDensity")
     return result
 
 
@@ -306,9 +331,12 @@ def _kde_handle(fields: PythonObject, binding: PythonObject, context: PythonObje
         _kde_validate(fields)
     _kde_release(fields)
     # ORDER MATCHES bindings/_mojolearn_estimators.mojo::kde_fit_prepare_binding.
+    # Lane a7b: the fit set `_x` is the fit's tested copy (`_kde_copy_finite`
+    # or a refused-on-cast copy), so the prepare's serial host pass runs only
+    # for the rules that are not finiteness (finite_tested = 1).
     var params = Python.list(family_call(b.int, x.shape[0]), family_call(b.int, x.shape[1]),
                              family_call(b.float, family_field(fields, "bandwidth")),
-                             PythonObject(1 if w is not None else 0))
+                             PythonObject(1 if w is not None else 0), PythonObject(1))
     var handle = family_call(b.int, family_call(prepare, key[0], key[2], params,
                                                 family_field(fields, "kernel"), family_field(fields, "metric")))
     _ = x  # keep the Python object alive through the native call above
@@ -336,29 +364,25 @@ def _kde_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var dense = _kde_dense(args[1], context)
     var x = dense[0]
     py_setitem(fields, "input_copied_", dense[1])
-    if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
-        # DEVIATION 604 refuses a non-finite fit set at the first
-        # score_samples; refusing it here as well names the input at the
-        # call that supplied it, as scikit-learn's fit does.
-        raise Error("mojolearn KernelDensity: X contains a NaN or an infinity; "
-                    + "refused by name at fit (DEVIATION 604)")
-    _ = x  # keep the Python object alive through the native call above
     # Opt-in immutable snapshot: transport-only copy of caller bytes.
     # Residency never relies on external mutable pointer identity.
     var immutable = False
     var probe = knn_door(binding, "kde_fast_immutable_fit")
     if probe is not None:
         immutable = _kde_truth(family_call(probe))
-    if immutable:
-        x = _kde_copy(x, context)
-        py_setitem(fields, "input_copied_", PythonObject(True))
-    elif not _kde_truth(dense[1]):
+    if not _kde_truth(dense[1]):
         # p3-neighbors-cluster (caller-aliased inputs): the conversion handed
         # back the caller's own float32 buffer, and the resident fit handle
         # is keyed by its address. Fit keeps an owned snapshot instead, so a
         # later in-place write into the caller's X never reaches a score.
-        # `input_copied_` keeps reporting what the conversion did.
+        # `input_copied_` keeps reporting what the conversion did. Lane a7b:
+        # this copy is also the fit's finite test (DEVIATION 604 at fit, as
+        # scikit-learn refuses; a cast X was refused by its cast).
+        x = _kde_copy_finite(x, context)
+    elif immutable:
         x = _kde_copy(x, context)
+    if immutable:
+        py_setitem(fields, "input_copied_", PythonObject(True))
     # The fitted set is read-only (bindings/p3nc_fitted_freeze.mojo).
     _ = fitted_freeze(x, context)
     py_setitem(fields, "_x", x)
@@ -368,7 +392,7 @@ def _kde_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     if sample_weight is not None:
         # scikit-learn's _check_sample_weight (shape, finite, >= 0, not all
         # zero, its wording) by the base binding's reductions
-        var w = family_sample_weight(sample_weight, Int(py=x.shape[0]), False, context)
+        var w = admit_family_weights(sample_weight, Int(py=x.shape[0]), False, context).keep
         # Always an owned snapshot (the resident key holds its address).
         w = _kde_copy(w, context)
         _ = fitted_freeze(w, context)
@@ -411,14 +435,26 @@ def _kde_scores(model: PythonObject, args: PythonObject, want_total: Bool,
     var got = PythonObject(None)
     if handle is not None:
         var resident = knn_door(binding, "kde_score_samples_resident")
+        # Lane a7b: the queries are tested behind the entry's upload; the
+        # status word comes back with the scores.
+        var status = List[Int32](length=1, fill=Int32(0))
         # ORDER MATCHES bindings/_mojolearn_estimators.mojo::kde_score_samples_resident_binding.
         got = family_call(resident, handle, classical_address(q), classical_address(out),
                           Python.list(family_call(b.int, q.shape[0]), family_call(b.int, features),
-                                      family_call(b.float, family_field(fields, "bandwidth")), want),
+                                      family_call(b.float, family_field(fields, "bandwidth")), want,
+                                      PythonObject(Int(status.unsafe_ptr()))),
                           family_field(fields, "kernel"), family_field(fields, "metric"))
         _ = q  # keep the Python object alive through the native call above
         _ = out  # keep the Python object alive through the native call above
+        admitted_finite_refuse(Int(status[0]), "KernelDensity")
+        _ = status^
     else:
+        # The CPU column: one parallel scan of the float32 C-order queries,
+        # so the refusal is the one wording (the host entry's own DEVIATION
+        # 604 scan stays behind it for the bound and the cosine rule).
+        # parallel: host_finite_status splits the words across the host's cores
+        admitted_finite_refuse(Int(host_finite_status(Int(py=classical_address(q)), Int(py=q.size))),
+                               "KernelDensity")
         var x = family_field(fields, "_x")
         var w_address = PythonObject(0)
         if w is not None:

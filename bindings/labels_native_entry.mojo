@@ -20,7 +20,7 @@
 # the ones bindings/label_input_sources.mojo admits (exact ndarray, Array, flat
 # list or tuple, a numpy-backed pandas Series, '<U' ndarrays) plus the ORDER
 # RULE walk for everything else (bindings/classical_labels.mojo
-# `labels_encode_labels`).
+# `classical_encode_labels`).
 #
 # The context is the classical shared admission context merged with the label
 # context (python/mojolearn/_native_labels_bridge.py `labels_entry`).

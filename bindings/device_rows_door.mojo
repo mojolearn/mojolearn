@@ -12,16 +12,9 @@
 #                                        False for a context without it
 #   DoorRows(value, context)             the resolution with no host words:
 #                                        base, indices, row count, row width
-#   door_rows_host(value, context)       the host Array of the rows, for a door
-#                                        whose kernels read host addresses: the
-#                                        DeviceRows' own native materializer,
-#                                        which gathers on the device out of the
-#                                        resident base (model selection's take)
-#                                        and keeps the result on the object, so
-#                                        it runs at most once per object
-#   door_x(value, context)               the value itself, or door_rows_host of
-#                                        a DeviceRows: what the classical and
-#                                        family-lifecycle X checks continue with
+#   (the door then reads the rows through `admit_x`, bindings/admitted_input.mojo:
+#   the handle itself for an entry that gathers on the device (`device_x`), or
+#   a parallel host gather out of the host base; never a download)
 #
 # A family whose kernels read a device store slot resolves a DeviceRows to a
 # slot through the arena runner (`bindings/arena_prog_native.mojo` `_rows_gather`:
@@ -30,8 +23,10 @@
 #
 # The connected names (import-time glue, `_native_msel_dispatch.connect`, into
 # every owner context model selection calls): `door_rows_class`
-# (`_arena_io.DeviceRows`), `door_rows_call` (`_arena_io._ROWS_CALL`, the
-# compiled DeviceRows owner) and `door_rows_context` (`_arena_io._ROWS_CONTEXT`).
+# (`_arena_io.DeviceRows`), `door_rows_context` (`_arena_io._ROWS_CONTEXT`)
+# and `door_rows_call` (`_arena_io._ROWS_CALL`, lane a6: `door_rows_store`
+# reads the fold's resident store ids through it, the "store_ids" operation
+# of bindings/arena_rows_native.mojo).
 #
 # Numerics: none. The rows a DeviceRows names are the rows model selection's
 # host path gathers (the same device gather, the same order), so a fit or a
@@ -81,16 +76,60 @@ struct DoorRows(Movable):
         self.row_words = Int(py=fields["row_words"])
 
 
-def door_rows_host(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The rows of a DeviceRows as a host Array, through its compiled owner's
-    `materialize` (the device gather out of model selection's resident base;
-    kept on the object, so a second call returns the same Array)."""
-    var call = context["door_rows_call"]
-    return py_call(call, value, PythonObject("materialize"), Python.tuple(), context["door_rows_context"])
+# TOMBSTONE: door_rows_host and door_x (the DeviceRows materialize for host-address
+# kernels: device gather, download, host finite scan, kernel re-upload; REGRESSIONS
+# R13) deleted 2026-11-08 by lane a5-admit-core-followup; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A5_DOOR_ROWS_HOST.patch. admit_x / admit_rows_host
+# (bindings/admitted_input.mojo) read a DeviceRows without the round trip.
 
 
-def door_x(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`value`, or the host rows of a DeviceRows (`door_rows_host`)."""
-    if door_is_device_rows(value, context):
-        return door_rows_host(value, context)
-    return value
+struct DoorRowsStore(ImplicitlyCopyable, Movable):
+    """The resident store ids of a DeviceRows fold in model selection's
+    store (core/msel_device_x.mojo `msel_store`): the float32 C-order base
+    (`base_rows` x `row_words`) and the int64 row indices (`rows` words).
+    A device kernel entry gathers the fold on the device out of these
+    (core/msel_device_x.mojo msel_device_x_f32); no host word is read."""
+    var base_id: Int
+    var base_rows: Int
+    var row_words: Int
+    var index_id: Int
+    var rows: Int
+
+    def __init__(out self, base_id: Int, base_rows: Int, row_words: Int, index_id: Int, rows: Int):
+        self.base_id = base_id
+        self.base_rows = base_rows
+        self.row_words = row_words
+        self.index_id = index_id
+        self.rows = rows
+
+    @staticmethod
+    def none() -> Self:
+        return DoorRowsStore(-1, 0, 0, -1, 0)
+
+    def active(self) -> Bool:
+        return self.base_id >= 0 and self.index_id >= 0 and self.rows > 0
+
+
+def door_rows_store(value: PythonObject, context: PythonObject) raises -> DoorRowsStore:
+    """The resident store ids of a DeviceRows (the base and the indices put
+    once per fold set by its model-selection owner). `DoorRowsStore.none()`
+    for a context without the store connection (a door outside model
+    selection), so the caller gathers on the host instead."""
+    var call = py_get(context, PythonObject("door_rows_call"))
+    if call is None or not door_is_device_rows(value, context):
+        return DoorRowsStore.none()
+    var ids = py_call(call, value, PythonObject("store_ids"), Python.tuple(), context["door_rows_context"])
+    var row_bytes = Int(py=ids[2])
+    if row_bytes % 4 != 0:
+        raise Error("TypeError: DeviceRows requires a float32 base")
+    return DoorRowsStore(Int(py=ids[0]), Int(py=ids[1]), row_bytes // 4, Int(py=ids[3]), Int(py=ids[4]))
+
+
+def door_rows_refuse(finite_word: Int, range_word: Int, est: String, base_rows: Int) raises:
+    """The refusal of a fold a device entry gathered (core/msel_device_x.mojo
+    status words, 0 = clear): an index out of range (IndexError) or a NaN /
+    infinity, in admit_x's wording."""
+    if range_word != 0:
+        raise Error("IndexError: DeviceRows row index out of range for a base of " + String(base_rows) + " rows")
+    if finite_word != 0:
+        raise Error("Input X contains NaN or infinity (" + est + ").")

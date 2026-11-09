@@ -837,8 +837,14 @@ def _resident_ones(layer: PythonObject, entries: PythonObject, count: Int, conte
     return xcnn_dev_upload(layer, entries, "ones", _ones(n, context), context)
 
 
+# TOMBSTONE: the hand chain of GCNConv's resident backward (x_cnn_gemm_m bias, x_cnn_spmm_m, x_cnn_gemm_m dW, x_cnn_gemm_m dX:
+# four entry crossings, removed: superseded by the tape) deleted 2026-11-09 by lane/x9-moe-gcn-rules; code recoverable at origin/integ/pre-0867-w2 f59d913b0b.
+# Restore: git apply experiments/removed/XCNN_GRAPH_HAND_BACKWARD.patch
 def _gcn_backward_dev(layer: PythonObject, fields: PythonObject, entries: PythonObject, grad: PythonObject,
                       context: PythonObject) raises -> PythonObject:
+    """The resident backward as one native call: the tape over the forward's
+    resident buffers (autograd/rules_graph.mojo `gcn_backward_autograd`),
+    the same entries' bodies on the same arguments."""
     var saved = fields["_xdev"]
     var dev = saved[0]
     var xh = saved[1]
@@ -848,28 +854,46 @@ def _gcn_backward_dev(layer: PythonObject, fields: PythonObject, entries: Python
     var f = Int(py=fields["out_channels"])
     var gt = xcnn_is_t(grad, context)
     var gh = grad.h if gt else xcnn_dev_upload(layer, entries, "G", grad, context)
+    var bias = Bool(py=fields["bias"])
     var gb = xcnn_host_f32([f], context)
-    if Bool(py=fields["bias"]):
+    var ones = PythonObject(None)
+    var ones_addr = PythonObject(0)
+    var ones_dev = 0
+    var bv = PythonObject(None)
+    var b_addr = PythonObject(0)
+    var gb_addr = PythonObject(0)
+    if bias:
         var resident = not xcnn_device_io_off(entries, context)
-        var ones = PythonObject(None) if resident else _ones(n, context)
-        var address = _resident_ones(layer, entries, n, context) if resident else xcnn_addr(ones)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_gemm_m"), Python.list(gh, address, xcnn_addr(gb)),
-                          PythonObject(3 if resident else 1), Python.list(f, 1, n, 2))
-        _ = ones
-    py_setitem(fields, "grad_bias_", gb)
-    var dh = xcnn_dev_get(layer, entries, "dh", n * f, context)
-    var _hv3 = _dev_pair(dev, "vals_t", "csr_t", context)   # one owner admission for both handles
-    _ = py_call_typed(xcnn_entry(entries, "x_cnn_spmm_m"), Python.list(_hv3[0], gh, _hv3[1], dh),
-                      PythonObject(15), Python.list(n, f, graph["nnz"], 0))
-    var gw = xcnn_host_f32([f, d], context)
-    _ = py_call_typed(xcnn_entry(entries, "x_cnn_gemm_m"), Python.list(dh, xh, xcnn_addr(gw)), PythonObject(3), Python.list(f, d, n, 2))
-    py_setitem(fields, "grad_weight_", gw)
+        if resident:
+            ones_addr = _resident_ones(layer, entries, n, context)
+            ones_dev = 1
+        else:
+            ones = _ones(n, context)
+            ones_addr = xcnn_addr(ones)
+        bv = _snapshot(fields["bias_"], "bias_", context)
+        if Int(py=bv.size) != f:
+            raise Error("ValueError: mojolearn: bias_ has the wrong size")
+        b_addr = xcnn_addr(bv)
+        gb_addr = xcnn_addr(gb)
     var w = _snapshot(fields["weight_"], "weight_", context)
     if not _same_shape(xcnn_shape(w), [f, d]):
         raise Error("GCN weight shape differs from configured channels")
+    var gw = xcnn_host_f32([f, d], context)
+    # the forward's h and output arrays (the same sizes: no reallocation;
+    # recorded as the tape's values, never read)
+    var hh = xcnn_dev_get(layer, entries, "h", n * f, context)
+    var oh = xcnn_dev_get(layer, entries, "o", n * f, context)
+    var dh = xcnn_dev_get(layer, entries, "dh", n * f, context)
     var dx = xcnn_new(entries, [n, d], False, context) if gt else xcnn_host_f32([n, d], context)
-    _ = py_call_typed(xcnn_entry(entries, "x_cnn_gemm_m"), Python.list(dh, xcnn_addr(w), dx.h if gt else xcnn_addr(dx)),
-                      PythonObject(5 if gt else 1), Python.list(n, d, f, 0))
+    var _hv = _dev_pair(dev, "vals_t", "csr_t", context)   # one owner admission for both handles
+    _ = py_call_typed(xcnn_entry(entries, "x_cnn_gcn_backward_t"),
+                      Python.list(gh, xh, hh, oh, xcnn_addr(w), xcnn_addr(gw), dx.h if gt else xcnn_addr(dx), dh,
+                                  _hv[0], _hv[1], b_addr, gb_addr, ones_addr),
+                      Python.list(n, d, f, Int(py=graph["nnz"]), 1 if bias else 0, 1 if gt else 0, ones_dev))
+    py_setitem(fields, "grad_bias_", gb)
+    py_setitem(fields, "grad_weight_", gw)
+    _ = ones
+    _ = bv
     _ = w
     _ = grad
     return dx
@@ -885,19 +909,75 @@ def _gcn_backward(layer: PythonObject, gradient: PythonObject, context: PythonOb
         return xcnn_wrap(entries, _gcn_backward(layer, xcnn_host_of(g, context), context), context)
     if _resident_saved(fields, entries, context):
         return _gcn_backward_dev(layer, fields, entries, g, context)
+    return _gcn_backward_host(fields, entries, g, context)
+
+
+# TOMBSTONE: the host-form hand chain of GCNConv's backward (x_cnn_gemm bias, x_cnn_spmm transposed, x_cnn_gemm dW,
+# x_cnn_gemm dX: four entry crossings, removed: superseded by the tape) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/XCNN_GRAPH_HOST_HAND_BACKWARD.patch
+def _gcn_backward_host(fields: PythonObject, entries: PythonObject, g: PythonObject,
+                       context: PythonObject) raises -> PythonObject:
+    """The host-form backward (the CPU binding, or a forward kept on the
+    host) as one native call after the transposed values: the tape over
+    host arrays (autograd/rules_graph.mojo `gcn_backward_autograd` on the
+    GPU binding, autograd/rules_graph_host.mojo on the CPU binding)."""
     var n = xcnn_shape(g)[0]
     var d = Int(py=fields["in_channels"])
     var f = Int(py=fields["out_channels"])
-    var gb = _gemm(entries, g, _ones(n, context), f, 1, n, 2, context) if Bool(py=fields["bias"]) else xcnn_host_f32([f], context)
-    py_setitem(fields, "grad_bias_", xcnn_reshape(gb, [f], context))
     var graph = fields["_g"]
-    var dh = _spmm(entries, graph, _vals_t(entries, graph, fields["_vals"], context), g, 0, context, True)
-    py_setitem(fields, "grad_weight_", _gemm(entries, dh, fields["_x"], f, d, n, 2, context))
-    return _gemm(entries, dh, fields["weight_"], n, d, f, 0, context)
+    var bias = Bool(py=fields["bias"])
+    var vt = _vals_t(entries, graph, fields["_vals"], context)
+    var x = xcnn_f32(fields["_x"], "x", context)
+    var w = _snapshot(fields["weight_"], "weight_", context)
+    if not _same_shape(xcnn_shape(w), [f, d]):
+        raise Error("GCN weight shape differs from configured channels")
+    var gw = xcnn_host_f32([f, d], context)
+    var gb = xcnn_host_f32([f], context)
+    var dx = xcnn_host_f32([n, d], context)
+    var dh = xcnn_host_f32([n, f], context)
+    # the forward's h and output (recorded as the tape's values, never read)
+    var hv = xcnn_host_f32([n, f], context)
+    var ones = PythonObject(None)
+    var bv = PythonObject(None)
+    var b_addr = PythonObject(0)
+    var gb_addr = PythonObject(0)
+    var ones_addr = PythonObject(0)
+    if bias:
+        ones = _ones(n, context)
+        ones_addr = xcnn_addr(ones)
+        bv = _snapshot(fields["bias_"], "bias_", context)
+        if Int(py=bv.size) != f:
+            raise Error("ValueError: mojolearn: bias_ has the wrong size")
+        b_addr = xcnn_addr(bv)
+        gb_addr = xcnn_addr(gb)
+    _ = py_call_typed(xcnn_entry(entries, "x_cnn_gcn_backward_t"),
+                      Python.list(xcnn_addr(g), xcnn_addr(x), xcnn_addr(hv), xcnn_addr(hv), xcnn_addr(w), xcnn_addr(gw),
+                                  xcnn_addr(dx), xcnn_addr(dh), xcnn_addr(vt), xcnn_addr(graph["csr_t"]), b_addr, gb_addr,
+                                  ones_addr),
+                      Python.list(n, d, f, Int(py=graph["nnz"]), 1 if bias else 0, 0, 0, 0))
+    py_setitem(fields, "grad_bias_", gb)
+    py_setitem(fields, "grad_weight_", gw)
+    _ = vt
+    _ = x
+    _ = w
+    _ = dh
+    _ = hv
+    _ = ones
+    _ = bv
+    _ = g
+    return dx
 
 
+# TOMBSTONE: the hand chain of SAGEConv's resident backward (x_cnn_graph_op_m normalisation, x_cnn_linear_backward_m,
+# x_cnn_spmm_m mean scale, x_cnn_spmm_m / x_cnn_graph_op_m aggregate, x_cnn_gemm_m x2 + x_cnn_map2_m root, x_cnn_res_download:
+# up to nine entry crossings, removed: superseded by the tape) deleted 2026-11-09 by lane/x9-moe-gcn-rules; code recoverable at origin/integ/pre-0867-w2 f59d913b0b.
+# Restore: git apply experiments/removed/XCNN_GRAPH_HAND_BACKWARD.patch
 def _sage_backward_dev(layer: PythonObject, fields: PythonObject, entries: PythonObject, grad: PythonObject,
                        context: PythonObject) raises -> PythonObject:
+    """The resident backward (no projection) as one native call: the tape
+    over the forward's resident buffers (autograd/rules_graph.mojo
+    `sage_backward_autograd`), the same entries' bodies on the same
+    arguments."""
     var saved = fields["_xdev"]
     var dev = saved[0]
     var xh = saved[1]
@@ -908,60 +988,64 @@ def _sage_backward_dev(layer: PythonObject, fields: PythonObject, entries: Pytho
     var f = Int(py=fields["out_channels"])
     var gt = xcnn_is_t(grad, context)
     var gh = grad.h if gt else xcnn_dev_upload(layer, entries, "G", grad, context)
-    if Bool(py=fields["normalize"]):
+    var norm = Bool(py=fields["normalize"])
+    var root = Bool(py=fields["root_weight"])
+    var aggr = String(fields["aggr"])
+    var kind = 2 if aggr == "max" else (1 if aggr == "mean" else 0)
+    var outh = PythonObject(0)
+    var preh = PythonObject(0)
+    var gpre = PythonObject(0)
+    var denh = PythonObject(0)
+    if norm:
         var yd = fields["_ydev"]
         var b = xcnn_builtins()
         if py_type(yd) is not b.tuple or len(yd) != 3 or py_type(yd[0]) is not b.int or py_type(yd[1]) is not b.int:
             raise Error("TypeError: SAGE normalization requires native saved handle metadata")
         if yd[2] is not None and not xcnn_is_t(yd[2], context):
             raise Error("TypeError: SAGE normalization requires a native retained tensor")
-        var normg = xcnn_dev_get(layer, entries, "G2", n * f, context)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_graph_op_m"), Python.list(yd[0], gh, yd[1], normg, 0),
-                          PythonObject(15), Python.list(n, f, 0, 3))
-        gh = normg
+        outh = yd[0]
+        denh = yd[1]
+        preh = xcnn_dev_get(layer, entries, "pre", n * f, context)
+        gpre = xcnn_dev_get(layer, entries, "G2", n * f, context)
+    else:
+        # the forward's lin_l output array (recorded as the tape's value, never read)
+        outh = xcnn_dev_get(layer, entries, "ol", n * f, context)
     var lin = _linear_fields(fields["lin_l"], context)
     var values = _linear_weights(lin, context)
-    var w = values[0]
     var dagg = xcnn_dev_get(layer, entries, "dagg", n * d, context)
     var dw = xcnn_host_f32([f, d], context)
     var db = xcnn_host_f32([f], context)
-    _ = py_call_typed(xcnn_entry(entries, "x_cnn_linear_backward_m"), Python.list(aggh, xcnn_addr(w), gh, dagg, xcnn_addr(dw), xcnn_addr(db)),
-                      PythonObject(13), Python.list(n, d, f))
-    py_setitem(lin, "grad_weight_", dw)
-    py_setitem(lin, "grad_bias_", db if Bool(py=fields["bias"]) else xcnn_host_f32([f], context))
     var dx = xcnn_new(entries, [n, d], False, context) if gt else xcnn_host_f32([n, d], context)
-    var root = Bool(py=fields["root_weight"])
+    var dxa = dx.h if gt else xcnn_addr(dx)
     var dxs = dx.h if gt and not root else xcnn_dev_get(layer, entries, "dxs", n * d, context)
-    var aggr = String(fields["aggr"])
-    if aggr == "mean":
-        var scaled = xcnn_dev_get(layer, entries, "dsc", n * d, context)
-        var _hv4 = _dev_pair(dev, "vals_f", "csr_f", context)   # one owner admission for both handles
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_spmm_m"), Python.list(_hv4[0], dagg, _hv4[1], scaled),
-                          PythonObject(15), Python.list(n, d, graph["nnz"], 3))
-        dagg = scaled
-    if aggr == "max":
-        var _hv5 = _dev_pair(dev, "maxaux", "csr_t", context)   # one owner admission for both handles
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_graph_op_m"), Python.list(xh, dagg, _hv5[0], dxs, _hv5[1]),
-                          PythonObject(31), Python.list(n, d, graph["nnz"], 1))
-    else:
-        var _hv6 = _dev_pair(dev, "vals_t", "csr_t", context)   # one owner admission for both handles
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_spmm_m"), Python.list(_hv6[0], dagg, _hv6[1], dxs),
-                          PythonObject(15), Python.list(n, d, graph["nnz"], 0))
+    var dsc = xcnn_dev_get(layer, entries, "dsc", n * d, context) if kind == 1 else PythonObject(0)
+    var maxaux = _dev_h(dev, "maxaux", context) if kind == 2 else PythonObject(0)
+    var _hf = _dev_pair(dev, "vals_f", "csr_f", context)   # one owner admission for both handles
+    var _ht = _dev_pair(dev, "vals_t", "csr_t", context)
+    var wr = PythonObject(None)
+    var wr_addr = PythonObject(0)
+    var gwr = PythonObject(None)
+    var gwr_addr = PythonObject(0)
+    var grh = PythonObject(0)
     if root:
-        var gwr = xcnn_host_f32([f, d], context)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_gemm_m"), Python.list(gh, xh, xcnn_addr(gwr)), PythonObject(3), Python.list(f, d, n, 2))
-        py_setitem(fields, "grad_weight_r_", gwr)
-        var wr = _snapshot(fields["weight_r_"], "weight_r_", context)
+        wr = _snapshot(fields["weight_r_"], "weight_r_", context)
         if not _same_shape(xcnn_shape(wr), [f, d]):
             raise Error("SAGE root weight shape differs from configured channels")
-        var gr = xcnn_dev_get(layer, entries, "gr", n * d, context)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_gemm_m"), Python.list(gh, xcnn_addr(wr), gr), PythonObject(5), Python.list(n, d, f, 0))
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_map2_m"), Python.list(gr, dxs, dx.h if gt else xcnn_addr(dx)),
-                          PythonObject(7 if gt else 3), Python.list(2, n * d))
-        _ = wr
-    elif not gt:
-        _download(entries, dxs, dx)
-    _ = w
+        wr_addr = xcnn_addr(wr)
+        gwr = xcnn_host_f32([f, d], context)
+        gwr_addr = xcnn_addr(gwr)
+        grh = xcnn_dev_get(layer, entries, "gr", n * d, context)
+    _ = py_call_typed(xcnn_entry(entries, "x_cnn_sage_backward_t"),
+                      Python.list(gh, xh, aggh, outh, xcnn_addr(values[0]), xcnn_addr(values[1]), xcnn_addr(dw),
+                                  xcnn_addr(db), dagg, dxa, dxs, _hf[0], _hf[1], _ht[0], _ht[1], maxaux, dsc, wr_addr,
+                                  gwr_addr, grh, preh, gpre, denh),
+                      Python.list(n, d, f, Int(py=graph["nnz"]), kind, 1 if norm else 0, 1 if root else 0, 1 if gt else 0))
+    py_setitem(lin, "grad_weight_", dw)
+    py_setitem(lin, "grad_bias_", db if Bool(py=fields["bias"]) else xcnn_host_f32([f], context))
+    if root:
+        py_setitem(fields, "grad_weight_r_", gwr)
+    _ = values
+    _ = wr
     _ = grad
     return dx
 
@@ -976,40 +1060,169 @@ def _sage_backward(layer: PythonObject, gradient: PythonObject, context: PythonO
         return xcnn_wrap(entries, _sage_backward(layer, xcnn_host_of(g, context), context), context)
     if _resident_saved(fields, entries, context):
         return _sage_backward_dev(layer, fields, entries, g, context)
+    return _sage_backward_host(fields, entries, g, context)
+
+
+# TOMBSTONE: the host-form hand chain of SAGEConv's backward (x_cnn_graph_op normalisation, x_cnn_linear_backward,
+# x_cnn_spmm mean scale, x_cnn_spmm / x_cnn_graph_op aggregate, the projection's x_cnn_relu_backward +
+# x_cnn_linear_backward, x_cnn_gemm x2 + x_cnn_add root: up to ten entry crossings, removed: superseded by the tape)
+# deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/XCNN_GRAPH_HOST_HAND_BACKWARD.patch
+def _sage_backward_host(fields: PythonObject, entries: PythonObject, g: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    """The host-form backward (the CPU binding, project=True, or a forward
+    kept on the host) as one native call: the tape over host arrays
+    (autograd/graph_tape.mojo `sage_cfg`, 33 addresses and 10 integers)."""
     var n = xcnn_shape(g)[0]
     var d = Int(py=fields["in_channels"])
     var f = Int(py=fields["out_channels"])
     var graph = fields["_g"]
-    if Bool(py=fields["normalize"]):
-        var g2 = xcnn_host_f32([n, f], context)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_graph_op"), xcnn_addr(fields["_y"]), xcnn_addr(g), xcnn_addr(fields["_den"]),
-                          xcnn_addr(g2), xcnn_addr(fields["_nograph"]), Python.list(n, f, 0, 3))
-        _ = g
-        g = g2
-    var dagg = _linear_backward(fields["lin_l"], g, context)
-    if not Bool(py=fields["bias"]):
-        py_setitem(_fields(fields["lin_l"]), "grad_bias_", xcnn_host_f32([f], context))
+    var nnz = Int(py=graph["nnz"])
+    var norm = Bool(py=fields["normalize"])
+    var root = Bool(py=fields["root_weight"])
+    var project = Bool(py=fields["project"])
     var aggr = String(fields["aggr"])
-    var dx = PythonObject(None)
-    if aggr == "max":
-        dx = xcnn_host_f32([n, d], context)
-        _ = py_call_typed(xcnn_entry(entries, "x_cnn_graph_op"), xcnn_addr(fields["_xs"]), xcnn_addr(dagg), xcnn_addr(fields["_max_aux"]),
-                          xcnn_addr(dx), xcnn_addr(graph["csr_t"]), Python.list(n, d, graph["nnz"], 1))
-        # The address argument borrows dagg's buffer through the native read.
-        # Its owner must outlive the call, even though later work only uses dx.
-        _ = dagg
+    var kind = 2 if aggr == "max" else (1 if aggr == "mean" else 0)
+    var keep = Python.list()   # every array an address below points into, alive through the call
+    var x = xcnn_f32(fields["_x"], "x", context)
+    keep.append(x)
+    var lin = _linear_fields(fields["lin_l"], context)
+    if py_get(lin, "_x") is None:
+        raise Error("RuntimeError: linear backward requires a prior forward")
+    var agg = xcnn_f32(lin["_x"], "x", context)
+    keep.append(agg)
+    var values = _linear_weights(lin, context)
+    keep.append(values)
+    var dw = xcnn_host_f32([f, d], context)
+    var db = xcnn_host_f32([f], context)
+    var dagg = xcnn_host_f32([n, d], context)
+    var dx = xcnn_host_f32([n, d], context)
+    keep.append(dagg)
+    var ones = _ones(max(nnz, 1), context)
+    keep.append(ones)
+    var outv = PythonObject(0)
+    var prev = PythonObject(0)
+    var gpre = PythonObject(0)
+    var den = PythonObject(0)
+    var nograph = PythonObject(0)
+    if norm:
+        var y = xcnn_f32(fields["_y"], "y", context)
+        var pre = xcnn_f32(fields["_pre"], "pre", context)
+        var gp = xcnn_host_f32([n, f], context)
+        keep.append(y)
+        keep.append(pre)
+        keep.append(gp)
+        keep.append(fields["_den"])
+        keep.append(fields["_nograph"])
+        outv = xcnn_addr(y)
+        prev = xcnn_addr(pre)
+        gpre = xcnn_addr(gp)
+        den = xcnn_addr(fields["_den"])
+        nograph = xcnn_addr(fields["_nograph"])
     else:
-        var ones = _ones(Int(py=graph["nnz"]), context)
-        if aggr == "mean":
-            dagg = _spmm(entries, graph, ones, dagg, 3, context)
-        dx = _spmm(entries, graph, ones, dagg, 0, context, True)
-    if Bool(py=fields["project"]):
+        # the layer output (recorded as the tape's value, never read)
+        var ov = xcnn_host_f32([n, f], context)
+        keep.append(ov)
+        outv = xcnn_addr(ov)
+    var maxaux = PythonObject(0)
+    if kind == 2:
+        keep.append(fields["_max_aux"])
+        maxaux = xcnn_addr(fields["_max_aux"])
+    var dsc = PythonObject(0)
+    if kind == 1:
+        var t = xcnn_host_f32([n, d], context)
+        keep.append(t)
+        dsc = xcnn_addr(t)
+    var wr_addr = PythonObject(0)
+    var gwr = PythonObject(None)
+    var gwr_addr = PythonObject(0)
+    var gr = PythonObject(0)
+    var dxs = PythonObject(0)
+    var dxp = PythonObject(0)
+    if root:
+        var wr = _snapshot(fields["weight_r_"], "weight_r_", context)
+        if not _same_shape(xcnn_shape(wr), [f, d]):
+            raise Error("SAGE root weight shape differs from configured channels")
+        keep.append(wr)
+        wr_addr = xcnn_addr(wr)
+        gwr = xcnn_host_f32([f, d], context)
+        gwr_addr = xcnn_addr(gwr)
+        var t1 = xcnn_host_f32([n, d], context)
+        var t2 = xcnn_host_f32([n, d], context)
+        var t3 = xcnn_host_f32([n, d], context)
+        keep.append(t1)
+        keep.append(t2)
+        keep.append(t3)
+        gr = xcnn_addr(t1)
+        dxs = xcnn_addr(t2)
+        dxp = xcnn_addr(t3)
+    var s_addr = PythonObject(0)
+    var prep = PythonObject(0)
+    var wp = PythonObject(0)
+    var bp = PythonObject(0)
+    var plin = PythonObject(None)
+    var dwp = PythonObject(None)
+    var dbp = PythonObject(None)
+    var dwp_addr = PythonObject(0)
+    var dbp_addr = PythonObject(0)
+    var dsp = PythonObject(0)
+    var dpre = PythonObject(0)
+    if project:
         if py_type(fields["_relu_p"]) is not context["xcnn_relu_class"]:
             raise Error("TypeError: graph projection requires a native ReLU layer")
-        dx = _linear_backward(fields["lin"], _relu_backward(fields["_relu_p"], dx, context), context)
-    if Bool(py=fields["root_weight"]):
-        py_setitem(fields, "grad_weight_r_", _gemm(entries, g, fields["_x"], f, d, n, 2, context))
-        dx = _add(entries, _gemm(entries, g, fields["weight_r_"], n, d, f, 0, context), dx, context)
+        var relu_x = py_get(_fields(fields["_relu_p"]), "_x")
+        if relu_x is None:
+            raise Error("RuntimeError: ReLU backward requires a prior forward")
+        plin = _linear_fields(fields["lin"], context)
+        var pvalues = _linear_weights(plin, context)
+        var sv = xcnn_f32(fields["_xs"], "x", context)
+        var pv = xcnn_f32(relu_x, "x", context)
+        dwp = xcnn_host_f32([d, d], context)
+        dbp = xcnn_host_f32([d], context)
+        var t4 = xcnn_host_f32([n, d], context)
+        var t5 = xcnn_host_f32([n, d], context)
+        keep.append(pvalues)
+        keep.append(sv)
+        keep.append(pv)
+        keep.append(t4)
+        keep.append(t5)
+        s_addr = xcnn_addr(sv)
+        prep = xcnn_addr(pv)
+        wp = xcnn_addr(pvalues[0])
+        bp = xcnn_addr(pvalues[1])
+        dwp_addr = xcnn_addr(dwp)
+        dbp_addr = xcnn_addr(dbp)
+        dsp = xcnn_addr(t4)
+        dpre = xcnn_addr(t5)
+    var csr_f = xcnn_addr(graph["csr_f"])
+    var csr_t = xcnn_addr(graph["csr_t"])
+    var addrs = Python.list(
+        xcnn_addr(g), xcnn_addr(x), xcnn_addr(agg), outv, xcnn_addr(values[0]), xcnn_addr(values[1]), xcnn_addr(dw),
+        xcnn_addr(db), xcnn_addr(dagg), xcnn_addr(dx), dxs, xcnn_addr(ones), csr_f, xcnn_addr(ones), csr_t, maxaux,
+        dsc, wr_addr, gwr_addr, gr, prev, gpre, den,
+    )
+    # the host form's ten extra words (autograd/graph_tape.mojo sage_cfg)
+    addrs.append(s_addr)
+    addrs.append(prep)
+    addrs.append(wp)
+    addrs.append(bp)
+    addrs.append(dwp_addr)
+    addrs.append(dbp_addr)
+    addrs.append(dsp)
+    addrs.append(dpre)
+    addrs.append(nograph)
+    addrs.append(dxp)
+    _ = py_call_typed(xcnn_entry(entries, "x_cnn_sage_backward_t"), addrs,
+                      Python.list(n, d, f, nnz, kind, 1 if norm else 0, 1 if root else 0, 0, 0, 1 if project else 0))
+    py_setitem(lin, "grad_weight_", dw)
+    py_setitem(lin, "grad_bias_", db if Bool(py=fields["bias"]) else xcnn_host_f32([f], context))
+    if project:
+        py_setitem(plin, "grad_weight_", dwp)
+        py_setitem(plin, "grad_bias_", dbp)
+    if root:
+        py_setitem(fields, "grad_weight_r_", gwr)
+    _ = keep
+    _ = g
     return dx
 
 

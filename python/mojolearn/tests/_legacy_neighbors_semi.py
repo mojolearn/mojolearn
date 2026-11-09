@@ -10,7 +10,7 @@ from mojolearn._buffer import addr, addr_ro, empty
 from mojolearn._lazy_out import _empty_out
 from mojolearn import _expansion_neighbors as xn
 from mojolearn._expansion_neighbors import (
-    _f32, _kfeat_flags, _seed_word, _f32_scalar, _lp_fast_resident,
+    _f32, _kfeat_flags, _seed_word, _f32_scalar,
     _classical_graph_normalization, _argmax_labels, _accuracy, _U_LOG,
 )
 
@@ -221,7 +221,7 @@ def lp_fit(est, X, y):
         est._op("lp_clamp", [(ld, 0), (ld, 0), (unlabeled, 0), (ystatic, 1)], (n, C))
     else:
         ystatic = ys
-    if isinstance(G, tuple) and _lp_fast_resident(est):
+    if isinstance(G, tuple):
         cols, vals, _ = G
         info = empty((2,), "<i4")
         tol_bits = struct.unpack("<Q", struct.pack("<d", float(est.tol)))[0]

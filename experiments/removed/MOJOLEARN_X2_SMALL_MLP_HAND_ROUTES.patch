@@ -1,0 +1,3891 @@
+diff --git a/autograd/rules_small_mlp.mojo b/autograd/rules_small_mlp.mojo
+new file mode 100644
+index 0000000000..12da44f698
+--- /dev/null
++++ b/autograd/rules_small_mlp.mojo
+@@ -0,0 +1,353 @@
++# SPDX-License-Identifier: Apache-2.0
++# The small MLP train step's backward on the tape (the step's only backward).
++# TAPE_EVERYWHERE_PLAN.md path 8, lane ag-smallmlp-tape.
++#
++# ---------------------------------------------------------------- launch inventory
++# The hand path, training/mlp_ops.mojo::mlp_train_step_host after the loss
++# (identical_ce_loss_resident already wrote dlogits), in launch order:
++#   H1  dw2 = dlogits^T . act              _gemm[ROLE_WGRAD] (3, 16, rows) OP_TN
++#   H2  db2 = sum_rows(dlogits)            _mlp_kernel op 3 (rows, 3)
++#   H3  incoming = dlogits . w2            _gemm (rows, 16, 3) OP_NN
++#   H4  dhidden = relu'(act) incoming      _mlp_kernel op 2 (rows, 16)
++#   H5  dw1 = dhidden^T . x                _gemm[ROLE_WGRAD] (16, 8, rows) OP_TN
++#   H6  db1 = sum_rows(dhidden)            _mlp_kernel op 3 (rows, 16)
++#       refusal scan of the flat gradient (device_first_nonfinite, one wait)
++#   H7  dx = dhidden . w1                  _gemm (rows, 8, 16) OP_NN, want_input_grad only
++#       refusal scan of dx (one wait)
++#
++# The tape: the same seven kernels with the same arguments on the same
++# buffers, in reverse creation order of the graph below:
++#   T1 = H2 (bias node of the head), T2 = H1, T3 = H3 (head linear node),
++#   T4 = H4, T5 = H6 (bias + ReLU node of the hidden layer), T6 = H5,
++#   T7 = H7 (hidden linear node), then the two refusal scans.
++# Each kernel writes its own destination from operands no other kernel of
++# the backward writes after it is read, so the order change (db2 before
++# dw2, db1 before dw1, dx before the gradient scan) moves no bit. The tape
++# itself launches nothing: every node holds its gradient in the trainer's
++# buffer (variable_into / custom_into / custom_into_shared), no input has two
++# consumers, zeroed_destination is False (every kernel overwrites its whole
++# destination) and the seed is the trainer's dlogits read in place.
++# Launches: hand 6 (+1 dx) + 2 scans; tape 6 (+1 dx) + 2 scans. Waits: the
++# same (the scans'). The tape records on SmallMlpRecordExec, which raises on
++# any launch, allocation, copy or wait: so the tape provably adds none, and
++# no executor drain (DeviceExec's destructor) enters the step.
++#
++# ReLU. The tape's own RELU op (OP_AG_UNARY_VJP: `g if x > 0 else 0`, g
++# loaded through ftz) gives the same word as op 2 (`ftz(g) if act > 0 else
++# 0`; act > 0 exactly when the pre-activation is), but its forward is a
++# separate launch over a pre-activation buffer the fused bias + ReLU forward
++# never writes. So the ReLU stays in the hand kernel, as the backward of the
++# bias + ReLU node (SM_BIAS_ACT with i1 = 1).
++#
++# Loss. identical_ce_loss_resident writes dlogits in the forward (the LM
++# rules' AFN_LM_HEAD_FUSE case, where LM_CE does nothing). The graph's root
++# is the logits node and its seed is dlogits itself, held in place: no loss
++# node, no seed buffer, no copy.
++#
++# ---------------------------------------------------------------- the tape graph
++#   [x (variable_into dx, only when the input gradient is wanted)]
++#   w1 (variable_into dw1)
++#     -> P   SM_LINEAR layer 0   pre1 = x w1^T        grad storage dhidden
++#   b1 (variable_into db1)
++#     -> A   SM_BIAS_ACT relu    act = relu(pre1 + b1) grad storage incoming
++#   w2 (variable_into dw2)
++#     -> P2  SM_LINEAR layer 1   pre2 = act w2^T      grad storage dlogits
++#   b2 (variable_into db2)
++#     -> L   SM_BIAS_ACT plain   logits = pre2 + b2   grad shared with P2
++#   seed: dlogits (the loss's gradient, written by the forward)
++#
++# Bits: same kernels, same operands, same buffers => the hand path's bits.
++from std.sys.compile import is_defined
++from max.gpu.host import DeviceBuffer
++
++from autograd.tape import Tape, Tensor, BackwardRules
++from sequence.exec_trait import Exec
++from sequence.ops import FP, Args
++from gemm.contract import OP_NN, OP_TN
++
++# TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by 3cd0063d7; code recoverable at 3cd0063d7^.
++# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
++# (the AUTOGRAD_SMALL_MLP switch and its opt-in spelling MOJOLEARN_AUTOGRAD_SMALL_MLP;
++# training/checks/mlp_tape_step_check.mojo compares the tape against stored digests).
++
++
++def _check_removed_defines() -> Bool:
++    """Refusals for the retired small MLP hand-chain defines. They live here, next to the code they named, not in
++    core/six_lane_experiment_guards.mojo: a line there marks every binding that imports core as changed (the
++    rebuild fence refuses it)."""
++    # lane del-smallmlp (2026-10-19): the tape backward is the step's only backward (same bits, 162/162 tensors on
++    # Metal, NVIDIA and AMD; docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md).
++    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF"](), "removed 2026-10-19 (lane/del-smallmlp, 3cd0063d7): AUTOGRAD_SMALL_MLP_OFF restored the small MLP train step's hand backward chain; the tape backward is the only one (same bits, 162/162 tensors on Metal, NVIDIA and AMD). Restore with experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch"
++    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_SMALL_MLP"](), "removed 2026-10-19 (lane/del-smallmlp, 3cd0063d7): AUTOGRAD_SMALL_MLP was the opt-in spelling of the small MLP tape backward, now the only path; drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch"
++    return True
++
++
++comptime SMALL_MLP_REMOVED_DEFINES_OK = _check_removed_defines()
++
++# Tags 120-121 (LayerNorm 1, recurrent 16-18, transformer 32-47, Mamba 48-63,
++# LM 64-71, Mamba-3 72-86, CNN 96-111, MoE 112-115).
++comptime SM_LINEAR = 120
++comptime SM_BIAS_ACT = 121
++
++comptime SmallMlpBuffer = MutPointer[DeviceBuffer[DType.float32], MutUntrackedOrigin]
++
++
++@always_inline
++def small_mlp_buffer(mut buf: DeviceBuffer[DType.float32]) -> SmallMlpBuffer:
++    """A pointer to a trainer-owned buffer; the buffer must outlive its use."""
++    return SmallMlpBuffer(unsafe_from_address=Int(MutPointer(to=buf)))
++
++
++@always_inline
++def _fp(mut buf: DeviceBuffer[DType.float32]) -> FP:
++    return FP(unsafe_from_address=Int(buf.unsafe_ptr()))
++
++
++def _same(p: FP, mut buf: DeviceBuffer[DType.float32], what: String) raises:
++    # The rules launch on the trainer's own buffers; the tape must hand them
++    # exactly those (the driver records them so). Anything else is a driver bug.
++    if Int(p) != Int(buf.unsafe_ptr()):
++        raise Error(String("small MLP backward (autograd): ") + what + " is not the trainer's buffer")
++
++
++trait SmallMlpKernels(Movable & Deinitable):
++    """The two launches the small MLP's hand path makes, as the trainer
++    makes them (its GEMM dispatch, its workspace and its context), so the
++    rules launch exactly the hand kernels without importing the trainer."""
++
++    def gemm(
++        self, mut c: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
++        mut b: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, op: Int, wgrad: Bool,
++    ) raises:
++        """C = op(A, B) through the trainer's GEMM; `wgrad` selects its
++        weight-gradient role."""
++        ...
++
++    def cells(self, source: FP, other: FP, output: FP, rows: Int, cols: Int, operation: Int) raises:
++        """The trainer's elementwise kernel (2: ReLU backward, 3: row sum)."""
++        ...
++
++
++struct SmallMlpRules[K: SmallMlpKernels](BackwardRules):
++    """Backward adapters for the small MLP's two node kinds: a linear layer
++    without bias (dW, and dX when its input needs one) and a bias add with
++    optional ReLU (the ReLU backward, and the bias row sum).
++
++    Per layer (0 hidden, 1 head) it holds pointers to the layer's input,
++    weight, output gradient, weight gradient and input gradient buffers;
++    all must outlive the backward."""
++
++    var k: Self.K
++    var batch: Int
++    var xin: List[SmallMlpBuffer]
++    var w: List[SmallMlpBuffer]
++    var dz: List[SmallMlpBuffer]
++    var dw: List[SmallMlpBuffer]
++    var dx: List[SmallMlpBuffer]
++
++    def __init__(
++        out self, var k: Self.K, batch: Int, var xin: List[SmallMlpBuffer], var w: List[SmallMlpBuffer],
++        var dz: List[SmallMlpBuffer], var dw: List[SmallMlpBuffer], var dx: List[SmallMlpBuffer],
++    ):
++        self.k = k^
++        self.batch = batch
++        self.xin = xin^
++        self.w = w^
++        self.dz = dz^
++        self.dw = dw^
++        self.dx = dx^
++
++    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
++        # Never: every kernel overwrites every element of its destination
++        # (the hand path hands them unfilled buffers), and the shared edge of
++        # the plain bias node is written by nobody (it IS the upstream).
++        return False
++
++    def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
++        # No input has two consumers: every gradient is one contribution,
++        # written in place as a plain first contribution.
++        return False
++
++    def supports(self, tag: Int) -> Bool:
++        return tag == SM_LINEAR or tag == SM_BIAS_ACT
++
++    def apply[E: Exec](
++        self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
++        inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
++    ) raises:
++        # Every launch goes on the trainer's context, the one `ex` wraps.
++        var layer = saved.i0
++        if layer < 0 or layer >= len(self.dz):
++            raise Error("small MLP backward (autograd): node carries no valid layer index")
++        if tag == SM_LINEAR:
++            self._linear(layer, upstream, gradients, rows, cols)
++        elif tag == SM_BIAS_ACT:
++            self._bias_act(layer, saved.i1, output, upstream, gradients, cols)
++        else:
++            raise Error("unknown small MLP backward rule")
++
++    def _linear(self, layer: Int, upstream: FP, gradients: List[FP], rows: List[Int], cols: List[Int]) raises:
++        # forward Z [B, out] = X [B, in] . W [out, in]^T (OP_NT): the hand
++        # path's dW (OP_TN, weight-gradient role) then dX (OP_NN)
++        var last = len(gradients) - 1
++        var n_out = rows[last]
++        var n_in = cols[last]
++        _same(upstream, self.dz[layer][], "the layer output gradient")
++        _same(gradients[last], self.dw[layer][], "the weight gradient")
++        self.k.gemm(self.dw[layer][], self.dz[layer][], self.xin[layer][], n_out, n_in, self.batch, OP_TN, True)
++        if last == 1:
++            _same(gradients[0], self.dx[layer][], "the layer input gradient")
++            self.k.gemm(self.dx[layer][], self.dz[layer][], self.w[layer][], self.batch, n_in, n_out, OP_NN, False)
++
++    def _bias_act(
++        self, layer: Int, relu: Int, output: FP, upstream: FP, gradients: List[FP], cols: List[Int],
++    ) raises:
++        var n = cols[1]
++        if relu == 1:
++            # dZ = relu'(act) upstream, read from the forward output act
++            # (op 2), then the bias row sum of dZ (op 3; its `other` operand
++            # is never read: the upstream, as the hand path passes)
++            _same(gradients[0], self.dz[layer][], "the pre-activation gradient")
++            self.k.cells(output, upstream, gradients[0], self.batch, n, 2)
++            self.k.cells(gradients[0], upstream, gradients[1], self.batch, n, 3)
++        else:
++            # the identity edge shares the upstream's storage (written by
++            # the forward's loss); only the bias row sum runs. Its unread
++            # `other` operand is the next layer down's input gradient, as
++            # the hand path passes.
++            _same(gradients[0], self.dz[layer][], "the shared output gradient")
++            self.k.cells(upstream, _fp(self.dx[layer][]), gradients[1], self.batch, n, 3)
++
++
++from sequence.execution_profile import ExecutionProfile
++
++
++struct SmallMlpRecordExec(Exec, Movable):
++    """The executor the small MLP's tape records on. The graph holds only
++    caller storage and its rules launch on the trainer's context, so the
++    tape needs no storage, launch, copy or wait of its own: every method
++    raises, which keeps it that way."""
++    comptime IS_DEVICE: Bool = False
++
++    def __init__(out self):
++        pass
++
++    def alloc(mut self, n: Int) raises -> FP:
++        raise Error(_RECORD_ONLY)
++
++    def free(mut self, p: FP) raises:
++        raise Error(_RECORD_ONLY)
++
++    def upload(mut self, dst: FP, src: FP, n: Int) raises:
++        raise Error(_RECORD_ONLY)
++
++    def download(mut self, dst: FP, src: FP, n: Int) raises:
++        raise Error(_RECORD_ONLY)
++
++    def download_async(mut self, dst: FP, src: FP, n: Int) raises:
++        raise Error(_RECORD_ONLY)
++
++    def bind(mut self, src: FP, n: Int) raises -> FP:
++        raise Error(_RECORD_ONLY)
++
++    def launch[OP: Int](mut self, a: Args, n: Int) raises:
++        raise Error(_RECORD_ONLY)
++
++    def sync(mut self) raises:
++        raise Error(_RECORD_ONLY)
++
++    def execution_profile_begin(mut self) raises:
++        raise Error(_RECORD_ONLY)
++
++    def execution_profile_end(mut self) raises -> ExecutionProfile:
++        raise Error(_RECORD_ONLY)
++
++
++comptime _RECORD_ONLY = "small MLP backward (autograd): the tape asked its record-only executor for storage, a launch, a copy or a wait"
++
++
++@always_inline
++def _at(layer: Int, relu: Int) -> Args:
++    var a = Args()
++    a.i0 = layer
++    a.i1 = relu
++    return a
++
++
++def small_mlp_backward_autograd[E: Exec, K: SmallMlpKernels](
++    mut ex: E,
++    var kernels: K,
++    mut x: DeviceBuffer[DType.float32],
++    mut w1: DeviceBuffer[DType.float32],
++    mut b1: DeviceBuffer[DType.float32],
++    mut w2: DeviceBuffer[DType.float32],
++    mut b2: DeviceBuffer[DType.float32],
++    mut pre1: DeviceBuffer[DType.float32],
++    mut act: DeviceBuffer[DType.float32],
++    mut pre2: DeviceBuffer[DType.float32],
++    mut logits: DeviceBuffer[DType.float32],
++    mut dlogits: DeviceBuffer[DType.float32],
++    mut dw1: DeviceBuffer[DType.float32],
++    mut db1: DeviceBuffer[DType.float32],
++    mut dw2: DeviceBuffer[DType.float32],
++    mut db2: DeviceBuffer[DType.float32],
++    mut incoming: DeviceBuffer[DType.float32],
++    mut dhidden: DeviceBuffer[DType.float32],
++    mut dx: DeviceBuffer[DType.float32],
++    batch: Int,
++    n_in: Int,
++    n_hid: Int,
++    n_out: Int,
++    want_input_grad: Bool,
++) raises:
++    """The small MLP's backward on one tape, recorded over the forward that
++    already ran (`dlogits` holds the loss's gradient), then one backward.
++
++    Writes exactly what the hand chain writes, with the same kernels on the
++    same buffers: dw2, db2, incoming, dhidden, dw1, db1 and, when
++    `want_input_grad`, dx. Queues the launches on the executor's context
++    and does not wait."""
++    if batch <= 0 or n_in <= 0 or n_hid <= 0 or n_out <= 0:
++        raise Error("small MLP backward (autograd): dimensions must be positive")
++    if len(dw1) != n_hid * n_in or len(db1) != n_hid or len(dw2) != n_out * n_hid or len(db2) != n_out:
++        raise Error("small MLP backward (autograd): the gradient buffers do not match the layer shapes")
++    if len(dlogits) != batch * n_out or len(incoming) != batch * n_hid or len(dhidden) != batch * n_hid:
++        raise Error("small MLP backward (autograd): the stage buffers do not match the batch")
++    if want_input_grad and len(dx) != batch * n_in:
++        raise Error("small MLP backward (autograd): the input gradient buffer does not match the batch")
++
++    var tape = Tape()
++    # ---- hidden layer: pre1 = x w1^T, act = relu(pre1 + b1)
++    var hidden_in = List[Tensor]()
++    if want_input_grad:
++        hidden_in.append(tape.variable_into(ex, _fp(x), _fp(dx), batch, n_in))
++    hidden_in.append(tape.variable_into(ex, _fp(w1), _fp(dw1), n_hid, n_in))
++    var p = tape.custom_into(ex, hidden_in, _fp(pre1), _fp(dhidden), batch, n_hid, SM_LINEAR, _at(0, 0))
++    var g_b1 = tape.variable_into(ex, _fp(b1), _fp(db1), 1, n_hid)
++    var a = tape.custom_into(ex, [p, g_b1], _fp(act), _fp(incoming), batch, n_hid, SM_BIAS_ACT, _at(0, 1))
++    # ---- head: pre2 = act w2^T, logits = pre2 + b2 (gradient shared with pre2)
++    var g_w2 = tape.variable_into(ex, _fp(w2), _fp(dw2), n_out, n_hid)
++    var p2 = tape.custom_into(ex, [a, g_w2], _fp(pre2), _fp(dlogits), batch, n_out, SM_LINEAR, _at(1, 0))
++    var g_b2 = tape.variable_into(ex, _fp(b2), _fp(db2), 1, n_out)
++    var lg = tape.custom_into_shared(ex, [p2, g_b2], _fp(logits), p2, batch, n_out, SM_BIAS_ACT, _at(1, 0))
++    # ---- the seed: dlogits in place (the root's own gradient storage)
++    var seed = tape.variable(ex, _fp(dlogits), batch, n_out, False)
++
++    var xin = List[SmallMlpBuffer]()
++    xin.append(small_mlp_buffer(x))
++    xin.append(small_mlp_buffer(act))
++    var ws = List[SmallMlpBuffer]()
++    ws.append(small_mlp_buffer(w1))
++    ws.append(small_mlp_buffer(w2))
++    var dz = List[SmallMlpBuffer]()
++    dz.append(small_mlp_buffer(dhidden))
++    dz.append(small_mlp_buffer(dlogits))
++    var dws = List[SmallMlpBuffer]()
++    dws.append(small_mlp_buffer(dw1))
++    dws.append(small_mlp_buffer(dw2))
++    var dxs = List[SmallMlpBuffer]()
++    dxs.append(small_mlp_buffer(dx))
++    dxs.append(small_mlp_buffer(incoming))
++    var rules = SmallMlpRules[K](kernels^, batch, xin^, ws^, dz^, dws^, dxs^)
++    tape.backward_with_rules(ex, lg, seed, rules)
++    tape.release(ex)
+diff --git a/bindings/_mojolearn_training.mojo b/bindings/_mojolearn_training.mojo
+index ca74e9e6a1..d6a73d2de6 100644
+--- a/bindings/_mojolearn_training.mojo
++++ b/bindings/_mojolearn_training.mojo
+@@ -80,6 +80,7 @@ from std.python.bindings import PythonModuleBuilder
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from core.neural_context import neural_ctx
+ from training.native_primitive_dispatch import NATIVE_PRIMITIVE_API, native_primitive_operation
++from training.small_mlp_dispatch import SMALL_MLP_NATIVE_TABLE
+ from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+ # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
+ comptime _NEURAL_CTX = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingContextFast"
+@@ -117,7 +118,16 @@ from std.ffi import _Global
+ from max.gpu.host import DeviceBuffer
+ from training.mlp_ops import (
+     mlp_bias_activation_host, mlp_relu_backward_host, mlp_sum_rows_host,
+-    mlp_validate_shape,
++    mlp_train_step_host, mlp_validate_shape,
++)
++#: lane afn-mlp (2026-10-03): the Apple FAST resident session, registered
++#: only under FAST + Apple + `-D MOJOLEARN_AFN_MLP_RESIDENT` / `_MULTISTEP`
++#: / `_ALL` (training/mlp_fast.mojo); absent from every other build.
++from training.mlp_fast import (
++    MLP_MULTISTEP, MLP_RESIDENT,
++    mlp_resident_close_host, mlp_resident_download_host, mlp_resident_open_host,
++    mlp_resident_step_host, mlp_resident_upload_host, mlp_resident_registry,
++    FT_TOTAL, RS_OFF_P, RS_OFF_G, RS_OFF_M, RS_OFF_V,
+ )
+ from training.checks.optimizer_contract import microbatch_split_is_identical
+ from training.chunked_lm_head_v2 import (
+@@ -619,8 +629,218 @@ def mlp_sum_rows_binding(
+     return PythonObject(count)
+ 
+ 
+-# TOMBSTONE: mlp_train_step, the mlp_resident_* session and small_mlp_api_v1 entries (MOJOLEARN_AFN_MLP_RESIDENT / _MULTISTEP / _FUSED_STEP / _ALL, merged-unmeasured; superseded by SmallMLPTrainer's captured program, autograd/small_mlp_program.mojo, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
+-# Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
++def mlp_train_step_binding(
++    addresses: PythonObject, params: PythonObject,
++) raises -> PythonObject:
++    """The small MLP's whole step as ONE call (lane/apple-mlp-fused,
++    2026-09-30): the same GEMMs, bias/ReLU/row-sum launches, cross-entropy
++    and AdamW step `SmallMLPTrainer` made through twelve binding calls, the
++    intermediates kept on the device. Returns `rows * 3`, the logits written.
++
++    addresses, in this exact order (mirrored word for word in
++    `python/mojolearn/_mlp_impl.py::_fused`):
++
++        0  x        rows x 8 f32, read
++        1  y        rows i32 classes 0..2, read (unread under mode 0)
++        2  w1       16 x 8 f32   read; WRITTEN IN PLACE under mode 2
++        3  b1       16 f32       "
++        4  w2       3 x 16 f32   "
++        5  b2       3 f32        "
++        6  m        195 f32      read and written under mode 2 (any one
++                                 float otherwise, never 0)
++        7  v        195 f32      "
++        8  flags    4 i32        read and written back under mode 2
++        9  loss     1 f32        written (modes 1 and 2)
++        10 logits   rows x 3 f32 written
++        11 dw1      16 x 8 f32   written (modes 1 and 2)
++        12 db1      16 f32       "
++        13 dw2      3 x 16 f32   "
++        14 db2      3 f32        "
++        15 dx       rows x 8 f32 written when want_input_grad (else any
++                                 one float, never 0)
++        16 info     3 f32        the optimizer's info, +0.0 (no clip)
++
++    params, in this exact order:
++
++        0  rows              1..256
++        1  mode              0 forward only, 1 forward and backward,
++                             2 the whole step
++        2  t                 the optimizer's ONE-BASED step (mode 2)
++        3  lr                (float)
++        4  beta1             (float)
++        5  beta2             (float)
++        6  eps               (float)
++        7  weight_decay      (float)
++        8  want_input_grad   0 or 1
++
++    A silent reorder here is a WRONG ANSWER and not a crash. If you change
++    either list, change `_fused` in the same edit.
++    """
++    var a = _addrs(addresses, 17, "mlp_train_step")
++    _params(params, 9, "mlp_train_step")
++    var rows = Int(py=params[0])
++    var mode = Int(py=params[1])
++    var t = Int(py=params[2])
++    var lr = Float32(Float64(py=params[3]))
++    var beta1 = Float32(Float64(py=params[4]))
++    var beta2 = Float32(Float64(py=params[5]))
++    var eps = Float32(Float64(py=params[6]))
++    var weight_decay = Float32(Float64(py=params[7]))
++    var want_input_grad = Int(py=params[8])
++    var count = 0
++    with GILReleased(Python()):
++        var ctx = neural_ctx[_NEURAL_CTX]()
++        count = mlp_train_step_host(
++            ctx,
++            _f32_ptr(a[0]), _i32_ptr(a[1]),
++            _f32_ptr(a[2]), _f32_ptr(a[3]), _f32_ptr(a[4]), _f32_ptr(a[5]),
++            _f32_ptr(a[6]), _f32_ptr(a[7]), _i32_ptr(a[8]),
++            _f32_ptr(a[9]), _f32_ptr(a[10]),
++            _f32_ptr(a[11]), _f32_ptr(a[12]), _f32_ptr(a[13]), _f32_ptr(a[14]),
++            _f32_ptr(a[15]), _f32_ptr(a[16]),
++            rows, mode, t, lr, beta1, beta2, eps, weight_decay, want_input_grad,
++        )
++    return PythonObject(count)
++
++
++# ---------------------------------------------------------------------------
++# lane afn-mlp (2026-10-03): the small MLP's RESIDENT SESSION on Apple FAST.
++# `python/mojolearn/_mlp_impl.py::SmallMLPTrainer` opens one per trainer when
++# the binding exposes `mlp_resident_open`; weights and moments live on the
++# device between steps and come down only for `state_dict`.
++# ---------------------------------------------------------------------------
++
++
++def mlp_resident_open_binding(
++    addresses: PythonObject, params: PythonObject,
++) raises -> PythonObject:
++    """addresses = [w1, b1, w2, b2, m, v] (read); params = [cap_k], the most
++    minibatches one `mlp_resident_steps` call may run. Returns the handle."""
++    var a = _addrs(addresses, 6, "mlp_resident_open")
++    _params(params, 1, "mlp_resident_open")
++    var cap_k = Int(py=params[0])
++    var h = -1
++    with GILReleased(Python()):
++        var ctx = neural_ctx[_NEURAL_CTX]()
++        h = mlp_resident_open_host(
++            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]),
++            _f32_ptr(a[4]), _f32_ptr(a[5]), cap_k,
++        )
++    return PythonObject(h)
++
++
++def mlp_resident_download_binding(
++    handle: PythonObject, addresses: PythonObject,
++) raises -> PythonObject:
++    """addresses = [w1, b1, w2, b2, m, v] (written): the session's state."""
++    var a = _addrs(addresses, 6, "mlp_resident_download")
++    var h = Int(py=handle)
++    with GILReleased(Python()):
++        var ctx = neural_ctx[_NEURAL_CTX]()
++        mlp_resident_download_host(
++            ctx, h, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]),
++            _f32_ptr(a[4]), _f32_ptr(a[5]),
++        )
++    return PythonObject(h)
++
++
++def mlp_resident_close_binding(handle: PythonObject) raises -> PythonObject:
++    var h = Int(py=handle)
++    with GILReleased(Python()):
++        var ctx = neural_ctx[_NEURAL_CTX]()
++        mlp_resident_close_host(ctx, h)
++    return PythonObject(h)
++
++
++def mlp_resident_steps_binding(
++    handle: PythonObject, addresses: PythonObject, params: PythonObject,
++) raises -> PythonObject:
++    """`k` steps on the session (mirrored word for word in
++    `python/mojolearn/_mlp_impl.py::SmallMLPTrainer._resident_steps`):
++
++        addresses: x (k*rows x 8), y (k*rows i32), losses (k f32, written),
++                   logits (rows x 3, the last step's), dw1, db1, dw2, db2
++                   (the last step's), dx (rows x 8 when want_input_grad,
++                   else any one float)
++        params:    rows, k, mode, t, lr, beta1, beta2, eps, weight_decay,
++                   want_input_grad
++
++    `k > 1` is compiled under MOJOLEARN_AFN_MLP_MULTISTEP only. Returns
++    `rows * 3`."""
++    var a = _addrs(addresses, 9, "mlp_resident_steps")
++    _params(params, 10, "mlp_resident_steps")
++    var h = Int(py=handle)
++    var rows = Int(py=params[0])
++    var k = Int(py=params[1])
++    var mode = Int(py=params[2])
++    var t = Int(py=params[3])
++    var lr = Float32(Float64(py=params[4]))
++    var beta1 = Float32(Float64(py=params[5]))
++    var beta2 = Float32(Float64(py=params[6]))
++    var eps = Float32(Float64(py=params[7]))
++    var weight_decay = Float32(Float64(py=params[8]))
++    var want_input_grad = Int(py=params[9])
++    var count = 0
++    with GILReleased(Python()):
++        var ctx = neural_ctx[_NEURAL_CTX]()
++        count = mlp_resident_step_host(
++            ctx, h, _f32_ptr(a[0]), _i32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]),
++            _f32_ptr(a[4]), _f32_ptr(a[5]), _f32_ptr(a[6]), _f32_ptr(a[7]), _f32_ptr(a[8]),
++            rows, k, mode, t, lr, beta1, beta2, eps, weight_decay, want_input_grad,
++        )
++    return PythonObject(count)
++
++
++def mlp_resident_apply_binding(
++    handle: PythonObject, addresses: PythonObject, params: PythonObject,
++) raises -> PythonObject:
++    """`SmallMLPTrainer.apply_gradients` on the open session (lane
++    migrate-neural-2): the packed gradient [dw1, db1, dw2, db2] goes up into
++    the session's gradient slot and `optimizer_step`'s AdamW step (the same
++    `identical_optimizer_step_resident_io` on the same registry offsets
++    [0, 128, 144, 192, 195]) updates the session's weights and moments in
++    place; nothing comes down, so the session stays open.
++
++        addresses: grads (195 f32), flags (4 i32, read and written),
++                   info (3 f32, written)
++        params:    t, lr, beta1, beta2, eps, weight_decay
++
++    Returns 195."""
++    var a = _addrs(addresses, 3, "mlp_resident_apply")
++    _params(params, 6, "mlp_resident_apply")
++    var h = Int(py=handle)
++    var t = Int(py=params[0])
++    var lr = Float32(Float64(py=params[1]))
++    var beta1 = Float32(Float64(py=params[2]))
++    var beta2 = Float32(Float64(py=params[3]))
++    var eps = Float32(Float64(py=params[4]))
++    var weight_decay = Float32(Float64(py=params[5]))
++    var n = 0
++    with GILReleased(Python()):
++        var ctx = neural_ctx[_NEURAL_CTX]()
++        var arena = mlp_resident_registry(h)
++        var p_v = arena.create_sub_buffer[DType.float32](RS_OFF_P, FT_TOTAL)
++        var g_v = arena.create_sub_buffer[DType.float32](RS_OFF_G, FT_TOTAL)
++        var m_v = arena.create_sub_buffer[DType.float32](RS_OFF_M, FT_TOTAL)
++        var v_v = arena.create_sub_buffer[DType.float32](RS_OFF_V, FT_TOTAL)
++        var p_stage = ctx.enqueue_create_host_buffer[DType.float32](1)
++        var g_stage = ctx.enqueue_create_host_buffer[DType.float32](1)
++        var offsets: List[Int32] = [0, 128, 144, 192, 195]
++        n = identical_optimizer_step_resident_io(
++            ctx, _f32_ptr(a[0]), _f32_ptr(a[0]), m_v, v_v, p_v, g_v, p_stage, g_stage,
++            offsets.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), _i32_ptr(a[1]), _f32_ptr(a[2]),
++            4, 2, t, 0, lr, beta1, beta2, eps, weight_decay, Float32(0.0), Float32(0.0), Float32(0.0),
++            OPT_IO_UP_G,
++        )
++        _ = offsets^
++        _ = p_v^
++        _ = g_v^
++        _ = m_v^
++        _ = v_v^
++        _ = p_stage^
++        _ = g_stage^
++        _ = arena^
++    return PythonObject(n)
+ 
+ 
+ # ===========================================================================
+@@ -654,6 +874,11 @@ def _params(params: PythonObject, want: Int, name: String) raises:
+         )
+ 
+ 
++def small_mlp_api_binding() raises -> PythonObject:
++    var api = SMALL_MLP_NATIVE_TABLE.get_or_create_ptr()
++    return neural_descriptor_capsule(api[].name, api[].entries)
++
++
+ def neural_primitives_api_binding() raises -> PythonObject:
+     ref cpy = Python().cpython()
+     var api = NATIVE_PRIMITIVE_API.get_or_create_ptr()
+@@ -772,6 +997,39 @@ def mlp_sessions_binding(addresses: PythonObject, input_addresses: PythonObject,
+     return PythonObject(count)
+ 
+ 
++def mlp_sessions_resident_binding(handle: PythonObject, addresses: PythonObject, input_addresses: PythonObject,
++                                  shapes: PythonObject, dims: PythonObject) raises -> PythonObject:
++    """`mlp_sessions` reading the weights of open training session `handle`
++    where they are (lane migrate-neural-2: `mlp_inference_sessions` no
++    longer downloads the session to upload it again). addresses = [output];
++    the rest as `mlp_sessions`."""
++    if len(addresses) != 1 or Int(py=addresses[0]) == 0:
++        raise Error("mlp_sessions_resident: addresses must be [output]")
++    _params(dims, 3, "mlp_sessions")
++    var n_sessions = len(shapes)
++    if len(input_addresses) != n_sessions:
++        raise Error("neural MLP sessions: metadata length mismatch")
++    var inputs = List[Int]()
++    var rows = List[Int]()
++    for i in range(n_sessions):  # small-loop(n_sessions: session handles): reads buffer addresses and shapes, not data
++        inputs.append(Int(py=input_addresses[i]))
++        rows.append(Int(py=shapes[i][0]))
++    var in_width = Int(py=dims[0])
++    var hidden = Int(py=dims[1])
++    var out_width = Int(py=dims[2])
++    var out = _f32_ptr(Int(py=addresses[0]))
++    var h = Int(py=handle)
++    var count = 0
++    with GILReleased(Python()):
++        var ctx = neural_ctx[_NEURAL_CTX]()
++        var arena = mlp_resident_registry(h)
++        var reg = Optional[DeviceBuffer[DType.float32]](arena.create_sub_buffer[DType.float32](RS_OFF_P, FT_TOTAL))
++        count = nn_mlp_sessions_device(ctx, inputs, rows, out, out, out, out, out, in_width, hidden, out_width, reg)
++        _ = reg^
++        _ = arena^
++    return PythonObject(count)
++
++
+ def linear_forward_binding(
+     addresses: PythonObject, params: PythonObject
+ ) raises -> PythonObject:
+@@ -1417,10 +1675,20 @@ def build__mojolearn_training() -> PythonObject:
+         m.def_function[mlp_bias_activation_binding]("mlp_bias_activation")
+         m.def_function[mlp_relu_backward_binding]("mlp_relu_backward")
+         m.def_function[mlp_sum_rows_binding]("mlp_sum_rows")
+-        # TOMBSTONE: mlp_train_step, the mlp_resident_* session and small_mlp_api_v1 entries (MOJOLEARN_AFN_MLP_RESIDENT / _MULTISTEP / _FUSED_STEP / _ALL, merged-unmeasured; superseded by SmallMLPTrainer's captured program, autograd/small_mlp_program.mojo, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
+-        # Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
++        m.def_function[mlp_train_step_binding]("mlp_train_step")
++        comptime if MLP_RESIDENT:
++            # lane afn-mlp: Apple FAST only, behind its define
++            m.def_function[mlp_resident_open_binding]("mlp_resident_open")
++            m.def_function[mlp_resident_download_binding]("mlp_resident_download")
++            m.def_function[mlp_resident_close_binding]("mlp_resident_close")
++            m.def_function[mlp_resident_steps_binding]("mlp_resident_step")
++            m.def_function[mlp_resident_apply_binding]("mlp_resident_apply")
++            m.def_function[mlp_sessions_resident_binding]("mlp_sessions_resident")
++        comptime if MLP_MULTISTEP:
++            m.def_function[mlp_resident_steps_binding]("mlp_resident_steps")
+         m.def_function[neural_primitives_api_binding]("neural_primitives_api_v1")
+         m.def_function[samba_resident_native_handle_binding]("samba_resident_native_handle_v1")
++        m.def_function[small_mlp_api_binding]("small_mlp_api_v1")
+         m.def_function[embedding_forward_binding]("embedding_forward")
+         m.def_function[embedding_backward_binding]("embedding_backward")
+         m.def_function[rms_norm_forward_binding]("rms_norm_forward")
+diff --git a/bindings/parallel_mlp_native.mojo b/bindings/parallel_mlp_native.mojo
+index a83140d567..0449fde928 100644
+--- a/bindings/parallel_mlp_native.mojo
++++ b/bindings/parallel_mlp_native.mojo
+@@ -60,7 +60,7 @@ def mlp_initialize(model_cls: PythonObject, opt_cls: PythonObject, binding: Pyth
+     b[].entries = b[].bi.dict()
+     for name in [String("neural_gemm"), String("mlp_bias_activation"), String("mlp_relu_backward"),  # small-loop(the fixed training entry names)
+                  String("mlp_sum_rows"), String("ce_loss"), String("accumulate"), String("optimizer_step"),
+-                 String("training_numeric_mode"), String("training_vendor"),
++                 String("training_numeric_mode"), String("training_vendor"), String("mlp_train_step"),
+                  String("optimizer_parallel_available"), String("accumulate_parallel_available"),
+                  String("clip_parallel_available")]:
+         var entry = PythonObject(None)
+@@ -272,8 +272,56 @@ def _mlp_sum(values: PythonObject, rows: Int, columns: Int) raises -> PythonObje
+     return out
+ 
+ 
+-# TOMBSTONE: the fused-gradient route through mlp_train_step (the deleted hand small-MLP step, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b. The worker gradients take the per-operation primitives below.
+-# Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
++def _mlp_fused_enabled() raises -> Bool:
++    # The process environment read natively: os.environ assignment (and
++    # monkeypatch.setenv) updates the C environment through putenv, so this
++    # reads the same values the os.environ._data lookup did, with no Python
++    # string encoding or mapping calls per training step.
++    var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
++    return (b[].entries["mlp_train_step"] is not None and getenv("MOJOLEARN_MLP_FUSED", "1") != "0"
++            and getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1") == "1")
++
++
++def _mlp_fused_gradients(checked: PythonObject, x: PythonObject, y: PythonObject) raises -> PythonObject:
++    var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
++    var rows = Int(py=x.shape[0])
++    var owners = b[].bi.list()
++    _ = py_call(owners.append, x)
++    _ = py_call(owners.append, y)
++    var names = _mlp_names()
++    for i in range(4):  # driver-loop: over fused MLP parameter registry entries
++        _ = py_call(owners.append, checked["weights"][names[i]])
++    _ = py_call(owners.append, generation_array([1]))
++    _ = py_call(owners.append, generation_array([1]))
++    _ = py_call(owners.append, generation_array([4], "i"))
++    _ = py_call(owners.append, generation_array([1]))
++    _ = py_call(owners.append, generation_array([rows, 3]))
++    var gradients = b[].bi.list()
++    for i in range(4):  # driver-loop: over fused MLP gradient output owners
++        var grad = generation_array(_mlp_dims(i))
++        _ = py_call(owners.append, grad)
++        _ = py_call(gradients.append, grad)
++    _ = py_call(owners.append, generation_array([1]))
++    _ = py_call(owners.append, generation_array([3]))
++    var addresses = b[].bi.list()
++    for i in range(len(owners)):  # driver-loop: over the existing fused MLP ABI pointer registry
++        _ = py_call(addresses.append, owners[i]._addr)
++    var config = checked["config"]
++    var params = py_ints([rows, 1, 1])
++    for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:  # small-loop(the five optimizer config words)
++        _ = py_call(params.append, config[name])
++    _ = py_call(params.append, 0)
++    var written = py_call(b[].entries["mlp_train_step"], addresses, params)
++    if Int(py=written) != rows * 3:
++        raise Error("RuntimeError: SmallMLPTrainer fused gradient returned incomplete output")
++    _mlp_finite(owners[9], "loss")
++    for i in range(4):  # driver-loop: over the four MLP parameter tensors
++        _mlp_finite(gradients[i], "parameter gradient")
++    var result = b[].bi.list()
++    _ = py_call(result.append, Float64(Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=owners[9]._addr))[0]))
++    _ = py_call(result.append, gradients)
++    _ = owners^
++    return py_call(b[].bi.tuple, result)
+ 
+ 
+ def mlp_gradients_from_state(state: PythonObject, inputs: PythonObject, targets: PythonObject) raises -> PythonObject:
+@@ -288,6 +336,8 @@ def mlp_gradients_from_checked(checked: PythonObject, inputs: PythonObject, targ
+     var x = mlp_batch(inputs)
+     var rows = Int(py=x.shape[0])
+     var y = mlp_targets(targets, rows)
++    if _mlp_fused_enabled():
++        return _mlp_fused_gradients(checked, x, y)
+     var w = checked["weights"]
+     var hidden = _mlp_bias(_mlp_gemm(x, w["weight1"], rows, 16, 8, 1), w["bias1"], rows, 16, True)
+     var logits = _mlp_bias(_mlp_gemm(hidden, w["weight2"], rows, 3, 16, 1), w["bias2"], rows, 3, False)
+diff --git a/bindings/small_mlp_native.mojo b/bindings/small_mlp_native.mojo
+index 396b7d940e..8daf366dde 100644
+--- a/bindings/small_mlp_native.mojo
++++ b/bindings/small_mlp_native.mojo
+@@ -3,13 +3,13 @@
+ 
+ The Python class keeps one integer handle (`_handle`) into the typed store in
+ `core/small_mlp_state_impl.mojo`. This door unpacks the caller's arguments,
+-selects the numeric mode and runs the trainer's ONE path: its captured
+-program on the executor (autograd/small_mlp_program.mojo, the x_sequence
+-binding's `small_mlp_program` entry). The program opens from the host state
+-on first use and then holds the weights and moments as its session
+-parameters; the host copy comes down only when it is read (state_dict,
+-weights, save, inference sessions) and the program closes when the host copy
+-becomes the truth again (load_state_dict, close). It adds no arithmetic.
++selects the numeric mode and route (fused step, Apple FAST device-resident
++session, or the per-operation sequence a binding without the fused entry and a
++CPU-only install take), calls the compiled training entries with addresses into
++the store and returns typed results. It adds no arithmetic: the forward,
++backward, loss and AdamW update are the training binding's entries, called with
++the same operands, in the same order, as `python/mojolearn/_mlp_impl.py` called
++them before this owner existed, so every route keeps its bits.
+ 
+ The public class hands the owner and arguments to this door once. Native
+ admission checks passive class storage and reads its handle without invoking
+@@ -17,6 +17,7 @@ Python descriptors. Shared exact input admission precedes native buffer reads;
+ balanced call helpers retain original owners without leaking references.
+ """
+ from std.ffi import _Global
++from std.os import getenv
+ from std.math import isfinite
+ from std.python import Python, PythonObject
+ from std.python._cpython import PyObjectPtr
+@@ -31,6 +32,7 @@ from bindings.native_class_admission import class_record, class_admit
+ from bindings.native_buffer_owner import native_storage_allocate, native_buffer_view
+ from providers.python.lowbit_weight_pyapi import low_materialize, low_formats
+ from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
++from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute, neural_descriptor_info
+ from bindings.classical_attributes import classical_connect_numpy
+ from bindings.sequential_admission import sequential_admit_value
+ from bindings.small_mlp_items import small_mlp_items, SMALL_MLP_ITEMS_PENDING
+@@ -60,10 +62,15 @@ from core.small_mlp_state_impl import (
+ )
+ from training.parallel_byte_impl import parallel_copy_words
+ 
+-# The program's STEP modes (autograd/small_mlp_program.mojo).
++# `mlp_train_step` / `mlp_resident_steps` modes (training/mlp_ops.mojo).
+ comptime _FORWARD = 0
+ comptime _GRADS = 1
+ comptime _TRAIN = 2
++# The neural GEMM layouts (bindings/_mojolearn_training.mojo::neural_gemm and
++# _mojolearn_linalg.mojo::gemm): 0 NN, 1 NT, 2 TN.
++comptime _NN = 0
++comptime _NT = 1
++comptime _TN = 2
+ comptime _STATE_SCHEMA = "mojolearn.small-mlp-trainer.v1"
+ comptime _FILE_SCHEMA = "mojolearn.small-mlp-checkpoint.v1"
+ comptime _BASE_PROFILE = "mojolearn.neural-training.fp32.v1"
+@@ -152,20 +159,21 @@ def small_mlp_initialize(context: PythonObject) raises:
+ 
+ 
+ struct MlpOperationMetadata(Movable):
+-    # One admission per public operation: the selected mode's connected
+-    # entries (the training binding's mode word and `mlp_sessions`, the
+-    # x_sequence binding's `small_mlp_program`) and the mode's name.
++    # One admission per public operation. The provider owns the shared native
++    # transport; this record only snapshots mode and the selected legacy map.
+     var legacy: PythonObject
++    var provider: PythonObject
+     var mode: String
+ 
+-    def __init__(out self, legacy: PythonObject, var mode: String):
++    def __init__(out self, legacy: PythonObject, provider: PythonObject, var mode: String):
+         self.legacy = legacy
++        self.provider = provider
+         self.mode = mode^
+ 
+ 
+ def _mode_entries() raises -> MlpOperationMetadata:
+-    """The process-selected numeric mode's entries (identical or fast), read
+-    back from the compiled bindings; checked once per connected table."""
++    """The process-selected numeric mode's training entries (identical or fast),
++    read back from the compiled binding; the route choice of every call."""
+     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+     var mode = b[].backend["_DEFAULT_MODE"]
+     if mode is None or py_type(mode) is not b[].bi.str or (String(py=mode) != "identical" and String(py=mode) != "fast"):
+@@ -173,30 +181,43 @@ def _mode_entries() raises -> MlpOperationMetadata:
+     var entries = py_get(b[].modes, mode)
+     if entries is None or py_type(entries) is b[].bi.str:
+         raise Error(String(_MODE_REFUSAL) + " (" + String(entries) + ")")
+-    # The compiled mode word and the required entry are fixed per connected
+-    # entries table and mode: verify them once per (entries, mode).
++    var provider = PythonObject(None)
++    # Cache only the connection. Each new operation rechecks the exact factory
++    # identity and snapshots its mode; changed input metadata is admitted below.
++    if String(py=mode) == "identical" and py_contains(entries, "small_mlp_api_v1"):
++        provider = neural_descriptor_reuse(py_get(entries, "_native_provider"),
++            entries["small_mlp_api_v1"], "mojolearn.training.small_mlp.v1", 8)
++        py_setitem(entries, "_native_provider", provider)
++    # The compiled mode word and the required entries are fixed per
++    # connected entries table and provider object: verify them once per
++    # (entries, provider, mode) and skip the extra provider crossing after.
+     var v = SMALL_MLP_MODE_VERIFIED.get_or_create_ptr()
+-    var verified = v[].entries is not None and v[].entries is entries and v[].mode == String(py=mode)
++    var verified = (v[].entries is not None and v[].entries is entries and v[].provider is provider
++                    and v[].mode == String(py=mode))
+     if not verified:
+-        var compiled = Int(py=entries["training_numeric_mode"]())
++        var compiled = neural_descriptor_execute(provider, 0, List[Int](), List[Int](), List[Float64]()) if provider is not None else Int(py=entries["training_numeric_mode"]())
+         if compiled != (1 if String(py=mode) == "identical" else 0):
+             raise Error(_MODE_REFUSAL)
+-        if not py_contains(entries, "small_mlp_program"):
+-            raise Error("ImportError: SmallMLPTrainer requires updated x_sequence binding: missing small_mlp_program")
++        for name in [String("mlp_bias_activation"), String("mlp_relu_backward"), String("mlp_sum_rows")]:  # small-loop(the three required entry names)
++            if not py_contains(entries, name):
++                raise Error("ImportError: SmallMLPTrainer requires updated training binding: missing " + name)
+         v[].entries = entries
++        v[].provider = provider
+         v[].mode = String(py=mode)
+-    return MlpOperationMetadata(entries, String(py=mode))
++    return MlpOperationMetadata(entries, provider, String(py=mode))
+ 
+ 
+ struct SmallMlpModeVerified(Defaultable, Movable):
+-    # The last (entries table, mode) whose compiled mode word and required
+-    # entry passed. Holds a strong reference, so the table's address cannot
+-    # be recycled while it is the key.
++    # The last (entries table, provider, mode) whose compiled mode word and
++    # required entries passed. Holds strong references, so neither object's
++    # address can be recycled while it is the key.
+     var entries: PythonObject
++    var provider: PythonObject
+     var mode: String
+ 
+     def __init__(out self):
+         self.entries = PythonObject(None)
++        self.provider = PythonObject(None)
+         self.mode = String()
+ 
+ 
+@@ -208,8 +229,32 @@ def _mode_name(entries: MlpOperationMetadata) raises -> String:
+     return entries.mode
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_MLP_FUSED=0 per-operation route, the fused one-call step and the Apple FAST resident session doors (superseded by the captured program, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
+-# Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
++def _env(name: String, default: String) raises -> String:
++    # The process environment read natively, as bindings/parallel_mlp_native.mojo
++    # (_mlp_fused_enabled) does: os.environ assignment (and monkeypatch.setenv)
++    # updates the C environment through putenv, so this reads the same values
++    # the os.environ._data lookup did, with no str.encode, mapping get and
++    # bytes.decode calls per step.
++    return getenv(name, default)
++
++
++def _fused_enabled(entries: MlpOperationMetadata) raises -> Bool:
++    """ONE binding call per step (`mlp_train_step`): same kernels, operands and
++    order as the per-operation sequence. MOJOLEARN_MLP_FUSED=0 restores the
++    per-operation calls; a multi-device optimizer count keeps them too (that
++    route lives in the per-call optimizer entry); a binding without the entry
++    (a CPU-only install) takes them."""
++    if _env("MOJOLEARN_MLP_FUSED", "1") == "0":
++        return False
++    if _env("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1") != "1":
++        return False
++    return py_contains(entries.legacy, "mlp_train_step")
++
++
++def _resident_enabled(entries: MlpOperationMetadata) raises -> Bool:
++    """The Apple FAST device-resident session (compiled under
++    -D MOJOLEARN_AFN_MLP_RESIDENT, _MULTISTEP or _ALL only)."""
++    return _fused_enabled(entries) and py_contains(entries.legacy, "mlp_resident_open")
+ 
+ 
+ # ------------------------------------------------------------ argument doors
+@@ -533,17 +578,9 @@ def _state_out(state: MlpState, mode: String) raises -> PythonObject:
+     return result
+ 
+ 
+-# ------------------------------------------------------------ the captured program
+-# autograd/small_mlp_program.mojo, reached through the x_sequence binding's
+-# `small_mlp_program` entry: (op, addresses, ints[, floats]).
+-comptime _P_OPEN = 0
+-comptime _P_STEP = 1
+-comptime _P_DOWNLOAD = 2
+-comptime _P_APPLY = 3
+-comptime _P_CLOSE = 4
+-
++# ------------------------------------------------------------ resident session
+ 
+-def _program_addresses(index: Int) raises -> PythonObject:
++def _resident_addresses(index: Int) raises -> PythonObject:
+     var store = MLP_STORE.get_or_create_ptr()
+     return Python.list(
+         store[].slots[index].state.params_addr(0), store[].slots[index].state.params_addr(1),
+@@ -551,130 +588,121 @@ def _program_addresses(index: Int) raises -> PythonObject:
+         store[].slots[index].state.m_addr(), store[].slots[index].state.v_addr())
+ 
+ 
+-def _program_call(entry: PythonObject, op: Int, addresses: PythonObject, ints: PythonObject) raises -> Int:
+-    try:
+-        return Int(py=py_call_typed(entry, PythonObject(op), addresses, ints, Python.list()))
+-    except error:
+-        raise _step_error(error)
+-
+-
+-def _program_sync(index: Int) raises:
+-    """Bring an open program's weights and moments into the store."""
++def _resident_sync(index: Int) raises:
++    """Bring an open session's parameters and moments into the store."""
+     var store = MLP_STORE.get_or_create_ptr()
+-    var handle = store[].slots[index].program
+-    if handle < 0:
++    if store[].slots[index].resident < 0:
+         return
+     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+-    var entry = b[].modes[store[].slots[index].program_mode]["small_mlp_program"]
+-    if _program_call(entry, _P_DOWNLOAD, _program_addresses(index), Python.list(handle)) != MLP_TOTAL:
+-        raise Error("RuntimeError: SmallMLPTrainer state download returned an invalid result")
++    var entries = b[].modes[store[].slots[index].resident_mode]
++    _ = py_call_typed(entries["mlp_resident_download"], store[].slots[index].resident, _resident_addresses(index))
+ 
+ 
+-def _program_close(index: Int) raises:
++def _resident_close(index: Int) raises:
+     var store = MLP_STORE.get_or_create_ptr()
+-    var handle = store[].slots[index].program
++    var handle = store[].slots[index].resident
+     if handle < 0:
+         return
+-    var mode = store[].slots[index].program_mode
+-    store[].slots[index].program = -1
+-    store[].slots[index].program_mode = String()
++    var mode = store[].slots[index].resident_mode
++    store[].slots[index].resident = -1
++    store[].slots[index].resident_mode = String()
++    store[].slots[index].resident_cap = 0
+     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+-    _ = _program_call(b[].modes[mode]["small_mlp_program"], _P_CLOSE, Python.list(), Python.list(handle))
++    _ = py_call(b[].modes[mode]["mlp_resident_close"], handle)
+ 
+ 
+ def _settle(index: Int, close: Bool) raises:
+-    """Before the host state is read (or replaced): sync an open program,
+-    and close it when the host copy becomes the truth again."""
+-    _program_sync(index)
++    """Before the host state is read (or replaced): sync an open session, and
++    close it when the host copy becomes the truth again."""
++    _resident_sync(index)
+     if close:
+-        _program_close(index)
++        _resident_close(index)
+ 
+ 
+-def _program_open(index: Int, entries: MlpOperationMetadata) raises -> Int:
+-    """The trainer's program in the selected mode, opened from the host
+-    state on first use (the weights and moments upload once)."""
++def _resident_open(index: Int, entries: MlpOperationMetadata, cap_k: Int) raises -> Int:
+     var store = MLP_STORE.get_or_create_ptr()
+     var mode = _mode_name(entries)
+-    if store[].slots[index].program >= 0:
+-        if store[].slots[index].program_mode == mode:
+-            return store[].slots[index].program
++    if store[].slots[index].resident >= 0:
++        if store[].slots[index].resident_mode == mode and store[].slots[index].resident_cap >= cap_k:
++            return store[].slots[index].resident
+         _settle(index, True)
+-    mlp_require_state(store[].slots[index].state)
+-    ref s = store[].slots[index].state
+-    var handle: Int
+-    try:
+-        handle = Int(py=py_call_typed(entries.legacy["small_mlp_program"], PythonObject(_P_OPEN),
+-            _program_addresses(index), Python.list(s.step),
+-            Python.list(s.lr, s.beta1, s.beta2, s.eps, s.weight_decay)))
+-    except error:
+-        raise _step_error(error)
+-    store[].slots[index].program = handle
+-    store[].slots[index].program_mode = mode
++    var handle = Int(py=py_call_typed(entries.legacy["mlp_resident_open"], _resident_addresses(index), Python.list(cap_k)))
++    store[].slots[index].resident = handle
++    store[].slots[index].resident_mode = mode
++    store[].slots[index].resident_cap = cap_k
+     return handle
+ 
+ 
+ def _step_error(error: Error) -> Error:
+-    """The program refuses a non-finite loss on the device; that refusal
+-    surfaces as a RuntimeError naming the step."""
++    """The native step refuses a non-finite result on the device; that
++    refusal surfaces as a RuntimeError naming the step."""
+     var message = String(error)
+-    if message.startswith("RuntimeError: ") or message.startswith("ImportError: "):
+-        return Error(message)
+     if message.find("nonfinite") >= 0 or message.find("not finite") >= 0:
+         return Error("RuntimeError: SmallMLPTrainer step returned an invalid result: " + message)
+     return Error("RuntimeError: " + message)
+ 
+ 
+-def _program_steps(index: Int, entries: MlpOperationMetadata, x: List[Float32], y: List[Int32],
+-                   rows: Int, k: Int, mode: Int, want_dx: Bool) raises -> PythonObject:
+-    """`k` runs of the program (mode 0 forward, 1 loss and gradients, 2 the
+-    whole step); `[losses, logits, gradients, input_grad]` (the logits and
+-    gradients are the last step's). The step counter advances under mode 2."""
++def _native_step(entry: PythonObject, a: PythonObject, b: PythonObject) raises -> Int:
++    """One fused step call."""
++    try:
++        return Int(py=py_call(entry, a, b))
++    except error:
++        raise _step_error(error)
++
++
++def _native_resident_step(entry: PythonObject, a: PythonObject, b: PythonObject, c: PythonObject) raises -> Int:
++    """One resident-session step call."""
++    try:
++        return Int(py=py_call(entry, a, b, c))
++    except error:
++        raise _step_error(error)
++
++
++def _resident_steps(index: Int, entries: MlpOperationMetadata, x: List[Float32], y: List[Int32],
++                    rows: Int, k: Int, mode: Int, want_dx: Bool) raises -> PythonObject:
++    """`k` steps on the session; `[losses, logits, gradients, input_grad]`
++    (the logits and gradients are the last step's)."""
+     var bi = SMALL_MLP_BOUNDARY.get_or_create_ptr()[].bi
+     var store = MLP_STORE.get_or_create_ptr()
+-    var handle = _program_open(index, entries)
++    var handle = _resident_open(index, entries, k)
+     var losses = List[Float32](length=k, fill=Float32(0))
+-    var grads = mode != _FORWARD
+     var logits = generation_array([rows, 3])
+-    var g0 = generation_array(_dims(0)) if grads else PythonObject(None)
+-    var g1 = generation_array(_dims(1)) if grads else PythonObject(None)
+-    var g2 = generation_array(_dims(2)) if grads else PythonObject(None)
+-    var g3 = generation_array(_dims(3)) if grads else PythonObject(None)
++    var g0 = generation_array(_dims(0))
++    var g1 = generation_array(_dims(1))
++    var g2 = generation_array(_dims(2))
++    var g3 = generation_array(_dims(3))
+     var dx = generation_array([rows, 8]) if want_dx else PythonObject(None)
+-    var scratch = List[Float32](length=MLP_TOTAL, fill=Float32(0))
+-    var sa = Int(scratch.unsafe_ptr())
+-    # addresses in this exact order (autograd/small_mlp_program.mojo, STEP)
+-    var addresses = Python.list(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), Int(losses.unsafe_ptr()), logits._addr,
+-        g0._addr if grads else PythonObject(sa + 4 * mlp_offset(0)),
+-        g1._addr if grads else PythonObject(sa + 4 * mlp_offset(1)),
+-        g2._addr if grads else PythonObject(sa + 4 * mlp_offset(2)),
+-        g3._addr if grads else PythonObject(sa + 4 * mlp_offset(3)),
+-        dx._addr if want_dx else PythonObject(sa))
++    var scratch_dx = List[Float32](length=1, fill=Float32(0))
++    var dx_addr = Int(py=dx._addr) if want_dx else Int(scratch_dx.unsafe_ptr())
++    _ = dx  # keep the Python object alive through the native call above
+     var t = store[].slots[index].state.step + 1
+-    var written = _program_call(entries.legacy["small_mlp_program"], _P_STEP, addresses,
+-                                Python.list(handle, rows, mode, 1 if want_dx else 0, k))
+-    _ = dx  # keep the Python objects alive through the native call above
+-    _ = g3
+-    _ = g2
+-    _ = g1
+-    _ = g0
+-    _ = scratch^
++    ref s = store[].slots[index].state
++    # addresses and params in this exact order (mirrored word for word in
++    # `bindings/_mojolearn_training.mojo::mlp_resident_steps_binding`).
++    var addresses = Python.list(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), Int(losses.unsafe_ptr()),
++                                logits._addr, g0._addr, g1._addr, g2._addr, g3._addr, dx_addr)
++    _ = dx  # keep the Python object alive through the native call above
++    _ = g3  # keep the Python object alive through the native call above
++    _ = g2  # keep the Python object alive through the native call above
++    _ = g1  # keep the Python object alive through the native call above
++    _ = g0  # keep the Python object alive through the native call above
++    _ = logits  # keep the Python object alive through the native call above
++    var params = Python.list(rows, k, mode, t, s.lr, s.beta1, s.beta2, s.eps, s.weight_decay, 1 if want_dx else 0)
++    var entry = entries.legacy["mlp_resident_steps"] if k > 1 else entries.legacy["mlp_resident_step"]
++    var written = _native_resident_step(entry, PythonObject(handle), addresses, params)
++    _ = g3  # keep the Python object alive through the native call above
++    _ = g2  # keep the Python object alive through the native call above
++    _ = g1  # keep the Python object alive through the native call above
++    _ = g0  # keep the Python object alive through the native call above
++    _ = logits  # keep the Python object alive through the native call above
++    _ = scratch_dx^
+     if written != rows * 3:
+         raise Error("RuntimeError: SmallMLPTrainer step returned an invalid result")
+-    mlp_require_result_finite(Int(py=logits._addr), rows * 3, "logits")
+-    _ = logits
+     if mode == _FORWARD:
+-        _ = losses^
+         return Python.list(PythonObject(None), logits, PythonObject(None), PythonObject(None))
+-    for i in range(4):  # driver-loop: over the fixed MLP gradient registry
+-        var g = g0 if i == 0 else (g1 if i == 1 else (g2 if i == 2 else g3))
+-        mlp_require_result_finite(Int(py=g._addr), mlp_size(i), "gradient")
+-        _ = g
+-    if want_dx:
+-        mlp_require_result_finite(Int(py=dx._addr), rows * 8, "input gradient")
+-        _ = dx
+     var values = bi.list()
+     var append = values.append
+-    for i in range(k):  # driver-loop: over the k step losses the program returned
++    for i in range(k):  # driver-loop: over the k step losses the session returned
+         _ = py_call(append, mlp_read_f32(Int(losses.unsafe_ptr()) + 4 * i))
+     _ = losses^
+     if mode == _TRAIN:
+@@ -682,6 +710,234 @@ def _program_steps(index: Int, entries: MlpOperationMetadata, x: List[Float32],
+     return Python.list(values, logits, Python.list(g0, g1, g2, g3), dx)
+ 
+ 
++# ------------------------------------------------------------ fused step
++
++def _fused(mut state: MlpState, entries: MlpOperationMetadata, x: List[Float32], y: List[Int32],
++           rows: Int, mode: Int, want_dx: Bool) raises -> PythonObject:
++    """The forward (mode 0), the forward and backward (mode 1) or the whole
++    step (mode 2) as ONE binding call. Under mode 2 the parameters, moments,
++    flags and step of `state` are updated in place. Returns
++    `[loss, logits, gradients, input_grad]`."""
++    var train = mode == _TRAIN
++    var loss = List[Float32](length=1, fill=Float32(0))
++    var logits = generation_array([rows, 3])
++    var grads = mode != _FORWARD
++    var g0 = generation_array(_dims(0)) if grads else PythonObject(None)
++    var g1 = generation_array(_dims(1)) if grads else PythonObject(None)
++    var g2 = generation_array(_dims(2)) if grads else PythonObject(None)
++    var g3 = generation_array(_dims(3)) if grads else PythonObject(None)
++    # The forward writes no gradient; it still takes their addresses.
++    var scratch_grads = List[Float32](length=1 if grads else MLP_TOTAL, fill=Float32(0))
++    var dx = generation_array([rows, 8]) if want_dx else PythonObject(None)
++    var info = List[Float32](length=3, fill=Float32(0))
++    var scratch = List[Float32](length=2, fill=Float32(0))
++    var scratch_flags = List[Int32](length=4, fill=Int32(0))
++    var sg = Int(scratch_grads.unsafe_ptr())
++    var m = state.m_addr() if train else Int(scratch.unsafe_ptr())
++    var v = state.v_addr() if train else Int(scratch.unsafe_ptr()) + 4
++    var flags = state.flags_addr() if train else Int(scratch_flags.unsafe_ptr())
++    var t = state.step + 1 if train else 1
++    # addresses and params in this exact order (mirrored word for word in
++    # `bindings/_mojolearn_training.mojo::mlp_train_step_binding`):
++    #     addresses: x, y, w1, b1, w2, b2, m, v, flags, loss, logits,
++    #                dw1, db1, dw2, db2, dx, info
++    #     params:    rows, mode, t, lr, beta1, beta2, eps, weight_decay,
++    #                want_input_grad
++    # The seventeen buffer addresses as native words: the provider route takes
++    # them as they are, and only the legacy entry receives a Python list.
++    var native_addresses: List[Int] = [
++        Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), state.params_addr(0),
++        state.params_addr(1), state.params_addr(2), state.params_addr(3),
++        m, v, flags, Int(loss.unsafe_ptr()), Int(py=logits._addr),
++        Int(py=g0._addr) if grads else sg + 4 * mlp_offset(0),
++        Int(py=g1._addr) if grads else sg + 4 * mlp_offset(1),
++        Int(py=g2._addr) if grads else sg + 4 * mlp_offset(2),
++        Int(py=g3._addr) if grads else sg + 4 * mlp_offset(3),
++        Int(py=dx._addr) if want_dx else Int(scratch.unsafe_ptr()),
++        Int(info.unsafe_ptr())]
++    _ = logits  # keep the Python object alive through the native call above
++    _ = g0  # keep the Python object alive through the native call above
++    _ = g1  # keep the Python object alive through the native call above
++    _ = g2  # keep the Python object alive through the native call above
++    _ = g3  # keep the Python object alive through the native call above
++    _ = dx  # keep the Python object alive through the native call above
++    var written = 0
++    if entries.provider is not None:
++        try:
++            written = neural_descriptor_execute(entries.provider, 1, native_addresses,
++                [rows, mode, t, 1 if want_dx else 0],
++                [Float64(state.lr), Float64(state.beta1), Float64(state.beta2), Float64(state.eps), Float64(state.weight_decay)])
++        except error:
++            raise _step_error(error)
++    else:
++        var addresses = Python.list()
++        for i in range(len(native_addresses)):  # small-loop(the fixed fused-step buffer descriptor)
++            _ = py_call(addresses.append, PythonObject(native_addresses[i]))
++        var params = Python.list(rows, mode, t, state.lr, state.beta1, state.beta2, state.eps,
++                                 state.weight_decay, 1 if want_dx else 0)
++        written = _native_step(entries.legacy["mlp_train_step"], addresses, params)
++    _ = dx  # keep the Python object alive through the native call above
++    _ = g3  # keep the Python object alive through the native call above
++    _ = g2  # keep the Python object alive through the native call above
++    _ = g1  # keep the Python object alive through the native call above
++    _ = g0  # keep the Python object alive through the native call above
++    _ = logits  # keep the Python object alive through the native call above
++    var value = mlp_read_f32(Int(loss.unsafe_ptr()))
++    _ = loss^
++    _ = info^
++    _ = scratch^
++    _ = scratch_flags^
++    _ = scratch_grads^
++    if written != rows * 3:
++        raise Error("RuntimeError: SmallMLPTrainer step returned an invalid result")
++    if mode == _FORWARD:
++        return Python.list(0.0, logits, PythonObject(None), PythonObject(None))
++    if not isfinite(value):
++        raise Error("RuntimeError: SmallMLPTrainer loss is not finite")
++    if train:
++        state.step = t
++    return Python.list(value, logits, Python.list(g0, g1, g2, g3), dx)
++
++
++# ------------------------------------------------------------ per-operation route
++
++def _gemm_into(entries: MlpOperationMetadata, a: Int, b: Int, dst: Int, m: Int, n: Int, k: Int, layout: Int) raises:
++    if _mode_name(entries) == "identical":
++        if not py_contains(entries.legacy, "neural_gemm"):
++            raise Error("ImportError: SmallMLPTrainer requires updated training binding: missing neural_gemm")
++        var written = neural_descriptor_execute(entries.provider, 2, [a, b, dst], [m, n, k, layout], List[Float64]()) if entries.provider is not None else Int(py=py_call_typed(entries.legacy["neural_gemm"], a, b, dst, py_ints([m, n, k, layout])))
++        if written != m * n:
++            raise Error("RuntimeError: SmallMLPTrainer neural GEMM returned an incomplete result")
++    else:
++        if not py_contains(entries.legacy, "linalg_gemm"):
++            raise Error("ImportError: SmallMLPTrainer requires the linalg binding's gemm")
++        # THE OUTPUT ADDRESS COMES FIRST in the linalg entry.
++        _ = py_call_typed(entries.legacy["linalg_gemm"], dst, a, b, py_ints([m, n, k, layout]))
++    mlp_require_result_finite(dst, m * n, "GEMM")
++
++
++def _bias_into(entries: MlpOperationMetadata, values: Int, bias: Int, dst: Int, rows: Int, cols: Int, relu: Bool) raises:
++    var written = neural_descriptor_execute(entries.provider, 3, [values, bias, dst], [rows, cols, Int(relu)], List[Float64]()) if entries.provider is not None else Int(py=py_call_typed(entries.legacy["mlp_bias_activation"], values, bias, dst, py_ints([rows, cols, Int(relu)])))
++    if written != rows * cols:
++        raise Error("RuntimeError: SmallMLPTrainer bias/activation returned an invalid result")
++    mlp_require_result_finite(dst, rows * cols, "bias/activation")
++
++
++def _sum_into(entries: MlpOperationMetadata, values: Int, dst: Int, rows: Int, cols: Int) raises:
++    var written = neural_descriptor_execute(entries.provider, 5, [values, dst], [rows, cols], List[Float64]()) if entries.provider is not None else Int(py=py_call_typed(entries.legacy["mlp_sum_rows"], values, dst, py_ints([rows, cols])))
++    if written != cols:
++        raise Error("RuntimeError: SmallMLPTrainer bias gradient returned an invalid result")
++    mlp_require_result_finite(dst, cols, "bias gradient")
++
++
++def _forward_into(state: MlpState, entries: MlpOperationMetadata, x: Int, rows: Int, hidden: Int, logits: Int) raises:
++    """`relu(x @ w1.T + b1) @ w2.T + b2`, the hidden activation kept."""
++    var z1 = List[Float32](length=rows * 16, fill=Float32(0))
++    var z2 = List[Float32](length=rows * 3, fill=Float32(0))
++    _gemm_into(entries, x, state.params_addr(0), Int(z1.unsafe_ptr()), rows, 16, 8, _NT)
++    _bias_into(entries, Int(z1.unsafe_ptr()), state.params_addr(1), hidden, rows, 16, True)
++    _gemm_into(entries, hidden, state.params_addr(2), Int(z2.unsafe_ptr()), rows, 3, 16, _NT)
++    _bias_into(entries, Int(z2.unsafe_ptr()), state.params_addr(3), logits, rows, 3, False)
++    _ = z1^
++    _ = z2^
++
++
++def _predict_route(state: MlpState, entries: MlpOperationMetadata, x: List[Float32], rows: Int) raises -> PythonObject:
++    var hidden = List[Float32](length=rows * 16, fill=Float32(0))
++    var logits = generation_array([rows, 3])
++    _forward_into(state, entries, Int(x.unsafe_ptr()), rows, Int(hidden.unsafe_ptr()), Int(py=logits._addr))
++    _ = logits  # keep the Python object alive through the native call above
++    _ = hidden^
++    return logits
++
++
++def _gradient(state: MlpState, entries: MlpOperationMetadata, x: List[Float32], y: List[Int32],
++              rows: Int, want_dx: Bool) raises -> PythonObject:
++    """The per-operation forward and backward: `[loss, logits, gradients, input_grad]`."""
++    var xa = Int(x.unsafe_ptr())
++    var hidden = List[Float32](length=rows * 16, fill=Float32(0))
++    var ha = Int(hidden.unsafe_ptr())
++    var logits = generation_array([rows, 3])
++    _forward_into(state, entries, xa, rows, ha, Int(py=logits._addr))
++    _ = logits  # keep the Python object alive through the native call above
++    var loss = List[Float32](length=1, fill=Float32(0))
++    var row_loss = List[Float32](length=rows, fill=Float32(0))
++    var dlogits = List[Float32](length=rows * 3, fill=Float32(0))
++    var dl = Int(dlogits.unsafe_ptr())
++    # ce_loss params: rows, vocab, ignore_index, reduction (2 mean),
++    # num_items, return_grad, label_smoothing
++    # (bindings/_mojolearn_training.mojo::ce_loss_binding).
++    if entries.provider is not None:
++        _ = neural_descriptor_execute(entries.provider, 6,
++            [Int(loss.unsafe_ptr()), Int(row_loss.unsafe_ptr()), dl, Int(py=logits._addr), Int(y.unsafe_ptr())],
++            [rows, 3, -100, 2, 0, 1], [Float64(0)])
++    else:
++        _ = py_call_typed(entries.legacy["ce_loss"], Int(loss.unsafe_ptr()), Int(row_loss.unsafe_ptr()), dl, logits._addr,
++                    Int(y.unsafe_ptr()), Python.list(rows, 3, -100, 2, 0, 1, 0.0))
++    _ = logits  # keep the Python object alive through the native call above
++    var value = mlp_read_f32(Int(loss.unsafe_ptr()))
++    if not isfinite(value):
++        raise Error("RuntimeError: SmallMLPTrainer loss is not finite")
++    mlp_require_finite(dl, rows * 3, "logit gradient")
++    var dw1 = generation_array(_dims(0))
++    var db1 = generation_array(_dims(1))
++    var dw2 = generation_array(_dims(2))
++    var db2 = generation_array(_dims(3))
++    _gemm_into(entries, dl, ha, Int(py=dw2._addr), 3, 16, rows, _TN)
++    _ = dw2  # keep the Python object alive through the native call above
++    _sum_into(entries, dl, Int(py=db2._addr), rows, 3)
++    _ = db2  # keep the Python object alive through the native call above
++    var incoming = List[Float32](length=rows * 16, fill=Float32(0))
++    _gemm_into(entries, dl, state.params_addr(2), Int(incoming.unsafe_ptr()), rows, 16, 3, _NN)
++    var dhidden = List[Float32](length=rows * 16, fill=Float32(0))
++    var dh = Int(dhidden.unsafe_ptr())
++    var written = neural_descriptor_execute(entries.provider, 4, [ha, Int(incoming.unsafe_ptr()), dh], [rows, 16], List[Float64]()) if entries.provider is not None else Int(py=py_call_typed(entries.legacy["mlp_relu_backward"], ha, Int(incoming.unsafe_ptr()), dh, py_ints([rows, 16])))
++    if written != rows * 16:
++        raise Error("RuntimeError: SmallMLPTrainer ReLU gradient returned an invalid result")
++    mlp_require_result_finite(dh, rows * 16, "ReLU gradient")
++    _gemm_into(entries, dh, xa, Int(py=dw1._addr), 16, 8, rows, _TN)
++    _ = dw1  # keep the Python object alive through the native call above
++    _sum_into(entries, dh, Int(py=db1._addr), rows, 16)
++    _ = db1  # keep the Python object alive through the native call above
++    var dx = PythonObject(None)
++    if want_dx:
++        dx = generation_array([rows, 8])
++        _gemm_into(entries, dh, state.params_addr(0), Int(py=dx._addr), rows, 8, 16, _NN)
++        _ = dx  # keep the Python object alive through the native call above
++    _ = hidden^
++    _ = loss^
++    _ = row_loss^
++    _ = dlogits^
++    _ = incoming^
++    _ = dhidden^
++    return Python.list(value, logits, Python.list(dw1, db1, dw2, db2), dx)
++
++
++def _adamw(mut state: MlpState, entries: MlpOperationMetadata, grads: List[Float32]) raises:
++    """One AdamW step over the packed registry (`optimizer_step`, as
++    `mojolearn.AdamW.step` calls it): the parameters, moments and flags of
++    `state` are updated in place."""
++    var offsets: List[Int32] = [0, 128, 144, 192, 195]
++    var info = List[Float32](length=3, fill=Float32(0))
++    var t = state.step + 1
++    # params: n_tensors, kind (2 AdamW), t, nesterov, lr, beta1, beta2, eps,
++    # weight_decay, momentum, dampening, max_norm (<= 0: no clip), maximize
++    # (bindings/_mojolearn_training.mojo::optimizer_step_binding).
++    var plan = Python.list(4, 2, t, 0, state.lr, state.beta1, state.beta2, state.eps,
++                           state.weight_decay, 0.0, 0.0, 0.0, 0)
++    if entries.provider is not None:
++        _ = neural_descriptor_execute(entries.provider, 7,
++            [state.params_addr(0), Int(grads.unsafe_ptr()), state.m_addr(), state.v_addr(), Int(offsets.unsafe_ptr()), state.flags_addr(), Int(info.unsafe_ptr())],
++            [4, 2, t, 0, 0], [Float64(state.lr), Float64(state.beta1), Float64(state.beta2), Float64(state.eps), Float64(state.weight_decay), Float64(0), Float64(0), Float64(0)])
++    else:
++        _ = py_call_typed(entries.legacy["optimizer_step"], state.params_addr(0), Int(grads.unsafe_ptr()), state.m_addr(),
++                    state.v_addr(), Int(offsets.unsafe_ptr()), state.flags_addr(),
++                    Int(info.unsafe_ptr()), plan)
++    _ = offsets^
++    _ = info^
++    state.step = t
++
++
+ def _items(value: PythonObject, limit: Int, refusal: String) raises -> List[PythonObject]:
+     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+     return small_mlp_items(value, limit, refusal, b[].array_cls, b[].arrays, b[].bi)
+@@ -749,7 +1005,7 @@ def small_mlp_close(handle: PythonObject) raises:
+     var h = Int(py=handle)
+     try:
+         var index = mlp_store_index(h)
+-        _program_close(index)
++        _resident_close(index)
+     except:
+         pass
+     _ = mlp_store_release(h)
+@@ -768,7 +1024,7 @@ def small_mlp_load_state(handle: Int, state: PythonObject, mode: String) raises:
+     """Validate and copy `state`, then replace the live state in one move."""
+     var typed = _state_from_dict(state, mode)
+     var index = mlp_store_index(handle)
+-    _program_close(index)
++    _resident_close(index)
+     var store = MLP_STORE.get_or_create_ptr()
+     store[].slots[index].state = typed^
+ 
+@@ -797,13 +1053,35 @@ def _train_step(handle: Int, X: PythonObject, targets: PythonObject, want: Pytho
+     var entries = _mode_entries()
+     var index = mlp_store_index(handle)
+     var store = MLP_STORE.get_or_create_ptr()
+-    if store[].slots[index].state.step == MLP_MAX_STEP:
+-        raise Error("SmallMLPTrainer step counter is exhausted")
+-    # The weights stay on the program; a refused step updates nothing.
+-    var out = _program_steps(index, entries, x, y, rows, 1, _TRAIN, want_dx)
++    var out: PythonObject
++    if _resident_enabled(entries):
++        # The state stays on the device; the binding restores the pre-step
++        # state on the device when the step fails.
++        if store[].slots[index].state.step == MLP_MAX_STEP:
++            raise Error("SmallMLPTrainer step counter is exhausted")
++        var res = _resident_steps(index, entries, x, y, rows, 1, _TRAIN, want_dx)
++        out = Python.list(res[0][0], res[1], res[2], res[3])
++    else:
++        _settle(index, True)
++        var working = store[].slots[index].state.copy()
++        mlp_require_state(working)
++        if working.step == MLP_MAX_STEP:
++            raise Error("SmallMLPTrainer step counter is exhausted")
++        var before = working.step
++        if _fused_enabled(entries):
++            out = _fused(working, entries, x, y, rows, _TRAIN, want_dx)
++        else:
++            out = _gradient(working, entries, x, y, rows, want_dx)
++            _adamw(working, entries, _pack_gradients(_items(out[2], 4, "gradients")))
++        # Validation precedes the single publication of the new state.
++        mlp_require_state(working)
++        if working.step != before + 1:
++            raise Error("RuntimeError: SmallMLPTrainer optimizer did not advance exactly one step")
++        index = mlp_store_index(handle)
++        store[].slots[index].state = working^
+     var result = b[].bi.dict()
+     py_setitem(result, "step", PythonObject(store[].slots[index].state.step))
+-    py_setitem(result, "loss", out[0][0])
++    py_setitem(result, "loss", out[0])
+     py_setitem(result, "logits", out[1])
+     py_setitem(result, "gradients", _gradients_dict(out[2]))
+     if want_dx:
+@@ -817,6 +1095,9 @@ def _train_steps(handle: Int, X: PythonObject, targets: PythonObject, k_value: P
+         raise Error("SmallMLPTrainer train_steps k must be a positive int")
+     var k = Int(py=k_value)
+     var entries = _mode_entries()
++    if not (_resident_enabled(entries) and py_contains(entries.legacy, "mlp_resident_steps")):
++        raise Error("RuntimeError: SmallMLPTrainer.train_steps needs the Apple FAST training "
++                    + "binding built with -D MOJOLEARN_AFN_MLP_MULTISTEP")
+     var view = _view(X, "SmallMLPTrainer train_steps X must have shape (k * batch, 8)")
+     var shape = _shape(X, view)
+     if len(shape) != 2 or Int(py=shape[1]) != 8 or Int(py=shape[0]) % k != 0:
+@@ -833,7 +1114,7 @@ def _train_steps(handle: Int, X: PythonObject, targets: PythonObject, k_value: P
+     var store = MLP_STORE.get_or_create_ptr()
+     if store[].slots[index].state.step + k > MLP_MAX_STEP:
+         raise Error("SmallMLPTrainer step counter is exhausted")
+-    var res = _program_steps(index, entries, x, y, batch, k, _TRAIN, False)
++    var res = _resident_steps(index, entries, x, y, batch, k, _TRAIN, False)
+     var result = b[].bi.dict()
+     py_setitem(result, "step", PythonObject(store[].slots[index].state.step))
+     py_setitem(result, "losses", res[0])
+@@ -844,13 +1125,19 @@ def _train_steps(handle: Int, X: PythonObject, targets: PythonObject, k_value: P
+ 
+ 
+ def _predict_logits(handle: Int, X: PythonObject) raises -> PythonObject:
+-    """The same program with recording off."""
+     var x = _batch_in(X)
+     var rows = len(x) // 8
+     var entries = _mode_entries()
+     var index = mlp_store_index(handle)
+     var zeros = List[Int32](length=rows, fill=Int32(0))
+-    return _program_steps(index, entries, x, zeros, rows, 1, _FORWARD, False)[1]
++    if _resident_enabled(entries):
++        return _resident_steps(index, entries, x, zeros, rows, 1, _FORWARD, False)[1]
++    _settle(index, False)
++    var store = MLP_STORE.get_or_create_ptr()
++    var state = store[].slots[index].state.copy()
++    if _fused_enabled(entries):
++        return _fused(state, entries, x, zeros, rows, _FORWARD, False)[1]
++    return _predict_route(state, entries, x, rows)
+ 
+ 
+ def _loss_and_grads(handle: Int, X: PythonObject, targets: PythonObject) raises -> PythonObject:
+@@ -859,8 +1146,18 @@ def _loss_and_grads(handle: Int, X: PythonObject, targets: PythonObject) raises
+     var y = _targets_in(targets, rows)
+     var entries = _mode_entries()
+     var index = mlp_store_index(handle)
+-    var res = _program_steps(index, entries, x, y, rows, 1, _GRADS, False)
+-    return Python.tuple(res[0][0], res[2])
++    var out: PythonObject
++    if _resident_enabled(entries):
++        var res = _resident_steps(index, entries, x, y, rows, 1, _GRADS, False)
++        return Python.tuple(res[0][0], res[2])
++    _settle(index, False)
++    var store = MLP_STORE.get_or_create_ptr()
++    var state = store[].slots[index].state.copy()
++    if _fused_enabled(entries):
++        out = _fused(state, entries, x, y, rows, _GRADS, False)
++    else:
++        out = _gradient(state, entries, x, y, rows, False)
++    return Python.tuple(out[0], out[2])
+ 
+ 
+ def _apply_gradients(handle: Int, gradients: PythonObject) raises -> PythonObject:
+@@ -871,18 +1168,40 @@ def _apply_gradients(handle: Int, gradients: PythonObject) raises -> PythonObjec
+     var entries = _mode_entries()
+     var index = mlp_store_index(handle)
+     var store = MLP_STORE.get_or_create_ptr()
+-    if store[].slots[index].state.step == MLP_MAX_STEP:
++    if _resident_enabled(entries) and py_contains(entries.legacy, "mlp_resident_apply"):
++        # The session stays open: the AdamW step runs on its weights and
++        # moments on the device (`mlp_resident_apply`, the same optimizer
++        # step `optimizer_step` runs), and the next train_step continues on
++        # it. The host copy comes down only on export (state_dict, weights,
++        # save).
++        if store[].slots[index].state.step == MLP_MAX_STEP:
++            raise Error("SmallMLPTrainer step counter is exhausted")
++        var resident = _resident_open(index, entries, max(1, store[].slots[index].resident_cap))
++        var info = List[Float32](length=3, fill=Float32(0))
++        ref st = store[].slots[index].state
++        var t = st.step + 1
++        var applied = Int(py=py_call_typed(entries.legacy["mlp_resident_apply"], PythonObject(resident),
++            Python.list(Int(grads.unsafe_ptr()), st.flags_addr(), Int(info.unsafe_ptr())),
++            Python.list(t, st.lr, st.beta1, st.beta2, st.eps, st.weight_decay)))
++        _ = info^
++        _ = grads^
++        if applied != MLP_TOTAL:
++            raise Error("RuntimeError: SmallMLPTrainer optimizer did not advance exactly one step")
++        st.step = t
++        return PythonObject(t)
++    _settle(index, True)
++    var working = store[].slots[index].state.copy()
++    mlp_require_state(working)
++    if working.step == MLP_MAX_STEP:
+         raise Error("SmallMLPTrainer step counter is exhausted")
+-    # One AdamW update on the program's weights and moments (the update a
+-    # train_step applies); the host copy comes down only on export.
+-    var program = _program_open(index, entries)
+-    var applied = _program_call(entries.legacy["small_mlp_program"], _P_APPLY,
+-                                Python.list(Int(grads.unsafe_ptr())), Python.list(program))
+-    _ = grads^
+-    if applied != MLP_TOTAL:
++    var before = working.step
++    _adamw(working, entries, grads)
++    mlp_require_state(working)
++    if working.step != before + 1:
+         raise Error("RuntimeError: SmallMLPTrainer optimizer did not advance exactly one step")
+-    store[].slots[index].state.step += 1
+-    return PythonObject(store[].slots[index].state.step)
++    index = mlp_store_index(handle)
++    store[].slots[index].state = working^
++    return PythonObject(before + 1)
+ 
+ 
+ def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
+@@ -892,7 +1211,13 @@ def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
+     var bi = b[].bi
+     var entries = _mode_entries()
+     var index = mlp_store_index(handle)
+-    _settle(index, False)
++    # an open training session is read where it is (`mlp_sessions_resident`)
++    var store0 = MLP_STORE.get_or_create_ptr()
++    var resident = store0[].slots[index].resident
++    var on_session = (resident >= 0 and py_contains(entries.legacy, "mlp_sessions_resident")
++                      and store0[].slots[index].resident_mode == _mode_name(entries))
++    if not on_session:
++        _settle(index, False)
+     var listed = _items(inputs, -1, "mojolearn.mlp_inference_sessions: inputs must be a list of arrays")
+     # Mojo-owned row-major copies, alive across the call.
+     var sessions = List[List[Float32]]()
+@@ -924,10 +1249,16 @@ def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
+     var out = generation_array([total, 3])
+     var store = MLP_STORE.get_or_create_ptr()
+     ref s = store[].slots[index].state
+-    var wrote = Int(py=py_call_typed(entries.legacy["mlp_sessions"],
+-        Python.list(out._addr, s.params_addr(0), s.params_addr(1), s.params_addr(2), s.params_addr(3)),
+-        addresses, shapes, py_ints([8, 16, 3])))
+-    _ = out  # keep the Python object alive through the native call above
++    var wrote: Int
++    if on_session:
++        wrote = Int(py=py_call_typed(entries.legacy["mlp_sessions_resident"], PythonObject(resident),
++            Python.list(out._addr), addresses, shapes, py_ints([8, 16, 3])))
++        _ = out  # keep the Python object alive through the native call above
++    else:
++        wrote = Int(py=py_call_typed(entries.legacy["mlp_sessions"],
++            Python.list(out._addr, s.params_addr(0), s.params_addr(1), s.params_addr(2), s.params_addr(3)),
++            addresses, shapes, py_ints([8, 16, 3])))
++        _ = out  # keep the Python object alive through the native call above
+     _ = sessions^
+     if wrote != Int(py=out.size):
+         raise Error("RuntimeError: MLP sessions returned an invalid output count")
+@@ -1427,9 +1758,8 @@ def small_mlp_call(operation: String, args: PythonObject) raises -> PythonObject
+     else:
+         sequential_admit_value(args, boundary[].admission)
+     if operation == "native_provider_info":
+-        # TOMBSTONE: the small_mlp_api_v1 provider (the per-operation and fused routes' descriptor) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
+-        _ = _mode_entries()
+-        return PythonObject(None)
++        var metadata = _mode_entries()
++        return neural_descriptor_info(metadata.provider) if metadata.provider is not None else PythonObject(None)
+     if operation == "create":
+         return small_mlp_create(args)
+     if operation == "close":
+diff --git a/core/small_mlp_state_impl.mojo b/core/small_mlp_state_impl.mojo
+index 649e4c365d..448135b224 100644
+--- a/core/small_mlp_state_impl.mojo
++++ b/core/small_mlp_state_impl.mojo
+@@ -6,7 +6,7 @@ order weight1, bias1, weight2, bias2 at offsets 0, 128, 144, 192, 195), its
+ AdamW moments, flags and step counter, its float32-rounded optimizer settings
+ and its canonical data schedule live here, in Mojo memory. The Python door
+ (`bindings/small_mlp_native.mojo`) converts arguments and calls the compiled
+-training program with addresses into these buffers; nothing here imports
++training entries with addresses into these buffers; nothing here imports
+ Python.
+ """
+ from std.ffi import _Global
+@@ -81,19 +81,21 @@ struct MlpSlot(Copyable, Movable):
+     var live: Bool
+     var generation: Int
+     var state: MlpState
+-    # The trainer's captured program on the executor (-1: none;
+-    # autograd/small_mlp_program.mojo). While it is open its session
+-    # parameters and optimizer state are the truth for the weights and
+-    # moments; `program_mode` names the numeric mode whose binding opened it.
+-    var program: Int
+-    var program_mode: String
++    # The Apple FAST device-resident session (-1: none). While it is open it
++    # is the truth for the parameters and moments; `resident_mode` names the
++    # numeric mode whose binding opened it and `resident_cap` its minibatch
++    # capacity.
++    var resident: Int
++    var resident_mode: String
++    var resident_cap: Int
+ 
+     def __init__(out self):
+         self.live = False
+         self.generation = 0
+         self.state = MlpState()
+-        self.program = -1
+-        self.program_mode = String()
++        self.resident = -1
++        self.resident_mode = String()
++        self.resident_cap = 0
+ 
+ 
+ struct MlpStore(Defaultable, Movable):
+@@ -125,8 +127,9 @@ def mlp_store_create(var state: MlpState) raises -> Int:
+     store[].slots[index].live = True
+     store[].slots[index].generation = generation
+     store[].slots[index].state = state^
+-    store[].slots[index].program = -1
+-    store[].slots[index].program_mode = String()
++    store[].slots[index].resident = -1
++    store[].slots[index].resident_mode = String()
++    store[].slots[index].resident_cap = 0
+     return generation * MLP_HANDLE_SPAN + index
+ 
+ 
+@@ -149,8 +152,9 @@ def mlp_store_release(handle: Int) raises -> Bool:
+         return False
+     store[].slots[index].live = False
+     store[].slots[index].state = MlpState()
+-    store[].slots[index].program = -1
+-    store[].slots[index].program_mode = String()
++    store[].slots[index].resident = -1
++    store[].slots[index].resident_mode = String()
++    store[].slots[index].resident_cap = 0
+     return True
+ 
+ 
+diff --git a/gemm/neural_dispatch.mojo b/gemm/neural_dispatch.mojo
+index 2b23e79951..91e3db57f7 100644
+--- a/gemm/neural_dispatch.mojo
++++ b/gemm/neural_dispatch.mojo
+@@ -194,8 +194,28 @@ def identical_gemm_into[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
+         _incumbent_into[allow_vendor](ctx,c,a,b,ws,m,n,k,op)
+ 
+ 
+-# TOMBSTONE: neural_model_leaf_into (its one caller, the deleted small MLP step's MLP_GEMM_LEAF128 dispatch, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
+-# Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
++def neural_model_leaf_into[MIN_LEAF: Int](ctx: DeviceContext,
++    mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
++    mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int,
++) raises:
++    """A MODEL call site's own leaf choice (lane grid-act-5, 2026-10-08): the
++    NN03 neural profile body at MIN_LEAF for one model's products, in a build
++    whose other neural callers keep the incumbent. This is the body
++    identical_gemm_into reaches under -D MOJOLEARN_IDN_GEMM_LEAF=1|2 with no
++    schedule arm (the last `elif NEURAL_PROFILE_CHANGED` branch), with the
++    same validation and overlap refusals; the profile kernel reads no
++    workspace, so none is taken. First caller: the MLP training step
++    (training/mlp_ops.mojo::MLP_GEMM_LEAF128)."""
++    comptime assert MIN_LEAF == 128 or MIN_LEAF == 256, "neural profile leaf 128|256 (leaf 64 deleted: I04 loser)"
++    neural_validate(m,n,k,op)
++    if len(c)<m*n or len(a)<m*k or len(b)<n*k:
++        raise Error("neural GEMM operand storage too short")
++    if _overlaps(c,m*n,a,m*k) or _overlaps(c,m*n,b,n*k):
++        raise Error("neural GEMM output must not overlap inputs")
++    if m==0 or n==0:
++        return
++    neural_profile_device[MIN_LEAF,NEURAL_CHAINS](ctx,c,a,b,m,n,k,op)
++
+ 
+ def identical_gemm[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
+     ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
+diff --git a/python/mojolearn/_mlp_impl.py b/python/mojolearn/_mlp_impl.py
+index 13293d3ac9..7d27a199b3 100644
+--- a/python/mojolearn/_mlp_impl.py
++++ b/python/mojolearn/_mlp_impl.py
+@@ -294,6 +294,8 @@ class SmallMLPTrainer:
+         rows ``i * batch`` to ``(i + 1) * batch``, each 1 to 256 rows. Returns a dict
+         with `step`, `losses` (one per minibatch), and `loss`, `logits` and `gradients`
+         of the last minibatch.
++
++        Available only on builds that provide it; otherwise raises `RuntimeError`.
+         """
+         return _NATIVE('owner_train_steps', (self, X, targets, k))
+ 
+@@ -444,7 +446,11 @@ def _decode_state(payload):
+ 
+ #: The compiled training entries the native owner calls, resolved once at import.
+ _TRAINING_ENTRIES = (
+-    'training_numeric_mode', 'mlp_sessions', 'mlp_sessions_rows', 'sha256_hex', 'neural_arithmetic_profile',
++    'training_numeric_mode', 'small_mlp_api_v1', 'neural_gemm', 'mlp_bias_activation', 'mlp_relu_backward',
++    'mlp_sum_rows', 'ce_loss', 'optimizer_step', 'mlp_train_step', 'mlp_resident_open',
++    'mlp_resident_download', 'mlp_resident_close', 'mlp_resident_step', 'mlp_resident_steps',
++    'mlp_sessions', 'mlp_sessions_rows', 'sha256_hex', 'neural_arithmetic_profile',
++    'mlp_resident_apply', 'mlp_sessions_resident',
+ )
+ 
+ 
+@@ -468,10 +474,9 @@ def _connect():
+             if 'training_numeric_mode' not in entries:
+                 raise ImportError('SmallMLPTrainer requires a compiled training binding')
+             try:
+-                # the trainer's captured program (autograd/small_mlp_program.mojo)
+-                program = _backend.binding('_mojolearn_x_sequence', mode).small_mlp_program
+-                if isinstance(program, BuiltinFunctionType):
+-                    entries['small_mlp_program'] = program
++                gemm = _backend.binding('_mojolearn_linalg', mode).gemm
++                if isinstance(gemm, BuiltinFunctionType):
++                    entries['linalg_gemm'] = gemm
+             except Exception:
+                 pass
+             modes[mode] = entries
+diff --git a/tools/mlp_step_check.py b/tools/mlp_step_check.py
+new file mode 100644
+index 0000000000..b221f346a8
+--- /dev/null
++++ b/tools/mlp_step_check.py
+@@ -0,0 +1,141 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The small MLP's fused step against its per-operation calls: bits and wall.
++
++lane/apple-mlp-fused (2026-09-30). `SmallMLPTrainer.train_step` runs as ONE
++binding call (`mlp_train_step`) where the binding offers it, and as the
++twelve calls it was under `MOJOLEARN_MLP_FUSED=0`. The two must agree bit
++for bit on every step's loss, logits, gradients, input gradient and on the
++state (weights, m, v, flags, step) after every step, because the fused entry
++runs the same kernels on the same operands in the same order. This tool runs
++both from one initialization over the same batches and compares every byte,
++then reports the median step wall of each and the ratio.
++
++Since lane ag-smallmlp-tape (2026-10-19) the fused entry's backward runs on
++the autograd tape (autograd/rules_small_mlp.mojo; the hand fused chain was
++deleted 2026-10-19, see docs/TOMBSTONES.md MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF),
++so this tool checks the tape against the per-operation hand calls. The
++in-binary check against the stored digests is `pixi run check-mlp-tape-step`.
++
++    python tools/mlp_step_check.py                    # 64 steps of 256 rows
++    python tools/mlp_step_check.py --steps 128 --rows 32 --json out.json
++
++Prints `MLP_STEP_CHECK PASS` or `MLP_STEP_CHECK FAIL <what>` and exits 1 on
++FAIL. A FAIL is a bug in the fused entry, never a result. Requires the
++process-selected IDENTICAL (or FAST) mode and the GPU training binding; on
++a binding without `mlp_train_step` it reports SKIP.
++"""
++import argparse
++import hashlib
++import json
++import os
++import statistics
++import sys
++import time
++
++import numpy as np
++
++NAMES = ("weight1", "bias1", "weight2", "bias2")
++SHAPES = ((16, 8), (16,), (3, 16), (3,))
++CONFIG = dict(lr=0.03, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01)
++
++
++def _bytes(a):
++    return np.ascontiguousarray(np.asarray(a)).tobytes()
++
++
++def _state_bytes(state):
++    parts = [_bytes(state["weights"][n]) for n in NAMES]
++    opt = state["optimizer"]
++    parts += [_bytes(opt["m"]), _bytes(opt["v"]), _bytes(opt["flags"]),
++              int(opt["step"]).to_bytes(8, "little")]
++    return b"".join(parts)
++
++
++def _run(ml, w, X, y, steps, fused, input_grad_every):
++    os.environ["MOJOLEARN_MLP_FUSED"] = "1" if fused else "0"
++    trainer = ml.SmallMLPTrainer(*[a.copy() for a in w],
++                                 data_schedule={"fixture": "tools/mlp_step_check.py"}, **CONFIG)
++    records, walls = [], []
++    for k in range(steps):
++        want = input_grad_every > 0 and (k % input_grad_every) == 0
++        t0 = time.perf_counter()
++        res = trainer.train_step(X[k], y[k], return_input_grad=want)
++        walls.append(time.perf_counter() - t0)
++        rec = {"loss": np.float64(res["loss"]).tobytes(), "logits": _bytes(res["logits"])}
++        for n in NAMES:
++            rec["grad_" + n] = _bytes(res["gradients"][n])
++        rec["input_grad"] = _bytes(res["input_grad"]) if want else b""
++        rec["state"] = _state_bytes(trainer.state_dict())
++        records.append(rec)
++    # the other two entry points, once each, on the final state
++    loss, grads = trainer.loss_and_grads(X[0], y[0])
++    extra = {"lg_loss": np.float64(loss).tobytes(),
++             "lg_grads": b"".join(_bytes(g) for g in grads),
++             "predict": _bytes(trainer.predict_logits(X[1]))}
++    return records, extra, walls
++
++
++def main(argv=None):
++    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
++    ap.add_argument("--steps", type=int, default=64)
++    ap.add_argument("--rows", type=int, default=256)
++    ap.add_argument("--seed", type=int, default=20260930)
++    ap.add_argument("--input-grad-every", type=int, default=8,
++                    help="ask for input_grad on every k-th step (0: never)")
++    ap.add_argument("--json", default=None)
++    args = ap.parse_args(argv)
++
++    import mojolearn as ml
++    mode = ml.numeric_mode()
++    from mojolearn import _mlp_impl
++    binding = _mlp_impl.SmallMLPTrainer._binding()
++    if not callable(getattr(binding, "mlp_train_step", None)):
++        print("MLP_STEP_CHECK SKIP: the training binding has no mlp_train_step (rebuild it)")
++        return 0
++
++    rng = np.random.default_rng(args.seed)
++    w = [np.ascontiguousarray((rng.standard_normal(s) * 0.5).astype(np.float32)) for s in SHAPES]
++    X = np.ascontiguousarray(rng.standard_normal((args.steps, args.rows, 8)).astype(np.float32))
++    y = np.ascontiguousarray(rng.integers(0, 3, size=(args.steps, args.rows)).astype(np.int32))
++
++    per_op, per_extra, per_walls = _run(ml, w, X, y, args.steps, False, args.input_grad_every)
++    fused, fused_extra, fused_walls = _run(ml, w, X, y, args.steps, True, args.input_grad_every)
++
++    failures = []
++    for k, (a, b) in enumerate(zip(per_op, fused)):
++        for key in a:
++            if a[key] != b[key]:
++                failures.append("step %d %s" % (k + 1, key))
++    for key in per_extra:
++        if per_extra[key] != fused_extra[key]:
++            failures.append(key)
++
++    losses = [np.frombuffer(r["loss"], dtype=np.float64)[0] for r in fused]
++    digest = hashlib.sha256(b"".join(r["loss"] for r in fused)).hexdigest()[:16]
++    med_op = statistics.median(per_walls[1:] or per_walls) * 1e3
++    med_fused = statistics.median(fused_walls[1:] or fused_walls) * 1e3
++    print("mlp_step_check mode %s rows %d steps %d" % (mode, args.rows, args.steps))
++    print("  per-operation step: median %.3f ms (first %.3f ms)" % (med_op, per_walls[0] * 1e3))
++    print("  fused step:         median %.3f ms (first %.3f ms)  ratio %.2fx"
++          % (med_fused, fused_walls[0] * 1e3, med_op / med_fused if med_fused > 0 else 0.0))
++    print("  losses: first %.6f last %.6f digest %s" % (losses[0], losses[-1], digest))
++    out = dict(mode=mode, rows=args.rows, steps=args.steps, seed=args.seed,
++               per_op_median_ms=med_op, fused_median_ms=med_fused,
++               per_op_walls_ms=[t * 1e3 for t in per_walls],
++               fused_walls_ms=[t * 1e3 for t in fused_walls],
++               loss_digest=digest, losses=losses, failures=failures)
++    if args.json:
++        with open(args.json, "w") as f:
++            json.dump(out, f, indent=1)
++    if failures:
++        print("MLP_STEP_CHECK FAIL " + "; ".join(failures[:12])
++              + (" ..." if len(failures) > 12 else ""))
++        return 1
++    print("MLP_STEP_CHECK PASS (%d steps, every byte equal)" % args.steps)
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/training/checks/mlp_tape_step_check.mojo b/training/checks/mlp_tape_step_check.mojo
+new file mode 100644
+index 0000000000..98456242ea
+--- /dev/null
++++ b/training/checks/mlp_tape_step_check.mojo
+@@ -0,0 +1,177 @@
++# SPDX-License-Identifier: Apache-2.0
++"""The small MLP train step (its backward on the tape, autograd/rules_small_mlp.mojo) against stored digests, word for word.
++
++For each case (rows 1, 37 and 256; with and without the input gradient),
++runs two AdamW steps (t = 1, 2) of `mlp_train_step_host` from fixed weights
++and batches and digests (FNV-1a 64 over the float32 words) the loss, the
++logits, the four gradients, the input gradient and the weights, moments and
++flags after each step. Every digest must equal the stored record
++(training/checks/mlp_tape_step_digests.tsv: the tape == hand-chain runs on
++Metal, NVIDIA and AMD, 162 tensors). Prints one digest per tensor so columns
++can be compared across vendors. The record path is relative to the repo
++root; MOJOLEARN_MLP_TAPE_DIGESTS overrides it.
++
++    mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/mlp_tape_step_check.mojo
++"""
++# TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by 3cd0063d7; code recoverable at 3cd0063d7^.
++# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
++# (the check compared step[False] (hand chain) against step[True] (tape) in one process;
++# the hand chain's digests are now the stored record).
++from std.memory import bitcast
++from std.os import getenv
++from max.gpu.host import DeviceContext
++
++from checks.identity_trace_read import read_trace_lines
++
++from training.mlp_ops import (
++    MLP_B1, MLP_B2, MLP_IN, MLP_OUT, MLP_STEP_TRAIN, MLP_TOTAL, MLP_W1, MLP_W2,
++    mlp_train_step_host,
++)
++
++comptime _F = MutPointer[Float32, MutUntrackedOrigin]
++comptime _I = MutPointer[Int32, MutUntrackedOrigin]
++
++
++def _p(mut values: List[Float32]) -> _F:
++    return values.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
++
++
++def _q(mut values: List[Int32]) -> _I:
++    return values.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
++
++
++def digest(values: List[Float32]) -> UInt64:
++    var hash = UInt64(1469598103934665603)
++    for i in range(len(values)):
++        hash = (hash ^ UInt64(bitcast[DType.uint32](values[i]))) * UInt64(1099511628211)
++    return hash
++
++
++def fill(n: Int, salt: Int, scale: Float32) -> List[Float32]:
++    var out = List[Float32]()
++    for i in range(n):
++        out.append(Float32((i * 37 + salt * 11) % 97 - 48) * scale)
++    return out^
++
++
++struct StepState(Movable):
++    """One trainer's arrays: weights, moments and flags carried across steps."""
++
++    var w1: List[Float32]
++    var b1: List[Float32]
++    var w2: List[Float32]
++    var b2: List[Float32]
++    var m: List[Float32]
++    var v: List[Float32]
++    var flags: List[Int32]
++
++    def __init__(out self):
++        self.w1 = fill(MLP_W1, 1, Float32(0.004))
++        self.b1 = fill(MLP_B1, 2, Float32(0.002))
++        self.w2 = fill(MLP_W2, 3, Float32(0.006))
++        self.b2 = fill(MLP_B2, 4, Float32(0.001))
++        self.m = List[Float32](length=MLP_TOTAL, fill=Float32(0.0))
++        self.v = List[Float32](length=MLP_TOTAL, fill=Float32(0.0))
++        self.flags = List[Int32](length=4, fill=Int32(0))
++
++
++def step(
++    ctx: DeviceContext, mut st: StepState, rows: Int, t: Int, want_input_grad: Int,
++) raises -> List[List[Float32]]:
++    """One train step; returns [loss, logits, dw1, db1, dw2, db2, dx, w1, b1, w2, b2, m, v, flags]."""
++    var x = fill(rows * MLP_IN, 5 + t, Float32(0.02))
++    var y = List[Int32]()
++    for i in range(rows):
++        y.append(Int32((i * 7 + t) % MLP_OUT))
++    var loss = List[Float32](length=1, fill=Float32(0.0))
++    var logits = List[Float32](length=rows * MLP_OUT, fill=Float32(0.0))
++    var dw1 = List[Float32](length=MLP_W1, fill=Float32(0.0))
++    var db1 = List[Float32](length=MLP_B1, fill=Float32(0.0))
++    var dw2 = List[Float32](length=MLP_W2, fill=Float32(0.0))
++    var db2 = List[Float32](length=MLP_B2, fill=Float32(0.0))
++    var dx = List[Float32](length=rows * MLP_IN if want_input_grad != 0 else 1, fill=Float32(0.0))
++    var info = List[Float32](length=3, fill=Float32(0.0))
++    _ = mlp_train_step_host(
++        ctx, _p(x), _q(y), _p(st.w1), _p(st.b1), _p(st.w2), _p(st.b2), _p(st.m), _p(st.v), _q(st.flags),
++        _p(loss), _p(logits), _p(dw1), _p(db1), _p(dw2), _p(db2), _p(dx), _p(info),
++        rows, MLP_STEP_TRAIN, t, Float32(0.03), Float32(0.9), Float32(0.999), Float32(1e-8), Float32(0.01),
++        want_input_grad,
++    )
++    var flags = List[Float32]()
++    for j in range(len(st.flags)):
++        flags.append(Float32(Int(st.flags[j])))
++    var out = List[List[Float32]]()
++    out.append(loss^)
++    out.append(logits^)
++    out.append(dw1^)
++    out.append(db1^)
++    out.append(dw2^)
++    out.append(db2^)
++    out.append(dx^)
++    out.append(st.w1.copy())
++    out.append(st.b1.copy())
++    out.append(st.w2.copy())
++    out.append(st.b2.copy())
++    out.append(st.m.copy())
++    out.append(st.v.copy())
++    out.append(flags^)
++    _ = x^
++    _ = y^
++    _ = info^
++    return out^
++
++
++comptime DIGESTS_DEFAULT = "training/checks/mlp_tape_step_digests.tsv"
++
++
++def record_line(tag: String, name: String, values: List[Float32]) -> String:
++    """One record: case, tensor, word count and digest, tab separated (the stored file's layout)."""
++    return tag + "\t" + name + "\t" + String(len(values)) + "\t" + String(digest(values))
++
++
++def compare(stored: List[String], mut k: Int, line: String) -> Int:
++    """Print `line`, compare it with stored record `k` and advance `k`; 1 on a difference."""
++    var want = String("<missing>")
++    if k < len(stored):
++        want = String(stored[k])
++    k += 1
++    var same = line == want
++    print("MLP_TAPE", line, String("SAME") if same else String("DIFFER stored ") + want)
++    return 0 if same else 1
++
++
++def run_case(ctx: DeviceContext, stored: List[String], mut k: Int, rows: Int, want_input_grad: Int) raises -> Int:
++    var names: List[String] = [
++        "loss", "logits", "grad.w1", "grad.b1", "grad.w2", "grad.b2", "grad.x",
++        "w1_after", "b1_after", "w2_after", "b2_after", "m_after", "v_after", "flags_after",
++    ]
++    var state = StepState()
++    var bad = 0
++    for t in range(1, 3):
++        var tag = String("rows=") + String(rows) + " dx=" + String(want_input_grad) + " t=" + String(t)
++        var got = step(ctx, state, rows, t, want_input_grad)
++        for j in range(len(names)):
++            if j == 6 and want_input_grad == 0:
++                continue
++            bad += compare(stored, k, record_line(tag, names[j], got[j]))
++    return bad
++
++
++def main() raises:
++    var path = String(getenv("MOJOLEARN_MLP_TAPE_DIGESTS"))
++    if path.byte_length() == 0:
++        path = String(DIGESTS_DEFAULT)
++    var stored = read_trace_lines(path)
++    var ctx = DeviceContext()
++    var bad = 0
++    var k = 0
++    var row_cases: List[Int] = [1, 37, 256]
++    for r in range(len(row_cases)):
++        bad += run_case(ctx, stored, k, row_cases[r], 0)
++        bad += run_case(ctx, stored, k, row_cases[r], 1)
++    if k != len(stored):
++        print("MLP_TAPE records produced", k, "stored", len(stored), "DIFFER")
++        bad += 1
++    if bad != 0:
++        raise Error("MLP_TAPE_STEP_FAIL " + String(bad) + " differing tensors")
++    print("MLP_TAPE_STEP_PASS every loss, logit, gradient and updated state word equals the stored record (" + String(k) + " tensors)")
+diff --git a/training/checks/mlp_tape_step_digests.tsv b/training/checks/mlp_tape_step_digests.tsv
+new file mode 100644
+index 0000000000..0225e9dccc
+--- /dev/null
++++ b/training/checks/mlp_tape_step_digests.tsv
+@@ -0,0 +1,165 @@
++# Stored digests of training/checks/mlp_tape_step_check.mojo (FNV-1a 64 over the float32 words), one record per tensor:
++# case<TAB>tensor<TAB>words<TAB>digest. Recorded 2026-10-19 from the tape == hand runs on main 66e0842f8's tape (162/162 SAME):
++# Metal (compile-24, compile-25), NVIDIA L40S and AMD MI325X (final-02); all four logs carry these exact digests.
++rows=1 dx=0 t=1	loss	1	13303793352294555115
++rows=1 dx=0 t=1	logits	3	1520568757129838970
++rows=1 dx=0 t=1	grad.w1	128	4721263042384964473
++rows=1 dx=0 t=1	grad.b1	16	14619191457854456861
++rows=1 dx=0 t=1	grad.w2	48	2406724417228190269
++rows=1 dx=0 t=1	grad.b2	3	984240271701384815
++rows=1 dx=0 t=1	w1_after	128	9139443900810783000
++rows=1 dx=0 t=1	b1_after	16	2077891698605319485
++rows=1 dx=0 t=1	w2_after	48	17559922072217474243
++rows=1 dx=0 t=1	b2_after	3	7176534418998698562
++rows=1 dx=0 t=1	m_after	195	1943629848391971690
++rows=1 dx=0 t=1	v_after	195	7079973771903101911
++rows=1 dx=0 t=1	flags_after	4	3554543661169652019
++rows=1 dx=0 t=2	loss	1	12942118897799200564
++rows=1 dx=0 t=2	logits	3	11676663734031749085
++rows=1 dx=0 t=2	grad.w1	128	13296232659365601814
++rows=1 dx=0 t=2	grad.b1	16	12323992007038511618
++rows=1 dx=0 t=2	grad.w2	48	9215267711727405918
++rows=1 dx=0 t=2	grad.b2	3	6334092366638040182
++rows=1 dx=0 t=2	w1_after	128	2017766183060221171
++rows=1 dx=0 t=2	b1_after	16	970902549076031271
++rows=1 dx=0 t=2	w2_after	48	11535899045877546262
++rows=1 dx=0 t=2	b2_after	3	13716207909365014303
++rows=1 dx=0 t=2	m_after	195	4957458871138299598
++rows=1 dx=0 t=2	v_after	195	1549093434185297186
++rows=1 dx=0 t=2	flags_after	4	3554543661169652019
++rows=1 dx=1 t=1	loss	1	13303793352294555115
++rows=1 dx=1 t=1	logits	3	1520568757129838970
++rows=1 dx=1 t=1	grad.w1	128	4721263042384964473
++rows=1 dx=1 t=1	grad.b1	16	14619191457854456861
++rows=1 dx=1 t=1	grad.w2	48	2406724417228190269
++rows=1 dx=1 t=1	grad.b2	3	984240271701384815
++rows=1 dx=1 t=1	grad.x	8	5881718488778718435
++rows=1 dx=1 t=1	w1_after	128	9139443900810783000
++rows=1 dx=1 t=1	b1_after	16	2077891698605319485
++rows=1 dx=1 t=1	w2_after	48	17559922072217474243
++rows=1 dx=1 t=1	b2_after	3	7176534418998698562
++rows=1 dx=1 t=1	m_after	195	1943629848391971690
++rows=1 dx=1 t=1	v_after	195	7079973771903101911
++rows=1 dx=1 t=1	flags_after	4	3554543661169652019
++rows=1 dx=1 t=2	loss	1	12942118897799200564
++rows=1 dx=1 t=2	logits	3	11676663734031749085
++rows=1 dx=1 t=2	grad.w1	128	13296232659365601814
++rows=1 dx=1 t=2	grad.b1	16	12323992007038511618
++rows=1 dx=1 t=2	grad.w2	48	9215267711727405918
++rows=1 dx=1 t=2	grad.b2	3	6334092366638040182
++rows=1 dx=1 t=2	grad.x	8	8786357496320290114
++rows=1 dx=1 t=2	w1_after	128	2017766183060221171
++rows=1 dx=1 t=2	b1_after	16	970902549076031271
++rows=1 dx=1 t=2	w2_after	48	11535899045877546262
++rows=1 dx=1 t=2	b2_after	3	13716207909365014303
++rows=1 dx=1 t=2	m_after	195	4957458871138299598
++rows=1 dx=1 t=2	v_after	195	1549093434185297186
++rows=1 dx=1 t=2	flags_after	4	3554543661169652019
++rows=37 dx=0 t=1	loss	1	13239109083206901985
++rows=37 dx=0 t=1	logits	111	1070030440601564267
++rows=37 dx=0 t=1	grad.w1	128	3880601324355560537
++rows=37 dx=0 t=1	grad.b1	16	11359186933486387110
++rows=37 dx=0 t=1	grad.w2	48	13516732963004677018
++rows=37 dx=0 t=1	grad.b2	3	6644263226046000851
++rows=37 dx=0 t=1	w1_after	128	5976470458220342229
++rows=37 dx=0 t=1	b1_after	16	2031082183356301534
++rows=37 dx=0 t=1	w2_after	48	5715485930088744198
++rows=37 dx=0 t=1	b2_after	3	17880661418057264528
++rows=37 dx=0 t=1	m_after	195	7842812798069711191
++rows=37 dx=0 t=1	v_after	195	11437804997009861331
++rows=37 dx=0 t=1	flags_after	4	3554543661169652019
++rows=37 dx=0 t=2	loss	1	13346576449259873336
++rows=37 dx=0 t=2	logits	111	11262215778782473534
++rows=37 dx=0 t=2	grad.w1	128	3199554202578324221
++rows=37 dx=0 t=2	grad.b1	16	13694638080731435691
++rows=37 dx=0 t=2	grad.w2	48	11442978863666651782
++rows=37 dx=0 t=2	grad.b2	3	7454477101464901761
++rows=37 dx=0 t=2	w1_after	128	17014246680821415814
++rows=37 dx=0 t=2	b1_after	16	2858275618360619748
++rows=37 dx=0 t=2	w2_after	48	12909456314358295586
++rows=37 dx=0 t=2	b2_after	3	5944084827842232330
++rows=37 dx=0 t=2	m_after	195	9086881812719549622
++rows=37 dx=0 t=2	v_after	195	17659750103327443603
++rows=37 dx=0 t=2	flags_after	4	3554543661169652019
++rows=37 dx=1 t=1	loss	1	13239109083206901985
++rows=37 dx=1 t=1	logits	111	1070030440601564267
++rows=37 dx=1 t=1	grad.w1	128	3880601324355560537
++rows=37 dx=1 t=1	grad.b1	16	11359186933486387110
++rows=37 dx=1 t=1	grad.w2	48	13516732963004677018
++rows=37 dx=1 t=1	grad.b2	3	6644263226046000851
++rows=37 dx=1 t=1	grad.x	296	9163469574249209977
++rows=37 dx=1 t=1	w1_after	128	5976470458220342229
++rows=37 dx=1 t=1	b1_after	16	2031082183356301534
++rows=37 dx=1 t=1	w2_after	48	5715485930088744198
++rows=37 dx=1 t=1	b2_after	3	17880661418057264528
++rows=37 dx=1 t=1	m_after	195	7842812798069711191
++rows=37 dx=1 t=1	v_after	195	11437804997009861331
++rows=37 dx=1 t=1	flags_after	4	3554543661169652019
++rows=37 dx=1 t=2	loss	1	13346576449259873336
++rows=37 dx=1 t=2	logits	111	11262215778782473534
++rows=37 dx=1 t=2	grad.w1	128	3199554202578324221
++rows=37 dx=1 t=2	grad.b1	16	13694638080731435691
++rows=37 dx=1 t=2	grad.w2	48	11442978863666651782
++rows=37 dx=1 t=2	grad.b2	3	7454477101464901761
++rows=37 dx=1 t=2	grad.x	296	6011677787718905515
++rows=37 dx=1 t=2	w1_after	128	17014246680821415814
++rows=37 dx=1 t=2	b1_after	16	2858275618360619748
++rows=37 dx=1 t=2	w2_after	48	12909456314358295586
++rows=37 dx=1 t=2	b2_after	3	5944084827842232330
++rows=37 dx=1 t=2	m_after	195	9086881812719549622
++rows=37 dx=1 t=2	v_after	195	17659750103327443603
++rows=37 dx=1 t=2	flags_after	4	3554543661169652019
++rows=256 dx=0 t=1	loss	1	13373952089779070814
++rows=256 dx=0 t=1	logits	768	15003944596349055581
++rows=256 dx=0 t=1	grad.w1	128	15061943265117177202
++rows=256 dx=0 t=1	grad.b1	16	5247409565294098082
++rows=256 dx=0 t=1	grad.w2	48	16132881383559349721
++rows=256 dx=0 t=1	grad.b2	3	16548005777299924905
++rows=256 dx=0 t=1	w1_after	128	3508047057585247453
++rows=256 dx=0 t=1	b1_after	16	11912379308192134672
++rows=256 dx=0 t=1	w2_after	48	10892039608977820278
++rows=256 dx=0 t=1	b2_after	3	2200146468666819042
++rows=256 dx=0 t=1	m_after	195	16695201624708023222
++rows=256 dx=0 t=1	v_after	195	7228026629769938013
++rows=256 dx=0 t=1	flags_after	4	3554543661169652019
++rows=256 dx=0 t=2	loss	1	13357163646727917055
++rows=256 dx=0 t=2	logits	768	961470201275726235
++rows=256 dx=0 t=2	grad.w1	128	12902822371629737873
++rows=256 dx=0 t=2	grad.b1	16	12719419657570009578
++rows=256 dx=0 t=2	grad.w2	48	12408694294037824019
++rows=256 dx=0 t=2	grad.b2	3	9493193780036189478
++rows=256 dx=0 t=2	w1_after	128	6006877833276832649
++rows=256 dx=0 t=2	b1_after	16	5264961820081111343
++rows=256 dx=0 t=2	w2_after	48	10219301007738107351
++rows=256 dx=0 t=2	b2_after	3	17747249773012430070
++rows=256 dx=0 t=2	m_after	195	10014612120742690402
++rows=256 dx=0 t=2	v_after	195	13094507283182429757
++rows=256 dx=0 t=2	flags_after	4	3554543661169652019
++rows=256 dx=1 t=1	loss	1	13373952089779070814
++rows=256 dx=1 t=1	logits	768	15003944596349055581
++rows=256 dx=1 t=1	grad.w1	128	15061943265117177202
++rows=256 dx=1 t=1	grad.b1	16	5247409565294098082
++rows=256 dx=1 t=1	grad.w2	48	16132881383559349721
++rows=256 dx=1 t=1	grad.b2	3	16548005777299924905
++rows=256 dx=1 t=1	grad.x	2048	17903755370734942938
++rows=256 dx=1 t=1	w1_after	128	3508047057585247453
++rows=256 dx=1 t=1	b1_after	16	11912379308192134672
++rows=256 dx=1 t=1	w2_after	48	10892039608977820278
++rows=256 dx=1 t=1	b2_after	3	2200146468666819042
++rows=256 dx=1 t=1	m_after	195	16695201624708023222
++rows=256 dx=1 t=1	v_after	195	7228026629769938013
++rows=256 dx=1 t=1	flags_after	4	3554543661169652019
++rows=256 dx=1 t=2	loss	1	13357163646727917055
++rows=256 dx=1 t=2	logits	768	961470201275726235
++rows=256 dx=1 t=2	grad.w1	128	12902822371629737873
++rows=256 dx=1 t=2	grad.b1	16	12719419657570009578
++rows=256 dx=1 t=2	grad.w2	48	12408694294037824019
++rows=256 dx=1 t=2	grad.b2	3	9493193780036189478
++rows=256 dx=1 t=2	grad.x	2048	15918937509858170123
++rows=256 dx=1 t=2	w1_after	128	6006877833276832649
++rows=256 dx=1 t=2	b1_after	16	5264961820081111343
++rows=256 dx=1 t=2	w2_after	48	10219301007738107351
++rows=256 dx=1 t=2	b2_after	3	17747249773012430070
++rows=256 dx=1 t=2	m_after	195	10014612120742690402
++rows=256 dx=1 t=2	v_after	195	13094507283182429757
++rows=256 dx=1 t=2	flags_after	4	3554543661169652019
+diff --git a/training/mlp_fast.mojo b/training/mlp_fast.mojo
+new file mode 100644
+index 0000000000..6ab86a9141
+--- /dev/null
++++ b/training/mlp_fast.mojo
+@@ -0,0 +1,909 @@
++# SPDX-License-Identifier: Apache-2.0
++"""Apple FAST candidates for the small MLP trainer (lane afn-mlp, 2026-10-03).
++
++Every launch and every host entry here compiles ONLY under
++`GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()` and
++behind its own `-D MOJOLEARN_AFN_MLP_<NAME>` define (default OFF); the
++IDENTICAL build and every other vendor compile `training/mlp_ops.mojo`'s
++path unchanged.
++
++THE STEP main's `mlp_train_step_host` pays on Apple (counted in
++docs/apple-fast/notes/neural-mlp.md): 6 uploads, about 40 allocations,
++2 vendor GEMMs + 2 pinned OP_TN GEMMs (each several launches) + 1 vendor
++OP_NN GEMM, 4 `_mlp_kernel` launches, the logits' non-finite scan (a
++launch, a readback and a wait), the cross-entropy's own launches and three
++waits, the optimizer's clip-free step (launches, a readback, a wait), and
++the final wait: about 20 launches and 7 waits for a 256 x 8 batch whose
++arithmetic is ~100k FMAs. On Metal every launch costs ~20 us host time
++plus ~0.25 us per live buffer, and a wait with a readback ~180 us, so the
++step is transport, not arithmetic.
++
++MOJOLEARN_AFN_MLP_FUSED_STEP   `mlp_fused_kernel`: forward (8x16 GEMV +
++    bias + ReLU, 16x3 + bias), softmax cross-entropy and the backward
++    (dlogits, ReLU mask, dhidden, dx) for ONE row per thread, the weights
++    in threadgroup memory, each block of MLP_FT_ROWS rows folding its
++    gradient partials (dw1, db1, dw2, db2, the mean loss) in threadgroup
++    memory into one 196-float slot; `mlp_fold_adam_kernel` sums the
++    (at most MLP_FT_MAX_BLOCKS) block slots in a free order and applies AdamW in the same
++    thread. TWO launches, ONE wait, TWO allocations (one float arena with
++    sub-buffer views, one int32 buffer for y) per step. f32 everywhere;
++    the fold order is the free one FAST allows (per-block serial over the
++    rows, then over the blocks).
++MOJOLEARN_AFN_MLP_RESIDENT     the session (`mlp_resident_open_host` ..
++    `mlp_resident_close_host`): parameters, gradients, the moments, a
++    shadow of the three, the loss cells, the block slots and the batch
++    staging live in ONE arena for the length of the trainer; a step
++    uploads x and y, runs the two launches, downloads the loss, the logits
++    and the gradients and waits once. The weights never travel per step
++    (`mlp_resident_download_host` brings them to the host when the trainer
++    is asked for its state). A step that fails the host's finiteness check
++    restores p, m and v from the shadow on the device (one launch) before
++    raising, so the published state is the pre-step one, as the
++    transactional trainer promises.
++MOJOLEARN_AFN_MLP_MULTISTEP    `k` minibatches per host call on the
++    session: x and y for all k steps uploaded once, sliced per step on the
++    device, 2k launches in one command stream, one wait. Implies RESIDENT.
++MOJOLEARN_AFN_MLP_ALL          the three together.
++"""
++from std.atomic import Atomic, Ordering
++from std.ffi import _Global
++from std.gpu import block_dim, block_idx, thread_idx
++from std.math import exp, isfinite, log, sqrt
++from std.memory import stack_allocation
++from std.sys.compile import is_defined
++from std.sys.info import has_apple_gpu_accelerator
++from max.gpu.host import DeviceBuffer, DeviceContext
++from max.gpu.memory import AddressSpace
++from max.gpu.sync import barrier
++from core.device_scan import device_first_nonfinite
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
++
++comptime _AFN_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
++comptime MLP_AFN_ALL = _AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MLP_ALL"]()
++# T07 AFN26 alias: not tested in this campaign; default remains disabled.
++comptime MLP_FUSED_STEP = _AFN_APPLE_FAST and (
++    is_defined["MOJOLEARN_AFN_MLP_FUSED_STEP"]() or MLP_AFN_ALL
++    or is_defined["MOJOLEARN_AFN26_MLP_FUSED_STEP"]()
++)
++# T08 AFN26 alias: not tested in this campaign; multistep implies resident.
++comptime MLP_MULTISTEP = _AFN_APPLE_FAST and (
++    is_defined["MOJOLEARN_AFN_MLP_MULTISTEP"]() or MLP_AFN_ALL
++    or is_defined["MOJOLEARN_AFN26_MLP_MULTISTEP"]()
++)
++# T08 AFN26 alias: not tested in this campaign; resident is a separate arm.
++comptime MLP_RESIDENT = _AFN_APPLE_FAST and (
++    is_defined["MOJOLEARN_AFN_MLP_RESIDENT"]() or MLP_MULTISTEP
++    or is_defined["MOJOLEARN_AFN26_MLP_RESIDENT"]()
++)
++
++#: The architecture, 8 -> 16 -> 3, and the flat registry `[w1, b1, w2, b2]`
++#: (the same constants `training/mlp_ops.mojo` states; restated here so
++#: that file can import this one without a cycle).
++comptime FT_IN = 8
++comptime FT_HID = 16
++comptime FT_OUT = 3
++comptime FT_W1 = FT_HID * FT_IN
++comptime FT_OFF_B1 = FT_W1
++comptime FT_OFF_W2 = FT_W1 + FT_HID
++comptime FT_OFF_B2 = FT_OFF_W2 + FT_OUT * FT_HID
++comptime FT_TOTAL = FT_OFF_B2 + FT_OUT
++#: one block slot: the 195 gradient cells and the block's share of the loss
++comptime FT_SLOT = FT_TOTAL + 1
++# T12: not tested. One thread owns a row; 32 reduces per-block activation
++# scratch and increases partials, while 128 reduces partials and increases
++# shared storage. These fixed hardware/work alternatives do not dispatch on
++# batch dimensions. Neither enables fused or resident execution by itself.
++comptime MLP_FT_ROWS = (
++    32 if _AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN26_MLP_ROWS32"]()
++    else 128 if _AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN26_MLP_ROWS128"]()
++    else 64
++)
++# Public per-step row capacity from mlp_ops; not tested with alternate tiles.
++comptime MLP_FT_MAX_ROWS = 256
++# not tested: resident steps reuse this slot region serially, so capacity is
++# derived from one public step's row cap, not the multistep transport capacity.
++comptime MLP_FT_MAX_BLOCKS = (MLP_FT_MAX_ROWS + MLP_FT_ROWS - 1) // MLP_FT_ROWS
++#: `mlp_fold_adam_kernel`'s block
++comptime FT_FOLD_TPB = 64
++
++comptime FP = MutPointer[Float32, MutAnyOrigin]
++comptime IP = MutPointer[Int32, MutAnyOrigin]
++
++
++@always_inline
++def _fp(mut buf: DeviceBuffer[DType.float32]) -> FP:
++    return buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++
++
++@always_inline
++def _ip(mut buf: DeviceBuffer[DType.int32]) -> IP:
++    return buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++
++
++def mlp_fused_kernel(
++    x: FP,
++    y: IP,
++    p: FP,
++    logits: FP,
++    dx: FP,
++    slots: FP,
++    rows_in: Int32,
++    inv_rows: Float32,
++    want_dx: Int32,
++    want_grads: Int32,
++):
++    """One row per thread, MLP_FT_ROWS rows per block. Forward, loss and
++    backward in registers; the block's gradient partials folded in
++    threadgroup memory and written to `slots[block * FT_SLOT ..]`."""
++    var wsh = stack_allocation[FT_TOTAL, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var s_x = stack_allocation[MLP_FT_ROWS * FT_IN, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var s_act = stack_allocation[MLP_FT_ROWS * FT_HID, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var s_dh = stack_allocation[MLP_FT_ROWS * FT_HID, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var s_dl = stack_allocation[MLP_FT_ROWS * FT_OUT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var s_nll = stack_allocation[MLP_FT_ROWS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var tid = Int(thread_idx.x)
++    var rows = Int(rows_in)
++    var t = tid
++    while t < FT_TOTAL:
++        wsh[t] = p.unsafe_load(t)
++        t += MLP_FT_ROWS
++    barrier()
++
++    var r = Int(block_idx.x) * MLP_FT_ROWS + tid
++    var valid = r < rows
++    var grads = want_grads != Int32(0)
++    var xr = InlineArray[Float32, FT_IN](fill=Float32(0))
++    var act = InlineArray[Float32, FT_HID](fill=Float32(0))
++    var lg = InlineArray[Float32, FT_OUT](fill=Float32(0))
++    var dl = InlineArray[Float32, FT_OUT](fill=Float32(0))
++    var dh = InlineArray[Float32, FT_HID](fill=Float32(0))
++    var nll = Float32(0)
++    if valid:
++        comptime for i in range(FT_IN):
++            xr[i] = x.unsafe_load(r * FT_IN + i)
++        comptime for h in range(FT_HID):
++            var a = wsh[FT_OFF_B1 + h]
++            comptime for i in range(FT_IN):
++                a += wsh[h * FT_IN + i] * xr[i]
++            act[h] = a if a > Float32(0) else Float32(0)
++        comptime for o in range(FT_OUT):
++            var l = wsh[FT_OFF_B2 + o]
++            comptime for h in range(FT_HID):
++                l += wsh[FT_OFF_W2 + o * FT_HID + h] * act[h]
++            lg[o] = l
++            logits.unsafe_store(r * FT_OUT + o, l)
++        if grads:
++            var yi = Int(y.unsafe_load(r))
++            var m = lg[0]
++            comptime for o in range(1, FT_OUT):
++                if lg[o] > m:
++                    m = lg[o]
++            var s = Float32(0)
++            var e = InlineArray[Float32, FT_OUT](fill=Float32(0))
++            comptime for o in range(FT_OUT):
++                e[o] = exp(lg[o] - m)
++                s += e[o]
++            var ls = log(s)
++            comptime for o in range(FT_OUT):
++                var pr = e[o] / s
++                if o == yi:
++                    pr -= Float32(1)
++                    nll = (ls - (lg[o] - m)) * inv_rows
++                dl[o] = pr * inv_rows
++            comptime for h in range(FT_HID):
++                var g = Float32(0)
++                if act[h] > Float32(0):
++                    comptime for o in range(FT_OUT):
++                        g += dl[o] * wsh[FT_OFF_W2 + o * FT_HID + h]
++                dh[h] = g
++            if want_dx != Int32(0):
++                comptime for i in range(FT_IN):
++                    var d = Float32(0)
++                    comptime for h in range(FT_HID):
++                        d += dh[h] * wsh[h * FT_IN + i]
++                    dx.unsafe_store(r * FT_IN + i, d)
++    if grads:
++        # an out-of-range row stages zeros, so the fold reads a full tile
++        comptime for i in range(FT_IN):
++            s_x[tid * FT_IN + i] = xr[i]
++        comptime for h in range(FT_HID):
++            s_act[tid * FT_HID + h] = act[h]
++            s_dh[tid * FT_HID + h] = dh[h]
++        comptime for o in range(FT_OUT):
++            s_dl[tid * FT_OUT + o] = dl[o]
++        s_nll[tid] = nll
++    barrier()
++    if not grads:
++        return
++    var base = Int(block_idx.x) * FT_SLOT
++    var cell = tid
++    while cell < FT_SLOT:
++        var acc = Float32(0)
++        if cell < FT_OFF_B1:
++            var h = cell // FT_IN
++            var i = cell - h * FT_IN
++            for rr in range(MLP_FT_ROWS):
++                acc += s_dh[rr * FT_HID + h] * s_x[rr * FT_IN + i]
++        elif cell < FT_OFF_W2:
++            var h = cell - FT_OFF_B1
++            for rr in range(MLP_FT_ROWS):
++                acc += s_dh[rr * FT_HID + h]
++        elif cell < FT_OFF_B2:
++            var c = cell - FT_OFF_W2
++            var o = c // FT_HID
++            var h = c - o * FT_HID
++            for rr in range(MLP_FT_ROWS):
++                acc += s_dl[rr * FT_OUT + o] * s_act[rr * FT_HID + h]
++        elif cell < FT_TOTAL:
++            var o = cell - FT_OFF_B2
++            for rr in range(MLP_FT_ROWS):
++                acc += s_dl[rr * FT_OUT + o]
++        else:
++            for rr in range(MLP_FT_ROWS):
++                acc += s_nll[rr]
++        slots.unsafe_store(base + cell, acc)
++        cell += MLP_FT_ROWS
++
++
++def mlp_fold_adam_kernel(
++    slots: FP,
++    blocks_in: Int32,
++    g_out: FP,
++    loss_out: FP,
++    p: FP,
++    m_state: FP,
++    v_state: FP,
++    do_update: Int32,
++    beta1: Float32,
++    beta2: Float32,
++    eps: Float32,
++    c1: Float32,
++    c2: Float32,
++    step_size: Float32,
++    rt_bc2: Float32,
++    decay_mul: Float32,
++):
++    """Cell `i`: the gradient as the sum of the block slots (the loss for
++    cell 195), then torch's AdamW on that cell when `do_update`:
++    p *= 1 - lr wd; m = b1 m + (1 - b1) g; v = b2 v + (1 - b2) g^2;
++    p -= (lr / bc1) * m / (sqrt(v) / sqrt(bc2) + eps). The same seams the
++    IDENTICAL kernel spells (`training/checks/optimizer.mojo`), unpinned."""
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i >= FT_SLOT:
++        return
++    var blocks = Int(blocks_in)
++    var g = Float32(0)
++    for b in range(blocks):
++        g += slots.unsafe_load(b * FT_SLOT + i)
++    if i == FT_TOTAL:
++        loss_out.unsafe_store(0, g)
++        return
++    g_out.unsafe_store(i, g)
++    if do_update == Int32(0):
++        return
++    var pv = p.unsafe_load(i) * decay_mul
++    var mv = beta1 * m_state.unsafe_load(i) + c1 * g
++    var vv = beta2 * v_state.unsafe_load(i) + c2 * (g * g)
++    var dn = sqrt(vv) / rt_bc2 + eps
++    pv = pv - step_size * (mv / dn)
++    p.unsafe_store(i, pv)
++    m_state.unsafe_store(i, mv)
++    v_state.unsafe_store(i, vv)
++
++
++def mlp_copy_kernel(dst: FP, src: FP, n_in: Int32):
++    """`dst[i] = src[i]` (the session's shadow and its restore)."""
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i < Int(n_in):
++        dst.unsafe_store(i, src.unsafe_load(i))
++
++
++@fieldwise_init
++struct _AdamScalars(Copyable, Movable):
++    var c1: Float32
++    var c2: Float32
++    var step_size: Float32
++    var rt_bc2: Float32
++    var decay_mul: Float32
++
++
++def _pow_f32(base: Float32, e_in: Int) -> Float32:
++    var acc = Float32(1)
++    var b = base
++    var e = e_in
++    while e > 0:
++        if (e & 1) != 0:
++            acc = acc * b
++        b = b * b
++        e = e >> 1
++    return acc
++
++
++def _adam_scalars(
++    t: Int, lr: Float32, beta1: Float32, beta2: Float32, weight_decay: Float32
++) -> _AdamScalars:
++    """Contract 7.1's host scalars (`step_scalars`), unpinned."""
++    var bc1 = Float32(1) - _pow_f32(beta1, t)
++    var bc2 = Float32(1) - _pow_f32(beta2, t)
++    return _AdamScalars(
++        Float32(1) - beta1, Float32(1) - beta2, lr / bc1, sqrt(bc2),
++        Float32(1) - lr * weight_decay,
++    )
++
++
++def _blocks_for(rows: Int) -> Int:
++    return (rows + MLP_FT_ROWS - 1) // MLP_FT_ROWS
++
++
++def _launch_fused(
++    ctx: DeviceContext, x: FP, y: IP, p: FP, logits: FP, dx: FP, slots: FP,
++    rows: Int, want_dx: Int, want_grads: Int,
++) raises:
++    ctx.enqueue_function[mlp_fused_kernel](
++        x, y, p, logits, dx, slots, Int32(rows), Float32(1) / Float32(rows),
++        Int32(want_dx), Int32(want_grads),
++        grid_dim=(_blocks_for(rows), 1, 1), block_dim=(MLP_FT_ROWS, 1, 1),
++    )
++
++
++def _launch_fold_adam(
++    ctx: DeviceContext, slots: FP, blocks: Int, g: FP, loss: FP, p: FP, m: FP, v: FP,
++    do_update: Int, sc: _AdamScalars, beta1: Float32, beta2: Float32, eps: Float32,
++) raises:
++    ctx.enqueue_function[mlp_fold_adam_kernel](
++        slots, Int32(blocks), g, loss, p, m, v, Int32(do_update),
++        beta1, beta2, eps, sc.c1, sc.c2, sc.step_size, sc.rt_bc2, sc.decay_mul,
++        grid_dim=((FT_SLOT + FT_FOLD_TPB - 1) // FT_FOLD_TPB, 1, 1),
++        block_dim=(FT_FOLD_TPB, 1, 1),
++    )
++
++
++def mlp_flag_clear_kernel(flag: IP):
++    """`flag[0] = 0` (the resident step's nonfinite word)."""
++    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
++        flag.unsafe_store(0, Int32(0))
++
++
++def mlp_nonfinite_kernel(flag: IP, src: FP, n_in: Int32):
++    """`flag[0] = 1` when any of `src[0:n]` is nonfinite (every writer
++    stores the same 1, so the race is benign)."""
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i < Int(n_in) and not isfinite(src.unsafe_load(i)):
++        flag.unsafe_store(0, Int32(1))
++
++
++def _launch_nonfinite(ctx: DeviceContext, flag: IP, src: FP, n: Int) raises:
++    ctx.enqueue_function[mlp_nonfinite_kernel](
++        flag, src, Int32(n),
++        grid_dim=((n + FT_FOLD_TPB - 1) // FT_FOLD_TPB, 1, 1), block_dim=(FT_FOLD_TPB, 1, 1),
++    )
++
++
++def _launch_copy(ctx: DeviceContext, dst: FP, src: FP, n: Int) raises:
++    ctx.enqueue_function[mlp_copy_kernel](
++        dst, src, Int32(n),
++        grid_dim=((n + FT_FOLD_TPB - 1) // FT_FOLD_TPB, 1, 1), block_dim=(FT_FOLD_TPB, 1, 1),
++    )
++
++
++def _finite_or_raise(values: MutPointer[Float32, MutUntrackedOrigin], count: Int) raises:
++    for i in range(count):
++        if not isfinite(values.unsafe_load(i)):
++            raise Error("small MLP operation has nonfinite input or output")
++
++
++# ---------------------------------------------------------------------------
++# MOJOLEARN_AFN_MLP_FUSED_STEP: the one-call step, every buffer per call.
++# ---------------------------------------------------------------------------
++
++
++def mlp_fast_step_host(
++    ctx: DeviceContext,
++    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    y_ptr: MutPointer[Int32, MutUntrackedOrigin],
++    w1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    b1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    w2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    b2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    m_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    v_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    flags_ptr: MutPointer[Int32, MutUntrackedOrigin],
++    loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    logits_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    dw1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    db1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    dw2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    db2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    dx_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    info_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    rows: Int,
++    mode: Int,
++    t: Int,
++    lr: Float32,
++    beta1: Float32,
++    beta2: Float32,
++    eps: Float32,
++    weight_decay: Float32,
++    want_input_grad: Int,
++) raises -> Int:
++    """`mlp_train_step_host`'s contract (same arguments, same modes, same
++    outputs, the refusals already raised by the caller) as two launches
++    and one wait. Returns `rows * 3`."""
++    comptime if not MLP_FUSED_STEP:
++        raise Error("mlp_fast_step_host: compiled without MOJOLEARN_AFN_MLP_FUSED_STEP")
++    else:
++        var train = mode == 2
++        var grads = mode != 0
++        var blocks = _blocks_for(rows)
++        var dx_n = rows * FT_IN if want_input_grad != 0 else 1
++        # the arena: [x | p | g | m | v | logits | dx | loss | slots]
++        var off_x = 0
++        var off_p = off_x + rows * FT_IN
++        var off_g = off_p + FT_TOTAL
++        var off_m = off_g + FT_TOTAL
++        var off_v = off_m + FT_TOTAL
++        var off_lg = off_v + FT_TOTAL
++        var off_dx = off_lg + rows * FT_OUT
++        var off_loss = off_dx + dx_n
++        var off_slots = off_loss + 1
++        var total = off_slots + blocks * FT_SLOT
++        var arena = ctx.enqueue_create_buffer[DType.float32](total)
++        var y_d = ctx.enqueue_create_buffer[DType.int32](rows)
++        var x_v = arena.create_sub_buffer[DType.float32](off_x, rows * FT_IN)
++        var w1_v = arena.create_sub_buffer[DType.float32](off_p, FT_W1)
++        var b1_v = arena.create_sub_buffer[DType.float32](off_p + FT_OFF_B1, FT_HID)
++        var w2_v = arena.create_sub_buffer[DType.float32](off_p + FT_OFF_W2, FT_OUT * FT_HID)
++        var b2_v = arena.create_sub_buffer[DType.float32](off_p + FT_OFF_B2, FT_OUT)
++        var dw1_v = arena.create_sub_buffer[DType.float32](off_g, FT_W1)
++        var db1_v = arena.create_sub_buffer[DType.float32](off_g + FT_OFF_B1, FT_HID)
++        var dw2_v = arena.create_sub_buffer[DType.float32](off_g + FT_OFF_W2, FT_OUT * FT_HID)
++        var db2_v = arena.create_sub_buffer[DType.float32](off_g + FT_OFF_B2, FT_OUT)
++        var m_v = arena.create_sub_buffer[DType.float32](off_m, FT_TOTAL)
++        var v_v = arena.create_sub_buffer[DType.float32](off_v, FT_TOTAL)
++        var lg_v = arena.create_sub_buffer[DType.float32](off_lg, rows * FT_OUT)
++        var dx_v = arena.create_sub_buffer[DType.float32](off_dx, dx_n)
++        var loss_v = arena.create_sub_buffer[DType.float32](off_loss, 1)
++        ctx.enqueue_copy(dst_buf=x_v, src_ptr=x_ptr)
++        ctx.enqueue_copy(dst_buf=y_d, src_ptr=y_ptr)
++        ctx.enqueue_copy(dst_buf=w1_v, src_ptr=w1_ptr)
++        ctx.enqueue_copy(dst_buf=b1_v, src_ptr=b1_ptr)
++        ctx.enqueue_copy(dst_buf=w2_v, src_ptr=w2_ptr)
++        ctx.enqueue_copy(dst_buf=b2_v, src_ptr=b2_ptr)
++        if train:
++            ctx.enqueue_copy(dst_buf=m_v, src_ptr=m_ptr)
++            ctx.enqueue_copy(dst_buf=v_v, src_ptr=v_ptr)
++        var base = _fp(arena)
++        _launch_fused(
++            ctx, base + off_x, _ip(y_d), base + off_p, base + off_lg, base + off_dx,
++            base + off_slots, rows, want_input_grad, 1 if grads else 0,
++        )
++        if grads:
++            var sc = _adam_scalars(t if train else 1, lr, beta1, beta2, weight_decay)
++            _launch_fold_adam(
++                ctx, base + off_slots, blocks, base + off_g, base + off_loss,
++                base + off_p, base + off_m, base + off_v, 1 if train else 0, sc,
++                beta1, beta2, eps,
++            )
++        # cpu2-l11-neural (2026-10-04): the refusal of a non-finite logit,
++        # loss, gradient or dx is a device scan here, before any result or
++        # state is downloaded; the Python trainer no longer walks them.
++        if device_first_nonfinite(ctx, lg_v, rows * FT_OUT) >= 0:
++            raise Error("small MLP operation has nonfinite input or output")
++        if grads:
++            var g_all = arena.create_sub_buffer[DType.float32](off_g, FT_TOTAL)
++            var bad_g = device_first_nonfinite(ctx, g_all, FT_TOTAL)
++            _ = g_all^
++            if bad_g >= 0 or device_first_nonfinite(ctx, loss_v, 1) >= 0:
++                raise Error("small MLP operation has nonfinite input or output")
++            if want_input_grad != 0 and device_first_nonfinite(ctx, dx_v, dx_n) >= 0:
++                raise Error("small MLP operation has nonfinite input or output")
++        ctx.enqueue_copy(dst_ptr=logits_ptr, src_buf=lg_v)
++        if grads:
++            ctx.enqueue_copy(dst_ptr=loss_ptr, src_buf=loss_v)
++            ctx.enqueue_copy(dst_ptr=dw1_ptr, src_buf=dw1_v)
++            ctx.enqueue_copy(dst_ptr=db1_ptr, src_buf=db1_v)
++            ctx.enqueue_copy(dst_ptr=dw2_ptr, src_buf=dw2_v)
++            ctx.enqueue_copy(dst_ptr=db2_ptr, src_buf=db2_v)
++            if want_input_grad != 0:
++                ctx.enqueue_copy(dst_ptr=dx_ptr, src_buf=dx_v)
++        if train:
++            ctx.enqueue_copy(dst_ptr=w1_ptr, src_buf=w1_v)
++            ctx.enqueue_copy(dst_ptr=b1_ptr, src_buf=b1_v)
++            ctx.enqueue_copy(dst_ptr=w2_ptr, src_buf=w2_v)
++            ctx.enqueue_copy(dst_ptr=b2_ptr, src_buf=b2_v)
++            ctx.enqueue_copy(dst_ptr=m_ptr, src_buf=m_v)
++            ctx.enqueue_copy(dst_ptr=v_ptr, src_buf=v_v)
++        ctx.synchronize()
++        info_ptr.unsafe_store(0, Float32(0))
++        info_ptr.unsafe_store(1, Float32(0))
++        info_ptr.unsafe_store(2, Float32(0))
++        for j in range(4):
++            var flag = Int32(0)
++            if flags_ptr.unsafe_load(j) != Int32(0):
++                flag = Int32(1)
++            flags_ptr.unsafe_store(j, flag)
++        # Explicit ownership after the wait (the rule of mlp_ops.mojo).
++        _ = x_v^
++        _ = w1_v^
++        _ = b1_v^
++        _ = w2_v^
++        _ = b2_v^
++        _ = dw1_v^
++        _ = db1_v^
++        _ = dw2_v^
++        _ = db2_v^
++        _ = m_v^
++        _ = v_v^
++        _ = lg_v^
++        _ = dx_v^
++        _ = loss_v^
++        _ = y_d^
++        _ = arena^
++        _finite_or_raise(logits_ptr, rows * FT_OUT)
++        if grads:
++            if not isfinite(loss_ptr.unsafe_load(0)):
++                raise Error("small MLP train step: loss is not finite")
++            _finite_or_raise(dw1_ptr, FT_W1)
++            _finite_or_raise(db1_ptr, FT_HID)
++            _finite_or_raise(dw2_ptr, FT_OUT * FT_HID)
++            _finite_or_raise(db2_ptr, FT_OUT)
++            if want_input_grad != 0:
++                _finite_or_raise(dx_ptr, rows * FT_IN)
++        return rows * FT_OUT
++
++
++# ---------------------------------------------------------------------------
++# MOJOLEARN_AFN_MLP_RESIDENT / _MULTISTEP: the session.
++# ---------------------------------------------------------------------------
++
++#: the resident arena: [p | g | m | v | shadow(p, g, m, v) | losses(cap_k) |
++#: slots | x(cap_rows * 8) | logits(cap_rows * 3) | dx(cap_rows * 8)]
++comptime RS_OFF_P = 0
++comptime RS_OFF_G = FT_TOTAL
++comptime RS_OFF_M = 2 * FT_TOTAL
++comptime RS_OFF_V = 3 * FT_TOTAL
++comptime RS_OFF_SHADOW = 4 * FT_TOTAL
++comptime RS_STATE = 4 * FT_TOTAL
++comptime RS_OFF_LOSS = RS_OFF_SHADOW + RS_STATE
++
++
++struct _MlpSession(Defaultable, Movable):
++    var arena: List[DeviceBuffer[DType.float32]]
++    var ybuf: List[DeviceBuffer[DType.int32]]
++    var cap_rows: List[Int]
++    var cap_k: List[Int]
++    var live: List[Bool]
++
++    def __init__(out self):
++        self.arena = List[DeviceBuffer[DType.float32]]()
++        self.ybuf = List[DeviceBuffer[DType.int32]]()
++        self.cap_rows = List[Int]()
++        self.cap_k = List[Int]()
++        self.live = List[Bool]()
++
++
++comptime _MLP_SESSIONS = _Global[
++    StorageType=_MlpSession, name="MojoAfnMlpSessionsFast", init_fn=_MlpSession.__init__
++]
++
++
++def _rs_offsets(cap_rows: Int, cap_k: Int) -> List[Int]:
++    """[slots, x, logits, dx, total] offsets for a session's capacity."""
++    var off_slots = RS_OFF_LOSS + cap_k
++    var off_x = off_slots + MLP_FT_MAX_BLOCKS * FT_SLOT
++    var off_lg = off_x + cap_rows * FT_IN
++    var off_dx = off_lg + cap_rows * FT_OUT
++    var total = off_dx + cap_rows * FT_IN
++    var out = List[Int]()
++    out.append(off_slots)
++    out.append(off_x)
++    out.append(off_lg)
++    out.append(off_dx)
++    out.append(total)
++    return out^
++
++
++def _rs_check(h: Int) raises:
++    var s = _MLP_SESSIONS.get_or_create_ptr()
++    if h < 0 or h >= len(s[].live) or not s[].live[h]:
++        raise Error("small MLP resident session: unknown handle " + String(h))
++
++
++def mlp_resident_open_host(
++    ctx: DeviceContext,
++    w1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    b1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    w2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    b2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    m_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    v_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    cap_k: Int,
++) raises -> Int:
++    """Open a session holding the weights and moments; `cap_k` minibatches
++    of up to 256 rows may be stepped per call. Returns the handle."""
++    comptime if not MLP_RESIDENT:
++        raise Error("mlp_resident_open_host: compiled without MOJOLEARN_AFN_MLP_RESIDENT")
++    else:
++        if cap_k < 1:
++            raise Error("small MLP resident session: cap_k must be >= 1")
++        var cap_rows = MLP_FT_MAX_ROWS * cap_k
++        var offs = _rs_offsets(cap_rows, cap_k)
++        var arena = ctx.enqueue_create_buffer[DType.float32](offs[4])
++        # ybuf[cap_rows] is the step's nonfinite flag word.
++        var ybuf = ctx.enqueue_create_buffer[DType.int32](cap_rows + 1)
++        _rs_upload(ctx, arena, w1_ptr, b1_ptr, w2_ptr, b2_ptr, m_ptr, v_ptr)
++        ctx.synchronize()
++        var s = _MLP_SESSIONS.get_or_create_ptr()
++        var h = -1
++        for j in range(len(s[].live)):
++            if not s[].live[j] and h < 0:
++                h = j
++        if h < 0:
++            s[].arena.append(arena^)
++            s[].ybuf.append(ybuf^)
++            s[].cap_rows.append(cap_rows)
++            s[].cap_k.append(cap_k)
++            s[].live.append(True)
++            h = len(s[].live) - 1
++        else:
++            s[].arena[h] = arena^
++            s[].ybuf[h] = ybuf^
++            s[].cap_rows[h] = cap_rows
++            s[].cap_k[h] = cap_k
++            s[].live[h] = True
++        return h
++
++
++def _rs_upload(
++    ctx: DeviceContext,
++    mut arena: DeviceBuffer[DType.float32],
++    w1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    b1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    w2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    b2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    m_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    v_ptr: MutPointer[Float32, MutUntrackedOrigin],
++) raises:
++    var w1_v = arena.create_sub_buffer[DType.float32](RS_OFF_P, FT_W1)
++    var b1_v = arena.create_sub_buffer[DType.float32](RS_OFF_P + FT_OFF_B1, FT_HID)
++    var w2_v = arena.create_sub_buffer[DType.float32](RS_OFF_P + FT_OFF_W2, FT_OUT * FT_HID)
++    var b2_v = arena.create_sub_buffer[DType.float32](RS_OFF_P + FT_OFF_B2, FT_OUT)
++    var m_v = arena.create_sub_buffer[DType.float32](RS_OFF_M, FT_TOTAL)
++    var v_v = arena.create_sub_buffer[DType.float32](RS_OFF_V, FT_TOTAL)
++    ctx.enqueue_copy(dst_buf=w1_v, src_ptr=w1_ptr)
++    ctx.enqueue_copy(dst_buf=b1_v, src_ptr=b1_ptr)
++    ctx.enqueue_copy(dst_buf=w2_v, src_ptr=w2_ptr)
++    ctx.enqueue_copy(dst_buf=b2_v, src_ptr=b2_ptr)
++    ctx.enqueue_copy(dst_buf=m_v, src_ptr=m_ptr)
++    ctx.enqueue_copy(dst_buf=v_v, src_ptr=v_ptr)
++    ctx.synchronize()
++    _ = w1_v^
++    _ = b1_v^
++    _ = w2_v^
++    _ = b2_v^
++    _ = m_v^
++    _ = v_v^
++
++
++def mlp_resident_upload_host(
++    ctx: DeviceContext,
++    h: Int,
++    w1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    b1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    w2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    b2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    m_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    v_ptr: MutPointer[Float32, MutUntrackedOrigin],
++) raises:
++    """Replace the session's weights and moments (`load_state_dict`)."""
++    comptime if not MLP_RESIDENT:
++        raise Error("mlp_resident_upload_host: compiled without MOJOLEARN_AFN_MLP_RESIDENT")
++    else:
++        _rs_check(h)
++        var s = _MLP_SESSIONS.get_or_create_ptr()
++        _rs_upload(ctx, s[].arena[h], w1_ptr, b1_ptr, w2_ptr, b2_ptr, m_ptr, v_ptr)
++
++
++def mlp_resident_registry(h: Int) raises -> DeviceBuffer[DType.float32]:
++    """Session `h`'s arena (a shared reference): the flat registry
++    [w1, b1, w2, b2] at RS_OFF_P, its gradient at RS_OFF_G and the AdamW
++    moments at RS_OFF_M / RS_OFF_V, FT_TOTAL floats each (lane
++    migrate-neural-2: `apply_gradients` steps the session where it is)."""
++    comptime if not MLP_RESIDENT:
++        raise Error("mlp_resident_registry: compiled without MOJOLEARN_AFN_MLP_RESIDENT")
++    else:
++        _rs_check(h)
++        var s = _MLP_SESSIONS.get_or_create_ptr()
++        return s[].arena[h]
++
++
++def mlp_resident_download_host(
++    ctx: DeviceContext,
++    h: Int,
++    w1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    b1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    w2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    b2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    m_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    v_ptr: MutPointer[Float32, MutUntrackedOrigin],
++) raises:
++    """The session's weights and moments to the host (`state_dict`)."""
++    comptime if not MLP_RESIDENT:
++        raise Error("mlp_resident_download_host: compiled without MOJOLEARN_AFN_MLP_RESIDENT")
++    else:
++        _rs_check(h)
++        var s = _MLP_SESSIONS.get_or_create_ptr()
++        var w1_v = s[].arena[h].create_sub_buffer[DType.float32](RS_OFF_P, FT_W1)
++        var b1_v = s[].arena[h].create_sub_buffer[DType.float32](RS_OFF_P + FT_OFF_B1, FT_HID)
++        var w2_v = s[].arena[h].create_sub_buffer[DType.float32](RS_OFF_P + FT_OFF_W2, FT_OUT * FT_HID)
++        var b2_v = s[].arena[h].create_sub_buffer[DType.float32](RS_OFF_P + FT_OFF_B2, FT_OUT)
++        var m_v = s[].arena[h].create_sub_buffer[DType.float32](RS_OFF_M, FT_TOTAL)
++        var v_v = s[].arena[h].create_sub_buffer[DType.float32](RS_OFF_V, FT_TOTAL)
++        ctx.enqueue_copy(dst_ptr=w1_ptr, src_buf=w1_v)
++        ctx.enqueue_copy(dst_ptr=b1_ptr, src_buf=b1_v)
++        ctx.enqueue_copy(dst_ptr=w2_ptr, src_buf=w2_v)
++        ctx.enqueue_copy(dst_ptr=b2_ptr, src_buf=b2_v)
++        ctx.enqueue_copy(dst_ptr=m_ptr, src_buf=m_v)
++        ctx.enqueue_copy(dst_ptr=v_ptr, src_buf=v_v)
++        ctx.synchronize()
++        _ = w1_v^
++        _ = b1_v^
++        _ = w2_v^
++        _ = b2_v^
++        _ = m_v^
++        _ = v_v^
++
++
++def mlp_resident_close_host(ctx: DeviceContext, h: Int) raises:
++    """Release the session's arena (its views are dead after the wait every
++    entry ended with); a one-cell buffer holds the slot."""
++    comptime if not MLP_RESIDENT:
++        raise Error("mlp_resident_close_host: compiled without MOJOLEARN_AFN_MLP_RESIDENT")
++    else:
++        var s = _MLP_SESSIONS.get_or_create_ptr()
++        if h < 0 or h >= len(s[].live) or not s[].live[h]:
++            return
++        s[].live[h] = False
++        s[].arena[h] = ctx.enqueue_create_buffer[DType.float32](1)
++        s[].ybuf[h] = ctx.enqueue_create_buffer[DType.int32](1)
++        s[].cap_rows[h] = 0
++        s[].cap_k[h] = 0
++        ctx.synchronize()
++
++
++def mlp_resident_step_host(
++    ctx: DeviceContext,
++    h: Int,
++    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    y_ptr: MutPointer[Int32, MutUntrackedOrigin],
++    losses_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    logits_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    dw1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    db1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    dw2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    db2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    dx_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    rows: Int,
++    k: Int,
++    mode: Int,
++    t: Int,
++    lr: Float32,
++    beta1: Float32,
++    beta2: Float32,
++    eps: Float32,
++    weight_decay: Float32,
++    want_input_grad: Int,
++) raises -> Int:
++    """`k` steps of `rows` rows each on session `h` (`k > 1` needs
++    MOJOLEARN_AFN_MLP_MULTISTEP): `x` is `k * rows x 8`, `y` is `k * rows`,
++    `losses` receives `k` mean losses, `logits`, the four gradients and
++    `dx` are the LAST step's. `mode` 0 (forward, k must be 1), 1 (grads,
++    k must be 1, the state unchanged) or 2 (train; step `t` is the first
++    step's one-based number). A nonfinite result restores p, m and v from
++    the shadow taken before the first step and raises. Returns
++    `rows * 3`."""
++    comptime if not MLP_RESIDENT:
++        raise Error("mlp_resident_step_host: compiled without MOJOLEARN_AFN_MLP_RESIDENT")
++    else:
++        _rs_check(h)
++        if rows < 1 or rows > MLP_FT_MAX_ROWS:
++            raise Error("small MLP operations require rows 1..256 and cols 1..64")
++        if mode < 0 or mode > 2:
++            raise Error("small MLP train step: mode must be 0 (forward), 1 (grads) or 2 (train)")
++        if k < 1:
++            raise Error("small MLP resident step: k must be >= 1")
++        if k > 1:
++            comptime if not MLP_MULTISTEP:
++                raise Error("small MLP resident step: k > 1 needs -D MOJOLEARN_AFN_MLP_MULTISTEP")
++            if mode != 2:
++                raise Error("small MLP resident step: k > 1 is for mode 2 (train) only")
++        if mode == 2 and t < 1:
++            raise Error("small MLP train step: t is ONE-BASED; the first step of a run is t = 1")
++        if want_input_grad != 0 and want_input_grad != 1:
++            raise Error("small MLP train step: want_input_grad must be 0 or 1")
++        var s = _MLP_SESSIONS.get_or_create_ptr()
++        if k > s[].cap_k[h] or k * rows > s[].cap_rows[h]:
++            raise Error("small MLP resident step: k exceeds the session's capacity")
++        _finite_or_raise(x_ptr, k * rows * FT_IN)
++        if mode != 0:
++            for i in range(k * rows):
++                var yi = Int(y_ptr.unsafe_load(i))
++                if yi < 0 or yi >= FT_OUT:
++                    raise Error("small MLP train step: targets must be classes 0..2")
++        var offs = _rs_offsets(s[].cap_rows[h], s[].cap_k[h])
++        var off_slots = offs[0]
++        var off_x = offs[1]
++        var off_lg = offs[2]
++        var off_dx = offs[3]
++        var train = mode == 2
++        var grads = mode != 0
++        var blocks = _blocks_for(rows)
++        var base = _fp(s[].arena[h])
++        var yb = _ip(s[].ybuf[h])
++        var x_v = s[].arena[h].create_sub_buffer[DType.float32](off_x, k * rows * FT_IN)
++        var y_v = s[].ybuf[h].create_sub_buffer[DType.int32](0, k * rows)
++        var lg_v = s[].arena[h].create_sub_buffer[DType.float32](off_lg, rows * FT_OUT)
++        var dx_n = rows * FT_IN if want_input_grad != 0 else 1
++        var dx_v = s[].arena[h].create_sub_buffer[DType.float32](off_dx, dx_n)
++        var loss_v = s[].arena[h].create_sub_buffer[DType.float32](RS_OFF_LOSS, k)
++        var dw1_v = s[].arena[h].create_sub_buffer[DType.float32](RS_OFF_G, FT_W1)
++        var db1_v = s[].arena[h].create_sub_buffer[DType.float32](RS_OFF_G + FT_OFF_B1, FT_HID)
++        var dw2_v = s[].arena[h].create_sub_buffer[DType.float32](RS_OFF_G + FT_OFF_W2, FT_OUT * FT_HID)
++        var db2_v = s[].arena[h].create_sub_buffer[DType.float32](RS_OFF_G + FT_OFF_B2, FT_OUT)
++        if train:
++            _launch_copy(ctx, base + RS_OFF_SHADOW, base + RS_OFF_P, RS_STATE)
++        ctx.enqueue_copy(dst_buf=x_v, src_ptr=x_ptr)
++        if grads:
++            ctx.enqueue_copy(dst_buf=y_v, src_ptr=y_ptr)
++        for step in range(k):
++            _launch_fused(
++                ctx, base + off_x + step * rows * FT_IN, yb + step * rows, base + RS_OFF_P,
++                base + off_lg, base + off_dx, base + off_slots, rows, want_input_grad,
++                1 if grads else 0,
++            )
++            if grads:
++                var sc = _adam_scalars(t + step if train else 1, lr, beta1, beta2, weight_decay)
++                _launch_fold_adam(
++                    ctx, base + off_slots, blocks, base + RS_OFF_G, base + RS_OFF_LOSS + step,
++                    base + RS_OFF_P, base + RS_OFF_M, base + RS_OFF_V, 1 if train else 0, sc,
++                    beta1, beta2, eps,
++                )
++        # The nonfinite check runs on the device: one flag word comes back.
++        var flag = yb + s[].cap_rows[h]
++        var flag_v = s[].ybuf[h].create_sub_buffer[DType.int32](s[].cap_rows[h], 1)
++        ctx.enqueue_function[mlp_flag_clear_kernel](flag, grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
++        _launch_nonfinite(ctx, flag, base + off_lg, rows * FT_OUT)
++        if grads:
++            _launch_nonfinite(ctx, flag, base + RS_OFF_LOSS, k)
++            _launch_nonfinite(ctx, flag, base + RS_OFF_G, FT_TOTAL)
++            if want_input_grad != 0:
++                _launch_nonfinite(ctx, flag, base + off_dx, rows * FT_IN)
++        var flag_host = List[Int32](length=1, fill=Int32(0))
++        ctx.enqueue_copy(dst_ptr=flag_host.unsafe_ptr(), src_buf=flag_v)
++        ctx.enqueue_copy(dst_ptr=logits_ptr, src_buf=lg_v)
++        if grads:
++            ctx.enqueue_copy(dst_ptr=losses_ptr, src_buf=loss_v)
++            ctx.enqueue_copy(dst_ptr=dw1_ptr, src_buf=dw1_v)
++            ctx.enqueue_copy(dst_ptr=db1_ptr, src_buf=db1_v)
++            ctx.enqueue_copy(dst_ptr=dw2_ptr, src_buf=dw2_v)
++            ctx.enqueue_copy(dst_ptr=db2_ptr, src_buf=db2_v)
++            if want_input_grad != 0:
++                ctx.enqueue_copy(dst_ptr=dx_ptr, src_buf=dx_v)
++        ctx.synchronize()
++        _ = x_v^
++        _ = y_v^
++        _ = lg_v^
++        _ = dx_v^
++        _ = loss_v^
++        _ = dw1_v^
++        _ = db1_v^
++        _ = dw2_v^
++        _ = db2_v^
++        _ = flag_v^
++        var ok = flag_host[0] == 0
++        if not ok:
++            if train:
++                _launch_copy(ctx, base + RS_OFF_P, base + RS_OFF_SHADOW, RS_STATE)
++                ctx.synchronize()
++            raise Error("small MLP operation has nonfinite input or output")
++        return rows * FT_OUT
+diff --git a/training/mlp_ops.mojo b/training/mlp_ops.mojo
+index 80ae31a9dd..e703bf4376 100644
+--- a/training/mlp_ops.mojo
++++ b/training/mlp_ops.mojo
+@@ -5,19 +5,88 @@ C-row-major inputs; rows 1..256 and columns 1..64. Bias addition and
+ ascending row sums use checks.numerics' pinned FMA with multiplier one,
+ flushing operands/results at each seam. No atomics or vendor reductions.
+ ReLU returns positive values, otherwise +0; its derivative is zero at zero.
++This is new surface arithmetic awaiting root-run numerical qualification.
+ Host pointers are borrowed for a synchronous call and never retained.
+ 
+-These are the training binding's per-operation primitives
+-(`mlp_bias_activation`, `mlp_relu_backward`, `mlp_sum_rows`) and the cell
+-kernel `mlp_sessions` launches. `SmallMLPTrainer` itself runs as one
+-captured program on the executor (autograd/small_mlp_program.mojo).
++`mlp_train_step_host` (lane/apple-mlp-fused, 2026-09-30) is the whole
++training step as ONE call: the same GEMMs, the same `_mlp_kernel` launches,
++the same cross-entropy and the same optimizer step the Python trainer made
++one binding call at a time, on the same operands in the same order, with the
++intermediates kept on the device. Same cells, same order, same bits; what
++changes is the count of host round trips a step pays (about forty
++synchronizes across twelve calls before, seven in one call now), which is
++the whole cost of this cell on a Metal box.
+ """
+-# TOMBSTONE: mlp_train_step_host, its step GEMM dispatch (MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF), the tape rules autograd/rules_small_mlp.mojo and the Apple FAST fused step training/mlp_fast.mojo (superseded by SmallMLPTrainer's captured program, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
+-# Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
+ from std.gpu import block_dim, block_idx, thread_idx
++from std.sys.compile import is_defined
+ from std.math import isfinite
+-from max.gpu.host import DeviceContext
+-from checks.numerics import ftz, identical_mul_add
++from max.gpu.host import DeviceBuffer, DeviceContext
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
++from gemm.checks.gemm_identical import _fast_vendor_gemm
++from gemm.neural_dispatch import (
++    identical_gemm_into,
++    identical_gemm_workspace_max_floats,
++    neural_model_leaf_into,
++    NEURAL_GEMM_EXPERIMENT_ENABLED,
++)
++from gemm.contract import OP_NT
++from gemm.experiments.neural_switches import ROLE_PROJECTION, ROLE_WGRAD
++from gemm.experiments.neural_profile import NEURAL_EXPERIMENTS_ALLOWED
++from training.checks.loss_contract import CeConfig, IGNORE_INDEX_DEFAULT, REDUCTION_MEAN
++from core.device_scan import device_first_nonfinite
++from training.checks.optimizer import (
++    OPT_RECORD_INTERMEDIATES,
++    SAB_CHUNKS,
++    identical_optimizer_step,
++    identical_optimizer_workspace_floats,
++)
++from training.checks.optimizer_contract import OPT_ADAMW, OptimizerConfig
++from training.estimator import (
++    _refuse_hyperparameters,
++    identical_ce_admit_call,
++    identical_ce_loss_resident,
++)
++#: lane afn-mlp (2026-10-03): the Apple FAST fused step, compiled only under
++#: FAST + Apple + `-D MOJOLEARN_AFN_MLP_FUSED_STEP` (or `_ALL`); every other
++#: build takes the path below unchanged (training/mlp_fast.mojo).
++from training.mlp_fast import MLP_FUSED_STEP, mlp_fast_step_host
++#: lane ag-smallmlp-tape (2026-10-19): the step's backward runs on the
++#: autograd tape (autograd/rules_small_mlp.mojo; the same kernels on the
++#: same buffers, so the same bits as the hand chain it replaced).
++# TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by 3cd0063d7; code recoverable at 3cd0063d7^.
++# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
++from sequence.ops import FP
++from autograd.rules_small_mlp import (
++    SMALL_MLP_REMOVED_DEFINES_OK,
++    SmallMlpBuffer,
++    SmallMlpKernels,
++    SmallMlpRecordExec,
++    small_mlp_backward_autograd,
++    small_mlp_buffer,
++)
++
++#: The public small MLP's fixed architecture, 8 -> 16 -> 3, and the flat
++#: parameter layout `[w1 (16 x 8), b1 (16), w2 (3 x 16), b2 (3)]` the
++#: optimizer steps over (`python/mojolearn/_mlp_impl.py::_SHAPES`, in that
++#: order; the offsets are the registry `_offsets_for` builds from it).
++comptime MLP_IN = 8
++comptime MLP_HID = 16
++comptime MLP_OUT = 3
++comptime MLP_W1 = MLP_HID * MLP_IN
++comptime MLP_B1 = MLP_HID
++comptime MLP_W2 = MLP_OUT * MLP_HID
++comptime MLP_B2 = MLP_OUT
++comptime MLP_OFF_B1 = MLP_W1
++comptime MLP_OFF_W2 = MLP_W1 + MLP_B1
++comptime MLP_OFF_B2 = MLP_OFF_W2 + MLP_W2
++comptime MLP_TOTAL = MLP_OFF_B2 + MLP_B2
++comptime MLP_TENSORS = 4
++#: `mlp_train_step_host` modes: the forward alone (logits), the forward and
++#: the backward (loss, logits, the four gradients), or the whole step (the
++#: AdamW update applied to the weights, `m`, `v` and the flags in place).
++comptime MLP_STEP_FORWARD = 0
++comptime MLP_STEP_GRADS = 1
++comptime MLP_STEP_TRAIN = 2
+ 
+ 
+ def mlp_validate_shape(rows: Int, cols: Int) raises:
+@@ -37,6 +106,37 @@ def _add(left: Float32, right: Float32) -> Float32:
+     return ftz(identical_mul_add(Float32(1), ftz(left), ftz(right)))
+ 
+ 
++# TOMBSTONE (lane grid-act-5, 2026-10-08): neural_gemm_epilogue=mlp (NN06,
++# -D MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE bit 1: the forward's GEMM + bias (+
++# ReLU) as one thread-per-cell kernel, _mlp_gemm_epilogue_kernel /
++# _mlp_fused_projection) was DELETED as an IDENTICAL grid ge123e6f9 loser:
++# mlp-train-step NV 2.0 -> 3.8 ms / AMD 3.5 -> 3.4 ms (1.367x combined
++# SLOWER), same bits. Recoverable at main 8ed94710a; the guard refuses bit 1.
++
++# gemm_leaf=neural128 for THE MLP TRAINING STEP ONLY (lane grid-act-5,
++# 2026-10-08; IDENTICAL grid ge123e6f9, docs/apple-fast/EXPERIMENTS.md). The
++# build-wide arm (-D MOJOLEARN_IDN_GEMM_LEAF=1) was a SPLIT: mlp-train-step
++# FASTER, NV 2.0 -> 1.7 ms / AMD 3.5 -> 3.1 ms (0.886x combined), but every
++# other neural model SLOWER: lm-forward 7.2x, lm-train-step 13.6x,
++# mamba1/2/3-forward 3.0/3.8/5.2x, samba-train-step 1.73x,
++# transformer-forward 7.6x. Output hashes equal to the incumbent on both
++# vendors (no bits change: at leaf 128 the profile's partition is the
++# contract's, contract_leaf_size). So the choice is keyed on the MODEL KIND
++# (this file's GEMMs are the small MLP's and nobody else's), never on a
++# dimension: every MLP step product takes the NN03 profile body at leaf 128
++# through gemm.neural_dispatch.neural_model_leaf_into, the same body the
++# measured arm ran, and every other neural model keeps the incumbent.
++# -D MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF restores the incumbent dispatch here.
++# Any build-wide neural GEMM arm (gemm_leaf=neural128|neural256, a schedule,
++# chains, Ozaki) routes the MLP through identical_gemm_into like every other
++# caller, so the grid's gemm_leaf arms keep their meaning.
++comptime MLP_GEMM_LEAF128 = (
++    NEURAL_EXPERIMENTS_ALLOWED
++    and not NEURAL_GEMM_EXPERIMENT_ENABLED
++    and not is_defined["MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF"]()
++)
++
++
+ def _mlp_kernel(
+     source: MutPointer[Float32, MutAnyOrigin],
+     other: MutPointer[Float32, MutAnyOrigin],
+@@ -165,3 +265,421 @@ def _launch_mlp[
+         source, other, output, Int32(rows), Int32(cols), Int32(operation),
+         grid_dim=((out_count + 127) // 128, 1, 1), block_dim=(128, 1, 1),
+     )
++
++
++def _gemm[ROLE: Int = ROLE_PROJECTION](
++    ctx: DeviceContext,
++    mut c: DeviceBuffer[DType.float32],
++    mut a: DeviceBuffer[DType.float32],
++    mut b: DeviceBuffer[DType.float32],
++    mut ws: DeviceBuffer[DType.float32],
++    m: Int, n: Int, k: Int, op: Int,
++) raises:
++    """`identical_gemm`'s dispatch (the linalg binding's `matmul`, which the
++    per-operation trainer calls) without its own wait: under FAST the vendor
++    kernel first (DEVIATION 1876), else the profile's plan for the shape
++    with the caller's workspace, which `identical_gemm_workspace_max_floats`
++    sized for every shape this file runs. The caller waits once at the end;
++    the buffers are the caller's and outlive that wait."""
++    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
++        if _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
++            return
++    comptime if MLP_GEMM_LEAF128:
++        # The MLP step's own leaf (MLP_GEMM_LEAF128 above); ROLE is only a
++        # schedule-arm mask and no schedule arm is on in this build.
++        neural_model_leaf_into[128](ctx, c, a, b, m, n, k, op)
++        return
++    identical_gemm_into[ROLE=ROLE](ctx, c, a, b, ws, m, n, k, op)
++
++
++struct _MlpStepKernels(SmallMlpKernels):
++    """The train step's own `_gemm` (its dispatch, its one workspace) and
++    `_launch_mlp`, on its context, for the tape's rules
++    (autograd/rules_small_mlp.mojo)."""
++
++    var ctx: DeviceContext
++    var ws: SmallMlpBuffer
++
++    def __init__(out self, ctx: DeviceContext, ws: SmallMlpBuffer):
++        self.ctx = ctx.copy()
++        self.ws = ws
++
++    def gemm(
++        self, mut c: DeviceBuffer[DType.float32], mut a: DeviceBuffer[DType.float32],
++        mut b: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, op: Int, wgrad: Bool,
++    ) raises:
++        if wgrad:
++            _gemm[ROLE_WGRAD](self.ctx, c, a, b, self.ws[], m, n, k, op)
++        else:
++            _gemm(self.ctx, c, a, b, self.ws[], m, n, k, op)
++
++    def cells(self, source: FP, other: FP, output: FP, rows: Int, cols: Int, operation: Int) raises:
++        _launch_mlp(
++            self.ctx, source.unsafe_origin_cast[MutAnyOrigin](), other.unsafe_origin_cast[MutAnyOrigin](),
++            output.unsafe_origin_cast[MutAnyOrigin](), rows, cols, operation,
++        )
++
++
++def _max_ws(mut ws_n: Int, m: Int, n: Int, k: Int):
++    comptime if MLP_GEMM_LEAF128:
++        # The profile body reads no workspace (the measured arm sized it 1).
++        return
++    var w = identical_gemm_workspace_max_floats(m, n, k)
++    if w > ws_n:
++        ws_n = w
++
++
++def mlp_train_step_host(
++    ctx: DeviceContext,
++    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    y_ptr: MutPointer[Int32, MutUntrackedOrigin],
++    w1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    b1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    w2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    b2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    m_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    v_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    flags_ptr: MutPointer[Int32, MutUntrackedOrigin],
++    loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    logits_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    dw1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    db1_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    dw2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    db2_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    dx_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    info_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    rows: Int,
++    mode: Int,
++    t: Int,
++    lr: Float32,
++    beta1: Float32,
++    beta2: Float32,
++    eps: Float32,
++    weight_decay: Float32,
++    want_input_grad: Int,
++) raises -> Int:
++    """The small MLP's forward, backward and AdamW step as ONE device call
++    (lane/apple-mlp-fused, 2026-09-30). Returns `rows * 3`, the logits
++    written.
++
++    THE SAME CALLS THE PYTHON TRAINER MADE, IN THE SAME ORDER. Each line
++    below names the `SmallMLPTrainer` call it stands for; the kernels, the
++    operands, the shapes and the profile dispatch (`choose_gemm_plan` on the
++    same (m, n, k)) are the per-operation path's, so every cell is the same
++    arithmetic in the same order and the bits do not move. What moves is
++    the transport: the twelve calls paid about forty synchronizes and about
++    sixty buffer allocations a step; this one pays seven waits (the logits
++    download for the loss's host refusal scan, the loss's own two, its
++    transport out, the optimizer's refusal read-back and its wait, and the
++    final one) and about forty allocations. On a Metal box, where a host
++    round trip is a few hundred microseconds, that is the whole step.
++
++        forward     pre1 = x . w1^T (OP_NT), act = relu(pre1 + b1),
++                    pre2 = act . w2^T (OP_NT), logits = pre2 + b2
++        loss        mean cross-entropy over classes 0..2 with its gradient
++                    (`identical_ce_loss_resident`, after `ce_refuse_inputs`'s
++                    refusals, the logits' non-finite scan on the device)
++        backward    dw2 = dlogits^T . act (OP_TN), db2 = sum_rows(dlogits),
++                    incoming = dlogits . w2 (OP_NN), dhidden = relu'(act)
++                    incoming, dw1 = dhidden^T . x (OP_TN), db1 =
++                    sum_rows(dhidden), and dx = dhidden . w1 (OP_NN) when
++                    `want_input_grad`
++        step        `identical_optimizer_step` (AdamW, no clip) over the
++                    flat `[w1, b1, w2, b2]` registry, the weights, `m`, `v`
++                    and the flags written back in place
++
++    The backward runs on the autograd tape (autograd/rules_small_mlp.mojo):
++    the six calls above as recorded nodes, launched in that order.
++
++    `mode` is `MLP_STEP_FORWARD` (the logits alone; `y` is unread),
++    `MLP_STEP_GRADS` (the loss, the logits and the four gradients; the
++    weights are read only) or `MLP_STEP_TRAIN` (all of it; `t` is the
++    optimizer's ONE-BASED step number, the first step of a run is 1).
++
++    THE REFUSALS the per-operation path raised are raised here: a shape
++    outside the bound, a non-finite input, weight, state or output, a target
++    outside 0..2, a non-finite loss, a non-finite hyperparameter (the
++    optimizer's own `_refuse_hyperparameters`), and the certified entries'
++    own (contract 8a on the device). The wording differs; the outcome, an
++    error before any state is published, is the same, and the Python
++    trainer re-validates the state it receives either way.
++
++    THE BUFFERS. `x` is `rows x 8`, `y` is `rows` int32 classes, the four
++    weights are `16 x 8`, `16`, `3 x 16`, `3` (read, and WRITTEN IN PLACE
++    under `MLP_STEP_TRAIN`), `m` and `v` are 195 each (read and written
++    under `MLP_STEP_TRAIN`; may be any one-element buffer otherwise), the
++    flags are 4 int32 (Adam leaves them unchanged, written back as read),
++    `loss` is one float, `logits` is `rows x 3`, the gradients are the
++    weights' shapes, `dx` is `rows x 8` when `want_input_grad` (else any
++    one-element buffer), `info` is the optimizer's three floats, all +0.0
++    here because the clip never runs.
++    """
++    comptime assert SMALL_MLP_REMOVED_DEFINES_OK, "retired small MLP hand-chain define"
++    mlp_validate_shape(rows, MLP_HID)
++    if mode < MLP_STEP_FORWARD or mode > MLP_STEP_TRAIN:
++        raise Error("small MLP train step: mode must be 0 (forward), 1 (grads) or 2 (train)")
++    if want_input_grad != 0 and want_input_grad != 1:
++        raise Error("small MLP train step: want_input_grad must be 0 or 1")
++    if mode == MLP_STEP_TRAIN and t < 1:
++        raise Error("small MLP train step: t is ONE-BASED; the first step of a run is t = 1")
++    _finite(x_ptr, rows * MLP_IN)
++    _finite(w1_ptr, MLP_W1)
++    _finite(b1_ptr, MLP_B1)
++    _finite(w2_ptr, MLP_W2)
++    _finite(b2_ptr, MLP_B2)
++    if mode != MLP_STEP_FORWARD:
++        for i in range(rows):
++            var yi = Int(y_ptr.unsafe_load(i))
++            if yi < 0 or yi >= MLP_OUT:
++                raise Error("small MLP train step: targets must be classes 0..2")
++    var cfg_opt = OptimizerConfig(
++        OPT_ADAMW, lr, beta1, beta2, eps, weight_decay,
++        Float32(0.0), Float32(0.0), False, Float32(0.0),
++    )
++    if mode == MLP_STEP_TRAIN:
++        _refuse_hyperparameters(cfg_opt)
++        _finite(m_ptr, MLP_TOTAL)
++        _finite(v_ptr, MLP_TOTAL)
++    comptime if MLP_FUSED_STEP:
++        # lane afn-mlp: the refusals above raised; the step itself is two
++        # launches and one wait (training/mlp_fast.mojo).
++        return mlp_fast_step_host(
++            ctx, x_ptr, y_ptr, w1_ptr, b1_ptr, w2_ptr, b2_ptr, m_ptr, v_ptr, flags_ptr,
++            loss_ptr, logits_ptr, dw1_ptr, db1_ptr, dw2_ptr, db2_ptr, dx_ptr, info_ptr,
++            rows, mode, t, lr, beta1, beta2, eps, weight_decay, want_input_grad,
++        )
++
++    # One workspace for every GEMM of the step: the max of the certified
++    # sizer over the shapes, and the GEMMs run one after another on the one
++    # in-order context. A fresh (unzeroed) buffer per GEMM is what the
++    # per-operation path handed each one, so no plan reads what a previous
++    # GEMM left there.
++    var ws_n = 1
++    _max_ws(ws_n, rows, MLP_HID, MLP_IN)
++    _max_ws(ws_n, rows, MLP_OUT, MLP_HID)
++    if mode != MLP_STEP_FORWARD:
++        _max_ws(ws_n, MLP_OUT, MLP_HID, rows)
++        _max_ws(ws_n, rows, MLP_HID, MLP_OUT)
++        _max_ws(ws_n, MLP_HID, MLP_IN, rows)
++        if want_input_grad != 0:
++            _max_ws(ws_n, rows, MLP_IN, MLP_HID)
++
++    # ---- Transport in: the batch, the targets, the flat parameters (the
++    # four weights land in their registry slots through sub-buffer views,
++    # the pattern of sequence/exec_device.mojo). Nothing waits here.
++    var x_d = ctx.enqueue_create_buffer[DType.float32](rows * MLP_IN)
++    var y_d = ctx.enqueue_create_buffer[DType.int32](rows)
++    var p_d = ctx.enqueue_create_buffer[DType.float32](MLP_TOTAL)
++    var w1_v = p_d.create_sub_buffer[DType.float32](0, MLP_W1)
++    var b1_v = p_d.create_sub_buffer[DType.float32](MLP_OFF_B1, MLP_B1)
++    var w2_v = p_d.create_sub_buffer[DType.float32](MLP_OFF_W2, MLP_W2)
++    var b2_v = p_d.create_sub_buffer[DType.float32](MLP_OFF_B2, MLP_B2)
++    ctx.enqueue_copy(dst_buf=x_d, src_ptr=x_ptr)
++    ctx.enqueue_copy(dst_buf=y_d, src_ptr=y_ptr)
++    ctx.enqueue_copy(dst_buf=w1_v, src_ptr=w1_ptr)
++    ctx.enqueue_copy(dst_buf=b1_v, src_ptr=b1_ptr)
++    ctx.enqueue_copy(dst_buf=w2_v, src_ptr=w2_ptr)
++    ctx.enqueue_copy(dst_buf=b2_v, src_ptr=b2_ptr)
++    var ws = ctx.enqueue_create_buffer[DType.float32](ws_n)
++    var pre1 = ctx.enqueue_create_buffer[DType.float32](rows * MLP_HID)
++    var act = ctx.enqueue_create_buffer[DType.float32](rows * MLP_HID)
++    var pre2 = ctx.enqueue_create_buffer[DType.float32](rows * MLP_OUT)
++    var logits = ctx.enqueue_create_buffer[DType.float32](rows * MLP_OUT)
++
++    # ---- Forward: `_forward` (two `_matmul(..., transpose_b=True)`, two
++    # `_bias`).
++    _gemm(ctx, pre1, x_d, w1_v, ws, rows, MLP_HID, MLP_IN, OP_NT)
++    _launch_mlp(
++        ctx, pre1.unsafe_ptr(), p_d.unsafe_ptr() + MLP_OFF_B1, act.unsafe_ptr(),
++        rows, MLP_HID, 1,
++    )
++    _gemm(ctx, pre2, act, w2_v, ws, rows, MLP_OUT, MLP_HID, OP_NT)
++    _launch_mlp(
++        ctx, pre2.unsafe_ptr(), p_d.unsafe_ptr() + MLP_OFF_B2, logits.unsafe_ptr(),
++        rows, MLP_OUT, 0,
++    )
++    # The loss's refusal scan of the logits runs on the device (one scan
++    # launch and its partials read back; cpu-gpu-cleanup n-train-mamba), and
++    # the logits come down once, as a result, behind it on the same queue.
++    if device_first_nonfinite(ctx, logits, rows * MLP_OUT) >= 0:
++        raise Error("small MLP operation has nonfinite input or output")
++    ctx.enqueue_copy(dst_ptr=logits_ptr, src_buf=logits)
++    info_ptr.unsafe_store(0, Float32(0.0))
++    info_ptr.unsafe_store(1, Float32(0.0))
++    info_ptr.unsafe_store(2, Float32(0.0))
++    if mode == MLP_STEP_FORWARD:
++        ctx.synchronize()
++        _ = x_d^
++        _ = y_d^
++        _ = w1_v^
++        _ = b1_v^
++        _ = w2_v^
++        _ = b2_v^
++        _ = p_d^
++        _ = ws^
++        _ = pre1^
++        _ = act^
++        _ = pre2^
++        _ = logits^
++        return rows * MLP_OUT
++
++    # ---- Loss: `_training_impl.cross_entropy(logits, y, reduction='mean',
++    # return_grad=True)`, which is `ce_loss_binding` -> `identical_ce_loss_host`:
++    # the admit, the refusals, `ce_count`, then the resident half with
++    # `dlogits` left on the device. The refusals ran above: the logits' scan on
++    # the device, the shape by construction (`rows x 3` against `rows`), the
++    # targets as classes 0..2. So no target equals the ignore index and
++    # `ce_count` is `rows`, exactly.
++    identical_ce_admit_call(REDUCTION_MEAN, 1, rows)
++    var cfg = CeConfig(MLP_OUT, IGNORE_INDEX_DEFAULT, REDUCTION_MEAN, Float32(0.0), 0)
++    var count = rows
++    var h_row = List[Float32](length=rows, fill=Float32(0.0))
++    var dlogits = ctx.enqueue_create_buffer[DType.float32](rows * MLP_OUT)
++    identical_ce_loss_resident(
++        ctx, loss_ptr, h_row.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
++        dlogits, logits, y_d, rows, count, REDUCTION_MEAN, 1, cfg,
++    )
++    _ = h_row^
++    if not isfinite(loss_ptr.unsafe_load(0)):
++        raise Error("small MLP train step: loss is not finite")
++
++    # ---- Backward: `_gradient`'s six calls in its order, the gradients
++    # landing in their registry slots of one flat buffer, which is what
++    # `_pack` built for the optimizer.
++    var g_d = ctx.enqueue_create_buffer[DType.float32](MLP_TOTAL)
++    var dw1_v = g_d.create_sub_buffer[DType.float32](0, MLP_W1)
++    var db1_v = g_d.create_sub_buffer[DType.float32](MLP_OFF_B1, MLP_B1)
++    var dw2_v = g_d.create_sub_buffer[DType.float32](MLP_OFF_W2, MLP_W2)
++    var db2_v = g_d.create_sub_buffer[DType.float32](MLP_OFF_B2, MLP_B2)
++    var incoming = ctx.enqueue_create_buffer[DType.float32](rows * MLP_HID)
++    var dhidden = ctx.enqueue_create_buffer[DType.float32](rows * MLP_HID)
++    # dx's buffer is made here (the tape writes it inside the backward); an
++    # allocation's place in the queue moves no bit.
++    var dx_n = 1
++    if want_input_grad != 0:
++        dx_n = rows * MLP_IN
++    var dx_d = ctx.enqueue_create_buffer[DType.float32](dx_n)
++    # ---- Backward on the tape: the same seven launches (header of
++    # autograd/rules_small_mlp.mojo), then the two refusal scans
++    # (cpu2-l11-neural, 2026-10-04: the gradients' and dx's refusal is a
++    # device scan, before any result or state leaves the device). The tape
++    # records on an executor that refuses to launch or allocate (every node
++    # holds caller storage, the rules launch on ctx) and never waits, so it
++    # adds no drain to the step.
++    # TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by 3cd0063d7; code recoverable at 3cd0063d7^.
++    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
++    var tape_ex = SmallMlpRecordExec()
++    small_mlp_backward_autograd(
++        tape_ex, _MlpStepKernels(ctx, small_mlp_buffer(ws)),
++        x_d, w1_v, b1_v, w2_v, b2_v, pre1, act, pre2, logits, dlogits,
++        dw1_v, db1_v, dw2_v, db2_v, incoming, dhidden, dx_d,
++        rows, MLP_IN, MLP_HID, MLP_OUT, want_input_grad != 0,
++    )
++    if device_first_nonfinite(ctx, g_d, MLP_TOTAL) >= 0:
++        raise Error("small MLP operation has nonfinite input or output")
++    if want_input_grad != 0:
++        if device_first_nonfinite(ctx, dx_d, dx_n) >= 0:
++            raise Error("small MLP operation has nonfinite input or output")
++        ctx.enqueue_copy(dst_ptr=dx_ptr, src_buf=dx_d)
++    # The gradients are a result whatever the mode; the optimizer (no clip)
++    # never writes them, so their download may sit ahead of it in the queue.
++    ctx.enqueue_copy(dst_ptr=dw1_ptr, src_buf=dw1_v)
++    ctx.enqueue_copy(dst_ptr=db1_ptr, src_buf=db1_v)
++    ctx.enqueue_copy(dst_ptr=dw2_ptr, src_buf=dw2_v)
++    ctx.enqueue_copy(dst_ptr=db2_ptr, src_buf=db2_v)
++
++    if mode == MLP_STEP_TRAIN:
++        # ---- Step: `AdamW.step(grads)` -> `optimizer_step_binding` ->
++        # `identical_optimizer_step_host`, with the flat parameters and
++        # gradients already on the device. The buffers are the host
++        # wrapper's, sized as it sizes them.
++        var m_d = ctx.enqueue_create_buffer[DType.float32](MLP_TOTAL)
++        var v_d = ctx.enqueue_create_buffer[DType.float32](MLP_TOTAL)
++        ctx.enqueue_copy(dst_buf=m_d, src_ptr=m_ptr)
++        ctx.enqueue_copy(dst_buf=v_d, src_ptr=v_ptr)
++        var record_n = 1
++        comptime if OPT_RECORD_INTERMEDIATES:
++            record_n = MLP_TOTAL
++        var denom_out = ctx.enqueue_create_buffer[DType.float32](record_n)
++        var q_out = ctx.enqueue_create_buffer[DType.float32](record_n)
++        var sumsq = ctx.enqueue_create_buffer[DType.float32](MLP_TENSORS)
++        var norms = ctx.enqueue_create_buffer[DType.float32](MLP_TENSORS)
++        var total_cell = ctx.enqueue_create_buffer[DType.float32](1)
++        var out2 = ctx.enqueue_create_buffer[DType.float32](2)
++        var offsets = List[Int]()
++        offsets.append(0)
++        offsets.append(MLP_OFF_B1)
++        offsets.append(MLP_OFF_W2)
++        offsets.append(MLP_OFF_B2)
++        offsets.append(MLP_TOTAL)
++        var ws_opt = ctx.enqueue_create_buffer[DType.float32](
++            identical_optimizer_workspace_floats(offsets)
++        )
++        var sab_partials = ctx.enqueue_create_buffer[DType.float32](SAB_CHUNKS)
++        var buf_initialized = List[Bool]()
++        for j in range(MLP_TENSORS):
++            buf_initialized.append(flags_ptr.unsafe_load(j) != Int32(0))
++        identical_optimizer_step(
++            ctx, p_d, g_d, m_d, v_d, denom_out, q_out, sumsq, norms,
++            total_cell, out2, ws_opt, sab_partials, buf_initialized, offsets,
++            cfg_opt, t,
++        )
++        # ---- Transport out: the new weights into the caller's four arrays
++        # (what `_unpack_into` did on the host), the moments, the flags.
++        ctx.enqueue_copy(dst_ptr=w1_ptr, src_buf=w1_v)
++        ctx.enqueue_copy(dst_ptr=b1_ptr, src_buf=b1_v)
++        ctx.enqueue_copy(dst_ptr=w2_ptr, src_buf=w2_v)
++        ctx.enqueue_copy(dst_ptr=b2_ptr, src_buf=b2_v)
++        ctx.enqueue_copy(dst_ptr=m_ptr, src_buf=m_d)
++        ctx.enqueue_copy(dst_ptr=v_ptr, src_buf=v_d)
++        ctx.synchronize()
++        for j in range(MLP_TENSORS):
++            var flag = Int32(0)
++            if buf_initialized[j]:
++                flag = Int32(1)
++            flags_ptr.unsafe_store(j, flag)
++        _ = m_d^
++        _ = v_d^
++        _ = denom_out^
++        _ = q_out^
++        _ = sumsq^
++        _ = norms^
++        _ = total_cell^
++        _ = out2^
++        _ = ws_opt^
++        _ = sab_partials^
++    else:
++        ctx.synchronize()
++
++    # The per-operation path checked every gradient as it came back
++    # (`_gradient`'s `_array(..., ' gradient')` and `_mlp_host`'s `_finite`).
++    _finite(dw1_ptr, MLP_W1)
++    _finite(db1_ptr, MLP_B1)
++    _finite(dw2_ptr, MLP_W2)
++    _finite(db2_ptr, MLP_B2)
++    if want_input_grad != 0:
++        _finite(dx_ptr, rows * MLP_IN)
++
++    # Explicit ownership after the drain (the file's rule above).
++    _ = x_d^
++    _ = y_d^
++    _ = w1_v^
++    _ = b1_v^
++    _ = w2_v^
++    _ = b2_v^
++    _ = p_d^
++    _ = ws^
++    _ = pre1^
++    _ = act^
++    _ = pre2^
++    _ = logits^
++    _ = dlogits^
++    _ = dw1_v^
++    _ = db1_v^
++    _ = dw2_v^
++    _ = db2_v^
++    _ = g_d^
++    _ = incoming^
++    _ = dhidden^
++    _ = dx_d^
++    return rows * MLP_OUT
+diff --git a/training/neural_session_mlp.mojo b/training/neural_session_mlp.mojo
+index b874221323..4e533e0a46 100644
+--- a/training/neural_session_mlp.mojo
++++ b/training/neural_session_mlp.mojo
+@@ -21,20 +21,38 @@ comptime _FP = MutPointer[Float32, MutUntrackedOrigin]
+ def nn_mlp_sessions_device(ctx: DeviceContext, inputs: List[Int], rows: List[Int],
+     w1: _FP, b1: _FP, w2: _FP, b2: _FP, output: _FP,
+     in_width: Int, hidden: Int, out_width: Int,
++    registry: Optional[DeviceBuffer[DType.float32]] = None,
+ ) raises -> Int:
+-    # TOMBSTONE: the `registry` argument (sessions reading an open Apple FAST resident training session's weights; its only caller, mlp_sessions_resident, went with the session, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
++    """`registry` (lane migrate-neural-2): the weights already on the device
++    as one flat [w1, b1, w2, b2] buffer (an open training session); the
++    sessions read them there through views instead of an upload of the host
++    copy (w1 .. b2 are then not read). The same values, so the same bits."""
+     var total = nn_mlp_session_shape(inputs, rows, in_width, hidden, out_width)
+     var x = ctx.enqueue_create_buffer[DType.float32](max(1, total * in_width))
+     var a = ctx.enqueue_create_buffer[DType.float32](max(1, total * hidden))
+     var y = ctx.enqueue_create_buffer[DType.float32](max(1, total * out_width))
+-    var dw1 = ctx.enqueue_create_buffer[DType.float32](hidden * in_width)
+-    var db1 = ctx.enqueue_create_buffer[DType.float32](hidden)
+-    var dw2 = ctx.enqueue_create_buffer[DType.float32](out_width * hidden)
+-    var db2 = ctx.enqueue_create_buffer[DType.float32](out_width)
+-    ctx.enqueue_copy(dst_buf=dw1, src_ptr=w1)
+-    ctx.enqueue_copy(dst_buf=db1, src_ptr=b1)
+-    ctx.enqueue_copy(dst_buf=dw2, src_ptr=w2)
+-    ctx.enqueue_copy(dst_buf=db2, src_ptr=b2)
++    var dw1: DeviceBuffer[DType.float32]
++    var db1: DeviceBuffer[DType.float32]
++    var dw2: DeviceBuffer[DType.float32]
++    var db2: DeviceBuffer[DType.float32]
++    if registry:
++        var n_w1 = hidden * in_width
++        var n_w2 = out_width * hidden
++        if len(registry.value()) < n_w1 + hidden + n_w2 + out_width:
++            raise Error("neural MLP sessions: the resident registry is smaller than the model")
++        dw1 = registry.value().create_sub_buffer[DType.float32](0, n_w1)
++        db1 = registry.value().create_sub_buffer[DType.float32](n_w1, hidden)
++        dw2 = registry.value().create_sub_buffer[DType.float32](n_w1 + hidden, n_w2)
++        db2 = registry.value().create_sub_buffer[DType.float32](n_w1 + hidden + n_w2, out_width)
++    else:
++        dw1 = ctx.enqueue_create_buffer[DType.float32](hidden * in_width)
++        db1 = ctx.enqueue_create_buffer[DType.float32](hidden)
++        dw2 = ctx.enqueue_create_buffer[DType.float32](out_width * hidden)
++        db2 = ctx.enqueue_create_buffer[DType.float32](out_width)
++        ctx.enqueue_copy(dst_buf=dw1, src_ptr=w1)
++        ctx.enqueue_copy(dst_buf=db1, src_ptr=b1)
++        ctx.enqueue_copy(dst_buf=dw2, src_ptr=w2)
++        ctx.enqueue_copy(dst_buf=db2, src_ptr=b2)
+     var keep = List[DeviceBuffer[DType.float32]]()
+     var base = 0
+     for session in range(len(rows)):
+diff --git a/training/small_mlp_dispatch.mojo b/training/small_mlp_dispatch.mojo
+new file mode 100644
+index 0000000000..3ef8b140ec
+--- /dev/null
++++ b/training/small_mlp_dispatch.mojo
+@@ -0,0 +1,92 @@
++# SPDX-License-Identifier: Apache-2.0
++# Engine-specific operations over the shared native descriptor transport.
++# Every branch calls the established owner with the same precision/order.
++from std.ffi import _Global
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
++from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
++from core.hostptr import f32_ptr, i32_ptr
++from core.neural_context import neural_ctx
++from training.mlp_ops import mlp_train_step_host, mlp_bias_activation_host, mlp_relu_backward_host, mlp_sum_rows_host, mlp_validate_shape
++from training.estimator import identical_ce_loss_host
++from training.optimizer_public import per_call_step
++from training.neural_gemm_admission import neural_gemm_shape
++from training.neural_gemm_native import neural_gemm_native
++
++comptime SMALL_MLP_ABI_NAME = "mojolearn.training.small_mlp.v1"
++comptime SMALL_MLP_OPERATION_COUNT = 8
++comptime SMALL_MLP_CONTEXT = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingContextFast"
++
++
++def small_mlp_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
++    if op == 0:
++        return 1 if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else 0
++    var ctx = neural_ctx[SMALL_MLP_CONTEXT]()
++    if op == 1:
++        return mlp_train_step_host(ctx, f32_ptr(a[0]), i32_ptr(a[1]),
++            f32_ptr(a[2]), f32_ptr(a[3]), f32_ptr(a[4]), f32_ptr(a[5]),
++            f32_ptr(a[6]), f32_ptr(a[7]), i32_ptr(a[8]), f32_ptr(a[9]), f32_ptr(a[10]),
++            f32_ptr(a[11]), f32_ptr(a[12]), f32_ptr(a[13]), f32_ptr(a[14]), f32_ptr(a[15]), f32_ptr(a[16]),
++            p[0], p[1], p[2], Float32(f[0]), Float32(f[1]), Float32(f[2]), Float32(f[3]), Float32(f[4]), p[3])
++    if op == 2:
++        var shape = neural_gemm_shape(p[0], p[1], p[2], p[3], a[0], a[1], a[2])
++        return neural_gemm_native(a[0], a[1], a[2], shape)
++    if op == 3 or op == 4 or op == 5:
++        mlp_validate_shape(p[0], p[1])
++    if op == 3:
++        if p[2] != 0 and p[2] != 1:
++            raise Error("mlp_bias_activation relu_flag must be 0 or 1")
++        return mlp_bias_activation_host(ctx, f32_ptr(a[0]), f32_ptr(a[1]), f32_ptr(a[2]), p[0], p[1], p[2])
++    if op == 4:
++        return mlp_relu_backward_host(ctx, f32_ptr(a[0]), f32_ptr(a[1]), f32_ptr(a[2]), p[0], p[1])
++    if op == 5:
++        return mlp_sum_rows_host(ctx, f32_ptr(a[0]), f32_ptr(a[1]), p[0], p[1])
++    if op == 6:
++        return identical_ce_loss_host(ctx, f32_ptr(a[0]), f32_ptr(a[1]), f32_ptr(a[2]), f32_ptr(a[3]), i32_ptr(a[4]),
++            p[0], p[1], p[2], p[3], p[4], p[5], Float32(f[0]))
++    if op == 7:
++        return per_call_step(ctx, f32_ptr(a[0]), f32_ptr(a[1]), f32_ptr(a[2]), f32_ptr(a[3]), i32_ptr(a[4]), i32_ptr(a[5]), f32_ptr(a[6]),
++            p[0], p[1], p[2], p[3], Float32(f[0]), Float32(f[1]), Float32(f[2]), Float32(f[3]), Float32(f[4]), Float32(f[5]), Float32(f[6]), Float32(f[7]), p[4] != 0)
++    raise Error("small MLP native ABI: unknown operation")
++
++
++def small_mlp_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
++                        result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
++    try:
++        var address_counts: List[Int] = [0, 17, 3, 3, 3, 2, 5, 7]
++        var int_counts: List[Int] = [0, 4, 4, 3, 2, 2, 6, 5]
++        var float_counts: List[Int] = [0, 5, 0, 0, 0, 0, 1, 8]
++        if op < 0 or op >= SMALL_MLP_OPERATION_COUNT:
++            raise Error("small MLP native ABI: unknown operation")
++        if na != address_counts[op] or np != int_counts[op] or nf != float_counts[op]:
++            raise Error("small MLP native ABI: descriptor length mismatch")
++        if result == 0 or (nf > 0 and ff == 0):
++            raise Error("small MLP native ABI: null output or scalar span")
++        var a = native_descriptor_words(aa, na)
++        for i in range(na):  # small-loop(the fixed operation buffer descriptor)
++            if a[i] == 0:
++                raise Error("small MLP native ABI: null buffer address")
++        var p = native_descriptor_words(pp, np)
++        var f = List[Float64]()
++        var fp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)
++        for i in range(nf):  # small-loop(fixed operation scalar descriptor)
++            f.append(fp[i])
++        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = small_mlp_native_operation(op, a, p, f)
++        return 0
++    except problem:
++        native_descriptor_report(problem, context, sink)
++        return 1
++
++
++struct SmallMlpNativeTable(Defaultable, Movable):
++    var name: String
++    var entries: List[NativeDescriptorCall]
++
++    def __init__(out self):
++        self.name = String(SMALL_MLP_ABI_NAME)
++        self.entries = List[NativeDescriptorCall]()
++        self.entries.append(small_mlp_native_v1)
++
++
++comptime SMALL_MLP_NATIVE_TABLE = _Global[StorageType=SmallMlpNativeTable,
++    name="MojoSmallMlpNativeTableV1", init_fn=SmallMlpNativeTable.__init__]

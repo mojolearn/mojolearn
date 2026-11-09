@@ -40,11 +40,13 @@ def test_both_doors_share_numerical_functions_and_original_float_casts():
     for op in (2, 3):
         branch = native.split(f'    if op == {op}:')[1].split('    if op ==')[0]
         assert branch.count('Float32(f[0])') == 1
-    assert 'MojoNeuralTrainingContextIdentical' in native
+    assert 'MojolearnNeuralTrainingContextIdenticalV2' in native
     mamba = read('mamba/native_state_dispatch.mojo')
-    assert '_mamba1_run(a, b, l, dm, step, position)' in mamba
-    assert '_mamba2_run(a, b, l, dm, p[tail], Float32(f[0]), Float32(f[1]))' in mamba
-    assert '_mamba3_run(a, b, l, dm, p[tail], p[tail + 1])' in mamba
+    # lane x5-mamba-on-executor: every family runs the block step op on the
+    # cached block program (mamba/impl/mamba_block_program.mojo).
+    assert 'mamba_block_call_abi(1, a, b, l, dm, 0, 0, Float32(0), Float32(0))' in mamba
+    assert 'mamba_block_call_abi(2, a, b, l, dm, p[tail], 0, Float32(f[0]), Float32(f[1]))' in mamba
+    assert 'mamba_block_call_abi(3, a, b, l, dm, p[tail], p[tail + 1], Float32(0), Float32(0))' in mamba
 
 
 def test_native_descriptors_are_checked_named_private_operations():

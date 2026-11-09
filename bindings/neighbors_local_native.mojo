@@ -24,6 +24,7 @@ from std.math import floor, isinf
 from std.memory import memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop, prepared_key_add, prepared_key_same
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
@@ -36,13 +37,14 @@ from bindings.host_sparse_native import host_sparse_format
 from bindings.host_inference_scalars import host_inference_scalar
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_call, family_entry,
-    family_as_f32_dense, family_field, family_isinstance,
+    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_call, family_entry, family_field,
+    family_isinstance,
 )
 from bindings.classical_labels import (
-    labels_empty, labels_vector, labels_cast, labels_view, labels_check_rank, labels_helper, classical_encode_labels,
+    labels_cast, labels_class_ratio_f64, labels_fsum_f64, classical_encode_labels,
     classical_decode_labels, classical_accuracy,
 )
+from bindings.admitted_input import admitted_array, admitted_vector, admit_c_view, admitted_dtype
 from checks.numerics import pinned_mul_f64
 
 # x_neighbors/items.mojo's unary codes (`_U_SQRT`, `_U_IDENTITY`).
@@ -175,12 +177,12 @@ def _size(a: PythonObject) raises -> Int:
 
 def _f32(source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_f32(X)`: `as_f32_c(_dense(X), ndim=2, name="X")`."""
-    return family_as_f32_dense(source, 2, "X", context)
+    return admit_family(source, 2, "X", context, dense=True).array
 
 
 def _out(shape: PythonObject, typestr: String, context: PythonObject) raises -> PythonObject:
     """`empty(shape, typestr)` / `_empty_out(shape)`: a new zero-filled Array."""
-    return labels_empty(shape, typestr, context)
+    return admitted_array(shape, typestr, context)
 
 
 def _op(binding: PythonObject, name: String, addrs: PythonObject, ints: PythonObject, floats: PythonObject,
@@ -225,7 +227,7 @@ def _isclose(a: Float64, b: Float64, rel_tol: Float64, abs_tol: Float64) -> Bool
 def _astype_i64(lab: PythonObject, context: PythonObject) raises -> PythonObject:
     """`lab.astype("<i8")` of an int32 vector Array."""
     var n = _size(lab)
-    var out = labels_vector(n, "<i8", context)
+    var out = admitted_vector(n, "<i8", context)
     labels_cast(Int(py=classical_address(lab)), "<i4", Int(py=classical_address(out)), "<i8", n, context)
     _ = lab  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
@@ -326,7 +328,7 @@ def _knn(binding: PythonObject, q: PythonObject, r: PythonObject, k: Int, exclud
 def _i32_from_ints(values: List[Int], context: PythonObject) raises -> PythonObject:
     """`_i32(list)`: an int32 vector Array of a short int list (class
     offsets, kept columns, flags)."""
-    var out = labels_vector(len(values), "<i4", context)
+    var out = admitted_vector(len(values), "<i4", context)
     var p = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(out)))
     for i in range(len(values)):  # driver-loop: over a class- or feature-sized int list of model structure
         p[i] = Int32(values[i])
@@ -587,16 +589,15 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         counts.append(Int(nkp[c]))
     _ = nk  # keep the Python object alive through the reads above
     var priors = family_field(fields, "priors")
-    var prior = labels_vector(C, "<f8", context)
+    var prior = admitted_vector(C, "<f8", context)
     var pp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(prior)))
     if py_type(priors) is b.str and String(priors) == "empirical":
         # count / n per class in the base binding (`class_ratio_f64`)
-        var ca = labels_vector(C, "<i8", context)
+        var ca = admitted_vector(C, "<i8", context)
         var cap = FAMILY_I64P(unsafe_from_address=Int(py=classical_address(ca)))
         for c in range(C):  # driver-loop: over the k class counts
             cap[c] = Int64(counts[c])
-        _ = family_call(labels_helper(context, "class_ratio_f64"), classical_address(ca), _i(C), _i(n), _i(1),
-                        classical_address(prior))
+        _ = labels_class_ratio_f64(context, Int(py=classical_address(ca)), C, n, 1, Int(py=classical_address(prior)))
         _ = ca  # keep the Python object alive through the native call above
     elif py_type(priors) is b.str and String(priors) == "uniform":
         for c in range(C):  # driver-loop: over the k uniform class priors
@@ -604,13 +605,15 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     else:
         # Parse admitted primitive storage once; ndarray.tolist (including
         # object-element conversions) is not part of native model execution.
-        var given = labels_view(priors, "priors", context)
-        labels_check_rank(given, 1, "priors")
-        if given.size() != C:
+        var given = admit_c_view(priors, "priors", context)
+        if Int(py=given.ndim) != 1:
+            raise Error("mojolearn: priors must be 1-D, got " + String(Int(py=given.ndim)) + "-D")
+        if Int(py=given.size) != C:
             raise Error("priors must have one entry per class")
-        var packed = labels_vector(C, "<f8", context)
+        var packed = admitted_vector(C, "<f8", context)
         var packed_address = Int(py=classical_address(packed))
-        labels_cast(given.addr, given.typestr, packed_address, "<f8", C, context)
+        labels_cast(Int(py=classical_address(given)), admitted_dtype(given, context), packed_address, "<f8", C,
+                    context)
         var source = FAMILY_F64P(unsafe_from_address=packed_address)
         var values = List[Float64]()
         for i in range(C):  # driver-loop: over admitted native class priors
@@ -621,13 +624,12 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
             if values[i] < 0:
                 raise Error("priors must be non-negative")
         # `_portable_math.fsum`: the core `fsum_f64` (Shewchuk's partials)
-        var src = labels_vector(C, "<f8", context)
+        var src = admitted_vector(C, "<f8", context)
         var sp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(src)))
         for i in range(C):  # driver-loop: over the user priors argument (k sized)
             sp[i] = values[i]
-        var total = labels_vector(1, "<f8", context)
-        var status = Int(py=family_call(labels_helper(context, "fsum_f64"), classical_address(src), _i(C),
-                                        classical_address(total)))
+        var total = admitted_vector(1, "<f8", context)
+        var status = labels_fsum_f64(Int(py=classical_address(src)), C, Int(py=classical_address(total)))
         _ = src  # keep the Python object alive through the native call above
         var tot = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(total)))[0]
         _ = total  # keep the Python object alive through the read above
@@ -795,7 +797,7 @@ def _nc_decision_inputs(fields: PythonObject, source: PythonObject, context: Pyt
     # `Array.from_list(class_prior_.tolist(), "<f4")`: each prior rounded once
     var given = family_field(fields, "class_prior_")
     var count = _size(given)  # one fitted prior per class (see `_nc_uniform`)
-    var prior = labels_vector(count, "<f4", context)
+    var prior = admitted_vector(count, "<f4", context)
     var gp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(given)))
     var fp = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(prior)))
     for i in range(count):  # driver-loop: over the k class priors
@@ -832,7 +834,7 @@ def _nc_predict(model: PythonObject, args: PythonObject, context: PythonObject,
             dmat = _l1dist(binding, q, cent, context)
         var pair = _knn_select(binding, dmat, 1, False, context)
         var idx = pair[1]
-        var codes = labels_empty(Python.tuple(_rows(idx)), "<i4", context)
+        var codes = admitted_array(Python.tuple(_rows(idx)), "<i4", context)
         memcpy(dest=FAMILY_I32P(unsafe_from_address=Int(py=classical_address(codes))),
                src=FAMILY_I32P(unsafe_from_address=Int(py=classical_address(idx))), count=_rows(idx))
         _ = idx  # keep the Python object alive through the copy above
@@ -862,7 +864,7 @@ def _nc_decision(model: PythonObject, args: PythonObject, context: PythonObject)
     var dec = _nc_decision_matrix(binding, py_fields(model), args[1], context)
     if _cols(dec) != 2:
         return dec
-    var signs = labels_vector(2, "<f4", context)
+    var signs = admitted_vector(2, "<f4", context)
     var sp = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(signs)))
     sp[0] = -1.0
     sp[1] = 1.0

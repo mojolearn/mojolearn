@@ -1,14 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Host input marshaling and result publication of the sequence-expansion
 native owner (bindings/xseq_native_common.mojo and its siblings): the
-element casts into C-ordered float32, the label-code conversion, constant
-learning-rate tables and the column / block copies the fitted attributes
-are made of. Typed pointers in, no Python; the words are the ones the
+label-code conversion, constant learning-rate tables and the column / block
+copies the fitted attributes are made of. The element casts of inputs into
+float32 and int32 are the one admission path's (core/admitted_input_nd.mojo). Typed pointers in, no Python; the words are the ones the
 NumPy expressions they replace produced."""
-from std.memory import bitcast
-from core.classical_cast import classical_f32_bits
-from core.cast_in import cast_f32_bits, cast_i32_bits
-from core.host_finite_scan import host_all_finite_f32
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -16,34 +12,10 @@ comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
 comptime _U8P = MutPointer[UInt8, MutUntrackedOrigin]
 
 
-def xseq_cast_nd(base: Int, dims: List[Int], steps: List[Int], item: Int, kind: Int, double_ints: Bool,
-                 dst: _F32P):
-    """`np.array(a, dtype=float32, order="C")` of a strided array: element i
-    (C order) of the array at `base` with byte `steps` per axis, cast by the
-    shared integer-defined conversion (`cast_f32_bits`, NumPy's astype bits;
-    `double_ints` the integer -> double -> float32 route of `Array.astype`)."""
-    var rank = len(dims)
-    var total = 1
-    for k in range(rank):  # native input marshaling: the array's rank metadata
-        total *= dims[k]
-    var counter = List[Int](length=rank, fill=0)
-    var offset = 0
-    for i in range(total):  # native input marshaling: numeric buffer items, exact cast bits
-        var bytes = _U8P(unsafe_from_address=base + offset)
-        var raw = UInt64(0)
-        for j in range(item):  # native input marshaling: the bytes of one item
-            raw |= UInt64(bytes[j]) << UInt64(j * 8)
-        var bits = classical_f32_bits(raw, kind, item) if double_ints else cast_f32_bits(raw, kind, item)
-        dst[i] = bitcast[DType.float32](bits)
-        var axis = rank - 1
-        while axis >= 0:  # native input marshaling: the next element's byte offset
-            counter[axis] += 1
-            offset += steps[axis]
-            if counter[axis] < dims[axis]:
-                break
-            offset -= steps[axis] * dims[axis]
-            counter[axis] = 0
-            axis -= 1
+# TOMBSTONE: xseq_cast_nd (admission helper, merged into the one path) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A4_ADMISSION_HELPERS.patch. It is
+# `admitted_cast_nd_f32` (core/admitted_input_nd.mojo): the same bits per
+# item, row tasks across the host's cores instead of one serial odometer.
 
 
 def xseq_fill_f32(dst: _F32P, count: Int, value: Float32):
@@ -87,17 +59,9 @@ def xseq_var_blocks(params: _F32P, endog: _F32P, resid: _F32P, intercept: _F32P,
             fitted[r * neqs + c] = endog[(lags + r) * neqs + c] - resid[r * neqs + c]
 
 
-def neural_cast_i32_2d(addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, kind: Int,
-                       dst: _I32P):
-    """A strided (rows, cols) integer or bool array as C-ordered int32 words
-    (`cast_i32_bits`: exact, saturated outside int32)."""
-    for r in range(rows):  # native input marshaling: input rows, never a model loop
-        for c in range(cols):  # native input marshaling: one id per position
-            var bytes = _U8P(unsafe_from_address=addr + r * s0 + c * s1)
-            var raw = UInt64(0)
-            for j in range(item):  # native input marshaling: the bytes of one item
-                raw |= UInt64(bytes[j]) << UInt64(j * 8)
-            dst[r * cols + c] = bitcast[DType.int32](cast_i32_bits(raw, kind, item))
+# TOMBSTONE: neural_cast_i32_2d (admission helper, merged into the one path) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A4_ADMISSION_HELPERS.patch. It is
+# `admitted_ids_i32` (core/admitted_input_nd.mojo), row tasks across cores.
 
 
 def neural_first_bad_id(ids: _I32P, rows: Int, cols: Int, vocab: Int, target_column: Int, ignore: Int) -> Int:
@@ -121,10 +85,9 @@ def tsa_flags_u8(src: _I32P, dst: _U8P, count: Int):
         dst[i] = UInt8(src[i])
 
 
-def xseq_all_finite_f32(src: _F32P, count: Int) -> Bool:
-    """`all_finite(a)` of `count` float32 words: no NaN and no infinity."""
-    # parallel: finiteness scan across host cores (0.8.66 regression C2, serial scan)
-    return host_all_finite_f32(src, count)
+# TOMBSTONE: xseq_all_finite_f32 (admission helper, a second name of host_all_finite_f32) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A4_ADMISSION_HELPERS.patch. Callers read
+# `host_all_finite_f32` (core/host_finite_scan.mojo) directly.
 
 
 def xseq_min_max_f32(src: _F32P, count: Int) -> Tuple[Float32, Float32]:

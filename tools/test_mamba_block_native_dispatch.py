@@ -16,7 +16,7 @@ def test_native_closure_has_no_python_or_provider_backedge():
 
 def test_existing_numerical_owners_and_recoverable_failure_are_retained():
     for owner in ('_mamba1_backward_run', '_mamba2_backward_run', '_mamba3_backward_run',
-                  '_mamba3_run[True]', '_m3_prefill_run', '_m3_prefill_backward_run'):
+                  'mamba_block_call_abi(3, expanded', '_m3_prefill_run', '_m3_prefill_backward_run'):
         assert owner in NATIVE
     assert 'not owned and String(problem).startswith(_M3_BWD_NONFINITE_DY)' in NATIVE
     assert 'owner[].usable = False' in NATIVE

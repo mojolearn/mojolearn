@@ -7,16 +7,16 @@
 # Python stored. With `prediction_data=True` the core rows become resident
 # on the device at fit (bindings/cfb_resident.mojo), so `predict` uploads
 # only its queries. Same entries, same inputs: the bits do not move.
+from bindings.admitted_family import admit_family, admit_family_weights
 from bindings.p3nc_fitted_freeze import fitted_freeze
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields
 from bindings.classical_arrays import classical_address, classical_wrap_array, classical_is_array
-from core.family_cast_impl import family_fill_i32, family_all_finite_f32
-from core.p3nc_scan import p3nc_all_finite_f32
+from core.admitted_weights import admitted_fill
+from core.host_finite_scan import host_all_finite_f32
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_array, family_as_f32,
-    family_sample_weight, family_min, family_field,
+    FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_array, family_min, family_field,
 )
 from bindings.cluster_native import _reference_queries
 from bindings.cfb_resident import cfb_fresh_holder, cfb_mint, cfb_reference_labels
@@ -124,11 +124,11 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     # perf2-cluster row 24: one extra full pass + one admission per fit).
     # Any other caller keeps the full admission below.
     var admitted = len(args) > 3 and Bool(py=args[3])
-    var x = source if admitted else family_as_f32(source, 2, "X", context)
+    var x = source if admitted else admit_family(source, 2, "X", context).array
     py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    if not admitted and not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
+    if not admitted and not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
         # Before this check a NaN row reached the kernel and came back
         # labelled noise (-1), silently; scikit-learn refuses it.
         raise Error("mojolearn DBSCAN: X contains a NaN or an infinity; a "
@@ -152,7 +152,7 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     var w = PythonObject(None)
     var weight_addr = PythonObject(0)
     if weights_source is not None:
-        w = family_sample_weight(weights_source, n, True, context)
+        w = admit_family_weights(weights_source, n, True, context).keep
         weight_addr = classical_address(w)
         _ = w  # keep the Python object alive through the native call above
     # ORDER MATCHES bindings/_mojolearn_estimators.mojo::dbscan_fit_binding:
@@ -234,7 +234,7 @@ def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonOb
     var n_core = Int(py=components.shape[0])
     if n_core == 0:
         var labels = family_array(Python.tuple(nq), "<i4", context)
-        family_fill_i32(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, -1)
+        admitted_fill[DType.int32](FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, Int32(-1))
         _ = labels  # keep the Python object alive through the native call above
         return labels
     var metric_name = py_call(py_call(b.str, family_raw_get(model, "metric")).lower)

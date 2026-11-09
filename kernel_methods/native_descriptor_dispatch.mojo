@@ -179,7 +179,10 @@ def km_native_kernel_ridge_predict_ptr(a: List[Int], p: List[Int], f: List[Float
     )
     var q = p[9]
     var trace = IdentityTrace()
-    kernel_ridge_predict_ptr_into(xfaddr, daddr, xnaddr, n, d, t, kp, q, op, trace)
+    # The descriptor door tests the query on the host before this call
+    # (bindings/kernel_methods_native.mojo, lane a7a): the status words are
+    # all zero here.
+    _ = kernel_ridge_predict_ptr_into(xfaddr, daddr, xnaddr, n, d, t, kp, q, op, trace)
     return 0
 
 
@@ -229,7 +232,8 @@ def km_native_kernel_ridge_predict_resident(original: List[Int], p: List[Int], f
     var q = p[9]
     var h = handle
     var trace = IdentityTrace()
-    kernel_ridge_predict_resident(h, xnaddr, n, d, t, kp, q, op, trace)
+    # Tested on the host by the descriptor door (lane a7a), as above.
+    _ = kernel_ridge_predict_resident(h, xnaddr, n, d, t, kp, q, op, trace)
     return 0
 
 
@@ -543,4 +547,4 @@ struct KernelMethodNativeAPI(Defaultable, Movable):
         self.entries.append(km_native_v1)
 
 comptime KERNEL_METHOD_NATIVE_API = _Global[StorageType=KernelMethodNativeAPI,
-    name="MojoKernelMethodNativeAPIv1", init_fn=KernelMethodNativeAPI.__init__]
+    name=("MojolearnKernelMethodNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKernelMethodNativeAPIFastV2"), init_fn=KernelMethodNativeAPI.__init__]

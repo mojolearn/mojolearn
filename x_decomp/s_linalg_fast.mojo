@@ -5,7 +5,7 @@ the kit's device routes. Python reads which are compiled through
 `x_decomp_s_flags()`. All three are the FAST + Apple default since
 verdicts batch 6 (2026-10-05), each with an _OFF rollback:
 
-  bit 1  RSVD_FAST_DEVSCAN   (`-D MOJOLEARN_RSVD_FAST_DEVSCAN_OFF`)
+  bit 1  (RSVD_FAST_DEVSCAN, deleted 2026-11-08; the bit stays 0)
   bit 2  DECOMP_FAST_ORTH_WS (`-D MOJOLEARN_DECOMP_FAST_ORTH_WS_OFF`)
   bit 4  LU_FAST_RESIDENT    (`-D MOJOLEARN_LU_FAST_RESIDENT_OFF`)
   bit 8  IDN_LU_RESIDENT_PAIR (IDENTICAL default since 2026-10-11, `-D MOJOLEARN_IDN_LU_RESIDENT_PAIR_OFF`)
@@ -28,22 +28,12 @@ from x_decomp.device import (
 from x_decomp.qfix import LU_QFIX, QF_LAUNCH_CELLS, QF_RT, QF_TPB, lu_resid_ff_kernel
 from x_decomp.resident import X_DECOMP_POOL, _ptr
 
-#: What: `randomized_svd`'s direct input (RSVD_FAST_DIRECT_IN, the FAST +
-#: Apple default) refuses NaN/inf with the base binding's `all_finite_f32`, a
-#: single-thread host loop with an early-exit branch over every value
-#: (bindings/_mojolearn.mojo `all_finite_f32_binding`): 220 million floats
-#: (880 MB) at the board's istella 1M x 220, on the host, inside the fit.
-#: This uploads M into its pooled device matrix first and scans THAT buffer
-#: on the device (`core/device_scan.mojo device_first_nonfinite`, one read,
-#: one int per block back), raising the same ValueError (Python) when a
-#: value is not finite. Same words reach the device; no arithmetic changes.
-#: Expect: randomized-svd istella 501 -> ~430-460 ms (the host scan is
-#: ~1 cycle a float), taxi a few ms.
-#: RSVD_FAST_DEVSCAN OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
-#: 2026-10-05, rab15-rsvdbundle, with DECOMP_FAST_ORTH_WS): randomized-svd
-#: istella 490.1 -> 435.1 ms, taxi 200.5 -> 189.8 ms, error equal to 1e-14.
-#: KEEP: the FAST + Apple default; rollback -D MOJOLEARN_RSVD_FAST_DEVSCAN_OFF.
-comptime RSVD_FAST_DEVSCAN = XD_FAST_APPLE and not is_defined["MOJOLEARN_RSVD_FAST_DEVSCAN_OFF"]()
+# TOMBSTONE: MOJOLEARN_RSVD_FAST_DEVSCAN (KEPT FAST + Apple default, superseded) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch. It moved randomized_svd's
+# finiteness refusal from the serial host scan to the device copy (rab15: istella
+# 490.1 -> 435.1 ms with ORTH_WS). randomized_svd is now one driver
+# (x_decomp/randomized_svd_owner.mojo) whose input admission runs the parallel
+# host scan of the one admission path, so the serial scan it beat is gone.
 
 #: What: `Kit.orth` on a device matrix (`x_decomp_dev_orth`, resident.mojo
 #: `dev_orth_py` -> device.mojo `orth_on_device_diag`) copies A into the
@@ -119,11 +109,10 @@ comptime LU_RESIDENT_ENTRIES = LU_FAST_RESIDENT or IDN_LU_RESIDENT_PAIR
 
 
 def s_flags_run() -> Int:
-    """Bit 1 RSVD_FAST_DEVSCAN, bit 2 DECOMP_FAST_ORTH_WS, bit 4
-    LU_FAST_RESIDENT, bit 8 IDN_LU_RESIDENT_PAIR (0 when none)."""
+    """Bit 2 DECOMP_FAST_ORTH_WS, bit 4 LU_FAST_RESIDENT, bit 8
+    IDN_LU_RESIDENT_PAIR (0 when none; bit 1, RSVD_FAST_DEVSCAN, was deleted
+    2026-11-08)."""
     var f = 0
-    comptime if RSVD_FAST_DEVSCAN:
-        f |= 1
     comptime if DECOMP_FAST_ORTH_WS:
         f |= 2
     comptime if LU_FAST_RESIDENT:
@@ -223,26 +212,15 @@ def dev_lu_solve_run(
     return cells
 
 
-def dev_upload_scan_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
-    """`dev_upload_scan_py`'s typed body: cnt host floats into pool matrix
-    i, then the first non-finite index or -1."""
-    var p = X_DECOMP_POOL.get_or_create_ptr()
-    _ = _ptr(i, cnt)
-    var r = -1
-    if cnt <= 0:
-        return r
-    var ctx = xd_ctx()
-    _up_into(ctx, p[].bufs[i], src, cnt)
-    r = device_first_nonfinite(ctx, p[].bufs[i], cnt)
-    ctx.synchronize()
-    return r
+# TOMBSTONE: MOJOLEARN_RSVD_FAST_DEVSCAN (its upload-and-scan entry dev_upload_scan_run) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
 
 
 def orth_ws_on_device(
     ctx: DeviceContext, a: DeviceBuffer[DType.float32], dst: DeviceBuffer[DType.float32], m: Int, l: Int
 ) raises:
     """dst = the orthonormalized columns of a (both m x l, a unchanged):
-    `orth_on_device`'s two passes with pooled work buffers; waits."""
+    `orth_on_device`'s two passes with pooled work buffers, enqueued."""
     comptime NAME = "MojoXDecompOrthWS"
     var cells = m * l
     var ns = qr_slice_count(m, l)
@@ -263,8 +241,12 @@ def orth_ws_on_device(
         )
         _ = src^
         _ = out^
-    # every launch that reads the pooled buffers is done before they go back
-    ctx.synchronize()
+    # No wait before the buffers go back (lane consol-n0-readmission: this
+    # synchronize() read nothing). The pool is this function's own name and
+    # its only taker is this function on x_decomp's one context
+    # (`dev_orth_ws_run` -> `xd_ctx`), so the next take's launches run after
+    # these in stream order, as x_decomp's resident pool (`pool_free`) already
+    # relies on.
     pool_give[NAME](dw^)
     pool_give[NAME](dq^)
     pool_give[NAME](scratch^)

@@ -23,11 +23,11 @@ comptime _SAMBA_CAPS_SLOT = "p3_samba_caps_v1"
 # Record layout (a Python tuple of exact ints/bools/strs).
 comptime SAMBA_CAP_MODE = 0  # Int: training_numeric_mode() of the binding (1 identical, 0 fast), -1 absent
 comptime SAMBA_CAP_VENDOR = 1  # training_vendor() of the binding, None when absent
-comptime SAMBA_CAP_RESIDENT_ABI = 2  # Bool: the four resident entries exist
+comptime SAMBA_CAP_RESIDENT_ABI = 2  # Bool: the three resident train-step entries exist
 comptime SAMBA_CAP_RESIDENT_ON = 3  # Bool: samba_resident_enabled() (compile-time switch)
 comptime SAMBA_CAP_ACCUMULATED = 4  # Bool: samba_resident_accumulated_step exists
 comptime SAMBA_CAP_CHUNKED = 5  # Bool: training_chunked_lm_head_enabled() (False when absent)
-comptime SAMBA_CAP_AFN = 6  # Bool: the three fused-tail entries exist
+comptime SAMBA_CAP_AFN = 6  # Bool: the two fused training-tail entries exist
 comptime SAMBA_CAP_HEAD_LOSS = 7  # Bool: samba_head_loss exists
 
 
@@ -44,13 +44,13 @@ def _probe(entries: PythonObject) raises -> PythonObject:
     if _has(bi, entries, "training_vendor"):
         vendor = _native_function(entries, "training_vendor")()
     var abi = True
-    for name in [String("samba_resident_enabled"), String("samba_resident_open"), String("samba_resident_forward"), String("samba_resident_step")]:  # driver-loop: over the fixed resident Samba ABI names, once per binding
+    for name in [String("samba_resident_enabled"), String("samba_resident_open"), String("samba_resident_step")]:  # driver-loop: over the fixed resident Samba ABI names, once per binding
         abi = abi and _has(bi, entries, name)
     var resident_on = abi and Bool(py=_native_function(entries, "samba_resident_enabled")())
     var accumulated = _has(bi, entries, "samba_resident_accumulated_step")
     var chunked = _has(bi, entries, "training_chunked_lm_head_enabled") and Bool(py=_native_function(entries, "training_chunked_lm_head_enabled")())
     var afn = True
-    for name in [String("samba_afn_norm_head_forward"), String("samba_afn_tail_train"), String("samba_afn_embedding_backward_tied")]:  # driver-loop: over the fixed fused-tail names, once per binding
+    for name in [String("samba_afn_tail_train"), String("samba_afn_embedding_backward_tied")]:  # driver-loop: over the fixed fused-tail names, once per binding
         afn = afn and _has(bi, entries, name)
     var head_loss = _has(bi, entries, "samba_head_loss")
     return Python.tuple(mode, vendor, PythonObject(abi), PythonObject(resident_on), PythonObject(accumulated),

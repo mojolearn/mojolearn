@@ -11,9 +11,13 @@ from bindings.py_balanced import py_call, py_get, py_fields, py_setitem, py_cont
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.py_typed_call import py_call_typed
 from bindings.trees_public_inputs import (
-    TreesMatrix, trees_f32, trees_builtins, trees_table, trees_entry, trees_helper, trees_vector,
-    trees_address, trees_cast, trees_all_finite, trees_decode_labels,
+    trees_builtins, trees_table, trees_entry, trees_helper,
+    trees_address, trees_cast, trees_decode_labels,
 )
+from bindings.admitted_input import admit_f32, admitted_vector
+from core.host_finite_scan import host_all_finite_f32
+# TOMBSTONE: trees_f32 / trees_all_finite / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.trees_public_score import (
     trees_accuracy, trees_r2, trees_shape_of, trees_sample_weight_f32, ScoreLabels, _classification_encoded,
     _metrics_mode, trees_accuracy_labels,
@@ -43,9 +47,10 @@ def boost_score(model: PythonObject, args: PythonObject, context: PythonObject) 
     var prediction = boost_operation(model, "trees_boost_predict", Python.tuple(X), context)
     # `as_f32_c(y, ndim=None)` and `as_f32_c(prediction, ndim=None)`, then
     # `r2_score`'s 1-D path.
-    var truth = trees_f32(y, -1, "C", "y", context)
-    var pred = trees_f32(prediction, -1, "C", "prediction", context)
-    var result = trees_r2(truth.keep, pred.keep, sample_weight, mode, context)
+    # NaN is refused by trees_r2's own check, with the metrics wording.
+    var truth = admit_f32(y, -1, "y", context, finite=False)
+    var pred = admit_f32(prediction, -1, "prediction", context, finite=False)
+    var result = trees_r2(truth.array, pred.array, sample_weight, mode, context)
     _ = truth^
     _ = pred^
     return PythonObject(result)
@@ -90,7 +95,7 @@ def _codes_i32(codes: PythonObject, n: Int, context: PythonObject) raises -> Pyt
                         + "kernels are the int32 instantiation (the int64 overload of "
                         + "adjusted_rand_index is the same code at a wider type and is "
                         + "not instantiated, metrics/NOT_IMPLEMENTED.tsv)")
-    var out = trees_vector(n, "<i4", context)
+    var out = admitted_vector(n, "<i4", context)
     trees_cast(trees_address(codes), "<i8", trees_address(out), "<i4", n, context)
     _ = out  # keep the Python object alive through the native call above
     return out
@@ -107,13 +112,13 @@ def _vocabulary_codes(target: ScoreLabels, var classes: PythonObject, context: P
         py_setitem(vocabulary, classes[i], PythonObject(i))
     if target.encoded:
         var k = len(target.classes)
-        var table = trees_vector(k, "<i4", context)
+        var table = admitted_vector(k, "<i4", context)
         var p = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(table))
         _ = table  # keep the Python object alive through the native call above
         for i in range(k):  # driver-loop: over the distinct target classes
             p[i] = Int32(Int(py=py_call(vocabulary.get, target.classes[i], PythonObject(-1))))
             _ = table  # keep the Python object alive through the native call above
-        var out = trees_vector(target.n, "<i4", context)
+        var out = admitted_vector(target.n, "<i4", context)
         _ = py_call_typed(trees_helper(context, "gather_i32"), PythonObject(trees_address(table)), PythonObject(k),
                           PythonObject(trees_address(target.codes)), PythonObject(target.n),
                           PythonObject(trees_address(out)))
@@ -121,7 +126,7 @@ def _vocabulary_codes(target: ScoreLabels, var classes: PythonObject, context: P
         _ = out  # keep the Python object alive through the native call above
         return out
     var n = len(target.values)
-    var out = trees_vector(n, "<i4", context)
+    var out = admitted_vector(n, "<i4", context)
     var q = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(out))
     _ = out  # keep the Python object alive through the native call above
     for i in range(n):  # cpu-route: Python object labels mapped per row, the explicit label input step
@@ -157,7 +162,7 @@ def gbdt_adapter_score(model: PythonObject, args: PythonObject, context: PythonO
         if sample_weight is not None:
             var w = trees_sample_weight_f32(sample_weight, n, "accuracy_score", context)
             result = py_call_typed(metrics["accuracy_score_weighted"], PythonObject(trees_address(encoded)),
-                                   PythonObject(trees_address(yp)), PythonObject(w.addr), Python.list(PythonObject(n)))
+                                   PythonObject(trees_address(yp)), PythonObject(w.address), Python.list(PythonObject(n)))
             _ = encoded  # keep the Python object alive through the native call above
             _ = w  # keep the Python object alive through the native call above
             _ = yp  # keep the Python object alive through the native call above
@@ -169,14 +174,15 @@ def gbdt_adapter_score(model: PythonObject, args: PythonObject, context: PythonO
             _ = yp  # keep the Python object alive through the native call above
         return py_call(trees_builtins().float, result)
     # `as_f32_c(y, ndim=None)` then `_regression_target`.
-    var target = trees_f32(y, -1, "C", "y", context)
-    var shape = trees_shape_of(target.keep, context)
+    var target = admit_f32(y, -1, "y", context, finite=False)
+    var shape = trees_shape_of(target.array, context)
     if len(shape) != 1 or target.rows * target.cols == 0:
         raise Error("y must be nonempty one-dimensional targets")
-    if not trees_all_finite(target.addr, target.rows, False, context):
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=target.address),
+                               target.rows):
         raise Error("y must be finite")
     _ = target  # keep the Python object alive through the native calls above
     var prediction = adapter_decision_function(model, X, context)
-    var result = trees_r2(target.keep, prediction, sample_weight, mode, context)
+    var result = trees_r2(target.array, prediction, sample_weight, mode, context)
     _ = target^
     return PythonObject(result)

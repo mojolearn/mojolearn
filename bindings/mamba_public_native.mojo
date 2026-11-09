@@ -32,7 +32,7 @@ from bindings.generation_buffers import (
 from bindings.causal_lm_public import _native_function, _native_entry_fields, _native_has_entry, _mutable, _writeback
 from bindings.causal_lm_construct import _model_bindings, _model_block
 from bindings.neural_block_public import neural_training_entries, _neural_input, _neural_lengths, _neural_int_words, neural_block_snapshot_prepared
-from bindings.neural_block_admission import neural_block_fields, neural_block_snapshot, neural_block_f32, neural_array_snapshot, neural_native_scalar
+from bindings.neural_block_admission import neural_block_fields, neural_block_snapshot, admit_block_f32, BLOCK_OPERATION, neural_array_snapshot, neural_native_scalar
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
@@ -46,6 +46,8 @@ from core.neural_block_public_impl import neural_copy_row_prefixes
 from core.native_descriptor_abi import MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
 from mamba.impl.mamba_session_impl import mamba_copy_f32, mamba_host_copy
 from mamba.impl.mamba_decode_plan import MambaDecodePlan
+from core.hostptr import f32_ptr
+from std.memory import memcpy
 
 
 # ---------------------------------------------------------------- Mamba3Block
@@ -594,7 +596,7 @@ def mamba3_set_input_states(mut mods: NativeModules,
     var targets = [String("theta"), String("h"), String("pending_k"), String("pending_v")]
     var sources = Python.list(theta, h, k, v)
     for i in range(4):  # driver-loop: over the four named continuation pieces
-        var source = neural_block_f32(sources[i], names[i], context)
+        var source = admit_block_f32(sources[i], names[i], context, BLOCK_OPERATION)
         var target = slots[targets[i]]
         var want = _shape_of(target)
         if not Bool(py=source.shape == want):
@@ -835,29 +837,13 @@ def _session_require_open(handle: PythonObject, what: String) raises:
         raise Error(what + ": the session is closed")
 
 
-def mamba_session_step(mut mods: NativeModules, session: PythonObject, input: PythonObject, context: PythonObject) raises -> PythonObject:
-    var hobj = session._handle
+def _session_step_call(mut mods: NativeModules, hobj: PythonObject, input_address: Int, output_address: Int,
+                       report_addresses: List[Int]) raises:
+    """One token through the session's arm: x (B, d_model) at `input_address`,
+    y (B, d_model) at `output_address`, the reports at `report_addresses`."""
     var h = hobj.downcast_value_ptr[MambaDecodeHandle]()
     var kind = h[].plan.kind
     var name = _kind_name(kind)
-    var what = _session_name(kind) + ".step"
-    _session_require_open(hobj, what)
-    var x = _neural_input(mods, input, h[].plan.d_model, True, context)
-    var b = h[].plan.b
-    if Int(py=x.shape[0]) != b:
-        raise Error(what + ": the session holds " + String(b) + " rows, x has B = " + String(x.shape[0]))
-    var keep = List[PythonObject]()
-    var y = generation_array([b, 1, h[].plan.d_model])
-    # Reports escape in the returned tuple/public h_last_ fields, so each
-    # call still owns fresh arrays. Their temporary collection is native.
-    var reports = List[PythonObject](capacity=len(h[].plan.report_dims))
-    for i in range(len(h[].plan.report_dims)):  # driver-loop: over the fixed report buffers
-        reports.append(generation_array(h[].plan.report_dims[i]))
-    var input_address = generation_address(x, keep)
-    var output_address = generation_address(y, keep)
-    var report_addresses = List[Int](capacity=len(reports))
-    for i in range(len(reports)):  # driver-loop: capture newly allocated report buffers at the provider boundary
-        report_addresses.append(generation_address(reports[i], keep))
     var addresses = h[].plan.step_addresses(h[].device is not None, input_address, output_address, report_addresses)
     if h[].device is not None:
         if h[].provider is not None:
@@ -895,6 +881,99 @@ def mamba_session_step(mut mods: NativeModules, session: PythonObject, input: Py
             h[].plan.pending = False
     if kind == 1 and h[].plan.profile == 2:
         h[].plan.position += 1
+
+
+def mamba_session_step(mut mods: NativeModules, session: PythonObject, input: PythonObject, context: PythonObject) raises -> PythonObject:
+    var hobj = session._handle
+    var h = hobj.downcast_value_ptr[MambaDecodeHandle]()
+    var kind = h[].plan.kind
+    var name = _kind_name(kind)
+    var what = _session_name(kind) + ".step"
+    _session_require_open(hobj, what)
+    var x = _neural_input(mods, input, h[].plan.d_model, True, context)
+    var b = h[].plan.b
+    if Int(py=x.shape[0]) != b:
+        raise Error(what + ": the session holds " + String(b) + " rows, x has B = " + String(x.shape[0]))
+    var keep = List[PythonObject]()
+    var y = generation_array([b, 1, h[].plan.d_model])
+    # Reports escape in the returned tuple/public h_last_ fields, so each
+    # call still owns fresh arrays. Their temporary collection is native.
+    var reports = List[PythonObject](capacity=len(h[].plan.report_dims))
+    for i in range(len(h[].plan.report_dims)):  # driver-loop: over the fixed report buffers
+        reports.append(generation_array(h[].plan.report_dims[i]))
+    var input_address = generation_address(x, keep)
+    var output_address = generation_address(y, keep)
+    var report_addresses = List[Int](capacity=len(reports))
+    for i in range(len(reports)):  # driver-loop: capture newly allocated report buffers at the provider boundary
+        report_addresses.append(generation_address(reports[i], keep))
+    _session_step_call(mods, hobj, input_address, output_address, report_addresses)
+    _ = keep^
+    if kind == 1:
+        return y
+    if kind == 2:
+        return Python.tuple(y, reports[0])
+    return Python.tuple(y, reports[0], reports[1], reports[2], reports[3])
+
+
+def mamba_session_decode(mut mods: NativeModules, session: PythonObject, input: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`decode(x)`: N tokens per row in one native call (decode plan D2).
+
+    x is (B, N, d_model). On the device arm the session's `_session_decode`
+    entry uploads x once, runs the one-token step body N times on the device
+    and downloads y once; the host arm runs the per-call step N times on the
+    session's own copies. Either way y and the state equal N `step` calls byte
+    for byte; the reports are the last token's."""
+    var hobj = session._handle
+    var h = hobj.downcast_value_ptr[MambaDecodeHandle]()
+    var kind = h[].plan.kind
+    var name = _kind_name(kind)
+    var what = _session_name(kind) + ".decode"
+    _session_require_open(hobj, what)
+    var x = _neural_input(mods, input, h[].plan.d_model, False, context)
+    var b = h[].plan.b
+    var dm = h[].plan.d_model
+    if Int(py=x.shape[0]) != b:
+        raise Error(what + ": the session holds " + String(b) + " rows, x has B = " + String(x.shape[0]))
+    var n = Int(py=x.shape[1])
+    var keep = List[PythonObject]()
+    var y = generation_array([b, n, dm])
+    var reports = List[PythonObject](capacity=len(h[].plan.report_dims))
+    for i in range(len(h[].plan.report_dims)):  # driver-loop: over the fixed report buffers
+        reports.append(generation_array(h[].plan.report_dims[i]))
+    var input_address = generation_address(x, keep)
+    var output_address = generation_address(y, keep)
+    var report_addresses = List[Int](capacity=len(reports))
+    for i in range(len(reports)):  # driver-loop: capture newly allocated report buffers at the provider boundary
+        report_addresses.append(generation_address(reports[i], keep))
+    if h[].device is not None:
+        if not _native_has_entry(mods, h[].binding, name + "_session_decode"):
+            raise Error("NotImplementedError: " + what + ": the loaded binding has no " + name + "_session_decode entry")
+        var addresses: List[Int] = [input_address, output_address]
+        for i in range(len(report_addresses)):  # driver-loop: admitted output report addresses
+            addresses.append(report_addresses[i])
+        var updated = py_call(_native_function(mods, h[].binding, name + "_session_decode"), h[].device,
+                              py_ints(addresses), py_ints([n]))
+        mods.released()
+        if kind != 1:
+            h[].plan.q = Int(py=updated)
+        if kind == 1 and h[].plan.profile == 2:
+            h[].plan.position += n
+    else:
+        # The host arm: the per-call step on the session's own copies, token
+        # by token, with token t copied into and out of (B, d_model) buffers.
+        var row = b * dm
+        var xt = List[Float32](length=row, fill=Float32(0.0))
+        var yt = List[Float32](length=row, fill=Float32(0.0))
+        var src = f32_ptr(input_address)
+        var dst = f32_ptr(output_address)
+        for t in range(n):  # driver-loop: over decode tokens, one host-arm step each
+            for r in range(b):  # driver-loop: over the session's batch rows, a host-arm copy of token t
+                memcpy(dest=xt.unsafe_ptr() + r * dm, src=src + (r * n + t) * dm, count=dm)
+            _session_step_call(mods, hobj, Int(xt.unsafe_ptr()), Int(yt.unsafe_ptr()), report_addresses)
+            for r in range(b):  # driver-loop: over the session's batch rows, a host-arm copy of token t
+                memcpy(dest=dst + (r * n + t) * dm, src=yt.unsafe_ptr() + r * dm, count=dm)
+        _ = xt^
+        _ = yt^
     _ = keep^
     if kind == 1:
         return y
@@ -1151,8 +1230,9 @@ def mamba_native_call(mut mods: NativeModules, operation: String, values: Python
         if operation == "session_exit":
             _ = mamba_session_close(mods, values[0], context)
             return PythonObject(False)
-        if operation == "session_step_public":
-            var result = mamba_session_step(mods, values[0], values[1], context)
+        if operation == "session_step_public" or operation == "session_decode_public":
+            var result = (mamba_session_step(mods, values[0], values[1], context) if operation == "session_step_public"
+                          else mamba_session_decode(mods, values[0], values[1], context))
             var hobj = fields["_handle"]
             var h = hobj.downcast_value_ptr[MambaDecodeHandle]()
             if h[].plan.kind == 1:
@@ -1216,6 +1296,8 @@ def mamba_native_call(mut mods: NativeModules, operation: String, values: Python
         return mamba_session_init(mods, values[0], values[1], values[2], context)
     if operation == "session_step":
         return mamba_session_step(mods, values[0], values[1], context)
+    if operation == "session_decode":
+        return mamba_session_decode(mods, values[0], values[1], context)
     if operation == "session_sync":
         return mamba_session_sync(mods, values[0], context)
     if operation == "session_load":

@@ -69,7 +69,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL 
 #: device never wrote (x-neighbors-svc-multiclass BATCH_MOVED, gp-optimize,
 #: steward 1790601762837). Same kernels, same order, each entry still
 #: synchronizes before it returns, so no bit moves.
-comptime _CTX_NAME = "MojoMixtureContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoMixtureContextFast"
+comptime _CTX_NAME = "MojolearnMixtureContextIdenticalV2" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnMixtureContextFastV2"
 
 
 def _binding_ctx() raises -> DeviceContext:
@@ -102,7 +102,8 @@ from mixture.checks.estep import (
     gmm_predict_labels,
 )
 from core.device_plan import DevicePlan
-from mixture.multi_gpu import gmm_device_plan, gmm_e_step_dispatch
+from mixture.multi_gpu import gmm_device_count, gmm_device_plan, gmm_e_step_dispatch
+from mixture.step_keep import GmmStepKeep
 from mixture.checks.sample import (
     GMM_SAMPLE_TPB,
     gmm_sample_components,
@@ -114,6 +115,7 @@ from mixture.checks.gmm_sabotage import (
     gmm_ulp_down,
 )
 from mixture.checks.mstep import (
+    GmmCholScratch,
     GmmMStepRun,
     gmm_chol_dwork_floats,
     gmm_chol_workspace_floats,
@@ -121,8 +123,19 @@ from mixture.checks.mstep import (
     gmm_mstep_gemm_workspace_floats,
     gmm_mstep_scratch_floats,
     gmm_precision_cholesky,
+    gmm_precision_enqueue,
+    gmm_precision_status,
+    gmm_status_put,
     resp_exp_kernel,
 )
+from autograd.program_loop import LoopTimers
+from autograd.program_loop_device import (
+    LoopRegisters, LoopStep, bounded_device_loop, loop_lap,
+)
+from core.step_gate import (
+    STEP_DONE, STEP_ITER, STEP_STOP_ITER, step_fail_joins_loop, step_gate_open_word,
+)
+from core.em_loop_chunk import em_loop_check_every
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, numeric_mode_name
 from checks.numerics import identical_div, identical_log
 from std.gpu import block_dim, block_idx, thread_idx
@@ -805,35 +818,10 @@ def gmm_initial_resp_host(
 #: reads the scoring E-step's device mean (`_gmm_score_device`, the order
 #: of `gmm_meanll_host`). Same words as the host forms, so no bit moves.
 
-#: IDENTICAL, every column: the mean log likelihood's copy to the host is
-#: enqueued right after the E-step instead of at the end of the iteration,
-#: so it rides the drain the precision Cholesky already pays to read its
-#: pivot flags and the iteration's last synchronize finds an empty queue.
-#: With `IDN_GMM_FUSED_CHOL` that is one working drain an EM iteration. The
-#: same value is read (nothing between the E-step and the read writes
-#: `meanll`). `-D MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF=1` restores the late copy.
-# I21 2026-10-06 legacy_both_off LOSS on both vendors, source 5b467815b51b:
-# generated COV_FULL fits k=9, rows/features=10000/17,10001/18,32769/9,
-# both-OFF/incumbent time ratios AMD 2.051/1.913/1.471 and NVIDIA L40S
-# 2.140/2.221/1.705. This arm restores BOTH the component Cholesky chain
-# and the late meanll copy below; its timing cannot isolate this drain
-# control. Isolated one_drain_off, same freeze/cases, OFF/ON ratios AMD
-# 0.987/1.000/1.010 (mixed near-neutral) and NVIDIA 1.010/1.020/1.532
-# (losses). This arm retains fused Cholesky and only moves the meanll copy
-# from after E-step to after M-step/Cholesky, before the final synchronize.
-# All six isolated and six combined rollback executions converged=True,
-# rc=0; one excluded same-context fit and one scored fit per binary.
-# Retain ON: the small AMD first-case gain does not offset the NVIDIA losses.
-# Retain the existing ON default. Prior identity evidence reused without
-# revalidation; synthetic caller results do not qualify full-board changes.
-# Evidence: experiments/performance_ideas/measurements/20261006/index.json.
-comptime IDN_GMM_ONE_DRAIN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not (
-        is_defined["MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF"]()
-        or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    )
-)
+# TOMBSTONE: MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF (REFACTORED: the EM loop reads no meanll home; the criterion is a device value) deleted 2026-11-09 by lane/n1-gmm-bgmm-loops; code recoverable at f59d913b0b.
+# Kept-winner switch (I21 2026-10-06: OFF/ON NVIDIA 1.010/1.020/1.532, AMD 0.987/1.000/1.010) moved the meanll copy onto the pivot drain;
+# the device loop (GmmEmStep) has neither the copy nor the per-iteration drain it rode.
+# Restore: git apply experiments/removed/EXECUTOR_EM_DRIVER_LOOPS.patch; record in docs/TOMBSTONES.md.
 
 comptime GMM_INIT_TPB = 256
 #: lane/review-fixes: the largest Int32, so `Atomic.min` keeps the LOWEST
@@ -1064,6 +1052,214 @@ def _download(
     return out^
 
 
+# ===========================================================================
+# THE EM LOOP AS A STEP OP (lane n1-gmm-bgmm-loops, 2026-11-09)
+# ===========================================================================
+
+
+def gmm_em_commit_kernel(
+    words: MutPointer[Int32, MutAnyOrigin],
+    w_src: MutPointer[Float32, MutAnyOrigin],
+    w_dst: MutPointer[Float32, MutAnyOrigin],
+    m_src: MutPointer[Float32, MutAnyOrigin],
+    m_dst: MutPointer[Float32, MutAnyOrigin],
+    c_src: MutPointer[Float32, MutAnyOrigin],
+    c_dst: MutPointer[Float32, MutAnyOrigin],
+    p_src: MutPointer[Float32, MutAnyOrigin],
+    p_dst: MutPointer[Float32, MutAnyOrigin],
+    l_src: MutPointer[Float32, MutAnyOrigin],
+    l_dst: MutPointer[Float32, MutAnyOrigin],
+    ncomp: Int32,
+    kd: Int32,
+    kdd: Int32,
+):
+    """While the loop runs: this iteration's weights, means, covariances,
+    precision Cholesky factors and log determinants into the committed
+    copies (one cell per thread, a plain copy). Once the loop is done it
+    writes nothing, so the copies are the stopping iteration's."""
+    if words.unsafe_load(STEP_DONE) != Int32(0):
+        return
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(ncomp):
+        w_dst.unsafe_store(t, w_src.unsafe_load(t))
+        l_dst.unsafe_store(t, l_src.unsafe_load(t))
+    if t < Int(kd):
+        m_dst.unsafe_store(t, m_src.unsafe_load(t))
+    if t < Int(kdd):
+        c_dst.unsafe_store(t, c_src.unsafe_load(t))
+        p_dst.unsafe_store(t, p_src.unsafe_load(t))
+
+
+def gmm_em_criterion_kernel(
+    words: MutPointer[Int32, MutAnyOrigin],
+    meanll: MutPointer[Float32, MutAnyOrigin],
+    lower_bound: MutPointer[Float32, MutAnyOrigin],
+    change_out: MutPointer[Float32, MutAnyOrigin],
+    tol: Float32,
+    it: Int32,
+    ulp_down: Int32,
+):
+    """`_base.py:270-277` on the device, one thread: `change = lower_bound -
+    prev` with DEVIATION 1747's first-iteration `+inf`
+    (`gmm_convergence_change`), the bound kept, and `abs(change) < tol`
+    (`gmm_converged`, the same float32 comparison the host made) sets the
+    stopping iteration and the done word. `ulp_down` is
+    `GMM_SAB_TOL_ULP`'s arm: the compared value one ulp toward zero. Once
+    the loop is done it changes nothing."""
+    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+        return
+    if words.unsafe_load(STEP_DONE) != Int32(0):
+        return
+    var cur = meanll.unsafe_load(0)
+    var change = gmm_convergence_change(cur, lower_bound.unsafe_load(0))
+    change_out.unsafe_store(0, change)
+    lower_bound.unsafe_store(0, cur)
+    words.unsafe_store(STEP_ITER, it)
+    var compared = change
+    if ulp_down != Int32(0):
+        compared = gmm_ulp_down(change)
+    if gmm_converged(compared, tol):
+        words.unsafe_store(STEP_STOP_ITER, it)
+        words.unsafe_store(STEP_DONE, Int32(1))
+
+
+@fieldwise_init
+struct GmmEmStep(LoopStep, Movable):
+    """One EM iteration of `gaussian_mixture_fit` as a step op of the
+    executor's bounded loop (`autograd/program_loop_device.mojo`): the
+    E-step (`gmm_e_step_dispatch`), the M-step (`gmm_m_step`) and the
+    precision Cholesky (`gmm_precision_enqueue`; the sabotage arms' host
+    chain `gmm_precision_cholesky`), the kernels and order of the
+    host-driven loop it replaced; then the pivot verdict joins the loop
+    (`step_fail_joins_loop`), the gated commit of the parameters and the
+    criterion. The E-step and M-step kernels are not gated: an iteration
+    enqueued past the stop runs and its result is never committed (the
+    identical GEMMs, most of an iteration's work, take no gate, so
+    core/em_loop_chunk.mojo keeps heavy iterations at one per read). The
+    steps' per-call scratch is held in `keep` (mixture/step_keep.mojo), so
+    no lifetime drain runs inside a chunk. The buffer fields are handle
+    copies of the fit's buffers."""
+    var dplan: DevicePlan
+    var dx: DeviceBuffer[DType.float32]
+    var logresp: DeviceBuffer[DType.float32]
+    var resp: DeviceBuffer[DType.float32]
+    var mahal: DeviceBuffer[DType.float32]
+    var wlp: DeviceBuffer[DType.float32]
+    var rowmax: DeviceBuffer[DType.float32]
+    var lse: DeviceBuffer[DType.float32]
+    var meanll: DeviceBuffer[DType.float32]
+    var nk: DeviceBuffer[DType.float32]
+    var weights: DeviceBuffer[DType.float32]
+    var log_weights: DeviceBuffer[DType.float32]
+    var log_det_chol: DeviceBuffer[DType.float32]
+    var means: DeviceBuffer[DType.float32]
+    var cov: DeviceBuffer[DType.float32]
+    var chol_l: DeviceBuffer[DType.float32]
+    var linv: DeviceBuffer[DType.float32]
+    var prec: DeviceBuffer[DType.float32]
+    var escratch: DeviceBuffer[DType.float32]
+    var mscratch: DeviceBuffer[DType.float32]
+    var gws: DeviceBuffer[DType.float32]
+    var cws: DeviceBuffer[DType.float32]
+    var dwork: DeviceBuffer[DType.float32]
+    var c_weights: DeviceBuffer[DType.float32]
+    var c_means: DeviceBuffer[DType.float32]
+    var c_cov: DeviceBuffer[DType.float32]
+    var c_prec: DeviceBuffer[DType.float32]
+    var c_logdet: DeviceBuffer[DType.float32]
+    var lb: DeviceBuffer[DType.float32]
+    var change: DeviceBuffer[DType.float32]
+    var chol: GmmCholScratch
+    var trace: IdentityTrace
+    var card_prefix: String
+    var n: Int
+    var d: Int
+    var ncomp: Int
+    var reg_covar: Float32
+    var tol: Float32
+    var elem_tpb: Int
+    var row_tpb: Int
+    var comp_tpb: Int
+    var solve_tpb: Int
+    var panel_tpb: Int
+    var chol_elem_tpb: Int
+    var sabotage: Int
+    var cov_lo_addr: Int
+    # the E-/M-step scratch held across the loop (mixture/step_keep.mojo)
+    var keep: GmmStepKeep
+
+    def enqueue_step(
+        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
+    ) raises:
+        var tag = gmm_iter_prefix(self.card_prefix, it)
+        var keep_addr = self.keep.address()
+        gmm_e_step_dispatch(
+            self.dplan, ctx, self.dx, self.means, self.prec, self.linv,
+            self.log_det_chol, self.log_weights, self.escratch, self.gws,
+            self.mahal, self.wlp, self.rowmax, self.lse, self.logresp,
+            self.meanll, self.n, self.d, self.ncomp, self.trace, tag,
+            self.elem_tpb, self.row_tpb, self.sabotage, keep_addr,
+        )
+        loop_lap(ctx, timers, "estep")
+        gmm_m_step(
+            ctx, self.dx, self.logresp, self.resp, self.nk, self.weights,
+            self.log_weights, self.means, self.cov, self.mscratch, self.gws,
+            self.n, self.d, self.ncomp, self.reg_covar, False, self.trace,
+            tag, self.elem_tpb, self.comp_tpb, self.sabotage,
+            self.cov_lo_addr, keep_addr,
+        )
+        loop_lap(ctx, timers, "mstep")
+        if self.sabotage == GMM_SAB_NONE:
+            gmm_precision_enqueue(
+                ctx, registers.words, self.cov, self.chol_l, self.linv,
+                self.prec, self.log_det_chol, self.chol, self.d, self.ncomp,
+                self.trace, tag, self.elem_tpb, self.chol_elem_tpb,
+                self.cov_lo_addr,
+            )
+        else:
+            var run = gmm_precision_cholesky(
+                ctx, self.cov, self.chol_l, self.linv, self.prec,
+                self.log_det_chol, self.cws, self.dwork, self.d, self.ncomp,
+                self.trace, tag, self.elem_tpb, self.solve_tpb,
+                self.panel_tpb, self.chol_elem_tpb, self.sabotage,
+                self.cov_lo_addr,
+            )
+            gmm_status_put(ctx, self.chol, run)
+        # a collapsed component stops the loop here (DEVIATION 1723),
+        # before the commit and the criterion read this iteration
+        step_fail_joins_loop(ctx, registers.words, self.chol.status, it)
+        loop_lap(ctx, timers, "precision_cholesky")
+        var kd = self.ncomp * self.d
+        var kdd = kd * self.d
+        ctx.enqueue_function[gmm_em_commit_kernel](
+            registers.words.unsafe_ptr(),
+            self.weights.unsafe_ptr(), self.c_weights.unsafe_ptr(),
+            self.means.unsafe_ptr(), self.c_means.unsafe_ptr(),
+            self.cov.unsafe_ptr(), self.c_cov.unsafe_ptr(),
+            self.prec.unsafe_ptr(), self.c_prec.unsafe_ptr(),
+            self.log_det_chol.unsafe_ptr(), self.c_logdet.unsafe_ptr(),
+            Int32(self.ncomp), Int32(kd), Int32(kdd),
+            grid_dim=((kdd + GMM_INIT_TPB - 1) // GMM_INIT_TPB, 1, 1),
+            block_dim=(GMM_INIT_TPB, 1, 1),
+        )
+        var ulp = Int32(1) if self.sabotage == GMM_SAB_TOL_ULP else Int32(0)
+        ctx.enqueue_function[gmm_em_criterion_kernel](  # small-launch(one word): the EM loop's convergence criterion
+            registers.words.unsafe_ptr(), self.meanll.unsafe_ptr(),
+            self.lb.unsafe_ptr(), self.change.unsafe_ptr(), self.tol,
+            Int32(it), ulp, grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+        )
+        loop_lap(ctx, timers, "commit_criterion")
+        if self.trace.enabled:
+            # `<tag>.change` after the stages, as the host loop recorded it;
+            # none on an iteration whose factor failed (the host loop raised
+            # first). The trace runs one iteration per read.
+            var verdict = gmm_precision_status(ctx, self.chol)
+            if verdict.info == 0:
+                var one = List[Float32]()
+                one.append(_download(ctx, self.change, 1)[0])
+                self.trace.record_list_f32(tag + ".change", one)
+
+
 def gaussian_mixture_fit(
     x: List[Float32],
     n_samples: Int,
@@ -1148,16 +1344,17 @@ def gaussian_mixture_fit(
             lower_bound = mean log likelihood
             if abs(lower_bound - prev) < tol: converged; STOP
 
-    **THE CONVERGENCE TEST IS ON THE HOST AND THAT COSTS ONE DRAIN PER
-    ITERATION.** `meanll` is read back so `abs(change) < tol` is decided by
-    one float32 comparison in one place, on a value the card has already
-    hashed. The alternative -- a device-side test writing a flag -- would put
-    the decision behind a kernel launch where nothing can hash it, and
-    `CONTRIBUTING.md` (Algorithms and references) records that this repository has already
-    invented one on-device convergence test, cited a line range that was
-    actually a function signature, and been wrong: cuVS's own k-means loop
-    syncs at `detail/kmeans.cuh:491` and tests on the HOST at `:492`. The
-    drain is deliberate and `mixture/README.md`'s WHAT IS OWED prices it.
+    **THE CONVERGENCE TEST IS A DEVICE VALUE** (lane n1-gmm-bgmm-loops,
+    2026-11-09). The loop is the executor's bounded device loop over
+    `GmmEmStep`: `gmm_em_criterion_kernel` makes the same one float32
+    comparison `abs(change) < tol` (`gmm_converged`, DEVIATION 1747's
+    first-iteration `+inf` from `gmm_convergence_change`) in one place,
+    writes the change it compared (the card records it, `<tag>.change`) and
+    sets the loop's done word; the parameters of the stopping iteration are
+    the committed copies (`gmm_em_commit_kernel`). The host reads the
+    register block once per `check_every` iterations
+    (`core/em_loop_chunk.mojo`); with a trace on, a sabotage arm, or a
+    row-sharded E-step it reads it every iteration.
 
     **A COLLAPSED COMPONENT RAISES.** DEVIATION 1723. The error names the
     iteration, the component and LAPACK's `info`, and mirrors
@@ -1214,9 +1411,6 @@ def gaussian_mixture_fit(
         + String(params.random_state)
     )
 
-    var st_i0 = Int(perf_counter_ns())
-    var st_i1 = Int(perf_counter_ns())
-
     trace.record_device(ctx, card_prefix + ".input", dx, n * d)
 
     var logresp = ctx.enqueue_create_buffer[DType.float32](n * ncomp)
@@ -1254,12 +1448,31 @@ def gaussian_mixture_fit(
     if mg > need_gws:
         need_gws = mg
     var gws = ctx.enqueue_create_buffer[DType.float32](need_gws)
+    # the sabotage arms' host-read chain (gmm_precision_cholesky) only
     var cws = ctx.enqueue_create_buffer[DType.float32](
         gmm_chol_workspace_floats(d)
     )
     var dwork = ctx.enqueue_create_buffer[DType.float32](
         gmm_chol_dwork_floats(d)
     )
+    # the precision Cholesky's pivots and verdict as device words
+    # (gmm_precision_enqueue), and the gate of a call outside the loop
+    var chol = GmmCholScratch(ctx, d, ncomp)
+    var open_gate = step_gate_open_word(ctx)
+    # THE COMMITTED PARAMETERS: the EM loop's ungated kernels keep running
+    # for the iterations enqueued past the stop, so the fit's outputs are
+    # these copies, written by `gmm_em_commit_kernel` while the loop runs.
+    var c_weights = ctx.enqueue_create_buffer[DType.float32](ncomp)
+    var c_means = ctx.enqueue_create_buffer[DType.float32](ncomp * d)
+    var c_cov = ctx.enqueue_create_buffer[DType.float32](ncomp * dd)
+    var c_prec = ctx.enqueue_create_buffer[DType.float32](ncomp * dd)
+    var c_logdet = ctx.enqueue_create_buffer[DType.float32](ncomp)
+    # the lower bound so far (the criterion's state) and the last change
+    var lb = ctx.enqueue_create_buffer[DType.float32](1)
+    var change = ctx.enqueue_create_buffer[DType.float32](1)
+    var hlb = ctx.enqueue_create_host_buffer[DType.float32](1)
+    hlb.unsafe_ptr().unsafe_store(0, gmm_neg_inf())
+    ctx.enqueue_copy(dst_buf=lb, src_ptr=hlb.unsafe_ptr())
     ctx.synchronize()
 
     # ---- initialization -------------------------------------------------
@@ -1269,9 +1482,6 @@ def gaussian_mixture_fit(
     # is the one place in the fit a `log` of a value we already had is
     # taken, and it is exact for the one-hot case (`log(1) = +0.0`,
     # `log(0) = -inf`, and `exp` of those is `1` and `+0.0` again).
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
-    var st_i2 = Int(perf_counter_ns())
-    var st_i3 = Int(perf_counter_ns())
     var dloginit = _gmm_init_resp_buffer(ctx, n * ncomp)
     var dresp0 = _gmm_init_resp_buffer(ctx, n * ncomp)
     gmm_initial_resp_device(ctx, x, n, d, params, dresp0, dloginit)
@@ -1291,117 +1501,93 @@ def gaussian_mixture_fit(
         mscratch, gws, n, d, ncomp, params.reg_covar, True, trace,
         card_prefix + ".init", elem_tpb, comp_tpb, sabotage, cov_lo_addr,
     )
-    var pre = gmm_precision_cholesky(
-        ctx, cov, chol_l, linv, prec, log_det_chol, cws, dwork, d, ncomp,
-        trace, card_prefix + ".init", elem_tpb, solve_tpb, panel_tpb,
-        chol_elem_tpb, sabotage, cov_lo_addr,
-    )
-    if pre.info != 0:
-        raise Error(_collapse_message(0, pre, params))
-
-    var lower_bound = gmm_neg_inf()
-    var n_iter = 0
-    var converged = False
-    var hll = ctx.enqueue_create_host_buffer[DType.float32](1)
-    ctx.synchronize()
-
-    # MOJOLEARN_STAGE_TIMES=1: drain around each EM phase and print the
-    # totals (a diagnostic; the drains make it a different program).
-    if st_on:
-        var now = Int(perf_counter_ns())
-        print(
-            "GMM_INIT_TIMES resp0_ms=" + String((st_i1 - st_i0) // 1000000) + " buffers_ms="
-            + String((st_i2 - st_i1) // 1000000) + " loginit_ms=" + String((st_i3 - st_i2) // 1000000)
-            + " upload_mstep_chol_ms=" + String((now - st_i3) // 1000000)
+    var pre: GmmMStepRun
+    if sabotage == GMM_SAB_NONE:
+        gmm_precision_enqueue(
+            ctx, open_gate, cov, chol_l, linv, prec, log_det_chol, chol, d,
+            ncomp, trace, card_prefix + ".init", elem_tpb, chol_elem_tpb,
+            cov_lo_addr,
         )
-    var st_e = 0
-    var st_m = 0
-    var st_c = 0
-    var st_t = 0
-    for it in range(1, params.max_iter + 1):
-        var tag = gmm_iter_prefix(card_prefix, it)
-        var prev = lower_bound
-
-        if st_on:
-            ctx.synchronize()
-            st_t = Int(perf_counter_ns())
-        gmm_e_step_dispatch(
-            dplan, ctx, dx, means, prec, linv, log_det_chol, log_weights,
-            escratch, gws, mahal, wlp, rowmax, lse, logresp, meanll,
-            n, d, ncomp, trace, tag, elem_tpb, row_tpb, sabotage,
-        )
-        comptime if IDN_GMM_ONE_DRAIN:
-            # The E-step wrote `meanll` and nothing later in the iteration
-            # touches it: start its trip home now, so the precision
-            # Cholesky's one drain (the pivot flags) brings it too.
-            ctx.enqueue_copy(dst_ptr=hll.unsafe_ptr(), src_buf=meanll)
-        if st_on:
-            ctx.synchronize()
-            var now = Int(perf_counter_ns())
-            st_e += now - st_t
-            st_t = now
-        gmm_m_step(
-            ctx, dx, logresp, resp, nk, weights, log_weights, means, cov,
-            mscratch, gws, n, d, ncomp, params.reg_covar, False, trace,
-            tag, elem_tpb, comp_tpb, sabotage, cov_lo_addr,
-        )
-        if st_on:
-            ctx.synchronize()
-            var now = Int(perf_counter_ns())
-            st_m += now - st_t
-            st_t = now
-        var p2 = gmm_precision_cholesky(
-            ctx, cov, chol_l, linv, prec, log_det_chol, cws, dwork, d,
-            ncomp, trace, tag, elem_tpb, solve_tpb, panel_tpb,
+        pre = gmm_precision_status(ctx, chol)
+    else:
+        pre = gmm_precision_cholesky(
+            ctx, cov, chol_l, linv, prec, log_det_chol, cws, dwork, d, ncomp,
+            trace, card_prefix + ".init", elem_tpb, solve_tpb, panel_tpb,
             chol_elem_tpb, sabotage, cov_lo_addr,
         )
-        if p2.info != 0:
-            raise Error(_collapse_message(it, p2, params))
-        if st_on:
-            ctx.synchronize()
-            st_c += Int(perf_counter_ns()) - st_t
+    if pre.info != 0:
+        raise Error(_collapse_message(0, pre, params))
+    # max_iter = 0 fits the initialization: it is the committed state until
+    # an iteration commits its own
+    ctx.enqueue_copy(dst_buf=c_weights, src_buf=weights)
+    ctx.enqueue_copy(dst_buf=c_means, src_buf=means)
+    ctx.enqueue_copy(dst_buf=c_cov, src_buf=cov)
+    ctx.enqueue_copy(dst_buf=c_prec, src_buf=prec)
+    ctx.enqueue_copy(dst_buf=c_logdet, src_buf=log_det_chol)
 
-        # THE ONE DRAIN PER ITERATION. See this function's docstring.
-        comptime if not IDN_GMM_ONE_DRAIN:
-            ctx.enqueue_copy(dst_ptr=hll.unsafe_ptr(), src_buf=meanll)
-        ctx.synchronize()
-        lower_bound = hll.unsafe_ptr().unsafe_load(0)
-
-        var change = gmm_convergence_change(lower_bound, prev)
-        var compared = change
-        if sabotage == GMM_SAB_TOL_ULP:
-            # ARM. THE MOST IMPORTANT ONE IN THE LANE. The value compared
-            # against `tol` is moved ONE ULP toward zero. No parameter and no
-            # probability changes; only whether the loop stops.
-            compared = gmm_ulp_down(change)
-        var one = List[Float32]()
-        one.append(change)
-        trace.record_list_f32(tag + ".change", one)
-
-        n_iter = it
-        if gmm_converged(compared, params.tol):
-            converged = True
-            break
-
-    if st_on:
-        print(
-            "GMM_STAGE_TIMES iters=" + String(n_iter) + " estep_ms="
-            + String(st_e // 1000000) + " mstep_ms=" + String(st_m // 1000000)
-            + " chol_ms=" + String(st_c // 1000000)
+    # ---- EM -------------------------------------------------------------
+    # Lane n1-gmm-bgmm-loops (2026-11-09): the EM iterations run as the
+    # executor's bounded device loop over one step op (`GmmEmStep`: the
+    # E-step, the M-step and the precision Cholesky with the kernels and
+    # order of the host-driven loop it replaces, then the commit and the
+    # criterion as device values). The host reads the register block once
+    # per `check_every` iterations (core/em_loop_chunk.mojo); a trace, a
+    # sabotage arm or a row-sharded E-step reads it every iteration.
+    # TOMBSTONE: gmm-em-host-driver-loop (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n1-gmm-bgmm-loops; code recoverable at f59d913b0b.
+    # Restore: git apply experiments/removed/EXECUTOR_EM_DRIVER_LOOPS.patch; record in docs/TOMBSTONES.md.
+    var check_every = em_loop_check_every(n, ncomp, d)
+    if trace.enabled or sabotage != GMM_SAB_NONE or gmm_device_count(dplan) > 1:
+        check_every = 1
+    var step = GmmEmStep(
+        dplan.copy(), dx.copy(), logresp.copy(), resp.copy(), mahal.copy(),
+        wlp.copy(), rowmax.copy(), lse.copy(), meanll.copy(), nk.copy(),
+        weights.copy(), log_weights.copy(), log_det_chol.copy(),
+        means.copy(), cov.copy(), chol_l.copy(), linv.copy(), prec.copy(),
+        escratch.copy(), mscratch.copy(), gws.copy(), cws.copy(),
+        dwork.copy(), c_weights.copy(), c_means.copy(), c_cov.copy(),
+        c_prec.copy(), c_logdet.copy(), lb.copy(), change.copy(), chol^,
+        trace^, card_prefix, n, d, ncomp, params.reg_covar, params.tol,
+        elem_tpb, row_tpb, comp_tpb, solve_tpb, panel_tpb, chol_elem_tpb,
+        sabotage, cov_lo_addr, GmmStepKeep(),
+    )
+    var n_iter = 0
+    var converged = False
+    if params.max_iter >= 1:
+        var registers = LoopRegisters(ctx)
+        var timers = LoopTimers(card_prefix + ".em")
+        var outcome = bounded_device_loop(
+            ctx, step, registers, 1, params.max_iter, check_every, timers,
         )
+        timers.report()
+        if registers.failure() != 0:
+            # A COLLAPSED COMPONENT RAISES (DEVIATION 1723), naming the
+            # iteration the failure stopped the loop at
+            var run = gmm_precision_status(ctx, step.chol)
+            raise Error(
+                _collapse_message(registers.word(STEP_STOP_ITER), run, params)
+            )
+        if outcome.converged:
+            converged = True
+            n_iter = outcome.stop_iteration
+        else:
+            n_iter = params.max_iter
+
     var card = List[Int32]()
     card.append(Int32(n_iter))
     card.append(Int32(1) if converged else Int32(0))
     card.append(Int32(params.max_iter))
-    trace.record_list_i32(card_prefix + ".niter", card)
+    step.trace.record_list_i32(card_prefix + ".niter", card)
 
-    var out_w = _download(ctx, weights, ncomp)
-    var out_m = _download(ctx, means, ncomp * d)
+    ctx.enqueue_copy(dst_ptr=hlb.unsafe_ptr(), src_buf=lb)
+    ctx.synchronize()
+    var lower_bound = hlb.unsafe_ptr().unsafe_load(0)
+    var out_w = _download(ctx, c_weights, ncomp)
+    var out_m = _download(ctx, c_means, ncomp * d)
     if labels_address != 0 and n > 0:
         # fit_predict's final labels on the fit's own device buffers (N401).
         var final_lw = ctx.enqueue_create_buffer[DType.float32](ncomp)
         ctx.enqueue_function[gmm_log_weights_kernel](
-            weights.unsafe_ptr(),
+            c_weights.unsafe_ptr(),
             Int32(ncomp),
             final_lw.unsafe_ptr(),
             grid_dim=((ncomp + GMM_INIT_TPB - 1) // GMM_INIT_TPB, 1, 1),
@@ -1411,7 +1597,7 @@ def gaussian_mixture_fit(
         var label_trace = IdentityTrace.disabled()
         var dlabels = ctx.enqueue_create_buffer[DType.int32](n)
         gmm_e_step_dispatch(
-            dplan, ctx, dx, means, prec, prec, log_det_chol, final_lw,
+            dplan, ctx, dx, c_means, c_prec, c_prec, c_logdet, final_lw,
             escratch, gws, mahal, wlp, rowmax, lse, logresp, meanll,
             n, d, ncomp, label_trace, card_prefix + ".predict", GMM_ELEM_TPB,
             GMM_ROW_TPB, GMM_SAB_NONE,
@@ -1427,10 +1613,11 @@ def gaussian_mixture_fit(
         ctx.synchronize()
         _ = dlabels^
         _ = final_lw^
-    var out_c = _download(ctx, cov, ncomp * dd)
-    var out_p = _download(ctx, prec, ncomp * dd)
-    var out_l = _download(ctx, log_det_chol, ncomp)
+    var out_c = _download(ctx, c_cov, ncomp * dd)
+    var out_p = _download(ctx, c_prec, ncomp * dd)
+    var out_l = _download(ctx, c_logdet, ncomp)
 
+    _ = step^
     _ = dx^
     _ = dloginit^
     _ = dresp0^
@@ -1456,7 +1643,15 @@ def gaussian_mixture_fit(
     _ = gws^
     _ = cws^
     _ = dwork^
-    _ = hll^
+    _ = open_gate^
+    _ = c_weights^
+    _ = c_means^
+    _ = c_cov^
+    _ = c_prec^
+    _ = c_logdet^
+    _ = lb^
+    _ = change^
+    _ = hlb^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
 

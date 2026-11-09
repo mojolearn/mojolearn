@@ -8,7 +8,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.family_common import family_call
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_arrays import classical_host_f32
+from bindings.admitted_input import admit_x
 from bindings.parallel_public_result import parallel_public_result
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.trees_public_forest import forest_effective_mode, _engine
@@ -221,7 +221,7 @@ def parallel_public_operation(model: PythonObject, packed: PythonObject, context
             raise Error("ValueError: parallel " + operation + " requires IDENTICAL numeric mode")
     var check = String(spec["check"]) if spec["check"] is not None else String("")
     if check == "gram" or check == "matrix" or check == "kmeans" or check == "gmm_predict":
-        var data = classical_host_f32(args[0], 2, "X", context)
+        var data = admit_x(args[0], 2, "X", context)
         py_setitem(args, PythonObject(0), data)
         if check == "gram":
             if Int(py=data.shape[1]) < 1:

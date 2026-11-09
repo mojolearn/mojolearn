@@ -3,22 +3,23 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 
 
-def test_small_mlp_uses_shared_provider_and_native_owners():
+def test_small_mlp_runs_one_captured_program():
     src=(ROOT/'bindings/small_mlp_native.mojo').read_text()
-    assert 'neural_descriptor_reuse' in src and 'neural_descriptor_execute' in src
-    assert 'struct SmallMlpProvider' not in src
     operation=src.split('def _mode_entries(')[1].split('def _mode_name(')[0]
-    assert 'entries["small_mlp_api_v1"]' in operation
-    assert 'MlpOperationMetadata(entries, provider, String(py=mode))' in operation
+    assert '"small_mlp_program"' in operation
+    assert 'MlpOperationMetadata(entries, String(py=mode))' in operation
+    code='\n'.join(line for line in src.splitlines() if not line.lstrip().startswith('#'))
+    for gone in ('mlp_train_step', 'mlp_resident_', 'small_mlp_api_v1', 'neural_descriptor_execute'):
+        assert gone not in code
     batch=src.split('def _batch_in(')[1].split('def _owned_rows(')[0]
     assert batch.count('= _view(')==1 and batch.count('= _shape(')==1
     assert '_words_from_view(value, view, shape,' in batch
-    table=(ROOT/'training/small_mlp_dispatch.mojo').read_text()
+    program=(ROOT/'autograd/small_mlp_program.mojo').read_text()
     for forbidden in ('PythonObject', 'std.python', 'bindings.', 'providers.'):
-        assert forbidden not in table
-    for owner in ('mlp_train_step_host(', 'neural_gemm_native(', 'mlp_bias_activation_host(',
-                  'mlp_relu_backward_host(', 'mlp_sum_rows_host(', 'identical_ce_loss_host(', 'per_call_step('):
-        assert owner in table
+        assert forbidden not in program
+    for owner in ('OPS_LINEAR', 'capture(', 'cross_entropy(', 'backward_scalar_with_rules(', 'step_lr('):
+        assert owner in program
+    assert not (ROOT/'training/small_mlp_dispatch.mojo').exists()
 
 
 def test_neural_gemm_both_doors_share_native_transport():

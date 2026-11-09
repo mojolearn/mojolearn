@@ -129,7 +129,7 @@ struct _ShapContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojoXTreesShapContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXTreesShapContextFast"
+comptime _CTX_NAME = "MojolearnXTreesShapContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXTreesShapContextFastV2"
 comptime X_TREES_SHAP_CONTEXT = _Global[StorageType=_ShapContext, name=_CTX_NAME, init_fn=_ShapContext.__init__]
 
 

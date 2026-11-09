@@ -23,9 +23,14 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.optimizer_public_words import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_address, classical_typed, classical_input, classical_host_f32
+from bindings.classical_arrays import classical_address, classical_typed, classical_input
+from bindings.admitted_input import admit_x
+from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end
+from bindings.admitted_meta_scope import admitted_hold_array_f32
+from bindings.classical_arrays import classical_is_array
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_labels import labels_f32, labels_vector, classical_encode_labels
+from bindings.classical_labels import classical_encode_labels
+from bindings.admitted_input import admit_f32, admitted_vector
 from bindings.scaler_native import _stage, _ptr
 from bindings.scaler_lifecycle_native import _entries
 from bindings.x_prep_native_owner import xprep_values
@@ -60,6 +65,7 @@ comptime OP_P2M_CSCAN = 201
 comptime OP_C2_KEY64 = 253
 comptime OP_C2_RFE_STEP = 256
 comptime OP_C2_RFE_RANK = 257
+comptime OP_C2_RFE_KEEP = 271
 # `_II_CH`: the p2m units' chunk rows.
 comptime II_CH = 1024
 
@@ -104,20 +110,24 @@ def _fit_clone(estimator: PythonObject, x: PythonObject, y: PythonObject, fit_pa
 
 
 # ---------------------------------------------------------------- RFE programs
-def _gather_cls(arr_value: PythonObject, n: Int, d: Int, cols: List[Int], mode: PythonObject,
-                cc: PythonObject) raises -> PythonObject:
-    """`_gather(arr, cols, mode)`: the columns `cols` of X as an (n, k) float32 Array."""
-    var k = len(cols)
-    var pr = ClsProg()
-    var xo = pr.put(arr_value)
-    var fl = List[Float64]()
-    for i in range(k):  # driver-loop: over the selected column ids (feature metadata)
-        fl.append(Float64(cols[i]))
-    var ko = pr.put_list(fl, cc)
+# TOMBSTONE: _gather_cls (one gather program per round plus one for the final fit, each putting X) deleted
+# 2026-11-09 by d6f2d5ed09 (lane w1-readmission-rfe); code recoverable at d6f2d5ed09^.
+# Restore: git apply experiments/removed/W1_RFE_GATHER_PROGRAM_PER_ROUND.patch
+def _stage_block(mut pr: ClsProg, x_value: PythonObject, n: Int, d: Int, sup: Int,
+                 k: Int) raises -> Tuple[Int, Int]:
+    """Stage the next round's block: the supported columns of the support
+    mask at `sup` compacted on the device (c2_rfe_keep) and those k columns
+    of X gathered into an (n, k) block (gather_cols, bit for bit). X is the
+    one admitted value every round puts: the rounds' resident scope keeps
+    its single device copy. Returns the offsets of the int32 column ids and
+    of the block."""
+    var xo = pr.put(x_value)
+    var kf = pr.alloc(d)
+    var ki = pr.alloc(d)
+    pr.stage(OP_C2_RFE_KEEP, d, sup, d, kf, ki)
     var out = pr.alloc(n * k)
-    pr.stage(OP_GATHER_COLS, n * k, xo, n, d, ko, k, out)
-    pr.run(mode, cc)
-    return pr.get(out, n, k, cc)
+    pr.stage(OP_GATHER_COLS, n * k, xo, n, d, kf, k, out)
+    return (ki, out)
 
 
 def _importance_keys(mut pr: ClsProg, est: PythonObject, m: Int, getter: PythonObject, context: PythonObject,
@@ -159,7 +169,7 @@ def _importance_keys(mut pr: ClsProg, est: PythonObject, m: Int, getter: PythonO
         raise Error("too many values to unpack (expected 2)")
     if d != m:
         raise Error("mojolearn: RFE importances have " + String(d) + " columns, expected " + String(m))
-    var c = classical_host_f32(coef, nd, "coef_", cc)
+    var c = admit_x(coef, nd, "coef_", cc)
     var out = pr.work(d)
     var co = pr.put(c)
     pr.stage(OP_SQSUM_COLS, d, co, rows, d, out)
@@ -198,36 +208,59 @@ def _rfe_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     if py_type(fit_params) is not b.dict:
         raise Error("TypeError: mojolearn: RFE.fit parameters require an exact dict")
     var arr = cls_x2d(args[0], cc)
-    # lane ne2-b-rounds (N059): X stays on the device for every elimination
-    # round and the final fit. One resident scope (the classifier owner's
-    # native `with resident():`) spans the rounds with min_words = n * d, so
-    # the round programs' X input (the same admitted Array each round) is put
-    # once and every later gather reads its device copy; the smaller round
-    # blocks, masks and rankings are not held. An enclosing user scope, when
-    # one is active, is the one used. Same inputs, same stages: no bit moves.
-    # A context whose arena rows owner is not connected yet runs the rounds
-    # without the scope (each round puts X, as before).
-    var scope = PythonObject(None)
+    # X stays on the device for every elimination round and the final fit
+    # (lane ne2-b-rounds, N059; lane w1-readmission-rfe). One resident scope
+    # (the classifier owner's native `with resident():`) spans the rounds
+    # with min_words = n * d, so X (the same admitted value every round
+    # program puts) goes up once and every later gather reads its device
+    # copy; the d-word support, ranking and column ids are in-out words of
+    # the round's program, not held. An enclosing user scope, when one is
+    # active, is the one used. The scope is required: the arena rows owner
+    # connects when the package imports model_selection, and entering it only
+    # records the scope, so the silent "no scope, put X every round" fallback
+    # is deleted with it.
+    # S4 (lane s1): X came through admit_x above (refused unless finite), so
+    # every round's block, columns gathered out of it, is finite: it is held
+    # in the admitted registry while that round's estimator fits, and the
+    # member door (in any binding: one registry per process) reads it with
+    # no view, check or scan. A fold's DeviceRows X was not tested here, so
+    # its blocks are not held.
+    var hold = py_type(args[0]) is not cc["maxabs_rows_class"]
+    var mark = -1
+    var scope = resident_enter_min(cc, PythonObject(arr.n * arr.d))
     try:
-        scope = resident_enter_min(cc, PythonObject(arr.n * arr.d))
-    except:
-        scope = PythonObject(None)
-    try:
-        _rfe_rounds(model, fields, estimator, g, y, fit_params, arr, context, cc)
-        if scope is not None:
-            _resident_exit(scope, cc)
+        _rfe_rounds(model, fields, estimator, g, y, fit_params, arr, context, cc, hold, mark)
     except error:
-        if scope is not None:
-            try:
-                _resident_exit(scope, cc)
-            except ignored:
-                _ = ignored^
+        try:
+            _resident_exit(scope, cc)
+        except ignored:
+            _ = ignored^
+        if mark >= 0:
+            admitted_scope_end(mark)
         raise error^
+    try:
+        _resident_exit(scope, cc)
+    finally:
+        if mark >= 0:
+            admitted_scope_end(mark)
+
+
+def _rfe_hold_block(block: PythonObject, hold: Bool, mut mark: Int, cc: PythonObject) raises:
+    """Hold this round's block for its fit in the one RFE hold scope: the
+    previous round's scope (`mark`, -1 for none) is closed first, so one
+    block is held at a time; `_rfe_fit` closes the last one on any exit."""
+    if mark >= 0:
+        admitted_scope_end(mark)
+        mark = -1
+    if not hold or not classical_is_array(block, cc):
+        return
+    mark = admitted_scope_begin()
+    _ = admitted_hold_array_f32(block, False)
 
 
 def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObject, g: PythonObject,
                 y: PythonObject, fit_params: PythonObject, arr: XIn, context: PythonObject,
-                cc: PythonObject) raises:
+                cc: PythonObject, hold: Bool, mut mark: Int) raises:
     """The elimination rounds and the final fit of `_rfe_fit`, inside its
     resident scope."""
     var b = native_loaded_module("builtins")
@@ -254,44 +287,59 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
         step = Int(py=py_call_typed(b.int, step_arg))
     if step <= 0:
         raise Error("mojolearn: step must be > 0")
-    var support = List[Bool](length=d, fill=True)
+    # One program per elimination round (lane w1-readmission-rfe): the
+    # fitted estimator's importance keys, c2_rfe_step on the support mask,
+    # c2_rfe_rank, then the next block staged from the updated mask
+    # (c2_rfe_keep + gather_cols). Program 0 stages the first block from the
+    # all-ones mask. The support, ranking and column ids ride each program as
+    # its in-out and output words (d words each); the host reads the support
+    # once, after the last round. Each round drops exactly min(step, nsup -
+    # nsel) columns (c2_rfe_step's stable rank is a total order), so the
+    # round count and every block width are known before the program runs.
+    # Same stages on the same words as the two programs per round they
+    # replace: no bit moves.
+    var support = f32_array(d, cc)
+    var sp = _ptr(support)
     var ranking = f32_array(d, cc)
     var rp = _ptr(ranking)
-    for j in range(d):  # driver-loop: over the initial ranking (feature count)
+    for j in range(d):  # driver-loop: over the initial support and ranking (feature count)
+        sp[j] = 1.0
         rp[j] = 1.0
+        _ = support  # keep the Python object alive through the native call above
         _ = ranking  # keep the Python object alive through the native call above
+    var pr0 = ClsProg()
+    var sup0 = pr0.put(support)
+    var first = _stage_block(pr0, arr.value, n, d, sup0, d)
+    pr0.run(mode, cc)
+    var feat = pr0.get_i32(first[0], d, cc)
+    var block = pr0.get(first[1], n, d, cc)
     var nsup = d
     while nsup > nsel:  # driver-loop: over elimination rounds
-        var features = List[Int]()
-        for j in range(d):  # driver-loop: over the support mask (feature count)
-            if support[j]:
-                features.append(j)
-        var m = len(features)
-        var est = _fit_clone(estimator, _gather_cls(arr.value, n, d, features, mode, cc), y, fit_params, context)
+        _rfe_hold_block(block, hold, mark, cc)
+        var est = _fit_clone(estimator, block, y, fit_params, context)
+        var drop = min(step, nsup - nsel)
+        var k = nsup - drop
         var pr = ClsProg()
-        var key = _importance_keys(pr, est, m, g, context, cc)
-        var mask = List[Float64]()
-        for j in range(d):  # driver-loop: over the support mask (feature count)
-            mask.append(1.0 if support[j] else 0.0)
-        var sup = pr.put_list(mask, cc, True)
+        var key = _importance_keys(pr, est, nsup, g, context, cc)
+        var sup = pr.put(support, True)
         var rk = pr.put(ranking, True)
-        var fo = pr.put_ints(features, cc)
-        pr.stage(OP_C2_RFE_STEP, m, key, fo, m, min(step, nsup - nsel), sup)
+        var fo = pr.put_words(feat)
+        pr.stage(OP_C2_RFE_STEP, nsup, key, fo, nsup, drop, sup)
         pr.stage(OP_C2_RFE_RANK, d, sup, rk)
+        var nxt = _stage_block(pr, arr.value, n, d, sup, k)
         pr.run(mode, cc)
-        nsup = 0
-        for j in range(d):  # driver-loop: over the device's support mask (feature count)
-            support[j] = pr.value(sup + j) != 0.0
-            if support[j]:
-                nsup += 1
+        support = pr.get(sup, d, 0, cc)
         ranking = pr.get(rk, d, 0, cc)
-    var features = List[Int]()
+        feat = pr.get_i32(nxt[0], k, cc)
+        block = pr.get(nxt[1], n, k, cc)
+        nsup = k
+    _rfe_hold_block(block, hold, mark, cc)
+    var final = _fit_clone(estimator, block, y, fit_params, context)
     var mask_list = Python.list()
+    var fs = _ptr(support)
     for j in range(d):  # driver-loop: over the fitted support (feature count)
-        if support[j]:
-            features.append(j)
-        _ = py_call(mask_list.append, PythonObject(support[j]))
-    var final = _fit_clone(estimator, _gather_cls(arr.value, n, d, features, mode, cc), y, fit_params, context)
+        _ = py_call(mask_list.append, PythonObject(fs[j] != Float32(0)))
+        _ = support  # keep the Python object alive through the native call above
     py_setitem(fields, "estimator_", final)
     py_setitem(fields, "_mask", mask_list)
     py_setitem(fields, "support_", py_call(b.list, mask_list))
@@ -304,7 +352,7 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
         _ = ranks  # keep the Python object alive through the native call above
         _ = ranking  # keep the Python object alive through the native call above
     py_setitem(fields, "ranking_", ranks)
-    py_setitem(fields, "n_features_", len(features))
+    py_setitem(fields, "n_features_", nsup)
     py_setitem(fields, "numeric_mode_", mode)
     py_setitem(fields, "n_features_in_", d)
 
@@ -504,11 +552,11 @@ def prep_mutual_info_call(operation: String, args: PythonObject, context: Python
             fl.append(Float64(counts[i]))
         lc = p.put_floats(fl, context)
     else:
-        var t = labels_f32(y, 1, "C", "y", context)
+        var t = admit_f32(y, 1, "y", context, finite=False)
         if t.rows != n:
             raise Error("mojolearn: X and y have different numbers of rows")
-        target = labels_vector(n, "<f4", context)
-        memcpy(dest=_ptr(target), src=F32P(unsafe_from_address=t.addr), count=n)
+        target = admitted_vector(n, "<f4", context)
+        memcpy(dest=_ptr(target), src=F32P(unsafe_from_address=t.address), count=n)
         _ = target  # keep the Python object alive through the native call above
         _ = t^
     var dc = len(cont)

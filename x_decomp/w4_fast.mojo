@@ -1,151 +1,27 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""lane/apple-fast-w4-decomp (2026-10-04): FAST + Apple candidates.
+"""lane/apple-fast-w4-decomp (2026-10-04): FAST + Apple candidates. No live
+code remains (every candidate was deleted; the records below stay).
 
-LLE_FAST_DEV_LU (`-D MOJOLEARN_LLE_FAST_DEV_LU`): LocallyLinearEmbedding's
-shift-invert factor F0 (n x n, 10,000 x 10,000 = 400 MB at the board's n)
-is factored where it already lives. Main (`_lle_smallest` ->
-`_Kit.lu` + `_Kit.lu_aux`) moved it through the host five times: F0.copy()
-downloads it (and copies it into a fresh array), `x_decomp_lu` uploads it,
-factors it and downloads the factor, `x_decomp_lu_aux` uploads the factor
-and (clamp) downloads it again, and the first `trisolve` uploads it once
-more. On Apple a download into host memory runs at ~3 GB/s (~130 ms per
-400 MB) and fresh host pages cost about as much again. Here
-`dev_lu_aux_py` copies F0 into a pooled device matrix and runs
-`launch_lu` then DevExec.lu_aux's five launches on it, enqueued, the
-same kernels in the same order on the same words: the factor, the pivots'
-row orders, the diagonal and the four stats are bit-identical to main's.
-Only the 4 stats come back to the host.
+(LLE_FAST_DEV_LU, the device LU of LocallyLinearEmbedding's shift-invert factor, was
+deleted 2026-11-08: HOLD-quality; see the TOMBSTONE below.)
 
-RSVD_FAST_DIRECT_IN (FAST + Apple default; `-D MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF`
-rolls back): randomized_svd's
-input goes up from the caller's own buffer into a pooled device matrix
-(`_M._on_device` + `x_decomp_dev_upload`, the random projections' and
-KernelPCA's resident pattern) instead of `_M.from_input`'s copy into a fresh
-`array.array` (880 MB of fresh host pages at the board's 1,000,000 x 220)
-that the first product then uploads. The host finiteness refusal
-(`_host_all_finite`) is unchanged. Same words reach the device: no bit moves.
-
-Both are read by Python through `x_decomp_w4_flags()` (bit 1 LLE_FAST_DEV_LU,
-bit 2 RSVD_FAST_DIRECT_IN), registered on every GPU build so a quality
-capture can prove which arm is installed.
+(RSVD_FAST_DIRECT_IN and RSVD_IDN_DIRECT_IN, randomized_svd's direct input, and
+their x_decomp_w4_flags entry were deleted 2026-11-08: superseded; see below.)
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
-from x_decomp.cells import F32Ptr, I32Ptr
-from x_decomp.rr import RR_OFF_TPB
-from x_decomp.device import (
-    LU_SCAL_LEN,
-    TPB,
-    _blocks,
-    _pj_off_blocks,
-    launch_lu,
-    lu_aux_clamp_kernel,
-    lu_aux_fold_kernel,
-    lu_aux_part_kernel,
-    lu_perm_kernel,
-    xd_ctx,
-)
-from x_decomp.resident import _ptr
 
-#: HOLD-quality, opt-in only (`-D MOJOLEARN_LLE_FAST_DEV_LU`), measured source
-#: e9d72edb5 (2026-10-04). M3 afc_ab_def, full board size, 1 run per arm: lle
-#: taxi 1783.8 -> 1039.0 ms, but trustworthiness_k15 0.8662 -> 0.8410 vs FAST
-#: main (arm A) is a real drop, not noise, so default OFF (FAST quality must
-#: not go down vs FAST main and must match the best opponent).
-#: 2026-10-05 re-check with LLE_FAST_NULL_CANON (deleted 2026-10-09; M3 rab14, 1 run per arm), DEV_LU + CANON vs FAST main:
-#:   lle istella 1803.9 -> 1048.9 ms (-41.9%), trustworthiness_k15 0.8851 -> 0.8615 (-2.7%, consistent across runs);
-#:   lle taxi    1745.1 ->  968.0 ms (-44.5%), trustworthiness_k15 0.8105 -> 0.8420 (arm A itself ranges 0.81-0.87 run to run).
-#:   sklearn-cpu trustworthiness: istella 0.8491, taxi 0.7708, so DEV_LU stays above the opponent on both.
-#:   Andrew (2026-10-05): 2.7% on istella is a lot, so it stays OFF. Re-judge if the istella drop goes away.
-comptime LLE_FAST_DEV_LU = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_LLE_FAST_DEV_LU"]()
-)
+# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (HOLD-quality: lle trustworthiness_k15 istella 0.8851 -> 0.8615, taxi 0.8662 ->
+# 0.8410 vs FAST main) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 # TOMBSTONE: MOJOLEARN_LLE_FAST_NULL_CANON (DROPPED-quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: a canonical LLE answer when the null space is wider than n_components (all of N, then its nc directions of most data variance); trustworthiness down on lle taxi and istella (verdicts batch 6).
 # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_NULL_CANON.patch; record in docs/TOMBSTONES.md.
-#: FAST Apple default, measured source e9d72edb5 (2026-10-04).
-#: M3 afc_ab_def, full board size, 1 run per arm: randomized-svd istella
-#: 517.3 -> 501.3 ms, taxi 200.8 -> 198.5 ms; relative_reconstruction_error
-#: equal (istella 2.3594584442703e-4 -> 2.3594584442301e-4, taxi
-#: 0.0271967625509 -> 0.0271967625509). ACCEPT.
-#: `-D MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF` restores `_M.from_input`'s host copy.
-comptime RSVD_FAST_DIRECT_IN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF"]()
-)
-
-#: R1, lane fg-pca (2026-10-09), IDENTICAL default on every GPU column;
-#: rollback `-D MOJOLEARN_IDN_RSVD_DIRECT_IN_OFF`. The same route as
-#: RSVD_FAST_DIRECT_IN above (bit 2, `_rsvd_direct_input`): randomized_svd's
-#: input goes from the caller's own buffer straight into a pooled device
-#: matrix (`x_decomp_dev_upload`), instead of `_M.from_input`'s copy of all
-#: n*d floats into a fresh host `array.array` (880 MB of fresh host pages and
-#: a full memcpy at 1M x 220, each extra n*d*4 bytes of host traffic at any
-#: shape) that the first product then uploads. The host finiteness refusal
-#: (`_host_all_finite`) runs first, as before; sparse, wide (host-transposed)
-#: and host-binding inputs keep `_M.from_input`. Cost: -1 host copy of X per
-#: call. Bits: none (a copy is not arithmetic; the same words reach the
-#: device, and `_RES_MIN` = 1 already sent every product to the device).
-comptime RSVD_IDN_DIRECT_IN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and not is_defined["MOJOLEARN_IDN_RSVD_DIRECT_IN_OFF"]()
-)
-
-
-def w4_copy_kernel(dst: F32Ptr, src: F32Ptr, n: Int32):
-    """dst[i] = src[i], a thread per word."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n):
-        dst.unsafe_store(i, src.unsafe_load(i))
-
-
-def dev_lu_aux_run(ia: Int, il: Int, ipm: Int, iim: Int, idiag: Int, ist: Int, n: Int, clamp: Int) raises -> Int:
-    """lu = the LU factor of device matrix a (a untouched;
-    `launch_lu`, DevExec.lu's launches), then DevExec.lu_aux's launches on
-    it: pm / im the swaps' row order and its inverse (n x 1), diag (1 x n),
-    st = (max |u_ii|, zero pivots, negative pivots, swaps), and with clamp
-    the pivots under eps max |u_jj| floored in lu. Waits once at the end
-    (the scratch buffers are this call's). Returns n."""
-    if n <= 0 or n * n > 2147483647:
-        raise Error("x_decomp: dev_lu_aux needs 0 < n and n * n inside Int32")
-    var pa = _ptr(ia, n * n)
-    var pl = _ptr(il, n * n)
-    var ppm = _ptr(ipm, n)
-    var pim = _ptr(iim, n)
-    var pd = _ptr(idiag, n)
-    var pst = _ptr(ist, 4)
-    var ctx = xd_ctx()
-    var nb = _pj_off_blocks(n)
-    var dp = ctx.enqueue_create_buffer[DType.int32](n)
-    var di = ctx.enqueue_create_buffer[DType.float32](1)
-    var ds = ctx.enqueue_create_buffer[DType.float32](LU_SCAL_LEN)
-    var dact = ctx.enqueue_create_buffer[DType.float32](n)
-    var dpart = ctx.enqueue_create_buffer[DType.float32](4 * nb)
-    ctx.enqueue_function[w4_copy_kernel](pl, pa, Int32(n * n), grid_dim=_blocks(n * n), block_dim=TPB)
-    var pp = I32Ptr(unsafe_from_address=Int(dp.unsafe_ptr()))
-    launch_lu(
-        ctx, pl, pp, F32Ptr(unsafe_from_address=Int(di.unsafe_ptr())),
-        F32Ptr(unsafe_from_address=Int(ds.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(dact.unsafe_ptr())), n,
-    )
-    var ppart = F32Ptr(unsafe_from_address=Int(dpart.unsafe_ptr()))
-    ctx.enqueue_function[lu_perm_kernel](pp, ppm, Int32(n), Int32(0), grid_dim=_blocks(n), block_dim=TPB)
-    ctx.enqueue_function[lu_perm_kernel](pp, pim, Int32(n), Int32(1), grid_dim=_blocks(n), block_dim=TPB)
-    ctx.enqueue_function[lu_aux_part_kernel](pl, pp, ppart, Int32(n), grid_dim=nb, block_dim=RR_OFF_TPB)
-    ctx.enqueue_function[lu_aux_fold_kernel](ppart, pst, Int32(nb), grid_dim=1, block_dim=RR_OFF_TPB)
-    ctx.enqueue_function[lu_aux_clamp_kernel](
-        pl, pd, pst, Int32(n), Int32(clamp), grid_dim=_blocks(n), block_dim=TPB
-    )
-    ctx.synchronize()
-    _ = dp^
-    _ = di^
-    _ = ds^
-    _ = dact^
-    _ = dpart^
-    return n
+# TOMBSTONE: MOJOLEARN_RSVD_FAST_DIRECT_IN (KEPT FAST + Apple default, superseded) and MOJOLEARN_IDN_RSVD_DIRECT_IN (KEPT IDENTICAL default, superseded) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch. Both sent randomized_svd's input
+# from the caller's buffer to the device instead of a host copy (M3 e9d72edb5: istella
+# 517.3 -> 501.3 ms). randomized_svd is now one driver (x_decomp/randomized_svd_owner.mojo)
+# that always reads M in place and uploads it once, so there is no other route to select.
+# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (w4_copy_kernel, dev_lu_aux_run: its device LU) deleted 2026-11-08 by ed9ba6e7a1; code
+# recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch

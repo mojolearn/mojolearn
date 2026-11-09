@@ -9,7 +9,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_input, classical_typed, classical_address
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
-from core.xseq_marshal import xseq_cast_nd
+from core.admitted_input_nd import admitted_cast_nd_f32
 from core.cast_in import NPY_DOUBLE, NPY_FLOAT, CAST_KIND_SIGNED
 from bindings.sequential_admission import _one_of
 from providers.python.forecast_owner_pyapi import forecast_commit
@@ -119,7 +119,7 @@ def autoarima_initialize(model: PythonObject, args: PythonObject, context: Pytho
         strides.append(source.source.s0)
         if rank == 2:
             strides.append(source.source.s1)
-        xseq_cast_nd(source.source.addr, source.shape, strides, source.source.itemsize, source.source.kind, True,
+        _ = admitted_cast_nd_f32(source.source.addr, source.shape, strides, source.source.itemsize, source.source.kind,
                      _F32(unsafe_from_address=Int(py=classical_address(out))))
     var updates = Python.dict()
     py_setitem(updates, "endog", args[0])

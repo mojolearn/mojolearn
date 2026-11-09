@@ -1,0 +1,527 @@
+diff --git a/x_linear/bayes.mojo b/x_linear/bayes.mojo
+index edb732103c..235d4c4cac 100644
+--- a/x_linear/bayes.mojo
++++ b/x_linear/bayes.mojo
+@@ -7,11 +7,8 @@ Reference: scikit-learn `sklearn/linear_model/_bayes.py`:
+     gamma = sum(alpha ev / (lambda + alpha ev)), lambda = (gamma + 2 l1) /
+     (|w|^2 + 2 l2), alpha = (n - gamma + 2 a1) / (sse + 2 a2), stopping on
+     sum|w_old - w| < tol, then one last coefficient update. Theirs takes the
+-    SVD of X; here the eigenpairs of the centered Gram X'X come from the
+-    executor eigh op (x_decomp/eigh_ops.mojo `eigh_op_dense`, the
+-    round-robin Jacobi; its host twin `eigh_op_dense_host` on the host
+-    column; lane n9b-device-svd-qr, was the team's cyclic `jacobi_eig`),
+-    ev = S^2, and
++    SVD of X; here the eigenpairs of the centered Gram X'X come from cyclic
++    Jacobi (x_linear/ops.mojo `jacobi_eig`), ev = S^2, and
+     w = V diag(1 / (ev + lambda/alpha)) V' X'y.
+   * `ARDRegression.fit` / `_update_sigma`: sigma = inv(diag(lambda_keep) +
+     alpha X_keep'X_keep) by Cholesky (theirs pinvh; the Woodbury branch for
+@@ -30,7 +27,7 @@ from x_linear.ops import (
+ from std.sys.info import is_gpu, has_apple_gpu_accelerator
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+ from x_linear.team import Team
+-from x_linear.tops import fold_parts, fold_blocks, fold_fa_blocked, FOLD_BLOCK, upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad, t_cholesky
++from x_linear.tops import fold_parts, fold_blocks, fold_fa_blocked, FOLD_BLOCK, upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad, t_jacobi_eig, t_cholesky
+ 
+ 
+ def _center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, iw: IP) -> Float32:
+@@ -256,11 +253,9 @@ def bayes_yvar(y: FP, n: Int) -> Float32:
+ 
+ 
+ def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32) -> Tuple[Float32, Float32]:
+-    """The d x d half of the prep after the eigendecomposition of G (no row
+-    passes): fw holds diag(w) at G's place and V (eigenvector j in column
+-    j) at vv, as `bayes_eig_place` leaves the executor eigh op's answer;
+-    the lead's eigenvalues and V'X'y, the starting alpha (the lead's, from
+-    yvar, when alpha_init is none) and lambda."""
++    """The d x d half of `bayes_prep` (no row passes): the eigendecomposition
++    of G on the team, the lead's eigenvalues and V'X'y, the starting alpha
++    (the lead's, from yvar, when alpha_init is none) and lambda."""
+     var gg = d
+     var xty = gg + d * d
+     var vv = xty + d
+@@ -268,8 +263,7 @@ def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32) -> Tuple[Floa
+     var old = vty + d
+     var tmp = old + d
+     var alpha = ld(fp, 5)
+-    # TOMBSTONE: the team's cyclic Jacobi of G here (`t_jacobi_eig(t, fw, gg, fw, vv, d, 60)`) deleted 2026-11-09 by
+-    # lane n9b-device-svd-qr; code recoverable at 5b5490960d. Restore: git apply experiments/removed/N9B_BAYES_EIGH.patch
++    t_jacobi_eig(t, fw, gg, fw, vv, d, 60)
+     if t.lead():
+         for j in range(d):
+             var ev = ld(fw, gg + j * d + j)
+@@ -298,7 +292,7 @@ def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32) -> Tuple[Floa
+     return (alpha, lam)
+ 
+ 
+-def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP) -> Tuple[Float32, Float32, Float32]:
++def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP) -> Tuple[Float32, Float32, Float32, Float32]:
+     """ip: [max_iter, fit_intercept, sample_weight]; fp: [tol, alpha_1, alpha_2, lambda_1,
+     lambda_2, alpha_init (<0: none), lambda_init (<0: none)].
+     With sample_weight, y = targets n | weights n: weighted centering, the
+@@ -307,10 +301,8 @@ def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
+     res: coef d, intercept, alpha_, lambda_, n_iter.
+     fw: xm d | G d*d | xty d | V d*d | vty d | old d | tmp d, then at
+     3d^2 + 5d the host's sse scratch n (lane linear-cpu).
+-    The host column's row passes (the device's are the grid driver's,
+-    x_linear/device.mojo); returns (yvar, ym, wsum). The eigendecomposition
+-    of G and `bayes_eig_prep` follow in the caller (x_linear/bayes_host.mojo
+-    `bayes_ridge_fit`)."""
++    Team form: the row passes (means, Gram, X'y, sse) across the team
++    (x_linear/tops.mojo), the d x d algebra and the scalar updates on the lead."""
+     var max_iter = ldi(ip, 0)
+     var fi = ldi(ip, 1) != 0
+     var tol = ld(fp, 0)
+@@ -329,90 +321,149 @@ def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
+     var wsum = i2f(n)
+     var ym = Float32(0)
+     var wyvar = Float32(0)
+-    # TOMBSTONE: the device team's row passes here (`comptime if is_gpu()`: dead since cgr-linear moved every
+-    # device BayesianRidge onto the grid driver, x_linear/device.mojo) deleted 2026-11-09 by lane n9b-device-svd-qr;
+-    # code recoverable at 5b5490960d. Restore: git apply experiments/removed/N9B_BAYES_EIGH.patch
+-    # the host's row passes: one pass per statistic, vector accumulators
+-    if sw:
+-        # cgr-linear: the weighted statistics in the blocked order (each
+-        # FOLD_BLOCK rows from zero, the blocks folded ascending), the
+-        # order the grid driver folds them (x_linear/device.mojo)
+-        wsum = fold_fa_blocked(y, n, 1, n)
+-        var scr = List[Float32](length=d * d + d, fill=Float32(0))
+-        var sp = FP(unsafe_from_address=Int(scr.unsafe_ptr()))
+-        var ywm = Float32(0)
+-        fill(fw, xm, d, Float32(0))
+-        var lo = 0
+-        while lo < n:
+-            var hi = min(lo + FOLD_BLOCK, n)
+-            ywm = fa(ywm, bayes_wy_part(y, n, lo, hi - lo))
++    comptime if is_gpu():
++        if sw:
++            wsum = t_sum(t, y + n, n)
++            # weighted means (their _preprocess_data with sample_weight)
+             if fi:
+-                fill(sp, 0, d, Float32(0))
+-                for i in range(lo, hi):
+-                    axpy_acc(sp, 0, ld(y, n + i), x, i * d, d)
+-                add_acc(fw, xm, sp, 0, d)
+-            lo = hi
+-        ywm = fd(ywm, wsum)
+-        if fi:
+-            ym = ywm
+-            for j in range(d):
+-                st(fw, xm + j, fd(ld(fw, xm + j), wsum))
+-        fill(fw, gg, d * d, Float32(0))
+-        fill(fw, xty, d, Float32(0))
+-        lo = 0
+-        while lo < n:
+-            var hi = min(lo + FOLD_BLOCK, n)
+-            fill(sp, 0, d * d + d, Float32(0))
+-            for i in range(lo, hi):
+-                var wi = ld(y, n + i)
+-                for j in range(d):
+-                    var a = fm(wi, fs(ld(x, i * d + j), ld(fw, xm + j)))
+-                    axpy_centered(sp, j * d + j, a, x, i * d + j, fw, xm + j, d - j)
+-                axpy_centered[True](sp, d * d, fs(ld(y, i), ym), x, i * d, fw, xm, d, wi)
+-            add_acc(fw, gg, sp, 0, d * d)
+-            add_acc(fw, xty, sp, d * d, d)
+-            lo = hi
+-        for j in range(d):
+-            for k in range(j + 1, d):
+-                st(fw, gg + k * d + j, ld(fw, gg + j * d + k))
+-        if ld(fp, 5) < 0:
+-            # np.average((y - y_mean) ** 2, weights=sample_weight), blocked
++                for j in range(t.tid, d, t.nt):
++                    var acc = Float32(0)
++                    for i in range(n):
++                        acc = fmad(ld(y, n + i), ld(x, i * d + j), acc)
++                    st(fw, xm + j, fd(acc, wsum))
++                if t.lead():
++                    var acc = Float32(0)
++                    for i in range(n):
++                        acc = fmad(ld(y, n + i), ld(y, i), acc)
++                    ym = fd(acc, wsum)
++                ym = t.bcast(ym, 1)
++            else:
++                if t.lead():
++                    fill(fw, xm, d, Float32(0))
++                t.sync()
++            var cells = d * (d + 1) // 2
++            for c in range(t.tid, cells, t.nt):
++                var jk = upper_cell(c, d)
++                var j = jk[0]
++                var k = jk[1]
++                var acc = Float32(0)
++                for i in range(n):
++                    acc = fmad(fm(ld(y, n + i), fs(ld(x, i * d + j), ld(fw, xm + j))), fs(ld(x, i * d + k), ld(fw, xm + k)), acc)
++                st(fw, gg + j * d + k, acc)
++                st(fw, gg + k * d + j, acc)
++            t.sync()
++        else:
++            if fi:
++                t_col_means(t, x, n, d, fw, xm)
++                if t.lead():
++                    ym = bayes_ymean(y, n, True)
++                ym = t.bcast(ym, 1)
++            else:
++                if t.lead():
++                    fill(fw, xm, d, Float32(0))
++                t.sync()
++            # ip[4] (device only, lane/neural-pass87): 1 when x_linear/device.mojo's
++            # grid kernels already wrote this centered Gram into fw[gg, gg + d*d)
++            if ldi(ip, 4) == 0:
++                t_centered_gram(t, x, n, d, fw, xm, fw, gg)
++        var yc = ym
++        # X'y on centered data
++        for j in range(t.tid, d, t.nt):
+             var acc = Float32(0)
++            var mj = ld(fw, xm + j)
++            if sw:
++                for i in range(n):
++                    var xc = fs(ld(x, i * d + j), mj)
++                    xc = fm(ld(y, n + i), xc)
++                    acc = fmad(xc, fs(ld(y, i), yc), acc)
++            else:
++                acc = chain_cfmad(x, j, d, mj, y, 0, 1, yc, n)
++            st(fw, xty + j, acc)
++        t.sync()
++    else:
++        # the host's row passes: one pass per statistic, vector accumulators
++        if sw:
++            # cgr-linear: the weighted statistics in the blocked order (each
++            # FOLD_BLOCK rows from zero, the blocks folded ascending), the
++            # order the grid driver folds them (x_linear/device.mojo)
++            wsum = fold_fa_blocked(y, n, 1, n)
++            var scr = List[Float32](length=d * d + d, fill=Float32(0))
++            var sp = FP(unsafe_from_address=Int(scr.unsafe_ptr()))
++            var ywm = Float32(0)
++            fill(fw, xm, d, Float32(0))
++            var lo = 0
++            while lo < n:
++                var hi = min(lo + FOLD_BLOCK, n)
++                ywm = fa(ywm, bayes_wy_part(y, n, lo, hi - lo))
++                if fi:
++                    fill(sp, 0, d, Float32(0))
++                    for i in range(lo, hi):
++                        axpy_acc(sp, 0, ld(y, n + i), x, i * d, d)
++                    add_acc(fw, xm, sp, 0, d)
++                lo = hi
++            ywm = fd(ywm, wsum)
++            if fi:
++                ym = ywm
++                for j in range(d):
++                    st(fw, xm + j, fd(ld(fw, xm + j), wsum))
++            fill(fw, gg, d * d, Float32(0))
++            fill(fw, xty, d, Float32(0))
+             lo = 0
+             while lo < n:
+-                acc = fa(acc, bayes_wvar_part(y, n, ywm, lo, min(FOLD_BLOCK, n - lo)))
+-                lo += FOLD_BLOCK
+-            wyvar = fd(acc, wsum)
+-    else:
+-        _ = _center(x, y, n, d, fi, fw, xm, iw)
+-        ym = bayes_ymean(y, n, fi)
+-        centered_gram(x, n, d, fw, xm, fw, gg)
+-        var yc = ym
+-        # X'y on centered data
+-        fill(fw, xty, d, Float32(0))
+-        for i in range(n):
+-            var b = fs(ld(y, i), yc)
+-            axpy_centered(fw, xty, b, x, i * d, fw, xm, d)
++                var hi = min(lo + FOLD_BLOCK, n)
++                fill(sp, 0, d * d + d, Float32(0))
++                for i in range(lo, hi):
++                    var wi = ld(y, n + i)
++                    for j in range(d):
++                        var a = fm(wi, fs(ld(x, i * d + j), ld(fw, xm + j)))
++                        axpy_centered(sp, j * d + j, a, x, i * d + j, fw, xm + j, d - j)
++                    axpy_centered[True](sp, d * d, fs(ld(y, i), ym), x, i * d, fw, xm, d, wi)
++                add_acc(fw, gg, sp, 0, d * d)
++                add_acc(fw, xty, sp, d * d, d)
++                lo = hi
++            for j in range(d):
++                for k in range(j + 1, d):
++                    st(fw, gg + k * d + j, ld(fw, gg + j * d + k))
++            if ld(fp, 5) < 0:
++                # np.average((y - y_mean) ** 2, weights=sample_weight), blocked
++                var acc = Float32(0)
++                lo = 0
++                while lo < n:
++                    acc = fa(acc, bayes_wvar_part(y, n, ywm, lo, min(FOLD_BLOCK, n - lo)))
++                    lo += FOLD_BLOCK
++                wyvar = fd(acc, wsum)
++        else:
++            _ = _center(x, y, n, d, fi, fw, xm, iw)
++            ym = bayes_ymean(y, n, fi)
++            centered_gram(x, n, d, fw, xm, fw, gg)
++            var yc = ym
++            # X'y on centered data
++            fill(fw, xty, d, Float32(0))
++            for i in range(n):
++                var b = fs(ld(y, i), yc)
++                axpy_centered(fw, xty, b, x, i * d, fw, xm, d)
+     var yvar = Float32(0)
+     if t.lead() and ld(fp, 5) < 0:
+         if sw:
+-            yvar = wyvar
++            comptime if is_gpu():
++                # np.average((y - y_mean) ** 2, weights=sample_weight)
++                var m = Float32(0)
++                for i in range(n):
++                    m = fmad(ld(y, n + i), ld(y, i), m)
++                m = fd(m, wsum)
++                var acc = Float32(0)
++                for i in range(n):
++                    var r = fs(ld(y, i), m)
++                    acc = fmad(fm(ld(y, n + i), r), r, acc)
++                yvar = fd(acc, wsum)
++            else:
++                yvar = wyvar
+         else:
+             yvar = bayes_yvar(y, n)
+-    return (yvar, ym, wsum)
+-
+-
+-def bayes_eig_place(t: Team, fw: FP, w: FP, v: FP, d: Int):
+-    """The eigh op's answer into the prep's layout: G's place = diag(w) (w
+-    ascending, the op's order), V's place = v (eigenvector j in column j).
+-    Copies across the team, then a team barrier."""
+-    var gg = d
+-    var vv = gg + d * d + d
+-    for c in range(t.tid, d * d, t.nt):
+-        var i = c // d
+-        st(fw, gg + c, ld(w, i) if c == i * d + i else Float32(0))
+-        st(fw, vv + c, ld(v, c))
+-    t.sync()
++    var al = bayes_eig_prep(t, fw, fp, d, yvar)
++    var alpha = al[0]
++    var lam = al[1]
++    return (alpha, lam, ym, wsum)
+ 
+ 
+ @always_inline
+diff --git a/x_linear/bayes_host.mojo b/x_linear/bayes_host.mojo
+index 05db29337c..34c48cab63 100644
+--- a/x_linear/bayes_host.mojo
++++ b/x_linear/bayes_host.mojo
+@@ -34,7 +34,6 @@ from x_linear.ops import (
+     sti,
+ )
+ from x_linear.team import Team
+-from x_decomp.eigh_ops_host import eigh_op_dense_host
+ from std.sys.info import is_gpu
+ from x_linear.bayes import (
+     GRAM_SSE_TRUST,
+@@ -48,8 +47,6 @@ from x_linear.bayes import (
+     ard_layout,
+     ard_update,
+     bayes_coef,
+-    bayes_eig_place,
+-    bayes_eig_prep,
+     bayes_finish,
+     bayes_prep,
+     bayes_step,
+@@ -128,25 +125,6 @@ def _t_sse(t: Team, x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32,
+     return t.bcast(acc)
+ 
+ 
+-def bayes_eig_host(t: Team, fw: FP, d: Int):
+-    """The executor eigh op's host twin on G (fw[d, d + d^2)):
+-    `eigh_op_dense_host` (the round-robin Jacobi the device's
+-    `eigh_op_dense` runs, the same words), placed by `bayes_eig_place`. An
+-    unconverged solve keeps the answer as it stands (as the device column
+-    off Apple; the old team Jacobi did the same)."""
+-    var w = List[Float32](length=max(d, 1), fill=Float32(0))
+-    var v = List[Float32](length=max(d * d, 1), fill=Float32(0))
+-    var pw = FP(unsafe_from_address=Int(w.unsafe_ptr()))
+-    var pv = FP(unsafe_from_address=Int(v.unsafe_ptr()))
+-    try:
+-        _ = eigh_op_dense_host(fw + d, pw, pv, 1, d)
+-    except:
+-        pass
+-    bayes_eig_place(t, fw, pw, pv, d)
+-    _ = w^
+-    _ = v^
+-
+-
+ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+     """See `bayes_prep` (the statistics, the eigendecomposition, the
+     starting alpha and lambda); then the iterations: the lead's
+@@ -157,13 +135,11 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res:
+     var fi = ldi(ip, 1) != 0
+     var sw = ldi(ip, 2) != 0
+     var xm = 0
+-    var st3 = bayes_prep(t, x, y, n, d, ip, fp, res, fw, iw)
+-    bayes_eig_host(t, fw, d)
+-    var al = bayes_eig_prep(t, fw, fp, d, st3[0])
+-    var alpha = al[0]
+-    var lam = al[1]
+-    var ym = st3[1]
+-    var wsum = st3[2]
++    var st4 = bayes_prep(t, x, y, n, d, ip, fp, res, fw, iw)
++    var alpha = st4[0]
++    var lam = st4[1]
++    var ym = st4[2]
++    var wsum = st4[3]
+     var gg = d
+     var vty = gg + d * d + d + d * d
+     var tmp = vty + 2 * d
+diff --git a/x_linear/device.mojo b/x_linear/device.mojo
+index c437ccb16d..8bbf7ca8b1 100644
+--- a/x_linear/device.mojo
++++ b/x_linear/device.mojo
+@@ -61,9 +61,7 @@ from x_linear.sgd import sgd_perc_avg_on, sgd_perc_avg_from
+ from x_linear.sgd_avg import sgd_avg_acc_kernel, sgd_avg_fin_kernel
+ from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
+ from x_linear.bayes import bayes_wy_part, bayes_wx_part, bayes_wgram_part, bayes_wxty_part, bayes_wvar_part, bayes_coef_one
+-from x_linear.bayes import bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_place, bayes_eig_prep, bayes_yvar_part, GRAM_SSE_TRUST
+-from x_decomp.eigh_ops import eigh_op_dense
+-from core.step_gate import step_gate_open_word
++from x_linear.bayes import bayes_prep, bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_prep, bayes_yvar_part, GRAM_SSE_TRUST
+ from x_linear.classical_fold_stats import fold_stat_words, kfold_mean_cell, kfold_gram_cell, kfold_combine_unit
+ from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score, kf_ff_solve, kf_blocks, kf_ysum_part, kf_sq_part, kf_score_final
+ from x_linear.ridge import ridge_ff_unit, ridge_ff_units, ridge_ff_solve
+@@ -409,20 +407,14 @@ def bayes_coef_kernel(fw: FP, res: FP, d: Int32, state: FP, wf: IP, woff: Int32,
+     witness_end(wf, woff, nonce)
+ 
+ def bayes_eig_kernel(fw: FP, fp: FP, res: FP, ip: IP, d: Int32, nb: Int32, yparts: FP, vparts: FP, tw: FP,
+-                     state: FP, ew: FP, ev: FP, est: IP, wf: IP, woff: Int32, nonce: Int32):
+-    """One block team: the d x d half of the prep after the executor eigh op
+-    (`eigh_op_dense` on a copy of G, enqueued just before: w ascending in
+-    ew, V in ev, its status word est; lane n9b-device-svd-qr, was the
+-    team's cyclic Jacobi): the answer placed (`bayes_eig_place`), V'X'y, the
+-    starting alpha and lambda (`bayes_eig_prep`) and the first
+-    coefficients. Every row pass ran on the grid kernels above; this block
+-    folds only the nb row-block partials. An unconverged eigh (or a cut
+-    Jacobi launch: its block's mark stays -1) withholds the Metal witness,
+-    so the unit reruns and then raises on Apple."""
++                     state: FP, wf: IP, woff: Int32, nonce: Int32):
++    """One block team: the d x d half of the prep (`bayes_eig_prep`: the
++    Jacobi eigendecomposition of G, V'X'y, the starting alpha and lambda)
++    and the first coefficients. Every row pass ran on the grid kernels
++    above; this block folds only the nb row-block partials."""
+     var a = ALGO_BAYES
+     var dd = Int(d)
+     var t = device_team(tw, 0, team_rows(a, ip), team_own(a, dd))
+-    bayes_eig_place(t, fw, ew, ev, dd)
+     var wsum = ld(state, 3)
+     var yvar = fd(fold_parts(vparts, 0, Int(nb)), wsum)
+     var al = bayes_eig_prep(t, fw, fp, dd, yvar)
+@@ -435,8 +427,7 @@ def bayes_eig_kernel(fw: FP, fp: FP, res: FP, ip: IP, d: Int32, nb: Int32, ypart
+         st(state, 1, al[1])
+         st(state, 2, ym)
+         st(state, 5, Float32(0))
+-    if ldi(est, 0) == 0:
+-        witness_end(wf, woff, nonce)
++    witness_end(wf, woff, nonce)
+ 
+ def bayes_resid_kernel(x: FP, y: FP, n: Int32, d: Int32, fw: FP, res: FP, state: FP, rows: FP, wf: IP, woff: Int32, nonce: Int32):
+     """Row i's residual; a stopped fit (state[5] != 0) writes nothing, so
+@@ -5506,28 +5497,11 @@ def fit_device(
+                             dyparts.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(d), block_dim=XG_TPB,
+                         )
+                         wo += _xg_blocks(d)
+-                # lane n9b-device-svd-qr: G's eigendecomposition is the
+-                # executor op (`eigh_op_dense`, the round-robin Jacobi on a
+-                # copy of G; host column `eigh_op_dense_host`), then the
+-                # team's d x d half
+-                var dg = ctx.enqueue_create_buffer[DType.float32](d * d)
+-                ctx.enqueue_copy(dst_buf=dg, src_buf=dfw.create_sub_buffer[DType.float32](d, d * d))
+-                var dew = ctx.enqueue_create_buffer[DType.float32](d)
+-                var dev_v = ctx.enqueue_create_buffer[DType.float32](d * d)
+-                var dest = ctx.enqueue_create_buffer[DType.int32](1)
+-                var egate = step_gate_open_word(ctx)
+-                eigh_op_dense(ctx, egate, dg, dew, dev_v, dest, 1, d)
+                 ctx.enqueue_function[bayes_eig_kernel](
+                     dfw.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dip.unsafe_ptr(), Int32(d), Int32(ynb),
+                     dyparts.unsafe_ptr(), dvparts.unsafe_ptr(), dtw.unsafe_ptr(), dstate.unsafe_ptr(),
+-                    dew.unsafe_ptr(), dev_v.unsafe_ptr(), dest.unsafe_ptr(),
+                     wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=LINEAR_TPB,
+                 )
+-                _ = dg^
+-                _ = dew^
+-                _ = dev_v^
+-                _ = dest^
+-                _ = egate^
+                 units = wo + 1
+             else:
+                 ctx.enqueue_function[lars_path_kernel](
+diff --git a/x_linear/tops.mojo b/x_linear/tops.mojo
+index d1e3fc9fd7..65d21d0d86 100644
+--- a/x_linear/tops.mojo
++++ b/x_linear/tops.mojo
+@@ -7,7 +7,7 @@ ONE thread's loop over ascending rows, so every value carries the one-thread
+ bits. Each returns with its outputs visible to the whole team; a scalar
+ result is the lead's fold, broadcast.
+ """
+-from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, i2f, fsqrt, cholesky, fabs, fsign
++from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, i2f, fsqrt, cholesky, fabs, fsign, jacobi_eig
+ from std.sys.compile import is_defined
+ from x_linear.team import Team
+ from std.memory import stack_allocation
+@@ -496,6 +496,65 @@ def t_cholesky(t: Team, a: FP, aoff: Int, m: Int) -> Bool:
+     return True
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_X_LINEAR_JACOBI_LEAD (with `t_jacobi_eig`, the team's cyclic Jacobi; its one caller, BayesianRidge's
+-# prep, takes the executor eigh op) deleted 2026-11-09 by lane n9b-device-svd-qr; code recoverable at 5b5490960d.
+-# Restore: git apply experiments/removed/N9B_BAYES_EIGH.patch
++def t_jacobi_eig(t: Team, a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps: Int):
++    """`jacobi_eig` (x_linear/ops.mojo) on the team (lane/neural-pass85,
++    2026-10-01). A rotation (p, q) is three element-wise passes over k: the
++    columns p, q of A, then its rows p, q, then the columns p, q of V; in each
++    pass entry k reads and writes only its own pair, so the k of a pass are
++    independent and thread `tid` takes k = tid, tid + nt, ... with the serial
++    loop's statements. The passes and rotations are separated by team
++    barriers, so every read sees exactly the words the serial loop read.
++    Every thread computes the rotation's scalars from the same words, so the
++    skip test and the stop are uniform. The bits are `jacobi_eig`'s; on the
++    device it ran on the lead thread alone (BayesianRidge at 220 features:
++    about 30 s on the M4's GPU whatever the row count). A team of one runs
++    `jacobi_eig` itself. `-D MOJOLEARN_X_LINEAR_JACOBI_LEAD=1` restores the
++    lead-only call."""
++    comptime if is_defined["MOJOLEARN_X_LINEAR_JACOBI_LEAD"]():
++        if t.lead():
++            jacobi_eig(a, aoff, v, voff, m, max_sweeps)
++        t.sync()
++        return
++    if t.nt <= 1:
++        jacobi_eig(a, aoff, v, voff, m, max_sweeps)
++        return
++    for i in range(t.tid, m, t.nt):
++        for j in range(m):
++            st(v, voff + i * m + j, Float32(1) if i == j else Float32(0))
++    t.sync()
++    for _ in range(max_sweeps):
++        var rotated = False
++        for p in range(m):
++            for q in range(p + 1, m):
++                var apq = ld(a, aoff + p * m + q)
++                var app = ld(a, aoff + p * m + p)
++                var aqq = ld(a, aoff + q * m + q)
++                var scale = fsqrt(fabs(fm(app, aqq)))
++                if fabs(apq) <= fm(Float32(1e-9), scale) or apq == 0:
++                    continue
++                rotated = True
++                var theta = fd(fs(aqq, app), fm(Float32(2), apq))
++                var tt = fd(fsign(theta) if theta != 0 else Float32(1),
++                            fa(fabs(theta), fsqrt(fa(fm(theta, theta), Float32(1)))))
++                var c = fd(Float32(1), fsqrt(fa(fm(tt, tt), Float32(1))))
++                var s = fm(tt, c)
++                # every thread has read a_pq, a_pp, a_qq before any writes them
++                t.sync()
++                for k in range(t.tid, m, t.nt):
++                    var akp = ld(a, aoff + k * m + p)
++                    var akq = ld(a, aoff + k * m + q)
++                    st(a, aoff + k * m + p, fs(fm(c, akp), fm(s, akq)))
++                    st(a, aoff + k * m + q, fa(fm(s, akp), fm(c, akq)))
++                    var vkp = ld(v, voff + k * m + p)
++                    var vkq = ld(v, voff + k * m + q)
++                    st(v, voff + k * m + p, fs(fm(c, vkp), fm(s, vkq)))
++                    st(v, voff + k * m + q, fa(fm(s, vkp), fm(c, vkq)))
++                t.sync()
++                for k in range(t.tid, m, t.nt):
++                    var apk = ld(a, aoff + p * m + k)
++                    var aqk = ld(a, aoff + q * m + k)
++                    st(a, aoff + p * m + k, fs(fm(c, apk), fm(s, aqk)))
++                    st(a, aoff + q * m + k, fa(fm(s, apk), fm(c, aqk)))
++                t.sync()
++        if not rotated:
++            return

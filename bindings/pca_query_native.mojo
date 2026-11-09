@@ -2,13 +2,16 @@
 # Native PCA transform/inverse_transform envelope: admitted private state,
 # captured inputs, existing native execution, and the finished owned ndarray.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_contains
+from bindings.py_balanced import py_contains, py_get, py_type
+from bindings.device_rows_door import door_rows_refuse
+from bindings.admitted_input import admitted_finite_refuse
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_validate import classical_check_width
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.pca_exact import pca_whiten_entries, pca_refusal
 from providers.python.pca_model_pyapi import pca_query_admitted
-from providers.python.pca_input_pyapi import pca_input_snapshot, pca_state_snapshot
+from providers.python.pca_input_pyapi import pca_state_snapshot
+from bindings.decomp_inputs import decomp_admit
 
 
 def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool,
@@ -26,13 +29,24 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
     var count = Int(py=fields["n_components_"])
     if features < 1 or count < 0:
         raise Error("PCA fitted dimensions are invalid")
-    var x = pca_input_snapshot(source, context)
-    var rows = x.shape[0]
-    if x.shape[1] != (count if inverse else features):
+    var whiten = Bool(py=fields["whiten"])
+    # Lane a6: a cross-validation fold of a plain transform is gathered on
+    # the device out of model selection's resident base by the GPU entry
+    # `pca_transform_fold` (no host gather, no upload of X; connected from
+    # the identical base binding that holds the fold store); without it (the
+    # host column) the door gets the host rows.
+    var fold_entry = py_get(context, "pca_transform_fold")
+    var fold_ok = (not inverse and not whiten and fold_entry is not None
+                   and py_type(fold_entry) is py_type(entries["pca_transform"]))
+    # The plain transform's entry tests a borrowed X on the device after its
+    # upload and returns the finite word (lane a6, defer_finite): no host
+    # scan of X here.
+    var x = decomp_admit(source, "PCA", context, fold_ok, not inverse and not whiten)
+    var rows = x.rows
+    if x.cols != (count if inverse else features):
         if inverse:
             raise Error("mojolearn PCA component count differs from fit")
-        classical_check_width(x.shape[1], features, "PCA")
-    var whiten = Bool(py=fields["whiten"])
+        classical_check_width(x.cols, features, "PCA")
     # The whitening path refuses non-finite (and negative) fitted state on
     # every call, as 0.8.55 did: one native scan of the four fitted buffers,
     # so a value written in place into components_ or mean_ after an earlier
@@ -54,21 +68,27 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
         # only governs output shape. All owners and addresses are now frozen.
         try:
             if inverse:
-                _ = py_call_typed(entries["pca_whiten_inverse_transform"], x.source.addr, components.source.addr,
+                _ = py_call_typed(entries["pca_whiten_inverse_transform"], x.address, components.source.addr,
                     singular.source.addr, mean.source.addr, output_address, Python.list(rows, features, count, fit_rows))
             else:
-                _ = py_call_typed(entries["pca_whiten_transform"], x.source.addr, mean.source.addr,
+                _ = py_call_typed(entries["pca_whiten_transform"], x.address, mean.source.addr,
                     components.source.addr, singular.source.addr, output_address, Python.list(rows, features, count, fit_rows))
         except error:
             raise pca_refusal(error^)
         _ = singular^
         _ = variance^
     elif inverse:
-        _ = py_call_typed(entries["inverse_transform"], x.source.addr, components.source.addr,
+        _ = py_call_typed(entries["inverse_transform"], x.address, components.source.addr,
             mean.source.addr, output_address, Python.list(rows, features, count, 1))
+    elif x.store.active():
+        var words = py_call_typed(fold_entry, Python.list(x.store.base_id, x.store.base_rows, x.store.index_id),
+            mean.source.addr, components.source.addr, output_address, Python.list(rows, features, count))
+        door_rows_refuse(Int(py=words[0]), Int(py=words[1]), "PCA", x.store.base_rows)
     else:
-        _ = py_call_typed(entries["pca_transform"], x.source.addr, mean.source.addr,
+        var status = py_call_typed(entries["pca_transform"], x.address, mean.source.addr,
             components.source.addr, output_address, Python.list(rows, features, count))
+        if not x.finite:
+            admitted_finite_refuse(Int(py=status), "PCA")
     _ = x^
     _ = components^
     _ = mean^

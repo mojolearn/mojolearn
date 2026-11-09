@@ -80,20 +80,18 @@ def test_public_forward_loss_match_primitive_recipe(monkeypatch, layers, dropout
     before_rng = model.generator.state_dict()
     with monkeypatch.context() as patch:
         _poison(patch)
-        patch.setattr(SambaStack, "_forward", lambda *a, **k: pytest.fail("Python model orchestration"))
-        patch.setattr(SambaStack, "_forward_resident", lambda *a, **k: pytest.fail("Python resident orchestration"))
         actual = audit_native_call(model.forward, inputs).assert_native()
         loss = audit_native_call(model.loss, inputs, targets).assert_native()
     assert actual.shape == expected.shape
     assert actual.tobytes() == expected.tobytes()
     assert np.float32(loss).tobytes() == np.float32(expected_loss).tobytes()
     assert model.generator.state_dict() == before_rng
-    if dropout == 0.0 and hasattr(bridge.CONTEXT["entries"], "samba_resident_enabled"):
-        if bridge.CONTEXT["entries"].samba_resident_enabled():
-            assert model._resident_handle is not None
-            handle = model._resident_handle
-            audit_native_call(model.forward, inputs).assert_native()
-            assert model._resident_handle is handle
+    if hasattr(bridge.CONTEXT["entries"], "samba_program_open"):
+        # A device build runs the stack program, opened once per shape.
+        program = model._samba_program
+        assert program is not None
+        audit_native_call(model.forward, inputs).assert_native()
+        assert model._samba_program is program
 
 
 @pytest.mark.parametrize("layers", [["attention"], ["mamba3"], ["mamba3", "attention"]])
@@ -110,7 +108,6 @@ def test_public_stateful_forward_and_dedicated_step_preserve_complete_state(monk
         expected = _reference(reference, ids, expected_states, step)
         with monkeypatch.context() as patch:
             _poison(patch)
-            patch.setattr(SambaStack, "_forward_state", lambda *a, **k: pytest.fail("Python state traversal"))
             value = audit_native_call(model.step if step else model.forward, ids, actual).assert_native()
         assert value.shape == ((2, 19) if step else expected.shape)
         assert value.tobytes() == expected.tobytes()

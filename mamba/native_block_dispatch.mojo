@@ -2,15 +2,17 @@
 # Named block operations on the common native descriptor transport. All math,
 # transfer, reports and retained stages remain in the existing Mamba owners.
 from std.ffi import _Global
+from checks.numerics import GLOBAL_NUMERIC_MODE
 from mamba.native_decode_dispatch import mamba_decode_operation
 from mamba.native_tape_dispatch import mamba_tape_operation
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, MAMBA_BLOCK_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from mamba.impl.modules.afn_defines import IDN_MAMBA3_REPORTS_ON_REQUEST
 from mamba.checks.mamba3_fixture import Mamba3Dims
+from mamba.impl.mamba_block_program import mamba_block_call_abi
 from mamba.impl.mamba_shell_impl import (
     Mamba3PrefillSession, _mamba1_backward_run, _mamba2_backward_run,
-    _mamba3_backward_run, _mamba3_run, _m3_prefill_run,
+    _mamba3_backward_run, _m3_prefill_run,
     _m3_prefill_backward_run, _M3_BWD_NONFINITE_DY, NN40_OWNED_WEIGHTS,
     _m3_install_weights_run, _m3_export_weights_run, _mamba3_run_owned,
 )
@@ -144,7 +146,7 @@ def mamba_block_operation(op: Int, a: List[Int], words: List[Int], f: List[Float
             for i in range(5):  # small-loop(output and four report addresses)
                 expanded[20 + i] = a[10 + i]
         if op == 5:
-            return _mamba3_run[True](expanded, p[0], p[1], p[2], 0, 0)
+            return mamba_block_call_abi(3, expanded, p[0], p[1], p[2], 0, 0, Float32(0), Float32(0), True)
         var owner = MutPointer[Mamba3PrefillSession, MutUntrackedOrigin](unsafe_from_address=handle)
         if owned:
             if not owner[].owned_weights or p[3] != owner[].weight_generation:
@@ -230,4 +232,4 @@ struct NativeMambaBlockAPI(Defaultable, Movable):
 
 
 comptime NATIVE_MAMBA_BLOCK_API = _Global[StorageType=NativeMambaBlockAPI,
-    name="MojoMambaBlockNativeAPIv1", init_fn=NativeMambaBlockAPI.__init__]
+    name=("MojolearnMambaBlockNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnMambaBlockNativeAPIFastV2"), init_fn=NativeMambaBlockAPI.__init__]

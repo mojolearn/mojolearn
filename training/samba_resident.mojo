@@ -168,6 +168,62 @@ comptime SAMBA_LAYER_ATTENTION = 1
 comptime SAMBA_BLOCK_TENSORS = 9
 
 
+def samba_registry_layout(
+    kinds: List[Int],
+    vocab: Int,
+    dm: Int,
+    ldims: LlamaDims,
+    it: Int,
+    tie: Bool,
+    mut offsets: List[Int],
+    mut slot: List[Int],
+) raises -> Int:
+    """`SambaConfig.registry`'s offsets (J + 1 entries) into `offsets` and,
+    per layer, its index among the layers of its kind into `slot`; returns
+    the registry's float count. embed.weight, nine tensors per layer
+    (Mamba3Block._W_NAMES or TransformerBlock._W_NAMES order), norm_f.weight,
+    then lm_head.weight when the embedding is untied. Bookkeeping over the
+    model's structure, not data."""
+    offsets.clear()
+    slot.clear()
+    offsets.append(0)
+    var n_m3 = 0
+    var n_t = 0
+    var running = vocab * dm
+    offsets.append(running)
+    for i in range(len(kinds)):  # small-loop(kinds: one code per layer): registry bookkeeping, not data
+        if kinds[i] == SAMBA_LAYER_MAMBA3:
+            var d3 = Mamba3Dims.of(dm)
+            var dip = d3.d_in_proj()
+            var sizes: List[Int] = [
+                dm, dip * dm, d3.nheads, M3_D_STATE, M3_D_STATE,
+                d3.nheads * M3_D_STATE, d3.nheads * M3_D_STATE, d3.nheads,
+                dm * d3.d_inner,
+            ]
+            for k in range(SAMBA_BLOCK_TENSORS):  # small-loop(nine tensors of one block): sizes, not data
+                running += sizes[k]
+                offsets.append(running)
+            slot.append(n_m3)
+            n_m3 += 1
+        else:
+            var qw = ldims.q_width()
+            var kw = ldims.kv_width()
+            var sizes: List[Int] = [
+                dm, dm, qw * dm, kw * dm, kw * dm, dm * qw, it * dm, it * dm, dm * it,
+            ]
+            for k in range(SAMBA_BLOCK_TENSORS):  # small-loop(nine tensors of one block): sizes, not data
+                running += sizes[k]
+                offsets.append(running)
+            slot.append(n_t)
+            n_t += 1
+    running += dm
+    offsets.append(running)
+    if not tie:
+        running += vocab * dm
+        offsets.append(running)
+    return running
+
+
 def _lean_stages(hd: Int) -> Bool:
     """`bindings/_mojolearn_transformer.mojo::transformer_lean_stages` for a
     default-options block: the attention stage buffers may be skipped when
@@ -415,44 +471,11 @@ struct SambaResidentSession(Movable, Writable):
             self.ldims = LlamaDims(dm, nh, nkv, hd, it)
             self.ldims.validate()
         self.lean = _lean_stages(hd) if self.has_attn else False
-        # ---- the registry offsets, SambaConfig.registry's order
+        # ---- the registry offsets, SambaConfig.registry's order (one helper,
+        # shared with the stack program: training/samba_program.mojo)
         self.offsets = List[Int]()
-        self.offsets.append(0)
         self.slot = List[Int]()
-        var n_m3 = 0
-        var n_t = 0
-        var running = vocab * dm
-        self.offsets.append(running)
-        for i in range(len(kinds)):  # small-loop(kinds: one code per layer): registry bookkeeping, not data
-            if kinds[i] == SAMBA_LAYER_MAMBA3:
-                var d3 = Mamba3Dims.of(dm)
-                var dip = d3.d_in_proj()
-                var sizes: List[Int] = [
-                    dm, dip * dm, d3.nheads, M3_D_STATE, M3_D_STATE,
-                    d3.nheads * M3_D_STATE, d3.nheads * M3_D_STATE, d3.nheads,
-                    dm * d3.d_inner,
-                ]
-                for k in range(SAMBA_BLOCK_TENSORS):  # small-loop(nine tensors of one block): sizes, not data
-                    running += sizes[k]
-                    self.offsets.append(running)
-                self.slot.append(n_m3)
-                n_m3 += 1
-            else:
-                var qw = self.ldims.q_width()
-                var kw = self.ldims.kv_width()
-                var sizes: List[Int] = [
-                    dm, dm, qw * dm, kw * dm, kw * dm, dm * qw, it * dm, it * dm, dm * it,
-                ]
-                for k in range(SAMBA_BLOCK_TENSORS):  # small-loop(nine tensors of one block): sizes, not data
-                    running += sizes[k]
-                    self.offsets.append(running)
-                self.slot.append(n_t)
-                n_t += 1
-        running += dm
-        self.offsets.append(running)
-        if not tie:
-            running += vocab * dm
-            self.offsets.append(running)
+        var running = samba_registry_layout(kinds, vocab, dm, self.ldims, it, tie, self.offsets, self.slot)
         self.n_total = running
         if n_total != running:
             raise Error(
@@ -659,7 +682,7 @@ def _admit_registry(mut s: SambaResidentSession) raises:
         s.m3_w[j].weights_checked = True
 
 
-def _forward_blocks(mut s: SambaResidentSession, b: Int, l: Int, forward_only: Bool) raises:
+def _forward_blocks(mut s: SambaResidentSession, b: Int, l: Int) raises:
     """Embedding output in `acts[0]` -> `acts[i + 1] = block_i(acts[i])` for
     every layer, in stack order, each from its certified zero state."""
     var m = b * l
@@ -684,15 +707,15 @@ def _forward_blocks(mut s: SambaResidentSession, b: Int, l: Int, forward_only: B
             s.kv.value().k.enqueue_fill(Float32(0.0))
             s.kv.value().v.enqueue_fill(Float32(0.0))
             s.t_stages[j].reset(s.ctx)
-            # attn_stash=recompute for the Samba train step only (grid
-            # ge123e6f9: samba-train-step 0.905x; the LM step keeps its
-            # stash, 1.24x slower there). A forward-only call keeps the
-            # build's profile (samba-forward was not measured with it).
+            # attn_stash=recompute for the Samba train step (grid ge123e6f9:
+            # samba-train-step 0.905x; the LM step keeps its stash, 1.24x
+            # slower there). Every call here is a train step since the
+            # forward moved to SambaStackProgram (lane x6).
             comptime if IDN_SAMBA_ATTN_RECOMPUTE:
-                s.t_stages[j].attn_recompute_backward = not forward_only
+                s.t_stages[j].attn_recompute_backward = True
             llama_decoder_layer_forward(
                 s.ctx, s.t_stages[j], s.kv.value(), s.rope.value(), s.t_w[j], s.acts[i],
-                b, l, 0, trace, String("samba.resident.attn"), forward_only=forward_only,
+                b, l, 0, trace, String("samba.resident.attn"), forward_only=False,
             )
             _d2d(s.ctx, s.acts[i + 1], 0, s.t_stages[j].residual2, m * dm)
 
@@ -947,56 +970,22 @@ def _upload_tokens(
     s.ctx.enqueue_copy(dst_buf=s.ids, src_ptr=ids_ptr)
 
 
-def _norm_head_forward(mut s: SambaResidentSession, m: Int, train: Bool) raises:
-    """`hn = norm_f(acts[L])`, `logits = hn . head^T`. The train step's head
-    GEMM runs at `ROLE_HEAD` as `samba_head_loss_host` does; the forward's
-    at the default role as `samba_linear_forward_host` does (an execution
-    plan tag, the same bits)."""
+def _norm_head_forward(mut s: SambaResidentSession, m: Int) raises:
+    """`hn = norm_f(acts[L])`, `logits = hn . head^T`, the head GEMM at
+    `ROLE_HEAD` as `samba_head_loss_host` runs it. (Its forward-only arm went
+    with `samba_resident_forward`, lane x6.)"""
     var nw = s.view(s.norm_f_index())
     var hw = s.view(s.head_index())
     llama_rms_norm(s.ctx, s.sumsq, s.hn, s.acts[s.n_layers()], nw, m, s.dm, s.eps)
-    if train:
-        identical_gemm_into[ROLE=ROLE_HEAD](
-            s.ctx, s.logits, s.hn, hw, s.head_ws, m, s.vocab, s.dm, OP_NT
-        )
-    else:
-        identical_gemm_into(s.ctx, s.logits, s.hn, hw, s.head_ws, m, s.vocab, s.dm, OP_NT)
+    identical_gemm_into[ROLE=ROLE_HEAD](
+        s.ctx, s.logits, s.hn, hw, s.head_ws, m, s.vocab, s.dm, OP_NT
+    )
     _ = nw^
     _ = hw^
 
 
-def samba_resident_forward(
-    mut s: SambaResidentSession,
-    param_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    ids_ptr: MutPointer[Int32, MutUntrackedOrigin],
-    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    b: Int,
-    l: Int,
-) raises -> Int:
-    """`SambaStack.forward(inputs)`: `(B, L)` ids -> `(B * L, vocab)` logits
-    written to `out_ptr`, every block from its zero state, no dropout. The
-    registry goes up once, the ids once, the logits come down once (the
-    board's forward span includes that download, as for lm-forward).
-    Returns `B * L * vocab`."""
-    comptime if not IDN_SAMBA_RESIDENT_STEP:
-        raise Error("mojolearn samba resident: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
-    _ensure_shape(s, b, l)
-    var m = b * l
-    s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
-    _upload_tokens(s, ids_ptr)
-    _admit_registry(s)
-    # The token-range refusal is the embedding entry's own
-    # (`emb_refuse_device_ids`): the ids are checked on the device before
-    # the gather reads them, so Python makes no min/max pass over them.
-    var emb = EmbConfig.llama(s.vocab, s.dm)
-    var ew = s.view(0)
-    identical_embedding_forward_into(s.ctx, s.acts[0], ew, s.ids, m, emb)
-    _forward_blocks(s, b, l, True)
-    _norm_head_forward(s, m, False)
-    s.ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=s.logits)
-    s.ctx.synchronize()
-    _ = ew^
-    return m * s.vocab
+# TOMBSTONE: SAMBA_THREE_TIER_FORWARD samba_resident_forward (the resident stateless forward; SambaStack.forward runs SambaStackProgram, training/samba_program.mojo) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
 
 
 def samba_resident_train_step(
@@ -1075,8 +1064,8 @@ def samba_resident_train_step(
     var emb = EmbConfig.llama(v, dm)
     var ew = s.view(0)
     identical_embedding_forward_into(s.ctx, s.acts[0], ew, s.ids, m, emb)
-    _forward_blocks(s, b, l, False)
-    _norm_head_forward(s, m, True)
+    _forward_blocks(s, b, l)
+    _norm_head_forward(s, m)
 
     # ---- the loss: the logits refusal (the oracle's walk, on the device),
     # then `identical_ce_loss_resident` with the gradient left on the device
@@ -1200,8 +1189,8 @@ def samba_resident_accumulated_step(
         var cfg = CeConfig(v, IGNORE_INDEX_DEFAULT, REDUCTION_SUM, Float32(0.0), total_count)
         ce_refuse_shape(m, m * v, cfg)
         identical_embedding_forward_into(s.ctx, s.acts[0], ew, s.ids, m, emb)
-        _forward_blocks(s, rows_per, l, False)
-        _norm_head_forward(s, m, True)
+        _forward_blocks(s, rows_per, l)
+        _norm_head_forward(s, m)
         var bad = device_first_nonfinite(s.ctx, s.logits, m * v)
         if bad >= 0:
             var is_nan = device_classify_nonfinite(s.ctx, s.logits, bad)

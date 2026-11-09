@@ -15,7 +15,7 @@ from x_decomp.exec_trait import Exec
 from x_decomp.pca_randomized import RDev, RKit
 from x_decomp.decomp_owner_kit import (
     DecompDev, OP_ADD, OP_DIV, OP_MAXS, OP_MUL, OP_SCALE, OP_SQDIFF, OP_SQRT, OP_SUB,
-    kit_colmean, kit_eigh, kit_pinv_rows, kit_rand, kit_reversed_columns, kit_rows,
+    kit_colmean, kit_eigh, kit_eigh_desc, kit_pinv_rows, kit_rand, kit_reversed_columns, kit_rows,
 )
 
 #: `_F32_EPS * 10`: the eigenvalue floor before the whitening's sqrt
@@ -46,11 +46,11 @@ def ica_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
             mean = kit_colmean(kit, m)
             xc = kit.ew(OP_SUB, m, mean)
             var gram = kit.mm(xc, xc, ta=True)
-            var eig = kit_eigh[E, D, RES, X](kit, gram)
-            var ev = kit_reversed_columns(kit, eig[0])
-            ev = kit.ew(OP_MAXS, ev, scalar=_EV_FLOOR)
+            # lane n9-decomp-eigh-families: descending and resident (no w / V round trip)
+            var eig = kit_eigh_desc[E, D, RES, X](kit, gram)
+            var ev = kit.ew(OP_MAXS, eig[0], scalar=_EV_FLOOR)
             var sv = kit.ew(OP_SQRT, ev)
-            var u = kit_reversed_columns(kit, eig[1])
+            var u = eig[1]
             var first = kit_rows(kit, u, 0, 1)
             var signs = kit.signs(first)
             u = kit.ew(OP_MUL, u, signs)

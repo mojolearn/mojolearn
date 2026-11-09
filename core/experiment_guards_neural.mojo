@@ -29,6 +29,16 @@ def _check_configuration() -> Bool:
     # registered sched_exp_block, which nothing called after the schedules went native; PURITY_3_OFF / PURITY_6_OFF only
     # changed the x_neighbors_purity_flags word, which nothing read. Recoverable at 485ba9cc1.
     comptime assert not (is_defined["MOJOLEARN_SCHED_FAST_TABLE"]() or is_defined["MOJOLEARN_SCHED_FAST_TABLE_OFF"]()), "removed: MOJOLEARN_SCHED_FAST_TABLE (sched_exp_block) had no caller; the schedules run lr_schedule_at / lr_schedule_series"
+    # Deleted 2026-11-09 (lane x4-transformer-on-executor): the device per-call fresh prefill entry and the public
+    # decode session's deferred-check window (docs/TOMBSTONES.md). Recoverable at f59d913b0b.
+    comptime assert not (is_defined["MOJOLEARN_TRANSFORMER_FRESH_PREFILL"]() or is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"]()), "removed: MOJOLEARN_TRANSFORMER_FRESH_PREFILL / MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (the GPU binding's per-call transformer_forward_fresh) superseded by the block session's fresh prefill; deleted 2026-11-09, recoverable at f59d913b0b; see docs/TOMBSTONES.md"
+    # Deleted 2026-11-09 (lane x7-byte-lm-on-executor): the byte LM trainer's hand step, whose arms these were
+    # (the step is the trainer's captured program on Program.fit now). Never measured as defaults; docs/TOMBSTONES.md
+    # "BYTE_LM_HAND_STEP". Recoverable at the deletion commit's parent on lane/x7-byte-lm-on-executor.
+    comptime assert not (is_defined["MOJOLEARN_IDN_TRAIN_ONE_WAIT"]() or is_defined["MOJOLEARN_AFN_LM_NOSYNC"]() or is_defined["MOJOLEARN_AFN26_LM_NOSYNC"]() or is_defined["MOJOLEARN_AFN_LM_HEAD_FUSE"]() or is_defined["MOJOLEARN_AFN26_LM_HEAD_FUSE"]()), "removed: MOJOLEARN_IDN_TRAIN_ONE_WAIT / MOJOLEARN_AFN_LM_NOSYNC / MOJOLEARN_AFN_LM_HEAD_FUSE (and the AFN26 spellings): arms of the byte LM's hand step, deleted 2026-11-09 with it (lane x7-byte-lm-on-executor: the trainer runs one captured program on Program.fit); see docs/TOMBSTONES.md BYTE_LM_HAND_STEP"
+    # Deleted 2026-11-09 (lane x7b-step-ops-host-arm): the hand train step's gradient views (docs/TOMBSTONES.md
+    # "BYTE_LM_X7_LEFTOVERS"). Recoverable at the deletion commit's parent on lane/x7b-step-ops-host-arm.
+    comptime assert not is_defined["MOJOLEARN_IDN_PARAM_GRAD_VIEWS"](), "removed 2026-11-09 (lane x7b-step-ops-host-arm): MOJOLEARN_IDN_PARAM_GRAD_VIEWS (every parameter and gradient of the hand byte LM train step a view of the flat owners) went with that step (lane x7: the step is the trainer's captured program); default off, never promoted; see docs/TOMBSTONES.md BYTE_LM_X7_LEFTOVERS"
     comptime assert get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_DEPTH",2]() == 1 or get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_DEPTH",2]() == 2, "invalid neural STAGE_DEPTH configuration"
     comptime assert get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_PAD",0]() == 0 or get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_PAD",0]() == 1, "invalid neural STAGE_PAD configuration"
     comptime assert get_defined_int["MOJOLEARN_IDN_NEURAL_FILL_BLOCKS",1]() > 0, "positive neural resource budget required"
@@ -133,7 +143,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch
     comptime assert get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() != 2, "removed: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (NI35 token-tree256 v2) retired 2026-10-10: noise, avg 1.00x lm-forward (NV 0.99x / AMD 1.01x), 1.01x lm-train-step (NV 1.01x / AMD 1.00x), mean_nll SAME (main ca25d9321, A/B nv2 v1229/v1231/v1232, amd a1555/a1556/a1557, default v1232/a1557); see docs/TOMBSTONES.md"
     comptime assert get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() == 0 or get_defined_int["MOJOLEARN_IDN_CE_TOKEN_FOLD",0]() == 1, "invalid MOJOLEARN_IDN_CE_TOKEN_FOLD arm (legal: 0|1; 2 removed 2026-10-10)"
-    comptime assert get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 1 or get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 2, "invalid MOJOLEARN_IDN_LM_RESIDENT_TOKENS arm (legal: 0|1|2)"
+    comptime assert get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS",0]() == 0, "removed 2026-11-09 (lane x7b-step-ops-host-arm): MOJOLEARN_IDN_LM_RESIDENT_TOKENS (arms 1 NI32, 2 NN51), resident token validation of the hand byte LM training step, had no reader after lane x7 moved the step onto the executor; never promoted; see docs/TOMBSTONES.md BYTE_LM_X7_LEFTOVERS"
     comptime assert get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 0 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 1 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 2 or get_defined_int["MOJOLEARN_IDN_LM_VIEWS",0]() == 3, "invalid MOJOLEARN_IDN_LM_VIEWS arm (legal: 0|1|2|3)"
     # TOMBSTONE: MOJOLEARN_IDN_LM_GROUPED_ADAM (arm 1, LOSER avg 1.03x lm-train-step, NV 1.019 / AMD 1.043) deleted 2026-10-11 by cdb22ee93; code recoverable at cdb22ee93^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_GROUPED_ADAM.patch
@@ -248,6 +258,38 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_SAMBA_OFF"](), "removed 2026-10-19 (lane/del-samba, 70ce81192): MOJOLEARN_AUTOGRAD_SAMBA_OFF (the hand Samba train-step backward walk) was deleted: the tape backward is the only one and gave the same words on Metal, NVIDIA and AMD. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch."
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_SAMBA"](), "removed 2026-10-19 (lane/del-samba, 70ce81192): MOJOLEARN_AUTOGRAD_SAMBA (the Samba tape opt-in) is gone: the tape is always on. Restore the switch with experiments/removed/MOJOLEARN_AUTOGRAD_SAMBA_OFF.patch."
     # ---- end lane del-samba
+    # ---- lane x9-moe-gcn-rules (2026-11-09): the MoE backward's refusal arm, deleted; the tape is the only MoE backward
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_MOE_OFF (removed) deleted 2026-11-09 by lane/x9-moe-gcn-rules; code recoverable at origin/integ/pre-0867-w2 f59d913b0b.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MOE_OFF"](), "removed 2026-11-09 (lane/x9-moe-gcn-rules): MOJOLEARN_AUTOGRAD_MOE_OFF (the refusal of the MoE backward) is deleted; the tape (autograd/route_ops.mojo) is the only MoE backward. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch"
+    # ---- end lane x9-moe-gcn-rules
+    # ---- lane x2-small-mlp-on-executor (2026-11-09): the hand small-MLP step and its switches, deleted
+    # (docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md).
+    # TOMBSTONE: MOJOLEARN_AFN_MLP_FUSED_STEP / _RESIDENT / _MULTISTEP / _ALL, MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
+    # Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
+    comptime assert not (is_defined["MOJOLEARN_AFN_MLP_FUSED_STEP"]() or is_defined["MOJOLEARN_AFN_MLP_RESIDENT"]() or is_defined["MOJOLEARN_AFN_MLP_MULTISTEP"]() or is_defined["MOJOLEARN_AFN_MLP_ALL"]()), "removed 2026-11-09 (lane/x2-small-mlp-on-executor, plan row X2): SmallMLPTrainer runs as one captured program on the executor (autograd/small_mlp_program.mojo); the Apple FAST fused step and resident session (merged-unmeasured opt-ins) are deleted with the hand step; drop the define. Restore with experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch"
+    comptime assert not is_defined["MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF"](), "removed 2026-11-09 (lane/x2-small-mlp-on-executor, plan row X2): SmallMLPTrainer runs as one captured program on the executor (autograd/small_mlp_program.mojo); the hand step's GEMM leaf switch went with it; drop the define. Restore with experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch"
+    # ---- end lane x2-small-mlp-on-executor
+    # ---- lane x3-mlp-rnn-predict-on-tape (2026-11-08, docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md X3 and 5.6): one
+    # path per decision in the MLP and recurrent trainers (docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md).
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by c3b7dc42e6; code recoverable at c3b7dc42e6^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_PREDICT"](), "removed 2026-11-08 (lane/x3-mlp-rnn-predict-on-tape, c3b7dc42e6 + 9a9a8e3148): MLP and GRU/LSTM/RNN predict always run the tape forward in inference mode; the hand mlp_predict / mlp_forward and the recurrent hand forward + head are deleted. Drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch"
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_LOSS"](), "removed 2026-11-08 (lane/x3-mlp-rnn-predict-on-tape, dbab55bea7): rnn_fit's reported loss always uses the blocked fold (loss_value_into; the serial OP_SUM is deleted); mlp_fit keeps its loss block (already blocked, the arm added launches). Drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch"
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_OPTIM"](), "removed 2026-11-08 (lane/x3-mlp-rnn-predict-on-tape, 75825f479c): mlp_fit and rnn_fit always update through autograd/optim.mojo (step_lr), the same OP_OPT words; the hand OP_OPT assembly is deleted. Drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch"
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_DATA (promoted: autograd/data.mojo epoch_order is the one epoch order; the hand launches deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_DATA"](), "removed 2026-11-08 (lane/x3-mlp-rnn-predict-on-tape, 75825f479c): rnn_fit always takes its epoch order from autograd/data.mojo epoch_order (same launches, same key); the inline launches are deleted. Drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch"
+    # ---- end lane x3-mlp-rnn-predict-on-tape
+    # TOMBSTONE: MOJOLEARN_NI18_FUSED_EPOCH_GATHER (removed with its route) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+    # Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
+    # TOMBSTONE: MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF (removed with its route) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+    comptime assert not is_defined["MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF"](), "removed 2026-11-09 (lane/x8-cnn-on-executor): MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF chose the CNNClassifier epoch's row order and Adam scalars between host and device; that epoch is deleted (the classifier trains through Program.fit); recoverable at f59d913b0b, see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_NI18_FUSED_EPOCH_GATHER"](), "removed 2026-11-09 (lane/x8-cnn-on-executor): MOJOLEARN_NI18_FUSED_EPOCH_GATHER fused the CNNClassifier device epoch's row gather, which is deleted (the classifier is a captured program on the executor); never measured; recoverable at f59d913b0b, see docs/TOMBSTONES.md"
     return True
 
 

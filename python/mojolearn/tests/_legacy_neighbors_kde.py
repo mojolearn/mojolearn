@@ -146,10 +146,9 @@ def fit(self, X, y=None, sample_weight=None):
         # DEVIATION 604 refuses a non-finite fit set at the first
         # score_samples; refusing it here as well names the input at the
         # call that supplied it, as scikit-learn's fit does.
-        raise ValueError(
-            "mojolearn KernelDensity: X contains a NaN or an infinity; "
-            "refused by name at fit (DEVIATION 604)"
-        )
+        # The one non-finite wording (bindings/admitted_input.mojo
+        # admitted_finite_wording; lane a7b-device-x-neighbors).
+        raise ValueError("Input X contains NaN or infinity (KernelDensity).")
     # Opt-in immutable snapshot: transport-only copy of caller bytes.
     # Residency never relies on external mutable pointer identity.
     binding = self._bind("_mojolearn_estimators")

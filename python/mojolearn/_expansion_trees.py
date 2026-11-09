@@ -450,12 +450,13 @@ _native_trees_bridge.register(DecisionTreeRegressor, "dt_regressor")
 #     CalibratedClassifierCV, OneVsRest's targets and MultiOutputClassifier's
 #     label columns leave their Python row loops (`_trees_native_folds`;
 #     the native meta-estimator owner, bindings/trees_public_meta.mojo);
-#   MOJOLEARN_TE_ADA_SESSION  the AdaBoost members fit the one staged device
-#     copy of X (the exact forest data session DART opens by default);
-#   MOJOLEARN_TE_ADA_SESSION_SHARE  with it, later members reuse the first
-#     member's quantile tables (may move bits: a quality gate, not a digest).
+#   MOJOLEARN_TE_ADA_SESSION_SHARE  the AdaBoost members' data session (every
+#     build opens it) lets later members reuse the first member's quantile
+#     tables (may move bits: a quality gate, not a digest).
+# TOMBSTONE: MOJOLEARN_TE_ADA_SESSION_OFF / MOJOLEARN_IDN_ADA_SESSION_OFF (bits 2 and 128, escapes from the AdaBoost
+# data session) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch
 _TE_NATIVE_SPLITS = 1
-_TE_ADA_SESSION = 2
 _TE_ADA_SESSION_SHARE = 4
 #   MOJOLEARN_KSHAP_FAST_BATCH (lane apple-fast-gap-kapprox2; M3 kernel-shap
 #     istella 27,011 -> 15,325 ms, same rel_error): Kernel/Permutation SHAP reuse one host buffer for
@@ -475,12 +476,6 @@ _AGN_IDN_SYN_POOL = 16
 #     from the previous coalition's (`x_trees_pshap_dsynth` +
 #     `x_trees_pshap_dvalues`); see xtrees/agnostic_device.mojo.
 _PSHAP_DELTA = 32
-#   _XT_IDN_ADA_SESSION (lane fam-forests; an IDENTICAL build's switch, -D
-#     MOJOLEARN_IDN_ADA_SESSION_OFF clears it): the AdaBoost members fit the
-#     one staged device copy of X through the EXACT session. Moves no bit.
-#     Bit 128 since the 2026-10-05 merge (was 32 on the IDENTICAL branch;
-#     main took 32 for PSHAP_DELTA; providers/python/xtrees_api_pyapi.mojo XTREES_FAST_SWITCHES).
-_IDN_ADA_SESSION = 128
 # TOMBSTONE: MOJOLEARN_PSHAP_FAST_OVERLAP (DROPPED-slower: permutation-shap taxi +26.6%, verdicts batch 6) deleted 2026-10-09
 # on lane/owed-deletions-D1 (next chunk's delta rows + download overlapped with the model); code recoverable at b639a2bd2.
 # Restore: git apply experiments/removed/MOJOLEARN_PSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.

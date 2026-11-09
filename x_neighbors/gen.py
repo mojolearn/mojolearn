@@ -426,7 +426,7 @@ struct _NeighborsContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojoXNeighborsContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXNeighborsContextFast"
+comptime _CTX_NAME = "MojolearnXNeighborsContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXNeighborsContextFastV2"
 comptime X_NEIGHBORS_CONTEXT = _Global[StorageType=_NeighborsContext, name=_CTX_NAME, init_fn=_NeighborsContext.__init__]
 
 
@@ -767,7 +767,6 @@ def gpu_binding():
             + f"from x_neighbors.device_ops import {ops}\n"
             + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(0)
             + "from providers.python.x_neighbors_dev_pyapi import kpca_resident_binding\n"
-            + "from providers.python.x_neighbors_dev_pyapi import lp_fast_resident_binding\n"
             + "from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES\n"
             + "from providers.python.x_neighbors_dev_pyapi import ocsvm_resident_binding\n"
             + "from x_neighbors.kfeat_dev import XN_KFEAT_ANY\n"
@@ -787,7 +786,6 @@ def build__mojolearn_x_neighbors() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_neighbors")
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
-        m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
         # TOMBSTONE: x_neighbors_purity_flags (dead native entry: no reader of the PURITY_3/PURITY_6 switch word) deleted 2026-10-26 by 1d3757533; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/x_neighbors_purity_flags.patch
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
@@ -814,7 +812,6 @@ def host_binding():
             + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n"
             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
             + "from providers.python.x_neighbors_host_pyapi import kpca_resident_binding\n"
-            + "from providers.python.x_neighbors_host_pyapi import lp_fast_resident_binding\n"
             + wrappers() + """
 
 def x_neighbors_host_numeric_mode_binding() raises -> PythonObject:
@@ -851,7 +848,6 @@ def build__mojolearn_x_neighbors_host() -> PythonObject:
         m.def_function[x_neighbors_host_sabotage_binding]("x_neighbors_host_sabotage")
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
-        m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
         # TOMBSTONE: x_neighbors_purity_flags (dead native entry: no reader of the PURITY_3/PURITY_6 switch word) deleted 2026-10-26 by 1d3757533; code recoverable at 485ba9cc1.
         # Restore: git apply experiments/removed/x_neighbors_purity_flags.patch
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")

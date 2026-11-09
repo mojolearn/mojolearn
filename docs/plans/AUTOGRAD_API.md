@@ -139,8 +139,9 @@ count or executor.
 - Opcodes: dropout is `OP_AG_DROPOUT_FWD`/`OP_AG_DROPOUT_VJP` (1100/1101,
   `autograd/data_ops.mojo`), a range of its own beside the tape family
   (1000..1010), asserted disjoint in `sequence/dispatch.mojo`.
-- Trainers: `-D MOJOLEARN_AUTOGRAD_DATA` routes the recurrent trainer's epoch
-  order through `epoch_order` (same launches, same bits expected). The MLP
+- Trainers: the recurrent trainer's epoch order comes from `epoch_order`
+  (same launches, same bits; `-D MOJOLEARN_AUTOGRAD_DATA` promoted and
+  deleted 2026-11-08). The MLP
   keeps its own `OP_MLP_PERM` launch: `permutation` is that launch with the
   same key, so moving the MLP onto it would change no bits and needs no
   define.
@@ -193,11 +194,10 @@ sum is the fixed fold. The metrics in `metrics/impl/` (DeviceContext kernels
 with shared-memory trees) are not used here because they do not run on
 HostExec; the terms are theirs, the fold order is the tape's.
 
-Trainers under `-D MOJOLEARN_AUTOGRAD_LOSS` (default off): `sequence/
-mlp_fit.mojo` takes each batch's data term from `loss_value_into` (sum of
-per-element terms) and keeps op_mlp_bloss for the L2 term and the divide;
+Trainers (2026-11-08, `-D MOJOLEARN_AUTOGRAD_LOSS` deleted):
 `sequence/recurrent.mojo::rnn_fit` takes `losses[k]` from `loss_value_into`
-(mean) instead of the one-thread OP_SUM. Gradient seeds are unchanged in
+(mean) instead of the one-thread OP_SUM (new bits in `losses[]`); the MLP
+keeps its loss block (already a blocked fold). Gradient seeds are unchanged in
 both. New bits in the reported losses only; n_iter of the MLP can move with
 them through the stopping rule.
 
@@ -437,6 +437,84 @@ adamw; a saved and loaded optimizer state continues bit for bit; zero_grad
 then an accumulating backward equals a plain backward; refusals). Its
 `OPS_OPT_DIGEST` lines must be equal on CPU, Metal, NVIDIA and AMD.
 
+### Bounded loops
+
+A bounded loop repeats a body until a criterion holds or an iteration bound
+is reached, with the whole loop on the device. It has four parts, shared by
+the program loop and by compiled step ops (`autograd/program_loop.mojo`,
+`autograd/program_loop_device.mojo`):
+
+- **Carried state in place.** The state lives in fixed buffers, uploaded
+  once and updated in place by the loop's own ops. Nothing is allocated,
+  copied to a fresh buffer or synchronized per iteration; the final state is
+  downloaded once.
+- **An iteration register.** A device value that counts the iterations
+  committed so far. A body can read it as an input.
+- **The criterion as a device value.** The device compares, records the
+  stop in a small register block, and freezes the state. The host reads the
+  block once every `check_every` iterations. Iterations enqueued after the
+  stop change nothing, so the result does not depend on `check_every`.
+- **Step ops.** A body is a fixed list of ops enqueued on the device stream.
+  A compiled step op enqueues its own kernels, in its own order, each gated
+  on the register block's done word.
+
+From Python, `Program.while_loop` runs a captured body as a bounded loop:
+
+```python
+with ops.Session() as s:
+    x = s.tensor(a)
+    i = s.tensor(np.zeros((1, 1), np.float32))
+    cond = s.capture([x, i], s.less(i, s.full((1, 1), 10)))
+    body = s.capture([x, i], s.add(x, i))
+    out = body.while_loop(a, condition=cond, max_iterations=100,
+                          check_every=8, iteration=True)
+    out["outputs"], out["iterations"], out["stopped"]
+```
+
+- `check_every` (default None: the loop's chunk rule, see
+  docs/plans/EXECUTOR_X1_API.md section 5): iterations between two status
+  reads. With 1, no body runs after the stop. Above 1, up to
+  `check_every - 1` extra iterations are computed and discarded (their
+  writes to state tensors too), and the body must keep each state array's
+  shape.
+- `iteration=True`: the body and the condition take one more input, the
+  iteration register (one value). Pass only the state arrays.
+- `max_iterations` is at most 16777216.
+
+From Mojo, a family registers its iteration as a `LoopStep`
+(`enqueue_step(ctx, registers, it, timers)`): its kernels, each gated on
+`registers.words`, followed by a criterion op such as
+`loop_criterion_below(ctx, registers, value, threshold, it)`. Then
+`bounded_device_loop(ctx, step, registers, first, last, check_every, timers)`
+runs it and returns whether the criterion held and at which iteration.
+KMeans' Lloyd iterations (`LloydStep`, `cluster/impl/detail/kmeans.mojo`)
+are the first step op.
+
+Integer state (lane x1): a state array of integer ids (an ids input of the
+body) is carried word for word; each body output keeps its input's kind. With
+`iteration=True` and an ids iteration input, the register reaches the body as
+an int32 word, so `take`/`index` can select token t of a slab.
+
+### Carried state, block step ops and decode
+
+Lane x1 (`docs/plans/EXECUTOR_X1_API.md` is the reference):
+
+- `Session.state(x, ids=False)` uploads a state tensor: operations that carry
+  state write it in place, and a captured program records it as a state
+  parameter (program record version 3).
+- Block step ops, session codes 81..84 (`autograd/block_step_ops.mojo`):
+  Mamba-1, Mamba-2, Mamba-3 and Llama-style attention blocks over a packed
+  weights parameter and in-place state, the resident decode sessions' step
+  bodies unchanged. L = 1 is a decode step, L > 1 a prefill.
+- `Program.decode(*arrays, n, state=None, unroll=1, iteration=False)` runs a
+  next-token graph `n` times as a bounded loop with no condition, records
+  every step's tokens on the device and returns them together.
+
+Per-op timers: build with `-D MOJOLEARN_EXECUTOR_TIMERS` to print one line
+per op of every bounded loop,
+`EXECUTOR_TIMER loop=<label> op=<name> calls=<n> total_ms=<ms> mean_us=<us>`.
+Each timed op drains the stream, so the numbers are relative.
+
 ## Program form (design note, not implemented)
 
 The session runs one Mojo call per op and a Python branch costs one
@@ -458,6 +536,8 @@ over the `OPS_*` codes above, plus three control words evaluated in Mojo:
 - `LOOP count, body_end`: repeat a body a fixed number of times (epochs,
   batches, refinement steps) with an iteration register the body can read
   (dropout counter, permutation epoch).
+  (Implemented for `while_loop` as the bounded loop above: the iteration
+  register, in-place carried state and device criterion.)
 - `ROUTE gate, k`: top-k routing of rows to experts, producing per-expert
   row index lists and weights on the device (sequence/moe.mojo already
   routes this way for MoEBlock), followed by per-expert `gather_rows`, the
@@ -719,8 +799,8 @@ So the LM trainers keep their own step until a separate A/B moves them.
 superset of what the MLP and recurrent trainers use), the same element
 body and the same host scalars, plus a global-norm clip (blocked fold, two
 launches, then one scale launch) and host learning-rate schedules
-(constant, step, cosine, linear warmup). Under `-D MOJOLEARN_AUTOGRAD_OPTIM`
-the MLP and recurrent trainers update through it; with the clip off and a
+(constant, step, cosine, linear warmup). The MLP and recurrent trainers
+update through it (`-D MOJOLEARN_AUTOGRAD_OPTIM` promoted 2026-11-08); with the clip off and a
 constant schedule the launches and their arguments are the ones the hand
 update issues, so the bits are the same.
 

@@ -21,7 +21,6 @@ from bindings.classical_exceptions import classical_require_fitted
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.host_inference_scalars import host_inference_scalar
-from bindings.family_common import family_f32
 from bindings.cluster_fit_a_native import cluster_fit_a_operation, _pending, _pending_text, _drop_pending
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING
 from bindings.cluster_native import cluster_operation

@@ -14,10 +14,11 @@
 # kernels: the bits do not move.
 from std.math import sqrt
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.py_balanced import py_call
-from bindings.family_common import FAMILY_F32P, FAMILY_I64P, family_array, family_as_f32
+from bindings.family_common import FAMILY_F32P, FAMILY_I64P, family_array
 from bindings.classical_arrays import classical_address
-from core.family_cast_impl import family_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32
 from core.metrics_exp_impl import mexp_cast_i64
 from bindings.metrics_exp_common import (
     MX_NONE, MxProg, MxArena, MxLab, mx_run, mx_b, mx_len, mx_truthy, mx_is_str, mx_float,
@@ -249,10 +250,10 @@ def _cluster_score(args: PythonObject, caller: String, db: Bool, context: Python
     """calinski_harabasz_score (db False) or davies_bouldin_score (db True);
     args = (X, labels, mode)."""
     # `_cluster_inputs`
-    var Xa = family_as_f32(args[0], 2, "X", context)
+    var Xa = admit_family(args[0], 2, "X", context).array
     var n = Int(py=Xa.shape[0])
     var d = Int(py=Xa.shape[1])
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(Xa))), n * d):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(Xa))), n * d):
         raise Error("mojolearn " + caller + ": X contains NaN or infinity")
     _ = Xa  # keep the Python object alive through the native calls above
     var lab = mx_encode(args[1], "labels", context)

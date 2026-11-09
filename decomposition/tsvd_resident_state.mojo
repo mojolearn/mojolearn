@@ -100,8 +100,11 @@ def tsvd_transform_resident_device(
     n_rows: Int,
     n_features: Int,
     n_components: Int,
+    finite_word: Int = 0,
 ) raises:
-    """`tsvd_transform_host` with `components_` read from the lease's device
+    """`finite_word` (lane a7d): as `tsvd_transform_dev`'s.
+
+    `tsvd_transform_host` with `components_` read from the lease's device
     copy (uploaded from `components_addr` at the first call of the lease,
     and again only when the address or the size changed). Lease 0 uploads
     it into a buffer that dies with this call, the per-call route."""
@@ -109,7 +112,7 @@ def tsvd_transform_resident_device(
     var view = fitted_resident_view(tsvd_resident_store(), ctx, lease, 0, [components_addr],
                                     [n_components * n_features])
     var components = view.bufs[0].copy()
-    tsvd_transform_dev(ctx, x_ptr, components, out_ptr, n_rows, n_features, n_components)
+    tsvd_transform_dev(ctx, x_ptr, components, out_ptr, n_rows, n_features, n_components, finite_word)
     _ = components^
     _ = view^
 

@@ -27,7 +27,6 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture(autouse=True)
 def resident_route(monkeypatch):
     monkeypatch.setenv("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD", "1")
-    monkeypatch.delenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", raising=False)
 
 
 def resident_model(path, *, uniform=False):
@@ -35,7 +34,7 @@ def resident_model(path, *, uniform=False):
     entries = model._native_entries
     assert model.kind == "transformer"
     assert model._head_int15 is None and model._norm is not None
-    assert entries["resident_read_v1"] is True
+    assert entries["program_read"] is not None
     assert entries["native_block_operations"] is not None
     assert entries.get("parallel_call") is None
     for name in ("causal_lm_session_forward", "causal_lm_session_run",

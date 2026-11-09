@@ -17,6 +17,8 @@
 # inputs, same order: the bits do not move.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family, admit_family_refuse_empty
+from bindings.admitted_input import classical_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_fields, py_setitem
 from bindings.native_loaded_module import native_loaded_module
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
@@ -26,11 +28,11 @@ from bindings.classical_arrays import (
 )
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, family_repr, family_str, family_call, family_array, family_f32,
-    family_as_f32, family_view, family_cast_view, family_nonfinite, family_is_int, family_is_real, family_is_str,
-    family_type_name,
+    FAMILY_F32P, FAMILY_F64P, family_repr, family_str, family_call, family_array, family_nonfinite,
+    family_is_int, family_is_real, family_is_str, family_type_name,
 )
-from core.family_cast_impl import family_cast_rows, family_all_finite_f32
+from core.admitted_input import admitted_cast_f32
+from core.host_finite_scan import host_all_finite_f32
 from checks.numerics import pinned_mul_f64, portable_log64
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_check_x, classical_check_width, classical_estimator_name
@@ -122,13 +124,13 @@ def _x_finite(source: PythonObject, name: String, context: PythonObject) raises 
     if _f32_ready(source, context) and Int(py=source.ndim) == 2:
         # One native scan of the admitted float32 words: the same refusal
         # the cast's scan makes, for the same values.
-        if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(source))), Int(py=source.size)):
+        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(source))), Int(py=source.size)):
             raise Error("mojolearn: " + name + " contains NaN or infinity")
         _ = source  # keep the Python object alive through the native scan above
         return source
     var x = PythonObject(None)
     try:
-        x = family_f32(source, 2, name, context)
+        x = admit_family(source, 2, name, context, finite=True).array
     except error:
         if family_nonfinite(error, name):
             raise Error("mojolearn: " + name + " contains NaN or infinity")
@@ -151,7 +153,18 @@ def _any_f32_kept(source: PythonObject, name: String, context: PythonObject, mut
         # The input itself, as the view admission below returns it (its own
         # storage: `kept` stays as it is).
         return source
-    var view = family_view(source, -1, name, context)
+    # The one admission path: a rank 0-2 input goes through admit_family
+    # (its rank and emptiness refusals and its parallel cast); a higher rank
+    # (a stack of initial matrices) gets the same emptiness refusal and the
+    # slab casts below (family_view deleted).
+    var view = classical_view(source, context, name)
+    var shape = List[Int]()
+    var count = 1
+    for axis in range(Int(py=view.ndim)):  # small-loop(rank: the axes of one array)
+        shape.append(Int(py=view.shape[axis]))
+        count *= shape[axis]
+    if count == 0:
+        admit_family_refuse_empty(name, shape)
     var result = _any_f32_view(view, name, context)
     if kept:
         var cls = py_type(source)
@@ -163,7 +176,7 @@ def _any_f32_kept(source: PythonObject, name: String, context: PythonObject, mut
 def _any_f32_view(view: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     var nd = Int(py=view.ndim)
     if nd <= 2:
-        return family_cast_view(view, name, context)
+        return admit_family(view, -1, name, context, admitted=True, empty=True).array
     if not classical_is_array(view, context) and not Bool(py=view.dtype.isnative):
         raise Error("TypeError: " + name + " must be in native byte order")
     if classical_is_f32(view, context) and classical_c_order(view, context):
@@ -189,7 +202,7 @@ def _any_f32_view(view: PythonObject, name: String, context: PythonObject) raise
             var dim = Int(py=view.shape[a])
             offset += (rest % dim) * Int(py=view.strides[a])
             rest //= dim
-        family_cast_rows(base + offset, s0, s1, rows, cols, item, kind,
+        _ = admitted_cast_f32(base + offset, s0, s1, rows, cols, item, kind,
                          FAMILY_F32P(unsafe_from_address=out + s * rows * cols * 4))
         _ = result  # keep the Python object alive through the native call above
     _ = view  # keep the Python object alive through the native casts above
@@ -349,7 +362,7 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
         raise Error(_GMM + "weights_init" + _REFUSE_INIT_TAIL)
     if _get(model, "precisions_init") is not None:
         raise Error(_GMM + "precisions_init" + _REFUSE_INIT_TAIL)
-    var x = family_as_f32(source, 2, "X", context)
+    var x = admit_family(source, 2, "X", context).array
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     var n_components = _get(model, "n_components")
@@ -588,7 +601,7 @@ def _gmm_ext_fit(model: PythonObject, xc_binding: PythonObject, source: PythonOb
         if size != want:
             raise Error("The parameter '" + family_str(covariance_type) + " precision' has " + String(size)
                         + " values, expected " + String(want))
-        if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(pi))), size):
+        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(pi))), size):
             raise Error("precisions_init must be finite")
         _ = pi  # keep the Python object alive through the native calls above
         _ = py_call(parts.append, pi)
@@ -687,7 +700,7 @@ def _gmm_bic_aic(model: PythonObject, binding: PythonObject, source: PythonObjec
         result.append(fit_term + Float64(2 * p))
         _ = x^
         return result^
-    var x = source if admitted else family_as_f32(source, 2, "X", context)
+    var x = source if admitted else admit_family(source, 2, "X", context).array
     var out = family_array(Python.tuple(3), "<f8", context)
     _gmm_score_call(model, binding, x, "gmm_score_bic_aic", "score", out, context, key)
     var words = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(out)))
@@ -712,7 +725,7 @@ def _gmm_infer(model: PythonObject, binding: PythonObject, source: PythonObject,
     if ext is not None:
         var xe = source if admitted else _x_finite(source, "X", context)
         return _gmm_ext_labels(model, xe, which, context)
-    var x = source if admitted else family_as_f32(source, 2, "X", context)
+    var x = source if admitted else admit_family(source, 2, "X", context).array
     return _gmm_default_infer(model, binding, x, which, context, key)
 
 

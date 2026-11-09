@@ -8,7 +8,8 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_address, classical_host_f32
+from bindings.classical_arrays import classical_address
+from bindings.admitted_input import admit_x
 from bindings.decomp_inputs import decomp_input
 from bindings.decomp_owner_common import (
     decomp_attr, decomp_check, decomp_entries, decomp_eq, decomp_f32, decomp_float, decomp_gemm_check, decomp_int,
@@ -124,11 +125,11 @@ def ica_project(model: PythonObject, source: PythonObject, inverse: Bool, contex
     var n = Int(py=x.shape[0])
     var width = Int(py=x.shape[1])
     var name = String("mixing_") if inverse else String("components_")
-    var matrix = classical_host_f32(decomp_attr(model, fields, name), 2, name, context)
+    var matrix = admit_x(decomp_attr(model, fields, name), 2, name, context)
     var rows = Int(py=matrix.shape[0])
     decomp_gemm_check(width, Int(py=matrix.shape[1]))
     var whiten = Bool(py=decomp_attr(model, fields, "_whiten"))
-    var mean = classical_host_f32(decomp_attr(model, fields, "mean_"), 1, "mean_", context) if whiten else matrix
+    var mean = admit_x(decomp_attr(model, fields, "mean_"), 1, "mean_", context) if whiten else matrix
     var out = decomp_f32(Python.tuple(n, rows), context)
     _ = py_call_typed(entries["x_decomp_ica_project"], Python.list(
         1 if inverse else 0, classical_address(x), n, width, classical_address(matrix), rows,

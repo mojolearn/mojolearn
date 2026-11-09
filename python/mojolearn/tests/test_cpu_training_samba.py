@@ -120,17 +120,16 @@ def test_every_entry_samba_reaches_is_on_the_host():
                 | {"mamba3_forward_tape", "mamba3_backward_tape", "mamba3_close_tape"},
             "transformer": {"transformer_session_" + name for name in ("create", "forward", "close")}
                 | {"transformer_decode_session_" + name for name in
-                   ("create", "open", "step", "forward", "export_state", "load_state", "close")}
+                   ("create", "open", "open_step_op", "step", "forward", "decode", "export_state",
+                    "load_state", "close")}
                 # numeric_profile="fixed15_v1": the GPU sessions' profile entries
                 # (lane/lowbit-blocks, lane/lowbit-default); the host route takes
                 # `transformer_forward_int15`, and a host session under the
                 # profile is refused by name
                 | {"transformer_session_forward_int15", "transformer_decode_session_open_int15"}
-                # the retained tape (`transformer_forward_tape_enabled`, absent on
-                # the host, disables it) and the session's fresh forward and
-                # backward, each taken only behind an `_exports` check
-                | {"transformer_forward_tape", "transformer_backward_tape", "transformer_close_tape",
-                   "transformer_session_forward_fresh", "transformer_session_backward"},
+                # the session's fresh forward and backward, each taken only
+                # behind an `_exports` check
+                | {"transformer_session_forward_fresh", "transformer_session_backward"},
             # The device-resident optimizer pair (`_resident_enabled` takes it
             # only when the binding exports `_RESIDENT_ENTRIES`; every other
             # `optimizer_resident_*` call runs on an open pair) and the

@@ -14,6 +14,7 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.ffi import c_int
+from bindings.admitted_family import admit_family_meta
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.cpython_table import cpython_table
 from bindings.manifold_storage_native import (
@@ -24,8 +25,8 @@ from bindings.manifold_storage_native import (
 )
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_arrays import classical_address
-from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family_array, family_f32_snapshot
-from core.family_cast_impl import family_all_finite_f32
+from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family_array
+from core.host_finite_scan import host_all_finite_f32
 from bindings.native_loaded_module import native_loaded_module
 from bindings.spectral_umap_routes import spectral_umap_entry, spectral_umap_optional_entry
 # The x_decomp native kernel-call table (lane ne3-f-kernel-table, rows
@@ -774,7 +775,7 @@ struct MKit(Movable):
         if len(value.shape) != 2 or r == 0 or c == 0:
             raise Error(name + ": a nonempty two-dimensional input is required")
         var src = FAMILY_F32P(unsafe_from_address=value.source.addr)
-        if not family_all_finite_f32(src, r * c):
+        if not host_all_finite_f32(src, r * c):
             raise Error(name + ": input must be finite; NaN/inf are unsupported")
         var nd = self._devbuf(r * c)
         self.upload(Int(py=device_identifier(nd)), value.source.addr, r * c)
@@ -1022,15 +1023,20 @@ struct MKit(Movable):
     def eigh(mut self, a: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
         """Ascending eigenvalues (1 x n) and eigenvectors in COLUMNS (n x n)."""
         var n = mk_r(a)
-        var w = mk_zeros(1, n, self.ctx)
-        var v = mk_zeros(n, n, self.ctx)
         var params = mk_ints([n, 0])
         var d = matrix_device(a)
-        if n >= 1 and mk_c(a) == n and not (d is None) and device_binding(d) is self.raw and self.opt_dev("x_decomp_dev_eigh"):
-            _ = family_call(self.fn("x_decomp_dev_eigh"), device_identifier(d), mk_addr(w, self.ctx), mk_addr(v, self.ctx), params)
-            _ = v  # keep the Python object alive through the native call above
-            _ = w  # keep the Python object alive through the native call above
-            return (w, v)
+        if n >= 1 and mk_c(a) == n and not (d is None) and device_binding(d) is self.raw and self.opt_dev("x_decomp_dev_eigh_to"):
+            # lane n9-decomp-eigh-families (2026-11-09): w and V stay on the
+            # device (`x_decomp_dev_eigh_to`, eigh_op_sym, one status wait);
+            # the descending take and the sign flip after it are device moves.
+            # Was `x_decomp_dev_eigh` into host words.
+            var wd = self.dout(1, n)
+            var vd = self.dout(n, n)
+            _ = family_call(self.fn("x_decomp_dev_eigh_to"), device_identifier(d), device_identifier(matrix_device(wd)),
+                            device_identifier(matrix_device(vd)), params)
+            return (wd, vd)
+        var w = mk_zeros(1, n, self.ctx)
+        var v = mk_zeros(n, n, self.ctx)
         var pa = mk_addr(a, self.ctx)
         _ = family_call(self.fn("x_decomp_eigh"), pa, mk_addr(w, self.ctx), mk_addr(v, self.ctx), params)
         _ = v  # keep the Python object alive through the native call above
@@ -1098,26 +1104,9 @@ struct MKit(Movable):
             stats.append(mk_at(st, i, self.ctx))
         return (stats^, diag, pm, im)
 
-    def lu_dev_aux(mut self, a: PythonObject,
-                   clamp: Bool) raises -> Tuple[PythonObject, PythonObject, PythonObject, List[Float64]]:
-        """LLE_FAST_DEV_LU: `lu` then `lu_aux` on the device, A untouched:
-        (lu, pm, im) device-resident and the four stats."""
-        var n = mk_r(a)
-        var lu = self.dout(n, n)
-        var pm = self.dout(n, 1)
-        var im = self.dout(n, 1)
-        var diag = self.dout(1, n)
-        var st = self.dout(1, 4)
-        var ia = self.did(a)
-        _ = family_call(self.fn("x_decomp_dev_lu_aux"), ia, device_identifier(matrix_device(lu)), device_identifier(matrix_device(pm)), device_identifier(matrix_device(im)), device_identifier(matrix_device(diag)), device_identifier(matrix_device(st)),
-                        mk_ints([n, 1 if clamp else 0]))
-        # The unused diagonal is still a kernel output: its numeric id does
-        # not retain the pooled device buffer while the call is running.
-        _ = diag^
-        var stats = List[Float64]()
-        for i in range(4):  # small-loop(stats: the four lu_aux status words): 4
-            stats.append(mk_at(st, i, self.ctx))
-        return (lu, pm, im, stats^)
+    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (kit method lu_dev_aux, its only caller gone) deleted 2026-11-08 by ed9ba6e7a1;
+    # code recoverable at 41ffcec665.
+    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 
     def trisolve(mut self, lu: PythonObject, idx: PythonObject, b: PythonObject, trans: Int) raises -> PythonObject:
         var n = mk_r(lu)
@@ -1674,7 +1663,7 @@ def mk_from_snapshot(value: ArrayMetadata, name: String, ctx: PythonObject) rais
     memcpy(dest=mk_store_ptr(store), src=src, count=r * c)
     _ = store
     _ = value
-    if not family_all_finite_f32(src, r * c):
+    if not host_all_finite_f32(src, r * c):
         raise Error(name + ": input must be finite; NaN/inf are unsupported")
     _ = value
     return mk_new(store, r, c, ctx)
@@ -1682,7 +1671,7 @@ def mk_from_snapshot(value: ArrayMetadata, name: String, ctx: PythonObject) rais
 
 def mk_from_input(source: PythonObject, name: String, ctx: PythonObject) raises -> PythonObject:
     """Capture dense/sparse input once and copy its admitted float32 words."""
-    var snapshot = family_f32_snapshot(source, 2, name, ctx, True)
+    var snapshot = admit_family_meta(source, 2, name, ctx, True)
     var result = mk_from_snapshot(snapshot, name, ctx)
     _ = snapshot
     _ = source

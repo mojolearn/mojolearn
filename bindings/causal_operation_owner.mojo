@@ -158,16 +158,9 @@ def _causal_entries(mut mods: NativeModules, entries: PythonObject, pinned: Pyth
         if original is not None and (not py_contains(original, names[i]) or item is not original[names[i]]):
             raise Error("TypeError: CausalLM native execution entry changed after admission")
         if (name == "native_primitives" or name == "native_block_operations" or name == "native_mamba"
-                or name == "block_binding" or name == "native_session_provider"
-                or name == "mamba2_workspace_provider"):
+                or name == "block_binding" or name == "native_session_provider"):
             # Typed provider/lifetime admission occurs at its native boundary;
             # these values are retained, never called or traversed as Python.
-            py_setitem(result, names[i], item)
-        elif name == "resident_read_v1" or name == "resident_sampling_v1":
-            # Native capability metadata, not an executable registry callback.
-            # The constructed-owner identity check above still forbids edits.
-            if py_type(item) is not bi.bool:
-                raise Error("TypeError: CausalLM resident capability must be bool")
             py_setitem(result, names[i], item)
         elif (name == "cpu" or name == "weight_names" or name == "resident_vendor"
                 or name == "mamba1_profile" or name == "native_enabled"):
@@ -265,7 +258,7 @@ def _causal_model_names() raises -> PythonObject:
         names[].model = Python.tuple("plan", "config", "kind", "d_model", "vocab_size", "n_layers", "norm_eps",
         "numeric_profile", "device", "weight_format", "max_positions", "_embed", "_norm", "_head", "_blocks",
         "_native_entries", "_native_vendor", "_native_numeric_mode", "_head_int15", "_runtime",
-        "_parameters_exposed", "_resident_busy", "_resident_sessions", "_closed", "_failed", "layer_devices", "_worker_index", "_pool", "_pools", "_causal_entries_owner")
+        "_parameters_exposed", "_resident_busy", "_resident_sessions", "_decode_program", "_closed", "_failed", "layer_devices", "_worker_index", "_pool", "_pools", "_causal_entries_owner")
     return names[].model
 
 
@@ -273,7 +266,7 @@ def _causal_model_runtime_names() -> List[String]:
     # Model fields a call itself updates (lifecycle words, resident sessions):
     # read and normalized from the live model on every call, as before.
     return [String("_parameters_exposed"), String("_resident_busy"), String("_resident_sessions"),
-            String("_closed"), String("_failed")]
+            String("_decode_program"), String("_closed"), String("_failed")]
 
 
 def _causal_block_runtime_names() -> List[String]:

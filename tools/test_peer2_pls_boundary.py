@@ -43,16 +43,18 @@ def test_native_score_uses_connected_binding_and_direct_native_metric_owner():
 def test_native_target_uses_captured_metadata_without_array_or_reshape_protocol():
     owner = (ROOT / "bindings/pls_native.mojo").read_text()
     target = owner[owner.index("def _target("):owner.index("def _center_scale(")]
-    assert 'decomp_input_snapshot(source, "Y", context, -1)' in target
+    assert '_pls_input(source, "Y", context, -1)' in target
     assert 'kit.input_snapshot(input, 1, input.shape[0])' in target
     assert 'return (kit.transpose(row), True)' in target
     code = '\n'.join(line.split('#', 1)[0] for line in target.splitlines())
     assert not any(token in code for token in ('py_call(', 'getattr', 'hasattr', 'source.shape', 'source.reshape'))
-    provider = (ROOT / "providers/python/decomp_input_pyapi.mojo").read_text()
-    assert provider.count('array_shape_once(view, context)') == 1
-    assert provider.count('array_metadata_once(view, shape^, name, context, complex_error=complex_error)') == 1
-    assert 'snapshot.owner = Python.tuple(original_owner, snapshot.owner)' in provider
-    assert 'family_all_finite_f32(' in provider
+    # The operand admission is the one path (lane a1b: decomp_input_snapshot
+    # deleted): admit_x_unrecorded / admit_f32, then the captured metadata.
+    helper = owner[owner.index("def _pls_input("):owner.index("def _matrix(")]
+    assert 'admit_x_unrecorded(value, public_name, context)' in helper
+    assert 'admit_f32(view, nd, name, context, admitted=True)' in helper
+    assert 'array_metadata_once(array, array_shape_once(array, context), name, context)' in helper
+    assert 'snapshot.owner = Python.tuple(source, snapshot.owner)' in helper
 
 
 def test_kit_retains_snapshot_owner_and_drops_address_when_device_writes():

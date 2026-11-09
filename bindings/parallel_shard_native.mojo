@@ -28,6 +28,7 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.admitted_family import admit_family, admit_family_meta, admit_family_input, admit_family_cast
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
 from bindings.py_attr import py_attr
@@ -37,7 +38,7 @@ from bindings.classifier_public_lifecycle import classifier_after_fit, classifie
 from bindings.scaler_lifecycle_native import _public_result
 from bindings.parallel_public_result import parallel_public_result
 from bindings.parallel_neighbor_worker import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
-from bindings.family_common import family_call, family_as_f32, family_view, family_f32_snapshot
+from bindings.family_common import family_call
 from bindings.native_process_pool import (
     process_worker_connect, process_worker_next, process_send, process_pool_create, process_pool_map,
     process_pool_close,
@@ -128,7 +129,7 @@ def _transform_rbf_sampler(args: PythonObject) raises -> PythonObject:
     var rps = args[3]
     if py_type(rps) is not b.int or Int(py=rps) < 1:
         raise Error("ValueError: rows_per_shard must be a positive int")
-    var x_meta = family_f32_snapshot(args[1], 2, "X", context, True)
+    var x_meta = admit_family_meta(args[1], 2, "X", context, True)
     var x = x_meta.keep
     var d = Int(py=x.shape[1])
     if d != Int(py=fields["n_features_in_"]):
@@ -175,16 +176,22 @@ def _scaler_input(source: PythonObject, context: PythonObject) raises -> PythonO
     """`_ScalerProtocol._input(X)`'s refusals (float32, nonempty 2-D, the
     Int32 bound), then the C-contiguous float32 Array. The finiteness scan
     is the plain owners' (each shard's fit or transform)."""
-    var view = family_view(source, -1, "input", context)
+    # The one admission path in its two steps: the metadata (read once, with
+    # the rank and emptiness refusals), the Scaler's own refusals on it, then
+    # the borrow or the cast of the same capture (family_view and the second
+    # admission of `source` deleted). A rank above 2 is now refused by the
+    # metadata step ("must be at most 2-D") before the dtype test.
+    var snapshot = admit_family_input(source, -1, "input", context)
     var b = shard_b()
     var listed = py_type(source) is b.list or py_type(source) is b.tuple
-    if not listed and shard_dtype(view) != "<f4":
+    if not listed and snapshot.dtype_name != "<f4":
         raise Error("TypeError: Scaler input must have dtype float32")
-    if Int(py=view.ndim) != 2 or Int(py=view.shape[0]) == 0 or Int(py=view.shape[1]) == 0:
+    if len(snapshot.shape) != 2 or snapshot.shape[0] == 0 or snapshot.shape[1] == 0:
         raise Error("ValueError: Scaler requires a nonempty two-dimensional input")
-    if Int(py=view.shape[0]) * Int(py=view.shape[1]) > 2147483647:
+    if snapshot.shape[0] * snapshot.shape[1] > 2147483647:
         raise Error("ValueError: Scaler exceeds the native Int32 indexing bound")
-    return family_as_f32(source, 2, "input", context)
+    admit_family_cast(snapshot, "input", context)
+    return snapshot.keep
 
 
 def _columns(data: PythonObject, lo: Int, hi: Int, context: PythonObject) raises -> PythonObject:
@@ -351,7 +358,7 @@ def _fit_gpc(args: PythonObject) raises -> PythonObject:
     var estimator = args[0]
     var work = py_fields(_gpc_admit(estimator, context))
     var fields = py_fields(estimator)
-    var source = family_as_f32(args[1], 2, "X", context)
+    var source = admit_family(args[1], 2, "X", context).array
     var copied = not (source is args[1])
     var x = source
     var encoded = gp_encode_labels(args[2], _worker_binding("_mojolearn"), context)
@@ -418,7 +425,7 @@ def _predict_gpc(args: PythonObject) raises -> PythonObject:
     var fields = py_fields(estimator)
     if not py_contains(fields, PythonObject("estimators_")):
         raise Error("ValueError: GaussianProcessClassifier: call fit() or load() first")
-    var q = family_as_f32(args[1], 2, "X", context)
+    var q = admit_family(args[1], 2, "X", context).array
     if Int(py=q.shape[1]) != Int(py=fields["n_features_in_"]):
         raise Error("ValueError: GaussianProcessClassifier: X has " + String(Int(py=q.shape[1])) + " features, fit saw "
                     + String(Int(py=fields["n_features_in_"])))
@@ -492,7 +499,7 @@ def _forest_y(y: PythonObject, regressor: Bool, context: PythonObject) raises ->
     (class order = code order = the order of `classes`). NO BIT MOVES; the
     driver puts `classes` back as `classes_` (`_fit_forest`)."""
     if regressor:
-        return Python.tuple(family_as_f32(y, 1, "y", context), PythonObject(None))
+        return Python.tuple(admit_family(y, 1, "y", context).array, PythonObject(None))
     var labels = trees_encode_labels(y, _t("trees_context"))
     return Python.tuple(labels.codes, labels.classes)
 
@@ -530,7 +537,7 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     if mode is not None and (py_type(mode) is not b.str or String(mode) != "identical"):
         raise Error("ValueError: parallel forests require IDENTICAL numeric mode")
     py_setitem(params, "numeric_mode", "identical")
-    var x = family_as_f32(args[1], 2, "X", context)
+    var x = admit_family(args[1], 2, "X", context).array
     var regressor = Bool(py=py_call(py_attr(regressors, "__contains__"), cls))
     var targets = _forest_y(args[2], regressor, context)
     var y = targets[0]
@@ -768,7 +775,7 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
             raise Error("TypeError: predict_proba requires a classifier")
         if py_get(fields, PythonObject("_y_cols"), PythonObject(None)) is None:
             raise Error("ValueError: fit the estimator before prediction")
-    var data = family_as_f32(args[1], 2, "X", context)
+    var data = admit_family(args[1], 2, "X", context).array
     var d = Int(py=fields["n_features_in_"])
     if Int(py=data.shape[1]) != d:
         raise Error("ValueError: input feature count differs from fit")
@@ -902,7 +909,7 @@ def _merge_candidates(parts: PythonObject, ranges: List[Int], n_queries: Int, k:
     var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(table)))
     var keep = b.list()
     for p in range(count):  # driver-loop: one candidate table row per reference block
-        var dist = family_as_f32(parts[p][0], 2, "distance shard", context)
+        var dist = admit_family(parts[p][0], 2, "distance shard", context).array
         var ids = parts[p][1]
         var ids_dtype = shard_dtype(ids)
         if ids_dtype != "<i8":
@@ -1044,7 +1051,7 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     var source = args[1]
     if source is None and String(method) == "radius_neighbors":
         source = index
-    var data = family_as_f32(source, 2, "X", context)
+    var data = admit_family(source, 2, "X", context).array
     if Int(py=data.shape[1]) != Int(py=fields["n_features_in_"]):
         raise Error("ValueError: input feature count differs from fit")
     var n = Int(py=data.shape[0])
@@ -1235,7 +1242,7 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
     var own = _driver_fields(args[0], "distributed_ivf_class")
     if Bool(py=own["_closed"]):
         raise Error("RuntimeError: distributed IVF index is closed")
-    var q = family_as_f32(args[1], 2, "queries", context)
+    var q = admit_family(args[1], 2, "queries", context).array
     if Int(py=q.shape[0]) < 1:
         raise Error("ValueError: at least one query is required")
     if Int(py=q.shape[1]) != Int(py=own["n_features_in_"]):
@@ -1325,7 +1332,7 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
     var args = shard_resolve_stored(request[2])
     if operation == "rbf_rows":
         var model = shard_model(_t("rbf_class"), state)
-        var rows_meta = family_f32_snapshot(args[0], 2, "X", context, True)
+        var rows_meta = admit_family_meta(args[0], 2, "X", context, True)
         return _rbf_transform(model, Python.tuple(_worker_binding("_mojolearn_kernel_methods"), rows_meta.keep), context, rows_meta)
     if operation == "scaler_fit":
         var kind = String(state[0])

@@ -2,10 +2,9 @@
 # Private sibling ABI for the existing fresh/backward Transformer operations.
 # Common descriptor transport; no Python/provider imports or changed kernels.
 from std.ffi import _Global
+from checks.numerics import GLOBAL_NUMERIC_MODE
 from transformer.native_lm_resident_dispatch import transformer_lm_resident_operation
 from transformer.native_decode_dispatch import transformer_decode_operation
-from transformer.native_tape_dispatch import transformer_tape_operation
-from transformer.session_tape_dispatch import transformer_session_tape_operation
 from transformer.session_native_dispatch import transformer_session_forward_native
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, TRANSFORMER_BLOCK_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -18,10 +17,11 @@ from transformer.transformer_binding_impl import (
 
 # 0 reserve, 1 release (caller GIL/lock held); 2 session fresh, 3 session
 # backward; 4 ephemeral fresh, 5 ephemeral backward. Session operations prepend
-# Tape operations 6..10 reserve/release/forward/backward/close their own owner.
 # one checked opaque owner handle to their integer vector. All spans borrowed.
-# Session-ticket ops36..40 reserve/release/forward/backward/discard the original
-# budget-aware session tape; <=35 and standalone tape ops6..10 are unchanged.
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (standalone tape ops 6..10 and 14, session invalidate-tape op 12 and the
+# session-ticket ops 36..40 are refused as unknown operations.)
 
 
 def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List[Float64]) raises -> Int:
@@ -29,27 +29,20 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List
         return transformer_lm_resident_operation(op, a, words, f)
     if len(f) != 0:
         raise Error("transformer block: unexpected floating scalars")
-    if op >= 36 and op < 41:
-        return transformer_session_tape_operation(op - 36, a, words)
     if op >= 15 and op < 25:
         return transformer_decode_operation(op - 15, a, words)
-    if op == 14:
-        return transformer_tape_operation(5, a, words)
-    if op == 12 or op == 13:
+    if op == 13:
         if len(words) != 1 or words[0] == 0 or len(a) != 0:
             raise Error("transformer session administration: invalid native descriptor")
         var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=words[0])
-        if owner[].busy or (op == 12 and owner[].closed):
+        if owner[].busy:
             raise Error("transformer: session is busy or closed")
-        if op == 12:
-            owner[].invalidate_tape()
-        else:
-            owner[].closed = True
-            owner[].clear()
-            owner[].ctx = None
+        owner[].closed = True
+        owner[].clear()
+        owner[].ctx = None
         return 0
-    if op >= 6 and op < 11:
-        return transformer_tape_operation(op - 6, a, words)
+    if (op >= 6 and op < 11) or op == 12 or op == 14:
+        raise Error("transformer block native ABI: unknown operation")
     var p = List[Int]()
     var session = 0
     if op < 4 or op == 11 or op == 35:
@@ -96,10 +89,14 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List
         var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=session)
         return transformer_session_forward_native(owner[], expanded, p, opts)
     var result = 0
-    if op == 2 or op == 4:
-        var base_a = 13 if op == 2 else 11
-        var base_p = 10 if op == 2 else 8
-        var name = "transformer_session_forward_fresh" if op == 2 else "transformer_forward_fresh"
+    if op == 4:
+        # Lane x4: the device per-call fresh prefill was removed (the
+        # session's fresh prefill, op 2, is the one stateless forward).
+        raise Error("transformer_forward_fresh: removed from the GPU binding; the session's fresh prefill runs it")
+    if op == 2:
+        var base_a = 13
+        var base_p = 10
+        var name = "transformer_session_forward_fresh"
         if len(a) != base_a and len(a) != base_a + BLOCK_OPTION_ADDRS:
             raise Error(name + ": addrs must contain " + String(base_a) + " addresses, or "
                 + String(base_a) + " + " + String(BLOCK_OPTION_ADDRS)
@@ -107,38 +104,20 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List
         var raw = a.copy()
         while len(raw) < base_a + BLOCK_OPTION_ADDRS:  # small-loop(pad existing optional block address tail)
             raw.append(0)
-        var expanded = List[Int]()
-        if op == 2:
-            expanded = raw.copy()
-            _check_base_addrs(expanded, [0, 1, 2, 3, 4, 5, 6, 8, 9, 12], name)
+        var expanded = raw.copy()
+        _check_base_addrs(expanded, [0, 1, 2, 3, 4, 5, 6, 8, 9, 12], name)
         if len(p) != base_p and len(p) != base_p + BLOCK_OPTION_PARAMS:
             raise Error(name + ": params must contain " + String(base_p) + " values, or "
                 + String(base_p) + " + " + String(BLOCK_OPTION_PARAMS)
                 + " with the block options tail, got " + String(len(p)))
         var opts = BlockOptions.from_params(p, base_p)
-        if op == 2:
-            var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=session)
-            try:
-                result = _transformer_run_session[True](owner[], expanded,
-                    p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts)
-            except problem:
-                owner[].clear()
-                raise problem
-        else:
-            for i in range(10):  # small-loop(original ten input/weight address slots)
-                expanded.append(raw[i])
-            expanded.append(0)
-            expanded.append(0)
-            expanded.append(raw[10])
-            for i in range(BLOCK_OPTION_ADDRS):  # small-loop(original optional address tail)
-                expanded.append(raw[11 + i])
-            _check_base_addrs(expanded, [0, 1, 2, 3, 4, 5, 6, 8, 9], name)
-            if expanded[12] == 0:
-                raise Error("transformer_forward_fresh: null output address")
-            if p[0] <= 0 or p[1] <= 0:
-                raise Error("transformer_forward_fresh: B and L must be positive")
-            result = _transformer_run[True](expanded,
-                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[1], 0, p[7], opts)
+        var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=session)
+        try:
+            result = _transformer_run_session[True](owner[], expanded,
+                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts)
+        except problem:
+            owner[].clear()
+            raise problem
     elif op == 3 or op == 5:
         if len(a) != 21 or len(p) != 8:
             raise Error("transformer backward: expected 21 addresses and 8 scalars (B,"
@@ -166,7 +145,7 @@ def transformer_block_operation(op: Int, a: List[Int], words: List[Int], f: List
 def transformer_block_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                          result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if op < 0 or op >= 41 or nf < 0 or nf > 1 or na < 0 or na > 45 or np < 0 or np > 28:
+        if op < 0 or op >= 36 or nf < 0 or nf > 1 or na < 0 or na > 45 or np < 0 or np > 28:
             raise Error("transformer block native ABI: unknown operation or scalar span")
         if result == 0:
             raise Error("transformer block native ABI: null result")
@@ -197,4 +176,4 @@ struct NativeTransformerBlockAPI(Defaultable, Movable):
 
 
 comptime NATIVE_TRANSFORMER_BLOCK_API = _Global[StorageType=NativeTransformerBlockAPI,
-    name="MojoTransformerBlockNativeAPIv1", init_fn=NativeTransformerBlockAPI.__init__]
+    name=("MojolearnTransformerBlockNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnTransformerBlockNativeAPIFastV2"), init_fn=NativeTransformerBlockAPI.__init__]

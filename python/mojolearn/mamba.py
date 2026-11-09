@@ -13,8 +13,9 @@ Mamba-3), recomputing the forward internally; gradients through a carried state 
 decode step are not available. Inputs are read through the buffer protocol, so PyTorch
 and NumPy are not required.
 
-`Mamba1DecodeSession` (from `Mamba1Block.decode_session`) keeps a Mamba-1 block and
-its state resident on the device for fast decoding.
+`Mamba1DecodeSession`, `Mamba2DecodeSession` and `Mamba3DecodeSession` (from each
+block's `decode_session`) keep a block and its state resident on the device for fast
+token-by-token decoding, with the same bytes as `step`.
 
 Examples
 --------
@@ -36,6 +37,8 @@ from ._mamba_impl import (
     Mamba3Block,
     Mamba3State,
     Mamba1DecodeSession,
+    Mamba2DecodeSession,
+    Mamba3DecodeSession,
 )
 
 __all__ = [
@@ -43,7 +46,9 @@ __all__ = [
     "Mamba1DecodeSession",
     "Mamba1State",
     "Mamba2Block",
+    "Mamba2DecodeSession",
     "Mamba2State",
     "Mamba3Block",
+    "Mamba3DecodeSession",
     "Mamba3State",
 ]

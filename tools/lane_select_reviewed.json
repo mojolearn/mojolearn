@@ -133,12 +133,11 @@
    "transformer-bf16w",
    "transformer-decode-load-state",
    "transformer-decode-session",
-   "transformer-forward-tape",
    "transformer-int8w",
    "transformer-window"
   ]
  },
- "recorded": "2026-10-24 (lane/fix-round2-seq-20261024 at the merge of integ/20261024 cc3b222c2); 2026-10-26 lane/lane-select-tests-0859: core/forest_inference.mojo +9 sequence lanes, whose modules' import-time connect_module (_native_full_reset_params.py) runs _native_params_metadata.connect_classes, which imports _forest_protocol.py and _gbdt_adapters.py; 2026-10-31 lane/retire-multi-gpu-verify: every par-* lane removed from the registry and the members (multi-GPU verification retired); 2026-11-05 lane/lane-select-precision-2: core/forest_inference.mojo +sequence-prophet (e401e6d28d, 2026-10-30: _x_sequence_prophet.py's import-time _expansion_sequence._connect_imported_module runs _native_params_metadata.connect_classes, the same edge as the nine sequence lanes of 2026-10-26)",
+ "recorded": "2026-10-24 (lane/fix-round2-seq-20261024 at the merge of integ/20261024 cc3b222c2); 2026-10-26 lane/lane-select-tests-0859: core/forest_inference.mojo +9 sequence lanes, whose modules' import-time connect_module (_native_full_reset_params.py) runs _native_params_metadata.connect_classes, which imports _forest_protocol.py and _gbdt_adapters.py; 2026-10-31 lane/retire-multi-gpu-verify: every par-* lane removed from the registry and the members (multi-GPU verification retired); 2026-11-05 lane/lane-select-precision-2: core/forest_inference.mojo +sequence-prophet (e401e6d28d, 2026-10-30: _x_sequence_prophet.py's import-time _expansion_sequence._connect_imported_module runs _native_params_metadata.connect_classes, the same edge as the nine sequence lanes of 2026-10-26); 2026-11-09 lane x6-tape-retire: transformer-forward-tape left the registry and python/mojolearn/neural_inference.py with the TransformerBlock tape API (deleted)",
  "registry": [
   "agglomerative",
   "arima",
@@ -432,7 +431,6 @@
   "transformer-bf16w",
   "transformer-decode-load-state",
   "transformer-decode-session",
-  "transformer-forward-tape",
   "transformer-int8w",
   "transformer-window",
   "trees-adaboost-clf",

@@ -8,7 +8,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
 from x_decomp.cells import F32Ptr
-from x_decomp.lanczos_host import lanczos_run
+from x_decomp.lanczos_host import eigh_tridiag_host_run, lanczos_run
 
 
 def lanczos_py(a: PythonObject, q: PythonObject, ab: PythonObject, p: PythonObject) raises -> PythonObject:
@@ -24,3 +24,17 @@ def lanczos_py(a: PythonObject, q: PythonObject, ab: PythonObject, p: PythonObje
     with GILReleased(Python()):
         steps = lanczos_run(pa, pq, pab, n, j0, j1, cap)
     return PythonObject(steps)
+
+
+def eigh_tridiag_py(ab: PythonObject, w: PythonObject, z: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_dev_eigh_tridiag` on host addresses (x_decomp/lanczos_host.mojo
+    `eigh_tridiag_host_run`); p = [j, cap]."""
+    var j = Int(py=p[0])
+    var cap = Int(py=p[1])
+    var pab = F32Ptr(unsafe_from_address=Int(py=ab))
+    var pw = F32Ptr(unsafe_from_address=Int(py=w))
+    var pz = F32Ptr(unsafe_from_address=Int(py=z))
+    var got = 0
+    with GILReleased(Python()):
+        got = eigh_tridiag_host_run(pab, pw, pz, j, cap)
+    return PythonObject(got)

@@ -31,7 +31,7 @@ struct _MetricsContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojoXMetricsContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXMetricsContextFast"
+comptime _CTX_NAME = "MojolearnXMetricsContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXMetricsContextFastV2"
 comptime X_METRICS_CONTEXT = _Global[StorageType=_MetricsContext, name=_CTX_NAME, init_fn=_MetricsContext.__init__]
 
 

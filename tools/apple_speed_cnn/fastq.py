@@ -19,9 +19,9 @@ sys.path.insert(0, sys.argv[2] + "/python")
 import mojolearn as ml  # noqa: E402
 
 mode = sys.argv[1]
-if "legacy" in __import__("os").environ.get("CNN_FASTQ_EXTRA", ""):  # lane/cnn-apple2 before arm
-    from mojolearn import _expansion_cnn as _xc
-    _xc._LEGACY_STEP = True
+if "legacy" in __import__("os").environ.get("CNN_FASTQ_EXTRA", ""):
+    # lane x8-cnn-on-executor (2026-11-09): the legacy arm went with the hand CNN epoch
+    raise SystemExit("fastq.py: the legacy arm was deleted with the hand CNN epoch")
 
 
 def digest(a):

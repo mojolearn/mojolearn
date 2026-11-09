@@ -33,19 +33,19 @@ def test_lowbit_uses_existing_numerical_provider_not_public_python_wrappers():
 
 
 def test_once_captured_foreign_metadata_retains_zero_copy_owner():
-    source=(ROOT/'bindings/linalg_ops_buffers.mojo').read_text()
-    section=source[source.index('struct LinAdmission'):]
+    source=(ROOT/'bindings/admitted_input.mojo').read_text()
+    section=source[source.index('struct AdmittedTyped'):]
     assert section.count('AdmittedBorrowedBuffer(value)')==1
     assert 'classical_admit_value(value, context)' in section
     assert 'PyMemoryView_FromMemory' in section
     # The admitted pin is moved out of the admission and into the Python pin
-    # object (the mode-parameterized LinBufferPin, a2b5592a6d).
+    # object (the mode-parameterized AdmittedBufferPin, a2b5592a6d).
     assert 'swap(held_pin, input.pin)' in section
-    assert 'PythonObject(alloc=LinBufferPin[](held_pin^))' in section
+    assert 'PythonObject(alloc=AdmittedBufferPin[](held_pin^))' in section
     assert 'py_setattr(array, "_pin", pin)' in section
     assert 'py_setattr(array, "_store", input.keep)' in section
-    assert 'return lin_borrow_array(input^, typestr, context)' in section
-    assert 'lin_convert(input.view, typestr, result.addr, name)' in section
+    assert 'return _typed_borrow_array(input^, typestr, context)' in section
+    assert 'admitted_typed_convert(input.view, typestr, result.addr, name)' in section
 
 
 def test_sequence_target_preserves_direct_float_storage_and_other_callers():

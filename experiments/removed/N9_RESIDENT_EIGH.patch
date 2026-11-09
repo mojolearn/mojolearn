@@ -1,0 +1,1514 @@
+diff --git a/bindings/_mojolearn_x_decomp.mojo b/bindings/_mojolearn_x_decomp.mojo
+index 1a2e60d37f..c935502190 100644
+--- a/bindings/_mojolearn_x_decomp.mojo
++++ b/bindings/_mojolearn_x_decomp.mojo
+@@ -61,7 +61,7 @@ from providers.python.x_decomp_resident_pyapi import (
+ )
+ from x_decomp.resident import GRP_CLS2_ANY
+ from providers.python.x_decomp_resident_pyapi import grp_cls2_py
+-from providers.python.x_decomp_lanczos_dev_pyapi import dev_eigh_tridiag_py, dev_lanczos_py
++from providers.python.x_decomp_lanczos_dev_pyapi import dev_lanczos_py
+ from x_decomp.resident import IDN_SVD_RESIDENT
+ from providers.python.x_decomp_resident_pyapi import dev_svd_py
+ from x_decomp.resident import IDN_LU_RESIDENT
+@@ -69,7 +69,7 @@ from providers.python.x_decomp_resident_pyapi import dev_lu_py, dev_lu_aux_py
+ from x_decomp.resident import IDN_CODE_RESIDENT
+ from providers.python.x_decomp_resident_pyapi import dev_code_rows_py
+ from x_decomp.resident import IDN_EIGH_RESIDENT
+-from providers.python.x_decomp_resident_pyapi import dev_eigh_py, dev_eigh_to_py
++from providers.python.x_decomp_resident_pyapi import dev_eigh_py
+ # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (the w4 alias of `dev_lu_aux_py`; "x_decomp_dev_lu_aux" is now only the
+ # IDN_LU_RESIDENT entry) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
+ # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
+@@ -237,7 +237,6 @@ def build__mojolearn_x_decomp() -> PythonObject:
+         # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+         # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
+         m.def_function[dev_lanczos_py]("x_decomp_dev_lanczos")
+-        m.def_function[dev_eigh_tridiag_py]("x_decomp_dev_eigh_tridiag")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+         m.def_function[dev_rand_py]("x_decomp_dev_rand")
+@@ -284,8 +283,6 @@ def build__mojolearn_x_decomp() -> PythonObject:
+         comptime if IDN_EIGH_RESIDENT:
+             # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_EIGH_RESIDENT_OFF) (x_decomp/resident.mojo)
+             m.def_function[dev_eigh_py]("x_decomp_dev_eigh")
+-            # lane n9-decomp-eigh-families: device outputs (eigh_op_sym), no w / V round trip
+-            m.def_function[dev_eigh_to_py]("x_decomp_dev_eigh_to")
+         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
+         # Isomap / LLE graph builds (x_decomp/graph_device.mojo, lane hr2-graph-embed)
+diff --git a/bindings/_mojolearn_x_decomp_host.mojo b/bindings/_mojolearn_x_decomp_host.mojo
+index 3a314d2be3..e14e731fe9 100644
+--- a/bindings/_mojolearn_x_decomp_host.mojo
++++ b/bindings/_mojolearn_x_decomp_host.mojo
+@@ -29,7 +29,7 @@ from providers.python.x_decomp_mds_pyapi import mds_fit_py
+ from providers.python.x_decomp_lle_iter_pyapi import lle_iterate_py
+ from providers.python.x_decomp_pls_pyapi import pls_fit_py
+ from providers.python.x_decomp_dictl_pyapi import dict_learning_py, minibatch_py
+-from providers.python.x_decomp_lanczos_host_pyapi import eigh_tridiag_py, lanczos_py
++from providers.python.x_decomp_lanczos_host_pyapi import lanczos_py
+ from providers.python.x_decomp_graph_host_pyapi import (
+     graph_knn_py, graph_knn_dense_py, graph_radius_py, graph_radius_geo_py, graph_lle_iw_py, graph_components_py, graph_join_py, graph_dijkstra_py,
+ )
+@@ -164,7 +164,6 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
+         m.def_function[reduce_py]("x_decomp_reduce")
+         m.def_function[order_small_py]("x_decomp_order_small")
+         m.def_function[lanczos_py]("x_decomp_lanczos")
+-        m.def_function[eigh_tridiag_py]("x_decomp_eigh_tridiag")
+         m.def_function[dsum_sq_py]("x_decomp_dsum_sq")
+         m.def_function[order_f_py]("x_decomp_order_f")
+         m.def_function[select_smallest_py]("x_decomp_select_smallest")
+diff --git a/bindings/decomp_kit_native.mojo b/bindings/decomp_kit_native.mojo
+index 8df07e34a0..4be8a0d00e 100644
+--- a/bindings/decomp_kit_native.mojo
++++ b/bindings/decomp_kit_native.mojo
+@@ -1241,19 +1241,15 @@ struct DecompKit(Movable):
+     def eigh(mut self, a: Int) raises -> Tuple[Int, Int]:
+         # `_Kit.eigh(A)` (uplo 0): ascending values (1 x n), vectors in columns.
+         var n = self.matrices[a].rows
+-        var params = Python.list(n, 0)
+-        if n >= 1 and self.matrices[a].cols == n and self.matrices[a].on_device and self.opt_dev("x_decomp_dev_eigh_to"):
+-            # lane n9-decomp-eigh-families (2026-11-09): w and V stay on the
+-            # device (`x_decomp_dev_eigh_to`, the executor op eigh_op_sym;
+-            # one status wait). Was `x_decomp_dev_eigh` into host words that
+-            # the next device op (MinCovDet's pinvh product) uploaded again.
+-            var wd = self.device_output(1, n)
+-            var vd = self.device_output(n, n)
+-            _ = py_call(self.entries["x_decomp_dev_eigh_to"], self.matrices[a].device, self.matrices[wd].device,
+-                        self.matrices[vd].device, params)
+-            return (wd, vd)
+         var w = self.zeros(1, n)
+         var v = self.zeros(n, n)
++        var params = Python.list(n, 0)
++        if n >= 1 and self.matrices[a].cols == n and self.matrices[a].on_device and self.opt_dev("x_decomp_dev_eigh"):
++            var da = self.matrices[a].device
++            _ = py_call(self.entries["x_decomp_dev_eigh"], da, self.address(w), self.address(v), params)
++            _ = v  # keep the Python object alive through the native call above
++            _ = w  # keep the Python object alive through the native call above
++            return (w, v)
+         var aa = self.address(a)
+         _ = py_call(self.entries["x_decomp_eigh"], aa, self.address(w), self.address(v), params)
+         _ = v  # keep the Python object alive through the native call above
+diff --git a/bindings/mani_decomp_native.mojo b/bindings/mani_decomp_native.mojo
+index ebbd8abf26..10dbafb953 100644
+--- a/bindings/mani_decomp_native.mojo
++++ b/bindings/mani_decomp_native.mojo
+@@ -284,29 +284,16 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
+                     break
+             j = reached
+             stop = broke
+-        # TOMBSTONE: the host assembly of T (a j x j host matrix of the batch's
+-        # alphas and betas) and its dense `k.eigh` deleted 2026-11-09 by lane
+-        # n9-decomp-eigh-families; code recoverable at the lane's base
+-        # origin/integ/pre-0867-w2 (f59d913b0b). Restore: git apply experiments/removed/N9_RESIDENT_EIGH.patch
+-        # The projected solve is the executor op `eigh_op_tridiag` on the
+-        # alphas / betas the Lanczos step wrote (x_decomp/lanczos_dev.mojo
+-        # `dev_eigh_tridiag_run`, w and z left on the device), the host
+-        # column its twin `eigh_op_tridiag_host` on `ab`
+-        # (x_decomp/lanczos_host.mojo `eigh_tridiag_host_run`): one
+-        # algorithm on every column. T's words are the float32 alphas and
+-        # betas either way (mk_of rounded the float64 copies back to them).
+-        if resident:
+-            th = k.dout(1, j)
+-            yv = k.dout(j, j)
+-            _ = family_call(k.fn("x_decomp_dev_eigh_tridiag"), device_identifier(matrix_device(abd)),
+-                            device_identifier(matrix_device(th)), device_identifier(matrix_device(yv)),
+-                            mk_ints([j, cap]))
+-        else:
+-            th = mk_zeros(1, j, ctx)
+-            yv = mk_zeros(j, j, ctx)
+-            _ = family_call(k.fn("x_decomp_eigh_tridiag"), mk_store_addr(ab), mk_addr(th, ctx), mk_addr(yv, ctx),
+-                            mk_ints([j, cap]))
+-            _ = ab  # keep the Python object alive through the native call above
++        # the tridiagonal T from the batch's alphas and betas
++        var tvals = List[Float64](length=j * j, fill=0.0)
++        for i in range(j):  # driver-loop: over the Lanczos steps' scalars into T (at most _LANCZOS_MAX_M)
++            tvals[i * j + i] = alphas[i]
++            if i + 1 < j:
++                tvals[i * j + i + 1] = betas[i]
++                tvals[(i + 1) * j + i] = betas[i]
++        var eig = k.eigh(mk_of(tvals, j, j, ctx))
++        th = eig[0]
++        yv = eig[1]
+         top = List[Int]()
+         var stop_at = max(j - 1 - nc, -1)
+         var t = j - 1
+diff --git a/bindings/mani_kit.mojo b/bindings/mani_kit.mojo
+index 73dd35a111..13de6032a0 100644
+--- a/bindings/mani_kit.mojo
++++ b/bindings/mani_kit.mojo
+@@ -1023,20 +1023,15 @@ struct MKit(Movable):
+     def eigh(mut self, a: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
+         """Ascending eigenvalues (1 x n) and eigenvectors in COLUMNS (n x n)."""
+         var n = mk_r(a)
+-        var params = mk_ints([n, 0])
+-        var d = matrix_device(a)
+-        if n >= 1 and mk_c(a) == n and not (d is None) and device_binding(d) is self.raw and self.opt_dev("x_decomp_dev_eigh_to"):
+-            # lane n9-decomp-eigh-families (2026-11-09): w and V stay on the
+-            # device (`x_decomp_dev_eigh_to`, eigh_op_sym, one status wait);
+-            # the descending take and the sign flip after it are device moves.
+-            # Was `x_decomp_dev_eigh` into host words.
+-            var wd = self.dout(1, n)
+-            var vd = self.dout(n, n)
+-            _ = family_call(self.fn("x_decomp_dev_eigh_to"), device_identifier(d), device_identifier(matrix_device(wd)),
+-                            device_identifier(matrix_device(vd)), params)
+-            return (wd, vd)
+         var w = mk_zeros(1, n, self.ctx)
+         var v = mk_zeros(n, n, self.ctx)
++        var params = mk_ints([n, 0])
++        var d = matrix_device(a)
++        if n >= 1 and mk_c(a) == n and not (d is None) and device_binding(d) is self.raw and self.opt_dev("x_decomp_dev_eigh"):
++            _ = family_call(self.fn("x_decomp_dev_eigh"), device_identifier(d), mk_addr(w, self.ctx), mk_addr(v, self.ctx), params)
++            _ = v  # keep the Python object alive through the native call above
++            _ = w  # keep the Python object alive through the native call above
++            return (w, v)
+         var pa = mk_addr(a, self.ctx)
+         _ = family_call(self.fn("x_decomp_eigh"), pa, mk_addr(w, self.ctx), mk_addr(v, self.ctx), params)
+         _ = v  # keep the Python object alive through the native call above
+diff --git a/providers/python/x_decomp_lanczos_dev_pyapi.mojo b/providers/python/x_decomp_lanczos_dev_pyapi.mojo
+index 0e978f7e49..b1ab1272bb 100644
+--- a/providers/python/x_decomp_lanczos_dev_pyapi.mojo
++++ b/providers/python/x_decomp_lanczos_dev_pyapi.mojo
+@@ -5,7 +5,7 @@ the route flags the GPU binding registers. The door unpacks pool ids and
+ integers and calls `dev_lanczos_run`; no data work happens here."""
+ from std.python import PythonObject
+ 
+-from x_decomp.lanczos_dev import IPCA_FAST_DEV, KPCA_FAST_LANCZOS_DEV, dev_eigh_tridiag_run, dev_lanczos_run
++from x_decomp.lanczos_dev import IPCA_FAST_DEV, KPCA_FAST_LANCZOS_DEV, dev_lanczos_run
+ from providers.python.x_decomp_resident_pyapi import _id, _n
+ 
+ 
+@@ -27,11 +27,3 @@ def dev_lanczos_py(a: PythonObject, q: PythonObject, ab: PythonObject, p: Python
+     var steps = dev_lanczos_run(ia, iq, iab, n, j0, j1, cap)
+     return PythonObject(steps)
+ 
+-
+-def dev_eigh_tridiag_py(ab: PythonObject, w: PythonObject, z: PythonObject, p: PythonObject) raises -> PythonObject:
+-    """The Lanczos projected solve on pool ids (x_decomp/lanczos_dev.mojo
+-    `dev_eigh_tridiag_run`): ab the 2 cap alpha / beta words, w (1 x j) and
+-    z (j x j) outputs. p = [j, cap]. Waits (one status word)."""
+-    var j = _n(p, 0)
+-    var cap = _n(p, 1)
+-    return PythonObject(dev_eigh_tridiag_run(_id(ab), _id(w), _id(z), j, cap))
+diff --git a/providers/python/x_decomp_lanczos_host_pyapi.mojo b/providers/python/x_decomp_lanczos_host_pyapi.mojo
+index 956440c3ed..8457bec8f4 100644
+--- a/providers/python/x_decomp_lanczos_host_pyapi.mojo
++++ b/providers/python/x_decomp_lanczos_host_pyapi.mojo
+@@ -8,7 +8,7 @@ from std.python import Python, PythonObject
+ from std.python._cpython import GILReleased
+ 
+ from x_decomp.cells import F32Ptr
+-from x_decomp.lanczos_host import eigh_tridiag_host_run, lanczos_run
++from x_decomp.lanczos_host import lanczos_run
+ 
+ 
+ def lanczos_py(a: PythonObject, q: PythonObject, ab: PythonObject, p: PythonObject) raises -> PythonObject:
+@@ -24,17 +24,3 @@ def lanczos_py(a: PythonObject, q: PythonObject, ab: PythonObject, p: PythonObje
+     with GILReleased(Python()):
+         steps = lanczos_run(pa, pq, pab, n, j0, j1, cap)
+     return PythonObject(steps)
+-
+-
+-def eigh_tridiag_py(ab: PythonObject, w: PythonObject, z: PythonObject, p: PythonObject) raises -> PythonObject:
+-    """`x_decomp_dev_eigh_tridiag` on host addresses (x_decomp/lanczos_host.mojo
+-    `eigh_tridiag_host_run`); p = [j, cap]."""
+-    var j = Int(py=p[0])
+-    var cap = Int(py=p[1])
+-    var pab = F32Ptr(unsafe_from_address=Int(py=ab))
+-    var pw = F32Ptr(unsafe_from_address=Int(py=w))
+-    var pz = F32Ptr(unsafe_from_address=Int(py=z))
+-    var got = 0
+-    with GILReleased(Python()):
+-        got = eigh_tridiag_host_run(pab, pw, pz, j, cap)
+-    return PythonObject(got)
+diff --git a/providers/python/x_decomp_resident_pyapi.mojo b/providers/python/x_decomp_resident_pyapi.mojo
+index 73724a7390..11f7b28186 100644
+--- a/providers/python/x_decomp_resident_pyapi.mojo
++++ b/providers/python/x_decomp_resident_pyapi.mojo
+@@ -27,7 +27,6 @@ from x_decomp.resident import (
+     dev_lu_aux_run,
+     dev_code_rows_run,
+     dev_eigh_run,
+-    dev_eigh_to_run,
+     GRP_CLS2_NOSCAN,
+     GRP_CLS2_DEVSCAN,
+     GRP_CLS2_LAZY,
+@@ -270,20 +269,6 @@ def dev_eigh_py(a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObje
+     return PythonObject(r)
+ 
+ 
+-def dev_eigh_to_py(a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
+-    """`x_decomp_eigh` of the device matrix a (n x n, left as it is) into the
+-    DEVICE matrices w (n) and v (n x n). p = [n, uplo]. Waits once."""
+-    var n = _n(p, 0)
+-    var uplo = _n(p, 1)
+-    var ia = _id(a)
+-    var iw = _id(w)
+-    var iv = _id(v)
+-    var r = 0
+-    with GILReleased(Python()):
+-        r = dev_eigh_to_run(ia, iw, iv, n, uplo)
+-    return PythonObject(r)
+-
+-
+ def grp_cls2_py() raises -> PythonObject:
+     """The random projections' FAST Apple fit switches compiled in: bit 1
+     NOSCAN, bit 2 DEVSCAN, bit 4 LAZY, bit 8 FUSED, bit 16 SRP_STRAT (0 on
+diff --git a/python/mojolearn/_native_decomp_kit_bridge.py b/python/mojolearn/_native_decomp_kit_bridge.py
+index 2c11e38643..8df5486e3d 100644
+--- a/python/mojolearn/_native_decomp_kit_bridge.py
++++ b/python/mojolearn/_native_decomp_kit_bridge.py
+@@ -11,7 +11,7 @@ _REQUIRED = ("ew", "gemm", "colsum", "rowsum", "move", "order_f", "svd", "absmax
+ _OPTIONAL = ("dev_ew", "dev_alloc", "dev_free", "dev_upload", "dev_download", "dev_gemm", "dev_colsum",
+              "dev_rowsum", "dev_move", "dev_reduce", "dev_order_f", "dev_absmax", "dev_rand", "dev_svd",
+              "dev_code_rows", "dev_lu", "pls_fit",
+-             "eigh", "dev_eigh_to", "reduce", "argmin_all", "dev_argmin_all", "select_smallest",
++             "eigh", "dev_eigh", "reduce", "argmin_all", "dev_argmin_all", "select_smallest",
+              "dev_select_smallest", "lu_aux", "dev_lu_aux", "mcd", "chi2_quantile", "consistency_factor",
+              "als_fit", "topn_desc", "gather",
+              "s_flags", "qfix_flags", "idn_flags", "orth", "dev_orth",
+diff --git a/spectral/impl/sparse/solver/detail/lanczos.mojo b/spectral/impl/sparse/solver/detail/lanczos.mojo
+index 8f0b85f213..df037c1b6e 100644
+--- a/spectral/impl/sparse/solver/detail/lanczos.mojo
++++ b/spectral/impl/sparse/solver/detail/lanczos.mojo
+@@ -1958,17 +1958,10 @@ def lanczos_solve_ritz(
+     var first = lanczos_which_first(which, ncv, k)
+     var evals = List[Float32](length=ncv, fill=Float32(0.0))
+     var evecs = List[Float32](length=ncv * ncv, fill=Float32(0.0))
+-    # lane n9-decomp-eigh-families (2026-11-09): the executor op
+-    # x_decomp/eigh_ops.mojo `eigh_op_dense` (`DevExec._eigh_jacobi_on`: the
+-    # one-block Jacobi at every ncv, the same words as the per-round launches
+-    # and per-sweep waits of `_eigh_par_on`, deleted, and as the host
+-    # oracle's) with one sync. The op does not report sweeps: 0, as the
+-    # small route already reported for ncv <= 32.
+-    DevExec._eigh_jacobi_on(
++    var sweeps = DevExec._eigh_par_on(
+         ctx, dt, F32Ptr(unsafe_from_address=Int(evals.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(evecs.unsafe_ptr())),
+         ncv,
+     )
+-    var sweeps = 0
+     _ = dt^
+     _ = d_ta^
+     _ = d_tb^
+@@ -2080,17 +2073,10 @@ def lanczos_solve_ritz_device_t(
+     var first = lanczos_which_first(which, ncv, k)
+     var evals = List[Float32](length=ncv, fill=Float32(0.0))
+     var evecs = List[Float32](length=ncv * ncv, fill=Float32(0.0))
+-    # lane n9-decomp-eigh-families (2026-11-09): the executor op
+-    # x_decomp/eigh_ops.mojo `eigh_op_dense` (`DevExec._eigh_jacobi_on`: the
+-    # one-block Jacobi at every ncv, the same words as the per-round launches
+-    # and per-sweep waits of `_eigh_par_on`, deleted, and as the host
+-    # oracle's) with one sync. The op does not report sweeps: 0, as the
+-    # small route already reported for ncv <= 32.
+-    DevExec._eigh_jacobi_on(
++    var sweeps = DevExec._eigh_par_on(
+         ctx, d_t, F32Ptr(unsafe_from_address=Int(evals.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(evecs.unsafe_ptr())),
+         ncv,
+     )
+-    var sweeps = 0
+     eigenvalues_k.clear()
+     eigenvectors_k.clear()
+     for c in range(k):  # small-loop(k: selected Ritz values, one per requested eigenpair): k is the eigenpair count, independent of the sample count
+diff --git a/x_decomp/decomp_owner_dev.mojo b/x_decomp/decomp_owner_dev.mojo
+index dcfd3dda19..18616ac1c5 100644
+--- a/x_decomp/decomp_owner_dev.mojo
++++ b/x_decomp/decomp_owner_dev.mojo
+@@ -6,7 +6,7 @@ resident eigh / LU where the build registers `x_decomp_dev_eigh` /
+ the GPU body the binding registers under that name (`ica_solve_dev_py`, ...)."""
+ from x_decomp.cells import F32Ptr, I32Ptr
+ from x_decomp.decomp_owner_kit import DecompDev
+-from x_decomp.resident import IDN_EIGH_RESIDENT, IDN_LU_RESIDENT, dev_eigh_desc_run, dev_eigh_run, dev_lu_run
++from x_decomp.resident import IDN_EIGH_RESIDENT, IDN_LU_RESIDENT, dev_eigh_run, dev_lu_run
+ from x_decomp.ica_dev import ica_solve_dev_run
+ from x_decomp.nmf import NmfArgs
+ from x_decomp.nmf_dev import nmf_nndsvd_dev_run, nmf_solve_dev_run
+@@ -14,7 +14,7 @@ from x_decomp.fa_em import FaArgs
+ from x_decomp.fa_em_dev import fa_em_main_dev_run
+ from x_decomp.rotation_dev import ortho_rotation_dev_run
+ from x_decomp.resident import IDN_QR_R_RESIDENT, dev_lda_bound_run, dev_lda_rows_run, dev_qr_r_run, dev_sqdist_run
+-from x_decomp.lanczos_dev import dev_eigh_tridiag_run, dev_lanczos_run
++from x_decomp.lanczos_dev import dev_lanczos_run
+ from x_decomp.resident import (
+     GRP_CLS2_ANY, GRP_CLS2_DEVSCAN, GRP_CLS2_LAZY, GRP_CLS2_NOSCAN, GRP_FAST_FUSED, GRP_FAST_SRP_STRAT,
+     dev_project_run, grp_fit_fused_run,
+@@ -37,10 +37,6 @@ struct DevDecomp(DecompDev):
+     def eigh(a: Int, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
+         _ = dev_eigh_run(a, w, v, n, uplo)
+ 
+-    @staticmethod
+-    def eigh_desc(a: Int, w: Int, v: Int, n: Int) raises:
+-        dev_eigh_desc_run(a, w, v, n)
+-
+     @staticmethod
+     def has_lu() -> Bool:
+         return IDN_LU_RESIDENT
+@@ -140,14 +136,6 @@ struct DevDecomp(DecompDev):
+     def lanczos_host(pa: F32Ptr, pq: F32Ptr, pab: F32Ptr, n: Int, j0: Int, j1: Int, cap: Int) raises:
+         raise Error("x_decomp: the GPU binding runs Lanczos on resident matrices")
+ 
+-    @staticmethod
+-    def eigh_tridiag_dev(iab: Int, iw: Int, iz: Int, j: Int, cap: Int) raises:
+-        _ = dev_eigh_tridiag_run(iab, iw, iz, j, cap)
+-
+-    @staticmethod
+-    def eigh_tridiag_host(pab: F32Ptr, pw: F32Ptr, pz: F32Ptr, j: Int, cap: Int) raises:
+-        raise Error("x_decomp: the GPU binding runs Lanczos on resident matrices")
+-
+     @staticmethod
+     def grp_flags() -> Int:
+         # `grp_cls2_py`'s bits; `x_decomp_grp_cls2` is registered only under GRP_CLS2_ANY
+diff --git a/x_decomp/decomp_owner_host.mojo b/x_decomp/decomp_owner_host.mojo
+index ea21e5a33e..6d0da2fd31 100644
+--- a/x_decomp/decomp_owner_host.mojo
++++ b/x_decomp/decomp_owner_host.mojo
+@@ -12,7 +12,7 @@ from x_decomp.fa_em import FaArgs, fa_em_main_run
+ from x_decomp.rotation import ortho_rotation_run
+ from x_decomp.lda_fit import LdaArgs, lda_fit_run
+ from x_decomp.api import lda_online_run
+-from x_decomp.lanczos_host import eigh_tridiag_host_run, lanczos_run
++from x_decomp.lanczos_host import lanczos_run
+ 
+ 
+ struct HostDecomp(DecompDev):
+@@ -24,10 +24,6 @@ struct HostDecomp(DecompDev):
+     def eigh(a: Int, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
+         raise Error("x_decomp: no resident matrices on the host binding")
+ 
+-    @staticmethod
+-    def eigh_desc(a: Int, w: Int, v: Int, n: Int) raises:
+-        raise Error("x_decomp: no resident matrices on the host binding")
+-
+     @staticmethod
+     def has_lu() -> Bool:
+         return False
+@@ -118,14 +114,6 @@ struct HostDecomp(DecompDev):
+     def lanczos_host(pa: F32Ptr, pq: F32Ptr, pab: F32Ptr, n: Int, j0: Int, j1: Int, cap: Int) raises:
+         _ = lanczos_run(pa, pq, pab, n, j0, j1, cap)
+ 
+-    @staticmethod
+-    def eigh_tridiag_dev(iab: Int, iw: Int, iz: Int, j: Int, cap: Int) raises:
+-        raise Error("x_decomp: no resident matrices on the host binding")
+-
+-    @staticmethod
+-    def eigh_tridiag_host(pab: F32Ptr, pw: F32Ptr, pz: F32Ptr, j: Int, cap: Int) raises:
+-        _ = eigh_tridiag_host_run(pab, pw, pz, j, cap)
+-
+     @staticmethod
+     def grp_flags() -> Int:
+         return 0
+diff --git a/x_decomp/decomp_owner_kit.mojo b/x_decomp/decomp_owner_kit.mojo
+index effda30187..185acde2be 100644
+--- a/x_decomp/decomp_owner_kit.mojo
++++ b/x_decomp/decomp_owner_kit.mojo
+@@ -57,14 +57,6 @@ trait DecompDev:
+     def eigh(a: Int, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
+         ...
+ 
+-    @staticmethod
+-    def eigh_desc(a: Int, w: Int, v: Int, n: Int) raises:
+-        """The n x n device matrix `a` into the device matrices w (1 x n,
+-        DESCENDING) and v (n x n, matching vectors in columns): the resident
+-        `kit_eigh` + `kit_reversed_columns` without the round trip (lane
+-        n9-decomp-eigh-families; x_decomp/resident.mojo `dev_eigh_desc_run`)."""
+-        ...
+-
+     @staticmethod
+     def has_lu() -> Bool:
+         ...
+@@ -160,18 +152,6 @@ trait DecompDev:
+         """`x_decomp_lanczos` on host words (the host binding only)."""
+         ...
+ 
+-    @staticmethod
+-    def eigh_tridiag_dev(iab: Int, iw: Int, iz: Int, j: Int, cap: Int) raises:
+-        """`x_decomp_dev_eigh_tridiag` on device ids: the Lanczos T of the
+-        alphas / betas at iab into w (1 x j) and z (j x j) on the device
+-        (the GPU binding only)."""
+-        ...
+-
+-    @staticmethod
+-    def eigh_tridiag_host(pab: F32Ptr, pw: F32Ptr, pz: F32Ptr, j: Int, cap: Int) raises:
+-        """`x_decomp_eigh_tridiag` on host words (the host binding only)."""
+-        ...
+-
+     @staticmethod
+     def grp_flags() -> Int:
+         """The random projections' switches (`x_decomp_grp_cls2`): bit 1
+@@ -213,27 +193,6 @@ def kit_eigh[E: Exec, D: RDev, RES: Bool, X: DecompDev](mut kit: RKit[E, D, RES]
+     return (w, v)
+ 
+ 
+-def kit_eigh_desc[E: Exec, D: RDev, RES: Bool, X: DecompDev](mut kit: RKit[E, D, RES], a: Int) raises -> Tuple[Int, Int]:
+-    """(w 1 x n DESCENDING, v n x n matching vectors in columns): `kit_eigh`
+-    then `kit_reversed_columns` of both. A resident operand stays on the
+-    device (`X.eigh_desc`: the same solve, the reversal as device copies, w
+-    and V never home; lane n9-decomp-eigh-families); a host operand takes
+-    the host-address entry and the host reversal."""
+-    var n = kit.r(a)
+-    var resident = False
+-    comptime if RES:
+-        resident = X.has_eigh() and n >= 1 and kit.c(a) == n and kit.mats[a].dev >= 0
+-    if resident:
+-        var w = kit.device_output(1, n)
+-        var v = kit.device_output(n, n)
+-        X.eigh_desc(kit.mats[a].dev, kit.mats[w].dev, kit.mats[v].dev, n)
+-        return (w, v)
+-    var eig = kit_eigh[E, D, RES, X](kit, a)
+-    var wr = kit_reversed_columns(kit, eig[0])
+-    var vr = kit_reversed_columns(kit, eig[1])
+-    return (wr, vr)
+-
+-
+ def kit_reversed_columns[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int) raises -> Int:
+     """`A.take_cols(range(c - 1, -1, -1))` of a host matrix: a strided copy
+     per column (data movement)."""
+diff --git a/x_decomp/eigh_ops.mojo b/x_decomp/eigh_ops.mojo
+index f2813916f6..2db7f6a97f 100644
+--- a/x_decomp/eigh_ops.mojo
++++ b/x_decomp/eigh_ops.mojo
+@@ -13,17 +13,6 @@ Two ops, one algorithm each on every column (NVIDIA, AMD, Apple, the host):
+                      device), after the power-of-two range scale
+                      (x_decomp/eigh_scale.mojo). Host twin:
+                      `host_eigh_rr_sorted`, problem by problem.
+-  `eigh_op_sym`      ONE dense symmetric n x n problem by the route
+-                     `DevExec.eigh` always took (lane n9-decomp-eigh-families,
+-                     2026-11-09): from n = TD_MIN_N (on the tridiagonal
+-                     route: IDENTICAL everywhere, FAST Apple) the Householder
+-                     tridiagonalization, bisection and twisted vectors on a
+-                     copy, the Jacobi of the input enqueued behind it and
+-                     skipped unless that solve refused, one commit kernel;
+-                     below TD_MIN_N `eigh_op_dense` with a batch of one.
+-                     Host twin: `eigh_op_sym_host` (`HostExec.eigh`'s
+-                     route). The same words `DevExec.eigh` gave before, with
+-                     no wait inside: every resident family's dense solve.
+   `eigh_op_tridiag`  one symmetric tridiagonal T (diagonal d, off-diagonal
+                      e; a Lanczos or Householder T): Sturm bisection in df64
+                      and twisted-factorization vectors
+@@ -67,10 +56,8 @@ from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
+ from decomposition.spectrum_order_device import enqueue_eigh_ascending
+ from x_decomp.cells import F32Ptr, I32Ptr
+ from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale
+-from x_decomp.eigh_tridiag import EIGH_TRIDIAG_ROUTE, eigh_td_enqueue, td_copy_kernel, td_solve_enqueue
+-from x_decomp.eigh_tridiag_cells import TD_MIN_N
++from x_decomp.eigh_tridiag import td_solve_enqueue
+ from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB
+-from x_decomp.rr_block import IDN_EIGH_BLOCK, rb_use
+ from x_decomp.rr_batch import rr_batch_gated_kernel, rrb_cs_len, rrb_part_len
+ 
+ comptime EO_TPB = 256
+@@ -352,107 +339,3 @@ def eigh_op_status_joins_loop(
+     (`LoopRegisters.failure()` holds the count). Enqueue it right after the
+     op."""
+     step_fail_joins_loop(ctx, words, status, it)
+-
+-
+-def eigh_op_sym(
+-    ctx: DeviceContext,
+-    mut gate: DeviceBuffer[DType.int32],
+-    mut a: DeviceBuffer[DType.float32],
+-    mut w: DeviceBuffer[DType.float32],
+-    mut v: DeviceBuffer[DType.float32],
+-    mut status: DeviceBuffer[DType.int32],
+-    n: Int,
+-) raises:
+-    """ONE dense symmetric n x n problem in `a` (row major, both triangles;
+-    CONSUMED) into w (n, ascending) and v (n x n, eigenvector c in column
+-    c, sign-flipped), status[0] = 1 when no route holds (0: the answer
+-    holds). Enqueued only; w, v and status are written only while the gate
+-    is open.
+-
+-    The route is `DevExec.eigh`'s (so its words): on the tridiagonal route
+-    (EIGH_TRIDIAG_ROUTE) from n = TD_MIN_N, `eigh_td_enqueue` on a copy of
+-    `a` after the power-of-two range scale, then the sign flip, the
+-    ascending order and the unscale; the batched Jacobi of `a` itself is
+-    enqueued behind it with its blocks skipped unless the tridiagonal
+-    solve refused (`eo_fallback_skip_kernel`), and `eo_tridiag_commit_kernel`
+-    takes the answer that holds. Below TD_MIN_N (or off the route) it is
+-    `eigh_op_dense` with a batch of one: the one-block round-robin Jacobi,
+-    the same words as the per-round multi-block launches it replaces
+-    (x_decomp/rr_batch.mojo header)."""
+-    if n < 1:
+-        raise Error("eigh_op_sym: n must be positive, got " + String(n))
+-    var nn = n * n
+-    if len(a) < nn or len(w) < n or len(v) < nn or len(status) < 1:
+-        raise Error("eigh_op_sym: a buffer is shorter than n = " + String(n))
+-    comptime if IDN_EIGH_BLOCK:
+-        # the quarantined block Jacobi (MOJOLEARN_IDN_EIGH_BLOCK_ON, DROPPED:
+-        # observed convergence failure) has no op arm; refuse it by name
+-        # rather than split the device and host columns
+-        if rb_use(n):
+-            raise Error(
+-                "eigh_op_sym: MOJOLEARN_IDN_EIGH_BLOCK_ON is a quarantined candidate with no device op;"
+-                " build without it"
+-            )
+-    comptime if EIGH_TRIDIAG_ROUTE:
+-        if n >= TD_MIN_N:
+-            _eo_sym_td(ctx, gate, a, w, v, status, n)
+-            return
+-    eigh_op_dense(ctx, gate, a, w, v, status, 1, n)
+-
+-
+-def _eo_sym_td(
+-    ctx: DeviceContext,
+-    mut gate: DeviceBuffer[DType.int32],
+-    mut a: DeviceBuffer[DType.float32],
+-    mut w: DeviceBuffer[DType.float32],
+-    mut v: DeviceBuffer[DType.float32],
+-    mut status: DeviceBuffer[DType.int32],
+-    n: Int,
+-) raises:
+-    """`eigh_op_sym` from n = TD_MIN_N (the former `DevExec._eigh_td_try`
+-    plus its Jacobi fallback, decided on the device)."""
+-    var nn = n * n
+-    # 1. the tridiagonal solve on a flushed copy (`a` stays for the fallback)
+-    var work = ctx.enqueue_create_buffer[DType.float32](nn)
+-    ctx.enqueue_function[td_copy_kernel](
+-        _fp(a), _fp(work), Int32(nn), grid_dim=_eo_blocks(nn), block_dim=EO_TPB
+-    )
+-    var dfac = enqueue_es_scale(ctx, _fp(work), 1, n)
+-    var dz = ctx.enqueue_create_buffer[DType.float32](nn)
+-    var dwt = ctx.enqueue_create_buffer[DType.float32](n)
+-    var td_info = ctx.enqueue_create_buffer[DType.float32](4)
+-    eigh_td_enqueue(ctx, work, n, dz, dwt, td_info)
+-    _ = work^
+-    ctx.enqueue_function[sign_flip_kernel](
+-        dz.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
+-    )
+-    var w_td = ctx.enqueue_create_buffer[DType.float32](n)
+-    var z_td = ctx.enqueue_create_buffer[DType.float32](nn)
+-    var pos = ctx.enqueue_create_buffer[DType.int32](n)
+-    enqueue_eigh_ascending(ctx, _fp(dwt), 1, _fp(dz), n, pos, _fp(w_td), _fp(z_td))
+-    enqueue_es_unscale(ctx, _fp(w_td), dfac, 1, n)
+-    _ = dz^
+-    _ = dwt^
+-    _ = pos^
+-    _ = dfac^
+-    # 2. the Jacobi of the untouched input, every block skipped unless refused
+-    var skip = ctx.enqueue_create_buffer[DType.int32](1)
+-    ctx.enqueue_function[eo_fallback_skip_kernel](  # small-launch(one word): the fallback's gate
+-        _ip(gate), _fp(td_info), _ip(skip), grid_dim=(1, 1, 1), block_dim=(1, 1, 1)
+-    )
+-    var jw = ctx.enqueue_create_buffer[DType.float32](n)
+-    var jv = ctx.enqueue_create_buffer[DType.float32](nn)
+-    var jmarks = ctx.enqueue_create_buffer[DType.float32](2)
+-    _eo_jacobi_enqueue(ctx, skip, a, 1, n, jw, jv, jmarks)
+-    # 3. the one commit
+-    ctx.enqueue_function[eo_tridiag_commit_kernel](
+-        _ip(gate), _fp(td_info), _fp(jmarks), _fp(w_td), _fp(z_td), _fp(jw), _fp(jv),
+-        _fp(w), _fp(v), _ip(status), Int32(n), grid_dim=_eo_blocks(nn), block_dim=EO_TPB,
+-    )
+-    _ = td_info^
+-    _ = w_td^
+-    _ = z_td^
+-    _ = skip^
+-    _ = jw^
+-    _ = jv^
+-    _ = jmarks^
+diff --git a/x_decomp/eigh_ops_host.mojo b/x_decomp/eigh_ops_host.mojo
+index e52d4382df..a66bea5a27 100644
+--- a/x_decomp/eigh_ops_host.mojo
++++ b/x_decomp/eigh_ops_host.mojo
+@@ -7,10 +7,6 @@
+                           the words of `rr_batch_kernel` for each problem),
+                           the problems in parallel over the host pool (each
+                           writes only its own w, v rows).
+-  `eigh_op_sym_host`      `eigh_op_sym`: from n = TD_MIN_N (IDENTICAL) the
+-                          host tridiagonal solve (`host_eigh_td`) on a
+-                          copy, the Jacobi of the input on a refusal; the
+-                          Jacobi below (lane n9-decomp-eigh-families).
+   `eigh_op_tridiag_host`  the device's items one call per index
+                           (`td_bisect_item`, `td_gap_item`, `td_vec_item`, in
+                           parallel over the index, as x_decomp/eigh_tridiag_host.mojo
+@@ -26,9 +22,7 @@ from cluster.host.host_cells import host_cells
+ from decomposition.host.linalg_public import eigh_ascending
+ from decomposition.host.pca_oracle import host_sign_flip
+ from x_decomp.cells import F32Ptr
+-from x_decomp.eigh_tridiag_cells import EIGH_TD_IDN, TD_MIN_N
+-from x_decomp.eigh_tridiag_host import host_eigh_td, host_td_solve
+-from x_decomp.rr_block import IDN_EIGH_BLOCK, rb_use
++from x_decomp.eigh_tridiag_host import host_td_solve
+ from x_decomp.rr_solve import host_eigh_rr_sorted
+ 
+ 
+@@ -77,29 +71,6 @@ def eigh_op_dense_host(a: F32Ptr, w: F32Ptr, v: F32Ptr, batch: Int, n: Int) rais
+     return count
+ 
+ 
+-def eigh_op_sym_host(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises -> Int:
+-    """`eigh_op_sym` on host memory: one n x n problem at `a` (both
+-    triangles, read only) into w (n ascending) and v (n x n, eigenvector c
+-    in column c). Returns 1 when no route holds, else 0. `HostExec.eigh`
+-    is this after its triangle mirror."""
+-    if n < 1:
+-        raise Error("eigh_op_sym_host: n must be positive, got " + String(n))
+-    comptime if IDN_EIGH_BLOCK:
+-        if rb_use(n):
+-            raise Error(
+-                "eigh_op_sym: MOJOLEARN_IDN_EIGH_BLOCK_ON is a quarantined candidate with no device op;"
+-                " build without it"
+-            )
+-    comptime if EIGH_TD_IDN:
+-        if n >= TD_MIN_N:
+-            var work = List[Float32](capacity=n * n)
+-            for i in range(n * n):
+-                work.append(a.unsafe_load(i))
+-            if host_eigh_td(work, n, w, v):
+-                return 0
+-    return Int(_eo_host_one(a, w, v, n))
+-
+-
+ def eigh_op_tridiag_host(d: F32Ptr, e: F32Ptr, w: F32Ptr, z: F32Ptr, n: Int) raises -> Int:
+     """`eigh_op_tridiag` on host memory: T (diagonal d, off-diagonal e) into
+     w (n ascending) and z (n x n, eigenvector c in column c). Returns 1 when
+diff --git a/x_decomp/fa_em_dev.mojo b/x_decomp/fa_em_dev.mojo
+index 879644852f..7c7d6421c6 100644
+--- a/x_decomp/fa_em_dev.mojo
++++ b/x_decomp/fa_em_dev.mojo
+@@ -2,17 +2,17 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """x_decomp/fa_em.mojo's FactorAnalysis EM loop on resident device matrices
+ (lane py-runtime-b): the same statements on `DKit`. The d x d spectral
+-step: the SVD branch (n >= d) comes home where `_Kit.svd` brought it
+-(`svd_desc`'s descending order); the eigh branch (n < d) stays resident
+-(`DKit.eigh`, its reversal and transpose as device copies), and the
++step comes home where `_Kit.svd` / `_Kit.eigh` brought it (DevExec's solve
++writes host s and V): its descending order, the column reversal and the
++transposes are exact copies of d x d words (`svd_desc`, `rev_cols`), and the
+ log-likelihood's float32 words come home for `_dsum`, as Python read them.
+ GPU binding only."""
+ from std.math import inf, sqrt
+ from experiments.classical_identical_ideas.linear_controls import C27_FA_COMPONENTS
+ from x_decomp.cells import F32Ptr, OP_CLASSICAL_FA_LOAD
+-from x_decomp.fa_em import FA_LOG_FLOOR, FA_SMALL, FaArgs, dsum, fa_mask, svd_desc
++from x_decomp.fa_em import FA_LOG_FLOOR, FA_SMALL, FaArgs, dsum, fa_mask, rev_cols, svd_desc
+ from x_decomp.kit import (
+-    Mat, OP_ADD, OP_ADDS, OP_DIV, OP_LOGS, OP_MAXS, OP_MINS, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT, mat_from,
++    Mat, OP_ADD, OP_ADDS, OP_DIV, OP_LOGS, OP_MAXS, OP_MINS, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT, mat_from, mat_t,
+ )
+ from x_decomp.kit_device import DKit, DMat
+ 
+@@ -33,25 +33,24 @@ def fa_em_dev(mut k: DKit, A: DMat, mut psi: DMat, mut W: DMat, mut ll_out: List
+         it = i
+         var sqrt_psi = k.ew1(OP_ADDS, k.ew1(OP_SQRT, psi, 0.0), FA_SMALL)
+         var s2: DMat
+-        var Vfull: DMat
++        var Vh: Mat
+         if n >= d:
+             var B = k.ew1(OP_SCALE, k.ew2(OP_DIV, A, sqrt_psi), 1.0 / nsqrt)
+             var s = Mat(0, 0)
+             var v = Mat(0, 0)
+             k.svd_host(B, s, v)
+             var sv = Mat(0, 0)
+-            var Vh = Mat(0, 0)
++            Vh = Mat(0, 0)
+             svd_desc(s, v, sv, Vh)
+             s2 = k.ew1(OP_SQ, k.upload(sv), 0.0)
+-            Vfull = k.upload(Vh)
+         else:
+             var Z = k.ew1(OP_SCALE, k.ew2(OP_DIV, A, sqrt_psi), 1.0 / nsqrt)
+             var e = k.eigh(k.mm(Z, Z, True, False))
+-            # lane n9-decomp-eigh-families: the descending order and V^T on
+-            # the device (the same words `rev_cols` / `mat_t` copied on the
+-            # host after w and V came home and went up again)
+-            s2 = k.ew1(OP_MAXS, k.rev_vec(e.wd), 0.0)
+-            Vfull = k.rev_cols_t(e.vd)
++            var vh = k.get(e.vd)
++            k.sync()
++            s2 = k.ew1(OP_MAXS, k.upload(rev_cols(e.wh)), 0.0)
++            Vh = mat_t(rev_cols(vh))
++        var Vfull = k.upload(Vh)
+         var Vt = k.rows(Vfull, 0, nc)
+         # perf-decomp-slow (2026-11-06): s2's words come home with the two
+         # log vectors below, at ONE sync per iteration (was a second sync
+diff --git a/x_decomp/fa_owner.mojo b/x_decomp/fa_owner.mojo
+index b4f7ea05e2..41bd27ff90 100644
+--- a/x_decomp/fa_owner.mojo
++++ b/x_decomp/fa_owner.mojo
+@@ -84,10 +84,11 @@ def _gram_loop[E: Exec, D: RDev, RES: Bool, X: DecompDev](
+         var sqrt_psi_t = kit.transpose(sqrt_psi)
+         var both = kit.ew(OP_DIV, left, sqrt_psi_t)
+         var scaled = kit.ew(OP_SCALE, both, scalar=1.0 / Float64(n))
+-        # lane n9-decomp-eigh-families: descending and resident (no w / V round trip)
+-        var eig = kit_eigh_desc[E, D, RES, X](kit, scaled)
+-        var s2 = kit.ew(OP_MAXS, eig[0], scalar=0.0)
+-        var vfull = kit.transpose(eig[1])
++        var eig = kit_eigh[E, D, RES, X](kit, scaled)
++        var ev = kit_reversed_columns(kit, eig[0])
++        var s2 = kit.ew(OP_MAXS, ev, scalar=0.0)
++        var v_rev = kit_reversed_columns(kit, eig[1])
++        var vfull = kit.transpose(v_rev)
+         var lead = kit_rows(kit, vfull, 0, nc)
+         var signs = kit.absmax_signs(lead, False)
+         var vt = kit.ew(OP_MUL, lead, signs)
+diff --git a/x_decomp/ica_dev.mojo b/x_decomp/ica_dev.mojo
+index 6d6ab266d6..574d1a7a3c 100644
+--- a/x_decomp/ica_dev.mojo
++++ b/x_decomp/ica_dev.mojo
+@@ -23,9 +23,11 @@ def ica_norm_dev(mut k: DKit, v: DMat) raises -> Float64:
+ 
+ def sym_decorrelation_dev(mut k: DKit, W: DMat) raises -> DMat:
+     var e = k.eigh(k.mm(W, W, False, True))
+-    # lane n9-decomp-eigh-families: the floor max(w[-1] eps, FLT_MIN) and
+-    # OP_MAXS on the device (was w home and a sync per decorrelation)
+-    var w = k.eig_floor(e.wd, ICA_F32_EPS, ICA_FLT_MIN)
++    var top = Float64(e.wh.d[e.wh.c - 1]) * ICA_F32_EPS
++    var floor = ICA_FLT_MIN
++    if top > floor:
++        floor = top
++    var w = k.ew1(OP_MAXS, e.wd, floor)
+     var ui = k.ew2(OP_MUL, e.vd, k.ew1(OP_RECIP, k.ew1(OP_SQRT, w, 0.0), 0.0))
+     return k.mm(k.mm(ui, e.vd, False, True), W, False, False)
+ 
+diff --git a/x_decomp/ica_owner.mojo b/x_decomp/ica_owner.mojo
+index e4310066e0..9b4042593c 100644
+--- a/x_decomp/ica_owner.mojo
++++ b/x_decomp/ica_owner.mojo
+@@ -46,11 +46,11 @@ def ica_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
+             mean = kit_colmean(kit, m)
+             xc = kit.ew(OP_SUB, m, mean)
+             var gram = kit.mm(xc, xc, ta=True)
+-            # lane n9-decomp-eigh-families: descending and resident (no w / V round trip)
+-            var eig = kit_eigh_desc[E, D, RES, X](kit, gram)
+-            var ev = kit.ew(OP_MAXS, eig[0], scalar=_EV_FLOOR)
++            var eig = kit_eigh[E, D, RES, X](kit, gram)
++            var ev = kit_reversed_columns(kit, eig[0])
++            ev = kit.ew(OP_MAXS, ev, scalar=_EV_FLOOR)
+             var sv = kit.ew(OP_SQRT, ev)
+-            var u = eig[1]
++            var u = kit_reversed_columns(kit, eig[1])
+             var first = kit_rows(kit, u, 0, 1)
+             var signs = kit.signs(first)
+             u = kit.ew(OP_MUL, u, signs)
+diff --git a/x_decomp/ipca_owner.mojo b/x_decomp/ipca_owner.mojo
+index f3c501ec9c..823367e6f5 100644
+--- a/x_decomp/ipca_owner.mojo
++++ b/x_decomp/ipca_owner.mojo
+@@ -13,9 +13,7 @@ entry the Python kit called, with the same broadcast modes and float32
+ scalars; the binary64 scalars (1 / total, seen / n, the sqrt of the mean
+ correction) are the same IEEE operations CPython performed. The Gram's
+ eigendecomposition is resident where `_Kit.eigh` was (an IDENTICAL GPU build
+-with `x_decomp_dev_eigh`, `IpcaDev.has_eigh`): `IpcaDev.eigh_desc` leaves the
+-descending w and V on the device (lane n9-decomp-eigh-families); else the
+-host-address entry and the host column reversal.
++with `x_decomp_dev_eigh`, `IpcaDev.has_eigh`), else the host-address entry.
+ 
+ The running state between batches and calls is the public arrays (the
+ exact words the Python kit's matrices held); each step re-reads them, so a
+@@ -54,20 +52,15 @@ comptime _MV_PLACE_COLS = 2
+ 
+ 
+ trait IpcaDev:
+-    """The resident eigendecomposition on a GPU binding (registered with
+-    IDN_EIGH_RESIDENT): the Gram's descending spectrum straight into device
+-    matrices (lane n9-decomp-eigh-families, 2026-11-09)."""
++    """The resident eigendecomposition the Python kit reached on a GPU
++    binding (`x_decomp_dev_eigh`, registered only with IDN_EIGH_RESIDENT)."""
+ 
+     @staticmethod
+     def has_eigh() -> Bool:
+         ...
+ 
+     @staticmethod
+-    def eigh_desc(a: Int, w: Int, v: Int, n: Int) raises:
+-        """The n x n device matrix `a` (left as it is) into the device
+-        matrices w (1 x n, eigenvalues DESCENDING) and v (n x n, the
+-        matching eigenvectors in columns): `DevExec.eigh`'s solve with its
+-        ascending answer's columns reversed on the device."""
++    def eigh(a: Int, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
+         ...
+ 
+ 
+@@ -79,32 +72,32 @@ struct NoIpcaDev(IpcaDev):
+         return False
+ 
+     @staticmethod
+-    def eigh_desc(a: Int, w: Int, v: Int, n: Int) raises:
++    def eigh(a: Int, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
+         raise Error("x_decomp: no resident matrices on the host binding")
+ 
+ 
+-def _eigh[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int) raises -> Tuple[Int, Int]:
+-    """`_Kit.eigh(A)` of a host operand: (w 1 x n ascending, v n x n
+-    eigenvectors in columns), both host words (the host-address entry)."""
++def _eigh[E: Exec, D: RDev, RES: Bool, X: IpcaDev](mut kit: RKit[E, D, RES], a: Int) raises -> Tuple[Int, Int]:
++    """`_Kit.eigh(A)`: (w 1 x n ascending, v n x n eigenvectors in columns),
++    both host words; a resident operand is solved on a device copy where
++    the build exports `x_decomp_dev_eigh`."""
+     var n = kit.r(a)
+     var w = kit.zeros(1, n)
+     var v = kit.zeros(n, n)
+     var pw = kit.ptr(w)
+     var pv = kit.ptr(v)
+-    eigh_run[E](kit.ptr(a), pw, pv, n, 0)
++    var resident = False
++    comptime if RES:
++        resident = X.has_eigh() and n >= 1 and kit.c(a) == n and kit.mats[a].dev >= 0
++    if resident:
++        X.eigh(kit.mats[a].dev, pw, pv, n, 0)
++    else:
++        eigh_run[E](kit.ptr(a), pw, pv, n, 0)
+     return (w, v)
+ 
+ 
+-# TOMBSTONE: the resident Gram eigh's host words (`IpcaDev.eigh` -> `dev_eigh_run`: w and V downloaded, reversed on
+-# the host by `_reversed_columns`, uploaded again by the next step) deleted 2026-11-09 by lane n9-decomp-eigh-families;
+-# `_gram_svd` keeps the resident answer on the device (`IpcaDev.eigh_desc`). Code recoverable at the deletion commit's parent.
+-# Restore: git apply experiments/removed/N9_RESIDENT_EIGH.patch
+-
+-
+ def _reversed_columns[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int) raises -> Int:
+     """`A.take_cols(range(c - 1, -1, -1))` of a host matrix: one strided
+-    copy per column (data movement). The host binding's (and a host
+-    operand's) route; a resident Gram is reversed on the device."""
++    copy per column (data movement)."""
+     var rows = kit.r(a)
+     var cols = kit.c(a)
+     var out = kit.zeros(rows, cols)
+@@ -158,23 +151,10 @@ def _gram_svd[E: Exec, D: RDev, RES: Bool, X: IpcaDev](mut kit: RKit[E, D, RES],
+     """`_gram_svd(k, Z)`: S descending (1 x d) and Vt (d x d) through the
+     eigendecomposition of Z^T Z, then svd_flip(u_based_decision=False)."""
+     var gram = kit.mm(z, z, ta=True)
+-    var n = kit.r(gram)
+-    var resident = False
+-    comptime if RES:
+-        resident = X.has_eigh() and n >= 1 and kit.c(gram) == n and kit.mats[gram].dev >= 0
+-    var w: Int
+-    var v: Int
+-    if resident:
+-        # lane n9-decomp-eigh-families: w and V stay on the device, already
+-        # descending (the same words `_reversed_columns` copied on the host)
+-        w = kit.device_output(1, n)
+-        v = kit.device_output(n, n)
+-        X.eigh_desc(kit.mats[gram].dev, kit.mats[w].dev, kit.mats[v].dev, n)
+-    else:
+-        var eig = _eigh(kit, gram)
+-        w = _reversed_columns(kit, eig[0])
+-        v = _reversed_columns(kit, eig[1])
++    var eig = _eigh[E, D, RES, X](kit, gram)
++    var w = _reversed_columns(kit, eig[0])
+     var s = kit.ew(_OP_SQRT, w)
++    var v = _reversed_columns(kit, eig[1])
+     var vt = kit.transpose(v)
+     var signs = kit.absmax_signs(vt, False)
+     vt = kit.ew(_OP_MUL, vt, signs)
+diff --git a/x_decomp/ipca_owner_dev.mojo b/x_decomp/ipca_owner_dev.mojo
+index 66c178541f..58a4d3b29f 100644
+--- a/x_decomp/ipca_owner_dev.mojo
++++ b/x_decomp/ipca_owner_dev.mojo
+@@ -1,16 +1,11 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """The GPU binding's resident eigendecomposition for IncrementalPCA
+-(x_decomp/ipca_owner.mojo), present when the build registers
+-`x_decomp_dev_eigh` (IDN_EIGH_RESIDENT), as `_Kit.eigh` chose.
+-
+-Lane n9-decomp-eigh-families (2026-11-09): the Gram's solve is the executor
+-op (`DevExec.eigh_enq`, x_decomp/eigh_ops.mojo `eigh_op_sym`, `DevExec.eigh`'s
+-route and words) into device buffers, and the descending order
+-(`_reversed_columns`' copies) is one kernel into the kit's device matrices:
+-w and V never come home. One wait, for the op's status word."""
++(x_decomp/ipca_owner.mojo): `x_decomp_dev_eigh`'s typed body, present when
++the build registers that entry (IDN_EIGH_RESIDENT), as `_Kit.eigh` chose."""
++from x_decomp.cells import F32Ptr
+ from x_decomp.ipca_owner import IpcaDev
+-from x_decomp.resident import IDN_EIGH_RESIDENT, dev_eigh_desc_run
++from x_decomp.resident import IDN_EIGH_RESIDENT, dev_eigh_run
+ 
+ 
+ struct DevIpcaDev(IpcaDev):
+@@ -19,7 +14,5 @@ struct DevIpcaDev(IpcaDev):
+         return IDN_EIGH_RESIDENT
+ 
+     @staticmethod
+-    def eigh_desc(a: Int, w: Int, v: Int, n: Int) raises:
+-        # the shared body (x_decomp/resident.mojo), FastICA / FactorAnalysis's
+-        # owners reach it too
+-        dev_eigh_desc_run(a, w, v, n)
++    def eigh(a: Int, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
++        _ = dev_eigh_run(a, w, v, n, uplo)
+diff --git a/x_decomp/kit_device.mojo b/x_decomp/kit_device.mojo
+index 40a93cd247..bdd202badb 100644
+--- a/x_decomp/kit_device.mojo
++++ b/x_decomp/kit_device.mojo
+@@ -11,7 +11,7 @@ enqueued launch, with no sync:
+ 
+ - the launch sequences are DevExec's own (`launch_ew`, `launch_gemm`,
+   `launch_colsum`, `launch_rowsum`, `launch_lu`, `rand_kernel`,
+-  `gamma_kernel`, `launch_lda_rows`, `DevExec.eigh_enq`), so every value
++  `gamma_kernel`, `launch_lda_rows`, `DevExec._eigh_par_on`), so every value
+   is the same bits as `Kit[DevExec]`, which is the same bits as the CPU
+   column's kit (every x-decomp lane's GPU == CPU claim);
+ - the host reads a value only where the search branches on it: a C-step's
+@@ -33,8 +33,7 @@ from std.memory import bitcast
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from x_decomp.cells import F32Ptr, I32Ptr
+-from checks.numerics import ftz
+-from x_decomp.rr import RR_EIGH_SWEEPS
++from x_decomp.eigh_tridiag_cells import EIGH_TD_IDN
+ from x_decomp.device import (
+     DevExec,
+     LU_SCAL_LEN,
+@@ -115,75 +114,17 @@ def diag_kernel(a: F32Ptr, dst: F32Ptr, n: Int32):
+         dst.unsafe_store(i, a.unsafe_load(i * Int(n) + i))
+ 
+ 
+-def pinv_mask_dev_kernel(keep: F32Ptr, w: F32Ptr, dst: F32Ptr, n: Int32, eps: Float32):
+-    """dst[j] = keep[j] where |w[j]| > cut, else 0 (`_pinvh`'s mask; the
+-    comparison on the bit patterns of the two non-negative values, which
+-    order them as IEEE does, subnormals included, NaN never above), with
+-    the cut taken on the device from the
+-    ascending w (lane n9-decomp-eigh-families: was two words home and a
+-    sync): wmax = |w[0]|, replaced by |w[n-1]| when larger (Python max()),
+-    cut = (wmax n) eps. In binary64 on the host that product was exact
+-    (24-bit wmax times n < 2^29) and eps = 2^-23 an exact scale, so the
+-    float32 product's one rounding then the exact scale is the same word."""
++def pinv_mask_kernel(keep: F32Ptr, w: F32Ptr, dst: F32Ptr, n: Int32, cut: Float32):
++    """dst[j] = keep[j] where |w[j]| > cut, else 0 (`_pinvh`'s mask). The
++    comparison is on the bit patterns of the two non-negative values, which
++    order them as IEEE does (subnormals included, NaN never above), so no
++    flush-to-zero can move it."""
+     var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+-    var nn = Int(n)
+-    if j >= nn:
+-        return
+-    var wmax = abs(w.unsafe_load(0))
+-    var a_last = abs(w.unsafe_load(nn - 1))
+-    if a_last > wmax:
+-        wmax = a_last
+-    var cut = (wmax * Float32(nn)) * eps
+-    var ab = bitcast[DType.uint32](w.unsafe_load(j)) & UInt32(0x7FFFFFFF)
+-    var cb = bitcast[DType.uint32](cut) & UInt32(0x7FFFFFFF)
+-    var take = ab <= UInt32(0x7F800000) and cb <= UInt32(0x7F800000) and ab > cb
+-    dst.unsafe_store(j, keep.unsafe_load(j) if take else Float32(0))
+-
+-
+-def dk_eig_sticky_kernel(status: I32Ptr, dst: F32Ptr):
+-    """One thread: the first nonzero eigh status word since the kit's last
+-    sync lands in dst[0] (read at `DKit.sync`)."""
+-    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+-        return
+-    var st = status.unsafe_load(0)
+-    if st != Int32(0) and dst.unsafe_load(0) == Float32(0):
+-        dst.unsafe_store(0, Float32(st))
+-
+-
+-def dk_rev_vec_kernel(src: F32Ptr, dst: F32Ptr, n: Int32):
+-    """dst[i] = src[n - 1 - i]: an ascending spectrum descending (a copy)."""
+-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+-    if i < Int(n):
+-        dst.unsafe_store(i, src.unsafe_load(Int(n) - 1 - i))
+-
+-
+-def dk_rev_cols_t_kernel(src: F32Ptr, dst: F32Ptr, n: Int32):
+-    """dst = (src with its columns reversed)^T for an n x n src: row i of
+-    dst is column n - 1 - i of src (`mat_t(rev_cols(V))`, a copy)."""
+-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+-    var nn = Int(n)
+-    if t >= nn * nn:
+-        return
+-    var i = t // nn
+-    var j = t - i * nn
+-    dst.unsafe_store(t, src.unsafe_load(j * nn + (nn - 1 - i)))
+-
+-
+-def dk_eig_floor_kernel(w: F32Ptr, dst: F32Ptr, n: Int32, eps: Float32, fmin: Float32):
+-    """FastICA's floored spectrum on the device (lane n9-decomp-eigh-families:
+-    was w home and a sync): floor = max(w[n-1] eps, fmin), dst[i] =
+-    OP_MAXS(w[i], floor). eps = 2^-23 is an exact scale, so the float32
+-    product is the binary64 product's word."""
+-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+-    var nn = Int(n)
+-    if i >= nn:
+-        return
+-    var top = ftz(w.unsafe_load(nn - 1)) * eps
+-    var fl = fmin
+-    if top > fl:
+-        fl = top
+-    var x = ftz(w.unsafe_load(i))
+-    dst.unsafe_store(i, x if x > fl else fl)
++    if j < Int(n):
++        var ab = bitcast[DType.uint32](w.unsafe_load(j)) & UInt32(0x7FFFFFFF)
++        var cb = bitcast[DType.uint32](cut) & UInt32(0x7FFFFFFF)
++        var take = ab <= UInt32(0x7F800000) and cb <= UInt32(0x7F800000) and ab > cb
++        dst.unsafe_store(j, keep.unsafe_load(j) if take else Float32(0))
+ 
+ 
+ 
+@@ -339,13 +280,12 @@ def _mode(xr: Int, xc: Int, ar: Int, ac: Int) raises -> Int:
+ 
+ 
+ struct _Eig(Movable):
+-    """`DKit.eigh`'s answer, resident: w (1 x n ascending) and V (n x n,
+-    vectors in columns). Nothing comes home (lane n9-decomp-eigh-families:
+-    the host copy `wh` and its sync are gone)."""
++    var wh: Mat
+     var wd: DMat
+     var vd: DMat
+ 
+-    def __init__(out self, var wd: DMat, var vd: DMat):
++    def __init__(out self, var wh: Mat, var wd: DMat, var vd: DMat):
++        self.wh = wh^
+         self.wd = wd^
+         self.vd = vd^
+ 
+@@ -362,11 +302,6 @@ struct DKit(Movable):
+     var nan_word: DMat
+     var nan_host: List[Int32]
+     var nan_pending: Bool
+-    # the eigh op's status words (`eigh` below), sticky until the next
+-    # `sync` reads them (lane n9-decomp-eigh-families)
+-    var eig_word: DMat
+-    var eig_host: List[Float32]
+-    var eig_pending: Bool
+ 
+     def __init__(out self) raises:
+         self.ctx = xd_ctx()
+@@ -376,9 +311,6 @@ struct DKit(Movable):
+         self.nan_word = DMat(1, 1)
+         self.nan_host = List[Int32](length=1, fill=Int32(0))
+         self.nan_pending = False
+-        self.eig_word = DMat(1, 1)
+-        self.eig_host = List[Float32](length=1, fill=Float32(0))
+-        self.eig_pending = False
+         # the unused broadcast operand: Kit's `one`, a 0
+         var z = List[Float32](length=1, fill=Float32(0))
+         var pool = X_DECOMP_POOL.get_or_create_ptr()
+@@ -390,9 +322,6 @@ struct DKit(Movable):
+         var nv = pool[].bufs[self.nan_word.id].create_sub_buffer[DType.float32](0, 1)
+         enqueue_fill(self.ctx, nv, Float32(0))
+         _ = nv^
+-        var ev = pool[].bufs[self.eig_word.id].create_sub_buffer[DType.float32](0, 1)
+-        enqueue_fill(self.ctx, ev, Float32(0))
+-        _ = ev^
+ 
+     # ---- movement
+     def _sub(self, D: DMat) raises -> DeviceBuffer[DType.float32]:
+@@ -424,29 +353,15 @@ struct DKit(Movable):
+ 
+     def sync(mut self) raises:
+         var check = self.nan_pending
+-        var echeck = self.eig_pending
+         if check:
+             var pool = X_DECOMP_POOL.get_or_create_ptr()
+             self.ctx.enqueue_copy(
+                 dst_ptr=F32Ptr(unsafe_from_address=Int(self.nan_host.unsafe_ptr())),
+                 src_buf=pool[].bufs[self.nan_word.id].create_sub_buffer[DType.float32](0, 1),
+             )
+-        if echeck:
+-            var pool = X_DECOMP_POOL.get_or_create_ptr()
+-            self.ctx.enqueue_copy(
+-                dst_ptr=F32Ptr(unsafe_from_address=Int(self.eig_host.unsafe_ptr())),
+-                src_buf=pool[].bufs[self.eig_word.id].create_sub_buffer[DType.float32](0, 1),
+-            )
+         self.ctx.synchronize()
+         self.hold_f.clear()
+         self.hold_i.clear()
+-        if echeck:
+-            self.eig_pending = False
+-            if self.eig_host[0] != Float32(0):
+-                raise Error(
+-                    "eigh: a resident solve did not converge in " + String(RR_EIGH_SWEEPS) + " sweeps."
+-                    " An unconverged decomposition is not returned as if it were one (DEVIATION 590)."
+-                )
+         if check:
+             self.nan_pending = False
+             if self.nan_host[0] != Int32(0):
+@@ -1027,71 +942,36 @@ struct DKit(Movable):
+         pool_free(sid)
+         pool_free(iid)
+ 
+-    # TOMBSTONE: `DKit.eigh`'s host words (`_Eig.wh`, w and V home through `DevExec._eigh_on`, uploaded again) deleted
+-    # 2026-11-09 by lane n9-decomp-eigh-families; code recoverable at f59d913b0b.
+-    # Restore: git apply experiments/removed/N9_RESIDENT_EIGH.patch
+     def eigh(mut self, A: DMat) raises -> _Eig:
+-        """`Kit.eigh` on the device: the executor op `eigh_op_sym` (through
+-        `DevExec.eigh_enq`, `DevExec.eigh`'s route and words) on a device
+-        copy of A, w and V left resident, ENQUEUED. The status word is
+-        sticky until the next `sync`, which raises on an unconverged solve.
+-
+-        Lane n9-decomp-eigh-families (2026-11-09): this ran `DevExec._eigh_on`
+-        into host Mats (a wait every sweep, w and V home) and uploaded both
+-        again; FastICA, FactorAnalysis, the rotation and MinCovDet's pinvh
+-        read them on the device now. FAST: the op's route (the tridiagonal
+-        solve from TD_MIN_N on Apple FAST, as `DevExec.eigh`) replaces the
+-        Jacobi this kit kept at every n under FAST (quality only)."""
++        """`Kit.eigh`: DevExec.eigh's solve on a device copy of A (one sync,
++        inside the solve), then w and V back on the device."""
+         var n = A.r
+-        var wd = DMat(1, n)
+-        var vd = DMat(n, n)
+-        if n == 0:
+-            return _Eig(wd^, vd^)
+-        var da = self.ctx.enqueue_create_buffer[DType.float32](n * n)
+-        self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
+-        var dw = self._sub(wd)
+-        var dv = self._sub(vd)
+-        var status = DevExec.eigh_enq(self.ctx, da, dw, dv, n)
+-        self.ctx.enqueue_function[dk_eig_sticky_kernel](
+-            I32Ptr(unsafe_from_address=Int(status.unsafe_ptr())), self.eig_word.p(),
+-            grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+-        )  # small-launch(one word): the op's status, sticky to the next sync
+-        self.eig_pending = True
+-        _ = da^
+-        _ = dw^
+-        _ = dv^
+-        _ = status^
+-        return _Eig(wd^, vd^)
+-
+-    def rev_vec(self, A: DMat) raises -> DMat:
+-        """A 1 x n (or n x 1) vector's words reversed, on the device."""
+-        var out = DMat(A.r, A.c)
+-        if A.n() > 0:
+-            self.ctx.enqueue_function[dk_rev_vec_kernel](
+-                A.p(), out.p(), Int32(A.n()), grid_dim=_blocks(A.n()), block_dim=TPB
+-            )
+-        return out^
+-
+-    def rev_cols_t(self, A: DMat) raises -> DMat:
+-        """`mat_t(rev_cols(A))` of a square A on the device: row i is column
+-        n - 1 - i (an ascending eigenvector matrix as descending rows)."""
+-        var n = A.r
+-        var out = DMat(n, n)
++        var wh = Mat(1, n)
++        var vh = Mat(n, n)
++        # DevExec.eigh's round-robin solve on a device copy of A (one sync a
++        # sweep inside the solve); cgr-decomp: the one-block jacobi2 route
++        # this took is deleted, so the resident kit and DevExec agree
++        var da = self.ctx.enqueue_create_buffer[DType.float32](max(n * n, 1))
+         if n > 0:
+-            self.ctx.enqueue_function[dk_rev_cols_t_kernel](
+-                A.p(), out.p(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
+-            )
+-        return out^
+-
+-    def eig_floor(self, w: DMat, eps: Float64, fmin: Float64) raises -> DMat:
+-        """FastICA's `max(w, max(w[-1] eps, fmin))` on the device."""
+-        var out = DMat(w.r, w.c)
+-        if w.n() > 0:
+-            self.ctx.enqueue_function[dk_eig_floor_kernel](
+-                w.p(), out.p(), Int32(w.n()), Float32(eps), Float32(fmin),
+-                grid_dim=_blocks(w.n()), block_dim=TPB,
+-            )
+-        return out^
++            self.ctx.enqueue_copy(dst_buf=da.create_sub_buffer[DType.float32](0, n * n), src_buf=self._sub(A))
++        # IDENTICAL: DevExec.eigh's route, `_eigh_on` (the tridiagonal solve
++        # from n = TD_MIN_N, the Jacobi below it or on a refusal), so the
++        # resident kit and `DevExec.eigh` agree again and both equal the host
++        # column's `HostExec.eigh` (lane apple-neighbors-gpu-cpu, 2026-10-13).
++        # Since EIGH_TD_IDN became the default (2026-10-11) this call kept the
++        # Jacobi at every n while `DevExec.eigh` did not, so the resident
++        # FastICA / rotation / FactorAnalysis / MinCovDet routes and their
++        # Kit[DevExec] twins differed from n = 64. FAST keeps the Jacobi here.
++        comptime if EIGH_TD_IDN:
++            DevExec._eigh_on(self.ctx, da, wh.p(), vh.p(), n, 0)
++        else:
++            _ = DevExec._eigh_par_on(self.ctx, da, wh.p(), vh.p(), n)
++        _ = da^
++        self.hold_f.clear()
++        self.hold_i.clear()
++        var wd = self.upload(wh)
++        var vd = self.upload(vh)
++        return _Eig(wh^, wd^, vd^)
+ 
+     def lu_logdet(mut self, A: DMat) raises -> Float64:
+         """`_fast_logdet` over `_slogdet`: getrf on a copy (DevExec.lu's
+@@ -1173,17 +1053,23 @@ struct DMcd:
+         return self.k.rowsum(self.k.ew2(OP_MUL, self.k.mm(Xc, P, False, False), Xc))
+ 
+     def pinvh(mut self, A: DMat) raises -> DMat:
+-        """`_pinvh`: V diag(1/w) V^T over |w| > max|w| * n * float32 eps,
+-        the cut taken on the device from the ascending w's two ends
+-        (`pinv_mask_dev_kernel`; lane n9-decomp-eigh-families: was w home
+-        and a sync)."""
++        """`_pinvh`: V diag(1/w) V^T over |w| > max|w| * n * float32 eps."""
+         var n = A.r
+         var e = self.k.eigh(A)
++        var wmax: Float64 = 0.0
++        if n > 0:
++            # w is ascending (the solve's own permutation), so max|w| is at
++            # an end: no host walk over the n eigenvalues (lane cpu3-core)
++            wmax = abs(Float64(e.wh.d[0]))
++            var a_last = abs(Float64(e.wh.d[n - 1]))
++            if a_last > wmax:                 # Python max(): replace on >
++                wmax = a_last
++        var cut = Float32((wmax * Float64(n)) * _F32_EPS)
+         var keep = self.k.ew1(OP_RECIP, e.wd, 0.0)
+         var inv = DMat(1, n)
+         if n > 0:
+-            self.k.ctx.enqueue_function[pinv_mask_dev_kernel](
+-                keep.p(), e.wd.p(), inv.p(), Int32(n), Float32(_F32_EPS), grid_dim=_blocks(n), block_dim=TPB
++            self.k.ctx.enqueue_function[pinv_mask_kernel](
++                keep.p(), e.wd.p(), inv.p(), Int32(n), cut, grid_dim=_blocks(n), block_dim=TPB
+             )
+         return self.k.mm(self.k.ew2(OP_MUL, e.vd, inv), e.vd, False, True)
+ 
+diff --git a/x_decomp/kpca_owner.mojo b/x_decomp/kpca_owner.mojo
+index 1daf874a71..219d387f46 100644
+--- a/x_decomp/kpca_owner.mojo
++++ b/x_decomp/kpca_owner.mojo
+@@ -96,6 +96,7 @@ def _lanczos_top[E: Exec, D: RDev, RES: Bool, X: DecompDev](
+         basis = kit.zeros(cap + 1, n)
+     var q_row = kit.add(kit.mats[q].host, kit.mats[q].dev, 1, n)
+     _ = kit_place_strided(kit, basis, q_row, 1, 0)
++    var alphas = List[Float64]()
+     var betas = List[Float64]()
+     var width = min(n, max(2 * nc + 1, 20))
+     var j = 0
+@@ -115,29 +116,24 @@ def _lanczos_top[E: Exec, D: RDev, RES: Bool, X: DecompDev](
+             for jj in range(j, width):  # driver-loop: over the batch's Lanczos steps (at most _LANCZOS_MAX_M)
+                 var av = Float64(ab[jj])
+                 var bv = Float64(ab[cap + jj])
++                alphas.append(av)
+                 betas.append(bv)
+                 if bv <= 1e-30 * max(1.0, abs(av)) or jj + 1 == n:
+                     reached = jj + 1
+                     stop = True
+                     break
+             j = reached
+-        # TOMBSTONE: the host assembly of T (j x j host words of the alphas
+-        # and betas) and its dense `kit_eigh` deleted 2026-11-09 by lane
+-        # n9-decomp-eigh-families; code recoverable at the lane's base
+-        # origin/integ/pre-0867-w2 (f59d913b0b). Restore: git apply experiments/removed/N9_RESIDENT_EIGH.patch
+-        # The projected solve is the executor op `eigh_op_tridiag` on the
+-        # alphas / betas the Lanczos step wrote (resident: abd, w and z stay
+-        # on the device), the host column `eigh_op_tridiag_host` on ab: one
+-        # algorithm on every column; T's words are the float32 alphas and
+-        # betas as before.
+-        comptime if RES:
+-            th = kit.device_output(1, j)
+-            y = kit.device_output(j, j)
+-            X.eigh_tridiag_dev(kit.mats[abd].dev, kit.mats[th].dev, kit.mats[y].dev, j, cap)
+-        else:
+-            th = kit.zeros(1, j)
+-            y = kit.zeros(j, j)
+-            X.eigh_tridiag_host(pab, kit.ptr(th), kit.ptr(y), j, cap)
++        # the tridiagonal T from the per-step scalars
++        var t = kit.zeros(j, j)
++        var pt = kit.ptr(t)
++        for i in range(j):  # driver-loop: over the Lanczos steps (at most _LANCZOS_MAX_M)
++            pt[i * j + i] = Float32(alphas[i])
++            if i + 1 < j:
++                pt[i * j + i + 1] = Float32(betas[i])
++                pt[(i + 1) * j + i] = Float32(betas[i])
++        var eig = kit_eigh[E, D, RES, X](kit, t)
++        th = eig[0]
++        y = eig[1]
+         top = min(nc, j)
+         if top < nc:
+             return (False, -1, -1)
+diff --git a/x_decomp/lanczos_dev.mojo b/x_decomp/lanczos_dev.mojo
+index 7328a6d3aa..5d38455f6a 100644
+--- a/x_decomp/lanczos_dev.mojo
++++ b/x_decomp/lanczos_dev.mojo
+@@ -32,10 +32,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+ from x_decomp.cells import F32Ptr
+ from x_decomp.device import TPB, _blocks, gemm_scratch, launch_gemm, xd_ctx
+ from x_decomp.lanczos_step import lz_alpha, lz_beta, lz_inv, lz_q, lz_w
+-from x_decomp.resident import X_DECOMP_POOL, _ptr, pool_alloc, pool_free
+-from x_decomp.eigh_ops import eigh_op_tridiag
+-from core.step_gate import step_gate_open_word
+-from max.gpu.host import DeviceBuffer
++from x_decomp.resident import _ptr, pool_alloc, pool_free
+ 
+ #: The FAST + Apple default since 2026-10-03 (M3 A/B, one run per arm:
+ #: kernel-pca taxi -9%, istella -12.5%, tags gl2k-kpca-lzdev-taxi/-istella;
+@@ -129,51 +126,3 @@ comptime IPCA_FAST_DEV = (
+     and has_apple_gpu_accelerator()
+     and not is_defined["MOJOLEARN_IPCA_FAST_DEV_OFF"]()
+ )
+-
+-
+-def dev_eigh_tridiag_run(iab: Int, iw: Int, iz: Int, j: Int, cap: Int) raises -> Int:
+-    """The Lanczos projected solve on the device (lane n9-decomp-eigh-families,
+-    2026-11-09): T of the batch's own alphas (ab[0, j)) and betas (ab[cap,
+-    cap + j - 1)), read where `dev_lanczos_run` wrote them, through the
+-    executor op x_decomp/eigh_ops.mojo `eigh_op_tridiag` (bisection and
+-    twisted vectors, the Jacobi of T on a refusal) into the pool matrices w
+-    (1 x j, ascending) and z (j x j, eigenvector c in column c,
+-    sign-flipped). The host column runs `eigh_op_tridiag_host`
+-    (x_decomp/lanczos_host.mojo `eigh_tridiag_host_run`). One sync, for the
+-    status word: a solve that holds on neither route raises.
+-
+-    Before, the driver (bindings/mani_decomp_native.mojo) assembled T as a
+-    j x j host matrix and ran the dense eigh on it (an upload of j^2 floats
+-    and the dense route per basis round)."""
+-    if j < 1 or j > cap:
+-        raise Error("x_decomp: the Lanczos projected solve needs 1 <= j <= cap, got j=" + String(j) + " cap=" + String(cap))
+-    _ = _ptr(iab, 2 * cap)
+-    _ = _ptr(iw, j)
+-    _ = _ptr(iz, j * j)
+-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+-    var ctx = xd_ctx()
+-    var d = pool[].bufs[iab].create_sub_buffer[DType.float32](0, j)
+-    var e = pool[].bufs[iab].create_sub_buffer[DType.float32](cap, max(j - 1, 1))
+-    var w = pool[].bufs[iw].create_sub_buffer[DType.float32](0, j)
+-    var z = pool[].bufs[iz].create_sub_buffer[DType.float32](0, j * j)
+-    var gate = step_gate_open_word(ctx)
+-    var status = ctx.enqueue_create_buffer[DType.int32](1)
+-    eigh_op_tridiag(ctx, gate, d, e, w, z, status, j)
+-    var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
+-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
+-    ctx.synchronize()
+-    var bad = Int(hs.unsafe_ptr().unsafe_load(0))
+-    _ = d^
+-    _ = e^
+-    _ = w^
+-    _ = z^
+-    _ = gate^
+-    _ = status^
+-    _ = hs^
+-    if bad != 0:
+-        raise Error(
+-            "x_decomp: the Lanczos projected tridiagonal solve (j = " + String(j) + ") did not hold on the"
+-            " bisection route nor on its Jacobi fallback. An unconverged decomposition is not returned as if"
+-            " it were one (DEVIATION 590)."
+-        )
+-    return j
+diff --git a/x_decomp/lanczos_host.mojo b/x_decomp/lanczos_host.mojo
+index 65b0ef4201..e4443c79cc 100644
+--- a/x_decomp/lanczos_host.mojo
++++ b/x_decomp/lanczos_host.mojo
+@@ -7,7 +7,6 @@ launch_gemm) and the same scalar steps (x_decomp/lanczos_step.mojo), in the
+ same order. Registered as `x_decomp_lanczos` by the host binding."""
+ from x_decomp.cells import F32Ptr
+ from x_decomp.host import HostExec
+-from x_decomp.eigh_ops_host import eigh_op_tridiag_host
+ from x_decomp.lanczos_step import lz_alpha, lz_beta, lz_inv, lz_q, lz_w
+ 
+ 
+@@ -43,20 +42,3 @@ def lanczos_run(pa: F32Ptr, pq: F32Ptr, pab: F32Ptr, n: Int, j0: Int, j1: Int, c
+         raise Error("x_decomp: lanczos steps out of range")
+     lanczos_host(pa, pq, pab, n, j0, j1, cap)
+     return j1 - j0
+-
+-
+-def eigh_tridiag_host_run(pab: F32Ptr, pw: F32Ptr, pz: F32Ptr, j: Int, cap: Int) raises -> Int:
+-    """`x_decomp/lanczos_dev.mojo` `dev_eigh_tridiag_run` on host memory: T
+-    of alphas pab[0, j) and betas pab[cap, cap + j - 1) through
+-    `eigh_op_tridiag_host` (the device op's algorithm and words) into w (j,
+-    ascending) and z (j x j, eigenvector c in column c). Raises when
+-    neither the tridiagonal solve nor its Jacobi fallback holds."""
+-    if j < 1 or j > cap:
+-        raise Error("x_decomp: the Lanczos projected solve needs 1 <= j <= cap, got j=" + String(j) + " cap=" + String(cap))
+-    if eigh_op_tridiag_host(pab, pab + cap, pw, pz, j) != 0:
+-        raise Error(
+-            "x_decomp: the Lanczos projected tridiagonal solve (j = " + String(j) + ") did not hold on the"
+-            " bisection route nor on its Jacobi fallback. An unconverged decomposition is not returned as if"
+-            " it were one (DEVIATION 590)."
+-        )
+-    return j
+diff --git a/x_decomp/resident.mojo b/x_decomp/resident.mojo
+index 1460b0bcf5..9bccd85f5f 100644
+--- a/x_decomp/resident.mojo
++++ b/x_decomp/resident.mojo
+@@ -71,7 +71,6 @@ from x_decomp.device import (
+     _p,
+ )
+ from x_decomp.qr_bounded import QRB_CELLS
+-from x_decomp.jacobi_par import PJ_TPB, sym_from_triangle_kernel
+ from decomposition.linalg_types import _validate_shape
+ 
+ comptime POOL_KEEP_BYTES = 1 << 30
+@@ -683,101 +682,7 @@ def dev_eigh_run(ia: Int, pw: F32Ptr, pv: F32Ptr, n: Int, uplo: Int) raises -> I
+     ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+     DevExec._eigh_on(ctx, da, pw, pv, n, uplo)
+     _ = da^
+-    return n
+-
+-
+-comptime _EIGH_REV_TPB = 256
+-
+-
+-def eigh_rev_kernel(w_asc: F32Ptr, v_asc: F32Ptr, w_out: F32Ptr, v_out: F32Ptr, n_in: Int32):
+-    """Cell t of the descending answer (copies): v_out[i, j] = v_asc[i,
+-    n - 1 - j], and for t < n w_out[t] = w_asc[n - 1 - t]
+-    (`A.take_cols(range(c - 1, -1, -1))` of both)."""
+-    var n = Int(n_in)
+-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+-    if t >= n * n:
+-        return
+-    var i = t // n
+-    var j = t - i * n
+-    v_out.unsafe_store(t, v_asc.unsafe_load(i * n + (n - 1 - j)))
+-    if t < n:
+-        w_out.unsafe_store(t, w_asc.unsafe_load(n - 1 - t))
+-
+-
+-def dev_eigh_desc_run(ia: Int, iw: Int, iv: Int, n: Int) raises:
+-    """The n x n device matrix a (left as it is) into the device matrices w
+-    (1 x n, eigenvalues DESCENDING) and v (n x n, the matching vectors in
+-    columns): `eigh_op_sym` (`DevExec.eigh_enq`) on a device copy, then
+-    `eigh_rev_kernel` (the column reversal the owners' host
+-    `_reversed_columns` copied). One wait, for the status word (lane
+-    n9-decomp-eigh-families: IncrementalPCA, FastICA's whitening and
+-    FactorAnalysis's owner; was w and V home, reversed, uploaded again)."""
+-    if n < 1:
+-        raise Error("x_decomp: the resident eigh needs n >= 1")
+-    var cells = n * n
+-    if cells > 2147483647:
+-        raise Error("x_decomp: eigh exceeds the Int32 index bound")
+-    _ = _ptr(ia, cells)
+-    var pw = _ptr(iw, n)
+-    var pv = _ptr(iv, cells)
+-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+-    var ctx = xd_ctx()
+-    var da = ctx.enqueue_create_buffer[DType.float32](cells)
+-    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+-    var dw = ctx.enqueue_create_buffer[DType.float32](n)
+-    var dv = ctx.enqueue_create_buffer[DType.float32](cells)
+-    var status = DevExec.eigh_enq(ctx, da, dw, dv, n)
+-    ctx.enqueue_function[eigh_rev_kernel](
+-        F32Ptr(unsafe_from_address=Int(dw.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(dv.unsafe_ptr())),
+-        pw, pv, Int32(n), grid_dim=(cells + _EIGH_REV_TPB - 1) // _EIGH_REV_TPB, block_dim=_EIGH_REV_TPB,
+-    )
+-    var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
+-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
+-    ctx.synchronize()
+-    _ = da^
+-    _ = dw^
+-    _ = dv^
+-    _ = status^
+-    DevExec.eigh_status_check(hs, n)
+-
+-
+-def dev_eigh_to_run(ia: Int, iw: Int, iv: Int, n: Int, uplo: Int) raises -> Int:
+-    """`x_decomp_eigh` of the device matrix a (n x n, left as it is) into the
+-    device matrices w (n) and v (n x n, vectors in columns): the executor op
+-    x_decomp/eigh_ops.mojo `eigh_op_sym` (`DevExec.eigh_enq`, `DevExec.eigh`'s
+-    route and words) on a device copy; nothing but its status word comes
+-    home (lane n9-decomp-eigh-families, 2026-11-09: the resident kits'
+-    eigh no longer brings w and V down to upload them again). Waits once,
+-    for the status; an unconverged solve raises."""
+-    if n < 1:
+-        raise Error("x_decomp: the resident eigh needs n >= 1")
+-    if uplo > 2:
+-        raise Error("x_decomp: eigh uplo is 0, 1 (L) or 2 (U)")
+-    var cells = n * n
+-    if cells > 2147483647:
+-        raise Error("x_decomp: eigh exceeds the Int32 index bound")
+-    _ = _ptr(ia, cells)
+-    _ = _ptr(iw, n)
+-    _ = _ptr(iv, cells)
+-    var pool = X_DECOMP_POOL.get_or_create_ptr()
+-    var ctx = xd_ctx()
+-    var da = ctx.enqueue_create_buffer[DType.float32](cells)
+-    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+-    if uplo != 0:
+-        ctx.enqueue_function[sym_from_triangle_kernel](
+-            da.unsafe_ptr(), Int32(n), Int32(uplo), grid_dim=(cells + PJ_TPB - 1) // PJ_TPB, block_dim=PJ_TPB
+-        )
+-    var dw = pool[].bufs[iw].create_sub_buffer[DType.float32](0, n)
+-    var dv = pool[].bufs[iv].create_sub_buffer[DType.float32](0, cells)
+-    var status = DevExec.eigh_enq(ctx, da, dw, dv, n)
+-    var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
+-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
+     ctx.synchronize()
+-    _ = da^
+-    _ = dw^
+-    _ = dv^
+-    _ = status^
+-    DevExec.eigh_status_check(hs, n)
+     return n
+ 
+ 

@@ -3,6 +3,7 @@
 """CPU binding for `_mojolearn_x_linear` (lane/algos-linear, 2026-09-27).
 HOST ONLY: the GPU binding's export names and address contract, running the
 same x_linear/ source (`fit_dispatch`, `decision_one`) directly on the CPU."""
+from core.host_finite_scan import host_all_finite_f32
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import Python, PythonObject
@@ -96,6 +97,16 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     return PythonObject(n_out)
 
 
+def _x_status(xa: Int, count: Int, status: Int):
+    """The deferred finite test of X on the CPU column (lane a1b; the
+    status word of core/admitted_finite_status.mojo, by the parallel SIMD
+    scan of core/host_finite_scan.mojo, without that module's device
+    import): the word at host address `status` (0: the door tested X)."""
+    if status != 0:
+        var finite = count <= 0 or host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=xa), count)
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status)[0] = Int32(0) if finite else Int32(1)
+
+
 def decision_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
                      out_addr: PythonObject) raises -> PythonObject:
     var n = Int(py=dims[0])
@@ -105,8 +116,10 @@ def decision_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonOb
     var xa = Int(py=x_addr)
     var wa = Int(py=wb_addr)
     var oa = Int(py=out_addr)
+    var status = Int(py=dims[4]) if len(dims) > 4 else 0
     var cells = 0
     with GILReleased(Python()):
+        _x_status(xa, n * d, status)
         cells = x_linear_decision_host(xa, wa, n, d, k, link, oa)
     return PythonObject(cells)
 
@@ -125,8 +138,10 @@ def decision_codes_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: Py
     var xa = Int(py=x_addr)
     var wa = Int(py=wb_addr)
     var oa = Int(py=out_addr)
+    var status = Int(py=dims[7]) if len(dims) > 7 else 0
     var rows = 0
     with GILReleased(Python()):
+        _x_status(xa, n * d, status)
         rows = x_linear_decision_codes_host(xa, wa, n, d, k, link, strict, below, above, oa)
     return PythonObject(rows)
 
@@ -135,18 +150,20 @@ def decision_rows_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: Pyt
                           out_addr: PythonObject) raises -> PythonObject:
     """The GPU binding's `x_linear_decision_rows` on the host: dims = [n,
     d, k, link, rows_mode]; out float32 n x max(k, 2). Returns n."""
-    if len(dims) != 5:
-        raise Error("x_linear_decision_rows: dims must contain n, d, k, link, rows_mode")
+    if len(dims) != 5 and len(dims) != 6:
+        raise Error("x_linear_decision_rows: dims must contain n, d, k, link, rows_mode (and the status address)")
     var n = Int(py=dims[0])
     var d = Int(py=dims[1])
     var k = Int(py=dims[2])
     var link = Int(py=dims[3])
     var mode = Int(py=dims[4])
+    var status = Int(py=dims[5]) if len(dims) > 5 else 0
     var xa = Int(py=x_addr)
     var wa = Int(py=wb_addr)
     var oa = Int(py=out_addr)
     var rows = 0
     with GILReleased(Python()):
+        _x_status(xa, n * d, status)
         rows = x_linear_decision_rows_host(xa, wa, n, d, k, link, mode, oa)
     return PythonObject(rows)
 

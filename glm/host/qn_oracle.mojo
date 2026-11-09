@@ -1226,7 +1226,7 @@ def host_qn_fit(
     """`qn_fit_host` then `qn_fit_x` and `qn_fit` (module docstring).
     `coef` is resized to `n_param` and zero-initialized here as
     `solvers/qn.pyx:552-554` does (no warm start)."""
-    # `glm/estimator.mojo::qn_check_loss_args`, the same refusals.
+    # `glm/qn_resident.mojo::qn_check_loss_args`, the same refusals.
     var is_svr = loss == QN_LOSS_SVR_L1 or loss == QN_LOSS_SVR_L2
     var is_regression = is_svr or loss == QN_LOSS_SQUARED or loss == QN_LOSS_ABS
     var is_binary = (

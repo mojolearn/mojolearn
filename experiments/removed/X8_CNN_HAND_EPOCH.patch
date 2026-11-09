@@ -1,0 +1,3765 @@
+diff --git a/autograd/rules_cnn.mojo b/autograd/rules_cnn.mojo
+new file mode 100644
+index 0000000000..f7b122273c
+--- /dev/null
++++ b/autograd/rules_cnn.mojo
+@@ -0,0 +1,320 @@
++# SPDX-License-Identifier: Apache-2.0
++# CNNClassifier's trainer backward on the tape, the only backward (the hand walk
++# was deleted 2026-10-19, see the tombstone below). TAPE_EVERYWHERE_PLAN path 3.
++#
++# ---------------------------------------------------------------- launch inventory
++# The deleted hand path, bindings/_mojolearn_x_cnn.mojo fit_epoch_r_binding /
++# fit_epoch_d_binding, per step after the forward (the pair gather, every
++# block's conv_block_forward_into[True], the head's linear_forward_into[True]
++# and softmax_xent_into[True] / softmax_xent_res_loss, which already writes
++# the logits gradient `glog`):
++#
++#   head    linear_backward_into[True] (autograd/kernels/cnn.mojo linear_backward_m):
++#           dW GEMM TN, bias_grad_gemm (leaf + fold, or the GEMM on ones),
++#           dX GEMM NN -> the last block's gout (or `ghead` with no block);
++#           one host wait
++#   blocks  for j = nb-1 .. 0: conv_block_backward_into[True]
++#           (autograd/kernels/cnn.mojo conv_block_backward_into): [the conv + ReLU
++#           recompute when the forward saved no cols / conv output], the
++#           pool + ReLU + row-layout kernel (pool_relu_rows_bwd_at or the
++#           tiled rows kernel) or the ReLU rows kernel(s) without a pool,
++#           [fill_one_at], the dW GEMM (device_gemm OP_TN, nn14_wgrad_at or
++#           _implicit_wgrad), bias_grad_gemm, and for j > 0 the dX GEMM
++#           (device_gemm OP_NN + _col2im, or nn14_input_grad_at) -> block
++#           j-1's gout; one host wait per block
++#   step    opt_many_resident[_h] (unchanged, after the backward)
++#
++# Glue (moved to the tape): which buffer is each block's input and output
++# gradient (the chaining of the blocks and the head), the order of the
++# stages, and whether a block owes dX (block 0's input is the data: no
++# gradient). Fused kernels (kept, one rule each, called with the hand path's
++# arguments on the hand path's buffers): the whole conv block backward
++# (CNN_CONV_BLOCK), the head's backward (CNN_LINEAR: the CNN's pinned GEMM
++# plan, not the sequence GEMM, so it is not the tape's linear node) and the
++# softmax cross-entropy (CNN_SOFTMAX_XENT: its row kernel already wrote the
++# logits gradient in the forward, so the rule launches nothing, as LM_CE
++# under AFN_LM_HEAD_FUSE).
++#
++# ---------------------------------------------------------------- the tape graph
++#   w_j, b_j (variable_into gw_j, gb_j)
++#     -> CNN_CONV_BLOCK j   out_j = pool(relu(conv(in_j)))   grad storage gout_j
++#        in_0 is the data (not recorded: no gradient, no scratch); in_j for
++#        j > 0 is out_{j-1}
++#   head w, b (variable_into head gw, gb)
++#     -> CNN_LINEAR         logits = out_{nb-1} W^T + b      grad storage glog
++#     -> CNN_SOFTMAX_XENT   the mean loss                    grad storage = the seed
++#   seed: one resident word holding 1.0 (the driver's), recorded as the
++#   loss's gradient storage, so the tape copies nothing into the root.
++#
++# ACCUMULATION ORDER. No tensor of this graph has two consumers: each block
++# output feeds only the next block (or the head), the logits only the loss,
++# and no weight is shared. So every gradient is ONE contribution, written in
++# place by its rule (writes_total on every edge: no fill, no scratch, no
++# OP_AG_ACCUMULATE). The tape adds in no order of its own: the same kernels
++# on the same operands in the same order give the hand path's bits.
++#
++# ---------------------------------------------------------------- launch count
++# Tape: the hand launches above, one for one, in the same order, with the
++# same arguments, each entry still ending in its own wait (the `_into[True]`
++# entries synchronize and keep their host parameter lists alive until then;
++# removing those waits is a kernel-entry change, not this migration's). Plus
++# one ex.sync() on an already drained queue at the end of the backward. The
++# tape itself launches nothing and allocates nothing (no input without a
++# gradient is recorded, zeroed_destination is False, writes_total is True).
++#
++# The rules launch on cnn_ctx(), the context every x_cnn entry uses, and keep
++# the entries' slot workspaces; the DeviceExec wraps that same context, so its
++# one sync drains the queue the kernels ran on.
++from std.sys.compile import is_defined
++
++from autograd.tape import Tape, Tensor, BackwardRules
++from sequence.exec_trait import Exec
++from sequence.exec_device import DeviceExec
++from sequence.ops import FP, Args
++from x_cnn.ops import FP as XFP, IP as XIP
++from x_cnn.ops import CP_N, CP_C, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, PP_N, PP_C, PP_OH, PP_OW
++from x_cnn.device import cnn_ctx
++from autograd.kernels.cnn import conv_block_backward_into, linear_backward_into
++
++# TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
++# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch (the AUTOGRAD_CNN switch and the hand walk;
++# the tape matched it word for word on Metal, NVIDIA and AMD, x_cnn/checks/tape_check.mojo now checks stored digests).
++
++# Tags 96-111 (LayerNorm 1, recurrent 16-18, transformer 32-47, Mamba 48-63,
++# LM 64-71). 99-111 are reserved for the per-layer rules (bare conv, pools,
++# BatchNorm, Dropout2d, pad, graph layers).
++comptime CNN_CONV_BLOCK = 96
++comptime CNN_LINEAR = 97
++comptime CNN_SOFTMAX_XENT = 98
++
++# A block handle list, as fit_epoch_r/d receive it.
++comptime BH_W = 0
++comptime BH_B = 1
++comptime BH_GW = 2
++comptime BH_GB = 3
++comptime BH_OUT = 4
++comptime BH_IDX = 5
++comptime BH_GOUT = 6
++comptime BH_COLS = 7
++comptime BH_YCONV = 8
++
++
++@always_inline
++def _x(a: Int) -> XFP:
++    return XFP(unsafe_from_address=a)
++
++
++@always_inline
++def _xi(a: Int) -> XIP:
++    return XIP(unsafe_from_address=a)
++
++
++@always_inline
++def _t(a: Int) -> FP:
++    return FP(unsafe_from_address=a)
++
++
++def _same(p: FP, addr: Int, what: String) raises:
++    # The rules launch on the trainer's own buffers; the tape must hand them
++    # exactly those (the driver records them so). Anything else is a driver bug.
++    if Int(p) != addr:
++        raise Error(String("CNN backward (autograd): ") + what + " is not the trainer's buffer")
++
++
++def conv_block_out_count(cprm: List[Int32], pprm: List[Int32], pool: Bool) -> Int:
++    """Words of a conv block's output: the pool's, or the conv's without one."""
++    if pool:
++        return Int(pprm[PP_N]) * Int(pprm[PP_C]) * Int(pprm[PP_OH]) * Int(pprm[PP_OW])
++    return Int(cprm[CP_N]) * Int(cprm[CP_OC]) * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
++
++
++struct CnnRules(BackwardRules):
++    """Backward adapters for CNNClassifier's fused native ops: each conv
++    block (by index), the head and the loss. Holds the trainer's resident
++    addresses; all must outlive the backward."""
++
++    var bh: List[List[Int]]
++    var head: List[Int]
++    var a: List[Int]
++    var cs: List[List[Int32]]
++    var ps: List[List[Int32]]
++    var pools: List[Bool]
++    var m: Int
++    var flat: Int
++    var k: Int
++    var seed: Int
++
++    def __init__(
++        out self, var bh: List[List[Int]], var head: List[Int], var a: List[Int], var cs: List[List[Int32]],
++        var ps: List[List[Int32]], var pools: List[Bool], m: Int, flat: Int, k: Int, seed: Int,
++    ):
++        self.bh = bh^
++        self.head = head^
++        self.a = a^
++        self.cs = cs^
++        self.ps = ps^
++        self.pools = pools^
++        self.m = m
++        self.flat = flat
++        self.k = k
++        self.seed = seed
++
++    def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
++        # Never: every entry overwrites every word of the destinations it is
++        # handed (the hand path reuses gw, gb, gout and glog across steps
++        # with no fill).
++        return False
++
++    def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
++        # Every input has one consumer (accumulation order, header): the
++        # rule's write is the input's whole gradient, in place.
++        return True
++
++    def supports(self, tag: Int) -> Bool:
++        return tag >= CNN_CONV_BLOCK and tag <= CNN_SOFTMAX_XENT
++
++    def apply[E: Exec](
++        self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
++        inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
++    ) raises:
++        # Every launch goes on cnn_ctx(), the context `ex` wraps.
++        if tag == CNN_CONV_BLOCK:
++            self._block(saved.i0, upstream, gradients)
++        elif tag == CNN_LINEAR:
++            self._head(upstream, gradients)
++        elif tag == CNN_SOFTMAX_XENT:
++            self._xent(upstream, gradients)
++        else:
++            raise Error("unknown CNN backward rule")
++
++    def _block(self, j: Int, upstream: FP, gradients: List[FP]) raises:
++        # fit_epoch_r/d's block backward, verbatim
++        var nb = len(self.bh)
++        if j < 0 or j >= nb:
++            raise Error("CNN backward (autograd): node carries no valid block index")
++        ref h = self.bh[j]
++        _same(upstream, h[BH_GOUT], "the block output gradient")
++        var bsrc = self.bh[j - 1][BH_OUT] if j > 0 else self.a[0]
++        var dx = self.bh[j - 1][BH_GOUT] if j > 0 else 0
++        var want = dx != 0
++        var e = 0
++        if j > 0:
++            if len(gradients) != 3:
++                raise Error("CNN backward (autograd): a chained block has three inputs")
++            _same(gradients[0], dx, "the block input gradient")
++            e = 1
++        elif len(gradients) != 2:
++            raise Error("CNN backward (autograd): the first block has two inputs")
++        _same(gradients[e], h[BH_GW], "the block weight gradient")
++        _same(gradients[e + 1], h[BH_GB], "the block bias gradient")
++        conv_block_backward_into[True](
++            _x(bsrc), _x(h[BH_W]), _x(h[BH_B]), _x(h[BH_GOUT]), _xi(h[BH_IDX]), self.cs[j], self.ps[j],
++            self.pools[j], want, _x(dx) if want else _x(h[BH_GB]), _x(h[BH_GW]), _x(h[BH_GB]), h[BH_COLS],
++            h[BH_YCONV],
++        )
++
++    def _head(self, upstream: FP, gradients: List[FP]) raises:
++        # fit_epoch_r/d's head backward, verbatim: dX into the last block's
++        # gout, or `ghead` (a[5], never read) with no block
++        var nb = len(self.bh)
++        _same(upstream, self.a[3], "the logits gradient")
++        var src = self.bh[nb - 1][BH_OUT] if nb > 0 else self.a[0]
++        var glast = self.bh[nb - 1][BH_GOUT] if nb > 0 else self.a[5]
++        var e = 0
++        if nb > 0:
++            if len(gradients) != 3:
++                raise Error("CNN backward (autograd): the head has three inputs after a block")
++            _same(gradients[0], glast, "the head input gradient")
++            e = 1
++        elif len(gradients) != 2:
++            raise Error("CNN backward (autograd): the head has two inputs without a block")
++        _same(gradients[e], self.head[2], "the head weight gradient")
++        _same(gradients[e + 1], self.head[3], "the head bias gradient")
++        linear_backward_into[True](
++            _x(src), _x(self.head[0]), _x(self.a[3]), self.m, self.flat, self.k, _x(glast), _x(self.head[2]),
++            _x(self.head[3]),
++        )
++
++    def _xent(self, upstream: FP, gradients: List[FP]) raises:
++        # The mean loss's VJP at the unit seed: the forward's row kernel
++        # (softmax_xent_row_at, the 1/m folded in) already wrote glog, so
++        # the rule reads no upstream, launches nothing and refuses any
++        # other seed.
++        if Int(upstream) != self.seed:
++            raise Error("CNN backward (autograd): the loss rule takes only the unit seed")
++        _same(gradients[0], self.a[3], "the logits gradient")
++
++
++def cnn_backward_autograd(
++    bh: List[List[Int]], head: List[Int], a: List[Int], cs: List[List[Int32]], ps: List[List[Int32]],
++    pools: List[Bool], m: Int, flat: Int, k: Int, seed_addr: Int, loss_addr: Int,
++) raises:
++    """CNNClassifier's step backward on one tape: every conv block, the
++    head and the softmax cross-entropy, recorded over the forward that
++    already ran (its outputs, saved cols and conv outputs, pool winners and
++    the logits gradient), then one backward.
++
++    Writes exactly what the hand walk writes: the head's gw and gb, every
++    block's gout (but block 0's input gradient, which nobody reads) and
++    every block's gw and gb, with the same kernels on the same buffers.
++
++    bh: per block [w, b, gw, gb, out, idx, gout, cols, conv out] (resident
++    addresses); head [w, b, gw, gb]; a [x, y, logits, glog, proba, ghead];
++    cs / ps / pools: the step's plan per block; m rows, flat head inputs, k
++    classes. seed_addr: one resident word holding 1.0; loss_addr: one
++    resident word the tape records as the loss's value (never read)."""
++    # removed-define refusals (lane del-cnn), here and not in core/six_lane_experiment_guards.mojo: a core line
++    # rebuilds every binding. Every CNN trainer step reaches this function, so the asserts are evaluated.
++    # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
++    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch
++    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_CNN_OFF"](), "removed 2026-10-19 (lane/del-cnn, ddd4fa509): AUTOGRAD_CNN_OFF (the hand CNN fit-epoch backward walk) is deleted; the tape is the only backward (word for word equal on Metal, NVIDIA and AMD). Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch"
++    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_CNN"](), "removed 2026-10-19 (lane/del-cnn, ddd4fa509): AUTOGRAD_CNN (opt-in spelling) is deleted; the tape is the only CNN backward"
++    var nb = len(bh)
++    if len(cs) != nb or len(ps) != nb or len(pools) != nb:
++        raise Error("CNN backward (autograd): one plan per block")
++    if len(head) != 4 or len(a) != 6:
++        raise Error("CNN backward (autograd): head is [w, b, gw, gb], a is [x, y, logits, glog, proba, ghead]")
++    if m <= 0 or flat <= 0 or k <= 0:
++        raise Error("CNN backward (autograd): positive rows, inputs and classes required")
++    if seed_addr == 0 or loss_addr == 0 or seed_addr == loss_addr:
++        raise Error("CNN backward (autograd): the seed and the loss word must be two resident words")
++    var ctx = cnn_ctx()
++    var ex = DeviceExec(ctx)
++    var tape = Tape()
++    # ---- the blocks; block j's output gradient is its gout, the storage
++    # the hand path hands block j as `g` and block j+1 (or the head) as dx
++    var h = Tensor(0, 0, -1)
++    for j in range(nb):  # driver-loop: over conv blocks
++        ref b = bh[j]
++        if len(b) != 9:
++            raise Error("CNN backward (autograd): a block is [w, b, gw, gb, out, idx, gout, cols, conv out]")
++        var oc = Int(cs[j][CP_OC])
++        var ckk = Int(cs[j][CP_C]) * Int(cs[j][CP_KH]) * Int(cs[j][CP_KW])
++        if j > 0 and Int(cs[j][CP_N]) != m:
++            raise Error("CNN backward (autograd): every block's plan must be at the step's rows")
++        var g_w = tape.variable_into(ex, _t(b[BH_W]), _t(b[BH_GW]), oc, ckk)
++        var g_b = tape.variable_into(ex, _t(b[BH_B]), _t(b[BH_GB]), 1, oc)
++        var saved = Args()
++        saved.i0 = j
++        var no = conv_block_out_count(cs[j], ps[j], pools[j])
++        if j == 0:
++            h = tape.custom_into(ex, [g_w, g_b], _t(b[BH_OUT]), _t(b[BH_GOUT]), 1, no, CNN_CONV_BLOCK, saved)
++        else:
++            h = tape.custom_into(ex, [h, g_w, g_b], _t(b[BH_OUT]), _t(b[BH_GOUT]), 1, no, CNN_CONV_BLOCK, saved)
++    # ---- head and loss; the loss's gradient is the unit seed
++    var g_hw = tape.variable_into(ex, _t(head[0]), _t(head[2]), k, flat)
++    var g_hb = tape.variable_into(ex, _t(head[1]), _t(head[3]), 1, k)
++    var lg: Tensor
++    if nb > 0:
++        lg = tape.custom_into(ex, [h, g_hw, g_hb], _t(a[2]), _t(a[3]), m, k, CNN_LINEAR, Args())
++    else:
++        lg = tape.custom_into(ex, [g_hw, g_hb], _t(a[2]), _t(a[3]), m, k, CNN_LINEAR, Args())
++    var loss = tape.custom_into(ex, [lg], _t(loss_addr), _t(seed_addr), 1, 1, CNN_SOFTMAX_XENT, Args())
++    var seed = tape.variable(ex, _t(seed_addr), 1, 1, False)
++
++    var rules = CnnRules(bh.copy(), head.copy(), a.copy(), cs.copy(), ps.copy(), pools.copy(), m, flat, k, seed_addr)
++    tape.backward_with_rules(ex, loss, seed, rules)
++    tape.release(ex)
++    # Drain the queue before the views go back to the caller (every entry
++    # already waited; this wait finds the queue empty).
++    ex.sync()
+diff --git a/bindings/_mojolearn_x_cnn.mojo b/bindings/_mojolearn_x_cnn.mojo
+index 73e0375f4f..918cd15b25 100644
+--- a/bindings/_mojolearn_x_cnn.mojo
++++ b/bindings/_mojolearn_x_cnn.mojo
+@@ -4,7 +4,7 @@
+ Host addresses in, host addresses out; the work is x_cnn/device.mojo. The CPU
+ twin is bindings/_mojolearn_x_cnn_host.mojo, same names, same contract."""
+ from core.experiment_guards_neural import NEURAL_GUARDS_OK
+-from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32, copy_f32
++from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
+ from std.os import abort
+ from std.python import Python, PythonObject
+ from bindings.native_loaded_module import native_loaded_module
+@@ -84,17 +84,28 @@ from x_cnn.device import idn_flags, adaptive_pool_m, graph_op_m, gcn_norm_m, pad
+ # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+ # Tried: the fused BatchNorm entries' imports.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
+-from x_cnn.ops import idn2_flags, neural_tape_budget_bytes, neural_numerical_profile
++# lane fam2-neural (2026-10-04): the device epoch (order, Adam scalars and losses on the device)
++from x_cnn.ops import idn2_flags, epoch_key, adam_hyper_base, AH_ROW, neural_tape_budget_bytes, neural_numerical_profile
++from x_cnn.device import (
++    epoch_rows_download, res_gather_pair_perm, adam_hyper_resident, adam_hyper_download, opt_many_resident_h,
++    softmax_xent_res_loss,
++)
++from x_cnn.device import cnn_ctx
++# the step backward on the tape (autograd/rules_cnn.mojo)
+ # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
+ # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch; record in docs/TOMBSTONES.md.
+-# TOMBSTONE: autograd/rules_cnn.mojo and the device epoch imports (lane x8-cnn-on-executor) deleted 2026-11-09; code recoverable at f59d913b0b.
+-# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
++from autograd.rules_cnn import cnn_backward_autograd
++from core.device_zero import enqueue_fill
+ from std.memory import memcpy
+ # The typed bodies (lane thin-trees-metrics, 2026-10-21), moved word for word
+ # out of this shell.
+ from x_cnn.device_entries_impl import (
+     _device_int_check,
+     csr_checked_device,
++    fit_epoch_r_device,
++    fit_epoch_d_device,
++    sgd_base_rows,
++    widen_f32_into,
+ )
+ 
+ 
+@@ -1194,8 +1205,101 @@ def chan_copy_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonOb
+     return PythonObject(N * cg * HW)
+ 
+ 
+-# TOMBSTONE: x_cnn_fit_epoch_r / x_cnn_fit_epoch_d / x_cnn_fit_d / x_cnn_predict_r / x_cnn_epoch_rows / x_cnn_adam_hyper_d (CNNClassifier's hand epoch and resident predict; the classifier is a captured program on the executor, sequence/cnn_classifier_program.mojo) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+-# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
++# ------------------------------------------------------------ the fit epoch
++# lane/py-misc (2026-09-28, audit rank 10): CNNClassifier.fit's steps looped
++# HERE instead of in Python. `x_cnn_fit_epoch_r` runs a run of trainer steps
++# on the resident arrays: per step the pair gather of the step's rows, each
++# block's resident forward, the head, the softmax, the head's backward, each
++# block's backward (last to first) and the list-form optimizer, which are
++# the very calls `_expansion_cnn.CNNClassifier.fit` makes one binding call
++# at a time (the same `_into[True]` functions, the same arguments, the same
++# order, each still ending in its own wait). The step's loss is written as
++# the Float64 of the Float32 the softmax entry returns, which is what the
++# Python loop stored. The optimizer's hyper rows (Adam's step scalars in
++# double, SGD's first-step flag) come from Python, computed as before. No
++# kernel, operand or order changes: the bits cannot move.
++
++
++def _epoch_plan(
++    obj: PythonObject, nb: Int, mut cs: List[List[List[Int32]]], mut ps: List[List[List[Int32]]],
++    mut pools: List[List[Bool]],
++) raises:
++    """Appends one plan: [[conv params, pool params] per block] -> the blocks' parameter blocks."""
++    if Int(py=len(obj)) != nb:
++        raise Error("x_cnn fit epoch: one [conv, pool] plan per block")
++    var c = List[List[Int32]]()
++    var p = List[List[Int32]]()
++    var o = List[Bool]()
++    for j in range(nb):  # small-loop(nb: conv blocks of the network): one plan entry per block, not data
++        var t = _block_prms(obj[j][0], obj[j][1])
++        c.append(t[0].copy())
++        p.append(t[1].copy())
++        o.append(t[2])
++    cs.append(c^)
++    ps.append(p^)
++    pools.append(o^)
++
++
++def fit_epoch_r_binding(
++    spec: PythonObject, rows_addr: PythonObject, hyper_addr: PythonObject, losses_addr: PythonObject,
++    params: PythonObject,
++) raises -> PythonObject:
++    """params = [n, batch, adam (0/1)]: ceil(n / batch) steps over host int32
++    rows[0:n] (the epoch's order), step t on rows[t*batch : t*batch + m];
++    hyper = float64 rows of 9 (Adam) or 6 (SGD) per step; losses = float64 per
++    step. spec: blocks [[w, b, gw, gb, out, idx, gout, cols, conv out] per
++    block], head [w, b, gw, gb], a [x, y, logits, glog, proba, ghead], opt
++    [params, grads, buffers, counts], data [X, y, row words], dims [flat, k],
++    plan_full / plan_last [[conv params, pool params] per block] at the batch
++    and at the last step's rows."""
++    var n = Int(py=params[0])
++    var batch = Int(py=params[1])
++    var adam = Int(py=params[2]) != 0
++    if n <= 0 or batch <= 0:
++        raise Error("x_cnn fit epoch: positive rows and batch required")
++    var nh = 9 if adam else 6
++    var blocks = spec["blocks"]
++    var nb = Int(py=len(blocks))
++    var bh = List[List[Int]]()
++    for j in range(nb):  # small-loop(nb: conv blocks of the network): one handle list per block, not data
++        var h = _ints(blocks[j])
++        if len(h) != 9:
++            raise Error("x_cnn fit epoch: a block is [w, b, gw, gb, out, idx, gout, cols, conv out]")
++        bh.append(h^)
++    var head = _ints(spec["head"])
++    var a = _ints(spec["a"])
++    var data = _ints(spec["data"])
++    var dims = _ints(spec["dims"])
++    var opt = spec["opt"]
++    var t = _many(opt[0], opt[1], opt[2], opt[3])
++    # plan 0 at the batch, plan 1 at the last step's rows
++    var cs = List[List[List[Int32]]]()
++    var ps = List[List[List[Int32]]]()
++    var pools = List[List[Bool]]()
++    _epoch_plan(spec["plan_full"], nb, cs, ps, pools)
++    _epoch_plan(spec["plan_last"], nb, cs, ps, pools)
++    var flat = dims[0]
++    var k = dims[1]
++    var steps = (n + batch - 1) // batch
++    var rows = _ip(rows_addr)
++    var hyp = f64_ptr(Int(py=hyper_addr))
++    var losses = f64_ptr(Int(py=losses_addr))
++    with GILReleased(Python()):
++        fit_epoch_r_device(
++            n, batch, adam, nh, nb, steps, flat, k, bh, head, a, data, t, cs, ps, pools, rows, hyp, losses,
++        )
++    return PythonObject(steps)
++
++
++# ------------------------------------------------ lane fam2-neural: the device epoch
++# `x_cnn_fit_epoch_d` is `x_cnn_fit_epoch_r` with nothing computed on the
++# host and nothing crossing the bus inside the epoch: each step's rows come
++# from `epoch_rows_at` on the device (was the CPU's Fisher-Yates order,
++# uploaded per step), Adam's step scalars from `adam_hyper_at` into a
++# resident block (was `adam_hyper_f64` on the CPU, uploaded per step), and
++# each step's mean loss stays in a resident block (`blk_fold_at`; was n row
++# losses down per step and a host fold) that comes down once at the end.
++# The forward, backward and optimizer launches are the `_r` entry's.
+ 
+ 
+ def idn2_flags_binding() raises -> PythonObject:
+@@ -1210,6 +1314,202 @@ def neural_numerical_profile_binding() raises -> PythonObject:
+     return PythonObject(neural_numerical_profile())
+ 
+ 
++def _seed64(lo: PythonObject, hi: PythonObject) raises -> UInt64:
++    return (UInt64(Int(py=hi)) << UInt64(32)) | UInt64(Int(py=lo))
++
++
++def epoch_rows_binding(dst_addr: PythonObject, params: PythonObject) raises -> PythonObject:
++    """Host int32 dst[0:n] = epoch `epoch`'s row order. params = [n, epoch,
++    shuffle (0/1), seed low 32 bits, seed high 32 bits]."""
++    var n = Int(py=params[0])
++    if n < 1 or n >= 2147483647:
++        raise Error("x_cnn epoch rows: 1 <= n < 2^31 - 1")
++    var key = epoch_key(_seed64(params[3], params[4]), Int(py=params[1]))
++    var shuffle = Int(py=params[2]) != 0
++    var dst = _ip(dst_addr)
++    with GILReleased(Python()):
++        epoch_rows_download(dst, n, 0, n, shuffle, key)
++    return PythonObject(n)
++
++
++def _adam_base(fparams: PythonObject) raises -> List[Float32]:
++    if Int(py=len(fparams)) != 6:
++        raise Error("x_cnn adam hyper: fparams is [lr, beta1, beta2, eps, weight_decay, decoupled]")
++    return adam_hyper_base(
++        Float64(py=fparams[0]), Float64(py=fparams[1]), Float64(py=fparams[2]), Float64(py=fparams[3]),
++        Float64(py=fparams[4]), Float64(py=fparams[5]),
++    )
++
++
++def adam_hyper_d_binding(dst_addr: PythonObject, params: PythonObject, fparams: PythonObject) raises -> PythonObject:
++    """Host float64 dst[0 : 9 nsteps] = `adam_at`'s hyper blocks of 1-based
++    steps step0 .. step0 + nsteps - 1, computed on the device in float32
++    pairs (`adam_hyper_at`) and widened. params = [step0, nsteps]; fparams
++    = [lr, beta1, beta2, eps, weight_decay, decoupled]."""
++    var step0 = Int(py=params[0])
++    var nsteps = Int(py=params[1])
++    if step0 < 1 or nsteps < 0:
++        raise Error("x_cnn adam hyper: step0 >= 1, nsteps >= 0")
++    var base = _adam_base(fparams)
++    var out = List[Float32](length=nsteps * AH_ROW + 1, fill=Float32(0))
++    var po = out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    with GILReleased(Python()):
++        adam_hyper_download(base, step0, nsteps, po)
++    var dst = f64_ptr(Int(py=dst_addr))
++    widen_f32_into(dst, out, nsteps * AH_ROW)
++    _ = base^
++    _ = out^
++    return PythonObject(nsteps)
++
++
++def fit_epoch_d_binding(
++    spec: PythonObject, losses_addr: PythonObject, params: PythonObject, fparams: PythonObject,
++) raises -> PythonObject:
++    """params = [n, batch, adam (0/1), steps already taken, epoch, shuffle
++    (0/1), seed low 32 bits, seed high 32 bits]; fparams = Adam's [lr,
++    beta1, beta2, eps, weight_decay, decoupled] or SGD's [lr, momentum,
++    weight_decay, dampening, nesterov, 0]; losses = float64 per step; spec
++    as `x_cnn_fit_epoch_r`."""
++    return _fit_d_epochs(spec, losses_addr, params, fparams, 1)
++
++
++def fit_d_binding(
++    spec: PythonObject, losses_addr: PythonObject, params: PythonObject, fparams: PythonObject,
++) raises -> PythonObject:
++    """N099 (ne3-c-cnn, 2026-11-07): the whole device fit in one call.
++    params = `x_cnn_fit_epoch_d`'s eight words (the epoch word is the first
++    epoch) plus the epoch count; losses = float64 (epochs x steps), epoch e's
++    step losses at e * steps. The spec and both plans are parsed once; each
++    epoch is exactly `x_cnn_fit_epoch_d`'s epoch e (the same device function,
++    the same words, steps already taken = done + e * steps), so no bit
++    moves. Returns the steps per epoch."""
++    if Int(py=len(params)) != 9:
++        raise Error("x_cnn fit: params is the epoch entry's eight words and the epoch count")
++    var epochs = Int(py=params[8])
++    if epochs < 0:
++        raise Error("x_cnn fit: a nonnegative epoch count required")
++    return _fit_d_epochs(spec, losses_addr, params, fparams, epochs)
++
++
++def _fit_d_epochs(
++    spec: PythonObject, losses_addr: PythonObject, params: PythonObject, fparams: PythonObject, epochs: Int,
++) raises -> PythonObject:
++    """`epochs` device epochs from epoch params[4] on, the spec parsed once."""
++    var n = Int(py=params[0])
++    var batch = Int(py=params[1])
++    var adam = Int(py=params[2]) != 0
++    var done = Int(py=params[3])
++    var epoch = Int(py=params[4])
++    var shuffle = Int(py=params[5]) != 0
++    if n <= 0 or batch <= 0 or n >= 2147483647 or done < 0:
++        raise Error("x_cnn fit epoch: positive rows and batch required")
++    var seed = _seed64(params[6], params[7])
++    var blocks = spec["blocks"]
++    var nb = Int(py=len(blocks))
++    var bh = List[List[Int]]()
++    for j in range(nb):  # small-loop(nb: conv blocks of the network): one handle list per block, not data
++        var h = _ints(blocks[j])
++        if len(h) != 9:
++            raise Error("x_cnn fit epoch: a block is [w, b, gw, gb, out, idx, gout, cols, conv out]")
++        bh.append(h^)
++    var head = _ints(spec["head"])
++    var a = _ints(spec["a"])
++    var data = _ints(spec["data"])
++    var dims = _ints(spec["dims"])
++    var opt = spec["opt"]
++    var t = _many(opt[0], opt[1], opt[2], opt[3])
++    var cs = List[List[List[Int32]]]()
++    var ps = List[List[List[Int32]]]()
++    var pools = List[List[Bool]]()
++    _epoch_plan(spec["plan_full"], nb, cs, ps, pools)
++    _epoch_plan(spec["plan_last"], nb, cs, ps, pools)
++    var flat = dims[0]
++    var k = dims[1]
++    var steps = (n + batch - 1) // batch
++    var losses_base = Int(py=losses_addr)
++    for ep in range(epochs):  # driver-loop: over the fit's epochs (training structure, one device epoch each)
++        var key = epoch_key(seed, epoch + ep)
++        var losses = f64_ptr(losses_base + 8 * ep * steps)
++        # the hyper rows: Adam's from the device kernel; SGD's two rows (the
++        # first step's, flag 1, then every later step's), words only. Built
++        # per epoch exactly as the one-epoch entry builds them.
++        var base = List[Float32]()
++        if adam:
++            base = _adam_base(fparams)
++        else:
++            if Int(py=len(fparams)) != 6:
++                raise Error("x_cnn fit epoch: SGD's fparams is [lr, momentum, weight_decay, dampening, nesterov, 0]")
++            var f5 = List[Float64]()
++            for e in range(5):  # small-loop(the five sgd hyper words)
++                f5.append(Float64(py=fparams[e]))
++            sgd_base_rows(base, f5)
++        var l32 = List[Float32](length=steps, fill=Float32(0))
++        var taken = done + ep * steps
++        with GILReleased(Python()):
++            fit_epoch_d_device(
++                n, batch, adam, taken, nb, steps, flat, k, shuffle, key, bh, head, a, data, t, cs, ps, pools, base, l32,
++            )
++        widen_f32_into(losses, l32, steps)
++        _ = base^
++        _ = l32^
++    return PythonObject(steps)
++
++
++def predict_r_binding(
++    spec: PythonObject, x_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
++) raises -> PythonObject:
++    """N090 (ne3-c-cnn, 2026-11-07): the classifier's whole resident predict
++    in one call. params = [n, cap, row words, codes (0/1)]: n host float32
++    rows of `row` words at x, cap rows per chunk; out = int32 (n) class
++    indices (codes) or float32 (n, k) probabilities. spec: blocks [[w, b,
++    out, idx, saved] per block], head [w, b], a [x, y, logits, glog, proba]
++    (y holds -1 targets), dims [flat, k], plans [full, last] ([[conv
++    params, pool params] per block] at cap rows and at the last chunk's).
++    Per chunk exactly the launches the per-launch entries ran from Python
++    (`x_cnn_res_upload`, `x_cnn_conv_block_forward_r` per block,
++    `x_cnn_linear_forward_r`, `x_cnn_softmax_xent_r`, `x_cnn_res_argmax` or
++    `x_cnn_res_download`), the same functions with the same words in the
++    same order, so no bit moves; only the interpreter crossings are gone."""
++    if Int(py=len(params)) != 4:
++        raise Error("x_cnn predict: params is [n, cap, row, codes]")
++    var n = Int(py=params[0])
++    var cap = Int(py=params[1])
++    var row = Int(py=params[2])
++    var codes = Int(py=params[3]) != 0
++    if n < 0 or cap <= 0 or row <= 0:
++        raise Error("x_cnn predict: nonnegative rows, a positive chunk and row size required")
++    var blocks = spec["blocks"]
++    var head = spec["head"]
++    var a = spec["a"]
++    var dims = spec["dims"]
++    var plans = spec["plans"]
++    var nb = Int(py=len(blocks))
++    if Int(py=len(plans)) != 2 or Int(py=len(plans[0])) != nb or Int(py=len(plans[1])) != nb:
++        raise Error("x_cnn predict: plans is [full, last], one [conv, pool] pair per block")
++    var flat = Int(py=dims[0])
++    var k = Int(py=dims[1])
++    var x0 = Int(py=x_addr)
++    var o0 = Int(py=out_addr)
++    var s = 0
++    while s < n:  # driver-loop: over the prediction chunks (cap rows each)
++        var m = min(cap, n - s)
++        var plan = plans[0] if m == cap else plans[1]
++        _ = res_upload_binding(a[0], PythonObject(x0 + 4 * s * row), PythonObject(m * row))
++        var src = a[0]
++        for j in range(nb):  # driver-loop: one launch per conv block (model structure)
++            var bj = blocks[j]
++            _ = conv_block_forward_r_binding(src, bj[0], bj[1], bj[2], bj[3], plan[j][0], plan[j][1], bj[4])
++            src = bj[2]
++        _ = linear_forward_binding[True](src, head[0], head[1], a[2], Python.list(m, flat, k))
++        _ = softmax_xent_binding[True](a[2], a[1], a[3], a[4], Python.list(m, k))
++        if codes:
++            _ = res_argmax_binding(a[4], PythonObject(o0 + 4 * s), Python.list(m, k))
++        else:
++            _ = res_download_binding(a[4], PythonObject(o0 + 4 * s * k), PythonObject(m * k))
++        s += m
++    return PythonObject(n)
++
++
+ def numeric_mode_binding() raises -> PythonObject:
+     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
+ 
+@@ -1268,6 +1568,7 @@ def build__mojolearn_x_cnn() -> PythonObject:
+         m.def_function[softmax_xent_binding[True]]("x_cnn_softmax_xent_r")
+         m.def_function[sgd_binding[True]]("x_cnn_sgd_r")
+         m.def_function[adam_binding[True]]("x_cnn_adam_r")
++        m.def_function[fit_epoch_r_binding]("x_cnn_fit_epoch_r")
+         m.def_function[gemm_m_binding]("x_cnn_gemm_m")
+         m.def_function[conv2d_forward_m_binding]("x_cnn_conv2d_forward_m")
+         m.def_function[conv2d_backward_m_binding]("x_cnn_conv2d_backward_m")
+@@ -1293,6 +1594,11 @@ def build__mojolearn_x_cnn() -> PythonObject:
+         m.def_function[idn2_flags_binding]("x_cnn_idn2_flags")
+         m.def_function[neural_tape_budget_binding]("x_cnn_neural_tape_budget_bytes")
+         m.def_function[neural_numerical_profile_binding]("x_cnn_numerical_profile")
++        m.def_function[epoch_rows_binding]("x_cnn_epoch_rows")
++        m.def_function[adam_hyper_d_binding]("x_cnn_adam_hyper_d")
++        m.def_function[fit_epoch_d_binding]("x_cnn_fit_epoch_d")
++        m.def_function[fit_d_binding]("x_cnn_fit_d")
++        m.def_function[predict_r_binding]("x_cnn_predict_r")
+         m.def_function[adaptive_pool_m_binding]("x_cnn_adaptive_pool_m")
+         m.def_function[graph_op_m_binding]("x_cnn_graph_op_m")
+         m.def_function[gcn_norm_m_binding]("x_cnn_gcn_norm_m")
+diff --git a/bindings/_mojolearn_x_cnn_host.mojo b/bindings/_mojolearn_x_cnn_host.mojo
+index 7e2b3b2fd8..c3dc03ff0c 100644
+--- a/bindings/_mojolearn_x_cnn_host.mojo
++++ b/bindings/_mojolearn_x_cnn_host.mojo
+@@ -4,7 +4,7 @@
+ the GPU binding's export names and address contract, the work is
+ x_cnn/host/ops_host.mojo."""
+ from core.experiment_guards_neural import NEURAL_GUARDS_OK
+-from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32, copy_f32
++from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
+ from std.os import abort
+ from std.python import Python, PythonObject
+ from bindings.native_loaded_module import native_loaded_module
+@@ -40,19 +40,25 @@ from x_cnn.host.ops_host import spmm_host as spmm_impl
+ from x_cnn.host.ops_host import gcn_norm_host as gcn_norm_impl
+ from providers.python.x_cnn_host_ops_host_pyapi import csr_build_host_binding, perm_gather_host_binding, vals_t_host_binding
+ from providers.python.x_cnn_host_ops_host_pyapi import gcn_loops_host_binding
++# lane fam2-neural (2026-10-04): the device epoch's element functions, looped
+ # The typed bodies (lane thin-trees-metrics, 2026-10-21), moved word for word
+ # out of this shell; `out_f32` (the CPU column's output seam) lives there too.
+-# TOMBSTONE: the host fit-epoch helpers (epoch_rows_fill, adam_rows, widen_f32_into, widen_f32_list_into, sgd_hyper_rows, fit_epoch_r_into) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+-# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
+ from x_cnn.host.binding_entries_impl import (
+     out_f32,
++    _at,
+     pool_counts as _pool_counts,
+     check_labels_below,
+     csr_checked,
+     argmax_rows_into,
+     gather_rows_f32,
++    epoch_rows_fill as _epoch_rows_fill,
++    adam_rows,
++    widen_f32_into,
++    widen_f32_list_into,
++    sgd_hyper_rows,
++    fit_epoch_r_into,
+ )
+-from x_cnn.ops import idn2_flags, neural_tape_budget_bytes, neural_numerical_profile
++from x_cnn.ops import idn2_flags, epoch_key, epoch_rows_prm, epoch_rows_at, adam_hyper_base, adam_hyper_at, AH_ROW, neural_tape_budget_bytes, neural_numerical_profile
+ 
+ 
+ def fp(addr: PythonObject) raises -> FP:
+@@ -841,8 +847,95 @@ def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonOb
+     return PythonObject(n)
+ 
+ 
+-# TOMBSTONE: the host x_cnn_fit_epoch_r / x_cnn_fit_epoch_d / x_cnn_fit_d / x_cnn_predict_r / x_cnn_epoch_rows / x_cnn_adam_hyper_d (CNNClassifier's hand epoch and resident predict; the classifier is a captured program on the executor, sequence/cnn_classifier_program.mojo, whose host column is the x_sequence host binding) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+-# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
++# ------------------------------------------------------------ the fit epoch
++# lane/py-misc (2026-09-28): the host twin of the GPU binding's
++# `x_cnn_fit_epoch_r` (see there). CNNClassifier.fit on the CPU made, per
++# step, two row gathers, each block's `_r` forward, the head, the softmax
++# (with its label check), the head's backward, each block's backward and one
++# optimizer entry per parameter; this loop makes the same `_into` calls with
++# the same arguments in the same order, each followed by the same output
++# seam (`out_f32`) its entry ran. The bits cannot move.
++
++
++def _epoch_plan(
++    obj: PythonObject, nb: Int, mut cs: List[List[List[Int32]]], mut ps: List[List[List[Int32]]],
++    mut pools: List[List[Bool]],
++) raises:
++    """Appends one plan: [[conv params, pool params] per block]."""
++    if Int(py=len(obj)) != nb:
++        raise Error("x_cnn fit epoch: one [conv, pool] plan per block")
++    var c = List[List[Int32]]()
++    var p = List[List[Int32]]()
++    var o = List[Bool]()
++    for j in range(nb):  # driver-loop: over the network's blocks
++        var t = _block_prms(obj[j][0], obj[j][1])
++        c.append(t[0].copy())
++        p.append(t[1].copy())
++        o.append(t[2])
++    cs.append(c^)
++    ps.append(p^)
++    pools.append(o^)
++
++
++def fit_epoch_r_binding(
++    spec: PythonObject, rows_addr: PythonObject, hyper_addr: PythonObject, losses_addr: PythonObject,
++    params: PythonObject,
++) raises -> PythonObject:
++    """The GPU binding's `x_cnn_fit_epoch_r` contract, on host allocations."""
++    var n = Int(py=params[0])
++    var batch = Int(py=params[1])
++    var adam = Int(py=params[2]) != 0
++    if n <= 0 or batch <= 0:
++        raise Error("x_cnn fit epoch: positive rows and batch required")
++    var nh = 9 if adam else 6
++    var blocks = spec["blocks"]
++    var nb = Int(py=len(blocks))
++    var bh = List[List[Int]]()
++    for j in range(nb):  # driver-loop: over the network's blocks
++        var h = _ints(blocks[j])
++        if len(h) != 9:
++            raise Error("x_cnn fit epoch: a block is [w, b, gw, gb, out, idx, gout, cols, conv out]")
++        bh.append(h^)
++    var head = _ints(spec["head"])
++    var a = _ints(spec["a"])
++    var data = _ints(spec["data"])
++    var dims = _ints(spec["dims"])
++    var opt = spec["opt"]
++    var cnt = _list_counts(opt[0], opt[1], opt[2], opt[3])
++    var hp = _ints(opt[0])
++    var hg = _ints(opt[1])
++    var hb = _ints(opt[2])
++    var cs = List[List[List[Int32]]]()
++    var ps = List[List[List[Int32]]]()
++    var pools = List[List[Bool]]()
++    _epoch_plan(spec["plan_full"], nb, cs, ps, pools)
++    _epoch_plan(spec["plan_last"], nb, cs, ps, pools)
++    var flat = dims[0]
++    var k = dims[1]
++    var row = data[2]
++    var steps = (n + batch - 1) // batch
++    var rows = i32_ptr(Int(py=rows_addr))
++    var hyp = f64_ptr(Int(py=hyper_addr))
++    var losses = f64_ptr(Int(py=losses_addr))
++    var xd = f32_ptr(a[0])
++    var yd = f32_ptr(a[1])
++    var xs = f32_ptr(data[0])
++    var ys = f32_ptr(data[1])
++    var yl = IP(unsafe_from_address=a[1])
++    with GILReleased(Python()):
++        fit_epoch_r_into(
++            n, batch, adam, nh, nb, steps, flat, k, row, bh, head, a, cnt, hp, hg, hb, cs, ps, pools,
++            rows, hyp, losses, xd, yd, xs, ys, yl,
++        )
++    return PythonObject(steps)
++
++
++# ------------------------------------------------ lane fam2-neural: the device epoch
++# The GPU binding's `x_cnn_idn2_flags`, `x_cnn_epoch_rows`,
++# `x_cnn_adam_hyper_d` and `x_cnn_fit_epoch_d` contracts on the host: the
++# same element functions (`epoch_rows_at`, `adam_hyper_at`, and through
++# `softmax_xent_into` `blk_fold_at`) in a loop, so the order, the step
++# scalars and the losses are the device's words.
+ 
+ 
+ def idn2_flags_binding() raises -> PythonObject:
+@@ -857,6 +950,161 @@ def neural_numerical_profile_binding() raises -> PythonObject:
+     return PythonObject(neural_numerical_profile())
+ 
+ 
++def _seed64(lo: PythonObject, hi: PythonObject) raises -> UInt64:
++    return (UInt64(Int(py=hi)) << UInt64(32)) | UInt64(Int(py=lo))
++
++
++def epoch_rows_binding(dst_addr: PythonObject, params: PythonObject) raises -> PythonObject:
++    var n = Int(py=params[0])
++    if n < 1 or n >= 2147483647:
++        raise Error("x_cnn epoch rows: 1 <= n < 2^31 - 1")
++    var key = epoch_key(_seed64(params[3], params[4]), Int(py=params[1]))
++    _epoch_rows_fill(ip(dst_addr), n, Int(py=params[2]) != 0, key)
++    return PythonObject(n)
++
++
++def _adam_rows(fparams: PythonObject, step0: Int, nsteps: Int) raises -> List[Float32]:
++    """`adam_hyper_at`'s rows of steps step0 .. step0 + nsteps - 1."""
++    if Int(py=len(fparams)) != 6:
++        raise Error("x_cnn adam hyper: fparams is [lr, beta1, beta2, eps, weight_decay, decoupled]")
++    return adam_rows(
++        Float64(py=fparams[0]), Float64(py=fparams[1]), Float64(py=fparams[2]), Float64(py=fparams[3]),
++        Float64(py=fparams[4]), Float64(py=fparams[5]), step0, nsteps,
++    )
++
++
++def adam_hyper_d_binding(dst_addr: PythonObject, params: PythonObject, fparams: PythonObject) raises -> PythonObject:
++    var step0 = Int(py=params[0])
++    var nsteps = Int(py=params[1])
++    if step0 < 1 or nsteps < 0:
++        raise Error("x_cnn adam hyper: step0 >= 1, nsteps >= 0")
++    var rows = _adam_rows(fparams, step0, nsteps)
++    var dst = f64_ptr(Int(py=dst_addr))
++    widen_f32_into(dst, rows, nsteps * AH_ROW)
++    return PythonObject(nsteps)
++
++
++def fit_epoch_d_binding(
++    spec: PythonObject, losses_addr: PythonObject, params: PythonObject, fparams: PythonObject,
++) raises -> PythonObject:
++    """The GPU binding's `x_cnn_fit_epoch_d` contract: the epoch's order and
++    hyper rows from the device's element functions, then the `_r` entry's
++    loop on them (its losses are `softmax_xent_into`'s blocked fold)."""
++    var n = Int(py=params[0])
++    var batch = Int(py=params[1])
++    var adam = Int(py=params[2]) != 0
++    var done = Int(py=params[3])
++    if n <= 0 or batch <= 0 or n >= 2147483647 or done < 0:
++        raise Error("x_cnn fit epoch: positive rows and batch required")
++    var key = epoch_key(_seed64(params[6], params[7]), Int(py=params[4]))
++    var steps = (n + batch - 1) // batch
++    var rows = List[Int32](length=n, fill=Int32(0))
++    _epoch_rows_fill(rows.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n, Int(py=params[5]) != 0, key)
++    var nh = 9 if adam else 6
++    var hyp = List[Float64](length=steps * nh, fill=Float64(0))
++    if adam:
++        var r32 = _adam_rows(fparams, done + 1, steps)
++        widen_f32_list_into(hyp, r32, steps * nh)
++    else:
++        if Int(py=len(fparams)) != 6:
++            raise Error("x_cnn fit epoch: SGD's fparams is [lr, momentum, weight_decay, dampening, nesterov, 0]")
++        var f5 = List[Float64]()
++        for e in range(5):  # small-loop(the five sgd hyper words)
++            f5.append(Float64(py=fparams[e]))
++        sgd_hyper_rows(hyp, f5, steps, done)
++    var out = fit_epoch_r_binding(
++        spec, PythonObject(Int(rows.unsafe_ptr())), PythonObject(Int(hyp.unsafe_ptr())), losses_addr, params,
++    )
++    _ = rows^
++    _ = hyp^
++    return out
++
++
++def fit_d_binding(
++    spec: PythonObject, losses_addr: PythonObject, params: PythonObject, fparams: PythonObject,
++) raises -> PythonObject:
++    """The GPU binding's `x_cnn_fit_d` contract on the host (N099,
++    ne3-c-cnn, 2026-11-07): params = `x_cnn_fit_epoch_d`'s eight words plus
++    the epoch count; epoch e is exactly `x_cnn_fit_epoch_d`'s epoch
++    params[4] + e with done + e * steps steps already taken, its losses at
++    e * steps of the (epochs x steps) float64 buffer. One crossing per fit;
++    the host column re-reads the spec per epoch inside the native call
++    (the `_r` contract it shares), with no Python code between epochs."""
++    if Int(py=len(params)) != 9:
++        raise Error("x_cnn fit: params is the epoch entry's eight words and the epoch count")
++    var epochs = Int(py=params[8])
++    if epochs < 0:
++        raise Error("x_cnn fit: a nonnegative epoch count required")
++    var n = Int(py=params[0])
++    var batch = Int(py=params[1])
++    if n <= 0 or batch <= 0:
++        raise Error("x_cnn fit epoch: positive rows and batch required")
++    var steps = (n + batch - 1) // batch
++    var done = Int(py=params[3])
++    var epoch = Int(py=params[4])
++    var base = Int(py=losses_addr)
++    for ep in range(epochs):  # driver-loop: over the fit's epochs (training structure, one host epoch each)
++        var words = Python.list(params[0], params[1], params[2], done + ep * steps, epoch + ep, params[5],
++                                params[6], params[7])
++        _ = fit_epoch_d_binding(spec, PythonObject(base + 8 * ep * steps), words, fparams)
++    return PythonObject(steps)
++
++
++def predict_r_binding(
++    spec: PythonObject, x_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
++) raises -> PythonObject:
++    """N090 (ne3-c-cnn, 2026-11-07): the classifier's whole resident predict
++    in one call. params = [n, cap, row words, codes (0/1)]: n host float32
++    rows of `row` words at x, cap rows per chunk; out = int32 (n) class
++    indices (codes) or float32 (n, k) probabilities. spec: blocks [[w, b,
++    out, idx, saved] per block], head [w, b], a [x, y, logits, glog, proba]
++    (y holds -1 targets), dims [flat, k], plans [full, last] ([[conv
++    params, pool params] per block] at cap rows and at the last chunk's).
++    Per chunk exactly the launches the per-launch entries ran from Python
++    (`x_cnn_res_upload`, `x_cnn_conv_block_forward_r` per block,
++    `x_cnn_linear_forward_r`, `x_cnn_softmax_xent_r`, `x_cnn_res_argmax` or
++    `x_cnn_res_download`), the same functions with the same words in the
++    same order, so no bit moves; only the interpreter crossings are gone."""
++    if Int(py=len(params)) != 4:
++        raise Error("x_cnn predict: params is [n, cap, row, codes]")
++    var n = Int(py=params[0])
++    var cap = Int(py=params[1])
++    var row = Int(py=params[2])
++    var codes = Int(py=params[3]) != 0
++    if n < 0 or cap <= 0 or row <= 0:
++        raise Error("x_cnn predict: nonnegative rows, a positive chunk and row size required")
++    var blocks = spec["blocks"]
++    var head = spec["head"]
++    var a = spec["a"]
++    var dims = spec["dims"]
++    var plans = spec["plans"]
++    var nb = Int(py=len(blocks))
++    if Int(py=len(plans)) != 2 or Int(py=len(plans[0])) != nb or Int(py=len(plans[1])) != nb:
++        raise Error("x_cnn predict: plans is [full, last], one [conv, pool] pair per block")
++    var flat = Int(py=dims[0])
++    var k = Int(py=dims[1])
++    var x0 = Int(py=x_addr)
++    var o0 = Int(py=out_addr)
++    var s = 0
++    while s < n:  # driver-loop: over the prediction chunks (cap rows each)
++        var m = min(cap, n - s)
++        var plan = plans[0] if m == cap else plans[1]
++        _ = res_upload_binding(a[0], PythonObject(x0 + 4 * s * row), PythonObject(m * row))
++        var src = a[0]
++        for j in range(nb):  # driver-loop: one launch per conv block (model structure)
++            var bj = blocks[j]
++            _ = conv_block_forward_r_binding(src, bj[0], bj[1], bj[2], bj[3], plan[j][0], plan[j][1], bj[4])
++            src = bj[2]
++        _ = linear_forward_binding(src, head[0], head[1], a[2], Python.list(m, flat, k))
++        _ = softmax_xent_binding(a[2], a[1], a[3], a[4], Python.list(m, k))
++        if codes:
++            _ = res_argmax_binding(a[4], PythonObject(o0 + 4 * s), Python.list(m, k))
++        else:
++            _ = res_download_binding(a[4], PythonObject(o0 + 4 * s * k), PythonObject(m * k))
++        s += m
++    return PythonObject(n)
++
++
+ def vendor_binding() raises -> PythonObject:
+     return PythonObject(String("cpu"))
+ 
+@@ -919,9 +1167,15 @@ def build__mojolearn_x_cnn_host() -> PythonObject:
+         m.def_function[softmax_xent_binding]("x_cnn_softmax_xent_r")
+         m.def_function[sgd_binding]("x_cnn_sgd_r")
+         m.def_function[adam_binding]("x_cnn_adam_r")
++        m.def_function[fit_epoch_r_binding]("x_cnn_fit_epoch_r")
+         m.def_function[idn2_flags_binding]("x_cnn_idn2_flags")
+         m.def_function[neural_tape_budget_binding]("x_cnn_neural_tape_budget_bytes")
+         m.def_function[neural_numerical_profile_binding]("x_cnn_numerical_profile")
++        m.def_function[epoch_rows_binding]("x_cnn_epoch_rows")
++        m.def_function[adam_hyper_d_binding]("x_cnn_adam_hyper_d")
++        m.def_function[fit_epoch_d_binding]("x_cnn_fit_epoch_d")
++        m.def_function[fit_d_binding]("x_cnn_fit_d")
++        m.def_function[predict_r_binding]("x_cnn_predict_r")
+         return m.finalize()
+     except e:
+         abort(String("failed to create _mojolearn_x_cnn_host: ", e))
+diff --git a/bindings/xcnn_classifier_native.mojo b/bindings/xcnn_classifier_native.mojo
+index 0dbed0fcb8..f63620084c 100644
+--- a/bindings/xcnn_classifier_native.mojo
++++ b/bindings/xcnn_classifier_native.mojo
+@@ -6,25 +6,28 @@
+ fit: the images admitted, the labels encoded (the sequence owner's label
+ sort, bindings/xseq_neural_native.mojo `xseq_labels`), the layer stack built
+ natively (Conv2d / ReLU / MaxPool2d blocks and the Linear head, each with the
+-constructor's fields and its seeded Mojo draws), then the whole training as
+-ONE call of the x_sequence whole-model door of the model's tier (CNN_FIT,
+-sequence/cnn_classifier_program.mojo): the layer stack captured as one
+-program on the program executor and trained by Program.fit; the trained
+-words come back into the layers' arrays. predict_proba / predict: one
+-CNN_PREDICT call, the same forward with the softmax (and argmax) in an
+-inference session, then classes_[codes] by the base gathers.
+-
+-Lane x8-cnn-on-executor (2026-11-09): the hand epoch on the x_cnn resident
+-entries (x_cnn_fit_d / x_cnn_fit_epoch_d / x_cnn_fit_epoch_r, the Python
+-step-loop arm, the resident predict record and x_cnn_predict_r) is deleted.
+-TOMBSTONE: the hand CNN classifier epoch and resident predict deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+-Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
++constructor's fields and its seeded Mojo draws), the resident arrays planned
++and allocated, the whole X and its labels uploaded once, then every epoch as
++the binding's device epoch (`x_cnn_fit_epoch_d`), or (MOJOLEARN_XCNN_PY_STEPS=1,
++or a binding without the epoch entry) the step loop on the same `_r`
++entries; the parameters, gradients and optimizer buffers come down at the
++end. predict_proba / predict: the resident forward in row chunks and the
++device softmax (and argmax), then classes_[codes] by the base gathers.
++
++The same compiled entries with the same argument words, residency and
++launch order as the Python bodies, so the bits do not move.
+ """
+ from std.math import sqrt
++from std.memory import memcpy
+ from std.python import Python, PythonObject
+-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
+-from bindings.xcnn_common import xcnn_builtins, xcnn_entries, xcnn_f32, xcnn_addr
+-from bindings.xseq_native_common import XseqStream, xseq_neural_provider
++from std.python._cpython import PyObjectPtr
++from std.ffi import c_int
++from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
++from bindings.py_typed_call import py_call_typed
++from bindings.xcnn_common import xcnn_builtins, xcnn_entries, xcnn_entry, xcnn_f32, xcnn_addr, xcnn_readonly
++from bindings.native_identity_key import NativeIdentityKey
++from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
++from bindings.xseq_native_common import XseqStream
+ from bindings.neural_labels_native import neural_encode_labels, neural_decode_labels
+ from bindings.mode_metadata_native import _fields
+ from bindings.neural_block_admission import neural_plain_value
+@@ -34,22 +37,43 @@ from bindings.sequential_inputs import sequential_input
+ from bindings.sequential_arrays import sequential_array
+ from bindings.xcnn_common import xcnn_shape, xcnn_tuple, xcnn_reshape, xcnn_numpy
+ from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
+-from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
++from core.array_helpers_impl import nsum_f64
+ from bindings.native_model_records import (
+     RECORDS_PREPARED, ContentRecord, content_fields, content_object, records_stampable, records_stamped_get,
+     records_stamped_put,
+ )
+-from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT
++from x_cnn.shape_words import conv_params, pool_params, CP_OH, CP_OW, PP_OH, PP_OW
+ 
+-#: rows per predict pass on the device (every op is per row, so the chunk
+-#: never changes a word)
+ comptime _PREDICT_ROWS = 2048
++comptime _PREDICT_SLOT = "xcnn_clf_predict_v1"  # p3-cnn-sequence-tsa resident predict record
+ 
+ 
+ def _b() raises -> PythonObject:
+     return xcnn_builtins()
+ 
+ 
++def _e(entries: PythonObject, name: String) raises -> PythonObject:
++    return xcnn_entry(entries, name)
++
++
++def _has(entries: PythonObject, name: String) raises -> Bool:
++    return py_contains(entries["symbols"], name)
++
++
++def _ints(values: List[Int]) raises -> PythonObject:
++    var out = Python.list()
++    for i in range(len(values)):  # small-loop(launch-plan words)
++        _ = py_call(out.append, values[i])
++    return out
++
++
++def _prod(values: List[Int]) -> Int:
++    var n = 1
++    for i in range(len(values)):  # small-loop(shape words)
++        n *= values[i]
++    return n
++
++
+ def _empty(shape: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
+     xcnn_numpy(context)
+     var dims = Python.tuple(shape) if py_type(shape) is _b().int else shape
+@@ -73,6 +97,43 @@ def _contiguous(source: PythonObject, context: PythonObject) raises -> PythonObj
+     return out
+ 
+ 
++def _float_words(values: PythonObject) raises -> PythonObject:
++    """`values.tolist()` of a float64 array: one PyList_New and a stolen
++    PyList_SetItem per word (p3-cnn-sequence-tsa: it was a bound `append`
++    call per word)."""
++    var result = _float_words_at(Int(py=xcnn_addr(values)), Int(py=values.size))
++    _ = values
++    return result
++
++
++def _float_words_at(address: Int, count: Int) raises -> PythonObject:
++    """`_float_words` of `count` float64 words at `address` (the caller keeps
++    their owner alive)."""
++    var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=address)
++    ref cpy = Python().cpython()
++    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(count)
++    if not raw:
++        raise cpy.unsafe_get_error()
++    # Own the NULL-filled list at once: a failure releases every stored slot.
++    var result = PythonObject(from_owned=raw)
++    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
++    for i in range(count):  # driver-loop: native loss/optimizer scalar result publication
++        var item = PythonObject(words[i])
++        # SetItem steals the reference on both success and failure.
++        if set_item(result._obj_ptr, i, item.steal_data()) != 0:
++            raise cpy.unsafe_get_error()
++    return result
++
++
++def _minus_one(count: Int, context: PythonObject) raises -> PythonObject:
++    var array = _empty(Python.tuple(count), "int32", context)
++    var words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=xcnn_addr(array)))
++    for i in range(count):  # driver-loop: native absent-target metadata for prediction
++        words[i] = -1
++    _ = array
++    return array
++
++
+ # N135 (ne3-c-cnn, 2026-11-07): the admission record. A call on a classifier
+ # whose generation word (bindings/native_model_records.mojo: the watched
+ # instance dictionary) and content words (exact list items of `layers_` /
+@@ -345,6 +406,199 @@ def _params(fields: PythonObject) raises -> PythonObject:
+     return out
+ 
+ 
++# ---------------------------------------------------------------- the plan
++
++def _conv_params(conv: PythonObject, shape: List[Int]) raises -> List[Int]:
++    """`Conv2d._params(shape)`."""
++    var f = _fields(conv)
++    var g = Int(py=f["groups"])
++    var ks = f["kernel_size"]
++    var st = f["stride"]
++    var cp = f["_conv_pad"]
++    var dl = f["dilation"]
++    return [shape[0], shape[1] // g, shape[2], shape[3], Int(py=f["out_channels"]) // g, Int(py=ks[0]), Int(py=ks[1]),
++            Int(py=st[0]), Int(py=st[1]), Int(py=cp[0]), Int(py=cp[1]), Int(py=dl[0]), Int(py=dl[1]), 0, 0,
++            1 if Bool(py=f["bias"]) else 0, 0]
++
++
++def _pool_params(pool: PythonObject, shape: List[Int]) raises -> List[Int]:
++    """`_Pool2d._params(shape)`."""
++    var f = _fields(pool)
++    var ks = f["kernel_size"]
++    var st = f["stride"]
++    var pd = f["padding"]
++    var dl = f["dilation"]
++    var div = f["divisor_override"]
++    return [shape[0], shape[1], shape[2], shape[3], Int(py=ks[0]), Int(py=ks[1]), Int(py=st[0]), Int(py=st[1]),
++            Int(py=pd[0]), Int(py=pd[1]), Int(py=dl[0]), Int(py=dl[1]), 0, 0,
++            1 if Bool(py=f["count_include_pad"]) else 0, 0, 1 if Bool(py=f["ceil_mode"]) else 0,
++            0 if div is None else Int(py=div)]
++
++
++struct _BlockPlan(Copyable, Movable):
++    var prm: List[Int]
++    var pprm: List[Int]
++    var in_size: Int
++    var out_size: Int
++    var im2col: Int
++    var ny: Int
++
++    def __init__(out self, var prm: List[Int], var pprm: List[Int], in_size: Int, out_size: Int, im2col: Int, ny: Int):
++        self.prm = prm^
++        self.pprm = pprm^
++        self.in_size = in_size
++        self.out_size = out_size
++        self.im2col = im2col
++        self.ny = ny
++
++
++def _plan(fields: PythonObject, entries: PythonObject, n: Int) raises -> List[_BlockPlan]:
++    """`_plan(n)`: per block (conv params, pool params or [], input size,
++    output size, im2col size, conv output size) at batch size n."""
++    var plans = List[_BlockPlan]()
++    var ishape = fields["input_shape"]
++    var shape: List[Int] = [n, Int(py=ishape[0]), Int(py=ishape[1]), Int(py=ishape[2])]
++    var blocks = fields["_blocks"]
++    for i in range(len(blocks)):  # driver-loop: one launch plan per conv block (model structure)
++        var conv = blocks[i][0]
++        var pool = blocks[i][1]
++        var prm = _conv_params(conv, shape)
++        # N149 (ne3-c-cnn): the binding's shape rules imported natively
++        # (x_cnn/shape_words.mojo), no x_cnn_conv_shape / x_cnn_pool_shape crossing.
++        var hw = conv_params(prm)
++        var cshape: List[Int] = [shape[0], Int(py=_fields(conv)["out_channels"]), Int(hw[CP_OH]), Int(hw[CP_OW])]
++        var pprm = List[Int]()
++        var oshape = cshape.copy()
++        if pool is not None:
++            pprm = _pool_params(pool, cshape)
++            var phw = pool_params(pprm)
++            oshape = [cshape[0], cshape[1], Int(phw[PP_OH]), Int(phw[PP_OW])]
++        var ny = _prod(cshape)
++        var wsize = Int(py=_fields(conv)["weight_"].size) // Int(py=_fields(conv)["out_channels"])
++        plans.append(_BlockPlan(prm^, pprm^, _prod(shape), _prod(oshape), ny // Int(py=_fields(conv)["out_channels"]) * wsize, ny))
++        shape = oshape^
++    return plans^
++
++
++# ---------------------------------------------------------------- resident arrays
++
++def _new(entries: PythonObject, handles: PythonObject, n: Int) raises -> PythonObject:
++    """`_Res.new(n)`."""
++    var h = py_call(_e(entries, "x_cnn_res_alloc"), Int(n))
++    _ = py_call(handles.append, h)
++    return h
++
++
++def _put(entries: PythonObject, h: PythonObject, arr: PythonObject, context: PythonObject) raises:
++    """`_Res.put(h, arr)`: a float32 or int32 host array's words up."""
++    var a = _contiguous(arr, context)
++    _ = py_call(_e(entries, "x_cnn_res_upload"), h, xcnn_addr(a), a.size)
++    _ = a  # keep the Python object alive through the native call above
++
++
++def _get(entries: PythonObject, h: PythonObject, shape: PythonObject, context: PythonObject) raises -> PythonObject:
++    """`_Res.get(h, shape)`: float32 words down."""
++    var out = _empty(shape, "float32", context)
++    _ = py_call(_e(entries, "x_cnn_res_download"), h, xcnn_addr(out), out.size)
++    _ = out  # keep the Python object alive through the native call above
++    return out
++
++
++def _free_all(entries: PythonObject, handles: PythonObject) raises:
++    for i in range(len(handles)):  # driver-loop: over the resident buffer handles
++        _ = py_call(_e(entries, "x_cnn_res_free"), handles[i])
++
++
++def _resident(fields: PythonObject, entries: PythonObject, handles: PythonObject, n: Int, save: Bool, train: Bool,
++              context: PythonObject) raises -> PythonObject:
++    """`_resident(R, n, save, train)`: the step's resident arrays."""
++    var b = _b()
++    var plans = _plan(fields, entries, n)
++    var k = len(fields["classes_"])
++    var flat = Int(py=fields["_flat"])
++    var a = b.dict()
++    py_setitem(a, "x", _new(entries, handles, plans[0].in_size if len(plans) else n * flat))
++    py_setitem(a, "y", _new(entries, handles, n))
++    py_setitem(a, "logits", _new(entries, handles, n * k))
++    py_setitem(a, "glog", _new(entries, handles, n * k))
++    py_setitem(a, "proba", _new(entries, handles, n * k))
++    var outs = Python.list()
++    var idxs = Python.list()
++    var gouts = Python.list()
++    for i in range(len(plans)):  # driver-loop: one buffer per conv block
++        _ = py_call(outs.append, _new(entries, handles, plans[i].out_size))
++    for i in range(len(plans)):  # driver-loop: one buffer per conv block
++        _ = py_call(idxs.append, _new(entries, handles, plans[i].out_size))
++    if train:
++        for i in range(len(plans)):  # driver-loop: one buffer per conv block
++            _ = py_call(gouts.append, _new(entries, handles, plans[i].out_size))
++    py_setitem(a, "out", outs)
++    py_setitem(a, "idx", idxs)
++    py_setitem(a, "gout", gouts)
++    var bounded = _has(entries, "x_cnn_bounded_im2col") and Bool(py=py_call(_e(entries, "x_cnn_bounded_im2col")))
++    var budget = Int(py=py_call(_e(entries, "x_cnn_neural_tape_budget_bytes"))) if _has(entries, "x_cnn_neural_tape_budget_bytes") else -1
++    var saved = Python.list()
++    for i in range(len(plans)):  # driver-loop: optional buffers per conv block
++        var tape = 4 * ((1 if bounded else plans[i].im2col) + plans[i].ny)
++        var keep = save and (budget < 0 or tape <= budget)
++        if keep:
++            _ = py_call(saved.append, Python.list(_new(entries, handles, 1 if bounded else plans[i].im2col),
++                                                  _new(entries, handles, plans[i].ny)))
++            if budget >= 0:
++                budget -= tape
++        elif save:
++            _ = py_call(saved.append, Python.list(0, 0))
++        else:
++            _ = py_call(saved.append, Python.list())
++    py_setitem(a, "saved", saved)
++    if len(plans) == 0:
++        py_setitem(a, "ghead", _new(entries, handles, n * flat))
++    return a
++
++
++def _plan_words(plans: List[_BlockPlan]) raises -> PythonObject:
++    """Each block's launch words (`_ints(prm)`, `_ints(pprm)`), built once
++    per batch size instead of once per launch."""
++    var out = Python.list()
++    for i in range(len(plans)):  # driver-loop: one word pair per conv block (model structure)
++        _ = py_call(out.append, Python.tuple(_ints(plans[i].prm), _ints(plans[i].pprm)))
++    return out
++
++
++def _block_handles(fields: PythonObject, rw: PythonObject) raises -> PythonObject:
++    """`rw[id(conv)]` of every block's conv, looked up once per call."""
++    var b = _b()
++    var out = Python.list()
++    var blocks = fields["_blocks"]
++    for i in range(len(blocks)):  # driver-loop: over the conv blocks (model structure)
++        _ = py_call(out.append, rw[py_call(b.id, blocks[i][0])])
++    return out
++
++
++def _forward_planned(entries: PythonObject, a: PythonObject, n: Int, hws: PythonObject, head: PythonObject,
++                     words: PythonObject, flat: PythonObject, k: Int) raises:
++    """`_forward_r(b, a, n)` on launch words and resident handles the caller
++    built once (`_plan_words`, `_block_handles`): the same entries, the same
++    words, in the same order."""
++    var src = a["x"]
++    if len(words):
++        var forward = _e(entries, "x_cnn_conv_block_forward_r")
++        for i in range(len(words)):  # driver-loop: one device launch per conv block
++            var hw = hws[i]
++            _ = py_call(forward, src, hw[0], hw[1], a["out"][i], a["idx"][i], words[i][0], words[i][1], a["saved"][i])
++            src = a["out"][i]
++    _ = py_call(_e(entries, "x_cnn_linear_forward_r"), src, head[0], head[1], a["logits"], Python.list(n, flat, k))
++
++
++def _forward_r(fields: PythonObject, entries: PythonObject, rw: PythonObject, a: PythonObject, n: Int) raises -> List[_BlockPlan]:
++    """`_forward_r(b, a, n)`: logits of the n rows in a["x"], resident."""
++    var b = _b()
++    var plans = _plan(fields, entries, n)
++    _forward_planned(entries, a, n, _block_handles(fields, rw), rw[py_call(b.id, fields["head_"])], _plan_words(plans),
++                     fields["_flat"], len(fields["classes_"]))
++    return plans^
++
++
+ # ---------------------------------------------------------------- the images
+ 
+ def _images(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+@@ -365,106 +619,277 @@ def _images(fields: PythonObject, source: PythonObject, context: PythonObject) r
+     return x
+ 
+ 
+-# ---------------------------------------------------------------- the program descriptor
+-
+-def _engine(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+-    """The x_sequence whole-model door of the model's tier (the provider the
+-    label sort already uses)."""
+-    var labels = context["xcnn_label_bindings"][fields["numeric_mode_"]]
+-    if py_type(labels) is _b().str:
+-        raise Error(String(py=labels))
+-    return labels
+-
+-
+-def _geometry(fields: PythonObject, n: Int, k: Int) raises -> List[Int]:
+-    """[n, C, H, W, k, blocks, kernel_size, pool_size]: the head of a CNN_FIT /
+-    CNN_PREDICT descriptor."""
+-    var shape = fields["input_shape"]
+-    var out: List[Int] = [n, Int(py=shape[0]), Int(py=shape[1]), Int(py=shape[2]), k, len(fields["_blocks"]),
+-                          Int(py=fields["kernel_size"]), Int(py=fields["pool_size"])]
+-    return out^
+-
+-
+-def _block_words(fields: PythonObject, mut ints: List[Int]) raises:
+-    """Append every block's width, then every block's pool flag (a block
+-    pools when _build kept its MaxPool2d)."""
+-    var blocks = fields["_blocks"]
+-    for i in range(len(blocks)):  # driver-loop: over the conv blocks (model structure)
+-        ints.append(Int(py=_fields(blocks[i][0])["out_channels"]))
+-    for i in range(len(blocks)):  # driver-loop: over the conv blocks (model structure)
+-        ints.append(0 if blocks[i][1] is None else 1)
+-
+-
+-def _param_arrays(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+-    """Every learned array in descriptor order (per block weight_, bias_,
+-    then the head's), each a float32 C-contiguous ndarray."""
+-    var out = _b().list()
+-    var params = _params(fields)
+-    for i in range(len(params)):  # driver-loop: over the layer parameter list (model structure)
+-        _ = py_call(out.append, _contiguous(_fields(params[i][0])[params[i][1]], context))
+-    return out
+-
+-
+ # ---------------------------------------------------------------- fit
+ 
+ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+     var b = _b()
+     var fields = _classifier_fields(model, context)
+-    var x = _contiguous(_images(fields, args[0], context), context)
+-    # the identical-mode profile check, and `numeric_mode_`
+-    _ = xcnn_entries(fields, context)
++    var x = _images(fields, args[0], context)
++    var entries = xcnn_entries(fields, context)
+     # sorted classes and the inverse codes (the sequence owner's label sort,
+     # `model_labels` of the x_sequence binding of the model's tier)
+-    var labels = _engine(fields, context)
++    var key = fields["numeric_mode_"]
++    var labels = context["xcnn_label_bindings"][key]
++    if py_type(labels) is b.str:
++        raise Error(String(py=labels))
+     var encoded = neural_encode_labels(args[1], labels, context)
+     py_setitem(fields, "classes_", encoded[0])
+     var yi = encoded[1]
+-    var n = Int(py=x.shape[0])
+-    if Int(py=yi.size) != n:
++    if Int(py=yi.size) != Int(py=x.shape[0]):
+         raise Error("ValueError: X and y must contain the same number of rows")
+     var k = len(encoded[0])
++    # p3-cnn-sequence-tsa: the refit publishes new weights; free the old
++    # resident predict state now rather than at the next predict
++    var drop_mods = NativeModules()
++    prepared_drop(drop_mods, _PREDICT_SLOT, model)
+     _build(fields, k, context)
+     var optimizer = String(py=fields["optimizer"])
+-    var seed64 = XseqStream(fields["random_state"], context).seed
++    var per = 1 if optimizer == "sgd" else 2
++    var params = _params(fields)
++    var order = XseqStream(fields["random_state"], context)
++    var seed64 = order.seed
++    var n = Int(py=x.shape[0])
+     var batch = Int(py=fields["batch_size"])
+-    var max_iter = Int(py=fields["max_iter"])
++    var cap = min(batch, n)
+     var losses_all = b.list()
+-    var curve_out = b.list()
+-    if max_iter > 0:
+-        var nsteps = (n + batch - 1) // batch
+-        var curve = _empty(Python.tuple(max_iter), "float32", context)
+-        var steps = _empty(Python.tuple(max_iter * nsteps), "float32", context)
+-        var arrays = _param_arrays(fields, context)
+-        var addresses: List[Int] = [Int(py=xcnn_addr(x)), Int(py=xcnn_addr(yi)), Int(py=xcnn_addr(curve)),
+-                                    Int(py=xcnn_addr(steps))]
+-        for i in range(len(arrays)):  # driver-loop: over the layer parameter arrays (model structure)
+-            addresses.append(Int(py=xcnn_addr(arrays[i])))
+-        var ints = _geometry(fields, n, k)
+-        ints.append(batch)
+-        ints.append(max_iter)
+-        ints.append(1 if Bool(py=fields["shuffle"]) else 0)
+-        ints.append(Int(seed64 & 0xFFFFFFFF))
+-        ints.append(Int(seed64 >> 32))
+-        ints.append(0 if optimizer == "sgd" else (1 if optimizer == "adam" else 2))
+-        ints.append(1 if Bool(py=fields["nesterov"]) else 0)
+-        _block_words(fields, ints)
+-        var betas = fields["betas"]
+-        var floats: List[Float64] = [
+-            Float64(py=fields["learning_rate"]), Float64(py=fields["momentum"]), Float64(py=betas[0]),
+-            Float64(py=betas[1]), Float64(py=fields["eps"]), Float64(py=fields["weight_decay"]),
+-            Float64(py=fields["dampening"]),
+-        ]
+-        _ = neural_descriptor_execute(xseq_neural_provider(labels), CNN_FIT, addresses, ints, floats)
+-        _ = x  # keep the Python objects alive through the native call above
+-        _ = yi
+-        # the trained words are in `arrays`; publish them on their layers
+-        var params = _params(fields)
+-        for i in range(len(params)):  # driver-loop: over the layer parameter list (model structure)
+-            py_setitem(_fields(params[i][0]), params[i][1], arrays[i])
+-        losses_all = py_call(steps.tolist)
+-        curve_out = py_call(curve.tolist)
++    var curve = b.list()
+     py_setitem(fields, "losses_", losses_all)
+-    py_setitem(fields, "loss_curve_", curve_out)
++    py_setitem(fields, "loss_curve_", curve)
++    var handles = b.list()
++    var rw = b.dict()
++    py_setitem(fields, "_rw", rw)
++    try:
++        var hp = b.list()
++        var hg = b.list()
++        var hbuf = b.list()
++        var sizes = b.list()
++        for i in range(len(params)):  # driver-loop: over the layer parameter list
++            var arr = _fields(params[i][0])[params[i][1]]
++            var size = Int(py=arr.size)
++            var p = _new(entries, handles, size)
++            _put(entries, p, arr, context)
++            _ = py_call(hp.append, p)
++            _ = py_call(hg.append, _new(entries, handles, size))
++            _ = py_call(hbuf.append, _new(entries, handles, per * size))
++            _ = py_call(sizes.append, size)
++        for i in range(len(params)):  # driver-loop: over the layer parameter list
++            if String(py=params[i][1]) == "weight_":
++                py_setitem(rw, py_call(b.id, params[i][0]), Python.tuple(hp[i], hp[i + 1], hg[i], hg[i + 1]))
++        var a = _resident(fields, entries, handles, cap, True, True, context)
++        var lists = String(py=py_call(b.str, py_call(_e(entries, "x_cnn_vendor")))) != "cpu"
++        var ishape = fields["input_shape"]
++        var row = Int(py=ishape[0]) * Int(py=ishape[1]) * Int(py=ishape[2])
++        var xall = _new(entries, handles, Int(py=x.size))
++        var yall = _new(entries, handles, n)
++        _put(entries, xall, x, context)
++        _put(entries, yall, yi, context)
++        var step = 0
++        var epoch_entry = Bool(py=context["xcnn_epoch_entry"]) and _has(entries, "x_cnn_fit_epoch_d")
++        var seed_lo = Int(seed64 & 0xFFFFFFFF)
++        var seed_hi = Int(seed64 >> 32)
++        var max_iter = Int(py=fields["max_iter"])
++        var shuffle = 1 if Bool(py=fields["shuffle"]) else 0
++        var sgd = optimizer == "sgd"
++        var spec = PythonObject(None)
++        var nsteps = 0
++        if epoch_entry:
++            nsteps = (n + batch - 1) // batch
++            var m_last = n - (nsteps - 1) * batch
++            var head = rw[py_call(b.id, fields["head_"])]
++            var blocks = b.list()
++            var bl = fields["_blocks"]
++            for j in range(len(bl)):  # driver-loop: over the conv blocks
++                var hw = rw[py_call(b.id, bl[j][0])]
++                var entry = Python.list(hw[0], hw[1], hw[2], hw[3], a["out"][j], a["idx"][j], a["gout"][j])
++                _ = py_call(entry.extend, a["saved"][j])
++                _ = py_call(blocks.append, entry)
++            var full_plan = b.list()
++            var last_plan = b.list()
++            var pf = _plan(fields, entries, cap)
++            var pl = _plan(fields, entries, m_last)
++            for j in range(len(pf)):  # driver-loop: launch plan of every conv block
++                _ = py_call(full_plan.append, Python.list(_ints(pf[j].prm), _ints(pf[j].pprm)))
++            for j in range(len(pl)):  # driver-loop: launch plan of every conv block
++                _ = py_call(last_plan.append, Python.list(_ints(pl[j].prm), _ints(pl[j].pprm)))
++            spec = b.dict()
++            py_setitem(spec, "blocks", blocks)
++            py_setitem(spec, "head", Python.list(head[0], head[1], head[2], head[3]))
++            py_setitem(spec, "a", Python.list(a["x"], a["y"], a["logits"], a["glog"], a["proba"], py_get(a, "ghead", PythonObject(0))))
++            py_setitem(spec, "opt", Python.list(hp, hg, hbuf, sizes))
++            py_setitem(spec, "data", Python.list(xall, yall, row))
++            py_setitem(spec, "dims", Python.list(fields["_flat"], k))
++            py_setitem(spec, "plan_full", full_plan)
++            py_setitem(spec, "plan_last", last_plan)
++        # Launch words that stay fixed for the whole fit are built once (they
++        # were rebuilt per epoch or per step): the optimizer scalars, the
++        # compiled entries, each block's resident handles, its backward tail
++        # and its plan words per batch size. Same values, same order.
++        var fpar = PythonObject(None)
++        var hyper_first = PythonObject(None)
++        var hyper_rest = PythonObject(None)
++        if max_iter > 0:
++            if sgd:
++                var lr = py_call(b.float, fields["learning_rate"])
++                var mom = py_call(b.float, fields["momentum"])
++                var wd = py_call(b.float, fields["weight_decay"])
++                var damp = py_call(b.float, fields["dampening"])
++                var nest = 1.0 if Bool(py=fields["nesterov"]) else 0.0
++                fpar = Python.list(lr, mom, wd, damp, nest, 0.0)
++                hyper_first = Python.list(lr, mom, wd, damp, nest, 1.0)
++                hyper_rest = Python.list(lr, mom, wd, damp, nest, 0.0)
++            else:
++                var betas = fields["betas"]
++                fpar = Python.list(py_call(b.float, fields["learning_rate"]), py_call(b.float, betas[0]),
++                                   py_call(b.float, betas[1]), py_call(b.float, fields["eps"]),
++                                   py_call(b.float, fields["weight_decay"]), 1.0 if optimizer == "adamw" else 0.0)
++        var hws = PythonObject(None)
++        var head_hw = PythonObject(None)
++        var tails = PythonObject(None)
++        var size_words = PythonObject(None)
++        var planned_m = -1
++        var plans = List[_BlockPlan]()
++        var words = PythonObject(None)
++        var flat = fields["_flat"]
++        if not epoch_entry and max_iter > 0:
++            hws = _block_handles(fields, rw)
++            head_hw = rw[py_call(b.id, fields["head_"])]
++            tails = b.list()
++            for j in range(len(hws)):  # driver-loop: the backward tail words of every conv block
++                var tail = Python.list(a["gout"][j - 1] if j > 0 else PythonObject(0), hws[j][2], hws[j][3])
++                _ = py_call(tail.extend, a["saved"][j])
++                _ = py_call(tails.append, tail)
++            size_words = b.list()
++            for q in range(len(params)):  # driver-loop: one size word list per parameter array
++                _ = py_call(size_words.append, Python.list(sizes[q]))
++        # N099 (ne3-c-cnn, 2026-11-07): a binding with `x_cnn_fit_d` runs every
++        # epoch in one call (the spec and both plans parsed once natively;
++        # each epoch is `x_cnn_fit_epoch_d`'s epoch ep with `ep * nsteps`
++        # steps taken, the same words). The epoch loop below then only
++        # publishes each epoch's losses from the (max_iter x nsteps) buffer.
++        var whole = epoch_entry and max_iter > 0 and _has(entries, "x_cnn_fit_d")
++        var all_losses = PythonObject(None)
++        if whole:
++            all_losses = _empty(Python.tuple(max_iter * nsteps), "float64", context)
++            _ = py_call(_e(entries, "x_cnn_fit_d"), spec, xcnn_addr(all_losses),
++                        Python.list(n, batch, 0 if sgd else 1, step, 0, shuffle, seed_lo, seed_hi, max_iter), fpar)
++            _ = all_losses  # keep the Python object alive through the native call above
++        for ep in range(max_iter):  # driver-loop: over the device epochs
++            var epoch = b.list()
++            var total = 0.0
++            var count = 0
++            if epoch_entry:
++                var losses = PythonObject(None)
++                var at = 0
++                if whole:
++                    at = Int(py=xcnn_addr(all_losses)) + 8 * ep * nsteps
++                else:
++                    losses = _empty(Python.tuple(nsteps), "float64", context)
++                    _ = py_call(_e(entries, "x_cnn_fit_epoch_d"), spec, xcnn_addr(losses),
++                                Python.list(n, batch, 0 if sgd else 1, step, ep, shuffle, seed_lo, seed_hi), fpar)
++                    _ = losses  # keep the Python object alive through the native call above
++                    at = Int(py=xcnn_addr(losses))
++                step += nsteps
++                epoch = _float_words_at(at, nsteps)
++                # CPython 3.12+'s sum spelled out (`_portable_math.nsum`: the
++                # same Neumaier fold in the same order, core/array_helpers_impl.mojo),
++                # read straight from the float64 loss words (they were copied
++                # into a Python list and then into an array('d') first).
++                count = nsteps
++                if count:
++                    total = nsum_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=at), count)
++                _ = losses  # keep the Python object alive through the native read above
++                _ = all_losses  # keep the Python object alive through the native read above
++            else:
++                var order_rows = _empty(Python.tuple(n), "int32", context)
++                _ = py_call(_e(entries, "x_cnn_epoch_rows"), xcnn_addr(order_rows), Python.list(n, ep, shuffle, seed_lo, seed_hi))
++                _ = order_rows  # keep the Python object alive through the native call above
++                var gather = _e(entries, "x_cnn_res_gather")
++                var softmax = _e(entries, "x_cnn_softmax_xent_r")
++                var linear_back = _e(entries, "x_cnn_linear_backward_r")
++                var step_losses = List[Float64]()
++                var s = 0
++                var k_out = k
++                while s < n:  # driver-loop: over the device minibatch steps
++                    var m = min(batch, n - s)
++                    var rows = py_call(context["ndarray"], Python.tuple(m), dtype=context["int32"], buffer=order_rows, offset=s * 4)
++                    if not lists:
++                        _ = py_call(gather, a["x"], xall, xcnn_addr(rows), Python.list(m, row))
++                        _ = rows  # keep the Python object alive through the native call above
++                        _ = py_call(gather, a["y"], yall, xcnn_addr(rows), Python.list(m, 1))
++                        _ = rows  # keep the Python object alive through the native call above
++                    else:
++                        _ = py_call(gather, Python.list(a["x"], a["y"]), Python.list(xall, yall),
++                                    xcnn_addr(rows), Python.list(m, row, 1))
++                        _ = rows  # keep the Python object alive through the native call above
++                    if m != planned_m:
++                        # the plan depends on the batch size only: once for the
++                        # full batches, once more for a short last batch
++                        plans = _plan(fields, entries, m)
++                        words = _plan_words(plans)
++                        planned_m = m
++                    _forward_planned(entries, a, m, hws, head_hw, words, flat, k)
++                    var loss = py_call(b.float, py_call(softmax, a["logits"], a["y"], a["glog"],
++                                                       a["proba"], Python.list(m, k_out)))
++                    var last = a["out"][len(plans) - 1] if len(plans) else a["x"]
++                    var glast = a["gout"][len(plans) - 1] if len(plans) else a["ghead"]
++                    _ = py_call(linear_back, last, head_hw[0], a["glog"], glast, head_hw[2], head_hw[3],
++                                Python.list(m, flat, k_out))
++                    var j = len(plans) - 1
++                    while j >= 0:  # driver-loop: the backward launch per conv block
++                        var hw = hws[j]
++                        var src = a["out"][j - 1] if j > 0 else a["x"]
++                        _ = py_call(_e(entries, "x_cnn_conv_block_backward_r"), src, hw[0], hw[1], a["gout"][j], a["idx"][j],
++                                    tails[j], words[j][0], words[j][1])
++                        j -= 1
++                    step += 1
++                    if sgd:
++                        var hyper = hyper_first if step == 1 else hyper_rest
++                        if lists:
++                            _ = py_call(_e(entries, "x_cnn_sgd_r"), hp, hg, hbuf, sizes, hyper)
++                        else:
++                            var sgd_entry = _e(entries, "x_cnn_sgd_r")
++                            for q in range(len(params)):  # driver-loop: one optimizer launch per parameter array
++                                _ = py_call(sgd_entry, hp[q], hg[q], hbuf[q], size_words[q], hyper)
++                    else:
++                        var block = _empty(Python.tuple(1, 9), "float64", context)
++                        _ = py_call(_e(entries, "x_cnn_adam_hyper_d"), xcnn_addr(block), Python.list(step, 1), fpar)
++                        _ = block  # keep the Python object alive through the native call above
++                        var hyper = _float_words(block)
++                        if lists:
++                            _ = py_call(_e(entries, "x_cnn_adam_r"), hp, hg, hbuf, sizes, hyper)
++                        else:
++                            var adam_entry = _e(entries, "x_cnn_adam_r")
++                            for q in range(len(params)):  # driver-loop: one optimizer launch per parameter array
++                                _ = py_call(adam_entry, hp[q], hg[q], hbuf[q], size_words[q], hyper)
++                    _ = py_call(epoch.append, loss)
++                    step_losses.append(Float64(py=loss))
++                    s += m
++                # the same Neumaier fold over the same float64 values the
++                # Python list holds (they were copied into an array('d') first)
++                count = len(step_losses)
++                if count:
++                    total = nsum_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(step_losses.unsafe_ptr())), count)
++            _ = py_call(losses_all.extend, epoch)
++            _ = py_call(curve.append, PythonObject(total / Float64(count)))
++        for i in range(len(params)):  # driver-loop: reads back each parameter array handle
++            var layer = params[i][0]
++            var lf = _fields(layer)
++            var arr = lf[params[i][1]]
++            # p3-cnn-sequence-tsa: published read-only (the resident predict
++            # record keys on these objects; an in-place edit raises)
++            py_setitem(lf, params[i][1], xcnn_readonly(_get(entries, hp[i], arr.shape, context), PythonObject(None), context))
++            py_setitem(lf, params[i][2], _get(entries, hg[i], arr.shape, context))
++        var bufs = b.list()
++        for i in range(len(params)):  # driver-loop: reads back each optimizer buffer handle
++            _ = py_call(bufs.append, _get(entries, hbuf[i], Python.tuple(per * Int(py=sizes[i])), context))
++        py_setitem(fields, "_bufs", bufs)
++        py_setitem(fields, "_rw", b.dict())
++    except error:
++        # p3-cnn-sequence-tsa: no field names a freed handle after a failure
++        py_setitem(fields, "_rw", b.dict())
++        _free_all(entries, handles)
++        raise error^
++    _free_all(entries, handles)
+     var ishape = fields["input_shape"]
+     py_setitem(fields, "n_features_in_", Int(py=ishape[0]) * Int(py=ishape[1]) * Int(py=ishape[2]))
+     return model
+@@ -472,30 +897,209 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
+ 
+ # ---------------------------------------------------------------- predict
+ 
++def _predict_layers(fields: PythonObject) raises -> PythonObject:
++    """The layers whose weights a predict uploads: every block's conv, then
++    the head (`_run_predict`'s order)."""
++    var layers = _b().list()
++    var blocks = fields["_blocks"]
++    for i in range(len(blocks)):  # driver-loop: over the conv layers
++        _ = py_call(layers.append, blocks[i][0])
++    _ = py_call(layers.append, fields["head_"])
++    return layers
++
++
++def _weights_frozen(layers: PythonObject, freeze: Bool, context: PythonObject) raises -> Bool:
++    """Whether every layer's `weight_` / `bias_` is a read-only exact ndarray
++    (marked so first when `freeze`). One flags read per array."""
++    var b = _b()
++    for i in range(len(layers)):  # driver-loop: over the predict layers (model structure)
++        var lf = _fields(layers[i])
++        for name in ["weight_", "bias_"]:  # small-loop(the two learned arrays)
++            var arr = lf[PythonObject(name)]
++            if py_type(arr) is not context["ndarray"]:
++                return False
++            var flags = arr.flags
++            if freeze and Bool(py=flags.writeable):
++                _ = py_call(b.setattr, flags, "writeable", PythonObject(False))
++            if Bool(py=flags.writeable):
++                return False
++    return True
++
++
++def _predict_key(mut mods: NativeModules, fields: PythonObject, layers: PythonObject,
++                 entries: PythonObject) raises -> NativeIdentityKey:
++    var key = NativeIdentityKey(mods)
++    key.add_identity(entries["module"])
++    key.add_identity(fields["_blocks"])
++    key.add_identity(fields["head_"])
++    key.add_identity(fields["classes_"])
++    for i in range(len(layers)):  # driver-loop: over the predict layers (model structure)
++        var lf = _fields(layers[i])
++        key.add_identity(layers[i])
++        key.add_identity(lf["weight_"])
++        key.add_identity(lf["bias_"])
++    return key^
++
++
++def _predict_key_matches(record: PythonObject, fields: PythonObject, layers: PythonObject,
++                         entries: PythonObject) raises -> Bool:
++    var key = record[0].downcast_value_ptr[NativeIdentityKey]()
++    var offset = 0
++    if not key[].matches_identity(entries["module"], offset) or not key[].matches_identity(fields["_blocks"], offset):
++        return False
++    if not key[].matches_identity(fields["head_"], offset) or not key[].matches_identity(fields["classes_"], offset):
++        return False
++    for i in range(len(layers)):  # driver-loop: over the predict layers (model structure)
++        var lf = _fields(layers[i])
++        if (not key[].matches_identity(layers[i], offset) or not key[].matches_identity(lf["weight_"], offset)
++                or not key[].matches_identity(lf["bias_"], offset)):
++            return False
++    return key[].complete(offset)
++
++
++def _predict_owner(entries: PythonObject, handles: PythonObject, context: PythonObject) raises -> PythonObject:
++    """A layer-resident owner (`_Dev`, freed with the object) that takes over
++    `handles`, so a dropped or collected record releases them."""
++    var b = _b()
++    var dev = py_call(py_call(b.getattr, b.object, "__new__"), context["xcnn_dev_class"])
++    var state = _fields(dev)
++    py_setitem(state, "b", entries["module"])
++    var table = b.dict()
++    for i in range(len(handles)):  # driver-loop: over the resident buffer handles
++        py_setitem(table, PythonObject("r" + String(i)), Python.tuple(Int(py=handles[i]), 1))
++    py_setitem(state, "h", table)
++    return dev
++
++
+ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context: PythonObject) raises -> PythonObject:
+     """`_run_predict(X, codes)`: probabilities (n, k) float32, or with
+-    `codes` each row's class index (int32): one CNN_PREDICT call."""
++    `codes` each row's class index (int32), on the device.
++
++    p3-cnn-sequence-tsa: the fitted weights and the work arrays stay
++    resident between predicts in a native record (prepared registry, weak on
++    the model, outside its `__dict__`): (identity key of the binding, the
++    layers and their `weight_` / `bias_`, the owner of every handle, the row
++    capacity, the weight handles, the work arrays). It is reused while the
++    key matches, the weights are still read-only (fit publishes them so) and
++    its capacity covers this call; otherwise everything is uploaded and a
++    new record kept. The record is taken out of the registry while a call
++    uses it, so concurrent predicts never share work arrays."""
++    var b = _b()
+     var fields = _classifier_fields(model, context, True)
+-    var x = _contiguous(_images(fields, source, context), context)
++    var x = _images(fields, source, context)
+     var n = Int(py=x.shape[0])
+     var k = len(fields["classes_"])
+-    _ = xcnn_entries(fields, context)
+-    var out = _empty(Python.tuple(n), "int32", context) if codes else _empty(Python.tuple(n, k), "float32", context)
+-    if n == 0:
+-        return out
+-    var labels = _engine(fields, context)
+-    var arrays = _param_arrays(fields, context)
+-    var addresses: List[Int] = [Int(py=xcnn_addr(x)), Int(py=xcnn_addr(out))]
+-    for i in range(len(arrays)):  # driver-loop: over the layer parameter arrays (model structure)
+-        addresses.append(Int(py=xcnn_addr(arrays[i])))
+-    var ints = _geometry(fields, n, k)
+-    ints.append(1 if codes else 0)
+-    ints.append(_PREDICT_ROWS)
+-    _block_words(fields, ints)
+-    _ = neural_descriptor_execute(xseq_neural_provider(labels), CNN_PREDICT, addresses, ints, List[Float64]())
+-    _ = x  # keep the Python objects alive through the native call above
+-    _ = arrays
+-    return out
++    var entries = xcnn_entries(fields, context)
++    var cap = max(1, min(n, _PREDICT_ROWS))
++    var proba = PythonObject(None) if codes else _empty(Python.tuple(n, k), "float32", context)
++    var lab = _empty(Python.tuple(n), "int32", context) if codes else PythonObject(None)
++    var mods = NativeModules()
++    var layers = _predict_layers(fields)
++    var record = prepared_get(mods, _PREDICT_SLOT, model)
++    if record is not None:
++        prepared_drop(mods, _PREDICT_SLOT, model)  # this call owns it now
++        if (Int(py=record[2]) < cap or not _predict_key_matches(record, fields, layers, entries)
++                or not _weights_frozen(layers, False, context)):
++            record = PythonObject(None)  # its owner frees the old handles
++    var owner = PythonObject(None)
++    var rw = PythonObject(None)
++    var a = PythonObject(None)
++    var alloc_cap = cap  # the rows the work arrays hold
++    if record is not None:
++        alloc_cap = Int(py=record[2])
++        owner = record[1]
++        rw = record[3]
++        a = record[4]
++    else:
++        var handles = b.list()
++        rw = b.dict()
++        try:
++            for i in range(len(layers)):  # driver-loop: the layer list for device copies
++                var lf = _fields(layers[i])
++                var hw = _new(entries, handles, Int(py=lf["weight_"].size))
++                var hb = _new(entries, handles, Int(py=lf["bias_"].size))
++                _put(entries, hw, lf["weight_"], context)
++                _put(entries, hb, lf["bias_"], context)
++                py_setitem(rw, py_call(b.id, layers[i]), Python.tuple(hw, hb))
++            a = _resident(fields, entries, handles, cap, False, False, context)
++            _put(entries, a["y"], _minus_one(cap, context), context)
++        except error:
++            _free_all(entries, handles)
++            raise error^
++        owner = _predict_owner(entries, handles, context)
++    # N135 (ne3-c-cnn): `_rw` is no longer published on the model during a
++    # predict (no native or Python reader takes it from the fields; every
++    # helper here receives `rw`). Writing it twice per call bumped the
++    # model's generation word on every predict, so no stamped record could
++    # survive to the next call. Its value after a predict was an empty dict
++    # before and is the empty dict the fit left now.
++    try:
++        var ishape = fields["input_shape"]
++        var row = Int(py=ishape[0]) * Int(py=ishape[1]) * Int(py=ishape[2])
++        var base = Int(py=xcnn_addr(x))
++        _ = x  # keep the Python object alive through the native call above
++        # The conv handles, head handles and plan words are built once per
++        # batch size (they were rebuilt for every chunk).
++        var hws = _block_handles(fields, rw)
++        var head_hw = rw[py_call(b.id, fields["head_"])]
++        var flat = fields["_flat"]
++        var planned_m = -1
++        var words = PythonObject(None)
++        var s = 0
++        if _has(entries, "x_cnn_predict_r") and n > 0:
++            # N090 (ne3-c-cnn, 2026-11-07): every chunk in one native call:
++            # the same launches with the same words in the same order as the
++            # loop below (`x_cnn_predict_r`), the plan words built twice per
++            # call at most (full chunks, the last chunk).
++            var last = n - ((n + cap - 1) // cap - 1) * cap
++            var full_words = _plan_words(_plan(fields, entries, cap))
++            var last_words = full_words if last == cap else _plan_words(_plan(fields, entries, last))
++            var blocks = b.list()
++            for j in range(len(hws)):  # driver-loop: over the conv blocks (model structure)
++                _ = py_call(blocks.append, Python.list(hws[j][0], hws[j][1], a["out"][j], a["idx"][j], a["saved"][j]))
++            var spec = b.dict()
++            py_setitem(spec, "blocks", blocks)
++            py_setitem(spec, "head", Python.list(head_hw[0], head_hw[1]))
++            py_setitem(spec, "a", Python.list(a["x"], a["y"], a["logits"], a["glog"], a["proba"]))
++            py_setitem(spec, "dims", Python.list(flat, k))
++            py_setitem(spec, "plans", Python.list(full_words, last_words))
++            var dst = xcnn_addr(lab) if codes else xcnn_addr(proba)
++            _ = py_call(_e(entries, "x_cnn_predict_r"), spec, base, dst, Python.list(n, cap, row, 1 if codes else 0))
++            _ = x  # keep the Python objects alive through the native call above
++            _ = lab
++            _ = proba
++            s = n
++        while s < n:  # driver-loop: over the device prediction batches (cap-sized)
++            var m = min(cap, n - s)
++            _ = py_call(_e(entries, "x_cnn_res_upload"), a["x"], base + 4 * s * row, m * row)
++            _ = x  # keep the Python object alive through the native call above
++            if m != planned_m:
++                words = _plan_words(_plan(fields, entries, m))
++                planned_m = m
++            _forward_planned(entries, a, m, hws, head_hw, words, flat, k)
++            _ = py_call(_e(entries, "x_cnn_softmax_xent_r"), a["logits"], a["y"], a["glog"], a["proba"], Python.list(m, k))
++            if codes:
++                _ = py_call(_e(entries, "x_cnn_res_argmax"), a["proba"], Int(py=xcnn_addr(lab)) + 4 * s, Python.list(m, k))
++                _ = lab  # keep the Python object alive through the native call above
++            else:
++                _ = py_call(_e(entries, "x_cnn_res_download"), a["proba"], Int(py=xcnn_addr(proba)) + 4 * s * k, m * k)
++                _ = proba  # keep the Python object alive through the native call above
++            s += m
++    except error:
++        # no field names a handle after a failure; the owner frees them
++        raise error^
++    # keep the state for the next predict when every weight can stay
++    # read-only; otherwise `owner` is released here and frees its handles
++    if record is not None:
++        prepared_put(mods, _PREDICT_SLOT, model, record)
++        return lab if codes else proba
++    if not _weights_frozen(layers, True, context):
++        return lab if codes else proba
++    var key = _predict_key(mods, fields, layers, entries)
++    if key.retains(model):
++        return lab if codes else proba
++    prepared_put(mods, _PREDICT_SLOT, model, Python.tuple(PythonObject(alloc=key^), owner, alloc_cap, rw, a))
++    return lab if codes else proba
+ 
+ 
+ def cnnclf_predict_proba(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+diff --git a/python/mojolearn/_expansion_cnn.py b/python/mojolearn/_expansion_cnn.py
+index 5b5d5832e3..dd706b39d9 100644
+--- a/python/mojolearn/_expansion_cnn.py
++++ b/python/mojolearn/_expansion_cnn.py
+@@ -134,14 +134,16 @@ def _idn(b, bit):
+ # lane fam2-neural (2026-10-04): `x_cnn_idn2_flags` (BOTH bindings export it:
+ # these switches move bits, so the host column moves with the devices).
+ # Bit 0: the softmax mean loss is the blocked device fold (inside the
+-# binding; nothing for the glue to choose). Bit 1: reserved (0; the
+-# classifier's device epoch was deleted, lane x8-cnn-on-executor).
++# binding; nothing for the glue to choose). Bit 1: the fit epoch's row order
++# and Adam step scalars come from device kernels (`x_cnn_epoch_rows`,
++# `x_cnn_adam_hyper_d`, `x_cnn_fit_epoch_d`), not the CPU helpers
++# `epoch_order_i32` and `adam_hyper_f64`.
+ # Bit 2 (lane fix-n1-lm-neural): GCNConv's remaining self loops come from
+ # `x_cnn_gcn_loops` (a stable device sort and two gathers; the host twin on a
+ # CPU-only install), not host NumPy. Copies only: no bit moves.
+ # Bit 3: the candidate fold block 256. Bit 4 (lane/review-fixes): the binding
+ # was built with -D MOJOLEARN_IDN_ALL_OFF (read by `_device_io_off`).
+-_F2_XENT_FOLD, _F2_GCN_LOOPS = 1, 4
++_F2_XENT_FOLD, _F2_EPOCH_DEV, _F2_GCN_LOOPS = 1, 2, 4
+ _F2_FOLD_BLOCK_256, _F2_ALL_OFF = 8, 16
+ _IDN2_FLAGS = {}
+ 
+@@ -890,8 +892,20 @@ class _Res:
+         return out
+ 
+ 
+-# TOMBSTONE: _PREDICT_ROWS, _LEGACY_STEP and _EPOCH_ENTRY (MOJOLEARN_XCNN_PY_STEPS), the measurement arms of the deleted hand CNN epoch, deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+-# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
++#: lane/cnn-apple2 (2026-09-28): predict_proba runs at most this many rows
++#: per forward pass on one set of resident arrays (every op is per row, so
++#: the chunk never changes a word), and the trainer's per-step optimizer and
++#: batch gather each take one binding call (the list forms). `_LEGACY_STEP`
++#: True is the measurement arm's before side (per-parameter optimizer calls,
++#: two gathers, one pass over all rows); never set in production.
++_PREDICT_ROWS = 2048
++_LEGACY_STEP = False
++#: lane/py-misc (2026-09-28): with X resident, fit runs each epoch's steps in
++#: ONE binding call (`x_cnn_fit_epoch_r`: the same entries' work in the same
++#: order, looped in Mojo). False is the measurement arm's before side (the
++#: Python step loop, also `MOJOLEARN_XCNN_PY_STEPS=1` for a whole-process
++#: arm such as the identity harness); never cleared in production.
++_EPOCH_ENTRY = __import__("os").environ.get("MOJOLEARN_XCNN_PY_STEPS", "") != "1"
+ 
+ 
+ class CNNClassifier(_Layer):
+@@ -901,16 +915,23 @@ class CNNClassifier(_Layer):
+     the map is smaller than the window), then one Linear layer to the
+     classes; softmax cross entropy (mean); `optimizer` 'sgd' (torch.optim.SGD:
+     momentum, dampening, nesterov, weight_decay), 'adam' or 'adamw'
+-    (torch.optim.Adam / AdamW: betas, eps, weight_decay). The whole fit runs
+-    as one compiled program on the GPU (or the CPU). X is (n, C*H*W) rows
+-    with `input_shape=(C, H, W)`, or (n, C, H, W). After `fit`, `losses_`
+-    holds every minibatch's loss and `loss_curve_` each epoch's mean loss."""
++    (torch.optim.Adam / AdamW: betas, eps, weight_decay). Every step runs on `_mojolearn_x_cnn` (the GPU, or the CPU
++    host twin), IDENTICAL across columns. X is (n, C*H*W) rows with
++    `input_shape=(C, H, W)`, or (n, C, H, W)."""
+ 
+     def __init__(self, input_shape, conv_channels=(8,), kernel_size=3, pool_size=2, learning_rate=0.01,
+                  momentum=0.9, weight_decay=0.0, batch_size=32, max_iter=10, shuffle=True, random_state=0,
+                  numeric_mode=None, optimizer="sgd", dampening=0.0, nesterov=False, betas=(0.9, 0.999), eps=1e-8):
+         return _XCNN(self, "cnnclf_init", (input_shape, conv_channels, kernel_size, pool_size, learning_rate, momentum, weight_decay, batch_size, max_iter, shuffle, random_state, numeric_mode, optimizer, dampening, nesterov, betas, eps), _XCNN_CONTEXT)
+ 
++    def _images(self, X):
++        X = _f32(X, "X")
++        if X.ndim == 2:
++            return np_reshape(X, (X.shape[0],) + self.input_shape)
++        if X.shape[1:] != self.input_shape:
++            raise ValueError(f"mojolearn: images of shape {X.shape[1:]}, the model {self.input_shape}")
++        return X
++
+     def _build(self, n_classes):
+         seed = 0 if self.random_state is None else int(self.random_state)
+         c, h, w = self.input_shape
+@@ -928,17 +949,88 @@ class CNNClassifier(_Layer):
+         self._flat = c * h * w
+         self.head_ = _Linear(self._flat, n_classes, random_state=seed + 997, numeric_mode=self.numeric_mode)
+         self.layers_ = layers
+-        # (conv, pool or None) per block, the native fit's layer stack
++        # (conv, pool or None) per block: each block runs as ONE binding call
++        # each way (x_cnn_conv_block_*_r, DEVIATION 5717), the same kernels on
++        # the same values as the three layer calls, on resident arrays
++        # (DEVIATION 5718).
+         self._blocks = []
+         for i, layer in enumerate(layers):  # glue: walks the built layer list
+             if isinstance(layer, Conv2d):
+                 nxt = layers[i + 2] if i + 2 < len(layers) else None
+                 self._blocks.append((layer, nxt if isinstance(nxt, MaxPool2d) else None))
+ 
++    def _params(self):
++        out = []
++        for layer in self.layers_ + [self.head_]:  # glue: walks the layer parameter list
++            if hasattr(layer, "weight_"):
++                out.append((layer, "weight_", "grad_weight_"))
++                out.append((layer, "bias_", "grad_bias_"))
++        return out
++
++    def _plan(self, n):
++        """Per block (conv params, pool params or [], input size, output size,
++        im2col size, conv output size) at batch size n, and the final shape."""
++        plans = []
++        shape = (n,) + self.input_shape
++        for conv, pool in self._blocks:  # glue: plans one launch per conv block
++            prm = conv._params(shape)
++            cshape = conv._out_shape(shape)
++            pprm = pool._params(cshape) if pool is not None else []
++            oshape = pool._out_shape(cshape) if pool is not None else cshape
++            ny = int(_np().prod(cshape))  # glue: product of the output shape entries
++            plans.append((prm, pprm, int(_np().prod(shape)), int(_np().prod(oshape)),  # glue: products of the plan shape entries
++                          ny // conv.out_channels * conv.weight_[0].size, ny))
++            shape = oshape
++        return plans, shape
++
++    def _resident(self, R, n, save=False, train=True):
++        """The step's resident arrays at batch capacity n (DEVIATION 5718);
++        `save` keeps each block's im2col matrix and conv output for its
++        backward; `train` False (predict) skips the gradient arrays."""
++        plans, shape = self._plan(n)
++        k = len(self.classes_)
++        a = dict(x=R.new(plans[0][2] if plans else n * self._flat), y=R.new(n),
++                 logits=R.new(n * k), glog=R.new(n * k), proba=R.new(n * k))
++        a["out"] = [R.new(p[3]) for p in plans]  # glue: allocates one buffer per conv block
++        a["idx"] = [R.new(p[3]) for p in plans]  # glue: allocates one buffer per conv block
++        a["gout"] = [R.new(p[3]) for p in plans] if (train or _LEGACY_STEP) else []  # glue: allocates one buffer per conv block
++        bounded = bool(getattr(R.b, "x_cnn_bounded_im2col", lambda: False)())
++        # NI10: allocation planning only. The binding reports its compiled
++        # A/B policy; Python never computes activations or tensor values.
++        # Keep two zero handles for recomputed blocks so the native epoch
++        # descriptor still has its required nine entries.
++        tape_budget = (int(R.b.x_cnn_neural_tape_budget_bytes())
++                       if hasattr(R.b, "x_cnn_neural_tape_budget_bytes") else -1)
++        a["saved"] = []
++        for p in plans:  # glue: allocates optional buffers per conv block
++            tape_bytes = 4 * ((1 if bounded else p[4]) + p[5])
++            keep = save and (tape_budget < 0 or tape_bytes <= tape_budget)
++            a["saved"].append([R.new(1 if bounded else p[4]), R.new(p[5])] if keep else ([0, 0] if save else []))
++            if keep and tape_budget >= 0:
++                tape_budget -= tape_bytes
++        if not plans:  # the head's input gradient, never read, kept apart from glog
++            a["ghead"] = R.new(n * self._flat)
++        return a
++
++    def _forward_r(self, b, a, n):
++        """Logits of the n rows in a["x"], every array on the binding's side."""
++        plans, _ = self._plan(n)
++        src = a["x"]
++        for (conv, pool), p, out, idx, sv in zip(self._blocks, plans, a["out"], a["idx"], a["saved"]):  # glue: drives one device launch per conv block
++            b.x_cnn_conv_block_forward_r(src, self._rw[id(conv)][0], self._rw[id(conv)][1], out, idx, p[0], p[1], sv)
++            src = out
++        hw, hb = self._rw[id(self.head_)][:2]
++        b.x_cnn_linear_forward_r(src, hw, hb, a["logits"], [n, self._flat, len(self.classes_)])
++        return plans
++
+     def fit(self, X, y):
+-        """Train the classifier on images X and labels y; returns self."""
+-        # the labels, the layers and every epoch in one native call
+-        # (bindings/xcnn_classifier_native.mojo -> the x_sequence program door)
++        """Every step on the binding's resident arrays (DEVIATION 5718): the
++        weights, optimizer state, activations and gradients stay on the
++        device for the whole fit; each step uploads its batch and labels and
++        downloads its loss. The same entries' kernels on the same values in
++        the same order as the per-layer calls: the bits do not move."""
++        # the labels, the layers, the resident arrays and every epoch in one
++        # native call (bindings/xcnn_classifier_native.mojo)
+         return _XCNN(self, "cnnclf_fit", (X, y), _XCNN_CONTEXT)
+ 
+     def predict_proba(self, X):
+@@ -952,6 +1044,10 @@ class CNNClassifier(_Layer):
+         return _XCNN(self, "cnnclf_weights", (), _XCNN_CONTEXT)
+ 
+ 
++def np_reshape(X, shape):
++    return _np().ascontiguousarray(X).reshape(shape)
++
++
+ class BatchNorm2d(_Layer):
+     """PyTorch `nn.BatchNorm2d` (affine, track_running_stats): training mode
+     normalizes by the batch statistics and updates running_mean_/running_var_
+@@ -1570,6 +1666,6 @@ _native_xcnn_bridge.register(
+     xcnn_tensor_class=DeviceTensor, xcnn_dev_class=_Dev, xcnn_maxpool_class=MaxPool2d,
+     xcnn_avgpool_class=AvgPool2d, xcnn_pool1d_class=_Pool1dMixin, xcnn_conv1d_class=Conv1d,
+     xcnn_device_io_off=_DEVICE_IO_OFF, xcnn_graph_class=_Graph, xcnn_graph_key_class=_GraphKey,
+-    xcnn_conv2d_class=Conv2d, xcnn_relu_class=_ReLU, xcnn_linear_class=_Linear,
++    xcnn_conv2d_class=Conv2d, xcnn_relu_class=_ReLU, xcnn_linear_class=_Linear, xcnn_epoch_entry=_EPOCH_ENTRY,
+ )
+ _native_xcnn_bridge.connect_classifier()
+diff --git a/python/mojolearn/_native_xcnn_bridge.py b/python/mojolearn/_native_xcnn_bridge.py
+index 3268c4f120..31286f0cd1 100644
+--- a/python/mojolearn/_native_xcnn_bridge.py
++++ b/python/mojolearn/_native_xcnn_bridge.py
+@@ -11,6 +11,7 @@ _CONTEXT = None
+ 
+ #: the compiled entries the CNN layers run (those a binary lacks are absent)
+ _NAMES = (
++    "x_cnn_adam_hyper_d",
+     "x_cnn_adam_r",
+     "x_cnn_adaptive_pool",
+     "x_cnn_adaptive_pool_m",
+@@ -36,6 +37,10 @@ _NAMES = (
+     "x_cnn_csr_upload",
+     "x_cnn_dropout2d",
+     "x_cnn_dropout2d_m",
++    "x_cnn_epoch_rows",
++    "x_cnn_fit_d",
++    "x_cnn_fit_epoch_d",
++    "x_cnn_fit_epoch_r",
+     "x_cnn_gcn_loops",
+     "x_cnn_gcn_norm",
+     "x_cnn_gcn_norm_m",
+@@ -63,6 +68,7 @@ _NAMES = (
+     "x_cnn_pad2d_forward",
+     "x_cnn_pad2d_m",
+     "x_cnn_perm_gather",
++    "x_cnn_predict_r",
+     "x_cnn_pool_shape",
+     "x_cnn_relu_backward",
+     "x_cnn_relu_forward",
+diff --git a/python/mojolearn/_surface_cnn.py b/python/mojolearn/_surface_cnn.py
+index 0f9f0d1b37..76dcfcb3bc 100644
+--- a/python/mojolearn/_surface_cnn.py
++++ b/python/mojolearn/_surface_cnn.py
+@@ -48,8 +48,8 @@ FAMILIES = (
+             "x_cnn_vendor",
+             "x_cnn_res_alloc", "x_cnn_res_free", "x_cnn_res_upload", "x_cnn_res_download", "x_cnn_res_argmax", "x_cnn_res_gather",
+             "x_cnn_conv_block_forward_r", "x_cnn_conv_block_backward_r", "x_cnn_linear_forward_r",
+-            "x_cnn_linear_backward_r", "x_cnn_softmax_xent_r", "x_cnn_sgd_r", "x_cnn_adam_r",
+-            "x_cnn_idn2_flags",
++            "x_cnn_linear_backward_r", "x_cnn_softmax_xent_r", "x_cnn_sgd_r", "x_cnn_adam_r", "x_cnn_fit_epoch_r",
++            "x_cnn_idn2_flags", "x_cnn_epoch_rows", "x_cnn_adam_hyper_d", "x_cnn_fit_epoch_d", "x_cnn_fit_d", "x_cnn_predict_r",
+             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
+             "x_cnn_csr_build", "x_cnn_gcn_loops", "x_cnn_bounded_im2col",
+             "x_cnn_perm_gather", "x_cnn_vals_t",
+diff --git a/python/mojolearn/tests/test_x_cnn_native_sessions.py b/python/mojolearn/tests/test_x_cnn_native_sessions.py
+new file mode 100644
+index 0000000000..7dc7ae9a2d
+--- /dev/null
++++ b/python/mojolearn/tests/test_x_cnn_native_sessions.py
+@@ -0,0 +1,102 @@
++# SPDX-License-Identifier: Apache-2.0
++"""The CNN classifier's one-call fit (`x_cnn_fit_d`) and one-call predict
++(`x_cnn_predict_r`) produce the same words as the per-epoch and per-chunk
++entries they replace, and the admission record never changes a result."""
++import contextlib
++
++import numpy as np
++import pytest
++
++
++def _bindings():
++    from mojolearn import _native_xcnn_bridge as bridge
++    _, context = bridge.connect()
++    tables = context.get("xcnn_bindings")
++    if not tables:
++        pytest.skip("the CNN binding is not connected")
++    return [t for t in tables.values() if isinstance(t, dict)]
++
++
++@contextlib.contextmanager
++def _without(name):
++    """Hide one compiled entry so the classifier takes its older route."""
++    saved = []
++    for table in _bindings():
++        if name in table["symbols"]:
++            saved.append((table, table["symbols"].pop(name)))
++    try:
++        yield bool(saved)
++    finally:
++        for table, fn in saved:
++            table["symbols"][name] = fn
++
++
++def _data(rows=150):
++    rng = np.random.default_rng(3)
++    X = rng.standard_normal((rows, 1, 6, 6)).astype(np.float32)
++    y = (X[:, 0, :3].sum((1, 2)) > X[:, 0, 3:].sum((1, 2))).astype(int)
++    return X.reshape(rows, -1), y
++
++
++def _fit(optimizer, X, y):
++    import mojolearn as ml
++    return ml.CNNClassifier(input_shape=(1, 6, 6), conv_channels=(4,), learning_rate=0.05, batch_size=32,
++                            max_iter=4, optimizer=optimizer, random_state=0).fit(X, y)
++
++
++def _weight_bytes(model):
++    return [np.asarray(w).tobytes() for w in model.weights()]
++
++
++@pytest.mark.parametrize("optimizer", ["sgd", "adam"])
++def test_fit_one_call_equals_epoch_calls(optimizer):
++    X, y = _data()
++    whole = _fit(optimizer, X, y)
++    with _without("x_cnn_fit_d") as hidden:
++        if not hidden:
++            pytest.skip("this binding has no x_cnn_fit_d")
++        epochs = _fit(optimizer, X, y)
++    assert np.asarray(whole.loss_curve_).tobytes() == np.asarray(epochs.loss_curve_).tobytes()
++    assert np.asarray(whole.losses_).tobytes() == np.asarray(epochs.losses_).tobytes()
++    assert _weight_bytes(whole) == _weight_bytes(epochs)
++
++
++@pytest.mark.parametrize("rows", [1, 150, 2048 + 37])
++def test_predict_one_call_equals_chunk_calls(rows):
++    X, y = _data()
++    model = _fit("sgd", X, y)
++    Q, _ = _data(rows)
++    proba = model.predict_proba(Q)
++    labels = model.predict(Q)
++    with _without("x_cnn_predict_r") as hidden:
++        if not hidden:
++            pytest.skip("this binding has no x_cnn_predict_r")
++        proba_chunks = model.predict_proba(Q)
++        labels_chunks = model.predict(Q)
++    assert proba.tobytes() == proba_chunks.tobytes()
++    assert np.array_equal(labels, labels_chunks)
++
++
++def test_admission_record_follows_field_changes():
++    X, y = _data()
++    model = _fit("sgd", X, y)
++    first = model.predict_proba(X)
++    again = model.predict_proba(X)          # a stamped admission hit
++    assert first.tobytes() == again.tobytes()
++    model.layers_ = "not a layer list"      # a field write bumps the generation: full admission refuses it
++    with pytest.raises(TypeError):
++        model.predict_proba(X)
++
++
++def test_native_shape_rules_match_the_layers():
++    """Conv / pool output shapes come from the native shape rules (no
++    binding crossing); the shapes and the refusal are unchanged."""
++    from mojolearn import _expansion_cnn as E
++    x = np.zeros((2, 3, 7, 9), np.float32)
++    conv = E.Conv2d(3, 5, kernel_size=3, stride=2, padding=1, dilation=1)
++    assert conv.forward(x).shape == (2, 5, 4, 5)
++    pool = E.MaxPool2d(2, ceil_mode=True)
++    assert pool.forward(x).shape == (2, 3, 4, 5)
++    big = E.Conv2d(3, 5, kernel_size=11)
++    with pytest.raises(Exception, match="does not fit"):
++        big.forward(x)
+diff --git a/tools/py_misc/cnn_epoch.py b/tools/py_misc/cnn_epoch.py
+new file mode 100644
+index 0000000000..8771e48b62
+--- /dev/null
++++ b/tools/py_misc/cnn_epoch.py
+@@ -0,0 +1,78 @@
++"""lane/py-misc: CNNClassifier.fit, the Python step loop (before) against
++x_cnn_fit_epoch_r (after), in ONE process on one column.
++
++PYMISC-DIGEST lines: sha256 of losses_, loss_curve_, every trained array,
++the optimizer buffers and predict_proba, per config and arm; PYMISC-SAME
++says whether the two arms' digests are equal. PYMISC-TIME lines: median
++fit wall per arm on the timing shape.
++usage: python cnn_epoch.py <repo root> <timing rows> [reps]"""
++import hashlib
++import statistics
++import sys
++import time
++
++import numpy as np
++
++sys.path.insert(0, sys.argv[1] + "/python")
++import mojolearn as ml  # noqa: E402
++from mojolearn import _expansion_cnn as xc  # noqa: E402
++
++rows = int(sys.argv[2])
++reps = int(sys.argv[3]) if len(sys.argv) > 3 else 3
++b = ml.CNNClassifier(input_shape=(1, 4, 4))._binding()
++print(f"PYMISC-COLUMN vendor={b.x_cnn_vendor()} has_epoch={hasattr(b, 'x_cnn_fit_epoch_r')}", flush=True)
++
++
++def digest(m, x):
++    h = hashlib.sha256()
++    h.update(np.asarray(m.losses_, np.float64).tobytes())
++    h.update(np.asarray(m.loss_curve_, np.float64).tobytes())
++    for a in m.weights() + list(m._bufs):
++        h.update(np.ascontiguousarray(a).tobytes())
++    h.update(np.ascontiguousarray(m.predict_proba(x)).tobytes())
++    return h.hexdigest()[:16]
++
++
++def fit(arm, x, y, **kw):
++    xc._EPOCH_ENTRY = arm == "epoch"
++    return ml.CNNClassifier(**kw).fit(x, y)
++
++
++rng = np.random.default_rng(0)
++x = rng.standard_normal((300, 3 * 8 * 8)).astype(np.float32)
++y = rng.integers(0, 4, 300)
++base = dict(input_shape=(3, 8, 8), random_state=3)
++configs = dict(
++    sgd=dict(conv_channels=(4,), batch_size=32, max_iter=2, momentum=0.9, weight_decay=1e-4),
++    sgd2blocks=dict(conv_channels=(4, 6), batch_size=64, max_iter=2),
++    nesterov=dict(conv_channels=(4,), batch_size=50, max_iter=2, nesterov=True),
++    dampening=dict(conv_channels=(4,), batch_size=33, max_iter=2, dampening=0.3),
++    adam=dict(conv_channels=(4, 5), batch_size=40, max_iter=3, optimizer="adam", weight_decay=1e-3),
++    adamw=dict(conv_channels=(4,), batch_size=64, max_iter=2, optimizer="adamw", betas=(0.8, 0.99)),
++    bigbatch=dict(conv_channels=(4,), batch_size=512, max_iter=2),
++    noshuffle=dict(conv_channels=(4,), batch_size=32, max_iter=1, shuffle=False),
++    nopool=dict(conv_channels=(3,), batch_size=32, max_iter=1, pool_size=16),
++    noconv=dict(conv_channels=(), batch_size=32, max_iter=2),
++)
++bad = 0
++for name, kw in configs.items():
++    d = {arm: digest(fit(arm, x, y, **base, **kw), x) for arm in ("python", "epoch")}
++    same = d["python"] == d["epoch"]
++    bad += not same
++    print(f"PYMISC-DIGEST cnn {name} python {d['python']} epoch {d['epoch']} {'SAME' if same else 'DIFFERENT'}",
++          flush=True)
++print(f"PYMISC-SAME cnn {'ALL SAME' if not bad else f'{bad} DIFFERENT'}", flush=True)
++
++# timing: MNIST-shaped rows, batch 32 (the audit's shape), one epoch
++xt = rng.standard_normal((rows, 28 * 28)).astype(np.float32)
++yt = rng.integers(0, 10, rows)
++for arm in ("python", "epoch"):
++    ts = []
++    for _ in range(reps):
++        s = time.perf_counter()
++        m = fit(arm, xt, yt, input_shape=(1, 28, 28), conv_channels=(8,), batch_size=32, max_iter=1, random_state=0)
++        ts.append(time.perf_counter() - s)
++    print(f"PYMISC-TIME cnn fit rows={rows} batch=32 epochs=1 arm={arm} median_s={statistics.median(ts):.3f} "
++          f"all={[round(t, 3) for t in ts]} digest={digest(m, xt[:256])}", flush=True)
++
++raise SystemExit(1 if bad else 0)
+diff --git a/tools/py_misc/cnn_job.sh b/tools/py_misc/cnn_job.sh
+new file mode 100755
+index 0000000000..32221d7a87
+--- /dev/null
++++ b/tools/py_misc/cnn_job.sh
+@@ -0,0 +1,53 @@
++#!/bin/bash
++# lane/py-misc: ONE light job for the CNN epoch entry on this box.
++# Builds x_cnn (GPU) and x_cnn_host when stale, then
++#  1. tools/py_misc/cnn_epoch.py on the GPU column and on the CPU host twin:
++#     Python step loop vs x_cnn_fit_epoch_r, digests + timing in one process;
++#  2. the identity lanes x-cnn-trainer,x-cnn-trainer-options, GPU and CPU
++#     arms, before (MOJOLEARN_XCNN_PY_STEPS=1) and after; before == after per
++#     column (identity_break --diff) and GPU == CPU after.
++# usage: cnn_job.sh <out dir> [gpu timing rows] [cpu timing rows]
++cd "$(dirname "$0")/../.."
++OUT=${1:?out}; GROWS=${2:-200000}; CROWS=${3:-20000}; mkdir -p "$OUT"
++export MOJOLEARN_BUILD_LOCK_HELD=1 MOJOLEARN_COMPILE_JOBS=${MOJOLEARN_COMPILE_JOBS:-4}
++PIXI=$(command -v pixi || echo ~/.pixi/bin/pixi)
++echo "$(date -u +%FT%TZ) $(hostname) $(git rev-parse --short HEAD 2>/dev/null) out $OUT"
++nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1
++lscpu 2>/dev/null | grep -E 'Model name|^CPU\(s\)'
++$PIXI install -e default > "$OUT/pixi_install.log" 2>&1 || { echo "PIXI INSTALL FAIL"; tail -5 "$OUT/pixi_install.log"; exit 1; }
++PY="$PIXI run -e default python -u"
++$PY - "$OUT" <<'PY' || { echo BUILD FAIL; exit 1; }
++import sys
++sys.path.insert(0, "tools")
++import algos_lane_check as alc
++out = sys.argv[1]
++alc.ensure_portable_math(out + "/build_portable_math.log")
++for b in ("_mojolearn_x_cnn", "_mojolearn_x_cnn_host"):
++    why = alc.stale(b)
++    print(b, "stale:", why, flush=True)
++    if why:
++        alc.build(b, out + "/build.log")
++PY
++HOST="$PWD/python/mojolearn/host"
++export PYTHONPATH="$PWD/python" MOJOLEARN_NUMERIC_MODE=identical OMP_NUM_THREADS=1
++echo "== cnn_epoch GPU"
++$PY tools/py_misc/cnn_epoch.py "$PWD" "$GROWS" 3 2>&1 | tee "$OUT/cnn_epoch_gpu.txt" | grep PYMISC
++echo "== cnn_epoch CPU"
++MOJOLEARN_VENDOR=cpu MOJOLEARN_HOST_DIR="$HOST" $PY tools/py_misc/cnn_epoch.py "$PWD" "$CROWS" 3 2>&1 \
++  | tee "$OUT/cnn_epoch_cpu.txt" | grep PYMISC
++LANES=x-cnn-trainer,x-cnn-trainer-options
++H="$PY tools/identity_break.py --lanes $LANES --repeats 1 --fail-on-refused"
++for arm in before after; do
++  if [ $arm = before ]; then export MOJOLEARN_XCNN_PY_STEPS=1; else unset MOJOLEARN_XCNN_PY_STEPS; fi
++  $H --json "$OUT/$arm.gpu.json" --require-backend cuda > "$OUT/$arm.gpu.log" 2>&1; echo "arm $arm gpu exit $?"
++  MOJOLEARN_VENDOR=cpu MOJOLEARN_HOST_DIR="$HOST" $H --json "$OUT/$arm.cpu.json" --require-cpu --require-backend cpu \
++    > "$OUT/$arm.cpu.log" 2>&1; echo "arm $arm cpu exit $?"
++done
++unset MOJOLEARN_XCNN_PY_STEPS
++for col in gpu cpu; do
++  $PY tools/identity_break.py --diff "$OUT/before.$col.json" "$OUT/after.$col.json" --lanes $LANES --require-columns 2 \
++    > "$OUT/diff_before_after_$col.txt" 2>&1; echo "DIFF before==after $col exit $?"; tail -4 "$OUT/diff_before_after_$col.txt"
++done
++$PY tools/identity_break.py --diff "$OUT/after.gpu.json" "$OUT/after.cpu.json" --lanes $LANES --require-columns 2 \
++  > "$OUT/diff_gpu_cpu_after.txt" 2>&1; echo "DIFF gpu==cpu after exit $?"; tail -4 "$OUT/diff_gpu_cpu_after.txt"
++echo "JOB END $(date -u +%FT%TZ)"
+diff --git a/x_cnn/checks/tape_check.mojo b/x_cnn/checks/tape_check.mojo
+new file mode 100644
+index 0000000000..405f3131fc
+--- /dev/null
++++ b/x_cnn/checks/tape_check.mojo
+@@ -0,0 +1,301 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""CNNClassifier's tape backward (autograd/rules_cnn.mojo) against stored digests, word for word.
++
++For each case (two conv blocks + head, N 8, 1x28x28, k 10; block 2 with and
++without its max pool; the forward's saved cols and conv output kept or
++recomputed; SGD with momentum and Adam), runs three trainer steps on fresh
++resident arrays through the tape (cnn_backward_autograd, fit_epoch_r/d's
++backward) and requires every step's loss, every gradient word of the last
++step, every updated parameter word and every optimizer buffer word to equal
++the stored digests in x_cnn/checks/tape_check_digests.tsv (recorded when the
++tape matched the deleted hand walk word for word on Metal, NVIDIA and AMD).
++Prints one FNV-1a digest per tensor so columns can be compared across vendors.
++
++    mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . x_cnn/checks/tape_check.mojo
++
++Run from the repo root (the digest file path is relative). A fixture whose
++gradients are all zero, or whose parameters do not move, is refused as
++VACUOUS. There is no float64 oracle for this trainer step."""
++# TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
++# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch (the hand arm and the tape-vs-hand compare)
++from std.memory import bitcast
++from x_cnn.ops import FP, IP, conv_params, pool_params, AH_ROW, adam_hyper_base, NN14_BOUNDED_IM2COL
++from x_cnn.ops import CP_N, CP_C, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW
++from x_cnn.device import (
++    res_alloc, res_free, res_upload, res_download, conv_block_forward_into, linear_forward_into,
++    softmax_xent_res_loss, opt_many_resident_h, adam_hyper_resident,
++)
++from autograd.rules_cnn import cnn_backward_autograd, conv_block_out_count
++
++comptime N = 8
++comptime C0 = 1
++comptime H0 = 28
++comptime K = 10
++comptime OC0 = 4
++comptime OC1 = 8
++comptime STEPS = 3
++comptime DIGESTS = "x_cnn/checks/tape_check_digests.tsv"
++
++
++@always_inline
++def _at(a: Int) -> FP:
++    return FP(unsafe_from_address=a)
++
++
++@always_inline
++def _at_i(a: Int) -> IP:
++    return IP(unsafe_from_address=a)
++
++
++def digest(values: List[Float32]) -> UInt64:
++    var hash = UInt64(1469598103934665603)
++    for i in range(len(values)):
++        hash = (hash ^ UInt64(bitcast[DType.uint32](values[i]))) * UInt64(1099511628211)
++    return hash
++
++
++def _down(addr: Int, n: Int) raises -> List[Float32]:
++    var out = List[Float32](length=n, fill=Float32(0))
++    res_download(addr, out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n)
++    return out^
++
++
++def _up(addr: Int, mut values: List[Float32]) raises:
++    res_upload(addr, values.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), len(values))
++
++
++def _fixture(n: Int, salt: Int, scale: Float32) -> List[Float32]:
++    var out = List[Float32](capacity=n)
++    for i in range(n):
++        out.append(Float32((i * 17 + salt * 13) % 101 - 50) / scale)
++    return out^
++
++
++def _conv_raw(n: Int, c: Int, h: Int, oc: Int) -> List[Int]:
++    # Conv2d._params: 3x3, stride 1, pad 1, dilation 1, OH/OW filled, bias, no reversal
++    return [n, c, h, h, oc, 3, 3, 1, 1, 1, 1, 1, 1, 0, 0, 1, 0]
++
++
++def _pool_raw(n: Int, c: Int, h: Int) -> List[Int]:
++    # MaxPool2d(2)._params: 2x2, stride 2, no pad, dilation 1, floor mode
++    return [n, c, h, h, 2, 2, 2, 2, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0]
++
++
++struct Result(Movable):
++    var names: List[String]
++    var tensors: List[List[Float32]]
++    var losses: List[Float32]
++
++    def __init__(out self):
++        self.names = List[String]()
++        self.tensors = List[List[Float32]]()
++        self.losses = List[Float32]()
++
++    def add(mut self, name: String, var values: List[Float32]):
++        self.names.append(name)
++        self.tensors.append(values^)
++
++
++def run(pool2: Bool, save: Bool, adam: Bool) raises -> Result:
++    """Three steps on fresh resident arrays through the tape."""
++    # ---- the plan: block 0 conv 1->4 + pool (28 -> 14), block 1 conv 4->8 (+ pool 14 -> 7)
++    var cs = List[List[Int32]]()
++    var ps = List[List[Int32]]()
++    var pools = List[Bool]()
++    cs.append(conv_params(_conv_raw(N, C0, H0, OC0)))
++    ps.append(pool_params(_pool_raw(N, OC0, H0)))
++    pools.append(True)
++    var h1 = H0 // 2
++    cs.append(conv_params(_conv_raw(N, OC0, h1, OC1)))
++    ps.append(pool_params(_pool_raw(N, OC1, h1)) if pool2 else List[Int32]())
++    pools.append(pool2)
++    var nb = 2
++    var flat = conv_block_out_count(cs[1], ps[1], pools[1]) // N
++    # ---- the arrays, as CNNClassifier._resident lays them out
++    var nx = N * C0 * H0 * H0
++    var a: List[Int] = [res_alloc(nx), res_alloc(N), res_alloc(N * K), res_alloc(N * K), res_alloc(N * K), 0]
++    var bh = List[List[Int]]()
++    var sizes = List[Int]()
++    var pw = List[Int]()
++    var pg = List[Int]()
++    var pb = List[Int]()
++    for j in range(nb):
++        var oc = Int(cs[j][CP_OC])
++        var ckk = Int(cs[j][CP_C]) * Int(cs[j][CP_KH]) * Int(cs[j][CP_KW])
++        var rows = Int(cs[j][CP_N]) * Int(cs[j][CP_OH]) * Int(cs[j][CP_OW])
++        var no = conv_block_out_count(cs[j], ps[j], pools[j])
++        var w = res_alloc(oc * ckk)
++        var b = res_alloc(oc)
++        var gw = res_alloc(oc * ckk)
++        var gb = res_alloc(oc)
++        var cols = (res_alloc(1 if NN14_BOUNDED_IM2COL else rows * ckk)) if save else 0
++        var yconv = res_alloc(rows * oc) if save else 0
++        bh.append([w, b, gw, gb, res_alloc(no), res_alloc(no), res_alloc(no), cols, yconv])
++        var wv = _fixture(oc * ckk, 2 * j, Float32(500.0))
++        var bv = _fixture(oc, 2 * j + 1, Float32(5000.0))
++        _up(w, wv)
++        _up(b, bv)
++        sizes.append(oc * ckk)
++        sizes.append(oc)
++        pw.append(w)
++        pw.append(b)
++        pg.append(gw)
++        pg.append(gb)
++    var head: List[Int] = [res_alloc(K * flat), res_alloc(K), res_alloc(K * flat), res_alloc(K)]
++    var hwv = _fixture(K * flat, 7, Float32(5000.0))
++    var hbv = _fixture(K, 8, Float32(5000.0))
++    _up(head[0], hwv)
++    _up(head[1], hbv)
++    sizes.append(K * flat)
++    sizes.append(K)
++    pw.append(head[0])
++    pw.append(head[1])
++    pg.append(head[2])
++    pg.append(head[3])
++    for e in range(len(sizes)):
++        pb.append(res_alloc(2 * sizes[e]))  # Adam's [m | v]; SGD reads the first half
++    # ---- the data: the same rows every step (the gather is not under test)
++    var xv = List[Float32](capacity=nx)
++    for i in range(nx):
++        xv.append(Float32((i * 37 + 11) % 97) / Float32(97.0))
++    _up(a[0], xv)
++    var lab = List[Int32](capacity=N)
++    for i in range(N):
++        lab.append(Int32((i * 3 + 1) % K))
++    res_upload(a[1], FP(unsafe_from_address=Int(lab.unsafe_ptr())), N)
++    # ---- the hyper rows, as fit_epoch_d_binding builds them
++    var hbuf = res_alloc(STEPS * AH_ROW if adam else 12)
++    if adam:
++        adam_hyper_resident(adam_hyper_base(1e-3, 0.9, 0.999, 1e-8, 0.0, 0.0), 1, STEPS, hbuf)
++    else:
++        var sg: List[Float32] = [
++            Float32(0.05), Float32(0.9), Float32(0), Float32(0), Float32(0), Float32(1),
++            Float32(0.05), Float32(0.9), Float32(0), Float32(0), Float32(0), Float32(0),
++        ]
++        _up(hbuf, sg)
++    var lbuf = res_alloc(STEPS)
++    var tw = res_alloc(2)
++    var one: List[Float32] = [Float32(1), Float32(0)]
++    _up(tw, one)
++    var m = N
++    for st in range(STEPS):
++        var src = a[0]
++        for j in range(nb):
++            conv_block_forward_into[True](
++                _at(src), _at(bh[j][0]), _at(bh[j][1]), cs[j], ps[j], pools[j], _at(bh[j][4]),
++                _at_i(bh[j][5]), bh[j][7], bh[j][8],
++            )
++            src = bh[j][4]
++        linear_forward_into[True](_at(src), _at(head[0]), _at(head[1]), m, flat, K, _at(a[2]))
++        softmax_xent_res_loss(_at(a[2]), _at_i(a[1]), m, K, _at(a[3]), _at(a[4]), lbuf, st)
++        cnn_backward_autograd(bh, head, a, cs, ps, pools, m, flat, K, tw, tw + 4)
++        if adam:
++            opt_many_resident_h[True](pw, pg, pb, sizes, hbuf + 4 * AH_ROW * st)
++        else:
++            opt_many_resident_h[False](pw, pg, pb, sizes, hbuf + (0 if st == 0 else 24))
++    # ---- everything the step writes
++    var r = Result()
++    r.losses = _down(lbuf, STEPS)
++    var pnames: List[String] = ["block0.w", "block0.b", "block1.w", "block1.b", "head.w", "head.b"]
++    for e in range(len(sizes)):
++        r.add(pnames[e] + " grad", _down(pg[e], sizes[e]))
++        r.add(pnames[e] + " param", _down(pw[e], sizes[e]))
++        r.add(pnames[e] + " opt", _down(pb[e], 2 * sizes[e]))
++    r.add("block0.gout", _down(bh[0][6], conv_block_out_count(cs[0], ps[0], pools[0])))
++    r.add("block1.gout", _down(bh[1][6], conv_block_out_count(cs[1], ps[1], pools[1])))
++    r.add("glog", _down(a[3], N * K))
++    # ---- vacuity: the step must move the parameters and reach every gradient
++    for e in range(len(sizes)):
++        var g = _down(pg[e], sizes[e])
++        var nz = 0
++        for i in range(len(g)):
++            if (bitcast[DType.uint32](g[i]) & UInt32(0x7FFFFFFF)) != UInt32(0):
++                nz += 1
++        if nz == 0:
++            raise Error("VACUOUS cnn tape check: gradient " + pnames[e] + " is all zero")
++    var w0 = _fixture(sizes[0], 0, Float32(500.0))
++    var w1 = _down(pw[0], sizes[0])
++    var moved = 0
++    for i in range(sizes[0]):
++        if bitcast[DType.uint32](w0[i]) != bitcast[DType.uint32](w1[i]):
++            moved += 1
++    if moved == 0:
++        raise Error("VACUOUS cnn tape check: the steps did not move block0.w")
++    # ---- free
++    for j in range(nb):
++        for e in range(4, 9):  # out, idx, gout, cols, conv out (w, b, gw, gb below)
++            if bh[j][e] != 0:
++                res_free(bh[j][e])
++    for e in range(len(sizes)):
++        res_free(pw[e])
++        res_free(pg[e])
++        res_free(pb[e])
++    for e in range(5):
++        res_free(a[e])
++    res_free(hbuf)
++    res_free(lbuf)
++    res_free(tw)
++    _ = lab^
++    _ = xv^
++    _ = one^
++    return r^
++
++
++def stored_rows() raises -> List[String]:
++    """The stored digest rows, comments and blank lines skipped."""
++    var f = open(DIGESTS, "r")
++    var text = f.read()
++    f.close()
++    var rows = List[String]()
++    # split on "\n" only: this Mojo's String.splitlines() also breaks a row at its tabs (seen 2026-10-19, every row DIFFER).
++    for line in text.split("\n"):
++        var r = String(String(line).strip())
++        if r.byte_length() > 0 and not r.startswith("#"):
++            rows.append(r^)
++    if len(rows) == 0:
++        raise Error("VACUOUS cnn tape check: no stored digests in " + String(DIGESTS))
++    return rows^
++
++
++def compare(tag: String, tape: Result, stored: List[String], mut pos: Int) -> Int:
++    """Each printed row against the stored row at `pos`; a missing or different row counts."""
++    var bad = 0
++    for s in range(len(tape.losses)):
++        var row = tag + "\tloss step " + String(s) + "\t1\t" + String(tape.losses[s])
++        var same = pos < len(stored) and stored[pos] == row
++        print("CNN_TAPE", tag, "loss step", s, "tape", tape.losses[s], "SAME" if same else "DIFFER")
++        if not same:
++            bad += 1
++        pos += 1
++    for t in range(len(tape.tensors)):
++        ref p = tape.tensors[t]
++        var d = digest(p)
++        var row = tag + "\t" + tape.names[t] + "\t" + String(len(p)) + "\t" + String(d)
++        var same = pos < len(stored) and stored[pos] == row
++        print("CNN_TAPE", tag, tape.names[t], len(p), "tape", d, "SAME" if same else "DIFFER")
++        if not same:
++            bad += 1
++        pos += 1
++    return bad
++
++
++def run_case(tag: String, pool2: Bool, save: Bool, adam: Bool, stored: List[String], mut pos: Int) raises -> Int:
++    var tape = run(pool2, save, adam)
++    return compare(tag, tape, stored, pos)
++
++
++def main() raises:
++    var stored = stored_rows()
++    var pos = 0
++    var bad = 0
++    bad += run_case("sgd.pool.saved", True, True, False, stored, pos)
++    bad += run_case("adam.pool.saved", True, True, True, stored, pos)
++    bad += run_case("sgd.nopool.recompute", False, False, False, stored, pos)
++    bad += run_case("adam.nopool.recompute", False, False, True, stored, pos)
++    if pos != len(stored):
++        bad += abs(len(stored) - pos)
++        print("CNN_TAPE stored rows", len(stored), "printed rows", pos, "DIFFER")
++    if bad != 0:
++        raise Error("CNN_TAPE_CHECK_FAIL " + String(bad) + " rows differ from the stored digests")
++    print("CNN_TAPE_CHECK_PASS every loss, gradient, parameter and optimizer word equals the stored digests")
+diff --git a/x_cnn/checks/tape_check_digests.tsv b/x_cnn/checks/tape_check_digests.tsv
+new file mode 100644
+index 0000000000..dd1d59d869
+--- /dev/null
++++ b/x_cnn/checks/tape_check_digests.tsv
+@@ -0,0 +1,100 @@
++# x_cnn/checks/tape_check.mojo stored digests: one row per printed value, in print order.
++# case<TAB>name<TAB>words<TAB>value (loss rows: the printed float32; tensor rows: FNV-1a over the float32 words).
++# Recorded from the tape/hand word-for-word runs (every row SAME, tape == hand) on integration fda883af2:
++# Metal compile-22, NVIDIA L40S and AMD MI325X p6-01 and final-02; the five runs print these 96 rows identically.
++sgd.pool.saved	loss step 0	1	2.3037658
++sgd.pool.saved	loss step 1	1	2.3024082
++sgd.pool.saved	loss step 2	1	2.2998545
++sgd.pool.saved	block0.w grad	36	8104314183148238768
++sgd.pool.saved	block0.w param	36	3293484983923039772
++sgd.pool.saved	block0.w opt	72	8039907601755017941
++sgd.pool.saved	block0.b grad	4	13265473500782557063
++sgd.pool.saved	block0.b param	4	13845545538268743125
++sgd.pool.saved	block0.b opt	8	11524473895547991568
++sgd.pool.saved	block1.w grad	288	8220372124592903142
++sgd.pool.saved	block1.w param	288	4270244011106451977
++sgd.pool.saved	block1.w opt	576	7671249351704167528
++sgd.pool.saved	block1.b grad	8	18061822496569614588
++sgd.pool.saved	block1.b param	8	9982639272968139221
++sgd.pool.saved	block1.b opt	16	620720436370172553
++sgd.pool.saved	head.w grad	3920	7810355158328773345
++sgd.pool.saved	head.w param	3920	6511303935257813828
++sgd.pool.saved	head.w opt	7840	12413927351179878746
++sgd.pool.saved	head.b grad	10	12807471776144090497
++sgd.pool.saved	head.b param	10	5291013969643945699
++sgd.pool.saved	head.b opt	20	1283346789918746007
++sgd.pool.saved	block0.gout	6272	11911152793884618261
++sgd.pool.saved	block1.gout	3136	7158447693498068758
++sgd.pool.saved	glog	80	11230793670407808225
++adam.pool.saved	loss step 0	1	2.3037658
++adam.pool.saved	loss step 1	1	2.3019517
++adam.pool.saved	loss step 2	1	2.2998872
++adam.pool.saved	block0.w grad	36	4352378144459286162
++adam.pool.saved	block0.w param	36	15021576751651866798
++adam.pool.saved	block0.w opt	72	1902364243776733380
++adam.pool.saved	block0.b grad	4	6379120879008425299
++adam.pool.saved	block0.b param	4	6163420504083946692
++adam.pool.saved	block0.b opt	8	7083335176704643683
++adam.pool.saved	block1.w grad	288	17333622151233373126
++adam.pool.saved	block1.w param	288	11964672758139883701
++adam.pool.saved	block1.w opt	576	15847886399420962401
++adam.pool.saved	block1.b grad	8	14444240954410019522
++adam.pool.saved	block1.b param	8	8785354851484112576
++adam.pool.saved	block1.b opt	16	6145827171061772504
++adam.pool.saved	head.w grad	3920	2387869440843611754
++adam.pool.saved	head.w param	3920	9570122623033546313
++adam.pool.saved	head.w opt	7840	11031145568465186159
++adam.pool.saved	head.b grad	10	4062646138839671941
++adam.pool.saved	head.b param	10	11030459469399963396
++adam.pool.saved	head.b opt	20	5173011295127271196
++adam.pool.saved	block0.gout	6272	17810196174848863762
++adam.pool.saved	block1.gout	3136	17285092552688314039
++adam.pool.saved	glog	80	17287740291219813343
++sgd.nopool.recompute	loss step 0	1	2.303248
++sgd.nopool.recompute	loss step 1	1	2.3017132
++sgd.nopool.recompute	loss step 2	1	2.2988076
++sgd.nopool.recompute	block0.w grad	36	11736279240771176045
++sgd.nopool.recompute	block0.w param	36	15039473985768783768
++sgd.nopool.recompute	block0.w opt	72	14870130459760385765
++sgd.nopool.recompute	block0.b grad	4	1541152392954409566
++sgd.nopool.recompute	block0.b param	4	840576076622758438
++sgd.nopool.recompute	block0.b opt	8	8096700972098478058
++sgd.nopool.recompute	block1.w grad	288	3028280244625366156
++sgd.nopool.recompute	block1.w param	288	17109016231903897742
++sgd.nopool.recompute	block1.w opt	576	16825584715197288556
++sgd.nopool.recompute	block1.b grad	8	1017579556162279339
++sgd.nopool.recompute	block1.b param	8	13184700540946621108
++sgd.nopool.recompute	block1.b opt	16	6714139828553958667
++sgd.nopool.recompute	head.w grad	15680	7734023717380614247
++sgd.nopool.recompute	head.w param	15680	14669558499535670768
++sgd.nopool.recompute	head.w opt	31360	18015060039941298972
++sgd.nopool.recompute	head.b grad	10	2550040657711805651
++sgd.nopool.recompute	head.b param	10	8914210887965801087
++sgd.nopool.recompute	head.b opt	20	11618809510211127379
++sgd.nopool.recompute	block0.gout	6272	14433602142267468309
++sgd.nopool.recompute	block1.gout	12544	2700283977056759188
++sgd.nopool.recompute	glog	80	6817992723065583060
++adam.nopool.recompute	loss step 0	1	2.303248
++adam.nopool.recompute	loss step 1	1	2.2983856
++adam.nopool.recompute	loss step 2	1	2.2927203
++adam.nopool.recompute	block0.w grad	36	4039022429560834445
++adam.nopool.recompute	block0.w param	36	15811148188894622846
++adam.nopool.recompute	block0.w opt	72	12473436754436713657
++adam.nopool.recompute	block0.b grad	4	13289984823684805063
++adam.nopool.recompute	block0.b param	4	11892549913289052004
++adam.nopool.recompute	block0.b opt	8	6610510187501552558
++adam.nopool.recompute	block1.w grad	288	9875086403135070455
++adam.nopool.recompute	block1.w param	288	15589757169018926170
++adam.nopool.recompute	block1.w opt	576	17201491161420231236
++adam.nopool.recompute	block1.b grad	8	5424989598921750812
++adam.nopool.recompute	block1.b param	8	2484622654167953517
++adam.nopool.recompute	block1.b opt	16	13364871831874891820
++adam.nopool.recompute	head.w grad	15680	15479027408185979560
++adam.nopool.recompute	head.w param	15680	14996520891344104481
++adam.nopool.recompute	head.w opt	31360	1695108762155305813
++adam.nopool.recompute	head.b grad	10	17639555964188402959
++adam.nopool.recompute	head.b param	10	3682804060131384370
++adam.nopool.recompute	head.b opt	20	1333786532265078510
++adam.nopool.recompute	block0.gout	6272	18074556102428034895
++adam.nopool.recompute	block1.gout	12544	13253452362571238158
++adam.nopool.recompute	glog	80	18263833079698021201
+diff --git a/x_cnn/device.mojo b/x_cnn/device.mojo
+index ed108a023b..882c04c101 100644
+--- a/x_cnn/device.mojo
++++ b/x_cnn/device.mojo
+@@ -77,8 +77,11 @@ from x_cnn.ops import IDN_GAP_BLOCK_FOLD, gap_fold_blocks, adapt_avg_blk_at, ada
+ from x_cnn.ops import (
+     IDN_BN_GRID_STATS, BN_GS_LANES, bn_gs_chunks, bn_gs_lane, bn_gs_mean_at, bn_gs_var_at, bn_gs_red_fin_at,
+ )
+-# lane fam2-neural (2026-10-04): the device loss fold
+-from x_cnn.ops import IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan
++# lane fam2-neural (2026-10-04): the device loss fold, epoch order and Adam step scalars
++from x_cnn.ops import (
++    IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan, EP_LEN, epoch_rows_at, epoch_row_val, epoch_rows_prm,
++    AH_ROW, adam_hyper_at,
++)
+ 
+ comptime TPB = 256
+ # Neural 2026-10-06 source-only experiment controls. Every new control is
+@@ -102,8 +105,7 @@ comptime NI12_IMPLICIT_CONV = _NI_CNN_ENABLED and not is_defined["MOJOLEARN_NI12
+ comptime NI14_BOUNDED_COL2IM = _NI_CNN_ENABLED and NI14_COL2IM == NI14_COL2IM_BOUNDED  # arm 1 of MOJOLEARN_NI14_COL2IM (x_cnn/neural_col2im.mojo)
+ comptime NI15_BIAS_NO_ONES = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI15_BIAS_NO_ONES"]()
+ comptime NI16_CONV_RELU_FUSED = _NI_CNN_ENABLED and IDN_CNN_CONV_RELU_ARM == 2  # arm 2 of MOJOLEARN_IDN_CNN_CONV_RELU (x_cnn/ops.mojo)
+-# TOMBSTONE: MOJOLEARN_NI18_FUSED_EPOCH_GATHER (removed with its route, the classifier device epoch) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+-# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
++comptime NI18_FUSED_EPOCH_GATHER = _NI_CNN_ENABLED and is_defined["MOJOLEARN_NI18_FUSED_EPOCH_GATHER"]()
+ # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
+ # Tried: IDN_CNN_BN_FUSE, the BasicBlock's BatchNorm epilogues fused (x_cnn_idn_flags bit 6); resnet-block NV 0.94x / AMD 1.02x, conv2d NV 1.14x / AMD 1.03x: noise / slower.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
+@@ -2531,8 +2533,207 @@ def res_gather_pair(
+     _ = ctx^
+ 
+ 
+-# TOMBSTONE: the classifier's device epoch pieces (epoch_rows_download, res_gather_pair_perm and its gather kernel, adam_hyper_resident, adam_hyper_download, opt_many_resident_h, softmax_xent_res_loss) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+-# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
++# ------------------------------------------------ lane fam2-neural: the device epoch
++# IDN_CNN_EPOCH_DEV (x_cnn/ops.mojo): the pieces `x_cnn_fit_epoch_d` runs so
++# a fit epoch has no host arithmetic and one download (its losses).
++
++
++def epoch_rows_download(dst: IP, n: Int, pos: Int, count: Int, shuffle: Bool, key: UInt64) raises:
++    """Host dst[0:count] = positions pos .. pos + count - 1 of the epoch's
++    order over n rows (`epoch_rows_at` on the device, then down): for the
++    trainers whose batch is gathered from host memory."""
++    if count <= 0:
++        return
++    var ctx = cnn_ctx()
++    var prm = epoch_rows_prm(n, pos, shuffle, key)
++    var dp = put_prm(ctx, 1, prm)
++    var out = ws_i(ctx, 0, count)
++    var none = ws(ctx, 2, 1)
++    launch[epoch_rows_at](ctx, fp(none), fp(none), fp(none), fp(none), ip(out), ip(dp), count)
++    down_i(ctx, out, dst, count)
++    ctx.synchronize()
++    _ = prm^
++    _ = dp^
++    _ = out^
++    _ = none^
++    _ = ctx^
++
++
++def _ni18_epoch_gather_kernel(src: FP, dst: FP, src2: FP, dst2: FP, p: IP):
++    """One block per sampled row: compute its key once, copy both buffers.
++
++    Resource schedule only: threads stride over row bytes. The permutation
++    is the same shared integer function as the host and reference device
++    paths, and all tensors are copied as Int32 words (including NaN bits).
++    """
++    var row_index = Int(block_idx.x)
++    var tid = Int(thread_idx.x)
++    var selected = stack_allocation[1, Int32, address_space=AddressSpace.SHARED]()
++    if tid == 0:
++        selected[0] = epoch_row_val(row_index, p)
++    barrier()
++    var chosen = Int(selected[0])
++    var row = Int(p.unsafe_load(EP_LEN))
++    var row2 = Int(p.unsafe_load(EP_LEN + 1))
++    var i = tid
++    while i < row:
++        dst.bitcast[Int32]().unsafe_store(row_index * row + i, src.bitcast[Int32]().unsafe_load(chosen * row + i))
++        i += TPB
++    i = tid
++    while i < row2:
++        dst2.bitcast[Int32]().unsafe_store(row_index * row2 + i, src2.bitcast[Int32]().unsafe_load(chosen * row2 + i))
++        i += TPB
++
++
++def res_gather_pair_perm(
++    dst_addr: Int, src_addr: Int, row: Int, dst2_addr: Int, src2_addr: Int, row2: Int, n: Int, pos: Int,
++    m: Int, shuffle: Bool, key: UInt64,
++) raises:
++    """`res_gather_pair` with the step's rows computed on the device
++    (`epoch_rows_at`, positions pos .. pos + m - 1 of the epoch over n rows)
++    instead of uploaded: nothing crosses the bus."""
++    if m <= 0:
++        return
++    var ctx = cnn_ctx()
++    var prm = epoch_rows_prm(n, pos, shuffle, key)
++    prm.append(Int32(row))
++    prm.append(Int32(row2))
++    var dp = put_prm(ctx, 1, prm)
++    var pp = ip(dp)
++    comptime if NI18_FUSED_EPOCH_GATHER:
++        ctx.enqueue_function[_ni18_epoch_gather_kernel](
++            FP(unsafe_from_address=src_addr), FP(unsafe_from_address=dst_addr),
++            FP(unsafe_from_address=src2_addr), FP(unsafe_from_address=dst2_addr), pp,
++            grid_dim=(m, 1, 1), block_dim=(TPB, 1, 1),
++        )
++        ctx.synchronize()
++        _ = prm^
++        _ = dp^
++        _ = ctx^
++        return
++    var di = ws_i(ctx, 0, m)
++    launch[epoch_rows_at](
++        ctx, FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr),
++        FP(unsafe_from_address=dst_addr), ip(di), pp, m,
++    )
++    if row > 0:
++        launch[gather_rows_at](
++            ctx, FP(unsafe_from_address=src_addr), FP(unsafe_from_address=dst_addr),
++            FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr), ip(di), pp + EP_LEN, m * row,
++        )
++    if row2 > 0:
++        launch[gather_rows_at](
++            ctx, FP(unsafe_from_address=src2_addr), FP(unsafe_from_address=dst2_addr),
++            FP(unsafe_from_address=dst2_addr), FP(unsafe_from_address=dst2_addr), ip(di), pp + EP_LEN + 1,
++            m * row2,
++        )
++    ctx.synchronize()
++    _ = prm^
++    _ = di^
++    _ = dp^
++    _ = ctx^
++
++
++def adam_hyper_resident(base: List[Float32], step0: Int, nsteps: Int, dst_addr: Int) raises:
++    """Resident dst[9 t : 9 t + 9] = Adam's hyper block of 1-based step
++    step0 + t for t < nsteps (`adam_hyper_at`, one thread per step)."""
++    if nsteps <= 0:
++        return
++    var ctx = cnn_ctx()
++    var db = put_hyper(ctx, 3, base)
++    var prm: List[Int32] = [Int32(step0)]
++    var dp = put_prm(ctx, 4, prm)
++    var dst = FP(unsafe_from_address=dst_addr)
++    launch[adam_hyper_at](ctx, fp(db), dst, dst, dst, ip(dp), ip(dp), nsteps)
++    ctx.synchronize()
++    _ = prm^
++    _ = db^
++    _ = dp^
++    _ = ctx^
++
++
++def adam_hyper_download(base: List[Float32], step0: Int, nsteps: Int, dst: FP) raises:
++    """Host dst[0 : 9 nsteps] = the same blocks (for the per-step entries,
++    which take the block from the caller)."""
++    if nsteps <= 0:
++        return
++    var ctx = cnn_ctx()
++    var db = put_hyper(ctx, 3, base)
++    var prm: List[Int32] = [Int32(step0)]
++    var dp = put_prm(ctx, 4, prm)
++    var out = ws(ctx, 5, nsteps * AH_ROW)
++    launch[adam_hyper_at](ctx, fp(db), fp(out), fp(out), fp(out), ip(dp), ip(dp), nsteps)
++    down(ctx, out, dst, nsteps * AH_ROW)
++    ctx.synchronize()
++    _ = prm^
++    _ = db^
++    _ = dp^
++    _ = out^
++    _ = ctx^
++
++
++def opt_many_resident_h[adam: Bool](
++    ws_: List[Int], gs: List[Int], bs: List[Int], ns: List[Int], hyper_addr: Int
++) raises:
++    """`opt_many_resident` with the step's hyper block already on the device
++    at `hyper_addr` (a row of the epoch's resident block): no upload."""
++    var ctx = cnn_ctx()
++    var prm = List[Int32]()
++    for j in range(len(ns)):  # small-loop(ns: parameter tensors of the model): per-launch length list for the device
++        prm.append(Int32(ns[j]))
++    var dp = put_prm(ctx, 4, prm)
++    var pp = ip(dp)
++    var ph = FP(unsafe_from_address=hyper_addr)
++    for j in range(len(ns)):
++        var pw = FP(unsafe_from_address=ws_[j])
++        var pg = FP(unsafe_from_address=gs[j])
++        var pb = FP(unsafe_from_address=bs[j])
++        comptime if adam:
++            launch[adam_at](ctx, pw, pg, pb, ph, pp + j, pp + j, ns[j])
++        else:
++            launch[sgd_at](ctx, pw, pg, pb, ph, pp + j, pp + j, ns[j])
++    ctx.synchronize()
++    _ = prm^
++    _ = dp^
++    _ = ctx^
++
++
++def softmax_xent_res_loss(
++    logits: FP, labels: IP, n: Int, k: Int, grad_out: FP, proba_out: FP, loss_addr: Int, index: Int
++) raises:
++    """`softmax_xent_into[True]` with the mean loss left on the device:
++    resident loss[index] = the blocked fold of the row losses over n
++    (`blk_fold_at`, what `softmax_xent_into` returns under
++    IDN_XENT_DEV_FOLD). Nothing comes down."""
++    if n <= 0:
++        return
++    var ctx = cnn_ctx()
++    var dl = view(ctx, logits, n * k)
++    var dy = view_i(ctx, labels, n)
++    var prm: List[Int32] = [Int32(n), Int32(k)]
++    var dp = put_prm(ctx, 2, prm)
++    var grad = view(ctx, grad_out, n * k)
++    var proba = view(ctx, proba_out, n * k)
++    var rl = ws(ctx, 5, n)
++    grad.enqueue_fill(Float32(0))
++    rl.enqueue_fill(Float32(0))
++    launch[softmax_xent_row_at](ctx, fp(dl), fp(grad), fp(proba), fp(rl), ip(dy), ip(dp), n)
++    var fprm = fold_plan(n, n, index)
++    var dfp = put_prm(ctx, 7, fprm)
++    var pong = ws(ctx, 6, (n + LOSS_FOLD_BLOCK - 1) // LOSS_FOLD_BLOCK)
++    fold_launch(ctx, fp(rl), fp(pong), FP(unsafe_from_address=loss_addr), ip(dfp), n)
++    ctx.synchronize()
++    _ = fprm^
++    _ = prm^
++    _ = dfp^
++    _ = pong^
++    _ = dl^
++    _ = dy^
++    _ = dp^
++    _ = grad^
++    _ = proba^
++    _ = rl^
++    _ = ctx^
+ 
+ 
+ # ------------------------------------------------------------ the conv block
+diff --git a/x_cnn/device_entries_impl.mojo b/x_cnn/device_entries_impl.mojo
+index 0f52e930b1..e8c61bbde4 100644
+--- a/x_cnn/device_entries_impl.mojo
++++ b/x_cnn/device_entries_impl.mojo
+@@ -3,17 +3,27 @@
+ """Typed device entries behind `bindings/_mojolearn_x_cnn.mojo`'s Python
+ doors (lane thin-trees-metrics, 2026-10-21: moved word for word out of that
+ shell, so a Python-free caller reaches the same source; no Python here):
+-the device label and CSR checks and the CSR validation.
+-
+-TOMBSTONE: the resident fit epochs (`fit_epoch_r_device`, `fit_epoch_d_device`,
+-`sgd_base_rows`, `widen_f32_into`, `_tape_words`; CNNClassifier is a captured
+-program on the executor, sequence/cnn_classifier_program.mojo) deleted
+-2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+-Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
++the device label and CSR checks, the CSR validation, and the resident fit
++epochs (`x_cnn_fit_epoch_r` and `x_cnn_fit_epoch_d`) with their step loops.
+ """
+ from core.hostptr import read_i32
+-from x_cnn.ops import IP
++from x_cnn.ops import FP, IP, AH_ROW
++from x_cnn.device import (
++    linear_forward_into,
++    softmax_xent_into,
++    conv_block_forward_into,
++    res_alloc,
++    res_free,
++    res_upload,
++    res_download,
++    res_gather_pair,
++    opt_many_resident,
++)
++from x_cnn.device import (
++    res_gather_pair_perm, adam_hyper_resident, opt_many_resident_h, softmax_xent_res_loss,
++)
+ from x_cnn.device import cnn_ctx
++from autograd.rules_cnn import cnn_backward_autograd
+ from core.device_zero import enqueue_fill
+ from std.gpu import block_dim, block_idx, thread_idx
+ 
+@@ -77,6 +87,26 @@ def _device_int_check(src: IP, words: Int, n: Int, m: Int, csr: Bool) raises ->
+     return (f0, f1)
+ 
+ 
++@always_inline
++def _at(a: Int) -> FP:
++    return FP(unsafe_from_address=a)
++
++
++@always_inline
++def _at_i(a: Int) -> IP:
++    return IP(unsafe_from_address=a)
++
++
++def _tape_words() raises -> Int:
++    """Two resident words for the tape step: [the unit seed 1.0, the loss's
++    recorded value (never read)]."""
++    var w = res_alloc(2)
++    var one: List[Float32] = [Float32(1), Float32(0)]
++    res_upload(w, one.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 2)
++    _ = one^
++    return w
++
++
+ def csr_checked_device(csr_address: Int, n: Int, F: Int, nnz: Int, mode: Int) raises -> Tuple[List[Int32], List[Int32]]:
+     """Validate a CSR block [rowptr | col | row] at `csr_address` against
+     [n, F, nnz, mode] (the ordering checks on the device); returns (the
+@@ -95,3 +125,134 @@ def csr_checked_device(csr_address: Int, n: Int, F: Int, nnz: Int, mode: Int) ra
+         raise Error("x_cnn spmm: a column or row index is out of range")
+     var prm: List[Int32] = [Int32(n), Int32(F), Int32(nnz), Int32(mode)]
+     return (csr^, prm^)
++
++
++def fit_epoch_r_device(
++    n: Int,
++    batch: Int,
++    adam: Bool,
++    nh: Int,
++    nb: Int,
++    steps: Int,
++    flat: Int,
++    k: Int,
++    bh: List[List[Int]],
++    head: List[Int],
++    a: List[Int],
++    data: List[Int],
++    t: Tuple[List[Int], List[Int], List[Int], List[Int]],
++    cs: List[List[List[Int32]]],
++    ps: List[List[List[Int32]]],
++    pools: List[List[Bool]],
++    rows: IP,
++    hyp: MutPointer[Float64, MutUntrackedOrigin],
++    losses: MutPointer[Float64, MutUntrackedOrigin],
++) raises:
++    """`x_cnn_fit_epoch_r`'s epoch: per step the row gathers, each block's
++    forward, the head, the softmax, the tape backward and one optimizer
++    launch over every parameter."""
++    var tw = _tape_words()
++    for st in range(steps):  # small-loop(steps: optimizer steps of one epoch): orchestration that launches device work per step
++        var s0 = st * batch
++        var m = min(batch, n - s0)
++        var q = 0 if m == batch else 1
++        res_gather_pair(a[0], data[0], data[2], a[1], data[1], 1, rows + s0, m)
++        var src = a[0]
++        for j in range(nb):
++            conv_block_forward_into[True](
++                _at(src), _at(bh[j][0]), _at(bh[j][1]), cs[q][j], ps[q][j], pools[q][j], _at(bh[j][4]),
++                _at_i(bh[j][5]), bh[j][7], bh[j][8],
++            )
++            src = bh[j][4]
++        linear_forward_into[True](_at(src), _at(head[0]), _at(head[1]), m, flat, k, _at(a[2]))
++        var loss = softmax_xent_into[True](_at(a[2]), _at_i(a[1]), m, k, _at(a[3]), _at(a[4]))
++        losses[st] = Float64(loss)
++        # the head and every block's backward on the tape (autograd/rules_cnn.mojo)
++        # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
++        # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch (the hand walk arm)
++        cnn_backward_autograd(bh, head, a, cs[q], ps[q], pools[q], m, flat, k, tw, tw + 4)
++        var h = List[Float32]()
++        for e in range(nh):  # small-loop(nh: optimizer scalars of one step, six or nine): builds one launch parameter list, not data
++            h.append(Float32(hyp[st * nh + e]))
++        if adam:
++            opt_many_resident[True](t[0], t[1], t[2], t[3], h)
++        else:
++            opt_many_resident[False](t[0], t[1], t[2], t[3], h)
++    res_free(tw)
++
++
++def sgd_base_rows(mut base: List[Float32], f5: List[Float64]):
++    """SGD's two hyper rows for `x_cnn_fit_epoch_d`: the five caller words
++    through float32 and the first-step flag 1, then the same with flag 0."""
++    for r in range(2):
++        for e in range(5):
++            base.append(Float32(f5[e]))
++        base.append(Float32(1) if r == 0 else Float32(0))
++
++
++def widen_f32_into(dst: MutPointer[Float64, MutUntrackedOrigin], src: List[Float32], n: Int):
++    """dst[e] = Float64(src[e]) for e < n: the per-step optimizer scalars
++    (AH_ROW per step) or one loss per step, already downloaded."""
++    for e in range(n):  # small-loop(n: per-step optimizer scalars or per-step losses): widens per step scalars, not row data
++        dst[e] = Float64(src[e])
++
++
++def fit_epoch_d_device(
++    n: Int,
++    batch: Int,
++    adam: Bool,
++    done: Int,
++    nb: Int,
++    steps: Int,
++    flat: Int,
++    k: Int,
++    shuffle: Bool,
++    key: UInt64,
++    bh: List[List[Int]],
++    head: List[Int],
++    a: List[Int],
++    data: List[Int],
++    t: Tuple[List[Int], List[Int], List[Int], List[Int]],
++    cs: List[List[List[Int32]]],
++    ps: List[List[List[Int32]]],
++    pools: List[List[Bool]],
++    mut base: List[Float32],
++    mut l32: List[Float32],
++) raises:
++    """`x_cnn_fit_epoch_d`'s epoch on the device: the resident hyper rows,
++    per step the permuted row gathers, the forward, the resident loss, the
++    tape backward and the optimizer launch; the losses come down once into
++    `l32`."""
++    var hbuf = res_alloc(steps * AH_ROW if adam else 12)
++    var lbuf = res_alloc(steps)
++    var tw = _tape_words()
++    if adam:
++        adam_hyper_resident(base, done + 1, steps, hbuf)
++    else:
++        res_upload(hbuf, base.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 12)
++    for st in range(steps):
++        var s0 = st * batch
++        var m = min(batch, n - s0)
++        var q = 0 if m == batch else 1
++        res_gather_pair_perm(a[0], data[0], data[2], a[1], data[1], 1, n, s0, m, shuffle, key)
++        var src = a[0]
++        for j in range(nb):
++            conv_block_forward_into[True](
++                _at(src), _at(bh[j][0]), _at(bh[j][1]), cs[q][j], ps[q][j], pools[q][j], _at(bh[j][4]),
++                _at_i(bh[j][5]), bh[j][7], bh[j][8],
++            )
++            src = bh[j][4]
++        linear_forward_into[True](_at(src), _at(head[0]), _at(head[1]), m, flat, k, _at(a[2]))
++        softmax_xent_res_loss(_at(a[2]), _at_i(a[1]), m, k, _at(a[3]), _at(a[4]), lbuf, st)
++        # the head and every block's backward on the tape (autograd/rules_cnn.mojo)
++        # TOMBSTONE: MOJOLEARN_AUTOGRAD_CNN_OFF (removed: tape is the only backward) deleted 2026-10-19 by ddd4fa509; code recoverable at ddd4fa509^.
++        # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch (the hand walk arm)
++        cnn_backward_autograd(bh, head, a, cs[q], ps[q], pools[q], m, flat, k, tw, tw + 4)
++        if adam:
++            opt_many_resident_h[True](t[0], t[1], t[2], t[3], hbuf + 4 * AH_ROW * st)
++        else:
++            opt_many_resident_h[False](t[0], t[1], t[2], t[3], hbuf + (0 if done + st == 0 else 24))
++    res_download(lbuf, l32.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), steps)
++    res_free(hbuf)
++    res_free(lbuf)
++    res_free(tw)
+diff --git a/x_cnn/host/binding_entries_impl.mojo b/x_cnn/host/binding_entries_impl.mojo
+index 34d2eb72bd..2d29c10a99 100644
+--- a/x_cnn/host/binding_entries_impl.mojo
++++ b/x_cnn/host/binding_entries_impl.mojo
+@@ -5,7 +5,7 @@ doors (lane thin-trees-metrics, 2026-10-21: moved word for word out of that
+ shell, so a Python-free caller reaches the same source; no Python here).
+ 
+ `out_f32` is the CPU column's output seam the shell's address-out entries
+-call; the end-to-end sabotage arm
++and the host fit epoch both call; the end-to-end sabotage arm
+ (x_cnn/checks/sabotage/e2e_host_output_bit.patch) flips every word's low
+ bit here.
+ """
+@@ -15,6 +15,10 @@ from core.hostptr import read_i32
+ from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW
+ from x_cnn.ops import PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW
+ from x_cnn.ops import FP, IP, argmax_row_at
++from x_cnn.ops import epoch_rows_prm, epoch_rows_at, adam_hyper_base, adam_hyper_at, AH_ROW
++from x_cnn.host.ops_host import conv_block_forward_into, conv_block_backward_into
++from x_cnn.host.ops_host import linear_forward_into, linear_backward_into
++from x_cnn.host.ops_host import softmax_xent_into, sgd_into, adam_into
+ 
+ 
+ @always_inline
+@@ -29,6 +33,11 @@ def out_f32(p: FP, n: Int):
+     _ = n
+ 
+ 
++@always_inline
++def _at(a: Int) -> FP:
++    return FP(unsafe_from_address=a)
++
++
+ def pool_counts(prm: List[Int32]) -> Tuple[Int, Int]:
+     var nc = Int(prm[PP_N]) * Int(prm[PP_C])
+     return (nc * Int(prm[PP_H]) * Int(prm[PP_W]), nc * Int(prm[PP_OH]) * Int(prm[PP_OW]))
+@@ -82,5 +91,159 @@ def gather_rows_f32(
+         memcpy(dest=d + r * row, src=s + Int(rp[r]) * row, count=row)
+ 
+ 
+-# TOMBSTONE: the host fit epoch (epoch_rows_fill, adam_rows, widen_f32_into, widen_f32_list_into, sgd_hyper_rows, fit_epoch_r_into) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
+-# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
++def epoch_rows_fill(dst: IP, n: Int, shuffle: Bool, key: UInt64):
++    var prm = epoch_rows_prm(n, 0, shuffle, key)
++    var pp = prm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var none = FP(unsafe_from_address=Int(dst))
++    for i in range(n):
++        epoch_rows_at(i, none, none, none, none, dst, pp)
++    _ = prm^
++
++
++def adam_rows(
++    lr: Float64, b1: Float64, b2: Float64, eps: Float64, wd: Float64, dec: Float64, step0: Int, nsteps: Int,
++) -> List[Float32]:
++    """`adam_hyper_at`'s rows of steps step0 .. step0 + nsteps - 1."""
++    var base = adam_hyper_base(lr, b1, b2, eps, wd, dec)
++    var out = List[Float32](length=nsteps * AH_ROW + 1, fill=Float32(0))
++    var prm: List[Int32] = [Int32(step0)]
++    var pb = base.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var po = out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var pp = prm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    for t in range(nsteps):
++        adam_hyper_at(t, pb, po, po, po, pp, pp)
++    _ = base^
++    _ = prm^
++    return out^
++
++
++def widen_f32_into(dst: MutPointer[Float64, MutUntrackedOrigin], src: List[Float32], n: Int):
++    """dst[e] = Float64(src[e]) for e < n."""
++    for e in range(n):
++        dst[e] = Float64(src[e])
++
++
++def widen_f32_list_into(mut dst: List[Float64], src: List[Float32], n: Int):
++    """dst[e] = Float64(src[e]) for e < n."""
++    for e in range(n):
++        dst[e] = Float64(src[e])
++
++
++def sgd_hyper_rows(mut hyp: List[Float64], f5: List[Float64], steps: Int, done: Int):
++    """SGD's per-step hyper rows: the five caller words through float32,
++    then the first-step flag."""
++    for st in range(steps):
++        for e in range(5):
++            hyp[st * 6 + e] = Float64(Float32(f5[e]))
++        hyp[st * 6 + 5] = Float64(1) if done + st == 0 else Float64(0)
++
++
++def fit_epoch_r_into(
++    n: Int,
++    batch: Int,
++    adam: Bool,
++    nh: Int,
++    nb: Int,
++    steps: Int,
++    flat: Int,
++    k: Int,
++    row: Int,
++    bh: List[List[Int]],
++    head: List[Int],
++    a: List[Int],
++    cnt: List[Int],
++    hp: List[Int],
++    hg: List[Int],
++    hb: List[Int],
++    cs: List[List[List[Int32]]],
++    ps: List[List[List[Int32]]],
++    pools: List[List[Bool]],
++    rows: MutPointer[Int32, MutUntrackedOrigin],
++    hyp: MutPointer[Float64, MutUntrackedOrigin],
++    losses: MutPointer[Float64, MutUntrackedOrigin],
++    xd: MutPointer[Float32, MutUntrackedOrigin],
++    yd: MutPointer[Float32, MutUntrackedOrigin],
++    xs: MutPointer[Float32, MutUntrackedOrigin],
++    ys: MutPointer[Float32, MutUntrackedOrigin],
++    yl: IP,
++) raises:
++    """The host twin of the GPU binding's `x_cnn_fit_epoch_r` loop: per
++    step the two row gathers, each block's forward, the head, the softmax
++    (with its label check), the head's backward, each block's backward and
++    one optimizer entry per parameter, each followed by its output seam."""
++    var noidx = List[Int32](length=1, fill=Int32(0))
++    var pnoidx = noidx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    for st in range(steps):
++        var s0 = st * batch
++        var m = min(batch, n - s0)
++        var q = 0 if m == batch else 1
++        # the two row gathers (x_cnn_res_gather: the batch, then its labels)
++        for r in range(m):
++            memcpy(dest=xd + r * row, src=xs + Int(rows[s0 + r]) * row, count=row)
++        for r in range(m):
++            memcpy(dest=yd + r, src=ys + Int(rows[s0 + r]), count=1)
++        var src = a[0]
++        for j in range(nb):
++            var cprm = cs[q][j].copy()
++            var pprm = ps[q][j].copy()
++            var pool = pools[q][j]
++            var ny = Int(cprm[CP_N]) * Int(cprm[CP_OC]) * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
++            var no = pool_counts(pprm)[1] if pool else ny
++            var pi = IP(unsafe_from_address=bh[j][5]) if pool else pnoidx
++            conv_block_forward_into(
++                _at(src), _at(bh[j][0]), _at(bh[j][1]), _at(bh[j][4]), pi, cprm, pprm, pool, True,
++                _at(bh[j][7]), _at(bh[j][8]),
++            )
++            out_f32(_at(bh[j][4]), no)
++            src = bh[j][4]
++        linear_forward_into(_at(src), _at(head[0]), _at(head[1]), _at(a[2]), m, flat, k)
++        out_f32(_at(a[2]), m * k)
++        for i in range(m):
++            if Int(yl[i]) >= k:
++                raise Error("x_cnn softmax: a label is not a class index")
++        var loss = softmax_xent_into(_at(a[2]), yl, _at(a[3]), _at(a[4]), m, k)
++        out_f32(_at(a[3]), m * k)
++        out_f32(_at(a[4]), m * k)
++        losses[st] = Float64(loss)
++        var glast = bh[nb - 1][6] if nb > 0 else a[5]
++        linear_backward_into(_at(src), _at(head[0]), _at(a[3]), _at(glast), _at(head[2]), _at(head[3]), m, flat, k)
++        out_f32(_at(glast), m * flat)
++        out_f32(_at(head[2]), k * flat)
++        out_f32(_at(head[3]), k)
++        for jj in range(nb):
++            var j = nb - 1 - jj
++            var cprm = cs[q][j].copy()
++            var pprm = ps[q][j].copy()
++            var pool = pools[q][j]
++            var N = Int(cprm[CP_N]); var C = Int(cprm[CP_C]); var OC = Int(cprm[CP_OC])
++            var ckk = C * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
++            var nx = N * C * Int(cprm[CP_H]) * Int(cprm[CP_W])
++            var bsrc = bh[j - 1][4] if j > 0 else a[0]
++            var dx = bh[j - 1][6] if j > 0 else 0
++            var need_dx = dx != 0
++            var pi = IP(unsafe_from_address=bh[j][5]) if pool else pnoidx
++            var pdb = _at(bh[j][3])
++            var pdx = _at(dx) if need_dx else pdb
++            conv_block_backward_into(
++                _at(bsrc), _at(bh[j][0]), _at(bh[j][1]), _at(bh[j][6]), pi, pdx, _at(bh[j][2]), pdb, cprm,
++                pprm, pool, need_dx, True, _at(bh[j][7]), _at(bh[j][8]),
++            )
++            if need_dx:
++                out_f32(pdx, nx)
++            out_f32(_at(bh[j][2]), OC * ckk)
++            out_f32(pdb, OC)
++        var h = List[Float32]()
++        for e in range(nh):
++            h.append(Float32(hyp[st * nh + e]))
++        # one optimizer entry per parameter, in the parameters' order
++        for j in range(len(cnt)):
++            var nj = cnt[j]
++            if adam:
++                adam_into(_at(hp[j]), _at(hg[j]), _at(hb[j]), h, nj)
++                out_f32(_at(hp[j]), nj)
++                out_f32(_at(hb[j]), 2 * nj)
++            else:
++                sgd_into(_at(hp[j]), _at(hg[j]), _at(hb[j]), h, nj)
++                out_f32(_at(hp[j]), nj)
++                out_f32(_at(hb[j]), nj)
++    _ = noidx^
+diff --git a/x_cnn/ops.mojo b/x_cnn/ops.mojo
+index e351e95164..e12d2a7956 100644
+--- a/x_cnn/ops.mojo
++++ b/x_cnn/ops.mojo
+@@ -1831,8 +1831,16 @@ def l2norm_bwd_at(r: Int, y: FP, g: FP, aux: FP, dst: FP, q: IP, p: IP):
+ #   and one division by n at the last level (`blk_fold_at`). The fold order
+ #   depends on n alone; the host column runs the same function, so the bits
+ #   move on all four columns together. `-D MOJOLEARN_IDN_XENT_DEV_FOLD_OFF`.
+-# IDN_CNN_EPOCH_DEV (the classifier's device epoch order and Adam scalars)
+-#   is deleted with that epoch (lane x8-cnn-on-executor, 2026-11-09).
++# IDN_CNN_EPOCH_DEV: (a) the epoch's row order was a Fisher-Yates walk on the
++#   CPU (`epoch_order_i32`), uploaded per step. It is now a counter-based
++#   permutation each thread computes for its own position (`epoch_rows_at`:
++#   a six-round Feistel network over the smallest even-width domain holding
++#   n, cycle-walked into [0, n); 32-bit integers only). (b) Adam's step
++#   scalars were double arithmetic on the CPU (`adam_hyper_f64`). They are
++#   now computed on the device per step (`adam_hyper_at`) in double-float32
++#   arithmetic (error-free sums and Dekker products, every product pinned),
++#   about 2^-45 relative before the final rounding to float32. Both change
++#   bits, on every column together. `-D MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF`.
+ comptime _FAM2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+ # cpu2-l11-neural (2026-10-04): FAST takes the same device forms on every
+ # vendor (no host epoch order, Adam scalars, loss fold or GCN loops on a GPU
+@@ -1840,6 +1848,7 @@ comptime _FAM2_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined
+ # `_OFF` defines keep their meaning for the IDENTICAL A/B only.
+ comptime _FAM2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+ comptime IDN_XENT_DEV_FOLD = _FAM2_FAST or (_FAM2_IDN and not is_defined["MOJOLEARN_IDN_XENT_DEV_FOLD_OFF"]())
++comptime IDN_CNN_EPOCH_DEV = _FAM2_FAST or (IDN_XENT_DEV_FOLD and not is_defined["MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF"]())
+ # IDN_GCN_LOOPS_DEV (lane fix-n1-lm-neural, audit F7 `gcn_self_loops`):
+ #   GCNConv's add_remaining_self_loops (drop every existing loop, append one
+ #   loop per node carrying the LAST existing loop's weight, else the fill)
+@@ -1901,8 +1910,230 @@ def fold_plan(count: Int, div: Int, index: Int) -> List[Int32]:
+     return prm^
+ 
+ 
+-# TOMBSTONE: the classifier device epoch's element functions (epoch_key, epoch_rows_prm, epoch_rows_at, epoch_row_val, the double-float32 adam_hyper_at / adam_hyper_base and their helpers) and MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF deleted 2026-11-09 by lane/x8-cnn-on-executor (the classifier trains through Program.fit: OP_MLP_PERM order, the session optimizer's step_lr scalars); code recoverable at f59d913b0b.
+-# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
++# ---- the epoch order
++comptime EP_N = 0  # rows
++comptime EP_POS = 1  # the position of element 0 in the epoch
++comptime EP_SHUFFLE = 2
++comptime EP_HALF = 3  # the Feistel half width in bits
++comptime EP_KEY = 4  # the 64-bit epoch key as four 16-bit words, low first
++comptime EP_LEN = 8
++
++
++@always_inline
++def _perm_mix(x: UInt32) -> UInt32:
++    """murmur3's 32-bit finalizer (a bijection of the 32-bit words)."""
++    var z = x
++    z = (z ^ (z >> 16)) * UInt32(0x85EBCA6B)
++    z = (z ^ (z >> 13)) * UInt32(0xC2B2AE35)
++    return z ^ (z >> 16)
++
++
++def epoch_key(seed: UInt64, epoch: Int) -> UInt64:
++    """Epoch `epoch`'s permutation key: splitmix64's output at state
++    seed + (epoch + 1) * golden (the counter is the epoch)."""
++    var z = seed + UInt64(epoch + 1) * UInt64(0x9E3779B97F4A7C15)
++    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
++    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
++    return z ^ (z >> 31)
++
++
++def epoch_rows_prm(n: Int, pos: Int, shuffle: Bool, key: UInt64) -> List[Int32]:
++    """`epoch_rows_at`'s parameter block for positions pos, pos + 1, ... of
++    an epoch over n rows (1 <= n < 2^31)."""
++    var bits = 1
++    while (1 << bits) < n:
++        bits += 1
++    var prm = List[Int32]()
++    prm.append(Int32(n))
++    prm.append(Int32(pos))
++    prm.append(Int32(1 if shuffle else 0))
++    prm.append(Int32((bits + 1) // 2))
++    for w in range(4):
++        prm.append(Int32(Int((key >> UInt64(16 * w)) & UInt64(0xFFFF))))
++    return prm^
++
++
++@always_inline
++def epoch_rows_at(i: Int, f0: FP, f1: FP, f2: FP, f3: FP, q: IP, p: IP):
++    """q[i] = the row at position p[EP_POS] + i of the epoch's order: the
++    position itself without shuffle, else its image under the epoch's
++    permutation of [0, n): six Feistel rounds on the two EP_HALF-bit halves
++    (round function `_perm_mix` of the half plus the round key, masked),
++    repeated until the image is below n (cycle walking: the image of a
++    permutation of the 2^(2 half) words restricted to [0, n) is a
++    permutation of [0, n)). Integers only: the same row on every column."""
++    q.unsafe_store(i, epoch_row_val(i, p))
++
++
++@always_inline
++def epoch_row_val(i: Int, p: IP) -> Int32:
++    """NI18 shared integer permutation, also used by the fused device gather.
++
++    Logical position, epoch key, Feistel rounds and cycle walk are exactly
++    the existing epoch_rows_at contract. This is not a new shuffle/RNG.
++    """
++    var n = UInt32(_g(p, EP_N))
++    var pos = _g(p, EP_POS) + i
++    if _g(p, EP_SHUFFLE) == 0:
++        return Int32(pos)
++    var h = UInt32(_g(p, EP_HALF))
++    var mask = (UInt32(1) << UInt32(h)) - UInt32(1)
++    var k0 = UInt32(_g(p, EP_KEY)) | (UInt32(_g(p, EP_KEY + 1)) << UInt32(16))
++    var k1 = UInt32(_g(p, EP_KEY + 2)) | (UInt32(_g(p, EP_KEY + 3)) << UInt32(16))
++    var x = UInt32(pos)
++    while True:
++        var l = (x >> h) & mask
++        var r = x & mask
++        for rd in range(6):
++            var rk = _perm_mix(k0 + UInt32(rd) * UInt32(0x9E3779B9)) ^ k1
++            var f = _perm_mix(r + rk) & mask
++            var t = l ^ f
++            l = r
++            r = t
++        x = (l << h) | r
++        if x < n:
++            break
++    return Int32(Int(x))
++
++
++# ---- Adam's step scalars in double-float32
++@always_inline
++def _two_sum(a: Float32, b: Float32) -> Tuple[Float32, Float32]:
++    """(s, e) with s = fl(a + b) and s + e = a + b exactly (Knuth)."""
++    var s = ftz(a + b)
++    var bb = ftz(s - a)
++    var e = ftz(ftz(a - ftz(s - bb)) + ftz(b - bb))
++    return (s, e)
++
++
++@always_inline
++def _two_prod(a: Float32, b: Float32) -> Tuple[Float32, Float32]:
++    """(p, e) with p = fl(a b) and p + e = a b exactly (Dekker's split, no
++    fused operation; every product pinned)."""
++    var p = ftz(identical_mul(a, b))
++    var ca = ftz(identical_mul(Float32(4097), a))
++    var ah = ftz(ca - ftz(ca - a))
++    var al = ftz(a - ah)
++    var cb = ftz(identical_mul(Float32(4097), b))
++    var bh = ftz(cb - ftz(cb - b))
++    var bl = ftz(b - bh)
++    var e = ftz(ftz(identical_mul(ah, bh)) - p)
++    e = ftz(e + ftz(identical_mul(ah, bl)))
++    e = ftz(e + ftz(identical_mul(al, bh)))
++    e = ftz(e + ftz(identical_mul(al, bl)))
++    return (p, e)
++
++
++@always_inline
++def _dd_mul(ah: Float32, al: Float32, bh: Float32, bl: Float32) -> Tuple[Float32, Float32]:
++    """(ah + al)(bh + bl) as a normalized pair."""
++    var pe = _two_prod(ah, bh)
++    var e = ftz(pe[1] + ftz(ftz(identical_mul(ah, bl)) + ftz(identical_mul(al, bh))))
++    return _two_sum(pe[0], e)
++
++
++@always_inline
++def _dd_powi(bh: Float32, bl: Float32, e: Int) -> Tuple[Float32, Float32]:
++    """(bh + bl) ** e for e >= 0 by squaring, in one fixed order."""
++    var rh = Float32(1)
++    var rl = Float32(0)
++    var xh = bh
++    var xl = bl
++    var k = e
++    while k > 0:
++        if (k & 1) != 0:
++            var r = _dd_mul(rh, rl, xh, xl)
++            rh = r[0]
++            rl = r[1]
++        var x = _dd_mul(xh, xl, xh, xl)
++        xh = x[0]
++        xl = x[1]
++        k >>= 1
++    return (rh, rl)
++
++
++@always_inline
++def _dd_one_minus(h: Float32, l: Float32) -> Tuple[Float32, Float32]:
++    """1 - (h + l) as a normalized pair."""
++    var se = _two_sum(Float32(1), -h)
++    return _two_sum(se[0], ftz(se[1] - l))
++
++
++comptime AH_BASE = 10  # [lr hi, lr lo, b1 hi, b1 lo, b2 hi, b2 lo, eps, wd hi, wd lo, decoupled]
++comptime AH_ROW = 9
++
++
++@always_inline
++def adam_hyper_at(t: Int, base: FP, hy: FP, f2: FP, f3: FP, q: IP, p: IP):
++    """hy[9 t : 9 t + 9] = `adam_at`'s hyper block of 1-based step p[0] + t:
++    [lr / bc1, 1 - b1, b2, 1 - b2, eps, sqrt(bc2), wd, decoupled, 1 - lr wd]
++    with bc = 1 - beta ** step, each value the float32 nearest a
++    double-float32 result (the pairs in `base` are the float32 nearest the
++    caller's double and the float32 nearest the remainder)."""
++    var step = _g(p, 0) + t
++    var lrh = base.unsafe_load(0)
++    var lrl = base.unsafe_load(1)
++    var b1h = base.unsafe_load(2)
++    var b1l = base.unsafe_load(3)
++    var b2h = base.unsafe_load(4)
++    var b2l = base.unsafe_load(5)
++    var wdh = base.unsafe_load(7)
++    var wdl = base.unsafe_load(8)
++    var p1 = _dd_powi(b1h, b1l, step)
++    var c1 = _dd_one_minus(p1[0], p1[1])
++    var p2 = _dd_powi(b2h, b2l, step)
++    var c2 = _dd_one_minus(p2[0], p2[1])
++    # lr / bc1: the float32 quotient plus its correction
++    var q0 = ftz(identical_div(lrh, c1[0]))
++    var step_size = q0
++    if c1[0] != Float32(0):
++        var pe = _two_prod(q0, c1[0])
++        var rem = ftz(ftz(ftz(lrh - pe[0]) - pe[1]) + lrl)
++        rem = ftz(rem - ftz(identical_mul(q0, c1[1])))
++        step_size = ftz(q0 + ftz(identical_div(rem, c1[0])))
++    # sqrt(bc2): the float32 root plus one Newton correction
++    var s0 = ftz(identical_sqrt(c2[0]))
++    var sq = s0
++    if s0 > Float32(0):
++        var ps = _two_prod(s0, s0)
++        var rs = ftz(ftz(ftz(c2[0] - ps[0]) - ps[1]) + c2[1])
++        sq = ftz(s0 + ftz(identical_div(rs, ftz(s0 + s0))))
++    var o1 = _dd_one_minus(b1h, b1l)
++    var o2 = _dd_one_minus(b2h, b2l)
++    var lw = _dd_mul(lrh, lrl, wdh, wdl)
++    var ow = _dd_one_minus(lw[0], lw[1])
++    var row = t * AH_ROW
++    hy.unsafe_store(row + 0, canon(step_size))
++    hy.unsafe_store(row + 1, canon(o1[0]))
++    hy.unsafe_store(row + 2, b2h)
++    hy.unsafe_store(row + 3, canon(o2[0]))
++    hy.unsafe_store(row + 4, base.unsafe_load(6))
++    hy.unsafe_store(row + 5, canon(sq))
++    hy.unsafe_store(row + 6, wdh)
++    hy.unsafe_store(row + 7, base.unsafe_load(9))
++    hy.unsafe_store(row + 8, canon(ow[0]))
++
++
++def adam_hyper_base(lr: Float64, b1: Float64, b2: Float64, eps: Float64, wd: Float64, dec: Float64) -> List[Float32]:
++    """`adam_hyper_at`'s base block: each double hyperparameter as the
++    float32 nearest it and the float32 nearest the remainder (two casts and
++    one exact subtraction; no step arithmetic)."""
++    var out = List[Float32]()
++    var lrh = Float32(lr)
++    out.append(lrh)
++    out.append(Float32(lr - Float64(lrh)))
++    var b1h = Float32(b1)
++    out.append(b1h)
++    out.append(Float32(b1 - Float64(b1h)))
++    var b2h = Float32(b2)
++    out.append(b2h)
++    out.append(Float32(b2 - Float64(b2h)))
++    out.append(Float32(eps))
++    var wdh = Float32(wd)
++    out.append(wdh)
++    out.append(Float32(wd - Float64(wdh)))
++    out.append(Float32(dec))
++    return out^
+ 
+ 
+ def neural_numerical_profile() -> String:
+@@ -1927,8 +2158,7 @@ def neural_numerical_profile() -> String:
+ 
+ def idn2_flags() -> Int:
+     """The lane fam2-neural switches this build has on (both bindings export
+-    it as `x_cnn_idn2_flags`): bit 0 IDN_XENT_DEV_FOLD, bit 1 reserved
+-    (0: IDN_CNN_EPOCH_DEV was deleted with the classifier's device epoch),
++    it as `x_cnn_idn2_flags`): bit 0 IDN_XENT_DEV_FOLD, bit 1 IDN_CNN_EPOCH_DEV,
+     bit 2 IDN_GCN_LOOPS_DEV (lane fix-n1-lm-neural); bit 3 the candidate
+     IDN_XENT_FOLD_BLOCK_256 and bit 4 a `-D MOJOLEARN_IDN_ALL_OFF` build
+     (lane/review-fixes: the glue reads the build's OFF arm from here, not
+@@ -1936,6 +2166,8 @@ def idn2_flags() -> Int:
+     var f = 0
+     comptime if IDN_XENT_DEV_FOLD:
+         f |= 1
++    comptime if IDN_CNN_EPOCH_DEV:
++        f |= 2
+     comptime if IDN_GCN_LOOPS_DEV:
+         f |= 4
+     comptime if IDN_XENT_FOLD_BLOCK_256:

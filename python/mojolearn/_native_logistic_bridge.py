@@ -56,7 +56,7 @@ def connect():
     call = _binding()._module.logistic_native_call
     if not isinstance(call, BuiltinFunctionType):
         raise TypeError("LogisticRegression requires a compiled logistic_native_call")
-    context.update(lr_bindings=estimators, lr_x_trees=x_trees, lr_host_contexts={})
+    context.update(lr_bindings=estimators, lr_x_trees=x_trees, lr_host_contexts={}, qn_fit_fold=_qn_fit_fold())
     return call, context
 
 
@@ -122,3 +122,17 @@ def connect_public(cls, context, install=True):
                  lr_consumed_fields=('_w', 'classes_', 'n_features_in_', '_l1_ratio', 'lbfgs_memory',
                                      'penalty_normalized', '_mojolearn_fitted', '_mojolearn_fitting'))
     return owner
+
+
+def _qn_fit_fold():
+    # glue (lane a7c): the QN fit of a cross-validation fold resident on the
+    # device, exported by the identical GPU base binding next to the fold
+    # store it reads (bindings/msel_device.mojo); a build without it (the
+    # CPU column) leaves None and the door gathers host rows.
+    from types import BuiltinFunctionType
+    from ._buffer import _native
+    try:
+        fold = _native('qn_fit_fold')
+    except (ImportError, AttributeError, TypeError, RuntimeError):
+        fold = None
+    return fold if isinstance(fold, BuiltinFunctionType) else None

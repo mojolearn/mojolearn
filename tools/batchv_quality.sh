@@ -35,10 +35,11 @@ dump() {  # $1 binding, $2 arm, $3 prep|kde
 }
 build x_prep off "" && dump x_prep off prep
 build x_prep si "-D MOJOLEARN_SI_ONEPASS" && dump x_prep si prep
-build x_prep ptns "-D MOJOLEARN_PT_COLBATCH -D MOJOLEARN_SI_ONEPASS" && dump x_prep ptns prep
+# ptns arm (-D MOJOLEARN_PT_COLBATCH) gone: the define was deleted 2026-11-08 (docs/TOMBSTONES.md batch 3);
+# COLBATCH runs under the PT_SCORE default, which the off arm already builds.
 build estimators off "" && dump estimators off kde
 build estimators kdt "-D MOJOLEARN_KDE_DIMTILE" && dump estimators kdt kde
-for a in si ptns; do
+for a in si; do
   [ -f "$out/prep_off.npz" ] && [ -f "$out/prep_$a.npz" ] && $PY tools/batchv_quality.py cmp "$out/prep_off.npz" "$out/prep_$a.npz" "$a"
 done
 [ -f "$out/kde_off.npz" ] && [ -f "$out/kde_kdt.npz" ] && $PY tools/batchv_quality.py cmp "$out/kde_off.npz" "$out/kde_kdt.npz" kdt

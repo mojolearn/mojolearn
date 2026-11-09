@@ -14,7 +14,7 @@ def neural_gemm_native(aa: Int, ba: Int, ca: Int, shape: Tuple[Int, Int, Int, In
     var m = shape[0]
     var n = shape[1]
     var k = shape[2]
-    var ctx = neural_ctx["MojoNeuralTrainingContextIdentical"]()
+    var ctx = neural_ctx["MojolearnNeuralTrainingContextIdenticalV2"]()
     var lease = GemmHostLease()
     var a = lease.f32(ctx,ROLE_A,m*k)
     var b = lease.f32(ctx,ROLE_B,n*k)

@@ -20,8 +20,9 @@ from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_words import stash_python_error
 from bindings.classical_arrays import classical_address, classical_wrap_array
 from bindings.classical_labels import (
-    LabelsView, labels_vector, labels_empty, labels_address, labels_label_kind, labels_view, labels_cast,
-    labels_helper, _numeric_label_view, _flatten_labels, _sorted_classes)
+    labels_address, labels_label_kind, labels_cast,
+    labels_reduce_stat, _numeric_label_view, _flatten_labels, _sorted_classes)
+from bindings.admitted_input import admitted_array, admitted_vector, admit_c_view, admitted_dtype
 from bindings.scaler_native import _stage
 from bindings.scaler_lifecycle_native import _entries
 from bindings.prep_entry_cache import prep_entry_word
@@ -127,7 +128,7 @@ def _take_i32(ran: PythonObject, offset: Int, rows: Int, cols: Int, context: Pyt
 
 def _f32_matrix(values: List[Float64], rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
     # A float32 C-order Array of the values rounded once to float32.
-    var out = labels_empty(Python.tuple(rows, cols), "<f4", _out(context))
+    var out = admitted_array(Python.tuple(rows, cols), "<f4", _out(context))
     var dest = F32P(unsafe_from_address=labels_address(out))
     _ = out  # keep the Python object alive through the native call above
     for i in range(len(values)):  # driver-loop: over a fitted category or label word list
@@ -143,7 +144,7 @@ def _classes_array(classes: PythonObject, context: PythonObject) raises -> Pytho
     var kind = labels_label_kind(classes, context)
     var k = len(classes)
     if kind == "int":
-        var out = labels_vector(k, "<i8", _out(context))
+        var out = admitted_vector(k, "<i8", _out(context))
         var dest = I64P(unsafe_from_address=labels_address(out))
         _ = out  # keep the Python object alive through the native call above
         for i in range(k):  # driver-loop: over the distinct classes
@@ -151,7 +152,7 @@ def _classes_array(classes: PythonObject, context: PythonObject) raises -> Pytho
             _ = out  # keep the Python object alive through the native call above
         return out
     if kind == "float":
-        var out = labels_vector(k, "<f8", _out(context))
+        var out = admitted_vector(k, "<f8", _out(context))
         var dest = F64P(unsafe_from_address=labels_address(out))
         _ = out  # keep the Python object alive through the native call above
         for i in range(k):  # driver-loop: over the distinct classes
@@ -204,16 +205,16 @@ def _label_buffer(y: PythonObject, context: PythonObject) raises -> Optional[Lab
     var found = _numeric_label_view(y, context, bool_source)
     if not found or bool_source:
         return None
-    var view = found.value().copy()
-    var spec = _lab_spec(view.typestr)
-    var n = view.size()
+    var view = found.value()
+    var spec = _lab_spec(admitted_dtype(view, context))
+    var n = Int(py=view.size)
     if spec[0] < 0 or n == 0:
         return None
     var nw = n * spec[1]
     if nw > LABEL_WORDS_MAX:
         return None
     var words = classical_wrap_array(native_array_zeros("i", nw), Python.tuple(nw), "<i4", "C", _out(context))
-    memcpy(dest=I32P(unsafe_from_address=Int(py=classical_address(words))), src=I32P(unsafe_from_address=view.addr), count=nw)
+    memcpy(dest=I32P(unsafe_from_address=Int(py=classical_address(words))), src=I32P(unsafe_from_address=Int(py=classical_address(view))), count=nw)
     _ = view  # keep the Python object alive through the native call above
     _ = words  # keep the Python object alive through the native call above
     return LabelBuf(spec[0], words, n, nw, spec[0] == 0 or spec[0] == 4)
@@ -525,21 +526,22 @@ def _multilabel_buffer(y: PythonObject, shape: PythonObject, context: PythonObje
         return None
     if "bool" in _text(py_call(b.getattr, y, "dtype", "")):
         raise Error(REFUSE_MULTIOUTPUT)
-    var view = labels_view(y, "y", context)
-    var size = view.size()
-    var rows = view.shape[0]
-    var cols = view.shape[1]
-    # `as_f64_c(y, ndim=2)`: float64 in the source's storage order (the
-    # tests below do not depend on the order)
-    var wide = labels_vector(size, "<f8", _out(context))
-    labels_cast(view.addr, view.typestr, labels_address(wide), "<f8", size, context)
+    # y in its own dtype, C order (admit_c_view; lane a1b: was labels_view,
+    # whose storage-order read of an F-ordered y needed a transpose below).
+    var view = admit_c_view(y, "y", context)
+    var size = Int(py=view.size)
+    var rows = Int(py=view.shape[0])
+    var cols = Int(py=view.shape[1])
+    # `as_f64_c(y, ndim=2)`: float64 in C order
+    var wide = admitted_vector(size, "<f8", _out(context))
+    labels_cast(Int(py=classical_address(view)), admitted_dtype(view, context), labels_address(wide), "<f8", size,
+                context)
     _ = view  # keep the Python object alive through the native call above
-    var reduce = labels_helper(context, "reduce_stat")
     var addr = labels_address(wide)
-    if not _truth(py_call_typed(reduce, PythonObject(addr), PythonObject(1), PythonObject(size), PythonObject(4))):
+    if not _truth(labels_reduce_stat(context, addr, 1, size, 4)):
         raise Error(REFUSE_MULTIOUTPUT)
-    var lo = Float64(py=py_call_typed(reduce, PythonObject(addr), PythonObject(1), PythonObject(size), PythonObject(0)))
-    var hi = Float64(py=py_call_typed(reduce, PythonObject(addr), PythonObject(1), PythonObject(size), PythonObject(1)))
+    var lo = Float64(py=labels_reduce_stat(context, addr, 1, size, 0))
+    var hi = Float64(py=labels_reduce_stat(context, addr, 1, size, 1))
     var src = F64P(unsafe_from_address=addr)
     var hits = 0
     for i in range(size):  # driver-loop: over the indicator's values (the native equality counts)
@@ -551,15 +553,11 @@ def _multilabel_buffer(y: PythonObject, shape: PythonObject, context: PythonObje
     if hits != size:
         raise Error(REFUSE_MULTIOUTPUT)
     # `_x2d(Y.astype("<f4"), "y")`: float32 in C order
-    var out = labels_empty(Python.tuple(rows, cols), "<f4", _out(context))
-    if view.c_order() or view.both_orders():
-        labels_cast(addr, "<f8", labels_address(out), "<f4", size, context)
-    else:
-        var staged = labels_vector(size, "<f4", _out(context))
-        labels_cast(addr, "<f8", labels_address(staged), "<f4", size, context)
-        _ = py_call_typed(labels_helper(context, "transpose_f32"), PythonObject(labels_address(staged)),
-                          PythonObject(labels_address(out)), PythonObject(cols), PythonObject(rows))
-        _ = staged  # keep the Python object alive through the native call above
+    var out = admitted_array(Python.tuple(rows, cols), "<f4", _out(context))
+    # The words are in C order (admit_c_view): one narrowing, no transpose.
+    # TOMBSTONE: prep_labels _multilabel_buffer py_call into the base binding's transpose_f32 (the F-order y arm) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+    labels_cast(addr, "<f8", labels_address(out), "<f4", size, context)
+    _ = view
     _ = wide  # keep the Python object alive through the native call above
     return out
 

@@ -67,7 +67,6 @@ def test_native_standard_step_matches_independent_training_recipe(
         expected = _reference_step(expected_model, inputs, targets)
         with monkeypatch.context() as patch:
             _poison(patch)
-            patch.setattr(SambaStack, "_forward", lambda *a: pytest.fail("legacy Python coordinator"))
             patch.setattr(SambaStack, "loss_and_grads", lambda *a, **k: pytest.fail("Python gradient wrapper"))
             patch.setattr(training.AdamW, "step", lambda *a, **k: pytest.fail("Python optimizer step"))
             actual = _step(actual_model, inputs, targets)

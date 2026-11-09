@@ -1,0 +1,322 @@
+diff --git a/bindings/tsa_admission.mojo b/bindings/tsa_admission.mojo
+index fd4159058a..5f28779e75 100644
+--- a/bindings/tsa_admission.mojo
++++ b/bindings/tsa_admission.mojo
+@@ -17,9 +17,7 @@ from bindings.classical_arrays import classical_wrap_array, _store_code
+ from bindings.arena_array_metadata import arena_array_metadata
+ from gemm.f16_widen import f16_bits_to_f32
+ from bindings.sequential_admission import _one_of, _ctypes_array_owner
+-from bindings.admitted_input import admit_view, admitted_view_kind
+-from bindings.tensor_view import TensorView
+-from core.cast_in import CAST_KIND_BOOL, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
++from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+ 
+ 
+ def tsa_scalar(value: PythonObject, context: PythonObject, integer: Bool = False) raises -> PythonObject:
+@@ -41,61 +39,56 @@ def tsa_scalar(value: PythonObject, context: PythonObject, integer: Bool = False
+             return native_scalar_buffer(value).to_python_number(integer or kind == "i" or kind == "u" or kind == "b")
+     # Native one-element numeric buffers retain the original int/float
+     # conversion interface. Arbitrary __int__/__float__/__bool__ never run.
+-    # The one admission captures the value (bindings/admitted_input.mojo
+-    # admit_view, which also reads a ctypes-backed Array from its slots); its
+-    # one word is decoded here from the captured address.
+-    var one = admit_view(value, "scalar setting", context)
+-    if one.view.count() != 1:
++    var one = tsa_buffer(value, "scalar setting", context)
++    if one.count != 1:
+         raise Error("TypeError: TSA scalar settings require one native numeric value")
+-    var result = tsa_word(one.view, "scalar setting")
+-    _ = one^
+-    return result
+-
+-
+-def tsa_word(v: TensorView, name: String) raises -> PythonObject:
+-    """The first element of a captured numeric view as a Python bool, int or
+-    float (bool, signed / unsigned integers of 1, 2, 4 or 8 bytes, float16 /
+-    32 / 64): the number the buffer's own format reads back as."""
+-    var t = admitted_view_kind(v, name)
+-    var kind = t[0]
+-    var item = t[1]
+-    if kind == CAST_KIND_BOOL:
+-        return PythonObject(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=v.addr)[0] != 0)
+-    if kind == CAST_KIND_FLOAT:
+-        if item == 2:
+-            return PythonObject(Float64(f16_bits_to_f32(MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=v.addr)[0])))
+-        if item == 4:
+-            return PythonObject(Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]))
+-        if item == 8:
+-            return PythonObject(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=v.addr)[0])
+-    if kind == CAST_KIND_SIGNED:
+-        if item == 1:
+-            return PythonObject(Int(MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]))
+-        if item == 2:
+-            return PythonObject(Int(MutPointer[Int16, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]))
+-        if item == 4:
+-            return PythonObject(Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]))
+-        if item == 8:
+-            return PythonObject(Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]))
+-    if kind == CAST_KIND_UNSIGNED:
+-        if item == 1:
+-            return PythonObject(Int(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]))
+-        if item == 2:
+-            return PythonObject(Int(MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]))
+-        if item == 4:
+-            return PythonObject(Int(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]))
+-        if item == 8:
+-            var w = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]
+-            if w >= UInt64(1) << 63:
+-                raise Error("ValueError: TSA " + name + " is beyond the signed 64-bit range")
+-            return PythonObject(Int(w))
+-    raise Error("TypeError: TSA " + name + " requires one native numeric value")
+-
+-
+-# TOMBSTONE: tsa_buffer (the TSA owners' own admission: classical_view, a by-hand repack of ctypes-backed Arrays,
+-# arena _prepare, a second pinned view; superseded by bindings/admitted_input.mojo admit_view, the one admission)
+-# deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+-# Restore: git apply experiments/removed/TSA_BUFFER_ADMISSION.patch
++    # ndarray's scalar conversion is C-owned. Array has a Python protocol,
++    # so read its independently captured buffer instead.
++    var view = one.owner[1]
++    var flat = py_call(view.cast, "B")
++    var code = String(view.format)
++    if code == "e" or (one.is_array and one.dtype_number == 23):
++        var bits = MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=one.source.addr)[0]
++        return PythonObject(Float64(f16_bits_to_f32(bits)))
++    return py_call(flat.cast, code)[0]
++
++
++def tsa_buffer(value: PythonObject, name: String, context: PythonObject) raises -> ArrayMetadata:
++    _array_layout(context)
++    var b = native_loaded_module("builtins")
++    var mapping = py_call(b.type.__dict__["__dict__"].__get__, context["array_class"])
++    if py_get(mapping, "__setattr__") is not None:
++        raise Error("TypeError: TSA native preparation cannot invoke Array attribute hooks")
++    var prepared = value
++    if py_type(value) is not context["array_class"]:
++        prepared = classical_view(value, context, name)
++    else:
++        # Library output stores can be native ctypes arrays. The shared
++        # materializer does not admit those exporters; pack their C buffer
++        # after exact native owner admission, retaining the supported Array
++        # input rather than invoking its Python conversion methods.
++        var slots = context["owner_array_slots"]
++        var view = py_call(slots["_mv"].__get__, value, context["array_class"])
++        if py_type(view) is not b.memoryview:
++            raise Error("TypeError: TSA Array backing view must be a native memoryview")
++        if _ctypes_array_owner(py_type(view.obj), context):
++            var metadata = arena_array_metadata(value, context)
++            var order = py_call(slots["order"].__get__, value, context["array_class"])
++            if py_type(order) is not b.str or (String(order) != "C" and String(order) != "F"):
++                raise Error("TypeError: TSA Array order must be C or F")
++            var dtype = String(metadata["dtype"])
++            var store = native_array_from_bytes(_store_code(dtype), py_call(view.tobytes, "C"))
++            prepared = classical_wrap_array(store, metadata["shape"], dtype, String(order), context)
++    # Native preparation validates exact metadata and pins an independent
++    # buffer before any kernel can release the GIL. Never keep just mutable
++    # caller Array slots as the ownership contract.
++    if py_get(context, "ndarray") is not None:
++        _ = native_numpy_dtype(context)
++    var snapshot = _prepare(prepared, context, True)
++    var result = array_metadata_once(snapshot, array_shape_once(snapshot, context), name, context)
++    var pinned = native_buffer_view(py_call(context["array_fields"]["_mv"], snapshot, context["array_class"]))
++    result.owner = Python.tuple(result.owner, pinned, value)
++    return result^
+ 
+ 
+ def tsa_hw_class(model: PythonObject, context: PythonObject) raises -> Bool:
+@@ -184,10 +177,10 @@ def tsa_truth(value: PythonObject, context: PythonObject) raises -> Bool:
+     if cls is b.list or cls is b.tuple or cls is b.dict or cls is b.set or cls is b.frozenset or cls is b.str or cls is b.bytes or cls is b.bytearray:
+         return len(value) != 0
+     if cls is context["array_class"]:
+-        var snapshot = admit_view(value, "flag", context)
+-        if len(snapshot.view.shape) == 0:
++        var snapshot = tsa_buffer(value, "flag", context)
++        if len(snapshot.shape) == 0:
+             raise Error("TypeError: len() of unsized object")
+-        return snapshot.view.shape[0] != 0
++        return snapshot.shape[0] != 0
+     if cls is py_get(context, "ndarray") and _primitive_dtype(value, context):
+         var count = Int(py=value.size)
+         if count == 0:
+@@ -206,8 +199,8 @@ def tsa_component_index(value: PythonObject, context: PythonObject) raises -> Py
+     if py_type(value) is b.bool or _one_of(py_type(value), context["integer_types"]):
+         return py_call(b.int, value)
+     if py_type(value) is py_get(context, "ndarray"):
+-        var snapshot = admit_view(value, "component index", context)
+-        if len(snapshot.view.shape) == 0 and admitted_view_kind(snapshot.view, "component index")[0] != CAST_KIND_FLOAT:
++        var snapshot = tsa_buffer(value, "component index", context)
++        if len(snapshot.shape) == 0 and snapshot.source.kind != 2:
+             return py_call(b.int, tsa_scalar(value, context))
+     raise Error("TypeError: Holt-Winters component indices require native integers")
+ 
+diff --git a/bindings/tsa_hw_native.mojo b/bindings/tsa_hw_native.mojo
+index 194b7c3e6a..ec359d6906 100644
+--- a/bindings/tsa_hw_native.mojo
++++ b/bindings/tsa_hw_native.mojo
+@@ -29,9 +29,7 @@ from bindings.py_typed_call import py_call_typed
+ from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind, classical_wrap_array
+ from bindings.classical_pandas import classical_admit_value
+ from providers.python.array_metadata_pyapi import ArrayMetadata
+-from bindings.tsa_admission import tsa_hw_fields, tsa_hw_class, tsa_scalar, tsa_component_index
+-from bindings.admitted_input import admit_view, admitted_view_kind, AdmittedTyped
+-from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED
++from bindings.tsa_admission import tsa_hw_fields, tsa_hw_class, tsa_buffer, tsa_scalar, tsa_component_index
+ from bindings.native_owner_lifetime import native_release_admit
+ from bindings.classical_attributes import classical_connect_numpy
+ from providers.python.forecast_owner_pyapi import forecast_commit
+@@ -133,22 +131,21 @@ def _entry(entries: PythonObject, name: String) raises -> PythonObject:
+ 
+ def _check_dims(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+     """`_check_dims(ts_input)`: (C-ordered float32 (ts_num, n) data, n)."""
+-    var value = admit_view(source, "endog", context)
+-    var kind = admitted_view_kind(value.view, "endog")
+-    var rank = len(value.view.shape)
++    var value = tsa_buffer(source, "endog", context)
++    var rank = len(value.shape)
+     var ts_num = Int(py=fields["ts_num"])
+     if rank != 1 and rank != 2:
+         raise Error("ValueError: " + _HW + "data input must have 1 or 2 dimensions")
+-    var rows = 1 if rank == 1 else value.view.shape[0]
+-    var n = value.view.shape[0] if rank == 1 else value.view.shape[1]
++    var rows = 1 if rank == 1 else value.shape[0]
++    var n = value.shape[0] if rank == 1 else value.shape[1]
+     if ts_num != rows:
+         raise Error("ValueError: " + _HW + "initialized series count disagrees with data")
+     if rows * n == 0:
+         raise Error("ValueError: " + _HW + "endog is empty")
+     var out = admitted_array_f32(Python.tuple(rows, n), rows * n, context)
+-    _ = admitted_cast_nd_f32(value.view.addr, value.view.shape, value.view.strides, kind[1],
+-                 kind[0], _F32P(unsafe_from_address=Int(py=classical_address(out))))
+-    _ = value^
++    _ = admitted_cast_nd_f32(value.source.addr, value.shape, value.strides, value.source.itemsize,
++                 value.source.kind, _F32P(unsafe_from_address=Int(py=classical_address(out))))
++    _ = value
+     _ = out
+     return Python.tuple(out, n)
+ 
+@@ -357,7 +354,7 @@ def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) r
+         return _shaped(fields, _hw_query(entries, held, fields, start, end, b, context), 0, steps, index, context)
+     var packed = _packed(fields["_comps"], 3 * (n - period) * b, context)
+     var comps = packed.keep
+-    var minted = _hw_mint(model, fields, entries, n, b, period, packed.view.addr)
++    var minted = _hw_mint(model, fields, entries, n, b, period, packed.source.addr)
+     if minted is not None:
+         var whole = _hw_query(entries, minted, fields, start, end, b, context)
+         _ = comps
+@@ -400,7 +397,7 @@ def hw_score(model: PythonObject, args: PythonObject, context: PythonObject) rai
+     # `self.sse_[index]`: the float32 word, as a Python float
+     var packed = _packed(fields["sse_"], b, context)
+     var sse = packed.keep
+-    var value = _F32P(unsafe_from_address=packed.view.addr)[Int(py=index)]
++    var value = _F32P(unsafe_from_address=packed.source.addr)[Int(py=index)]
+     _ = sse  # keep the Python object alive through the native call above
+     _ = sse^
+     return PythonObject(Float64(value))
+@@ -477,10 +474,9 @@ def hw_initialize(model: PythonObject, args: PythonObject, context: PythonObject
+     return PythonObject(None)
+ 
+ 
+-def _packed(value: PythonObject, count: Int, context: PythonObject) raises -> AdmittedTyped:
+-    var result = admit_view(value, "Holt-Winters fitted storage", context)
+-    var kind = admitted_view_kind(result.view, "Holt-Winters fitted storage")
+-    if kind[0] != CAST_KIND_FLOAT or kind[1] != 4 or not result.view.c_contig or result.view.count() != count:
++def _packed(value: PythonObject, count: Int, context: PythonObject) raises -> ArrayMetadata:
++    var result = tsa_buffer(value, "Holt-Winters fitted storage", context)
++    if not result.f32_c() or result.count != count:
+         raise Error("ValueError: " + _HW + "fitted storage must be contiguous float32 with the fitted extent")
+     return result^
+ 
+@@ -516,13 +512,13 @@ def hw_forecast(model: PythonObject, args: PythonObject, context: PythonObject)
+         raise Error("ValueError: Holt-Winters forecast extent exceeds native indexing bounds")
+     var out = tsa_array("f", "<f4", Python.tuple(h * b), h * b, 4, context)
+     var entries = _hw_entries(model, fields, context)
+-    var minted = _hw_mint(model, fields, entries, n, b, period, comps.view.addr)
++    var minted = _hw_mint(model, fields, entries, n, b, period, comps.source.addr)
+     if minted is not None:
+         var whole = _hw_query(entries, minted, fields, n, n + h, b, context)
+         _ = comps
+         return _shaped(fields, whole, 0, h, index, context)
+     _ = py_call_typed(_entry(entries, "holtwinters_forecast"),
+-        PythonObject(comps.view.addr), classical_address(out), Python.list(n, b, period, h), fields["seasonal"])
++        PythonObject(comps.source.addr), classical_address(out), Python.list(n, b, period, h), fields["seasonal"])
+     _ = comps
+     _ = out
+     return _shaped(fields, out, 0, h, index, context)
+@@ -564,7 +560,7 @@ def hw_component(model: PythonObject, args: PythonObject, context: PythonObject,
+     var out = tsa_array("f", "<f4", Python.tuple(b, rows), b * rows, 4, context)
+     var base = Int(py=classical_address(out))
+     for series in range(b):  # driver-loop: gather each native component column into its series-major output
+-        xseq_column_copy_f32(_F32P(unsafe_from_address=comps.view.addr + which * rows * b * 4),
++        xseq_column_copy_f32(_F32P(unsafe_from_address=comps.source.addr + which * rows * b * 4),
+             _F32P(unsafe_from_address=base + series * rows * 4), rows, b, series)
+     if cached is None:
+         var updates = Python.dict()
+@@ -609,10 +605,8 @@ def hw_save(model: PythonObject, args: PythonObject, context: PythonObject) rais
+     var names = Python.tuple("sse", "alpha", "beta", "gamma", "n_iter", "criterion")
+     for i in range(len(names)):  # driver-loop: snapshot all six saved native statistics before opening the archive
+         var name = String(names[i])
+-        var stored = admit_view(fields[name + "_"], name, context)
+-        var skind = admitted_view_kind(stored.view, name)
+-        var want = CAST_KIND_FLOAT if i < 4 else CAST_KIND_SIGNED
+-        if stored.view.count() != b or not stored.view.c_contig or skind[1] != 4 or skind[0] != want:
++        var stored = tsa_buffer(fields[name + "_"], name, context)
++        if stored.count != b or not stored.c_order or stored.source.itemsize != 4 or ((i < 4 and stored.dtype_number != 11) or (i >= 4 and stored.source.kind != 1)):
+             raise Error("ValueError: Holt-Winters archive statistics have invalid dtype or extent")
+         py_setitem(values, names[i], stored.keep)
+     var meta = tsa_array("q", "<i8", Python.tuple(4), 4, 8, context)
+@@ -625,5 +619,5 @@ def hw_save(model: PythonObject, args: PythonObject, context: PythonObject) rais
+     MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(eps)))[0] = Float64(py=fields["eps"])
+     py_setitem(values, "meta", meta)
+     py_setitem(values, "eps", eps)
+-    _ = components^
++    _ = components
+     return classical_archive_write(args[0], values, context)
+diff --git a/bindings/tsa_public_native.mojo b/bindings/tsa_public_native.mojo
+index 8f3f6ac4d3..4fcc4d7a64 100644
+--- a/bindings/tsa_public_native.mojo
++++ b/bindings/tsa_public_native.mojo
+@@ -24,8 +24,7 @@ from core.xseq_marshal import tsa_flags_u8
+ from core.admitted_input_nd import admitted_cast_nd_f32
+ from bindings.native_array_storage import native_scratch_bytes, native_scratch_address
+ from bindings.tsa_hw_native import tsa_array, hw_fit, hw_predict, hw_score, hw_initialize, hw_forecast, hw_component, hw_save
+-from bindings.tsa_admission import tsa_scalar, tsa_truth
+-from bindings.admitted_input import admit_view, admitted_view_kind
++from bindings.tsa_admission import tsa_buffer, tsa_scalar, tsa_truth
+ from bindings.native_loaded_module import native_loaded_module
+ from bindings.tsa_arima_native import arima_fit, arima_predict, arima_forecast
+ from providers.python.arima_lifecycle_pyapi import arima_initialize, arima_parameter, arima_repr
+@@ -62,13 +61,12 @@ def _series_major(source: PythonObject, name: String, context: PythonObject) rai
+     (never returned or kept), written in full by the one parallel cast, so it
+     is uninitialised (`native_scratch_bytes`; REGRESSIONS F3/C3, was a
+     zero-filled Array); read its address with `native_scratch_address`."""
+-    var value = admit_view(source, name + " y", context)
+-    var kind = admitted_view_kind(value.view, name + " y")
+-    var rank = len(value.view.shape)
++    var value = tsa_buffer(source, name + " y", context)
++    var rank = len(value.shape)
+     if rank != 1 and rank != 2:
+         raise Error("mojolearn " + name + ": y must be 1-D or 2-D (n_obs, n_series)")
+-    var rows = value.view.shape[0]
+-    var cols = 1 if rank == 1 else value.view.shape[1]
++    var rows = value.shape[0]
++    var cols = 1 if rank == 1 else value.shape[1]
+     if rows * cols == 0:
+         raise Error("mojolearn " + name + ": y is empty")
+     var out = native_scratch_bytes(rows * cols * 4)
+@@ -76,12 +74,12 @@ def _series_major(source: PythonObject, name: String, context: PythonObject) rai
+     var steps = List[Int]()
+     if rank == 2:
+         dims.append(cols)
+-        steps.append(value.view.strides[1])
++        steps.append(value.strides[1])
+     dims.append(rows)
+-    steps.append(value.view.strides[0])
+-    _ = admitted_cast_nd_f32(value.view.addr, dims, steps, kind[1], kind[0],
++    steps.append(value.strides[0])
++    _ = admitted_cast_nd_f32(value.source.addr, dims, steps, value.source.itemsize, value.source.kind,
+                  _F32P(unsafe_from_address=native_scratch_address(out)))
+-    _ = value^
++    _ = value
+     _ = out
+     return Python.tuple(out, rows, cols)
+ 

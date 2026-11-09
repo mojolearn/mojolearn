@@ -3,9 +3,10 @@
 # entry: retain the established per-call search/vote and exact output layout.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module, _loaded_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
-from bindings.family_common import family_as_f32_dense, family_call, family_min
+from bindings.family_common import family_call, family_min
 from bindings.classical_arrays import classical_address, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.host_archive_native import host_archive_neighbor_metric
@@ -49,7 +50,7 @@ def host_knn_predict(model: PythonObject, source: PythonObject, classifier: Bool
     var targets = py_get(fields, "_y_cols")
     if index is None or targets is None:
         raise Error("mojolearn: call fit before predict")
-    var query = family_as_f32_dense(source, 2, "X", context)
+    var query = admit_family(source, 2, "X", context, dense=True).array
     var metric = host_archive_neighbor_metric(fields["metric"], Float64(py=fields["p"]), False, context)
     if String(fields["metric"]).lower() == "jensenshannon" and Int(py=query.size) > 0 and family_min(query) < 0:
         var name = "HostKNeighborsClassifier" if classifier else "HostKNeighborsRegressor"

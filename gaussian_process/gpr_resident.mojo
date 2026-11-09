@@ -41,18 +41,18 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL 
 from cholesky.checks.potrf import (
     CHOL_ELEM_TPB,
     CHOL_NB_PINNED,
-    CHOL_PANEL_TPB,
     add_jitter,
-    chol_default_nb_hint,
     chol_nb_for,
     chol_validate_jitter,
-    chol_workspace_floats,
-    enqueue_logdet,
-    potrf_lower,
 )
-from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve, trsm_lower
-from cholesky.impl.matrix.detail.matrix import copy_vector_from_matrix_diagonal_kernel
-from cholesky.logdet_fold import logdet_blocks
+from cholesky.chol_ops import (
+    chol_op_cho_solve,
+    chol_op_factor,
+    chol_op_logdet,
+    chol_op_logdet_scratch_floats,
+    chol_op_zero_on_fail,
+)
+from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from core.device_scan import device_classify_nonfinite, device_first_nonfinite
 from core.device_zero import enqueue_fill
 from core.identity_trace import IdentityTrace
@@ -166,73 +166,72 @@ def gpr_fit_ptr_device(
     # alpha IS the profile's jitter (DEVIATION 1751): `gpr_fit_host`'s calls.
     chol_validate_jitter(alpha)
     var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
-    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
-    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+    # The factor, the log-determinant and the solve as the executor's
+    # Cholesky ops (lane n8-gp-krr-smo, cholesky/chol_ops.mojo): `info`
+    # stays in a device word that gates every later launch, and comes home
+    # once, with the outputs (before: one drain inside the factor for
+    # `info`, then the branch on the host).
+    var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill(ctx, dinfo, Int32(0))
     add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
-    var run = potrf_lower(ctx, dk, ws, n, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
-    # the factor home, before the solve (which only reads it)
+    chol_op_factor(ctx, dk, dinfo, n)
+    # the factor home, before the solve (which only reads it); a failed
+    # factor is the one frozen at its failing panel, beside its nonzero info
     ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=l_addr), src_buf=dk)
 
     var ddual = ctx.enqueue_create_buffer[DType.float32](n)
-    var dlparts = ctx.enqueue_create_buffer[DType.float32](2 * logdet_blocks(n))
+    var dldscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
+    var dldet = ctx.enqueue_create_buffer[DType.float32](1)
     var nbf = gpc_fold_blocks(n)
     var dpart = ctx.enqueue_create_buffer[DType.float32](max(nbf, 1))
     var dyd = ctx.enqueue_create_buffer[DType.float32](1)
-    var diag = dwork.create_sub_buffer[DType.float32](0, n)
-    var scalar = dwork.create_sub_buffer[DType.float32](n, 1)
     var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
     var hyd = ctx.enqueue_create_host_buffer[DType.float32](1)
+    var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
     var logdet = Float32(0.0)
     var ydotalpha = Float32(0.0)
     var lml = Float32(0.0)
-    if run.info == 0:
-        # `chol_logdet`'s two launches, the scalar left on the device
-        ctx.enqueue_function[copy_vector_from_matrix_diagonal_kernel](
-            diag.unsafe_ptr(), dk.unsafe_ptr(), Int32(n), Int32(n),
-            grid_dim=((n + CHOL_ELEM_TPB - 1) // CHOL_ELEM_TPB, 1, 1), block_dim=(CHOL_ELEM_TPB, 1, 1),
+    chol_op_logdet(ctx, dk, dinfo, dldscr, dldet, n)
+    ctx.enqueue_copy(dst_buf=ddual, src_buf=dy)
+    chol_op_cho_solve(ctx, dk, ddual, dinfo, n, 1)
+    # `_gpr_ydot_device`'s two launches (read only when info == 0)
+    if nbf > 0:
+        ctx.enqueue_function[gpr_ydot_part_kernel](
+            _fp(dy), _fp(ddual), Int32(n), _fp(dpart), Int32(nbf),
+            grid_dim=(nbf + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
         )
-        enqueue_logdet(ctx, _fp(diag), _fp(dlparts), _fp(scalar), n)
-        ctx.enqueue_copy(dst_buf=ddual, src_buf=dy)
-        cho_solve(ctx, dk, ddual, n, 1, trace, CHOL_SOLVE_TPB)
-        # `_gpr_ydot_device`'s two launches
-        if nbf > 0:
-            ctx.enqueue_function[gpr_ydot_part_kernel](
-                _fp(dy), _fp(ddual), Int32(n), _fp(dpart), Int32(nbf),
-                grid_dim=(nbf + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
-            )
-        ctx.enqueue_function[gpr_ydot_fin_kernel](_fp(dpart), Int32(nbf), _fp(dyd), grid_dim=1, block_dim=1)
-        ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=scalar)
-        ctx.enqueue_copy(dst_ptr=hyd.unsafe_ptr(), src_buf=dyd)
-    else:
-        # a failed fit hands back a zero dual beside its nonzero info
-        enqueue_fill(ctx, ddual, Float32(0.0))
+    ctx.enqueue_function[gpr_ydot_fin_kernel](_fp(dpart), Int32(nbf), _fp(dyd), grid_dim=1, block_dim=1)
+    # a failed fit hands back a zero dual beside its nonzero info
+    chol_op_zero_on_fail(ctx, dinfo, ddual, n)
     ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=dual_addr), src_buf=ddual)
+    ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dldet)
+    ctx.enqueue_copy(dst_ptr=hyd.unsafe_ptr(), src_buf=dyd)
+    ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
     ctx.synchronize()
-    if run.info == 0:
+    var info = Int(hinfo.unsafe_ptr().unsafe_load(0))
+    if info == 0:
         logdet = hld.unsafe_ptr().unsafe_load(0)
         ydotalpha = hyd.unsafe_ptr().unsafe_load(0)
         lml = gp_log_marginal_likelihood_value(ydotalpha, logdet, n_train)
     # info, nb, logdet, ydotalpha, lml; each float32 widens to float64 exactly.
     var sp = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=scalars_addr)
-    sp.unsafe_store(0, Float64(run.info))
-    sp.unsafe_store(1, Float64(run.nb))
+    sp.unsafe_store(0, Float64(info))
+    sp.unsafe_store(1, Float64(nb_pin))
     sp.unsafe_store(2, Float64(logdet))
     sp.unsafe_store(3, Float64(ydotalpha))
     sp.unsafe_store(4, Float64(lml))
-    var info = run.info
-    _ = diag^
-    _ = scalar^
     _ = hld^
     _ = hyd^
+    _ = hinfo^
     _ = dx^
     _ = dy^
     _ = dls^
     _ = dk^
     _ = dstack^
-    _ = ws^
-    _ = dwork^
+    _ = dinfo^
     _ = ddual^
-    _ = dlparts^
+    _ = dldscr^
+    _ = dldet^
     _ = dpart^
     _ = dyd^
     # DEVIATION 1946: the context dies LAST, after every value built on it.

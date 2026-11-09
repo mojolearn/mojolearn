@@ -48,7 +48,7 @@ from core.device_scan import device_first_nonfinite
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_EMB_SCAN_DEFERRED.patch; record in docs/TOMBSTONES.md.
 from core.staged_download import download_f32_into
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
-comptime _NEURAL_CTX = "MojoNeuralEmbeddingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralEmbeddingContextFast"
+comptime _NEURAL_CTX = "MojolearnNeuralEmbeddingContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralEmbeddingContextFastV2"
 # The pinned stages of this binding's downloads (core/staged_download.mojo),
 # one pool per binding and tier like the context above.
 comptime _STAGE_POOL = "MojoDownloadStagesEmbeddingIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDownloadStagesEmbeddingFast"

@@ -81,3 +81,6 @@ bytes, plus complete logs. Source review by generation and neural peers found
 no remaining blocker after the documented repairs; no duplicate peer builds.
 Provider executable source ec6f1fbc1d compiled the real shared public boundary;
 its evidence and guard handoff are owned by generation agent.
+
+integ-w3 (2026-11-09): compile_native.mojo / compile_native.py deleted: they imported the per-call Mamba-2 workspace entries
+(mamba2_workspace_api_binding, mamba2_workspace_v1) that lane x5-mamba-on-executor deleted; recoverable at f59d913b0b.

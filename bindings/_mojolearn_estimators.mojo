@@ -14,11 +14,10 @@ from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAI
 # DEVIATION 2486: shared byte-preserving host copies.
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
 from std.os import abort
-from experiments.apple_fast.gemm.scoped_dispatch import (
-    AUDIT as SCOPED_AUDIT, GRAM as SCOPED_GRAM, SPLITS as SCOPED_SPLITS,
-    PCA as SCOPED_PCA, TALL as SCOPED_TALL, DENSE as SCOPED_DENSE,
-    NARROW as SCOPED_NARROW, scoped_count, scoped_last,
-)
+# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
+# f59d913b0b (its witnesses scoped_gemm_flags, scoped_gemm_count, scoped_gemm_metadata, and the MOJOLEARN_SOFTMAX_G2_AUDIT
+# witnesses softmax_g2_state / _count / _last / _reset with bindings/softmax_g2_observe.mojo).
+# Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -28,8 +27,6 @@ from providers.python.core_py2mojo_rows_pyapi import py2mojo_rows_device_binding
 from core.py2mojo_linear import py2mojo_linear_flags
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from experiments.apple_fast.gemm.softmax_narrow import SOFTMAX_AUDIT
-from bindings.softmax_g2_observe import softmax_g2_state_binding, softmax_g2_count_binding, softmax_g2_last_binding, softmax_g2_reset_binding
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import NUMERIC_FAST as _OLS_FAST
 from std.sys.compile import is_defined
@@ -70,7 +67,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoEstimatorsContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoEstimatorsContextFast"
+comptime _DEVCTX_SLOT = "MojolearnEstimatorsContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnEstimatorsContextFastV2"
 
 
 from core.labeled_reference_predict import labeled_reference_predict
@@ -140,10 +137,9 @@ from core.estimators_impl import (
 )
 
 
-from decomposition.impl.linalg.detail.pca import pca_compensated_cov_count
-
-def pca_compensated_cov_count_py() raises -> PythonObject:
-    return PythonObject(pca_compensated_cov_count())
+# TOMBSTONE: MOJOLEARN_PCA_FAST_COMPENSATED_COV (never measured, deleted) deleted 2026-11-09 by e4e58162e9; code
+# recoverable at f59d913b0b (its reach counter export pca_compensated_cov_count).
+# Restore: git apply experiments/removed/MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
@@ -379,11 +375,13 @@ def pca_transform_binding(
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
+    # Returns X's finite status word (0 = finite), tested on the device after
+    # the upload (lane a6; the door defers its finite scan to this entry).
+    var status: Int32
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        pca_transform_host(ctx, xp, mp, cp, op, nr, nf, nc)
-        ctx.synchronize()
-    return PythonObject(0)
+        status = pca_transform_host(ctx, xp, mp, cp, op, nr, nf, nc)
+    return PythonObject(Int(status))
 
 
 def _pca_whiten_pointer(
@@ -474,8 +472,9 @@ def tsvd_fit_binding(
     singular_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """Fit tSVD. Only components and singular values are claimed."""
-    if len(params) != 3:
+    """Fit tSVD. Only components and singular values are claimed.
+    An OPTIONAL last param (lane a7d) of 1 asks for X's finite status word over the entry's own upload, returned instead of 0 (the door refuses a nonzero word)."""
+    if len(params) != 3 and len(params) != 4:
         raise Error("tsvd_fit: params must contain 3 values")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=components_addr))
@@ -483,11 +482,14 @@ def tsvd_fit_binding(
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
+    var test = len(params) == 4 and Int(py=params[3]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        tsvd_fit_host(ctx, xp, cp, sp, nr, nf, nc)
+        tsvd_fit_host(ctx, xp, cp, sp, nr, nf, nc, word_addr)
         ctx.synchronize()
-    return PythonObject(0)
+    return PythonObject(Int(word[0]) if test else 0)
 
 
 def tsvd_explained_binding(
@@ -526,8 +528,8 @@ def tsvd_fit_explained_binding(
     """`tsvd_fit` then `tsvd_explained` in one call (`tsvd_fit_explained_host`,
     lane fg-pca T1: one upload of X under the IDENTICAL default; the two
     calls in order under -D MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF): params
-    `n_rows, n_features, n_components`."""
-    if len(params) != 3:
+    `n_rows, n_features, n_components`. An OPTIONAL last param (lane a7d) of 1 asks for X's finite status word over the entry's own upload, returned instead of 0 (the door refuses a nonzero word)."""
+    if len(params) != 3 and len(params) != 4:
         raise Error("tsvd_fit_explained: params must contain 3 values")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=components_addr))
@@ -537,11 +539,14 @@ def tsvd_fit_explained_binding(
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
+    var test = len(params) == 4 and Int(py=params[3]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        tsvd_fit_explained_host(ctx, xp, cp, sp, ep, rp, nr, nf, nc)
+        tsvd_fit_explained_host(ctx, xp, cp, sp, ep, rp, nr, nf, nc, word_addr)
         ctx.synchronize()
-    return PythonObject(0)
+    return PythonObject(Int(word[0]) if test else 0)
 
 
 def tsvd_transform_binding(
@@ -550,7 +555,9 @@ def tsvd_transform_binding(
     out_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    if len(params) != 3:
+    """`TruncatedSVD.transform`: params n_rows, n_features, n_components.
+    An OPTIONAL last param (lane a7d) of 1 asks for X's finite status word over the entry's own upload, returned instead of 0 (the door refuses a nonzero word)."""
+    if len(params) != 3 and len(params) != 4:
         raise Error("tsvd_transform: params must contain 3 values")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=components_addr))
@@ -558,11 +565,14 @@ def tsvd_transform_binding(
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
+    var test = len(params) == 4 and Int(py=params[3]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        tsvd_transform_host(ctx, xp, cp, op, nr, nf, nc)
+        tsvd_transform_host(ctx, xp, cp, op, nr, nf, nc, word_addr)
         ctx.synchronize()
-    return PythonObject(0)
+    return PythonObject(Int(word[0]) if test else 0)
 
 
 def tsvd_resident_lease_binding() raises -> PythonObject:
@@ -584,7 +594,8 @@ def tsvd_resident_stats_binding() raises -> PythonObject:
 
 
 def _tsvd_resident_params(params: PythonObject, who: String) raises -> Tuple[Int, Int, Int, Int]:
-    if len(params) != 4:
+    # Lane a7d: a fifth value is the optional finite flag (read by the caller).
+    if len(params) != 4 and len(params) != 5:
         raise Error(who + ": params must contain 4 values (n_rows, n_features, n_components, lease), got "
                     + String(len(params)))
     var lease = Int(py=params[3])
@@ -601,16 +612,21 @@ def tsvd_transform_resident_binding(
 ) raises -> PythonObject:
     """`tsvd_transform` with `params` = its 3 values followed by the lease
     (`tsvd_resident_lease`; 0 uploads the components for this call only).
-    The components are read from the lease's device copy. Returns 0."""
+    The components are read from the lease's device copy. Returns 0, or
+    with a fifth param of 1 (lane a7d) X's finite status word over the
+    entry's own upload."""
     var words = _tsvd_resident_params(params, "tsvd_transform_resident")
     var xp = _f32_ptr(Int(py=x_addr))
     var c_address = Int(py=components_addr)
     var op = _f32_ptr(Int(py=out_addr))
+    var test = len(params) == 5 and Int(py=params[4]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        tsvd_transform_resident_device(ctx, words[3], xp, c_address, op, words[0], words[1], words[2])
+        tsvd_transform_resident_device(ctx, words[3], xp, c_address, op, words[0], words[1], words[2], word_addr)
         ctx.synchronize()
-    return PythonObject(0)
+    return PythonObject(Int(word[0]) if test else 0)
 
 
 def tsvd_inverse_transform_resident_binding(
@@ -810,9 +826,11 @@ def pca_fit_owned_binding(
     n_components, the kept count chosen, and with an output address (0:
     none) X projected onto the kept components. params: n_rows, n_features,
     n_components, dense (1: svd_solver='full'), keep mode (0: every
-    component, 1: the fraction, 2: "mle"), whiten, the fraction. Returns (kept
-    count, noise variance)."""
-    if len(params) != 7:
+    component, 1: the fraction, 2: "mle"), whiten, the fraction, and
+    OPTIONALLY (lane a7d) a finite flag: 1 asks for X's finite status word
+    over the fit's upload. Returns (kept count, noise variance), with the
+    status word third when asked (0 = finite; the door refuses otherwise)."""
+    if len(params) != 7 and len(params) != 8:
         raise Error("pca_fit_owned: params must contain n_rows, n_features, n_components, dense, keep mode, whiten, fraction")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=components_addr))
@@ -829,15 +847,21 @@ def pca_fit_owned_binding(
     var keep_mode = Int(py=params[4])
     var whiten = Int(py=params[5]) != 0
     var fraction = Float64(py=params[6])
+    var test = len(params) == 8 and Int(py=params[7]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     var kept = 0
     var noise = Float64(0.0)
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         var fitted = pca_fit_owned(
-            ctx, xp, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, fraction, op, oa != 0, whiten
+            ctx, xp, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, fraction, op, oa != 0, whiten,
+            word_addr,
         )
         kept = fitted[0]
         noise = fitted[1]
+    if test:
+        return Python.tuple(PythonObject(kept), PythonObject(noise), PythonObject(Int(word[0])))
     return Python.tuple(PythonObject(kept), PythonObject(noise))
 
 
@@ -1194,9 +1218,13 @@ def qn_fit_binding(
     OPTIONAL 15th is `svr_eps`, the SVR sensitivity (0 when absent).
     Lane sk-kernels: with has_sample_weight = 1 a 16th field is required,
     the address of `n_rows` float32 per-row weights.
+    Lane a7c: an OPTIONAL 17th field (the 16th then present, 0 without
+    weights) is the host address of the deferred finite status word of X
+    (core/admitted_finite_status.mojo): the uploaded X is tested on the
+    device and the word written there; a non-finite X fits nothing.
     Returns num_iters; info[0] = objective, info[1] = retcode."""
-    if len(params) < 13 or len(params) > 16:
-        raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id, an optional 15th, svr_eps, and a 16th, the sample_weight address, when has_sample_weight is 1")
+    if len(params) < 13 or len(params) > 17:
+        raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id, an optional 15th, svr_eps, a 16th, the sample_weight address, when has_sample_weight is 1, and an optional 17th, the finite status address")
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
     var wp = _f32_ptr(Int(py=coef_addr))
@@ -1216,16 +1244,17 @@ def qn_fit_binding(
     var has_sw = Int(py=params[12]) != 0
     var loss = Int(py=params[13]) if len(params) >= 14 else 0
     var svr_eps = Float64(py=params[14]) if len(params) >= 15 else 0.0
-    if has_sw and len(params) != 16:
+    if has_sw and len(params) < 16:
         raise Error("qn_fit: has_sample_weight = 1 needs the 16th field, the sample_weight address")
     var swp = _f32_ptr(Int(py=params[15])) if has_sw else yp
+    var status = Int(py=params[16]) if len(params) == 17 else 0
     var iters = 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         iters = qn_fit_host(
             ctx, xp, yp, wp, ip, nr, nf, nc, l1, l2, grad_tol, change_tol,
             max_iter, ls_max, mem, fit_intercept, normalized, has_sw, swp,
-            loss, svr_eps,
+            loss, svr_eps, status,
         )
         ctx.synchronize()
     return PythonObject(iters)
@@ -1522,12 +1551,15 @@ def kde_fit_prepare_binding(
         1  n_features
         2  bandwidth   (float)
         3  has_weights (0/1; weights_addr is read only when 1)
+        4  finite_tested (optional, 0/1; lane a7b-device-x-neighbors: the
+           door's fit tested the rows, so the serial host pass runs only
+           for the sqeuclidean bound and the cosine zero-row rule)
 
     Refuses, by name, everything `kde_score_samples` refuses about the fit
     set. Release with `kde_fit_release`."""
-    if len(params) != 4:
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kde_fit_prepare: params must contain 4 values, got "
+            "kde_fit_prepare: params must contain 4 or 5 values, got "
             + String(len(params))
         )
     var tp = _f32_ptr(Int(py=train_addr))
@@ -1535,6 +1567,7 @@ def kde_fit_prepare_binding(
     var n_features = Int(py=params[1])
     var bandwidth = Float32(Float64(py=params[2]))
     var has_weights = Int(py=params[3]) != 0
+    var finite_tested = len(params) == 5 and Int(py=params[4]) != 0
     var kname = String(py=kernel)
     var mname = String(py=metric)
     var weights = List[Float32]()
@@ -1543,7 +1576,8 @@ def kde_fit_prepare_binding(
         weights = read_f32(Int(wp), max(0, n_train))
     var handle: Int
     with GILReleased(Python()):
-        handle = kde_fit_prepare(tp, n_train, n_features, bandwidth, kname, mname, weights, has_weights)
+        handle = kde_fit_prepare(tp, n_train, n_features, bandwidth, kname, mname, weights, has_weights,
+                                 finite_tested)
     return PythonObject(handle)
 
 
@@ -1562,16 +1596,21 @@ def kde_score_samples_resident_binding(
     metric: PythonObject,
 ) raises -> PythonObject:
     """`kde_score_samples` over a resident fit set (DEVIATION 3003).
-    `params`: [n_query, n_features, bandwidth(, want_total)]. Writes
+    `params`: [n_query, n_features, bandwidth(, want_total(, status
+    address))]; the status address (lane a7b-device-x-neighbors) is a host
+    int32 word that receives the queries' finite status (0 = finite). Writes
     `n_query` float32 to `out_addr`; returns n_query, or with want_total the
     scores' fixed-order float32 sum (on the device, `device_sum_f32_fixed`;
     lane pyglue-numeric: KernelDensity.score summed them on the host)."""
-    if len(params) != 3 and len(params) != 4:
+    if len(params) < 3 or len(params) > 5:
         raise Error(
-            "kde_score_samples_resident: params must contain 3 or 4 values, got "
+            "kde_score_samples_resident: params must contain 3 to 5 values, got "
             + String(len(params))
         )
-    var want_total = len(params) == 4 and Int(py=params[3]) != 0
+    var want_total = len(params) >= 4 and Int(py=params[3]) != 0
+    var status = 0 if len(params) < 5 else Int(py=params[4])
+    if status < 0 or status % 4 != 0:
+        raise Error("kde_score_samples_resident: the status address must be a positive int32-aligned address")
     var h = Int(py=handle)
     var qp = _f32_ptr(Int(py=query_addr))
     var op = _f32_ptr(Int(py=out_addr))
@@ -1584,6 +1623,7 @@ def kde_score_samples_resident_binding(
     with GILReleased(Python()):
         total = kde_score_samples_resident(
             h, qp, n_query, n_features, bandwidth, kname, mname, op, want_total=want_total,
+            status_addr=status,
         )
     if want_total:
         return PythonObject(Float64(total))
@@ -1632,18 +1672,6 @@ def dbscan_core_arrays_binding(
     return dbscan_core_arrays_device(ctx, x_addr, labels_addr, core_addr, params)
 
 
-def scoped_gemm_flags_binding() raises -> PythonObject:
-    return PythonObject(Int(SCOPED_TALL) + 2 * Int(SCOPED_DENSE) + 4 * Int(SCOPED_GRAM) + 8 * Int(SCOPED_NARROW) + 16 * Int(SCOPED_SPLITS) + 32 * Int(SCOPED_PCA))
-
-
-def scoped_gemm_count_binding(route: PythonObject, arm: PythonObject) raises -> PythonObject:
-    return PythonObject(scoped_count(Int(py=route), Int(py=arm)))
-
-
-def scoped_gemm_metadata_binding(index: PythonObject) raises -> PythonObject:
-    return PythonObject(scoped_last(Int(py=index)))
-
-
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_estimators.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -1651,7 +1679,6 @@ def build__mojolearn_estimators() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_estimators")
-        m.def_function[pca_compensated_cov_count_py]("pca_compensated_cov_count")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
@@ -1675,10 +1702,6 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[kde_fast_immutable_fit_binding]("kde_fast_immutable_fit")
         m.def_function[kde_fit_release_binding]("kde_fit_release")
         m.def_function[kde_score_samples_resident_binding]("kde_score_samples_resident")
-        comptime if SCOPED_AUDIT:
-            m.def_function[scoped_gemm_flags_binding]("scoped_gemm_flags")
-            m.def_function[scoped_gemm_count_binding]("scoped_gemm_count")
-            m.def_function[scoped_gemm_metadata_binding]("scoped_gemm_metadata")
         m.def_function[pca_fit_binding]("pca_fit")
         # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_estimators.patch
@@ -1723,11 +1746,6 @@ def build__mojolearn_estimators() -> PythonObject:
         comptime if MULTIOUT_RIDGE:
             m.def_function[ridge_fit_multi_binding]("ridge_fit_multi")
             m.def_function[ridge_predict_multi_binding]("ridge_predict_multi")
-        comptime if SOFTMAX_AUDIT:
-            m.def_function[softmax_g2_state_binding]("softmax_g2_state")
-            m.def_function[softmax_g2_count_binding]("softmax_g2_count")
-            m.def_function[softmax_g2_last_binding]("softmax_g2_last")
-            m.def_function[softmax_g2_reset_binding]("softmax_g2_reset")
         m.def_function[qn_fit_binding]("qn_fit")
         comptime if QN_OVR_ONE_UPLOAD:
             m.def_function[qn_fit_ovr_binding]("qn_fit_ovr")

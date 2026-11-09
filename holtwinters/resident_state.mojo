@@ -37,7 +37,7 @@ from holtwinters.estimator import hw_predict_in_sample_kernel, HW_PREDICT_TPB, h
 
 # The context slot of holtwinters/estimator.mojo `_DEVCTX_SLOT`: resident
 # entries and the per-call path share one process context.
-comptime _HW_CTX_SLOT = "MojoTsaContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoTsaContextFast"
+comptime _HW_CTX_SLOT = "MojolearnTsaContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnTsaContextFastV2"
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 

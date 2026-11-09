@@ -40,10 +40,14 @@ from sequence.ops import (
     OP_CELL_BWD_H,
     OP_CELL_FWD_H,
     OP_COPY,
+    OP_SEQ_IOTA,
+    OP_SEQ_OUT,
+    OP_SOFTMAX,
+    dummy_ptr,
     gates_of,
 )
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, scan_routes
-from sequence.recurrent import Net, Work, RnnStep, SEQ_WGRAD_BLOCKED, bias_rows, fill, gemm
+from sequence.recurrent import Net, Work, RnnStep, SEQ_WGRAD_BLOCKED, TASK_CE, bias_rows, fill, gather_seq, gemm
 from autograd.kernels.recurrent import colsum, wgrad_block, wgrad_blocked
 
 # The recurrent trainer's backward runs on the tape (promoted 2026-10-19). One run per arm, HIGGS
@@ -61,8 +65,9 @@ comptime RNN_LINEAR = 16
 comptime RNN_LAYER = 17
 comptime RNN_LAST_STEP = 18
 
-# sequence/recurrent.mojo::forward adds b_ih to GX in its own launch unless
-# the per-step kernel adds it (NN42 fused, per-step path only).
+# The input projection adds b_ih to GX in its own launch unless the per-step
+# kernel adds it (NN42 fused, per-step path only); the deleted hand forward
+# (sequence/recurrent.mojo::forward, lane X3) used the same rule.
 comptime RNN_INPUT_BIAS_IN_GX = not NN42_INPUT_BIAS_FUSED or SEQ_LSTM_SCAN
 
 
@@ -151,8 +156,8 @@ def rnn_layer[E: Exec](
     var whh = tape.value(w_hh)
     var bhh = tape.value(b_hh)
     var scanned = False
-    # The IDENTICAL default, as recurrent.forward (rnn_predict): the two
-    # take the same route under the same defines, so they stay equal.
+    # The IDENTICAL default. Training and prediction (rnn_predict, the same
+    # forward in inference mode) take this one route.
     comptime if SEQ_LSTM_SCAN:
         if scan_routes(H, gates_of(cell)):
             var sa = Args()
@@ -165,8 +170,8 @@ def rnn_layer[E: Exec](
             sa.p6 = w.call[l] + B * H
             sa.p7 = whh
             sa.p8 = bhh
-            # never read on this route (b_ih is in gx); live storage, as
-            # recurrent.forward binds them
+            # never read on this route (b_ih is in gx); bound to live
+            # storage, not dummy_ptr (the Metal rule)
             sa.p9 = b_ih
             sa.p10 = gxp
             sa.p11 = whh
@@ -378,11 +383,13 @@ struct RecurrentRules(BackwardRules):
 
 # ------------------------------------------------------------------ trainer step
 def rnn_forward_autograd[E: Exec](
-    mut tape: Tape, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work,
+    mut tape: Tape, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work, yhat: FP,
 ) raises -> Tensor:
     """Record input projections, layers and the head on the tape; the
-    head's output lands in w.yhat and its gradient is w.dy. Every parameter
-    leaf's gradient is its slice of Gr (the `Net` layout)."""
+    head's output lands in `yhat` (B x O; the trainer passes w.yhat) and its
+    gradient is w.dy. Every parameter leaf's gradient is its slice of Gr
+    (the `Net` layout). In inference mode (tape.no_grad(), rnn_predict) the
+    same launches run and nothing is recorded."""
     tape.reset()
     var H = net.H
     var GH = net.G() * H
@@ -397,7 +404,7 @@ def rnn_forward_autograd[E: Exec](
         inp = rnn_layer(tape, ex, gx, w_hh, b_hh, P + net.b_ih(l), net.cell, T, B, w, l)
     var w_o = tape.variable_into(ex, P + net.head(), Gr + net.head(), net.O, H)
     var b_o = tape.variable_into(ex, P + net.head() + net.O * H, Gr + net.head() + net.O * H, 1, net.O)
-    return rnn_head(tape, ex, inp, w_o, b_o, B, w.yhat, w.dy, w)
+    return rnn_head(tape, ex, inp, w_o, b_o, B, yhat, w.dy, w)
 
 
 def rnn_backward_autograd[E: Exec](mut tape: Tape, mut ex: E, net: Net, logits: Tensor, dy: FP, B: Int) raises:
@@ -411,7 +418,7 @@ def rnn_backward_autograd[E: Exec](mut tape: Tape, mut ex: E, net: Net, logits: 
 struct AutogradRnnStep(RnnStep):
     """rnn_fit's step with the backward assembled by the tape."""
 
-    # Launches per optimizer step, backward only (the forward launches are
+    # Launches per optimizer step, backward only (the forward launches were
     # recurrent.forward + head on both paths). L layers, T steps, per-step
     # cell path; W = one weight-gradient group (a GEMM, or wgrad_blocked's
     # launches), S = one bias sum (colsum or its blocked twin).
@@ -436,7 +443,84 @@ struct AutogradRnnStep(RnnStep):
     def forward_head[E: Exec](
         mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work,
     ) raises:
-        self.logits = rnn_forward_autograd(self.tape, ex, net, P, Gr, x, T, B, w)
+        self.logits = rnn_forward_autograd(self.tape, ex, net, P, Gr, x, T, B, w, w.yhat)
 
     def backward[E: Exec](mut self, mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int, w: Work) raises:
         rnn_backward_autograd(self.tape, ex, net, self.logits, w.dy, B)
+
+
+# ------------------------------------------------------------------ predict
+# Lane x3-mlp-rnn-predict-on-tape (docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md X3): prediction runs the
+# trainer's recorded forward (rnn_forward_autograd) on a tape in inference mode.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by 9a9a8e3148; code recoverable at c3b7dc42e6^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
+# rnn_predict moved here from sequence/recurrent.mojo (which this module imports) with the hand forward and head
+# it ran deleted. The launches are the hand chain's, argument for argument: the input projection GEMM (+ b_ih in
+# its own launch exactly when recurrent.forward added it, RNN_INPUT_BIAS_IN_GX), the scan or the per-step
+# OP_CELL_FWD_H chain with the same i5, then the head GEMM over h_T and its bias rows. Same bits by construction.
+def rnn_predict[E: Exec](
+    mut ex: E, net: Net, task: Int, X: FP, N: Int, T: Int, Pin: FP,
+    dst: FP, seq: FP, want_seq: Bool, chunk: Int, resident: Bool = False,
+) raises:
+    """dst [N, O]: the head's output (task MSE) or its softmax (task CE);
+    with want_seq, seq [N, T, H] is the top layer's h_1..h_T batch-first.
+    Each chunk of `chunk` rows runs rnn_forward_autograd on a tape in
+    inference mode (no graph, no gradient storage), the training forward's
+    kernels in the training forward's order. `resident` (perf3-seq-neural):
+    `Pin` is already this executor's memory (the model's resident fitted
+    block, sequence/perf3_seq_resident.mojo), read in place: no per-call
+    allocation and upload of the parameters."""
+    var np_ = net.n_params()
+    var H = net.H
+    var bmax = chunk if chunk < N else N
+    var dX = ex.alloc(N * T * net.D)
+    ex.upload(dX, X, N * T * net.D)
+    # perf3-seq-neural: the identity row order is built on the executor
+    # (OP_SEQ_IOTA, the fit's unshuffled order: p0[t] = t, exact below 2^24,
+    # N < 2^24 is admitted by rnn_predict_impl), not by a host loop over the
+    # rows and an upload. The same float32 words.
+    var didx = ex.alloc(N)
+    var ia = Args()
+    ia.p0 = didx
+    ex.launch[OP_SEQ_IOTA](ia, N)
+    var P: FP
+    if resident:
+        P = Pin
+    else:
+        P = ex.alloc(np_)
+        ex.upload(P, Pin, np_)
+    var dout = ex.alloc(N * net.O)
+    var dseq = ex.alloc(N * T * H if want_seq else 1)
+    var w = Work(ex, net, T, bmax, False)
+    var tape = Tape()
+    tape.no_grad()
+    var b0 = 0
+    while b0 < N:  # driver-loop: over prediction chunks
+        var B = bmax if b0 + bmax <= N else N - b0
+        gather_seq(ex, dX, didx, w.xb, T, B, net.D, b0)
+        # Inference mode keeps no gradient pointer, so the gradient vector is
+        # a placeholder; rnn_forward_autograd resets the tape, so every chunk
+        # reuses the first chunk's storage. The head writes this chunk's rows
+        # of dout directly.
+        _ = rnn_forward_autograd(tape, ex, net, P, dummy_ptr(), w.xb, T, B, w, dout + b0 * net.O)
+        if task == TASK_CE:
+            var a = Args()
+            a.p0 = dout + b0 * net.O
+            a.p1 = dout + b0 * net.O
+            a.i1 = net.O
+            ex.launch[OP_SOFTMAX](a, B)
+        if want_seq:
+            var a = Args()
+            a.p0 = w.hall[net.L - 1] + B * H
+            a.p1 = dseq
+            a.i0 = T
+            a.i1 = B
+            a.i2 = H
+            a.i3 = b0
+            ex.launch[OP_SEQ_OUT](a, B * T * H)
+        b0 += B
+    tape.release(ex)
+    ex.sync()
+    ex.download(dst, dout, N * net.O)
+    if want_seq:
+        ex.download(seq, dseq, N * T * H)

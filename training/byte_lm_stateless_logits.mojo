@@ -7,7 +7,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.byte_lm_binding_impl import ByteLMSession, BYTE_LM_CONTEXT_KEEPER, _validate_slot_table, _read_f32, _read_ids
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_logits import byte_logits_validate, byte_logits_validate_params, byte_logits_from_params_into
-comptime _NEURAL_CTX = "MojoNeuralByteLMContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralByteLMContextFast"
+comptime _NEURAL_CTX = "MojolearnNeuralByteLMContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralByteLMContextFastV2"
 
 
 def byte_lm_stateless_logits_native(addr: List[Int], batch: Int, length: Int, cfg: ByteConfig) raises -> Int:

@@ -41,7 +41,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoEstimatorsContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoEstimatorsContextFast"
+comptime _DEVCTX_SLOT = "MojolearnEstimatorsContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnEstimatorsContextFastV2"
 
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -60,6 +60,19 @@ from kde.impl.neighbors.kernel_density import (
     kernel_from_name,
     metric_from_name,
 )
+from kde.impl.distance.distance_ops import DIST_COSINE_EXPANDED, DIST_L2_EXPANDED
+from core.admitted_finite_status import enqueue_finite_status
+from core.device_zero import enqueue_fill
+
+
+def kde_host_rules_needed(metric: Int, finite_tested: Bool) -> Bool:
+    """Whether DEVIATION 604's host pass (`kde_validate_data_ptr`) still has
+    work for rows whose finiteness is already decided (lane
+    a7b-device-x-neighbors): only the sqeuclidean magnitude bound and the
+    cosine zero-row rule are not finiteness, so for every other metric a
+    tested set (the fit set the door tested in its copy; queries the entry
+    tests behind its upload) skips the host pass."""
+    return not finite_tested or metric == DIST_COSINE_EXPANDED or metric == DIST_L2_EXPANDED
 
 
 # Immutable retained fit snapshots and direct upload are separate controls.
@@ -103,11 +116,15 @@ struct ResidentKdeFit(Movable):
         metric: Int,
         weights: List[Float32],
         has_weights: Bool,
+        finite_tested: Bool = False,
     ) raises:
         # `kde_score_samples_host_ptr`'s refusals for the fit set, in its
-        # order: `kde_fit_validate`, then the training rows.
+        # order: `kde_fit_validate`, then the training rows. `finite_tested`
+        # (lane a7b): the door's fit tested the rows in its copy; the serial
+        # host pass runs only for the rules that are not finiteness.
         kde_fit_validate(n_train, n_features, bandwidth, kernel, metric, weights, has_weights)
-        kde_validate_data_ptr(train_ptr, n_train, n_features, metric, "train")
+        if kde_host_rules_needed(metric, finite_tested):
+            kde_validate_data_ptr(train_ptr, n_train, n_features, metric, "train")
         var ctx = process_ctx[_DEVCTX_SLOT]()
         var n = n_train * n_features
         var train = ctx.enqueue_create_buffer[DType.float32](n)
@@ -200,14 +217,17 @@ def kde_fit_prepare(
     metric: String,
     weights: List[Float32],
     has_weights: Bool,
+    finite_tested: Bool = False,
 ) raises -> Int:
     """Validate and upload the fit set once; the handle every later score
     names. Refuses, by name, everything `kde_score_samples_host_ptr`
-    refuses about the fit set."""
+    refuses about the fit set (`finite_tested`: its finiteness is already
+    decided by the door's fit)."""
     var k = kernel_from_name(kernel)
     var m = metric_from_name(metric)
     var state = KDE_FIT_REGISTRY.get_or_create_ptr()
-    var entry = ResidentKdeFit(train_ptr, n_train, n_features, bandwidth, k, m, weights, has_weights)
+    var entry = ResidentKdeFit(train_ptr, n_train, n_features, bandwidth, k, m, weights, has_weights,
+                               finite_tested)
     if state[].next_id == 9223372036854775807:
         raise Error("resident KDE fit handle space exhausted")
     var handle = state[].next_id
@@ -238,6 +258,7 @@ def kde_score_samples_resident(
     lse_tpb: Int = KDE_LSE_TPB,
     metric_arg: Float32 = Float32(2.0),
     want_total: Bool = False,
+    status_addr: Int = 0,
 ) raises -> Float32:
     """`kde_score_samples_host_ptr` after its fit-set work: the query count
     and rows are validated as there, the queries staged once into pinned
@@ -247,7 +268,14 @@ def kde_score_samples_resident(
     the handle's; a mismatch is refused rather than served. Returns the
     scores' fixed-order float32 sum on the device (`device_sum_f32_fixed`)
     when `want_total` (KernelDensity.score; lane pyglue-numeric: a host sum
-    of the downloaded scores), else 0."""
+    of the downloaded scores), else 0.
+
+    `status_addr` (not 0; lane a7b-device-x-neighbors): a host int32 word
+    that receives the queries' finite status, tested on the device behind
+    their upload and read back with the scores (no extra synchronisation);
+    the host pass then runs only for the sqeuclidean bound and the cosine
+    zero-row rule. On a non-finite word the door refuses and discards the
+    scores."""
     var k = kernel_from_name(kernel)
     var m = metric_from_name(metric)
     var state = KDE_FIT_REGISTRY.get_or_create_ptr()
@@ -265,12 +293,19 @@ def kde_score_samples_resident(
         )
     if n_query <= 0:
         raise Error("kde: X must have at least one row (n_query)")
-    kde_validate_data_ptr(query, n_query, n_features, m, "query")
+    if kde_host_rules_needed(m, status_addr != 0):
+        kde_validate_data_ptr(query, n_query, n_features, m, "query")
     var n = n_query * n_features
     var dquery = entry.ctx.enqueue_create_buffer[DType.float32](n)
     var host = entry.ctx.enqueue_create_host_buffer[DType.float32](n)
     copy_f32(query, host.unsafe_ptr(), n)
     entry.ctx.enqueue_copy(dst_buf=dquery, src_ptr=host.unsafe_ptr())
+    var dstatus = entry.ctx.enqueue_create_buffer[DType.int32](1)
+    var hstatus = entry.ctx.enqueue_create_host_buffer[DType.int32](1)
+    if status_addr != 0:
+        enqueue_fill[DType.int32](entry.ctx, dstatus, Int32(0))
+        enqueue_finite_status(entry.ctx, dquery.unsafe_ptr(), n, dstatus.unsafe_ptr(), 0)
+        entry.ctx.enqueue_copy(dst_ptr=hstatus.unsafe_ptr(), src_buf=dstatus)
     var dout = entry.ctx.enqueue_create_buffer[DType.float32](n_query)
     var trace = IdentityTrace()
     trace.header(
@@ -304,6 +339,10 @@ def kde_score_samples_resident(
     entry.ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=dout)
     entry.ctx.synchronize()
     copy_f32(hout.unsafe_ptr(), scores, n_query)
+    if status_addr != 0:
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr).unsafe_store(0, hstatus.unsafe_ptr()[0])
+    _ = hstatus^
+    _ = dstatus^
     _ = hout^
     _ = host^
     _ = dquery^

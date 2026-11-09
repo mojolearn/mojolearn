@@ -39,7 +39,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequential_inputs import sequential_input
 from bindings.native_loaded_module import native_loaded_module, native_interpreter_finalizing
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
-from core.xseq_marshal import xseq_cast_nd
+from core.admitted_input_nd import admitted_cast_nd_f32
 from core.training_embedding_inputs import embedding_pack, embedding_cast_refusal
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_FLOAT, CAST_KIND_BOOL
@@ -534,7 +534,7 @@ def _float_owned(source: PythonObject, name: String, context: PythonObject) rais
         strides[i] = step
         step *= layout.shape[i]
     var out = new_array(layout.shape, "<f4")
-    xseq_cast_nd(Int(bytes.unsafe_ptr()), layout.shape, strides, layout.itemsize, kind, True,
+    _ = admitted_cast_nd_f32(Int(bytes.unsafe_ptr()), layout.shape, strides, layout.itemsize, kind,
         MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr)))
     _ = bytes^
     _ = pin^

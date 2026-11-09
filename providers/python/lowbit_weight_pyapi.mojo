@@ -11,7 +11,8 @@ from bindings.native_buffer_owner import native_storage_allocate
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_wrap_array
 from bindings.sequential_inputs import sequential_sequence_f32
-from bindings.linalg_ops_buffers import LinBuf, LinAdmission, lin_admitted_c, lin_new, lin_tuple, lin_is_f32, lin_dtype_name
+from bindings.linalg_ops_buffers import lin_is_f32, lin_dtype_name
+from bindings.admitted_input import AdmittedBuf, AdmittedTyped, admitted_typed_c, admitted_zeros, admitted_shape_tuple
 from bindings.linalg_ops_lowbit import lin_connected_binding, lin_lowbit, lin_call, lin_ints
 from bindings.optimizer_public_door import base_format, shape_text
 
@@ -64,19 +65,19 @@ def low_binding(mut binding: PythonObject, context: PythonObject) raises -> Pyth
     return binding
 
 
-def low_wrap(kind: Int, q: LinBuf, e: PythonObject, context: PythonObject) raises -> PythonObject:
+def low_wrap(kind: Int, q: AdmittedBuf, e: PythonObject, context: PythonObject) raises -> PythonObject:
     var result = native_storage_allocate(context["family_low_bf16"] if kind == 1 else context["family_low_int8"])
     var fields = py_fields(result)
     py_setitem(fields, "bits" if kind == 1 else "codes", q.keep)
     if kind == 2:
         py_setitem(fields, "exponents", e)
-    py_setitem(fields, "shape", lin_tuple(q.shape))
+    py_setitem(fields, "shape", admitted_shape_tuple(q.shape))
     return result
 
 
 def low_admit(value: PythonObject, typestr: String, rank: Int, name: String,
-              context: PythonObject, force_copy: Bool = False) raises -> LinBuf:
-    var input = LinAdmission(value, context)
+              context: PythonObject, force_copy: Bool = False) raises -> AdmittedBuf:
+    var input = AdmittedTyped(value, context)
     var code = base_format(input.view.fmt)
     var valid = (typestr == "<u2" and code == "H" and input.view.itemsize == 2
         or typestr == "<i1" and code == "b" and input.view.itemsize == 1
@@ -89,11 +90,11 @@ def low_admit(value: PythonObject, typestr: String, rank: Int, name: String,
         raise Error("TypeError: mojolearn.lowbit.Int8Weight: exponents must be int32 of shape (rows,)")
     if input.view.count() == 0:
         low_empty(name, input.view.shape)
-    return lin_admitted_c(input^, typestr, name, context, force_copy)
+    return admitted_typed_c(input^, typestr, name, context, force_copy)
 
 
 def low_exponents(value: PythonObject, rows: Int, context: PythonObject,
-                  force_copy: Bool = False) raises -> LinBuf:
+                  force_copy: Bool = False) raises -> AdmittedBuf:
     var e = low_admit(value, "<i4", 1, "exponents", context, force_copy)
     if e.dim(0) != rows:
         raise Error("TypeError: mojolearn.lowbit.Int8Weight: exponents must be int32 of shape (rows,)")
@@ -106,7 +107,7 @@ def low_materialize(value: PythonObject, mut binding: PythonObject, context: Pyt
         return value
     var fields = low_fields(value)
     var q = low_admit(native_instance_item(fields, PythonObject("bits" if kind == 1 else "codes")), "<u2" if kind == 1 else "<i1", 2, "weight", context)
-    var result = lin_new(q.shape, "<f4", context)
+    var result = admitted_zeros(q.shape, "<f4", context)
     if kind == 1:
         _ = lin_call(low_binding(binding, context), context, "from_bf16", PythonObject(result.addr), PythonObject(q.addr), lin_ints(q.count()))
     else:
@@ -117,7 +118,7 @@ def low_materialize(value: PythonObject, mut binding: PythonObject, context: Pyt
     return result.keep
 
 
-def low_pack_admitted(var input: LinAdmission, fmt: String, name: String,
+def low_pack_admitted(var input: AdmittedTyped, fmt: String, name: String,
                       mut binding: PythonObject, context: PythonObject) raises -> PythonObject:
     if not lin_is_f32(input.view):
         raise Error("TypeError: mojolearn.lowbit: " + name + " has dtype " + lin_dtype_name(input.keep, input.view) + "; pack takes float32")
@@ -125,16 +126,16 @@ def low_pack_admitted(var input: LinAdmission, fmt: String, name: String,
         raise Error("mojolearn.lowbit: " + name + " must be 2-D to pack, got shape " + shape_text(input.view.shape))
     if input.view.count() == 0:
         low_empty(name, input.view.shape)
-    var a = lin_admitted_c(input^, "<f4", name, context, fmt == "float32")
+    var a = admitted_typed_c(input^, "<f4", name, context, fmt == "float32")
     if fmt == "float32":
         return a.keep
-    var q = lin_new(a.shape, "<u2" if fmt == "bfloat16" else "<i1", context)
+    var q = admitted_zeros(a.shape, "<u2" if fmt == "bfloat16" else "<i1", context)
     var result = PythonObject(None)
     if fmt == "bfloat16":
         _ = lin_call(low_binding(binding, context), context, "to_bf16", PythonObject(q.addr), PythonObject(a.addr), lin_ints(a.count()))
         result = low_wrap(1, q, PythonObject(None), context)
     else:
-        var e = lin_new([a.dim(0)], "<i4", context)
+        var e = admitted_zeros([a.dim(0)], "<i4", context)
         _ = lin_call(low_binding(binding, context), context, "quantize_int8", PythonObject(q.addr), PythonObject(e.addr), PythonObject(a.addr), lin_ints(a.dim(0), a.dim(1)))
         result = low_wrap(2, q, e.keep, context)
         _ = e^
@@ -192,24 +193,24 @@ def lowbit_weight_operation(model: PythonObject, operation: String, args: Python
             _ = e^
         else:
             py_setitem(fields, "bits", q.keep)
-        py_setitem(fields, "shape", lin_tuple(q.shape))
+        py_setitem(fields, "shape", admitted_shape_tuple(q.shape))
         _ = q^
         return PythonObject(None)
     if operation == "family_low_materialize_one":
         return low_materialize(args[0], binding, context)
     if operation == "family_low_widen_bf16":
-        var input = LinAdmission(args[0], context)
-        var a = lin_admitted_c(input^, "<u2", "bits", context)
+        var input = AdmittedTyped(args[0], context)
+        var a = admitted_typed_c(input^, "<u2", "bits", context)
         if a.count() == 0:
             raise Error("mojolearn.linalg.from_bf16: bits has no elements")
-        var result = lin_new(a.shape, "<f4", context)
+        var result = admitted_zeros(a.shape, "<f4", context)
         _ = lin_call(low_binding(binding, context), context, "from_bf16", PythonObject(result.addr), PythonObject(a.addr), lin_ints(a.count()))
         _ = a^
         return result.keep
     if operation == "family_low_pack_one":
         var fmt = low_format(args[1])
         var name = low_name(args[2])
-        var input = LinAdmission(args[0], context)
+        var input = AdmittedTyped(args[0], context)
         return low_pack_admitted(input^, fmt, name, binding, context)
     var b = native_loaded_module("builtins")
     if operation == "family_low_unpack":
@@ -256,7 +257,7 @@ def lowbit_weight_operation(model: PythonObject, operation: String, args: Python
                 classical_admit_value(value, context)
                 var sequence = sequential_sequence_f32(value, context)
                 value = classical_wrap_array(sequence[1], sequence[0], "<f4", "C", context)
-            var input = LinAdmission(value, context)
+            var input = AdmittedTyped(value, context)
             if fmt != "float32" and len(input.view.shape) == 2:
                 py_setitem(result, key, low_pack_admitted(input^, fmt, name, binding, context))
             else:

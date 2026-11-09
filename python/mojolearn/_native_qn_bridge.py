@@ -14,8 +14,8 @@ def connect(losses):
     from ._native_labels_bridge import label_context
     context = _state_context()
     # predict's float64 result (bindings/qn_native.mojo labels_cast) calls the
-    # base binding's cast helper through context["labels_helpers"]; without
-    # the label context every public predict raised ValueError('labels_helpers')
+    # label context (context["labels_base_binding"], connected once); without
+    # it every public predict raised ValueError('labels_helpers')
     # (0.8.66 AMD measurement smoke, algos/qn-reg on istella and taxi).
     context.update(label_context())
     from ._native_owner_lifetime import connect_owner_context
@@ -60,5 +60,20 @@ def connect(losses):
     from ._native_classical_bridge import _numpy_free_context
     # the fitted coefficient stores are mojolearn Arrays whatever is installed
     context.update(qn_bindings=connected, classical_metrics=metric_bindings, qn_losses=dict(losses),
-                   environment=os.environ._data, output_context=_numpy_free_context())
+                   environment=os.environ._data, output_context=_numpy_free_context(),
+                   qn_fit_fold=_qn_fit_fold())
     return call, context
+
+
+def _qn_fit_fold():
+    # glue (lane a7c): the QN fit of a cross-validation fold resident on the
+    # device, exported by the identical GPU base binding next to the fold
+    # store it reads (bindings/msel_device.mojo); a build without it (the
+    # CPU column) leaves None and the door gathers host rows.
+    from types import BuiltinFunctionType
+    from ._buffer import _native
+    try:
+        fold = _native('qn_fit_fold')
+    except (ImportError, AttributeError, TypeError, RuntimeError):
+        fold = None
+    return fold if isinstance(fold, BuiltinFunctionType) else None

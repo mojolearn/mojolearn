@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """WHERE AN OPERATION RUNS. `Exec` (`sequence/exec_trait.mojo`) is the one interface the lane's algorithms
-are written against (`sequence/recurrent.mojo`); `HostExec` (here, no GPU
-import) runs each operation as an ascending host loop over its elements and
+are written against (`sequence/recurrent.mojo`); `HostExec` (here; no GPU
+binding imports it, and since lane x7b it imports the block step ops' host
+arm, whose step-op layouts live with the device table in
+autograd/block_step_ops.mojo) runs each operation as an ascending host loop over its elements and
 `DeviceExec` (`sequence/exec_device.mojo`) as one GPU thread per element.
 The element body is the same function (`sequence/ops.mojo::apply`), so the
 two agree bit for bit by construction.
@@ -34,6 +36,11 @@ from autograd.ops import OP_AGK_GEMM_EPI, OP_AGK_BIN_VJP_PART, OP_AG_REDUCE_PART
 from std.time import perf_counter_ns
 from sequence.host_gemm import host_gemm_pack, host_gemm_rows
 from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_split_on
+# Lane x7b: the block step ops' host arm (its imports reach the step-op
+# layouts of autograd/block_step_ops.mojo; no GPU binding imports this file).
+from autograd.block_step_host import (
+    HostStepScratch, host_step_run, host_attn_step_backward, host_block_step_reports,
+)
 from sequence.ops import (
     FP,
     Args,
@@ -79,6 +86,9 @@ from sequence.ops import (
     OP_PROPHET_FIT,
     OP_PROPHET_PREDICT,
     OP_PROPHET_FG_PART,
+    OP_PROPHET_LB_YMAX,
+    OP_PROPHET_LB_INIT,
+    OP_PROPHET_LB_STEP,
     OP_CHOLSOLVE,
     OP_VAR_FORECAST,
     OP_MOE_ROUTE,
@@ -141,13 +151,14 @@ def _element_weight[OP: Int](a: Args) -> Int:
         OP == OP_STL or OP == OP_THETA or OP == OP_THETA_FORECAST or OP == OP_CROSTON or OP == OP_ETS
         or OP == OP_GARCH or OP == OP_PROPHET_FIT or OP == OP_CHOLSOLVE
         or OP == OP_VAR_FORECAST or OP == OP_SEG_SUMSQ or OP == OP_LAMB_RATIO
+        or OP == OP_PROPHET_LB_INIT or OP == OP_PROPHET_LB_STEP
     ):
         return _HEAVY
     elif (
         OP == OP_CE or OP == OP_SOFTMAX or OP == OP_MLP_ROWLOSS
         or OP == OP_AF_ROW or OP == OP_AF_COL or OP == OP_LN_FWD or OP == OP_CHUNK_SUMSQ
         or OP == OP_LN_BWD_X or OP == OP_PROPHET_FEATURES
-        or OP == OP_PROPHET_PREDICT or OP == OP_MOE_ROUTE or OP == OP_PROPHET_FG_PART
+        or OP == OP_PROPHET_PREDICT or OP == OP_MOE_ROUTE or OP == OP_PROPHET_FG_PART or OP == OP_PROPHET_LB_YMAX
         or OP == OP_MOE_HIDDEN or OP == OP_MOE_OUT
     ):
         return 256
@@ -200,6 +211,7 @@ def _host_apply[OP: Int](t: Int, a: Args):
 # Movable (lane ag-ops-api): an operation session (autograd/ops_api.mojo)
 # owns its executor across binding calls; moving changes no value.
 struct HostExec(Exec, Movable):
+    comptime IS_DEVICE: Bool = False
     var bufs: List[FP]
     var buf_sizes: List[Int]
     var execution_profile: ExecutionProfile
@@ -212,8 +224,12 @@ struct HostExec(Exec, Movable):
     #: lane ag-pass2-kernels: MOJOLEARN_AG_PROFILE read once at construction
     #: (0 off, 1 count launches, 2 count and time them; sequence/launch_profile.mojo)
     var profile: Int
+    #: lane x7b: the block step ops' host-arm entries of the sessions on this
+    #: executor (autograd/block_step_host.mojo)
+    var steps: HostStepScratch
 
     def __init__(out self):
+        self.steps = HostStepScratch()
         self.bufs = List[FP]()
         self.buf_sizes = List[Int]()
         self.execution_profile = ExecutionProfile()
@@ -456,3 +472,25 @@ struct HostExec(Exec, Movable):
         self.sync()
         self.execution_profile.enabled = False
         return self.execution_profile.copy()
+
+    # Lane x7b-step-ops-host-arm: the block step ops' host arm
+    # (autograd/block_step_host.mojo), reached by generic session code
+    # through the Exec trait.
+    def step_run(mut self, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int], fs: List[Float32],
+                 y_out: FP, record: Bool) raises:
+        host_step_run(self.steps, code, bufs, counts, ints, fs, y_out, record)
+
+    def step_backward(mut self, w: FP, s: FP, q: FP, d_out: FP, d_x: FP, d_w: FP) raises:
+        host_attn_step_backward(self.steps, w, s, q, d_out, d_x, d_w)
+
+    def step_reports(mut self, code: Int, w_addr: Int, s_addr: Int, dsts: List[Int]) raises:
+        host_block_step_reports(self.steps, code, w_addr, s_addr, dsts)
+
+    def step_forget(mut self, addr: Int):
+        self.steps.forget(addr)
+
+    def step_weights_changed(mut self, addr: Int):
+        self.steps.weights_changed(addr)
+
+    def step_clear(mut self):
+        self.steps.clear()

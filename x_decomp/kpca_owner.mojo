@@ -15,6 +15,7 @@ from std.math import sqrt
 from std.memory import memcpy
 
 from x_decomp.cells import F32Ptr
+from x_decomp.moves import MOVE_REV_COLS
 from x_decomp.exec_trait import Exec
 from x_decomp.select_ops import reduce_run
 from x_decomp.pca_randomized import RDev, RKit
@@ -35,24 +36,19 @@ comptime _SEL_MAXABS = 0
 
 
 def _cols_desc[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int, high: Int, count: Int) raises -> Int:
-    """`A.take_cols(range(high, high - count, -1))`: the device gather for a
-    resident matrix, else a host copy (data movement)."""
+    """`A.take_cols(range(high, high - count, -1))`: the REV_COLS move
+    (x_decomp/moves.mojo), on the device for a resident matrix, else on
+    the host, with no index list (lane n9b-device-svd-qr: the index was
+    built on the host and uploaded every call). Copies only."""
     var rows = kit.r(a)
     var cols = kit.c(a)
-    if kit.mats[a].dev >= 0 and count:
-        var idx = kit.zeros(count, 1)
-        var pi = kit.ptr(idx)
-        for t in range(count):  # driver-loop: over the kept components (model structure)
-            pi[t] = Float32(high - t)
-        return kit.move(a, idx, rows, count, 4, rows * count, count, cols, 0, 0, 0, rows * cols, rows * count, count,
-                        True)
-    var out = kit.zeros(rows, count)
-    var src = kit.ptr(a)
-    var dst = kit.ptr(out)
-    for t in range(count):  # driver-loop: over the kept components (model structure)
-        for i in range(rows):  # small-loop(rows of an eigen factor): one word each
-            dst[i * count + t] = src[i * cols + high - t]
-    return out
+    if count <= 0:
+        return kit.zeros(rows, 0)
+    if high - count + 1 < 0 or high >= cols:
+        raise Error("x_decomp: KernelPCA descending columns out of range")
+    var one = kit.unused_operand()
+    return kit.move(a, one, rows, count, MOVE_REV_COLS, rows * count, count, cols, 0, 0, high, rows * cols,
+                    rows * count, 1, kit.mats[a].dev >= 0)
 
 
 def _reduce_word[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int, op: Int) raises -> Float64:
@@ -96,7 +92,6 @@ def _lanczos_top[E: Exec, D: RDev, RES: Bool, X: DecompDev](
         basis = kit.zeros(cap + 1, n)
     var q_row = kit.add(kit.mats[q].host, kit.mats[q].dev, 1, n)
     _ = kit_place_strided(kit, basis, q_row, 1, 0)
-    var alphas = List[Float64]()
     var betas = List[Float64]()
     var width = min(n, max(2 * nc + 1, 20))
     var j = 0
@@ -116,24 +111,29 @@ def _lanczos_top[E: Exec, D: RDev, RES: Bool, X: DecompDev](
             for jj in range(j, width):  # driver-loop: over the batch's Lanczos steps (at most _LANCZOS_MAX_M)
                 var av = Float64(ab[jj])
                 var bv = Float64(ab[cap + jj])
-                alphas.append(av)
                 betas.append(bv)
                 if bv <= 1e-30 * max(1.0, abs(av)) or jj + 1 == n:
                     reached = jj + 1
                     stop = True
                     break
             j = reached
-        # the tridiagonal T from the per-step scalars
-        var t = kit.zeros(j, j)
-        var pt = kit.ptr(t)
-        for i in range(j):  # driver-loop: over the Lanczos steps (at most _LANCZOS_MAX_M)
-            pt[i * j + i] = Float32(alphas[i])
-            if i + 1 < j:
-                pt[i * j + i + 1] = Float32(betas[i])
-                pt[(i + 1) * j + i] = Float32(betas[i])
-        var eig = kit_eigh[E, D, RES, X](kit, t)
-        th = eig[0]
-        y = eig[1]
+        # TOMBSTONE: the host assembly of T (j x j host words of the alphas
+        # and betas) and its dense `kit_eigh` deleted 2026-11-09 by lane
+        # n9-decomp-eigh-families; code recoverable at the lane's base
+        # origin/integ/pre-0867-w2 (f59d913b0b). Restore: git apply experiments/removed/N9_RESIDENT_EIGH.patch
+        # The projected solve is the executor op `eigh_op_tridiag` on the
+        # alphas / betas the Lanczos step wrote (resident: abd, w and z stay
+        # on the device), the host column `eigh_op_tridiag_host` on ab: one
+        # algorithm on every column; T's words are the float32 alphas and
+        # betas as before.
+        comptime if RES:
+            th = kit.device_output(1, j)
+            y = kit.device_output(j, j)
+            X.eigh_tridiag_dev(kit.mats[abd].dev, kit.mats[th].dev, kit.mats[y].dev, j, cap)
+        else:
+            th = kit.zeros(1, j)
+            y = kit.zeros(j, j)
+            X.eigh_tridiag_host(pab, kit.ptr(th), kit.ptr(y), j, cap)
         top = min(nc, j)
         if top < nc:
             return (False, -1, -1)

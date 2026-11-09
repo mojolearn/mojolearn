@@ -1,0 +1,17 @@
+diff --git a/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo b/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo
+index eb8644d5aa..ff6af74bed 100644
+--- a/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo
++++ b/ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo
+@@ -938,11 +938,7 @@ def ivf_flat_search_prepared(
+                             # balanced candidate/baseline1.20x-4.17x time. One warmup/score;
+                             # IDENTICAL opt-in remains off. Evidence: overnight-ab-20261006/
+                             # nvidia/default-repair-normalized-measurements.json.
+-                            # TOMBSTONE: MOJOLEARN_IVF_BALANCED_TASKS (loser) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+-                            # Restore: git apply experiments/removed/MOJOLEARN_IVF_BALANCED_TASKS.patch
+-                            # (the IDENTICAL opt-in and its run-time MOJOLEARN_IVF_BALANCED_TASKS_OFF getenv; measured
+-                            # slower on both vendors, I16 above; ivf_balanced_scan stays for C35_PACKED_LISTS)
+-                            if C35_PACKED_LISTS:
++                            if C35_PACKED_LISTS or (is_defined["MOJOLEARN_IVF_BALANCED_TASKS"]() and String(getenv("MOJOLEARN_IVF_BALANCED_TASKS_OFF")) != "1"):
+                                 ivf_balanced_scan[KM](ctx,dq,dq_norm,dev.dlist_data,dev.dlist_norm,dev.d_off,dev.d_ind,dprobe_idx,d_keep,keep_len,d_od,d_oi,n_queries,n_probes,dim,k)
+                             elif _ivf_scan_grouped():
+                                 # lane neural-pass42: the (query, probe) pairs grouped by

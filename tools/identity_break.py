@@ -8060,7 +8060,10 @@ def _(ml, X, yc, yr, Xh=None):
         for t in range(4, 8):  # glue: four steps the reload discards
             sr.step(tok(t))
         sr.load_state()
-        reload_out = np.concatenate([np.asarray(sr.step(tok(t))) for t in range(8, 12)], axis=1)  # glue: four steps
+        # The four tokens after the reload go through `decode` (one native
+        # call, Mamba1DecodeSession.decode -> mamba1_session_decode): byte for
+        # byte the four steps, held below to the per-call step.
+        reload_out = np.asarray(sr.decode(np.ascontiguousarray(xr[:, 8:12])))
     plain_r = blk.allocate_state(2)
     for t in range(4):  # glue: the same first four steps, per call
         blk.step(tok(t), plain_r)
@@ -8100,7 +8103,7 @@ def _(ml, X, yc, yr, Xh=None):
     and converts the KV cache between the device layout and the oracle's.
     The class now carries a HOST ARM that owns its copies of the nine (plus
     optional) weights and of the k/v caches and calls those entries in
-    `TransformerBlock._call_impl`'s own address order, options tail included.
+    `transformer_forward`'s address order, options tail included.
     The oracle is still the per-call `block.step`/`block.forward` beside it
     in the cell, and the arm makes NO speed claim.
 

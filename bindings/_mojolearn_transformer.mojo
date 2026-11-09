@@ -155,7 +155,6 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from training.neural_identical_experiments import IDN_SAMBA_FORWARD_TAPE
 from core.neural_context import neural_ctx
 from checks.vendor import COMPILED_VENDOR
 from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_ANY_BWD_SABOTAGE
@@ -192,7 +191,7 @@ from autograd.kernels.transformer import (
     BWD_ANY_SABOTAGE,
     LlamaBackwardStages,
 )
-# The session and saved-tape backwards below run on the autograd tape.
+# The session backward below runs on the autograd tape.
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
 from autograd.rules_transformer import llama_decoder_layer_backward, llama_decoder_layer_backward_autograd
@@ -225,10 +224,9 @@ from transformer.impl.llama.afn_apple_fast import AFN_ATTN_ARENA, afn_flash_call
 from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
 from transformer.session_native_dispatch import TRANSFORMER_NATIVE_API, transformer_session_forward_native
 
+from transformer.lean_stages import transformer_lean_stages, _lean_for
 # Typed kernel side of this shell (thin-shell move, pure, no bit change).
 from transformer.transformer_binding_impl import (
-    _session_forward_tape_run,
-    _session_backward_tape_run,
     _NEURAL_CTX,
     _optional_upload,
     _f32_ptr,
@@ -237,27 +235,15 @@ from transformer.transformer_binding_impl import (
     _upload_addr,
     _download_addr,
     _btick,
-    transformer_lean_stages,
     _load_transformer_weights,
     _tail_of,
     _check_base_addrs,
-    _lean_for,
     _lean_for_w,
     _workspace_key,
     TransformerWorkspace,
-    TransformerBackwardWorkspace,
     TransformerSession,
-    _weights_key,
-    _base_weight_lens,
-    _weights_same_bits,
-    _weights_host_copy,
-    _weights_recopy,
-    _stage_reset_on,
     _session_retain_cap_bytes,
-    _session_weights,
     _transformer_run_session,
-    TransformerForwardTape,
-    _transformer_saved_backward,
     _transformer_run_session_backward,
     INT15_ENTRY_ADDRS,
     INT15_ENTRY_PARAMS,
@@ -272,6 +258,7 @@ from transformer.transformer_binding_impl import (
     _session_open_run,
     _session_open_run_int15,
     _session_step_run,
+    _session_decode_run,
     _session_forward_run,
     _session_export_run,
     _session_load_run,
@@ -411,84 +398,10 @@ def transformer_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-def transformer_forward_tape_enabled_binding() -> PythonObject:
-    return PythonObject(IDN_SAMBA_FORWARD_TAPE)
-
-
-def transformer_forward_tape_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """[x, nine weights, y], [B,L,dm,nh,nkv,hd,it,window] -> owned tape."""
-    comptime if not IDN_SAMBA_FORWARD_TAPE:
-        raise Error("transformer forward tape: IDENTICAL opt-in is disabled")
-    var incoming = _read_addrs_tail(addrs, 11, String("transformer_forward_tape"))
-    # _read_addrs_tail always returns 11 + BLOCK_OPTION_ADDRS slots (zeros
-    # where no options tail was sent), so the old `len(incoming) != 11` test
-    # refused every call. Default options means the tail slots are all zero.
-    for i in range(11, len(incoming)):  # small-loop(incoming: the block options tail slots): validated tensor addresses, not data
-        if incoming[i] != 0:
-            raise Error("transformer forward tape: default options only (no block options tail)")
-    var p = _read_params(params, 8, String("transformer_forward_tape"))
-    if len(p) != 8:
-        raise Error("transformer forward tape: expected 8 shape scalars")
-    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
-        if incoming[i] == 0:
-            raise Error("transformer forward tape: null address at slot " + String(i))
-    var a = List[Int]()
-    for i in range(10):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
-        a.append(incoming[i])
-    a.append(0)
-    a.append(0)
-    a.append(incoming[10])
-    var tape = TransformerForwardTape(p)
-    with GILReleased(Python()):
-        try:
-            _ = _transformer_run_session[True, True](tape.session, a,
-                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[1], 0, p[7], BlockOptions())
-        except error:
-            tape.close()
-            raise error
-    return PythonObject(alloc=tape^)
-
-
-def transformer_backward_tape_binding(tape: PythonObject, addrs: PythonObject) raises -> PythonObject:
-    comptime if not IDN_SAMBA_FORWARD_TAPE:
-        raise Error("transformer backward tape: IDENTICAL opt-in is disabled")
-    var owner = tape.downcast_value_ptr[TransformerForwardTape]()
-    if owner[].busy or owner[].consumed:
-        raise Error("transformer forward tape: busy, closed or already consumed")
-    var a = _read_addrs_tail(addrs, 11, String("transformer_backward_tape"))
-    # _read_addrs_tail pads to 11 + BLOCK_OPTION_ADDRS slots, so the old
-    # `len(a) != 11` test refused every call (the forward tape entry had the
-    # same fault). The backward takes no options: the tail must be zero.
-    for i in range(11, len(a)):  # small-loop(a: the block options tail slots): validated tensor addresses, not data
-        if a[i] != 0:
-            raise Error("transformer backward tape: expected dy and ten outputs, no block options tail")
-    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
-        if a[i] == 0:
-            raise Error("transformer backward tape: null address at slot " + String(i))
-    owner[].busy = True
-    owner[].consumed = True
-    try:
-        with GILReleased(Python()):
-            try:
-                _transformer_saved_backward(owner[], a)
-            except error:
-                owner[].close()
-                raise error
-            owner[].close()
-    except error:
-        owner[].busy = False
-        raise error
-    owner[].busy = False
-    return PythonObject(0)
-
-
-def transformer_close_tape_binding(tape: PythonObject) raises -> PythonObject:
-    var owner = tape.downcast_value_ptr[TransformerForwardTape]()
-    if owner[].busy:
-        raise Error("transformer forward tape: busy")
-    with GILReleased(Python()):
-        owner[].close()
-    return PythonObject(0)
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (the standalone tape entries `transformer_forward_tape_enabled`,
+# `transformer_forward_tape`, `transformer_backward_tape`, `transformer_close_tape`.)
 
 def transformer_session_forward_fresh_binding(
     session: PythonObject, addrs: PythonObject, params: PythonObject,
@@ -498,8 +411,8 @@ def transformer_session_forward_fresh_binding(
     10 and 11 ZERO, the same 10 (+17) params with `smax = L` and
     `cached_tokens = 0`. The cache is the session's retained buffers,
     zero-filled on the device; nothing of it crosses the host boundary. This
-    is `transformer_forward_fresh` on a session: weights retained across
-    calls (`_session_weights`), workspace retained under the budget."""
+    is `transformer_forward_fresh` on a session: the block's attention step
+    op arm retained across calls under the budget."""
     var owner = session.downcast_value_ptr[TransformerSession]()
     if owner[].busy or owner[].closed:
         raise Error("transformer: session is busy or closed")
@@ -612,17 +525,13 @@ def transformer_session_forward_binding(
 
 
 from transformer.native_block_dispatch import NATIVE_TRANSFORMER_BLOCK_API
+from providers.python.causal_lm_program_pyapi import CausalProgramOwner, causal_lm_program_read_py
 
 
 
-def transformer_tape_create_native_binding() raises -> PythonObject:
-    # Empty typed lifetime admission only; all forward work uses the provider.
-    return PythonObject(alloc=TransformerForwardTape(List[Int]()))
-
-
-def transformer_tape_handle_native_binding(tape: PythonObject) raises -> PythonObject:
-    # Exact registered owner, never an inferred extension object layout.
-    return PythonObject(Int(tape.downcast_value_ptr[TransformerForwardTape]()))
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (`transformer_tape_create_native_v1`, `transformer_tape_handle_native_v1`.)
 
 def transformer_block_api_binding() raises -> PythonObject:
     # Same common named-table transport used by other native sibling entries.
@@ -711,61 +620,14 @@ def _transformer_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
     return _read_addrs_tail(addrs, 13, what)
 
 
-def transformer_forward_fresh_binding(
-    addrs: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """Stateless prefill: original zero device cache, only y is returned.
-
-    Eleven pointers: x, nine weights, y. Eight scalars: B, L, d_model,
-    n_heads, n_kv_heads, head_dim, intermediate, window. Capacity remains
-    L (or a window-sized ring), exactly as Python allocate_state(B, L).
-    The zero sentinel cache pointers never reach a transfer in this arm.
-
-    lane/block-options: or 11 + 11 pointers and 8 + 17 scalars, the two
-    option tails appended (this file's tail section, word for word). The
-    gate_proj.weight pointer (slot 7) is 0 under an ungated MLP.
-    """
-    var what = String("transformer_forward_fresh")
-    var raw = _read_addrs_tail(addrs, 11, what)
-    var p = _read_params(params, 8, what)
-    var opts = BlockOptions.from_params(p, 8)
-    # Into `transformer_forward`'s 13 + 11 layout: x, nine weights, the
-    # two absent cache slots, y, then the tail.
-    var a = List[Int]()
-    for i in range(10):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
-        a.append(raw[i])
-    a.append(0)
-    a.append(0)
-    a.append(raw[10])
-    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
-        a.append(raw[11 + i])
-    _check_base_addrs(a, [0, 1, 2, 3, 4, 5, 6, 8, 9], what)
-    _ = a  # keep the Python object alive through the native call above
-    if a[12] == 0:
-        raise Error("transformer_forward_fresh: null output address")
-    var b = p[0]
-    var l = p[1]
-    var dm = p[2]
-    var nh = p[3]
-    var nkv = p[4]
-    var hd = p[5]
-    var it = p[6]
-    var window = p[7]
-    if b <= 0 or l <= 0:
-        raise Error("transformer_forward_fresh: B and L must be positive")
-    var out_len = 0
-    with GILReleased(Python()):
-        out_len = _transformer_run[True](a, b, l, dm, nh, nkv, hd, it, l, 0, window, opts)
-    return PythonObject(out_len)
-
-
+# TOMBSTONE: MOJOLEARN_TRANSFORMER_FRESH_PREFILL / MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (the device per-call transformer_forward_fresh entry, SUPERSEDED by the session's transformer_session_forward_fresh, reached only under MOJOLEARN_TRANSFORMER_SESSION_FRESH=0 or MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
+# Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch
 # Lane ne3-c-blocks-embedding (row N114): a VERIFICATION AND LEGACY entry on
 # this GPU binding. TransformerBlock decodes and prefills through
 # `transformer_session_forward` (weights, cache and RoPE retained by the
-# block's session) whenever the binding exports it; this per-call entry,
-# which uploads the nine weights and both caches per call, is reached only
-# under MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1 (the A arm) and by direct callers
-# of the extension. CPU host bindings export their own host entry.
+# block's session); this per-call entry, which uploads the nine weights and
+# both caches per call, is reached only by direct callers of the extension
+# (lane x4 removed MOJOLEARN_TRANSFORMER_LEGACY_SETUP, its A arm). CPU host bindings export their own host entry.
 def transformer_forward_binding(
     addrs: PythonObject,
     params: PythonObject,
@@ -863,10 +725,9 @@ def transformer_forward_binding(
 # Lane ne3-c-blocks-embedding (row N114): a VERIFICATION AND LEGACY entry on
 # this GPU binding. TransformerBlock decodes and prefills through
 # `transformer_session_forward` (weights, cache and RoPE retained by the
-# block's session) whenever the binding exports it; this per-call entry,
-# which uploads the nine weights and both caches per call, is reached only
-# under MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1 (the A arm) and by direct callers
-# of the extension. CPU host bindings export their own host entry.
+# block's session); this per-call entry, which uploads the nine weights and
+# both caches per call, is reached only by direct callers of the extension
+# (lane x4 removed MOJOLEARN_TRANSFORMER_LEGACY_SETUP, its A arm). CPU host bindings export their own host entry.
 def transformer_decode_step_binding(
     addrs: PythonObject,
     params: PythonObject,
@@ -1042,6 +903,57 @@ def transformer_decode_session_open_int15_binding(
     return PythonObject(out_len)
 
 
+def transformer_decode_session_open_step_op_binding(
+    session: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`transformer_decode_session_open` for the public decode session (lane
+    x4-transformer-on-executor): the same ELEVEN addresses and NINE scalars,
+    each optionally followed by its block options tail, but the session runs
+    on the attention step op (`OPS_ATTN_STEP`): the weights packed into its
+    one weight buffer, the caches into its one state buffer, the position
+    into its state word. Every later step, forward, decode, export, load and
+    close is this binding's own entry. Returns cached_tokens."""
+    var owner = session.downcast_value_ptr[TransformerDecodeSession]()
+    var what = String("transformer_decode_session_open_step_op")
+    if (len(addrs) != 11 and len(addrs) != 11 + BLOCK_OPTION_ADDRS) or (
+        len(params) != 9 and len(params) != 9 + BLOCK_OPTION_PARAMS
+    ):
+        raise Error(what + ": expected 11 addresses and 9 scalars, each optionally followed by its block options tail")
+    if owner[].busy:
+        raise Error("transformer decode session: busy")
+    if owner[].is_open():
+        raise Error("transformer decode session: already open; close it first")
+    var raw = _read_addrs_tail(addrs, 11, what)
+    var a = List[Int]()
+    a.append(0)
+    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
+        a.append(raw[i])
+    a.append(0)
+    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
+        a.append(raw[11 + i])
+    _check_base_addrs(a, [1, 2, 3, 4, 5, 6, 8, 9, 10, 11], what)
+    var p = _read_params(params, 9, what)
+    var opts = BlockOptions.from_params(p, 9)
+    if p[0] <= 0:
+        raise Error(what + ": B must be positive")
+    owner[].busy = True
+    owner[].usable = False
+    var out_len = 0
+    try:
+        with GILReleased(Python()):
+            # Lane x4b: every decode session opens on the step op; this entry
+            # and `transformer_decode_session_open` share the one open.
+            out_len = _session_open_run(
+                owner[], a, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], opts)
+    except error:
+        owner[].busy = False
+        owner[].release()
+        raise error
+    owner[].busy = False
+    owner[].usable = True
+    return PythonObject(out_len)
+
+
 def transformer_decode_session_step_binding(
     session: PythonObject, addrs: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
@@ -1059,15 +971,50 @@ def transformer_decode_session_step_binding(
         raise Error("transformer_decode_session_step: null buffer address")
     var claimed = Int(py=params[0])
     _require_session_open(owner[])
-    if owner[].kv.value().s != claimed:
+    if owner[].cached() != claimed:
         raise Error(
             String("transformer decode session: the caller believes cached_tokens = ") + String(claimed)
-            + " but the resident cache holds " + String(owner[].kv.value().s))
+            + " but the resident cache holds " + String(owner[].cached()))
     owner[].busy = True
     var out_len = 0
     try:
         with GILReleased(Python()):
             out_len = _session_step_run(owner[], px, py)
+    except error:
+        owner[].busy = False
+        owner[].usable = False
+        raise error
+    owner[].busy = False
+    return PythonObject(out_len)
+
+
+def transformer_decode_session_decode_binding(
+    session: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`N` decode tokens per row on an open session in one call (decode plan
+    D2): `addrs` = [x, y_out], both B * N * d_model float32 in (B, N, d_model)
+    order; `params` = [N, cached_tokens], the position refused on a mismatch
+    as the step refuses it. Bytes equal N `transformer_decode_session_step`
+    calls. Returns the post-call cached_tokens."""
+    var owner = session.downcast_value_ptr[TransformerDecodeSession]()
+    if len(addrs) != 2 or len(params) != 2:
+        raise Error("transformer_decode_session_decode: expected 2 addresses and 2 scalars")
+    var px = Int(py=addrs[0])
+    var py = Int(py=addrs[1])
+    if px == 0 or py == 0:
+        raise Error("transformer_decode_session_decode: null buffer address")
+    var n = Int(py=params[0])
+    var claimed = Int(py=params[1])
+    _require_session_open(owner[])
+    if owner[].cached() != claimed:
+        raise Error(
+            String("transformer decode session: the caller believes cached_tokens = ") + String(claimed)
+            + " but the resident cache holds " + String(owner[].cached()))
+    owner[].busy = True
+    var out_len = 0
+    try:
+        with GILReleased(Python()):
+            out_len = _session_decode_run(owner[], px, py, n)
     except error:
         owner[].busy = False
         owner[].usable = False
@@ -1095,10 +1042,10 @@ def transformer_decode_session_forward_binding(
     if l <= 0:
         raise Error("transformer_decode_session_forward: L must be positive")
     _require_session_open(owner[])
-    if owner[].kv.value().s != claimed:
+    if owner[].cached() != claimed:
         raise Error(
             String("transformer decode session: the caller believes cached_tokens = ") + String(claimed)
-            + " but the resident cache holds " + String(owner[].kv.value().s))
+            + " but the resident cache holds " + String(owner[].cached()))
     owner[].busy = True
     var out_len = 0
     try:
@@ -1175,16 +1122,8 @@ def transformer_decode_session_close_binding(session: PythonObject) raises -> Py
     return PythonObject(0)
 
 
-def causal_lm_resident_read_version_binding() -> PythonObject:
-    # Capability for native group operation 2. Older images retain their
-    # existing per-call route; admission never probes by executing a read.
-    return PythonObject(1)
-
-
-def causal_lm_resident_sampling_version_binding() -> PythonObject:
-    # Capability only: public policy opt-in stays default-off. Group3 uses the
-    # common compensated-FP32 sampler and committed checkpoint publication.
-    return PythonObject(1)
+# TOMBSTONE: causal_lm_resident_read_v1 / causal_lm_resident_sampling_v1 capability entries (REFACTORED: reads run as the decode program, causal_lm_program_read_v1) deleted 2026-11-09 by lane/x45c-causal-generate-program-decode; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch; record in docs/TOMBSTONES.md.
 
 
 def causal_lm_native_handle_binding(session: PythonObject) raises -> PythonObject:
@@ -1311,10 +1250,10 @@ def causal_lm_session_run_binding(
             raise Error("causal_lm_session_run: layer " + String(i) + " holds B = " + String(sp[].b)
                 + ", d_model = " + String(sp[].dm) + "; the session has B = " + String(owner[].b)
                 + ", d_model = " + String(owner[].d))
-        if sp[].kv.value().s != claimed:
+        if sp[].cached() != claimed:
             raise Error(String("transformer decode session: the caller believes cached_tokens = ")
-                + String(claimed) + " but layer " + String(i) + " holds " + String(sp[].kv.value().s))
-        if sp[].kv.value().s + l + n_steps - 1 > sp[].smax:
+                + String(claimed) + " but layer " + String(i) + " holds " + String(sp[].cached()))
+        if sp[].cached() + l + n_steps - 1 > sp[].smax:
             raise Error("causal_lm_session_run: " + String(l + n_steps - 1) + " more positions do not fit the "
                 + String(sp[].smax) + "-token cache")
         ptrs.append(Int(sp))
@@ -1337,7 +1276,7 @@ def causal_lm_session_run_binding(
     for i in range(n_layers):  # driver-loop: over decoder layers of the model
         var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
         sp[].busy = False
-        result = sp[].kv.value().s
+        result = sp[].cached()
     owner[].busy = False
     return PythonObject(result)
 
@@ -1380,10 +1319,10 @@ def causal_lm_session_forward_binding(
                 + ", d_model = " + String(sp[].dm) + "; the session has B = " + String(owner[].b)
                 + ", d_model = " + String(owner[].d))
         if held < 0:
-            held = sp[].kv.value().s
-        elif sp[].kv.value().s != held:
+            held = sp[].cached()
+        elif sp[].cached() != held:
             raise Error("causal_lm_session_forward: the layers hold different cached lengths")
-        if sp[].kv.value().s + l > sp[].smax:
+        if sp[].cached() + l > sp[].smax:
             raise Error("causal_lm_session_forward: " + String(l) + " more positions do not fit the "
                 + String(sp[].smax) + "-token cache")
         ptrs.append(Int(sp))
@@ -1406,7 +1345,7 @@ def causal_lm_session_forward_binding(
     for i in range(n_layers):  # driver-loop: over decoder layers of the model
         var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
         sp[].busy = False
-        result = sp[].kv.value().s
+        result = sp[].cached()
     owner[].busy = False
     return PythonObject(result)
 
@@ -1464,28 +1403,9 @@ def transformer_backward_binding(
 
 
 
-def transformer_session_discard_tape_binding(session: PythonObject,ticket: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[TransformerSession]()
-    if owner[].busy:
-        raise Error("transformer tape: session is busy")
-    if len(ticket) != 2:
-        raise Error("transformer tape: owner and epoch required")
-    var cookie = Int(py=ticket[0])
-    var epoch = Int(py=ticket[1])
-    if cookie != Int(owner):
-        raise Error("transformer tape: foreign session")
-    # Closing an older ticket cannot discard a newer forward in this session.
-    if not owner[].closed and epoch == owner[].tape_generation:
-        owner[].invalidate_tape()
-    return PythonObject(0)
-
-
-def transformer_session_invalidate_tape_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[TransformerSession]()
-    if owner[].busy or owner[].closed:
-        raise Error("transformer tape: session is busy or closed")
-    owner[].invalidate_tape()
-    return PythonObject(0)
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (`transformer_session_discard_tape`, `transformer_session_invalidate_tape`.)
 
 
 def transformer_arithmetic_profile_changed_binding() raises -> PythonObject:
@@ -1496,85 +1416,9 @@ def transformer_arithmetic_profile_binding() raises -> PythonObject:
     return PythonObject(transformer_arithmetic_profile())
 
 
-def transformer_session_forward_tape_binding(
-    session: PythonObject, addrs: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """11 buffers x/9 weights/y; ten scalars shape/window/budget/cost.
-
-    Returns native session cookie, epoch, retained flag, counted stage bytes.
-    Copies finish before return. The weight snapshot belongs to this epoch;
-    any subsequent session operation invalidates the unconsumed ticket.
-    """
-    var owner = session.downcast_value_ptr[TransformerSession]()
-    if owner[].busy or owner[].closed:
-        raise Error("transformer tape: session is busy or closed")
-    if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("transformer tape: IDENTICAL only")
-    if len(addrs) != 11 or len(params) != 10:
-        raise Error("transformer tape: expected 11 addresses and 10 scalars")
-    var a = List[Int]()
-    var p = List[Int]()
-    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
-        var address = Int(py=addrs[i])
-        if address == 0:
-            raise Error("transformer tape: null buffer address")
-        a.append(address)
-    for i in range(10):  # small-loop(params: fixed scalar list of this entry): argument words, not data
-        p.append(Int(py=params[i]))
-    if p[0] <= 0 or p[1] <= 0 or p[7] < 0 or p[8] < 0 or p[9] < 0:
-        raise Error("transformer tape: invalid shape/window/activation budget/cost")
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            try:
-                _session_forward_tape_run(Int(owner), a, p)
-            except error:
-                owner[].clear()
-                raise error
-    except error:
-        owner[].busy = False
-        raise error
-    owner[].busy = False
-    var ticket = Python.list()
-    ticket.append(PythonObject(Int(owner)))
-    ticket.append(PythonObject(owner[].tape_generation))
-    ticket.append(PythonObject(Int(owner[].tape.value().retained)))
-    ticket.append(PythonObject(owner[].tape.value().retained_bytes))
-    return ticket
-
-
-def transformer_session_backward_tape_binding(
-    session: PythonObject, addrs: PythonObject, ticket: PythonObject,
-) raises -> PythonObject:
-    """Eleven addresses: dy, dx, norm1,norm2,Q,K,V,O,gate,up,down gradients."""
-    var owner = session.downcast_value_ptr[TransformerSession]()
-    if owner[].busy or owner[].closed:
-        raise Error("transformer tape: session is busy or closed")
-    if len(addrs) != 11 or len(ticket) != 2:
-        raise Error("transformer tape backward: expected 11 addresses and owner/epoch")
-    var cookie = Int(py=ticket[0])
-    var generation = Int(py=ticket[1])
-    if cookie != Int(owner) or generation != owner[].tape_generation or not owner[].tape:
-        raise Error("transformer tape: stale, foreign or already consumed ticket")
-    var a = List[Int]()
-    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
-        var address = Int(py=addrs[i])
-        if address == 0:
-            raise Error("transformer tape backward: null buffer address")
-        a.append(address)
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            try:
-                _session_backward_tape_run(Int(owner), a, generation)
-            except error:
-                owner[].clear()
-                raise error
-    except error:
-        owner[].busy = False
-        raise error
-    owner[].busy = False
-    return PythonObject(0)
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (`transformer_session_forward_tape`, `transformer_session_backward_tape`.)
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_transformer.mojo
@@ -1615,12 +1459,8 @@ def build__mojolearn_transformer() -> PythonObject:
         )
     try:
         var m = PythonModuleBuilder("_mojolearn_transformer")
-        m.def_function[transformer_session_discard_tape_binding]("transformer_session_discard_tape")
-        m.def_function[transformer_session_invalidate_tape_binding]("transformer_session_invalidate_tape")
         m.def_function[transformer_arithmetic_profile_changed_binding]("transformer_arithmetic_profile_changed")
         m.def_function[transformer_arithmetic_profile_binding]("transformer_arithmetic_profile")
-        m.def_function[transformer_session_forward_tape_binding]("transformer_session_forward_tape")
-        m.def_function[transformer_session_backward_tape_binding]("transformer_session_backward_tape")
         m.def_function[transformer_vendor_binding]("transformer_vendor")
         m.def_function[transformer_flash_call_count_binding]("transformer_flash_call_count")
         m.def_function[transformer_numeric_mode_binding](
@@ -1637,28 +1477,16 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[transformer_session_forward_binding]("transformer_session_forward")
         m.def_function[transformer_native_api_binding]("transformer_native_api_v1")
         m.def_function[transformer_block_api_binding]("transformer_block_api_v1")
-        m.def_function[transformer_tape_create_native_binding]("transformer_tape_create_native_v1")
-        m.def_function[transformer_tape_handle_native_binding]("transformer_tape_handle_native_v1")
         m.def_function[transformer_native_session_handle_binding]("transformer_native_session_handle_v1")
         # lane/neural-net-experiment: the stateless prefill on a session.
         m.def_function[transformer_session_forward_fresh_binding]("transformer_session_forward_fresh")
         m.def_function[transformer_session_backward_binding]("transformer_session_backward")
         # lane/lowbit-blocks: numeric_profile="fixed15_v1".
         m.def_function[transformer_session_forward_int15_binding]("transformer_session_forward_int15")
-        # NVIDIA's full public A/B gate admits discarded-cache prefill.
-        # Apple retains its prior default until separately priced; the explicit
-        # force flag remains available for its completed arithmetic gate.
-        comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and (is_defined["MOJOLEARN_TRANSFORMER_FRESH_PREFILL"]() or (TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"]())):
-            m.def_function[transformer_forward_fresh_binding]("transformer_forward_fresh")
         m.def_function[transformer_decode_step_binding](
             "transformer_decode_step"
         )
         m.def_function[transformer_backward_binding]("transformer_backward")
-        _ = m.add_type[TransformerForwardTape]("_TransformerForwardTape")
-        m.def_function[transformer_forward_tape_enabled_binding]("transformer_forward_tape_enabled")
-        m.def_function[transformer_forward_tape_binding]("transformer_forward_tape")
-        m.def_function[transformer_backward_tape_binding]("transformer_backward_tape")
-        m.def_function[transformer_close_tape_binding]("transformer_close_tape")
         # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by 79853ceba; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_transformer.patch
         # DEVIATION 2940: the resident decode session.
@@ -1666,9 +1494,11 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[transformer_decode_session_create_binding]("transformer_decode_session_create")
         m.def_function[transformer_decode_native_handle_binding]("transformer_decode_native_handle_v1")
         m.def_function[transformer_decode_session_open_binding]("transformer_decode_session_open")
+        m.def_function[transformer_decode_session_open_step_op_binding]("transformer_decode_session_open_step_op")
         # lane/lowbit-default: the resident sessions under numeric_profile="fixed15_v1".
         m.def_function[transformer_decode_session_open_int15_binding]("transformer_decode_session_open_int15")
         m.def_function[transformer_decode_session_step_binding]("transformer_decode_session_step")
+        m.def_function[transformer_decode_session_decode_binding]("transformer_decode_session_decode")
         m.def_function[transformer_decode_session_forward_binding]("transformer_decode_session_forward")
         m.def_function[transformer_decode_session_export_state_binding]("transformer_decode_session_export_state")
         m.def_function[transformer_decode_session_load_state_binding]("transformer_decode_session_load_state")
@@ -1682,10 +1512,11 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[causal_lm_session_open_binding]("causal_lm_session_open")
         m.def_function[causal_lm_session_open_int15_binding]("causal_lm_session_open_int15")
         m.def_function[causal_lm_session_run_binding]("causal_lm_session_run")
-        m.def_function[causal_lm_resident_read_version_binding]("causal_lm_resident_read_v1")
-        m.def_function[causal_lm_resident_sampling_version_binding]("causal_lm_resident_sampling_v1")
         m.def_function[causal_lm_session_forward_binding]("causal_lm_session_forward")
         m.def_function[causal_lm_session_close_binding]("causal_lm_session_close")
+        # Lane x45c: CausalLM.generate as one Program.decode (the decode program).
+        _ = m.add_type[CausalProgramOwner]("_CausalProgramOwner")
+        m.def_function[causal_lm_program_read_py]("causal_lm_program_read_v1")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_transformer: ", e))

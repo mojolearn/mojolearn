@@ -85,7 +85,8 @@ def enqueue_eigh_ascending(
     """`eigh_ascending` on device pointers, enqueued: the eigenvalues at
     diag[i * diag_stride] (diag_stride n + 1 reads a matrix's diagonal), the
     sign-flipped basis `vecs` (eigenvector i in column i), into device
-    `w_out` (n) and `v_out` (n x n, not `vecs`). `pos` holds n int32."""
+    `w_out` (n) and `v_out` (n x n, not `vecs`). `pos` holds n int32.
+    Enqueued only: nothing is drained."""
     if n <= 0:
         return
     var dk = ctx.enqueue_create_buffer[DType.float32](n)
@@ -99,7 +100,10 @@ def enqueue_eigh_ascending(
     ctx.enqueue_function[_eigh_scatter_kernel](
         kp, Int32(1), vecs, pp, Int32(n), w_out, v_out, grid_dim=_blocks(n * n), block_dim=_TPB
     )
-    ctx.synchronize()
+    # lane n7-device-linalg-ops: no drain here (the executor's eigh ops
+    # enqueue this inside a loop body); the key copy's buffer is released in
+    # stream order, as `DevExec._rr_batch_enq` releases its scratch, and
+    # both device callers read w_out / v_out after their own sync.
     _ = dk^
 
 

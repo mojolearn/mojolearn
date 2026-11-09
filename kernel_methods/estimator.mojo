@@ -60,7 +60,7 @@ from std.memory import bitcast
 # on one stream, and every entry still synchronizes before it returns, so no
 # bit moves. This module is compiled into ONE GPU binding, so the slot name
 # (per module and tier) is that binding's own.
-comptime _FAMILY_CTX = "MojoKernelMethodsContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoKernelMethodsContextOther"
+comptime _FAMILY_CTX = "MojolearnKernelMethodsContextIdenticalV2" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnKernelMethodsContextOtherV2"
 
 
 def _family_ctx() raises -> DeviceContext:
@@ -77,6 +77,7 @@ from cholesky.checks.potrf import (
 from cholesky.checks.trsm import CHOL_SOLVE_TPB
 from core.device_plan import device_plan_current
 from core.identity_trace import IdentityTrace
+from core.device_query_x import DeviceQueryX, QueryFold, query_context
 from decomposition.checks.jacobi_eigh_device import (
     JACOBI_SWEEPS,
     JACOBI_TOL,
@@ -125,6 +126,9 @@ from kernel_methods.checks.random_features import (
 from kernel_methods.impl.distance.kernel_matrices import KM_EPILOGUE_TPB
 from kernel_methods.impl.kernel_ridge.kernel_ridge import (
     KRR_RIDGE_TPB,
+    add_ridge_diag,
+    kernel_ridge_factor_solve_enqueue,
+    kernel_ridge_ops_route,
     kernel_ridge_solve,
     kernel_ridge_workspace_floats,
 )
@@ -983,13 +987,27 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
         )
         trace.record_device(ctx, "krr.weighted", dk, cells)
 
-    var info = kernel_ridge_solve(
-        ctx, dk, dy, cws, n_samples, n_targets, alpha, trace,
-        CHOL_PANEL_TPB, CHOL_ELEM_TPB, CHOL_SOLVE_TPB, KRR_RIDGE_TPB, KMSAB_NONE,
-    )
-    if info != 0:
-        ctx.synchronize()
-        raise Error(_krr_not_pd_message(info, kp.kernel, n_samples))
+    # The ridge, the factor and the solve enqueued read-free (lane
+    # n8-gp-krr-smo, the executor's Cholesky ops); `info` comes home with
+    # the dual coefficients and a failed factor raises after that one drain
+    # (before: a drain inside the factor for `info`, then the download's).
+    # The identity-trace route and a multi-GPU plan keep `kernel_ridge_solve`'s
+    # `potrf_lower` (its records; the trailing rows across owners).
+    var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
+    var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
+    if not kernel_ridge_ops_route(trace):
+        var info0 = kernel_ridge_solve(
+            ctx, dk, dy, cws, n_samples, n_targets, alpha, trace,
+            CHOL_PANEL_TPB, CHOL_ELEM_TPB, CHOL_SOLVE_TPB, KRR_RIDGE_TPB, KMSAB_NONE,
+        )
+        if info0 != 0:
+            ctx.synchronize()
+            raise Error(_krr_not_pd_message(info0, kp.kernel, n_samples))
+        enqueue_fill(ctx, dinfo, Int32(0))
+    else:
+        add_ridge_diag(ctx, dk, n_samples, alpha, KRR_RIDGE_TPB, KMSAB_NONE)
+        kernel_ridge_factor_solve_enqueue(ctx, dk, dy, dinfo, n_samples, n_targets)
+    ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
     comptime if KRR_IDN_DEV_SCALE:
         if weighted:
             _krr_scale_rows_dev(ctx, dy, dsw, n_samples, n_targets)
@@ -1001,6 +1019,12 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
                 dual_out.unsafe_store(i, dual[i])
         else:
             _download_into(ctx, dy, dual_out, n_samples * n_targets)
+    ctx.synchronize()
+    var info = Int(hinfo.unsafe_ptr().unsafe_load(0))
+    _ = hinfo^
+    _ = dinfo^
+    if info != 0:
+        raise Error(_krr_not_pd_message(info, kp.kernel, n_samples))
     _ = dsw^
     _ = xa^
     _ = dy^
@@ -1025,29 +1049,38 @@ def kernel_ridge_predict_ptr_into[out_origin: MutOrigin, //](
     n_query: Int,
     output: MutPointer[Float32, out_origin],
     mut trace: IdentityTrace,
-) raises:
+    fold: QueryFold = QueryFold.none(),
+) raises -> Tuple[Int32, Int32]:
     """KRR_IDN_PTR_IN: `kernel_ridge_predict_host` with the fit's X and dual
-    and the query X read from the caller's addresses on the device (the
-    query scanned there, `_upload_checked`; the fitted arrays unchecked as
-    on the list route) and the n_query x t predictions copied into
-    `output`. The same launches as the list route."""
-    if xfit_addr == 0 or dual_addr == 0 or xnew_addr == 0:
+    read from the caller's addresses on the device (unchecked, as on the
+    list route) and the n_query x t predictions copied into `output`. The
+    same launches as the list route. The query (lane a7a) is a
+    `DeviceQueryX` (core/device_query_x.mojo): host words at `xnew_addr`, or
+    the cross-validation fold `fold` gathered on the device (then the call
+    runs on the fold store's context). Returns the query's (finite word,
+    range word); the door refuses a flagged query and discards `output`."""
+    if xfit_addr == 0 or dual_addr == 0 or (xnew_addr == 0 and not fold.active()):
         raise Error("kernel_ridge_predict: null X_fit, dual or X address")
     if n <= 0 or d <= 0 or t <= 0:
         raise Error(
             "kernel_ridge_predict: the model needs positive n, d and n_targets, got "
             + String(n) + ", " + String(d) + ", " + String(t)
         )
-    var ctx = _family_ctx()
-    var dq = _upload_checked(ctx, xnew_addr, n_query, d, "predict X")
+    var ctx = query_context(fold, _family_ctx())
+    # TOMBSTONE: _upload_checked on the predict query (synchronising scan, DEVIATION 1686 text) removed 2026-11-09 by lane a7a-device-x-svm-gp-krr; recoverable at 5b5490960d (docs/TOMBSTONES.md).
+    var qx = DeviceQueryX(ctx, xnew_addr, n_query, d, fold)
     var dfit = _upload_ptr(ctx, xfit_addr, n * d)
     var ddual = _upload_ptr(ctx, dual_addr, n * t)
-    kernel_ridge_predict_dev(ctx, dq, dfit, ddual, n, d, t, kp, n_query, output, trace)
-    _ = dq^
+    # kernel_ridge_predict_dev synchronises before its read-back: the status
+    # words copied after the query are valid below.
+    kernel_ridge_predict_dev(ctx, qx.x, dfit, ddual, n, d, t, kp, n_query, output, trace)
+    var words = (qx.finite_word(), qx.range_word())
+    _ = qx^
     _ = dfit^
     _ = ddual^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
+    return words
 
 
 def kernel_ridge_predict_dev[out_origin: MutOrigin, //](

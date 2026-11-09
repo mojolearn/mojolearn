@@ -49,7 +49,7 @@ from autograd.model import (
     FIT_STATE_WORDS, FS_SEED_HI, FS_SEED_LO, FS_STEP, IP64, LAYER_LAYER_NORM, LAYER_LINEAR, ModelSpec,
     parse_model,
 )
-from autograd.program import program_from_words, program_words
+from autograd.program import program_from_words, program_words, PROGRAM_PARAM_WEIGHT, PROGRAM_PARAM_STATE_WORDS
 from autograd.ops_api import OpsSession, ops_session
 from core.cast_in import CAST_KIND_FLOAT, CastIn
 from autograd.arg_words import cast_in_words, fptr_word, fval_word
@@ -652,6 +652,13 @@ def ops_load_program[E: Exec & Movable & Deinitable, KIND: Int](sid: Int, file: 
                         + " does not hold its recorded shape")
         var c = CastIn(Int(ck.param.unsafe_ptr()) + 4 * off, CAST_KIND_FLOAT, 4, sh.rows(), sh.cols(), 4 * sh.cols(), 4)
         prog.params[i] = p[].upload_nd(c, sh, False)
+        # lane x1 (record version 3): carried state comes back as state; int32
+        # words were saved as their bit patterns and keep them (a float32 copy)
+        var pk = prog.param_kind(i)
+        if pk == PROGRAM_PARAM_STATE_WORDS:
+            p[].int_words[p[]._slot(prog.params[i])] = True
+        if pk != PROGRAM_PARAM_WEIGHT:
+            p[].declare_state(prog.params[i])
     var pid = p[].add_program(prog^)
     _ = ck^
     return pid

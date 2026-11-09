@@ -30,23 +30,9 @@ refusal of classification itself, is closed by DEVIATION 2830.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from max.gpu.host.dim import Dim
 from std.gpu import block_idx, thread_idx
-from checks.numerics import ftz, identical_mul
 from checks.numerics import NUMERIC_FAST as _NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
-from cholesky.checks.potrf import (
-    CHOL_ELEM_TPB,
-    CHOL_NB_PINNED,
-    CHOL_PANEL_TPB,
-    add_jitter,
-    chol_default_nb_hint,
-    chol_logdet,
-    chol_nb_for,
-    chol_workspace_floats,
-    potrf_lower,
-)
-from cholesky.checks.trsm import cho_solve
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
 from core.neural_context import neural_ctx
 from std.time import perf_counter_ns
@@ -59,7 +45,7 @@ from std.sys.compile import is_defined
 # on one stream, and every entry still synchronizes before it returns, so no
 # bit moves. This module is compiled into ONE GPU binding, so the slot name
 # (per module and tier) is that binding's own.
-comptime _FAMILY_CTX = "MojoGpContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoGpContextOther"
+comptime _FAMILY_CTX = "MojolearnGpContextIdenticalV2" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnGpContextOtherV2"
 
 
 def _family_ctx() raises -> DeviceContext:
@@ -97,18 +83,12 @@ from gaussian_process.gpc_device_var import (
 from gaussian_process.gpc_common import (
     GPCBinaryFit,
     GPCLatent,
-    gpc_neg_inf32,
-    gpc_stop,
     gpc_validate_labels,
     gpc_validate_max_iter,
 )
 from gaussian_process.gpc_proba64 import gpc_ovr_combine_row, gpc_pi_star_sf64
-from gaussian_process.gpc_items import (
-    gpc_weight_item, gpc_rhs_item, gpc_scale_item, gpc_a_item, gpc_residual_item, gpc_lml_part_item, gpc_lml_fin,
-    gpc_fold_blocks,
-)
-from std.atomic import Atomic
-from core.device_zero import enqueue_fill
+from gaussian_process.gpc_items import gpc_residual_item
+from gaussian_process.gpc_newton import gpc_newton_device
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
@@ -128,8 +108,9 @@ from gemm.contract import OP_TN
 #: validation cannot refuse here (K is a validated finite kernel matrix and
 #: B is symmetric by construction). The last factor is read back once.
 #: The opt-in host round trips (`-D MOJOLEARN_GPC_HOST_NEWTON`) were removed
-#: (hr-optin-flags).
-comptime GPC_B_TPB = 256
+#: (hr-optin-flags). Lane n8-gp-krr-smo (2026-11-09): the loop is
+#: gaussian_process/gpc_newton.mojo's bounded device loop over the executor's
+#: Cholesky ops (GPC_NEWTON_TPB is this file's old GPC_B_TPB, 256).
 
 
 #: lane neighbors-apple3 (2026-09-28), the default on every column since
@@ -142,23 +123,9 @@ comptime GPC_B_TPB = 256
 #: (`_gpc_kernel_self_dev`), not from a download and an upload.
 
 
-def gpc_b_matrix_kernel(
-    b: MutPointer[Float32, MutAnyOrigin],
-    k: MutPointer[Float32, MutAnyOrigin],
-    wsr: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-):
-    var n = Int(n_in)
-    var e = Int(block_idx.x) * GPC_B_TPB + Int(thread_idx.x)
-    if e >= n * n:
-        return
-    var i = e // n
-    var j = e - i * n
-    var ww = ftz(identical_mul(ftz(wsr[unsafe_offset = i]), ftz(wsr[unsafe_offset = j])))
-    var cell = ftz(identical_mul(ww, ftz(k[unsafe_offset = e])))
-    if i == j:
-        cell = ftz(Float32(1.0) + cell)
-    b[unsafe_offset = e] = cell
+# TOMBSTONE: the Newton loop's kernels (gpc_b_matrix_kernel, gpc_w_kernel, gpc_rhs_kernel, gpc_scale_nan_kernel, gpc_a_kernel, gpc_lml_part_kernel, gpc_lml_fin_kernel) deleted 2026-11-09 by lane/n8-gp-krr-smo; code recoverable at f59d913b0b.
+# Restore: git apply experiments/removed/N8_GPC_NEWTON_ONE_LOOP.patch
+# Their gated forms are gaussian_process/gpc_newton.mojo's.
 
 
 comptime _GP = MutPointer[Float32, MutAnyOrigin]
@@ -181,50 +148,10 @@ def _dp(buf: DeviceBuffer[DType.float32]) -> _GP:
     return _GP(unsafe_from_address=Int(buf.unsafe_ptr()))
 
 
-def gpc_w_kernel(f: _GP, pi: _GP, w: _GP, wsr: _GP, n: Int32):
-    var i = _gtid()
-    if i < Int(n):
-        gpc_weight_item(i, f, pi, w, wsr)
-
-
-def gpc_rhs_kernel(w: _GP, f: _GP, y: _GP, pi: _GP, dst: _GP, n: Int32):
-    var i = _gtid()
-    if i < Int(n):
-        gpc_rhs_item(i, w, f, y, pi, dst)
-
-
-def gpc_scale_nan_kernel(wsr: _GP, v: _GP, dst: _GP, nan_at: _GI, n: Int32):
-    """`gpc_scale`, and the lowest index whose value is NaN (DEVIATION 1638's
-    refusal of a NaN right-hand side) by an atomic min."""
-    var i = _gtid()
-    if i < Int(n):
-        gpc_scale_item(i, wsr, v, dst)
-        var c = dst.unsafe_load(i)
-        if c != c:
-            _ = Atomic[DType.int32].min(nan_at, Int32(i))
-
-
-def gpc_a_kernel(b: _GP, wsr: _GP, x: _GP, dst: _GP, n: Int32):
-    var i = _gtid()
-    if i < Int(n):
-        gpc_a_item(i, b, wsr, x, dst)
-
-
 def gpc_residual_kernel(y: _GP, pi: _GP, dst: _GP, n: Int32):
     var i = _gtid()
     if i < Int(n):
         gpc_residual_item(i, y, pi, dst)
-
-
-def gpc_lml_part_kernel(a: _GP, f: _GP, y: _GP, n: Int32, pdot: _GP, pt2: _GP, nb: Int32):
-    var b = _gtid()
-    if b < Int(nb):
-        gpc_lml_part_item(b, a, f, y, Int(n), pdot, pt2)
-
-
-def gpc_lml_fin_kernel(pdot: _GP, pt2: _GP, nb: Int32, logdet: Float32, dst: _GP):
-    if _gtid() == 0:
-        dst.unsafe_store(0, gpc_lml_fin(pdot, pt2, Int(nb), logdet))
 
 
 comptime _GU = MutPointer[UInt64, MutAnyOrigin]
@@ -301,13 +228,12 @@ def _gpc_fit_binary_device(
     kernel: GPKernelSpec,
     max_iter_predict: Int,
 ) raises -> GPCBinaryFit:
-    """The Laplace Newton loop with every step on the device
-    (cpu-gpu-cleanup c-gp-kernel, 2026-10-02): K from the kernel launch's own
-    buffer, the weights, B, its factor and log-determinant, the right-hand
-    side, both products, the solve, `a` and the likelihood
-    (gaussian_process/gpc_items.mojo, the host column's items); only the
-    likelihood and the NaN guard's index cross back per iteration, for the
-    stop test. The last factor, pi and W_sr are read back once."""
+    """The Laplace Newton loop with every step on the device: K from the
+    kernel launch's own buffer, then `gpc_newton_device`
+    (gaussian_process/gpc_newton.mojo, the one Newton loop the one-vs-rest
+    fit runs too: a bounded device loop over the executor's Cholesky ops,
+    the register block read once per GPC_NEWTON_CHECK iterations). The last
+    factor, pi and W_sr are read back once."""
     var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
     var t_k0 = Int(perf_counter_ns())
     var n = n_train
@@ -315,129 +241,28 @@ def _gpc_fit_binary_device(
     var dk = _gpc_kernel_self_dev(ctx, x, n_train, n_features, kernel)
     var t_kernel = Int(perf_counter_ns()) - t_k0
     var db = ctx.enqueue_create_buffer[DType.float32](n * n)
-    var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
-    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
-    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
     var dy = _upload(ctx, y)
-    var df = ctx.enqueue_create_buffer[DType.float32](n)
     var dpi = ctx.enqueue_create_buffer[DType.float32](n)
-    var dw = ctx.enqueue_create_buffer[DType.float32](n)
     var dwsr = ctx.enqueue_create_buffer[DType.float32](n)
-    var dbv = ctx.enqueue_create_buffer[DType.float32](n)
-    var dkb = ctx.enqueue_create_buffer[DType.float32](n)
-    var dc = ctx.enqueue_create_buffer[DType.float32](n)
-    var da = ctx.enqueue_create_buffer[DType.float32](n)
-    var nbf = gpc_fold_blocks(n)
-    var dpd = ctx.enqueue_create_buffer[DType.float32](max(nbf, 1))
-    var dpt = ctx.enqueue_create_buffer[DType.float32](max(nbf, 1))
-    var dlml = ctx.enqueue_create_buffer[DType.float32](1)
-    var dnan = ctx.enqueue_create_buffer[DType.int32](1)
     var dgw = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(n, 1, n))
-    var hlml = ctx.enqueue_create_host_buffer[DType.float32](1)
-    var hnan = ctx.enqueue_create_host_buffer[DType.int32](1)
-    enqueue_fill(ctx, df, Float32(0.0))
-    ctx.synchronize()
-    var trace = IdentityTrace()
-    var previous = gpc_neg_inf32()
-    var n_iter = 0
-    var nb = 0
-    var t_f = 0
-    # Resolve the kernel once; dispatch its handle without ambiguous generic overloads.
-    var b_kernel = ctx.compile_function[gpc_b_matrix_kernel]()
-    for it in range(max_iter_predict):
-        var s0 = Int(perf_counter_ns())
-        ctx.enqueue_function[gpc_w_kernel](
-            _dp(df), _dp(dpi), _dp(dw), _dp(dwsr), Int32(n), grid_dim=_gblocks(n), block_dim=GPC_STEP_TPB
-        )
-        ctx.enqueue_function(
-            b_kernel, db.unsafe_ptr(), dk.unsafe_ptr(), dwsr.unsafe_ptr(), Int32(n),
-            grid_dim=Dim((n * n + GPC_B_TPB - 1) // GPC_B_TPB, 1, 1),
-            block_dim=Dim(GPC_B_TPB, 1, 1),
-        )
-        add_jitter(ctx, db, n, Float32(0.0), CHOL_ELEM_TPB)
-        var run = potrf_lower(
-            ctx, db, ws, n, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB
-        )
-        t_f += Int(perf_counter_ns()) - s0
-        if run.info != 0:
-            raise Error(
-                "gpc_fit_host: the factorization of B = I + W_sr K W_sr failed"
-                " at Newton iteration "
-                + String(it + 1)
-                + " (info="
-                + String(run.info)
-                + "). B's eigenvalues are at least 1 for any finite kernel"
-                " matrix, so this means a non-finite latent value"
-            )
-        var logdet = chol_logdet(ctx, db, dwork, n, trace, CHOL_ELEM_TPB)
-        ctx.enqueue_function[gpc_rhs_kernel](
-            _dp(dw), _dp(df), _dp(dy), _dp(dpi), _dp(dbv), Int32(n), grid_dim=_gblocks(n), block_dim=GPC_STEP_TPB
-        )
-        identical_gemm_into(ctx, dkb, dk, dbv, dgw, n, 1, n, OP_TN)
-        enqueue_fill(ctx, dnan, Int32(n))
-        ctx.enqueue_function[gpc_scale_nan_kernel](
-            _dp(dwsr), _dp(dkb), _dp(dc), _GI(unsafe_from_address=Int(dnan.unsafe_ptr())), Int32(n),
-            grid_dim=_gblocks(n), block_dim=GPC_STEP_TPB,
-        )
-        cho_solve(ctx, db, dc, n, 1, trace, CHOL_SOLVE_TPB)
-        ctx.enqueue_function[gpc_a_kernel](
-            _dp(dbv), _dp(dwsr), _dp(dc), _dp(da), Int32(n), grid_dim=_gblocks(n), block_dim=GPC_STEP_TPB
-        )
-        identical_gemm_into(ctx, df, dk, da, dgw, n, 1, n, OP_TN)
-        if nbf > 0:
-            ctx.enqueue_function[gpc_lml_part_kernel](
-                _dp(da), _dp(df), _dp(dy), Int32(n), _dp(dpd), _dp(dpt), Int32(nbf),
-                grid_dim=_gblocks(nbf), block_dim=GPC_STEP_TPB,
-            )
-        ctx.enqueue_function[gpc_lml_fin_kernel](
-            _dp(dpd), _dp(dpt), Int32(nbf), logdet, _dp(dlml), grid_dim=1, block_dim=1
-        )
-        ctx.enqueue_copy(dst_ptr=hlml.unsafe_ptr(), src_buf=dlml)
-        ctx.enqueue_copy(dst_ptr=hnan.unsafe_ptr(), src_buf=dnan)
-        ctx.synchronize()
-        var nan_at = Int(hnan.unsafe_ptr().unsafe_load(0))
-        if nan_at < n:
-            raise Error(
-                "cholesky_solve_host: the right-hand side contains NaN at"
-                " flat index "
-                + String(nan_at)
-                + "; refused by name (DEVIATION 1638)"
-            )
-        var lml = hlml.unsafe_ptr().unsafe_load(0)
-        n_iter = it + 1
-        nb = run.nb
-        if gpc_stop(lml, previous):
-            break
-        previous = lml
+    var s0 = Int(perf_counter_ns())
+    var run = gpc_newton_device(ctx, dk, dy, db, dgw, dpi, dwsr, n, max_iter_predict)
+    var t_f = Int(perf_counter_ns()) - s0
     var t_l0 = Int(perf_counter_ns())
     var last_l = _download(ctx, db, n * n)
     var last_pi = _download(ctx, dpi, n)
     var last_wsr = _download(ctx, dwsr, n)
     if st_on:
-        print("GPC_FIT_DEVICE_STAGES iters=" + String(n_iter) + " kernel_ms=" + String(t_kernel // 1000000)
-              + " b_and_factor_ms=" + String(t_f // 1000000)
+        print("GPC_FIT_DEVICE_STAGES iters=" + String(run.n_iter) + " kernel_ms=" + String(t_kernel // 1000000)
+              + " newton_ms=" + String(t_f // 1000000)
               + " read_ms=" + String((Int(perf_counter_ns()) - t_l0) // 1000000))
     _ = dk^
     _ = db^
-    _ = ws^
-    _ = dwork^
     _ = dy^
-    _ = df^
     _ = dpi^
-    _ = dw^
     _ = dwsr^
-    _ = dbv^
-    _ = dkb^
-    _ = dc^
-    _ = da^
-    _ = dpd^
-    _ = dpt^
-    _ = dlml^
-    _ = dnan^
     _ = dgw^
-    _ = hlml^
-    _ = hnan^
-    return GPCBinaryFit(last_l^, last_pi^, last_wsr^, previous, n_iter, nb)
+    return GPCBinaryFit(last_l^, last_pi^, last_wsr^, run.lml, run.n_iter, run.nb)
 
 
 def gpc_fit_binary_host(

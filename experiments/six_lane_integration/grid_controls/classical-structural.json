@@ -5,27 +5,6 @@
  "head": "2cde5e0e7",
  "head_note": "lane S4 (2026-10-07): four new IDENTICAL structural switches, all default off, plus the board harness's separate upload clock (tools/classical_two_datasets.py, not a control). Nothing compiled, run or queued by the lane.",
  "controls": {
-  "sgd_epoch_contiguous": {
-   "define": "MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "x_linear/device.mojo:897",
-    "x_linear/device.mojo:902",
-    "x_linear/device.mojo:1739",
-    "x_linear/device.mojo:1855"
-   ],
-   "binding": "_mojolearn_x_linear",
-   "bits_change": false,
-   "status": "new",
-   "note": "Minibatch SGD (batch 4096, the board's SGDRegressor/SGDClassifier route _sgd_mb_grid -> fused rows/steprows + parts kernels): once per epoch and problem, right after sgd_perm_kernel and inside the witness unit, two gather launches write the permuted copies xp[p] = x[idx[p]], ysp, swp and an identity order; the batch kernels then read contiguous rows (batch*d words, L2-resident) instead of scattered 44-byte rows. Cost: two streaming passes over X per epoch against batches x scattered-row latency. No bits move: every batch position sees the same operands (x row idx[p], ys[idx[p]], sw[idx[p]]) at the same position and the mb_dot/mb_part folds index by batch position, so the host twin (sgd_mb_one) is unchanged. Memory gate: free device memory >= 2x the copies (ctx.get_memory_info), else the incumbent gathered loads. IDENTICAL only; the FAST+Apple MOJOLEARN_SGD_FAST_EPOCH_RESIDENT arm is untouched and exclusive by mode. tools/bench_board_algos.py:222 mismatch note corrected (ours is minibatch 4096, not per-sample)."
-  },
   "linear_gram_solve": {
    "define": "MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF",
    "kind": "switch",
@@ -181,7 +160,12 @@
    "interaction_groups": []
   }
  },
- "removed": [],
+ "removed": [
+  {
+   "define": "MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS",
+   "reason": "removed 2026-11-09 (lane n3-sgd-minibatch-loops): never measured on its own, default off; a per-epoch n x d device-to-device re-gather of X, y and the sample weights (plan EXECUTOR_CONSOLIDATION_AND_CLEANUP section 4, SGD row); the gathered-load batch kernels are the only path; docs/TOMBSTONES.md"
+  }
+ ],
  "notes": [
   "Item 5 (not a control): tools/classical_two_datasets.py records `upload_separate` per scored round for ours (a second H2D upload of the same input via x_cnn_res_upload, timed after every clock of the round closed) and `upload_ms_separate` / `fit_minus_upload_ms` (derived) on CTD-SPAN; the scored clock boundary is unchanged.",
   "RUN OWED (lq unreachable at lane time): ID + RACE for sgd-reg, sgd-clf, ols, ridge, randomized-svd, kmeans on taxi,istella on nv and amd per define."

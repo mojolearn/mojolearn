@@ -259,7 +259,9 @@ def _(ml, X, yc, yr, Xh=None):
         # four tokens (each step advanced it)
         st.cached_tokens = 4
         sess.load_state()
-        after = np.concatenate([np.asarray(sess.step(tok(t))) for t in range(8, 12)], axis=1)  # glue: four steps
+        # The four tokens after the reload go through `decode` (one native
+        # call, `transformer_decode_session_decode`): byte for byte the four steps.
+        after = np.asarray(sess.decode(np.ascontiguousarray(x[:, 8:12])))
         sess.sync_state()
         resident = np.concatenate(_decode_state_arrays(st))
     ref = blk.allocate_state(2, max_tokens=32)
@@ -520,7 +522,7 @@ def _coverage_state_pieces(st):
 
 
 def _coverage_decode_session(ml, blk, X, dm):
-    """`blk._decode_session(state)` (bindings/mamba_public_native.mojo, the
+    """`blk.decode_session(state)` (bindings/mamba_public_native.mojo, the
     binding's `<kind>_session_open/step/export_state/load_state`) on two rows
     of the fixture slab: four steps, `sync_state`, four steps the reload
     discards, `load_state` (the session rewinds to the synced four-token
@@ -536,14 +538,20 @@ def _coverage_decode_session(ml, blk, X, dm):
         return np.ascontiguousarray(x[:, t:t + 1])
 
     st = blk.allocate_state(2)
-    with blk._decode_session(st) as sess:
+    with blk.decode_session(st) as sess:
+        # The door returns the documented class (mojolearn.mamba
+        # Mamba2DecodeSession / Mamba3DecodeSession), which is also what
+        # attributes this lane to it in tools/verification_matrix.py.
+        assert type(sess) is getattr(ml.mamba, type(blk).__name__.replace("Block", "DecodeSession")), type(sess)
         first = np.concatenate([np.asarray(sess.step(tok(t))) for t in range(4)], axis=1)  # glue: four steps
         sess.sync_state()
         synced = _coverage_state_pieces(st)
         for t in range(4, 8):  # glue: four steps the reload discards
             sess.step(tok(t))
         sess.load_state()
-        after = np.concatenate([np.asarray(sess.step(tok(t))) for t in range(8, 12)], axis=1)  # glue: four steps
+        # The four tokens after the reload go through `decode` (one native
+        # call, `<kind>_session_decode`): byte for byte the four steps.
+        after = np.asarray(sess.decode(np.ascontiguousarray(x[:, 8:12])))
         sess.sync_state()
         resident = _coverage_state_pieces(st)
     plain = blk.allocate_state(2)
@@ -592,6 +600,70 @@ def _(ml, X, yc, yr, Xh=None):
         "D": (nh,), "out_proj.weight": (dm, di)},
         ones=("block_norm.weight",), near_one=("B_norm.weight", "C_norm.weight"))
     return _coverage_decode_session(ml, ml.Mamba3Block(w), X, dm)
+
+
+# ---------------------------------------------------------------- SambaStack.decode_session (lane fix-d1-decode-sessions, 2026-11-08)
+
+@lane("samba-decode-session")
+def _(ml, X, yc, yr, Xh=None):
+    """SambaStack.decode_session(state) -> SambaDecodeSession on the `samba`
+    lane's stack (one Mamba-3 and one attention layer, d_model 32, vocab 256,
+    weights from Generator(1)): two rows, four steps, `sync_state`, four steps
+    the reload discards, `load_state`, four more steps and a final
+    `sync_state` (`samba_decode_open`, `samba_decode_step`,
+    `samba_decode_export`, `samba_decode_load` on a binding with the resident
+    decode; the per-call step on the caller's state otherwise). Each output and
+    both synced states are held byte for byte IN THE CELL to the per-call
+    `SambaStack.step` on a second state that stepped the first four tokens and
+    then the same last four. Parts: the first and last logits, the final state
+    (every layer's float pieces in stack order) and its cursors."""
+    d = _coverage_digester(ml)
+    cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
+    m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
+    ids = _ids(X, 2, 12)
+
+    def tok(t):
+        return np.ascontiguousarray(ids[:, t:t + 1])
+
+    def pieces(st):
+        flat, words = [], []
+        for layer in st.layers:  # glue: the stack state's layer states
+            if hasattr(layer, "k_cache"):
+                flat += [np.asarray(layer.k_cache, dtype=np.float32).reshape(-1),
+                         np.asarray(layer.v_cache, dtype=np.float32).reshape(-1)]  # glue: two cache pieces
+                words += [int(layer.cached_tokens), 0]
+            else:
+                f, w = _coverage_state_pieces(layer)
+                flat.append(f)
+                words += [int(v) for v in w]  # glue: the layer's cursors
+        return np.concatenate(flat), np.asarray(words, dtype=np.int64)
+
+    st = m.allocate_state(2, 16)
+    with m.decode_session(st) as sess:
+        assert type(sess).__name__ == "SambaDecodeSession", type(sess)
+        first = np.stack([np.asarray(sess.step(tok(t))) for t in range(4)], axis=1)  # glue: four steps
+        sess.sync_state()
+        synced = pieces(st)
+        for t in range(4, 8):  # glue: four steps the reload discards
+            sess.step(tok(t))
+        sess.load_state()
+        # The four tokens after the reload go through `decode` (one native
+        # call, `samba_decode_tokens`): (2, 4, vocab), byte for byte the four steps.
+        after = np.asarray(sess.decode(np.ascontiguousarray(ids[:, 8:12])))
+        sess.sync_state()
+        resident = pieces(st)
+    plain = m.allocate_state(2, 16)
+    want_first = np.stack([np.asarray(m.step(tok(t), plain)) for t in range(4)], axis=1)  # glue: four steps
+    plain_synced = pieces(plain)
+    want = np.stack([np.asarray(m.step(tok(t), plain)) for t in range(8, 12)], axis=1)  # glue: four steps
+    plain_final = pieces(plain)
+    _same_bytes("session steps", first, "per-call SambaStack.step", want_first)
+    _same_bytes("session sync_state", synced[0], "per-call state", plain_synced[0])
+    _same_bytes("session sync_state cursors", synced[1], "per-call state cursors", plain_synced[1])
+    _same_bytes("steps after load_state", after, "per-call steps after the same four tokens", want)
+    _same_bytes("final sync_state", resident[0], "per-call final state", plain_final[0])
+    _same_bytes("final sync_state cursors", resident[1], "per-call final cursors", plain_final[1])
+    return _fit(dict(first=d(first), after=d(after), state=d(resident[0]), cursors=d(resident[1])))
 
 
 # ---------------------------------------------------------------- training.chunked_lm_head_loss
@@ -1268,56 +1340,10 @@ _batch_decl("n/a:coverage-probe (the lane checks one public call path the releas
 
 
 # ---------------------------------------------------------------- lane verify-coverage-20261024
-# The whole-surface audit (docs/plans/VERIFY_COVERAGE_20261024.md) found no
-# lane for TransformerBlock's forward tape: forward_with_tape,
-# backward_from_tape and TransformerForwardTape.close
-# (`transformer_session_forward_tape`, `_backward_tape`, `_discard_tape`).
-
-
-@lane("transformer-forward-tape")
-def _(ml, X, yc, yr, Xh=None):
-    """The `transformer` lane's block: a forward with a tape kept whole and
-    one with a zero activation budget (the backward replays the forward),
-    each consumed by backward_from_tape, whose gradients must equal the
-    block's own recomputing backward byte for byte. A third tape is closed;
-    its backward must refuse, and a fourth, made after the close, must
-    still give the same gradients (the discard frees only its ticket)."""
-    d = _coverage_digester(ml)
-    dm, nh, nkv, hd, it = 32, 2, 1, 16, 64
-    w = _block_weights("transformer", {
-        "input_layernorm.weight": (dm,), "post_attention_layernorm.weight": (dm,),
-        "q_proj.weight": (nh * hd, dm), "k_proj.weight": (nkv * hd, dm), "v_proj.weight": (nkv * hd, dm),
-        "o_proj.weight": (dm, nh * hd), "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
-        "down_proj.weight": (dm, it)},
-        near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
-    blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv)
-    x = _seq(X, 2, 16, dm)
-    g = _seq(X, 2, 16, dm, skip=1024)
-    whole = blk.backward(x, g)
-    names = sorted(whole)
-    parts = {"backward": d(np.concatenate([np.asarray(whole[k], dtype=np.float32).reshape(-1) for k in names]))}
-    for tag, budget in (("kept", 1 << 29), ("replayed", 0)):  # glue: the two activation budgets
-        y, tape = blk.forward_with_tape(x, activation_budget_bytes=budget)
-        grads = blk.backward_from_tape(tape, g)
-        flat = np.concatenate([np.asarray(grads[k], dtype=np.float32).reshape(-1) for k in names])
-        _same_bytes(f"backward_from_tape ({tag})", flat, "TransformerBlock.backward",
-                    np.concatenate([np.asarray(whole[k], dtype=np.float32).reshape(-1) for k in names]))
-        parts[f"{tag}_forward"] = d(np.asarray(y, dtype=np.float32))
-        parts[f"{tag}_grads"] = d(flat)
-    _, closed = blk.forward_with_tape(x)
-    closed.close()
-    try:
-        blk.backward_from_tape(closed, g)
-        refused = 0
-    except ValueError:
-        refused = 1
-    if not refused:
-        raise AssertionError("backward_from_tape accepted a closed tape")
-    _, after = blk.forward_with_tape(x)
-    again = blk.backward_from_tape(after, g)
-    parts["after_close"] = d(np.concatenate([np.asarray(again[k], dtype=np.float32).reshape(-1) for k in names]))
-    parts["closed_refused"] = d(np.asarray([refused], dtype=np.int64))
-    return _fit(parts)
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (the `transformer-forward-tape` lane: forward_with_tape, backward_from_tape
+# and the tape's close; the block's backward is the `transformer` lane's.)
 
 
 @lane("scaler-fit-transform")
@@ -1387,15 +1413,12 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("neural-trainer-unfused")
 def _(ml, X, yc, yr, Xh=None):
-    """ParallelNeuralTrainer over the mlp lane's trainer with
-    MOJOLEARN_MLP_FUSED=0: the unfused per-layer gradient route
-    (bindings/parallel_mlp_native.mojo mlp_gradients_from_state: the
-    training binding's mlp_bias_activation, ce_loss, mlp_relu_backward and
-    mlp_sum_rows) that a multi-device optimizer takes and a one-device run
-    otherwise skips for the fused step. The switch is read live from
-    os.environ (_parallel_mlp connects os.environ._data); it is restored
-    before the lane returns. Parts: the weights after three steps and the
-    logits."""
+    """ParallelNeuralTrainer over the mlp lane's trainer: the per-layer
+    gradient route (bindings/parallel_mlp_native.mojo
+    mlp_gradients_from_state: the training binding's mlp_bias_activation,
+    ce_loss, mlp_relu_backward and mlp_sum_rows), its only route since the
+    fused step was deleted (plan row X2, 2026-11-09). Parts: the weights
+    after three steps and the logits."""
     from mojolearn.parallel_training import ParallelNeuralTrainer
     d = _coverage_digester(ml)
     w = [((np.arange(int(np.prod(s)), dtype=np.float32) % 7 - 3) / 32).reshape(s).astype(np.float32)
@@ -1404,21 +1427,13 @@ def _(ml, X, yc, yr, Xh=None):
     t = _three_class(X[:576])
     steps = [[(Xm[192 * s + 64 * k: 192 * s + 64 * (k + 1)], t[192 * s + 64 * k: 192 * s + 64 * (k + 1)])
               for k in range(3)] for s in range(3)]
-    old = os.environ.get("MOJOLEARN_MLP_FUSED")
-    os.environ["MOJOLEARN_MLP_FUSED"] = "0"
-    try:
-        m = ml.SmallMLPTrainer(*w, data_schedule={"dataset": "identity_break", "order": "sequential"})
-        # one device: the claim is the unfused route's arithmetic, not a
-        # multi-device driver's (that is par-mlp's), so the lane names device 0
-        # itself rather than the par-* lanes' _par_devices()
-        with ParallelNeuralTrainer(m, devices=(0,), logical_shards=3) as tr:
-            for shards in steps:  # glue: three driver steps
-                tr.train_step(shards)
-    finally:
-        if old is None:
-            os.environ.pop("MOJOLEARN_MLP_FUSED", None)
-        else:
-            os.environ["MOJOLEARN_MLP_FUSED"] = old
+    m = ml.SmallMLPTrainer(*w, data_schedule={"dataset": "identity_break", "order": "sequential"})
+    # one device: the claim is the per-layer route's arithmetic, not a
+    # multi-device driver's (that is par-mlp's), so the lane names device 0
+    # itself rather than the par-* lanes' _par_devices()
+    with ParallelNeuralTrainer(m, devices=(0,), logical_shards=3) as tr:
+        for shards in steps:  # glue: three driver steps
+            tr.train_step(shards)
     return _fit(dict(weights=d(np.concatenate([np.asarray(m.weights_[k], dtype=np.float32).reshape(-1)
                                                for k in sorted(m.weights_)])),
                      logits=d(np.asarray(m.predict_logits(Xm[:256]), dtype=np.float32))))
@@ -1443,4 +1458,4 @@ def _(ml, X, yc, yr, Xh=None):
 
 _batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
             "its outputs are train parts, digested whole)",
-            "transformer-forward-tape", "scaler-fit-transform", "multioutput-ridge", "x-ridge-cv-kfold", "neural-trainer-unfused", "svc-gamma-scale")
+            "scaler-fit-transform", "multioutput-ridge", "x-ridge-cv-kfold", "neural-trainer-unfused", "svc-gamma-scale")

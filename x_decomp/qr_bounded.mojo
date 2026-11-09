@@ -46,6 +46,7 @@ def _qrb_pass(
     n: Int,
     ns: Int,
     cells: Int,
+    wait: Bool = True,
 ) raises:
     """One `qr_factor` pass (grid `ns`, one block per slice) as the split
     launches (core/householder_qr.mojo qr_reflector_kernel + qr_apply_kernel
@@ -53,7 +54,9 @@ def _qrb_pass(
     every QRB_SPLIT_SYNC columns keeps every launch short and the cut-launch
     poison check as it was. `cells` is kept for the callers; the split launch
     is already bounded (lane cgr5-owed2 deleted the MOJOLEARN_QR_SPLIT=0 arm,
-    `qr_panel_cols_kernel`)."""
+    `qr_panel_cols_kernel`). `wait` False (the executor ops,
+    x_decomp/svd_ops.mojo, lane n9b-device-svd-qr): no wait at all off
+    Apple; the waits read nothing, they only pace a Metal queue."""
     _ = cells
     var tau = ctx.enqueue_create_buffer[DType.float32](ns if ns > 0 else 1)
     for j in range(n):
@@ -68,12 +71,13 @@ def _qrb_pass(
                 grid_dim=((cols + QR_APPLY_WARPS - 1) // QR_APPLY_WARPS, ns, 1),
                 block_dim=(QR_APPLY_TPB, 1, 1),
             )
-        if (j + 1) % QRB_SPLIT_SYNC == 0:
+        if wait and (j + 1) % QRB_SPLIT_SYNC == 0:
             ctx.synchronize()
     ctx.enqueue_function[qr_r_copy_kernel](
         a, r_out, Int32(m), Int32(n), Int32(n), Int32(ns), grid_dim=(ns, 1, 1), block_dim=(QR_TPB, 1, 1),
     )
-    ctx.synchronize()
+    if wait:
+        ctx.synchronize()
     _ = tau^
 
 
@@ -85,11 +89,13 @@ def qr_factor_bounded(
     n_rows: Int,
     n_cols: Int,
     cells: Int = QRB_CELLS,
+    wait: Bool = True,
 ) raises -> Int:
     """`qr_factor(ctx, a, r_scratch, r_out, n_rows, n_cols)` (the same slices,
     the same passes, the same bits; DESTROYS `a`), each pass cut into bounded
     launches of about `cells` cells (the bits do not depend on it), r_out
-    (and the TSQR tiles) poisoned with NaN first."""
+    (and the TSQR tiles) poisoned with NaN first. `wait` False enqueues
+    only (`_qrb_pass`)."""
     if n_rows < n_cols:
         raise Error("qr_factor_bounded needs at least as many rows as columns, got "
                     + String(n_rows) + " x " + String(n_cols))
@@ -99,9 +105,9 @@ def qr_factor_bounded(
     var pr = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(r_out.unsafe_ptr()))
     enqueue_fill(ctx, r_out, Float32(0.0) / Float32(0.0))
     if ns == 1:
-        _qrb_pass(ctx, pa, pr, n_rows, n_cols, 1, cells)
+        _qrb_pass(ctx, pa, pr, n_rows, n_cols, 1, cells, wait)
         return 1
     enqueue_fill(ctx, r_scratch, Float32(0.0) / Float32(0.0))
-    _qrb_pass(ctx, pa, ps, n_rows, n_cols, ns, cells)
-    _qrb_pass(ctx, ps, pr, ns * n_cols, n_cols, 1, cells)
+    _qrb_pass(ctx, pa, ps, n_rows, n_cols, ns, cells, wait)
+    _qrb_pass(ctx, ps, pr, ns * n_cols, n_cols, 1, cells, wait)
     return ns

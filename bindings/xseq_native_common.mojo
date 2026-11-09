@@ -21,8 +21,7 @@ from bindings.sequential_inputs import sequential_input
 from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, neural_descriptor_execute
 from sequence.neural_model_dispatch import MODEL_OPERATION_COUNT, MODEL_UNIFORM
 from autograd.model_descriptor import MODEL_ABI_NAME
-from core.cast_in import cast_in_kind
-from core.xseq_marshal import xseq_cast_nd, xseq_column_copy_f32, xseq_column_copy_i64
+from core.xseq_marshal import xseq_column_copy_f32, xseq_column_copy_i64
 
 comptime XF32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime XI32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -122,38 +121,10 @@ def xseq_dim(value: PythonObject, axis: Int) raises -> Int:
     return Int(py=value.shape[axis])
 
 
-def xseq_f32(value: PythonObject, name: String, copy: Bool, context: PythonObject,
-             double_ints: Bool = False) raises -> PythonObject:
-    """`np.array(value, dtype=np.float32, order="C", copy=copy)` of an
-    admitted ndarray: the array itself when it is already C-ordered float32
-    and no copy is asked for, otherwise one C-ordered float32 copy, element by
-    element with the shared integer-defined conversion (`cast_f32_bits`:
-    `numpy.astype(float32)`'s bits; `double_ints` takes `Array.astype`'s
-    integer -> double -> float32 route, `classical_f32_bits`)."""
-    var dtype = value.dtype
-    var kind = String(py=dtype.kind)
-    if kind != "b" and kind != "i" and kind != "u" and kind != "f":
-        raise Error("TypeError: " + name + " must be a numeric array")
-    if not Bool(py=dtype.isnative):
-        raise Error("TypeError: " + name + " must be in native byte order")
-    var rank = Int(py=value.ndim)
-    var c_order = Bool(py=value.flags.c_contiguous)
-    if not copy and c_order and Int(py=dtype.num) == 11:
-        return value
-    var shape = value.shape
-    var out = sequential_array(shape, context["float32"], context)
-    var item = Int(py=dtype.itemsize)
-    var cast = cast_in_kind(Int(py=dtype.num), item, name)
-    var dims = List[Int]()
-    var steps = List[Int]()
-    var strides = value.strides  # one attribute read, not one per axis
-    for k in range(rank):  # driver-loop: over array rank metadata
-        dims.append(Int(py=shape[k]))
-        steps.append(Int(py=strides[k]))
-    xseq_cast_nd(Int(py=sequential_address(value)), dims, steps, item, cast, double_ints,
-                 XF32P(unsafe_from_address=Int(py=sequential_address(out))))
-    _ = out  # keep the Python object alive through the native call above
-    return out
+# TOMBSTONE: xseq_f32 (admission helper, merged into the one path) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A4_ADMISSION_HELPERS.patch. It is
+# `admit_nd_f32` (bindings/admitted_sequence.mojo): the same borrow rule and
+# cast bits, one parallel cast into uninitialised storage.
 
 
 def xseq_refuse_f64(value: PythonObject, message: String) raises:

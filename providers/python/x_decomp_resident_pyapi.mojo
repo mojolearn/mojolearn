@@ -13,7 +13,6 @@ from x_decomp.resident import (
     dev_upload_run,
     dev_download_run,
     dev_ew_run,
-    dev_mcd_cov_run,
     dev_gemm_run,
     dev_rand_run,
     dev_trisolve_run,
@@ -28,13 +27,13 @@ from x_decomp.resident import (
     dev_lu_aux_run,
     dev_code_rows_run,
     dev_eigh_run,
+    dev_eigh_to_run,
     GRP_CLS2_NOSCAN,
     GRP_CLS2_DEVSCAN,
     GRP_CLS2_LAZY,
     GRP_FAST_FUSED,
     GRP_FAST_SRP_STRAT,
     dev_move_run,
-    mcd_cov_probe_run,
 )
 
 
@@ -100,9 +99,8 @@ def dev_ew_py(
     return PythonObject(dev_ew_run(_id(a), _id(b), _id(c), _id(dst), op, count, d, lb, bm, lc, cm, Float64(py=s)))
 
 
-def dev_mcd_cov_py(a: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
-    """Opt-in MCD final masked covariance Gram; no generic GEMM dispatch change."""
-    return PythonObject(dev_mcd_cov_run(_id(a), _id(c), _n(p, 0), _n(p, 1)))
+# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its door dev_mcd_cov_py) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 
 
 def dev_gemm_py(a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
@@ -272,6 +270,20 @@ def dev_eigh_py(a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObje
     return PythonObject(r)
 
 
+def dev_eigh_to_py(a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_eigh` of the device matrix a (n x n, left as it is) into the
+    DEVICE matrices w (n) and v (n x n). p = [n, uplo]. Waits once."""
+    var n = _n(p, 0)
+    var uplo = _n(p, 1)
+    var ia = _id(a)
+    var iw = _id(w)
+    var iv = _id(v)
+    var r = 0
+    with GILReleased(Python()):
+        r = dev_eigh_to_run(ia, iw, iv, n, uplo)
+    return PythonObject(r)
+
+
 def grp_cls2_py() raises -> PythonObject:
     """The random projections' FAST Apple fit switches compiled in: bit 1
     NOSCAN, bit 2 DEVSCAN, bit 4 LAZY, bit 8 FUSED, bit 16 SRP_STRAT (0 on
@@ -308,13 +320,5 @@ def dev_move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: Pyth
     )
 
 
-# Test-only direct batched covariance seam, identical API on both arms.
-def mcd_cov_probe_py(xaddr: PythonObject, gaddr: PythonObject, outaddr: PythonObject,
-                     p: PythonObject) raises -> PythonObject:
-    var nc = _n(p, 0)
-    var rows = _n(p, 1)
-    var d = _n(p, 2)
-    var px = F32Ptr(unsafe_from_address=Int(py=xaddr))
-    var pg = I32Ptr(unsafe_from_address=Int(py=gaddr))
-    var pout = F32Ptr(unsafe_from_address=Int(py=outaddr))
-    return PythonObject(mcd_cov_probe_run(px, pg, pout, nc, rows, d))
+# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its test seam door mcd_cov_probe_py) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch

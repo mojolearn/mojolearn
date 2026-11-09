@@ -2,29 +2,26 @@
 # CPU training entry table: same provider transport, original host numerical
 # owners. Inference-only and training-host implementations remain distinct.
 from std.ffi import _Global
+from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, TRANSFORMER_BLOCK_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from transformer.block_options import BLOCK_OPTION_ADDRS, BLOCK_OPTION_PARAMS, BlockOptions
 from transformer.transformer_host_binding_impl import _run_forward, _backward_run, HostTransformerSession
-from transformer.host.session_tape_dispatch import transformer_host_session_tape_operation
 
 
 def transformer_host_block_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
     if len(f) != 0:
         raise Error("Transformer host provider: unexpected floating scalars")
-    # Append-only budget-aware session ticket transport; existing ops retain
-    # their numerical owners, including the separate inference-host routes.
-    if op >= 36 and op < 41:
-        return transformer_host_session_tape_operation(op - 36, a, p)
-    if op == 12 or op == 13:
+    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+    # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+    # (the session-ticket ops 36..40 and the invalidate-tape op 12.)
+    if op == 13:
         if len(p) != 1 or p[0] == 0 or len(a) != 0:
-            raise Error("transformer tape: invalid administration descriptor")
+            raise Error("transformer session: invalid administration descriptor")
         var owner = MutPointer[HostTransformerSession, MutUntrackedOrigin](unsafe_from_address=p[0])
-        if owner[].busy or (op == 12 and owner[].closed):
-            raise Error("transformer tape: session is busy or closed")
-        owner[].invalidate_tape()
-        if op == 13:
-            owner[].closed = True
+        if owner[].busy:
+            raise Error("transformer session: session is busy or closed")
+        owner[].closed = True
         return 0
     if op == 33:
         if (len(a) != 13 and len(a) != 13 + BLOCK_OPTION_ADDRS) or (len(p) != 10 and len(p) != 10 + BLOCK_OPTION_PARAMS):
@@ -70,7 +67,7 @@ def transformer_host_block_operation(op: Int, a: List[Int], p: List[Int], f: Lis
 def transformer_host_block_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                           result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        if op < 0 or op >= 41 or na < 0 or na > 25 or np < 0 or np > 28 or nf < 0 or nf > 2 or result == 0:
+        if op < 0 or op >= 36 or na < 0 or na > 25 or np < 0 or np > 28 or nf < 0 or nf > 2 or result == 0:
             raise Error("transformer host provider: invalid descriptor span or operation")
         var a = native_descriptor_words(aa, na)
         var p = native_descriptor_words(pp, np)
@@ -98,4 +95,4 @@ struct TransformerHostBlockAPI(Defaultable, Movable):
 
 
 comptime NATIVE_TRANSFORMER_HOST_BLOCK_API = _Global[StorageType=TransformerHostBlockAPI,
-    name="MojoTransformerHostBlockAPIv1", init_fn=TransformerHostBlockAPI.__init__]
+    name=("MojolearnTransformerHostBlockAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnTransformerHostBlockAPIFastV2"), init_fn=TransformerHostBlockAPI.__init__]

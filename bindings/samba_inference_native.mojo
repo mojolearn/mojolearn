@@ -1,14 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Native Samba inference over the existing resident model and block owners.
+"""Native Samba inference: `SambaStack.forward` / `step` and the loss.
 
-The resident model/session remains the persistent numerical owner. Public
-classes and buffer exporters remain CPython-owned interface records; this
-module does not claim that all public state has native struct ownership.
+A device build runs every call on the Samba stack program
+(training/samba_program.mojo, lane x6-samba-on-executor): one executor
+session, one step op per layer, the hidden state on the device. The host
+route (CPU builds, the CPU inference model) runs the installed CPU kernels
+layer by layer. Public classes and buffer exporters remain CPython-owned
+interface records.
 """
-from providers.python.samba_resident_pyapi import samba_resident_native_forward, samba_resident_provider
+from providers.python.samba_resident_pyapi import samba_resident_provider
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from providers.python.samba_execution_pyapi import samba_provider_forward
 from providers.python.neural_descriptor_pyapi import neural_descriptor_matches, neural_descriptor_execute
 from core.samba_ids_impl import samba_inference_ids_into, samba_copy_row_prefixes
 from std.memory import memcpy
@@ -18,7 +20,6 @@ from bindings.samba_training_native import samba_ids
 from bindings.neural_block_public import neural_training_entries, neural_block_allocate_binding, neural_block_forward_binding, _neural_lengths, neural_mamba_session_call
 from bindings.neural_prefill_native import _prefill_mamba3
 from bindings.causal_lm_public import _native_function, _mutable, _writeback
-from bindings.p3_samba_caps import samba_caps, SAMBA_CAP_RESIDENT_ABI, SAMBA_CAP_RESIDENT_ON, SAMBA_CAP_CHUNKED, SAMBA_CAP_AFN
 from bindings.causal_lm_construct import _model_bindings
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
 from bindings.byte_perf_helpers import byte_view_bytes
@@ -190,38 +191,140 @@ def _m3_state_forward(block: PythonObject, x: PythonObject, state: PythonObject,
     return result[0]
 
 
-def _samba_resident_forward(fields: PythonObject, config: PythonObject, entries: PythonObject, ids: PythonObject) raises -> PythonObject:
-    if py_get(fields, "_native_primitives") is not None:
-        return samba_resident_native_forward(fields, config, entries, ids)
+# TOMBSTONE: SAMBA_THREE_TIER_FORWARD _samba_resident_forward + the provider tier (samba_provider_forward) + the device per-layer walk of samba_forward (the three-tier driver; one program now: SambaStackProgram, training/samba_program.mojo) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
+
+
+def samba_program_arm(fields: PythonObject, entries: PythonObject) raises -> Bool:
+    """Whether this stack runs on the Samba stack program: a device training
+    binding (it registers `samba_program_open`) and not the CPU inference
+    route. Otherwise the host per-layer route below runs (CPU builds)."""
+    if Bool(py=py_get(fields, "_native_cpu_inference", PythonObject(False))):
+        return False
+    return Bool(py=py_call(native_loaded_module("builtins").hasattr, entries, "samba_program_open"))
+
+
+def samba_program_params(fields: PythonObject, config: PythonObject, b: Int, smax: Int) raises -> PythonObject:
+    """`samba_program_open`'s layer codes and integer/float words."""
     var bi = native_loaded_module("builtins")
-    if Float64(py=config["dropout"]) != 0.0:
-        return PythonObject(None)
-    # Resident ABI and compile-time switches: one per-binding record read
-    # (bindings/p3_samba_caps.mojo), not five probes and two crossings per token.
-    var caps = samba_caps(entries)
-    if not (Bool(py=caps[SAMBA_CAP_RESIDENT_ABI]) and Bool(py=caps[SAMBA_CAP_RESIDENT_ON])):
-        return PythonObject(None)
-    if Bool(py=caps[SAMBA_CAP_CHUNKED]):
-        return PythonObject(None)
-    var session = py_get(fields, "_resident_handle")
-    if session is None:
-        var kinds = bi.list()
-        for i in range(len(config["layers"])):  # driver-loop: over model layer metadata at session creation
-            _ = py_call(kinds.append, 0 if String(config["layers"][i]) == "mamba3" else 1)
-        var params = Python.list(config["vocab"], config["d_model"])
-        for name in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate")]:  # driver-loop: over resident-session shape metadata
-            _ = py_call(params.append, PythonObject(0) if config[name] is None else config[name])
-        _ = py_call(params.append, 1 if Bool(py=config["tie_embeddings"]) else 0)
-        _ = py_call(params.append, config["norm_eps"])
-        _ = py_call(params.append, fields["n_total"])
-        session = py_call(_native_function(entries, "samba_resident_open"), kinds, params, fields["flat"]._addr)
-        py_setitem(fields, "_resident_handle", session)
+    var kinds = bi.list()
+    for i in range(len(config["layers"])):  # driver-loop: over model layer metadata at program creation
+        _ = py_call(kinds.append, 0 if String(config["layers"][i]) == "mamba3" else 1)
+    var params = Python.list(config["vocab"], config["d_model"])
+    for name in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate")]:  # driver-loop: over program shape metadata
+        _ = py_call(params.append, PythonObject(0) if config[name] is None else config[name])
+    _ = py_call(params.append, 1 if Bool(py=config["tie_embeddings"]) else 0)
+    _ = py_call(params.append, config["norm_eps"])
+    _ = py_call(params.append, fields["n_total"])
+    _ = py_call(params.append, b)
+    _ = py_call(params.append, smax)
+    return Python.tuple(kinds, params)
+
+
+def samba_state_words(
+    model: PythonObject, state: PythonObject, what: String,
+    mut keep: List[PythonObject], mut copies: List[PythonObject],
+) raises -> Tuple[List[Int], List[Int]]:
+    """The state's piece addresses and cursor words, in the layout the
+    program's state entries take: per layer in stack order, the ten Mamba-3
+    pieces (`_m3_names()` order) and (buffered_tokens, pending), or k_cache,
+    v_cache and (cached_tokens, 0)."""
+    var fields = samba_fields(model)
+    var config = samba_fields(fields["config"])
+    var slots = samba_fields(state)
+    var b = Int(py=slots["batch_size"])
+    var smax = Int(py=slots["max_tokens"])
+    var layers = slots["layers"]
+    if len(layers) != len(config["layers"]):
+        raise Error(what + ": the state holds " + String(len(layers)) + " layers, the stack "
+                    + String(len(config["layers"])))
+    var blocks = fields["_blocks"]
+    var names = _m3_names()
+    var pieces = List[Int]()
+    var cursors = List[Int]()
+    for i in range(len(config["layers"])):  # driver-loop: over the stack's layer state owners
+        var lslots = samba_fields(layers[i])
+        if String(config["layers"][i]) == "attention":
+            if Int(py=py_get(lslots, "batch_size", PythonObject(b))) != b or Int(py=lslots["max_tokens"]) != smax:
+                raise Error(what + ": layer " + String(i) + " state differs from the stack state's batch or capacity")
+            if Int(py=py_get(lslots, "window", PythonObject(0))) != 0:
+                raise Error(what + ": layer " + String(i) + " state has a sliding window")
+            # The arithmetic-profile word the attention state carries
+            # (`_causal_layer_run_bound`'s check and write).
+            var pid = py_get(samba_fields(blocks[i]), "_arithmetic_profile")
+            var old = py_get(lslots, "arithmetic_profile")
+            if old is not None and pid is not None and not Bool(py=old == pid):
+                raise Error(what + ": layer " + String(i) + " state arithmetic profile differs")
+            if pid is not None:
+                py_setitem(lslots, "arithmetic_profile", pid)
+            var n = b * Int(py=lslots["n_kv_heads"]) * smax * Int(py=lslots["head_dim"])
+            pieces.append(_mutable(lslots["k_cache"], [n], keep, copies, "k_cache"))
+            pieces.append(_mutable(lslots["v_cache"], [n], keep, copies, "v_cache"))
+            cursors.append(Int(py=lslots["cached_tokens"]))
+            cursors.append(0)
+        else:
+            var shapes = _m3_shapes(b, Int(py=samba_fields(blocks[i])["nheads"]))
+            for k in range(len(names)):  # driver-loop: over the fixed Mamba3 continuation buffer ABI
+                pieces.append(_mutable(lslots[names[k]], shapes[k], keep, copies, names[k]))
+            cursors.append(Int(py=lslots["buffered_tokens"]))
+            cursors.append(1 if Bool(py=lslots["pending"]) else 0)
+    return (pieces^, cursors^)
+
+
+def samba_set_cursors(model: PythonObject, state: PythonObject, cursors: PythonObject) raises:
+    """The program's post-call cursor words onto the state's layer records."""
+    var config = samba_fields(samba_fields(model)["config"])
+    var layers = samba_fields(state)["layers"]
+    for i in range(len(layers)):  # driver-loop: over the stack's layer state owners
+        var lslots = samba_fields(layers[i])
+        if String(config["layers"][i]) == "attention":
+            py_setitem(lslots, "cached_tokens", PythonObject(Int(py=cursors[2 * i])))
+        else:
+            py_setitem(lslots, "buffered_tokens", PythonObject(Int(py=cursors[2 * i])))
+            py_setitem(lslots, "pending", PythonObject(Int(py=cursors[2 * i + 1]) != 0))
+
+
+def _samba_program_call(model: PythonObject, fields: PythonObject, config: PythonObject, entries: PythonObject,
+                        ids: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
+    """One per-call run on the stack's program: (B, L) ids -> (B, L, vocab)
+    logits, from a zero state (stateless) or from the caller's state, which
+    holds the post-call state afterwards. The stateless and the stateful
+    programs are kept apart (their attention capacity differs: L versus the
+    state's max_tokens); each is reopened when its (B, capacity) changes."""
     var b = Int(py=ids.shape[0])
     var l = Int(py=ids.shape[1])
+    var smax = l
+    var slot = String("_samba_program")
+    if state is not None:
+        smax = Int(py=samba_fields(state)["max_tokens"])
+        slot = String("_samba_state_program")
+    var program = py_get(fields, slot)
+    if program is not None:
+        var shape = py_call(_native_function(entries, "samba_program_shape"), program)
+        if Int(py=shape[0]) != b or Int(py=shape[1]) != smax or not Bool(py=shape[2]):
+            py_setitem(fields, slot, PythonObject(None))
+            program = PythonObject(None)
+    if program is None:
+        var opened = samba_program_params(fields, config, b, smax)
+        program = py_call(_native_function(entries, "samba_program_open"), opened[0], opened[1], fields["flat"]._addr)
+        py_setitem(fields, slot, program)
     var output = generation_array([b, l, Int(py=config["vocab"])])
-    _ = py_call(_native_function(entries, "samba_resident_forward"), session,
-                Python.list(fields["flat"]._addr, ids._addr, output._addr), py_ints([b, l]))
-    _ = output  # keep the Python object alive through the native call above
+    var addresses = Python.list(fields["flat"]._addr, ids._addr, output._addr)
+    if state is None:
+        _ = py_call(_native_function(entries, "samba_program_forward"), program, addresses, py_ints([b, l]),
+                    Python.list(), Python.list())
+        _ = ids  # keep the Python object alive through the native call above
+        return output
+    # The state was admitted at the public door (samba_admit).
+    var keep = List[PythonObject]()
+    var copies = List[PythonObject]()
+    var words = samba_state_words(model, state, "SambaStack", keep, copies)
+    var cursors = py_call(_native_function(entries, "samba_program_forward"), program, addresses, py_ints([b, l]),
+                          py_ints(words[0]), py_ints(words[1]))
+    _writeback(copies)
+    _ = keep^
+    _ = ids  # keep the Python object alive through the native call above
+    samba_set_cursors(model, state, cursors)
     return output
 
 
@@ -262,7 +365,7 @@ def _samba_inference_ids(value: PythonObject, vocab: Int, step: Bool, lengths: P
 
 
 def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject, lengths: PythonObject,
-                  step: Bool, resident: Bool, context: PythonObject) raises -> PythonObject:
+                  step: Bool, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["neural"]["generation_classes"])
     var bi = native_loaded_module("builtins")
     if step and state is None:
@@ -271,6 +374,11 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
         raise Error("SambaStack.forward: lengths applies to stateless calls only")
     if state is not None and not Bool(py=py_call(bi.isinstance, state, context["state_class"])):
         raise Error("TypeError: SambaStack: state must be a SambaState")
+    if state is not None and py_get(samba_fields(state), "_resident_session") is not None:
+        # A SambaDecodeSession holds this state on the device
+        # (bindings/samba_decode_native.mojo); its arrays are stale.
+        raise Error("SambaStack: the state is owned by an open decode session (its pieces live in the session and the "
+                    + "caller's arrays are stale); call sync_state() or close() on the session first")
     var fields = samba_fields(model)
     var config = samba_fields(fields["config"])
     var entries = PythonObject(None)
@@ -285,11 +393,13 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
     var b = Int(py=ids.shape[0])
     var l = Int(py=ids.shape[1])
     var output = PythonObject(None)
-    if state is None and resident:
-        output = _samba_resident_forward(fields, config, entries, ids)
-    if output is None:
-        output = samba_provider_forward(fields, config, entries, ids, state, step, context["neural"])
-    if output is None:
+    if samba_program_arm(fields, entries):
+        # ONE path on a device build: the stack program (lane x6).
+        output = _samba_program_call(model, fields, config, entries, ids, state, context)
+    else:
+        # The host route (CPU builds and the CPU inference model): the
+        # installed CPU kernels layer by layer. Device builds never come
+        # here (samba_program_arm).
         var native = py_get(fields, "_native_primitives")
         if native is not None and not neural_descriptor_matches(native, py_call(bi.getattr, entries, "canonical", entries)):
             native = PythonObject(None)
@@ -320,32 +430,23 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
             hidden = result
         output = generation_array([b, l, v])
         var head = arrays["embed.weight"] if Bool(py=config["tie_embeddings"]) else arrays["lm_head.weight"]
-        var afn = state is None and Bool(py=samba_caps(entries)[SAMBA_CAP_AFN])
-        if afn:
-            var params = py_ints([b * l, v, d])
-            _ = py_call(params.append, config["norm_eps"])
-            _ = py_call(_native_function(entries, "samba_afn_norm_head_forward"), Python.list(output._addr, hidden._addr, arrays["norm_f.weight"]._addr, head._addr), params)
-            _ = head  # keep the Python object alive through the native call above
-            _ = hidden  # keep the Python object alive through the native call above
-            _ = output  # keep the Python object alive through the native call above
+        var normalized = generation_array([b, l, d])
+        var params = py_ints([b * l, d])
+        _ = py_call(params.append, config["norm_eps"])
+        if native is not None:
+            _ = neural_descriptor_execute(native, 2, [Int(py=normalized._addr), Int(py=hidden._addr), Int(py=arrays["norm_f.weight"]._addr)], [b * l, d], [Float64(py=config["norm_eps"])])
         else:
-            var normalized = generation_array([b, l, d])
-            var params = py_ints([b * l, d])
-            _ = py_call(params.append, config["norm_eps"])
-            if native is not None:
-                _ = neural_descriptor_execute(native, 2, [Int(py=normalized._addr), Int(py=hidden._addr), Int(py=arrays["norm_f.weight"]._addr)], [b * l, d], [Float64(py=config["norm_eps"])])
-            else:
-                _ = py_call(_native_function(entries, "rms_norm_forward"), Python.list(normalized._addr, hidden._addr, arrays["norm_f.weight"]._addr), params)
-            _ = normalized  # keep the Python object alive through the native call above
-            _ = hidden  # keep the Python object alive through the native call above
-            if native is not None:
-                _ = neural_descriptor_execute(native, 4, [Int(py=output._addr), Int(py=normalized._addr), Int(py=head._addr)], [b * l, v, d], [])
-            else:
-                _ = py_call(_native_function(entries, "linear_forward"), Python.list(output._addr, normalized._addr, head._addr), py_ints([b * l, v, d]))
-            _ = normalized  # keep the Python object alive through the native call above
-            _ = head  # keep the Python object alive through the native call above
-            _ = output  # keep the Python object alive through the native call above
-            _ = normalized^
+            _ = py_call(_native_function(entries, "rms_norm_forward"), Python.list(normalized._addr, hidden._addr, arrays["norm_f.weight"]._addr), params)
+        _ = normalized  # keep the Python object alive through the native call above
+        _ = hidden  # keep the Python object alive through the native call above
+        if native is not None:
+            _ = neural_descriptor_execute(native, 4, [Int(py=output._addr), Int(py=normalized._addr), Int(py=head._addr)], [b * l, v, d], [])
+        else:
+            _ = py_call(_native_function(entries, "linear_forward"), Python.list(output._addr, normalized._addr, head._addr), py_ints([b * l, v, d]))
+        _ = normalized  # keep the Python object alive through the native call above
+        _ = head  # keep the Python object alive through the native call above
+        _ = output  # keep the Python object alive through the native call above
+        _ = normalized^
         _ = head^
         _ = hidden^
     if lengths is not None:
@@ -365,15 +466,12 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
 
 
 def samba_loss(model: PythonObject, inputs: PythonObject, targets: PythonObject, context: PythonObject) raises -> PythonObject:
-    # Row N169: the logits come from the resident forward when the binding
-    # has it (the route `SambaStack.forward` takes; the same kernels in the
-    # same order as the per-layer host route, training/samba_resident.mojo
-    # "NO NEW ARITHMETIC, SAME BITS"), so the layer loop no longer moves the
-    # hidden state through host arrays. Bindings without the resident
-    # session fall back inside samba_forward exactly as before.
-    # OWED: forward + cross entropy in the session (logits never leave the
-    # device) needs a resident loss entry in training/samba_resident.mojo.
-    var logits = samba_forward(model, inputs, PythonObject(None), PythonObject(None), False, True, context)
+    # Row N169: the logits come from `SambaStack.forward`'s one path (the
+    # stack program on a device build, lane x6), so no layer loop moves the
+    # hidden state through host arrays.
+    # OWED: the cross entropy inside the program (logits never leave the
+    # device) needs a loss op after the head in training/samba_program.mojo.
+    var logits = samba_forward(model, inputs, PythonObject(None), PythonObject(None), False, context)
     var fields = samba_fields(model)
     var v = Int(py=samba_fields(fields["config"])["vocab"])
     var y = samba_ids(targets, v, True, context)

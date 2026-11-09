@@ -10,7 +10,7 @@ from bindings.classical_warnings import classical_warning, _warning_class_fields
 from bindings.optimizer_public_words import stash_python_error
 from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.native_caller_frame import native_frame_globals
-from providers.python.metric_input_snapshot_pyapi import metric_input_snapshot
+from bindings.admitted_input import admitted_snapshot
 
 
 def metric_is_bool(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -71,7 +71,7 @@ def metric_arguments(args: PythonObject, first: Int, context: PythonObject) rais
             else:
                 value = scalar.to_python_number(metric_is_integral(value, context))
         elif index >= first:
-            value = metric_input_snapshot(value, snapshots, context)
+            value = admitted_snapshot(value, snapshots, context)
         py_call(out.append, value)
     return py_call(py_type(Python.tuple()), out)
 

@@ -181,7 +181,7 @@ struct _SeqContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojoXSequenceContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXSequenceContextFast"
+comptime _CTX_NAME = "MojolearnXSequenceContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequenceContextFastV2"
 comptime X_SEQUENCE_CONTEXT = _Global[StorageType=_SeqContext, name=_CTX_NAME, init_fn=_SeqContext.__init__]
 
 
@@ -490,6 +490,7 @@ def _pool_release_host(i: Int) raises:
 # Movable (lane ag-ops-api): an operation session (autograd/ops_api.mojo)
 # owns its executor across binding calls; moving changes no value.
 struct DeviceExec(Exec, Movable):
+    comptime IS_DEVICE: Bool = True
     var ctx: DeviceContext
     var bufs: List[DeviceBuffer[DType.float32]]
     var base: List[Int]
@@ -633,7 +634,14 @@ struct DeviceExec(Exec, Movable):
         if self.pooled:
             var pool = X_SEQUENCE_POOL.get_or_create_ptr()
             return pool[].dev[self.pdev[slot]].create_sub_buffer[DType.float32](off, n)
-        return self.bufs[slot].create_sub_buffer[DType.float32](off, n)
+        # `slot` indexes `base`; `bufs` also holds GEMM workspaces with no
+        # `base` entry (`_launch`), so after one of them the two lists no
+        # longer line up. Match the owning buffer by its address.
+        var addr = self.base[slot]
+        for j in range(len(self.bufs)):  # small-loop(bufs: buffers this Exec owns): address lookup, no data
+            if Int(self.bufs[j].unsafe_ptr()) == addr:
+                return self.bufs[j].create_sub_buffer[DType.float32](off, n)
+        raise Error("sequence: a view names no buffer this device Exec owns")
 
     def __deinit__(deinit self):
         # The context outlives this Exec: drain its queue before the buffers
@@ -1593,3 +1601,24 @@ struct DeviceExec(Exec, Movable):
         self.sync()
         self.execution_profile.enabled = False
         return self.execution_profile.copy()
+
+    # Lane x7b: the step ops' host-arm hooks (sequence/exec_trait.mojo). A
+    # device session runs the device table itself (autograd/block_step_ops.mojo).
+    def step_run(mut self, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int], fs: List[Float32],
+                 y_out: FP, record: Bool) raises:
+        raise Error("ops: a device session runs the block step ops' device table")
+
+    def step_backward(mut self, w: FP, s: FP, q: FP, d_out: FP, d_x: FP, d_w: FP) raises:
+        raise Error("ops: a device session runs the attention step's device backward")
+
+    def step_reports(mut self, code: Int, w_addr: Int, s_addr: Int, dsts: List[Int]) raises:
+        raise Error("ops: a device session reads its reports from the device table")
+
+    def step_forget(mut self, addr: Int):
+        pass
+
+    def step_weights_changed(mut self, addr: Int):
+        pass
+
+    def step_clear(mut self):
+        pass

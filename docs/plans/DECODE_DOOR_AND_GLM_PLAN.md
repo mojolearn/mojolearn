@@ -337,6 +337,13 @@ public call per token (the lane's declared operation) and a second operation `de
 two shapes; the paper recipe is not changed by this lane. Tests (unrun): `decode(x, L)` equals `L` steps byte for
 byte, state equal after. Bindings: as D1.
 
+*Status 2026-11-09: written on `lane/d2-generate-on-sessions` (uncompiled, unrun). `decode(x)` on the Mamba1/2/3,
+Transformer and Samba sessions; one `<kind>_session_decode` / `transformer_decode_session_decode` /
+`samba_decode_tokens` call per N tokens, token t moved on the device by `core/decode_slab.mojo`; board A/B
+operation `decode_n`. CausalLM.generate on transformer checkpoints already reads whole token blocks on the
+resident sessions (`_read_resident`); mamba1/mamba2 CausalLM generation still runs the per-layer native engine
+(`transformer/native_generation_engine.mojo`) and moves with X4/X5.*
+
 **D3 `decode-on-executor` (L, no bits change; after D1/D2 are green).** In `autograd/`: step ops `OP_M1_STEP`,
 `OP_M2_STEP`, `OP_M3_STEP`, `OP_ATTN_STEP` whose bodies are the session step launch sets over session tensors that
 hold the state (`Mamba3DeviceState` pieces, K/V cache pair) and an in-place state write rule (a `*_into` node writing

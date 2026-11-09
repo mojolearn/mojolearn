@@ -116,7 +116,7 @@ FAMILIES = (
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             # xn_softmax64 is not listed: bindings/_mojolearn_x_neighbors_host.mojo:1238 registers it only under
             # NC_PROBA64, which is FAST-only, and a host binding is IDENTICAL (0.8.37 macOS wheel qualification).
-            "x_neighbors_classical_graph_normalization", "x_neighbors_lp_fast_resident",
+            "x_neighbors_classical_graph_normalization",
             "x_neighbors_ocsvm_alpha_init", "x_neighbors_unit_ff", "x_neighbors_kfeat_schi2_fit_idn",
             "x_neighbors_kfeat_pcs_draw_idn", "x_neighbors_ocsvm_labels",
             "x_neighbors_nc_labels", "x_neighbors_nc_proba", "x_neighbors_lp_dense_proba",

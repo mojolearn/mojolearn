@@ -18,7 +18,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contain
 from bindings.py_typed_call import py_call_typed
 from bindings.xseq_native_common import xseq_addr, xseq_f32p, xseq_reshape
 from bindings.xseq_neural_native import xseq_as_f32_c
-from core.xseq_marshal import xseq_all_finite_f32, xseq_min_max_f32
+from core.xseq_marshal import xseq_min_max_f32
+from core.host_finite_scan import host_all_finite_f32
 
 
 def _shape_text(value: PythonObject) raises -> String:
@@ -36,7 +37,7 @@ def _vector(value: PythonObject, name: String) raises -> PythonObject:
     if n == 0:
         raise Error("ValueError: mojolearn metrics: " + name + " is empty")
     var out = xseq_reshape(value, Python.tuple(n)) if column else value
-    if not xseq_all_finite_f32(xseq_f32p(out), n):
+    if not host_all_finite_f32(xseq_f32p(out), n):
         raise Error("ValueError: mojolearn metrics: " + name + " contains NaN or infinity; refused "
                     + "here (metrics/README.md HAND-OFF ask 3) rather than letting it "
                     + "reach a kernel whose answer for it is a washed sentinel")
@@ -80,7 +81,7 @@ def _weights(source: PythonObject, n: Int, context: PythonObject) raises -> Pyth
                     + " entries for " + String(n) + " samples")
     var p = xseq_f32p(w)
     _ = w  # keep the Python object alive through the native call above
-    if not xseq_all_finite_f32(p, n):
+    if not host_all_finite_f32(p, n):
         raise Error("ValueError: mojolearn r2_score: sample_weight must have finite nonnegative entries")
     # one min/max scan serves both refusals (it was run twice)
     var bounds = xseq_min_max_f32(p, n)

@@ -284,16 +284,29 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
                     break
             j = reached
             stop = broke
-        # the tridiagonal T from the batch's alphas and betas
-        var tvals = List[Float64](length=j * j, fill=0.0)
-        for i in range(j):  # driver-loop: over the Lanczos steps' scalars into T (at most _LANCZOS_MAX_M)
-            tvals[i * j + i] = alphas[i]
-            if i + 1 < j:
-                tvals[i * j + i + 1] = betas[i]
-                tvals[(i + 1) * j + i] = betas[i]
-        var eig = k.eigh(mk_of(tvals, j, j, ctx))
-        th = eig[0]
-        yv = eig[1]
+        # TOMBSTONE: the host assembly of T (a j x j host matrix of the batch's
+        # alphas and betas) and its dense `k.eigh` deleted 2026-11-09 by lane
+        # n9-decomp-eigh-families; code recoverable at the lane's base
+        # origin/integ/pre-0867-w2 (f59d913b0b). Restore: git apply experiments/removed/N9_RESIDENT_EIGH.patch
+        # The projected solve is the executor op `eigh_op_tridiag` on the
+        # alphas / betas the Lanczos step wrote (x_decomp/lanczos_dev.mojo
+        # `dev_eigh_tridiag_run`, w and z left on the device), the host
+        # column its twin `eigh_op_tridiag_host` on `ab`
+        # (x_decomp/lanczos_host.mojo `eigh_tridiag_host_run`): one
+        # algorithm on every column. T's words are the float32 alphas and
+        # betas either way (mk_of rounded the float64 copies back to them).
+        if resident:
+            th = k.dout(1, j)
+            yv = k.dout(j, j)
+            _ = family_call(k.fn("x_decomp_dev_eigh_tridiag"), device_identifier(matrix_device(abd)),
+                            device_identifier(matrix_device(th)), device_identifier(matrix_device(yv)),
+                            mk_ints([j, cap]))
+        else:
+            th = mk_zeros(1, j, ctx)
+            yv = mk_zeros(j, j, ctx)
+            _ = family_call(k.fn("x_decomp_eigh_tridiag"), mk_store_addr(ab), mk_addr(th, ctx), mk_addr(yv, ctx),
+                            mk_ints([j, cap]))
+            _ = ab  # keep the Python object alive through the native call above
         top = List[Int]()
         var stop_at = max(j - 1 - nc, -1)
         var t = j - 1
@@ -696,19 +709,14 @@ def _lle_smallest(mut k: MKit, f: PythonObject, nc: Int, max_iter: Int,
     var pm: PythonObject
     var im: PythonObject
     var big: Float64
-    if (k.w4_flags() & 1) != 0:
-        var got = k.lu_dev_aux(f0, True)
-        lu = got[0]
-        pm = got[1]
-        im = got[2]
-        big = got[3][0]
-    else:
-        var fac = k.lu(f0)
-        lu = fac[0]
-        var aux = k.lu_aux(lu, fac[1], True)
-        big = aux[0][0]
-        pm = aux[2]
-        im = aux[3]
+    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (the w4 bit 1 device-LU arm) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
+    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
+    var fac = k.lu(f0)
+    lu = fac[0]
+    var aux = k.lu_aux(lu, fac[1], True)
+    big = aux[0][0]
+    pm = aux[2]
+    im = aux[3]
     if not (big > 0.0 and _mani_finite(big)):
         return (False, PythonObject(None), PythonObject(None))
     var en = mk_zeros(n, 1, ctx)

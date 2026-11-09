@@ -10,7 +10,7 @@ forgetting factor and convergence tests in the same order. So the IDENTICAL
 words are the Python driver's; x_decomp/dictl_dev.mojo is the same driver
 text on DKit (with the FAST fused atom update where Python took it)."""
 from std.math import sqrt
-from x_decomp.cells import F32Ptr
+from x_decomp.cells import F32Ptr, mul
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_ABS, OP_ADD, OP_DIV, OP_MAXS, OP_SCALE, OP_SOFT, OP_SQ, OP_SQDIFF, OP_SQRT, OP_SUB, mat_from,
@@ -92,7 +92,12 @@ def resample_atom[E: Exec](mut k: Kit[E], Y: Mat, seed: Int, c: Int) raises -> M
     var row = k.rows(Y, idx, idx + 1)
     var mean = k.ew1(OP_SCALE, k.total(row), 1.0 / Float64(row.c))
     var std = k.word(k.ew1(OP_SQRT, k.ew1(OP_SCALE, k.total(k.ew2(OP_SQDIFF, row, mean)), 1.0 / Float64(row.c)), 0.0))
-    var noise = k.ew1(OP_SCALE, k.rand(1, row.c, seed, 41 + 2 * c, 1), 0.01 * (std if std != 0.0 else 1.0))
+    # lane n10-dictl-arima-loops (2026-11-09): the scale is ONE float32
+    # product, mul(0.01f, std or 1), as the device's resample kernel takes it
+    # (x_decomp/dictl_resample.mojo; no float64 on Apple GPUs); it was the
+    # float64 product rounded to float32 (bits of a resampled atom only)
+    var sel = Float32(std) if std != 0.0 else Float32(1.0)
+    var noise = k.ew1(OP_SCALE, k.rand(1, row.c, seed, 41 + 2 * c, 1), Float64(mul(Float32(0.01), sel)))
     return k.ew2(OP_ADD, row, noise)
 
 

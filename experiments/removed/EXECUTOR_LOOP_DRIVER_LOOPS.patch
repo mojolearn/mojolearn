@@ -1,0 +1,713 @@
+diff --git a/autograd/program_control.mojo b/autograd/program_control.mojo
+index 5f3f8ab1a4..68d2b3be02 100644
+--- a/autograd/program_control.mojo
++++ b/autograd/program_control.mojo
+@@ -6,10 +6,6 @@
+ from std.memory import bitcast
+ from sequence.exec_trait import Exec
+ from sequence.ops import FP, Args, OP_COPY
+-from autograd.program_loop import (
+-    LOOP_DONE, LOOP_ITER, LOOP_STOPPED, LOOP_BAD, LOOP_WORDS, LOOP_MAX_EXACT, EXECUTOR_TIMERS,
+-    OP_LOOP_TICK, OP_LOOP_COMMIT, OP_LOOP_ADVANCE, LoopTimers, loop_check_every,
+-)
+ from autograd.ops_api import OpsSession, ops_session
+ from autograd.program import OpsProgram, PROGRAM_IN_IDS
+ from autograd.program_optimize import program_optimize
+@@ -58,116 +54,35 @@ def _predicate[E: Exec & Movable & Deinitable](
+     return value != 0
+ 
+ 
+-# TOMBSTONE: _copy_state (REFACTORED: per-iteration copy of the carried state into fresh buffers plus a drain) deleted 2026-11-08 by lane/fix-d3-executor-loops; code recoverable at 22ac89b54c.
+-# The bounded loop now carries its state in place (`_commit_state`, OP_LOOP_COMMIT) and stops on the device (OP_LOOP_TICK).
+-# Restore: git apply experiments/removed/EXECUTOR_LOOP_DRIVER_LOOPS.patch; record in docs/TOMBSTONES.md.
+-
+-
+-def _lap[E: Exec & Movable & Deinitable](mut s: OpsSession[E], mut timers: LoopTimers, name: String) raises:
+-    """Per-op timer mark (`MOJOLEARN_EXECUTOR_TIMERS`): drain the executor and
+-    charge the time since the last mark to `name`. Compiled out when off."""
+-    comptime if EXECUTOR_TIMERS:
++def _copy_state[E: Exec & Movable & Deinitable](
++    mut s: OpsSession[E], body: OpsProgram, outputs: List[Int],
++) raises -> Tuple[List[FP], List[ShapeN]]:
++    var buffers = List[FP]()
++    var shapes = List[ShapeN]()
++    try:
++        for k in range(len(outputs)):  # driver-loop: over loop-carried state tensors
++            var slot = s._slot(outputs[k])
++            var sh = s.shapes[slot]
++            if s.int_words[slot]:
++                raise Error("ValueError: while_loop state outputs must hold floating-point values")
++            if sh.ndim != body.in_shapes[k].ndim:
++                raise Error("while_loop body must preserve each state tensor's rank")
++            var t = s.tensors[slot]
++            var src = s.tape.value_of(s.ex, t)
++            var dst = s.ex.alloc(sh.count())
++            buffers.append(dst)
++            shapes.append(sh)
++            var args = Args()
++            args.p0 = src
++            args.p1 = dst
++            s.ex.launch[OP_COPY](args, sh.count())
++        # Reusing scratch after this point cannot overwrite a state copy.
+         s.ex.sync()
+-        timers.lap(name)
+-
+-
+-def _free_loop_owners[E: Exec & Movable & Deinitable](
+-    mut s: OpsSession[E], extras: List[FP], scratch: List[FP], scratch_n: List[Int],
+-):
+-    """Return the loop's register block and staging buffers (quiet: this runs
+-    on the error path too)."""
+-    for k in range(len(scratch_n)):  # driver-loop: over loop-carried state tensors (staging slots)
+-        if scratch_n[k] > 0:
+-            try:
+-                s.ex.free(scratch[k])
+-            except:
+-                pass
+-    for k in range(len(extras)):  # driver-loop: over the loop's register blocks
+-        try:
+-            s.ex.free(extras[k])
+-        except:
+-            pass
+-
+-
+-def _overlaps(addr: Int, n: Int, base: Int, m: Int) -> Bool:
+-    """[addr, addr + n) and [base, base + m) (float32 words) share a word."""
+-    return addr < base + 4 * m and base < addr + 4 * n
+-
+-
+-def _commit_state[E: Exec & Movable & Deinitable](
+-    mut s: OpsSession[E], body: OpsProgram, outputs: List[Int], words: FP,
+-    mut buffers: List[FP], mut shapes: List[ShapeN], mut scratch: List[FP], mut scratch_n: List[Int],
+-    gated_only: Bool,
+-) raises:
+-    """Write the body's outputs into the carried state buffers in place, each
+-    behind the register block's gate (OP_LOOP_COMMIT, a bit copy). An output
+-    that reads another state buffer is staged first, so no commit overwrites
+-    a value a later commit still reads. With `gated_only` (several iterations
+-    between flag reads) every output must keep its state tensor's shape;
+-    otherwise (the gate is known open) a resized output takes a new buffer."""
+-    var n_state = len(outputs)
+-    var srcs = List[FP]()
+-    var out_shapes = List[ShapeN]()
+-    for k in range(n_state):  # driver-loop: over loop-carried state tensors
+-        var slot = s._slot(outputs[k])
+-        var sh = s.shapes[slot]
+-        if s.int_words[slot]:
+-            raise Error("ValueError: while_loop state outputs must hold floating-point values")
+-        if sh.ndim != body.in_shapes[k].ndim:
+-            raise Error("while_loop body must preserve each state tensor's rank")
+-        if gated_only and not sh.same(shapes[k]):
+-            raise Error("ValueError: while_loop with check_every above 1 needs a body that keeps each state tensor's shape")
+-        srcs.append(s.tape.value_of(s.ex, s.tensors[slot]))
+-        out_shapes.append(sh)
+-    # Stage the outputs that read a state buffer other than their own (or a
+-    # shifted view of their own): every staging copy is enqueued before the
+-    # first commit.
+-    for k in range(n_state):  # driver-loop: over loop-carried state tensors
+-        var addr = Int(srcs[k])
+-        var n = out_shapes[k].count()
+-        var staged = False
+-        for j in range(n_state):  # driver-loop: over loop-carried state tensors (alias test, addresses only)
+-            if j == k and addr == Int(buffers[k]):
+-                continue
+-            if _overlaps(addr, n, Int(buffers[j]), shapes[j].count()):
+-                staged = True
+-        if staged:
+-            # One staging buffer per state slot, made at its first use and
+-            # kept for the loop (`scratch_n[k]` words; 0 = none yet).
+-            if scratch_n[k] < n:
+-                if scratch_n[k] > 0:
+-                    s.ex.free(scratch[k])
+-                scratch[k] = s.ex.alloc(n)
+-                scratch_n[k] = n
+-            var a = Args()
+-            a.p0 = srcs[k]
+-            a.p1 = scratch[k]
+-            s.ex.launch[OP_COPY](a, n)
+-            srcs[k] = scratch[k]
+-    for k in range(n_state):  # driver-loop: over loop-carried state tensors
+-        if Int(srcs[k]) == Int(buffers[k]):
+-            if not gated_only:
+-                shapes[k] = out_shapes[k]
+-            continue
+-        var n = out_shapes[k].count()
+-        if n != shapes[k].count():
+-            # Only reached with the gate known open (gated_only is False).
+-            var fresh = s.ex.alloc(n)
+-            var c = Args()
+-            c.p0 = srcs[k]
+-            c.p1 = fresh
+-            s.ex.launch[OP_COPY](c, n)
++    except err:
++        for k in range(len(buffers)):  # driver-loop: over acquired state owners
+             s.ex.free(buffers[k])
+-            buffers[k] = fresh
+-            shapes[k] = out_shapes[k]
+-            continue
+-        var a = Args()
+-        a.p0 = srcs[k]
+-        a.p1 = buffers[k]
+-        a.p2 = words
+-        s.ex.launch[OP_LOOP_COMMIT](a, n)
+-        if not gated_only:
+-            shapes[k] = out_shapes[k]
++        raise err
++    return (buffers^, shapes^)
+ 
+ 
+ # ---------------------------------------------------------------- entries
+@@ -181,20 +96,14 @@ struct ControlPlan(Movable):
+     var other: OpsProgram
+     var is_loop: Bool
+     var maximum: Int
+-    #: iterations between two host reads of the loop's register block
+-    var check_every: Int
+-    #: the body and the condition take the iteration register as a last input
+-    var iteration_input: Bool
+ 
+     def __init__(out self, var body: OpsProgram, var condition: OpsProgram, var other: OpsProgram,
+-                 is_loop: Bool, maximum: Int, check_every: Int = 1, iteration_input: Bool = False):
++                 is_loop: Bool, maximum: Int):
+         self.body = body^
+         self.condition = condition^
+         self.other = other^
+         self.is_loop = is_loop
+         self.maximum = maximum
+-        self.check_every = check_every
+-        self.iteration_input = iteration_input
+ 
+ 
+ struct ControlResult(Movable):
+@@ -210,7 +119,7 @@ struct ControlResult(Movable):
+ 
+ def control_prepare[E: Exec & Movable & Deinitable, KIND: Int](
+     sid: Int, body_id: Int, condition_id: Int, other_id: Int, condition_sid: Int, other_sid: Int,
+-    maximum: Int, optimize: Bool, check_every: Int = 1, iteration_input: Bool = False,
++    maximum: Int, optimize: Bool,
+ ) raises -> ControlPlan:
+     # other_id >= 1 selects if/else; other_id == 0 selects a bounded while.
+     if condition_sid != sid or other_sid != sid:
+@@ -230,19 +139,10 @@ def control_prepare[E: Exec & Movable & Deinitable, KIND: Int](
+     _signature(body, condition)
+     if len(condition.outs) != 1:
+         raise Error("control-flow condition must return one scalar")
+-    var every = 1
+     if is_loop:
+-        every = loop_check_every(check_every, "while_loop")
+-        if maximum > LOOP_MAX_EXACT:
+-            raise Error("ValueError: while_loop max_iterations must be at most " + String(LOOP_MAX_EXACT)
+-                        + ", got " + String(maximum))
+-        var n_state = body.n_in - (1 if iteration_input else 0)
+-        if iteration_input:
+-            if body.n_in < 1 or body.in_kinds[n_state] == PROGRAM_IN_IDS or body.in_shapes[n_state].count() != 1:
+-                raise Error("ValueError: while_loop with iteration=True needs a last body input of one floating-point value")
+-        if len(body.outs) != n_state:
++        if len(body.outs) != body.n_in:
+             raise Error("while_loop body must return one tensor per input")
+-        for k in range(n_state):  # driver-loop: over state input kinds
++        for k in range(body.n_in):  # driver-loop: over state input kinds
+             if body.in_kinds[k] == PROGRAM_IN_IDS:
+                 raise Error("ValueError: while_loop state inputs must hold floating-point values")
+         for k in range(len(body.outs)):  # driver-loop: over int32-word outputs cannot become float state
+@@ -258,7 +158,7 @@ def control_prepare[E: Exec & Movable & Deinitable, KIND: Int](
+         body = body_plan.program.copy()
+         condition = condition_plan.program.copy()
+         other = other_plan.program.copy()
+-    return ControlPlan(body^, condition^, other^, is_loop, maximum, every, iteration_input)
++    return ControlPlan(body^, condition^, other^, is_loop, maximum)
+ 
+ 
+ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
+@@ -299,76 +199,22 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
+     var result = ControlResult()
+     var iterations = 0
+     var stopped = False
+-    # The loop's register block and staging slots (freed with the state).
+-    var extras = List[FP]()
+-    var scratch = List[FP]()
+-    var scratch_n = List[Int]()
+     try:
+         s[].tape.no_grad()
+         if is_loop:
+-            # Lane fix-d3-executor-loops (2026-11-08): the executor's bounded
+-            # loop (autograd/program_loop.mojo). The carried state stays in
+-            # the uploaded buffers and is updated in place (OP_LOOP_COMMIT);
+-            # the condition goes to the register block on the device
+-            # (OP_LOOP_TICK) and the iteration register counts committed
+-            # iterations (OP_LOOP_ADVANCE). The host reads the block once
+-            # every `check_every` iterations, after a tick and before its
+-            # body, so with check_every = 1 no body runs after the stop and
+-            # the loop drains once per iteration (the former loop drained
+-            # twice: the condition read and the state copy). Iterations
+-            # enqueued past the stop leave the state as the stopping
+-            # iteration left it (closed gate), so the outputs, `iterations`
+-            # and `stopped` do not depend on `check_every`.
+-            var every = plan.check_every
+-            var n_state = len(buffers)
+-            var words = s[].ex.alloc(LOOP_WORDS)
+-            extras.append(words)
+-            for _k in range(n_state):  # driver-loop: over loop-carried state tensors (staging slots)
+-                scratch.append(words)
+-                scratch_n.append(0)
+-            var mirror = List[Float32](length=LOOP_WORDS, fill=Float32(0))
+-            var mirror_p = FP(unsafe_from_address=Int(mirror.unsafe_ptr()))
+-            var register = FP(unsafe_from_address=Int(words) + 4 * LOOP_ITER)
+-            var timers = LoopTimers("while_loop")
+-            var done = False
+-            while not done:  # driver-loop: over flag-read chunks of the bounded loop, bounded by max_iterations
+-                var j = 0
+-                while j < every:  # driver-loop: over loop iterations enqueued between two flag reads
+-                    var in_buffers = buffers.copy()
+-                    var in_shapes = shapes.copy()
+-                    if plan.iteration_input:
+-                        in_buffers.append(register)
+-                        in_shapes.append(body.in_shapes[n_state])
+-                    var cout = _execute(s[], condition, condition_replay, in_buffers, in_shapes, temps)
+-                    if len(cout) != 1 or s[].shapes[s[]._slot(cout[0])].count() != 1:
+-                        raise Error("control-flow condition must return one scalar")
+-                    var tick = Args()
+-                    tick.p0 = words
+-                    tick.p1 = s[].tape.value_of(s[].ex, s[].tensors[s[]._slot(cout[0])])
+-                    tick.i0 = maximum
+-                    s[].ex.launch[OP_LOOP_TICK](tick, 1)
+-                    _lap(s[], timers, "condition")
+-                    j += 1
+-                    if j == every:
+-                        s[].ex.download(mirror_p, words, LOOP_WORDS)
+-                        iterations = Int(mirror[LOOP_ITER])
+-                        _lap(s[], timers, "read_flag")
+-                        if mirror[LOOP_DONE] != Float32(0.0):
+-                            done = True
+-                            break
+-                    var outputs = _execute(s[], body, body_replay, in_buffers, in_shapes, temps)
+-                    _lap(s[], timers, "body")
+-                    # The gate is known open right after a read; between
+-                    # reads it is the device's, so shapes must hold.
+-                    _commit_state(s[], body, outputs, words, buffers, shapes, scratch, scratch_n, j != every)
+-                    var advance = Args()
+-                    advance.p0 = words
+-                    s[].ex.launch[OP_LOOP_ADVANCE](advance, 1)
+-                    _lap(s[], timers, "commit")
+-            if mirror[LOOP_BAD] != Float32(0.0):
+-                raise Error("control-flow condition must be finite")
+-            stopped = mirror[LOOP_STOPPED] != Float32(0.0)
+-            timers.report()
++            while True:  # driver-loop: over control-flow iterations, bounded by the explicit iteration limit
++                if not _predicate(s[], condition, condition_replay, buffers, shapes, temps):
++                    stopped = True
++                    break
++                if iterations == maximum:
++                    break
++                var outputs = _execute(s[], body, body_replay, buffers, shapes, temps)
++                var next_state = _copy_state(s[], body, outputs)
++                for k in range(len(buffers)):  # driver-loop: over previous state owners
++                    s[].ex.free(buffers[k])
++                buffers = next_state[0].copy()
++                shapes = next_state[1].copy()
++                iterations += 1
+             for k in range(len(buffers)):  # driver-loop: over final state download
+                 var a = HostArray(shapes[k])
+                 s[].ex.download(FP(unsafe_from_address=Int(a.data.unsafe_ptr())), buffers[k], shapes[k].count())
+@@ -387,7 +233,6 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
+         swap(held, s[].prog_tape)
+         for k in range(len(buffers)):  # driver-loop: over current state owners
+             s[].ex.free(buffers[k])
+-        _free_loop_owners(s[], extras, scratch, scratch_n)
+         var message = String(err)
+         var context = "program control flow after " + String(iterations) + " iterations: "
+         if message.startswith("ValueError: "):
+@@ -398,7 +243,6 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
+     swap(held, s[].prog_tape)
+     for k in range(len(buffers)):  # driver-loop: over current state owners
+         s[].ex.free(buffers[k])
+-    _free_loop_owners(s[], extras, scratch, scratch_n)
+     result.iterations = iterations
+     result.stopped = stopped
+     return result^
+diff --git a/cluster/checks/reduce_by_key.mojo b/cluster/checks/reduce_by_key.mojo
+index b3b4cded0f..23bab64510 100644
+--- a/cluster/checks/reduce_by_key.mojo
++++ b/cluster/checks/reduce_by_key.mojo
+@@ -1255,9 +1255,26 @@ def copy_f32_gated_kernel(
+         dst.unsafe_store(i, src.unsafe_load(i))
+ 
+ 
+-# TOMBSTONE: kmeans_conv_step_kernel (MERGED into the executor loop's criterion op) deleted 2026-11-08 by lane/fix-d3-executor-loops; code recoverable at 22ac89b54c.
+-# Its body is `loop_below_kernel` (autograd/program_loop_device.mojo), which also stores the iteration register.
+-# Restore: git apply experiments/removed/EXECUTOR_LOOP_DRIVER_LOOPS.patch; record in docs/TOMBSTONES.md.
++def kmeans_conv_step_kernel(
++    state: MutPointer[Int32, MutAnyOrigin],
++    shift: MutPointer[Float32, MutAnyOrigin],
++    thresh: Float32,
++    it: Int32,
++):
++    """fam2-cluster, `IDN_KMEANS_DEVICE_CONV`: the stopping rule on the
++    device. One thread. `state[0]` is the done flag, `state[1]` the iteration
++    that converged. `thresh` is the host's Float64 `tol` rounded UP to Float32
++    (`kmeans_shift_threshold`), so `shift < thresh` here is exactly the
++    host's `Float64(shift) < tol` for every Float32 `shift`, NaN included
++    (false both ways). One comparison of two Float32 values: the same bit on
++    every vendor."""
++    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
++        return
++    if state.unsafe_load(0) != Int32(0):
++        return
++    if shift.unsafe_load(0) < thresh:
++        state.unsafe_store(1, it)
++        state.unsafe_store(0, Int32(1))
+ 
+ 
+ def launch_accumulate_centroid_sums_blocked_gated[
+diff --git a/cluster/impl/detail/kmeans.mojo b/cluster/impl/detail/kmeans.mojo
+index b246b2bfef..ee8ad811f3 100644
+--- a/cluster/impl/detail/kmeans.mojo
++++ b/cluster/impl/detail/kmeans.mojo
+@@ -92,6 +92,7 @@ from cluster.checks.reduce_by_key import (
+     SUM_MODE_SQDIFF,
+     copy_f32_gated_kernel,
+     copy_f32_kernel,
++    kmeans_conv_step_kernel,
+     launch_accumulate_centroid_sums_blocked_gated,
+     launch_accumulate_weight_per_cluster_blocked_gated,
+     finish_sum_kernel,
+@@ -123,10 +124,6 @@ from cluster.impl.detail.min_cluster_distance_compute import (
+     min_cluster_and_distance_compute_gated,
+ )
+ from core.device_plan import DevicePlan
+-from autograd.program_loop import LoopTimers
+-from autograd.program_loop_device import (
+-    LoopRegisters, LoopStep, bounded_device_loop, loop_criterion_below, loop_lap,
+-)
+ from cluster.multi_gpu import assignment_device_count, kmeans_device_plan
+ from std.memory import bitcast
+ from cluster.impl.kmeans_params import (
+@@ -188,9 +185,7 @@ comptime IDN_KMEANS_FOLD_STORE = (
+ )
+ #: fam2-cluster (2026-10-04), IDENTICAL, with the row-block accumulator: THE
+ #: STOPPING RULE ON THE DEVICE. The Lloyd loop no longer drains once per
+-#: iteration to read the shift scalar. The executor loop's criterion op
+-#: (`loop_below_kernel`, autograd/program_loop_device.mojo; formerly
+-#: `kmeans_conv_step_kernel`) compares the
++#: iteration to read the shift scalar. `kmeans_conv_step_kernel` compares the
+ #: device shift with the tolerance and sets a device flag; the two heavy
+ #: kernels of an iteration (the fused assignment, `n x k x d`, and the
+ #: row-block accumulate, `n x d`) and the centroid copy-back return at once
+@@ -1536,165 +1531,6 @@ fits without the inertia check, with `params.lazy_shift` set, only."""
+ comptime KMEANS_LAZY_SHIFT_EVERY = KMEANS_LAZY_EVERY  # shared with the host restatement
+ 
+ 
+-struct LloydStep(LoopStep, Movable):
+-    """One Lloyd iteration as a step op of the executor's bounded loop
+-    (`autograd/program_loop_device.mojo`), `IDN_KMEANS_DEVICE_CONV` form:
+-    centroid norms, the gated fused assignment, the gated row-block
+-    accumulations of the sums and the weights, the centroid finalize, the
+-    shift reduction, the gated copy back, and the "shift below tol" criterion.
+-    Every gated kernel returns at once when the loop's done word is set, so
+-    iterations enqueued past convergence leave labels, centroids, inertia and
+-    `n_iter` as the converging iteration left them. The fields are handle
+-    copies (`DeviceBuffer.copy()` shares the memory the fit owns)."""
+-    var x: DeviceBuffer[DType.float32]
+-    var x_norm: DeviceBuffer[DType.float32]
+-    var cur_centroids: DeviceBuffer[DType.float32]
+-    var centroid_norm: DeviceBuffer[DType.float32]
+-    var labels: DeviceBuffer[DType.uint32]
+-    var min_dist: DeviceBuffer[DType.float32]
+-    var sums_i32: DeviceBuffer[DType.int32]
+-    var acc_table: DeviceBuffer[DType.int32]
+-    var weights: DeviceBuffer[DType.float32]
+-    var weight_i32: DeviceBuffer[DType.int32]
+-    var acc_table_w: DeviceBuffer[DType.int32]
+-    var new_centroids: DeviceBuffer[DType.float32]
+-    var partials: DeviceBuffer[DType.float32]
+-    var d_shift: DeviceBuffer[DType.float32]
+-    var n_samples: Int
+-    var n_features: Int
+-    var n_clusters: Int
+-    var metric: Int
+-    var sum_scale: Float32
+-    var weight_scale: Float32
+-    var conv_thresh: Float32
+-
+-    def __init__(
+-        out self,
+-        x: DeviceBuffer[DType.float32],
+-        x_norm: DeviceBuffer[DType.float32],
+-        cur_centroids: DeviceBuffer[DType.float32],
+-        centroid_norm: DeviceBuffer[DType.float32],
+-        labels: DeviceBuffer[DType.uint32],
+-        min_dist: DeviceBuffer[DType.float32],
+-        sums_i32: DeviceBuffer[DType.int32],
+-        acc_table: DeviceBuffer[DType.int32],
+-        weights: DeviceBuffer[DType.float32],
+-        weight_i32: DeviceBuffer[DType.int32],
+-        acc_table_w: DeviceBuffer[DType.int32],
+-        new_centroids: DeviceBuffer[DType.float32],
+-        partials: DeviceBuffer[DType.float32],
+-        d_shift: DeviceBuffer[DType.float32],
+-        n_samples: Int,
+-        n_features: Int,
+-        n_clusters: Int,
+-        metric: Int,
+-        sum_scale: Float32,
+-        weight_scale: Float32,
+-        conv_thresh: Float32,
+-    ):
+-        self.x = x.copy()
+-        self.x_norm = x_norm.copy()
+-        self.cur_centroids = cur_centroids.copy()
+-        self.centroid_norm = centroid_norm.copy()
+-        self.labels = labels.copy()
+-        self.min_dist = min_dist.copy()
+-        self.sums_i32 = sums_i32.copy()
+-        self.acc_table = acc_table.copy()
+-        self.weights = weights.copy()
+-        self.weight_i32 = weight_i32.copy()
+-        self.acc_table_w = acc_table_w.copy()
+-        self.new_centroids = new_centroids.copy()
+-        self.partials = partials.copy()
+-        self.d_shift = d_shift.copy()
+-        self.n_samples = n_samples
+-        self.n_features = n_features
+-        self.n_clusters = n_clusters
+-        self.metric = metric
+-        self.sum_scale = sum_scale
+-        self.weight_scale = weight_scale
+-        self.conv_thresh = conv_thresh
+-
+-    def enqueue_step(
+-        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
+-    ) raises:
+-        var cd = self.n_clusters * self.n_features
+-        comptime if not IDN_KMEANS_FOLD_STORE:
+-            ctx.enqueue_function[zero_i32_kernel](
+-                self.sums_i32.unsafe_ptr(),
+-                Int32(cd),
+-                grid_dim=((cd + 255) // 256, 1, 1),
+-                block_dim=(256, 1, 1),
+-            )
+-            ctx.enqueue_function[zero_i32_kernel](
+-                self.weight_i32.unsafe_ptr(),
+-                Int32(self.n_clusters),
+-                grid_dim=((self.n_clusters + 255) // 256, 1, 1),
+-                block_dim=(256, 1, 1),
+-            )
+-            loop_lap(ctx, timers, "zero_accumulators")
+-        compute_centroid_norms(
+-            ctx, self.cur_centroids, self.centroid_norm, self.n_clusters,
+-            self.n_features, self.metric,
+-        )
+-        loop_lap(ctx, timers, "centroid_norms")
+-        # Tried 2026-10-08 (MOJOLEARN_C37_FUSED_ACCUMULATE + MOJOLEARN_C37_FUSED_ROWS, run ge123e6f9): fused Lloyd assignment + Int32
+-        # row-block centroid accumulation in shared memory, X read once per iteration. NV/AMD kmeans istella 104.8x/0.841x,
+-        # taxi 68.6x/0.895x (vendor split); combined 9.4x/7.8x SLOWER; inertia SAME -> deleted. Recoverable at main 42d1e42c6;
+-        # row in docs/apple-fast/EXPERIMENTS.md.
+-        min_cluster_and_distance_compute_gated(
+-            ctx, registers.words, self.x, self.x_norm, self.cur_centroids,
+-            self.centroid_norm, self.labels, self.min_dist, self.n_samples,
+-            self.n_features, self.n_clusters, self.metric,
+-        )
+-        loop_lap(ctx, timers, "assign")
+-        launch_accumulate_centroid_sums_blocked_gated[
+-            KMEANS_BLOCK_ACC_SABOTAGE, IDN_KMEANS_FOLD_STORE
+-        ](
+-            ctx, registers.words, self.sums_i32, self.acc_table, self.x, self.labels,
+-            self.weights, self.n_samples, self.n_features, self.n_clusters,
+-            self.sum_scale,
+-        )
+-        loop_lap(ctx, timers, "accumulate_sums")
+-        launch_accumulate_weight_per_cluster_blocked_gated[
+-            IDN_KMEANS_FOLD_STORE
+-        ](
+-            ctx, registers.words, self.weight_i32, self.acc_table_w, self.labels,
+-            self.weights, self.n_samples, self.n_clusters, self.weight_scale,
+-        )
+-        loop_lap(ctx, timers, "accumulate_weights")
+-        ctx.enqueue_function[finalize_centroids_kernel](
+-            self.new_centroids.unsafe_ptr(),
+-            self.cur_centroids.unsafe_ptr(),
+-            self.sums_i32.unsafe_ptr(),
+-            self.weight_i32.unsafe_ptr(),
+-            Int32(self.n_clusters),
+-            Int32(self.n_features),
+-            self.sum_scale,
+-            self.weight_scale,
+-            grid_dim=((cd + 255) // 256, 1, 1),
+-            block_dim=(256, 1, 1),
+-        )
+-        loop_lap(ctx, timers, "finalize")
+-        _sum_device(
+-            ctx, self.cur_centroids, self.new_centroids, self.partials,
+-            self.d_shift, cd, SUM_MODE_SQDIFF,
+-        )
+-        loop_lap(ctx, timers, "shift")
+-        # The copy back reads the flag BEFORE this iteration's test sets it,
+-        # so the converging iteration still copies, as the host loop does.
+-        ctx.enqueue_function[copy_f32_gated_kernel](
+-            registers.words.unsafe_ptr(),
+-            self.cur_centroids.unsafe_ptr(),
+-            self.new_centroids.unsafe_ptr(),
+-            Int32(cd),
+-            grid_dim=((cd + 255) // 256, 1, 1),
+-            block_dim=(256, 1, 1),
+-        )
+-        loop_lap(ctx, timers, "copy_back")
+-        loop_criterion_below(ctx, registers, self.d_shift, self.conv_thresh, it)
+-        loop_lap(ctx, timers, "criterion")
+-
+-
+ def kmeans_fit_main_traced(
+     ctx: DeviceContext,
+     mut x: DeviceBuffer[DType.float32],
+@@ -1806,11 +1642,10 @@ def kmeans_fit_main_traced(
+     var d_shift = ctx.enqueue_create_buffer[DType.float32](1)
+     var h_shift = ctx.enqueue_create_host_buffer[DType.float32](1)
+     var h_cost = ctx.enqueue_create_host_buffer[DType.float32](1)
+-    # `IDN_KMEANS_DEVICE_CONV`: the executor loop's register block
+-    # (autograd/program_loop.mojo): [LOOP_DONE] the done flag the gated step
+-    # kernels read, [LOOP_STOP_ITER] the iteration that converged. Zeroed by
+-    # `bounded_device_loop` at the start of every restart.
+-    var registers = LoopRegisters(ctx)
++    # `IDN_KMEANS_DEVICE_CONV`: [0] the done flag, [1] the iteration that
++    # converged. Zeroed at the start of every restart.
++    var d_conv = ctx.enqueue_create_buffer[DType.int32](2)
++    var h_conv = ctx.enqueue_create_host_buffer[DType.int32](2)
+     var dev_conv = False
+     comptime if IDN_KMEANS_DEVICE_CONV:
+         dev_conv = (
+@@ -1922,29 +1757,104 @@ def kmeans_fit_main_traced(
+         var it = 1
+         comptime if IDN_KMEANS_DEVICE_CONV:
+             if dev_conv:
+-                # Lane fix-d3-executor-loops (2026-11-08): the Lloyd iterations
+-                # run as the executor's bounded loop over one step op
+-                # (`LloydStep`: the same kernels, arguments and order as the
+-                # hand-written chunk loop it replaces, so no bit moves), with
+-                # one register-block read per KMEANS_CONV_CHUNK iterations.
+-                # TOMBSTONE: kmeans-lloyd-chunk-driver-loop (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-08 by lane/fix-d3-executor-loops; code recoverable at 22ac89b54c.
+-                # Restore: git apply experiments/removed/EXECUTOR_LOOP_DRIVER_LOOPS.patch; record in docs/TOMBSTONES.md.
+-                var step = LloydStep(
+-                    x, x_norm, cur_centroids, centroid_norm, labels, min_dist,
+-                    sums_i32, acc_table, weights, weight_i32, acc_table_w,
+-                    new_centroids, partials, d_shift, n_samples, n_features,
+-                    n_clusters, params.metric, sum_scale, weight_scale,
+-                    conv_thresh,
+-                )
+-                var timers = LoopTimers(restart_tag + "kmeans.lloyd")
+-                var outcome = bounded_device_loop(
+-                    ctx, step, registers, it, params.max_iter,
+-                    KMEANS_CONV_CHUNK, timers,
++                ctx.enqueue_function[zero_i32_kernel](
++                    d_conv.unsafe_ptr(),
++                    Int32(2),
++                    grid_dim=(1, 1, 1),
++                    block_dim=(256, 1, 1),
+                 )
+-                timers.report()
+-                it = outcome.next_iteration
+-                if outcome.converged:
+-                    n_current_iter = outcome.stop_iteration
++                var conv_seen = False
++                while it <= params.max_iter and not conv_seen:
++                    var chunk_end = it + KMEANS_CONV_CHUNK - 1
++                    if chunk_end > params.max_iter:
++                        chunk_end = params.max_iter
++                    while it <= chunk_end:
++                        comptime if not IDN_KMEANS_FOLD_STORE:
++                            ctx.enqueue_function[zero_i32_kernel](
++                                sums_i32.unsafe_ptr(),
++                                Int32(cd),
++                                grid_dim=((cd + 255) // 256, 1, 1),
++                                block_dim=(256, 1, 1),
++                            )
++                            ctx.enqueue_function[zero_i32_kernel](
++                                weight_i32.unsafe_ptr(),
++                                Int32(n_clusters),
++                                grid_dim=((n_clusters + 255) // 256, 1, 1),
++                                block_dim=(256, 1, 1),
++                            )
++                        compute_centroid_norms(
++                            ctx, cur_centroids, centroid_norm, n_clusters,
++                            n_features, params.metric,
++                        )
++                        # Tried 2026-10-08 (MOJOLEARN_C37_FUSED_ACCUMULATE + MOJOLEARN_C37_FUSED_ROWS, run ge123e6f9): fused Lloyd assignment + Int32
++                        # row-block centroid accumulation in shared memory, X read once per iteration. NV/AMD kmeans istella 104.8x/0.841x,
++                        # taxi 68.6x/0.895x (vendor split); combined 9.4x/7.8x SLOWER; inertia SAME -> deleted. Recoverable at main 42d1e42c6;
++                        # row in docs/apple-fast/EXPERIMENTS.md.
++                        min_cluster_and_distance_compute_gated(
++                            ctx, d_conv, x, x_norm, cur_centroids,
++                            centroid_norm, labels, min_dist, n_samples,
++                            n_features, n_clusters, params.metric,
++                        )
++                        launch_accumulate_centroid_sums_blocked_gated[
++                            KMEANS_BLOCK_ACC_SABOTAGE, IDN_KMEANS_FOLD_STORE
++                        ](
++                            ctx, d_conv, sums_i32, acc_table, x, labels,
++                            weights, n_samples, n_features, n_clusters,
++                            sum_scale,
++                        )
++                        launch_accumulate_weight_per_cluster_blocked_gated[
++                            IDN_KMEANS_FOLD_STORE
++                        ](
++                            ctx, d_conv, weight_i32, acc_table_w, labels,
++                            weights, n_samples, n_clusters, weight_scale,
++                        )
++                        ctx.enqueue_function[finalize_centroids_kernel](
++                            new_centroids.unsafe_ptr(),
++                            cur_centroids.unsafe_ptr(),
++                            sums_i32.unsafe_ptr(),
++                            weight_i32.unsafe_ptr(),
++                            Int32(n_clusters),
++                            Int32(n_features),
++                            sum_scale,
++                            weight_scale,
++                            grid_dim=((cd + 255) // 256, 1, 1),
++                            block_dim=(256, 1, 1),
++                        )
++                        _sum_device(
++                            ctx, cur_centroids, new_centroids, partials,
++                            d_shift, cd, SUM_MODE_SQDIFF,
++                        )
++                        # The copy back reads the flag BEFORE this
++                        # iteration's test sets it, so the converging
++                        # iteration still copies, as the host loop does.
++                        ctx.enqueue_function[copy_f32_gated_kernel](
++                            d_conv.unsafe_ptr(),
++                            cur_centroids.unsafe_ptr(),
++                            new_centroids.unsafe_ptr(),
++                            Int32(cd),
++                            grid_dim=((cd + 255) // 256, 1, 1),
++                            block_dim=(256, 1, 1),
++                        )
++                        ctx.enqueue_function[kmeans_conv_step_kernel](
++                            d_conv.unsafe_ptr(),
++                            d_shift.unsafe_ptr(),
++                            conv_thresh,
++                            Int32(it),
++                            grid_dim=(1, 1, 1),
++                            block_dim=(1, 1, 1),
++                        )
++                        it += 1
++                    # ONE read per chunk.
++                    ctx.enqueue_copy(
++                        dst_ptr=h_conv.unsafe_ptr(), src_buf=d_conv
++                    )
++                    ctx.synchronize()
++                    if Int(h_conv.unsafe_ptr().unsafe_load(0)) != 0:
++                        conv_seen = True
++                        n_current_iter = Int(
++                            h_conv.unsafe_ptr().unsafe_load(1)
++                        )
++                        it = n_current_iter
+         while (not dev_conv) and it <= params.max_iter:
+             comptime if not IDN_KMEANS_FOLD_STORE:
+                 ctx.enqueue_function[zero_i32_kernel](
+@@ -2263,7 +2173,7 @@ def kmeans_fit_main_traced(
+     # Launches hold raw pointers: keep the tables alive past the last sync.
+     _ = acc_table^
+     _ = acc_table_w^
+-    _ = registers^
++    _ = d_conv^
+     if trace.enabled:
+         trace.record_device(ctx, tag_prefix + "fit.centroids", centroids, cd)
+         trace.record_device(ctx, tag_prefix + "fit.labels", labels, n_samples)

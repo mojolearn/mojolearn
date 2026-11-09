@@ -24,7 +24,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
 
-from x_decomp.mcd_bmma import MCD_ORDERED_COV, ordered_cov_scratch, launch_mcd_cov_ordered, launch_gemm_mma_batched, note_cov_route
 from x_decomp.cells import F32Ptr, I32Ptr, LARS_ROW_EXTRA, OP_SCALE, OP_SELECT, ew_cell, rand_cell
 from core.philox import philox4x32_10
 from std.gpu import block_dim, block_idx, thread_idx
@@ -72,6 +71,7 @@ from x_decomp.device import (
     _p,
 )
 from x_decomp.qr_bounded import QRB_CELLS
+from x_decomp.jacobi_par import PJ_TPB, sym_from_triangle_kernel
 from decomposition.linalg_types import _validate_shape
 
 comptime POOL_KEEP_BYTES = 1 << 30
@@ -227,42 +227,9 @@ def dev_ew_run(
     return count
 
 
-struct _CovGate(Defaultable, Movable):
-    """One persistent typed gate on xd_ctx; never released between enqueues."""
-    var bufs: List[DeviceBuffer[DType.int32]]
-
-    def __init__(out self):
-        self.bufs = List[DeviceBuffer[DType.int32]]()
-
-
-comptime MCD_COV_GATE = _Global[StorageType=_CovGate, name="MojoMCDOrderedCovGate", init_fn=_CovGate.__init__]
-
-
-def dev_mcd_cov_run(a: Int, c: Int, rows: Int, d: Int) raises -> Int:
-    """Opt-in MCD final masked covariance Gram; no generic GEMM dispatch change."""
-    comptime if not MCD_ORDERED_COV:
-        raise Error("ordered MCD covariance is disabled")
-    if rows <= 0 or d <= 0 or rows*d > 2147483647 or d*d > 2147483647:
-        raise Error("ordered covariance invalid shape or Int32 bound exceeded")
-    note_cov_route(False, rows, d)
-    var words = ordered_cov_scratch(1, rows, d)
-    var ctx = xd_ctx()
-    var state = MCD_COV_GATE.get_or_create_ptr()
-    if len(state[].bufs) == 0:
-        var initial_gate = ctx.enqueue_create_buffer[DType.int32](1)
-        ctx.enqueue_memset(initial_gate, Int32(1))
-        state[].bufs.append(initial_gate^)
-    # The global owner retains this typed allocation past every enqueue and
-    # subsequent download/synchronize. No null pointer, cast, or local-only
-    # allocation whose destruction could add an implicit synchronization.
-    var gate = state[].bufs[0]
-    var gate_ptr = gate.unsafe_ptr[MutAnyOrigin]()
-    var sid = pool_alloc(words)
-    launch_mcd_cov_ordered(ctx, _ptr(a, rows*d), _ptr(c, d*d),
-        _ptr(sid, words), rows, d, 1, rows*d, d*d, gate_ptr, True)
-    # Resident pool reuse is ordered on the same context, as dev_gemm_run.
-    pool_free(sid)
-    return d*d
+# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (dev_mcd_cov_run and its persistent gate, the x_decomp_dev_mcd_cov body) deleted
+# 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 
 
 def dev_gemm_run(a: Int, b: Int, c: Int, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises -> Int:
@@ -716,7 +683,101 @@ def dev_eigh_run(ia: Int, pw: F32Ptr, pv: F32Ptr, n: Int, uplo: Int) raises -> I
     ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
     DevExec._eigh_on(ctx, da, pw, pv, n, uplo)
     _ = da^
+    return n
+
+
+comptime _EIGH_REV_TPB = 256
+
+
+def eigh_rev_kernel(w_asc: F32Ptr, v_asc: F32Ptr, w_out: F32Ptr, v_out: F32Ptr, n_in: Int32):
+    """Cell t of the descending answer (copies): v_out[i, j] = v_asc[i,
+    n - 1 - j], and for t < n w_out[t] = w_asc[n - 1 - t]
+    (`A.take_cols(range(c - 1, -1, -1))` of both)."""
+    var n = Int(n_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= n * n:
+        return
+    var i = t // n
+    var j = t - i * n
+    v_out.unsafe_store(t, v_asc.unsafe_load(i * n + (n - 1 - j)))
+    if t < n:
+        w_out.unsafe_store(t, w_asc.unsafe_load(n - 1 - t))
+
+
+def dev_eigh_desc_run(ia: Int, iw: Int, iv: Int, n: Int) raises:
+    """The n x n device matrix a (left as it is) into the device matrices w
+    (1 x n, eigenvalues DESCENDING) and v (n x n, the matching vectors in
+    columns): `eigh_op_sym` (`DevExec.eigh_enq`) on a device copy, then
+    `eigh_rev_kernel` (the column reversal the owners' host
+    `_reversed_columns` copied). One wait, for the status word (lane
+    n9-decomp-eigh-families: IncrementalPCA, FastICA's whitening and
+    FactorAnalysis's owner; was w and V home, reversed, uploaded again)."""
+    if n < 1:
+        raise Error("x_decomp: the resident eigh needs n >= 1")
+    var cells = n * n
+    if cells > 2147483647:
+        raise Error("x_decomp: eigh exceeds the Int32 index bound")
+    _ = _ptr(ia, cells)
+    var pw = _ptr(iw, n)
+    var pv = _ptr(iv, cells)
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    var da = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    var dw = ctx.enqueue_create_buffer[DType.float32](n)
+    var dv = ctx.enqueue_create_buffer[DType.float32](cells)
+    var status = DevExec.eigh_enq(ctx, da, dw, dv, n)
+    ctx.enqueue_function[eigh_rev_kernel](
+        F32Ptr(unsafe_from_address=Int(dw.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(dv.unsafe_ptr())),
+        pw, pv, Int32(n), grid_dim=(cells + _EIGH_REV_TPB - 1) // _EIGH_REV_TPB, block_dim=_EIGH_REV_TPB,
+    )
+    var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
     ctx.synchronize()
+    _ = da^
+    _ = dw^
+    _ = dv^
+    _ = status^
+    DevExec.eigh_status_check(hs, n)
+
+
+def dev_eigh_to_run(ia: Int, iw: Int, iv: Int, n: Int, uplo: Int) raises -> Int:
+    """`x_decomp_eigh` of the device matrix a (n x n, left as it is) into the
+    device matrices w (n) and v (n x n, vectors in columns): the executor op
+    x_decomp/eigh_ops.mojo `eigh_op_sym` (`DevExec.eigh_enq`, `DevExec.eigh`'s
+    route and words) on a device copy; nothing but its status word comes
+    home (lane n9-decomp-eigh-families, 2026-11-09: the resident kits'
+    eigh no longer brings w and V down to upload them again). Waits once,
+    for the status; an unconverged solve raises."""
+    if n < 1:
+        raise Error("x_decomp: the resident eigh needs n >= 1")
+    if uplo > 2:
+        raise Error("x_decomp: eigh uplo is 0, 1 (L) or 2 (U)")
+    var cells = n * n
+    if cells > 2147483647:
+        raise Error("x_decomp: eigh exceeds the Int32 index bound")
+    _ = _ptr(ia, cells)
+    _ = _ptr(iw, n)
+    _ = _ptr(iv, cells)
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    var da = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    if uplo != 0:
+        ctx.enqueue_function[sym_from_triangle_kernel](
+            da.unsafe_ptr(), Int32(n), Int32(uplo), grid_dim=(cells + PJ_TPB - 1) // PJ_TPB, block_dim=PJ_TPB
+        )
+    var dw = pool[].bufs[iw].create_sub_buffer[DType.float32](0, n)
+    var dv = pool[].bufs[iv].create_sub_buffer[DType.float32](0, cells)
+    var status = DevExec.eigh_enq(ctx, da, dw, dv, n)
+    var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
+    ctx.synchronize()
+    _ = da^
+    _ = dw^
+    _ = dv^
+    _ = status^
+    DevExec.eigh_status_check(hs, n)
     return n
 
 
@@ -958,40 +1019,6 @@ def _pool_buf_view(id: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
 # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
 
 
-# Test-only direct batched covariance seam, identical API on both arms.
-# Inactive outputs retain sentinel, partial storage is poisoned before B.
-def mcd_cov_probe_run(px: F32Ptr, pg: I32Ptr, pout: F32Ptr, nc: Int, rows: Int, d: Int) raises -> Int:
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_FAST or not has_apple_gpu_accelerator():
-        raise Error("covariance probe requires FAST Apple")
-    if nc <= 0 or rows <= 0 or d <= 0 or nc*rows*d > 2147483647 or nc*d*d > 2147483647:
-        raise Error("invalid ordered covariance probe shape")
-    var ctx = xd_ctx()
-    var dx = ctx.enqueue_create_buffer[DType.float32](nc*rows*d)
-    var dg = ctx.enqueue_create_buffer[DType.int32](nc)
-    var dc = ctx.enqueue_create_buffer[DType.float32](nc*d*d)
-    var scratch = ctx.enqueue_create_buffer[DType.float32](ordered_cov_scratch(nc, rows, d))
-    ctx.enqueue_copy(dst_buf=dx, src_ptr=px)
-    ctx.enqueue_copy(dst_buf=dg, src_ptr=pg)
-    ctx.enqueue_memset(dc, Float32(-123.5))
-    ctx.enqueue_memset(scratch, Float32(7654321))
-    # Explicit mutable borrows of owned buffers for the legacy launcher API.
-    # No integer-address reconstruction or const-removing pointer cast. Keep
-    # one x borrow and copy its pointer for X^T X, rather than borrow dx twice.
-    var xp = dx.unsafe_ptr[MutAnyOrigin]()
-    var cp = dc.unsafe_ptr[MutAnyOrigin]()
-    var sp = scratch.unsafe_ptr[MutAnyOrigin]()
-    var gp = dg.unsafe_ptr[MutAnyOrigin]()
-    comptime if MCD_ORDERED_COV:
-        note_cov_route(True, rows, d)
-        launch_mcd_cov_ordered(ctx, xp, cp, sp,
-            rows, d, nc, rows*d, d*d, gp, False)
-    else:
-        launch_gemm_mma_batched(ctx, xp, xp, cp,
-            d, rows, d, True, False, nc, rows*d, rows*d, d*d, gp, False)
-    ctx.enqueue_copy(dst_ptr=pout, src_buf=dc)
-    ctx.synchronize()
-    _ = dx^
-    _ = dg^
-    _ = dc^
-    _ = scratch^
-    return 1 if MCD_ORDERED_COV else 0
+# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (mcd_cov_probe_run, the x_decomp_mcd_cov_probe test seam of its quality tool) deleted
+# 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch

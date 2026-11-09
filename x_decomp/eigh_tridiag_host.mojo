@@ -259,6 +259,45 @@ def _td_block_sub_ptr(c: F32Ptr, ldc: Int, r0: Int, c0: Int, g: List[Float32], m
     host_cells(cell, m * n, 2)
 
 
+def host_td_solve(dd: F32Ptr, ee: F32Ptr, info: F32Ptr, wh: F32Ptr, wlo: F32Ptr, wt: F32Ptr,
+                  z: F32Ptr, n: Int) raises:
+    """The host twin of the device's `td_solve_enqueue`: bisection, gaps and
+    the twisted eigenvectors of the tridiagonal T (d n words, e n-1 words)
+    into z (n x n, column k per eigenvalue), shared by `host_eigh_td` and
+    x_decomp/eigh_ops_host.mojo `eigh_op_tridiag_host`."""
+    # integ-w2: lane N7 5bdea49f45 replaced both call sites' inline blocks
+    # with this call but committed no definition; rebuilt from those blocks.
+    def bis(k: Int) {imm dd, imm ee, imm info, imm wh, imm wlo, imm n}:
+        td_bisect_item(dd, ee, info, wh, wlo, n, k)
+
+    # every index writes only its own wh / wl cells; info[0] (index 0) and
+    # info[2] (the same 1.0 from any index) are read only after the join
+    host_cells(bis, n, 64 * 40 * n)
+
+    def gap(k: Int) {imm wh, imm wlo, imm info, imm wt, imm n}:
+        td_gap_item(wh, wlo, info, wt, n, k)
+
+    host_cells(gap, n, 16)
+    # eigenvectors of T: td_vec_kernel (column k of z per index)
+    var dphl = List[Float32](length=n * n, fill=Float32(0.0))
+    var dpll = List[Float32](length=n * n, fill=Float32(0.0))
+    var dmhl = List[Float32](length=n * n, fill=Float32(0.0))
+    var dmll = List[Float32](length=n * n, fill=Float32(0.0))
+    var dph = _lp(dphl)
+    var dpl = _lp(dpll)
+    var dmh = _lp(dmhl)
+    var dml = _lp(dmll)
+
+    def vec(k: Int) {imm dd, imm ee, imm info, imm wh, imm wlo, imm dph, imm dpl, imm dmh, imm dml, imm z, imm n}:
+        td_vec_item(dd, ee, info, wh, wlo, dph, dpl, dmh, dml, z, n, k)
+
+    host_cells(vec, n, 120 * n)
+    _ = dphl^
+    _ = dpll^
+    _ = dmhl^
+    _ = dmll^
+
+
 def host_eigh_td(mut m: List[Float32], n: Int, w: F32Ptr, v: F32Ptr) raises -> Bool:
     """`DevExec._eigh_td_try` on the host. `m` (n x n row major, the
     triangle already mirrored) is consumed: range-scaled, then overwritten
@@ -300,37 +339,9 @@ def host_eigh_td(mut m: List[Float32], n: Int, w: F32Ptr, v: F32Ptr) raises -> B
     var wlo = _lp(wll)
     var wt = _lp(wtl)
 
-    def bis(k: Int) {imm dd, imm ee, imm info, imm wh, imm wlo, imm n}:
-        td_bisect_item(dd, ee, info, wh, wlo, n, k)
-
-    # every index writes only its own wh / wl cells; info[0] (index 0) and
-    # info[2] (the same 1.0 from any index) are read only after the join
-    host_cells(bis, n, 64 * 40 * n)
-
-    def gap(k: Int) {imm wh, imm wlo, imm info, imm wt, imm n}:
-        td_gap_item(wh, wlo, info, wt, n, k)
-
-    host_cells(gap, n, 16)
-    # 3. eigenvectors of T: td_vec_kernel (column k of z per index)
+    # 3. eigenvectors of T (the device's `td_solve_enqueue`)
     var zl = List[Float32](length=n * n, fill=Float32(0.0))
-    var dphl = List[Float32](length=n * n, fill=Float32(0.0))
-    var dpll = List[Float32](length=n * n, fill=Float32(0.0))
-    var dmhl = List[Float32](length=n * n, fill=Float32(0.0))
-    var dmll = List[Float32](length=n * n, fill=Float32(0.0))
-    var z = _lp(zl)
-    var dph = _lp(dphl)
-    var dpl = _lp(dpll)
-    var dmh = _lp(dmhl)
-    var dml = _lp(dmll)
-
-    def vec(k: Int) {imm dd, imm ee, imm info, imm wh, imm wlo, imm dph, imm dpl, imm dmh, imm dml, imm z, imm n}:
-        td_vec_item(dd, ee, info, wh, wlo, dph, dpl, dmh, dml, z, n, k)
-
-    host_cells(vec, n, 120 * n)
-    _ = dphl^
-    _ = dpll^
-    _ = dmhl^
-    _ = dmll^
+    host_td_solve(dd, ee, info, wh, wlo, wt, _lp(zl), n)
     if infol[2] != Float32(0.0):
         _ = vl^
         _ = wl^

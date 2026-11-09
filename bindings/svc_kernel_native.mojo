@@ -24,6 +24,10 @@
 # no resident entry for them.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family, admit_family_copied, admit_family_meta, admit_family_weights, admitted_array
+from core.admitted_input import admitted_cast_f32
+from core.cast_in import CAST_KIND_SIGNED
+from core.admitted_convert import admitted_convert_vector
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value
 from bindings.host_inference_scalars import host_inference_scalar
@@ -37,19 +41,19 @@ from bindings.mode_metadata_native import _class_fields
 from bindings.gp_svm_records import gpsvm_no_fit_callbacks
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.classical_arrays import classical_typed
-from bindings.classical_labels import labels_cast, labels_real_type
+from bindings.classical_labels import labels_cast, labels_real_type, classical_encode_labels
 from bindings.native_array_view import native_array_ndarray_view
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance,
-    family_call, family_entry, family_array, family_sample_weight_snapshot,
+    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance, family_call,
+    family_entry, family_array,
 )
 from core.scale_gamma_exact import scale_gamma_from_limbs
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_isfinite,
-    svc_round_f32, svc_base, svc_mode, svc_zero_division, svc_prefix, svc_scalar_array, svc_read_f64,
-    svc_read_f32, svc_read_i32, svc_f32, svc_snapshot, svc_shape_of, svc_labels_1d, svc_sorted_classes, svc_encode_1d, svc_decode,
-    svc_threshold_codes, svc_argmax_rows, svc_r2_sums, svc_accuracy, svc_accuracy_codes,
+    svc_round_f32, svc_base, svc_mode, svc_zero_division, svc_prefix, svc_scalar_array, svc_read_f64, svc_read_f32,
+    svc_read_i32, svc_shape_of, svc_labels_1d, svc_sorted_classes, svc_decode, svc_threshold_codes,
+    svc_argmax_rows, svc_r2_sums, svc_accuracy, svc_accuracy_codes,
 )
 
 # `svc_pair_epilogue` modes (svm/impl/svc_rows.mojo), `_svm_impl._EPI_*` and `_GLUE_*`.
@@ -72,6 +76,8 @@ comptime _DEV636_Y = "mojolearn SVC: y contains a non-finite value (DEVIATION 63
 
 
 from bindings.fitted_resident_door import fitted_resident_lease
+from bindings.device_rows_door import DoorRowsStore, door_is_device_rows, door_rows_refuse
+from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse
 from providers.python.svc_descriptor_pyapi import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute, svr_execute, svc_descriptor_execute, svc_descriptor_flags, svc_ovo_execute
 from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
@@ -378,7 +384,7 @@ def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight:
     var sw_owner = PythonObject(None)
     var sw_address = 0
     if sample_weight is not None:
-        var weights = family_sample_weight_snapshot(sample_weight, n_rows, False, context, True)
+        var weights = admit_family_weights(sample_weight, n_rows, False, context, True)
         sw = weights.keep
         sw_owner = Python.tuple(weights.keep, weights.owner)
         sw_address = weights.source.addr
@@ -386,11 +392,11 @@ def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight:
     var cwa = PythonObject(None)
     var n_classes = 0
     if class_weight is not None:
-        var encoded = svc_encode_1d(y, context)
-        if encoded[0] is None:
+        if len(svc_shape_of(y, context)) != 1:
             raise Error("mojolearn " + who + ": y must be 1-D")
-        var classes = encoded[0]
-        codes = encoded[1]
+        var encoded = classical_encode_labels(y, context)
+        var classes = encoded.classes
+        codes = encoded.codes
         n_classes = len(classes)
         if Int(py=codes.shape[0]) != n_rows:
             raise Error("mojolearn " + who + ": y has " + String(Int(py=codes.shape[0])) + " entries, X has "
@@ -551,19 +557,26 @@ def _machine(fields: PythonObject, binding: PythonObject, q: PythonObject, dual:
              n_support: Int, bias: Float64, label0: Float64, label1: Float64, predict_class: Bool,
              support: PythonObject, out_addr: Int, context: PythonObject,
              settings: SvcOperationSettings, native: PythonObject, n_rows: Int, query_cols: Int, query_address: Int,
-             predict_entry: PythonObject, lease: Int, slot: Int, resident_entry: PythonObject) raises:
+             predict_entry: PythonObject, lease: Int, slot: Int, resident_entry: PythonObject,
+             fold: DoorRowsStore = DoorRowsStore.none()) raises -> PythonObject:
     """`SVC._machine`: one machine's decisions (or labels) on q, written at
     `out_addr` (n float32). `predict_entry` is the binding's resolved
     `svc_predict` (None: resolved here), so a pair loop looks it up once.
     `resident_entry` is the binding's `svc_predict_resident` (None: the
     binding has none, or the descriptor route runs): the machine's support
     rows and duals are then read from slot `slot` of `lease` (0: uploaded for
-    this call only), the query and the output in place (lane ne1-a-gp-svm)."""
+    this call only), the query and the output in place (lane ne1-a-gp-svm).
+    Returns the resident entry's [finite, range] words of the query (lane
+    a7a; the caller refuses through `_svm_query_refuse`), None for the
+    other routes (they test the query themselves). `fold` (active only with
+    the resident entry, a computed kernel and support rows): the query is a
+    cross-validation fold the entry gathers on the device."""
     var n_features = settings.features
     var query = q
     var query_addr = query_address
     var vectors = sv
     var held = PythonObject(None)
+    var words = PythonObject(None)
     if settings.kernel == 4 and n_support > 0:
         # X is the cross-kernel against the TRAINING rows; the decision
         # reads its columns at the support vectors and no support rows.
@@ -591,12 +604,19 @@ def _machine(fields: PythonObject, binding: PythonObject, q: PythonObject, dual:
             # svc_predict's 12, then lease, slot
             _ = py_call(params.append, PythonObject(lease))
             _ = py_call(params.append, PythonObject(slot))
+            if fold.active():
+                # then the fold's store ids (no query address)
+                _ = py_call(params.append, PythonObject(fold.base_id))
+                _ = py_call(params.append, PythonObject(fold.base_rows))
+                _ = py_call(params.append, PythonObject(fold.index_id))
             entry = resident_entry
         else:
             entry = predict_entry if predict_entry is not None else _entry(binding, "svc_predict", context)
-        _ = family_call(entry, PythonObject(query_addr),
+        var result = family_call(entry, PythonObject(query_addr),
             classical_address(dual) if n_support > 0 else PythonObject(0),
             classical_address(vectors) if n_support > 0 else PythonObject(0), PythonObject(out_addr), params)
+        if resident_entry is not None:
+            words = result
     _ = query  # keep the Python object alive through the native call above
     _ = vectors  # keep the Python object alive through the native call above
     _ = dual
@@ -605,6 +625,7 @@ def _machine(fields: PythonObject, binding: PythonObject, q: PythonObject, dual:
     _ = query^
     _ = vectors^
     _ = held^
+    return words
 
 
 # ---------------------------------------------------------------- SVC fit
@@ -614,18 +635,23 @@ def _as_labels(y: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_svm_impl._as_labels`: (float32 labels or None, classes, the label
     pair or the int32 codes when more than two classes)."""
     var b = svc_builtins()
-    var encoded = PythonObject(None)
+    # The one label encoder (classical_encode_labels; lane a2-admit-family
+    # deleted the SVM's svc_encode_1d), after the 1-D test it made first.
+    var shape = PythonObject(None)
+    var classes = PythonObject(None)
+    var codes = PythonObject(None)
     try:
-        encoded = svc_encode_1d(y, context)
+        shape = svc_shape_of(y, context)
+        if len(shape) == 1:
+            var encoded = classical_encode_labels(y, context)
+            classes = encoded.classes
+            codes = encoded.codes
     except error:
         if String(error).find("NaN label") < 0:
             raise error
         raise Error(_DEV636_Y)
-    if encoded[0] is None:
-        var shape = encoded[2]
+    if len(shape) != 1:
         raise Error("mojolearn SVC: y must be 1-D, got " + String(len(shape)) + "-D shape " + family_repr(shape))
-    var classes = encoded[0]
-    var codes = encoded[1]
     if len(classes) < 2:
         raise Error("mojolearn SVC: y has " + String(len(classes)) + " class; at least two are needed")
     if len(classes) > 2:
@@ -637,22 +663,21 @@ def _as_labels(y: PythonObject, context: PythonObject) raises -> PythonObject:
     if not real:
         # non-numeric labels: the solver sees each row's code, 0.0 or 1.0
         var n = Int(py=codes.size)
-        var f = family_array(Python.tuple(PythonObject(n)), "<f4", context)
+        # The int32 codes (0 or 1) as float32, one cast in row tasks into an
+        # uninitialised Array (lane a2-admit-family: was a call into the base
+        # binding's cast_elements over a zero-filled Array; codes 0 and 1
+        # convert exactly either way).
+        var f = admitted_array(Python.tuple(PythonObject(n)), "<f4", context)
         if n > 0:
-            _ = family_call(svc_base("cast_elements", context), classical_address(codes), PythonObject(2),
-                            classical_address(f), PythonObject(0), PythonObject(n))
+            _ = admitted_cast_f32(Int(py=classical_address(codes)), 4, 0, n, 1, 4, CAST_KIND_SIGNED,
+                                  FAMILY_F32P(unsafe_from_address=Int(py=classical_address(f))))
             _ = codes  # keep the Python object alive through the native call above
             _ = f  # keep the Python object alive through the native call above
         _ = codes^
         return Python.tuple(f, classes, Python.tuple(PythonObject(0.0), PythonObject(1.0)))
-    var f = svc_f32(y, 1, "y", False, context)[0]
-    var n = Int(py=f.size)
-    var finite = True
-    if n > 0:
-        finite = Int(py=family_call(svc_base("all_finite_f32", context), classical_address(f), PythonObject(n))) == 1
-        _ = f  # keep the Python object alive through the native call above
-    if not finite:
-        raise Error(_DEV636_Y)
+    # The finiteness test rides in the admission (lane a2-admit-family: was a
+    # second pass through the base binding's all_finite_f32).
+    var f = admit_family(y, 1, "y", context, False, finite=True, refusal=_DEV636_Y).array
     return Python.tuple(f, classes, Python.tuple(classes[0], classes[1]))
 
 
@@ -784,7 +809,7 @@ def _platt(fields: PythonObject, binding: PythonObject, x_meta: ArrayMetadata, c
                 var support = svc_prefix(solved[2], n_sv, Python.tuple(PythonObject(n_sv)), "<i4", context)
                 _ = sub_c  # keep the Python object alive through the native call above
                 _ = lab  # keep the Python object alive through the native call above
-                _machine(fields, binding, q, dual, sv, n_sv, svc_round_f32(svc_read_f64(solved[4], 0)), 0.0, 1.0, False,
+                _ = _machine(fields, binding, q, dual, sv, n_sv, svc_round_f32(svc_read_f64(solved[4], 0)), 0.0, 1.0, False,
                          support, _addr(dec_perm) + 4 * begin, context, settings, native, h, nt if precomputed else x_cols, _addr(q),
                          PythonObject(None), 0, 0, PythonObject(None))
                 _ = sub_c  # keep the Python object alive through the native call above
@@ -979,8 +1004,8 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var binding = args[0]
     var fields = py_fields(model)
     _svm_validate(model, fields, True, context)
-    var x_meta = svc_snapshot(args[1], 2, "X", True, context)
-    py_setitem(fields, PythonObject("input_copied_"), PythonObject(x_meta.copied))
+    var x_meta = admit_family_meta(args[1], 2, "X", context, True)
+    py_setitem(fields, PythonObject("input_copied_"), PythonObject(admit_family_copied(x_meta, args[1])))
     var x = x_meta.keep
     var y = args[2]
     var parsed = _as_labels(y, context)
@@ -1035,8 +1060,11 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
         var n = Int(py=wide.size)
         var codes = family_array(Python.tuple(PythonObject(n)), "<i4", context)
         if n > 0:
-            _ = family_call(svc_base("cast_elements", context), classical_address(wide), PythonObject(3),
-                            classical_address(codes), PythonObject(2), PythonObject(n))
+            # The 0 / 1 codes narrowed int64 -> int32 by the typed parallel
+            # conversion (core/admitted_convert.mojo), not a py_call into the
+            # base binding.
+            _ = admitted_convert_vector(Int(py=classical_address(wide)), "<i8", Int(py=classical_address(codes)),
+                                        "<i4", n)
             _ = wide  # keep the Python object alive through the native call above
             _ = codes  # keep the Python object alive through the native call above
         _ = wide^
@@ -1053,14 +1081,80 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
 # ---------------------------------------------------------------- SVC inference
 
 
-def _query(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> ArrayMetadata:
+struct _SvmQuery(Movable):
+    """The admitted query X of a kernel SVM's decision (lane a7a): host
+    float32 C-order words (`keep` owns them, `address` the first word), or a
+    cross-validation fold the resident entry gathers on the device
+    (`store.active()`, `address` 0). No host pass tests X: the entry tests
+    the words it uploads or gathers and returns the status words."""
+    var keep: PythonObject
+    var owner: PythonObject
+    var address: Int
+    var rows: Int
+    var cols: Int
+    var store: DoorRowsStore
+
+    def __init__(out self, keep: PythonObject, owner: PythonObject, address: Int, rows: Int, cols: Int,
+                 store: DoorRowsStore):
+        self.keep = keep
+        self.owner = owner
+        self.address = address
+        self.rows = rows
+        self.cols = cols
+        self.store = store
+
+
+def _svm_query(source: PythonObject, est: String, context: PythonObject, entry_tests: Bool) raises -> _SvmQuery:
+    """The query X. `entry_tests` (the resident entry runs a computed
+    kernel on support rows, and returns the finite word of the words it
+    uploads or gathers): a model-selection fold stays on the device
+    (admit_x `device_x`: no host gather, no download), and a host X takes
+    no host finite pass (a borrowed float32 C-order X is read in place).
+    Otherwise (the host column, the host-list route of an empty machine or
+    kernel='precomputed', the descriptor route) the admission tests X, one
+    parallel pass or the cast's own verdict, so every route refuses in the
+    one wording 'Input X contains NaN or infinity (<est>).'"""
+    if entry_tests and door_is_device_rows(source, context):
+        var x = admit_x_unrecorded(source, est, context, device_x=True, finite=False)
+        return _SvmQuery(x.array, x.source, x.address, x.rows, x.cols, x.store)
+    var q = admit_family_meta(source, 2, "X", context, True, finite=not entry_tests,
+                              refusal="Input X contains NaN or infinity (" + est + ").")
+    return _SvmQuery(q.keep, q.owner, q.source.addr, q.shape[0], q.shape[1], DoorRowsStore.none())
+
+
+def _svm_query_refuse(words: PythonObject, q: _SvmQuery, est: String) raises:
+    """The refusal of a query the resident entry flagged (its [finite,
+    range] words; None: another route, which tests the query itself), in
+    scikit-learn's wording 'Input X contains NaN or infinity (<est>).'"""
+    if words is None:
+        return
+    if q.store.active():
+        door_rows_refuse(Int(py=words[0]), Int(py=words[1]), est, q.store.base_rows)
+    else:
+        admitted_finite_refuse(Int(py=words[0]), est)
+
+
+def _svm_device_ok(resident_entry: PythonObject, kernel: Int, n_supports: List[Int]) raises -> Bool:
+    """The resident entry runs (and tests the query of) every machine: a
+    computed kernel (precomputed reads the cross-kernel's columns on the
+    host) and support rows in every machine (an empty machine takes the
+    host-list route). Then a fold may stay on the device."""
+    if resident_entry is None or kernel == 4 or len(n_supports) == 0:
+        return False
+    for n in n_supports:  # small-loop(one word per fitted machine)
+        if n <= 0:
+            return False
+    return True
+
+
+def _query(fields: PythonObject, source: PythonObject, context: PythonObject, entry_tests: Bool) raises -> _SvmQuery:
     """`SVC._query`."""
     if not svc_has(fields, "dual_coef_"):
         raise Error("mojolearn SVC: call fit() first")
-    var q = svc_snapshot(source, 2, "X", True, context)
+    var q = _svm_query(source, "SVC", context, entry_tests)
     var d = svc_int(svc_field(fields, "n_features_in_"))
-    if q.shape[1] != d:
-        raise Error("mojolearn SVC: X has " + String(q.shape[1]) + " features, fit saw " + String(d))
+    if q.cols != d:
+        raise Error("mojolearn SVC: X has " + String(q.cols) + " features, fit saw " + String(d))
     return q^
 
 
@@ -1075,31 +1169,32 @@ def _resident_entry(binding: PythonObject, native: PythonObject) raises -> Pytho
 def _run(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject, predict_class: Bool,
          context: PythonObject, native: PythonObject) raises -> PythonObject:
     """`SVC._run`: the binary machine's (n,) float32 decisions or labels."""
-    var q_meta = _query(fields, source, context)
-    var q = q_meta.keep
-    var shape = q_meta.shape.copy()
-    var n_rows = shape[0]
-    var query_cols = shape[1]
     var settings = _svc_predict_settings(fields, context)
+    var resident_entry = _resident_entry(binding, native)
+    var n_support = svc_int(svc_field(fields, "n_support_")) if svc_has(fields, "dual_coef_") else 0
+    var q_meta = _query(fields, source, context, _svm_device_ok(resident_entry, settings.kernel, [n_support]))
+    var q = q_meta.keep
+    var n_rows = q_meta.rows
+    var query_cols = q_meta.cols
     var out = family_array(Python.tuple(PythonObject(n_rows)), "<f4", context)
     var dual = svc_field(fields, "dual_coef_")
     var sv = svc_field(fields, "support_vectors_")
-    var resident_entry = _resident_entry(binding, native)
     var lease = 0
     if resident_entry is not None and settings.kernel != 4:
         # The support rows and duals cross to the device once per fitted
         # state (bindings/fitted_resident_door.mojo; precomputed reads none).
         lease = fitted_resident_lease(model, _SVC_RESIDENT_SLOT, binding, "svm_resident_lease", Python.list(dual, sv))
-    _machine(fields, binding, q, dual, sv,
-             svc_int(svc_field(fields, "n_support_")), svc_read_f32(svc_field(fields, "intercept_"), 0),
+    var words = _machine(fields, binding, q, dual, sv,
+             n_support, svc_read_f32(svc_field(fields, "intercept_"), 0),
              svc_float(svc_field(fields, "_label0")), svc_float(svc_field(fields, "_label1")), predict_class,
-             svc_field(fields, "support_"), _addr(out), context, settings, native, n_rows, query_cols, q_meta.source.addr,
-             PythonObject(None), lease, 0, resident_entry)
+             svc_field(fields, "support_"), _addr(out), context, settings, native, n_rows, query_cols, q_meta.address,
+             PythonObject(None), lease, 0, resident_entry, q_meta.store)
     _ = dual
     _ = sv
     _ = out  # keep the Python object alive through the native call above
+    _svm_query_refuse(words, q_meta, "SVC")
     _ = q^
-    _ = q_meta  # retain captured storage owners through the last native use
+    _ = q_meta^  # retain captured storage owners through the last native use
     # The dispatch diagnostic is published once, by svc_kernel_operation,
     # after the operation (it published it twice per predict).
     return out
@@ -1109,19 +1204,21 @@ def _pair_decisions(model: PythonObject, fields: PythonObject, binding: PythonOb
                     context: PythonObject, native: PythonObject) raises -> PythonObject:
     """`SVC._pair_decisions`: each pair machine's raw decision, pair-major,
     in ONE float32 (n_pairs, n) Array."""
-    var q_meta = _query(fields, source, context)
-    var q = q_meta.keep
     var pairs = svc_field(fields, "_pairs")
-    var shape = q_meta.shape.copy()
-    var n_rows = shape[0]
-    var query_cols = shape[1]
     var settings = _svc_predict_settings(fields, context)
+    var resident_entry = _resident_entry(binding, native) if len(pairs) > 0 else PythonObject(None)
+    var pair_supports = List[Int]()
+    for pno in range(len(pairs)):  # driver-loop: over the class pairs (one support count each)
+        pair_supports.append(Int(py=pairs[pno]["dual"].shape[1]))
+    var q_meta = _query(fields, source, context, _svm_device_ok(resident_entry, settings.kernel, pair_supports))
+    var q = q_meta.keep
+    var n_rows = q_meta.rows
+    var query_cols = q_meta.cols
     var dec = family_array(Python.tuple(PythonObject(len(pairs)), PythonObject(n_rows)), "<f4", context)
     var base = _addr(dec)
     _ = dec  # keep the Python object alive through the native call above
     # One entry lookup per call, not one per pair machine (lane perf-sweep-msel-nbr-svc).
     var predict_entry = PythonObject(None)
-    var resident_entry = _resident_entry(binding, native) if len(pairs) > 0 else PythonObject(None)
     if native is None and len(pairs) > 0 and resident_entry is None:
         predict_entry = _entry(binding, "svc_predict", context)
     var lease = 0
@@ -1136,12 +1233,14 @@ def _pair_decisions(model: PythonObject, fields: PythonObject, binding: PythonOb
     for pno in range(len(pairs)):  # driver-loop: over the class pairs (one machine each)
         var p = pairs[pno]
         var dual = p["dual"]
-        _machine(fields, binding, q, dual, p["sv"], Int(py=dual.shape[1]), svc_float(p["b"]), 0.0, 1.0, False,
-                 p["support"], base + 4 * n_rows * pno, context, settings, native, n_rows, query_cols, q_meta.source.addr,
-                 predict_entry, lease, pno, resident_entry)
+        # A fold is gathered again per machine (one device gather each).
+        var words = _machine(fields, binding, q, dual, p["sv"], Int(py=dual.shape[1]), svc_float(p["b"]), 0.0, 1.0, False,
+                 p["support"], base + 4 * n_rows * pno, context, settings, native, n_rows, query_cols, q_meta.address,
+                 predict_entry, lease, pno, resident_entry, q_meta.store)
         _ = dec  # keep the Python object alive through the native call above
+        _svm_query_refuse(words, q_meta, "SVC")
     _ = q^
-    _ = q_meta  # retain captured storage owners through the last native use
+    _ = q_meta^  # retain captured storage owners through the last native use
     # The dispatch diagnostic is published once, by svc_kernel_operation.
     return dec
 
@@ -1296,8 +1395,8 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var binding = args[0]
     var fields = py_fields(model)
     _svm_validate(model, fields, False, context)
-    var x_meta = svc_snapshot(args[1], 2, "X", True, context)
-    py_setitem(fields, PythonObject("input_copied_"), PythonObject(x_meta.copied))
+    var x_meta = admit_family_meta(args[1], 2, "X", context, True)
+    py_setitem(fields, PythonObject("input_copied_"), PythonObject(admit_family_copied(x_meta, args[1])))
     var x = x_meta.keep
     var n_rows = x_meta.shape[0]
     var n_cols = x_meta.shape[1]
@@ -1305,7 +1404,7 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var shape = svc_shape_of(args[2], context)
     if len(shape) != 1:
         raise Error("mojolearn SVR: y must be 1-D, got " + String(len(shape)) + "-D shape " + family_repr(shape))
-    var targets = svc_f32(args[2], 1, "y", False, context)[0]
+    var targets = admit_family(args[2], 1, "y", context, False).array
     if Int(py=targets.shape[0]) != n_rows:
         raise Error("mojolearn SVR: y has " + String(Int(py=targets.shape[0])) + " entries, X has " + String(n_rows) + " rows")
     if String(svc_field(fields, "_hp_kernel")) == "precomputed" and n_cols != n_rows:
@@ -1384,24 +1483,28 @@ def _svr_predict(model: PythonObject, fields: PythonObject, binding: PythonObjec
     """`SVR.predict`."""
     if not svc_has(fields, "dual_coef_"):
         raise Error("mojolearn SVR: call fit() first")
-    var q_meta = svc_snapshot(source, 2, "X", True, context)
+    var resident_entry = neural_descriptor_entry(binding, "svr_predict_resident", False) if native is None else PythonObject(None)
+    var n_support = svc_int(svc_field(fields, "n_support_"))
+    var precomputed = String(svc_field(fields, "_hp_kernel")) == "precomputed"
+    var q_meta = _svm_query(source, "SVR", context,
+                            _svm_device_ok(resident_entry, 4 if precomputed else 0, [n_support]))
     var q = q_meta.keep
     var d = svc_int(svc_field(fields, "n_features_in_"))
-    if q_meta.shape[1] != d:
-        raise Error("mojolearn SVR: X has " + String(q_meta.shape[1]) + " features, fit saw " + String(d))
-    var n_rows = q_meta.shape[0]
+    if q_meta.cols != d:
+        raise Error("mojolearn SVR: X has " + String(q_meta.cols) + " features, fit saw " + String(d))
+    var n_rows = q_meta.rows
     var out = family_array(Python.tuple(PythonObject(n_rows)), "<f4", context)
     var dual = svc_field(fields, "dual_coef_")
     var sv = svc_field(fields, "support_vectors_")
-    var n_support = svc_int(svc_field(fields, "n_support_"))
     var n_features = d
     var query = q
-    var query_address = q_meta.source.addr
+    var query_address = q_meta.address
     var held = PythonObject(None)
-    if String(svc_field(fields, "_hp_kernel")) == "precomputed" and n_support > 0:
+    var words = PythonObject(None)
+    if precomputed and n_support > 0:
         # the cross-kernel's columns at the support vectors (SVC's rule)
         held = _i32_array(svc_field(fields, "support_"), context)
-        query = _gather(binding, q_meta.source.addr, n_rows, q_meta.shape[1], 0, n_rows, _addr(held), Int(py=held.shape[0]), context, native)
+        query = _gather(binding, q_meta.address, n_rows, q_meta.cols, 0, n_rows, _addr(held), Int(py=held.shape[0]), context, native)
         _ = held  # keep the Python object alive through the native call above
         _ = q  # keep the Python object alive through the native call above
         query_address = _addr(query)
@@ -1414,7 +1517,6 @@ def _svr_predict(model: PythonObject, fields: PythonObject, binding: PythonObjec
                              PythonObject(_kernel_code(fields, context)), svc_field(fields, "_gamma"),
                              svc_field(fields, "_hp_cache_size"))
     _kernel_tail(fields, params)
-    var resident_entry = neural_descriptor_entry(binding, "svr_predict_resident", False) if native is None else PythonObject(None)
     if resident_entry is not None:
         # Device-resident support rows and duals (lane ne1-a-gp-svm;
         # bindings/fitted_resident_door.mojo). ORDER MATCHES
@@ -1431,7 +1533,12 @@ def _svr_predict(model: PythonObject, fields: PythonObject, binding: PythonObjec
                                           Python.list(dual, sv))
         _ = py_call(params.append, PythonObject(lease))
         _ = py_call(params.append, PythonObject(0))
-        _ = family_call(resident_entry, PythonObject(query_address),
+        if q_meta.store.active():
+            # then the fold's store ids (no query address; lane a7a)
+            _ = py_call(params.append, PythonObject(q_meta.store.base_id))
+            _ = py_call(params.append, PythonObject(q_meta.store.base_rows))
+            _ = py_call(params.append, PythonObject(q_meta.store.index_id))
+        words = family_call(resident_entry, PythonObject(query_address),
                         classical_address(dual) if n_support > 0 else PythonObject(0),
                         classical_address(sv) if n_support > 0 else PythonObject(0),
                         classical_address(out), params)
@@ -1444,10 +1551,11 @@ def _svr_predict(model: PythonObject, fields: PythonObject, binding: PythonObjec
     _ = dual  # keep the Python object alive through the native call above
     _ = sv  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
+    _svm_query_refuse(words, q_meta, "SVR")
     _ = query^
     _ = held^
     _ = q^
-    _ = q_meta  # retain captured storage owners through the last native use
+    _ = q_meta^  # retain captured storage owners through the last native use
     return out
 
 

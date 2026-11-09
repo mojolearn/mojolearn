@@ -1,0 +1,92 @@
+diff --git b/bindings/classical_arrays.mojo a/bindings/classical_arrays.mojo
+index 36caefe22c..e9fa88a9a7 100644
+--- b/bindings/classical_arrays.mojo
++++ a/bindings/classical_arrays.mojo
+@@ -17,7 +17,7 @@ from std.python import Python, PythonObject
+ from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
+ from bindings.py_balanced import py_call, py_type, py_get, py_setattr
+ from core.cast_in import cast_in_kind, NPY_HALF, NPY_FLOAT, NPY_DOUBLE
+-from core.classical_arrays_impl import classical_cast_rows
++from core.classical_arrays_impl import classical_cast_rows, classical_check_weights
+ from bindings.classical_warnings import classical_warn_column
+ from bindings.sequential_admission import sequential_admit_value, _ordinary_torch
+ from bindings.sequential_arrays import sequential_array, sequential_address
+@@ -334,5 +334,21 @@ def classical_word(value: PythonObject, index: Int = 0) raises -> Float64:
+     return Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)[index])
+ 
+ 
+-# TOMBSTONE: classical_host_weights (orphan function: no caller) deleted 2026-11-08 by 7b2e1d1d83; code recoverable at 41ffcec665.
+-# Restore: git apply experiments/removed/dead_entries_orphan_functions.patch
++def classical_host_weights(source: PythonObject, rows: Int, context: PythonObject) raises -> PythonObject:
++    if source is None:
++        return PythonObject(None)
++    classical_admit_value(source, context)
++    var prepared = native_pandas_f32(source, context) if native_pandas_exact(source) else source
++    var raw = classical_input(prepared, context, "sample_weight")
++    var scalar = Int(py=raw.ndim) == 0
++    var value = classical_host_f32(source, 0 if scalar else 1, "sample_weight", context)
++    if not scalar and Int(py=value.size) != rows:
++        raise Error("sample_weight length differs from X")
++    var out = classical_array(rows, 0, context) if scalar else value
++    var input = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value)))
++    var output = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))
++    var any_positive = classical_check_weights(input, output, rows, scalar)
++    if not any_positive:
++        raise Error("Sample weights must contain at least one non-zero number.")
++    _ = value^
++    return out
+diff --git b/providers/python/pca_model_pyapi.mojo a/providers/python/pca_model_pyapi.mojo
+index 80e53d8033..a089faab08 100644
+--- b/providers/python/pca_model_pyapi.mojo
++++ a/providers/python/pca_model_pyapi.mojo
+@@ -46,8 +46,8 @@ def _native_number(value: PythonObject, context: PythonObject, truth: Bool,
+     return decoded.to_python_number(kind == "i" or kind == "u" or kind == "b")
+ 
+ 
+-# TOMBSTONE: pca_query_fields (orphan function: no caller; the owners call _pca_query_fields_from) deleted 2026-11-08 by 7b2e1d1d83; code recoverable at 41ffcec665.
+-# Restore: git apply experiments/removed/dead_entries_orphan_functions.patch
++def pca_query_fields(model: PythonObject, context: PythonObject, operation: String = "transform") raises -> PythonObject:
++    return _pca_query_fields_from(classical_family_admit(model), context, operation)
+ 
+ 
+ def _pca_query_fields_from(state: PythonObject, context: PythonObject, operation: String) raises -> PythonObject:
+diff --git b/providers/python/prep_metadata_pyapi.mojo a/providers/python/prep_metadata_pyapi.mojo
+index 980d9e6568..fc85e9e761 100644
+--- b/providers/python/prep_metadata_pyapi.mojo
++++ a/providers/python/prep_metadata_pyapi.mojo
+@@ -6,12 +6,33 @@ from bindings.py_balanced import py_call, py_type, py_get
+ from bindings.classical_arrays import classical_address
+ from bindings.classical_pandas import classical_admit_value, _pd_class, _pd_fields, _pd_get
+ from bindings.sequential_admission import sequential_admit_value
++from bindings.sequence_dtype_native import sequence_dtype_classes, sequence_dtype_create
+ from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+ from core.cast_in import CastIn, cast_in_kind
+ 
+ 
+-# TOMBSTONE: prep_check_info, prep_scalar_dtype (orphan functions: no caller) deleted 2026-11-08 by 7b2e1d1d83; code recoverable at 41ffcec665.
+-# Restore: git apply experiments/removed/dead_entries_orphan_functions.patch
++def prep_check_info(number: Int) -> Bool:
++    # Numeric PEP3118 buffers and native ndarray types whose buffer export
++    # fails but whose exact shape remains visible to describe() as a frame.
++    # Datetime/timedelta do not export PEP3118; object/string/record buffers do.
++    return (number >= 0 and number <= 13) or number == 23 or number == 21 or number == 22 or number == 2056 or number == -103
++
++
++def prep_scalar_dtype(value: PythonObject, context: PythonObject) raises -> PythonObject:
++    if py_get(context, "ndarray") is None:
++        return PythonObject(None)
++    var cls = py_type(value)
++    var classes = sequence_dtype_classes(context)
++    for i in range(len(classes)):  # small-loop(native scalar ABI class identities)
++        if cls is classes[i][1]:
++            return value.dtype
++    # NumPy's long/longlong aliases need not share their scalar class even
++    # when both occupy eight bytes. Resolve through the verified dtype owner.
++    for code in ["q", "Q"]:  # small-loop(native integer aliases)
++        var dtype = sequence_dtype_create(PythonObject(code), context)
++        if cls is dtype.type:
++            return value.dtype
++    return PythonObject(None)
+ 
+ 
+ def _array_snapshot(value: PythonObject, context: PythonObject) raises -> ArrayMetadata:

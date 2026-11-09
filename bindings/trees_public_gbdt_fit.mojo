@@ -28,10 +28,15 @@ from bindings.host_archive_native import host_archive_gbdt_state
 from bindings.classical_arrays import classical_wrap_array
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.trees_public_inputs import (
-    TreesMatrix, TreesLabels, TreesView, trees_builtins, trees_entry, trees_need, trees_helper, trees_vector, trees_address,
-    trees_f32, trees_f32_view, trees_view, trees_check_rank, trees_forest_layout, trees_all_finite,
-    trees_check_sample_weight, trees_call, trees_encode_labels,
+    TreesLabels, trees_builtins, trees_entry, trees_need, trees_helper, trees_address,
+    trees_forest_x, trees_finite_f32, trees_call, trees_encode_labels,
 )
+from bindings.admitted_input import (
+    AdmittedX, admit_f32, admit_weight_words, admitted_vector, admitted_array, classical_view, admitted_dtype,
+)
+from bindings.classical_arrays import classical_address, classical_c_order
+# TOMBSTONE: TreesView / trees_view / trees_check_rank / trees_f32 / trees_f32_view / trees_forest_layout / trees_all_finite / trees_check_sample_weight / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.trees_public_gbdt import gbdt_table, gbdt_vendor, gbdt_has_ctr, _field, _int, _repr, ordered_option_values
 from bindings.trees_boost_constructor_native import tree_constructor_storage
 from checks.numerics import portable_exp64, portable_log64, pinned_mul_f64
@@ -348,8 +353,8 @@ def _codes(addr: Int, n: Int, context: PythonObject) raises -> PythonObject:
     top)`: the number of distinct values, whether they are exactly
     0..k-1, and the largest; None where `finite_integer_codes` answers None
     (a value that is not a finite nonnegative integer)."""
-    var classes = trees_vector(n, "<f8", context)
-    var codes = trees_vector(n, "<i4", context)
+    var classes = admitted_vector(n, "<f8", context)
+    var codes = admitted_vector(n, "<i4", context)
     var k = 0
     try:
         k = Int(py=py_call_typed(trees_helper(context, "prepare_targets"), PythonObject(addr), PythonObject(0),
@@ -459,16 +464,18 @@ def _group_sizes_native(group_id: PythonObject, n_rows: Int, context: PythonObje
     var ndarray = py_get(context, "ndarray")
     if not ((ndarray is not None and cls is ndarray) or cls is context["array_class"]):
         return PythonObject(None)
-    var view: TreesView
+    var view = PythonObject(None)
+    var t = String("")
     try:
-        view = trees_view(group_id, "group_id", context)
+        view = classical_view(group_id, context, "group_id")
+        t = admitted_dtype(view, context)
     except:
         return PythonObject(None)
-    var t = view.typestr
-    if view.ndim() != 1 or not view.c_order() or not (t == "<i8" or t == "<i4" or t == "<u4" or t == "<i2"
+    if Int(py=view.ndim) != 1 or not classical_c_order(view, context) or not (t == "<i8" or t == "<i4" or t == "<u4" or t == "<i2"
             or t == "<u2" or t == "|i1" or t == "<i1" or t == "|u1" or t == "<u1"):
         return PythonObject(None)
-    var n = view.size()
+    var n = Int(py=view.size)
+    var view_address = Int(py=classical_address(view))
     if n != n_rows:
         raise Error("mojolearn: Length of group_id=" + String(n) + " and length of "
                     + "data=" + String(n_rows) + " are different.")
@@ -479,7 +486,7 @@ def _group_sizes_native(group_id: PythonObject, n_rows: Int, context: PythonObje
     var last = 0
     var code = _id_code(t)
     for i in range(n):  # cpu-route: group_id run lengths read natively from the id buffer (fit input step)
-        var value = _id_word_coded(view.addr, code, i)
+        var value = _id_word_coded(view_address, code, i)
         if i > 0 and value == last:
             sizes[len(sizes) - 1] += 1
             continue
@@ -490,8 +497,8 @@ def _group_sizes_native(group_id: PythonObject, n_rows: Int, context: PythonObje
         seen[value] = i
         sizes.append(1)
         last = value
-    _ = view.keep  # keep the id buffer alive through the reads above
-    var out = trees_vector(len(sizes), "<u4", context)
+    _ = view  # keep the id buffer alive through the reads above
+    var out = admitted_vector(len(sizes), "<u4", context)
     var p = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(out))
     for i in range(len(sizes)):  # cpu-route: group_id run lengths published from the label input step
         p[i] = UInt32(sizes[i])
@@ -556,7 +563,7 @@ def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) rai
         _ = py_call(seen.add, key)
         sizes.append(1)
         last = key
-    var out = trees_vector(len(sizes), "<u4", context)
+    var out = admitted_vector(len(sizes), "<u4", context)
     var p = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(out))
     _ = out  # keep the Python object alive through the native call above
     for i in range(len(sizes)):  # cpu-route: group_id run lengths published from the label input step
@@ -574,7 +581,7 @@ def _pairs_arrays(pairs: PythonObject, pairs_weight: PythonObject, n_rows: Int,
     var m = len(rows)
     if m == 0:
         raise Error("mojolearn: pairs is empty")
-    var flat = trees_vector(2 * m, "<u4", context)
+    var flat = admitted_vector(2 * m, "<u4", context)
     var fp = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(flat))
     _ = flat  # keep the Python object alive through the native call above
     # Builtins and the connected types read once, each index converted once
@@ -606,7 +613,7 @@ def _pairs_arrays(pairs: PythonObject, pairs_weight: PythonObject, n_rows: Int,
         _ = flat  # keep the Python object alive through the native call above
         fp[2 * i + 1] = UInt32(w1)
         _ = flat  # keep the Python object alive through the native call above
-    var weights = trees_vector(m, "<f4", context)
+    var weights = admitted_vector(m, "<f4", context)
     var wp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=trees_address(weights))
     _ = weights  # keep the Python object alive through the native call above
     if pairs_weight is None:
@@ -644,7 +651,7 @@ def _flags(fields: PythonObject, model: PythonObject, n_features: Int, context: 
     var hot = _field(fields, model, "one_hot_features")
     if not _truthy(cat) and not _truthy(hot):
         return PythonObject(None)
-    var out = trees_vector(n_features, "<u4", context)
+    var out = admitted_vector(n_features, "<u4", context)
     var p = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(out))
     _ = out  # keep the Python object alive through the native call above
     var lists = Python.tuple(cat, hot)
@@ -688,37 +695,37 @@ def _eval_set(eval_set: PythonObject, fields: PythonObject, model: PythonObject,
         raise Error("mojolearn: eval_set must be (X_eval, y_eval)")
     if len(items) != 2:
         raise Error("mojolearn: eval_set must be (X_eval, y_eval)")
-    var xe = trees_f32(items[0], 2, "F", "eval_set X", context)
+    var xe = admit_f32(items[0], 2, "eval_set X", context, order="F", finite=False)
     if xe.cols != n_features:
         raise Error("mojolearn: eval_set X has " + String(xe.cols) + " features "
                     + "for a fit on " + String(n_features))
     if xe.rows == 0:
         raise Error("mojolearn: eval_set X has no rows")
-    var ye = trees_f32(items[1], 1, "C", "eval_set y", context)
+    var ye = admit_f32(items[1], 1, "eval_set y", context, finite=False)
     if ye.rows != xe.rows:
         raise Error("mojolearn: eval_set y has " + String(ye.rows) + " values for "
                     + String(xe.rows) + " rows")
-    if not trees_all_finite(ye.addr, ye.rows, False, context):
+    if not trees_finite_f32(ye.address, ye.rows):
         var multi = _in(_field(fields, model, "loss"), _tables(context)["multi_output_losses"])
         raise Error("mojolearn: " + ("eval_set y (the eval_set labels)" if multi else "eval_set y")
                     + " must be finite (no NaN or infinity)")
     _ = ye  # keep the Python object alive through the native calls above
-    var _keep_ret_xe = Python.tuple(xe.keep, PythonObject(xe.addr), ye.keep, PythonObject(ye.addr), PythonObject(xe.rows))
+    var _keep_ret_xe = Python.tuple(xe.array, PythonObject(xe.address), ye.array, PythonObject(ye.address), PythonObject(xe.rows))
     _ = ye  # keep the Python object alive through the native call above
     _ = xe  # keep the Python object alive through the native call above
     _ = xe  # keep the Python object alive through the native call above
     return _keep_ret_xe^
 
 
-def _has_nan(x: TreesMatrix, context: PythonObject) raises -> Bool:
+def _has_nan(x: AdmittedX, context: PythonObject) raises -> Bool:
     """Whether a float32 X holds a NaN (an infinity is not one): the label
     encoder refuses a NaN by name and accepts an infinity. Reached only when
     the finite scan already failed."""
     var n = x.rows * x.cols
-    var classes = trees_vector(n, "<f8", context)
-    var codes = trees_vector(n, "<i4", context)
+    var classes = admitted_vector(n, "<f8", context)
+    var codes = admitted_vector(n, "<i4", context)
     try:
-        _ = py_call_typed(trees_helper(context, "prepare_targets"), PythonObject(x.addr), PythonObject(0), PythonObject(n),
+        _ = py_call_typed(trees_helper(context, "prepare_targets"), PythonObject(x.address), PythonObject(0), PythonObject(n),
                           PythonObject(trees_address(classes)), PythonObject(trees_address(codes)),
                           PythonObject(0), PythonObject(0), PythonObject(0))
         _ = codes  # keep the Python object alive through the native call above
@@ -806,23 +813,23 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
             row_major_ok = Int(py=py_call_typed(b.int, py_call_typed(probe))) != 0
         except:
             row_major_ok = False
-    var x: TreesMatrix
+    var x: AdmittedX
     if not _truthy(cat) and not _truthy(hot) and row_major_ok:
-        x = trees_forest_layout(X, "X", context)
+        x = trees_forest_x(X, "X", context)
     else:
         # 0.8.66 regression C3 (gbdt-rank-pairlogit fit 1.24x): this fit
         # reads only x's address during the call and drops x at its end, so
         # a converted (transposed) X goes into an uninitialized store.
-        x = trees_f32(X, 2, "F", "X", context, True)
+        x = admit_f32(X, 2, "X", context, order="F", finite=False)
     var n_rows = x.rows
     var n_features = x.cols
     if n_rows == 0 or n_features == 0:
         raise Error("mojolearn: fit requires at least one row and one feature")
     var loss = _field(fields, model, "loss")
     var target_dim = 1
-    var ya: TreesMatrix
+    var ya: AdmittedX
     if _in(loss, t["multi_regression_losses"]):
-        ya = trees_f32(y, 2, "F", "y", context)
+        ya = admit_f32(y, 2, "y", context, order="F", finite=False)
         target_dim = ya.cols
         if target_dim < 2:
             raise Error("mojolearn: " + _str(loss) + " needs y of shape (n_samples, "
@@ -847,16 +854,16 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                         + "per-dimension (optimal_const_for_loss.h:230-239) and "
                         + "this model's bias is one value (DEVIATION 5951)")
     else:
-        ya = trees_f32(y, 1, "C", "y", context)
+        ya = admit_f32(y, 1, "y", context, finite=False)
     if ya.rows != n_rows:
         raise Error("mojolearn: y has " + String(ya.rows) + " values for " + String(n_rows) + " rows")
     var multi_output = _in(loss, t["multi_output_losses"])
-    if not trees_all_finite(ya.addr, ya.rows * ya.cols, False, context):
+    if not trees_finite_f32(ya.address, ya.rows * ya.cols):
         # scikit-learn's wording, as the former fit and the other families
         # raise it (bindings/classical_validate.mojo).
         raise Error("Input y contains NaN or infinity" + (" (the class labels)" if multi_output else "")
                     + " (GradientBoosting).")
-    if _eq(_field(fields, model, "nan_mode"), "Forbidden") and not trees_all_finite(x.addr, n_rows * n_features, False, context):
+    if _eq(_field(fields, model, "nan_mode"), "Forbidden") and not trees_finite_f32(x.address, n_rows * n_features):
         if _has_nan(x, context):
             raise Error("mojolearn: nan_mode='Forbidden' but X contains NaN. "
                         + "CatBoost refuses this pair; this implementation would otherwise "
@@ -864,7 +871,7 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                         + "nan_mode='Min' or 'Max', or clean the column.")
     var n_classes = 0
     if multi_output:
-        var found = _codes(ya.addr, n_rows, context)
+        var found = _codes(ya.address, n_rows, context)
         if found is None:
             raise Error("mojolearn: " + _str(loss) + " labels must be finite "
                         + "nonnegative integer class codes")
@@ -880,13 +887,13 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                         + "for " + _str(loss))
     var flags = _flags(fields, model, n_features, context)
     var n_flags = 0 if flags is None else n_features
-    var flags_holder = flags if flags is not None else trees_vector(1, "<u4", context)
-    var w_addr = x.addr
+    var flags_holder = flags if flags is not None else admitted_vector(1, "<u4", context)
+    var w_addr = x.address
     var n_weights = 0
-    var weights: Optional[TreesMatrix] = None
+    var weights: Optional[AdmittedX] = None
     if sample_weight is not None:
-        weights = trees_check_sample_weight(sample_weight, n_rows, context)
-        w_addr = weights.value().addr
+        weights = admit_weight_words(sample_weight, n_rows, context)
+        w_addr = weights.value().address
         n_weights = n_rows
     var held = _eval_set(eval_set, fields, model, n_features, context)
     var n_eval_rows = 0 if held is None else Int(py=held[4])
@@ -975,11 +982,11 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         _ = py_call(strs.append, PythonObject(String(bitcast[DType.uint64](fold_len))))
         _ = py_call(strs.append, PythonObject(String(0 if fold_block is None else Int(py=py_call_typed(b.int, fold_block)))))
     py_setitem(fields, "boosting_type_", PythonObject(boosting))
-    var ex_addr = x.addr if held is None else Int(py=held[1])
-    var ey_addr = ya.addr if held is None else Int(py=held[3])
-    var name = String("gbdt_fit_rowmajor") if x.row_major else String("gbdt_fit")
+    var ex_addr = x.address if held is None else Int(py=held[1])
+    var ey_addr = ya.address if held is None else Int(py=held[3])
+    var name = String("gbdt_fit_rowmajor") if x.c_order else String("gbdt_fit")
     var entry = trees_need(table, name, "mojolearn: this gbdt binding has no " + name, "AttributeError")
-    var call = Python.list(PythonObject(x.addr), PythonObject(ya.addr), PythonObject(w_addr),
+    var call = Python.list(PythonObject(x.address), PythonObject(ya.address), PythonObject(w_addr),
                            PythonObject(trees_address(flags_holder)), PythonObject(ex_addr), PythonObject(ey_addr),
                            params, strs)
     _ = flags_holder  # keep the Python object alive through the native call above
@@ -1524,7 +1531,7 @@ def _label_kind(labels: TreesLabels, values: PythonObject, name: String, context
 
 def _codes_f32(labels: TreesLabels, context: PythonObject) raises -> PythonObject:
     """The class codes as float32 (`_label_map(...).astype('<f4')`)."""
-    var out = trees_vector(labels.n, "<f4", context)
+    var out = admitted_vector(labels.n, "<f4", context)
     _ = py_call_typed(trees_helper(context, "cast_elements"), PythonObject(trees_address(labels.codes)), PythonObject(2),
                       PythonObject(trees_address(out)), PythonObject(0), PythonObject(labels.n))
     _ = out  # keep the Python object alive through the native call above
@@ -1609,7 +1616,7 @@ def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: Pyt
         var eval_kind = _label_kind(eval_labels, pair[1], "eval_set y", context)
         if not Bool(py=eval_kind[0] == kind[0]):
             raise Error("eval_set contains labels outside the training vocabulary")
-        var table = trees_vector(len(eval_kind[1]), "<i4", context)
+        var table = admitted_vector(len(eval_kind[1]), "<i4", context)
         var tp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(table))
         _ = table  # keep the Python object alive through the native call above
         for i in range(len(eval_kind[1])):  # driver-loop: over the eval set's distinct labels
@@ -1621,13 +1628,13 @@ def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: Pyt
                 raise Error("eval_set contains labels outside the training vocabulary")
             tp[i] = Int32(at)
             _ = table  # keep the Python object alive through the native call above
-        var mapped = trees_vector(eval_labels.n, "<i4", context)
+        var mapped = admitted_vector(eval_labels.n, "<i4", context)
         _ = py_call_typed(trees_helper(context, "gather_i32"), PythonObject(trees_address(table)),
                           PythonObject(len(eval_kind[1])), PythonObject(trees_address(eval_labels.codes)),
                           PythonObject(eval_labels.n), PythonObject(trees_address(mapped)))
         _ = table  # keep the Python object alive through the native call above
         _ = mapped  # keep the Python object alive through the native call above
-        var eval_y = trees_vector(eval_labels.n, "<f4", context)
+        var eval_y = admitted_vector(eval_labels.n, "<f4", context)
         _ = py_call_typed(trees_helper(context, "cast_elements"), PythonObject(trees_address(mapped)), PythonObject(2),
                           PythonObject(trees_address(eval_y)), PythonObject(0), PythonObject(eval_labels.n))
         _ = mapped  # keep the Python object alive through the native call above
@@ -1640,14 +1647,14 @@ def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: Pyt
     return model
 
 
-def _regression_target(source: PythonObject, name: String, context: PythonObject) raises -> TreesMatrix:
+def _regression_target(source: PythonObject, name: String, context: PythonObject) raises -> AdmittedX:
     """`as_f32_c(y, ndim=None)` and `_regression_target`'s checks."""
-    var view = trees_view(source, name, context)
-    trees_check_rank(view, -1, name)
-    if view.ndim() != 1 or view.size() == 0:
+    var view = classical_view(source, context, name)
+    if Int(py=view.ndim) != 1 or Int(py=view.size) == 0:
         raise Error(name + " must be nonempty one-dimensional targets")
-    var target = trees_f32_view(view^, "C", context)
-    if not trees_all_finite(target.addr, target.rows, False, context):
+    var target = admit_f32(view, 1, name, context, finite=False, admitted=True)
+    _ = view^
+    if not trees_finite_f32(target.address, target.rows):
         raise Error(name + " must be finite")
     _ = target  # keep the Python object alive through the native calls above
     return target^
@@ -1660,7 +1667,7 @@ def adapter_regressor_fit(model: PythonObject, args: PythonObject, context: Pyth
     _clear_fit(fields, context)
     var target = _regression_target(args[1], "y", context)
     var eval_set = args[3]
-    var eval_target: Optional[TreesMatrix] = None
+    var eval_target: Optional[AdmittedX] = None
     if eval_set is not None:
         var pair = _adapter_eval(eval_set)
         eval_target = _regression_target(pair[1], "eval_set y", context)
@@ -1668,7 +1675,7 @@ def adapter_regressor_fit(model: PythonObject, args: PythonObject, context: Pyth
     return _fit_native(model, learner, args[0], _as_array(target, context), args[2], eval_set, context)
 
 
-def _as_array(m: TreesMatrix, context: PythonObject) raises -> PythonObject:
+def _as_array(m: AdmittedX, context: PythonObject) raises -> PythonObject:
     """A float32 vector as the Array the learner's fit reads (the checked
     copy itself, or the caller's own Array/buffer owner)."""
-    return m.keep
+    return m.array

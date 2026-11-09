@@ -70,7 +70,10 @@ from x_neighbors.device_ops import (
     p2m_sign_label_kernel,
 )
 from x_neighbors.items import K_RBF, U_IDENTITY
-from x_neighbors.lp_spmm import lp_ell_fill_kernel, lp_nonfinite_kernel, lp_prod_kernel, lp_rowcount_kernel
+from x_neighbors.lp_spmm import lp_ell_fill_kernel, lp_ell_spmm_enqueue, lp_rowcount_kernel
+from autograd.program_loop import LoopTimers
+from autograd.program_loop_device import LoopRegisters, LoopStep, bounded_device_loop, loop_criterion_below, loop_lap
+from core.step_gate import STEP_DONE, STEP_ITER, STEP_STOP_ITER, step_gate_open_word
 from core.device_zero import enqueue_fill
 from core.pinned_reduce import pinned_block_sum
 from core.scratch_pool import take_host_i32, give_host_i32
@@ -117,26 +120,24 @@ def xn_tree_fold_kernel(part: FP, res: FP, nb_: Int64):
         res.unsafe_store(0, sh[0])
 
 
-def _c33_stop(sum: FP, state: IP, threshold: Float32, iteration: Int32):
-    # First convergence wins, including which ping-pong buffer owns it.
-    if state[0] == 0 and sum[0] < threshold:
-        state[0] = 1
-        state[1] = iteration
-        state[2] = iteration % 2
-
-
-def _c33_product(state: IP, graph: FP, cur: FP, nxt: FP, n: Int32, c: Int32, degree: FP, raw_graph: Int32, variant: Int32):
+# TOMBSTONE: MOJOLEARN_C33_FROZEN_CHUNKS in op_lp_iterate (REFACTORED: the frozen-chunk body is the only path, on autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+# Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
+def lp_dense_product_gated(gate: IP, graph: FP, cur: FP, nxt: FP, n: Int32, c: Int32, degree: FP, raw_graph: Int32, variant: Int32):
+    """The dense graph product (`matmul_item`, or the raw affinity's
+    `classical_graph_product`) while the bounded loop runs (gate[0] == 0)."""
     var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if state[0] == 0 and t < Int(n)*Int(c):
+    if gate[0] == 0 and t < Int(n)*Int(c):
         if raw_graph != 0:
             classical_graph_product(t,graph,degree,cur,nxt,Int(n),Int(c),Int(variant))
         else:
             matmul_item(t,graph,cur,nxt,Int(n),Int(n),Int(c))
 
 
-def _c33_clamp(state: IP, nxt: FP, ys: FP, unl: IP, output: FP, n: Int32, c: Int32, variant: Int32, alpha: Float32):
+def lp_clamp_gated(gate: IP, nxt: FP, ys: FP, unl: IP, output: FP, n: Int32, c: Int32, variant: Int32, alpha: Float32):
+    """`lp_clamp_item` per row (variant 0) or `ls_clamp_item` per cell while
+    the bounded loop runs."""
     var t = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
-    if state[0] != 0:
+    if gate[0] != 0:
         return
     if variant == 0:
         if t < Int(n):
@@ -151,10 +152,107 @@ def _c43_graph_degree(a: FP,degree: FP,n: Int32,variant: Int32):
         classical_graph_degree(t,a,degree,Int(n),Int(variant))
 
 
-def _c43_graph_product(a: FP,degree: FP,x: FP,dst: FP,n: Int32,c: Int32,variant: Int32):
-    var t=_tid()
-    if t < Int(n)*Int(c):
-        classical_graph_product(t,a,degree,x,dst,Int(n),Int(c),Int(variant))
+# The step keeps its device addresses untracked (a struct field cannot expose
+# AnyOrigin); enqueue_step hands the kernels MutAnyOrigin views of them.
+comptime _LpF = MutPointer[Float32, MutUntrackedOrigin]
+comptime _LpI = MutPointer[Int32, MutUntrackedOrigin]
+
+
+struct _LpDenseStep(LoopStep, Movable):
+    """One iteration of `_LabelPropagationBase.fit` over the dense (or raw
+    affinity) graph as a step of the bounded device loop: the stopping sum
+    (`absdiff_sum`'s blocked fold) and its criterion first, then the gated
+    product (the ELL SpMM op over G's nonzeros when sparse) and the gated
+    clamp into the buffer the old prev held. The ping-pong pair is chosen by
+    the iteration's parity, so a stop at iteration `it` leaves the last
+    distributions in a when (it - 1) is even."""
+    var graph: _LpF
+    var degree: _LpF
+    var a: _LpF
+    var b: _LpF
+    var nxt: _LpF
+    var ys: _LpF
+    var unl: _LpI
+    var part: _LpF
+    var cnt: _LpI
+    var cols: _LpI
+    var vals: _LpF
+    var s: DeviceBuffer[DType.float32]
+    var flag: DeviceBuffer[DType.int32]
+    var n: Int
+    var c: Int
+    var maxk: Int
+    var raw_graph: Bool
+    var use_sparse: Bool
+    var variant: Int
+    var alpha: Float32
+    var threshold: Float32
+
+    def __init__(
+        out self, graph: FP, degree: FP, a: FP, b: FP, nxt: FP, ys: FP, unl: IP, part: FP, cnt: IP, cols: IP,
+        vals: FP, s: DeviceBuffer[DType.float32], flag: DeviceBuffer[DType.int32], n: Int, c: Int, maxk: Int,
+        raw_graph: Bool, use_sparse: Bool, variant: Int, alpha: Float32, threshold: Float32,
+    ):
+        self.graph = graph.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.degree = degree.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.a = a.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.b = b.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.nxt = nxt.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.ys = ys.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.unl = unl.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.part = part.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.cnt = cnt.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.cols = cols.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.vals = vals.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.s = s.copy()
+        self.flag = flag.copy()
+        self.n = n
+        self.c = c
+        self.maxk = maxk
+        self.raw_graph = raw_graph
+        self.use_sparse = use_sparse
+        self.variant = variant
+        self.alpha = alpha
+        self.threshold = threshold
+
+    def enqueue_step(
+        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
+    ) raises:
+        var nc = self.n * self.c
+        var graph: FP = self.graph.unsafe_origin_cast[MutAnyOrigin]()
+        var degree: FP = self.degree.unsafe_origin_cast[MutAnyOrigin]()
+        var a: FP = self.a.unsafe_origin_cast[MutAnyOrigin]()
+        var b: FP = self.b.unsafe_origin_cast[MutAnyOrigin]()
+        var nxt: FP = self.nxt.unsafe_origin_cast[MutAnyOrigin]()
+        var ys: FP = self.ys.unsafe_origin_cast[MutAnyOrigin]()
+        var part: FP = self.part.unsafe_origin_cast[MutAnyOrigin]()
+        var vals: FP = self.vals.unsafe_origin_cast[MutAnyOrigin]()
+        var unl: IP = self.unl.unsafe_origin_cast[MutAnyOrigin]()
+        var cnt: IP = self.cnt.unsafe_origin_cast[MutAnyOrigin]()
+        var cols: IP = self.cols.unsafe_origin_cast[MutAnyOrigin]()
+        var even = (it - 1) % 2 == 0
+        var cur = a if even else b
+        var prev = b if even else a
+        var sp: FP = self.s.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        _absdiff_launch(ctx, cur, prev, sp, part, nc)
+        loop_criterion_below(ctx, registers, self.s, self.threshold, it)
+        loop_lap(ctx, timers, "stopping_sum")
+        var gate: IP = registers.words.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        if self.use_sparse:
+            lp_ell_spmm_enqueue(ctx, gate, self.flag, cnt, cols, vals, self.maxk, graph, cur, nxt, self.n, self.c, BLOCK)
+        else:
+            ctx.enqueue_function[lp_dense_product_gated](
+                gate, graph, cur, nxt, Int32(self.n), Int32(self.c), degree,
+                Int32(1 if self.raw_graph else 0), Int32(self.variant), grid_dim=_grid(nc), block_dim=BLOCK,
+            )
+        loop_lap(ctx, timers, "product")
+        # prev = ld; ld = clamp(nxt): the clamp writes over the buffer the old
+        # prev held; the next iteration's parity swaps the two names.
+        ctx.enqueue_function[lp_clamp_gated](
+            gate, nxt, ys, unl, prev, Int32(self.n), Int32(self.c), Int32(self.variant), self.alpha,
+            grid_dim=_grid(nc), block_dim=BLOCK,
+        )
+        loop_lap(ctx, timers, "clamp")
 
 
 def op_lp_iterate(
@@ -167,14 +265,16 @@ def op_lp_iterate(
     the initial label distributions, out: the last. info (int32 x 2): the
     fit's n_iter_ and converged.
 
-    Everything on the device (lane/cgr-kernel): the stopping sum is the
-    blocked `absdiff_sum` fold (`absdiff_sum_item`'s bits) with only the
-    scalar read back; G's nonzeros are found on the device, once, and the
-    product runs over them while the distributions are finite
-    (`lp_prod_kernel`, the dense product's bits). Before, the host scanned
-    G for its CSR and downloaded the distributions every iteration for the
-    stopping sum and the finiteness test (and `-D MOJOLEARN_XN_LP_BATCH`,
-    `_DENSE` and `_DEVICE_FOLD` chose other routes; they are gone)."""
+    Everything on the device: the stopping sum is the blocked `absdiff_sum`
+    fold (`absdiff_sum_item`'s bits), compared against the float32 ceiling of
+    tol on the device (the same decision as Python's float64 compare of the
+    float32 sum); G's nonzeros are found on the device, once, and the product
+    runs over them while the distributions are finite (the ELL SpMM op, the
+    dense product's bits). Lane n4-mds-labelprop-nmf-loops (2026-11-09): the
+    iterations run as the executor's bounded device loop, one register read
+    per LPK_BATCH iterations; before, the default path read the stopping sum
+    home every iteration and the frozen-chunk body
+    (`-D MOJOLEARN_C33_FROZEN_CHUNKS`) was a second, dense-only copy."""
     var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
     var raw_graph = C43_RESIDENT_NORMALIZATION and variant >= 2
     var clamp_variant = variant % 2
@@ -192,12 +292,6 @@ def op_lp_iterate(
     var d_unl = _buf_i(ctx, unlabeled, n, True)
     var d_s = _buf(ctx, 0, 1, False)
     var d_part = ctx.enqueue_create_buffer[DType.float32](max(xn_fold_blocks(nc), 1))
-    var hs = List[Float32](length=1, fill=Float32(0))
-    var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var prev: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var cur_is_a = True
-    var n_iter = 0
-    var converged = False
     # G's nonzeros per row (sparse only when it pays: under an eighth
     # nonzero), counted and laid out on the device; two integers come back
     var d_cnt = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
@@ -223,77 +317,29 @@ def op_lp_iterate(
             d_g.unsafe_ptr(), Int64(n), Int64(maxk), d_cols.unsafe_ptr(), d_vals.unsafe_ptr(),
             grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
         )
-    comptime if C33_FROZEN_CHUNKS:
-        # Upward Float32 threshold gives exactly Float64(sum) < tol.
-        var threshold = Float32(tol)
-        if Float64(threshold) < tol:
-            threshold = bitcast[DType.float32](bitcast[DType.uint32](threshold) + UInt32(1))
-        var state = ctx.enqueue_create_buffer[DType.int32](3)
-        ctx.enqueue_memset(state,Int32(0))
-        var status = List[Int32](length=3,fill=Int32(0))
-        for chunk in range(0,max_iter,C33_CHUNK):
-            for it in range(chunk,min(chunk+C33_CHUNK,max_iter)):
-                n_iter = it
-                _absdiff_launch(ctx,cur,prev,_p(d_s),_p(d_part),nc)
-                ctx.enqueue_function[_c33_stop](_p(d_s),state.unsafe_ptr(),threshold,Int32(it),grid_dim=1,block_dim=1)
-                ctx.enqueue_function[_c33_product](state.unsafe_ptr(),_p(d_g),cur,_p(d_nxt),Int32(n),Int32(c),_p(d_degree),Int32(raw_graph),Int32(clamp_variant),grid_dim=_grid(nc),block_dim=BLOCK)
-                ctx.enqueue_function[_c33_clamp](state.unsafe_ptr(),_p(d_nxt),_p(d_ys),d_unl.unsafe_ptr(),prev,Int32(n),Int32(c),Int32(clamp_variant),alpha,grid_dim=_grid(nc),block_dim=BLOCK)
-                var tmp = cur
-                cur = prev
-                prev = tmp
-                cur_is_a = not cur_is_a
-            ctx.enqueue_copy(dst_ptr=status.unsafe_ptr(),src_buf=state)
-            ctx.synchronize()
-            if status[0] != 0:
-                converged = True
-                n_iter = Int(status[1])
-                cur_is_a = status[2] == 0
-                break
-        _ = state^
+    var step = _LpDenseStep(
+        _p(d_g), _p(d_degree), _p(d_a), _p(d_b), _p(d_nxt), _p(d_ys),
+        d_unl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        d_cnt.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_cols.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        d_vals.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_s, d_flag, n, c, maxk, raw_graph, use_sparse,
+        clamp_variant, alpha, _lpki_tol_ceil(tol),
+    )
+    var registers = LoopRegisters(ctx)
+    var timers = LoopTimers("label_propagation.dense")
+    var outcome = bounded_device_loop(ctx, step, registers, 1, max_iter, LPK_BATCH, timers)
+    timers.report()
+    var converged = outcome.converged
+    var n_iter: Int
+    var cur_is_a: Bool
+    if converged:
+        # the stop at 1-based iteration s: s - 1 steps taken, the current
+        # distributions where the parity left them
+        n_iter = outcome.stop_iteration - 1
+        cur_is_a = n_iter % 2 == 0
     else:
-        for it in range(max_iter):
-            n_iter = it
-            _absdiff_launch(ctx, cur, prev, _p(d_s), _p(d_part), nc)
-            ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_s)
-            ctx.synchronize()
-            if Float64(hs[0]) < tol:
-                converged = True
-                break
-            if raw_graph:
-                ctx.enqueue_function[_c43_graph_product](_p(d_g),_p(d_degree),cur,_p(d_nxt),Int32(n),Int32(c),Int32(clamp_variant),grid_dim=_grid(nc),block_dim=BLOCK)
-            elif use_sparse:
-                ctx.enqueue_memset(d_flag, Int32(0))
-                ctx.enqueue_function[lp_nonfinite_kernel](
-                    cur, Int64(nc), d_flag.unsafe_ptr(), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-                )
-                ctx.enqueue_function[lp_prod_kernel](
-                    d_flag.unsafe_ptr(), d_cnt.unsafe_ptr(), d_cols.unsafe_ptr(), d_vals.unsafe_ptr(), Int64(maxk),
-                    d_g.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), Int64(n), Int64(c),
-                    grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-                )
-            else:
-                ctx.enqueue_function[matmul_kernel](
-                    d_g.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), Int64(n), Int64(n), Int64(c),
-                    grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-                )
-            # prev = ld; ld = clamp(nxt): the clamp writes over the buffer the
-            # old prev held, then the two names swap.
-            if clamp_variant == 0:
-                ctx.enqueue_function[lp_clamp_kernel](
-                    d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), d_unl.unsafe_ptr(), prev, Int64(n), Int64(c),
-                    grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
-                )
-            else:
-                ctx.enqueue_function[ls_clamp_kernel](
-                    d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), prev, Int64(nc), alpha,
-                    grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-                )
-            var t = cur
-            cur = prev
-            prev = t
-            cur_is_a = not cur_is_a
-    if not converged:
-        n_iter += 1
+        # every step ran (n_iter_ = max_iter; the loop over nothing reports 1)
+        n_iter = max_iter if max_iter > 0 else 1
+        cur_is_a = max_iter <= 0 or max_iter % 2 == 0
     if cur_is_a:
         _down(ctx, d_a, ld, nc)
     else:
@@ -302,7 +348,7 @@ def op_lp_iterate(
     var inf = IP(unsafe_from_address=info)
     inf.unsafe_store(0, Int32(n_iter))
     inf.unsafe_store(1, Int32(1 if converged else 0))
-    _ = hs^
+    _ = step^
     _ = hst^
     _ = d_cnt^
     _ = d_stats^
@@ -2767,19 +2813,22 @@ def op_lp_knn_product(cols: Int, vals: Int, x: Int, res: Int, n: Int, m: Int, k:
         var dr_i = _buf(ctx_i, 0, n * c, False)
         var d_fl = ctx_i.enqueue_create_buffer[DType.int32](4)
         ctx_i.enqueue_memset(d_fl, Int32(0))
+        # called outside a loop: the kernels' gate is one open (zeroed) word
+        var d_gate = step_gate_open_word(ctx_i)
         if m * c > 0:
             ctx_i.enqueue_function[lpki_nonfinite_kernel](
-                dx_i.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m * c),
+                dx_i.unsafe_ptr(), d_gate.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m * c),
                 grid_dim=_grid(m * c), block_dim=(BLOCK if m * c > 1 else 1),
             )
         if n * c > 0:
             ctx_i.enqueue_function[lpki_product_kernel](
-                dc_i.unsafe_ptr(), dv_i.unsafe_ptr(), dx_i.unsafe_ptr(), dr_i.unsafe_ptr(), d_fl.unsafe_ptr(),
-                Int64(n), Int64(m), Int64(k), Int64(c),
+                dc_i.unsafe_ptr(), dv_i.unsafe_ptr(), dx_i.unsafe_ptr(), dr_i.unsafe_ptr(), d_gate.unsafe_ptr(),
+                d_fl.unsafe_ptr(), Int64(n), Int64(m), Int64(k), Int64(c),
                 grid_dim=_grid(n * c), block_dim=(BLOCK if n * c > 1 else 1),
             )
         _down(ctx_i, dr_i, res, n * c)
         ctx_i.synchronize()
+        _ = d_gate^
         _ = dc_i^
         _ = dv_i^
         _ = dx_i^
@@ -3165,7 +3214,7 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
 
 # ---------------------------------------------------------------- lp_iterate_knn
 #: LP_FAST_RESIDENT (lane/apple-fast-neighbors2, 2026-10-02; FAST + Apple
-#: default, `-D MOJOLEARN_LP_FAST_RESIDENT_OFF` off): LabelPropagation /
+#: default; every vendor and tier since 2026-11-09): LabelPropagation /
 #: LabelSpreading's fit loop over the compact kNN graph as ONE resident op.
 #: Cause: with kernel='knn' `_LabelPropagationBase.fit`
 #: (python/mojolearn/_expansion_neighbors.py) runs the loop in Python, three
@@ -3185,48 +3234,48 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
 comptime LPK_TPB = 256
 comptime LPK_BATCH = C33_CHUNK if C33_FROZEN_CHUNKS else 16
 comptime LPK_FAST_BUILD = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
-#: LP_FAST_RESIDENT: the default on FAST + Apple since the M3 A/B
-#: (n2-lp-res-taxi: label-propagation taxi 6,793 -> 2,086 ms, -69%, accuracy
-#: .7016 same). `-D MOJOLEARN_LP_FAST_RESIDENT_OFF` keeps the Python loop;
-#: the old `MOJOLEARN_LP_FAST_RESIDENT` env name is harmless (no longer
-#: read). The Python layer asks `x_neighbors_lp_fast_resident()`.
-comptime LP_FAST_RESIDENT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_LP_FAST_RESIDENT_OFF"]()
-)
-
-
-#: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor, default ON:
-#: the same loop resident in IDENTICAL. The Python loop paid three binding
-#: calls per iteration (absdiff_sum, lp_knn_product, lp_clamp / ls_clamp:
-#: the distributions up and down three times, a host finiteness walk over
-#: them, `lp_knn_finite`, and a scalar readback every iteration). Here the
-#: graph goes up once and every launch is the op's own item:
+#: The resident loop is the only kNN-graph path on every vendor and tier
+#: (lane n4-mds-labelprop-nmf-loops, 2026-11-09). It was the measured
+#: default: FAST + Apple since the M3 A/B n2-lp-res-taxi (label-propagation
+#: taxi 6,793 -> 2,086 ms, -69%, accuracy .7016 same), IDENTICAL on every
+#: vendor since lane/fam2-neighbors (2026-10-04, no bit change). The
+#: rollbacks `-D MOJOLEARN_LP_FAST_RESIDENT_OFF` and
+#: `-D MOJOLEARN_IDN_LP_RESIDENT_OFF` (and IDN_ALL_OFF's arm here) kept the
+#: binding's per-iteration loop alive, which allocated n x C per iteration;
+#: both are refused now (core/experiment_guards_cluster.mojo).
+# TOMBSTONE: MOJOLEARN_LP_FAST_RESIDENT_OFF (rollback of a measured winner) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+# Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_LP_RESIDENT_OFF (rollback of a measured default) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+# Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
+#: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor: the loop
+#: resident in IDENTICAL, every launch the op's own item:
 #: `absdiff_part_item` + `absdiff_fin_item` (the `absdiff_sum` op's bits),
 #: the stopping test against the float32 ceiling of tol (the same decision
 #: as Python's float64 compare of a float32 sum), the finiteness scan on the
 #: device, `lp_knn_product_item`, `lp_clamp_item` / `ls_clamp_item`. The
 #: stop flag gates the later launches of the batch; LPK_BATCH iterations per
-#: drain. No bit changes: the host column keeps the Python loop over the
-#: same items. -D MOJOLEARN_IDN_LP_RESIDENT_OFF (or MOJOLEARN_IDN_ALL_OFF)
-#: restores the Python loop.
-comptime LP_IDN_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_LP_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: drain. The host column runs the same items (x_neighbors/iter_host.mojo).
+comptime LP_IDN_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
-def lp_fast_resident() -> Int:
-    """1 when this binary takes the resident kNN-graph loop by default
-    (LP_FAST_RESIDENT on FAST + Apple, LP_IDN_RESIDENT on IDENTICAL)."""
-    comptime if LP_FAST_RESIDENT or LP_IDN_RESIDENT:
-        return 1
-    return 0
+# TOMBSTONE: x_neighbors_lp_fast_resident (dead export: always 1, the resident kNN-graph loop is the only path) deleted 2026-11-09 by lane/n3b-sgd-on-program-fit; code recoverable at 5b5490960d.
+# Restore: git apply -3 experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch
 
 
-def lpki_absdiff_part_kernel(a: FP, b: FP, part: FP, flag: IP, count_: Int64):
-    """`absdiff_part_item` per fold block; nothing once the flag is set."""
-    if flag.unsafe_load(0) != 0:
+# Lane n3b-sgd-on-program-fit (2026-11-09): both kNN-graph loops (IDENTICAL's item
+# loop and FAST's block-sum loop) run as the executor's bounded device loop
+# (autograd/program_loop_device.mojo), as the dense loop above does: every
+# kernel takes the loop's register block as its gate (word 0, the done word),
+# the stopping test is the criterion (it sets the stopping iteration and the
+# done word), and `bounded_device_loop` reads the block once per LPK_BATCH
+# iterations. The hand chunk loops and their own flag / step-count words are
+# gone: the steps taken are the loop's outcome (the stop at iteration s took
+# s - 1 steps). Same kernels, same order: no bit moves.
+# TOMBSTONE: lp-knn-hand-chunk-loops (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-09 by lane/n3b-sgd-on-program-fit; code recoverable at 5b5490960d.
+# Restore: git apply -3 experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch; record in docs/TOMBSTONES.md.
+def lpki_absdiff_part_kernel(a: FP, b: FP, part: FP, gate: IP, count_: Int64):
+    """`absdiff_part_item` per fold block; nothing once the loop is done."""
+    if gate.unsafe_load(STEP_DONE) != 0:
         return
     var count = Int(count_)
     var t = _tid()
@@ -3234,43 +3283,46 @@ def lpki_absdiff_part_kernel(a: FP, b: FP, part: FP, flag: IP, count_: Int64):
         absdiff_part_item(t, a, b, part, part, count)
 
 
-def lpki_check_kernel(a: FP, b: FP, sres: FP, part: FP, flag: IP, count_: Int64, tol_: Float32):
-    """ONE item: `absdiff_fin_item`, then the stopping test. Below tol the
-    stop flag (flag[0]) is set (the loop stops before this step), else the
-    step is counted (flag[1]) and the finiteness flag (flag[2]) is cleared
-    for this step's scan."""
-    if flag.unsafe_load(0) != 0:
+def lpki_check_kernel(a: FP, b: FP, sres: FP, part: FP, gate: IP, fin: IP, count_: Int64, tol_: Float32, it: Int32):
+    """ONE item, the loop's criterion: `absdiff_fin_item`, then the stopping
+    test. Below tol the loop stops at iteration `it` (before this step: the
+    stopping iteration and the done word), else the finiteness flag
+    (fin[0]) is cleared for this step's scan."""
+    if gate.unsafe_load(STEP_DONE) != 0:
         return
     var t = _tid()
     if t < 1:
         absdiff_fin_item(t, a, b, sres, part, Int(count_))
+        gate.unsafe_store(STEP_ITER, it)
         if sres.unsafe_load(0) < tol_:
-            flag.unsafe_store(0, Int32(1))
+            gate.unsafe_store(STEP_STOP_ITER, it)
+            gate.unsafe_store(STEP_DONE, Int32(1))
         else:
-            flag.unsafe_store(1, flag.unsafe_load(1) + Int32(1))
-            flag.unsafe_store(2, Int32(0))
+            fin.unsafe_store(0, Int32(0))
 
 
-def lpki_nonfinite_kernel(x: FP, flag: IP, count_: Int64):
-    """flag[2] = 1 when any x is Inf or NaN (`lp_knn_finite`'s test, every
-    element its own thread); nothing once the stop flag is set."""
-    if flag.unsafe_load(0) != 0:
+def lpki_nonfinite_kernel(x: FP, gate: IP, fin: IP, count_: Int64):
+    """fin[0] = 1 when any x is Inf or NaN (`lp_knn_finite`'s test, every
+    element its own thread); nothing once the loop is done."""
+    if gate.unsafe_load(STEP_DONE) != 0:
         return
     var t = _tid()
     if t < Int(count_):
         var bits = bitcast[DType.uint32](x.unsafe_load(t)) & UInt32(0x7F800000)
         if bits == UInt32(0x7F800000):
-            flag.unsafe_store(2, Int32(1))
+            fin.unsafe_store(0, Int32(1))
 
 
-def lpki_product_kernel(cols: IP, vals: FP, x: FP, res: FP, flag: IP, n_: Int64, m_: Int64, k_: Int64, c_: Int64):
+def lpki_product_kernel(
+    cols: IP, vals: FP, x: FP, res: FP, gate: IP, fin: IP, n_: Int64, m_: Int64, k_: Int64, c_: Int64,
+):
     """`lp_knn_product_item` with the device's finiteness flag; nothing once
-    the stop flag is set."""
-    if flag.unsafe_load(0) != 0:
+    the loop is done."""
+    if gate.unsafe_load(STEP_DONE) != 0:
         return
     var t = _tid()
     if t < Int(n_) * Int(c_):
-        lp_knn_product_item(t, cols, vals, x, res, Int(n_), Int(m_), Int(k_), Int(c_), flag.unsafe_load(2) == 0)
+        lp_knn_product_item(t, cols, vals, x, res, Int(n_), Int(m_), Int(k_), Int(c_), fin.unsafe_load(0) == 0)
 
 
 def _lpki_tol_ceil(tol: Float64) -> Float32:
@@ -3284,96 +3336,9 @@ def _lpki_tol_ceil(tol: Float64) -> Float32:
     return t32
 
 
-def _op_lp_iterate_knn_idn(
-    cols: Int, vals: Int, ld: Int, ystatic: Int, unlabeled: Int, info: Int,
-    n: Int, k: Int, c: Int, max_iter: Int, variant: Int, tol: Float64, alpha: Float32,
-) raises:
-    """LP_IDN_RESIDENT: `_LabelPropagationBase.fit`'s Python loop over the
-    compact kNN graph, resident, every launch the op's own item."""
-    var nc = n * c
-    var nfb = xn_fold_blocks(nc)
-    var ctx = xn_ctx()
-    var d_cols = _buf_i(ctx, cols, n * k, True)
-    var d_vals = _buf(ctx, vals, n * k, True)
-    var d_a = _buf(ctx, ld, nc, True)
-    var d_b = _buf(ctx, 0, nc, False)
-    ctx.enqueue_memset(d_b, Float32(0))
-    var d_nxt = _buf(ctx, 0, nc, False)
-    var d_ys = _buf(ctx, ystatic, nc, True)
-    var d_unl = _buf_i(ctx, unlabeled, n, True)
-    var d_s = _buf(ctx, 0, 1, False)
-    var d_part = _buf(ctx, 0, nfb, False)
-    var h_fl = List[Int32](length=4, fill=Int32(0))
-    var d_fl = _buf_i(ctx, Int(h_fl.unsafe_ptr()), 4, True)
-    var flp: IP = d_fl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var prev: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var tol32 = _lpki_tol_ceil(tol)
-    var done = 0
-    var converged = False
-    while done < max_iter and not converged and nc > 0:
-        var steps = min(LPK_BATCH, max_iter - done)
-        for _ in range(steps):
-            ctx.enqueue_function[lpki_absdiff_part_kernel](
-                cur, prev, d_part.unsafe_ptr(), flp, Int64(nc),
-                grid_dim=_grid(nfb), block_dim=(BLOCK if nfb > 1 else 1),
-            )
-            ctx.enqueue_function[lpki_check_kernel](
-                cur, prev, d_s.unsafe_ptr(), d_part.unsafe_ptr(), flp, Int64(nc), tol32,
-                grid_dim=1, block_dim=1,
-            )
-            ctx.enqueue_function[lpki_nonfinite_kernel](
-                cur, flp, Int64(nc), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-            )
-            ctx.enqueue_function[lpki_product_kernel](
-                d_cols.unsafe_ptr(), d_vals.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), flp,
-                Int64(n), Int64(n), Int64(k), Int64(c), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-            )
-            # prev = ld; ld = clamp(nxt): the clamp writes over the buffer
-            # the old prev held, then the two names swap (op_lp_iterate)
-            ctx.enqueue_function[lpk_clamp_kernel](
-                d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), d_unl.unsafe_ptr(), prev, flp,
-                Int64(n), Int64(c), Int64(variant), alpha,
-                grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-            )
-            var t = cur
-            cur = prev
-            prev = t
-        ctx.enqueue_copy(dst_ptr=h_fl.unsafe_ptr(), src_buf=d_fl)
-        ctx.synchronize()
-        converged = h_fl[0] != 0
-        done += steps
-    # steps taken: the loop's n_iter_ whether it converged (it) or ran out
-    var n_iter = Int(h_fl[1])
-    if nc == 0:
-        # the Python loop over nothing: the empty sum 0 against tol
-        converged = Float64(0) < tol
-        n_iter = 0 if (converged or max_iter <= 0) else max_iter
-    elif n_iter % 2 == 0:
-        _down(ctx, d_a, ld, nc)
-    else:
-        _down(ctx, d_b, ld, nc)
-    ctx.synchronize()
-    var inf = IP(unsafe_from_address=info)
-    inf.unsafe_store(0, Int32(n_iter))
-    inf.unsafe_store(1, Int32(1 if converged else 0))
-    _ = h_fl^
-    _ = d_fl^
-    _ = d_s^
-    _ = d_part^
-    _ = d_cols^
-    _ = d_vals^
-    _ = d_a^
-    _ = d_b^
-    _ = d_nxt^
-    _ = d_ys^
-    _ = d_unl^
-    _ = ctx^
-
-
-def lpk_absdiff_partial_kernel(a: FP, b: FP, part: FP, flag: IP, count_: Int64):
-    """Block partials of sum |a - b|; nothing once the flag is set."""
-    if flag.unsafe_load(0) != 0:
+def lpk_absdiff_partial_kernel(a: FP, b: FP, part: FP, gate: IP, count_: Int64):
+    """Block partials of sum |a - b|; nothing once the loop is done."""
+    if gate.unsafe_load(STEP_DONE) != 0:
         return
     var tid = Int(thread_idx.x)
     var i = Int(block_idx.x) * LPK_TPB + tid
@@ -3385,10 +3350,10 @@ def lpk_absdiff_partial_kernel(a: FP, b: FP, part: FP, flag: IP, count_: Int64):
         part.unsafe_store(Int(block_idx.x), s)
 
 
-def lpk_check_kernel(part: FP, nparts_: Int64, flag: IP, iters: IP, tol_: Float32):
-    """ONE block of LPK_TPB threads: the partials folded; below tol the flag
-    is set (the loop stops before this step), else the step is counted."""
-    if flag.unsafe_load(0) != 0:
+def lpk_check_kernel(part: FP, nparts_: Int64, gate: IP, tol_: Float32, it: Int32):
+    """ONE block of LPK_TPB threads, the loop's criterion: the partials
+    folded; below tol the loop stops at iteration `it` (before this step)."""
+    if gate.unsafe_load(STEP_DONE) != 0:
         return
     var tid = Int(thread_idx.x)
     var acc = Float32(0)
@@ -3398,15 +3363,15 @@ def lpk_check_kernel(part: FP, nparts_: Int64, flag: IP, iters: IP, tol_: Float3
         i += LPK_TPB
     var s = pinned_block_sum[LPK_TPB](acc)
     if tid == 0:
+        gate.unsafe_store(STEP_ITER, it)
         if s < tol_:
-            flag.unsafe_store(0, 1)
-        else:
-            iters.unsafe_store(0, iters.unsafe_load(0) + 1)
+            gate.unsafe_store(STEP_STOP_ITER, it)
+            gate.unsafe_store(STEP_DONE, Int32(1))
 
 
-def lpk_product_kernel(cols: IP, vals: FP, x: FP, res: FP, flag: IP, n_: Int64, k_: Int64, c_: Int64):
-    """`lp_knn_product_item` (finite x); nothing once the flag is set."""
-    if flag.unsafe_load(0) != 0:
+def lpk_product_kernel(cols: IP, vals: FP, x: FP, res: FP, gate: IP, n_: Int64, k_: Int64, c_: Int64):
+    """`lp_knn_product_item` (finite x); nothing once the loop is done."""
+    if gate.unsafe_load(STEP_DONE) != 0:
         return
     var t = _tid()
     if t < Int(n_) * Int(c_):
@@ -3414,11 +3379,11 @@ def lpk_product_kernel(cols: IP, vals: FP, x: FP, res: FP, flag: IP, n_: Int64, 
 
 
 def lpk_clamp_kernel(
-    ld: FP, ystatic: FP, unlabeled: IP, res: FP, flag: IP, n_: Int64, c_: Int64, variant_: Int64, alpha_: Float32,
+    ld: FP, ystatic: FP, unlabeled: IP, res: FP, gate: IP, n_: Int64, c_: Int64, variant_: Int64, alpha_: Float32,
 ):
     """variant 0 `lp_clamp_item` per row, 1 `ls_clamp_item` per cell;
-    nothing once the flag is set."""
-    if flag.unsafe_load(0) != 0:
+    nothing once the loop is done."""
+    if gate.unsafe_load(STEP_DONE) != 0:
         return
     var t = _tid()
     var n = Int(n_)
@@ -3431,95 +3396,160 @@ def lpk_clamp_kernel(
             ls_clamp_item(t, ld, ystatic, res, n * c, alpha_)
 
 
+@fieldwise_init
+struct _LpKnnStep(LoopStep, Movable):
+    """One iteration of `_LabelPropagationBase.fit` over the compact kNN
+    graph as a step of the bounded device loop: the stopping sum and its
+    criterion first (IDENTICAL: the `absdiff_sum` items, the finiteness
+    scan; FAST: the block sums), then the gated product and the gated clamp
+    into the buffer the old prev held. The ping-pong pair is chosen by the
+    iteration's parity (as `_LpDenseStep`)."""
+    var cols: _LpI
+    var vals: _LpF
+    var a: _LpF
+    var b: _LpF
+    var nxt: _LpF
+    var ys: _LpF
+    var unl: _LpI
+    var part: _LpF
+    var s: _LpF
+    var fin: _LpI
+    var n: Int
+    var k: Int
+    var c: Int
+    var variant: Int
+    var alpha: Float32
+    var tol32: Float32
+    var nparts: Int
+    var idn: Bool
+
+    def enqueue_step(
+        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
+    ) raises:
+        var nc = self.n * self.c
+        var vals: FP = self.vals.unsafe_origin_cast[MutAnyOrigin]()
+        var a: FP = self.a.unsafe_origin_cast[MutAnyOrigin]()
+        var b: FP = self.b.unsafe_origin_cast[MutAnyOrigin]()
+        var nxt: FP = self.nxt.unsafe_origin_cast[MutAnyOrigin]()
+        var ys: FP = self.ys.unsafe_origin_cast[MutAnyOrigin]()
+        var part: FP = self.part.unsafe_origin_cast[MutAnyOrigin]()
+        var s: FP = self.s.unsafe_origin_cast[MutAnyOrigin]()
+        var cols: IP = self.cols.unsafe_origin_cast[MutAnyOrigin]()
+        var unl: IP = self.unl.unsafe_origin_cast[MutAnyOrigin]()
+        var fin: IP = self.fin.unsafe_origin_cast[MutAnyOrigin]()
+        var even = (it - 1) % 2 == 0
+        var cur = a if even else b
+        var prev = b if even else a
+        var gate: IP = registers.words.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        if self.idn:
+            var nfb = xn_fold_blocks(nc)
+            ctx.enqueue_function[lpki_absdiff_part_kernel](
+                cur, prev, part, gate, Int64(nc), grid_dim=_grid(nfb), block_dim=(BLOCK if nfb > 1 else 1),
+            )
+            ctx.enqueue_function[lpki_check_kernel](  # small-launch(one item): the loop's stopping criterion
+                cur, prev, s, part, gate, fin, Int64(nc), self.tol32, Int32(it),
+                grid_dim=1, block_dim=1,
+            )
+            loop_lap(ctx, timers, "stopping_sum")
+            ctx.enqueue_function[lpki_nonfinite_kernel](
+                cur, gate, fin, Int64(nc), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+            )
+            ctx.enqueue_function[lpki_product_kernel](
+                cols, vals, cur, nxt, gate, fin,
+                Int64(self.n), Int64(self.n), Int64(self.k), Int64(self.c),
+                grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+            )
+        else:
+            ctx.enqueue_function[lpk_absdiff_partial_kernel](
+                cur, prev, part, gate, Int64(nc), grid_dim=self.nparts, block_dim=LPK_TPB,
+            )
+            ctx.enqueue_function[lpk_check_kernel](
+                part, Int64(self.nparts), gate, self.tol32, Int32(it), grid_dim=1, block_dim=LPK_TPB,
+            )
+            loop_lap(ctx, timers, "stopping_sum")
+            ctx.enqueue_function[lpk_product_kernel](
+                cols, vals, cur, nxt, gate, Int64(self.n), Int64(self.k), Int64(self.c),
+                grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+            )
+        loop_lap(ctx, timers, "product")
+        # prev = ld; ld = clamp(nxt): the clamp writes over the buffer the old
+        # prev held; the next iteration's parity swaps the two names
+        ctx.enqueue_function[lpk_clamp_kernel](
+            nxt, ys, unl, prev, gate, Int64(self.n), Int64(self.c), Int64(self.variant), self.alpha,
+            grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+        )
+        loop_lap(ctx, timers, "clamp")
+
+
 def op_lp_iterate_knn(
     cols: Int, vals: Int, ld: Int, ystatic: Int, unlabeled: Int, info: Int,
     n: Int, k: Int, c: Int, max_iter: Int, variant: Int, tol_hi: Int, tol_lo: Int, alpha: Float32,
 ) raises:
     """The Python loop of `_LabelPropagationBase.fit` over the compact kNN
-    graph, resident (see LPK_TPB above). `ld` in: the initial distributions,
-    out: the last. info (int32 x 2): n_iter_, converged. tol is Python's
-    float64 bits."""
-    comptime if not LPK_FAST_BUILD:
-        comptime if LP_IDN_RESIDENT:
-            _op_lp_iterate_knn_idn(
-                cols, vals, ld, ystatic, unlabeled, info, n, k, c, max_iter, variant,
-                bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo)), alpha,
-            )
-        else:
-            raise Error("lp_iterate_knn: the FAST tier only (LP_FAST_RESIDENT), or IDENTICAL without MOJOLEARN_IDN_LP_RESIDENT_OFF")
+    graph, resident (see LPK_TPB above), as the bounded device loop over
+    `_LpKnnStep`. `ld` in: the initial distributions, out: the last. info
+    (int32 x 2): n_iter_, converged. tol is Python's float64 bits.
+    IDENTICAL (LP_IDN_RESIDENT): every launch the op's own item, tol against
+    its float32 ceiling; FAST: the block sums, tol in float32."""
+    var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
+    var idn = not LPK_FAST_BUILD
+    var nc = n * c
+    var ctx = xn_ctx()
+    var d_cols = _buf_i(ctx, cols, n * k, True)
+    var d_vals = _buf(ctx, vals, n * k, True)
+    var d_a = _buf(ctx, ld, nc, True)
+    var d_b = _buf(ctx, 0, nc, False)
+    ctx.enqueue_memset(d_b, Float32(0))
+    var d_nxt = _buf(ctx, 0, nc, False)
+    var d_ys = _buf(ctx, ystatic, nc, True)
+    var d_unl = _buf_i(ctx, unlabeled, n, True)
+    var d_s = _buf(ctx, 0, 1, False)
+    var nparts = max(1, (nc + LPK_TPB - 1) // LPK_TPB)
+    var d_part = _buf(ctx, 0, max(xn_fold_blocks(nc), 1) if idn else nparts, False)
+    # IDENTICAL's finiteness word (cleared by each step's criterion)
+    var d_fin = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(d_fin, Int32(0))
+    comptime U = MutUntrackedOrigin
+    var step = _LpKnnStep(
+        d_cols.unsafe_ptr().unsafe_origin_cast[U](), _p(d_vals).unsafe_origin_cast[U](), _p(d_a).unsafe_origin_cast[U](),
+        _p(d_b).unsafe_origin_cast[U](), _p(d_nxt).unsafe_origin_cast[U](), _p(d_ys).unsafe_origin_cast[U](),
+        d_unl.unsafe_ptr().unsafe_origin_cast[U](), _p(d_part).unsafe_origin_cast[U](), _p(d_s).unsafe_origin_cast[U](),
+        d_fin.unsafe_ptr().unsafe_origin_cast[U](), n, k, c, variant, alpha,
+        _lpki_tol_ceil(tol) if idn else Float32(tol), nparts, idn,
+    )
+    var converged = False
+    var n_iter = 0
+    if nc == 0 and idn:
+        # the Python loop over nothing: the empty sum 0 against tol
+        converged = Float64(0) < tol
+        n_iter = 0 if (converged or max_iter <= 0) else max_iter
     else:
-        var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
-        var nc = n * c
-        var ctx = xn_ctx()
-        var d_cols = _buf_i(ctx, cols, n * k, True)
-        var d_vals = ctx.enqueue_create_buffer[DType.float32](n * k)
-        ctx.enqueue_copy(dst_buf=d_vals, src_ptr=FP(unsafe_from_address=vals))
-        var d_a = ctx.enqueue_create_buffer[DType.float32](nc)
-        ctx.enqueue_copy(dst_buf=d_a, src_ptr=FP(unsafe_from_address=ld))
-        var d_b = ctx.enqueue_create_buffer[DType.float32](nc)
-        ctx.enqueue_memset(d_b, Float32(0))
-        var d_nxt = ctx.enqueue_create_buffer[DType.float32](nc)
-        var d_ys = ctx.enqueue_create_buffer[DType.float32](nc)
-        ctx.enqueue_copy(dst_buf=d_ys, src_ptr=FP(unsafe_from_address=ystatic))
-        var d_unl = _buf_i(ctx, unlabeled, n, True)
-        var nparts = max(1, (nc + LPK_TPB - 1) // LPK_TPB)
-        var d_part = ctx.enqueue_create_buffer[DType.float32](nparts)
-        var h_fl = List[Int32](length=2, fill=Int32(0))
-        var d_fl = _buf_i(ctx, Int(h_fl.unsafe_ptr()), 2, True)
-        var flp: IP = d_fl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var itp: IP = flp + 1
-        var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var prev: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var tol32 = Float32(tol)
-        var done = 0
-        var converged = False
-        while done < max_iter and not converged:
-            var steps = min(LPK_BATCH, max_iter - done)
-            for _ in range(steps):
-                ctx.enqueue_function[lpk_absdiff_partial_kernel](
-                    cur, prev, d_part.unsafe_ptr(), flp, Int64(nc),
-                    grid_dim=nparts, block_dim=LPK_TPB,
-                )
-                ctx.enqueue_function[lpk_check_kernel](
-                    d_part.unsafe_ptr(), Int64(nparts), flp, itp, tol32,
-                    grid_dim=1, block_dim=LPK_TPB,
-                )
-                ctx.enqueue_function[lpk_product_kernel](
-                    d_cols.unsafe_ptr(), d_vals.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), flp,
-                    Int64(n), Int64(k), Int64(c), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-                )
-                # prev = ld; ld = clamp(nxt): the clamp writes over the buffer
-                # the old prev held, then the two names swap (op_lp_iterate)
-                ctx.enqueue_function[lpk_clamp_kernel](
-                    d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), d_unl.unsafe_ptr(), prev, flp,
-                    Int64(n), Int64(c), Int64(variant), alpha,
-                    grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-                )
-                var t = cur
-                cur = prev
-                prev = t
-            ctx.enqueue_copy(dst_ptr=h_fl.unsafe_ptr(), src_buf=d_fl)
-            ctx.synchronize()
-            converged = h_fl[0] != 0
-            done += steps
-        # steps taken: the loop's n_iter_ whether it converged (it) or ran out
-        var n_iter = Int(h_fl[1])
+        var registers = LoopRegisters(ctx)
+        var timers = LoopTimers("label_propagation.knn")
+        var outcome = bounded_device_loop(ctx, step, registers, 1, max_iter, LPK_BATCH, timers)
+        timers.report()
+        converged = outcome.converged
+        # steps taken: the stop at 1-based iteration s took s - 1 steps;
+        # without a stop every iteration stepped
+        n_iter = outcome.stop_iteration - 1 if converged else max(max_iter, 0)
         if n_iter % 2 == 0:
-            ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=ld), src_buf=d_a)
+            _down(ctx, d_a, ld, nc)
         else:
-            ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=ld), src_buf=d_b)
+            _down(ctx, d_b, ld, nc)
         ctx.synchronize()
-        var inf = IP(unsafe_from_address=info)
-        inf.unsafe_store(0, Int32(n_iter))
-        inf.unsafe_store(1, Int32(1 if converged else 0))
-        _ = h_fl^
-        _ = d_fl^
-        _ = d_part^
-        _ = d_cols^
-        _ = d_vals^
-        _ = d_a^
-        _ = d_b^
-        _ = d_nxt^
-        _ = d_ys^
-        _ = d_unl^
-        _ = ctx^
+        _ = registers^
+    var inf = IP(unsafe_from_address=info)
+    inf.unsafe_store(0, Int32(n_iter))
+    inf.unsafe_store(1, Int32(1 if converged else 0))
+    _ = d_fin^
+    _ = d_s^
+    _ = d_part^
+    _ = d_cols^
+    _ = d_vals^
+    _ = d_a^
+    _ = d_b^
+    _ = d_nxt^
+    _ = d_ys^
+    _ = d_unl^
+    _ = ctx^
+

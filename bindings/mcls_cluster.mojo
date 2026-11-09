@@ -9,11 +9,12 @@
 # itself (`_mean_error`, `_r2_options`), as `regression_error_options` and
 # `r2_score_options` did. Same kernels, same operands: the bits do not move.
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays import classical_address
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_array, family_as_f32, family_min,
+    FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_array, family_min,
 )
 from bindings.metrics_reg_native import _mean_error, _r2_options
 from bindings.metrics_native_inputs import metric_shape
@@ -23,7 +24,7 @@ from bindings.mcls_common import (
     mc_i32_1d, mc_f32_1d, mc_regression_f32_1d, mc_pair_check, mc_weights, mc_encode_store,
     mc_encode_signed,
 )
-from core.family_cast_impl import family_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32
 from core.mcls_impl import mcls_min_i32, mcls_max_i32, mcls_copy_words
 from checks.numerics import portable_exp64, portable_log64
 
@@ -171,10 +172,10 @@ def _silhouette(args: PythonObject, caller: String, context: PythonObject) raise
                     + "silhouette_score.pyx dispatches by default). 'cityblock', "
                     + "'cosine', 'l1', 'manhattan' and 'sqeuclidean' are other "
                     + "distance kernels and are not in metrics/ (NOT_IMPLEMENTED.tsv)")
-    var x = family_as_f32(args[1], 2, "X", context)
+    var x = admit_family(args[1], 2, "X", context).array
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), rows * cols):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), rows * cols):
         raise Error("mojolearn " + caller + ": X contains NaN or infinity; refused here "
                     + "(metrics/README.md HAND-OFF ask 3), because a NaN distance "
                     + "reaches sil_op as +0.0 (DEVIATION 656) rather than as an error")
@@ -227,16 +228,16 @@ def _trustworthiness(args: PythonObject, context: PythonObject) raises -> Python
         raise Error("NotImplementedError: mojolearn trustworthiness: metric=" + family_repr(metric)
                     + " is refused; only 'euclidean' is implemented, and cuML's trustworthiness.pyx:86 "
                     + "refuses every other name too")
-    var x = family_as_f32(args[1], 2, "X", context)
-    var emb = family_as_f32(args[2], 2, "X_embedded", context)
+    var x = admit_family(args[1], 2, "X", context).array
+    var emb = admit_family(args[2], 2, "X_embedded", context).array
     var rows = Int(py=x.shape[0])
     if rows != Int(py=emb.shape[0]):
         raise Error("mojolearn trustworthiness: X has " + String(rows) + " rows and X_embedded has "
                     + String(Int(py=emb.shape[0])))
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
         raise Error("mojolearn trustworthiness: X contains NaN or infinity; refused here (metrics/README.md HAND-OFF ask 3)")
     _ = x  # keep the Python object alive through the native calls above
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(emb))), Int(py=emb.size)):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(emb))), Int(py=emb.size)):
         raise Error("mojolearn trustworthiness: X_embedded contains NaN or infinity; refused here "
                     + "(metrics/README.md HAND-OFF ask 3)")
     _ = emb  # keep the Python object alive through the native calls above

@@ -393,7 +393,7 @@ def main() raises:
     var ce = _both[OP_CE](hx, dx, [logits.copy(), lab.copy(), List[Float32](length=B6 * C6, fill=Float32(0.0)),
                                    List[Float32](length=B6, fill=Float32(0.0))], [0, C6], [scale6], B6)
     _check("5505_ce_expsum", o_ce(logits, labels, B6, C6, scale6, False), o_ce(logits, labels, B6, C6, scale6, True),
-           _cat(ce.dev[2], ce.dev[3]), _cat(ce.host[2], ce.host[3]), tr, fails)
+           ce.dev[2].copy(), ce.host[2].copy(), tr, fails)
 
     # ---- 5506 Adam, 64 parameters, step 3, L2 weight decay.
     var n7 = 64
