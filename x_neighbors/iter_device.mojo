@@ -3401,16 +3401,16 @@ struct _LpKnnStep(LoopStep, Movable):
     scan; FAST: the block sums), then the gated product and the gated clamp
     into the buffer the old prev held. The ping-pong pair is chosen by the
     iteration's parity (as `_LpDenseStep`)."""
-    var cols: IP
-    var vals: FP
-    var a: FP
-    var b: FP
-    var nxt: FP
-    var ys: FP
-    var unl: IP
-    var part: FP
-    var s: FP
-    var fin: IP
+    var cols: _LpI
+    var vals: _LpF
+    var a: _LpF
+    var b: _LpF
+    var nxt: _LpF
+    var ys: _LpF
+    var unl: _LpI
+    var part: _LpF
+    var s: _LpF
+    var fin: _LpI
     var n: Int
     var k: Int
     var c: Int
@@ -3424,45 +3424,55 @@ struct _LpKnnStep(LoopStep, Movable):
         mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
     ) raises:
         var nc = self.n * self.c
+        var vals: FP = self.vals.unsafe_origin_cast[MutAnyOrigin]()
+        var a: FP = self.a.unsafe_origin_cast[MutAnyOrigin]()
+        var b: FP = self.b.unsafe_origin_cast[MutAnyOrigin]()
+        var nxt: FP = self.nxt.unsafe_origin_cast[MutAnyOrigin]()
+        var ys: FP = self.ys.unsafe_origin_cast[MutAnyOrigin]()
+        var part: FP = self.part.unsafe_origin_cast[MutAnyOrigin]()
+        var s: FP = self.s.unsafe_origin_cast[MutAnyOrigin]()
+        var cols: IP = self.cols.unsafe_origin_cast[MutAnyOrigin]()
+        var unl: IP = self.unl.unsafe_origin_cast[MutAnyOrigin]()
+        var fin: IP = self.fin.unsafe_origin_cast[MutAnyOrigin]()
         var even = (it - 1) % 2 == 0
-        var cur = self.a if even else self.b
-        var prev = self.b if even else self.a
+        var cur = a if even else b
+        var prev = b if even else a
         var gate: IP = registers.words.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         if self.idn:
             var nfb = xn_fold_blocks(nc)
             ctx.enqueue_function[lpki_absdiff_part_kernel](
-                cur, prev, self.part, gate, Int64(nc), grid_dim=_grid(nfb), block_dim=(BLOCK if nfb > 1 else 1),
+                cur, prev, part, gate, Int64(nc), grid_dim=_grid(nfb), block_dim=(BLOCK if nfb > 1 else 1),
             )
             ctx.enqueue_function[lpki_check_kernel](  # small-launch(one item): the loop's stopping criterion
-                cur, prev, self.s, self.part, gate, self.fin, Int64(nc), self.tol32, Int32(it),
+                cur, prev, s, part, gate, fin, Int64(nc), self.tol32, Int32(it),
                 grid_dim=1, block_dim=1,
             )
             loop_lap(ctx, timers, "stopping_sum")
             ctx.enqueue_function[lpki_nonfinite_kernel](
-                cur, gate, self.fin, Int64(nc), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+                cur, gate, fin, Int64(nc), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
             )
             ctx.enqueue_function[lpki_product_kernel](
-                self.cols, self.vals, cur, self.nxt, gate, self.fin,
+                cols, vals, cur, nxt, gate, fin,
                 Int64(self.n), Int64(self.n), Int64(self.k), Int64(self.c),
                 grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
             )
         else:
             ctx.enqueue_function[lpk_absdiff_partial_kernel](
-                cur, prev, self.part, gate, Int64(nc), grid_dim=self.nparts, block_dim=LPK_TPB,
+                cur, prev, part, gate, Int64(nc), grid_dim=self.nparts, block_dim=LPK_TPB,
             )
             ctx.enqueue_function[lpk_check_kernel](
-                self.part, Int64(self.nparts), gate, self.tol32, Int32(it), grid_dim=1, block_dim=LPK_TPB,
+                part, Int64(self.nparts), gate, self.tol32, Int32(it), grid_dim=1, block_dim=LPK_TPB,
             )
             loop_lap(ctx, timers, "stopping_sum")
             ctx.enqueue_function[lpk_product_kernel](
-                self.cols, self.vals, cur, self.nxt, gate, Int64(self.n), Int64(self.k), Int64(self.c),
+                cols, vals, cur, nxt, gate, Int64(self.n), Int64(self.k), Int64(self.c),
                 grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
             )
         loop_lap(ctx, timers, "product")
         # prev = ld; ld = clamp(nxt): the clamp writes over the buffer the old
         # prev held; the next iteration's parity swaps the two names
         ctx.enqueue_function[lpk_clamp_kernel](
-            self.nxt, self.ys, self.unl, prev, gate, Int64(self.n), Int64(self.c), Int64(self.variant), self.alpha,
+            nxt, ys, unl, prev, gate, Int64(self.n), Int64(self.c), Int64(self.variant), self.alpha,
             grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
         )
         loop_lap(ctx, timers, "clamp")
@@ -3496,10 +3506,12 @@ def op_lp_iterate_knn(
     # IDENTICAL's finiteness word (cleared by each step's criterion)
     var d_fin = ctx.enqueue_create_buffer[DType.int32](1)
     ctx.enqueue_memset(d_fin, Int32(0))
+    comptime U = MutUntrackedOrigin
     var step = _LpKnnStep(
-        d_cols.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), _p(d_vals), _p(d_a), _p(d_b), _p(d_nxt), _p(d_ys),
-        d_unl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), _p(d_part), _p(d_s),
-        d_fin.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n, k, c, variant, alpha,
+        d_cols.unsafe_ptr().unsafe_origin_cast[U](), _p(d_vals).unsafe_origin_cast[U](), _p(d_a).unsafe_origin_cast[U](),
+        _p(d_b).unsafe_origin_cast[U](), _p(d_nxt).unsafe_origin_cast[U](), _p(d_ys).unsafe_origin_cast[U](),
+        d_unl.unsafe_ptr().unsafe_origin_cast[U](), _p(d_part).unsafe_origin_cast[U](), _p(d_s).unsafe_origin_cast[U](),
+        d_fin.unsafe_ptr().unsafe_origin_cast[U](), n, k, c, variant, alpha,
         _lpki_tol_ceil(tol) if idn else Float32(tol), nparts, idn,
     )
     var converged = False
