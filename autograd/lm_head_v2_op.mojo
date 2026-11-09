@@ -40,7 +40,11 @@ from training.chunked_lm_head_v2 import (
 
 #: The session op code (autograd/ops_api.mojo) and the tape custom tag.
 comptime OPS_LM_HEAD_V2 = 87
-comptime LM_HEAD_V2_TAG = 109
+# Integration (integ/pre-0867-w5): lane m2 took 109, which lane x56d gave
+# M1_STEP_TAG (autograd/block_step_ops.mojo, 109-111) in the same rule set
+# (rules_step_ops.StepRules): 115 is the first free custom tag (99-104
+# graph, 108-111 block steps, 112-114 MoE, 128+ rank-N).
+comptime LM_HEAD_V2_TAG = 115
 
 comptime _F = MutPointer[Float32, MutAnyOrigin]
 comptime _I = MutPointer[Int32, MutAnyOrigin]
