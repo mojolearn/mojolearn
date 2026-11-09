@@ -309,6 +309,15 @@ def _device_scan(fields: PythonObject, context: PythonObject) raises -> Bool:
     return False
 
 
+def iforest_device_scan(model: PythonObject, context: PythonObject) raises -> Bool:
+    """True when the model's binary tests every X it uploads on the device
+    (the fit's training matrix and the query rows of score_samples /
+    decision_function / predict: `_raise_first_nonfinite_device`), so a
+    door may defer its finite test of a borrowed X to it (lane a7c). The
+    CPU column's host query tests nothing: False there."""
+    return _device_scan(py_fields(model), context)
+
+
 def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
          copy_source: PythonObject) raises -> PythonObject:
     """`fit` (want < 0: the one-row fresh run) or `fit_predict` (one fresh

@@ -9,7 +9,7 @@ from bindings.classical_attributes import classical_check_layout
 from bindings.classical_arrays import classical_is_array
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_check_y, classical_check_width, classical_estimator_name
-from bindings.admitted_input import admit_x_unrecorded
+from bindings.admitted_input import admit_x_unrecorded, admitted_finite_entry_refuse
 from bindings.classical_labels import labels_shape_of, _flatten_labels
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.classifier_public_lifecycle import classifier_after_fit, _feature_names
@@ -94,9 +94,12 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
     # kernel entry, which tests the words it uploads (the forest fit's
     # device scan, `forest_device_scan`; the CPU column's host scan in
     # trees_public_forest `_finite_or_refuse`): no host pass here. A cast X
-    # is tested in its cast pass. Predict keeps the door's parallel scan
-    # (its entries test nothing).
-    var admitted = admit_x_unrecorded(args[0], name, context, True, defer_finite=fitting)
+    # is tested in its cast pass. Lane a7c: predict, predict_proba and
+    # score defer too: the resident engines test the X they upload and the
+    # sequential engines take the door's parallel scan, right before them
+    # (trees_public_forest `_public_deferred`); every deferred refusal is
+    # the one scikit-learn wording (admitted_finite_refuse).
+    var admitted = admit_x_unrecorded(args[0], name, context, True, defer_finite=True)
     var x = admitted.array
     var kind = forest_kind(model, context)
     var classifier = kind.endswith("_classifier")
@@ -140,13 +143,15 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
             trees_finite_mark(x)
         try:
             result = forest_fit(model, Python.tuple(x, y, args[2], args[3], args[4]), context)
-        finally:
-            trees_finite_clear()
-            fields = py_fields(model)
-            if depth > 0:
-                py_setitem(fields, "_mojolearn_fitting", PythonObject(depth))
-            else:
-                py_call(fields.pop, "_mojolearn_fitting", PythonObject(None))
+        except error:
+            # The fit entry's own refusal of a deferred non-finite X
+            # (TREES_NONFINITE) in the one scikit-learn wording (lane a7c).
+            _forest_fit_restore(model, depth)
+            if not admitted.finite:
+                admitted_finite_entry_refuse(error, name)
+            raise error^
+        _forest_fit_restore(model, depth)
+        fields = py_fields(model)
         if classifier:
             classifier_after_fit(fields, args[0], context)
         else:
@@ -158,6 +163,17 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
             py_setitem(fields, "_mojolearn_fitted", PythonObject(True))
         return result
     raise Error("unknown native public forest operation " + operation)
+
+
+def _forest_fit_restore(model: PythonObject, depth: Int) raises:
+    """The fit's `finally`: the finite record cleared, the fitting depth
+    restored."""
+    trees_finite_clear()
+    var fields = py_fields(model)
+    if depth > 0:
+        py_setitem(fields, "_mojolearn_fitting", PythonObject(depth))
+    else:
+        _ = py_call(fields.pop, "_mojolearn_fitting", PythonObject(None))
 
 
 def _public_result(var result: PythonObject, operation: String, classifier: Bool,

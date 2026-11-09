@@ -12,13 +12,13 @@ from bindings.native_class_admission import class_record, class_admit
 from bindings.classical_attributes import _type_mro
 from bindings.classical_pandas import classical_admit_value
 from bindings.trees_side_records import trees_finite_mark, trees_finite_clear
-from bindings.admitted_input import admit_x_unrecorded
+from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse, admitted_finite_entry_refuse
 from bindings.classical_validate import classical_check_x, classical_check_width, classical_estimator_name, classical_view
 from bindings.classical_labels import labels_shape_of
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_array_view import native_array_ndarray_view
-from bindings.trees_public_iforest import iforest_operation_with_source
+from bindings.trees_public_iforest import iforest_operation_with_source, iforest_device_scan
 from bindings.trees_public_state import _release_tree_values
 from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_key_same, trees_key_shallow
 from providers.python.classical_family_admission_pyapi import classical_family_admit
@@ -130,7 +130,13 @@ def iforest_public_operation(model: PythonObject, operation: String, args: Pytho
     # Lane a1b (part 2): a fit defers the finite test of a borrowed X to the
     # iforest fit entry's device scan (`iforest_device_scan`; the CPU
     # column's host scan in trees_public_iforest `_fit`): no host pass here.
-    var admitted = admit_x_unrecorded(source, name, context, defer_finite=fitting)
+    # Lane a7c: score_samples / decision_function / predict defer too when
+    # the binary tests the query rows it uploads (iforest_device_scan); the
+    # CPU column's host query tests nothing, so a deferred X takes the
+    # door's parallel scan there (the one admit_x made before). Every
+    # deferred refusal is the one scikit-learn wording.
+    var defer = fitting or iforest_device_scan(model, context)
+    var admitted = admit_x_unrecorded(source, name, context, defer_finite=defer)
     var x = admitted.array
     var shape = labels_shape_of(x, context)
     var rows = shape[0]
@@ -152,6 +158,13 @@ def iforest_public_operation(model: PythonObject, operation: String, args: Pytho
     try:
         result = iforest_operation_with_source(model, "trees_iforest_" + method, Python.tuple(x), context, source)
     except error:
+        if not admitted.finite:
+            # The entry's own refusal of a deferred non-finite X (the
+            # fit's _NONFINITE, the device scan's "Input X contains NaN at
+            # flat index ...") in the one scikit-learn wording.
+            admitted_finite_entry_refuse(error, name)
+            if "does not accept non-finite" in String(error):
+                admitted_finite_refuse(1, name)
         var refused = _refusal(error, fitting, nested, rows, columns, name)
         raise refused^
     finally:
