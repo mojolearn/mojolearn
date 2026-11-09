@@ -105,7 +105,7 @@ from std.gpu.primitives.warp import shuffle_xor
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from cholesky.checks.potrf import (
     CHOL_ELEM_TPB,
@@ -117,6 +117,13 @@ from cholesky.checks.potrf import (
     potrf_lower,
 )
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
+from cholesky.chol_ops import (
+    chol_op_begin,
+    chol_op_factor,
+    chol_op_logdet,
+    chol_op_logdet_scratch_floats,
+    chol_op_solve_lower,
+)
 from core.identity_trace import IdentityTrace
 from core.gram_splitk import gemm_tn_splitk_into, gram_splitk_applies
 from std.math import log, sqrt
@@ -1829,7 +1836,10 @@ def gmm_precision_cholesky(
 ) raises -> GmmMStepRun:
     """`_compute_precision_cholesky` for `covariance_type="full"`
     (`_gaussian_mixture.py:353-371`), component by component in ASCENDING
-    order.
+    order, with the host reading every pivot: THE SABOTAGE ARMS' CHAIN ONLY
+    (`GMM_SAB_COLLAPSE_RESET`, `GMM_SAB_LOGDET_FROM_DIAG` and every other
+    `GMM_SAB_*` fit). A fit without a sabotage arm takes
+    `gmm_precision_enqueue` (enqueue only, the pivots in device words).
 
     For each `k`, in this order:
 
@@ -1900,129 +1910,9 @@ def gmm_precision_cholesky(
 
     var grid_dd = (dd + elem_tpb - 1) // elem_tpb
 
-    comptime if IDN_GMM_FUSED_CHOL:
-        # fam2-cluster: every component in one launch, one readback of the
-        # pivot flags (`mixture/chol_order.mojo`). The sabotage arms keep the
-        # per-component chain they were written against.
-        if sabotage == GMM_SAB_NONE and gmm_idn_chol_applies(d):
-            var d_info = ctx.enqueue_create_buffer[DType.int32](ncomp)
-            var h_info = ctx.enqueue_create_host_buffer[DType.int32](ncomp)
-            ctx.enqueue_function[idn_precision_cholesky_kernel](
-                cov.unsafe_ptr(), chol_l.unsafe_ptr(), linv.unsafe_ptr(),
-                prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
-                d_info.unsafe_ptr(), Int32(d),
-                grid_dim=(ncomp, 1, 1), block_dim=(GMM_IDN_CHOL_TPB, 1, 1),
-            )
-            ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=d_info)
-            ctx.synchronize()
-            var fail_k = -1
-            var fail_info = 0
-            for kc in range(ncomp):
-                var inf_k = Int(h_info.unsafe_ptr().unsafe_load(kc))
-                if inf_k != 0 and fail_k < 0:
-                    fail_k = kc
-                    fail_info = inf_k
-            _ = d_info^
-            _ = h_info^
-            _ = identity^
-            _ = scal^
-            _ = work^
-            if trace.enabled:
-                # The per-component chain's tags, in its order: the
-                # components before the first failure, then the log
-                # determinants when none failed.
-                var upto = ncomp if fail_k < 0 else fail_k
-                for kc in range(upto):
-                    var ldst = chol_l.create_sub_buffer[DType.float32](
-                        kc * dd, dd
-                    )
-                    trace.record_device(
-                        ctx, gmm_comp_tag(tag, kc, "cholesky"), ldst, dd
-                    )
-                    var prec_k = prec.create_sub_buffer[DType.float32](
-                        kc * dd, dd
-                    )
-                    trace.record_device(
-                        ctx, gmm_comp_tag(tag, kc, "precchol"), prec_k, dd
-                    )
-                    _ = ldst^
-                    _ = prec_k^
-                if fail_k < 0:
-                    trace.record_device(
-                        ctx, tag + ".logdet", log_det_chol, ncomp
-                    )
-            return GmmMStepRun(fail_info, fail_k)
-    comptime if GMM_FUSED_CHOL:
-        if sabotage == GMM_SAB_NONE and not trace.enabled and d <= GMM_CHOL_MAX_D:
-            var d_info = ctx.enqueue_create_buffer[DType.int32](ncomp)
-            var h_info = ctx.enqueue_create_host_buffer[DType.int32](ncomp)
-            var ff_chol = False
-            comptime if GMM_FAST_FF_COV:
-                ff_chol = cov_lo_addr != 0
-            if ff_chol:
-                # GMM_FAST_FF_COV: float-float factor of cov + cov_lo (the
-                # residual is zero when the M-step took a float32 route)
-                ctx.enqueue_function[fused_precision_cholesky_ff_kernel](
-                    cov.unsafe_ptr(), MutPointer[Float32, MutAnyOrigin](unsafe_from_address=cov_lo_addr),
-                    chol_l.unsafe_ptr(), linv.unsafe_ptr(),
-                    prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
-                    d_info.unsafe_ptr(), Int32(d),
-                    grid_dim=(ncomp, 1, 1), block_dim=(GMM_CHOL_TPB, 1, 1),
-                )
-            else:
-                ctx.enqueue_function[fused_precision_cholesky_kernel](
-                    cov.unsafe_ptr(), chol_l.unsafe_ptr(), linv.unsafe_ptr(),
-                    prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
-                    d_info.unsafe_ptr(), Int32(d),
-                    grid_dim=(ncomp, 1, 1), block_dim=(GMM_CHOL_TPB, 1, 1),
-                )
-            ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=d_info)
-            ctx.synchronize()
-            var fail_k = -1
-            var fail_info = 0
-            for kc in range(ncomp):
-                var inf_k = Int(h_info.unsafe_ptr().unsafe_load(kc))
-                if inf_k != 0 and fail_k < 0:
-                    fail_k = kc
-                    fail_info = inf_k
-            _ = d_info^
-            _ = h_info^
-            _ = identity^
-            _ = scal^
-            _ = work^
-            return GmmMStepRun(fail_info, fail_k)
-    comptime if GMM_FAST_BIG_CHOL:
-        # lane/apple-fast-linear: -D MOJOLEARN_GMM_FAST_BIG_CHOL, d > 32 (see
-        # gmm_big_chol_kernel's banner); one launch, one readback of info
-        if (
-            sabotage == GMM_SAB_NONE
-            and not trace.enabled
-            and d > GMM_CHOL_MAX_D
-            and d <= GMM_CHOL_TPB
-        ):
-            var d_info = ctx.enqueue_create_buffer[DType.int32](ncomp)
-            var h_info = ctx.enqueue_create_host_buffer[DType.int32](ncomp)
-            ctx.enqueue_function[gmm_big_chol_kernel](
-                cov.unsafe_ptr(), chol_l.unsafe_ptr(), linv.unsafe_ptr(),
-                prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
-                d_info.unsafe_ptr(), Int32(d),
-                grid_dim=(ncomp, 1, 1), block_dim=(GMM_CHOL_TPB, 1, 1),
-            )
-            ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=d_info)
-            ctx.synchronize()
-            var fail_k = -1
-            var fail_info = 0
-            for kc in range(ncomp):
-                var inf_k = Int(h_info.unsafe_ptr().unsafe_load(kc))
-                if inf_k != 0 and fail_k < 0:
-                    fail_k = kc
-                    fail_info = inf_k
-            _ = d_info^
-            _ = h_info^
-            _ = identity^
-            _ = scal^
-            _ = work^
-            return GmmMStepRun(fail_info, fail_k)
+    # lane n1-gmm-bgmm-loops (2026-11-09): the one-launch factors (IDN fused,
+    # FAST fused, FAST big) moved to `gmm_precision_enqueue` below, the fit's
+    # only route; this chain is the sabotage arms' (`GMM_SAB_*`) alone.
 
     for kc in range(ncomp):
         # (1) the working copy
@@ -2159,6 +2049,258 @@ def gmm_precision_cholesky(
     _ = scal^
     _ = work^
     return GmmMStepRun(0, -1)
+
+
+# ===========================================================================
+# THE PRECISION CHOLESKY AS A STEP OP (lane n1-gmm-bgmm-loops, 2026-11-09)
+# ===========================================================================
+#
+# The fit's precision Cholesky, enqueue only (docs/plans/EXECUTOR_N7_OPS.md
+# "The contract every op keeps"): the pivot of every component lands in a
+# device word, `gmm_first_fail_kernel` turns them into the step's status
+# (the first failing component ascending and its LAPACK info, the decision
+# DEVIATION 1723 is about), and the EM loop makes that status join its
+# predicate (`step_fail_joins_loop`), so a collapsed component stops the
+# loop at its iteration with no host read. The routes are the kernels the
+# old host-read driver called, in its order of preference: the IDENTICAL
+# one-launch order (`IDN_GMM_FUSED_CHOL`, d <= GMM_IDN_CHOL_MAX_D), FAST
+# Apple's fused and big kernels, and otherwise the per-component chain on
+# the executor's Cholesky ops (`cholesky/chol_ops.mojo`: potrf_lower's
+# launches at the pinned width, the default trsm kernels and the logdet
+# fold, each guarded on the component's info word) where `potrf_lower`,
+# `chol_logdet` and `trsm_lower` read `info` and the log determinant home.
+
+
+def gmm_first_fail_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    info: MutPointer[Int32, MutAnyOrigin],
+    status: MutPointer[Int32, MutAnyOrigin],
+    ncomp: Int32,
+):
+    """One thread. While the gate is open (word 0 zero): status[0] = the
+    LAPACK info of the first component, ascending, whose factor failed and
+    status[1] = that component; 0 and -1 when none did. Once the gate is
+    closed it writes nothing, so the stopping iteration's status stays."""
+    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+        return
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    var code = Int32(0)
+    var comp = Int32(-1)
+    for k in range(Int(ncomp)):
+        var v = info.unsafe_load(k)
+        if v > Int32(0):
+            code = v
+            comp = Int32(k)
+            break
+    status.unsafe_store(0, code)
+    status.unsafe_store(1, comp)
+
+
+def gmm_logdet_halve_kernel(
+    raw: MutPointer[Float32, MutAnyOrigin],
+    info: MutPointer[Int32, MutAnyOrigin],
+    log_det_chol: MutPointer[Float32, MutAnyOrigin],
+    ncomp: Int32,
+):
+    """Per component whose factor succeeded: `log_det_chol[k] =
+    ftz(-0.5 * log det Sigma_k)` (DEVIATION 1726), the multiply the
+    host-read chain did on the host, here on the device."""
+    var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if k >= Int(ncomp):
+        return
+    if info.unsafe_load(k) != Int32(0):
+        return
+    log_det_chol.unsafe_store(k, ftz(identical_mul(Float32(-0.5), raw.unsafe_load(k))))
+
+
+struct GmmCholScratch(Movable):
+    """The precision Cholesky's device words and scratch, allocated once per
+    fit: one info word per component, the status pair, and for the
+    per-component chain a working d x d block, the identity it solves
+    against, the logdet fold's scratch and the raw log determinants."""
+    var info: DeviceBuffer[DType.int32]
+    var status: DeviceBuffer[DType.int32]
+    var work: DeviceBuffer[DType.float32]
+    var identity: DeviceBuffer[DType.float32]
+    var ld_scratch: DeviceBuffer[DType.float32]
+    var ld_raw: DeviceBuffer[DType.float32]
+    var host_status: HostBuffer[DType.int32]
+
+    def __init__(out self, ctx: DeviceContext, d: Int, ncomp: Int) raises:
+        var dd = d * d
+        self.info = ctx.enqueue_create_buffer[DType.int32](max(ncomp, 1))
+        self.status = ctx.enqueue_create_buffer[DType.int32](2)
+        self.work = ctx.enqueue_create_buffer[DType.float32](max(dd, 1))
+        self.identity = ctx.enqueue_create_buffer[DType.float32](max(dd, 1))
+        self.ld_scratch = ctx.enqueue_create_buffer[DType.float32](
+            max(chol_op_logdet_scratch_floats(d), 1)
+        )
+        self.ld_raw = ctx.enqueue_create_buffer[DType.float32](max(ncomp, 1))
+        self.host_status = ctx.enqueue_create_host_buffer[DType.int32](2)
+        ctx.enqueue_memset(self.status, Int32(0))
+
+
+def gmm_precision_status(
+    ctx: DeviceContext, mut scratch: GmmCholScratch
+) raises -> GmmMStepRun:
+    """The status pair home (one drain): `info` and `failed_component` of
+    the last open precision Cholesky. The fit reads it once after the init
+    and once after a loop that stopped on a failure."""
+    ctx.enqueue_copy(dst_ptr=scratch.host_status.unsafe_ptr(), src_buf=scratch.status)
+    ctx.synchronize()
+    return GmmMStepRun(
+        Int(scratch.host_status.unsafe_ptr().unsafe_load(0)),
+        Int(scratch.host_status.unsafe_ptr().unsafe_load(1)),
+    )
+
+
+def gmm_status_put(
+    ctx: DeviceContext, mut scratch: GmmCholScratch, run: GmmMStepRun
+) raises:
+    """The host-read chain's verdict (the sabotage arms) into the status
+    pair, so the loop's failure criterion reads one word on every route.
+    The sabotage arms run the loop one iteration per read, so nothing is
+    enqueued past a stop that could overwrite it."""
+    scratch.host_status.unsafe_ptr().unsafe_store(0, Int32(run.info))
+    scratch.host_status.unsafe_ptr().unsafe_store(1, Int32(run.failed_component))
+    ctx.enqueue_copy(dst_buf=scratch.status, src_ptr=scratch.host_status.unsafe_ptr())
+    ctx.synchronize()
+
+
+def gmm_precision_enqueue(
+    ctx: DeviceContext,
+    mut gate: DeviceBuffer[DType.int32],
+    mut cov: DeviceBuffer[DType.float32],
+    mut chol_l: DeviceBuffer[DType.float32],
+    mut linv: DeviceBuffer[DType.float32],
+    mut prec: DeviceBuffer[DType.float32],
+    mut log_det_chol: DeviceBuffer[DType.float32],
+    mut scratch: GmmCholScratch,
+    d: Int,
+    ncomp: Int,
+    mut trace: IdentityTrace,
+    tag: String,
+    elem_tpb: Int = GMM_ELEM_TPB,
+    chol_elem_tpb: Int = CHOL_ELEM_TPB,
+    cov_lo_addr: Int = 0,
+) raises:
+    """`_compute_precision_cholesky` for `covariance_type="full"`, every
+    component, ENQUEUED: `chol_l`, `linv`, `prec = (L^{-1})^T` and
+    `log_det_chol = -0.5 log det` per component, the pivots in
+    `scratch.info`, the step's verdict in `scratch.status` (written only
+    while `gate` word 0 is zero: inside the EM loop `gate` is the loop's
+    register block, outside it `step_gate_open_word`). No host read; with a
+    trace on, one drain to record the stages the host-read chain recorded,
+    under its tags and in its order (the components before the first
+    failure, then the log determinants when none failed)."""
+    var dd = d * d
+    var fused = False
+    comptime if IDN_GMM_FUSED_CHOL:
+        if gmm_idn_chol_applies(d):
+            ctx.enqueue_function[idn_precision_cholesky_kernel](
+                cov.unsafe_ptr(), chol_l.unsafe_ptr(), linv.unsafe_ptr(),
+                prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
+                scratch.info.unsafe_ptr(), Int32(d),
+                grid_dim=(ncomp, 1, 1), block_dim=(GMM_IDN_CHOL_TPB, 1, 1),
+            )
+            fused = True
+    comptime if GMM_FUSED_CHOL:
+        if not fused and d <= GMM_CHOL_MAX_D:
+            var ff_chol = False
+            comptime if GMM_FAST_FF_COV:
+                ff_chol = cov_lo_addr != 0
+            if ff_chol:
+                # GMM_FAST_FF_COV: float-float factor of cov + cov_lo (the
+                # residual is zero when the M-step took a float32 route)
+                ctx.enqueue_function[fused_precision_cholesky_ff_kernel](
+                    cov.unsafe_ptr(), MutPointer[Float32, MutAnyOrigin](unsafe_from_address=cov_lo_addr),
+                    chol_l.unsafe_ptr(), linv.unsafe_ptr(),
+                    prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
+                    scratch.info.unsafe_ptr(), Int32(d),
+                    grid_dim=(ncomp, 1, 1), block_dim=(GMM_CHOL_TPB, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[fused_precision_cholesky_kernel](
+                    cov.unsafe_ptr(), chol_l.unsafe_ptr(), linv.unsafe_ptr(),
+                    prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
+                    scratch.info.unsafe_ptr(), Int32(d),
+                    grid_dim=(ncomp, 1, 1), block_dim=(GMM_CHOL_TPB, 1, 1),
+                )
+            fused = True
+    comptime if GMM_FAST_BIG_CHOL:
+        # lane/apple-fast-linear: d > 32 (see gmm_big_chol_kernel's banner)
+        if not fused and d > GMM_CHOL_MAX_D and d <= GMM_CHOL_TPB:
+            ctx.enqueue_function[gmm_big_chol_kernel](
+                cov.unsafe_ptr(), chol_l.unsafe_ptr(), linv.unsafe_ptr(),
+                prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
+                scratch.info.unsafe_ptr(), Int32(d),
+                grid_dim=(ncomp, 1, 1), block_dim=(GMM_CHOL_TPB, 1, 1),
+            )
+            fused = True
+    if not fused:
+        var grid_dd = (dd + elem_tpb - 1) // elem_tpb
+        for kc in range(ncomp):  # driver-loop: over mixture components (model structure), enqueue only
+            # (1) the working copy, (2) the profile's diagonal flush with no
+            # ridge (DEVIATION 1737), (3) the factor, its info in word kc
+            var src = cov.create_sub_buffer[DType.float32](kc * dd, dd)
+            ctx.enqueue_copy(dst_buf=scratch.work, src_buf=src)
+            add_jitter(ctx, scratch.work, d, GMM_CHOL_JITTER, chol_elem_tpb)
+            var info_k = scratch.info.create_sub_buffer[DType.int32](kc, 1)
+            chol_op_begin(ctx, gate, info_k)
+            chol_op_factor(ctx, scratch.work, info_k, d)
+            # (4) log|Sigma_k| through the pinned fold (halved below)
+            var ld_k = scratch.ld_raw.create_sub_buffer[DType.float32](kc, 1)
+            chol_op_logdet(ctx, scratch.work, info_k, scratch.ld_scratch, ld_k, d)
+            var ldst = chol_l.create_sub_buffer[DType.float32](kc * dd, dd)
+            ctx.enqueue_copy(dst_buf=ldst, src_buf=scratch.work)
+            # (5) L^{-1} by forward substitution against the identity
+            ctx.enqueue_function[set_identity_kernel](
+                scratch.identity.unsafe_ptr(),
+                Int32(d),
+                grid_dim=(grid_dd, 1, 1),
+                block_dim=(elem_tpb, 1, 1),
+            )
+            chol_op_solve_lower(ctx, scratch.work, scratch.identity, info_k, d, d)
+            var linv_k = linv.create_sub_buffer[DType.float32](kc * dd, dd)
+            ctx.enqueue_copy(dst_buf=linv_k, src_buf=scratch.identity)
+            # (6) P_k = (L_k^{-1})^T
+            var prec_k = prec.create_sub_buffer[DType.float32](kc * dd, dd)
+            ctx.enqueue_function[transpose_square_kernel](
+                linv_k.unsafe_ptr(),
+                prec_k.unsafe_ptr(),
+                Int32(d),
+                grid_dim=(grid_dd, 1, 1),
+                block_dim=(elem_tpb, 1, 1),
+            )
+            _ = src^
+            _ = info_k^
+            _ = ld_k^
+            _ = ldst^
+            _ = linv_k^
+            _ = prec_k^
+        ctx.enqueue_function[gmm_logdet_halve_kernel](
+            scratch.ld_raw.unsafe_ptr(), scratch.info.unsafe_ptr(),
+            log_det_chol.unsafe_ptr(), Int32(ncomp),
+            grid_dim=((ncomp + elem_tpb - 1) // elem_tpb, 1, 1),
+            block_dim=(elem_tpb, 1, 1),
+        )
+    ctx.enqueue_function[gmm_first_fail_kernel](  # small-launch(one word pair): the step's verdict from the component pivots
+        gate.unsafe_ptr(), scratch.info.unsafe_ptr(), scratch.status.unsafe_ptr(),
+        Int32(ncomp), grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+    )
+    if trace.enabled:
+        var run = gmm_precision_status(ctx, scratch)
+        var upto = ncomp if run.failed_component < 0 else run.failed_component
+        for kc in range(upto):  # driver-loop: over mixture components, trace records only
+            var ldst = chol_l.create_sub_buffer[DType.float32](kc * dd, dd)
+            trace.record_device(ctx, gmm_comp_tag(tag, kc, "cholesky"), ldst, dd)
+            var prec_k = prec.create_sub_buffer[DType.float32](kc * dd, dd)
+            trace.record_device(ctx, gmm_comp_tag(tag, kc, "precchol"), prec_k, dd)
+            _ = ldst^
+            _ = prec_k^
+        if run.failed_component < 0:
+            trace.record_device(ctx, tag + ".logdet", log_det_chol, ncomp)
 
 
 # ===========================================================================

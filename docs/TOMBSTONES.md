@@ -405,6 +405,8 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN`](#mojolearn_idn_mamba1_chunked_scan) | Neural | REJECTED (breaks decode==prefill) | 2026-10-28 | none (recoverable at lane/mamba-folds@db803a1337) |
 | [`MOJOLEARN_PAR_VERIFY`](#mojolearn_par_verify) | Verification (multi-GPU: par-* identity lanes, `verify --par`, multi-gpu release rows) | retired (owner decision) | 2026-10-31 | [MOJOLEARN_PAR_VERIFY.patch](../experiments/removed/MOJOLEARN_PAR_VERIFY.patch) |
 | [Executor loop driver loops (no define): k-means Lloyd chunk loop, `kmeans_conv_step_kernel`, program `_copy_state`](#executor-loop-driver-loops-2026-11-08) | Cluster / Autograd executor | REFACTORED (onto the executor's bounded loop) | 2026-11-08 | [EXECUTOR_LOOP_DRIVER_LOOPS.patch](../experiments/removed/EXECUTOR_LOOP_DRIVER_LOOPS.patch) |
+| [EM driver loops: GaussianMixture host EM loop, BGMM per-iteration scalar read, the fused precision Cholesky host reads](#em-driver-loops-onto-the-device-loop-2026-11-09) | Cluster (mixture, x_cluster) | REFACTORED (onto the executor's bounded device loop) | 2026-11-09 | [EXECUTOR_EM_DRIVER_LOOPS.patch](../experiments/removed/EXECUTOR_EM_DRIVER_LOOPS.patch) |
+| [`MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF`](#em-driver-loops-onto-the-device-loop-2026-11-09) | Cluster (GaussianMixture EM, IDENTICAL) | removed (KEPT default, superseded: no meanll copy or per-iteration drain left) | 2026-11-09 | [EXECUTOR_EM_DRIVER_LOOPS.patch](../experiments/removed/EXECUTOR_EM_DRIVER_LOOPS.patch) |
 | [`classical_host_f32` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Classical admission (X/y/weight cast) | removed (superseded: `admit_x`, same signature) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
 | [`classical_host_weights` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Classical admission (sample_weight) | removed (zero callers; `admit_weights`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
 | [`classical_cast_rows` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Classical admission (cast + finite) | removed (merged: `admitted_check_f32`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
@@ -4564,3 +4566,37 @@ device word that gates the later launches (CHOL_DEFER_INFO on every vendor) and 
 - Code recoverable at `f59d913b0b`; patches `experiments/removed/N8_GPC_NEWTON_ONE_LOOP.patch` (classifier.mojo,
   gpc_ovr.mojo) and `experiments/removed/N8_GP_OPT_DEVICE_RUNS.patch` (gp_optim.mojo, gp_optim_items.mojo).
 
+## EM driver loops onto the device loop (2026-11-09)
+
+- **What it was**: lane n1-gmm-bgmm-loops (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 4, rows GMM EM
+  and BayesianGMM). (1) `mixture/estimator.mojo::gaussian_mixture_fit`'s host EM loop: E-step, M-step and
+  `gmm_precision_cholesky` per iteration, the mean log-likelihood copied home and `abs(change) < tol` decided on the host
+  (one drain per iteration, plus the pivot-flag drain of the precision Cholesky), the `MOJOLEARN_STAGE_TIMES` phase
+  timers, and `IDN_GMM_ONE_DRAIN` (`-D MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF`), which moved the meanll copy onto the pivot
+  drain. It is now the step op `GmmEmStep` run by `bounded_device_loop` (autograd/program_loop_device.mojo): the same
+  E-step, M-step and precision kernels, the pivot verdict as a device word that joins the loop (`step_fail_joins_loop`),
+  a gated commit of the parameters (`gmm_em_commit_kernel`) and the criterion on the device
+  (`gmm_em_criterion_kernel`: the same `gmm_convergence_change` / `gmm_converged` float32 comparison). Per-op timing is
+  `-D MOJOLEARN_EXECUTOR_TIMERS` (`loop_lap`). (2) The one-launch precision factors (IDN fused, FAST fused, FAST big) and
+  their host readback of the pivot flags moved from `gmm_precision_cholesky` to `gmm_precision_enqueue`
+  (mixture/checks/mstep.mojo); at d above those kernels' range the per-component chain runs on the N7 Cholesky ops
+  (`chol_op_factor`, `chol_op_logdet`, `chol_op_solve_lower`) instead of `potrf_lower` / `chol_logdet` / `trsm_lower`
+  with their per-panel `info` and logdet reads; `gmm_precision_cholesky` keeps the sabotage arms only. (3)
+  `x_cluster/bgmm.mojo::bgmm_fit`'s read of the scalar block every iteration: the loop now ends each iteration with a
+  gated commit of the workspace (ST_COMMIT) and a stop word (ST_FREEZE), and reads the two-word freeze pair once per
+  `check_every` iterations. The read interval is `core/em_loop_chunk.mojo` (8 below 2**24 multiply-adds an iteration,
+  else 1; host column 1; trace, sabotage and row-sharded E-step 1).
+- **Versions and measurements**: one form of each loop existed (plus the ONE_DRAIN `_OFF` arm: I21 2026-10-06 OFF/ON
+  NVIDIA 1.010/1.020/1.532, AMD 0.987/1.000/1.010, kept ON). No A/B of the device loop exists; at the board shapes
+  (gmm / bayesian-gmm istella, taxi: above the work bound) the interval is 1, one read per iteration as before.
+- **Verdict**: REFACTORED. Bits: unchanged by construction for every fit whose precision Cholesky took a fused kernel
+  (IDENTICAL d <= 256, FAST Apple d <= 256) and for BGMM; the committed parameters are the stopping iteration's for any
+  interval. At d above the fused range the chain's words are the N7 ops' (potrf_lower's launches at the pinned width,
+  the default trsm kernels, the logdet fold): expected equal, re-recorded with the gmm identity lane at the release run.
+- **Recoverable**: `f59d913b0b` (origin/integ/pre-0867-w2 at the lane's base); deleted on lane/n1-gmm-bgmm-loops.
+- **Patch**: `experiments/removed/EXECUTOR_EM_DRIVER_LOOPS.patch`, `git diff <lane head> f59d913b0b --
+  mixture/estimator.mojo mixture/checks/mstep.mojo x_cluster/bgmm.mojo`; `git apply` restores the three files on the
+  lane head (drop the `MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF` refusal in core/experiment_guards_cluster.mojo to build the
+  `_OFF` arm), `git apply -3` once the base has moved.
+- **Guard / records**: `MOJOLEARN_IDN_GMM_ONE_DRAIN_OFF` refused in core/experiment_guards_cluster.mojo; no
+  `grid_controls` entry existed. Rows in `docs/apple-fast/EXPERIMENTS.md`.
