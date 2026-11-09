@@ -12,7 +12,6 @@ rule	class	owner	state	path	occ	text
 py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/__init__.py	0	return sorted(set(globals()) | set(__all__)) # glue: module attribute names for dir
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_arima_impl.py	0	("bool_or", "input_copied_", False)) + extra[0]),
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_arima_impl.py	0	) + extra[1]
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/_array.py	0	return _backend.load_host_module("_mojolearn_tokenizer_host") # cpu-route: host-memory Array container operations, binding loaded once
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	_ARRAY_CONTEXT["helpers"].update(item for item in found if item[1] is not None) # glue: four fixed helper names
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -824,8 +823,6 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_gpu_witness.py	1	fo
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_gpu_witness.py	0	visibility={key: os.environ[key] for key in # glue: three named environment variables
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_gpu_witness.py	0	argv = list(sys.argv[1:] if argv is None else argv)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_gpu_witness.py	0	uuid_type = C.c_ubyte * 16
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/_host_import_aliases.py	0	if not os.path.isfile(_backend.host_module_path(owner_name)): # cpu-route: import-time existence check for the native alias owner
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/_host_import_aliases.py	0	owner = _backend.load_host_module(owner_name) # cpu-route: import-time connection of the canonical native alias owner
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_host_import_aliases.py	0	for name in spec["functions"]: # glue: retain verified compiled entry objects once, without wrappers
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -1087,7 +1084,6 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_arena_prog.p
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_arena_prog.py	0	if any(not isinstance(entry, BuiltinFunctionType) for entry in (call, gather, finite32, finite64)): # glue: fixed native ABI identity
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_arena_rows.py	0	for basename in (markers[3], None)) # glue: the two fixed host/missing-family refusal templates
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_arena_rows.py	0	for mode in ("identical", "fast"): # glue: fixed supported numeric-mode connections
@@ -1248,7 +1244,6 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_decomp_kit_b
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_decomp_kit_bridge.py	0	for suffix in _REQUIRED + _OPTIONAL: # glue: fixed native exports
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_native_decomp_kit_bridge.py	0	for suffix in _REQUIRED + _OPTIONAL: # glue: fixed native exports
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/_native_family_bridge.py	0	binding = _backend.load_host_module(basename) # cpu-route: import connection of an explicitly selected CPU-only binding
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_family_bridge.py	0	for mode in ('identical', 'fast'): # glue: fixed module-import binding modes, never product execution
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -1443,8 +1438,6 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_minmax_bridg
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_minmax_bridge.py	0	for name in ("x_prep_run", "x_prep_numeric_mode"): # glue: native missing-value and running-extrema executor
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_minmax_bridge.py	0	if any(not isinstance(entry, BuiltinFunctionType) for entry in entries.values()): # glue: host ABI identity
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/_native_mode_metadata.py	0	if os.path.exists(_backend.host_module_path(_classical_host._GPC_HOST_INFERENCE_BASENAME)) # cpu-route: import-time explicit HostGaussianProcessClassifier metadata, not a GPU fallback
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/_native_mode_metadata.py	0	module = (_backend.load_host_module(actual) if key[0] else _backend.binding(actual, mode)) # cpu-route: import-time explicit Host* readback; GPU classes retain their GPU binding
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_mode_metadata.py	0	basename = next((row['_BINDING'] for row in namespaces if '_BINDING' in row), None) # glue: import-time inherited binary name
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -1490,7 +1483,6 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_mode_reconst
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_mode_reconstruction.py	0	owner = next((base for base in ancestry # glue: fixed native constructor recipe owner
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_native_mode_reconstruction.py	0	for cls in tuple(candidates) + tuple(pending): # glue: keep pending descendant contracts before changing a base
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/_native_model_selection_bridge.py	0	module = _backend.load_host_module("_mojolearn_runtime_model_selection_host") # cpu-route: import-time connection of existing native model-selection orchestration
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_msel_dispatch.py	0	context["family_msel_fast_masks"] = {mode: resample.fast_defines(mode) for mode in ("identical", "fast")} # glue: existing compiled option masks, no product resolver callback
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -1579,7 +1571,6 @@ py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_native_msel_prep.py
 py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/_native_msel_prep.py	0	for basename in sorted(wanted): # glue: fixed ABI metadata connected once during package import
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_native_msel_prep.py	0	'fit': (fit, (arg(0), arg(1)) + ((keyword('sample_weight'),) if weighted else ())),
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_native_msel_prep.py	0	xdecomp.LocallyLinearEmbedding, xdecomp.MDS, spectral.SpectralEmbedding) + xl:
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/_native_msel_scorers.py	0	module = _backend.load_host_module(module._HostBinding__basename) # cpu-route: import-time connection to the actual CPU metric extension
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_msel_scorers.py	0	for mode in ('identical', 'fast'): # glue: retain existing compiled metric bindings by mode once
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -1600,7 +1591,6 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_msel_search.
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_msel_search.py	0	{name for row in rows for name, value in row.items() # glue: fixed method/property identity inventory
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/_native_msel_search.py	0	protected = tuple(sorted(set(('__getattribute__', '__getattr__', '__setattr__', '__del__', # glue: import-time class-layout inventory
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/_native_neighbor_queries.py	0	binding = (_backend.load_host_module(host_names[name]) if host_names is not None # cpu-route: import-time connection of explicit saved-model CPU entries
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_neighbor_queries.py	0	for cls, kind in classes.items(): # glue: fixed public classes, connected after native lifetime setup
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -1624,7 +1614,6 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_numeric_prof
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_operation_lock.py	0	for name, entry in ( # glue: fixed import-time native protocol registration
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_native_ops.py	0	self.__dict__.update(zip(names, range(len(names)))) # glue: the fixed operation names, once at import
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/_native_optimizer_bridge.py	0	host_module = _backend.load_host_module("_mojolearn_embedding_infer_host") # cpu-route: import-time connection for explicitly selected CPU-only host_model lookup
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_optimizer_bridge.py	0	"array_getters": {name: vars(Array)[name].__get__ for name in Array.__slots__}, # glue: retain fixed native Array slot descriptors at import
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -1706,14 +1695,12 @@ py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_native_optimizer
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_owner_lifetime.py	0	if any(type(slot) is not MemberDescriptorType for slot in slots.values()): # glue: connect only fixed native owner slots
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_owner_lifetime.py	0	slots = {name: vars(Array)[name] for name in ("_store", "_base", "_pin", "_mv", "_addr", "_readonly", "shape", "dtype", "ndim", "size", "nbytes", "itemsize", "strides", "order")} # glue: every Array slot retains an owner
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/_native_parallel_cv.py	0	binding = _backend.load_host_module(binding._HostBinding__basename) # cpu-route: import-only native owner connection
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_parallel_cv.py	0	for cls in context['family_msel_estimators']: # glue: stable identifiers for exact native constructor schemas
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_parallel_cv.py	0	for function in context['family_msel_metric_plans']: # glue: native metric identifiers, not importable callbacks
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_parallel_cv.py	0	for name, entry in (('cv', package.model_selection._NATIVE), ('trees', _gbdt_adapters._TREES), # glue: import-time native owner files
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/_native_parallel_public.py	0	module = _backend.load_host_module(module._HostBinding__basename) # cpu-route: import-time resolution of the existing CPU-only proxy
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_parallel_public.py	0	(bind('_mojolearn_resample','identical'),)+tuple(arg(i) for i in range(6))+(const('identical'),), # glue: fixed Monte Carlo ABI
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -1755,7 +1742,6 @@ py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/_native_parallel_public
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_native_parallel_public.py	0	(bind('_mojolearn_resample','identical'),)+tuple(arg(i) for i in range(6))+(const('identical'),), # glue: fixed Monte Carlo ABI
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_native_parallel_public.py	0	(bind('_mojolearn_resample','identical'),)+tuple(arg(i) for i in range(7))+(const('identical'),arg(8)), # glue: fixed permutation ABI
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_native_parallel_public.py	0	(bind('_mojolearn_resample','identical'),)+tuple(arg(i) for i in range(9))+(const('identical'),arg(10)), # glue: fixed bootstrap ABI
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/_native_parallel_shard.py	0	module = _backend.load_host_module(module._HostBinding__basename) # cpu-route: import-time resolution of the existing CPU-only proxy
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_parallel_shard.py	0	for key in required: # glue: import-time check of a fixed set of compiled binding entries
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -1900,8 +1886,6 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_robust_bridg
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_robust_bridge.py	0	for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_vendor", "x_prep_host_column", # glue: fixed native exports connected during import
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_robust_bridge.py	0	if any(not isinstance(entry, BuiltinFunctionType) for entry in (call, attribute, gather, finite32, finite64)): # glue: fixed native ABI identity
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/_native_runtime_manifold_bridge.py	0	module = _backend.load_host_module("_mojolearn_runtime_manifold_host") # cpu-route: import-time connection of existing native manifold orchestration
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/_native_runtime_sequential_bridge.py	0	module = _backend.load_host_module("_mojolearn_runtime_sequential_host") # cpu-route: import-time connection of existing native Sequential orchestration
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_samba_bridge.py	0	"array_getters": {name: vars(array_cls)[name].__get__ for name in array_names}, # glue: connect native Array slot getters once at package import
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -1942,14 +1926,12 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_scaler_bridg
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_scaler_bridge.py	0	for name in ("x_prep_run", "x_prep_numeric_mode"): # glue: cache the existing native weighted-statistics executor
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_scaler_bridge.py	0	if any(not isinstance(entry, BuiltinFunctionType) for entry in entries.values()): # glue: host ABI identity
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/_native_spectral_umap_bridge.py	0	return _backend.load_host_module(basename) # cpu-route: import connection of an explicitly selected CPU-only binding
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_spectral_umap_bridge.py	0	for group, (binding_name, symbols) in _SYMBOLS.items(): # glue: fixed import-time bindings
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_spectral_umap_bridge.py	0	for mode in ("identical", "fast"): # glue: retain offered tiers; no per-call loader
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_spectral_umap_bridge.py	0	for symbol in symbols: # glue: import-time ABI connection only
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/_native_trees_bridge.py	0	module = _backend.load_host_module(module._HostBinding__basename) # cpu-route: a CPU-only install connects its compiled host binding once
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_trees_bridge.py	0	context['trees_gbdt_adapter_public_classes'] = {cls: cls._estimator_type for cls in classes} # glue: fixed native classifier/regressor identity
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -2568,7 +2550,6 @@ py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/randomforest.py	0	return int(max_features) / n_features
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/randomforest.py	0	return math.log2(max(2, n_features)) / n_features
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/randomforest.py	0	return math.sqrt(n_features) / n_features
-host-module	host-import	p4-loops	owed-tags	python/mojolearn/tokenizer.py	0	return _Entries(_backend.load_host_module(_EXTENSION)) # cpu-route: tokenizer host binding module loaded once by load_host_module (text input step)
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/tokenizer.py	0	for name in _ABI: # glue: looks up the binding ABI entries
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
