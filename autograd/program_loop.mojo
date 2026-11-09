@@ -36,8 +36,10 @@
 #   EXECUTOR_TIMER loop=<label> op=<name> calls=<n> total_ms=<ms> mean_us=<us>
 # Off, every timer call is compiled out. The per-op-code launch profile of a
 # program body is the existing `MOJOLEARN_AG_PROFILE` (sequence/launch_profile.mojo).
+from std.memory import bitcast
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
+from sequence.ops import Args
 
 comptime LOOP_DONE = 0
 comptime LOOP_STOP_ITER = 1
@@ -109,3 +111,66 @@ struct LoopTimers(Movable):
                 print("EXECUTOR_TIMER loop=" + self.label + " op=" + self.names[i] + " calls=" + String(n)
                       + " total_ms=" + String(Float64(total) / 1.0e6)
                       + " mean_us=" + String(Float64(total) / Float64(max(n, 1)) / 1.0e3))
+
+
+# ---------------------------------------------------------------- program loop ops
+# The program loop's three element ops over float32 program words, codes
+# OP_LOOP_FIRST..OP_LOOP_LAST (1800..1809); sequence/dispatch.mojo routes
+# and fences them. They run on every executor (one GPU thread per element on
+# the device, an ascending loop on the host) with the same body, so the
+# loop's control words agree on every column.
+comptime OP_LOOP_TICK = 1800
+comptime OP_LOOP_COMMIT = 1801
+comptime OP_LOOP_ADVANCE = 1802
+comptime OP_LOOP_FIRST = OP_LOOP_TICK
+comptime OP_LOOP_LAST = 1809
+
+
+def op_loop_tick(t: Int, a: Args):
+    """One element. p0: the register block (float32 words); p1: the
+    condition's one value; i0: the iteration bound. Closes the gate, then,
+    while the loop runs: a non-finite condition stops it with LOOP_BAD, a
+    zero condition with LOOP_STOPPED, a reached bound stops it; otherwise the
+    gate opens and this iteration's body results are committed. The order of
+    the tests is the host loop's: the condition first, then the bound."""
+    var w = a.p0
+    w.unsafe_store(LOOP_GATE, Float32(0.0))
+    if w.unsafe_load(LOOP_DONE) != Float32(0.0):
+        return
+    var c = a.p1.unsafe_load(0)
+    if (bitcast[DType.uint32](c) & UInt32(0x7FFFFFFF)) >= UInt32(0x7F800000):
+        w.unsafe_store(LOOP_BAD, Float32(1.0))
+        w.unsafe_store(LOOP_DONE, Float32(1.0))
+        return
+    if c == Float32(0.0):
+        w.unsafe_store(LOOP_STOPPED, Float32(1.0))
+        w.unsafe_store(LOOP_DONE, Float32(1.0))
+        return
+    if w.unsafe_load(LOOP_ITER) >= Float32(a.i0):
+        w.unsafe_store(LOOP_DONE, Float32(1.0))
+        return
+    w.unsafe_store(LOOP_GATE, Float32(1.0))
+
+
+def op_loop_commit(t: Int, a: Args):
+    """p1[t] = p0[t] when the gate of register block p2 is open: one carried
+    state tensor updated in place with this iteration's value (a bit copy)."""
+    if a.p2.unsafe_load(LOOP_GATE) != Float32(0.0):
+        a.p1.unsafe_store(t, a.p0.unsafe_load(t))
+
+
+def op_loop_advance(t: Int, a: Args):
+    """One element: the iteration register of block p0 counts a committed
+    iteration (exact below 2**24, the bound the loop admits)."""
+    var w = a.p0
+    if w.unsafe_load(LOOP_GATE) != Float32(0.0):
+        w.unsafe_store(LOOP_ITER, w.unsafe_load(LOOP_ITER) + Float32(1.0))
+
+
+def apply_loop[OP: Int](t: Int, a: Args):
+    comptime if OP == OP_LOOP_TICK:
+        op_loop_tick(t, a)
+    elif OP == OP_LOOP_COMMIT:
+        op_loop_commit(t, a)
+    elif OP == OP_LOOP_ADVANCE:
+        op_loop_advance(t, a)
