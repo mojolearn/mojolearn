@@ -818,6 +818,9 @@ def qn_fit_ovr_host(
     # used to download its row behind its own wait
     var w_all = ctx.enqueue_create_buffer[DType.float32](n_fits * n_param)
     var hw = ctx.enqueue_create_host_buffer[DType.float32](n_fits * n_param)
+    # one weight buffer for every fit: fit k's row is copied out (stream
+    # order) before fit k + 1's memset clears it
+    var w = ctx.enqueue_create_buffer[DType.float32](n_param)
     for k in range(n_fits):  # driver-loop: over the one-vs-rest fits, X shared
         # the solver takes X and y by transfer. X is the one resident upload
         # shared by every class: the handle is copied (a reference count), not
@@ -829,7 +832,6 @@ def qn_fit_ovr_host(
         # built on the device per class, nothing over the bus.
         var xk = x
         var yk = ctx.enqueue_create_buffer[DType.float32](n_rows)
-        var w = ctx.enqueue_create_buffer[DType.float32](n_param)
         ctx.enqueue_function[_ovr_target_kernel](
             codes.unsafe_ptr(), yk.unsafe_ptr(), Int32(n_rows), Int32(first_class + k),
             grid_dim=((n_rows + 255) // 256, 1, 1), block_dim=(256, 1, 1),
@@ -861,10 +863,10 @@ def qn_fit_ovr_host(
         info_ptr.unsafe_store(3 * k, fx)
         info_ptr.unsafe_store(3 * k + 1, Float32(ret))
         info_ptr.unsafe_store(3 * k + 2, Float32(iters))
-        _ = w^
     ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w_all)
     ctx.synchronize()
     memcpy(dest=coef_ptr, src=hw.unsafe_ptr(), count=n_fits * n_param)
+    _ = w^
     _ = w_all^
     _ = hw^
     _ = sw_all^
