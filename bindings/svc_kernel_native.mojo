@@ -24,7 +24,9 @@
 # no resident entry for them.
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.admitted_family import admit_family, admit_family_copied, admit_family_meta, admit_family_weights
+from bindings.admitted_family import admit_family, admit_family_copied, admit_family_meta, admit_family_weights, admitted_array
+from core.admitted_input import admitted_cast_f32
+from core.cast_in import CAST_KIND_SIGNED
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value
 from bindings.host_inference_scalars import host_inference_scalar
@@ -643,22 +645,21 @@ def _as_labels(y: PythonObject, context: PythonObject) raises -> PythonObject:
     if not real:
         # non-numeric labels: the solver sees each row's code, 0.0 or 1.0
         var n = Int(py=codes.size)
-        var f = family_array(Python.tuple(PythonObject(n)), "<f4", context)
+        # The int32 codes (0 or 1) as float32, one cast in row tasks into an
+        # uninitialised Array (lane a2-admit-family: was a call into the base
+        # binding's cast_elements over a zero-filled Array; codes 0 and 1
+        # convert exactly either way).
+        var f = admitted_array(Python.tuple(PythonObject(n)), "<f4", context)
         if n > 0:
-            _ = family_call(svc_base("cast_elements", context), classical_address(codes), PythonObject(2),
-                            classical_address(f), PythonObject(0), PythonObject(n))
+            _ = admitted_cast_f32(Int(py=classical_address(codes)), 4, 0, n, 1, 4, CAST_KIND_SIGNED,
+                                  FAMILY_F32P(unsafe_from_address=Int(py=classical_address(f))))
             _ = codes  # keep the Python object alive through the native call above
             _ = f  # keep the Python object alive through the native call above
         _ = codes^
         return Python.tuple(f, classes, Python.tuple(PythonObject(0.0), PythonObject(1.0)))
-    var f = admit_family(y, 1, "y", context, False).array
-    var n = Int(py=f.size)
-    var finite = True
-    if n > 0:
-        finite = Int(py=family_call(svc_base("all_finite_f32", context), classical_address(f), PythonObject(n))) == 1
-        _ = f  # keep the Python object alive through the native call above
-    if not finite:
-        raise Error(_DEV636_Y)
+    # The finiteness test rides in the admission (lane a2-admit-family: was a
+    # second pass through the base binding's all_finite_f32).
+    var f = admit_family(y, 1, "y", context, False, finite=True, refusal=_DEV636_Y).array
     return Python.tuple(f, classes, Python.tuple(classes[0], classes[1]))
 
 
