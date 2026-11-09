@@ -1227,6 +1227,57 @@ def amd_xgboost_fallback(pins):
     return [r for r in (trees[1] if trees else []) if r.lower().startswith("xgboost==")]
 
 
+#: The ours-only venv's packages besides scikit-learn, at the versions the repo pins (pixi.lock; the `bench`
+#: environment every recorded timing was taken under first): pandas (the pandas-input rows, forest_speed_arm and
+#: the trees data helpers) and huggingface_hub (bench_board_neural.lm_checkpoint fetches the causal-lm-generate
+#: checkpoint in the arm's own python when the box lacks it). Read from the lock, never written here, so the pin
+#: cannot drift (lane candidate-build replaced measure-prep's literal pandas==2.2.3, which no file pinned).
+OURS_ONLY_LOCKED = ("pandas", "huggingface_hub")
+LOCK_ENV_ORDER = ("bench", "gbmbench", "default", "test")
+
+
+def locked_version(name, lock=None, envs=LOCK_ENV_ORDER):
+    """NAME's version in pixi.lock (the linux-64 package of the first environment in ENVS that has it), or None.
+    pixi.lock lists each environment's packages by URL: conda `.../linux-64/<name>-<ver>-<build>.conda`, PyPI
+    `.../<name>-<ver>-py3-none-any.whl`."""
+    lock = lock or os.path.join(REPO, "pixi.lock")
+    try:
+        lines = open(lock).read().splitlines()
+    except OSError:
+        return None
+    found, env, platform = {}, None, None
+    want = re.compile(r"/" + re.escape(name) + r"-(\d+(?:\.\d+)*)-")
+    for line in lines:
+        if line == "packages:":
+            break
+        m = re.match(r"^  ([a-z][\w-]*):$", line)
+        if m:
+            env, platform = m.group(1), None
+            continue
+        m = re.match(r"^      ([a-z0-9-]+):$", line)
+        if m:
+            platform = m.group(1)
+            continue
+        m = want.search(line)
+        if m and env and platform == "linux-64":
+            found.setdefault(env, m.group(1))
+    return next((found[e] for e in envs if e in found), None)
+
+
+def ours_only_requirements(pins, lock=None):
+    """The third-party packages an ours-only board venv installs beside our wheels: the scikit-learn pin of
+    the trees opponent set (the drivers' data helpers and metrics; it pulls numpy, scipy, joblib and
+    threadpoolctl), then OURS_ONLY_LOCKED at their pixi.lock versions. Every other third-party import of the
+    drivers is an opponent arm's (lazy, inside that arm) or a download step's (pyarrow for parquet)."""
+    trees = next((v for k, v in pins.items() if k.startswith("trees-")), None)
+    sk = [r for r in (trees[1] if trees else []) if r.lower().startswith("scikit-learn==")]
+    out = sk or ["scikit-learn"]
+    for name in OURS_ONLY_LOCKED:
+        version = locked_version(name, lock)
+        out.append("%s==%s" % (name, version) if version else name)
+    return out
+
+
 def opponent_requirements(vendor, pins):
     """[(extra index or None, [reqs])] to install for this vendor.
 
@@ -1804,6 +1855,18 @@ def setup_python(args, vendor, out, log):
                  "bytes": os.path.getsize(wfile)}
         if run_logged(pip + [wfile], None, log, 3600) != 0:
             raise SystemExit("bench_board: installing %s failed; see %s" % (wfile, log))
+    if getattr(args, "ours_install_only", False):
+        # OURS-ONLY VENV (lane measure-prep, 2026-11-09): an ours-only board (no --with-opponents) times no
+        # opponent, so torch, RAPIDS, the ROCm builds, hipVS, mamba-ssm and the neural/algos opponent sets are
+        # dead weight (the 0.8.66 paper smoke venv was 13 GB per shard). Only what our drivers and the quality
+        # metrics import beside our wheel: scikit-learn (pinned with the trees opponents; brings scipy) and pandas.
+        if args.with_opponents or getattr(args, "opponents_only", False):
+            raise SystemExit("bench_board: --ours-install-only is for ours-only boards (no --with-opponents, "
+                             "no --opponents-only)")
+        deps = ours_only_requirements(opponent_pins())
+        if run_logged(pip + deps, None, log, 3600) != 0:
+            raise SystemExit("bench_board: ours-only dependencies %s failed; see %s" % (" ".join(deps), log))
+        return python, wheel
     # torch FIRST: the opponent sets that depend on torch (torch-geometric,
     # gpytorch, ...) then resolve against the pinned build instead of pulling
     # PyPI's newest torch (another CUDA major on Linux)
@@ -2014,8 +2077,8 @@ def setup_arm_venvs(args, vendor, out, log, arms=None):
     (tools/bench_board_algos.py ARM_VENVS), created and installed under the
     cache. A failed install is not fatal: the arm then refuses by name in its
     race, in the board's venv."""
-    if "algos" not in (args.families or ""):
-        return {}
+    if "algos" not in (args.families or "") or getattr(args, "ours_install_only", False):
+        return {}       # --ours-install-only: these are opponent libraries' venvs; an ours-only board races none
     cache = cache_dir(args, out)
     wanted = set(ALGOS.ARM_VENVS.get(vendor, {})) if arms is None else set(arms)
     if args.skip_install or args.python_env:
@@ -5104,6 +5167,10 @@ def build_parser():
                    help="venv sees the image's packages (the CUDA or ROCm torch on a rented box)")
     p.add_argument("--skip-install", action="store_true",
                    help="install nothing; the interpreter already holds mojolearn and the opponents")
+    p.add_argument("--ours-install-only", action="store_true",
+                   help="ours-only board: install our wheels plus scikit-learn and pandas, no opponent stack")
+    p.add_argument("--install-only", action="store_true",
+                   help="make the venv, install, check the wheel and our GPU set, print BOARD-INSTALL and exit")
     p.add_argument("--opponent-wheels", default=None,
                    help="offline opponent install from this staged wheel dir (tools/opponent_wheels.sh)")
     p.add_argument("--torch-spec", default=None,
@@ -5543,6 +5610,12 @@ def main(argv=None):
     if why:
         raise SystemExit("bench_board: REFUSING: our IDENTICAL GPU set cannot load on this %s box, "
                          "so every race would refuse our arm:\n%s" % (vendor, why))
+    if getattr(args, "install_only", False):
+        # ONE INSTALL PER BOX (lane measure-prep): the venv and its wheel manifest are made once; every smoke
+        # shard and the timed board then take --python-env <it> --skip-install --wheel-manifest <it>
+        print("BOARD-INSTALL python=%s manifest=%s source=%s sha256=%s"
+              % (python, args.wheel_manifest, (wheel or {}).get("source"), (wheel or {}).get("sha256")), flush=True)
+        return 0
     if artifact_identity:
         # Validate installed bytes before spending GPU time, using the exact
         # interpreter handed to workers. This is not a worker-load receipt.

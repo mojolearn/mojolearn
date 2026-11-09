@@ -43,6 +43,12 @@ FLAGS (per recipe; a recipe can carry several)
   NOW-LOSES      the reverse
   PARAMS-DIFF    the explicit parameters our arm read back differ from the paper's
   HW-DIFF        the new board's GPU is not the paper's GPU (timings are then not comparable)
+With --prior-compare (the 0.8.66 compare JSON on main; a third, middle column):
+  REGRESSION-VS-PRIOR / FASTER-VS-PRIOR   new / prior median ms above 1.10 / below 0.90
+  RECOVERED      the prior was a REGRESSION vs 0.8.55 and the new board is SAME or FASTER vs 0.8.55
+  STILL-REGRESSED the prior was a REGRESSION vs 0.8.55 and the new board still is
+A board made from candidate wheels (bench_board --candidate-wheel; box.mojolearn.wheel.source = candidate) is
+labelled "candidate <sha12> (<version>)" everywhere, with its source commit and wheel sha256s, never as a release.
 
 The new numbers come from tools/ops/paper_compare_job.sh, which runs these recipes through tools/bench_board.py
 (our arms only) from the published wheels. Tests: tools/test_paper_compare.py.
@@ -295,11 +301,6 @@ def smoke_id(rid, smoke_rows):
     return re.sub(r"/shape=full$", "/shape=" + SMOKE_SHAPE, rid)
 
 
-def full_id(rid):
-    rid = re.sub(r"/rows=[0-9]+$", "/rows=full", rid)
-    return re.sub(r"/shape=%s$" % SMOKE_SHAPE, "/shape=full", rid)
-
-
 def plan_ids(doc, planner):
     """(full ids planned, smoke ids planned, {race id: why not planned})."""
     b = doc["bench_board_args"]
@@ -364,21 +365,30 @@ def cmd_ids(args):
     return 0
 
 
+def race_smoke_key(rid):
+    """bench_board.smoke_key of a race id: family/lane/dataset, the key smoke.json files its races under and the
+    board's smoke gate reads (the same race at smoke and at full size)."""
+    return "/".join(rid.split("/")[:3])
+
+
 def passed_full_ids(full_ids, smoke_docs):
-    """(full ids whose smoke passed, {full id: why not})."""
+    """(full ids whose smoke passed, {full id: why not}). Matched on the smoke key (family/lane/dataset), as the
+    board's own smoke gate does: the 0.8.66 NVIDIA run lost 15 of 62 races to "no smoke result" when this
+    matched the smoke id turned back into a full id (taxi classical lanes, int8 gemm, decode lanes, ...)."""
     passed, seen = set(), {}
     for doc in smoke_docs:
         for key, v in (doc.get("races") or {}).items():
-            fid = full_id(v.get("id") or key)
-            seen[fid] = v
+            k = race_smoke_key(v.get("id") or key) if "/" in (v.get("id") or key) else key
+            seen[k] = v
             if v.get("pass") is True:
-                passed.add(fid)
+                passed.add(k)
     keep, failed = [], {}
     for rid in full_ids:
-        if rid in passed:
+        k = race_smoke_key(rid)
+        if k in passed:
             keep.append(rid)
-        elif rid in seen:
-            v = seen[rid]
+        elif k in seen:
+            v = seen[k]
             fails = v.get("failures") or []
             failed[rid] = short_status("smoke failed: " + "; ".join(
                 "%s: %s" % (f.get("arm"), f.get("reason")) for f in fails if isinstance(f, dict)) if fails
@@ -516,18 +526,87 @@ def compare_one(rec, races, not_run_why, hw_diff):
     return row
 
 
-def compare(doc, boards, not_run_why=None):
+def board_candidate(boards):
+    """The candidate identity of the new boards (bench_board --candidate-wheel: box.mojolearn.wheel carries the
+    candidate manifest), or None for a published release. Two different candidates in one compare refuse."""
+    found = {}
+    for b in boards:
+        wheel = (((b.get("box") or {}).get("mojolearn") or {}).get("wheel") or {})
+        man = wheel.get("candidate") if wheel.get("source") == "candidate" else None
+        if not man:
+            continue
+        ident = {"source_commit": man.get("source_commit"), "version": man.get("version"),
+                 "vendor": man.get("vendor"),
+                 "wheels": {f.get("distribution"): {"file": f.get("file"), "sha256": f.get("sha256")}
+                            for f in man.get("files") or []}}
+        found[json.dumps(ident, sort_keys=True)] = ident
+    if len(found) > 1:
+        raise SystemExit("paper_compare: the boards hold %d different candidates; compare one at a time"
+                         % len(found))
+    return next(iter(found.values()), None)
+
+
+def new_label(candidate, versions):
+    """'candidate <sha12> (<version>)' for a candidate build, so it is never read as a release."""
+    if candidate:
+        return "candidate %s (%s)" % ((candidate.get("source_commit") or "?")[:12], candidate.get("version"))
+    return ",".join(versions) or "?"
+
+
+def attach_prior(row, prior):
+    """The middle column (the previous release, e.g. 0.8.66, from its compare JSON on main): its ms and flags,
+    the new / prior ratio and the flags vs the prior:
+      REGRESSION-VS-PRIOR new / prior > 1.10      FASTER-VS-PRIOR new / prior < 0.90
+      RECOVERED           the prior was a REGRESSION vs 0.8.55; new is SAME or FASTER vs 0.8.55
+      STILL-REGRESSED     the prior was a REGRESSION vs 0.8.55 and new still is"""
+    p = prior.get(row["key"]) if prior else None
+    row["prior_ms"] = p.get("new_ms") if p and number(p.get("new_ms")) else None
+    row["prior_flags"] = list(p.get("flags") or []) if p else []
+    row["prior_status"] = p.get("new_status") if p else "not in the prior compare"
+    r = (row["new_ms"] / row["prior_ms"]) if number(row.get("new_ms")) and row["prior_ms"] else None
+    row["ratio_vs_prior"] = r
+    if r is not None:
+        if r > SLOWER:
+            row["flags"].append("REGRESSION-VS-PRIOR")
+        elif r < FASTER:
+            row["flags"].append("FASTER-VS-PRIOR")
+    if "REGRESSION" in row["prior_flags"]:
+        if "SAME" in row["flags"] or "FASTER" in row["flags"]:
+            row["flags"].append("RECOVERED")
+        elif "REGRESSION" in row["flags"]:
+            row["flags"].append("STILL-REGRESSED")
+    return row
+
+
+def compare(doc, boards, not_run_why=None, prior=None, prior_label=None):
+    """PRIOR: {recipe key: row} of the previous release's compare JSON (the middle column), or None."""
     races, gpus, versions = merge_boards(boards)
+    candidate = board_candidate(boards)
     paper_gpu = doc["source"].get("gpu")
     hw_diff = bool(gpus) and paper_gpu is not None and any(g != paper_gpu for g in gpus)
     rows = [compare_one(rec, races, not_run_why or {}, hw_diff) for rec in doc["recipes"]]
+    if prior is not None:
+        rows = [attach_prior(r, prior) for r in rows]
     counts = {}
     for r in rows:
         for f in r["flags"]:
             counts[f] = counts.get(f, 0) + 1
     return {"schema": COMPARE_SCHEMA, "vendor": doc["vendor"], "paper_version": doc["paper_version"],
-            "new_versions": versions, "paper_gpu": paper_gpu, "new_gpus": gpus, "hw_diff": hw_diff,
+            "new_versions": versions, "new_label": new_label(candidate, versions), "candidate": candidate,
+            "prior_label": prior_label if prior is not None else None,
+            "paper_gpu": paper_gpu, "new_gpus": gpus, "hw_diff": hw_diff,
             "thresholds": doc.get("thresholds"), "recipes": len(rows), "flag_counts": counts, "rows": rows}
+
+
+def load_prior(path):
+    """(rows by key, label) of a previous compare JSON (bench/results/paper_compare/compare-<vendor>.json)."""
+    doc = load_json(path)
+    if doc.get("schema") != COMPARE_SCHEMA:
+        raise SystemExit("paper_compare: %s is not a %s document" % (path, COMPARE_SCHEMA))
+    if doc.get("candidate"):
+        raise SystemExit("paper_compare: the prior column must be a published release, not %s"
+                         % doc.get("new_label"))
+    return {r["key"]: r for r in doc.get("rows") or []}, ",".join(doc.get("new_versions") or []) or "prior"
 
 
 def fmt_ms(v):
@@ -547,8 +626,16 @@ def fmt_q(q):
 
 
 def render_md(res):
-    v, new = res["vendor"], ", ".join(res["new_versions"]) or "?"
-    lines = ["# Paper measurements: %s against %s on %s" % (res["paper_version"], new, v), ""]
+    v, new = res["vendor"], res.get("new_label") or ", ".join(res["new_versions"]) or "?"
+    pl = res.get("prior_label")
+    lines = ["# Paper measurements: %s%s against %s on %s" % (res["paper_version"], ", " + pl if pl else "", new, v),
+             ""]
+    cand = res.get("candidate")
+    if cand:
+        lines.append("**Candidate build, not a release**: source %s, version %s; wheels %s." % (
+            cand.get("source_commit"), cand.get("version"),
+            ", ".join("%s sha256 %s" % (w.get("file"), w.get("sha256")) for _, w in sorted(cand["wheels"].items()))))
+        lines.append("")
     lines.append("Paper GPU: %s. New GPU: %s.%s" % (res["paper_gpu"], ", ".join(res["new_gpus"]) or "?",
                  " **Different hardware: timings are not comparable.**" if res["hw_diff"] else ""))
     t = res.get("thresholds") or {}
@@ -559,10 +646,13 @@ def render_md(res):
     lines.append("")
     lines.append("Flags: " + ", ".join("%s %d" % kv for kv in sorted(res["flag_counts"].items())))
     lines.append("")
-    lines.append("| recipe | %s ms | new ms | ratio | flags | quality %s | quality new | q | best opponent "
-                 "(ms) | vs opp %s | vs opp new | note |" % ((res["paper_version"],) * 3))
-    lines.append("|---|---:|---:|---:|---|---|---|---|---|---:|---:|---|")
+    pcols = "%s ms | new/%s | " % (pl, pl) if pl else ""
+    lines.append("| recipe | %s ms | %snew ms | ratio | flags | quality %s | quality new | q | best opponent "
+                 "(ms) | vs opp %s | vs opp new | note |" % (res["paper_version"], pcols, res["paper_version"],
+                                                             res["paper_version"]))
+    lines.append("|---|---:|%s---:|---:|---|---|---|---|---|---:|---:|---|" % ("---:|---:|" if pl else ""))
     for r in res["rows"]:
+        pvals = ("%s | %s | " % (fmt_ms(r.get("prior_ms")), fmt_ratio(r.get("ratio_vs_prior")))) if pl else ""
         b = r.get("best_opponent") or {}
         note = []
         if r.get("why"):
@@ -575,8 +665,8 @@ def render_md(res):
             note.append("quality: " + "; ".join(r["quality_failures"])[:200])
         if r.get("params_diff"):
             note.append("params: " + ",".join(r["params_diff"][:6]))
-        lines.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
-            r["key"], fmt_ms(r.get("old_ms")), fmt_ms(r.get("new_ms")), fmt_ratio(r.get("ratio")),
+        lines.append("| %s | %s | %s%s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+            r["key"], fmt_ms(r.get("old_ms")), pvals, fmt_ms(r.get("new_ms")), fmt_ratio(r.get("ratio")),
             " ".join(r["flags"]), fmt_q(r.get("old_quality")), fmt_q(r.get("new_quality")),
             r.get("quality_verdict", "-"),
             "%s (%s)" % (b.get("arm"), fmt_ms(b.get("opponent_ms"))) if b else "-",
@@ -587,8 +677,10 @@ def render_md(res):
 
 def render_summary(res, top=8):
     rows = res["rows"]
-    out = ["PAPER-COMPARE vendor=%s %s->%s recipes=%d gpu %s -> %s%s" % (
-        res["vendor"], res["paper_version"], ",".join(res["new_versions"]) or "?", res["recipes"],
+    label = res.get("new_label") or ",".join(res["new_versions"]) or "?"
+    out = ["PAPER-COMPARE vendor=%s %s->%s%s recipes=%d gpu %s -> %s%s" % (
+        res["vendor"], res["paper_version"], (res["prior_label"] + "->") if res.get("prior_label") else "",
+        label.replace(" ", "_"), res["recipes"],
         res["paper_gpu"], ",".join(res["new_gpus"]) or "?", " HW-DIFF" if res["hw_diff"] else "")]
     out.append("flags: " + " ".join("%s=%d" % kv for kv in sorted(res["flag_counts"].items())))
     timed_rows = [r for r in rows if number(r.get("ratio"))]
@@ -609,8 +701,14 @@ def render_summary(res, top=8):
         out.append("biggest gains:")
         out += ["  %.2fx %s (%s -> %s ms)" % (r["ratio"], r["key"], fmt_ms(r["old_ms"]), fmt_ms(r["new_ms"]))
                 for r in best]
-    for flag in ("FIXED", "BROKEN", "QUALITY-DROP", "QUALITY-CHANGE", "NOW-WINS", "NOW-LOSES", "PARAMS-DIFF",
-                 "NOT-RUN"):
+    if res.get("prior_label"):
+        worse = sorted([r for r in rows if "REGRESSION-VS-PRIOR" in r["flags"]], key=lambda r: -r["ratio_vs_prior"])
+        if worse:
+            out.append("worse than %s:" % res["prior_label"])
+            out += ["  %.2fx %s (%s -> %s ms)" % (r["ratio_vs_prior"], r["key"], fmt_ms(r["prior_ms"]),
+                                                  fmt_ms(r["new_ms"])) for r in worse[:top]]
+    for flag in ("RECOVERED", "STILL-REGRESSED", "FIXED", "BROKEN", "QUALITY-DROP", "QUALITY-CHANGE", "NOW-WINS",
+                 "NOW-LOSES", "PARAMS-DIFF", "NOT-RUN"):
         hit = [r for r in rows if flag in r["flags"]]
         if hit:
             out.append("%s (%d): %s%s" % (flag, len(hit), ", ".join(r["key"] for r in hit[:6]),
@@ -632,7 +730,12 @@ def cmd_compare(args):
             why.update({k: v for k, v in load_json(p).items() if isinstance(v, str)})
         except (OSError, ValueError):
             pass
-    res = compare(doc, boards, why)
+    prior, plabel = (None, None)
+    if args.prior_compare:
+        prior, plabel = load_prior(args.prior_compare)
+        if args.prior_label:
+            plabel = args.prior_label
+    res = compare(doc, boards, why, prior, plabel)
     v = doc["vendor"]
     md = args.out_md or os.path.join(OUT_DIR, "COMPARE-%s.md" % v)
     js = args.out_json or os.path.join(os.path.dirname(os.path.abspath(md)), "compare-%s.json" % v)
@@ -668,6 +771,10 @@ def build_parser():
     c.add_argument("--board", action="append", default=[], required=True)
     c.add_argument("--not-run", action="append", default=[],
                    help="json {race id: why} (not-planned.json, smoke-failed.json) for NOT-RUN rows")
+    c.add_argument("--prior-compare", default=None,
+                   help="the previous release's compare JSON (bench/results/paper_compare/compare-<vendor>.json, "
+                        "0.8.66): the middle column, REGRESSION-VS-PRIOR / RECOVERED / STILL-REGRESSED")
+    c.add_argument("--prior-label", default=None, help="the middle column's name (default its new_versions)")
     c.add_argument("--out-md", default=None)
     c.add_argument("--out-json", default=None)
     c.add_argument("--summary", default=None)

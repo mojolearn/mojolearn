@@ -2401,12 +2401,20 @@ class OursBlock(Ours):
                 # public resident session too (0.8.66 mamba3-decode 2.17x on the
                 # per-call step); the same bytes as the per-call step.
                 self.decode_state = self.block.allocate_state(batch)
-            if self.decode_state is not None:
+            if self.decode_state is not None and hasattr(self.block, "decode_session"):
                 # The public resident session: weights uploaded once, here,
                 # like the torch twin's device weights. The state's host
                 # buffers stay zero (never synced), so load_state() is the
                 # per-round zero reset.
                 self.decode_session = self.block.decode_session(self.decode_state)
+            elif self.decode_state is not None:
+                # A PRIOR WHEEL (the pre-0.8.67 measurement's 0.8.66 arm, lane candidate-build): Mamba-2/3 have
+                # no public decode_session there, so the arm runs that version's public per-call step (call(),
+                # fresh allocate_state per round), as its own board measured it.
+                self.decode_state = None
+                self.info["call"] = "%s.step(x[:, t:t+1], state) for t < L (no public decode_session)" % cls.__name__
+                if self.operation == "decode_n":
+                    raise RuntimeError("REFUSED: decode_n needs the public decode_session (not in this wheel)")
             self.info["operation_scope"] = ("zero-state token-by-token decode of the whole input, "
                                             "one public step call per token")
         # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
@@ -2542,9 +2550,15 @@ class OursSamba(Ours):
         # (parameters uploaded once). The state's host arrays stay zero
         # (never synced), so load_state() is the per-round zero reset.
         self.decode_session = None
-        if self.decode_ids is not None:
+        if self.decode_ids is not None and hasattr(self.model, "decode_session"):
             self.decode_session = self.model.decode_session(
                 self.model.allocate_state(int(self.ids.shape[0]), int(self.ids.shape[1])))
+        elif self.decode_ids is not None:
+            # A PRIOR WHEEL (0.8.66, lane candidate-build): SambaStack has no decode_session there; the arm runs
+            # that version's public per-call step(ids_t, state), as its own board measured it.
+            self.info["call"] = "SambaStack.step(ids[:, t], allocate_state(B, L)) for t < L (no decode_session)"
+            if self.operation == "decode_n":
+                raise RuntimeError("REFUSED: decode_n needs the public decode_session (not in this wheel)")
 
     def call(self):
         np = self.np
@@ -2553,6 +2567,10 @@ class OursSamba(Ours):
             res = self.model.train_step(np.ascontiguousarray(b[:, :-1]), np.ascontiguousarray(b[:, 1:]))
             self.losses.append(float(res["loss"]))
             self.k += 1
+        elif self.decode_ids is not None and self.decode_session is None:
+            state = self.model.allocate_state(int(self.ids.shape[0]), int(self.ids.shape[1]))
+            step = self.model.step
+            self.out = [step(t, state) for t in self.decode_ids]
         elif self.decode_ids is not None:
             self.decode_session.load_state()
             if self.operation == "decode_n":

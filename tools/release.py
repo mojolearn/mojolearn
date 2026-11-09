@@ -910,9 +910,12 @@ def github_legs(ctx):
     for vendor, arch in RELEASE_LEG_SETS:
         name = f"{vendor}-{arch}"
         rb, out = leg_layout(legs_dir, "github", name)
+        defines = candidate_defines(ctx)
+        ref = getattr(getattr(ctx, "args", None), "candidate_ref", "") or ""
         legs.append(Leg(name, vendor, arch,
                         ["python3", "tools/release_github_build.py", "run", "--commit", ctx.commit,
-                         "--arch", arch, "--out", str(out)],
+                         "--arch", arch, "--out", str(out)] + (["--defines", defines] if defines else [])
+                        + (["--ref", ref] if ref else []),
                         {}, rb, legs_dir, out))
     return legs
 
@@ -927,6 +930,12 @@ SELF_OVERLAID = ("cpu-box", "github")
 #: Routes whose linux-builds step rents a box: there linux-builds waits for the free cross-compile
 #: (Release.__init__); on `github` the two compile at once (STEP_TABLE, 2026-11-07).
 RENTED_BUILD_BACKENDS = ("cpu-box", "gpu-legs")
+
+
+def candidate_defines(ctx):
+    """The candidate build's defines (tools/release.py candidate --defines; MOJOLEARN_BUILD_DEFINES spelling),
+    empty for a release."""
+    return getattr(getattr(ctx, "args", None), "candidate_defines", "") or ""
 
 
 def linux_legs(ctx):
@@ -2769,7 +2778,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
                 return self._plan
             doc = read_json(self.plan_path)
             if (doc and doc.get("schema") == release_reuse.PLAN_SCHEMA and doc.get("commit") == self.commit
-                    and release_reuse.record_modes(doc) == self.release_modes):
+                    and release_reuse.record_modes(doc) == self.release_modes
+                    and (doc.get("candidate_defines") or "") == candidate_defines(self)):
                 if self.readonly:
                     self._plan = doc
                     return doc
@@ -2784,7 +2794,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
             # wins when it reuses more (release_reuse.candidate_builds, Andrew 2026-10-15)
             self._plan = release_reuse.make_plan(self.commit, self.evidence / "release" / "identities",
                                                  builders_override=override or None, evidence_root=self.evidence,
-                                                 modes=self.release_modes)
+                                                 modes=self.release_modes, defines=candidate_defines(self))
             return self._plan
 
     def step_reuse_plan(self):
@@ -2802,7 +2812,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
             return "would write " + str(self.plan_path) + "; " + summary
         old = read_json(self.plan_path) or {}
         if (old.get("commit") != self.commit or old.get("builders_override") != plan.get("builders_override")
-                or release_reuse.record_modes(old) != self.release_modes):
+                or release_reuse.record_modes(old) != self.release_modes
+                or old.get("candidate_defines") != plan.get("candidate_defines")):
             write_json(self.plan_path, plan)
         return (f"against {prev.get('version', 'no published release')}"
                 f"{' ' + (prev.get('channel') or 'pypi') if prev else ''}: {summary}; {self.plan_path}")
@@ -3867,6 +3878,16 @@ class Release(release_identity_wheels.IdentityOnWheels):
         # MOJOLEARN_RELEASE_ADAPTERS=0 releases none, legs and pack alike.
         if os.environ.get("MOJOLEARN_RELEASE_ADAPTERS", "1") != "0":
             args += ["--require-adapters"]
+        if getattr(self.args, "candidate_version", ""):
+            # a candidate build (tools/release.py candidate): the local version and the defines, never the release's
+            args += ["--local-version", self.args.candidate_version]
+            if candidate_defines(self):
+                args += ["--candidate-defines", candidate_defines(self)]
+            if "--source-root" not in args:
+                # the tooling's packer (it has --local-version; the candidate's source may predate it) reading the
+                # shipped source from the candidate's checkout: the retained-host-composition route above, unchanged
+                args += ["--source-root", src]
+                pack_cwd = ROOT
         args += ["--out", dist]
         # the vendor wheel's README says which native set ships unsmoked (no Hopper box held)
         unsmoked = sorted(self.smoke_notes("nvidia"))
@@ -6758,7 +6779,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
         return 0
 
 
-def main(argv=None):
+def release_parser():
+    """The release CLI (main); `tools/release.py candidate` parses its Release arguments with it too."""
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     ap.add_argument("version")
@@ -6852,6 +6874,15 @@ def main(argv=None):
                     help="where the AMD build leg rents: auto = DigitalOcean MI325X, Hot Aisle 1x MI300X when "
                          "DigitalOcean has a GPU droplet live (default MOJOLEARN_AMD_PROVIDER, else auto)")
     ap.add_argument("--state-dir", default="", help=argparse.SUPPRESS)
+    return ap
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv[:1] == ["candidate"]:
+        import release_candidate
+        return release_candidate.main(argv[1:], release=sys.modules[__name__])
+    ap = release_parser()
     args = ap.parse_args(argv)
     if args.report and (args.plan or args.status or args.dry_run or args.only or args.redo or args.refreeze):
         ap.error("--report runs nothing; it takes no --plan, --status, --dry-run, --only, --redo or --refreeze")

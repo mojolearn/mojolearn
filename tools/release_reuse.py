@@ -1187,8 +1187,41 @@ def materialize_ptx_leg(proof, whl, dest):
 
 
 # ---------------------------------------------------------------- the plan
+def define_readers(commit, names, root=ROOT):
+    """The files of COMMIT that name any of the define NAMES as a whole word (one `git grep`)."""
+    if not names:
+        return set()
+    args = ["git", "-C", str(root), "grep", "-l", "-w", "-F"]
+    for n in names:
+        args += ["-e", n]
+    p = subprocess.run(args + [commit, "--"], capture_output=True, text=True)
+    if p.returncode not in (0, 1):
+        raise SystemExit("release_reuse: git grep for the candidate defines failed: " + p.stderr.strip()[:300])
+    prefix = commit + ":"
+    return {line[len(prefix):] for line in p.stdout.splitlines() if line.startswith(prefix)}
+
+
+def apply_defines(rows, current, facts, readers, names):
+    """CANDIDATE DEFINES (tools/release.py candidate --defines): every Linux row decided REUSE whose closure
+    (its script and the Mojo sources it reaches, the identity's own closure) names a define is BUILT, because
+    the published bytes were compiled without it. Rows that read none keep their decision: their bytes are
+    the define-free ones by construction (tools/bincache.py scope_build_defines builds them the same way).
+    Returns the rows it moved."""
+    moved = []
+    for r, (b, _) in zip(rows, current):
+        if r["target"] != LINUX or r["decision"] != "REUSE":
+            continue
+        closure = facts["closures"].get(b.script) or {}
+        hits = sorted(({"bindings/" + b.script} | set(closure.get("sources", []))) & readers)
+        if hits:
+            r.update(decision="BUILD", reuse_from=None,
+                     reason="candidate defines %s: read by %s" % (",".join(names), ", ".join(hits[:4])))
+            moved.append(r)
+    return moved
+
+
 def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, builders_override=None,
-              evidence_root=None, candidates=None, modes=None):
+              evidence_root=None, candidates=None, modes=None, defines=""):
     """The REUSE/BUILD plan of COMMIT. `builders_override` ({builder: sha256})
     replaces a builder's bytes in every identity: the release's route overlay
     runs the tooling checkout's copy of a builder on the box
@@ -1246,6 +1279,13 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
     rows, runtime, prev, prev_source = best["rows"], best["runtime"], best["source"], best["prev_source"]
     rt_decision = runtime["decision"]
     ptx_proof = best.get("ptx_proof")
+    names = [e.split("=", 1)[0] for e in (defines or "").split(",") if e]
+    if names:
+        moved = apply_defines(rows, current, facts, define_readers(commit, names, root), names)
+        if ptx_proof and any((r["vendor"], r["arch"]) == PTX_SET for r in moved):
+            # the published PTX set was compiled without the defines: it cannot be taken whole
+            _refuse_ptx(rows, "a binding of the set reads the candidate defines")
+            ptx_proof = None
     # A PUBLISHED PTX SET TAKEN WHOLE ships the host owner's host bindings
     # (ptx_reuse.HOST_OWNER_ADMISSION): the owner leg must run at this freeze
     # (a device binding of its set builds, or it is the cheapest leg for a host
@@ -1275,7 +1315,8 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
     return dict(schema=PLAN_SCHEMA, commit=commit, made=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 previous=prev, previous_identities_from=prev_source, considered=considered, rows=rows, runtime=runtime,
                 legs=legs, leg_reasons=why, ptx_proof=ptx_proof, host_toolchain=host_toolchain,
-                builders_override=dict(sorted((builders_override or {}).items())), release_modes=list(modes))
+                builders_override=dict(sorted((builders_override or {}).items())), release_modes=list(modes),
+                **({"candidate_defines": defines} if defines else {}))
 
 
 def _decide(commit, root, cache_dir, facts, current, rt, prev, evidence_root=None):
