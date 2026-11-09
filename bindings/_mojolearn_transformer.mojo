@@ -270,6 +270,7 @@ from transformer.transformer_binding_impl import (
     _require_session_open,
     _session_open_run,
     _session_open_run_int15,
+    _session_open_step_op,
     _session_step_run,
     _session_decode_run,
     _session_forward_run,
@@ -1042,6 +1043,59 @@ def transformer_decode_session_open_int15_binding(
     return PythonObject(out_len)
 
 
+def transformer_decode_session_open_step_op_binding(
+    session: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`transformer_decode_session_open` for the public decode session (lane
+    x4-transformer-on-executor): the same ELEVEN addresses and NINE scalars,
+    each optionally followed by its block options tail, but the session runs
+    on the attention step op (`OPS_ATTN_STEP`): the weights packed into its
+    one weight buffer, the caches into its one state buffer, the position
+    into its state word. Every later step, forward, decode, export, load and
+    close is this binding's own entry. Returns cached_tokens."""
+    var owner = session.downcast_value_ptr[TransformerDecodeSession]()
+    var what = String("transformer_decode_session_open_step_op")
+    if (len(addrs) != 11 and len(addrs) != 11 + BLOCK_OPTION_ADDRS) or (
+        len(params) != 9 and len(params) != 9 + BLOCK_OPTION_PARAMS
+    ):
+        raise Error(what + ": expected 11 addresses and 9 scalars, each optionally followed by its block options tail")
+    if owner[].busy:
+        raise Error("transformer decode session: busy")
+    if owner[].is_open():
+        raise Error("transformer decode session: already open; close it first")
+    var raw = _read_addrs_tail(addrs, 11, what)
+    var a = List[Int]()
+    a.append(0)
+    for i in range(11):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
+        a.append(raw[i])
+    a.append(0)
+    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
+        a.append(raw[11 + i])
+    _check_base_addrs(a, [1, 2, 3, 4, 5, 6, 8, 9, 10, 11], what)
+    var p = _read_params(params, 9, what)
+    var opts = BlockOptions.from_params(p, 9)
+    var option_words = List[Int]()
+    if len(p) == 9 + BLOCK_OPTION_PARAMS:
+        for i in range(BLOCK_OPTION_PARAMS):  # small-loop(BLOCK_OPTION_PARAMS: the 17 option words): argument words, not data
+            option_words.append(p[9 + i])
+    if p[0] <= 0:
+        raise Error(what + ": B must be positive")
+    owner[].busy = True
+    owner[].usable = False
+    var out_len = 0
+    try:
+        with GILReleased(Python()):
+            out_len = _session_open_step_op(
+                owner[], a, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], opts, option_words)
+    except error:
+        owner[].busy = False
+        owner[].release()
+        raise error
+    owner[].busy = False
+    owner[].usable = True
+    return PythonObject(out_len)
+
+
 def transformer_decode_session_step_binding(
     session: PythonObject, addrs: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
@@ -1059,10 +1113,10 @@ def transformer_decode_session_step_binding(
         raise Error("transformer_decode_session_step: null buffer address")
     var claimed = Int(py=params[0])
     _require_session_open(owner[])
-    if owner[].kv.value().s != claimed:
+    if owner[].cached() != claimed:
         raise Error(
             String("transformer decode session: the caller believes cached_tokens = ") + String(claimed)
-            + " but the resident cache holds " + String(owner[].kv.value().s))
+            + " but the resident cache holds " + String(owner[].cached()))
     owner[].busy = True
     var out_len = 0
     try:
@@ -1094,10 +1148,10 @@ def transformer_decode_session_decode_binding(
     var n = Int(py=params[0])
     var claimed = Int(py=params[1])
     _require_session_open(owner[])
-    if owner[].kv.value().s != claimed:
+    if owner[].cached() != claimed:
         raise Error(
             String("transformer decode session: the caller believes cached_tokens = ") + String(claimed)
-            + " but the resident cache holds " + String(owner[].kv.value().s))
+            + " but the resident cache holds " + String(owner[].cached()))
     owner[].busy = True
     var out_len = 0
     try:
@@ -1130,10 +1184,10 @@ def transformer_decode_session_forward_binding(
     if l <= 0:
         raise Error("transformer_decode_session_forward: L must be positive")
     _require_session_open(owner[])
-    if owner[].kv.value().s != claimed:
+    if owner[].cached() != claimed:
         raise Error(
             String("transformer decode session: the caller believes cached_tokens = ") + String(claimed)
-            + " but the resident cache holds " + String(owner[].kv.value().s))
+            + " but the resident cache holds " + String(owner[].cached()))
     owner[].busy = True
     var out_len = 0
     try:
@@ -1701,6 +1755,7 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[transformer_decode_session_create_binding]("transformer_decode_session_create")
         m.def_function[transformer_decode_native_handle_binding]("transformer_decode_native_handle_v1")
         m.def_function[transformer_decode_session_open_binding]("transformer_decode_session_open")
+        m.def_function[transformer_decode_session_open_step_op_binding]("transformer_decode_session_open_step_op")
         # lane/lowbit-default: the resident sessions under numeric_profile="fixed15_v1".
         m.def_function[transformer_decode_session_open_int15_binding]("transformer_decode_session_open_int15")
         m.def_function[transformer_decode_session_step_binding]("transformer_decode_session_step")

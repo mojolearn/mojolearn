@@ -78,9 +78,9 @@ def transformer_decode_operation(op: Int, a: List[Int], words: List[Int]) raises
         raise Error("transformer decode export: unexpected scalars")
     if op == 5 or op == 6:
         var claimed = p[0] if op == 5 else p[1]
-        if owner[].kv.value().s != claimed:
+        if owner[].cached() != claimed:
             raise Error("transformer decode session: the caller believes cached_tokens = " + String(claimed)
-                + " but the resident cache holds " + String(owner[].kv.value().s))
+                + " but the resident cache holds " + String(owner[].cached()))
     try:
         if op == 5:
             return _session_step_run(owner[], a[0], a[1])

@@ -68,6 +68,10 @@ def _lm_group_reserve(group: NativeSessionGroup) raises:
             raise Error("causal lm resident: null decoder owner")
         var layer = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=group.layers[i])
         _require_session_open(layer[])
+        if layer[].op:
+            # lane x4: a public decode session runs on the attention step op
+            # and holds none of the structs the resident read walks.
+            raise Error("causal lm resident: a decoder session opened on the step op is not a layer session")
         if layer[].b != owner[].b or layer[].dm != owner[].d:
             raise Error("causal lm resident: decoder dimensions differ from the model")
         var cached = layer[].kv.value().s

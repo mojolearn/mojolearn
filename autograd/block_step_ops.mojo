@@ -716,6 +716,25 @@ def _step_run[CODE: Int](
         _run_attn(ex, sc, bufs, counts, ints, out)
 
 
+def attn_step_run(
+    mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int], out: FP,
+) raises:
+    """`block_step_run` of OPS_ATTN_STEP alone (lane x4-transformer-on-
+    executor): the transformer binding's decode session runs the step op
+    through this, so that binding instantiates the attention body only, not
+    the Mamba bodies of the table. Same checks, same body, same eviction of
+    the pair's entry on a failed run."""
+    _check_ints(OPS_ATTN_STEP, ints)
+    if len(bufs) != 4 or len(counts) != 4:
+        raise Error("ops: attention_step takes four tensors (x, weights, kv, words)")
+    try:
+        _run_attn(ex, sc, bufs, counts, ints, out)
+    except err:
+        for k in range(1, len(bufs)):  # small-loop(bufs: the op's four operands): entry eviction, no data
+            sc.forget(Int(bufs[k]))
+        raise err
+
+
 def block_step_check(code: Int, n_tensors: Int, ints: List[Int], fs: List[Float32]) raises -> StepOpInfo:
     """The operand counts of step op `code`, refused by name."""
     var info = step_op_info(code)
