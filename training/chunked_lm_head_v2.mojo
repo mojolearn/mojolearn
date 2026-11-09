@@ -46,21 +46,20 @@ def _device_logit(
     return ftz(acc)
 
 
-def chunked_lm_head_v2_rows_kernel(
+@always_inline
+def chunked_lm_head_v2_row_body(
+    row: Int,
     row_max: MutPointer[Float32, MutAnyOrigin],
     row_denom: MutPointer[Float32, MutAnyOrigin],
     row_loss: MutPointer[Float32, MutAnyOrigin],
     hidden: MutPointer[Float32, MutAnyOrigin],
     weight: MutPointer[Float32, MutAnyOrigin],
     targets: MutPointer[Int32, MutAnyOrigin],
-    rows_in: Int32, vocab_in: Int32, width_in: Int32,
+    vocab: Int, width: Int,
 ):
-    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var rows = Int(rows_in)
-    if row >= rows:
-        return
-    var vocab = Int(vocab_in)
-    var width = Int(width_in)
+    """One row's maximum, denominator and loss (the rows kernel's body; the
+    host arm of the executor op, autograd/lm_head_v2_op.mojo, runs it per
+    row too, so both columns compute the same words)."""
     var maximum = bitcast[DType.float32](CE_NEG_INF_BITS)
     for chunk0 in range(0, vocab, LM_HEAD_V2_CHUNK):
         var chunk1 = min(chunk0 + LM_HEAD_V2_CHUNK, vocab)
@@ -85,6 +84,22 @@ def chunked_lm_head_v2_rows_kernel(
     row_loss.unsafe_store(
         row, neg_by_bits(ftz(ftz(target_shift) - ftz(identical_log(ftz(denom)))))
     )
+
+
+def chunked_lm_head_v2_rows_kernel(
+    row_max: MutPointer[Float32, MutAnyOrigin],
+    row_denom: MutPointer[Float32, MutAnyOrigin],
+    row_loss: MutPointer[Float32, MutAnyOrigin],
+    hidden: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    targets: MutPointer[Int32, MutAnyOrigin],
+    rows_in: Int32, vocab_in: Int32, width_in: Int32,
+):
+    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if row >= Int(rows_in):
+        return
+    chunked_lm_head_v2_row_body(row, row_max, row_denom, row_loss, hidden, weight, targets,
+                                Int(vocab_in), Int(width_in))
 
 
 #: The mean loss's row fold (lane n-train-mamba, cpu-gpu-cleanup 2026-10-02):
@@ -189,22 +204,18 @@ def _enqueue_loss_total(
     _ = b^
 
 
-def chunked_lm_head_v2_dhidden_kernel(
+@always_inline
+def chunked_lm_head_v2_dhidden_body(
+    row: Int,
     d_hidden: MutPointer[Float32, MutAnyOrigin],
     hidden: MutPointer[Float32, MutAnyOrigin],
     weight: MutPointer[Float32, MutAnyOrigin],
     targets: MutPointer[Int32, MutAnyOrigin],
     row_max: MutPointer[Float32, MutAnyOrigin],
     row_denom: MutPointer[Float32, MutAnyOrigin],
-    rows_in: Int32, vocab_in: Int32, width_in: Int32,
+    rows: Int, vocab: Int, width: Int,
 ):
     """One row owner: every dHidden cell folds vocabulary globally ascending."""
-    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var rows = Int(rows_in)
-    if row >= rows:
-        return
-    var vocab = Int(vocab_in)
-    var width = Int(width_in)
     for feature in range(width):
         d_hidden.unsafe_store(row * width + feature, Float32(0.0))
     var maximum = row_max.unsafe_load(row)
@@ -228,8 +239,8 @@ def chunked_lm_head_v2_dhidden_kernel(
         d_hidden.unsafe_store(cell, ftz(d_hidden.unsafe_load(cell)))
 
 
-def chunked_lm_head_v2_dweight_kernel(
-    d_weight: MutPointer[Float32, MutAnyOrigin],
+def chunked_lm_head_v2_dhidden_kernel(
+    d_hidden: MutPointer[Float32, MutAnyOrigin],
     hidden: MutPointer[Float32, MutAnyOrigin],
     weight: MutPointer[Float32, MutAnyOrigin],
     targets: MutPointer[Int32, MutAnyOrigin],
@@ -237,13 +248,27 @@ def chunked_lm_head_v2_dweight_kernel(
     row_denom: MutPointer[Float32, MutAnyOrigin],
     rows_in: Int32, vocab_in: Int32, width_in: Int32,
 ):
-    """One vocabulary owner: every dWeight cell folds rows ascending."""
-    var token = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var vocab = Int(vocab_in)
-    if token >= vocab:
-        return
+    """One row owner per thread (`chunked_lm_head_v2_dhidden_body`)."""
+    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var rows = Int(rows_in)
-    var width = Int(width_in)
+    if row >= rows:
+        return
+    chunked_lm_head_v2_dhidden_body(row, d_hidden, hidden, weight, targets, row_max, row_denom,
+                                    rows, Int(vocab_in), Int(width_in))
+
+
+@always_inline
+def chunked_lm_head_v2_dweight_body(
+    token: Int,
+    d_weight: MutPointer[Float32, MutAnyOrigin],
+    hidden: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    targets: MutPointer[Int32, MutAnyOrigin],
+    row_max: MutPointer[Float32, MutAnyOrigin],
+    row_denom: MutPointer[Float32, MutAnyOrigin],
+    rows: Int, width: Int,
+):
+    """One vocabulary owner: every dWeight cell folds rows ascending."""
     for feature in range(width):
         d_weight.unsafe_store(token * width + feature, Float32(0.0))
     for row in range(rows):
@@ -260,6 +285,23 @@ def chunked_lm_head_v2_dweight_kernel(
     for feature in range(width):
         var cell = token * width + feature
         d_weight.unsafe_store(cell, ftz(d_weight.unsafe_load(cell)))
+
+
+def chunked_lm_head_v2_dweight_kernel(
+    d_weight: MutPointer[Float32, MutAnyOrigin],
+    hidden: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    targets: MutPointer[Int32, MutAnyOrigin],
+    row_max: MutPointer[Float32, MutAnyOrigin],
+    row_denom: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32, vocab_in: Int32, width_in: Int32,
+):
+    """One vocabulary owner per thread (`chunked_lm_head_v2_dweight_body`)."""
+    var token = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if token >= Int(vocab_in):
+        return
+    chunked_lm_head_v2_dweight_body(token, d_weight, hidden, weight, targets, row_max, row_denom,
+                                    Int(rows_in), Int(width_in))
 
 
 def chunked_lm_head_v2_loss_host(
