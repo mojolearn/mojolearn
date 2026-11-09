@@ -21,6 +21,11 @@
 #   an ndarray), `allow_nonfinite` (NaN and infinity pass: imputers and
 #   the NaN-accepting doors; `finite` stays False). A matrix held in bindings/admitted_registry.mojo by the
 #   running operation is returned as it is (C order, not as_array).
+#   admit_f32(source, ndim, name, context, ...) -> AdmittedX
+#                     the array form as an AdmittedX (ndim -1: any rank up
+#                     to 2): targets, fitted arrays, published predictions
+#   admit_weight_words(source, rows, context) -> AdmittedX
+#                     admit_weights as an AdmittedX; None is `rows` ones
 #   admit_y(...)      the float fit target (one column, finite, as long as X)
 #   admit_weights(...)  sample_weight as `rows` float32 words (None stays None)
 #   admitted_storage(shape, typestr, context)
@@ -298,8 +303,12 @@ def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject
     var column = column_target and ndim == 1 and nd == 2 and Int(py=value.shape[1]) == 1 and py_type(source) is not b.list and py_type(source) is not b.tuple and py_type(source) is not b.memoryview
     if column:
         classical_warn_column(context)
-    if nd != ndim and not column:
+    if ndim >= 0 and nd != ndim and not column:
         raise Error(name + " must be " + String(ndim) + "-D")
+    if nd > 2:
+        raise Error(name + " must be at most 2-D")
+    # ndim -1 (lane a1b): any rank up to 2, kept as it is (a fitted array).
+    var rank = nd if ndim < 0 else ndim
     var rows = 1 if nd == 0 else Int(py=value.shape[0])
     var cols = 1 if nd < 2 else Int(py=value.shape[1])
     if rows < 1 or cols < 1:
@@ -324,7 +333,7 @@ def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject
         in_order = classical_c_order(value, context)
     var borrowed = (not column and classical_is_f32(value, context) and in_order
                     and (not as_array or classical_is_array(value, context)))
-    var result = value if borrowed else admitted_storage_f32(rows, cols if ndim == 2 else 0, context,
+    var result = value if borrowed else admitted_storage_f32(rows, cols if rank == 2 else 0, context,
                                                              "F" if want_f else "C", as_array)
     var out = _ADM_F32P(unsafe_from_address=Int(py=classical_address(result)))
     if allow_nonfinite:
@@ -344,6 +353,45 @@ def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject
     _ = value^
     _ = prepared^
     return result
+
+
+def admit_f32(source: PythonObject, ndim: Int, name: String, context: PythonObject, order: String = "C",
+              defer_finite: Bool = False, as_array: Bool = False, allow_nonfinite: Bool = False,
+              admitted: Bool = False) raises -> AdmittedX:
+    """`admit_x(source, ndim, name, ...)` as an AdmittedX: the float32 words
+    of an input of rank `ndim` (-1: any rank up to 2) in `order`, with its
+    rows and columns (a rank-0 or rank-1 input has one column). For the
+    inputs that are not a public X (a target, a fitted array, a published
+    prediction); a public X goes through admit_x_unrecorded / admit_x."""
+    # Lane a1b-doors-opt-in-trees-linear: the former labels_f32 /
+    # trees_f32 (bindings/classical_labels.mojo, a second cast path with its
+    # own view struct) is this call.
+    var array = admit_x(source, ndim, name, context, False, admitted, defer_finite, order, as_array,
+                        allow_nonfinite)
+    var nd = Int(py=array.ndim)
+    var rows = 1 if nd == 0 else Int(py=array.shape[0])
+    var cols = 1 if nd < 2 else Int(py=array.shape[1])
+    var x = AdmittedX(array, source, Int(py=classical_address(array)), rows, cols, nd, array is source,
+                      not allow_nonfinite and not defer_finite)
+    x.c_order = order == "C" or rows == 1 or cols == 1
+    return x^
+
+
+def admit_weight_words(source: PythonObject, rows: Int, context: PythonObject,
+                       admitted: Bool = False) raises -> AdmittedX:
+    """`admit_weights(source, rows)` as an AdmittedX of `rows` words; None
+    is `rows` ones (the unweighted fit's weights, as a fresh vector)."""
+    # Lane a1b: the former labels_check_sample_weight / trees_check_sample_weight.
+    var w: PythonObject
+    if source is None:
+        w = admitted_storage_f32(rows, 0, context, "C", True)
+        var p = _ADM_F32P(unsafe_from_address=Int(py=classical_address(w)))
+        for i in range(rows):  # native input marshaling: the ones of an unweighted fit, one store per row
+            p[i] = 1.0
+    else:
+        w = admit_weights(source, rows, context, admitted)
+    var x = AdmittedX(w, source, Int(py=classical_address(w)), rows, 1, 1, w is source, True)
+    return x^
 
 
 def classical_view(source: PythonObject, context: PythonObject, name: String = "input",
