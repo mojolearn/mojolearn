@@ -33,19 +33,14 @@ from core.msel_device import (
     device_take_rows,
 )
 from core.neural_context import process_ctx
-from core.msel_device_x import msel_device_x_context
+from core.msel_device_x import msel_device_x_context, msel_store, MSEL_CONTEXT_SLOT
 from decomposition.pca_fold import pca_transform_fold
 
-#: The base binding's process-lifetime context slot
-#: (`bindings/_mojolearn.mojo::_DEVCTX_SLOT`): the same name, so the same
-#: DeviceContext, whose buffers the store holds.
-comptime _MSEL_SLOT = (
-    "MojolearnCoreContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV2"
-)
-# The store's one definition is core/msel_device_x.mojo (lane a6): a kernel
-# entry in any binding that gathers a fold on the device names the same
-# process-wide `_Global`.
-from core.msel_device_x import MSEL_STORE
+#: The store's own context slot (core/msel_device_x.mojo MSEL_CONTEXT_SLOT,
+#: the base binding's `_DEVCTX_SLOT`): one definition, so every reader of the
+#: store's buffers runs on the context that made them. The store itself is
+#: `msel_store()` there, one process-wide `_Global` with a layout word.
+comptime _MSEL_SLOT = MSEL_CONTEXT_SLOT
 
 
 def msel_put_binding(addr: PythonObject, nbytes: PythonObject) raises -> PythonObject:
@@ -54,7 +49,7 @@ def msel_put_binding(addr: PythonObject, nbytes: PythonObject) raises -> PythonO
     var ctx = process_ctx[_MSEL_SLOT]()
     var id: Int
     with GILReleased(Python()):
-        id = MSEL_STORE.get_or_create_ptr()[].put(ctx, a, n)
+        id = msel_store()[].put(ctx, a, n)
     return PythonObject(id)
 
 
@@ -63,7 +58,7 @@ def msel_alloc_binding(nbytes: PythonObject) raises -> PythonObject:
     var ctx = process_ctx[_MSEL_SLOT]()
     var id: Int
     with GILReleased(Python()):
-        id = MSEL_STORE.get_or_create_ptr()[].alloc(ctx, n)
+        id = msel_store()[].alloc(ctx, n)
     return PythonObject(id)
 
 
@@ -73,7 +68,7 @@ def msel_read_binding(id: PythonObject, dst_addr: PythonObject, nbytes: PythonOb
     var n = Int(py=nbytes)
     var ctx = process_ctx[_MSEL_SLOT]()
     with GILReleased(Python()):
-        MSEL_STORE.get_or_create_ptr()[].read(ctx, i, d, n)
+        msel_store()[].read(ctx, i, d, n)
     return PythonObject(0)
 
 
@@ -81,12 +76,12 @@ def msel_free_binding(id: PythonObject) raises -> PythonObject:
     var i = Int(py=id)
     var ctx = process_ctx[_MSEL_SLOT]()
     with GILReleased(Python()):
-        MSEL_STORE.get_or_create_ptr()[].free(ctx, i)
+        msel_store()[].free(ctx, i)
     return PythonObject(0)
 
 
 def msel_live_binding() raises -> PythonObject:
-    return PythonObject(MSEL_STORE.get_or_create_ptr()[].live)
+    return PythonObject(msel_store()[].live)
 
 
 def msel_take_rows_binding(
@@ -105,7 +100,7 @@ def msel_take_rows_binding(
     var ctx = process_ctx[_MSEL_SLOT]()
     var ok = True
     with GILReleased(Python()):
-        ok = device_take_rows(ctx, MSEL_STORE.get_or_create_ptr()[], s, ns, rb, ix, ni, d)
+        ok = device_take_rows(ctx, msel_store()[], s, ns, rb, ix, ni, d)
     if not ok:
         raise Error("msel_take_rows: row index out of bounds")
     return PythonObject(0)
@@ -137,7 +132,7 @@ def msel_scatter_rows_binding(
     var ctx = process_ctx[_MSEL_SLOT]()
     var ok = True
     with GILReleased(Python()):
-        ok = device_scatter_rows(ctx, MSEL_STORE.get_or_create_ptr()[], di, nd, dc, sa, sc, ns, w, ix)
+        ok = device_scatter_rows(ctx, msel_store()[], di, nd, dc, sa, sc, ns, w, ix)
     if not ok:
         raise Error("msel_scatter_rows: row index out of bounds")
     return PythonObject(0)
@@ -259,9 +254,10 @@ def _mdx_f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
 
 
 # Lane a6: the device-X entries of family and classical estimators live in
-# THIS binding (the identical GPU base binding), the extension module whose
-# `_Global` holds the fold store model selection connects, so no store is
-# read across extension modules.
+# this binding (the identical GPU base binding). The placement is a choice,
+# not a need: the fold store is one `_Global` per process by name, so an
+# entry in any extension module reaches it through `msel_fold_store()` and
+# runs on `msel_device_x_context()` (core/msel_device_x.mojo).
 def pca_transform_fold_binding(
     ids: PythonObject,
     mean_addr: PythonObject,

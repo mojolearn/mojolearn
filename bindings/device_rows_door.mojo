@@ -85,7 +85,7 @@ struct DoorRows(Movable):
 
 struct DoorRowsStore(ImplicitlyCopyable, Movable):
     """The resident store ids of a DeviceRows fold in model selection's
-    store (bindings/msel_device.mojo MSEL_STORE): the float32 C-order base
+    store (core/msel_device_x.mojo `msel_store`): the float32 C-order base
     (`base_rows` x `row_words`) and the int64 row indices (`rows` words).
     A device kernel entry gathers the fold on the device out of these
     (core/msel_device_x.mojo msel_device_x_f32); no host word is read."""
