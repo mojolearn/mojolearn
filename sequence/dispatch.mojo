@@ -85,6 +85,12 @@ from sequence.ops import (
     OP_PROPHET_PREDICT,
     OP_PROPHET_FG_PART,
     OP_PROPHET_FG_SUM,
+    OP_PROPHET_LB_YMAX,
+    OP_PROPHET_LB_INIT,
+    OP_PROPHET_LB_YDIV,
+    OP_PROPHET_LB_STEP,
+    OP_PROPHET_LB_ACTIVE,
+    OP_PROPHET_LB_OUT,
     OP_MOE_ROUTE,
     OP_MOE_HIDDEN,
     OP_MOE_OUT,
@@ -144,6 +150,7 @@ from sequence.ets import op_ets, op_ets_init, op_ets_lik
 from sequence.garch import op_garch
 from sequence.moe import op_moe_hidden, op_moe_out, op_moe_route
 from sequence.prophet import op_prophet_prep, op_prophet_features, op_prophet_fit, op_prophet_predict, op_prophet_fg_part, op_prophet_fg_sum
+from sequence.prophet import op_prophet_lb_ymax, op_prophet_lb_init, op_prophet_lb_ydiv, op_prophet_lb_step, op_prophet_lb_active, op_prophet_lb_out
 from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, op_cell_fwd_scan
 from autograd.kernels.recurrent_scan import op_cell_bwd_scan
 from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_sub, op_var_design, op_var_forecast
@@ -703,6 +710,18 @@ def apply[OP: Int](t: Int, a: Args):
         op_prophet_fg_part(t, a)
     elif OP == OP_PROPHET_FG_SUM:
         op_prophet_fg_sum(t, a)
+    elif OP == OP_PROPHET_LB_YMAX:
+        op_prophet_lb_ymax(t, a)
+    elif OP == OP_PROPHET_LB_INIT:
+        op_prophet_lb_init(t, a)
+    elif OP == OP_PROPHET_LB_YDIV:
+        op_prophet_lb_ydiv(t, a)
+    elif OP == OP_PROPHET_LB_STEP:
+        op_prophet_lb_step(t, a)
+    elif OP == OP_PROPHET_LB_ACTIVE:
+        op_prophet_lb_active(t, a)
+    elif OP == OP_PROPHET_LB_OUT:
+        op_prophet_lb_out(t, a)
     elif OP == OP_PROPHET_PREDICT:
         op_prophet_predict(t, a)
     elif OP == OP_MOE_ROUTE:

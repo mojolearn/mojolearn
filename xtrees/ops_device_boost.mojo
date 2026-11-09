@@ -162,14 +162,33 @@ def samme_step_device[CACHE: Bool = False](
     y: MutPointer[Int32, MutUntrackedOrigin], n: Int, n_classes: Int,
     learning_rate: Float64, last: Bool, stats: MutPointer[Float64, MutUntrackedOrigin],
 ) raises:
-    """`ops.samme_step` on the device: w, pred and y go up once; the error
-    and total fold on the device and come back as two words; the reweighting
-    and its sum run on the device; w comes back once (only when it moved)."""
+    """`ops.samme_step` on the device: w, pred and y go up once, the step is
+    `samme_step_on`, and w comes back once (only when it moved)."""
     var ctx = _ctx()
-    var m = fold_chunks(n)
     var d_w = _up_f64(ctx, w, n)
     var d_p = _up_i32(ctx, pred, n)
     var d_y = _up_i32(ctx, y, n)
+    if samme_step_on[CACHE](ctx, d_w, d_p, d_y, n, n_classes, learning_rate, last, stats):
+        ctx.enqueue_copy(dst_ptr=w.bitcast[UInt64](), src_buf=d_w)
+        ctx.synchronize()
+    _ = d_w^
+    _ = d_p^
+    _ = d_y^
+
+
+def samme_step_on[CACHE: Bool = False](
+    ctx: DeviceContext, d_w: DeviceBuffer[DType.uint64], d_p: DeviceBuffer[DType.int32],
+    d_y: DeviceBuffer[DType.int32], n: Int, n_classes: Int,
+    learning_rate: Float64, last: Bool, stats: MutPointer[Float64, MutUntrackedOrigin],
+) raises -> Bool:
+    """`ops.samme_step` over device-resident weights `d_w` (binary64 words,
+    reweighted in place), predictions and labels, on `ctx`: the error and
+    total fold on the device and come back as two words; the reweighting
+    and its sum run on the device (one word back). `stats` (host, 4 float64)
+    gets [status, alpha, error, new total]. Returns True when `d_w` moved.
+    (AdaBoostClassifier's device rounds call this on the weights they keep
+    resident across rounds; lane n5-prophet-adaboost-loops.)"""
+    var m = fold_chunks(n)
     var d_s = ctx.enqueue_create_buffer[DType.uint64](2 * m)
     var wrong: DeviceBuffer[DType.uint8]
     comptime if CACHE:
@@ -193,6 +212,7 @@ def samme_step_device[CACHE: Bool = False](
     var status: Float64 = 0.0
     var alpha: Float64 = 0.0
     var s = tot
+    var moved = False
     if err <= 0.0:
         status = 1.0
         alpha = 1.0
@@ -219,18 +239,15 @@ def samme_step_device[CACHE: Bool = False](
                     )
                 fold_tree_device(ctx, d_q, m, 1)
                 s = _f(_head_u64(ctx, d_q, 1)[0])
-                ctx.enqueue_copy(dst_ptr=w.bitcast[UInt64](), src_buf=d_w)
-                ctx.synchronize()
+                moved = True
                 _ = d_q^
     stats[unsafe_offset=0] = status
     stats[unsafe_offset=1] = alpha
     stats[unsafe_offset=2] = err
     stats[unsafe_offset=3] = s
-    _ = d_w^
-    _ = d_p^
-    _ = d_y^
     _ = d_s^
     _ = wrong^
+    return moved
 
 
 # ---------------------------------------------------------- AdaBoost.R2 --
@@ -355,14 +372,33 @@ def r2_step_device[CACHE: Bool = False](
     y: MutPointer[Float32, MutUntrackedOrigin], n: Int, loss: Int,
     learning_rate: Float64, last: Bool, stats: MutPointer[Float64, MutUntrackedOrigin],
 ) raises:
-    """`ops.r2_step` on the device: the largest error, the weighted error and
-    the reweighted sum on the device; status / beta / alpha on the host from
-    the folded words; w comes back once."""
+    """`ops.r2_step` on the device: w, pred and y go up once, the step is
+    `r2_step_on`, and w comes back once (only when it moved)."""
     var ctx = _ctx()
-    var m = fold_chunks(n)
     var d_w = _up_f64(ctx, w, n)
     var d_p = _up_f32(ctx, pred, n)
     var d_y = _up_f32(ctx, y, n)
+    if r2_step_on[CACHE](ctx, d_w, d_p, d_y, n, loss, learning_rate, last, stats):
+        ctx.enqueue_copy(dst_ptr=w.bitcast[UInt64](), src_buf=d_w)
+        ctx.synchronize()
+    _ = d_w^
+    _ = d_p^
+    _ = d_y^
+
+
+def r2_step_on[CACHE: Bool = False](
+    ctx: DeviceContext, d_w: DeviceBuffer[DType.uint64], d_p: DeviceBuffer[DType.float32],
+    d_y: DeviceBuffer[DType.float32], n: Int, loss: Int,
+    learning_rate: Float64, last: Bool, stats: MutPointer[Float64, MutUntrackedOrigin],
+) raises -> Bool:
+    """`ops.r2_step` over device-resident weights `d_w` (binary64 words,
+    reweighted in place), predictions and targets, on `ctx`: the largest
+    error, the weighted error and the reweighted sum on the device (one word
+    back each); status / beta / alpha on the host from the folded words.
+    `stats` (host, 4 float64) gets [status, alpha, error, new total].
+    Returns True when `d_w` moved. (AdaBoostRegressor's device rounds call
+    this on the weights they keep resident; lane n5-prophet-adaboost-loops.)"""
+    var m = fold_chunks(n)
     var d_s = ctx.enqueue_create_buffer[DType.uint64](m)
     var errors: DeviceBuffer[DType.uint64]
     comptime if CACHE:
@@ -374,7 +410,7 @@ def r2_step_device[CACHE: Bool = False](
         grid_dim=_blocks(m), block_dim=OPS_TPB,
     )
     var s = 1
-    while s < m:
+    while s < m:  # driver-loop: over the max tree's passes (log2 chunks)
         ctx.enqueue_function[max_tree_pass_kernel](
             d_s.unsafe_ptr(), Int64(m), Int64(s), grid_dim=_blocks(ceildiv(m, 2 * s)), block_dim=OPS_TPB,
         )
@@ -392,6 +428,7 @@ def r2_step_device[CACHE: Bool = False](
         )
     fold_tree_device(ctx, d_s, m, 1)
     var err = _f(_head_u64(ctx, d_s, 1)[0])
+    var moved = False
     if err <= 0.0:
         stats[unsafe_offset=0] = 1.0
         stats[unsafe_offset=1] = 1.0
@@ -418,18 +455,14 @@ def r2_step_device[CACHE: Bool = False](
             )
         fold_tree_device(ctx, d_s, m, 1)
         var tot = _f(_head_u64(ctx, d_s, 1)[0])
-        if not last:
-            ctx.enqueue_copy(dst_ptr=w.bitcast[UInt64](), src_buf=d_w)
-            ctx.synchronize()
+        moved = not last
         stats[unsafe_offset=0] = 0.0
         stats[unsafe_offset=1] = alpha
         stats[unsafe_offset=2] = err
         stats[unsafe_offset=3] = tot
-    _ = d_w^
-    _ = d_p^
-    _ = d_y^
     _ = d_s^
     _ = errors^
+    return moved
 
 
 # ------------------------------------------------------ weighted median --

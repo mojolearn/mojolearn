@@ -205,6 +205,15 @@ comptime OP_STL_FINISH = 79
 #: probability layouts on the executor, not in host NumPy.
 comptime OP_ONE_HOT = 80
 comptime OP_PROBA2 = 81
+#: lane n5-prophet-adaboost-loops (2026-11-09): FAST Prophet's long-series
+#: L-BFGS on the device (sequence/prophet.mojo op_prophet_lb_*), every series
+#: of the batch at once; the driver reads one word per chunk of evaluations.
+comptime OP_PROPHET_LB_YMAX = 82
+comptime OP_PROPHET_LB_INIT = 83
+comptime OP_PROPHET_LB_YDIV = 84
+comptime OP_PROPHET_LB_STEP = 85
+comptime OP_PROPHET_LB_ACTIVE = 86
+comptime OP_PROPHET_LB_OUT = 87
 # nr-small (2026-10-04), sequence/mlp.mojo: the MLP fit's blocked L2 and
 # batch-loss folds, the device epoch order and the device epoch loss
 comptime OP_MLP_L2PART = 90

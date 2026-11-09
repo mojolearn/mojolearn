@@ -511,6 +511,7 @@ in the tables after the sections.
 | [`nmf_mu_dev` / `nmf_cd_dev` host-word loops, `DKit.cd_rows`](#mds-label-propagation-and-nmf-loops-on-the-bounded-device-loop-2026-11-09) | Decomposition (NMF MU and CD, GPU) | removed (superseded: the bounded device loop, `_MuStep` / `_CdStep`, `DKit.cd_rows_enq`) | 2026-11-09 | [N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch](../experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch) |
 | [`MOJOLEARN_C33_FROZEN_CHUNKS` in `op_lp_iterate` (and the per-iteration stopping-sum read)](#mds-label-propagation-and-nmf-loops-on-the-bounded-device-loop-2026-11-09) | Neighbors (label propagation dense graph) | removed (superseded: one bounded device loop, `_LpDenseStep`; the define stays for DBSCAN and LPK_BATCH) | 2026-11-09 | [N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch](../experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch) |
 | [`MOJOLEARN_LP_FAST_RESIDENT_OFF`, `MOJOLEARN_IDN_LP_RESIDENT_OFF` (+ the compact-graph binding loop)](#mds-label-propagation-and-nmf-loops-on-the-bounded-device-loop-2026-11-09) | Neighbors (label propagation kNN graph) | removed (rollbacks of measured defaults; `lp_iterate_knn` on every vendor and tier) | 2026-11-09 | [N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch](../experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch) |
+| [`lbfgs_prophet_host` + `_prophet_fg_dev` (host driver)](#fast-prophet-host-l-bfgs-driver-2026-11-09) | Sequence (Prophet FAST, N >= 16384) | removed (superseded: the L-BFGS runs on the device) | 2026-11-09 | [PROPHET_FAST_HOST_LBFGS.patch](../experiments/removed/PROPHET_FAST_HOST_LBFGS.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -4675,3 +4676,21 @@ files; the guard entry in `core/experiment_guards_cluster.mojo` is left out). Co
 Run owed: MDS, NMF, LabelPropagation / LabelSpreading speed on NVIDIA and AMD (board and paper_compare rows) against
 `f59d913b0b`, and the identity lanes mds, nmf, label-propagation, label-spreading at the release.
 
+## FAST Prophet host L-BFGS driver (2026-11-09)
+
+Lane n5-prophet-adaboost-loops (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 4, row "Prophet FAST").
+
+- Tried / was: `sequence/ops_impl.mojo` `lbfgs_prophet_host` and `_prophet_fg_dev`, FAST's (apple2) long-series fit
+  (N >= `PROPHET_FAST_MIN_N`): the L-BFGS two-loop, Armijo backtracking and stopping rules on the host, one series at a
+  time; every objective evaluation uploaded theta (P floats), ran the chunked likelihood (`OP_PROPHET_FG_PART` /
+  `OP_PROPHET_FG_SUM`), downloaded the gradient and sse and synchronized, then added the priors on the host. The series'
+  scaling (max |y|, y / scale) ran on the host and re-uploaded y per series.
+- Now: `sequence/prophet.mojo` `op_prophet_lb_ymax`, `op_prophet_lb_init`, `op_prophet_lb_ydiv`, `op_prophet_lb_step`,
+  `op_prophet_lb_active`, `op_prophet_lb_out` (codes 82-87): every series of the batch at once, its workspace row resident,
+  the trial point read in place by the likelihood; the driver reads one running-series word per `PROPHET_LB_CHUNK` (8)
+  evaluations. Same statements in the same order (`_dot`, `_fg_prior_v`, the chunk-ordered sums).
+- Verdict: superseded by the device body (no define; nothing to A/B against: same FAST arithmetic). RUN OWED: Apple FAST
+  timing of the Prophet N >= 16384 row before -> after.
+- Bits: none intended (FAST only; IDENTICAL never reached this path).
+- Code recoverable at `f59d913b0b` (= `b70c3eda7c^`); patch `experiments/removed/PROPHET_FAST_HOST_LBFGS.patch` (reverse of
+  `b70c3eda7c`, `sequence/ops_impl.mojo` only; the new kernels in `sequence/prophet.mojo` are additions).

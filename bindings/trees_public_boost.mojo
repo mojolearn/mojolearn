@@ -38,7 +38,7 @@ from bindings.trees_public_inputs import (
     TREES_NONFINITE, TreesLabels, trees_builtins, trees_table, trees_entry, trees_need,
     trees_helper, trees_env, trees_reshape, trees_address, trees_finite_f32,
     trees_encode_labels, trees_decode_labels, trees_cast,
-    trees_weighted_rows, trees_call,
+    trees_weighted_rows, trees_call, trees_class_rows_only,
 )
 from bindings.admitted_input import (
     AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
@@ -1078,6 +1078,76 @@ def _colmajor(xt: PythonObject, x: AdmittedX, context: PythonObject) raises -> A
     return _keep_ret_out^
 
 
+def _ada_device_rounds(session: Session, entry: String) raises -> Bool:
+    """The session's binary runs AdaBoost's rounds on the device (lane
+    n5-prophet-adaboost-loops, `bindings/_mojolearn_rf.mojo` `rf_ada_open`):
+    the weights stay there for the whole fit. A binary without the entries
+    (the CPU-only install's `_mojolearn_rf_host`) keeps the per-round steps."""
+    if session.handle <= 0:
+        return False
+    return trees_entry(session.native, "rf_ada_open") is not None and trees_entry(session.native, entry) is not None
+
+
+def _ada_open(session: Session, w: PythonObject, y_addr: Int, cw_addr: Int, n: Int, k: Int) raises:
+    """`rf_ada_open`: the fit's starting weights, labels / targets and
+    class_weight rows go to the session's device once."""
+    _ = py_call_typed(trees_entry(session.native, "rf_ada_open"), _P(session.handle), _A(w), _P(y_addr), _P(cw_addr),
+                      Python.list(_P(n), _P(k)))
+    _ = w  # keep the Python object alive through the native call above
+
+
+def _ada_member_round(member: PythonObject, session: Session, labels: TreesLabels, n: Int, d: Int, lr: Float64,
+                      last: Bool, stats: PythonObject, context: PythonObject) raises:
+    """One SAMME round on the device (`rf_classifier_fit_ada_round_export`)
+    for a best-splitter DecisionTreeClassifier member from
+    `_validated_clone`: its classes are the ensemble's codes (`labels`, every
+    class present), its weights the resident boosting weights times n times
+    its class_weight rows (given to `rf_ada_open`); the round writes the
+    step's [status, alpha, error, total] into `stats`."""
+    var fields = py_fields(member)
+    var mode = String(fields["_fit_numeric_mode"])
+    py_setitem(fields, "classes_", labels.classes)
+    var k = len(labels.classes)
+    py_setitem(fields, "n_classes_", _P(k))
+    var rf = trees_table(context, mode, "_mojolearn_rf")
+    var params = _rf_params(fields, "dt_classifier", n, d, k, rf, context)
+    var criterion = fields["_cfg"]["criterion"]
+    var entry = trees_need(session.native, "rf_classifier_fit_ada_round_export",
+                           "rebuild the forest binding for AdaBoost device rounds")
+    var result = forest_export(session.native, py_call_typed(entry, _P(session.handle), params, criterion,
+                                                             Python.list(_F(lr), _P(1 if last else 0)), _A(stats)),
+                               "into", context)
+    _ = stats  # keep the Python object alive through the native call above
+    _member_store(member, forest_fit_arrays(result, context), d)
+    _fitted(member)
+
+
+def _ada_member_round_r2(member: PythonObject, session: Session, n: Int, d: Int, seed: Int, it: Int, loss: Int,
+                         lr: Float64, last: Bool, stats: PythonObject, context: PythonObject) raises:
+    """One AdaBoost.R2 round on the device (`rf_regressor_fit_ada_round_export`)
+    for a squared-error best-splitter DecisionTreeRegressor member from
+    `_validated_clone`: the rows drawn from the resident weights, the member
+    fitted on them, its predictions and the R2 step there; `stats` gets
+    [status, alpha, error, total]."""
+    var kind = forest_kind(member, context)
+    var fields = py_fields(member)
+    var mode = String(fields["_fit_numeric_mode"])
+    var code = fields["_cfg"]["criterion"]
+    if Int(py=code) != Int(py=context["trees_rf_tables"]["reg_criteria"]["squared_error"]):
+        raise Error("a forest data session fits squared_error members")
+    var rf = trees_table(context, mode, "_mojolearn_rf")
+    var params = _rf_params(fields, kind, n, d, 0, rf, context)
+    var entry = trees_need(session.native, "rf_regressor_fit_ada_round_export",
+                           "rebuild the forest binding for AdaBoost device rounds")
+    var result = forest_export(session.native, py_call_typed(entry, _P(session.handle), params, code,
+                                                             Python.list(_P(seed), _P(it), _P(loss), _F(lr),
+                                                                         _P(1 if last else 0)), _A(stats)),
+                               "into", context)
+    _ = stats  # keep the Python object alive through the native call above
+    _member_store(member, forest_fit_arrays(result, context), d)
+    _fitted(member)
+
+
 def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
     """AdaBoostClassifier (SAMME) / AdaBoostRegressor (AdaBoost.R2) `fit`."""
     var fields = py_fields(model)
@@ -1136,9 +1206,41 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
         # ne2-b-members, N064): every round re-ran forest_refresh, the full
         # constructor check and field rebuild, on a clone of the same base.
         var memo = Python.list()
+        # lane n5-prophet-adaboost-loops: the best-splitter tree members'
+        # rounds run on the device; weights, labels and class_weight rows go
+        # up once and only the step's four words come back per round.
+        var device_rounds = False
+        if xcm:
+            device_rounds = _ada_device_rounds(session, "rf_classifier_fit_ada_round_export")
+        var dev_labels = labels.copy()
+        if device_rounds:
+            dev_labels = encoded.value().copy() if encoded else trees_encode_labels(codes, context)
+            var mode = _member_mode(base, context)
+            var cw_rows = trees_class_rows_only(py_get(py_fields(base), "class_weight"), dev_labels,
+                                                trees_table(context, mode, "_mojolearn_x_trees"), context)
+            var cw_addr = cw_rows.value().addr if cw_rows else 0
+            _ada_open(session, w, trees_address(dev_labels.codes), cw_addr, n, k)
+            _ = cw_rows^  # keep the rows alive through the native call above
         try:
             for it in range(m):  # driver-loop: over the boosting rounds (one member each)
                 var member: PythonObject
+                if device_rounds:
+                    member = _validated_clone(base, template, _sub_seed(seed, it), "dt_classifier", memo, context)
+                    _ada_member_round(member, session, dev_labels, n, d, lr, it == m - 1, stats, context)
+                    var dstatus = _f64_word(stats, 0)
+                    var dtotal = _f64_word(stats, 3)
+                    if dstatus == 2.0:
+                        if len(members) == 0:
+                            raise Error("BaseClassifier in AdaBoostClassifier ensemble is worse than random,"
+                                        + " ensemble can not be fit.")
+                        break
+                    _ = py_call(members.append, member)
+                    _ = py_call(alphas.append, _F(_f64_word(stats, 1)))
+                    _ = py_call(errors.append, _F(_f64_word(stats, 2)))
+                    # the round rescaled the resident weights by the total
+                    if dstatus == 1.0 or not dtotal > 0:
+                        break
+                    continue
                 if xcm:
                     member = _validated_clone(base, template, _sub_seed(seed, it), "dt_classifier", memo, context)
                     _member_fit_weighted(member, xcm.value(), codes, _w32(xt, w, n, context), encoded, session, context)
@@ -1211,8 +1313,33 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
     var template = forest_get_params(base, context) if m > 0 else Python.dict()
     var memo = Python.list()
     var base_kind = forest_kind(base, context) if session.handle > 0 else String("")
+    # lane n5-prophet-adaboost-loops: the session members' rounds run on the
+    # device; weights and targets go up once, the rows are drawn and
+    # gathered there, and only the step's four words come back per round.
+    var device_rounds = _ada_device_rounds(session, "rf_regressor_fit_ada_round_export")
+    if device_rounds:
+        _ada_open(session, w, y32.addr, 0, n, 0)
+        _ = y32  # keep the Python object alive through the native call above
     try:
         for it in range(m):  # driver-loop: over the boosting rounds (one member each)
+            if device_rounds:
+                var dmember = _validated_clone(base, template, _sub_seed(seed, it), base_kind, memo, context)
+                _ada_member_round_r2(dmember, session, n, d, seed, it, loss, lr, it == m - 1, stats, context)
+                var dstatus = _f64_word(stats, 0)
+                var dtotal = _f64_word(stats, 3)
+                if dstatus == 2.0:
+                    if len(members) == 0:
+                        _ = py_call(members.append, dmember)
+                        _ = py_call(alphas.append, _F(0.0))
+                        _ = py_call(errors.append, _F(_f64_word(stats, 2)))
+                    break
+                _ = py_call(members.append, dmember)
+                _ = py_call(alphas.append, _F(_f64_word(stats, 1)))
+                _ = py_call(errors.append, _F(_f64_word(stats, 2)))
+                # the round rescaled the resident weights by the total
+                if dstatus == 1.0 or not dtotal > 0:
+                    break
+                continue
             var rows = admitted_vector(n, "<i4", context)
             _ = py_call_typed(_x(xt, "x_trees_weighted_sample"), _A(w), _A(rows), Python.list(_P(n), _P(n), _P(seed), _P(it)))
             _ = rows  # keep the Python object alive through the native call above
