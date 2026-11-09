@@ -643,7 +643,7 @@ def transformer_forward_fresh_binding(
     # Into `transformer_forward`'s 13 + 11 layout: x, nine weights, the
     # two absent cache slots, y, then the tail.
     var a = List[Int]()
-    for i in range(10):  # small-loop(addrs: fixed buffer-address list of this entry): argument words, not data
+    for i in range(10):  # small-loop(10: fixed buffer-address list of this entry): argument words, not data
         a.append(raw[i])
     a.append(0)
     a.append(0)
