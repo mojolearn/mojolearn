@@ -210,6 +210,32 @@ def connect(context, register, registry):
             methods['score'] = ('score', (arg(0),))
         add(cls, xdecomp._DECOMP_CALL, xdecomp._DECOMP_CONTEXT, methods)
 
+    # Lane a8d: NMF, SparsePCA, OPTICS and the manifold family's fixed owner
+    # ABIs (they were pending migration), the same recipes as their public
+    # methods pass. NMF.fit's keyword dictionary is empty (no W / H).
+    from . import _spectral_impl as spectral
+    add(xdecomp.NMF, xdecomp._DECOMP_CALL, xdecomp._DECOMP_CONTEXT, {
+        'fit': ('fit', (arg(0), constant({}))),
+        'transform': ('transform', (arg(0),)),
+    })
+    add(xdecomp.SparsePCA, xdecomp._DL_CALL, xdecomp._DL_CONTEXT, {
+        'fit': ('spca_fit', (arg(0),)),
+        'transform': ('spca_transform', (arg(0),)),
+    })
+    add(xcluster.OPTICS, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
+        'fit': ('family_cfa_optics_fit', (native, arg(0), arg(1))),
+    })
+    for cls, prefix, query in ((xdecomp.Isomap, 'iso', True), (xdecomp.LocallyLinearEmbedding, 'lle', True),  # glue: fixed ABI metadata connected once during package import
+                               (xdecomp.MDS, 'mds', False)):
+        fit_args = (native, native, arg(0), constant(None), arg(1)) if prefix == 'mds' else (native, native, arg(0), arg(1))
+        methods = {'fit': ('family_mani_' + prefix + '_fit', fit_args)}
+        if query:
+            methods['transform'] = ('family_mani_' + prefix + '_transform', (native, native, arg(0)))
+        add(cls, xdecomp._NATIVE, xdecomp._NATIVE_CONTEXT, methods)
+    add(spectral.SpectralEmbedding, spectral._NATIVE, spectral._NATIVE_CONTEXT, {
+        'fit': ('family_cfb_se_fit', (arg(0), arg(1))),
+    })
+
     for name in ('VotingClassifier', 'VotingRegressor', 'StackingClassifier', 'StackingRegressor',  # glue: fixed meta-estimator ABIs at import
                  'MultiOutputRegressor', 'MultiOutputClassifier', 'OneVsRestClassifier', 'CalibratedClassifierCV'):  # glue: exact meta-estimator ABIs at import
         methods = {
