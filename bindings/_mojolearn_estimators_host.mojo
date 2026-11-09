@@ -775,8 +775,8 @@ def qn_fit_binding(
     Lane sk-kernels: with has_sample_weight = 1 a 16th field is required,
     the address of `n_rows` float32 per-row weights (the device binding's
     contract)."""
-    if len(params) < 13 or len(params) > 16:
-        raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id, an optional 15th, svr_eps, and a 16th, the sample_weight address, when has_sample_weight is 1")
+    if len(params) < 13 or len(params) > 17:
+        raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id, an optional 15th, svr_eps, a 16th, the sample_weight address, when has_sample_weight is 1, and an optional 17th, the finite status address")
     var x_address = _index(x_addr)
     var y_address = _index(y_addr)
     var wp = f32_ptr(_index(coef_addr))
@@ -796,9 +796,18 @@ def qn_fit_binding(
     var has_sw = _index(params[12]) != 0
     var loss = _index(params[13]) if len(params) >= 14 else 0
     var svr_eps = Float64(py=params[14]) if len(params) >= 15 else 0.0
-    if has_sw and len(params) != 16:
+    if has_sw and len(params) < 16:
         raise Error("qn_fit: has_sample_weight = 1 needs the 16th field, the sample_weight address")
     var sw_address = _index(params[15]) if has_sw else 0
+    # The 17th field (lane a7c): the deferred finite status word of X, tested
+    # here on the CPU column by the parallel SIMD scan (the GPU entry tests
+    # its upload); a non-finite X fits nothing and the door refuses.
+    var status = _index(params[16]) if len(params) == 17 else 0
+    if status != 0:
+        var word = host_finite_status(x_address, _index(params[0]) * _index(params[1]))
+        i32_ptr(status)[0] = word
+        if word != 0:
+            return PythonObject(0)
     var iters = 0
     with GILReleased(Python()):
         iters = qn_fit_host_run(

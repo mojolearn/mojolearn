@@ -48,6 +48,7 @@ from glm.impl.ols import (
     ols_fit_weighted_traced,
 )
 from glm.impl.qn.qn import qn_decision_function, qn_fit_x
+from core.admitted_finite_status import enqueue_finite_status
 from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_eig_scratch_traced, ridge_fit_traced
 from glm.impl.linear_model.qn import (
     QN_LOSS_ABS,
@@ -660,6 +661,7 @@ def qn_fit_host(
     sw_ptr: MutPointer[Float32, MutUntrackedOrigin],
     loss: Int = QN_LOSS_LOGISTIC,
     svr_eps: Float64 = 0.0,
+    status: Int = 0,
 ) raises -> Int:
     """`qnFit` (`qn.cuh:176-193`) for a dense row-major `X`, through
     `qn_fit_x`'s loss switch. `loss` is QN_LOSS_LOGISTIC (the default) with
@@ -689,6 +691,16 @@ def qn_fit_host(
     # TOMBSTONE: MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD_OFF (pinned stage slower) deleted 2026-10-11 by 47a3af928; code recoverable at 47a3af928^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LINEAR_PINNED_UPLOAD.patch; record in docs/TOMBSTONES.md.
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    # `status` (lane a7c): the host address of the deferred finite status
+    # word of X (core/admitted_finite_status.mojo; 0 when the door tested X
+    # itself): the words just uploaded are tested on the device and the
+    # word comes back under the synchronize below. A non-finite X fits
+    # nothing (0 iterations, coef_ptr untouched); the door refuses.
+    var dstat = ctx.enqueue_create_buffer[DType.int32](1)
+    if status != 0:
+        dstat.enqueue_fill(Int32(0))
+        enqueue_finite_status(ctx, x.unsafe_ptr(), n_rows * n_features, dstat.unsafe_ptr(), 0)
+        ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status), src_buf=dstat)
     ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
     ctx.enqueue_memset(w, Float32(0.0))
     var sw = Optional[DeviceBuffer[DType.float32]]()
@@ -697,6 +709,9 @@ def qn_fit_host(
         ctx.enqueue_copy(dst_buf=swb, src_ptr=sw_ptr)
         sw = Optional[DeviceBuffer[DType.float32]](swb^)
     ctx.synchronize()
+    _ = dstat^
+    if status != 0 and MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status).unsafe_load(0) != 0:
+        return 0
     var pams = QNParams.default()
     pams.loss = loss
     pams.penalty_l1 = penalty_l1

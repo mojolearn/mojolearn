@@ -28,7 +28,7 @@ from bindings.classifier_public_lifecycle import classifier_after_fit, classifie
 from bindings.scaler_lifecycle_native import _public_result
 from bindings.classical_labels import _flatten_labels
 from bindings.classical_arrays import classical_address
-from bindings.admitted_input import admit_x
+from bindings.admitted_input import admit_x, admitted_finite_refuse
 from bindings.classical_labels import (
     ClassicalLabels, classical_encode_labels, classical_decode_labels, classical_accuracy,
     labels_class_weight_rows, labels_argmax_rows, labels_shape_of,
@@ -269,7 +269,9 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var b = _builtins()
     logistic_fit_replacements_admit(fields, context)
     var l1_ratio = _validate_params(fields)
-    var x = admit_x(args[0], 2, "X", context)
+    # Lane a7c: the finite test of a borrowed X is the qn_fit entry's (its
+    # 17th field, the status word); a cast X is tested in its cast pass.
+    var x = admit_x(args[0], 2, "X", context, defer_finite=True)
     py_setitem(fields, "input_copied_", PythonObject(not (x is args[0])))
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
@@ -318,14 +320,18 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject,
                              1 if Bool(py=_class_constant(model, fields, "penalty_normalized", context)) else 0,
                              1 if has_sw else 0, loss)
     _ = sw  # keep the Python object alive through the native call above
-    if has_sw:
-        # field 15 svr_eps (0), field 16 the weights
-        _ = py_call(params.append, PythonObject(0.0))
-        _ = py_call(params.append, PythonObject(sw.address))
-        _ = sw  # keep the Python object alive through the native call above
+    # field 15 svr_eps (0), field 16 the weights (0 without), field 17 the
+    # deferred finite status word of X (lane a7c)
+    _ = py_call(params.append, PythonObject(0.0))
+    _ = py_call(params.append, PythonObject(sw.address if has_sw else 0))
     _ = sw  # keep the Python object alive through the native calls above
+    var status = admitted_vector(1, "<i4", context)
+    _ = py_call(params.append, PythonObject(labels_address(status)))
     var n_iter = py_call_typed(_need(entries, "qn_fit"), classical_address(x), PythonObject(labels_address(y_enc)),
                                PythonObject(labels_address(w)), PythonObject(labels_address(info)), params)
+    admitted_finite_refuse(Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=labels_address(status))[0]),
+                           _name(model))
+    _ = status  # keep the Python object alive through the native call above
     _ = y_enc  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _ = info  # keep the Python object alive through the native call above

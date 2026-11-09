@@ -1192,9 +1192,13 @@ def qn_fit_binding(
     OPTIONAL 15th is `svr_eps`, the SVR sensitivity (0 when absent).
     Lane sk-kernels: with has_sample_weight = 1 a 16th field is required,
     the address of `n_rows` float32 per-row weights.
+    Lane a7c: an OPTIONAL 17th field (the 16th then present, 0 without
+    weights) is the host address of the deferred finite status word of X
+    (core/admitted_finite_status.mojo): the uploaded X is tested on the
+    device and the word written there; a non-finite X fits nothing.
     Returns num_iters; info[0] = objective, info[1] = retcode."""
-    if len(params) < 13 or len(params) > 16:
-        raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id, an optional 15th, svr_eps, and a 16th, the sample_weight address, when has_sample_weight is 1")
+    if len(params) < 13 or len(params) > 17:
+        raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id, an optional 15th, svr_eps, a 16th, the sample_weight address, when has_sample_weight is 1, and an optional 17th, the finite status address")
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
     var wp = _f32_ptr(Int(py=coef_addr))
@@ -1214,16 +1218,17 @@ def qn_fit_binding(
     var has_sw = Int(py=params[12]) != 0
     var loss = Int(py=params[13]) if len(params) >= 14 else 0
     var svr_eps = Float64(py=params[14]) if len(params) >= 15 else 0.0
-    if has_sw and len(params) != 16:
+    if has_sw and len(params) < 16:
         raise Error("qn_fit: has_sample_weight = 1 needs the 16th field, the sample_weight address")
     var swp = _f32_ptr(Int(py=params[15])) if has_sw else yp
+    var status = Int(py=params[16]) if len(params) == 17 else 0
     var iters = 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         iters = qn_fit_host(
             ctx, xp, yp, wp, ip, nr, nf, nc, l1, l2, grad_tol, change_tol,
             max_iter, ls_max, mem, fit_intercept, normalized, has_sw, swp,
-            loss, svr_eps,
+            loss, svr_eps, status,
         )
         ctx.synchronize()
     return PythonObject(iters)
