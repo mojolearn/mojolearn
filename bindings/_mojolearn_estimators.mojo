@@ -808,9 +808,11 @@ def pca_fit_owned_binding(
     n_components, the kept count chosen, and with an output address (0:
     none) X projected onto the kept components. params: n_rows, n_features,
     n_components, dense (1: svd_solver='full'), keep mode (0: every
-    component, 1: the fraction, 2: "mle"), whiten, the fraction. Returns (kept
-    count, noise variance)."""
-    if len(params) != 7:
+    component, 1: the fraction, 2: "mle"), whiten, the fraction, and
+    OPTIONALLY (lane a7d) a finite flag: 1 asks for X's finite status word
+    over the fit's upload. Returns (kept count, noise variance), with the
+    status word third when asked (0 = finite; the door refuses otherwise)."""
+    if len(params) != 7 and len(params) != 8:
         raise Error("pca_fit_owned: params must contain n_rows, n_features, n_components, dense, keep mode, whiten, fraction")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=components_addr))
@@ -827,15 +829,21 @@ def pca_fit_owned_binding(
     var keep_mode = Int(py=params[4])
     var whiten = Int(py=params[5]) != 0
     var fraction = Float64(py=params[6])
+    var test = len(params) == 8 and Int(py=params[7]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     var kept = 0
     var noise = Float64(0.0)
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         var fitted = pca_fit_owned(
-            ctx, xp, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, fraction, op, oa != 0, whiten
+            ctx, xp, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, fraction, op, oa != 0, whiten,
+            word_addr,
         )
         kept = fitted[0]
         noise = fitted[1]
+    if test:
+        return Python.tuple(PythonObject(kept), PythonObject(noise), PythonObject(Int(word[0])))
     return Python.tuple(PythonObject(kept), PythonObject(noise))
 
 

@@ -111,6 +111,28 @@ comptime TSVD_FAST_POOL = PCA_FAST_GRAM_MMA and not is_defined["MOJOLEARN_TSVD_F
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_XTY_TILED_OFF.patch; record in docs/TOMBSTONES.md.
 
 
+def _pca_finite_flagged(
+    ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n_words: Int, finite_word: Int,
+) raises -> Bool:
+    """The fit's synchronisation after its upload of X, with X's deferred
+    finite test enqueued before it when `finite_word` is a host address
+    (lane a7d): the status word is stored there; True when X is flagged."""
+    if finite_word == 0:
+        ctx.synchronize()
+        return False
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill[DType.int32](ctx, status, Int32(0))
+    enqueue_finite_status(ctx, x.unsafe_ptr(), n_words, status.unsafe_ptr(), 0)
+    var word = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
+    ctx.synchronize()
+    var flagged = word.unsafe_ptr()[0]
+    MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = flagged
+    _ = word^
+    _ = status^
+    return flagged != 0
+
+
 def pca_fit_host(
     ctx: DeviceContext,
     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -122,7 +144,14 @@ def pca_fit_host(
     n_rows: Int,
     n_features: Int,
     n_components: Int,
+    finite_word: Int = 0,
 ) raises -> Float64:
+    """`finite_word` (lane a7d-device-x-decomp-cluster): when nonzero, the
+    host address of one Int32 that receives X's finite status word
+    (core/admitted_finite_status.mojo: 0 = every word finite), tested on the
+    device after the upload and read at the upload's own synchronisation. A
+    flagged X stops the fit there (no output is written; the door refuses).
+    The door then admits a borrowed X with `defer_finite=True`."""
     var big = n_rows * n_features
     var pooled = False
     comptime if PCA_FAST_POOL:
@@ -142,7 +171,12 @@ def pca_fit_host(
     var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
     var cov = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.synchronize()
+    if _pca_finite_flagged(ctx, x, big, finite_word):
+        if pooled:
+            pool_give[_PCA_POOL](x^)
+        else:
+            _ = x^
+        return 0.0
     var trace = IdentityTrace()
     if trace.enabled:
         trace.header(
@@ -211,8 +245,10 @@ def pca_fit_full_host(
     n_rows: Int,
     n_features: Int,
     n_components: Int,
+    finite_word: Int = 0,
 ) raises -> Float64:
     """`PCA(svd_solver='full')`: the R-SVD arm, same five outputs.
+    `finite_word`: as `pca_fit_host`'s.
 
     The twin of `pca_fit_host` and deliberately the same shape, so a caller
     switching solvers changes ONE name. What differs is inside: no
@@ -237,7 +273,8 @@ def pca_fit_full_host(
     var s = ctx.enqueue_create_buffer[DType.float32](n_features)
     var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.synchronize()
+    if _pca_finite_flagged(ctx, x, n_rows * n_features, finite_word):
+        return 0.0
     var trace = IdentityTrace()
     if trace.enabled:
         trace.header(

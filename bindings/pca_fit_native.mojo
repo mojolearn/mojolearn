@@ -11,6 +11,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.pca_exact import pca_too_small, pca_whiten_entries, pca_refusal
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 from bindings.decomp_inputs import decomp_admit
+from bindings.admitted_input import admitted_finite_refuse
 from providers.python.pca_fit_scalar_pyapi import PCAFitScalar, pca_fit_scalar_capture
 from providers.python.pca_fit_model_pyapi import pca_fit_fields, pca_fit_entries, pca_fit_host_only, pca_fit_preflight
 
@@ -66,7 +67,11 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     var source = args[0]
     # The one admission path: borrowed when X already is C float32, else one
     # parallel cast into uninitialised storage (scikit-learn wording, est PCA).
-    var x = decomp_admit(source, "PCA", context)
+    # Lane a7d: the exact solvers' entry (pca_fit_owned) tests a borrowed X
+    # on the device after its upload and returns the status word
+    # (defer_finite): no host scan of X. The randomized driver uploads X in
+    # its own executor, so that solver keeps the scan here.
+    var x = decomp_admit(source, "PCA", context, defer_finite=solver != "randomized")
     var rows = x.rows
     var cols = x.cols
     var b = native_loaded_module("builtins")
@@ -164,9 +169,14 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
         except error:
             raise pca_refusal(error^)
     else:
+        var fit_params = Python.list(rows, cols, count, Int(dense), keep_mode, Int(whiten), fraction)
+        if not x.finite:
+            _ = py_call(fit_params.append, PythonObject(1))
         var fitted = py_call_typed(entries["pca_fit_owned"], x.address, components.address,
             mean.address, variance.address, ratio.address, singular.address, projection_address,
-            Python.list(rows, cols, count, Int(dense), keep_mode, Int(whiten), fraction))
+            fit_params)
+        if not x.finite:
+            admitted_finite_refuse(Int(py=fitted[2]), "PCA")
         keep = Int(py=fitted[0])
         noise = fitted[1]
         if keep != count:

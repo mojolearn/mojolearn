@@ -537,9 +537,12 @@ def pca_fit_owned_binding(
     host (core/estimators_host_impl.mojo `pca_fit_owned_host_run`): the GPU
     binding's contract. params: n_rows, n_features, n_components, dense (1:
     svd_solver='full'), keep mode (0: every component, 1: the fraction
-    the fraction, 2: "mle"), whiten, the fraction; an output address (0: none) gets X's
-    projection. Returns (kept count, noise variance)."""
-    if len(params) != 7:
+    the fraction, 2: "mle"), whiten, the fraction, and OPTIONALLY (lane a7d)
+    a finite flag; an output address (0: none) gets X's projection. Returns
+    (kept count, noise variance), with X's finite status word third when the
+    flag asks for it (the parallel host scan before the fit; a flagged X is
+    not fit)."""
+    if len(params) != 7 and len(params) != 8:
         raise Error("pca_fit_owned: params must contain n_rows, n_features, n_components, dense, keep mode, whiten, fraction")
     var x_address = Int(py=x_addr)
     var cp = f32_ptr(Int(py=components_addr))
@@ -556,14 +559,22 @@ def pca_fit_owned_binding(
     var keep_mode = Int(py=params[4])
     var whiten = Int(py=params[5]) != 0
     var fraction = Float64(py=params[6])
+    var test = len(params) == 8 and Int(py=params[7]) != 0
+    var status = 0
     var kept = 0
     var noise = Float64(0.0)
     with GILReleased(Python()):
-        var fitted = pca_fit_owned_host_run(
-            x_address, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, fraction, op, oa != 0, whiten
-        )
-        kept = fitted[0]
-        noise = fitted[1]
+        if test and nr >= 1 and nf >= 1:
+            # parallel: the deferred finite test of X (SIMD scan across the host's cores)
+            status = 0 if host_all_finite_f32(f32_ptr(x_address), nr * nf) else 1
+        if status == 0:
+            var fitted = pca_fit_owned_host_run(
+                x_address, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, fraction, op, oa != 0, whiten
+            )
+            kept = fitted[0]
+            noise = fitted[1]
+    if test:
+        return Python.tuple(PythonObject(kept), PythonObject(noise), PythonObject(status))
     return Python.tuple(PythonObject(kept), PythonObject(noise))
 
 
