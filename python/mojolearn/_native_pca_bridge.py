@@ -32,8 +32,7 @@ def connect(pca_class):
     # Additive exports: a build without one refuses the option that needs it
     # by name (bindings/pca_exact.mojo), not at import.
     optional = ("pca_fit_owned", "pca_fit_randomized", "pca_fit_full",
-                "pca_whiten_transform", "pca_whiten_inverse_transform",
-                "pca_transform_fold")  # lane a6: GPU bindings only (a resident CV fold)
+                "pca_whiten_transform", "pca_whiten_inverse_transform")
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: fixed numeric-mode ABI connection
         try:
             binding = _backend.binding("_mojolearn_estimators", mode)
@@ -88,6 +87,16 @@ def connect(pca_class):
                                           pca_class.__module__)
                                    for name in ("fit", "fit_transform", "transform", "inverse_transform")})  # glue: fixed public scalar warning locations
     context["pca_fit_scalar_context"] = scalar_context
+    # glue (lane a6): PCA.transform of a cross-validation fold resident on
+    # the device, exported by the identical GPU base binding next to the
+    # fold store it reads (bindings/msel_device.mojo); a build without it
+    # (the CPU column) leaves None and the door gathers host rows.
+    from ._buffer import _native
+    try:
+        fold = _native('pca_transform_fold')
+    except (ImportError, AttributeError, TypeError, RuntimeError):
+        fold = None
+    context["pca_transform_fold"] = fold if isinstance(fold, BuiltinFunctionType) else None
     entry = _binding()._module.pca_native_call
     if not isinstance(entry, BuiltinFunctionType):
         raise TypeError("PCA owner requires a compiled pca_native_call")

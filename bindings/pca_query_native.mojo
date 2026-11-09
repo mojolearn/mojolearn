@@ -31,12 +31,12 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
     var whiten = Bool(py=fields["whiten"])
     # Lane a6: a cross-validation fold of a plain transform is gathered on
     # the device out of model selection's resident base by the GPU entry
-    # `pca_transform_fold` (no host gather, no upload of X); a binding
-    # without it (the host column) gets the host rows.
-    var fold_entry = py_get(entries, "pca_transform_fold")
+    # `pca_transform_fold` (no host gather, no upload of X; connected from
+    # the identical base binding that holds the fold store); without it (the
+    # host column) the door gets the host rows.
+    var fold_entry = py_get(context, "pca_transform_fold")
     var fold_ok = (not inverse and not whiten and fold_entry is not None
-                   and py_type(fold_entry) is py_type(entries["pca_transform"])
-                   and fold_entry.__self__ is entries["pca_transform"].__self__)
+                   and py_type(fold_entry) is py_type(entries["pca_transform"]))
     var x = decomp_admit(source, "PCA", context, fold_ok)
     var rows = x.rows
     if x.cols != (count if inverse else features):
