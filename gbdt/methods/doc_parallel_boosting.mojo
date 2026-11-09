@@ -269,7 +269,7 @@ from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     DeviceLeafPartitioner,
     LeafPartition,
     compute_bins_for_model,
-    enqueue_partition_words_u32,
+    enqueue_partition_words_u32_from,
     partition_from_bins,
 )
 from ensemble.instruments import StageTimes as HostStageTimes
@@ -1445,7 +1445,8 @@ def tree_op_leaf_estimate(
     ctx: DeviceContext,
     mut gate: DeviceBuffer[DType.int32],
     mut state: LeafEstimateOpState,
-    mut parts: DeviceLeafPartitioner,
+    var row_order: DeviceBuffer[DType.uint32],
+    var part_words: DeviceBuffer[DType.int64],
     mut targets: DeviceBuffer[DType.float32],
     mut weights: DeviceBuffer[DType.float32],
     has_weights: Bool,
@@ -1465,9 +1466,11 @@ def tree_op_leaf_estimate(
 ) raises:
     """Tree op TREE_OP_LEAF_ESTIMATE (gbdt/tree_ops.mojo): one tree's leaves
     estimated on the device from the partition TREE_OP_PARTITION left in
-    `parts` (row order `parts.vals`, offsets / sizes in `parts.d_part`) at
-    `cursor`, the walk's Newton (or Gradient) steps and their stop included.
-    Enqueue only: nothing is read back and nothing drains.
+    its partitioner (`row_order` a handle onto `parts.vals`, `part_words`
+    onto `parts.d_part`: offsets / sizes; handles so a caller keeping the
+    partitioner and this state in one struct passes no two `mut` views of
+    it) at `cursor`, the walk's Newton (or Gradient) steps and their stop
+    included. Enqueue only: nothing is read back and nothing drains.
 
     Writes `leaf_out[0, n_leaves)` (the model's leaves) and
     `leaf_scaled[0, n_leaves)` (times `learning_rate`, TREE_OP_APPLY's
@@ -1495,7 +1498,7 @@ def tree_op_leaf_estimate(
         )
     var n_rows = state.n_rows
     var n_leaves = state.n_leaves
-    if parts.n_rows_cap < n_rows or parts.n_leaves_cap < n_leaves:
+    if len(row_order) < n_rows or len(part_words) < 2 * n_leaves + 2:
         raise Error("tree_op_leaf_estimate: the partitioner is smaller than the op state")
     if len(leaf_out) < n_leaves or len(leaf_scaled) < n_leaves:
         raise Error("tree_op_leaf_estimate: leaf_out / leaf_scaled hold fewer than " + String(n_leaves) + " leaves")
@@ -1516,10 +1519,9 @@ def tree_op_leaf_estimate(
     var d_p_off = state.est_ws[0].d_p_off.copy()
     var d_p_sz = state.est_ws[0].d_p_sz.copy()
     var walk = state.est_ws[0].walk.handles()
-    var row_order = parts.vals.copy()
     # the partition's offsets and sizes, on the device (the host pack and
     # its two uploads in `_estimate_and_apply`)
-    enqueue_partition_words_u32(ctx, parts, n_leaves, d_p_off, d_p_sz)
+    enqueue_partition_words_u32_from(ctx, part_words, n_leaves, d_p_off, d_p_sz)
     # target, weights and cursor into the partition's row order
     launch_gather_with_mask_f32(ctx, g_target, targets, row_order, n_rows, UInt32(0xFFFFFFFF))
     if has_weights:

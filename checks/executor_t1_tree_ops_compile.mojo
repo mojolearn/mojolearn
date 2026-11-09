@@ -97,7 +97,7 @@ def main() raises:
     var leaf_scaled = ctx.enqueue_create_buffer[DType.float32](1 << max_depth)
     var l_status = ctx.enqueue_create_buffer[DType.int32](1)
     tree_op_leaf_estimate(
-        ctx, regs.words, est_state, parts, l_targets, l_weights, True, cursor,
+        ctx, regs.words, est_state, parts.vals.copy(), parts.d_part.copy(), l_targets, l_weights, True, cursor,
         OBJECTIVE_LOGLOSS, Float32(0.5), Float32(0.5), Float32(0.5), Float32(3.0),
         LEAF_ESTIMATION_NEWTON, 2, 2, Float32(0.1), leaf_out, leaf_scaled, l_status,
     )
