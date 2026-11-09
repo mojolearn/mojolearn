@@ -65,7 +65,8 @@ from transformer.checks.transformer_fixture import RMS_EPS, ROPE_THETA
 # settled pattern (`transformer_check.mojo` imports the same pair).
 from transformer.impl.llama.fused_attention import fused_forward_supported_head_dim
 # Lane x4: the public decode session runs the attention step op.
-from transformer.attn_step_session import AttnStepArm
+from transformer.attn_step_session import AttnStepArm, attn_step_ints, attn_step_same_layout
+from autograd.block_step_ops import AttnPrefill
 from transformer.impl.llama.modeling_llama import (
     ATTN_PATH_EAGER,
     BLOCK_ANY_SABOTAGE,
@@ -531,13 +532,13 @@ struct TransformerSession(Movable, Writable):
     var weight_uploads: Int
     var weight_recopies: Int
     var weight_reuses: Int
-    var backward: Optional[TransformerBackwardWorkspace]
-    """lane/neural-net-experiment: the zero-state prefill backward's stages
-    and its grad_output buffer, retained across `transformer_session_backward`
-    calls the way the byte trainer retains `tr.backward[layer]` across steps
-    (no reset exists or is needed: every cell the backward reads it wrote
-    this call). Dropped with the forward workspace under the same budget."""
-    var backward_workspaces: Int
+    var arm: Optional[AttnStepArm]
+    """Lane x4b: the block's forward, step and backward on the attention
+    step op (transformer/attn_step_session.mojo): its weights packed once
+    into the op's weight buffer (byte-compared with the caller's arrays on
+    every call), its cache in the op's state buffer, its L stages and the
+    backward stages kept by the arm. `workspace` and `weights` above serve
+    only the forward tape (`retain_tape`, lane X6 deletes it)."""
     var tape: Optional[BorrowedAttentionTape]
     var tape_generation: Int
     var busy: Bool
@@ -556,8 +557,7 @@ struct TransformerSession(Movable, Writable):
         self.weight_uploads = 0
         self.weight_recopies = 0
         self.weight_reuses = 0
-        self.backward = Optional[TransformerBackwardWorkspace]()
-        self.backward_workspaces = 0
+        self.arm = Optional[AttnStepArm]()
         self.tape = None
         self.tape_generation = 1
         self.busy = False
@@ -575,7 +575,7 @@ struct TransformerSession(Movable, Writable):
         # Same teardown order as ByteLMSession (DEVIATION 2520): buffer
         # destruction enqueues frees, which must drain before context death.
         _ = self.tape^
-        _ = self.backward^
+        _ = self.arm^
         _ = self.workspace^
         _ = self.planes^
         _ = self.weights^
@@ -601,7 +601,7 @@ struct TransformerSession(Movable, Writable):
         self.invalidate_tape()
         if self.ctx:
             self.ctx.value().synchronize()
-        self.backward = None
+        self.arm = None
         self.workspace = None
         self.planes = None
         self.planes_key = List[Int]()
@@ -826,7 +826,15 @@ def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = Fa
     the session -- the caller passes no cache (slots 10 and 11 are 0), the
     retained cache buffers are zero-filled on the device (the bytes a fresh
     `LlamaKVCache` holds), nothing is uploaded or downloaded for it, and
-    `s0` is 0. Same kernels, same launches, same order."""
+    `s0` is 0. Same kernels, same launches, same order.
+
+    Lane x4b: every call that keeps no tape runs on the attention step op
+    (`_transformer_run_session_op`); the body below is the forward tape's
+    alone (`retain_tape`, `forward_with_tape`; lane X6 deletes it with the
+    tape API)."""
+    comptime if not retain_tape:
+        return _transformer_run_session_op[discard_cache](session, a, b, l, dm, nh, nkv, hd, it, smax, s0,
+                                                          window, opts)
     var dims = LlamaDims(dm, nh, nkv, hd, it)
     dims.validate()
     opts.validate(hd)
@@ -911,6 +919,89 @@ def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = Fa
 
 
 
+def _stage_cells(stages: LlamaDeviceStages) -> Int:
+    """The float cells of one block's stages (the retention budget's count;
+    `TransformerWorkspace.retained_bytes` adds the cache, rope and x)."""
+    var cells = len(stages.gemm_workspace.buffer)
+    cells += len(stages.norm1_sumsq) + len(stages.norm1_out) + len(stages.q_proj) + len(stages.k_proj)
+    cells += len(stages.v_proj) + len(stages.q_rope) + len(stages.k_rope) + len(stages.k_cache)
+    cells += len(stages.v_cache) + len(stages.scores) + len(stages.masked) + len(stages.amax)
+    cells += len(stages.aexp) + len(stages.denom) + len(stages.weights) + len(stages.ctxv)
+    cells += len(stages.o_proj) + len(stages.residual1) + len(stages.norm2_sumsq) + len(stages.norm2_out)
+    cells += len(stages.gate_proj) + len(stages.up_proj) + len(stages.silu_out) + len(stages.gated)
+    cells += len(stages.down_proj) + len(stages.residual2) + len(stages.qbh) + len(stages.kbh) + len(stages.sbh)
+    return cells
+
+
+def _session_arm(
+    mut session: TransformerSession, a: List[Int], ints: List[Int], b: Int, dm: Int, nh: Int, nkv: Int,
+    hd: Int, it: Int, smax: Int, s0: Int, window: Int, opts: BlockOptions,
+) raises:
+    """Leave `session.arm` open over this block's weights (lane x4b): the
+    same arm when the weight layout is the same (its shape words and the
+    caller's bytes are reconciled by the call itself), a new one otherwise."""
+    if not session.ctx:
+        session.ctx = neural_ctx[_NEURAL_CTX]()
+        session.contexts += 1
+    session.invalidate_tape()
+    if session.arm and attn_step_same_layout(session.arm.value().ints, ints):
+        return
+    session.arm = None
+    var words = List[Int]()
+    if len(ints) > 8:
+        for i in range(8, len(ints)):  # small-loop(ints: the 17 block option words): argument words, no data
+            words.append(ints[i])
+    session.arm = AttnStepArm(session.ctx.value(), a, b, dm, nh, nkv, hd, it, smax, s0, window, opts, words,
+                              keep_host=True)
+    session.workspaces += 1
+
+
+def _session_arm_budget(mut session: TransformerSession) raises:
+    """The retained-storage budget of the block session
+    (`MOJOLEARN_TRANSFORMER_RETAIN_MB`): kept L stages over it go after the
+    call (the next call rebuilds them), as the workspace did."""
+    if not session.arm:
+        return
+    ref arm = session.arm.value()
+    if arm.pre.stages and _stage_cells(arm.pre.stages.value()) * 4 > _session_retain_cap_bytes():
+        arm.pre.clear()
+        arm.bst = None
+        arm.dout = None
+        arm.bkey = List[Int]()
+        session.ctx.value().synchronize()
+
+
+def _transformer_run_session_op[discard_cache: Bool](
+    mut session: TransformerSession, a: List[Int], b: Int, l: Int,
+    dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
+    smax: Int, s0: Int, window: Int, opts: BlockOptions,
+) raises -> Int:
+    """`_transformer_run_session` on the attention step op (lane x4b): the
+    block session's arm (weights packed once, compared byte for byte with
+    the caller's arrays every call) runs the call. `discard_cache`: the
+    stateless prefill, zero caches at position 0 on the device, nothing of
+    them crosses the host; otherwise the caller's caches up at s0 and back
+    down after the run. One wait."""
+    var dims = LlamaDims(dm, nh, nkv, hd, it)
+    dims.validate()
+    opts.validate(hd)
+    if s0 < 0 or s0 > smax:
+        raise Error(String("transformer: cached_tokens must be in [0, ")
+            + String(smax) + "] (the cache capacity, max_tokens), got "
+            + String(s0) + "; the two sides of this boundary disagree about the state")
+    if window < 0:
+        raise Error("transformer: window must be >= 0 (0 = full causal)")
+    comptime if discard_cache:
+        if s0 != 0:
+            raise Error("transformer: a discarded cache starts at cached_tokens 0")
+    var ints = attn_step_ints(b, dm, nh, nkv, hd, it, smax, window, opts)
+    _session_arm(session, a, ints, b, dm, nh, nkv, hd, it, smax, s0, window, opts)
+    var result = session.arm.value().block_forward(a, ints, l, s0, discard_cache)
+    _session_arm_budget(session)
+    return result
+
+
+
 struct TransformerForwardTape(Movable, Writable):
     """NI36/48 single-use owner of input, weight snapshots and saved stages.
 
@@ -984,98 +1075,26 @@ def _transformer_run_session_backward(
     mut session: TransformerSession, a: List[Int], b: Int, l: Int,
     dm: Int, nh: Int, nkv: Int, hd: Int, it: Int, window: Int,
 ) raises:
-    """`_transformer_backward_run` on the session (lane/neural-net-experiment,
-    2026-09-30): the same forward from a zero cache at positions [0, L) and
-    the same backward on its stages, with the weights retained
-    (`_session_weights`), the forward workspace retained at `smax = L`, the
-    backward stages and the grad_output buffer retained, and the cache
-    zero-filled on the device. Same kernels, same launches, same order;
-    the ten gradients are written into the caller's buffers as before."""
+    """`TransformerBlock.backward` on the block session (lane x4b): the
+    zero-state prefill at positions [0, L) through the attention step op
+    (the block's arm, `smax = L`, stages kept), then the transformer stage
+    rule (`llama_decoder_layer_backward_autograd`) over the op's kept
+    stages, weights, rotary table and input; the backward stages and the
+    grad_output buffer kept by the arm. The ten gradients are written into
+    the caller's buffers as before. `a` is the 21 backward addresses."""
     var dims = LlamaDims(dm, nh, nkv, hd, it)
     dims.validate()
     if window < 0:
         raise Error("transformer backward: window must be >= 0")
     var opts = BlockOptions()
-    var qw = dims.q_width()
-    var kw = dims.kv_width()
-    var m = b * l
-    if not session.ctx:
-        session.ctx = neural_ctx[_NEURAL_CTX]()
-        session.contexts += 1
-    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
-    var tk = Int(perf_counter_ns())
-    var lean = transformer_lean_stages(hd)
-    # Weights: reused when the bytes are the same, recopied when they moved.
-    _session_weights(session, dims, a, opts, List[Int]())
-    ref ctx = session.ctx.value()
-    ref w = session.weights.value()
-    _btick(ton, tk, "surface.weights_up")
-    # The forward half at smax = L (the fresh-prefill shape).
-    var key = _workspace_key(b, l, dims, l, window, lean, opts)
-    var reused = False
-    if session.workspace:
-        reused = session.workspace.value().matches(key)
-    if not reused:
-        ctx.synchronize()
-        session.workspace = None
-        ctx.synchronize()
-        session.workspace = TransformerWorkspace(ctx, dims, b, l, l, window, lean, opts)
-        session.workspaces += 1
-    ref ws = session.workspace.value()
-    if reused and _stage_reset_on():
-        ws.stages.reset(ctx)
-    # The backward half.
-    var bkey: List[Int] = [b, l, dm, nh, nkv, hd, it, window, Int(lean)]
-    var breused = False
-    if session.backward:
-        breused = session.backward.value().matches(bkey)
-    if not breused:
-        ctx.synchronize()
-        session.backward = None
-        ctx.synchronize()
-        session.backward = TransformerBackwardWorkspace(ctx, dims, b, l, window, lean)
-        session.backward_workspaces += 1
-    ref bw = session.backward.value()
-    # Inputs: x and grad_output into retained buffers; the cache is the
-    # fresh zeros a `LlamaKVCache` holds.
-    ws.kv.k.enqueue_fill(Float32(0.0))
-    ws.kv.v.enqueue_fill(Float32(0.0))
-    ws.kv.s = 0
-    ctx.enqueue_copy(dst_buf=ws.x, src_ptr=_f32_ptr(a[0]))
-    ctx.enqueue_copy(dst_buf=bw.d_out, src_ptr=_f32_ptr(a[10]))
-    ctx.synchronize()
-    _btick(ton, tk, "surface.inputs_up")
-    var off = IdentityTrace.disabled()
-    llama_decoder_layer_forward(
-        ctx, ws.stages, ws.kv, ws.rope, w, ws.x, b, l, 0, off, String("pyf")
-    )
-    _btick(ton, tk, "surface.forward")
-    var offb = IdentityTrace.disabled()
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
-    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
-    llama_decoder_layer_backward_autograd(
-        ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
-        b, l, 0, offb, String("pyb"),
-    )
-    _btick(ton, tk, "surface.backward")
-    _download_addr[False](ctx, bw.bst.d_x, m * dm, a[11])
-    _download_addr[False](ctx, bw.bst.dw_norm1, dm, a[12])
-    _download_addr[False](ctx, bw.bst.dw_norm2, dm, a[13])
-    _download_addr[False](ctx, bw.bst.dw_q, qw * dm, a[14])
-    _download_addr[False](ctx, bw.bst.dw_k, kw * dm, a[15])
-    _download_addr[False](ctx, bw.bst.dw_v, kw * dm, a[16])
-    _download_addr[False](ctx, bw.bst.dw_o, dm * qw, a[17])
-    _download_addr[False](ctx, bw.bst.dw_gate, it * dm, a[18])
-    _download_addr[False](ctx, bw.bst.dw_up, it * dm, a[19])
-    _download_addr[False](ctx, bw.bst.dw_down, dm * it, a[20])
-    ctx.synchronize()
-    _btick(ton, tk, "surface.outputs_down")
-    # The same budget as the forward path, on the forward half's count
-    # (the backward half is of the same order); both go together.
-    if ws.retained_bytes() > _session_retain_cap_bytes():
-        session.backward = None
-        session.workspace = None
-        ctx.synchronize()
+    var ints = attn_step_ints(b, dm, nh, nkv, hd, it, l, window, opts)
+    # The arm opens on the forward layout: x and the nine weights, no caches.
+    var fa = List[Int](length=13 + BLOCK_OPTION_ADDRS, fill=0)
+    for i in range(10):  # small-loop(10: x and the nine base weight slots): argument words, no data
+        fa[i] = a[i]
+    _session_arm(session, fa, ints, b, dm, nh, nkv, hd, it, l, 0, window, opts)
+    session.arm.value().block_backward(a, ints, l)
+    _session_arm_budget(session)
 
 
 # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by 79853ceba; code recoverable at a88745022.

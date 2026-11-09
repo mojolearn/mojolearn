@@ -72,7 +72,7 @@ def attn_step_ints(b: Int, dm: Int, nh: Int, nkv: Int, hd: Int, it: Int, smax: I
     return ints^
 
 
-def _same_layout(a: List[Int], b: List[Int]) -> Bool:
+def attn_step_same_layout(a: List[Int], b: List[Int]) -> Bool:
     """Whether two ints lists pack the weights alike (every word but b,
     s_max and window)."""
     if len(a) != len(b):
@@ -269,7 +269,7 @@ struct AttnStepArm(Movable):
         buffer is kept (its packing does not depend on these words)."""
         if ints == self.ints:
             return
-        if len(self.ints) != 0 and not _same_layout(self.ints, ints):
+        if len(self.ints) != 0 and not attn_step_same_layout(self.ints, ints):
             raise Error("transformer: a block's step-op arm cannot change its weight layout")
         if self.adopted and len(self.ints) != 0:
             raise Error("transformer: a fixed15_v1 decode session keeps its shape")
