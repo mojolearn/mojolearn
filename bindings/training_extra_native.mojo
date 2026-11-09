@@ -6,10 +6,11 @@
 (python/mojolearn/_training_impl.py). Each is one call: the buffer
 admission and float32 / int32 preparation, the shape refusals in the Python
 bodies' words, the outputs, the compiled training entry with the same
-argument words, and the result. The kernels and their order are unchanged,
-so every result keeps its bits.
+argument words, and the result. `mlp_inference_sessions` runs the small-MLP
+program's forward (autograd/small_mlp_program.mojo, op SESSIONS).
 """
 from std.python import Python, PythonObject
+from std.memory import memcpy
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.py_typed_call import py_call_typed
@@ -296,38 +297,55 @@ def training_mlp_sessions(values: PythonObject, entries: PythonObject) raises ->
     if (w2v.shape[1] != hidden or len(b1v.shape) != 1 or b1v.shape[0] != hidden
             or len(b2v.shape) != 1 or b2v.shape[0] != out_width):
         raise Error("ValueError: MLP session weight/bias shapes do not agree")
-    # the session inputs: shape tuples and C-order addresses, never row values
+    # the session inputs: C-order addresses, never row values
     var inputs = py_call(b.list, values[0])
-    var shapes = Python.list()
     var addresses = Python.list()
     var views = List[TensorView]()
     # Bound append methods are read once, not twice per session array.
-    var shapes_append = py_call(b.getattr, shapes, "append")
     var addresses_append = py_call(b.getattr, addresses, "append")
     for i in range(len(inputs)):  # driver-loop: over the caller's session arrays
         var view = TensorView()
         var address = _c32(inputs[i], "session input", site, view, keep)
-        _ = py_call(shapes_append, py_ints(view.shape))
         _ = py_call(addresses_append, PythonObject(address))
         views.append(view^)
-    # One native call into the training binding: the output is sized here
-    # from the views already read above (the `mlp_sessions_rows` rule: at
-    # least one session, every session a (rows, width) matrix), not by a
-    # second call that re-reads the shape tuples. `mlp_sessions_rows` stays
-    # exported for its other caller (bindings/small_mlp_native.mojo).
-    var sessions_entry = _entry(entries, "mlp_sessions", "mojolearn: this training binding lacks ")
+    # The output is sized here from the views already read above (at least
+    # one session, every session a (rows, width) matrix). The sessions' rows
+    # are packed in order into one Mojo-owned buffer and run as ONE forward
+    # of the small-MLP program (the x_sequence binding's `small_mlp_program`,
+    # op SESSIONS: autograd/small_mlp_program.mojo small_mlp_sessions_forward).
+    # TOMBSTONE: the training binding's `mlp_sessions` entry (per-session NN64 forward, training/neural_session_mlp.mojo; MOJOLEARN_NN64_SESSION_PACK) deleted 2026-11-09 by lane/m2-neural-leftovers; code recoverable at 0ce88411d3.
+    # Restore: git apply experiments/removed/M2_SMALL_MLP_PRIMITIVES.patch
+    var program = _entry(entries, "small_mlp_program", "mojolearn: this install lacks the x_sequence binding's ")
+    if width < 1 or hidden < 1 or out_width < 1:
+        raise Error("ValueError: MLP session weight/bias shapes do not agree")
     if len(views) == 0:
         raise Error("ValueError: MLP sessions require at least one (rows, width) input")
     var total_rows = 0
     for i in range(len(views)):  # driver-loop: over the caller's session arrays (shape words, not data)
         if len(views[i].shape) != 2 or views[i].shape[1] != width or views[i].shape[0] < 0:
             raise Error("ValueError: MLP sessions require at least one (rows, width) input")
+        if views[i].shape[0] > 2147483647 // width - total_rows:
+            raise Error("ValueError: MLP sessions exceed the index range")
         total_rows += views[i].shape[0]
     var output = new_array([total_rows, out_width], "<f4")
-    var wrote = py_call_typed(sessions_entry,
-                              Python.list(output._addr, w1, b1, w2, b2), addresses, shapes,
-                              Python.list(width, hidden, out_width))
+    if total_rows == 0:
+        _ = keep^
+        _ = views^
+        _ = inputs^
+        return output
+    var packed = List[Float32](length=total_rows * width, fill=Float32(0))
+    var base = 0
+    for i in range(len(views)):  # driver-loop: over the caller's session arrays (one block copy each)
+        var n = views[i].shape[0] * width
+        if n > 0:
+            memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(packed.unsafe_ptr()) + 4 * base),
+                   src=Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=addresses[i])), count=n)
+        base += n
+    var wrote = py_call_typed(program, PythonObject(5),
+                              Python.list(output._addr, Int(packed.unsafe_ptr()), w1, b1, w2, b2),
+                              Python.list(total_rows, width, hidden, out_width), Python.list())
     _ = output  # keep the Python object alive through the native call above
+    _ = packed^
     if Int(py=wrote) != total_rows * out_width:
         raise Error("RuntimeError: MLP sessions returned an invalid output count")
     _ = output  # keep the Python object alive through the native calls above

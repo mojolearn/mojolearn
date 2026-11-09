@@ -58,6 +58,12 @@ def connect(training):
                     raise TypeError(f"optimizer requires compiled {name}")
                 cells[name] = entry
             cells["module"] = binding
+            try:  # glue: mlp_inference_sessions runs the x_sequence binding's small-MLP program (op SESSIONS)
+                program = getattr(_backend.binding("_mojolearn_x_sequence", mode), "small_mlp_program")
+                if isinstance(program, BuiltinFunctionType):
+                    cells["small_mlp_program"] = program
+            except (ImportError, AttributeError, ValueError, RuntimeError, NotImplementedError):
+                pass  # glue: refused by name at the call (training_extra_native._entry)
             bindings[mode] = cells
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
             bindings[mode] = type(error).__name__ + ": " + str(error)
