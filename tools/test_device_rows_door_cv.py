@@ -184,3 +184,53 @@ def test_x_linear_estimators_opt_in():
         assert _plan(cls)["device_rows"] is True, cls.__name__
     for cls in (xl.RidgeCV, xl.LassoCV, xl.ElasticNetCV, xl.LogisticRegressionCV):
         assert not _plan(cls).get("device_rows"), cls.__name__
+
+
+def _kmeans(n_clusters=3):
+    from mojolearn import cluster
+    return cluster.KMeans(n_clusters=n_clusters, n_init=1, max_iter=20, random_state=0)
+
+
+@pytest.mark.parametrize("method", ["predict", "transform"])
+def test_kmeans_fold_entries_match_host_path(method):
+    # Lane a8d (follow-up of a7d): KMeans fit and predict / transform of a
+    # resident fold run on the device fold entries (kmeans_fit_fold,
+    # kmeans_predict_fold, kmeans_transform_fold); the host-array path must
+    # give the same bytes.
+    x, _ = _data("reg")
+    plan = _plan(type(_kmeans()))
+    before = plan["device_rows"]
+    try:
+        plan["device_rows"] = False
+        host = model_selection.cross_val_predict(_kmeans(), x, cv=5, method=method)
+        plan["device_rows"] = True
+        door = model_selection.cross_val_predict(_kmeans(), x, cv=5, method=method)
+    finally:
+        plan["device_rows"] = before
+    host = np.asarray(host)
+    door = np.asarray(door)
+    assert host.shape == door.shape
+    assert host.tobytes() == door.tobytes(), method
+
+
+def test_kmeans_nan_fold_is_refused():
+    # The fold entry's finite word refuses a NaN fold with the admission's
+    # wording.
+    x, _ = _data("reg")
+    x = x.copy()
+    x[7, 2] = np.nan
+    with pytest.raises(ValueError, match="NaN"):
+        model_selection.cross_val_predict(_kmeans(), x, cv=3)
+
+
+def test_decomp_cluster_manifold_estimators_registered_and_opt_in():
+    # Lanes a7d / a8d: connected to native model selection (no longer
+    # pending migration) and handed DeviceRows folds.
+    from mojolearn import cluster, mixture, decomposition
+    from mojolearn import _expansion_cluster as xcluster, _expansion_decomp as xdecomp
+    from mojolearn import _spectral_impl as spectral
+    for cls in (cluster.KMeans, xcluster.MiniBatchKMeans, xcluster.BisectingKMeans, mixture.GaussianMixture,
+                xcluster.BayesianGaussianMixture, decomposition.TruncatedSVD, xdecomp.IncrementalPCA,
+                xdecomp.NMF, xdecomp.SparsePCA, xcluster.OPTICS, xdecomp.Isomap,
+                xdecomp.LocallyLinearEmbedding, xdecomp.MDS, spectral.SpectralEmbedding):
+        assert _plan(cls)["device_rows"] is True, cls.__name__
