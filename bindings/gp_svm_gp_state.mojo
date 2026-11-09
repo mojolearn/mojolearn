@@ -344,18 +344,35 @@ def gp_state_remember(model: PythonObject, fields: PythonObject, context: Python
 
 struct GpAdmittedInputs(Defaultable, Movable):
     var items: List[PythonObject]
+    # Lane a7a: True where the door left the finite test to the kernel
+    # entry (admit_x `defer_finite`: a borrowed float32 C-order X the door
+    # did not scan); the owner refuses through the entry's status word, or
+    # scans it itself on a route whose entry returns none.
+    var deferred: List[Bool]
 
     def __init__(out self):
         self.items = List[PythonObject]()
+        self.deferred = List[Bool]()
 
 
 comptime GP_ADMITTED_X = _Global[StorageType=GpAdmittedInputs, name="MojolearnGpAdmittedInputsV1",
                                  init_fn=GpAdmittedInputs.__init__]
 
 
-def gp_x_mark(value: PythonObject) raises:
+def gp_x_mark(value: PythonObject, deferred: Bool = False) raises:
     var g = GP_ADMITTED_X.get_or_create_ptr()
     g[].items.append(value)
+    g[].deferred.append(deferred)
+
+
+def gp_x_deferred(value: PythonObject) raises -> Bool:
+    """`value` is a registered X whose finite test the door deferred to the
+    kernel entry (lane a7a)."""
+    var g = GP_ADMITTED_X.get_or_create_ptr()
+    for i in range(len(g[].items)):  # small-loop(items: the running doors' admitted inputs, usually one)
+        if g[].items[i] is value:
+            return g[].deferred[i]
+    return False
 
 
 def gp_x_known(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -381,4 +398,5 @@ def gp_x_release(value: PythonObject) raises:
     # Hold a reference while the registry changes, so no destructor runs
     # inside the update.
     var held = g[].items.pop(found)
+    _ = g[].deferred.pop(found)
     _ = held^
