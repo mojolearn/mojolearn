@@ -1995,12 +1995,12 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
     # Check the source edges as well as the reviewed file set.
     assert "python/mojolearn/_user_objects.py" in lane_select._python_imports("python/mojolearn/_array.py")
     assert "python/mojolearn/tokenizer.py" in lane_select._python_imports("python/mojolearn/_user_objects.py")
-    assert {"python/mojolearn/_bpe_trainer.py", "python/mojolearn/_tokenizer_synthetic.py"} <= \
-        lane_select._python_imports("python/mojolearn/tokenizer.py")
+    # 2026-11-09: the BPE trainer oracle left the package (tests/_bpe_trainer.py)
+    assert "python/mojolearn/_tokenizer_synthetic.py" in lane_select._python_imports("python/mojolearn/tokenizer.py")
     assert {"_mojolearn_tokenizer_host", "_mojolearn_tokenizer_fast"} <= \
         lane_select._binding_names("python/mojolearn/tokenizer.py")
     shared |= {"python/mojolearn/_user_objects.py", "python/mojolearn/tokenizer.py",
-               "python/mojolearn/_bpe_trainer.py", "python/mojolearn/_tokenizer_synthetic.py",
+               "python/mojolearn/_tokenizer_synthetic.py",
                "bindings/_mojolearn_tokenizer_host.mojo", "bindings/_mojolearn_tokenizer_fast.mojo"}
     # 2026-10-24: load_host_module connects tokenizer_host's classical entries
     # from their alias binding (host_surface.HOST_IMPORT_ALIASES, 8188d819d),

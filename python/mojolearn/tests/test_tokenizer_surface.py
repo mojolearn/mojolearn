@@ -335,7 +335,7 @@ def test_trainer_mojo_backend_writes_the_python_reference_bytes(tok):
     backend must write the SAME ranks and tokenizer.json bytes as the pure
     Python reference. A binding built with -D MOJOLEARN_BPE_TRAINER_SABOTAGE=1
     fails this (reversed tie-break)."""
-    from mojolearn import _bpe_trainer as ref
+    from mojolearn.tests import _bpe_trainer as ref
     from mojolearn.tokenizer import BpeVocabularyTrainer
     bad = bytes([0xFF, 0xFE, 32, 97, 98, 0xC3, 32, 0xE2, 0x82, 32, 0x80, 97, 0xED, 0xA0, 0x80, 10])
     corpora = [([ref.fixture_corpus(n)], v, f) for n, _c, v, f in ref.FIXTURES]

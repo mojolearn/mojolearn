@@ -46,7 +46,6 @@ import operator
 import os
 
 from . import _backend
-from . import _bpe_trainer
 from . import _tokenizer_synthetic
 from ._buffer import addr, addr_ro
 
@@ -576,7 +575,7 @@ class TrainedBpeVocabulary:
 # THE TRAINER is the Mojo one, `tokenizer/train/bpe_train.mojo`, through
 # the tokenizer host binding (`bpe_train`). `backend` is kept for its
 # old spellings: "auto" and "mojo" both name it. The pure Python
-# reference `_bpe_trainer.train` is a VERIFICATION oracle only
+# reference `tests/_bpe_trainer.train` is a VERIFICATION oracle only
 # (lane/pyglue-text-io, 2026-10-03: Python is glue at run time), held to
 # the Mojo trainer's bytes by `pixi run check-bpe-trainer` and the
 # tokenizer surface test; `backend="python"` is refused by name.

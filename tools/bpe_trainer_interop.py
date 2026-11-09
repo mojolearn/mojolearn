@@ -48,7 +48,7 @@ def _load(name, path):
     return mod
 
 
-TR = _load("_bpe_trainer", os.path.join(HERE, "python", "mojolearn", "_bpe_trainer.py"))
+TR = _load("_bpe_trainer", os.path.join(HERE, "python", "mojolearn", "tests", "_bpe_trainer.py"))
 SYN = _load("_tokenizer_synthetic", os.path.join(HERE, "python", "mojolearn", "_tokenizer_synthetic.py"))
 
 

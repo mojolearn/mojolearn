@@ -37,7 +37,7 @@ import tempfile
 import pytest
 
 from mojolearn import Array, lowbit
-from mojolearn import _bpe_trainer
+from mojolearn.tests import _bpe_trainer
 from mojolearn import _tokenizer_synthetic as syn
 from mojolearn.models import (CausalLM, Checkpoint, HFConfig, SafetensorsFile, Tokenizer,
                               UnsupportedModel, plan_for)

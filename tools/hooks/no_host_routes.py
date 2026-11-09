@@ -84,7 +84,7 @@ _runtime_fallbacks.py
 _forest_host.py _gbdt_host.py _byte_lm_host.py _byte_lm_trainer_host.py
 _classical_host.py _serialize.py
 neural_inference.py _causal_lm_fixtures.py
-_bpe_trainer.py _tokenizer_synthetic.py
+_tokenizer_synthetic.py _verify_model.py
 """.split())
 # The bounded verifier modules above prepare test fixtures, compare outputs and
 # inject test faults. They are not product runtime implementations. Exact names
@@ -92,8 +92,10 @@ _bpe_trainer.py _tokenizer_synthetic.py
 # neural_inference.py: the public CPU inference product.
 # _causal_lm_fixtures.py: verification fixtures (_verify_causal_lm and tests only).
 # _serialize.py: model save/load (no fit, transform or predict).
-# _bpe_trainer.py: the BPE trainer's verification oracle (refused as a run-time route).
-# _tokenizer_synthetic.py: tokenizer fixtures for the gates and the identity lane.
+# _tokenizer_synthetic.py: tokenizer fixtures for the gates and the identity lane,
+#   and the GPT-2 byte-to-unicode table the verifier and identity tools spell with.
+# _verify_model.py: the `verify-model` command's report (verification, not a fit,
+#   transform or predict; the BPE trainer oracle moved to tests/_bpe_trainer.py).
 # _runtime_fallbacks.py: verifier-only exception descriptions and code identities;
 # no product caller imports it (enforced by test_runtime_fallback_scope.py).
 # The actual Array.__len__ product callback remains in scope and is reported.

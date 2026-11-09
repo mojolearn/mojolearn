@@ -115,7 +115,7 @@ float anywhere in the selection.
 
 **How it is held.** `pixi run check-bpe-trainer` trains the same corpora in
 Mojo and in an independent Python implementation of the same stated algorithm
-(`python/mojolearn/_bpe_trainer.py`) and requires **identical bytes** in both
+(`python/mojolearn/tests/_bpe_trainer.py`) and requires **identical bytes** in both
 formats. `pixi run check-bpe-trainer-sabotage` reverses the tie-break and must
 FAIL — and the gate also asserts `n_ties_broken > 0`, because a tie-break the
 fixture never reaches cannot be broken and the sabotage would be inert.
