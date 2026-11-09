@@ -61,7 +61,7 @@ from providers.python.x_decomp_resident_pyapi import (
 )
 from x_decomp.resident import GRP_CLS2_ANY
 from providers.python.x_decomp_resident_pyapi import grp_cls2_py
-from providers.python.x_decomp_lanczos_dev_pyapi import dev_lanczos_py
+from providers.python.x_decomp_lanczos_dev_pyapi import dev_eigh_tridiag_py, dev_lanczos_py
 from x_decomp.resident import IDN_SVD_RESIDENT
 from providers.python.x_decomp_resident_pyapi import dev_svd_py
 from x_decomp.resident import IDN_LU_RESIDENT
@@ -237,6 +237,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
         # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
         # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
         m.def_function[dev_lanczos_py]("x_decomp_dev_lanczos")
+        m.def_function[dev_eigh_tridiag_py]("x_decomp_dev_eigh_tridiag")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         m.def_function[dev_rand_py]("x_decomp_dev_rand")

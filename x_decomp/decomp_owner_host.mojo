@@ -12,7 +12,7 @@ from x_decomp.fa_em import FaArgs, fa_em_main_run
 from x_decomp.rotation import ortho_rotation_run
 from x_decomp.lda_fit import LdaArgs, lda_fit_run
 from x_decomp.api import lda_online_run
-from x_decomp.lanczos_host import lanczos_run
+from x_decomp.lanczos_host import eigh_tridiag_host_run, lanczos_run
 
 
 struct HostDecomp(DecompDev):
@@ -113,6 +113,14 @@ struct HostDecomp(DecompDev):
     @staticmethod
     def lanczos_host(pa: F32Ptr, pq: F32Ptr, pab: F32Ptr, n: Int, j0: Int, j1: Int, cap: Int) raises:
         _ = lanczos_run(pa, pq, pab, n, j0, j1, cap)
+
+    @staticmethod
+    def eigh_tridiag_dev(iab: Int, iw: Int, iz: Int, j: Int, cap: Int) raises:
+        raise Error("x_decomp: no resident matrices on the host binding")
+
+    @staticmethod
+    def eigh_tridiag_host(pab: F32Ptr, pw: F32Ptr, pz: F32Ptr, j: Int, cap: Int) raises:
+        _ = eigh_tridiag_host_run(pab, pw, pz, j, cap)
 
     @staticmethod
     def grp_flags() -> Int:

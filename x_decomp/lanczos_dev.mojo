@@ -32,7 +32,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_decomp.cells import F32Ptr
 from x_decomp.device import TPB, _blocks, gemm_scratch, launch_gemm, xd_ctx
 from x_decomp.lanczos_step import lz_alpha, lz_beta, lz_inv, lz_q, lz_w
-from x_decomp.resident import _ptr, pool_alloc, pool_free
+from x_decomp.resident import X_DECOMP_POOL, _ptr, pool_alloc, pool_free
+from x_decomp.eigh_ops import eigh_op_tridiag
+from core.step_gate import step_gate_open_word
+from max.gpu.host import DeviceBuffer
 
 #: The FAST + Apple default since 2026-10-03 (M3 A/B, one run per arm:
 #: kernel-pca taxi -9%, istella -12.5%, tags gl2k-kpca-lzdev-taxi/-istella;
@@ -126,3 +129,51 @@ comptime IPCA_FAST_DEV = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_IPCA_FAST_DEV_OFF"]()
 )
+
+
+def dev_eigh_tridiag_run(iab: Int, iw: Int, iz: Int, j: Int, cap: Int) raises -> Int:
+    """The Lanczos projected solve on the device (lane n9-decomp-eigh-families,
+    2026-11-09): T of the batch's own alphas (ab[0, j)) and betas (ab[cap,
+    cap + j - 1)), read where `dev_lanczos_run` wrote them, through the
+    executor op x_decomp/eigh_ops.mojo `eigh_op_tridiag` (bisection and
+    twisted vectors, the Jacobi of T on a refusal) into the pool matrices w
+    (1 x j, ascending) and z (j x j, eigenvector c in column c,
+    sign-flipped). The host column runs `eigh_op_tridiag_host`
+    (x_decomp/lanczos_host.mojo `eigh_tridiag_host_run`). One sync, for the
+    status word: a solve that holds on neither route raises.
+
+    Before, the driver (bindings/mani_decomp_native.mojo) assembled T as a
+    j x j host matrix and ran the dense eigh on it (an upload of j^2 floats
+    and the dense route per basis round)."""
+    if j < 1 or j > cap:
+        raise Error("x_decomp: the Lanczos projected solve needs 1 <= j <= cap, got j=" + String(j) + " cap=" + String(cap))
+    _ = _ptr(iab, 2 * cap)
+    _ = _ptr(iw, j)
+    _ = _ptr(iz, j * j)
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    var d = pool[].bufs[iab].create_sub_buffer[DType.float32](0, j)
+    var e = pool[].bufs[iab].create_sub_buffer[DType.float32](cap, max(j - 1, 1))
+    var w = pool[].bufs[iw].create_sub_buffer[DType.float32](0, j)
+    var z = pool[].bufs[iz].create_sub_buffer[DType.float32](0, j * j)
+    var gate = step_gate_open_word(ctx)
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    eigh_op_tridiag(ctx, gate, d, e, w, z, status, j)
+    var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
+    ctx.synchronize()
+    var bad = Int(hs.unsafe_ptr().unsafe_load(0))
+    _ = d^
+    _ = e^
+    _ = w^
+    _ = z^
+    _ = gate^
+    _ = status^
+    _ = hs^
+    if bad != 0:
+        raise Error(
+            "x_decomp: the Lanczos projected tridiagonal solve (j = " + String(j) + ") did not hold on the"
+            " bisection route nor on its Jacobi fallback. An unconverged decomposition is not returned as if"
+            " it were one (DEVIATION 590)."
+        )
+    return j

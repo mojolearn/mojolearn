@@ -284,16 +284,29 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
                     break
             j = reached
             stop = broke
-        # the tridiagonal T from the batch's alphas and betas
-        var tvals = List[Float64](length=j * j, fill=0.0)
-        for i in range(j):  # driver-loop: over the Lanczos steps' scalars into T (at most _LANCZOS_MAX_M)
-            tvals[i * j + i] = alphas[i]
-            if i + 1 < j:
-                tvals[i * j + i + 1] = betas[i]
-                tvals[(i + 1) * j + i] = betas[i]
-        var eig = k.eigh(mk_of(tvals, j, j, ctx))
-        th = eig[0]
-        yv = eig[1]
+        # TOMBSTONE: the host assembly of T (a j x j host matrix of the batch's
+        # alphas and betas) and its dense `k.eigh` deleted 2026-11-09 by lane
+        # n9-decomp-eigh-families; code recoverable at the lane's base
+        # origin/integ/pre-0867-w2 (f59d913b0b).
+        # The projected solve is the executor op `eigh_op_tridiag` on the
+        # alphas / betas the Lanczos step wrote (x_decomp/lanczos_dev.mojo
+        # `dev_eigh_tridiag_run`, w and z left on the device), the host
+        # column its twin `eigh_op_tridiag_host` on `ab`
+        # (x_decomp/lanczos_host.mojo `eigh_tridiag_host_run`): one
+        # algorithm on every column. T's words are the float32 alphas and
+        # betas either way (mk_of rounded the float64 copies back to them).
+        if resident:
+            th = k.dout(1, j)
+            yv = k.dout(j, j)
+            _ = family_call(k.fn("x_decomp_dev_eigh_tridiag"), device_identifier(matrix_device(abd)),
+                            device_identifier(matrix_device(th)), device_identifier(matrix_device(yv)),
+                            mk_ints([j, cap]))
+        else:
+            th = mk_zeros(1, j, ctx)
+            yv = mk_zeros(j, j, ctx)
+            _ = family_call(k.fn("x_decomp_eigh_tridiag"), mk_store_addr(ab), mk_addr(th, ctx), mk_addr(yv, ctx),
+                            mk_ints([j, cap]))
+            _ = ab  # keep the Python object alive through the native call above
         top = List[Int]()
         var stop_at = max(j - 1 - nc, -1)
         var t = j - 1

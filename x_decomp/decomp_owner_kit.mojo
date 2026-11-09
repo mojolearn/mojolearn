@@ -153,6 +153,18 @@ trait DecompDev:
         ...
 
     @staticmethod
+    def eigh_tridiag_dev(iab: Int, iw: Int, iz: Int, j: Int, cap: Int) raises:
+        """`x_decomp_dev_eigh_tridiag` on device ids: the Lanczos T of the
+        alphas / betas at iab into w (1 x j) and z (j x j) on the device
+        (the GPU binding only)."""
+        ...
+
+    @staticmethod
+    def eigh_tridiag_host(pab: F32Ptr, pw: F32Ptr, pz: F32Ptr, j: Int, cap: Int) raises:
+        """`x_decomp_eigh_tridiag` on host words (the host binding only)."""
+        ...
+
+    @staticmethod
     def grp_flags() -> Int:
         """The random projections' switches (`x_decomp_grp_cls2`): bit 1
         NOSCAN, 2 DEVSCAN, 4 LAZY, 8 FUSED, 16 SRP_STRAT; 0 elsewhere."""

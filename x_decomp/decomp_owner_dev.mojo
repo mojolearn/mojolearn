@@ -14,7 +14,7 @@ from x_decomp.fa_em import FaArgs
 from x_decomp.fa_em_dev import fa_em_main_dev_run
 from x_decomp.rotation_dev import ortho_rotation_dev_run
 from x_decomp.resident import IDN_QR_R_RESIDENT, dev_lda_bound_run, dev_lda_rows_run, dev_qr_r_run, dev_sqdist_run
-from x_decomp.lanczos_dev import dev_lanczos_run
+from x_decomp.lanczos_dev import dev_eigh_tridiag_run, dev_lanczos_run
 from x_decomp.resident import (
     GRP_CLS2_ANY, GRP_CLS2_DEVSCAN, GRP_CLS2_LAZY, GRP_CLS2_NOSCAN, GRP_FAST_FUSED, GRP_FAST_SRP_STRAT,
     dev_project_run, grp_fit_fused_run,
@@ -134,6 +134,14 @@ struct DevDecomp(DecompDev):
 
     @staticmethod
     def lanczos_host(pa: F32Ptr, pq: F32Ptr, pab: F32Ptr, n: Int, j0: Int, j1: Int, cap: Int) raises:
+        raise Error("x_decomp: the GPU binding runs Lanczos on resident matrices")
+
+    @staticmethod
+    def eigh_tridiag_dev(iab: Int, iw: Int, iz: Int, j: Int, cap: Int) raises:
+        _ = dev_eigh_tridiag_run(iab, iw, iz, j, cap)
+
+    @staticmethod
+    def eigh_tridiag_host(pab: F32Ptr, pw: F32Ptr, pz: F32Ptr, j: Int, cap: Int) raises:
         raise Error("x_decomp: the GPU binding runs Lanczos on resident matrices")
 
     @staticmethod
