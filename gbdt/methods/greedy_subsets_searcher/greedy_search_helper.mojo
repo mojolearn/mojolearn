@@ -6611,7 +6611,7 @@ def run_tree_layout_traced[
         var wd = words_out.value().copy()
         greedy_gate_and_tail(
             ctx, g, winners_score, winners_bf, table, hist_cells_per_leaf,
-            max_depth, n_rows, p_off, p_sz, st, wd,
+            max_depth, n_rows, p_off, p_sz, cover_dev, st, wd,
         )
         if apply_to_cursor:
             # the Simple leaves over every slot (the empty ones hold no rows
