@@ -21,6 +21,8 @@ from bindings.py_attr import py_attr
 from bindings.py_slice_native import py_slice, py_slice_from
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.arena_resident_plan import ArenaResidentPlan
+from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end
+from bindings.admitted_meta_scope import admitted_hold_array_f32
 from bindings.metrics_native_support import metric_float
 from bindings.msel_json import msel_canonical
 from bindings.sha256_door import sha256_update, sha256_hexdigest
@@ -297,6 +299,15 @@ struct MselFoldRows(Movable):
     # address cannot be reused while the entry lives.
     var rows_cache: PythonObject
     var rows_dict: PythonObject
+    # S4 (lane s1): the admitted-registry hold scope of the fold set. A host
+    # float32 C-order X found finite by one scan here is held for the whole
+    # set, and each fold's X rows (gathered out of it, so finite) are held in
+    # a nested scope while that fold runs: every member door, in any binding
+    # (one registry per process), reads them as admitted, with no view, check
+    # or scan of its own. -1: no scope open.
+    var scope_mark: Int
+    var fold_mark: Int
+    var x_finite: Bool
 
     def __init__(out self, x: PythonObject, y: PythonObject, folds: PythonObject, device_rows: Bool,
                  context: PythonObject) raises:
@@ -332,6 +343,45 @@ struct MselFoldRows(Movable):
             self.rows_class = family_call(msel_b().getattr, context["family_msel_arena_io"], PythonObject("DeviceRows"))
             self.rows_take = family_call(msel_b().getattr, self.res, PythonObject("take"))
             self.rows_dict = context["family_msel_rows_context"]["maxabs_rows_dict"]
+        self.scope_mark = -1
+        self.fold_mark = -1
+        self.x_finite = False
+        if not self.dev and msel_is_array(x, context):
+            self.scope_mark = admitted_scope_begin()
+            try:
+                self.x_finite = admitted_hold_array_f32(x, True)
+            except error:
+                admitted_scope_end(self.scope_mark)
+                self.scope_mark = -1
+                raise error^
+
+    def _hold_fold(mut self, xtr: PythonObject, xte: PythonObject, context: PythonObject) raises:
+        """Hold fold rows gathered out of the finite X for this fold only:
+        the previous fold's rows are dropped first, so at most one fold's
+        arrays are held beyond their own use."""
+        if not self.x_finite:
+            return
+        if self.fold_mark >= 0:
+            admitted_scope_end(self.fold_mark)
+        self.fold_mark = admitted_scope_begin()
+        if msel_is_array(xtr, context):
+            _ = admitted_hold_array_f32(xtr, False)
+        if msel_is_array(xte, context):
+            _ = admitted_hold_array_f32(xte, False)
+
+    def _end_holds(mut self):
+        if self.fold_mark >= 0:
+            try:
+                admitted_scope_end(self.fold_mark)
+            except ignored:
+                _ = ignored^
+            self.fold_mark = -1
+        if self.scope_mark >= 0:
+            try:
+                admitted_scope_end(self.scope_mark)
+            except ignored:
+                _ = ignored^
+            self.scope_mark = -1
 
     def xrows(mut self, idx_in: PythonObject, context: PythonObject) raises -> PythonObject:
         if not self.dev:
@@ -384,6 +434,7 @@ struct MselFoldRows(Movable):
         var test = pair[1]
         var xtr = self.xrows(train, context)
         var xte = self.xrows(test, context)
+        self._hold_fold(xtr, xte, context)
         var y = y_in
         if y is None:
             y = self.y
@@ -397,6 +448,7 @@ struct MselFoldRows(Movable):
         return Python.tuple(xtr, self.rows(y, train, context), xte, self.rows(y, test, context))
 
     def close(mut self, context: PythonObject) raises:
+        self._end_holds()
         self.extra = PythonObject(None)
         self.rows_cache = Python.dict()
         self.rows_take = PythonObject(None)
@@ -744,8 +796,11 @@ def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> Py
             if sliced:
                 var a = ranges[2 * i]
                 var b = ranges[2 * i + 1]
-                scores.append(msel_fit_score_fold(fitted, plan, _rows_outside(x, a, b, context), _rows_outside(y, a, b, context),
-                                                  _row_view(x, a, b, context), _row_view(y, a, b, context), scoring, context))
+                var xtr = _rows_outside(x, a, b, context)
+                var xte = _row_view(x, a, b, context)
+                rows._hold_fold(xtr, xte, context)
+                scores.append(msel_fit_score_fold(fitted, plan, xtr, _rows_outside(y, a, b, context),
+                                                  xte, _row_view(y, a, b, context), scoring, context))
             else:
                 var fr = rows.take(i, PythonObject(None), context)
                 scores.append(msel_fit_score_fold(fitted, plan, fr[0], fr[1], fr[2], fr[3], scoring, context))
