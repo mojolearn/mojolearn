@@ -44,15 +44,18 @@ def test_kmeans_refuses_non_finite():
     xn[5, 1] = np.nan
     xi = x.copy()
     xi[7, 0] = np.inf
-    _raises(ValueError, "X contains a NaN or an infinity", KMeans(3).fit, xn)
-    _raises(ValueError, "X contains a NaN or an infinity", KMeans(3).fit, xi)
-    _raises(ValueError, "init_centroids contains a NaN", KMeans(3, init="array", init_centroids=xn[4:7]).fit, x)
+    # Lane a7d: the one admission wording; the kernel entry tests X over its
+    # own upload and returns the status word.
+    _raises(ValueError, "Input X contains NaN or infinity (KMeans).", KMeans(3).fit, xn)
+    _raises(ValueError, "Input X contains NaN or infinity (KMeans).", KMeans(3).fit, xi)
+    _raises(ValueError, "Input init_centroids contains NaN or infinity (KMeans).",
+            KMeans(3, init="array", init_centroids=xn[4:7]).fit, x)
     w = np.ones(64)
     w[0] = np.nan
     _raises(ValueError, "Input sample_weight contains NaN", KMeans(3).fit, x, sample_weight=w)
     m = KMeans(3, random_state=0).fit(x)
-    _raises(ValueError, "X contains a NaN or an infinity", m.predict, xn)
-    _raises(ValueError, "X contains a NaN or an infinity", m.transform, xi)
+    _raises(ValueError, "Input X contains NaN or infinity (KMeans).", m.predict, xn)
+    _raises(ValueError, "Input X contains NaN or infinity (KMeans).", m.transform, xi)
     # the finite path is untouched
     assert np.isfinite(float(m.inertia_))
     assert np.array_equal(np.asarray(m.predict(x)), np.asarray(m.labels_))
