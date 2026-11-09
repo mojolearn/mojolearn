@@ -275,7 +275,7 @@ struct MambaBlockProgram(Movable):
 
     def _reports(mut self, reports: List[Int]) raises:
         var k = mamba_report_count(self.code)
-        if k == 0:
+        if k == 0 or len(reports) == 0:
             return
         if len(reports) != k:
             raise Error("mamba: expected " + String(k) + " report addresses")
@@ -547,7 +547,13 @@ def mamba_block_call(
             p[].zero_state()
         else:
             p[].load_state(state, words)
-        p[].run(px, py, l, reports)
+        p[].run(px, py, l, List[Int]())
+        if mamba_report_count(code) > 0:
+            # The reports of this run, queued on the program's device context
+            # behind y (the wait below covers them).
+            var ctx = p[].s.ex.ctx.copy()
+            block_step_reports_to_host(ctx, p[].s.steps, code, Int(p[].s.buffer(p[].w)),
+                                       Int(p[].s.buffer(p[].st)), reports)
         if fresh:
             p[].finish()
         else:
@@ -600,14 +606,14 @@ def mamba_block_call_abi(kind: Int, a: List[Int], b: Int, l: Int, dm: Int, q0: I
         raise Error("mamba" + String(kind) + ": expected " + String(1 + nw + ns + 1 + nr) + " addresses, got "
                     + String(len(a)))
     var weights = List[Int](capacity=nw)
-    for i in range(nw):  # small-loop(the block's weight addresses)
+    for i in range(nw):  # small-loop(nw: the block's weight addresses): address list, no data
         weights.append(a[1 + i])
     var state = List[Int](capacity=ns)
-    for i in range(ns):  # small-loop(the block's state addresses)
+    for i in range(ns):  # small-loop(ns: the block's state addresses): address list, no data
         state.append(a[1 + nw + i])
     var y = a[1 + nw + ns]
     var reports = List[Int](capacity=nr)
-    for i in range(nr):  # small-loop(the block's report addresses)
+    for i in range(nr):  # small-loop(nr: the block's report addresses): address list, no data
         reports.append(a[2 + nw + ns + i])
     var words = List[Int]()
     var fs = List[Float32]()
