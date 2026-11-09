@@ -6,7 +6,6 @@ liveness from pointer equality. A native model owner must supply the exact
 last device consumer (including backward/replay/error handling) and must retain
 the arena until its final context drain. Public-model integration remains owed.
 """
-from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined, get_defined_int
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
