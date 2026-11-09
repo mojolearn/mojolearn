@@ -534,8 +534,8 @@ struct TransformerSession(Movable, Writable):
     var arm: Optional[AttnStepArm]
     """Lane x4b: the block's forward, step and backward on the attention
     step op (transformer/attn_step_session.mojo): its weights packed once
-    into the op's weight buffer (byte-compared with the caller's arrays on
-    every call), its cache in the op's state buffer, its L stages and the
+    into the op's weight buffer (keyed by the caller's addresses and the
+    weight epoch, lane x45c), its cache in the op's state buffer, its L stages and the
     backward stages kept by the arm. `workspace` and `weights` above serve
     only the forward tape (`retain_tape`, lane X6 deletes it)."""
     var tape: Optional[BorrowedAttentionTape]
@@ -951,7 +951,7 @@ def _session_arm(
         for i in range(8, len(ints)):  # small-loop(ints: the 17 block option words): argument words, no data
             words.append(ints[i])
     session.arm = AttnStepArm(session.ctx.value(), a, b, dm, nh, nkv, hd, it, smax, s0, window, opts, words,
-                              keep_host=True)
+                              keyed=True)
     session.workspaces += 1
 
 

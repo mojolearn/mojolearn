@@ -25,11 +25,13 @@ Two owners:
 - a decode session owns its program (weights and state uploaded once at
   open, the caller's state arrays stale until export);
 - the per-call doors (`mamba_block_call`) share a small process-wide cache of
-  programs keyed by (block kind, B, d_model, weight addresses). The caller's
-  weights may change in place between calls (the public contract), so each
-  call compares the caller's weight bytes against the program's host copy
-  (memcmp, the Mamba-3 prefill session's rule since 2026-09-30) and rewrites
-  the device copy in place only when they differ. The caller's state is the
+  programs keyed by (block kind, B, d_model, weight addresses), bounded by
+  their device bytes. Lane x45c: the weights are keyed by the caller's
+  addresses and the process weight epoch (core/weight_epoch.mojo): the
+  binding's weight door freezes every weight it hands over and moves the
+  epoch on a new freeze, so equal addresses at an unchanged epoch hold the
+  same bytes. A changed epoch rewrites the device copy in place once; no
+  call compares weight bytes. The caller's state is the
   truth on every call: it is written into the state tensor in place before
   the run and read back after it, so the caller's arrays always hold the
   post-call state (DEVIATION 792).
@@ -39,7 +41,7 @@ bodies the op lifted. No arithmetic here.
 """
 from std.ffi import _Global
 from std.atomic import Atomic, Ordering
-from std.memory import memcpy, memcmp
+from core.weight_epoch import weight_epoch
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.cast_in import CastIn
 from core.decode_slab import decode_slab_check, decode_slab_put, decode_slab_take
@@ -111,19 +113,19 @@ struct MambaBlockProgram(Movable):
     var x_n: Int
     #: the host weight addresses the parameter was loaded from (cache key)
     var w_addrs: List[Int]
-    #: the weight bytes last loaded, concatenated in piece order (cache only:
-    #: the per-call doors compare the caller's bytes against it)
-    var w_host: List[Float32]
+    #: the weight epoch at the last weight load (lane x45c: the version key)
+    var epoch: Int
+    #: the device floats this program holds (the cache's byte bound)
+    var floats: Int
     var busy: Bool
     var stamp: Int
 
-    def __init__(out self, code: Int, b: Int, dm: Int, fs: List[Float32], weights: List[Int],
-                 shadow: Bool) raises:
+    def __init__(out self, code: Int, b: Int, dm: Int, fs: List[Float32], weights: List[Int]) raises:
         """A program holding `weights` (one host float32 array per piece,
-        `block_weight_sizes` order) and a zero state for `b` rows. `shadow`
-        keeps a host copy of the weight bytes for `refresh_weights`."""
+        `block_weight_sizes` order) and a zero state for `b` rows."""
         if b < 1 or dm < 1:
             raise Error("mamba: B and d_model must be positive")
+        var epoch = weight_epoch()
         var ex = DeviceExec(neural_ctx[_NEURAL_CTX]())
         var s = OpsSession[DeviceExec](ex^, False)
         var ints: List[Int] = [b, dm]
@@ -145,7 +147,9 @@ struct MambaBlockProgram(Movable):
         var k = block_int_words(code)
         if k > 0:
             q = s.upload_block(code, ints, BLOCK_PART_WORDS, List[CastIn](), List[Int](length=k, fill=0))
-        self.w_host = _host_copy(weights, wsizes) if shadow else List[Float32]()
+        self.epoch = epoch
+        self.floats = (block_part_floats(code, ints, BLOCK_PART_WEIGHTS)
+                       + block_part_floats(code, ints, BLOCK_PART_STATE) + k)
         self.s = s^
         self.code = code
         self.b = b
@@ -163,17 +167,19 @@ struct MambaBlockProgram(Movable):
 
     # ------------------------------------------------------------ weights
     def refresh_weights(mut self, weights: List[Int]) raises:
-        """The per-call rule: the caller's weight bytes against the last
-        loaded ones (one memcmp per piece); changed bytes are written into
-        the parameter in place and the block's non-finite refusal re-arms."""
+        """The per-call rule (lane x45c): the same addresses at the same
+        weight epoch keep the parameter (no pass over the weights);
+        otherwise the caller's arrays are written into it in place and the
+        block's non-finite refusal re-arms."""
         var wsizes = block_weight_sizes(self.code, self.ints)
         if len(weights) != len(wsizes):
             raise Error("mamba weights: expected " + String(len(wsizes)) + " arrays, got " + String(len(weights)))
-        if _same_bits(weights, wsizes, self.w_host):
+        var now = weight_epoch()
+        if now == self.epoch and weights == self.w_addrs:
             return
         self.s.load_block(self.w, self.code, self.ints, BLOCK_PART_WEIGHTS,
                           _pieces(weights, wsizes, "mamba weights", False), List[Int]())
-        self.w_host = _host_copy(weights, wsizes)
+        self.epoch = now
         self.w_addrs = weights.copy()
 
     def export_weights(mut self, dsts: List[Int]) raises:
@@ -343,44 +349,21 @@ struct MambaBlockProgram(Movable):
         self.s.close()
 
 
-def _host_copy(addrs: List[Int], sizes: List[Int]) raises -> List[Float32]:
-    var total = 0
-    for i in range(len(sizes)):  # driver-loop: over the block's weight pieces (model structure), layout arithmetic
-        total += sizes[i]
-    var out = List[Float32](length=total, fill=Float32(0))
-    var off = 0
-    for i in range(len(sizes)):  # driver-loop: over the block's weight pieces (model structure), one memcpy each
-        if sizes[i] > 0:
-            memcpy(dest=out.unsafe_ptr() + off, src=f32_ptr(addrs[i]), count=sizes[i])
-        off += sizes[i]
-    return out^
-
-
-def _same_bits(addrs: List[Int], sizes: List[Int], host: List[Float32]) raises -> Bool:
-    """Whether the caller's pieces hold exactly the bytes of `host` (their
-    concatenation): a byte compare, so NaN payloads and signed zeros count."""
-    var total = 0
-    for i in range(len(sizes)):  # driver-loop: over the block's weight pieces (model structure), layout arithmetic
-        total += sizes[i]
-    if total != len(host):
-        return False
-    var off = 0
-    for i in range(len(sizes)):  # driver-loop: over the block's weight pieces (model structure), one memcmp of the caller's host bytes each
-        if sizes[i] > 0 and memcmp(f32_ptr(addrs[i]), host.unsafe_ptr() + off, sizes[i]) != 0:
-            return False
-        off += sizes[i]
-    return True
+# TOMBSTONE: _host_copy / _same_bits (REFACTORED: the per-call memcmp of the caller's weights against a host copy of every cached program) deleted 2026-11-09 by lane/x45c-causal-generate-program-decode; code recoverable at 5b5490960d.
+# The programs key their weights by address and the process weight epoch (core/weight_epoch.mojo).
+# Restore: git apply experiments/removed/WEIGHT_BYTE_COMPARE.patch; record in docs/TOMBSTONES.md.
 
 
 # ---------------------------------------------------------------- the per-call cache
 # One program per live block (kind, B, d_model, weight addresses): the per-call
-# doors stop uploading the weights on every call. The cap bounds the device
-# memory a process that creates and drops many blocks can hold: 64 distinct
-# blocks covers every layer of a 64-layer stack at one batch size; past it
-# the least recently used idle program goes (a stack deeper than the cap
-# re-uploads, which is what every call did before). Sized from model depth,
-# not from a board shape.
-comptime MAMBA_PROGRAM_CACHE_CAP = 64
+# doors stop uploading the weights on every call. Lane x45c: the cache is
+# bounded by the device bytes its idle programs hold (weights, state and
+# words), not by a count: past MAMBA_PROGRAM_CACHE_BYTES the least recently
+# used idle programs go (a program larger than the bound alone runs as a
+# temporary). 1 GiB is a small fraction of any supported GPU's memory (the
+# smallest, Apple's unified pool, starts at 8 GiB) and holds every layer of
+# a deep stack at a decode batch; it comes from device memory, not a shape.
+comptime MAMBA_PROGRAM_CACHE_BYTES = 1 << 30
 
 
 struct MambaProgramCache(Movable):
@@ -435,72 +418,66 @@ def _destroy(p: _ProgramPtr):
 
 def _claim(code: Int, b: Int, dm: Int, fs: List[Float32], weights: List[Int]) raises -> Tuple[_ProgramPtr, Bool]:
     """An idle cached program for this block (marked busy), or a new one:
-    cached when the cache has room or an idle entry to evict, else a
-    temporary (second flag False) the caller destroys. A program matches by
-    its weight addresses, or, when the caller's arrays moved (a converted
-    copy has a new address every call), by its weight bytes: a same-shape
-    idle program holding exactly these bytes is the same block."""
-    var ints: List[Int] = [b, dm]
-    var wsizes = block_weight_sizes(code, ints)
+    cached while the cache's device bytes stay within
+    MAMBA_PROGRAM_CACHE_BYTES (least recently used idle programs go to make
+    room), else a temporary (second flag False) the caller destroys. A
+    program matches by its weight addresses; its weights are reloaded by
+    `refresh_weights` when the weight epoch moved (lane x45c: the byte-match
+    fallback for moved arrays is gone with the byte compare)."""
     var c = _cache()
     _lock(c)
-    var victim = -1
-    var hit = -1
     try:
         c[].tick += 1
-        for i in range(len(c[].programs)):  # driver-loop: over cached Mamba programs (at most the cap)
+        for i in range(len(c[].programs)):  # driver-loop: over cached Mamba programs
             var p = _ProgramPtr(unsafe_from_address=c[].programs[i])
-            if p[].busy:
-                continue
-            if p[].code == code and p[].b == b and p[].dm == dm and p[].w_addrs == weights:
-                hit = i
-                break
-            if victim < 0 or p[].stamp < _ProgramPtr(unsafe_from_address=c[].programs[victim])[].stamp:
-                victim = i
-        if hit < 0:
-            for i in range(len(c[].programs)):  # driver-loop: over cached Mamba programs (at most the cap)
-                var p = _ProgramPtr(unsafe_from_address=c[].programs[i])
-                if (not p[].busy and p[].code == code and p[].b == b and p[].dm == dm
-                        and _same_bits(weights, wsizes, p[].w_host)):
-                    p[].w_addrs = weights.copy()
-                    hit = i
-                    break
-        if hit >= 0:
-            var p = _ProgramPtr(unsafe_from_address=c[].programs[hit])
-            p[].busy = True
-            p[].stamp = c[].tick
-            p[].fs = fs.copy()
-            _unlock(c)
-            return (p, True)
+            if not p[].busy and p[].code == code and p[].b == b and p[].dm == dm and p[].w_addrs == weights:
+                p[].busy = True
+                p[].stamp = c[].tick
+                p[].fs = fs.copy()
+                _unlock(c)
+                return (p, True)
     except error:
         _unlock(c)
         raise error
-    var evicted = 0
-    var cached = len(c[].programs) < MAMBA_PROGRAM_CACHE_CAP
-    if not cached and victim >= 0:
-        evicted = c[].programs.pop(victim)
-        cached = True
     _unlock(c)
-    if evicted != 0:
-        _destroy(_ProgramPtr(unsafe_from_address=evicted))
     var p = alloc[MambaBlockProgram](1)
     try:
-        p.init_pointee_move(MambaBlockProgram(code, b, dm, fs, weights, True))
+        p.init_pointee_move(MambaBlockProgram(code, b, dm, fs, weights))
     except error:
         p.free()
         raise error
     var owned = _ProgramPtr(unsafe_from_address=Int(p))
     owned[].busy = True
+    var need = 4 * owned[].floats
+    if need > MAMBA_PROGRAM_CACHE_BYTES:
+        return (owned, False)
+    var evicted = List[Int]()
+    _lock(c)
+    c[].tick += 1
+    owned[].stamp = c[].tick
+    var held = 0
+    for i in range(len(c[].programs)):  # driver-loop: over cached Mamba programs (their device bytes)
+        held += 4 * _ProgramPtr(unsafe_from_address=c[].programs[i])[].floats
+    while held + need > MAMBA_PROGRAM_CACHE_BYTES:  # driver-loop: evict least recently used idle programs until the new one fits
+        var victim = -1
+        for i in range(len(c[].programs)):  # driver-loop: over cached Mamba programs
+            var q = _ProgramPtr(unsafe_from_address=c[].programs[i])
+            if q[].busy:
+                continue
+            if victim < 0 or q[].stamp < _ProgramPtr(unsafe_from_address=c[].programs[victim])[].stamp:
+                victim = i
+        if victim < 0:
+            break
+        var gone = c[].programs.pop(victim)
+        held -= 4 * _ProgramPtr(unsafe_from_address=gone)[].floats
+        evicted.append(gone)
+    var cached = held + need <= MAMBA_PROGRAM_CACHE_BYTES
     if cached:
-        _lock(c)
-        c[].tick += 1
-        owned[].stamp = c[].tick
-        if len(c[].programs) < MAMBA_PROGRAM_CACHE_CAP:
-            c[].programs.append(Int(p))
-            _unlock(c)
-            return (owned, True)
-        _unlock(c)
-    return (owned, False)
+        c[].programs.append(Int(p))
+    _unlock(c)
+    for i in range(len(evicted)):  # driver-loop: over evicted Mamba programs
+        _destroy(_ProgramPtr(unsafe_from_address=evicted[i]))
+    return (owned, cached)
 
 
 def _release(p: _ProgramPtr, cached: Bool, failed: Bool):

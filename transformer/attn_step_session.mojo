@@ -25,9 +25,10 @@ stages and block forward entry) and keeps them in `sc`. Bits are the op's.
   `TransformerBlock.backward` (`block_backward`: the zero-state prefill and
   the transformer stage rule over the op's kept stages).
 
-No host compute: the host side computes layout offsets, compares the
-caller's weight bytes with the bytes it uploaded (a version check, not
-arithmetic) and copies whole caller buffers.
+No host compute: the host side computes layout offsets, keys the uploaded
+weights by the caller's addresses and the process weight epoch
+(core/weight_epoch.mojo; lane x45c: no pass over the weights) and copies
+whole caller buffers.
 """
 
 from std.memory import bitcast, memcpy
@@ -35,6 +36,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from sequence.ops import FP
 from sequence.exec_device import DeviceExec
 from core.hostptr import f32_ptr
+from core.weight_epoch import weight_epoch
 from core.identity_trace import IdentityTrace
 from core.decode_slab import decode_slab_check, decode_slab_put, decode_slab_take
 from autograd.block_step_ops import (
@@ -123,10 +125,13 @@ struct AttnStepArm(Movable):
     #: the recopy read them)
     var sizes: List[Int]
     var at: List[Int]
-    #: the bytes uploaded into `w`, piece after piece, kept only by an arm
-    #: that serves a caller whose arrays may be edited in place between
-    #: calls (`keep_host`: the block session); empty otherwise
-    var host: List[Float32]
+    #: lane x45c: the caller addresses the weights were uploaded from and
+    #: the weight epoch at that upload, kept only by an arm that serves a
+    #: caller whose arrays may change between calls (`keyed`: the block
+    #: session); empty otherwise. Equal addresses at the same epoch hold the
+    #: same bytes (the weight door freezes them), so nothing is compared.
+    var w_src: List[Int]
+    var epoch: Int
     var adopted: Bool
     #: the kept L > 1 stages (block forward, backward, decode-session
     #: forward)
@@ -142,7 +147,7 @@ struct AttnStepArm(Movable):
 
     def __init__(
         out self, ctx: DeviceContext, a: List[Int], b: Int, dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
-        smax: Int, s0: Int, window: Int, opts: BlockOptions, option_words: List[Int], keep_host: Bool = False,
+        smax: Int, s0: Int, window: Int, opts: BlockOptions, option_words: List[Int], keyed: Bool = False,
     ) raises:
         """Open on the caller's float32 weights and caches. `a` is the
         `transformer_forward` 13 + 11 layout (slots 0 and 12 unused):
@@ -190,7 +195,8 @@ struct AttnStepArm(Movable):
         self.cached = 0
         self.sizes = sizes^
         self.at = at^
-        self.host = List[Float32]()
+        self.w_src = List[Int]()
+        self.epoch = 0
         self.adopted = False
         self.pre = AttnPrefill()
         self.xio = _fp(0)
@@ -199,9 +205,10 @@ struct AttnStepArm(Movable):
         self.bst = Optional[LlamaBackwardStages]()
         self.dout = Optional[DeviceBuffer[DType.float32]]()
         self.bkey = List[Int]()
+        if keyed:
+            self.epoch = weight_epoch()
+            self.w_src = src.copy()
         self._upload_weights(src)
-        if keep_host:
-            self.host = _host_copy(src, self.sizes)
         self._shape(ints)
         self._load(a[10], a[11], s0)
         self.ex.sync()
@@ -242,7 +249,8 @@ struct AttnStepArm(Movable):
         self.cached = 0
         self.sizes = List[Int]()
         self.at = List[Int]()
-        self.host = List[Float32]()
+        self.w_src = List[Int]()
+        self.epoch = 0
         self.adopted = True
         self.pre = AttnPrefill()
         self.xio = _fp(0)
@@ -350,21 +358,23 @@ struct AttnStepArm(Movable):
         self.cached = s0
 
     def refresh_weights(mut self, a: List[Int]) raises:
-        """The block session's version check: the caller's arrays are read
-        on EVERY call (a Python address is not a version). Equal bytes keep
-        the device copy; changed bytes are copied into the same buffer and
-        the resident entry is rebuilt at the next run (so the weights
-        constructor's refusals run on the new bytes)."""
-        if self.adopted or len(self.host) == 0:
-            raise Error("transformer: this step-op arm keeps no weight bytes to compare")
+        """The block session's version key (lane x45c): the same caller
+        addresses at the same weight epoch keep the device copy with no pass
+        over the weights; otherwise the caller's arrays are copied into the
+        same buffer and the resident entry is rebuilt at the next run (so
+        the weights constructor's refusals run on the new bytes)."""
+        if self.adopted or len(self.w_src) == 0:
+            raise Error("transformer: this step-op arm keeps no weight key")
         var src = _weight_sources(a, len(self.sizes))
         for i in range(len(self.sizes)):  # small-loop(sizes: the twenty weight pieces): address checks, no data
             if (self.sizes[i] != 0) != (src[i] != 0):
                 raise Error("transformer options: weight piece " + String(i) + " presence differs from the session's")
-        if _same_bits(src, self.sizes, self.host):
+        var now = weight_epoch()
+        if now == self.epoch and src == self.w_src:
             return
         self.sc.forget(Int(self.w))
-        self.host = _host_copy(src, self.sizes)
+        self.epoch = now
+        self.w_src = src.copy()
         self._upload_weights(src)
 
     # ------------------------------------------------------------ runs
@@ -559,47 +569,9 @@ def _down(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int, addr: In
     ctx.enqueue_copy(dst_ptr=f32_ptr(addr), src_buf=buf.create_sub_buffer[DType.float32](0, n))
 
 
-def _host_copy(src: List[Int], sizes: List[Int]) raises -> List[Float32]:
-    """The caller's pieces' bytes, concatenated in packing order."""
-    var total = 0
-    for i in range(len(sizes)):  # small-loop(sizes: the twenty weight pieces): layout arithmetic, no data
-        total += sizes[i]
-    var out = List[Float32](length=total, fill=Float32(0))
-    var off = 0
-    for i in range(len(sizes)):  # driver-loop: over the block's twenty weight pieces, one memcpy each
-        var n = sizes[i]
-        if n > 0:
-            memcpy(dest=out.unsafe_ptr() + off, src=f32_ptr(src[i]), count=n)
-        off += n
-    return out^
-
-
-def _same_bits(src: List[Int], sizes: List[Int], host: List[Float32]) raises -> Bool:
-    """Whether the caller's pieces hold exactly the bytes in `host`: an
-    integer compare of the bit patterns, eight lanes at a time (`-0.0` and
-    `+0.0` differ, NaN payloads differ, as they must for a version check)."""
-    comptime W = 8
-    var off = 0
-    var hp = host.unsafe_ptr()
-    for s in range(len(sizes)):  # driver-loop: over the block's twenty weight pieces
-        var n = sizes[s]
-        if n == 0:
-            continue
-        var p = f32_ptr(src[s])
-        var i = 0
-        var body = n - n % W
-        while i < body:  # compare-loop: version check over one piece, SIMD words
-            var x = bitcast[DType.uint32, W](p.unsafe_load[width=W](i))
-            var y = bitcast[DType.uint32, W](hp.unsafe_load[width=W](off + i))
-            if (x ^ y).reduce_or() != UInt32(0):
-                return False
-            i += W
-        while i < n:  # compare-loop: the piece's tail
-            if bitcast[DType.uint32](p.unsafe_load(i)) != bitcast[DType.uint32](hp.unsafe_load(off + i)):
-                return False
-            i += 1
-        off += n
-    return True
+# TOMBSTONE: _host_copy / _same_bits (REFACTORED: the per-call byte compare of the caller's weights against a host copy, ~7 MB per call) deleted 2026-11-09 by lane/x45c-causal-generate-program-decode; code recoverable at 5b5490960d.
+# The arm keys its weights by caller address and the process weight epoch (core/weight_epoch.mojo).
+# Restore: git apply experiments/removed/WEIGHT_BYTE_COMPARE.patch; record in docs/TOMBSTONES.md.
 
 
 def _exec_view(ex: DeviceExec, p: FP, n: Int) raises -> DeviceBuffer[DType.float32]:

@@ -318,7 +318,7 @@ def _m1_session_open_run(mut s: Mamba1DecodeSession, a: List[Int], b: Int, dm: I
     var weights = List[Int](capacity=10)
     for i in range(1, 11):  # small-loop(the ten Mamba-1 weight addresses)
         weights.append(a[i])
-    var prog = MambaBlockProgram(OPS_M1_STEP, b, dm, List[Float32](), weights, False)
+    var prog = MambaBlockProgram(OPS_M1_STEP, b, dm, List[Float32](), weights)
     prog.load_state([a[11], a[12]], List[Int]())
     s.prog = prog^
     s.b = b
@@ -422,7 +422,7 @@ def _m2_session_open_run(
     for i in range(9):  # small-loop(the nine Mamba-2 weight addresses)
         weights.append(a[i])
     var fs: List[Float32] = [dt_lo, dt_hi]
-    var prog = MambaBlockProgram(OPS_M2_STEP, b, dm, fs, weights, False)
+    var prog = MambaBlockProgram(OPS_M2_STEP, b, dm, fs, weights)
     prog.load_state([a[9], a[10], a[11], a[12]], [q0])
     s.prog = prog^
     s.b = b
@@ -550,7 +550,7 @@ def _m3_session_open_run(mut s: Mamba3DecodeSession, a: List[Int], b: Int,
     var pieces = List[Int](capacity=10)
     for i in range(10):  # small-loop(the ten Mamba-3 state addresses)
         pieces.append(a[9 + i])
-    var prog = MambaBlockProgram(OPS_M3_STEP, b, dm, List[Float32](), weights, False)
+    var prog = MambaBlockProgram(OPS_M3_STEP, b, dm, List[Float32](), weights)
     prog.load_state(pieces, [q0, pend])
     s.prog = prog^
     s.b = b
