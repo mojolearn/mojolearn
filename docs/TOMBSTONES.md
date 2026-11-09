@@ -5696,8 +5696,10 @@ that ran inside a native product operation (AGENTS.md "No Python in the runtime"
   them: bits may change for PageRank on a COO input with duplicate entries); BSR/DIA/DOK/LIL refused by name.
 - `P1_SEMI_SEED_RANDOMSTATE` (`bindings/neighbors_semi_native.mojo`): the seed word is drawn natively through NumPy's
   BitGenerator capsule (`pcs_seed`), the same word as `randint(0, 2**31, size=1)[0]`. Bits: none.
-- `P1_ONEHOT_WARN_IN_NATIVE` (`bindings/prep_encode_native.mojo`): the warning text is returned in the encode context
-  and issued by the Python shell after the native call returns (`_expansion_prep._issue_pending_warning`).
+- `P1_ONEHOT_WARN_IN_NATIVE` (`bindings/prep_encode_native.mojo`): the unknown-category warning goes through the native
+  warning path (`bindings/classical_warnings.mojo` `classical_warning`: filters read natively, only the standard
+  display hooks admitted, a custom `showwarning` refused; an "error" filter raises `UserWarning`), attributed to the
+  caller's frame; the encode context now carries `connect_warnings()`.
 - `P1_NATIVE_SKLEARN_TAGS`: tags are built by `_mode.sklearn_tags` (owner exception 2026-10-24); no native code
   imports `sklearn.utils._tags`.
 - `P1_DEAD_PY_CURVE_DRIVERS`: Python top-level defs no Python file (product, tests, tools, bench) and no Mojo string

@@ -21,6 +21,9 @@ from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_setattr
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
+from bindings.classical_warnings import classical_warning
+from bindings.native_caller_frame import native_frame_globals
+from bindings.cpython_table import cpython_table
 from bindings.prep_native_estimator import prep_native_split, prep_entry_call
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array, classical_c_order
@@ -1910,12 +1913,38 @@ def _onehot_fit(model: PythonObject, values: PythonObject, capture: Bool, contex
     return inverse
 
 
+def _onehot_caller_location() raises -> PythonObject:
+    """(filename, line, module) of the code that called the public method
+    (the Python frame below the shell's), read through public CPython frame
+    accessors (no sys._getframe or frame attribute audit hook); None when
+    the stack is not that deep (the context's default location is used)."""
+    ref cpy = Python().cpython()
+    var pointer = cpy.lib.get_function[PyObjectPtr]("PyEval_GetFrame")()
+    if not pointer:
+        return PythonObject(None)
+    var current = PythonObject(from_borrowed=pointer)
+    pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetBack")(current._obj_ptr)
+    _ = current^
+    if not pointer:
+        if cpython_table()[].PyErr_Occurred():
+            raise cpy.unsafe_get_error()
+        return PythonObject(None)
+    var frame = PythonObject(from_owned=pointer)
+    pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetCode")(frame._obj_ptr)
+    if not pointer:
+        raise cpy.unsafe_get_error()
+    var code = PythonObject(from_owned=pointer)
+    var line = cpy.lib.get_function[Int32]("PyFrame_GetLineNumber")(frame._obj_ptr)
+    var module = py_get(native_frame_globals(frame), "__name__", "")
+    if py_type(module) is not native_loaded_module("builtins").str:
+        module = PythonObject("")
+    return Python.tuple(code.co_filename, Int(line), module)
+
+
 def _onehot_transform(model: PythonObject, values: PythonObject, inverse: PythonObject, context: PythonObject) raises -> PythonObject:
     """OneHotEncoder `_transform_encoded`: lookup (or the C08 fit's inverse),
-    the grouping remap with the unknown slots, and onehot. An unknown-category
-    warning is left in `context["pending_warning"]` for the shell."""
+    the grouping remap with the unknown slots, and onehot."""
     var b = native_loaded_module("builtins")
-    py_setitem(context, "pending_warning", PythonObject(None))
     var fields = py_fields(model)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
@@ -1968,11 +1997,13 @@ def _onehot_transform(model: PythonObject, values: PythonObject, inverse: Python
             var where = String("encoded as the infrequent category") if handle_text != "ignore" else String("encoded as all zeros")
             # TOMBSTONE: P1_ONEHOT_WARN_IN_NATIVE (removed: warnings.warn through Python inside the native transform; filters and any showwarning hook ran in the operation) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
             # Restore: experiments/removed/P1_ONEHOT_WARN_IN_NATIVE.patch.
-            # The warning text is returned to the thin shell (the encode
-            # context's "pending_warning"), which issues it after this
-            # native call has returned (_expansion_prep._issue_pending_warning).
-            py_setitem(context, "pending_warning", PythonObject("Found unknown categories in columns " + _list_text(bad)
-                       + " during transform. These unknown categories will be " + where + "."))
+            # Delivered by the native warning path (bindings/classical_warnings
+            # .mojo: the filters read natively, only the standard display
+            # hooks admitted, a custom showwarning refused), attributed to the
+            # caller of the public method.
+            classical_warning("Found unknown categories in columns " + _list_text(bad)
+                              + " during transform. These unknown categories will be " + where + ".",
+                              b.UserWarning, context, _onehot_caller_location(), "UserWarning")
     return _take2(ran, out, n, W, context)
 
 
@@ -3421,4 +3452,7 @@ def prep_encode_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObj
             return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
         if String(error).startswith("RuntimeError:"):
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
+        if String(error).startswith("UserWarning:"):
+            # an "error" warning filter on the unknown-category warning
+            return raise_python_exception(error_without_class(error, "UserWarning"), ExceptionType("PyExc_UserWarning"))
         return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

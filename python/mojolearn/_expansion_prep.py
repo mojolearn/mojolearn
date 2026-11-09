@@ -39,7 +39,6 @@ from . import _portable_math as math
 import numbers
 import operator
 import os
-import warnings
 
 from . import _backend
 from . import _portable_math as _pm
@@ -1097,27 +1096,13 @@ class OneHotEncoder(_PrepBase):
         array
             The transformed data.
         """
-        out = _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
-        _issue_pending_warning()
-        return out
+        return _ENCODE_CALL(self, "fit_transform", (X, y, fit_params), _ENCODE_CONTEXT)
 
     def transform(self, X):
-        out = _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
-        _issue_pending_warning()
-        return out
+        return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
 
     def inverse_transform(self, X):
         return _ENCODE_CALL(self, "inverse_transform", (X,), _ENCODE_CONTEXT)
-
-
-def _issue_pending_warning():
-    # The native transform returns its unknown-category warning text in the
-    # encode context instead of calling warnings.warn itself, so warning
-    # filters and showwarning hooks run here, after the native call returned
-    # (bindings/prep_encode_native.mojo _onehot_transform).
-    message = _ENCODE_CONTEXT.pop("pending_warning", None)
-    if message is not None:
-        warnings.warn(message, UserWarning, stacklevel=3)
 
 
 # ---------------------------------------------------------------- target encoder
