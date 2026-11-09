@@ -546,6 +546,11 @@ in the tables after the sections.
 | [`DevExec._eigh_par_on`, `_eigh_td_try`, `_eigh_par_test`, `_rr_batch_enq` / `_rr_batch_on` / `_rr_batch_check`, `xd_first_where2_enq`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (host-driven dense eigh drivers) | REFACTORED (every dense eigh on `eigh_op_sym` / `eigh_op_dense`) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`DKit.eigh` host words, `IpcaDev.eigh` resident host words, `pinv_mask_kernel`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | FastICA / FactorAnalysis / rotation / MinCovDet / IncrementalPCA / MDS-Isomap-KPCA dense eigh | REFACTORED (w and V stay on the device) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
 | [Lanczos projected T host assembly (`kpca_owner`, `mani_decomp_native`)](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | KernelPCA / Isomap | REFACTORED (`eigh_op_tridiag`; bits change) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
+| [`_byte_forward_loss`, `_byte_layer_forward_deferred`, `_byte_backward_tape` (byte LM hand step, 8 `llama_decoder_layer_forward` sites)](#smallbytelanguagemodeltrainer-on-the-executor-2026-11-09) | Neural (SmallByteLanguageModelTrainer) | removed (one path: the captured program on Program.fit, plan row X7) | 2026-11-09 | [BYTE_LM_HAND_STEP.patch](../experiments/removed/BYTE_LM_HAND_STEP.patch) |
+| [`autograd/rules_lm.mojo` (`byte_backward_autograd`, `LmRules`), `training/checks/lm_tape_backward_check.mojo` + digests](#smallbytelanguagemodeltrainer-on-the-executor-2026-11-09) | Neural (byte LM tape backward) | removed (no caller after the move) | 2026-11-09 | [BYTE_LM_HAND_STEP.patch](../experiments/removed/BYTE_LM_HAND_STEP.patch) |
+| [`byte_owner_steps`, operation 12 (device and host columns), the binding's `while k < n_steps` driver](#smallbytelanguagemodeltrainer-on-the-executor-2026-11-09) | Neural (byte LM train_steps) | removed (operation 1 takes n_steps: one Program.fit) | 2026-11-09 | [BYTE_LM_HAND_STEP.patch](../experiments/removed/BYTE_LM_HAND_STEP.patch) |
+| [`MOJOLEARN_IDN_TRAIN_ONE_WAIT`, `MOJOLEARN_AFN_LM_NOSYNC`, `MOJOLEARN_AFN_LM_HEAD_FUSE` (+ AFN26 spellings)](#smallbytelanguagemodeltrainer-on-the-executor-2026-11-09) | Neural (byte LM hand-step arms) | removed (their step deleted; default off, never promoted) | 2026-11-09 | [BYTE_LM_HAND_STEP.patch](../experiments/removed/BYTE_LM_HAND_STEP.patch) |
+| [`_byte_glue_update`, `_byte_live_status_*`, eager-release helpers, the trainer's certified optimizer step](#smallbytelanguagemodeltrainer-on-the-executor-2026-11-09) | Neural (byte LM step glue) | removed (the program's AdamW is the update) | 2026-11-09 | [BYTE_LM_HAND_STEP.patch](../experiments/removed/BYTE_LM_HAND_STEP.patch) |
 ## Retired by lane debt-block-per-n (2026-10-21)
 
 These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
@@ -5014,3 +5019,44 @@ origin/lane/x4-transformer-on-executor c0b21c971c.
 - Recoverable at c0b21c971c; restore with `git apply experiments/removed/TRANSFORMER_DECODE_SESSION_STRUCTS.patch`
   (transformer/transformer_binding_impl.mojo, bindings/_mojolearn_transformer.mojo,
   transformer/native_lm_resident_dispatch.mojo).
+
+## SmallByteLanguageModelTrainer on the executor (2026-11-09)
+
+Lane x7-byte-lm-on-executor, plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` row X7. Every step, gradient, update and
+evaluation of `SmallByteLanguageModelTrainer` (and of ParallelByteLM's shard trainers) runs on ONE captured program per trainer
+(`training/byte_lm_program.mojo`): `OPS_EMBEDDING`, one `OPS_ATTN_STEP` per decoder layer (the layer's nine weights packed in one
+step-op weights tensor, its keys/values as declared state), `OPS_TRANSPOSE` + `OPS_MATMUL` for the head and the mean
+`OPS_CROSS_ENTROPY`. `train_step` / `train_steps` are ONE `Program.fit` (`train_program_control`) over the call's batches; a
+recorded attention step is a zero-state prefill with its stages kept, recorded as one custom tape node whose VJP is the transformer
+stage rule (`autograd/rules_step_ops.mojo` `StepOpRules`, tag 108). The trainer's flat buffers stay the committed state (export,
+logits, rollback); a call's result is copied in after the shadow point and re-scanned.
+
+What was deleted:
+
+- `training/byte_lm.mojo`: the per-layer hand forward `_byte_forward_loss` and `_byte_layer_forward_deferred` (eight
+  `llama_decoder_layer_forward` sites), `_byte_backward_tape`, the `IDN_TRAIN_ONE_WAIT` step (`_byte_step_one_wait`), the Apple
+  FAST no-sync step (`_afn_byte_step_nosync`), the step-glue update arms (`_byte_glue_update`, `_byte_live_status_launch` /
+  `_finish`), the eager-scratch release helpers, the per-layer training stage lists, and the trainer's certified optimizer step
+  (`identical_optimizer_step` is no longer called by the trainer; `byte_glue_update_launch` stays for the pooled trainers).
+- `autograd/rules_lm.mojo` (`byte_backward_autograd`, `LmRules`, `byte_lm_tape_eligible`), `training/checks/lm_tape_backward_check.mojo`
+  and its digests, the `check-lm-tape-backward` pixi task and the `autograd-lm-tape` smoke entry.
+- `byte_owner_steps` and operation 12 on the device (`training/byte_lm_native_dispatch.mojo`) and host
+  (`training/byte_lm_host_trainer_dispatch.mojo`) columns, and the binding's `while k < n_steps` driver
+  (`bindings/byte_lm_trainer_native.mojo` `_run_steps`): operation 1 takes the step count (`p[14]`), opens the session when it is
+  not open and exports a 'full' result's gradient, so `train_steps` is one native call. The stateless route keeps one whole-state
+  call per batch by design.
+
+Behaviour: a refused `train_steps` call (non-finite loss, a state failing the after-scans) now commits none of its steps on the
+device column (it committed the steps before the failed one); the host column still commits step by step and the binding
+reconciles either from the session status.
+
+Bits: the byte LM's bits changed on every GPU column together (the executor's embedding, GEMM, cross-entropy and OP_OPT AdamW
+bodies replace the trainer's identical embedding, head GEMM / chunked head v2, CE and optimizer kernels; the blocks keep their
+forward body and stage rule). The host column (`training/byte_lm_host_*`) was NOT moved and no longer matches: identity lane
+`byte-lm` owes the host column on the host executor (an `OPS_ATTN_STEP` host arm), or the column is recorded as differing.
+RUN OWED: lm-train-step (bytes) and lm-eval, program vs the 0.8.66 path, one run per arm on NVIDIA and AMD; ParallelByteLM step.
+
+- Guard: `core/experiment_guards_neural.mojo` refuses `MOJOLEARN_IDN_TRAIN_ONE_WAIT`, `MOJOLEARN_AFN_LM_NOSYNC`,
+  `MOJOLEARN_AFN_LM_HEAD_FUSE` and their AFN26 spellings; no `grid_controls` entry existed; row in `docs/apple-fast/EXPERIMENTS.md`.
+- Code recoverable at `5b5490960d` (the lane's base); patch `experiments/removed/BYTE_LM_HAND_STEP.patch` (the reverse of the
+  lane's change to the code files; `git apply` restores the hand step and removes the program route).
