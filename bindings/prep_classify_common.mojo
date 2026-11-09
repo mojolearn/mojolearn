@@ -13,7 +13,8 @@ from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_address, classical_host_f32, classical_dtype_str, classical_c_order, classical_c_bytes, classical_wrap_array, classical_is_array
+from bindings.classical_arrays import classical_address, classical_dtype_str, classical_c_order, classical_c_bytes, classical_wrap_array, classical_is_array
+from bindings.admitted_input import admit_x
 from bindings.classical_validate import classical_view
 from bindings.x_prep_native_inputs import _rows_fields, _values
 from bindings.classical_labels import ClassicalLabels, classical_encode_labels
@@ -192,7 +193,7 @@ def cls_x2d(source: PythonObject, context: PythonObject) raises -> XIn:
             n = Int(py=value.shape[0])
             d = Int(py=value.shape[1])
     else:
-        value = classical_host_f32(source, 2, "X", context)
+        value = admit_x(source, 2, "X", context)
         n = Int(py=value.shape[0])
         d = Int(py=value.shape[1])
     if n == 0 or d == 0:
@@ -273,7 +274,7 @@ def csr_input(source: PythonObject, context: PythonObject) raises -> CsrIn:
     var n = Int(py=py_call(cls_builtins().int, shape[0]))
     var d = Int(py=py_call(cls_builtins().int, shape[1]))
     var nnz = Int(py=py_call(cls_builtins().int, csr.nnz))
-    var data = classical_host_f32(csr.data, 1, "data", context) if nnz > 0 else f32_array(0, context)
+    var data = admit_x(csr.data, 1, "data", context) if nnz > 0 else f32_array(0, context)
     return CsrIn(_i32_vector(csr.indptr, "indptr", context), _i32_vector(csr.indices, "indices", context), data, n, d, nnz)
 
 

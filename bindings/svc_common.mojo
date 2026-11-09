@@ -33,7 +33,7 @@ from bindings.family_common import (
     family_entry, family_array, family_view, family_cast_view, family_as_f32, family_shape_repr, family_f32_snapshot,
 )
 from bindings.metrics_reg_native import _Prog, _Reg, _reg_run, _arena_double, _arena_int, _RE_DIV
-from core.family_cast_impl import family_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32
 
 comptime SVC_NONE = -1
 # cm_epi COUNT (x_metrics/cm_epi.mojo), `_expansion_metrics._CM_COUNT`.
@@ -365,10 +365,10 @@ def svc_r2_sums(pred: PythonObject, y: PythonObject, context: PythonObject) rais
     var p = family_as_f32(pred, 1, "predictions", context)
     var n = Int(py=t.size)
     var m = Int(py=p.size)
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(t))), n):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(t))), n):
         raise Error("mojolearn score: y_true contains NaN or infinity")
     _ = t  # keep the Python object alive through the native calls above
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(p))), m):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(p))), m):
         raise Error("mojolearn score: y_pred contains NaN or infinity")
     _ = p  # keep the Python object alive through the native calls above
     if n != m:

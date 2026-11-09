@@ -31,7 +31,7 @@ from bindings.mcls_common import (
     mc_f32_lists, mc_run, mc_arena_int, mc_arena_float, mc_arena_double, mc_arena_f64_array, mc_group,
 )
 from bindings.mcls_classify import mc_targets, mc_pos_label, mc_binary_sets
-from core.family_cast_impl import family_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32
 from core.mcls_impl import mcls_copy_words
 from checks.numerics import pinned_mul_f64
 
@@ -69,7 +69,7 @@ def _scores(y_score: PythonObject, n: Int, caller: String, ndim: Int, context: P
     if rows != n:
         raise Error("mojolearn " + caller + ": " + name + " has " + String(rows) + " rows for " + String(n) + " samples")
     var out = family_as_f32(a, nd, name, context)
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))), Int(py=out.size)):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))), Int(py=out.size)):
         raise Error("mojolearn " + caller + ": " + name + " must be finite")
     _ = out  # keep the Python object alive through the native calls above
     return out
@@ -83,7 +83,7 @@ def _binary_scores(y_score: PythonObject, n: Int, context: PythonObject) raises 
     if Int(py=scores.ndim) != 1 or Int(py=scores.shape[0]) != n:
         raise Error("binary ranking scores must be one-dimensional with the same length as y_true")
     var out = family_as_f32(scores, 1, "scores", context)
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))), n):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))), n):
         raise Error("binary ranking scores must be finite")
     _ = out  # keep the Python object alive through the native calls above
     if n > MC_INT32_MAX:

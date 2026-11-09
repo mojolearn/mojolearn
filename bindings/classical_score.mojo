@@ -6,7 +6,8 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from std.memory import memcpy, bitcast
 from std.os import getenv
-from bindings.classical_arrays import classical_array, classical_host_f32, classical_address
+from bindings.classical_arrays import classical_array, classical_address
+from bindings.admitted_input import admit_x
 from bindings.py_typed_call import py_call_typed
 from bindings.sequential_description import sequential_fields
 from bindings.classical_validate import classical_check_x, classical_check_width, classical_estimator_name
@@ -101,7 +102,7 @@ def classical_linear_score(model: PythonObject, args: PythonObject, entries: Pyt
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
     classical_check_width(cols, Int(py=fields["n_features_in_"]), est)
-    var coef = classical_host_f32(fields["coef_"], 1, "coef_", context)
+    var coef = admit_x(fields["coef_"], 1, "coef_", context)
     if Int(py=coef.size) != cols:
         raise Error("coef_ length differs from fitted feature count")
     var layout = ClassicalR2Layout(rows)
@@ -137,7 +138,7 @@ def classical_r2_score(prediction: PythonObject, target_source: PythonObject,
 def _r2_finish(var layout: ClassicalR2Layout, arena: PythonObject, rows: Int, target_source: PythonObject,
                context: PythonObject) raises -> PythonObject:
     # The prediction is already in the arena at `layout.p`.
-    var target = classical_host_f32(target_source, 1, "y", context)
+    var target = admit_x(target_source, 1, "y", context)
     if Int(py=target.size) != rows:
         raise Error("mojolearn score: y_true and y_pred have different shapes (" + String(Int(py=target.size))
                     + ", 1) and (" + String(rows) + ", 1)")

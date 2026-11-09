@@ -10,7 +10,8 @@ from bindings.native_buffer_owner import native_buffer_view
 from bindings.sequential_arrays import sequential_array, sequential_address
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from core.cast_in import cast_in_kind
-from core.family_cast_impl import family_cast_rows_finite, family_all_finite_f32
+from core.admitted_input import admitted_cast_f32
+from core.host_finite_scan import host_all_finite_f32
 from core.pca_exact_impl import pca_check_state
 
 
@@ -78,12 +79,12 @@ def pca_input_snapshot(source: PythonObject, context: PythonObject) raises -> Ar
         var result = sequential_array(captured.python_shape(), context["float32"], context)
         var address = Int(py=sequential_address(result))
         var input = captured.source
-        finite = family_cast_rows_finite(input.addr, input.s0, input.s1, input.rows, input.cols,
+        finite = admitted_cast_f32(input.addr, input.s0, input.s1, input.rows, input.cols,
                                          input.itemsize, input.kind,
                                          MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address))
         captured.replace_f32(result, address)
     else:
-        finite = family_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=captured.source.addr), captured.count)
+        finite = host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=captured.source.addr), captured.count)
     captured.owner = Python.tuple(owners, captured.owner)
     if not finite:
         raise Error("Input X contains NaN or infinity" + (String("") if sparse else String(" (PCA).")))

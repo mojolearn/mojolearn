@@ -4,7 +4,8 @@
 # dedicated owner; moving this envelope does not make those calls descriptor ABI.
 from bindings.native_class_admission import class_record, class_admit
 from bindings.cpython_table import cpython_table
-from core.p3nc_scan import p3nc_all_finite_f32, P3NC_REAL_OK, P3NC_REAL_NONFINITE, P3NC_REAL_CONTINUOUS
+from core.p3nc_scan import P3NC_REAL_OK, P3NC_REAL_NONFINITE, P3NC_REAL_CONTINUOUS
+from core.host_finite_scan import host_all_finite_f32
 from bindings.p3nc_label_lists import p3nc_float_list_verdict
 from std.math import isfinite, floor
 from std.python import Python, PythonObject
@@ -216,7 +217,7 @@ def hierarchy_public_begin(model: PythonObject, operation: String, args: PythonO
         raise Error("NotImplementedError: mojolearn AgglomerativeClustering: sparse X is refused; pass a dense matrix")
     var x = family_f32_snapshot(source, 2, "X", context)
     # p3-neighbors-cluster: one eight-lane exponent-bit pass (core/p3nc_scan.mojo).
-    if not p3nc_all_finite_f32(FAMILY_F32P(unsafe_from_address=x.source.addr), x.count):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=x.source.addr), x.count):
         raise Error("Input X contains NaN or infinity (AgglomerativeClustering).")
     if Int(py=depth) == 0:
         if fitting:

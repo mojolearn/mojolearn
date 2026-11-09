@@ -27,7 +27,8 @@ from bindings.parallel_public_result import parallel_public_result
 from bindings.metrics_native_support import metric_warn
 from providers.python.estimator_lifecycle_pyapi import estimator_feature_check
 from providers.python.array_metadata_pyapi import ArrayMetadata
-from bindings.classical_arrays import classical_address, classical_host_f32
+from bindings.classical_arrays import classical_address
+from bindings.admitted_input import admit_x
 from bindings.classical_labels import labels_f32
 from bindings.metrics_cls_native import metrics_cls_operation
 from providers.python.estimator_binding_pyapi import estimator_binding_mode

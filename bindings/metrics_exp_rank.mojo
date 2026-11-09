@@ -14,7 +14,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_contains
 from bindings.family_common import FAMILY_F32P, family_array, family_str, family_view, family_cast_view
 from bindings.classical_arrays import classical_address
-from core.family_cast_impl import family_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32
 from bindings.metrics_exp_common import (
     MX_NONE, MxProg, MxArena, MxLab, MxMat, mx_run, mx_b, mx_len, mx_truthy, mx_is_str, mx_float, mx_nan,
     mx_zero_division, mx_undefined, mx_sorted, mx_list, mx_missing, mx_selected, mx_codes, mx_map_eq, mx_targets,
@@ -254,7 +254,7 @@ def _relevance(y_true: PythonObject, y_score: PythonObject, caller: String,
     var y = family_cast_view(checked, "y_true", context)
     var n = Int(py=view.shape[0])
     var c = Int(py=view.shape[1])
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(y))), n * c):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(y))), n * c):
         raise Error("mojolearn " + caller + ": y_true must be finite")
     _ = y  # keep the Python object alive through the native calls above
     var s = mx_scores(y_score, n, caller, 2, "y_score", context)

@@ -34,7 +34,8 @@ from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, family_repr, family_str, family_isinstance, family_call, family_call_kw,
     family_array, family_shape_repr, family_cast_view, family_cast_view_f64, family_min,
 )
-from core.family_cast_impl import family_all_finite_f32, family_max_f32
+from core.family_cast_impl import family_max_f32
+from core.host_finite_scan import host_all_finite_f32
 
 comptime _NONE = -1
 comptime _PARAMS = 14
@@ -339,7 +340,7 @@ def _reg_target(source: PythonObject, name: String, caller: String, context: Pyt
     # p3-labels-metrics: a list already cast above is the fresh C-order
     # float32 array this cast would return; it is not cast twice.
     var flat = view if cast else family_cast_view(view, name, context)
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(flat))), rows * cols):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(flat))), rows * cols):
         raise Error("mojolearn " + caller + ": " + name + " contains NaN or infinity")
     _ = flat  # keep the Python object alive through the native calls above
     _ = view^
@@ -372,7 +373,7 @@ def _reg_weights(source: PythonObject, n: Int, caller: String, context: PythonOb
     var w = family_cast_view(view, "sample_weight", context)
     var words = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(w)))
     _ = w  # keep the Python object alive through the native call above
-    if not family_all_finite_f32(words, n) or family_min(w) < 0:
+    if not host_all_finite_f32(words, n) or family_min(w) < 0:
         raise Error("mojolearn " + caller + ": sample_weight must have finite nonnegative entries")
     if not family_max_f32(words, n) > 0:
         raise Error("mojolearn " + caller + ": sample_weight must have positive total weight")

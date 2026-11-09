@@ -25,7 +25,8 @@ from bindings.p3nc_fitted_freeze import fitted_is_freezable_any, fitted_freeze_a
 from std.memory import memcpy
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr
-from bindings.classical_arrays import classical_array, classical_typed, classical_address, classical_host_f32, classical_kind
+from bindings.classical_arrays import classical_array, classical_typed, classical_address, classical_kind
+from bindings.admitted_input import admit_x
 from bindings.classical_validate import classical_view
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from core.classical_tsqr_impl import tsqr_fill_constant, tsqr_fill_indices, tsqr_copy_columns, tsqr_fill_eye
@@ -174,7 +175,7 @@ def decomp_input(source: PythonObject, name: String, context: PythonObject) rais
     if kind != "b" and kind != "i" and kind != "u" and kind != "f":
         raise Error("TypeError: mojolearn: " + name + " has a non-numeric dtype")
     try:
-        return classical_host_f32(view, 2, name, context, admitted=True)
+        return admit_x(view, 2, name, context, admitted=True)
     except error:
         if String(error) == "Input " + name + " contains NaN or infinity":
             raise Error(name + ": input must be finite; NaN/inf are unsupported")

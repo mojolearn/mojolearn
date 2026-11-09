@@ -15,11 +15,13 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.classical_arrays import (
-    classical_address, classical_host_f32, classical_wrap_array, _store_code, classical_is_array,
+    classical_address, classical_wrap_array, _store_code, classical_is_array,
     classical_cast_kind, classical_is_f32, classical_c_order, classical_dtype_str,
 )
+from bindings.admitted_input import admit_x
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
-from core.family_cast_impl import family_cast_rows, family_cast_rows_f64, family_min_f32
+from core.family_cast_impl import family_min_f32
+from core.admitted_input import admitted_cast_f32, admitted_cast_f64
 from core.host_parallel_copy import host_parallel_copy_bytes
 from core.cast_in import CastIn, CAST_KIND_FLOAT, NPY_FLOAT, NPY_DOUBLE
 from bindings.classical_validate import classical_view, RESHAPE_HINT
@@ -199,7 +201,7 @@ def family_cast_f32(view: PythonObject, name: String, context: PythonObject) rai
     """A checked view as C-ordered float32 (the input itself when it already
     is one), the cast `_buffer.as_f32_c` makes. A NaN or an infinity raises
     `Input <name> contains NaN or infinity`, which a caller may reword."""
-    return classical_host_f32(view, Int(py=view.ndim), name, context)
+    return admit_x(view, Int(py=view.ndim), name, context)
 
 
 def family_f32(source: PythonObject, ndim: Int, name: String, context: PythonObject) raises -> PythonObject:
@@ -234,7 +236,7 @@ def family_cast_view(view: PythonObject, name: String, context: PythonObject) ra
     var s0 = 0 if nd == 0 else Int(py=strides[0])
     var s1 = 0 if nd < 2 else Int(py=strides[1])
     var result = family_array(py_call(b.tuple, shape), "<f4", context)
-    family_cast_rows(Int(py=classical_address(view)), s0, s1, rows, cols, item, kind,
+    _ = admitted_cast_f32(Int(py=classical_address(view)), s0, s1, rows, cols, item, kind,
                      FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))))
     _ = result  # keep the Python object alive through the native call above
     return result
@@ -261,7 +263,7 @@ def family_cast_view_f64(view: PythonObject, name: String, context: PythonObject
     var s0 = 0 if nd == 0 else Int(py=strides[0])
     var s1 = 0 if nd < 2 else Int(py=strides[1])
     var result = family_array(py_call(b.tuple, shape), "<f8", context)
-    family_cast_rows_f64(Int(py=classical_address(view)), s0, s1, rows, cols, item, kind,
+    admitted_cast_f64(Int(py=classical_address(view)), s0, s1, rows, cols, item, kind,
                          FAMILY_F64P(unsafe_from_address=Int(py=classical_address(result))))
     _ = result  # keep the Python object alive through the native call above
     return result
@@ -322,7 +324,7 @@ def family_snapshot_f32(mut snapshot: ArrayMetadata, context: PythonObject) rais
         var result = family_array(snapshot.python_shape(), "<f4", context)
         var address = Int(py=classical_address(result))
         var src = snapshot.source
-        family_cast_rows(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind,
+        _ = admitted_cast_f32(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind,
                          FAMILY_F32P(unsafe_from_address=address))
         snapshot.replace_f32(result, address)
 
@@ -436,7 +438,7 @@ def _family_weight_buffer(source: PythonObject, n: Int, wide: Bool,
             for byte in range(raw.itemsize):  # small-loop(one admitted scalar word)
                 dst[byte] = src[raw.itemsize - 1 - byte]
             scalar_address = Int(py=classical_address(reversed))
-        family_cast_rows_f64(scalar_address, 0, 0, 1, 1, raw.itemsize, raw.kind, ptr)
+        admitted_cast_f64(scalar_address, 0, 0, 1, 1, raw.itemsize, raw.kind, ptr)
         var result = _family_weight_scalar(ptr[0], n, wide, context)
         _ = scalar
         _ = one
@@ -457,11 +459,11 @@ def _family_weight_buffer(source: PythonObject, n: Int, wide: Bool,
         var address = Int(py=classical_address(weights))
         var raw = snapshot.source
         if wide:
-            family_cast_rows_f64(raw.addr, raw.s0, raw.s1, raw.rows, raw.cols, raw.itemsize, raw.kind,
+            admitted_cast_f64(raw.addr, raw.s0, raw.s1, raw.rows, raw.cols, raw.itemsize, raw.kind,
                                  FAMILY_F64P(unsafe_from_address=address))
             snapshot.replace_f64(weights, address)
         else:
-            family_cast_rows(raw.addr, raw.s0, raw.s1, raw.rows, raw.cols, raw.itemsize, raw.kind,
+            _ = admitted_cast_f32(raw.addr, raw.s0, raw.s1, raw.rows, raw.cols, raw.itemsize, raw.kind,
                              FAMILY_F32P(unsafe_from_address=address))
             snapshot.replace_f32(weights, address)
     return snapshot^

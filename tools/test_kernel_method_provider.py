@@ -110,7 +110,7 @@ def test_common_array_metadata_snapshot_retains_owner_and_native_shape():
     assert capture.count('array_shape_once(view, context)') == 1
     assert 'array_metadata_once(view, shape^, name, context)' in capture
     pack = body(family, 'family_snapshot_f32')
-    assert 'family_cast_rows(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind' in pack
+    assert 'admitted_cast_f32(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind' in pack
     assert 'snapshot.replace_f32(result, address)' in pack
     source = read('bindings/kernel_methods_native.mojo')
     _assert_x_admitted_once_per_operation(source)

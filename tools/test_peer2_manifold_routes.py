@@ -55,7 +55,7 @@ def test_manifold_input_copy_uses_snapshot_words_and_keeps_original_owner():
     for forbidden in (".shape[", ".ndim", "classical_address(value)"):
         assert forbidden not in copy
     assert "value.source.addr" in copy
-    assert "family_all_finite_f32(src, r * c)" in copy
+    assert "host_all_finite_f32(src, r * c)" in copy
 
 
 def test_tsne_pca_and_optimizer_share_one_x_snapshot():
@@ -105,7 +105,7 @@ def test_native_lifecycle_owns_checks_and_finished_results():
     assert 'return manifold_finish(settings, result, method, names, context)' in entry
     source = _source("bindings/manifold_lifecycle_native.mojo")
     conversion = source.split('def _cast(', 1)[1].split('def _target_finite(', 1)[0]
-    assert conversion.index('if not snapshot.castable:') < conversion.index('family_cast_rows(')
+    assert conversion.index('if not snapshot.castable:') < conversion.index('admitted_cast_f32(')
     assert 'snapshot.source.kind' not in source.split('def _target_finite(', 1)[1].split('def manifold_input(', 1)[0]
     assert 'parallel_public_result(result, method, PythonObject(None), context)' in source
     for forbidden in ('before_fit(', 'before_call(', '._mojolearn_after_fit(', '.warnings.warn('):

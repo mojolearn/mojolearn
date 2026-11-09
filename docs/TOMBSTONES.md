@@ -404,6 +404,17 @@ in the tables after the sections.
 | [`MOJOLEARN_AUTOGRAD_TRANSFORMER`](#mojolearn_autograd_transformer) | Neural | PROMOTED (hand arm deleted) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_TRANSFORMER.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch) |
 | [`MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN`](#mojolearn_idn_mamba1_chunked_scan) | Neural | REJECTED (breaks decode==prefill) | 2026-10-28 | none (recoverable at lane/mamba-folds@db803a1337) |
 | [`MOJOLEARN_PAR_VERIFY`](#mojolearn_par_verify) | Verification (multi-GPU: par-* identity lanes, `verify --par`, multi-gpu release rows) | retired (owner decision) | 2026-10-31 | [MOJOLEARN_PAR_VERIFY.patch](../experiments/removed/MOJOLEARN_PAR_VERIFY.patch) |
+| [`classical_host_f32` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Classical admission (X/y/weight cast) | removed (superseded: `admit_x`, same signature) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`classical_host_weights` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Classical admission (sample_weight) | removed (zero callers; `admit_weights`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`classical_cast_rows` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Classical admission (cast + finite) | removed (merged: `admitted_check_f32`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`classical_check_weights` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Classical admission (weight sign test) | removed (merged: `admitted_check_weights_f32`, now in row tasks) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`family_raw_word` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Family admission (typed item load) | removed (moved: `admitted_raw_word`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`family_cast_rows` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Family admission (float32 cast) | removed (merged: `admitted_cast_f32`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`family_cast_rows_finite` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Family admission (cast + finite) | removed (merged: `admitted_cast_f32`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`family_cast_rows_f64` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Family admission (float64 cast) | removed (moved: `admitted_cast_f64`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`family_all_finite_f32` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Family admission (finiteness scan) | removed (second name of `host_all_finite_f32`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`p3nc_all_finite_f32` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Neighbor/cluster admission (finiteness scan) | removed (second name of `host_all_finite_f32`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [trees_public_inputs array helpers copy (`trees_view`, `trees_f32`, `TreesView`, `TreesMatrix`)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Trees admission (TreesView/TreesMatrix copy of classical_labels) | removed (duplicate; the trees_* names import the one copy) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3754,3 +3765,35 @@ public runtime qualification; this entry is not release or performance evidence.
   historical box legs that mention par lanes (`tools/two_device_par_class_amd_leg.sh`, `tools/gap_column_leg.sh`,
   `tools/par_lm_xvendor*.py`/`.sh`), and the 531 par-* cells of the shipped reference table (preserved history; the
   admission guard refuses edits to unselected rows, and no harness lane reads them).
+
+
+## Admission helpers merged into the one path (2026-11-08)
+
+Lane `consol-a0-admission` (A0 of `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 3), branch
+`lane/consol-a0-admission` from main `ef4bce3a7e`. Not experiment defines: duplicate admission helpers that cast, scan or
+check a caller's X, y and sample_weight. No A/B and no bit change: every deleted helper was a word-for-word copy, a thin
+wrapper or a serial form of the kept one, so the same float32 bytes reach the same kernels and every refusal keeps its
+wording. Kept, and why (no measurement separates copies that run the same code; the kept one is the bits-defining one):
+
+- `admit_x` / `admit_y` / `admit_weights` and `AdmittedX` (`bindings/admitted_input.mojo`): the bodies of
+  `classical_host_f32`, `classical_check_x`, `classical_check_y` and `classical_check_weights_input` moved here;
+  `classical_validate.mojo` keeps its names as thin callers and re-exports. A cast destination is now uninitialised
+  (`admitted_storage_f32`: an ndarray over an uninitialised bytearray with NumPy; the zero-filled Array without NumPy),
+  since the cast writes every word (REGRESSIONS F3/C3).
+- `core/admitted_input.mojo`: `admitted_cast_f32` (was `family_cast_rows_finite`, the parallel one of the 0.8.66 F1 fix;
+  `family_cast_rows` was a wrapper of it), `admitted_cast_f64` (was `family_cast_rows_f64`), `admitted_check_f32` (was
+  `classical_cast_rows`), `admitted_raw_word` (was `family_raw_word`), `admitted_check_weights_f32` (was the serial
+  `classical_check_weights`; now row tasks with the same verdicts).
+- `core/host_finite_scan.mojo` `host_all_finite_f32`: `family_all_finite_f32` and `p3nc_all_finite_f32` were one-line
+  wrappers of it (lane fix-c1-c2-parallel-finite); 29 callers now read it directly.
+- `bindings/classical_labels.mojo` lines 174-607 (`labels_view`, `labels_f32`, `LabelsView`, `LabelsMatrix`, ...): the
+  one copy of the array admission helpers. `bindings/trees_public_inputs.mojo` kept a near-verbatim copy (81 of ~415
+  lines differed after renaming); the merged copy takes the trees copy's uninitialised scratch destination, forest layout
+  and once-read shape tuples, and this copy's native array stores (no `array.array` constructor call), type names
+  through the C descriptor and its one scalar-weight classification. `trees_public_inputs.mojo` imports the names under
+  `trees_*`. Behaviour change for trees doors only at the edges: a scalar `sample_weight` is classified by exact type
+  (`int`, `float` or a NumPy floating scalar) rather than `isinstance(int, float)`.
+
+Restore: `git apply -3 experiments/removed/A0_ADMISSION_HELPERS.patch` (the reverse of the lane's `.mojo` changes from
+`ef4bce3a7e`; it restores every helper and its callers together). Run owed: one identity record of every lane at the
+release (the door is on every path) and the classical/trees/family test suites.

@@ -7,7 +7,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.py_typed_call import py_call_typed
 from std.memory import memcpy
 from core.classical_ridge_impl import classical_widen_f32_f64
-from bindings.classical_arrays import classical_array, classical_host_f32, classical_word, classical_address
+from bindings.classical_arrays import classical_array, classical_word, classical_address
+from bindings.admitted_input import admit_x
 from bindings.sequential_description import sequential_fields
 from bindings.classical_metadata import classical_fit_replacements_admit
 from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_weights_input, classical_check_width, classical_estimator_name
@@ -225,7 +226,7 @@ def _classical_linear_predict(model: PythonObject, value: PythonObject, entries:
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
     classical_check_width(cols, Int(py=fields["n_features_in_"]), est)
-    var coef = classical_host_f32(fields["coef_"], 1, "coef_", context)
+    var coef = admit_x(fields["coef_"], 1, "coef_", context)
     if Int(py=coef.size) != cols:
         raise Error("coef_ length differs from fitted feature count")
     var out = classical_array(rows, 0, context, wide)
