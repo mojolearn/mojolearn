@@ -103,7 +103,7 @@ from svm.estimator import (
     svc_fit_host,
     svc_fit_host_borrowed,
     svc_predict_host,
-    svr_fit_host,
+    svr_fit_host_borrowed,
     svr_predict_host,
 )
 
@@ -208,12 +208,34 @@ def svc_fit_binding(
     pins the first three at the only values rung 1 accepts and refuses the
     rest by name. `max_outer_iter` is pinned at -1, which is what cuML's
     own Python layer does (`svm_base.pyx:371`).
+
+    THE DEVICE-X FORM (lane a8a): 15 values, the ten above, then
+
+        10 the per-row bounds' address (0: unweighted)
+        11 a cross-validation fold's base id   (-1: no fold)
+        12 the fold's base rows
+        13 the fold's index id                 (-1: no fold)
+        14 scale_gamma     (1: gamma='scale' is resolved from the fit's own
+                            device copy of X; slot 3 is then ignored)
+
+    With a fold, `x_addr` is 0 and the rows are gathered on the device.
+    `info_addr` then holds EIGHT float64: the five above, then X's finite
+    word (5), its range word (6) and the gamma solved with (7). A flagged X
+    (5 or 6 nonzero) is not solved: the door refuses it in admit_x's
+    wording 'Input X contains NaN or infinity (SVC).'
     """
-    if len(params) != 10 and len(params) != 11:
+    if len(params) != 10 and len(params) != 11 and len(params) != 15:
         raise Error(
-            "svc_fit: params must contain 10 values (11 with the per-row bounds), got " + String(len(params))
+            "svc_fit: params must contain 10 values (11 with the per-row bounds, 15 with a fold and"
+            " scale_gamma), got " + String(len(params))
         )
-    var xp = _f32_ptr(Int(py=x_addr))
+    var device_form = len(params) == 15
+    var fold = QueryFold.none()
+    var scale_gamma = False
+    if device_form:
+        fold = QueryFold(Int(py=params[11]), Int(py=params[12]), Int(py=params[13]))
+        scale_gamma = Int(py=params[14]) != 0
+    var x_word = 0 if fold.active() else Int(py=x_addr)
     var yp = _f32_ptr(Int(py=y_addr))
     var dp = _f32_ptr(Int(py=dual_addr))
     var sip = _i32_ptr(Int(py=support_idx_addr))
@@ -236,11 +258,11 @@ def svc_fit_binding(
     var c_rows = _c_rows(params, 10, n_rows, "svc_fit")
     var res = SvcFitOutputs()
     with GILReleased(Python()):
-        # DEVIATION 2665: X is not copied into a host List; the fit checks
-        # and stages the caller's buffer, which `_svm_impl.py` holds alive.
+        # DEVIATION 2665: X is not copied into a host List; the fit stages
+        # the caller's buffer (or gathers the fold) on the device once.
         res = svc_fit_host_borrowed(
-            xp, y, n_rows, n_cols, kernel, gamma, c, tol, max_iter,
-            nochange_steps, degree, coef0, c_rows,
+            x_word, fold, y, n_rows, n_cols, kernel, gamma, c, tol, max_iter,
+            nochange_steps, degree, coef0, c_rows, scale_gamma,
         )
     copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
     memcpy(dest=sip, src=res.support_idx.unsafe_ptr(), count=res.n_support)
@@ -250,6 +272,13 @@ def svc_fit_binding(
     ip.unsafe_store(2, Float64(res.n_iter))
     ip.unsafe_store(3, Float64(res.label0))
     ip.unsafe_store(4, Float64(res.label1))
+    if device_form:
+        ip.unsafe_store(5, Float64(res.finite_word))
+        ip.unsafe_store(6, Float64(res.range_word))
+        ip.unsafe_store(7, res.gamma)
+    elif res.finite_word != 0:
+        # The short forms carry no status slots: refuse in admit_x's wording.
+        raise Error("Input X contains NaN or infinity (SVC).")
     return PythonObject(res.n_support)
 
 
@@ -381,6 +410,18 @@ def svr_fit_binding(
     THREE, NOT FIVE. `svc_fit`'s slots 3 and 4 are the class labels and a
     regressor has none.
 
+    THE DEVICE-X FORM (lane a8a): 16 values, the nine above, then the per-row
+    bounds' address (9; 0: unweighted), degree (10), coef0 (11), a
+    cross-validation fold's base id (12; -1: no fold), base rows (13), index
+    id (14; -1: no fold) and scale_gamma (15; 1: gamma='scale' resolved from
+    the fit's own device copy of X, slot 3 ignored). With a fold `x_addr` is
+    0 and the rows are gathered on the device. `info_addr` then holds SIX
+    float64: the three below, then X's finite word, its range word and the
+    gamma solved with; a flagged X is not solved and the door refuses it.
+    X is never copied into a host List: one copy to the device from
+    `x_addr` (the former form read it element by element into a List,
+    scanned it serially and staged it again).
+
     `cache_size`, `svmType`, `sample_weight`, POLYNOMIAL, TANH and
     PRECOMPUTED are not on this surface at all: `svm/estimator.mojo` pins
     the first two at the only values this rung accepts and refuses the rest
@@ -388,12 +429,18 @@ def svr_fit_binding(
     Python layer does (`svm_base.pyx:371`), and -1 resolves over the DOUBLED
     `n_train`.
     """
-    if len(params) != 9 and len(params) != 10 and len(params) != 12:
+    if len(params) != 9 and len(params) != 10 and len(params) != 12 and len(params) != 16:
         raise Error(
             "svr_fit: params must contain 9 values (10 with the per-row bounds, 12 with"
-            " degree and coef0), got " + String(len(params))
+            " degree and coef0, 16 with a fold and scale_gamma), got " + String(len(params))
         )
-    var xp = _f32_ptr(Int(py=x_addr))
+    var device_form = len(params) == 16
+    var fold = QueryFold.none()
+    var scale_gamma = False
+    if device_form:
+        fold = QueryFold(Int(py=params[12]), Int(py=params[13]), Int(py=params[14]))
+        scale_gamma = Int(py=params[15]) != 0
+    var x_word = 0 if fold.active() else Int(py=x_addr)
     var yp = _f32_ptr(Int(py=y_addr))
     var dp = _f32_ptr(Int(py=dual_addr))
     var sip = _i32_ptr(Int(py=support_idx_addr))
@@ -410,21 +457,20 @@ def svr_fit_binding(
     var nochange_steps = Int(py=params[8])
     if n_rows <= 0 or n_cols <= 0:
         raise Error("svr_fit: n_rows and n_features must both be positive")
-    var x = List[Float32]()
+    # TOMBSTONE: the element-by-element host List copy of X (read_f32) before svr_fit_host removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr: one device copy from x_addr; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
     var y = List[Float32]()
-    x = read_f32(Int(xp), max(0, n_rows * n_cols))
     y = read_f32(Int(yp), max(0, n_rows))
     var c_rows = _c_rows(params, 9, n_rows, "svr_fit")
     var degree = 3
     var coef0 = 0.0
-    if len(params) == 12:
+    if len(params) >= 12:
         degree = Int(py=params[10])
         coef0 = Float64(py=params[11])
     var res = SvrFitOutputs()
     with GILReleased(Python()):
-        res = svr_fit_host(
-            x, y, n_rows, n_cols, kernel, gamma, c, epsilon, tol, max_iter,
-            nochange_steps, c_rows, degree, coef0,
+        res = svr_fit_host_borrowed(
+            x_word, fold, y, n_rows, n_cols, kernel, gamma, c, epsilon, tol, max_iter,
+            nochange_steps, c_rows, degree, coef0, scale_gamma,
         )
     copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
     memcpy(dest=sip, src=res.support_idx.unsafe_ptr(), count=res.n_support)
@@ -432,6 +478,13 @@ def svr_fit_binding(
     ip.unsafe_store(0, Float64(res.b))
     ip.unsafe_store(1, Float64(res.n_support))
     ip.unsafe_store(2, Float64(res.n_iter))
+    if device_form:
+        ip.unsafe_store(3, Float64(res.finite_word))
+        ip.unsafe_store(4, Float64(res.range_word))
+        ip.unsafe_store(5, res.gamma)
+    elif res.finite_word != 0:
+        # The short forms carry no status slots: refuse in admit_x's wording.
+        raise Error("Input X contains NaN or infinity (SVR).")
     return PythonObject(res.n_support)
 
 

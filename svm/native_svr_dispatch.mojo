@@ -2,7 +2,8 @@
 # Typed SVR transport to unchanged numerical owners; same packed scalar schema.
 from std.memory import memcpy
 from core.hostptr import f32_ptr as _f32_ptr, f64_ptr as _f64_ptr, i32_ptr as _i32_ptr, read_f32, copy_f32
-from svm.estimator import SvrFitOutputs, svr_fit_host, svr_predict_host
+from svm.estimator import SvrFitOutputs, svr_fit_host_borrowed, svr_predict_host
+from core.device_query_x import QueryFold
 
 
 def _c_rows(params: List[Int], slot: Int, n_rows: Int, who: String) raises -> List[Float32]:
@@ -35,9 +36,8 @@ def native_svr_fit(a: List[Int], params: List[Int], floats: List[Float64]) raise
     var nochange_steps = params[8]
     if n_rows <= 0 or n_cols <= 0:
         raise Error("svr_fit: n_rows and n_features must both be positive")
-    var x = List[Float32]()
+    # TOMBSTONE: the element-by-element host List copy of X (read_f32) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr: one device copy from the address; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
     var y = List[Float32]()
-    x = read_f32(Int(xp), max(0, n_rows * n_cols))
     y = read_f32(Int(yp), max(0, n_rows))
     var c_rows = _c_rows(params, 9, n_rows, "svr_fit")
     var degree = 3
@@ -46,10 +46,14 @@ def native_svr_fit(a: List[Int], params: List[Int], floats: List[Float64]) raise
         degree = params[10]
         coef0 = floats[11]
     var res = SvrFitOutputs()
-    res = svr_fit_host(
-        x, y, n_rows, n_cols, kernel, gamma, c, epsilon, tol, max_iter,
-        nochange_steps, c_rows, degree, coef0,
+    # The descriptor door tests X on the host before this call
+    # (bindings/svc_kernel_native.mojo, lane a8a); no fold reaches it.
+    res = svr_fit_host_borrowed(
+        Int(xp), QueryFold.none(), y, n_rows, n_cols, kernel, gamma, c, epsilon, tol, max_iter,
+        nochange_steps, c_rows, degree, coef0, False,
     )
+    if res.finite_word != 0:
+        raise Error("Input X contains NaN or infinity (SVR).")
     copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
     memcpy(dest=sip, src=res.support_idx.unsafe_ptr(), count=res.n_support)
     copy_f32(res.support_matrix.unsafe_ptr(), smp, res.n_support * n_cols)

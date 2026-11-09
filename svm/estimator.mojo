@@ -90,7 +90,8 @@ from core.device_plan import device_plan_current
 from core.identity_trace import IdentityTrace
 from svm.impl.smosolver import SmoTrace
 from svm.impl.svc_impl import svc_fit, svc_fit_borrowed, svc_predict
-from svm.impl.svr_impl import svr_fit, svr_predict
+from svm.impl.svr_impl import svr_fit_borrowed, svr_predict
+from core.device_query_x import QueryFold, query_context
 from svm.impl.svm_parameter import (
     C_SVC,
     EPSILON_SVR,
@@ -124,6 +125,12 @@ struct SvcFitOutputs(Copyable, Movable):
     var dual_coefs: List[Float32]
     var support_idx: List[Int32]
     var support_matrix: List[Float32]
+    var finite_word: Int32
+    """1 when X held a NaN or an infinity (lane a8a): nothing was solved."""
+    var range_word: Int32
+    """1 when a fold's row index was out of range: nothing was solved."""
+    var gamma: Float64
+    """The gamma the fit solved with (gamma='scale' resolved on the device)."""
 
     def __init__(out self):
         self.n_support = 0
@@ -134,6 +141,9 @@ struct SvcFitOutputs(Copyable, Movable):
         self.dual_coefs = List[Float32]()
         self.support_idx = List[Int32]()
         self.support_matrix = List[Float32]()
+        self.finite_word = Int32(0)
+        self.range_word = Int32(0)
+        self.gamma = 0.0
 
 
 def _kernel_params(
@@ -246,7 +256,8 @@ def svc_fit_host(
 
 
 def svc_fit_host_borrowed(
-    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    x_addr: Int,
+    fold: QueryFold,
     labels: List[Float32],
     n_rows: Int,
     n_cols: Int,
@@ -256,16 +267,21 @@ def svc_fit_host_borrowed(
     tol: Float64,
     max_iter: Int,
     nochange_steps: Int,
-    degree: Int = 3,
-    coef0: Float64 = 0.0,
-    c_rows: List[Float32] = List[Float32](),
+    degree: Int,
+    coef0: Float64,
+    c_rows: List[Float32],
+    scale_gamma: Bool,
 ) raises -> SvcFitOutputs:
     """`svc_fit_host` on the caller's borrowed row-major `n_rows x n_cols`
-    float32 buffer (DEVIATION 2665, 2026-09-11), what the binding calls. No
-    host List copy of X: `svc_fit_borrowed` checks the borrowed cells in one
-    threaded pass and fills the device buffer from the address. The caller
-    keeps the buffer alive and unmodified for the call (`_svm_impl.py` holds
-    the array across it). Same parameters, refusals, card and bytes as
+    float32 buffer at `x_addr` (DEVIATION 2665, 2026-09-11), what the binding
+    calls, or a cross-validation fold `fold` gathered on the device (lane
+    a8a; `x_addr` 0, the fit runs on the fold store's context). No host List
+    copy of X and no host pass over it: `svc_fit_borrowed` copies it to the
+    device once and returns its finite and range words on the outputs (a
+    flagged X is not solved; the door refuses it). `scale_gamma`:
+    gamma='scale' is resolved from the device copy (`gamma` on the outputs
+    is the value solved with). The caller keeps the buffer alive and
+    unmodified for the call. Same parameters, card and bytes as
     `svc_fit_host`."""
     if n_rows <= 0:
         raise Error("Parameter n_rows: number of rows cannot be less than one")
@@ -294,7 +310,7 @@ def svc_fit_host_borrowed(
     param.verbosity = 0
     check_rung1_scope(param, kp, False)
 
-    var ctx = _family_ctx()
+    var ctx = query_context(fold, _family_ctx())
     var card = IdentityTrace()
     card.header(
         "svc_fit_host: n_rows=" + String(n_rows) + " n_cols=" + String(n_cols)
@@ -307,7 +323,9 @@ def svc_fit_host_borrowed(
     # and passes the value down (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
     var plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
     var trace = SmoTrace()
-    var model = svc_fit_borrowed(ctx, x_ptr, labels, n_rows, n_cols, param, kp, card, trace, c_rows, plan)
+    var status = List[Int32]()
+    var model = svc_fit_borrowed(ctx, x_addr, fold, labels, n_rows, n_cols, param, kp, card, trace, status,
+                                 scale_gamma, c_rows, plan)
 
     var out = SvcFitOutputs()
     out.n_support = model.n_support
@@ -318,6 +336,9 @@ def svc_fit_host_borrowed(
     out.dual_coefs = model.dual_coefs.copy()
     out.support_idx = model.support_idx.copy()
     out.support_matrix = model.support_matrix.copy()
+    out.finite_word = status[0]
+    out.range_word = status[1]
+    out.gamma = kp.gamma
     _ = model^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
@@ -439,6 +460,12 @@ struct SvrFitOutputs(Copyable, Movable):
     var dual_coefs: List[Float32]
     var support_idx: List[Int32]
     var support_matrix: List[Float32]
+    var finite_word: Int32
+    """1 when X held a NaN or an infinity (lane a8a): nothing was solved."""
+    var range_word: Int32
+    """1 when a fold's row index was out of range: nothing was solved."""
+    var gamma: Float64
+    """The gamma the fit solved with (gamma='scale' resolved on the device)."""
 
     def __init__(out self):
         self.n_support = 0
@@ -447,6 +474,9 @@ struct SvrFitOutputs(Copyable, Movable):
         self.dual_coefs = List[Float32]()
         self.support_idx = List[Int32]()
         self.support_matrix = List[Float32]()
+        self.finite_word = Int32(0)
+        self.range_word = Int32(0)
+        self.gamma = 0.0
 
 
 def svr_fit_host(
@@ -465,9 +495,52 @@ def svr_fit_host(
     degree: Int = 3,
     coef0: Float64 = 0.0,
 ) raises -> SvrFitOutputs:
+    """`svr_fit_host_borrowed` over a host List X (the native-only smoke
+    cases): the same fit from the List's own words. A non-finite X is
+    refused by name here, as the door would."""
+    if len(x) != n_rows * n_cols:
+        raise Error(
+            "svr_fit_host: X has " + String(len(x)) + " values, n_rows x n_cols is "
+            + String(n_rows * n_cols)
+        )
+    if n_rows <= 0 or n_cols <= 0:
+        raise Error("Parameter n_rows: number of rows cannot be less than one")
+    var out = svr_fit_host_borrowed(
+        Int(x.unsafe_ptr()), QueryFold.none(), targets, n_rows, n_cols, kernel, gamma, C, epsilon, tol,
+        max_iter, nochange_steps, c_rows, degree, coef0, False,
+    )
+    if out.finite_word != 0:
+        raise Error("Input X contains NaN or infinity (SVR).")
+    return out^
+
+
+def svr_fit_host_borrowed(
+    x_addr: Int,
+    fold: QueryFold,
+    targets: List[Float32],
+    n_rows: Int,
+    n_cols: Int,
+    kernel: Int,
+    gamma: Float64,
+    C: Float64,
+    epsilon: Float64,
+    tol: Float64,
+    max_iter: Int,
+    nochange_steps: Int,
+    c_rows: List[Float32],
+    degree: Int,
+    coef0: Float64,
+    scale_gamma: Bool,
+) raises -> SvrFitOutputs:
     """`SVR(C, epsilon, kernel, gamma, tol, max_iter, nochange_steps).fit(X,
-    y)`, one shot. `x` is ROW-MAJOR `n_rows x n_cols` (theirs is
-    column-major; a layout, not an arithmetic).
+    y)`, one shot. X is the caller's ROW-MAJOR `n_rows x n_cols` float32
+    words at `x_addr` (theirs is column-major; a layout, not an arithmetic),
+    copied to the device once with no host pass (lane a8a: the former form
+    took a host List the binding filled element by element), or a
+    cross-validation fold `fold` gathered on the device (`x_addr` 0). X's
+    finite and range words come back on the outputs; a flagged X is not
+    solved and the door refuses it. `scale_gamma`: gamma='scale' resolved
+    from the device copy (`gamma` on the outputs).
 
     `targets` are CONTINUOUS VALUES, one per row. Nothing here validates
     them as `+-1` and nothing sorts them into a label pair, because
@@ -518,11 +591,6 @@ def svr_fit_host(
         raise Error("Parameter n_rows: number of rows cannot be less than one")
     if n_cols <= 0:
         raise Error("Parameter n_cols: number of columns cannot be less than one")
-    if len(x) != n_rows * n_cols:
-        raise Error(
-            "svr_fit_host: X has " + String(len(x)) + " values, n_rows x n_cols is "
-            + String(n_rows * n_cols)
-        )
     if len(targets) != n_rows:
         raise Error(
             "svr_fit_host: y has " + String(len(targets)) + " values, n_rows is "
@@ -546,7 +614,7 @@ def svr_fit_host(
     param.verbosity = 0
     check_rung1_scope(param, kp, False)
 
-    var ctx = _family_ctx()
+    var ctx = query_context(fold, _family_ctx())
     var card = IdentityTrace()
     card.header(
         "svr_fit_host: n_rows=" + String(n_rows) + " n_cols=" + String(n_cols)
@@ -560,7 +628,9 @@ def svr_fit_host(
     # and passes the value down (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
     var plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
     var trace = SmoTrace()
-    var model = svr_fit(ctx, x, targets, n_rows, n_cols, param, kp, card, trace, c_rows=c_rows, plan=plan)
+    var status = List[Int32]()
+    var model = svr_fit_borrowed(ctx, x_addr, fold, targets, n_rows, n_cols, param, kp, card, trace, status,
+                                 scale_gamma, c_rows=c_rows, plan=plan)
 
     var out = SvrFitOutputs()
     out.n_support = model.n_support
@@ -569,6 +639,9 @@ def svr_fit_host(
     out.dual_coefs = model.dual_coefs.copy()
     out.support_idx = model.support_idx.copy()
     out.support_matrix = model.support_matrix.copy()
+    out.finite_word = status[0]
+    out.range_word = status[1]
+    out.gamma = kp.gamma
     _ = model^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^

@@ -55,7 +55,8 @@ from core.device_plan import DevicePlan, plan_for_single
 from core.identity_trace import IdentityTrace
 from svm.checks.device_select import upload_f32
 from svm.impl.smosolver import SmoSolver, SmoTrace
-from svm.impl.svc_impl import svc_predict
+from svm.impl.svc_impl import svc_predict, svm_fit_device_x
+from core.device_query_x import QueryFold
 from svm.impl.svm_parameter import (
     EPSILON_SVR,
     KernelParams,
@@ -66,16 +67,19 @@ from svm.impl.svm_parameter import (
 )
 
 
-def svr_fit(
+def svr_fit_borrowed(
     ctx: DeviceContext,
-    x_host: List[Float32],
+    x_addr: Int,
+    fold: QueryFold,
     targets_host: List[Float32],
     n_rows: Int,
     n_cols: Int,
     param: SvmParameter,
-    kp: KernelParams,
+    mut kp: KernelParams,
     mut card: IdentityTrace,
     mut trace: SmoTrace,
+    mut status: List[Int32],
+    scale_gamma: Bool,
     has_sample_weight: Bool = False,
     kernel_tile_byte_limit: Int = 1 << 30,
     block_solve_threads: Int = 0,
@@ -89,12 +93,24 @@ def svr_fit(
     sample_weight)`. Returns the model (host values); `trace` receives the
     iteration record, empty unless `record_iterations`.
 
+    X (lane a8a) is the caller's row-major `n_rows x n_cols` float32 words
+    at `x_addr`, copied to the device ONCE, or the cross-validation fold
+    `fold` gathered there (`svm_fit_device_x`; `ctx` is then the fold
+    store's context). The former list form copied X into a host List
+    element by element, walked it serially for finiteness and copied it
+    into a pinned stage before the device copy. X's finite and range words
+    come back on the stream with the targets' upload drain: `status`
+    receives them (0, 0: finite and in range) and a flagged X returns the
+    unsolved model, which the door refuses in admit_x's wording.
+    gamma='scale' (`scale_gamma`) is resolved from the device copy into
+    `kp.gamma`.
+
     `targets_host` holds CONTINUOUS TARGETS, one per row. Nothing validates
     them as a label pair and nothing sorts them, because the reference does
-    neither. What IS checked is DEVIATION 636's family, every cell finite,
-    for the same reason the classifier checks its labels: a NaN target
-    lands in `svm.init.f` on the first recorded stage with a
-    vendor-specific payload.
+    neither. What IS checked is every cell finite (the door refuses a
+    non-finite y first, in scikit-learn's wording), for the same reason the
+    classifier checks its labels: a NaN target lands in `svm.init.f` on the
+    first recorded stage with a vendor-specific payload.
 
     The body is `svc_fit` minus the two label kernels and plus nothing.
     `svm/checks/svc_check.mojo::_run_svr_device` is the fit this was lifted
@@ -108,16 +124,17 @@ def svr_fit(
         raise Error("Parameter n_cols: number of columns cannot be less than one")
     if n_rows <= 0:
         raise Error("Parameter n_rows: number of rows cannot be less than one")
-    if len(x_host) != n_rows * n_cols or len(targets_host) != n_rows:
+    if len(targets_host) != n_rows:
         raise Error("svr_fit: x / y sizes do not match n_rows x n_cols")
+    if x_addr == 0 and not fold.active():
+        raise Error("svr_fit: X has a null address")
     if param.svmType != EPSILON_SVR:
         raise Error(
             "svr_fit: svmType must be EPSILON_SVR ("
             + String(EPSILON_SVR) + "), got " + String(param.svmType)
         )
     check_rung1_scope(param, kp, has_sample_weight)
-    # DEVIATION 636 (row 39, FACT 2): no NaN/inf may enter; see svm_parameter.mojo
-    check_finite_list(x_host, "X")
+    # TOMBSTONE: the host List copy of X and its serial check_finite_list walk (DEVIATION 636 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr: one copy to the device, the finite word on the stream; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
     check_finite_list(targets_host, "labels")
 
     var model = SvmModel()
@@ -134,10 +151,15 @@ def svr_fit(
         + " tol=" + String(param.tol)
     )
 
-    var x = upload_f32(ctx, x_host)
+    var qx = svm_fit_device_x(ctx, x_addr, fold, n_rows, n_cols, kp, scale_gamma)
     var yv = upload_f32(ctx, targets_host)
     ctx.synchronize()
-    card.record_device[DType.float32](ctx, "svm.input.x", x, n_rows * n_cols)
+    status = [qx.finite_word(), qx.range_word()]
+    if status[0] != 0 or status[1] != 0:
+        _ = yv^
+        _ = qx^
+        return model^
+    card.record_device[DType.float32](ctx, "svm.input.x", qx.x, n_rows * n_cols)
     card.record_device[DType.float32](ctx, "svm.input.y", yv, n_rows)
 
     var smo = SmoSolver(
@@ -145,12 +167,12 @@ def svr_fit(
         block_solve_threads, record_iterations, scratch_pad, scratch_poison,
         c_rows,
     )
-    smo.solve(ctx, x, yv, model, card, param.max_iter, param.max_outer_iter)
+    smo.solve(ctx, qx.x, yv, model, card, param.max_iter, param.max_outer_iter)
     model.n_cols = n_cols
     ctx.synchronize()
     trace = smo.trace^
     smo.trace = SmoTrace()
-    _ = x^
+    _ = qx^
     _ = yv^
     return model^
 

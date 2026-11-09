@@ -21,7 +21,7 @@
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.admitted_family import admit_family, admit_family_meta, admit_family_weights
+from bindings.admitted_family import admit_family, admit_family_meta, admit_family_weights, admit_family_fold_meta
 from bindings.native_caller_frame import native_frame_globals
 from bindings.native_loaded_module import native_loaded_module
 from bindings.trees_side_records import trees_side_get, trees_side_put
@@ -29,7 +29,7 @@ from bindings.classical_validate import classical_view
 from bindings.classical_warnings import classical_warning
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_bool
 from bindings.host_inference_scalars import host_inference_primitive_number
-from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_FLOAT, NPY_FLOAT, CastIn
+from core.cast_in import CAST_KIND_SIGNED
 from core.host_finite_scan import host_all_finite_f32_strided
 from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse, admit_rows_host_unchecked
 from bindings.device_rows_door import DoorRowsStore, door_is_device_rows, door_rows_refuse
@@ -236,12 +236,28 @@ def _km_degree(fields: PythonObject, where: String) raises -> Int:
     return _km_int(family_field(fields, "degree"), where + ".degree")
 
 
-def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_meta: ArrayMetadata) raises:
-    """`KernelRidge.fit(X, y, sample_weight)`."""
+def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_meta: ArrayMetadata,
+             fold: DoorRowsStore) raises:
+    """`KernelRidge.fit(X, y, sample_weight)`.
+
+    X (lane a8a): `fold` active is a cross-validation fold (`x_meta` then
+    holds no host words) that `kernel_ridge_fit_ptr` gathers on the device
+    and whose device copy comes home as `X_fit_` (no host gather); a route
+    that cannot take it (a chi2 kernel, whose sign test reads host words;
+    kernel='precomputed'; the descriptor route; a binding without the
+    pointer entry) gathers its host rows here instead. The pointer entry
+    tests X on the device and returns its status words; the other routes
+    are tested here first (`_krr_query_scan`); one refusal wording either
+    way."""
     classical_connect_numpy(context)
     var where = String("KernelRidge")
     var b = native_loaded_module("builtins")
     var fields = py_fields(model)
+    var admission = _km_extension(fields, args[0], where, context)
+    var binding = admission[0]
+    var native = admission[1]
+    var flags = admission[2]
+    var ptr_entry = neural_descriptor_entry(binding, "kernel_ridge_fit_ptr", False) if native is None else PythonObject(None)
     var x = x_meta.keep
     var n = x_meta.source.rows
     var d = x_meta.source.cols
@@ -262,16 +278,32 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
     var y = target.keep
     # `_kp`: the kernel, degree, gamma and coef0, in that order.
     var kernel = _km_kernel_code(family_field(fields, "kernel"), where, True, context)
+    if fold.active() and (kernel == _KERNEL_CHI2 or kernel == _KERNEL_ADDITIVE_CHI2
+                          or kernel == _KERNEL_PRECOMPUTED or ptr_entry is None):
+        # This route reads host words: the fold's host rows, gathered in
+        # parallel out of model selection's host base (unchecked: X is
+        # tested below like any host X).
+        var rows = admit_family_meta(admit_rows_host_unchecked(args[1], context), 2, "X", context, True)
+        _ = target^
+        _krr_fit(model, args, context, rows, DoorRowsStore.none())
+        return
+    var entry_tests = ptr_entry is not None
     var degree = _km_degree(fields, where)
     var gamma = _km_gamma(family_field(fields, "gamma"), d, where, kernel, context)
     var coef0 = _km_real(family_field(fields, "coef0"), "coef0", where, context)
-    _km_chi2_input(x_meta, kernel, where)
+    if not fold.active():
+        _km_chi2_input(x_meta, kernel, where)
     if kernel == _KERNEL_PRECOMPUTED and d != n:
         raise Error("mojolearn " + where + ": kernel='precomputed' needs the square "
                     + "n x n kernel matrix as X, got " + String(n) + " x " + String(d))
+    if not entry_tests:
+        # The list entry and the descriptor route return no status word.
+        _krr_query_scan(x_meta, where)
     var alpha = _km_real(family_field(fields, "alpha"), "alpha", where, context)
     var dual = family_array(Python.tuple(n) if squeeze else Python.tuple(n, t), "<f4", context)
     var scalars = family_array(Python.tuple(1), "<f8", context)
+    # A fold's X_fit_ is the entry's device copy of the gathered rows.
+    var fold_fit = family_array(Python.tuple(n, d), "<f4", context) if fold.active() else PythonObject(None)
     var weights = PythonObject(None)
     var weights_owner = PythonObject(None)
     var weights_address = 0
@@ -280,40 +312,50 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
         weights = snapshot.keep
         weights_owner = snapshot.owner
         weights_address = snapshot.source.addr
-    var admission = _km_extension(fields, args[0], where, context)
-    var binding = admission[0]
-    var native = admission[1]
-    var flags = admission[2]
-    var fit = PythonObject(None)
-    if native is None:
-        fit = _km_pointer_entry(binding, "kernel_ridge_fit_ptr", "kernel_ridge_fit", context)
+    var fit = ptr_entry
+    if native is None and ptr_entry is None:
+        fit = family_entry(binding, "kernel_ridge_fit", context)
     # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_fit_binding:
     # x, y, dual_out, scalars_out[, sw]; n, d, t, kernel, degree, gamma, coef0, alpha.
+    # The pointer entry (kernel_ridge_fit_ptr_binding) takes all nine: sw (0:
+    # none), x_fit_out (0: none) and the fold's store ids (-1, 0, -1: none).
     var addresses = Python.list(PythonObject(x_meta.source.addr), PythonObject(target.source.addr), classical_address(dual),
                                 classical_address(scalars))
-    _ = dual  # keep the Python object alive through the native call above
-    _ = y  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _ = scalars  # keep the Python object alive through the native call above
-    if weights is not None:
+    if entry_tests:
         _ = py_call(addresses.append, PythonObject(weights_address))
-        _ = weights  # keep the Python object alive through the native call above
-        _ = scalars  # keep the Python object alive through the native call above
-        _ = dual  # keep the Python object alive through the native call above
-        _ = y  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
+        _ = py_call(addresses.append, classical_address(fold_fit) if fold.active() else PythonObject(0))
+        _ = py_call(addresses.append, PythonObject(fold.base_id))
+        _ = py_call(addresses.append, PythonObject(fold.base_rows))
+        _ = py_call(addresses.append, PythonObject(fold.index_id))
+    elif weights is not None:
+        _ = py_call(addresses.append, PythonObject(weights_address))
+    _ = weights  # keep the Python object alive through the native call below
+    _ = fold_fit  # keep the Python object alive through the native call below
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(t), PythonObject(kernel),
                              PythonObject(degree), gamma, coef0, alpha)
-    var info = kernel_method_execute(native, "kernel_ridge_fit_ptr" if (flags & 1) != 0 else "kernel_ridge_fit", addresses, params) if native is not None else family_call(fit, addresses, params)
+    var info = PythonObject(0)
+    if native is not None:
+        info = kernel_method_execute(native, "kernel_ridge_fit_ptr" if (flags & 1) != 0 else "kernel_ridge_fit", addresses, params)
+    elif entry_tests:
+        var words = family_call(fit, addresses, params)
+        # kernel_ridge_fit_ptr's [info, finite, range] words (lane a8a)
+        if fold.active():
+            door_rows_refuse(Int(py=words[1]), Int(py=words[2]), where, fold.base_rows)
+        else:
+            admitted_finite_refuse(Int(py=words[1]), where)
+        info = words[0]
+    else:
+        info = family_call(fit, addresses, params)
     _ = weights  # keep the Python object alive through the native call above
     _ = scalars  # keep the Python object alive through the native call above
     _ = dual  # keep the Python object alive through the native call above
     _ = y  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
+    _ = fold_fit  # keep the Python object alive through the native call above
     # X_fit_ is an owned copy, never the caller's own X (hazard class A,
     # caller-aliased inputs, lane p3-svm-gp-kernel): the resident predict
     # freezes X_fit_ read-only, which must never reach the caller's array.
-    var kept = _km_fit_owned(x_meta, context)
+    var kept = fold_fit if fold.active() else _km_fit_owned(x_meta, context)
     _ = y^
     _ = weights^
     _ = weights_owner^
@@ -498,13 +540,6 @@ def _krr_predict_fold(fields: PythonObject, args: PythonObject, context: PythonO
     _ = x_fit_meta^
     _ = dual_meta^
     return out
-
-
-def _km_fold_metadata(rows: Int, cols: Int) raises -> ArrayMetadata:
-    """The shape record of a device fold (no host words: address 0), for
-    the dispatcher's shape and refusal reads (lane a7a)."""
-    return ArrayMetadata(PythonObject(None), [rows, cols], CastIn(0, CAST_KIND_FLOAT, 4, rows, cols, cols * 4, 4),
-                         rows * cols, NPY_FLOAT, True, True, False, PythonObject(None), False)
 
 
 def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
@@ -1084,7 +1119,8 @@ def _km_par_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     plan_enter(binding, devices, _KM_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)
     try:
         if ridge:
-            _krr_fit(model, Python.tuple(binding, args[1], args[2], PythonObject(None)), context, x)
+            _krr_fit(model, Python.tuple(binding, args[1], args[2], PythonObject(None)), context, x,
+                     DoorRowsStore.none())
         else:
             _ = _nys_fit(model, Python.tuple(binding, args[1]), context, x)
     finally:
@@ -1155,12 +1191,14 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
     # reads host words, gathers its host rows.
     var fold = DoorRowsStore.none()
     var krr_query = operation == "family_km_krr_predict" or operation == "family_km_krr_score"
+    # Lane a8a: the fit takes a fold on the device too (`_krr_fit`).
+    var krr_device_x = krr_query or operation == "family_km_krr_fit"
     var x: ArrayMetadata
-    if krr_query and door_is_device_rows(args[1], context):
+    if krr_device_x and door_is_device_rows(args[1], context):
         var fx = admit_x_unrecorded(args[1], "KernelRidge", context, device_x=True, finite=False)
         fold = fx.store
         if fold.active():
-            x = _km_fold_metadata(fx.rows, fx.cols)
+            x = admit_family_fold_meta(fx.rows, fx.cols)
         else:
             x = admit_family_meta(fx.array, 2, "X", context, True)
     else:
@@ -1193,7 +1231,7 @@ def _kernel_methods_operation(model: PythonObject, operation: String, args: Pyth
                               context: PythonObject, x: ArrayMetadata,
                               fold: DoorRowsStore = DoorRowsStore.none()) raises -> PythonObject:
     if operation == "family_km_krr_fit":
-        _krr_fit(model, args, context, x)
+        _krr_fit(model, args, context, x, fold)
         return model
     if operation == "family_km_krr_predict":
         return _krr_predict(model, args, context, x, True, fold)
