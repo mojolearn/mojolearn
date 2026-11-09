@@ -52,7 +52,13 @@ from std.sys.compile import is_defined, get_defined_int
 # optimizer_scalars is opt_scalars word for word). Andrew 2026-11-08 (bits may change; keep the simpler path):
 # that shared module is now rnn_fit's only update, the one Sequential and ops.Session already use; rnn_fit's hand
 # opt_step call is gone (opt_step stays for its other callers). Same bits by construction. A/B owed (ms per fit).
+# Restored 2026-11-09 by lane r2-restore-unmeasured-defaults (AGENTS.md "A measured winner is never deleted on
+# reasoning": the promotion had no measurement): rnn_fit's hand opt_step is the default again, as before X3 (the
+# define's default at f7d10d2b09 was off); -D MOJOLEARN_AUTOGRAD_OPTIM runs the update through autograd/optim.mojo
+# (OptimizerState + step_lr) for the A/B. A slot word the kind's body never reads may differ (RMSprop's f1, a
+# non-SGD kind's flags) and moves no bit. No fold is involved (no clip; the rate is lrs[k] in both arms).
 from autograd.optim import OptimizerState, optimizer_config_packed, step_lr
+comptime AUTOGRAD_OPTIM = is_defined["MOJOLEARN_AUTOGRAD_OPTIM"]()
 
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
@@ -475,14 +481,24 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     var Gr = ex.alloc(np_)
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
-    # The optimizer state on the executor (s2 filled with init_acc, Adagrad's initial accumulator).
+    # Restored 2026-11-09 (lane r2-restore-unmeasured-defaults): opt_step's state s1, s2, s3 is the default (s2
+    # filled with init_acc, Adagrad's initial accumulator); -D MOJOLEARN_AUTOGRAD_OPTIM: the state on the executor.
+    var s1 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
+    var s2 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
+    var s3 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
     var opt_cfg = optimizer_config_packed(cfg.kind, cfg.flags, cfg.f1, cfg.f2, cfg.eps, cfg.wd, cfg.f7, Float32(0.0))
-    var opt_state = OptimizerState(ex, opt_cfg, np_, init_acc)
+    var opt_state = OptimizerState()
+    comptime if AUTOGRAD_OPTIM:
+        opt_state = OptimizerState(ex, opt_cfg, np_, init_acc)
+    else:
+        if init_acc != Float32(0.0):
+            fill(ex, s2, np_, init_acc)
     var dloss = ex.alloc(n_steps)
     var w = Work(ex, net, T, bmax, True)
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
     var loss_ws = loss_scratch(ex, bmax * net.O)
+    var st = OptState()
     var step = S()
     for k in range(n_steps):
         var j = k % per
@@ -515,8 +531,12 @@ def rnn_fit[E: Exec, //, S: RnnStep](
             ex.launch[OP_CE](a, B)
             loss_value_into(ex, LS_CROSS_ENTROPY, w.yhat, w.yb, B, net.O, REDUCTION_MEAN, dloss + k, loss_ws)
         step.backward(ex, net, P, Gr, w.xb, T, B, w)
-        step_lr(ex, opt_cfg, opt_state, P, Gr, np_, k + 1, ftz(lrs.unsafe_load(k)))
-    opt_state.release(ex)
+        comptime if AUTOGRAD_OPTIM:
+            step_lr(ex, opt_cfg, opt_state, P, Gr, np_, k + 1, ftz(lrs.unsafe_load(k)))
+        else:
+            opt_step(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
+    comptime if AUTOGRAD_OPTIM:
+        opt_state.release(ex)
     release_loss_scratch(ex, loss_ws)
     ex.sync()
     ex.download(Pio, P, np_)

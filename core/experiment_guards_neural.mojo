@@ -280,7 +280,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_LOSS"](), "removed 2026-11-08 (lane/x3-mlp-rnn-predict-on-tape, dbab55bea7): rnn_fit's reported loss always uses the blocked fold (loss_value_into; the serial OP_SUM is deleted); mlp_fit keeps its loss block (already blocked, the arm added launches). Drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch"
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
-    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_OPTIM"](), "removed 2026-11-08 (lane/x3-mlp-rnn-predict-on-tape, 75825f479c): mlp_fit and rnn_fit always update through autograd/optim.mojo (step_lr), the same OP_OPT words; the hand OP_OPT assembly is deleted. Drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch"
+    # Restored 2026-11-09 by lane/r2-restore-unmeasured-defaults: the hand OP_OPT launch is the default again and
+    # -D MOJOLEARN_AUTOGRAD_OPTIM is the A/B arm (the executor optimizer), so the define is live: no refusal.
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_DATA (promoted: autograd/data.mojo epoch_order is the one epoch order; the hand launches deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_DATA"](), "removed 2026-11-08 (lane/x3-mlp-rnn-predict-on-tape, 75825f479c): rnn_fit always takes its epoch order from autograd/data.mojo epoch_order (same launches, same key); the inline launches are deleted. Drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch"
