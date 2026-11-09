@@ -55,6 +55,7 @@ from bindings.prep_native_estimator import (
     prep_estimator_plan, prep_native_context, prep_native_split, prep_entry_call,
 )
 from bindings.classical_labels import _label_list, classical_score_from_codes
+from bindings.p3_labels_metrics_native import p3_interleave_columns, p3_rows_of
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.classical_pandas import native_pandas_exact
 from bindings.native_buffer_owner import native_buffer_view
@@ -1377,22 +1378,21 @@ def _multioutput_assemble(model: PythonObject, Xa: PythonObject, codes: PythonOb
     for j in range(len(lists)):  # driver-loop: over members (each column's first label)
         if len(lists[j]) > 0 and not Bool(py=py_call(b.isinstance, lists[j][0], b.int)):
             ints = False
-    var zipped = py_call(b.list, py_call(b.map, b.list, _call_kw(b.zip, py_call(b.tuple, lists), Python.dict())))  # cpu-route: label objects (str/mixed) no Array holds
     # Pack exact int/float/bool label objects (bool classes) into one numeric
     # store as before. Any other label object (str, mixed) cannot live in a
-    # numeric Array: native_array_from_values refuses it, which made every
-    # string-label multi-output predict raise. Those outputs are returned as
-    # the per-row label lists (one list of m labels per row), the same label
-    # objects the single-output classifiers return for str classes.
-    var flat = Python.list()
-    for i in range(len(zipped)):  # driver-loop: completed output labels
-        _ = py_call(flat.extend, zipped[i])
+    # numeric Array: native_array_from_values refuses it. Those outputs are
+    # returned as the per-row label lists (one list of m labels per row), the
+    # same label objects the single-output classifiers return for str classes.
+    # Lane p2-labels-lists-arrays: the row-major labels and the row lists are
+    # filled in C (p3_interleave_columns / p3_rows_of); the Python
+    # zip/map/list per row and the extend per row are gone.
+    var flat = p3_interleave_columns(lists, n)
     var store = PythonObject(None)
     try:
         store = native_array_from_values("q" if ints else "d", flat)
     except:
-        return zipped
-    return classical_wrap_array(store, Python.tuple(len(zipped), len(cols)), "<i8" if ints else "<f8", "C", context)
+        return p3_rows_of(flat, n, len(lists))
+    return classical_wrap_array(store, Python.tuple(n, len(cols)), "<i8" if ints else "<f8", "C", context)
 
 
 def _multioutput_classifier_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
