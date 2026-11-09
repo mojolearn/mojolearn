@@ -595,6 +595,9 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | define | area | deleted | restored | now | patch |
 |---|---|---|---|---|---|
 | [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE`](#mojolearn_classical_c25_projection_reuse) | Decomp | 2026-10-08 (`ab4e8e543`) | 2026-10-10 (lane/c25-restore-promote) | IDENTICAL default; `_OFF` restores the old path | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch) |
+| [`_sgd_mb_grid` / `_sgd_mb_ovr_grid` / `_sgd_ps_grid` host epoch loops (a drain and stop words home per epoch; PA row norms per epoch)](#sgd-epochs-and-knn-label-propagation-on-the-bounded-device-loop-2026-11-09) | Linear (SGD, Perceptron, PassiveAggressive, SGDOneClassSVM; GPU) | removed (superseded: the bounded device loop, `_SgdMbEpochs` / `_SgdOvrEpochs` / `_SgdPsEpochs`) | 2026-11-09 | [N3B_SGD_HOST_EPOCH_LOOPS.patch](../experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch) |
+| [`_op_lp_iterate_knn_idn` and the FAST kNN hand chunk loop (own flag / step-count words)](#sgd-epochs-and-knn-label-propagation-on-the-bounded-device-loop-2026-11-09) | Neighbors (label propagation kNN graph) | removed (superseded: the bounded device loop, `_LpKnnStep`) | 2026-11-09 | [N3B_SGD_HOST_EPOCH_LOOPS.patch](../experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch) |
+| [`x_neighbors_lp_fast_resident` export (`lp_fast_resident`, both providers, both bindings, generator, manifest row, `_lp_fast_resident`)](#sgd-epochs-and-knn-label-propagation-on-the-bounded-device-loop-2026-11-09) | Neighbors (label propagation) | removed (dead: always 1) | 2026-11-09 | [N3B_SGD_HOST_EPOCH_LOOPS.patch](../experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch) |
 
 ## Trees
 
@@ -5014,3 +5017,33 @@ origin/lane/x4-transformer-on-executor c0b21c971c.
 - Recoverable at c0b21c971c; restore with `git apply experiments/removed/TRANSFORMER_DECODE_SESSION_STRUCTS.patch`
   (transformer/transformer_binding_impl.mojo, bindings/_mojolearn_transformer.mojo,
   transformer/native_lm_resident_dispatch.mojo).
+
+## SGD epochs and kNN label propagation on the bounded device loop (2026-11-09)
+
+Lane `n3b-sgd-on-program-fit`, plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` rows "SGD / Perceptron / PA" and
+"Label propagation", `docs/plans/EXECUTOR_X1_API.md` section 5. Base `integ/pre-0867-w3` 5b5490960d.
+
+- SGD (`x_linear/device.mojo`): the three drivers ran each epoch on the host and drained the stream to read the stop
+  words (minibatch: stop + failed; one-vs-rest: every problem's words, then an activity upload; per-sample: the live
+  count). Each epoch is now one step of `bounded_device_loop` (the device loop Program.fit runs on): `_SgdMbEpochs`,
+  `_SgdOvrEpochs`, `_SgdPsEpochs`. Every epoch kernel takes the loop's done word as its gate (it still writes its Metal
+  witness word); the stop is a criterion kernel (`sgd_flags_crit_kernel`, `sgd_live_crit_kernel`); the one-vs-rest
+  activity, epoch counts and result words are device values (`sgd_mb_ovr_act_kernel`, `sgd_mb_ovr_res_kernel`). Reads:
+  once per `sgd_loop_check_every` epochs (no tolerance: once at the bound; with one: Program.fit's
+  `fit_epochs_per_read` over the epoch's launches). Deleted: the three host epoch loops, the per-epoch `ctx.synchronize()`
+  and stop-word copies, the one-vs-rest host activity lists and `dact` re-uploads, and the per-epoch PA row-norm launch
+  (`sgd_rowsq_kernel` once a fit, `_sgd_rowsq_once`). Same kernels, order and operands: no bit change.
+- Label propagation kNN graph (`x_neighbors/iter_device.mojo`): IDENTICAL's item loop and FAST's block-sum loop are one
+  step `_LpKnnStep` on `bounded_device_loop` (the check kernels are the criteria); their hand chunk loops, flag words and
+  step counters are deleted (steps taken = the loop's stop iteration - 1). No bit change.
+- `x_neighbors_lp_fast_resident` (always 1) deleted with `lp_fast_resident` (device and host), both provider bindings,
+  both binding registrations, `x_neighbors/gen.py`, the `_surface_neighbors.py` manifest row, `_lp_fast_resident` and its
+  test use.
+- GaussianMixture: no deletion; the E-/M-step per-call scratch is held in `mixture/step_keep.mojo` `GmmStepKeep` inside
+  the EM loop, so the lifetime drains in `gmm_e_step` / `gmm_m_step` run only without a keep.
+
+Restore: `git apply -3 experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch` (the reverse of the lane on the code files).
+Code recoverable at `5b5490960d`. A/B define: `-D MOJOLEARN_SGD_LOOP_CHECK_EVERY=<k>` (1 = the old per-epoch read).
+Run owed: SGDClassifier / SGDRegressor / Perceptron / PassiveAggressive / SGDOneClassSVM fit and LabelPropagation /
+LabelSpreading (knn) fit on NVIDIA and AMD against 5b5490960d, arm B `-D MOJOLEARN_SGD_LOOP_CHECK_EVERY=1`, plus one
+non-board shape; identity lanes sgd-*, perceptron, passive-aggressive, label-propagation, label-spreading at the release.
