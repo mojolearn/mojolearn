@@ -125,23 +125,13 @@ struct MambaBlockProgram(Movable):
         if b < 1 or dm < 1:
             raise Error("mamba: B and d_model must be positive")
         var ex = DeviceExec(neural_ctx[_NEURAL_CTX]())
-        self.s = OpsSession[DeviceExec](ex^, False)
-        self.code = code
-        self.b = b
-        self.dm = dm
-        self.ints = [b, dm]
-        self.fs = fs.copy()
-        self.x = 0
-        self.x_n = 0
-        self.w_addrs = weights.copy()
-        self.w_host = List[Float32]()
-        self.busy = False
-        self.stamp = 0
-        var wsizes = block_weight_sizes(code, self.ints)
-        self.w = self.s.upload_block(code, self.ints, BLOCK_PART_WEIGHTS,
-                                     _pieces(weights, wsizes, "mamba weights", False), List[Int]())
+        var s = OpsSession[DeviceExec](ex^, False)
+        var ints: List[Int] = [b, dm]
+        var wsizes = block_weight_sizes(code, ints)
+        var w = s.upload_block(code, ints, BLOCK_PART_WEIGHTS, _pieces(weights, wsizes, "mamba weights", False),
+                               List[Int]())
         # The certified zero state (allocate_inference_cache's semantics).
-        var ssizes = block_state_sizes(code, self.ints)
+        var ssizes = block_state_sizes(code, ints)
         var most = 1
         for i in range(len(ssizes)):  # small-loop(the block's state pieces): the largest piece
             most = max(most, ssizes[i])
@@ -149,14 +139,27 @@ struct MambaBlockProgram(Movable):
         var zsrc = List[CastIn](capacity=len(ssizes))
         for i in range(len(ssizes)):  # small-loop(the block's state pieces): descriptors, no data
             zsrc.append(CastIn.f32_c(Int(zero.unsafe_ptr()), ssizes[i], 1))
-        self.st = self.s.upload_block(code, self.ints, BLOCK_PART_STATE, zsrc, List[Int]())
+        var st = s.upload_block(code, ints, BLOCK_PART_STATE, zsrc, List[Int]())
         _ = len(zero)  # keep-alive past the staging copies
-        self.q = 0
+        var q = 0
         var k = block_int_words(code)
         if k > 0:
-            self.q = self.s.upload_block(code, self.ints, BLOCK_PART_WORDS, List[CastIn](), List[Int](length=k, fill=0))
-        if shadow:
-            self.w_host = _host_copy(weights, wsizes)
+            q = s.upload_block(code, ints, BLOCK_PART_WORDS, List[CastIn](), List[Int](length=k, fill=0))
+        self.w_host = _host_copy(weights, wsizes) if shadow else List[Float32]()
+        self.s = s^
+        self.code = code
+        self.b = b
+        self.dm = dm
+        self.ints = ints^
+        self.fs = fs.copy()
+        self.w = w
+        self.st = st
+        self.q = q
+        self.x = 0
+        self.x_n = 0
+        self.w_addrs = weights.copy()
+        self.busy = False
+        self.stamp = 0
 
     # ------------------------------------------------------------ weights
     def refresh_weights(mut self, weights: List[Int]) raises:
