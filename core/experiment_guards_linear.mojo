@@ -67,6 +67,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_GS_SOLVE_ONE_LAUNCH"](), "removed 2026-10-11 (lane/w2-decide-linalg, fbf3d50a0): IDN_GS_SOLVE_ONE_LAUNCH one-launch Gram Cholesky/solve walks (C2) were NOISE: ols 0.997/1.036, ridge 1.008/0.961, ridge-cv/ard/bayesian-ridge 1.00 (nv2 v0136/v0081, amd a1718/a1663); see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch
     comptime assert not is_defined["MOJOLEARN_IDN_TSQR_RSTACK_TREE"](), "removed 2026-10-11 (lane/w2-decide-linalg, 7d76f567e): IDN_TSQR_RSTACK_TREE stacked-R TSQR levels were SLOWER: 8 cells mean 1.087, every cell > 1 (lstsq 1.12/1.10, rsvd istella 1.196, svd taxi 1.128; nv2 v0093, amd a1675); see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS.patch
+    comptime assert not is_defined["MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS"](), "removed 2026-11-09 (lane n3-sgd-minibatch-loops): CLASSICAL_SGD_EPOCH_CONTIGUOUS (a per-epoch n x d re-gather of X, y, sw into permuted copies) was default off and never measured on its own; the batch kernels read the rows through the epoch's order (docs/TOMBSTONES.md)"
     return True
 
 
