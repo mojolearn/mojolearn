@@ -743,7 +743,7 @@ index 225ced7c34..f509f26753 100644
      # DEVIATION 1946: the context dies LAST, after every value built on it.
      _ = ctx^
 diff --git a/svm/impl/svc_impl.mojo b/svm/impl/svc_impl.mojo
-index 29dc0c102f..da2a027eec 100644
+index ca8ffdc133..da2a027eec 100644
 --- a/svm/impl/svc_impl.mojo
 +++ b/svm/impl/svc_impl.mojo
 @@ -38,11 +38,7 @@ from max.gpu.sync import barrier
@@ -759,7 +759,7 @@ index 29dc0c102f..da2a027eec 100644
  from core.device_plan import DevicePlan, plan_for_single
  from svm.multi_gpu import kernel_matrix_dispatch
  from svm.impl.distance.kernel_matrices import (
-@@ -165,79 +161,44 @@ def svc_fit(
+@@ -165,80 +161,44 @@ def svc_fit(
      return fitted^
  
  
@@ -843,9 +843,10 @@ index 29dc0c102f..da2a027eec 100644
 +    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
 +    check_finite_device(ctx, x, n_rows * n_cols, "X")
      var model = _svc_label_model(labels_host, n_rows, n_cols, param, kp, card)
+-    var status_addr = Int(qx.words.unsafe_ptr())
      var fitted = _svc_fit_staged(
 -        ctx, plan, qx.x, labels_host, n_rows, n_cols, param, kp, model^, card, trace,
--        1 << 30, 0, False, 0, Float32(0.0), c_rows, Int(qx.words.unsafe_ptr()),
+-        1 << 30, 0, False, 0, Float32(0.0), c_rows, status_addr,
 +        ctx, plan, x, labels_host, n_rows, n_cols, param, kp, model^, card, trace,
 +        1 << 30, 0, False, 0, Float32(0.0), c_rows,
      )
@@ -855,7 +856,7 @@ index 29dc0c102f..da2a027eec 100644
      return fitted^
  
  
-@@ -286,21 +247,12 @@ def _svc_fit_staged(
+@@ -287,21 +247,12 @@ def _svc_fit_staged(
      scratch_pad: Int,
      scratch_poison: Float32,
      c_rows: List[Float32] = List[Float32](),
