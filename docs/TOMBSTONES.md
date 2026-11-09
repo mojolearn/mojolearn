@@ -409,6 +409,7 @@ in the tables after the sections.
 | [`classical_host_weights`, `pca_query_fields`, `prep_check_info`, `prep_scalar_dtype` (orphan functions)](#dead-native-entries-batch-3-2026-11) | Classical arrays, PCA and preprocessing providers | removed (orphan functions: no caller) | 2026-11-08 | [dead_entries_orphan_functions.patch](../experiments/removed/dead_entries_orphan_functions.patch) |
 | [`_rsvd_core`, `_randomized_decompose`, `_lanczos_top`, `_prepare_folds` (dead Python loops)](#dead-native-entries-batch-3-2026-11) | Decomposition and model selection (Python glue the native owners replaced) | removed (dead Python: no caller) | 2026-11-08 | [dead_python_loops.patch](../experiments/removed/dead_python_loops.patch) |
 | [`MOJOLEARN_PT_COLBATCH`](#mojolearn_pt_colbatch) | Prep | DROP (quality); the opt-in name only | 2026-11-08 | [MOJOLEARN_PT_COLBATCH.patch](../experiments/removed/MOJOLEARN_PT_COLBATCH.patch) |
+| [`MOJOLEARN_MCD_BATCH_COMPAT`](#mojolearn_mcd_batch_compat) | Decomp | HOLD-quality; the opt-in name only | 2026-11-08 | [MOJOLEARN_MCD_BATCH_COMPAT.patch](../experiments/removed/MOJOLEARN_MCD_BATCH_COMPAT.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3808,3 +3809,15 @@ public runtime qualification; this entry is not release or performance evidence.
   the only configuration that goes is the define on with `PT_SCORE` off. `tools/batchv_quality.sh` lost its `ptns` arm.
 - Deleted by `@K0SHA_PTCOL@`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_PT_COLBATCH.patch`
   (x_prep/fastpt.mojo). Refusal in `core/experiment_guards_base.mojo`; no `grid_controls` entry existed.
+
+### MOJOLEARN_MCD_BATCH_COMPAT
+
+- What it tried: `-D MOJOLEARN_MCD_BATCH_COMPAT` ran MinCovDet's fast_mcd C-steps on the device with the compact-support,
+  FMA-cell and round-robin eigensolve repairs (x_decomp/mcd_fast.mojo), without the MMA route.
+- Verdict: HOLD-quality, EXPERIMENTS.md (lane/apple-fast-mcd-exact @ ab4265c9a, gap26-mcdrepair-small-ready): taxi cap3000
+  5595.80 -> 828.96 ms, covariance relative difference .0857, precision .9998, support Jaccard .941 (bar .99), final
+  covariance rank 7 -> 6.
+- Deleted: the opt-in name only. The same code is the accepted FAST + Apple `MCD_BATCH_MMA` default, so
+  `MCD_BATCH_COMPAT` is now `MCD_BATCH_MMA`; no default build changes. `tools/mcd_compat_ab.sh` now needs `MCD_DEFINE`.
+- Deleted by `@K0SHA_MCDCOMPAT@`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_MCD_BATCH_COMPAT.patch`
+  (x_decomp/mcd_fast.mojo). Refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry existed.

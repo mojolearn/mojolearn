@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""MOJOLEARN_MCD_BATCH_COMPAT (2026-10-04) is a separate opt-in repair:
+"""MCD_BATCH_COMPAT (2026-10-04; its opt-in define was deleted 2026-11-08, it is now on exactly with MCD_BATCH_MMA) is a repair:
 compact support before legacy scalar 4096-term folds, FMA covariance/distance/LU cells,
 and a parallel round-robin eigensolve using main's rotation and convergence
 rules. It does NOT inherit the failed route's quality approval. Validate
@@ -113,12 +113,11 @@ comptime MCD_BATCH_MMA = (
 # separately accepted default MCD_BATCH_MMA route also sharing this gate.
 # gap26-mcdrepair-small-ready / ab4265c9a: covariance_rel .085678 > .01,
 # support Jaccard .941431 < .99, final covariance rank7 ->6; no promotion.
-# Keep the explicit define opt-in; do not disable the accepted MMA default.
 # See docs/apple-fast/EXPERIMENTS.md and ab/mcd-compat-review.md.
-comptime MCD_BATCH_COMPAT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and (is_defined["MOJOLEARN_MCD_BATCH_COMPAT"]() or MCD_BATCH_MMA)
-)
+# TOMBSTONE: MOJOLEARN_MCD_BATCH_COMPAT (HOLD-quality: the COMPAT-only opt-in arm) deleted 2026-11-08 by
+# @K0SHA_MCDCOMPAT@; code recoverable at 41ffcec665. The shared code stays under the MCD_BATCH_MMA default.
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_BATCH_COMPAT.patch
+comptime MCD_BATCH_COMPAT = MCD_BATCH_MMA
 
 # DROP-quality: mcdq4 (M2 taxi 100k), flagged-mask Jaccard vs OFF
 # .8805 MCD / .9645 EE fails .99; location/covariance shift 14%/18%.

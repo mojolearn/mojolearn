@@ -52,6 +52,9 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_XD_KIT_GEMM"](), "removed 2026-10-11 (lane/w2-decide-linalg, 2256fff37): IDN_XD_KIT_GEMM x_decomp kit GEMM through identical_gemm_into (C6) was NOISE: 8 cells mean 0.971, svd taxi NV 1.145x, bits changed (nv2 v0091, amd a1673); see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_RSVD_ORTH_LEAN.patch
     comptime assert not is_defined["MOJOLEARN_IDN_RSVD_ORTH_LEAN"](), "removed 2026-10-11 (lane/w2-decide-linalg, fdf3608ff): IDN_RSVD_ORTH_LEAN pooled rsvd orth buffers (C7) were NOISE: randomized-svd 0.990/0.977 (nv2 v0092, amd a1674); see docs/TOMBSTONES.md"
+    # Lane consol-k0-dead-code (2026-11-08): loser defines whose gate was still in the code (docs/TOMBSTONES.md batch 3). Code at 41ffcec665.
+    # Restore: git apply experiments/removed/MOJOLEARN_MCD_BATCH_COMPAT.patch
+    comptime assert not is_defined["MOJOLEARN_MCD_BATCH_COMPAT"](), "removed 2026-11-08 (lane consol-k0-dead-code): MOJOLEARN_MCD_BATCH_COMPAT, the COMPAT-only MinCovDet device C-step arm, was HOLD-quality: gap26-mcdrepair-small-ready (ab4265c9a) taxi cap3000 covariance rel .0857, precision rel .9998, support Jaccard .941 < .99, final covariance rank 7 -> 6; the shared code runs under the accepted MCD_BATCH_MMA default (use -D MOJOLEARN_MCD_BATCH_MMA_OFF for the per-candidate path); code at 41ffcec665; see docs/TOMBSTONES.md"
     return True
 
 
