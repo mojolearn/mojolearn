@@ -1092,6 +1092,8 @@ def _transformer_run_session_backward(
     for i in range(10):  # small-loop(10: x and the nine base weight slots): argument words, no data
         fa[i] = a[i]
     _session_arm(session, fa, ints, b, dm, nh, nkv, hd, it, l, 0, window, opts)
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
     session.arm.value().block_backward(a, ints, l)
     _session_arm_budget(session)
 
