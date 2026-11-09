@@ -109,3 +109,5 @@ SmallByteLanguageModelTrainer.train_steps	new multi-step entry: no NVIDIA and AM
 LanguageModelTrainer.train_steps	new multi-step entry: no NVIDIA and AMD reference records yet
 Program.decode	new device decode loop: not compiled or run yet
 mojolearn.ops.Session.state	new carried-state upload: not compiled or run yet
+_GBDTAdapter.save	GradientBoostingClassifier/Regressor.save always raises NotImplementedError (no adapter archive format; pickle works)
+_GBDTAdapter.load	GradientBoostingClassifier/Regressor.load always raises NotImplementedError (no adapter archive format; pickle works)
