@@ -14,7 +14,7 @@ from std.memory import memcpy
 from core.hostptr import read_i32
 from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW
 from x_cnn.ops import PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW
-from x_cnn.ops import FP, IP, argmax_row_at
+from x_cnn.ops import FP, IP
 
 
 @always_inline
@@ -61,13 +61,8 @@ def csr_checked(csr_address: Int, n: Int, F: Int, nnz: Int, mode: Int) raises ->
     return (csr^, prm^)
 
 
-def argmax_rows_into(src: FP, dst: IP, n: Int, k: Int):
-    """`x_cnn_res_argmax` on host memory: `argmax_row_at` for rows 0 .. n-1."""
-    var prm = List[Int32](length=1, fill=Int32(k))
-    var pp = prm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    for i in range(n):
-        argmax_row_at(i, src, src, src, src, dst, pp)
-    _ = prm^
+# TOMBSTONE: x_cnn_res_argmax (CNNClassifier.predict's device argmax; the classifier predicts on the x_sequence program executor since lane x8) deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
+# Restore: git apply experiments/removed/X8B_XCNN_RES_ARGMAX.patch
 
 
 def gather_rows_f32(

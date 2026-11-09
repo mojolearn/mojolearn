@@ -48,7 +48,6 @@ from x_cnn.device import (
     res_free,
     res_upload,
     res_download,
-    res_argmax,
     res_gather,
     res_gather_pair,
     opt_many_resident,
@@ -738,17 +737,8 @@ def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonOb
     return PythonObject(n)
 
 
-def res_argmax_binding(h: PythonObject, dst_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """dst (int32, n) = each row's first largest column of the resident
-    n x k block h (params [n, k]), computed on the device; only the labels
-    come down (lane pyglue-numeric: the classifier's numpy argmax)."""
-    var n = Int(py=params[0])
-    var k = Int(py=params[1])
-    var hh = Int(py=h)
-    var dst = _ip(dst_addr)
-    with GILReleased(Python()):
-        res_argmax(hh, dst, n, k)
-    return PythonObject(n)
+# TOMBSTONE: x_cnn_res_argmax (CNNClassifier.predict's device argmax; the classifier predicts on the x_sequence program executor since lane x8) deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
+# Restore: git apply experiments/removed/X8B_XCNN_RES_ARGMAX.patch
 
 
 def res_download_binding(h: PythonObject, dst_addr: PythonObject, n: PythonObject) raises -> PythonObject:
@@ -1259,7 +1249,7 @@ def build__mojolearn_x_cnn() -> PythonObject:
         m.def_function[res_free_binding]("x_cnn_res_free")
         m.def_function[res_upload_binding]("x_cnn_res_upload")
         m.def_function[res_download_binding]("x_cnn_res_download")
-        m.def_function[res_argmax_binding]("x_cnn_res_argmax")
+        # TOMBSTONE: x_cnn_res_argmax deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
         m.def_function[conv_block_forward_r_binding]("x_cnn_conv_block_forward_r")
         m.def_function[conv_block_backward_r_binding]("x_cnn_conv_block_backward_r")
         m.def_function[res_gather_binding]("x_cnn_res_gather")

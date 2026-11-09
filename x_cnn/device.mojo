@@ -68,7 +68,7 @@ from x_cnn.ops import (
     BN_FOLD_BLOCK, bn_fold_blocks, bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_at,
     bn_blk_red_at, bn_blk_red_fin_at, DROPOUT2D_CH_MASK, dropout2d_chan_at, dropout2d_apply_at,
     pad_fwd_at, pad_bwd_at, adapt_avg_fwd_at, adapt_avg_bwd_at, adapt_max_fwd_at, adapt_max_bwd_at,
-    sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at, gather_rows_at, argmax_row_at,
+    sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at, gather_rows_at,
     chan_slice_at, chan_place_at,
 )
 # lane fix-n1-lm-neural (2026-10-04): the blocked adaptive average fold (audit B9)
@@ -1004,24 +1004,8 @@ def res_gather(dst_addr: Int, src_addr: Int, rows: IP, n: Int, row: Int) raises:
     _ = ctx^
 
 
-def res_argmax(addr: Int, dst: IP, n: Int, k: Int) raises:
-    """dst[i] (int32, host) = row i's `argmax_row_at` of the resident n x k
-    block at `addr`: only the n labels come down."""
-    if n <= 0 or k <= 0:
-        return
-    var ctx = cnn_ctx()
-    var src = view(ctx, FP(unsafe_from_address=addr), n * k)
-    var out = ws_i(ctx, 0, n)
-    var prm: List[Int32] = [Int32(k)]
-    var dp = put_prm(ctx, 1, prm)
-    launch[argmax_row_at](ctx, fp(src), fp(src), fp(src), fp(src), ip(out), ip(dp), n)
-    down_i(ctx, out, dst, n)
-    ctx.synchronize()
-    _ = prm^
-    _ = dp^
-    _ = out^
-    _ = src^
-    _ = ctx^
+# TOMBSTONE: x_cnn_res_argmax (CNNClassifier.predict's device argmax; the classifier predicts on the x_sequence program executor since lane x8) deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
+# Restore: git apply experiments/removed/X8B_XCNN_RES_ARGMAX.patch
 
 
 def res_download(addr: Int, dst: FP, n: Int) raises:

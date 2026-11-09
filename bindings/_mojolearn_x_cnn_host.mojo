@@ -22,7 +22,7 @@ from x_cnn.ops import NN14_BOUNDED_IM2COL
 from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, conv_params
 from x_cnn.ops import PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW, pool_params
 from x_cnn.host.ops_host import X_CNN_HOST_SABOTAGE
-from x_cnn.ops import FP, IP, argmax_row_at
+from x_cnn.ops import FP, IP
 from x_cnn.host.gemm_host import gemm_host_into
 from x_cnn.host.ops_host import conv2d_forward_into, conv2d_backward_into
 from x_cnn.host.ops_host import conv_block_forward_into, conv_block_backward_into
@@ -49,7 +49,6 @@ from x_cnn.host.binding_entries_impl import (
     pool_counts as _pool_counts,
     check_labels_below,
     csr_checked,
-    argmax_rows_into,
     gather_rows_f32,
 )
 from x_cnn.ops import idn2_flags, neural_tape_budget_bytes, neural_numerical_profile
@@ -751,16 +750,8 @@ def res_upload_binding(h: PythonObject, src_addr: PythonObject, n: PythonObject)
     return PythonObject(nn)
 
 
-def res_argmax_binding(h: PythonObject, dst_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """The GPU binding's `x_cnn_res_argmax` on host memory: the same item."""
-    var n = Int(py=params[0])
-    var k = Int(py=params[1])
-    if n > 0 and k > 0:
-        var src = FP(unsafe_from_address=Int(py=h))
-        var dst = IP(unsafe_from_address=Int(py=dst_addr))
-        with GILReleased(Python()):  # p3-cnn-sequence-tsa
-            argmax_rows_into(src, dst, n, k)
-    return PythonObject(n)
+# TOMBSTONE: x_cnn_res_argmax (CNNClassifier.predict's device argmax; the classifier predicts on the x_sequence program executor since lane x8) deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
+# Restore: git apply experiments/removed/X8B_XCNN_RES_ARGMAX.patch
 
 
 def res_download_binding(h: PythonObject, dst_addr: PythonObject, n: PythonObject) raises -> PythonObject:
@@ -910,7 +901,7 @@ def build__mojolearn_x_cnn_host() -> PythonObject:
         m.def_function[res_free_binding]("x_cnn_res_free")
         m.def_function[res_upload_binding]("x_cnn_res_upload")
         m.def_function[res_download_binding]("x_cnn_res_download")
-        m.def_function[res_argmax_binding]("x_cnn_res_argmax")
+        # TOMBSTONE: x_cnn_res_argmax deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
         m.def_function[conv_block_forward_r_binding]("x_cnn_conv_block_forward_r")
         m.def_function[conv_block_backward_r_binding]("x_cnn_conv_block_backward_r")
         m.def_function[res_gather_binding]("x_cnn_res_gather")

@@ -68,7 +68,6 @@ _NAMES = (
     "x_cnn_relu_forward",
     "x_cnn_res_alloc",
     "x_cnn_res_alloc_nofill",
-    "x_cnn_res_argmax",
     "x_cnn_res_download",
     "x_cnn_res_free",
     "x_cnn_res_gather",
