@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """WHERE AN OPERATION RUNS. `Exec` (`sequence/exec_trait.mojo`) is the one interface the lane's algorithms
-are written against (`sequence/recurrent.mojo`); `HostExec` (here, no GPU
-import) runs each operation as an ascending host loop over its elements and
+are written against (`sequence/recurrent.mojo`); `HostExec` (here; no GPU
+binding imports it, and since lane x7b it imports the block step ops' host
+arm, whose step-op layouts live with the device table in
+autograd/block_step_ops.mojo) runs each operation as an ascending host loop over its elements and
 `DeviceExec` (`sequence/exec_device.mojo`) as one GPU thread per element.
 The element body is the same function (`sequence/ops.mojo::apply`), so the
 two agree bit for bit by construction.
