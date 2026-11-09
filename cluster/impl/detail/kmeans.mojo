@@ -92,7 +92,6 @@ from cluster.checks.reduce_by_key import (
     SUM_MODE_SQDIFF,
     copy_f32_gated_kernel,
     copy_f32_kernel,
-    kmeans_conv_step_kernel,
     launch_accumulate_centroid_sums_blocked_gated,
     launch_accumulate_weight_per_cluster_blocked_gated,
     finish_sum_kernel,
@@ -124,6 +123,10 @@ from cluster.impl.detail.min_cluster_distance_compute import (
     min_cluster_and_distance_compute_gated,
 )
 from core.device_plan import DevicePlan
+from autograd.program_loop import LoopTimers
+from autograd.program_loop_device import (
+    LoopRegisters, LoopStep, bounded_device_loop, loop_criterion_below, loop_lap,
+)
 from cluster.multi_gpu import assignment_device_count, kmeans_device_plan
 from std.memory import bitcast
 from cluster.impl.kmeans_params import (
@@ -185,7 +188,9 @@ comptime IDN_KMEANS_FOLD_STORE = (
 )
 #: fam2-cluster (2026-10-04), IDENTICAL, with the row-block accumulator: THE
 #: STOPPING RULE ON THE DEVICE. The Lloyd loop no longer drains once per
-#: iteration to read the shift scalar. `kmeans_conv_step_kernel` compares the
+#: iteration to read the shift scalar. The executor loop's criterion op
+#: (`loop_below_kernel`, autograd/program_loop_device.mojo; formerly
+#: `kmeans_conv_step_kernel`) compares the
 #: device shift with the tolerance and sets a device flag; the two heavy
 #: kernels of an iteration (the fused assignment, `n x k x d`, and the
 #: row-block accumulate, `n x d`) and the centroid copy-back return at once
@@ -1531,6 +1536,165 @@ fits without the inertia check, with `params.lazy_shift` set, only."""
 comptime KMEANS_LAZY_SHIFT_EVERY = KMEANS_LAZY_EVERY  # shared with the host restatement
 
 
+struct LloydStep(LoopStep, Movable):
+    """One Lloyd iteration as a step op of the executor's bounded loop
+    (`autograd/program_loop_device.mojo`), `IDN_KMEANS_DEVICE_CONV` form:
+    centroid norms, the gated fused assignment, the gated row-block
+    accumulations of the sums and the weights, the centroid finalize, the
+    shift reduction, the gated copy back, and the "shift below tol" criterion.
+    Every gated kernel returns at once when the loop's done word is set, so
+    iterations enqueued past convergence leave labels, centroids, inertia and
+    `n_iter` as the converging iteration left them. The fields are handle
+    copies (`DeviceBuffer.copy()` shares the memory the fit owns)."""
+    var x: DeviceBuffer[DType.float32]
+    var x_norm: DeviceBuffer[DType.float32]
+    var cur_centroids: DeviceBuffer[DType.float32]
+    var centroid_norm: DeviceBuffer[DType.float32]
+    var labels: DeviceBuffer[DType.uint32]
+    var min_dist: DeviceBuffer[DType.float32]
+    var sums_i32: DeviceBuffer[DType.int32]
+    var acc_table: DeviceBuffer[DType.int32]
+    var weights: DeviceBuffer[DType.float32]
+    var weight_i32: DeviceBuffer[DType.int32]
+    var acc_table_w: DeviceBuffer[DType.int32]
+    var new_centroids: DeviceBuffer[DType.float32]
+    var partials: DeviceBuffer[DType.float32]
+    var d_shift: DeviceBuffer[DType.float32]
+    var n_samples: Int
+    var n_features: Int
+    var n_clusters: Int
+    var metric: Int
+    var sum_scale: Float32
+    var weight_scale: Float32
+    var conv_thresh: Float32
+
+    def __init__(
+        out self,
+        x: DeviceBuffer[DType.float32],
+        x_norm: DeviceBuffer[DType.float32],
+        cur_centroids: DeviceBuffer[DType.float32],
+        centroid_norm: DeviceBuffer[DType.float32],
+        labels: DeviceBuffer[DType.uint32],
+        min_dist: DeviceBuffer[DType.float32],
+        sums_i32: DeviceBuffer[DType.int32],
+        acc_table: DeviceBuffer[DType.int32],
+        weights: DeviceBuffer[DType.float32],
+        weight_i32: DeviceBuffer[DType.int32],
+        acc_table_w: DeviceBuffer[DType.int32],
+        new_centroids: DeviceBuffer[DType.float32],
+        partials: DeviceBuffer[DType.float32],
+        d_shift: DeviceBuffer[DType.float32],
+        n_samples: Int,
+        n_features: Int,
+        n_clusters: Int,
+        metric: Int,
+        sum_scale: Float32,
+        weight_scale: Float32,
+        conv_thresh: Float32,
+    ):
+        self.x = x.copy()
+        self.x_norm = x_norm.copy()
+        self.cur_centroids = cur_centroids.copy()
+        self.centroid_norm = centroid_norm.copy()
+        self.labels = labels.copy()
+        self.min_dist = min_dist.copy()
+        self.sums_i32 = sums_i32.copy()
+        self.acc_table = acc_table.copy()
+        self.weights = weights.copy()
+        self.weight_i32 = weight_i32.copy()
+        self.acc_table_w = acc_table_w.copy()
+        self.new_centroids = new_centroids.copy()
+        self.partials = partials.copy()
+        self.d_shift = d_shift.copy()
+        self.n_samples = n_samples
+        self.n_features = n_features
+        self.n_clusters = n_clusters
+        self.metric = metric
+        self.sum_scale = sum_scale
+        self.weight_scale = weight_scale
+        self.conv_thresh = conv_thresh
+
+    def enqueue_step(
+        mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
+    ) raises:
+        var cd = self.n_clusters * self.n_features
+        comptime if not IDN_KMEANS_FOLD_STORE:
+            ctx.enqueue_function[zero_i32_kernel](
+                self.sums_i32.unsafe_ptr(),
+                Int32(cd),
+                grid_dim=((cd + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+            ctx.enqueue_function[zero_i32_kernel](
+                self.weight_i32.unsafe_ptr(),
+                Int32(self.n_clusters),
+                grid_dim=((self.n_clusters + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+            loop_lap(ctx, timers, "zero_accumulators")
+        compute_centroid_norms(
+            ctx, self.cur_centroids, self.centroid_norm, self.n_clusters,
+            self.n_features, self.metric,
+        )
+        loop_lap(ctx, timers, "centroid_norms")
+        # Tried 2026-10-08 (MOJOLEARN_C37_FUSED_ACCUMULATE + MOJOLEARN_C37_FUSED_ROWS, run ge123e6f9): fused Lloyd assignment + Int32
+        # row-block centroid accumulation in shared memory, X read once per iteration. NV/AMD kmeans istella 104.8x/0.841x,
+        # taxi 68.6x/0.895x (vendor split); combined 9.4x/7.8x SLOWER; inertia SAME -> deleted. Recoverable at main 42d1e42c6;
+        # row in docs/apple-fast/EXPERIMENTS.md.
+        min_cluster_and_distance_compute_gated(
+            ctx, registers.words, self.x, self.x_norm, self.cur_centroids,
+            self.centroid_norm, self.labels, self.min_dist, self.n_samples,
+            self.n_features, self.n_clusters, self.metric,
+        )
+        loop_lap(ctx, timers, "assign")
+        launch_accumulate_centroid_sums_blocked_gated[
+            KMEANS_BLOCK_ACC_SABOTAGE, IDN_KMEANS_FOLD_STORE
+        ](
+            ctx, registers.words, self.sums_i32, self.acc_table, self.x, self.labels,
+            self.weights, self.n_samples, self.n_features, self.n_clusters,
+            self.sum_scale,
+        )
+        loop_lap(ctx, timers, "accumulate_sums")
+        launch_accumulate_weight_per_cluster_blocked_gated[
+            IDN_KMEANS_FOLD_STORE
+        ](
+            ctx, registers.words, self.weight_i32, self.acc_table_w, self.labels,
+            self.weights, self.n_samples, self.n_clusters, self.weight_scale,
+        )
+        loop_lap(ctx, timers, "accumulate_weights")
+        ctx.enqueue_function[finalize_centroids_kernel](
+            self.new_centroids.unsafe_ptr(),
+            self.cur_centroids.unsafe_ptr(),
+            self.sums_i32.unsafe_ptr(),
+            self.weight_i32.unsafe_ptr(),
+            Int32(self.n_clusters),
+            Int32(self.n_features),
+            self.sum_scale,
+            self.weight_scale,
+            grid_dim=((cd + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        loop_lap(ctx, timers, "finalize")
+        _sum_device(
+            ctx, self.cur_centroids, self.new_centroids, self.partials,
+            self.d_shift, cd, SUM_MODE_SQDIFF,
+        )
+        loop_lap(ctx, timers, "shift")
+        # The copy back reads the flag BEFORE this iteration's test sets it,
+        # so the converging iteration still copies, as the host loop does.
+        ctx.enqueue_function[copy_f32_gated_kernel](
+            registers.words.unsafe_ptr(),
+            self.cur_centroids.unsafe_ptr(),
+            self.new_centroids.unsafe_ptr(),
+            Int32(cd),
+            grid_dim=((cd + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        loop_lap(ctx, timers, "copy_back")
+        loop_criterion_below(ctx, registers, self.d_shift, self.conv_thresh, it)
+        loop_lap(ctx, timers, "criterion")
+
+
 def kmeans_fit_main_traced(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
@@ -1642,10 +1806,11 @@ def kmeans_fit_main_traced(
     var d_shift = ctx.enqueue_create_buffer[DType.float32](1)
     var h_shift = ctx.enqueue_create_host_buffer[DType.float32](1)
     var h_cost = ctx.enqueue_create_host_buffer[DType.float32](1)
-    # `IDN_KMEANS_DEVICE_CONV`: [0] the done flag, [1] the iteration that
-    # converged. Zeroed at the start of every restart.
-    var d_conv = ctx.enqueue_create_buffer[DType.int32](2)
-    var h_conv = ctx.enqueue_create_host_buffer[DType.int32](2)
+    # `IDN_KMEANS_DEVICE_CONV`: the executor loop's register block
+    # (autograd/program_loop.mojo): [LOOP_DONE] the done flag the gated step
+    # kernels read, [LOOP_STOP_ITER] the iteration that converged. Zeroed by
+    # `bounded_device_loop` at the start of every restart.
+    var registers = LoopRegisters(ctx)
     var dev_conv = False
     comptime if IDN_KMEANS_DEVICE_CONV:
         dev_conv = (
@@ -1757,104 +1922,29 @@ def kmeans_fit_main_traced(
         var it = 1
         comptime if IDN_KMEANS_DEVICE_CONV:
             if dev_conv:
-                ctx.enqueue_function[zero_i32_kernel](
-                    d_conv.unsafe_ptr(),
-                    Int32(2),
-                    grid_dim=(1, 1, 1),
-                    block_dim=(256, 1, 1),
+                # Lane fix-d3-executor-loops (2026-11-08): the Lloyd iterations
+                # run as the executor's bounded loop over one step op
+                # (`LloydStep`: the same kernels, arguments and order as the
+                # hand-written chunk loop it replaces, so no bit moves), with
+                # one register-block read per KMEANS_CONV_CHUNK iterations.
+                # TOMBSTONE: kmeans-lloyd-chunk-driver-loop (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-08 by lane/fix-d3-executor-loops; code recoverable at the deletion commit^.
+                # Restore: git apply experiments/removed/KMEANS_LLOYD_CHUNK_DRIVER_LOOP.patch; record in docs/TOMBSTONES.md.
+                var step = LloydStep(
+                    x, x_norm, cur_centroids, centroid_norm, labels, min_dist,
+                    sums_i32, acc_table, weights, weight_i32, acc_table_w,
+                    new_centroids, partials, d_shift, n_samples, n_features,
+                    n_clusters, params.metric, sum_scale, weight_scale,
+                    conv_thresh,
                 )
-                var conv_seen = False
-                while it <= params.max_iter and not conv_seen:
-                    var chunk_end = it + KMEANS_CONV_CHUNK - 1
-                    if chunk_end > params.max_iter:
-                        chunk_end = params.max_iter
-                    while it <= chunk_end:
-                        comptime if not IDN_KMEANS_FOLD_STORE:
-                            ctx.enqueue_function[zero_i32_kernel](
-                                sums_i32.unsafe_ptr(),
-                                Int32(cd),
-                                grid_dim=((cd + 255) // 256, 1, 1),
-                                block_dim=(256, 1, 1),
-                            )
-                            ctx.enqueue_function[zero_i32_kernel](
-                                weight_i32.unsafe_ptr(),
-                                Int32(n_clusters),
-                                grid_dim=((n_clusters + 255) // 256, 1, 1),
-                                block_dim=(256, 1, 1),
-                            )
-                        compute_centroid_norms(
-                            ctx, cur_centroids, centroid_norm, n_clusters,
-                            n_features, params.metric,
-                        )
-                        # Tried 2026-10-08 (MOJOLEARN_C37_FUSED_ACCUMULATE + MOJOLEARN_C37_FUSED_ROWS, run ge123e6f9): fused Lloyd assignment + Int32
-                        # row-block centroid accumulation in shared memory, X read once per iteration. NV/AMD kmeans istella 104.8x/0.841x,
-                        # taxi 68.6x/0.895x (vendor split); combined 9.4x/7.8x SLOWER; inertia SAME -> deleted. Recoverable at main 42d1e42c6;
-                        # row in docs/apple-fast/EXPERIMENTS.md.
-                        min_cluster_and_distance_compute_gated(
-                            ctx, d_conv, x, x_norm, cur_centroids,
-                            centroid_norm, labels, min_dist, n_samples,
-                            n_features, n_clusters, params.metric,
-                        )
-                        launch_accumulate_centroid_sums_blocked_gated[
-                            KMEANS_BLOCK_ACC_SABOTAGE, IDN_KMEANS_FOLD_STORE
-                        ](
-                            ctx, d_conv, sums_i32, acc_table, x, labels,
-                            weights, n_samples, n_features, n_clusters,
-                            sum_scale,
-                        )
-                        launch_accumulate_weight_per_cluster_blocked_gated[
-                            IDN_KMEANS_FOLD_STORE
-                        ](
-                            ctx, d_conv, weight_i32, acc_table_w, labels,
-                            weights, n_samples, n_clusters, weight_scale,
-                        )
-                        ctx.enqueue_function[finalize_centroids_kernel](
-                            new_centroids.unsafe_ptr(),
-                            cur_centroids.unsafe_ptr(),
-                            sums_i32.unsafe_ptr(),
-                            weight_i32.unsafe_ptr(),
-                            Int32(n_clusters),
-                            Int32(n_features),
-                            sum_scale,
-                            weight_scale,
-                            grid_dim=((cd + 255) // 256, 1, 1),
-                            block_dim=(256, 1, 1),
-                        )
-                        _sum_device(
-                            ctx, cur_centroids, new_centroids, partials,
-                            d_shift, cd, SUM_MODE_SQDIFF,
-                        )
-                        # The copy back reads the flag BEFORE this
-                        # iteration's test sets it, so the converging
-                        # iteration still copies, as the host loop does.
-                        ctx.enqueue_function[copy_f32_gated_kernel](
-                            d_conv.unsafe_ptr(),
-                            cur_centroids.unsafe_ptr(),
-                            new_centroids.unsafe_ptr(),
-                            Int32(cd),
-                            grid_dim=((cd + 255) // 256, 1, 1),
-                            block_dim=(256, 1, 1),
-                        )
-                        ctx.enqueue_function[kmeans_conv_step_kernel](
-                            d_conv.unsafe_ptr(),
-                            d_shift.unsafe_ptr(),
-                            conv_thresh,
-                            Int32(it),
-                            grid_dim=(1, 1, 1),
-                            block_dim=(1, 1, 1),
-                        )
-                        it += 1
-                    # ONE read per chunk.
-                    ctx.enqueue_copy(
-                        dst_ptr=h_conv.unsafe_ptr(), src_buf=d_conv
-                    )
-                    ctx.synchronize()
-                    if Int(h_conv.unsafe_ptr().unsafe_load(0)) != 0:
-                        conv_seen = True
-                        n_current_iter = Int(
-                            h_conv.unsafe_ptr().unsafe_load(1)
-                        )
-                        it = n_current_iter
+                var timers = LoopTimers(restart_tag + "kmeans.lloyd")
+                var outcome = bounded_device_loop(
+                    ctx, step, registers, it, params.max_iter,
+                    KMEANS_CONV_CHUNK, timers,
+                )
+                timers.report()
+                it = outcome.next_iteration
+                if outcome.converged:
+                    n_current_iter = outcome.stop_iteration
         while (not dev_conv) and it <= params.max_iter:
             comptime if not IDN_KMEANS_FOLD_STORE:
                 ctx.enqueue_function[zero_i32_kernel](
@@ -2173,7 +2263,7 @@ def kmeans_fit_main_traced(
     # Launches hold raw pointers: keep the tables alive past the last sync.
     _ = acc_table^
     _ = acc_table_w^
-    _ = d_conv^
+    _ = registers^
     if trace.enabled:
         trace.record_device(ctx, tag_prefix + "fit.centroids", centroids, cd)
         trace.record_device(ctx, tag_prefix + "fit.labels", labels, n_samples)
