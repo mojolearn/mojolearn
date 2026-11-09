@@ -32,6 +32,10 @@ def _check_configuration() -> Bool:
     # Deleted 2026-11-09 (lane x4-transformer-on-executor): the device per-call fresh prefill entry and the public
     # decode session's deferred-check window (docs/TOMBSTONES.md). Recoverable at f59d913b0b.
     comptime assert not (is_defined["MOJOLEARN_TRANSFORMER_FRESH_PREFILL"]() or is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"]()), "removed: MOJOLEARN_TRANSFORMER_FRESH_PREFILL / MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (the GPU binding's per-call transformer_forward_fresh) superseded by the block session's fresh prefill; deleted 2026-11-09, recoverable at f59d913b0b; see docs/TOMBSTONES.md"
+    # Deleted 2026-11-09 (lane x7-byte-lm-on-executor): the byte LM trainer's hand step, whose arms these were
+    # (the step is the trainer's captured program on Program.fit now). Never measured as defaults; docs/TOMBSTONES.md
+    # "BYTE_LM_HAND_STEP". Recoverable at the deletion commit's parent on lane/x7-byte-lm-on-executor.
+    comptime assert not (is_defined["MOJOLEARN_IDN_TRAIN_ONE_WAIT"]() or is_defined["MOJOLEARN_AFN_LM_NOSYNC"]() or is_defined["MOJOLEARN_AFN26_LM_NOSYNC"]() or is_defined["MOJOLEARN_AFN_LM_HEAD_FUSE"]() or is_defined["MOJOLEARN_AFN26_LM_HEAD_FUSE"]()), "removed: MOJOLEARN_IDN_TRAIN_ONE_WAIT / MOJOLEARN_AFN_LM_NOSYNC / MOJOLEARN_AFN_LM_HEAD_FUSE (and the AFN26 spellings): arms of the byte LM's hand step, deleted 2026-11-09 with it (lane x7-byte-lm-on-executor: the trainer runs one captured program on Program.fit); see docs/TOMBSTONES.md BYTE_LM_HAND_STEP"
     comptime assert get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_DEPTH",2]() == 1 or get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_DEPTH",2]() == 2, "invalid neural STAGE_DEPTH configuration"
     comptime assert get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_PAD",0]() == 0 or get_defined_int["MOJOLEARN_IDN_NEURAL_STAGE_PAD",0]() == 1, "invalid neural STAGE_PAD configuration"
     comptime assert get_defined_int["MOJOLEARN_IDN_NEURAL_FILL_BLOCKS",1]() > 0, "positive neural resource budget required"
