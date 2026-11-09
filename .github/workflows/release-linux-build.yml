@@ -280,6 +280,11 @@ jobs:
           B="$RUNNER_TEMP/w/out/release/$VENDOR-$ARCH/release-build/build"
           cp -r "$B/bincache" "$D/report/bincache" 2>/dev/null || true
           cp -r "$B/build_logs" "$D/report/build_logs" 2>/dev/null || true
+          # LOGS ONLY (Andrew, 2026-11-09). packaging/adapters/build.sh extracts the pinned PyTorch wheel under
+          # build_logs/adapters/torch-build (libtorch_cpu.so 422 MB and 85,000 headers). It is a build input, not
+          # evidence: every shard uploaded it, about 490 MB x shards x sets, 22 GB per release on the Mac. Keep
+          # torch-build.json (version, ABI, sha256) and drop the tree.
+          find "$D/report/build_logs/adapters/torch-build" -mindepth 1 -maxdepth 1 ! -name '*.json' -exec rm -rf {} + 2>/dev/null || true
           cp "$B/compile-inputs.json" "$D/report/compile-inputs.json" 2>/dev/null || true
           { echo "### shard $VENDOR-$ARCH $SHARD"; echo '```'; cat "$D/report/shard.tsv" "$D/report/memory.txt" "$D/report/swap.txt" "$D/report/guard.jsonl" 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
