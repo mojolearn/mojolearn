@@ -108,6 +108,15 @@ from gbdt.methods.pointwise_optimization_subsets import (
     split_subsets_from_desc,
     update_subsets_stats,
 )
+from gbdt.methods.kernel.tree_gate_walk import (
+    TREE_STRUCT_DEPTH,
+    TREE_STRUCT_SPLITS,
+    TREE_STRUCT_SPLIT_WORDS,
+    TREE_STRUCT_STATUS,
+    tree_op_gate_walk,
+    tree_structure_words,
+)
+from core.device_zero import enqueue_fill
 from gbdt.methods.kernel.pointwise_split_resolve import (
     PW_FUSED_SEARCH,
     PW_SENTINEL_ID,
@@ -309,6 +318,13 @@ struct PointwiseTreeWorkspace(Movable):
     var d_feat_table: DeviceBuffer[DType.uint32]
     var h_winners_ids: HostBuffer[DType.uint32]
     var h_winners_scores: HostBuffer[DType.float32]
+    # lane t1-tree-builder-ops: the tree's structure record written by the
+    # device gate walk (`tree_op_gate_walk`, gbdt/methods/kernel/
+    # tree_gate_walk.mojo) and its host copy on the one drain; the open
+    # gate word the walk takes outside a device loop.
+    var d_structure: DeviceBuffer[DType.int32]
+    var h_structure: HostBuffer[DType.int32]
+    var d_gate_open: DeviceBuffer[DType.int32]
 
     def __init__(
         out self,
@@ -353,6 +369,14 @@ struct PointwiseTreeWorkspace(Movable):
         self.h_winners_scores = ctx.enqueue_create_host_buffer[
             DType.float32
         ](2 * max_depth)
+        self.d_structure = ctx.enqueue_create_buffer[DType.int32](
+            tree_structure_words(max_depth)
+        )
+        self.h_structure = ctx.enqueue_create_host_buffer[DType.int32](
+            tree_structure_words(max_depth)
+        )
+        self.d_gate_open = ctx.enqueue_create_buffer[DType.int32](1)
+        enqueue_fill(ctx, self.d_gate_open, Int32(0))
 
         # the same three values the host loop read from
         # `layout.features[fid]`, plus the same `one_hot[fid]` guard
@@ -1156,15 +1180,47 @@ def fit_oblivious_tree_structure_traced(
 
     # ---- THE ONE DRAIN OF THE TREE (DEVIATION 207) -------------------
     # Their per-level `ReadOptimalSplit`, folded into one: the winner
-    # records hold every level and ride home behind everything the loop
+    # records hold every level; the gates (below) walk them on the device
+    # and the structure record rides home behind everything the loop
     # enqueued.
+    #
+    # ============ THE GATES, POST-TREE ================================
+    # The host loop applied these BEFORE each split; the walk applies them
+    # in LEVEL ORDER, so the first stop at level k discards levels k..
+    # exactly as the loop would never have grown them, and the returned
+    # structure is unchanged record for record. Lane t1-tree-builder-ops:
+    # the walk is the device op TREE_OP_GATE_WALK
+    # (`tree_gate_walk_kernel`, the host loop that stood here statement for
+    # statement; integer work, so the same structure on every column). The
+    # host keeps only the copy into `TBinarySplit`s and the raise.
+    #
+    # `split_type`, and the constants are NOT in the order the names
+    # suggest: `BIN_SPLIT_TAKE_BIN` is 0 and `BIN_SPLIT_TAKE_GREATER`
+    # is 1 (`oblivious_model.mojo:36-37`). Writing `1 if one_hot else
+    # 0` makes every ORDINARY feature an equality test, which still
+    # grows a well-formed tree of the right depth with the right
+    # splits and partitions the rows completely differently -- 8
+    # non-empty leaves instead of 12. That is how this was found:
+    # identical structure, different leaf values. The kernel writes
+    # TAKE_BIN for a one-hot feature (word 3 of `d_feat_table`, the same
+    # `one_hot[fid]` guard) and TAKE_GREATER otherwise.
     times.begin(ctx)
-    ctx.enqueue_copy(
-        dst_buf=pool[0].h_winners_ids, src_buf=pool[0].d_winners_ids
+    tree_op_gate_walk(
+        ctx, pool[0].d_gate_open, pool[0].d_winners_ids,
+        pool[0].d_feat_table, max_depth, pool[0].d_structure,
     )
     ctx.enqueue_copy(
-        dst_buf=pool[0].h_winners_scores, src_buf=pool[0].d_winners_scores
+        dst_buf=pool[0].h_structure, src_buf=pool[0].d_structure
     )
+    if trace.enabled:
+        # the winner records feed only the identity checkpoint now
+        ctx.enqueue_copy(
+            dst_buf=pool[0].h_winners_ids, src_buf=pool[0].d_winners_ids
+        )
+        ctx.enqueue_copy(
+            dst_buf=pool[0].h_winners_scores,
+            src_buf=pool[0].d_winners_scores,
+        )
     # TOMBSTONE: MOJOLEARN_SYM_REUSE_PARTITION (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (the final
     # partition's records on this drain); code recoverable at b639a2bd2.
     ctx.synchronize()
@@ -1174,65 +1230,35 @@ def fit_oblivious_tree_structure_traced(
     # Every level's (feature, bin) and score pair, exactly as the one
     # drain brought them home; hashed from the HOST copies, so this adds
     # no device traffic of its own.
-    trace.record_host(
-        tree_tag + ".winners.ids",
-        pool[0].h_winners_ids.unsafe_ptr(),
-        2 * max_depth,
-    )
-    trace.record_host(
-        tree_tag + ".winners.scores",
-        pool[0].h_winners_scores.unsafe_ptr(),
-        2 * max_depth,
-    )
+    if trace.enabled:
+        trace.record_host(
+            tree_tag + ".winners.ids",
+            pool[0].h_winners_ids.unsafe_ptr(),
+            2 * max_depth,
+        )
+        trace.record_host(
+            tree_tag + ".winners.scores",
+            pool[0].h_winners_scores.unsafe_ptr(),
+            2 * max_depth,
+        )
 
-    # ============ THE GATES, POST-TREE ================================
-    # The host loop applied these BEFORE each split; the walk applies them
-    # in LEVEL ORDER, so the first stop at level k discards levels k..
-    # exactly as the loop would never have grown them, and the returned
-    # structure is unchanged record for record.
-    for depth2 in range(max_depth):  # small-loop(max_depth: tree levels, at most 16): the winner records become the split list
-        var fid_u = pool[0].h_winners_ids[2 * depth2]
-        var bin_u = pool[0].h_winners_ids[2 * depth2 + 1]
-
-        if fid_u == PW_SENTINEL_ID:
-            raise Error(
-                "best split is undefined at depth "
-                + String(depth2)
-                + ": every candidate scored non-finite. Theirs raises the"
-                " same way (`:122`)."
-            )
-
-        var fid = Int(fid_u)
-        var is_one_hot = False
-        if len(one_hot) == len(layout.features):
-            is_one_hot = one_hot[fid]
-
-        # `structure.HasSplit(bestSplit)` (`:134`), BEFORE applying it
-        var seen = False
-        for i in range(len(structure)):  # small-loop(structure: splits so far, at most 16): the HasSplit repeat test
-            if (
-                structure[i].feature_id == Int32(fid)
-                and structure[i].bin_idx == Int32(bin_u)
-            ):
-                seen = True
-        if seen:
-            break
-
-        # `split_type`, and the constants are NOT in the order the names
-        # suggest: `BIN_SPLIT_TAKE_BIN` is 0 and `BIN_SPLIT_TAKE_GREATER`
-        # is 1 (`oblivious_model.mojo:36-37`). Writing `1 if one_hot else
-        # 0` makes every ORDINARY feature an equality test, which still
-        # grows a well-formed tree of the right depth with the right
-        # splits and partitions the rows completely differently -- 8
-        # non-empty leaves instead of 12. That is how this was found:
-        # identical structure, different leaf values.
+    var hs = pool[0].h_structure.unsafe_ptr()
+    var status = Int(hs.unsafe_load(TREE_STRUCT_STATUS))
+    if status > 0:
+        raise Error(
+            "best split is undefined at depth "
+            + String(status - 1)
+            + ": every candidate scored non-finite. Theirs raises the"
+            " same way (`:122`)."
+        )
+    var kept = Int(hs.unsafe_load(TREE_STRUCT_DEPTH))
+    for k in range(kept):  # small-loop(kept: tree levels, at most 16): the device structure record becomes the split list
+        var at = TREE_STRUCT_SPLITS + TREE_STRUCT_SPLIT_WORDS * k
         structure.append(
             TBinarySplit(
-                Int32(fid),
-                Int32(bin_u),
-                Int32(BIN_SPLIT_TAKE_BIN) if is_one_hot else Int32(
-                    BIN_SPLIT_TAKE_GREATER
-                ),
+                hs.unsafe_load(at),
+                hs.unsafe_load(at + 1),
+                hs.unsafe_load(at + 2),
             )
         )
 
