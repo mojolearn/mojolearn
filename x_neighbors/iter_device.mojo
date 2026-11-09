@@ -3243,10 +3243,8 @@ comptime LPK_FAST_BUILD = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
 comptime LP_IDN_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
-def lp_fast_resident() -> Int:
-    """1: this binary takes the resident kNN-graph loop (`lp_iterate_knn`),
-    on every vendor and tier."""
-    return 1
+# TOMBSTONE: x_neighbors_lp_fast_resident (dead export: always 1, the resident kNN-graph loop is the only path) deleted 2026-11-09 by lane/n3b-sgd-on-program-fit; code recoverable at 5b5490960d.
+# Restore: git apply -3 experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch
 
 
 # Lane n3b-sgd-on-program-fit (2026-11-09): both kNN-graph loops (IDENTICAL's item
