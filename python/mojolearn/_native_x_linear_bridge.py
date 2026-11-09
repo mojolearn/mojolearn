@@ -11,7 +11,9 @@ _X_LINEAR_ENTRIES = ("x_linear_fit", "x_linear_decision", "x_linear_decision_cod
 _BASE_HELPERS = ("fold_ids", "select_fold_i64", "assign_fold_i64", "check_indices_i64", "count_fold_hits_i64",
                  "mark_split_roles_f32", "row_means_f64", "gather_rows_bytes", "reduce_stat")
 _X_LINEAR_OPTIONAL = ("x_linear_numeric_mode", "x_linear_vendor", "x_linear_decision_rows",
-                      "x_linear_decision_huber_out")
+                      "x_linear_decision_huber_out",
+                      # lane a8c: the Ridge fit over a device-resident CV fold (IDENTICAL GPU builds only)
+                      "x_linear_fit_fold")
 
 
 def _refusal(error):

@@ -44,6 +44,7 @@ from bindings.classical_score import classical_r2_score
 from bindings.classical_warnings import classical_warning
 from bindings.prep_native_estimator import prep_native_context, prep_native_split
 from bindings.msel_inputs import msel_admit
+from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
 from bindings.admitted_input import (
     AdmittedX, admit_x_unrecorded, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
     classical_view, admit_ids, admitted_finite_refuse, admitted_finite_entry_refuse,
@@ -436,6 +437,43 @@ def _xl_run(entries: PythonObject, algo: Int, x_addr: Int, x_size: Int, n: Int, 
                       ip, fp, PythonObject(labels_address(out)))
     _ = zero  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
+    _ = zero^
+    return out
+
+
+def _xl_fold_matrix(source: PythonObject, est: String, entries: PythonObject, context: PythonObject) raises -> AdmittedX:
+    """`_xl_matrix` for a fit whose binding reads a device fold
+    (`x_linear_fit_fold`, lane a8c-device-x-linear-prep-rfe): a model-
+    selection DeviceRows fold keeps its rows on the device (the result's
+    `store` is active and no host words exist); any other input, or a binding
+    without the fold entry, is `_xl_matrix`'s."""
+    if py_get(entries, "x_linear_fit_fold") is not None and door_is_device_rows(source, context):
+        return admit_x_unrecorded(source, est, context, defer_finite=True, device_x=True)
+    return _xl_matrix(source, est, context)
+
+
+def _xl_run_x(model: PythonObject, entries: PythonObject, algo: Int, x: AdmittedX, y_addr: Int, y_size: Int,
+              ip: PythonObject, fp: PythonObject, n_out: Int, n_fw: Int, n_iw: Int,
+              context: PythonObject) raises -> PythonObject:
+    """`_xl_run` over an admitted X: a device-resident fold (`x.store`) is
+    fitted by `x_linear_fit_fold` on rows gathered on the device (no host
+    gather, no upload of X) and refused on its words; any other X by
+    `x_linear_fit` from its host words."""
+    if not x.store.active():
+        return _xl_run(entries, algo, x.address, x.rows * x.cols, x.rows, x.cols, y_addr, y_size, ip, fp, n_out,
+                       n_fw, n_iw, context)
+    var out = admitted_vector(n_out, "<f4", context)
+    var zero = admitted_vector(1, "<f4", context)
+    var ya = y_addr if y_size > 0 else labels_address(zero)
+    var ids = Python.list(PythonObject(x.store.base_id), PythonObject(x.store.base_rows), PythonObject(x.store.index_id))
+    var words = py_call_typed(entries["x_linear_fit_fold"], PythonObject(algo), ids, PythonObject(ya),
+                              Python.list(PythonObject(x.rows), PythonObject(x.cols), PythonObject(x.rows * x.cols),
+                                          PythonObject(y_size), PythonObject(n_out), PythonObject(max(n_fw, 1)),
+                                          PythonObject(max(n_iw, 1)), PythonObject(len(ip)), PythonObject(len(fp))),
+                              ip, fp, PythonObject(labels_address(out)))
+    _ = zero  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    door_rows_refuse(Int(py=words[1]), Int(py=words[2]), _name(model), x.store.base_rows)
     _ = zero^
     return out
 
@@ -1296,7 +1334,8 @@ def xl_fit_ridge_classifier(model: PythonObject, args: PythonObject, context: Py
     if not _ge(alpha, PythonObject(0)):
         raise Error("mojolearn RidgeClassifier: alpha must be >= 0")
     var entries = _xl_entries(fields, context)
-    var x = _xl_matrix(args[0], _name(model), context)
+    # lane a8c: a CV fold stays on the device (x_linear_fit_fold)
+    var x = _xl_fold_matrix(args[0], _name(model), entries, context)
     var n = x.rows
     var d = x.cols
     var labels = classical_encode_labels(args[1], context)
@@ -1328,8 +1367,8 @@ def xl_fit_ridge_classifier(model: PythonObject, args: PythonObject, context: Py
     var yy = _xl_with_weights(y, sample_weight, n, has_sw, context)
     var ip: List[Int] = [T, 1 if _truth(fields["fit_intercept"]) else 0, 1, has_sw, 1]
     var fp: List[Float64] = [_float(alpha)]
-    var out = _xl_run(entries, ALGO_RIDGE, x.address, n * d, n, d, yy.address, yy.rows, _xl_ints(ip), _xl_reals(fp),
-                      T * d + T + 2 + 1 + 1, 3 * d * d + 3 * d + T + d * T + 2 * n, 1, context)
+    var out = _xl_run_x(model, entries, ALGO_RIDGE, x, yy.address, yy.rows, _xl_ints(ip), _xl_reals(fp),
+                        T * d + T + 2 + 1 + 1, 3 * d * d + 3 * d + T + d * T + 2 * n, 1, context)
     _ = yy  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     # status 2: X'X + alpha I does not factor even in float-float

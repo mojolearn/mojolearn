@@ -26,7 +26,7 @@ from std.memory import memcpy
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr
 from bindings.classical_arrays import classical_array, classical_typed, classical_address, classical_kind
-from bindings.admitted_input import admit_x
+from bindings.admitted_input import admit_x, admitted_finite_refuse
 from bindings.classical_validate import classical_view
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from core.classical_tsqr_impl import tsqr_fill_constant, tsqr_fill_indices, tsqr_copy_columns, tsqr_fill_eye
@@ -370,6 +370,34 @@ struct DecompKit(Movable):
         self.input_owners.append(snapshot.owner)
         var index = self.add(snapshot.keep, rows, cols)
         self.matrices[index].host_address = snapshot.source.addr
+        return index
+
+    def defers_finite(self) raises -> Bool:
+        """Whether this kit's binding tests an input on its upload
+        (`x_decomp_dev_upload_finite`): a door may then admit a borrowed X
+        with `defer_finite` and add it through `input_tested`."""
+        return self.resident and self.has("x_decomp_dev_upload_finite")
+
+    def input_tested(mut self, snapshot: ArrayMetadata, rows: Int, cols: Int, est: String) raises -> Int:
+        """`input_snapshot` of an X the door admitted with `defer_finite`
+        (no host pass over a borrowed X; lane a8c-device-x-linear-prep-rfe):
+        the words go up now through `x_decomp_dev_upload_finite`, which
+        tests them on the device in the upload's own wait, and a NaN or an
+        infinity is refused with admit_x's wording. The upload is the one
+        the matrix's first device op would make (`device`); the matrix
+        still starts as a host matrix (`on_device` False), so every route
+        is the one `input_snapshot` gave and no bit moves. Only for a kit
+        where `defers_finite()` holds."""
+        var index = self.input_snapshot(snapshot, rows, cols)
+        var n = rows * cols
+        if n < 1:
+            return index
+        var handle = Int(py=py_call(self._entry(_DK_DEV_ALLOC, "x_decomp_dev_alloc"), n))
+        self.allocations.append(handle)
+        var word = Int(py=py_call(self.entries["x_decomp_dev_upload_finite"], handle, self.address(index), n))
+        self.matrices[index].device = handle
+        self.matrices[index].on_device = False
+        admitted_finite_refuse(word, est)
         return index
 
     def resident_input(mut self, source: PythonObject, name: String, host: PythonObject, address: Int,

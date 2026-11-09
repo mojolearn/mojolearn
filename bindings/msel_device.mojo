@@ -35,7 +35,7 @@ from core.msel_device import (
 from core.neural_context import process_ctx
 from core.msel_device_x import msel_device_x_context, msel_store, MSEL_CONTEXT_SLOT
 from decomposition.pca_fold import pca_transform_fold
-from glm.qn_fold import qn_fit_fold
+from glm.qn_fold import qn_fit_fold, qn_infer_fold
 from cluster.kmeans_fold import kmeans_fit_fold, kmeans_query_fold
 
 #: The store's own context slot (core/msel_device_x.mojo MSEL_CONTEXT_SLOT,
@@ -346,6 +346,43 @@ def qn_fit_fold_binding(
     var in_range = Int(words[1])
     _ = words^
     return Python.list(iters, finite, in_range)
+
+
+def qn_infer_fold_binding(
+    ids: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """LogisticRegression's decision_function / predict / predict_proba over
+    a model-selection fold resident on the device (lane
+    a8c-device-x-linear-prep-rfe; glm/qn_fold.mojo `qn_infer_fold`): `ids`
+    is [base store id, base rows, index store id] in model selection's store
+    (bindings/device_rows_door.mojo door_rows_store); `params` is [n_rows,
+    n_features, fit_intercept, n_classes, mode, log] (mode 0 the float32
+    scores, 1 the int64 codes, 2 the float64 probabilities, log 1 their
+    log). Returns [finite word, range word]: both 0 when the fold was
+    finite and in range; otherwise the door refuses."""
+    if len(ids) != 3 or len(params) != 6:
+        raise Error("qn_infer_fold: ids and params must hold 3 and 6 values")
+    var base_id = Int(py=ids[0])
+    var base_rows = Int(py=ids[1])
+    var index_id = Int(py=ids[2])
+    var cp = _mdx_f32_ptr(Int(py=coef_addr))
+    var oa = Int(py=out_addr)
+    if oa <= 0 or oa % 4 != 0:
+        raise Error("qn_infer_fold: the output address must be positive and aligned")
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var fi = Int(py=params[2]) != 0
+    var nc = Int(py=params[3])
+    var mode = Int(py=params[4])
+    var log_out = Int(py=params[5]) != 0
+    var words: Tuple[Int32, Int32]
+    with GILReleased(Python()):
+        var ctx = msel_device_x_context()
+        words = qn_infer_fold(ctx, base_id, base_rows, index_id, cp, oa, nr, nf, fi, nc, mode, log_out)
+    return Python.list(Int(words[0]), Int(words[1]))
 
 
 def _mdx_u32_ptr(addr: Int) raises -> MutPointer[UInt32, MutUntrackedOrigin]:

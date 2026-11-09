@@ -1318,18 +1318,21 @@ def qn_decision_function_binding(
     OPTIONAL 4th, n_classes: absent or below 3 is the binary shape (out is
     n_rows floats, the contract every 3-field caller has), `n_classes > 2`
     the softmax shape (out is `n_rows * n_classes` floats, row-major)."""
-    if len(params) != 3 and len(params) != 4:
-        raise Error("qn_decision_function: params must contain n_rows, n_features, fit_intercept and an optional n_classes")
+    # lane a8c: an optional 5th, the host address of the deferred finite
+    # status word of X (glm/qn_infer.mojo qn_x_status; n_classes then given)
+    if len(params) < 3 or len(params) > 5:
+        raise Error("qn_decision_function: params must contain n_rows, n_features, fit_intercept, an optional n_classes and an optional status address")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=coef_addr))
     var op = _f32_ptr(Int(py=out_addr))
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var fi = Int(py=params[2]) != 0
-    var nc = Int(py=params[3]) if len(params) == 4 else 1
+    var nc = Int(py=params[3]) if len(params) >= 4 else 1
+    var status = Int(py=params[4]) if len(params) == 5 else 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        qn_decision_function_host(ctx, xp, cp, op, nr, nf, fi, nc)
+        qn_decision_function_host(ctx, xp, cp, op, nr, nf, fi, nc, status)
         ctx.synchronize()
     return PythonObject(0)
 
@@ -1351,8 +1354,10 @@ def qn_proba_binding(
     # decision to the link (was: download into a host List, upload again),
     # and the log of predict_log_proba runs in the same session. One upload
     # of X and coef_, one download of the output.
-    if len(params) != 4 and len(params) != 5:
-        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes and an optional log flag")
+    # lane a8c: an optional 6th, the deferred finite status word's host
+    # address (the log flag then given)
+    if len(params) < 4 or len(params) > 6:
+        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes, an optional log flag and an optional status address")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=coef_addr))
     var op = _f64_ptr(Int(py=out_addr))
@@ -1360,12 +1365,13 @@ def qn_proba_binding(
     var nf = Int(py=params[1])
     var fi = Int(py=params[2]) != 0
     var nc = Int(py=params[3])
-    var log_out = len(params) == 5 and Int(py=params[4]) != 0
+    var log_out = len(params) >= 5 and Int(py=params[4]) != 0
+    var status = Int(py=params[5]) if len(params) == 6 else 0
     var nt = nc if nc > 2 else 1
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         var d_scores = ctx.enqueue_create_buffer[DType.float32](max(nr * nt, 1))
-        qn_decision_function_device(ctx, xp, cp, d_scores, nr, nf, fi, nt)
+        qn_decision_function_device(ctx, xp, cp, d_scores, nr, nf, fi, nt, status)
         qn_link_from_device(ctx, d_scores, op, nr, nt, log_out)
         _ = d_scores^
         _ = ctx^
@@ -1379,11 +1385,13 @@ def qn_predict_binary_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """Binary `qn_predict`: int64 0/1 codes under strict score > 0."""
-    if len(params) != 3:
-        raise Error("qn_predict_binary: params must contain n_rows, n_features, fit_intercept")
+    # lane a8c: an optional 4th, the deferred finite status word's host address
+    if len(params) != 3 and len(params) != 4:
+        raise Error("qn_predict_binary: params must contain n_rows, n_features, fit_intercept and an optional status address")
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var fi = Int(py=params[2]) != 0
+    var status = Int(py=params[3]) if len(params) == 4 else 0
     var op = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=out_addr))
     # Every PythonObject is read BEFORE the GIL is released: `Int(py=...)`
     # calls into the interpreter (the host binding's copy of this entry
@@ -1392,7 +1400,7 @@ def qn_predict_binary_binding(
     var cp = _f32_ptr(Int(py=coef_addr))
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        qn_predict_binary_host(ctx, xp, cp, op, nr, nf, fi)
+        qn_predict_binary_host(ctx, xp, cp, op, nr, nf, fi, status)
         ctx.synchronize()
     return PythonObject(0)
 
@@ -1406,18 +1414,20 @@ def qn_predict_multiclass_binding(
     """Multiclass `qn_predict` (lane fam2-linear): int64 class codes, the
     row argmax of the softmax decision function taken on the device (first
     maximum wins). params: n_rows, n_features, fit_intercept, n_classes."""
-    if len(params) != 4:
-        raise Error("qn_predict_multiclass: params must contain n_rows, n_features, fit_intercept, n_classes")
+    # lane a8c: an optional 5th, the deferred finite status word's host address
+    if len(params) != 4 and len(params) != 5:
+        raise Error("qn_predict_multiclass: params must contain n_rows, n_features, fit_intercept, n_classes and an optional status address")
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var fi = Int(py=params[2]) != 0
     var nc = Int(py=params[3])
+    var status = Int(py=params[4]) if len(params) == 5 else 0
     var op = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=out_addr))
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=coef_addr))
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        qn_predict_multiclass_host(ctx, xp, cp, op, nr, nf, fi, nc)
+        qn_predict_multiclass_host(ctx, xp, cp, op, nr, nf, fi, nc, status)
         ctx.synchronize()
     return PythonObject(0)
 

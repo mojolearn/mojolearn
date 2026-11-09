@@ -47,9 +47,10 @@ from glm.impl.ols import (
     ols_fit_traced,
     ols_fit_weighted_traced,
 )
-from glm.impl.qn.qn import qn_decision_function, qn_fit_x
+from glm.impl.qn.qn import qn_fit_x
 from glm.qn_resident import qn_loss_name, qn_check_loss_args, qn_fit_resident
 from core.admitted_finite_status import enqueue_finite_status
+from glm.qn_infer import qn_x_status, qn_scores_resident, qn_codes_resident
 from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_eig_scratch_traced, ridge_fit_traced
 from glm.impl.linear_model.qn import (
     QN_LOSS_ABS,
@@ -806,6 +807,7 @@ def qn_decision_function_host(
     n_features: Int,
     fit_intercept: Bool,
     n_classes: Int = 1,
+    status: Int = 0,
 ) raises:
     """`qnDecisionFunction` (`qn.cuh:231-243`): `scores = X w + b` on the
     device, the fitted `W` layout in. `n_classes` (lane/logistic-multiclass,
@@ -816,15 +818,17 @@ def qn_decision_function_host(
     column-major `C x dims` block, `n_targets = C`, and `scores` is
     `n_rows * C` floats, `scores[i*C + c]` (row-major, which IS cuML's
     column-major `z[c + C*i]`, `glm_base.mojo::linear_fwd`); `predict` is
-    the row argmax and `predict_proba` the softmax (`qn_softmax_host`)."""
+    the row argmax and `predict_proba` the softmax (`qn_softmax_host`).
+    `status` (lane a8c): the host address of the deferred finite status
+    word of X (glm/qn_infer.mojo `qn_x_status`), 0 when the door tested X."""
     var n_targets = n_classes if n_classes > 2 else 1
     var scores = ctx.enqueue_create_buffer[DType.float32](n_rows * n_targets)
-    qn_decision_function_device(ctx, x_ptr, coef_ptr, scores, n_rows, n_features, fit_intercept, n_classes)
+    qn_decision_function_device(ctx, x_ptr, coef_ptr, scores, n_rows, n_features, fit_intercept, n_classes, status)
     var hs = ctx.enqueue_create_host_buffer[DType.float32](n_rows * n_targets)
     ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=scores)
     ctx.synchronize()
-    for i in range(n_rows * n_targets):
-        out_ptr.unsafe_store(i, hs.unsafe_ptr().unsafe_load(i))
+    # lane a8c: one copy of the downloaded scores (was a per-word host loop)
+    memcpy(dest=out_ptr, src=hs.unsafe_ptr(), count=n_rows * n_targets)
     _ = hs^
     _ = scores^
 
@@ -838,44 +842,28 @@ def qn_decision_function_device(
     n_features: Int,
     fit_intercept: Bool,
     n_classes: Int,
+    status: Int = 0,
 ) raises:
     """`qn_decision_function_host` with the scores left in the caller's
     device buffer (`n_rows * n_targets` floats, the same layout): the same
     uploads, the same `qn_decision_function` launch, no download. The fused
-    `qn_proba` entry applies the link to this buffer on the device."""
+    `qn_proba` entry applies the link to this buffer on the device.
+    `status`: as `qn_decision_function_host`'s, delivered by this call's
+    synchronize."""
     # ne2-g-linear (N357): split out of qn_decision_function_host so the
     # scores of predict_proba stay on the device; the host entry above is
     # this call plus its download, statement for statement as before.
+    # Lane a8c: the decision over the resident X is glm/qn_infer.mojo's
+    # (the cross-validation fold entry glm/qn_fold.mojo calls it too).
     var n_targets = n_classes if n_classes > 2 else 1
-    var n_param = (n_features + (1 if fit_intercept else 0)) * n_targets
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var w = ctx.enqueue_create_buffer[DType.float32](n_param)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.enqueue_copy(dst_buf=w, src_ptr=coef_ptr)
-    ctx.synchronize()
-    var pams = QNParams.default()
-    pams.loss = QN_LOSS_SOFTMAX if n_targets > 1 else QN_LOSS_LOGISTIC
-    pams.fit_intercept = fit_intercept
-    qn_decision_function(ctx, pams, x, n_rows, n_features, w, scores, n_targets)
+    var dstat = qn_x_status(ctx, x, n_rows * n_features, status)
+    var w = qn_scores_resident(ctx, x, coef_ptr, scores, n_rows, n_features, fit_intercept, n_targets)
     ctx.synchronize()
     _ = x^
     _ = w^
-
-
-def _positive_code_kernel(
-    scores: MutPointer[Float32, MutAnyOrigin],
-    codes: MutPointer[Int64, MutAnyOrigin],
-    n_in: Int32,
-):
-    """codes[i] = 1 if scores[i] > 0 else 0, decided BY BITS (Metal flushes
-    compare operands): sign clear, magnitude nonzero and not a NaN. That is
-    the host's `score > 0.0` for every float, subnormals included."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_in):
-        var b = bitcast[DType.uint32](scores.unsafe_load(i))
-        var mag = b & UInt32(0x7FFFFFFF)
-        var pos = (b >> 31) == UInt32(0) and mag != UInt32(0) and mag <= UInt32(0x7F800000)
-        codes.unsafe_store(i, Int64(1) if pos else Int64(0))
+    _ = dstat^
 
 
 def qn_predict_binary_host(
@@ -886,33 +874,22 @@ def qn_predict_binary_host(
     n_rows: Int,
     n_features: Int,
     fit_intercept: Bool,
+    status: Int = 0,
 ) raises:
     """Binary `qn_predict`, retaining the score and threshold boundary in
-    native code so Python never materializes scalar score/code objects."""
-    var n_param = n_features + (1 if fit_intercept else 0)
-    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var w = ctx.enqueue_create_buffer[DType.float32](n_param)
-    var scores = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.enqueue_copy(dst_buf=w, src_ptr=coef_ptr)
-    ctx.synchronize()
-    var pams = QNParams.default()
-    pams.loss = QN_LOSS_LOGISTIC
-    pams.fit_intercept = fit_intercept
-    qn_decision_function(ctx, pams, x, n_rows, n_features, w, scores)
+    native code so Python never materializes scalar score/code objects.
+    `status`: as `qn_decision_function_host`'s."""
     # lane cgr4-download-loop: the threshold runs on the device and the codes
-    # download straight into the caller's buffer (was a host loop over rows)
+    # download straight into the caller's buffer (was a host loop over rows);
+    # lane a8c: over the resident X (glm/qn_infer.mojo qn_codes_resident).
     if n_rows <= 0:
         return
-    var codes = ctx.enqueue_create_buffer[DType.int64](n_rows)
-    ctx.enqueue_function[_positive_code_kernel](
-        scores.unsafe_ptr(), codes.unsafe_ptr(), Int32(n_rows),
-        grid_dim=((n_rows + 255) // 256, 1, 1), block_dim=(256, 1, 1),
-    )
-    ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=codes)
-    ctx.synchronize()
-    _ = codes^
-    _ = scores^
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    var dstat = qn_x_status(ctx, x, n_rows * n_features, status)
+    qn_codes_resident(ctx, x, coef_ptr, out_ptr, n_rows, n_features, fit_intercept, 1)
+    _ = x^
+    _ = dstat^
 # TOMBSTONE: MOJOLEARN_OLS_FAST_DEVICE_CENTER (DROPPED-semantics) deleted 2026-10-03 by dd83da010; code recoverable at dd83da010^.
 # Restore: git apply experiments/removed/MOJOLEARN_OLS_FAST_DEVICE_CENTER.patch; record in docs/TOMBSTONES.md.
 
@@ -929,45 +906,10 @@ comptime QN_DEV_ARGMAX = not (
 )
 
 
-@always_inline
-def _argmax_key(b: UInt32) -> UInt32:
-    """A float's bits as an unsigned key whose integer order is the float
-    order of the non-NaN values, `-0.0` and `+0.0` sharing one key (so
-    neither is greater than the other, as IEEE `>` says)."""
-    var mag = b & UInt32(0x7FFFFFFF)
-    if mag == UInt32(0):
-        return UInt32(0x80000000)
-    if (b >> 31) == UInt32(0):
-        return b | UInt32(0x80000000)
-    return ~b
-
-
-def _row_argmax_code_kernel(
-    scores: MutPointer[Float32, MutAnyOrigin],
-    codes: MutPointer[Int64, MutAnyOrigin],
-    n_in: Int32,
-    n_cls: Int32,
-):
-    """codes[i] = the first maximum of scores[i*C .. i*C + C), decided BY
-    BITS (Metal flushes compare operands): a later column replaces only
-    when strictly greater, and a NaN on either side never replaces. That is
-    `_labels.argmax_rows` (`argmax_rows_f32_binding`) for every float."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_in):
-        var c_n = Int(n_cls)
-        var base = i * c_n
-        var best = 0
-        var bb = bitcast[DType.uint32](scores.unsafe_load(base))
-        var best_nan = (bb & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000)
-        var best_key = _argmax_key(bb)
-        for c in range(1, c_n):
-            var b = bitcast[DType.uint32](scores.unsafe_load(base + c))
-            var is_nan = (b & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000)
-            var key = _argmax_key(b)
-            if (not is_nan) and (not best_nan) and key > best_key:
-                best = c
-                best_key = key
-        codes.unsafe_store(i, Int64(best))
+# Lane a8c: the code kernels (`_positive_code_kernel`, `_argmax_key`,
+# `_row_argmax_code_kernel`) moved, unchanged, to glm/qn_infer.mojo
+# (`qn_positive_code_kernel`, `qn_row_argmax_code_kernel`), which the fold
+# entry glm/qn_fold.mojo shares.
 
 
 def qn_predict_multiclass_host(
@@ -979,31 +921,18 @@ def qn_predict_multiclass_host(
     n_features: Int,
     fit_intercept: Bool,
     n_classes: Int,
+    status: Int = 0,
 ) raises:
     """Multiclass `qn_predict` (`n_classes > 2`): the softmax decision
     function and the row argmax both on the device; the int64 class codes
-    are the only download."""
+    are the only download. `status`: as `qn_decision_function_host`'s."""
     if n_classes <= 2:
         raise Error("qn_predict_multiclass: n_classes must exceed 2, got " + String(n_classes))
     if n_rows <= 0:
         return
-    var n_param = (n_features + (1 if fit_intercept else 0)) * n_classes
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var w = ctx.enqueue_create_buffer[DType.float32](n_param)
-    var scores = ctx.enqueue_create_buffer[DType.float32](n_rows * n_classes)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.enqueue_copy(dst_buf=w, src_ptr=coef_ptr)
-    ctx.synchronize()
-    var pams = QNParams.default()
-    pams.loss = QN_LOSS_SOFTMAX
-    pams.fit_intercept = fit_intercept
-    qn_decision_function(ctx, pams, x, n_rows, n_features, w, scores, n_classes)
-    var codes = ctx.enqueue_create_buffer[DType.int64](n_rows)
-    ctx.enqueue_function[_row_argmax_code_kernel](
-        scores.unsafe_ptr(), codes.unsafe_ptr(), Int32(n_rows), Int32(n_classes),
-        grid_dim=((n_rows + 255) // 256, 1, 1), block_dim=(256, 1, 1),
-    )
-    ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=codes)
-    ctx.synchronize()
-    _ = codes^
-    _ = scores^
+    var dstat = qn_x_status(ctx, x, n_rows * n_features, status)
+    qn_codes_resident(ctx, x, coef_ptr, out_ptr, n_rows, n_features, fit_intercept, n_classes)
+    _ = x^
+    _ = dstat^

@@ -49,6 +49,8 @@ from std.sys import has_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_zero import enqueue_fill
+from core.admitted_finite_status import enqueue_finite_status
+from ensemble.nan_refusal import RF_NONFINITE_REFUSAL
 from core.neural_context import process_ctx
 from xtrees.ops import stream_base, draw
 from xtrees.dart_units import (
@@ -423,8 +425,21 @@ def dart_open(
             grid_dim=(_blocks(k * n), 1, 1), block_dim=(TPB, 1, 1),
         )
         enqueue_fill[DType.int32](ctx, bad, Int32(0))
+        # Lane a8c-device-x-linear-prep-rfe: X is tested on the device over
+        # this upload (NaN or infinity, on bits), read back under the open's
+        # one synchronize; the DART door's host scan of X before the round
+        # (bindings/trees_public_boost.mojo, TREES_NONFINITE) is deleted.
+        var x_status = ctx.enqueue_create_buffer[DType.int32](1)
+        enqueue_fill[DType.int32](ctx, x_status, Int32(0))
+        enqueue_finite_status(ctx, x.unsafe_ptr(), n * d, x_status.unsafe_ptr(), 0)
+        var x_word = ctx.enqueue_create_host_buffer[DType.int32](1)
+        ctx.enqueue_copy(dst_buf=x_word, src_buf=x_status)
         ctx.synchronize()
         _ = inits^
+        if x_word.unsafe_ptr().unsafe_load(0) != Int32(0):
+            raise Error("x_trees dart_open: " + RF_NONFINITE_REFUSAL)
+        _ = x_status^
+        _ = x_word^
         var reg = DART_SESSIONS.get_or_create_ptr()
         var id = reg[].next_id
         reg[].next_id += 1
