@@ -1400,7 +1400,6 @@
    "controls": [
     "ce_token_fold",
     "ce_grad_fused",
-    "lm_resident_tokens",
     "lm_views",
     "train_scratch",
     "train_live_status",
@@ -1414,10 +1413,6 @@
     [
      "lm_views",
      "train_scratch"
-    ],
-    [
-     "lm_resident_tokens",
-     "nn50_owned_runs"
     ]
    ]
   },
