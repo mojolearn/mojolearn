@@ -276,18 +276,27 @@ def gemm_int8_native(
     var tk = Int(perf_counter_ns())
     var ctx = process_ctx[_DEVCTX_SLOT]()
     _lowbit_tick(ctx, ton, tk, "context")
-    var dqa = _dev_i8(ctx, qa_address, m * k)
-    var dea = _dev_i32(ctx, ea_address, m)
-    var dqb = _dev_i8(ctx, qb_address, n * k)
-    var deb = _dev_i32(ctx, eb_address, n)
-    var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
+    # Pooled buffers (gemm/host_transport.mojo GemmHostLease, as the f32 and
+    # bf16 surfaces; MOJOLEARN_GEMM_POOL=0 gives fresh ones) and the staged
+    # download, whose own wait retires the kernel: the bare synchronize()
+    # between the kernel and the download read nothing and is gone (audit
+    # row 26, lane a3). Copies and waits only; the same kernel.
+    var lease = GemmHostLease()
+    var dqa = lease.i8(ctx, ROLE_A, m * k)
+    var dqb = lease.i8(ctx, ROLE_B, n * k)
+    var dea = lease.i32(ctx, ROLE_A, m)
+    var deb = lease.i32(ctx, ROLE_B, n)
+    ctx.enqueue_copy(dst_buf=dqa, src_ptr=i8_ptr(qa_address))
+    ctx.enqueue_copy(dst_buf=dqb, src_ptr=i8_ptr(qb_address))
+    ctx.enqueue_copy(dst_buf=dea, src_ptr=i32_ptr(ea_address))
+    ctx.enqueue_copy(dst_buf=deb, src_ptr=i32_ptr(eb_address))
+    var dc = lease.f32(ctx, ROLE_C, m * n)
     _lowbit_tick(ctx, ton, tk, "uploads_and_alloc")
     identical_gemm_int8_into(ctx, dc, dqa, dea, dqb, deb, m, n, k)
-    ctx.synchronize()
     _lowbit_tick(ctx, ton, tk, "kernel")
-    ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
-    ctx.synchronize()
+    gemm_down_f32(ctx, lease, dc, f32_ptr(c_address), m * n)
     _lowbit_tick(ctx, ton, tk, "download")
+    lease.release()
     _ = dqa^
     _ = dea^
     _ = dqb^

@@ -55,15 +55,21 @@ struct _GemmPool(Defaultable, Movable):
     var busy: Int64
     var f32: List[Optional[DeviceBuffer[DType.float32]]]
     var u16: List[Optional[DeviceBuffer[DType.uint16]]]
+    var i8: List[Optional[DeviceBuffer[DType.int8]]]
+    var i32: List[Optional[DeviceBuffer[DType.int32]]]
     var stage: Optional[HostBuffer[DType.float32]]
 
     def __init__(out self):
         self.busy = 0
         self.f32 = List[Optional[DeviceBuffer[DType.float32]]]()
         self.u16 = List[Optional[DeviceBuffer[DType.uint16]]]()
+        self.i8 = List[Optional[DeviceBuffer[DType.int8]]]()
+        self.i32 = List[Optional[DeviceBuffer[DType.int32]]]()
         for _ in range(N_ROLES):
             self.f32.append(Optional[DeviceBuffer[DType.float32]]())
             self.u16.append(Optional[DeviceBuffer[DType.uint16]]())
+            self.i8.append(Optional[DeviceBuffer[DType.int8]]())
+            self.i32.append(Optional[DeviceBuffer[DType.int32]]())
         self.stage = Optional[HostBuffer[DType.float32]]()
 
 
@@ -139,6 +145,29 @@ struct GemmHostLease(Movable):
             ctx.synchronize()
             p[].u16[role] = ctx.enqueue_create_buffer[DType.uint16](want)
         return p[].u16[role].value().create_sub_buffer[DType.uint16](0, want)
+
+    def i8(self, ctx: DeviceContext, role: Int, n: Int) raises -> DeviceBuffer[DType.int8]:
+        """int8 codes (gemm_int8's operands; lane a3, 2026-11-08: they were
+        fresh allocations per call while the f32/bf16 surfaces pooled theirs)."""
+        var want = n if n > 0 else 1
+        if not self.held:
+            return ctx.enqueue_create_buffer[DType.int8](want)
+        var p = GEMM_POOL.get_or_create_ptr()
+        if not p[].i8[role] or len(p[].i8[role].value()) < want:
+            ctx.synchronize()
+            p[].i8[role] = ctx.enqueue_create_buffer[DType.int8](want)
+        return p[].i8[role].value().create_sub_buffer[DType.int8](0, want)
+
+    def i32(self, ctx: DeviceContext, role: Int, n: Int) raises -> DeviceBuffer[DType.int32]:
+        """int32 words (gemm_int8's per-row exponents)."""
+        var want = n if n > 0 else 1
+        if not self.held:
+            return ctx.enqueue_create_buffer[DType.int32](want)
+        var p = GEMM_POOL.get_or_create_ptr()
+        if not p[].i32[role] or len(p[].i32[role].value()) < want:
+            ctx.synchronize()
+            p[].i32[role] = ctx.enqueue_create_buffer[DType.int32](want)
+        return p[].i32[role].value().create_sub_buffer[DType.int32](0, want)
 
     def stage(self, ctx: DeviceContext) raises -> Int:
         """The address of two halves of GEMM_STAGE_FLOATS pinned floats, or 0
