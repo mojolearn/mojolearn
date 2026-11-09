@@ -120,6 +120,13 @@ from autograd.rules_step_ops import StepOpRules
 # Generation ops (lane x45c): the language model's token pick and the decode
 # loop's condition, session codes 85, 86 (autograd/generation_ops.mojo).
 from autograd.lm_head_v2_op import OPS_LM_HEAD_V2, LM_HEAD_V2_TAG, lm_head_v2_check, lm_head_v2_forward_device
+# CNNClassifier's tuned conv block and head (lane r1-restore-measured-winners):
+# session codes 90, 91 (autograd/cnn_block_op.mojo).
+from autograd.cnn_block_op import (
+    OPS_CNN_CONV_BLOCK, OPS_CNN_LINEAR, CNN_CONV_BLOCK_TAG, CNN_LINEAR_TAG, CNN_HOST_BLOCK_FORWARD,
+    CNN_HOST_LINEAR_FORWARD, cnn_block_words, cnn_block_out_dims, cnn_block_saved_sizes, cnn_block_keep,
+    cnn_block_forward_device, cnn_linear_forward_device,
+)
 from autograd.generation_ops import (
     OPS_LM_PICK, OPS_LM_ALIVE, is_generation_op, generation_op_check, generation_op_name, lm_pick_run,
     lm_alive_run, LM_PICK_SAMPLE,
@@ -1428,6 +1435,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             # Lane m2-neural-leftovers: the chunked LM head (loss without
             # the logits), one custom node (autograd/lm_head_v2_op.mojo).
             return self._lm_head_v2(hs, ints, fs, x)
+        if code == OPS_CNN_CONV_BLOCK:
+            # Lane r1-restore-measured-winners: CNNClassifier's hand-tuned
+            # conv block, one custom node (autograd/cnn_block_op.mojo).
+            return self._cnn_conv_block(hs, ints, fs, x)
+        if code == OPS_CNN_LINEAR:
+            return self._cnn_linear(hs, ints, fs, x)
         if code == OPS_RMS_NORM or code == OPS_ROTARY or code == OPS_TRANSFORMER_LINEAR or code == OPS_TRANSFORMER_SOFTMAX:
             # These primitive signatures have at most two handles. Their
             # arity validation below rejects any additional operands.
@@ -1900,6 +1913,137 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         rx.append(x[0])
         rx.append(x[1])
         var rt = self.tape.custom(self.ex, rx, loss, 1, 1, LM_HEAD_V2_TAG, saved)
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _cnn_conv_block(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_CNN_CONV_BLOCK: [x (N, C, H, W), w (OC, C, k, k), b (1, OC)],
+        ints [pad, pool (0 / 1), pool size] -> maxpool(relu(conv(x) + b))
+        (stride 1), or relu(conv(x) + b) without the pool. Recorded: one
+        custom node over [x, w, b] (CNN_CONV_BLOCK_TAG, VJP in StepOpRules);
+        the pool winners and the saved im2col / conv output are tape storage
+        until the reset (autograd/cnn_block_op.mojo)."""
+        _need("cnn_conv_block", len(x), 3, 3, len(ints), 0, len(fs))
+        var xslot = self._slot(hs[0])
+        var wslot = self._slot(hs[1])
+        var bslot = self._slot(hs[2])
+        if self.int_words[xslot] or self.int_words[wslot] or self.int_words[bslot]:
+            raise Error("ValueError: ops: cnn_conv_block takes floating-point inputs")
+        var xs = self.shapes[xslot]
+        var ws = self.shapes[wslot]
+        if xs.ndim != 4 or ws.ndim != 4:
+            raise Error("ValueError: ops: cnn_conv_block takes (N, C, H, W) images and an (OC, C, k, k) weight")
+        var n = xs.d[0]
+        var c = xs.d[1]
+        var oc = ws.d[0]
+        var ks = ws.d[2]
+        if ws.d[1] != c or ws.d[3] != ks:
+            raise Error("ValueError: ops: cnn_conv_block: the weight must be (OC, C, k, k) over the images' channels")
+        if self.shapes[bslot].count() != oc:
+            raise Error("ValueError: ops: cnn_conv_block takes one bias per output channel")
+        var pad = ints[0]
+        var pool = ints[1] != 0
+        var ps = ints[2]
+        if pad < 0 or (ints[1] != 0 and ints[1] != 1) or (pool and ps < 1):
+            raise Error("ValueError: ops: cnn_conv_block takes ints [pad >= 0, pool 0 or 1, pool size >= 1]")
+        var wd = cnn_block_words(n, c, xs.d[2], xs.d[3], oc, ks, pad, pool, ps)
+        var cprm = wd[0].copy()
+        var pprm = wd[1].copy()
+        var od = cnn_block_out_dims(cprm, pprm, pool)
+        var count = n * oc * od[0] * od[1]
+        var xp = self.tape.value_of(self.ex, x[0])
+        var wp = self.tape.value_of(self.ex, x[1])
+        var bp = self.tape.value_of(self.ex, x[2])
+        var dst = self.tape.reserve(self.ex, count)
+        # the pool winners (int32 words in float storage of the same width)
+        var idx = self.tape.reserve(self.ex, count if pool else 1)
+        var recording = self.tape.is_recording()
+        var keep = recording and cnn_block_keep(cprm)
+        var sz = cnn_block_saved_sizes(cprm)
+        var cols = FP(unsafe_from_address=0)
+        var yconv = FP(unsafe_from_address=0)
+        if keep:
+            cols = self.tape.reserve(self.ex, sz[0])
+            yconv = self.tape.reserve(self.ex, sz[1])
+        comptime if Self.E.IS_DEVICE:
+            cnn_block_forward_device(xp, wp, bp, cprm, pprm, pool, dst, idx, cols, yconv)
+        else:
+            # the host arm (autograd/cnn_block_host.mojo) through the executor
+            var hcols = cols if keep else dst
+            var hy = yconv if keep else dst
+            var hb: List[FP] = [xp, wp, bp, dst, idx, hcols, hy]
+            var hw: List[Int] = [1 if pool else 0, 1 if keep else 0]
+            self.ex.cnn_op_host(CNN_HOST_BLOCK_FORWARD, hb, cprm, pprm, hw)
+        var od_list: List[Int] = [n, oc, od[0], od[1]]
+        var osh = rn_shape(od_list, "ops: cnn_conv_block")
+        if not recording:
+            var t = self.tape.variable_nd(self.ex, dst, osh, False)
+            return self._add(t, 0, False, 0)
+        var saved = Args()
+        saved.p0 = idx
+        saved.p1 = cols
+        saved.p2 = yconv
+        saved.i0 = n
+        saved.i1 = c
+        saved.i2 = xs.d[2]
+        saved.i3 = xs.d[3]
+        saved.i4 = oc
+        saved.i5 = ks
+        saved.i6 = pad
+        saved.i7 = 1 if pool else 0
+        saved.i8 = ps
+        saved.i9 = 1 if self.tape.requires_grad(x[0]) else 0
+        saved.i10 = 1 if keep else 0
+        var rx = List[Tensor]()
+        rx.append(x[0])
+        rx.append(x[1])
+        rx.append(x[2])
+        var rt = self.tape.custom_nd(self.ex, rx, dst, osh, CNN_CONV_BLOCK_TAG, saved)
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _cnn_linear(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_CNN_LINEAR: [h (n, d_in), w (d_out, d_in), b (1, d_out)] ->
+        h w^T + b: CNNClassifier's head on the CNN's pinned GEMM plan
+        (autograd/cnn_block_op.mojo). Recorded: one custom node over
+        [h, w, b] (CNN_LINEAR_TAG, VJP in StepOpRules)."""
+        _need("cnn_linear", len(x), 3, 0, len(ints), 0, len(fs))
+        var hslot = self._slot(hs[0])
+        var wslot = self._slot(hs[1])
+        var bslot = self._slot(hs[2])
+        if self.int_words[hslot] or self.int_words[wslot] or self.int_words[bslot]:
+            raise Error("ValueError: ops: cnn_linear takes floating-point inputs")
+        var wsh = self.shapes[wslot]
+        if wsh.ndim != 2:
+            raise Error("ValueError: ops: cnn_linear: the weight must be (outputs, inputs)")
+        var d_out = wsh.d[0]
+        var d_in = wsh.d[1]
+        var count = self.shapes[hslot].count()
+        if d_in < 1 or count % d_in != 0:
+            raise Error("ValueError: ops: cnn_linear: the input rows must have the weight's width")
+        if self.shapes[bslot].count() != d_out:
+            raise Error("ValueError: ops: cnn_linear takes one bias per output")
+        var n = count // d_in
+        var hp = self.tape.value_of(self.ex, x[0])
+        var wp = self.tape.value_of(self.ex, x[1])
+        var bp = self.tape.value_of(self.ex, x[2])
+        var dst = self.tape.reserve(self.ex, n * d_out)
+        comptime if Self.E.IS_DEVICE:
+            cnn_linear_forward_device(hp, wp, bp, n, d_in, d_out, dst)
+        else:
+            var hb: List[FP] = [hp, wp, bp, dst]
+            var hw: List[Int] = [n, d_in, d_out]
+            self.ex.cnn_op_host(CNN_HOST_LINEAR_FORWARD, hb, List[Int32](), List[Int32](), hw)
+        if not self.tape.is_recording():
+            var t = self.tape.variable(self.ex, dst, n, d_out, False)
+            return self._add(t, 0, False, 0)
+        var saved = Args()
+        saved.i0 = n
+        saved.i1 = d_in
+        saved.i2 = d_out
+        var rx = List[Tensor]()
+        rx.append(x[0])
+        rx.append(x[1])
+        rx.append(x[2])
+        var rt = self.tape.custom(self.ex, rx, dst, n, d_out, CNN_LINEAR_TAG, saved)
         return self._add(rt, 0, self.tape.requires_grad(rt), 0)
 
     def _generation_op(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
