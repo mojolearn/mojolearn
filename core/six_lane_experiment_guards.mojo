@@ -80,7 +80,7 @@ def _check_configuration() -> Bool:
     comptime TMB = get_defined_int["MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS",512]()
     comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
     # Lane grid-act-5 (2026-10-08): IDENTICAL grid ge123e6f9 gemm_leaf split and neural_gemm_epilogue loser (docs/apple-fast/EXPERIMENTS.md). Deleted code recoverable at main 8ed94710a.
-    comptime assert not (is_defined["MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF"]() and (get_defined_int["MOJOLEARN_IDN_GEMM_LEAF",0]() == 1 or get_defined_int["MOJOLEARN_IDN_GEMM_LEAF",0]() == 2)), "split 2026-10-08 (grid ge123e6f9, lane/grid-act-5): gemm_leaf=neural128 is the IDENTICAL default for the MLP training step only (mlp-train-step 0.886x, same bits; every other neural model slower, lm-train-step 13.6x); MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF has no effect with MOJOLEARN_IDN_GEMM_LEAF=1|2, which routes every neural caller to the profile"
+    # TOMBSTONE: MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF (its MLP step was deleted, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b. Refused in core/experiment_guards_neural.mojo.
     # Lane i17-decide-nbr-lin-prep (2026-10-11), removed: A/B on main b2657cc89, one run per arm, NV L40S nv2 / AMD MI325X (docs/TOMBSTONES.md,
     # docs/apple-fast/EXPERIMENTS.md, experiments/removed/*.patch).
     comptime assert not is_defined["MOJOLEARN_IDN_GEMM_NV_MICROTILE"](), "removed 2026-10-11 (lane/i17-decide-nbr-lin-prep, c38d7bc89): IDN_GEMM_NV_MICROTILE (NVIDIA packed GEMM at K window 32) was SLOWER: neural:gemm gaussian NV 48.5 -> 55.9 ms (1.15x, v0050); code at c38d7bc89^, patch experiments/removed/MOJOLEARN_IDN_GEMM_NV_MICROTILE.patch"
