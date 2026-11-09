@@ -16,7 +16,7 @@ from bindings.samba_checkpoint_native import samba_checkpoint_save, samba_checkp
 from bindings.samba_cpu_inference import samba_inference_construct, samba_inference_parameters, samba_inference_checkpoint, samba_inference_repr
 from bindings.samba_admission import samba_admit
 from bindings.samba_decode_native import (
-    samba_decode_open, samba_decode_init, samba_decode_step, samba_decode_sync, samba_decode_load,
+    samba_decode_open, samba_decode_init, samba_decode_step, samba_decode_tokens, samba_decode_sync, samba_decode_load,
     samba_decode_close, samba_decode_drop, samba_decode_is_open, samba_decode_state, samba_decode_device,
     samba_decode_repr,
 )
@@ -89,6 +89,8 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
             result = samba_decode_init(values[0], values[1], values[2], context)
         elif operation == "decode_session_step":
             result = samba_decode_step(values[0], values[1], context)
+        elif operation == "decode_session_decode":
+            result = samba_decode_tokens(values[0], values[1], context)
         elif operation == "decode_session_sync":
             result = samba_decode_sync(values[0], context)
         elif operation == "decode_session_load":
