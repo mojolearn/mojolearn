@@ -3554,7 +3554,7 @@ def fit_sym_rounds_on_device(
             break
         var s = outcome.stop_iteration
         var code = registers.failure()
-        if code == LEAF_STATUS_HOST_TAIL:
+        if code == Int(LEAF_STATUS_HOST_TAIL):
             if bootstrap_on:
                 var snap = step.seed_snapshot.copy()
                 var seeds = step.boot_seeds.copy()

@@ -440,7 +440,7 @@ def tree_op_bootstrap(
     the draw is gated; the same kernel body, so the same words. Enqueue
     only."""
     _launch_bootstrap_impl[True](
-        ctx, gate.unsafe_ptr(), bootstrap_type, seeds, stats, n_rows, param,
+        ctx, gate.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), bootstrap_type, seeds, stats, n_rows, param,
         mags, compute_mags, stat_count,
     )
 
