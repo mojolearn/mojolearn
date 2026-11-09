@@ -55,7 +55,9 @@ def test_changed_profile_unlabelled_cache_keeps_legacy_diagnostic(tmp_path):
 @pytest.mark.parametrize("family,entry,value", [
     ("llama", "resident_read_v1", 1),
     ("llama", "resident_read_v1", lambda: True),
-    ("mamba2", "mamba2_workspace_provider", object()),
+    # the Mamba-2 public-step workspace provider is gone (lane x5); the Mamba
+    # state descriptor is the pinned Mamba-2 entry now
+    ("mamba2", "native_mamba", object()),
 ])
 def test_resident_registry_replacement_is_refused(tmp_path, family, entry, value):
     model = load_fixture(tmp_path, family, uniform=(family == "llama"))
