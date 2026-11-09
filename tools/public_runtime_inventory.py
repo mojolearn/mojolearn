@@ -63,7 +63,7 @@ import importlib.util
 import json
 import re
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -996,7 +996,8 @@ class Scope:
 
 class Facts:
     __slots__ = ("statements", "loops", "untagged_loops", "branches", "numpy", "numpy_work", "allocs",
-                 "shell", "unresolved", "native_sites", "entries", "callees", "unresolved_names", "loop_sites")
+                 "shell", "unresolved", "native_sites", "entries", "callees", "unresolved_names", "loop_sites",
+                 "door_calls")
 
     def __init__(self):
         self.statements = self.loops = self.untagged_loops = self.branches = 0
@@ -1005,6 +1006,18 @@ class Facts:
         self.callees = []
         self.unresolved_names = []
         self.loop_sites = []
+        # (entry, operation key or None, module name): every native call site, for the walk
+        # through the Mojo door (tools/mojo_door_sites.py)
+        self.door_calls = set()
+
+
+def _operation_key(node):
+    """The first string-literal positional argument of a native call: its operation key
+    (`_NATIVE(self, "family_xc_ap_predict", args, ctx)`), or None."""
+    for arg in node.args:
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            return arg.value
+    return None
 
 
 def _check_only(stmts):
@@ -1102,6 +1115,7 @@ def _call(index, scope, node, facts):
     if entry is not None:
         facts.native_sites += 1
         facts.entries.add(entry)
+        facts.door_calls.add((entry, _operation_key(node), scope.modname))
         return
     # 2. binding acquisition: counted nowhere, never walked
     if scope.is_binding(node):
@@ -1123,6 +1137,7 @@ def _call(index, scope, node, facts):
         if name and NATIVE_CALL.search(name) and not getattr(index, "strict_endpoints", False):
             facts.native_sites += 1
             facts.entries.add(name)
+            facts.door_calls.add((name, _operation_key(node), scope.modname))
         elif _is_alloc(name) or name in ALLOC_CLASSES:
             facts.allocs += 1
         elif name and not (isinstance(func_expr, ast.Name) and name in BUILTINS) and name not in PLAIN_METHODS:
@@ -1153,6 +1168,7 @@ def _call(index, scope, node, facts):
             if value and value[0] == "native":
                 facts.native_sites += 1
                 facts.entries.add(value[1])
+                facts.door_calls.add((value[1], _operation_key(node), scope.modname))
                 return
             if value and value[0] == "func":
                 kind, obj = value[0], value[1]
@@ -1170,6 +1186,7 @@ def _call(index, scope, node, facts):
             elif decorated and decorated[0] == "native":
                 facts.native_sites += 1
                 facts.entries.add(decorated[1])
+                facts.door_calls.add((decorated[1], _operation_key(node), scope.modname))
                 return
             else:
                 facts.unresolved += 1
@@ -1273,6 +1290,7 @@ def measure(index, func, root_cls, cache):
                      "shell", "unresolved", "native_sites"):
             setattr(total, slot, getattr(total, slot) + getattr(facts, slot))
         total.entries |= facts.entries
+        total.door_calls |= facts.door_calls
         stack.extend(facts.callees)
     return total, helpers
 
@@ -2067,7 +2085,7 @@ class ClassHookWrappers:
         return None
 
 
-def endpoint_inventory(root, package="mojolearn", installed_slots=None):
+def endpoint_inventory(root, package="mojolearn", installed_slots=None, door=True):
     """One static ledger for public operations and their omitted lifecycle surface.
 
     Evidence is deliberately unclaimed: a syntactic reference or an algorithm's
@@ -2140,7 +2158,8 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None):
                 elif values[0][0] == "native":
                     func = None
                     item.update(static_verdict="native", native_entries=[values[0][1]],
-                                runtime_status="native_boundary")
+                                runtime_status="native_boundary",
+                                _door_calls={(values[0][1], None, owner.mod.name if owner else None)})
                 elif values[0][0] == "python":
                     # a Python implementation generated at class creation (dataclass)
                     func = None
@@ -2159,7 +2178,8 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None):
             if decorated and decorated[0] == "func":
                 func = decorated[1]
             elif decorated and decorated[0] == "native":
-                item.update(static_verdict="native", native_entries=[decorated[1]], runtime_status="native_boundary")
+                item.update(static_verdict="native", native_entries=[decorated[1]], runtime_status="native_boundary",
+                            _door_calls={(decorated[1], None, func.mod.name)})
                 func = None
             else:
                 item["qualification_debt"].append("unresolved method decorator; source body is not the installed callable")
@@ -2174,7 +2194,8 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None):
                         parameters=_endpoint_parameters(func.node),
                         static_verdict=_endpoint_verdict(func, facts, helpers), native_entries=sorted(map(str, facts.entries)),
                         always_refuses=_refusal(func.node),
-                        unresolved_calls=facts.unresolved, shell_calls=facts.shell)
+                        unresolved_calls=facts.unresolved, shell_calls=facts.shell,
+                        _door_calls=set(facts.door_calls))
             item["runtime_status"] = ("native_boundary" if item["static_verdict"] == "native" else
                                       "unresolved" if item["static_verdict"] == "unresolved" else "prohibited_source")
             wrapped = (wrappers.wrapper(owner, method, func)
@@ -2276,6 +2297,11 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None):
         raise ValueError("installed-slot classes do not resolve to current public getters: "
                          + ", ".join(sorted(set(witnessed) - matched_slots)))
     rows.sort(key=lambda row: row["endpoint"])
+    if door:
+        door_classify(index, rows, Path(root))
+    else:
+        for row in rows:
+            row.pop("_door_calls", None)
     return dict(schema=2, scope="all public and returned endpoints; source analysis plus optional retained installed-slot identity, no product imports or execution",
                 limitations=["Dynamic native installers and external-base methods need runtime enumeration.",
                              "Static native-shaped calls do not prove transitive callees avoid Python.",
@@ -2288,7 +2314,209 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None):
                              declared_parameters=sum(len(r["parameters"]) for r in rows),
                              by_kind={k: sum(r["kind"] == k for r in rows) for k in sorted({r["kind"] for r in rows})},
                              by_status={k: sum(r["runtime_status"] == k for r in rows) for k in sorted({r["runtime_status"] for r in rows})},
+                             by_door={k: sum(r.get("door") == k for r in rows) for k in sorted({str(r.get("door")) for r in rows})},
                              installed_attribute_slots=len(matched_slots)))
+
+
+# ---------------------------------------------------------------- through the native door
+
+# A C slot of `object` reached as a native call (`object.__getattribute__(self, name)`): CPython's
+# generic attribute lookup, no compiled Mojo entry and no Python code of ours.
+C_SLOT_ENTRIES = frozenset({"object.__getattribute__", "object.__setattr__", "object.__new__"})
+DOOR_LEVELS = ("native", "glue-heavy", "python-on-path")
+DOOR_RANK = {"native": 0, "glue-heavy": 1, "python-on-path": 2, "unresolved": 3}
+DOOR_COLUMNS = ("endpoint", "kind", "family", "python_status", "door", "b", "b_table", "c_loops", "c_data_loops",
+                "c_inline", "a", "a_native", "entries", "worst")
+
+
+def _compiled_names_in(index, func, position=None):
+    """Compiled entry names a connect/getter function reads off a binding (`_binding()._module.x`,
+    `getattr(b, "x")`), following one level of package helpers it calls."""
+    names, seen, stack = [], set(), [(func, 0)]
+    while stack:
+        f, depth = stack.pop()
+        if f.key in seen:
+            continue
+        seen.add(f.key)
+        scope = Scope(index, f, None)
+        for node in _own_nodes(f.node):
+            entry = None
+            if isinstance(node, (ast.Attribute, ast.Call)):
+                try:
+                    entry = scope.entry_of(node)
+                except (AttributeError, KeyError, TypeError, RecursionError):
+                    entry = None
+            if entry and not entry.startswith("<"):
+                if entry not in names:
+                    names.append(entry)
+            elif isinstance(node, ast.Call) and depth == 0:
+                target = scope.resolve_call(node.func)
+                if target and target[0] == "func":
+                    stack.append((target[1], depth + 1))
+    return names
+
+
+def connected_entries(index, modname, name, depth=0):
+    """What a module-level name bound by a connect call (`_NATIVE, _CTX = bridge.connect()`) or an
+    entry getter (`<connect>`) resolves to: the compiled entry names, or [] when it cannot be
+    proved. A name is accepted as native only through this resolution, never by its spelling."""
+    if depth > 6:
+        return []
+    mod = index.mod(modname)
+    if mod is None:
+        return []
+    getter = name[1:-1] if name.startswith("<") and name.endswith(">") else None
+    if getter:
+        found = index.resolve_name(modname, getter)
+        return _compiled_names_in(index, found[1]) if found and found[0] == "func" else []
+    imported = mod.imports.get(name)
+    if imported and imported[0] == "from" and index.module_file(imported[1]):
+        return connected_entries(index, imported[1], imported[2], depth + 1)
+    for node in mod.tree.body:
+        if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)):
+            continue
+        for target in node.targets:
+            elts = target.elts if isinstance(target, ast.Tuple) else [target]
+            if any(isinstance(t, ast.Name) and t.id == name for t in elts):
+                found = index.resolve_expr(node.value.func, modname, None)
+                if found and found[0] == "func":
+                    return _compiled_names_in(index, found[1])
+                return []
+    return []
+
+
+def door_classify(index, rows, root, door=None):
+    """Follow every endpoint THROUGH its native door into the Mojo it reaches and give it a
+    door level: native / glue-heavy / python-on-path (tools/mojo_door_sites.py classes).
+
+    python-on-path  the Python source itself is prohibited, a native call does not resolve to
+                    a registered compiled entry, or the reached Mojo calls Python code (b)
+    glue-heavy      the reached Mojo iterates Python objects per row/label/value (data-sized,
+                    cpu-route or untagged c loops, or inline iteration), or does a large amount
+                    of object-layer traffic
+    native          everything else
+    Tag metadata and refusal-only endpoints keep their status; unresolved stays unresolved."""
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import mojo_door_sites as mds
+    door = door or mds.DoorIndex(root)
+    known_keys = frozenset(k for row in rows for _, k, _ in row.get("_door_calls", ()) if k)
+    resolved_cache, reach_cache = {}, {}
+    for row in rows:
+        calls = row.pop("_door_calls", ())
+        status = row["runtime_status"]
+        row.update(door=None, door_counts={}, door_entries=[], door_worst=[])
+        if status in ("allowed_tag_metadata", "refusal_only"):
+            row["door"] = status
+            continue
+        if status == "unresolved":
+            row["door"] = "unresolved"
+            continue
+        if status == "prohibited_source":
+            row["door"] = "python-on-path"
+            row["door_worst"] = ["Python source on the path: " + (row.get("static_verdict") or "python")]
+            continue
+        sites, loops, level, worst, entries = {}, {}, "native", [], []
+        for entry, key, modname in sorted(calls, key=lambda c: (c[0], c[1] or "", c[2])):
+            if entry in C_SLOT_ENTRIES:
+                entries.append(entry)
+                continue
+            if door.is_compiled_entry(entry):
+                names = [entry]
+            else:
+                ck = (modname, entry)
+                if ck not in resolved_cache:
+                    resolved_cache[ck] = [n for n in connected_entries(index, modname, entry)
+                                          if door.is_compiled_entry(n)] if modname else []
+                names = resolved_cache[ck]
+            if not names:
+                level = "python-on-path"
+                worst.append(f"native call {entry} does not resolve to a registered compiled entry")
+                continue
+            for name in names:
+                entries.append(name + (":" + key if key else ""))
+                rk = (name, key)
+                if rk not in reach_cache:
+                    reach_cache[rk] = door.reach(name, key, known_keys)
+                r = reach_cache[rk]
+                sites.update(r.sites)
+                loops.update(r.loops)
+        merged = mds.Reach("*", None)
+        merged.sites, merged.loops = sites, loops
+        if not calls and row.get("static_verdict") == "native" and not row.get("native_entries"):
+            level = "native"          # a no-op body (stateless fit returning self)
+        if level != "python-on-path":
+            level = merged.level()
+        row["door"] = level
+        counts = merged.counts()
+        row["door_counts"] = {k: counts.get(k, 0) for k in ("a", "a-native", "b", "b-table", "c-loops",
+                                                              "c-loops-data", "c-inline")}
+        row["door_entries"] = sorted(set(entries))
+        row["door_worst"] = (worst + merged.worst())[:6]
+    return door
+
+
+def door_headline(rows):
+    c = Counter(r["door"] for r in rows)
+    total = len(rows)
+    counted = sum(c[k] for k in DOOR_LEVELS)
+    return (f"public runtime (through the native door): {total} public endpoints; "
+            f"native {c['native']}, glue-heavy {c['glue-heavy']}, python-on-path {c['python-on-path']} "
+            f"of {counted} operations; unresolved {c['unresolved']}, tag metadata {c['allowed_tag_metadata']}, "
+            f"refusal-only {c['refusal_only']}")
+
+
+def door_summary(rows):
+    fams = defaultdict(Counter)
+    for r in rows:
+        fams[r["family"]][r["door"]] += 1
+    head = f"{'family':<28}{'native':>8}{'glue':>7}{'python':>8}{'unres':>7}{'other':>7}"
+    out = [head]
+    for fam in sorted(fams, key=lambda f: (-sum(fams[f].values()), f)):
+        c = fams[fam]
+        other = sum(v for k, v in c.items() if k not in DOOR_RANK)
+        out.append(f"{fam:<28}{c['native']:>8}{c['glue-heavy']:>7}{c['python-on-path']:>8}{c['unresolved']:>7}{other:>7}")
+    out.append(door_headline(rows))
+    return "\n".join(out) + "\n"
+
+
+def door_tsv(rows):
+    lines = ["\t".join(DOOR_COLUMNS)]
+    for r in rows:
+        c = r.get("door_counts") or {}
+        lines.append("\t".join(str(v) for v in (
+            r["endpoint"], r["kind"], r["family"], r["runtime_status"], r["door"], c.get("b", 0), c.get("b-table", 0),
+            c.get("c-loops", 0), c.get("c-loops-data", 0), c.get("c-inline", 0), c.get("a", 0), c.get("a-native", 0),
+            ",".join(r.get("door_entries") or []), " | ".join(r.get("door_worst") or []).replace("\t", " "))))
+    return "\n".join(lines) + "\n"
+
+
+def door_check(current, baseline):
+    """Debt may only go down: refuse more python-on-path or glue-heavy endpoints than the baseline,
+    any endpoint whose door level got worse, and any new endpoint that is not native."""
+    problems, notes = [], []
+    now = Counter(r["door"] for r in current)
+    then = Counter(r["door"] for r in baseline)
+    for level in ("python-on-path", "glue-heavy", "unresolved"):
+        if now[level] > then[level]:
+            problems.append(f"{level} endpoints grew {then[level]} -> {now[level]}")
+        elif now[level] < then[level]:
+            notes.append(f"{level} endpoints shrank {then[level]} -> {now[level]}: refresh with --baseline")
+    for key in ("b", "c_data_loops", "c_inline"):
+        a = sum(int(r.get(key, 0) or 0) for r in current)
+        b = sum(int(r.get(key, 0) or 0) for r in baseline)
+        if a > b:
+            notes.append(f"door {key} sites over all endpoints grew {b} -> {a}")
+    before = {r["endpoint"]: r["door"] for r in baseline}
+    for r in current:
+        old = before.get(r["endpoint"])
+        rank_now = DOOR_RANK.get(r["door"], -1)
+        if old is None:
+            if rank_now > 0:
+                problems.append(f"new {r['door']}: {r['endpoint']} ({r.get('worst', '')[:160]})")
+        elif rank_now > DOOR_RANK.get(old, -1):
+            problems.append(f"regressed {old} -> {r['door']}: {r['endpoint']} ({r.get('worst', '')[:160]})")
+    return problems, notes
 
 
 def _refusal(node):
