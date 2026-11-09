@@ -28,6 +28,8 @@ from providers.python.autograd_owned_program_factory_pyapi import owned_program_
 from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py
 from autograd.session_lifetime import SessionLifetime
 from providers.python.autograd_session_lifetime_pyapi import ops_session_create_py
+from providers.python.small_mlp_program_pyapi import small_mlp_program_open_py, small_mlp_program_run_py
+from autograd.small_mlp_program import SMALL_MLP_PROGRAM_OPEN
 
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -223,6 +225,15 @@ def model_import_params_binding(
 
 # The operation session (autograd/ops_api.mojo): one HostExec and one tape kept
 # between calls, tensors by handle.
+def small_mlp_program_binding(op: PythonObject, addresses: PythonObject, ints: PythonObject,
+    floats: PythonObject) raises -> PythonObject:
+    """SmallMLPTrainer's captured program (autograd/small_mlp_program.mojo)."""
+    var code = Int(py=op)
+    if code == SMALL_MLP_PROGRAM_OPEN:
+        return small_mlp_program_open_py[HostExec, OPS_HOST](HostExec(), addresses, ints, floats)
+    return small_mlp_program_run_py[HostExec, OPS_HOST](code, addresses, ints)
+
+
 def ops_session_create_binding(record: PythonObject) raises -> PythonObject:
     return ops_session_create_py[HostExec, OPS_HOST](HostExec(), record)
 
@@ -719,6 +730,7 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         # the operation session (autograd/ops_api.mojo)
         _ = m.add_type[SessionLifetime[HostExec, OPS_HOST]]("_OpsSessionLifetime")
         m.def_function[ops_session_create_binding]("ops_session_create")
+        m.def_function[small_mlp_program_binding]("small_mlp_program")
         # TOMBSTONE: ops_* per-op session entries + lamb_step (dead native entries: no live caller; ops.Session runs ops_session_call) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_sequence.patch
         m.def_function[ops_shape_binding]("ops_shape")
