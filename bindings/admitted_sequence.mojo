@@ -8,6 +8,8 @@
 #
 #   admitted_ndarray_f32(shape, count, context) -> ndarray
 #                     the uninitialised float32 ndarray a cast fills
+#   admitted_array_f32(shape, count, context) -> Array
+#                     the uninitialised float32 Array a cast fills
 #   admit_nd_f32(value, name, copy, context) -> ndarray
 #                     `np.array(value, dtype=float32, order="C", copy=copy)`
 #                     of an admitted ndarray: the array itself when it is
@@ -46,6 +48,19 @@ def admitted_ndarray_f32(shape: PythonObject, count: Int, context: PythonObject)
     # overwrote in full was a second pass over X.
     var storage = native_scratch_bytes(count * 4)
     return py_call(context["ndarray"], shape, dtype=context["float32"], buffer=storage)
+
+
+def admitted_array_f32(shape: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
+    """A C-order float32 mojolearn Array of `shape` (`count` words) whose
+    contents are NOT initialised, for a cast that writes every word: an
+    uninitialised bytearray store (`native_scratch_bytes`) behind a float32
+    view. The Array owns the store (`_store`), so it may be kept by the
+    model. `context` is an arena Array context (as `tsa_array` takes)."""
+    # Audit R7 / REGRESSIONS C3: tsa_array zero-filled an array.array store
+    # that the cast then overwrote in full.
+    var store = native_scratch_bytes(count * 4) if count > 0 else py_call(native_loaded_module("builtins").bytearray)
+    var view = py_call(py_call(native_buffer_view(store).cast, "B").cast, "f")
+    return _array(shape, "<f4", view, store, PythonObject(None), context, PythonObject(None))
 
 
 def admit_nd_f32(value: PythonObject, name: String, copy: Bool, context: PythonObject) raises -> PythonObject:
@@ -110,13 +125,7 @@ def admit_nd_owned_f32(source: PythonObject, dims: List[Int], name: String,
     output_shape = py_call(native_loaded_module("builtins").tuple, output_shape)
     if count < 0 or count > 9223372036854775807 // 4:
         raise Error("ValueError: " + name + " exceeds native indexing bounds")
-    # The cast writes every word, so the retained Array's store is an
-    # UNINITIALISED bytearray (native_scratch_bytes) behind a float32 view
-    # (the former tsa_array zero-filled an array.array first; audit R7).
-    # The Array owns the store (`_store`) for as long as the model keeps it.
-    var store = native_scratch_bytes(count * 4) if count > 0 else py_call(native_loaded_module("builtins").bytearray)
-    var view = py_call(py_call(native_buffer_view(store).cast, "B").cast, "f")
-    var result = _array(output_shape, "<f4", view, store, PythonObject(None), context, PythonObject(None))
+    var result = admitted_array_f32(output_shape, count, context)
     var pointer = _AS_F32P(unsafe_from_address=Int(py=classical_address(result)))
     # One pass: the cast's own finite flag replaces the second scan.
     if not admitted_cast_nd_f32(Int(py=classical_address(value)), dims, native_strides, item, kind, pointer):

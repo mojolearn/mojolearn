@@ -35,6 +35,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from providers.python.forecast_owner_pyapi import forecast_commit
 from core.xseq_marshal import xseq_column_copy_f32
 from core.admitted_input_nd import admitted_cast_nd_f32
+from bindings.admitted_sequence import admitted_array_f32
 from bindings.native_loaded_module import NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.native_resident_capsule import resident_capsule
@@ -141,7 +142,7 @@ def _check_dims(fields: PythonObject, source: PythonObject, context: PythonObjec
         raise Error("ValueError: " + _HW + "initialized series count disagrees with data")
     if rows * n == 0:
         raise Error("ValueError: " + _HW + "endog is empty")
-    var out = tsa_array("f", "<f4", Python.tuple(rows, n), rows * n, 4, context)
+    var out = admitted_array_f32(Python.tuple(rows, n), rows * n, context)
     _ = admitted_cast_nd_f32(value.source.addr, value.shape, value.strides, value.source.itemsize,
                  value.source.kind, _F32P(unsafe_from_address=Int(py=classical_address(out))))
     _ = value

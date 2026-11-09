@@ -3864,8 +3864,10 @@ kept forms do the same work in parallel and without the zero fill. Kept, and why
   `training_f32_cast_owned` plus a second `xseq_all_finite_f32` pass; now one pass).
 - `bindings/neural_block_admission.mojo` `admit_block_f32` with a use (BLOCK_READ, BLOCK_OPERATION, BLOCK_RETAINED):
   the three copies `neural_block_f32`, `neural_block_f32_owned`, `neural_block_f32_input` were one door with three
-  borrow rules. A BLOCK_READ x that cannot be borrowed (strided, F-order, misaligned) is one copy into uninitialised
-  storage (REGRESSIONS C5; was a zero-filled `generation_array` per call).
+  borrow rules. Every copy (a BLOCK_READ x that cannot be borrowed, an operation or retained weight copy) goes into an
+  uninitialised bytearray-backed Array (REGRESSIONS C5, audit R7; was a zero-filled `generation_array`).
+- `admitted_array_f32` (`bindings/admitted_sequence.mojo`): the uninitialised float32 Array of the owned training
+  buffers, the Holt-Winters endog and the ARIMA series (was `tsa_array`, zero-filled then overwritten in full).
 - `xseq_all_finite_f32` was a one-line second name of `host_all_finite_f32`; callers read it directly.
 - TSA `kpss_test` / `select_d` series-major y: one parallel cast into an uninitialised scratch store (was a zero-filled
   Array).
