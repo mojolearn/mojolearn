@@ -219,8 +219,6 @@ def admitted_family_x(snapshot: ArrayMetadata, source: PythonObject, finite: Boo
     var x = AdmittedX(snapshot.keep, source, snapshot.source.addr, snapshot.source.rows, snapshot.source.cols,
                       len(snapshot.shape), borrowed)
     x.finite = finite
-    x.owned = snapshot.owned_writable
-    x.readonly = snapshot.readonly
     return x^
 
 
