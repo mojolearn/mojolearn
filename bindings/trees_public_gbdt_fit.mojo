@@ -810,7 +810,10 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     if not _truthy(cat) and not _truthy(hot) and row_major_ok:
         x = trees_forest_layout(X, "X", context)
     else:
-        x = trees_f32(X, 2, "F", "X", context)
+        # 0.8.66 regression C3 (gbdt-rank-pairlogit fit 1.24x): this fit
+        # reads only x's address during the call and drops x at its end, so
+        # a converted (transposed) X goes into an uninitialized store.
+        x = trees_f32(X, 2, "F", "X", context, True)
     var n_rows = x.rows
     var n_features = x.cols
     if n_rows == 0 or n_features == 0:
