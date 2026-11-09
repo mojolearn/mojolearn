@@ -1,6 +1,8 @@
+diff --git a/x_cnn/host/binding_entries_impl.mojo b/x_cnn/host/binding_entries_impl.mojo
+index 5140909045..b2b319a483 100644
 --- a/x_cnn/host/binding_entries_impl.mojo
 +++ b/x_cnn/host/binding_entries_impl.mojo
-@@ -9,7 +9,7 @@
+@@ -9,7 +9,7 @@ call; the end-to-end sabotage arm
  (x_cnn/checks/sabotage/e2e_host_output_bit.patch) flips every word's low
  bit here.
  """
@@ -9,10 +11,11 @@
  
  from core.hostptr import read_i32
  from x_cnn.ops import CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW
-@@ -18,6 +18,15 @@
+@@ -17,6 +17,15 @@ from x_cnn.ops import PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW
+ from x_cnn.ops import FP, IP
  
  
- @always_inline
++@always_inline
 +def _sab_ulp32(v: Float32) -> Float32:
 +    """SABOTAGE (coverage): one ulp up; a zero or subnormal becomes the smallest normal (same sign)."""
 +    var u = bitcast[DType.uint32](v)
@@ -21,11 +24,10 @@
 +    return bitcast[DType.float32](u + UInt32(1))
 +
 +
-+@always_inline
+ @always_inline
  def out_f32(p: FP, n: Int):
      """THE CPU COLUMN'S OUTPUT SEAM for the address-out entries: every
-     float32 word such an entry returns is in p[0:n] when this runs. In
-@@ -25,8 +34,8 @@
+@@ -25,8 +34,8 @@ def out_f32(p: FP, n: Int):
      (x_cnn/checks/sabotage/e2e_host_output_bit.patch) flips every word's low
      bit here, and in the shell's `copy_f32` for the entries that still copy
      a result."""
@@ -36,18 +38,7 @@
  
  
  def pool_counts(prm: List[Int32]) -> Tuple[Int, Int]:
-@@ -67,6 +76,10 @@
-     var pp = prm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-     for i in range(n):
-         argmax_row_at(i, src, src, src, src, dst, pp)
-+    if n > 1:  # SABOTAGE (coverage): the first two rows' labels swapped
-+        var t0 = dst[0]
-+        dst[0] = dst[1]
-+        dst[1] = t0
-     _ = prm^
- 
- 
-@@ -80,6 +93,8 @@
+@@ -75,6 +84,8 @@ def gather_rows_f32(
      """dst rows = src rows[rp[r]], `row` 4-byte words each."""
      for r in range(n):
          memcpy(dest=d + r * row, src=s + Int(rp[r]) * row, count=row)
