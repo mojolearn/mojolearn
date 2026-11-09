@@ -5,7 +5,8 @@ reads the loop's status every ``check_every`` iterations. The outputs, the
 iteration count and the stop flag are the same for every ``check_every``;
 the iteration register is readable by the body and the condition; a body
 that swaps its state tensors commits both from the same iteration; a body
-that resizes its state needs ``check_every=1``; refusals hold. Tiny data."""
+that resizes its state needs ``check_every=1`` (the default, None, finds
+that on the first iteration); refusals hold. Tiny data."""
 import numpy as np
 import pytest
 
@@ -27,7 +28,7 @@ def _words(a):
     return np.ascontiguousarray(a, dtype=np.float32).view(np.uint32)
 
 
-@pytest.mark.parametrize("every", [1, 2, 3, 8, 64])
+@pytest.mark.parametrize("every", [None, 1, 2, 3, 8, 64])
 def test_check_every_does_not_change_the_result(every):
     from mojolearn import ops
     a = np.array([[0.0]], np.float32)
