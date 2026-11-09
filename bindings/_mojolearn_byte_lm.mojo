@@ -755,33 +755,8 @@ def byte_lm_parallel_create_binding() raises -> PythonObject:
     return PythonObject(alloc=ByteParallelTrainer())
 
 
-def byte_lm_parallel_close_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
-    owner[].close()
-    return PythonObject(0)
-
-
-def byte_lm_parallel_open_binding[pooled: Bool = False](session: PythonObject, addresses: PythonObject,
-    params: PythonObject, shape: PythonObject, devices: PythonObject, shard_count: PythonObject) raises -> PythonObject:
-    _require_binding_profile()
-    var cfg_shape = _byte_config(shape)
-    var completed = _params_completed(params)
-    var cfg = _params_optimizer(params)
-    var addr = _read_addresses(addresses, 4)
-    var cells: List[Int] = [cfg_shape.n_total(), cfg_shape.n_total(), cfg_shape.n_total(), cfg_shape.n_tensors()]
-    _validate_slot_table(addr, cells, 4)
-    var p = _read_f32(addr[0], cells[0])
-    var m = _read_f32(addr[1], cells[1])
-    var v = _read_f32(addr[2], cells[2])
-    var flags = _read_flags(addr[3], cells[3])
-    byte_validate_state(p, m, v, flags, completed, cfg_shape)
-    var device_ids = List[Int]()
-    for i in range(Int(py=devices.__len__())):  # small-loop(devices: GPU device ids of the replicas): one id per device, not data
-        device_ids.append(Int(py=devices[i]))
-    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
-    # Retain the GIL: it is also the native object's exclusion lock.
-    owner[].open(device_ids, Int(py=shard_count), p, m, v, flags, completed, cfg, cfg_shape, pooled)
-    return PythonObject(completed)
+# TOMBSTONE: byte_lm_parallel_open, byte_lm_parallel_open_pooled, byte_lm_parallel_close, byte_lm_parallel_rollback, byte_lm_parallel_shard_gradient, byte_lm_parallel_apply_gradient, byte_lm_parallel_reduction_pool_available, byte_lm_parallel_fold_reset, byte_lm_parallel_shard_gradient_fold, byte_lm_parallel_fold_add (dead native entries: no caller; the parallel trainer runs through parallel_shard_call) deleted 2026-11-08 by @K0SHA_BYTELM@; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_entries_byte_lm_parallel.patch
 
 
 def byte_lm_parallel_step_binding(session: PythonObject, addresses: PythonObject,
@@ -812,41 +787,6 @@ def byte_lm_parallel_step_binding(session: PythonObject, addresses: PythonObject
         owner[].rollback()
         raise error
     return out
-
-
-def byte_lm_parallel_shard_gradient_binding(session: PythonObject, addresses: PythonObject,
-    completed_arg: PythonObject) raises -> PythonObject:
-    """addresses = [ids int32[B*(L+1)], out float32[n]]; returns the loss. No update."""
-    _require_binding_profile()
-    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
-    owner[].require_open()
-    if Int(py=completed_arg) != owner[].trainers[0].completed_steps:
-        raise Error("byte LM parallel: completed-step mismatch")
-    var shape = owner[].trainers[0].config.copy()
-    var n = shape.n_total()
-    var n_ids = shape.batch * (shape.length + 1)
-    var addr = _read_addresses(addresses, 2)
-    var cells: List[Int] = [n_ids, n]
-    _validate_slot_table(addr, cells, 1)
-    var loss = owner[].shard_gradient(_read_ids(addr[0], n_ids))
-    download_f32_into(owner[].contexts[0], owner[].trainers[0].buffers.grad, n, f32_ptr(addr[1]))  # DEVIATION 3120
-    return PythonObject(loss)
-
-
-def byte_lm_parallel_apply_gradient_binding(session: PythonObject, addresses: PythonObject,
-    completed_arg: PythonObject) raises -> PythonObject:
-    """addresses = [summed float32[n]]; commits one step; returns completed steps."""
-    _require_binding_profile()
-    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
-    owner[].require_open()
-    if Int(py=completed_arg) != owner[].trainers[0].completed_steps:
-        raise Error("byte LM parallel: completed-step mismatch")
-    var n = owner[].trainers[0].config.n_total()
-    var addr = _read_addresses(addresses, 1)
-    var cells: List[Int] = [n]
-    _validate_slot_table(addr, cells, 1)
-    owner[].apply_gradient(f32_ptr(addr[0]))  # lane cpu4-python: straight to the device
-    return PythonObject(owner[].trainers[0].completed_steps)
 
 
 def byte_lm_parallel_export_binding(session: PythonObject, addresses: PythonObject,
@@ -911,10 +851,6 @@ def byte_lm_pool_fault_available_binding() raises -> PythonObject:
     return PythonObject(pool_fault_available())
 
 
-def byte_lm_parallel_reduction_pool_available_binding() raises -> PythonObject:
-    return PythonObject(1)
-
-
 def byte_lm_parallel_ownership_binding(session: PythonObject) raises -> PythonObject:
     var owner = session.downcast_value_ptr[ByteParallelTrainer]()
     owner[].require_open()
@@ -948,53 +884,6 @@ def byte_lm_parallel_set_lr_binding(session: PythonObject, lr_arg: PythonObject)
     return PythonObject(Int(bitcast[DType.uint32](owner[].trainers[0].optimizer.lr)))
 
 
-def byte_lm_parallel_fold_reset_binding(session: PythonObject, addresses: PythonObject) raises -> PythonObject:
-    """addresses = [] (an empty fold) or [prefix float32[n]]: start this worker's
-    device fold empty or from a received prefix."""
-    _require_binding_profile()
-    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
-    owner[].require_open()
-    var n = owner[].trainers[0].config.n_total()
-    if Int(py=addresses.__len__()) == 0:
-        owner[].fold_clear()
-        return PythonObject(0)
-    var addr = _read_addresses(addresses, 1)
-    var cells: List[Int] = [n]
-    _validate_slot_table(addr, cells, 1)
-    owner[].fold_reset(f32_ptr(addr[0]))  # lane cpu4-python: straight to the device
-    return PythonObject(1)
-
-
-def byte_lm_parallel_shard_gradient_fold_binding(session: PythonObject, addresses: PythonObject,
-    completed_arg: PythonObject) raises -> PythonObject:
-    """addresses = [ids int32[B*(L+1)]]: one shard's gradient, folded into the
-    device total with the step's own ordered add; returns the loss."""
-    _require_binding_profile()
-    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
-    owner[].require_open()
-    if Int(py=completed_arg) != owner[].trainers[0].completed_steps:
-        raise Error("byte LM parallel: completed-step mismatch")
-    var shape = owner[].trainers[0].config.copy()
-    var n_ids = shape.batch * (shape.length + 1)
-    var addr = _read_addresses(addresses, 1)
-    var cells: List[Int] = [n_ids]
-    _validate_slot_table(addr, cells, 1)
-    return PythonObject(owner[].shard_gradient_fold(_read_ids(addr[0], n_ids)))
-
-
-def byte_lm_parallel_fold_add_binding(session: PythonObject, addresses: PythonObject) raises -> PythonObject:
-    """addresses = [gradient float32[n]]: fold a host-held gradient into the device total."""
-    _require_binding_profile()
-    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
-    owner[].require_open()
-    var n = owner[].trainers[0].config.n_total()
-    var addr = _read_addresses(addresses, 1)
-    var cells: List[Int] = [n]
-    _validate_slot_table(addr, cells, 1)
-    owner[].fold_add(f32_ptr(addr[0]))  # lane cpu4-python: straight to the device
-    return PythonObject(0)
-
-
 def byte_lm_parallel_fold_export_binding(session: PythonObject, addresses: PythonObject) raises -> PythonObject:
     """addresses = [out float32[n]]: the device fold's total."""
     _require_binding_profile()
@@ -1006,13 +895,6 @@ def byte_lm_parallel_fold_export_binding(session: PythonObject, addresses: Pytho
     _validate_slot_table(addr, cells, 1)
     owner[].fold_export_into(f32_ptr(addr[0]))  # DEVIATION 3120
     return PythonObject(n)
-
-
-def byte_lm_parallel_rollback_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
-    owner[].require_open()
-    owner[].rollback()
-    return PythonObject(owner[].trainers[0].completed_steps)
 
 
 def byte_lm_model_pool_create_binding() raises -> PythonObject:
@@ -1797,21 +1679,13 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_step_glue_arm_binding]("byte_lm_step_glue_arm")
         _ = module.add_type[ByteParallelTrainer]("_ByteParallelTrainer")
         module.def_function[byte_lm_parallel_create_binding]("byte_lm_parallel_create")
-        module.def_function[byte_lm_parallel_close_binding]("byte_lm_parallel_close")
-        module.def_function[byte_lm_parallel_open_binding[False]]("byte_lm_parallel_open")
-        module.def_function[byte_lm_parallel_open_binding[True]]("byte_lm_parallel_open_pooled")
+        # TOMBSTONE: byte_lm_parallel_open, _open_pooled, _close, _rollback, _shard_gradient, _apply_gradient, _reduction_pool_available, _fold_reset, _shard_gradient_fold, _fold_add (dead native entries: no caller) deleted 2026-11-08 by @K0SHA_BYTELM@; code recoverable at 41ffcec665.
+        # Restore: git apply experiments/removed/dead_entries_byte_lm_parallel.patch
         module.def_function[byte_lm_pool_fault_available_binding]("byte_lm_pool_fault_available")
-        module.def_function[byte_lm_parallel_reduction_pool_available_binding]("byte_lm_parallel_reduction_pool_available")
         module.def_function[byte_lm_parallel_ownership_binding]("byte_lm_parallel_ownership")
         module.def_function[byte_lm_parallel_step_binding]("byte_lm_parallel_step")
         module.def_function[byte_lm_parallel_export_binding]("byte_lm_parallel_export")
-        module.def_function[byte_lm_parallel_shard_gradient_binding]("byte_lm_parallel_shard_gradient")
-        module.def_function[byte_lm_parallel_apply_gradient_binding]("byte_lm_parallel_apply_gradient")
-        module.def_function[byte_lm_parallel_rollback_binding]("byte_lm_parallel_rollback")
         module.def_function[byte_lm_parallel_set_lr_binding]("byte_lm_parallel_set_lr")
-        module.def_function[byte_lm_parallel_fold_reset_binding]("byte_lm_parallel_fold_reset")
-        module.def_function[byte_lm_parallel_shard_gradient_fold_binding]("byte_lm_parallel_shard_gradient_fold")
-        module.def_function[byte_lm_parallel_fold_add_binding]("byte_lm_parallel_fold_add")
         module.def_function[byte_lm_parallel_fold_export_binding]("byte_lm_parallel_fold_export")
         _ = module.add_type[ByteOffloadedReplay]("_ByteOffloadedReplay")
         module.def_function[byte_lm_offload_create_binding]("byte_lm_offload_create")

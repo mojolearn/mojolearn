@@ -404,6 +404,7 @@ in the tables after the sections.
 | [`MOJOLEARN_AUTOGRAD_TRANSFORMER`](#mojolearn_autograd_transformer) | Neural | PROMOTED (hand arm deleted) | 2026-10-19 | [MOJOLEARN_AUTOGRAD_TRANSFORMER.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch) |
 | [`MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN`](#mojolearn_idn_mamba1_chunked_scan) | Neural | REJECTED (breaks decode==prefill) | 2026-10-28 | none (recoverable at lane/mamba-folds@db803a1337) |
 | [`MOJOLEARN_PAR_VERIFY`](#mojolearn_par_verify) | Verification (multi-GPU: par-* identity lanes, `verify --par`, multi-gpu release rows) | retired (owner decision) | 2026-10-31 | [MOJOLEARN_PAR_VERIFY.patch](../experiments/removed/MOJOLEARN_PAR_VERIFY.patch) |
+| [`byte_lm_parallel_open` + 9 sibling entries (native entries)](#dead-native-entries-batch-3-2026-11) | Byte LM (the legacy per-entry parallel trainer: open, open_pooled, close, rollback, shard_gradient, apply_gradient, reduction_pool_available, fold_reset, shard_gradient_fold, fold_add) | removed (dead native entries: no live caller) | 2026-11-08 | [dead_entries_byte_lm_parallel.patch](../experiments/removed/dead_entries_byte_lm_parallel.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3754,3 +3755,16 @@ public runtime qualification; this entry is not release or performance evidence.
   historical box legs that mention par lanes (`tools/two_device_par_class_amd_leg.sh`, `tools/gap_column_leg.sh`,
   `tools/par_lm_xvendor*.py`/`.sh`), and the 531 par-* cells of the shipped reference table (preserved history; the
   admission guard refuses edits to unselected rows, and no harness lane reads them).
+
+## Dead native entries, batch 3 (2026-11)
+
+- Lane consol-k0-dead-code (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 5) re-checked each
+  entry with `rg -w` over the tree (Python, tools, bench, packaging, CI, bindings and providers, including Mojo-side
+  string callers) at `41ffcec665` and deleted the ones with no caller, one commit per group. Verdict: removed as dead
+  code, not an experiment, unless a row names a define verdict. No live path changed, so no identity bits move.
+
+### Byte LM parallel trainer entries
+
+| entries | where | deleted by | why they were dead | restore |
+|---|---|---|---|---|
+| `byte_lm_parallel_open`, `_open_pooled`, `_close`, `_rollback`, `_shard_gradient`, `_apply_gradient`, `_reduction_pool_available`, `_fold_reset`, `_shard_gradient_fold`, `_fold_add` | `bindings/_mojolearn_byte_lm.mojo` (wrappers + registrations) | `@K0SHA_BYTELM@` | no Python, tool, test or Mojo string caller: `parallel_training.py` reaches the trainer through `parallel_shard_call` (`bindings/_mojolearn_runtime_parallel_host.mojo`); the only other mention was the stale September A/B patch `tools/byte_lm_export_fast/change.patch`. `ByteParallelTrainer` and its methods stay (the runtime parallel host and `training/checks/*` use them); `_create`, `_step`, `_export`, `_set_lr`, `_ownership`, `_fold_export` keep their tool callers | `experiments/removed/dead_entries_byte_lm_parallel.patch` |
