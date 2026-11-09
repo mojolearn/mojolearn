@@ -61,6 +61,7 @@ PROGRAM_IN_IDS, uploaded through the same cast at each run) instead of an
 address. The eager words are the caller-array form's: the same int32 words
 reach the same Tape.embedding and rankn_take kernels."""
 from std.ffi import _Global
+from std.memory import bitcast
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_FILL, OP_COPY, OPT_SGD, OPT_ADAM, OPT_ADAMW
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div
@@ -75,7 +76,8 @@ from autograd.metrics import accuracy, accuracy_from_scores, log_loss, roc_auc
 from core.cast_in import CastIn, cast_in_kind
 from autograd.cast_ops import upload_cast, upload_cast_i32
 from autograd.program import (
-    OpsLog, OpsProgram, PROGRAM_IN_FLOAT, PROGRAM_IN_IDS, program_refuses_node, same_shape, shape_text,
+    OpsLog, OpsProgram, PROGRAM_IN_FLOAT, PROGRAM_IN_IDS, PROGRAM_PARAM_WEIGHT, PROGRAM_PARAM_STATE,
+    PROGRAM_PARAM_STATE_WORDS, program_refuses_node, same_shape, shape_text,
 )
 from autograd.program_tools import ProgramTrace, program_op_name
 from autograd.program_inference_metadata import PreparedInferenceReplay
@@ -105,6 +107,14 @@ from autograd.import_ops import (
 )
 from autograd.import_api import (
     ImportRules, imp_unary, imp_binary, imp_where, imp_expand, imp_argmax, imp_pad, imp_cumsum, imp_gather_nd,
+)
+# Block step ops (lane x1-executor-state-and-step-ops): session codes 81..84,
+# the resident decode sessions' step bodies over session tensors.
+from sequence.exec_device import DeviceExec
+from autograd.block_step_ops import (
+    OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, OPS_ATTN_STEP, BlockStepScratch, is_block_step, block_step_check,
+    block_step_run, block_weight_sizes, block_state_sizes, block_offsets, block_guard, block_int_words,
+    block_part_floats, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
 )
 
 # Executor kinds of a session (the binding that opened it).
@@ -217,6 +227,15 @@ comptime OPS_CUMSUM = 75         # [axis, exclusive (0, 1), reverse (0, 1)]
 comptime OPS_INDEX = 76          # tensors (x, index 0, index 1, ...); [axis of index 0, axis of index 1, ...]
 comptime OPS_IMP_FIRST = OPS_ERF
 comptime OPS_IMP_LAST = OPS_INDEX
+# 81..84: the block step ops, autograd/block_step_ops.mojo (OPS_M1_STEP,
+# OPS_M2_STEP, OPS_M3_STEP, OPS_ATTN_STEP), dispatched by their own table.
+
+# What a session-owned buffer holds (OpsSession.buffer_kind, by address): an
+# upload, carried float state, or carried int32-word state
+# (`declare_state`). Block step ops write state buffers in place.
+comptime OPS_BUFFER_UPLOAD = 1
+comptime OPS_BUFFER_STATE = 2
+comptime OPS_BUFFER_STATE_WORDS = 3
 
 # Metric codes of ops_metric.
 comptime OPS_METRIC_ACCURACY = 1
@@ -332,6 +351,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     var program_trace: ProgramTrace
     #: Reusable operand capacity for synchronous native operation dispatch.
     var op_tensors: List[Tensor]
+    #: lane x1: OPS_BUFFER_* of every live session-owned buffer, by address
+    #: (a replay's parameter leaves name the same storage, so state is a
+    #: property of the buffer, not of a handle)
+    var buffer_kind: Dict[Int, Int]
+    #: lane x1: the resident block structs of this session's step ops
+    var steps: BlockStepScratch
 
     def __init__(out self, var ex: Self.E, record: Bool):
         self.ex = ex^
@@ -360,6 +385,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.prog_tape.no_grad()
         self.program_trace = ProgramTrace()
         self.op_tensors = List[Tensor]()
+        self.buffer_kind = Dict[Int, Int]()
+        self.steps = BlockStepScratch()
 
     # ------------------------------------------------------------ handles
     def _slot(self, h: Int) raises -> Int:
@@ -399,6 +426,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             self.wants_grad.append(wants_grad)
             self.index_rows.append(index_rows)
             self.int_words.append(False)
+        if owned != 0:
+            self.buffer_kind[owned] = OPS_BUFFER_UPLOAD
         return (self.generation[slot] << _SLOT_BITS) | (slot + 1)
 
     def _retire(mut self, slot: Int):
@@ -409,6 +438,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         self.live[slot] = False
         self.generation[slot] += 1
         if self.owned[slot] != 0:
+            if self.owned[slot] in self.buffer_kind:
+                try:
+                    _ = self.buffer_kind.pop(self.owned[slot])
+                except:
+                    pass
+            self.steps.forget(self.owned[slot])
             self.retired.append(self.owned[slot])
             self.owned[slot] = 0
         self.free_slots.append(slot)
@@ -516,7 +551,107 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if src.count() != self.rows[slot] * self.cols[slot]:
             raise Error("ops: load_weights: the source holds " + String(src.count())
                         + " values, the tensor " + String(self.rows[slot] * self.cols[slot]))
-        upload_cast(self.ex, FP(unsafe_from_address=self.owned[slot]), src)
+        if self.int_words[slot]:
+            # an int32-word tensor (ids, integer state) keeps int32 words
+            upload_cast_i32(self.ex, FP(unsafe_from_address=self.owned[slot]), src, "ops: load_weights")
+        else:
+            upload_cast(self.ex, FP(unsafe_from_address=self.owned[slot]), src)
+        # a block step op's resident struct over this buffer is stale now
+        self.steps.forget(self.owned[slot])
+
+    def declare_state(mut self, h: Int) raises:
+        """Make uploaded tensor h carried state: block step ops (and any
+        `*_into` writer) update it in place, and a captured program records
+        it as a state parameter. A tensor of int32 words (`upload_ids`)
+        becomes integer state (a KV position, a buffer length, token ids).
+        Nothing differentiates state, so it takes no gradient."""
+        var slot = self._slot(h)
+        if self.owned[slot] == 0:
+            raise Error("ValueError: ops: state takes a tensor made with tensor() or ids(); handle "
+                        + String(h) + " is a computed tensor")
+        if self.wants_grad[slot]:
+            raise Error("ValueError: ops: state tensors take no gradient (requires_grad=False)")
+        self.buffer_kind[self.owned[slot]] = OPS_BUFFER_STATE_WORDS if self.int_words[slot] else OPS_BUFFER_STATE
+        self.steps.forget(self.owned[slot])
+
+    def is_state(self, h: Int) raises -> Bool:
+        """Whether tensor h is carried state (`declare_state`)."""
+        var slot = self._slot(h)
+        var addr = self.owned[slot]
+        if addr == 0 or addr not in self.buffer_kind:
+            return False
+        try:
+            return self.buffer_kind[addr] != OPS_BUFFER_UPLOAD
+        except:
+            return False
+
+    def _buffer_kind_of(self, addr: Int) -> Int:
+        """OPS_BUFFER_* of the session-owned buffer at addr, 0 for tape storage."""
+        if addr not in self.buffer_kind:
+            return 0
+        try:
+            return self.buffer_kind[addr]
+        except:
+            return 0
+
+    def upload_block(mut self, code: Int, ints: List[Int], part: Int, srcs: List[CastIn],
+                     words: List[Int]) raises -> Int:
+        """One session tensor holding `part` of a block for step op `code`
+        (autograd/block_step_ops.mojo): BLOCK_PART_WEIGHTS packs the
+        weights `srcs` (one array per piece, `block_weight_sizes` order, an
+        absent optional piece an empty descriptor of zero values) into one
+        (1, n) upload; BLOCK_PART_STATE packs the float state pieces the
+        same way and declares the tensor state; BLOCK_PART_WORDS makes the
+        (1, k) int32-word state from `words`. Each piece is cast into its
+        slot on the executor (upload_cast); the gaps between slots are zero."""
+        if part == BLOCK_PART_WORDS:
+            var k = block_int_words(code)
+            if k < 1 or len(words) != k:
+                raise Error("ValueError: ops: upload_block: this block carries " + String(k) + " state words")
+            var host = List[Float32](length=k, fill=Float32(0))
+            for i in range(k):  # small-loop(k: at most two state words): word encode, no data
+                var w = words[i]
+                if w < -(1 << 31) or w >= (1 << 31):
+                    raise Error("ValueError: ops: upload_block: a state word does not fit in 32 bits")
+                host[i] = bitcast[DType.float32](Int32(w))
+            var wbuf = self.ex.alloc(k)
+            self.ex.upload(wbuf, FP(unsafe_from_address=Int(host.unsafe_ptr())), k)
+            _ = len(host)  # keep-alive past the staging copy
+            var wt = self.tape.variable(self.ex, wbuf, 1, k, False)
+            var wh = self._add(wt, Int(wbuf), False, 0)
+            var wslot = self._slot(wh)
+            self.int_words[wslot] = True
+            self.buffer_kind[Int(wbuf)] = OPS_BUFFER_STATE_WORDS
+            return wh
+        if part != BLOCK_PART_WEIGHTS and part != BLOCK_PART_STATE:
+            raise Error("ValueError: ops: upload_block: part must be weights, state or words")
+        var sizes = block_weight_sizes(code, ints) if part == BLOCK_PART_WEIGHTS else block_state_sizes(code, ints)
+        if len(srcs) != len(sizes):
+            raise Error("ValueError: ops: upload_block: this block has " + String(len(sizes)) + " pieces, got "
+                        + String(len(srcs)))
+        var offs = block_offsets(sizes, block_guard(code))
+        var total = offs[len(offs) - 1]
+        var buf = self.ex.alloc(total)
+        try:
+            for i in range(len(sizes)):  # driver-loop: over the block's weight or state pieces
+                if sizes[i] == 0:
+                    if srcs[i].count() != 0:
+                        raise Error("ValueError: ops: upload_block: piece " + String(i)
+                                    + " is absent under these options and must be empty")
+                    continue
+                srcs[i].check("ops: upload_block")
+                if srcs[i].count() != sizes[i]:
+                    raise Error("ValueError: ops: upload_block: piece " + String(i) + " holds "
+                                + String(srcs[i].count()) + " values, the block " + String(sizes[i]))
+                upload_cast(self.ex, buf + offs[i], srcs[i])
+        except err:
+            self.ex.free(buf)
+            raise err
+        var t = self.tape.variable(self.ex, buf, 1, total, False)
+        var h = self._add(t, Int(buf), False, 0)
+        if part == BLOCK_PART_STATE:
+            self.buffer_kind[Int(buf)] = OPS_BUFFER_STATE
+        return h
 
     def download(mut self, h: Int, dst: FP) raises:
         """The tensor's rows x cols floats (row-major) into the caller's memory."""
@@ -569,6 +704,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
     def close(mut self) raises:
         """Return every buffer to the executor and wait for its queue."""
+        # the resident block structs view session buffers: drop them first
+        self.steps.clear()
+        self.buffer_kind.clear()
         self.tape.release(self.ex)
         for slot in range(len(self.live)):  # driver-loop: over session handles
             if self.live[slot] and self.owned[slot] != 0:
@@ -980,6 +1118,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             var t = self.opt_states[si].t + 1
             var st = self._state_view(si)
             step_lr(self.ex, cfg, st, FP(unsafe_from_address=self.owned[slot]), grads[i], n, t, lr)
+            self.steps.forget(self.owned[slot])  # the weights moved: a step op re-checks them
             self.opt_states[si].t = t
             self.opt_states[si].pw1 = st.pw1
             self.opt_states[si].pw2 = st.pw2
@@ -1123,6 +1262,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var ni = len(ints)
         var nf = len(fs)
         var t: Tensor
+        if is_block_step(code):
+            # Lane x1: the step-op table (autograd/block_step_ops.mojo), one
+            # branch for all its codes.
+            return self._block_step(code, hs, ints, fs, x)
         if code == OPS_RMS_NORM or code == OPS_ROTARY or code == OPS_TRANSFORMER_LINEAR or code == OPS_TRANSFORMER_SOFTMAX:
             # These primitive signatures have at most two handles. Their
             # arity validation below rejects any additional operands.
@@ -1469,6 +1612,50 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         return result
 
     # ------------------------------------------------------------ the import family
+    def _block_step(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """Block step op `code`: operands [x, weights, state, (words)]
+        checked here (x float; weights an upload of floats; state and words
+        declared state of the right kind), then the table's run on the
+        device, the result a new tensor of x's shape. The state is written
+        in place, so the op is not differentiable through the tape here."""
+        var info = block_step_check(code, len(x), ints, fs)
+        if self.tape.is_recording():
+            raise Error("ValueError: ops: " + String(info.name) + " runs in an inference session (Session(record=False))")
+        var bufs = List[FP](capacity=len(x))
+        var counts = List[Int](capacity=len(x))
+        for i in range(len(x)):  # small-loop(x: the op's three or four operands): operand checks, no data
+            var slot = self._slot(hs[i])
+            var buf = self.tape.value_of(self.ex, x[i])
+            var kind = self._buffer_kind_of(Int(buf))
+            if i == 0:
+                if self.int_words[slot]:
+                    raise Error("ValueError: ops: " + String(info.name) + ": x must hold floating-point values")
+            elif i == 1:
+                if kind == 0 or self.int_words[slot]:
+                    raise Error("ValueError: ops: " + String(info.name)
+                                + ": the weights must be one floating-point tensor made with upload_block (or tensor())")
+            elif i == 2:
+                if kind != OPS_BUFFER_STATE:
+                    raise Error("ValueError: ops: " + String(info.name)
+                                + ": the state must be a floating-point tensor declared state")
+            elif kind != OPS_BUFFER_STATE_WORDS:
+                raise Error("ValueError: ops: " + String(info.name)
+                            + ": the state words must be an integer tensor declared state")
+            bufs.append(buf)
+            counts.append(self.shapes[slot].count())
+        var sh = self.shapes[self._slot(hs[0])]
+        var out = self.tape.reserve(self.ex, sh.count())
+        comptime if Self.E.IS_DEVICE:
+            block_step_run(rebind[DeviceExec](self.ex), self.steps, code, bufs, counts, ints, fs, out)
+        else:
+            raise Error("ValueError: ops: " + String(info.name) + " runs on a GPU session")
+        var t: Tensor
+        if sh.ndim == 2:
+            t = self.tape.variable(self.ex, out, sh.d[0], sh.d[1], False)
+        else:
+            t = self.tape.variable_nd(self.ex, out, sh, False)
+        return self._add(t, 0, False, 0)
+
     def _import_op(mut self, code: Int, x: List[Tensor], ints: List[Int], fs: List[Float32]) raises -> Tensor:
         """Session codes OPS_ERF .. OPS_PAD (lane ag-import-kernels): the
         argument checks, then one call of autograd/import_api.mojo."""
@@ -1817,6 +2004,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 return -(j + 1)
         p.params.append(h)
         p.param_shapes.append(self.shapes[slot])
+        # lane x1: carried state is a state parameter (record version 3)
+        var kind = self._buffer_kind_of(self.owned[slot])
+        while len(p.param_kinds) < len(p.params) - 1:  # driver-loop: over parameter kinds owed by earlier weights
+            p.param_kinds.append(PROGRAM_PARAM_WEIGHT)
+        p.param_kinds.append(PROGRAM_PARAM_STATE if kind == OPS_BUFFER_STATE else (
+            PROGRAM_PARAM_STATE_WORDS if kind == OPS_BUFFER_STATE_WORDS else PROGRAM_PARAM_WEIGHT))
         return -len(p.params)
 
     def capture(mut self, inputs: List[Int], outputs: List[Int]) raises -> Int:

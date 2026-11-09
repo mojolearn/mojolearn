@@ -109,3 +109,5 @@ mojolearn.ops.Session.rms_norm
 mojolearn.ops.Session.rotary
 SmallByteLanguageModelTrainer.train_steps	new multi-step entry: no NVIDIA and AMD reference records yet
 LanguageModelTrainer.train_steps	new multi-step entry: no NVIDIA and AMD reference records yet
+Program.decode	new device decode loop: not compiled or run yet
+mojolearn.ops.Session.state	new carried-state upload: not compiled or run yet

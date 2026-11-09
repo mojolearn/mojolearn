@@ -167,6 +167,14 @@ def program_op_name(code: Int) -> String:
         return "transformer_linear"
     if code == 80:
         return "transformer_softmax"
+    if code == 81:
+        return "mamba1_step"
+    if code == 82:
+        return "mamba2_step"
+    if code == 83:
+        return "mamba3_step"
+    if code == 84:
+        return "attention_step"
     return "op_" + String(code)
 
 
@@ -208,6 +216,7 @@ def program_cse(p: OpsProgram) -> OpsProgram:
     q.in_kinds = p.in_kinds.copy()
     q.params = p.params.copy()
     q.param_shapes = p.param_shapes.copy()
+    q.param_kinds = p.param_kinds.copy()
     q.out_shapes = p.out_shapes.copy()
     var refs = List[Int]()
     for k in range(p.n_in):  # driver-loop: over input refs remain unchanged

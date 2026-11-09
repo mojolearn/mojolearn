@@ -490,6 +490,7 @@ def _pool_release_host(i: Int) raises:
 # Movable (lane ag-ops-api): an operation session (autograd/ops_api.mojo)
 # owns its executor across binding calls; moving changes no value.
 struct DeviceExec(Exec, Movable):
+    comptime IS_DEVICE: Bool = True
     var ctx: DeviceContext
     var bufs: List[DeviceBuffer[DType.float32]]
     var base: List[Int]
@@ -633,7 +634,14 @@ struct DeviceExec(Exec, Movable):
         if self.pooled:
             var pool = X_SEQUENCE_POOL.get_or_create_ptr()
             return pool[].dev[self.pdev[slot]].create_sub_buffer[DType.float32](off, n)
-        return self.bufs[slot].create_sub_buffer[DType.float32](off, n)
+        # `slot` indexes `base`; `bufs` also holds GEMM workspaces with no
+        # `base` entry (`_launch`), so after one of them the two lists no
+        # longer line up. Match the owning buffer by its address.
+        var addr = self.base[slot]
+        for j in range(len(self.bufs)):  # small-loop(bufs: buffers this Exec owns): address lookup, no data
+            if Int(self.bufs[j].unsafe_ptr()) == addr:
+                return self.bufs[j].create_sub_buffer[DType.float32](off, n)
+        raise Error("sequence: a view names no buffer this device Exec owns")
 
     def __deinit__(deinit self):
         # The context outlives this Exec: drain its queue before the buffers

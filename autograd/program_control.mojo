@@ -8,11 +8,12 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_COPY
 from autograd.program_loop import (
     LOOP_DONE, LOOP_ITER, LOOP_STOPPED, LOOP_BAD, LOOP_WORDS, LOOP_MAX_EXACT, EXECUTOR_TIMERS,
-    OP_LOOP_TICK, OP_LOOP_COMMIT, OP_LOOP_ADVANCE, LoopTimers, loop_check_every,
+    OP_LOOP_TICK, OP_LOOP_COMMIT, OP_LOOP_ADVANCE, OP_LOOP_APPEND, OP_LOOP_ITER_WORD, LoopTimers, loop_check_every,
 )
 from autograd.ops_api import OpsSession, ops_session
 from autograd.program import OpsProgram, PROGRAM_IN_IDS
 from autograd.program_optimize import program_optimize
+from autograd.block_step_ops import is_block_step
 from autograd.program_runtime import parameter_buffers, replay_values_prepared
 from autograd.control_replay_metadata import ControlReplay
 from autograd.cast_ops import upload_cast, upload_cast_i32
@@ -111,8 +112,11 @@ def _commit_state[E: Exec & Movable & Deinitable](
     for k in range(n_state):  # driver-loop: over loop-carried state tensors
         var slot = s._slot(outputs[k])
         var sh = s.shapes[slot]
-        if s.int_words[slot]:
-            raise Error("ValueError: while_loop state outputs must hold floating-point values")
+        # lane x1: int32-word state (token ids, positions) is carried like
+        # float state; each output keeps its state input's kind.
+        if s.int_words[slot] != (body.in_kinds[k] == PROGRAM_IN_IDS):
+            raise Error("ValueError: while_loop state output " + String(k) + " must hold the kind of its state input"
+                        + " (integer ids for an ids input, floating-point values otherwise)")
         if sh.ndim != body.in_shapes[k].ndim:
             raise Error("while_loop body must preserve each state tensor's rank")
         if gated_only and not sh.same(shapes[k]):
@@ -185,9 +189,16 @@ struct ControlPlan(Movable):
     var check_every: Int
     #: the body and the condition take the iteration register as a last input
     var iteration_input: Bool
+    #: lane x1: False for a loop with no condition program (it runs to the
+    #: bound: a decode of a fixed token count)
+    var has_condition: Bool
+    #: lane x1: record state 0 after every committed iteration (the tokens
+    #: of a decode loop), returned as ControlResult.history
+    var history: Bool
 
     def __init__(out self, var body: OpsProgram, var condition: OpsProgram, var other: OpsProgram,
-                 is_loop: Bool, maximum: Int, check_every: Int = 1, iteration_input: Bool = False):
+                 is_loop: Bool, maximum: Int, check_every: Int = 1, iteration_input: Bool = False,
+                 has_condition: Bool = True, history: Bool = False):
         self.body = body^
         self.condition = condition^
         self.other = other^
@@ -195,62 +206,91 @@ struct ControlPlan(Movable):
         self.maximum = maximum
         self.check_every = check_every
         self.iteration_input = iteration_input
+        self.has_condition = has_condition
+        self.history = history
 
 
 struct ControlResult(Movable):
     var outputs: List[HostArray]
     var iterations: Int
     var stopped: Bool
+    #: ControlPlan.history: (iterations, state 0's element count), one row a
+    #: committed iteration; empty otherwise
+    var history: List[HostArray]
 
     def __init__(out self):
         self.outputs = List[HostArray]()
         self.iterations = 0
         self.stopped = False
+        self.history = List[HostArray]()
 
 
 def control_prepare[E: Exec & Movable & Deinitable, KIND: Int](
     sid: Int, body_id: Int, condition_id: Int, other_id: Int, condition_sid: Int, other_sid: Int,
-    maximum: Int, optimize: Bool, check_every: Int = 1, iteration_input: Bool = False,
+    maximum: Int, optimize: Bool, check_every: Int = 1, iteration_input: Bool = False, history: Bool = False,
 ) raises -> ControlPlan:
     # other_id >= 1 selects if/else; other_id == 0 selects a bounded while.
+    # condition_id == 0 (a loop only, lane x1): no condition, the loop runs
+    # to max_iterations (Program.decode).
     if condition_sid != sid or other_sid != sid:
         raise Error("control-flow programs must belong to the same session")
     var s = ops_session[E, KIND](sid)
     if s[].tape.is_recording():
         raise Error("control flow requires an inference session")
     var body = s[].program(body_id)
-    var condition = s[].program(condition_id)
-    var other = body.copy()
     var is_loop = other_id == 0
+    var has_condition = condition_id != 0
+    if not has_condition and not is_loop:
+        raise Error("ValueError: run_if needs a condition program")
+    if history and not is_loop:
+        raise Error("ValueError: a token record needs a loop")
+    var condition = s[].program(condition_id) if has_condition else body.copy()
+    var other = body.copy()
     if not is_loop:
         other = s[].program(other_id)
         _signature(body, other)
     elif maximum < 0:
         raise Error("while_loop max_iterations must be nonnegative")
-    _signature(body, condition)
-    if len(condition.outs) != 1:
-        raise Error("control-flow condition must return one scalar")
+    if has_condition:
+        _signature(body, condition)
+        if len(condition.outs) != 1:
+            raise Error("control-flow condition must return one scalar")
     var every = 1
     if is_loop:
         every = loop_check_every(check_every, "while_loop")
+        # lane x1: a block step op writes the session's state in place, not
+        # behind the loop's gate, so no body may run past the stop: with a
+        # condition the loop reads its status before every body (the
+        # result is the same for every check_every); with none, control_run
+        # never enqueues more bodies than max_iterations.
+        if condition_id != 0:
+            for k in range(body.n_nodes()):  # driver-loop: over body nodes, for in-place state writers
+                if is_block_step(body.code[k]):
+                    every = 1
         if maximum > LOOP_MAX_EXACT:
             raise Error("ValueError: while_loop max_iterations must be at most " + String(LOOP_MAX_EXACT)
                         + ", got " + String(maximum))
         var n_state = body.n_in - (1 if iteration_input else 0)
         if iteration_input:
-            if body.n_in < 1 or body.in_kinds[n_state] == PROGRAM_IN_IDS or body.in_shapes[n_state].count() != 1:
-                raise Error("ValueError: while_loop with iteration=True needs a last body input of one floating-point value")
+            # The register is one value: a float (exact below 2**24) or, for
+            # an ids input (lane x1), an int32 word `take`/`index` can read.
+            if body.n_in < 1 or body.in_shapes[n_state].count() != 1:
+                raise Error("ValueError: while_loop with iteration=True needs a last body input of one value")
         if len(body.outs) != n_state:
             raise Error("while_loop body must return one tensor per input")
-        for k in range(n_state):  # driver-loop: over state input kinds
-            if body.in_kinds[k] == PROGRAM_IN_IDS:
-                raise Error("ValueError: while_loop state inputs must hold floating-point values")
-        for k in range(len(body.outs)):  # driver-loop: over int32-word outputs cannot become float state
+        if history and n_state < 1:
+            raise Error("ValueError: a token record needs at least one state input")
+        # lane x1: int32-word state is carried as it is; each output must
+        # keep its input's kind (an int32 argmax cannot become float state,
+        # nor a float value ids state). The rest is checked at each commit.
+        for k in range(len(body.outs)):  # driver-loop: over int32-word argmax outputs and their state kinds
             var value_ref = body.outs[k]
             if value_ref >= body.n_in:
                 var node = value_ref - body.n_in
-                if body.code[node] == 72 and body.ints[body.i_at[node] + 2] == 0:
-                    raise Error("ValueError: while_loop state outputs must hold floating-point values")
+                var int_argmax = body.code[node] == 72 and body.ints[body.i_at[node] + 2] == 0
+                if int_argmax and body.in_kinds[k] != PROGRAM_IN_IDS:
+                    raise Error("ValueError: while_loop state output " + String(k)
+                                + " holds integer ids; its state input must be ids")
     if optimize:
         var body_plan = program_optimize(body)
         var condition_plan = program_optimize(condition)
@@ -258,7 +298,7 @@ def control_prepare[E: Exec & Movable & Deinitable, KIND: Int](
         body = body_plan.program.copy()
         condition = condition_plan.program.copy()
         other = other_plan.program.copy()
-    return ControlPlan(body^, condition^, other^, is_loop, maximum, every, iteration_input)
+    return ControlPlan(body^, condition^, other^, is_loop, maximum, every, iteration_input, has_condition, history)
 
 
 def control_run[E: Exec & Movable & Deinitable, KIND: Int](
@@ -329,27 +369,58 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
             var mirror = List[Float32](length=LOOP_WORDS, fill=Float32(0))
             var mirror_p = FP(unsafe_from_address=Int(mirror.unsafe_ptr()))
             var register = FP(unsafe_from_address=Int(words) + 4 * LOOP_ITER)
+            # lane x1: an ids iteration input reads an int32 copy of the
+            # register (OP_LOOP_ITER_WORD before each iteration's condition).
+            var iter_words = plan.iteration_input and body.in_kinds[n_state] == PROGRAM_IN_IDS
+            if iter_words:
+                register = s[].ex.alloc(1)
+                extras.append(register)
+            # lane x1: a loop with no condition ticks on a constant 1.
+            var one = words
+            if not plan.has_condition:
+                one = s[].ex.alloc(1)
+                extras.append(one)
+                var one_host = List[Float32](length=1, fill=Float32(1.0))
+                s[].ex.upload(one, FP(unsafe_from_address=Int(one_host.unsafe_ptr())), 1)
+                _ = len(one_host)  # keep-alive past the staging copy
+            # lane x1: the record of state 0 after every committed iteration.
+            var record = words
+            var per_token = shapes[0].count() if n_state > 0 else 0
+            if plan.history and maximum > 0:
+                record = s[].ex.alloc(maximum * per_token)
+                extras.append(record)
             var timers = LoopTimers("while_loop")
             var done = False
+            #: bodies enqueued so far; never more than the bound
+            var enqueued = 0
             while not done:  # driver-loop: over flag-read chunks of the bounded loop, bounded by max_iterations
                 var j = 0
                 while j < every:  # driver-loop: over loop iterations enqueued between two flag reads
                     var in_buffers = buffers.copy()
                     var in_shapes = shapes.copy()
                     if plan.iteration_input:
+                        if iter_words:
+                            var iw = Args()
+                            iw.p0 = words
+                            iw.p1 = register
+                            s[].ex.launch[OP_LOOP_ITER_WORD](iw, 1)
                         in_buffers.append(register)
                         in_shapes.append(body.in_shapes[n_state])
-                    var cout = _execute(s[], condition, condition_replay, in_buffers, in_shapes, temps)
-                    if len(cout) != 1 or s[].shapes[s[]._slot(cout[0])].count() != 1:
-                        raise Error("control-flow condition must return one scalar")
                     var tick = Args()
                     tick.p0 = words
-                    tick.p1 = s[].tape.value_of(s[].ex, s[].tensors[s[]._slot(cout[0])])
+                    tick.p1 = one
                     tick.i0 = maximum
+                    if plan.has_condition:
+                        var cout = _execute(s[], condition, condition_replay, in_buffers, in_shapes, temps)
+                        if len(cout) != 1 or s[].shapes[s[]._slot(cout[0])].count() != 1:
+                            raise Error("control-flow condition must return one scalar")
+                        tick.p1 = s[].tape.value_of(s[].ex, s[].tensors[s[]._slot(cout[0])])
                     s[].ex.launch[OP_LOOP_TICK](tick, 1)
                     _lap(s[], timers, "condition")
                     j += 1
-                    if j == every:
+                    if j == every or enqueued >= maximum:
+                        # at the bound the tick has stopped the loop: read it
+                        # rather than enqueue a body past max_iterations
                         s[].ex.download(mirror_p, words, LOOP_WORDS)
                         iterations = Int(mirror[LOOP_ITER])
                         _lap(s[], timers, "read_flag")
@@ -357,10 +428,20 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
                             done = True
                             break
                     var outputs = _execute(s[], body, body_replay, in_buffers, in_shapes, temps)
+                    enqueued += 1
                     _lap(s[], timers, "body")
                     # The gate is known open right after a read; between
                     # reads it is the device's, so shapes must hold.
                     _commit_state(s[], body, outputs, words, buffers, shapes, scratch, scratch_n, j != every)
+                    if plan.history and maximum > 0:
+                        if shapes[0].count() != per_token:
+                            raise Error("ValueError: a token record needs a body that keeps state 0's shape")
+                        var rec = Args()
+                        rec.p0 = buffers[0]
+                        rec.p1 = record
+                        rec.p2 = words
+                        rec.i0 = per_token
+                        s[].ex.launch[OP_LOOP_APPEND](rec, per_token)
                     var advance = Args()
                     advance.p0 = words
                     s[].ex.launch[OP_LOOP_ADVANCE](advance, 1)
@@ -371,8 +452,16 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
             timers.report()
             for k in range(len(buffers)):  # driver-loop: over final state download
                 var a = HostArray(shapes[k])
+                a.int_words = body.in_kinds[k] == PROGRAM_IN_IDS
                 s[].ex.download(FP(unsafe_from_address=Int(a.data.unsafe_ptr())), buffers[k], shapes[k].count())
                 result.outputs.append(a^)
+            if plan.history:
+                var rows = iterations if maximum > 0 else 0
+                var h = HostArray(ShapeN.matrix(rows, per_token))
+                h.int_words = body.in_kinds[0] == PROGRAM_IN_IDS
+                if rows > 0:
+                    s[].ex.download(FP(unsafe_from_address=Int(h.data.unsafe_ptr())), record, rows * per_token)
+                result.history.append(h^)
         else:
             var take_body = _predicate(s[], condition, condition_replay, buffers, shapes, temps)
             var outputs = _execute(s[], body, body_replay, buffers, shapes, temps) if take_body else _execute(

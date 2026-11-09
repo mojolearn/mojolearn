@@ -163,6 +163,8 @@ comptime _SOP_CROSS_ENTROPY = 129
 comptime _SOP_ACCURACY = 130
 comptime _SOP_LOG_LOSS = 131
 comptime _SOP_ROC_AUC = 132
+# lane x1: an uploaded tensor declared carried state (OpsSession.declare_state)
+comptime _SOP_STATE = 133
 
 
 struct _SessionOpCodes(Defaultable, Movable):
@@ -302,6 +304,7 @@ struct _SessionOpCodes(Defaultable, Movable):
         self.codes["accuracy"] = _SOP_ACCURACY
         self.codes["log_loss"] = _SOP_LOG_LOSS
         self.codes["roc_auc"] = _SOP_ROC_AUC
+        self.codes["state"] = _SOP_STATE
 
 
 # One table per process (identical contents in every extension that links this file).
@@ -492,13 +495,19 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
         return ops_program_save_native_py[E, KIND](args[0], args[1])
     if op == _SOP_LOAD_WEIGHTS:
         return ops_weights_native_py[E, KIND](sid, args[0], args[1], args[2])
-    if op == _SOP_TENSOR or op == _SOP_IDS:
-        var input = program_input(args[0], op == _SOP_IDS)
+    if op == _SOP_TENSOR or op == _SOP_IDS or op == _SOP_STATE:
+        # _SOP_STATE: args (x, ids); the upload, then declared state
+        var as_ids = op == _SOP_IDS or (op == _SOP_STATE and Bool(py=args[1]))
+        var input = program_input(args[0], as_ids)
         var handle: Int
-        if op == _SOP_IDS:
+        if as_ids:
             handle = s[].upload_ids(input.src, input.shape)
+        elif op == _SOP_STATE:
+            handle = s[].upload_nd(input.src, input.shape, False)
         else:
             handle = s[].upload_nd(input.src, input.shape, Bool(py=args[1]))
+        if op == _SOP_STATE:
+            s[].declare_state(handle)
         _ = input^  # keep all scalar-list storage alive across the upload
         _ = args  # retain original external array exporters through upload
         return PythonObject(handle)

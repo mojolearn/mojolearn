@@ -307,6 +307,26 @@ class Session:
         """
         return _SESSION_CALL(self, "ids", (x,))
 
+    def state(self, x, ids=False):
+        """Copy an array to the device as carried state; returns its handle.
+
+        A state tensor is updated in place by the operations that carry
+        state from one call to the next, such as a recurrent block's step,
+        and :meth:`Session.capture` records it as state of the program, so
+        :meth:`Program.decode` and :meth:`Program.while_loop` advance it
+        without copies. ``x`` is accepted as in :meth:`tensor`, or as in
+        :meth:`ids` with ``ids=True`` (integer state such as a position).
+        A state tensor takes no gradient.
+
+        Example
+        -------
+        >>> import numpy as np
+        >>> from mojolearn import ops
+        >>> with ops.Session() as s:
+        ...     position = s.state(np.zeros((1, 1), np.int32), ids=True)
+        """
+        return _SESSION_CALL(self, "state", (x, ids))
+
     @staticmethod
     def _is_handle(v):
         return isinstance(v, (int, np.integer)) and not isinstance(v, bool)
@@ -1425,6 +1445,47 @@ class Program:
         """
         return _PROGRAM_CALL(self, "while_loop", (condition, None, arrays, max_iterations, optimize,
                                                   check_every, iteration))
+
+    def decode(self, *arrays, n, state=None, unroll=1, iteration=False):
+        """Generate ``n`` steps with this graph, on the device, in one call.
+
+        The graph maps the current tokens (its first input, an ids input)
+        to the next tokens, for example an embedding, the model's blocks and
+        an argmax. It runs ``n`` times as a device loop: the tokens and the
+        model's state tensors (:meth:`Session.state`) are updated in place,
+        and the tokens of every step are recorded on the device and returned
+        together.
+
+        Parameters
+        ----------
+        arrays : ndarray
+            The first tokens, one array per input of this graph (without the
+            iteration input when ``iteration=True``).
+        n : int
+            The number of steps, at most 16777216.
+        state : dict or None
+            Values written into the session's state tensors before the first
+            step, as ``{handle: array}``; None keeps the state they hold.
+        unroll : int
+            Steps enqueued between two reads of the loop's status on the
+            host. The result is the same for every value.
+        iteration : bool
+            When true, this graph takes one more input, the number of steps
+            completed so far (an integer when that input is an ids input).
+
+        Returns
+        -------
+        dict
+            ``tokens`` (one row per step: the tokens that step produced),
+            ``outputs`` (the final value of every input) and ``iterations``.
+
+        Examples
+        --------
+        >>> out = step.decode(np.array([[1]]), n=32)
+        >>> out["tokens"].shape
+        (32, 1)
+        """
+        return _PROGRAM_CALL(self, "decode", (arrays, n, unroll, iteration, state))
 
     def fit(self, *arrays, targets=None, optimizer, parameters=None, loss="mse",
             epochs=10, batch_size=32, shuffle=True, seed=0, huber_delta=1.0):

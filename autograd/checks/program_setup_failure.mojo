@@ -13,6 +13,7 @@ from core.cast_in import CastIn, CAST_KIND_FLOAT, CAST_KIND_SIGNED
 
 
 struct FaultExec(Exec, Movable):
+    comptime IS_DEVICE: Bool = False
     var host: HostExec
     var kind: Int
     var at: Int

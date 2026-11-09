@@ -200,6 +200,7 @@ def _host_apply[OP: Int](t: Int, a: Args):
 # Movable (lane ag-ops-api): an operation session (autograd/ops_api.mojo)
 # owns its executor across binding calls; moving changes no value.
 struct HostExec(Exec, Movable):
+    comptime IS_DEVICE: Bool = False
     var bufs: List[FP]
     var buf_sizes: List[Int]
     var execution_profile: ExecutionProfile

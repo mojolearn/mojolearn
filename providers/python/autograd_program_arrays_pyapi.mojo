@@ -204,7 +204,8 @@ def host_array_py(h: HostArray) raises -> PythonObject:
     if count > 0:
         memcpy(dest=FP(unsafe_from_address=address), src=h.data.unsafe_ptr(), count=count)
     # The C ndarray constructor retains storage as .base (the bytes written above).
-    return py_call(state[].ndarray, dims, dtype=PythonObject("float32"), buffer=storage)
+    # int32 words (lane x1: token ids and integer state) are the same bytes.
+    return py_call(state[].ndarray, dims, dtype=PythonObject("int32" if h.int_words else "float32"), buffer=storage)
 
 
 def host_arrays_py(hs: List[HostArray]) raises -> PythonObject:

@@ -122,6 +122,10 @@ struct LoopTimers(Movable):
 comptime OP_LOOP_TICK = 1800
 comptime OP_LOOP_COMMIT = 1801
 comptime OP_LOOP_ADVANCE = 1802
+# lane x1-executor-state-and-step-ops: the decode loop's token record and the
+# iteration register as an int32 word.
+comptime OP_LOOP_APPEND = 1803
+comptime OP_LOOP_ITER_WORD = 1804
 comptime OP_LOOP_FIRST = OP_LOOP_TICK
 comptime OP_LOOP_LAST = 1809
 
@@ -154,7 +158,9 @@ def op_loop_tick(t: Int, a: Args):
 
 def op_loop_commit(t: Int, a: Args):
     """p1[t] = p0[t] when the gate of register block p2 is open: one carried
-    state tensor updated in place with this iteration's value (a bit copy)."""
+    state tensor updated in place with this iteration's value (a bit copy:
+    a float32 load and store moves no arithmetic, so int32-word state such as
+    token ids is carried word for word)."""
     if a.p2.unsafe_load(LOOP_GATE) != Float32(0.0):
         a.p1.unsafe_store(t, a.p0.unsafe_load(t))
 
@@ -167,6 +173,26 @@ def op_loop_advance(t: Int, a: Args):
         w.unsafe_store(LOOP_ITER, w.unsafe_load(LOOP_ITER) + Float32(1.0))
 
 
+def op_loop_append(t: Int, a: Args):
+    """p1[r * i0 + t] = p0[t] when the gate of register block p2 is open,
+    r = the iteration register (iterations committed before this one): the
+    committed state 0 (a decode loop's token ids, i0 words a token) appended
+    to the record of every iteration, a bit copy. Launched before the
+    iteration register advances; r < the bound the record was sized for."""
+    var w = a.p2
+    if w.unsafe_load(LOOP_GATE) != Float32(0.0):
+        var r = Int(w.unsafe_load(LOOP_ITER))
+        a.p1.unsafe_store(r * a.i0 + t, a.p0.unsafe_load(t))
+
+
+def op_loop_iter_word(t: Int, a: Args):
+    """One element: p1[0] = the iteration register of block p0 as an int32
+    word (the body's iteration input when it is an ids input: `take` and
+    `index` read it as a position)."""
+    var r = Int32(Int(a.p0.unsafe_load(LOOP_ITER)))
+    a.p1.unsafe_store(0, bitcast[DType.float32](r))
+
+
 def apply_loop[OP: Int](t: Int, a: Args):
     comptime if OP == OP_LOOP_TICK:
         op_loop_tick(t, a)
@@ -174,3 +200,7 @@ def apply_loop[OP: Int](t: Int, a: Args):
         op_loop_commit(t, a)
     elif OP == OP_LOOP_ADVANCE:
         op_loop_advance(t, a)
+    elif OP == OP_LOOP_APPEND:
+        op_loop_append(t, a)
+    elif OP == OP_LOOP_ITER_WORD:
+        op_loop_iter_word(t, a)

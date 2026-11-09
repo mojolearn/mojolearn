@@ -170,6 +170,8 @@ def train_program_control[E: Exec & Movable & Deinitable](
                 var slot = s._slot(p.params[j])
                 if s.int_words[slot]:
                     raise Error("Program.fit cannot train integer ids")
+                if s.is_state(p.params[j]):
+                    raise Error("ValueError: Program.fit cannot train carried state (Session.state)")
                 if conditional and not choice.body_parameters[j] and not choice.other_parameters[j]:
                     raise Error("ValueError: conditional training cannot update a predicate-only parameter")
                 trainable[j] = True
