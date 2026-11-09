@@ -105,36 +105,14 @@ a compile slot should replace both with what it sees, exactly as
 `arima/README.md`'s bounds table asks for the other four.
 """
 
-from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.memory import memcpy
+from max.gpu.host import DeviceBuffer, DeviceContext
 
-from arima.impl.batched_arima import (
-    ARIMA_FAST_BATCH_GRAD,
-    _refuse_non_finite,
-    grad_kernel,
-    loglike_ws_packed,
-    perturb_kernel,
-    reset_param_kernel,
-)
+from arima.impl.batched_arima import _refuse_non_finite
 from arima.impl.batched_kalman import ARIMA_EVAL_WS_EXOG, KALMAN_FAST_EVAL_WS, eval_ws_fits
 from arima.impl.estimate_x0 import StartParamsResult, estimate_x0_x
 from arima.impl.fast_eval_ws import FastEvalWS
 from arima.impl.fast_order_state import ARIMA_ORDER_BATCH, order_min_lbfgs
-from arima.impl.fast_lbfgs_async import (
-    ARIMA_FAST_ASYNC,
-    AsyncLBFGSOut,
-    async_min_lbfgs,
-)
-from arima.impl.lbfgs_device import (
-    LBFGS_TPB,
-    arima_eval_finish_kernel,
-    arima_mark_infeasible_kernel,
-    lbfgs_accept_kernel,
-    lbfgs_candidate_kernel,
-    lbfgs_init_kernel,
-    lbfgs_prelude_kernel,
-    lbfgs_verdict_kernel,
-)
+from arima.impl.fast_lbfgs_async import AsyncLBFGSOut, async_min_lbfgs
 from arima.impl.timeSeries.arima_helpers import batched_jones_transform
 from arima.impl.tsa.arima_common import (
     ARIMAOrder,
@@ -143,7 +121,6 @@ from arima.impl.tsa.arima_common import (
     unpack,
     validate_order,
 )
-from checks.numerics import ftz
 from core.identity_trace import IdentityTrace
 from glm.impl.qn.qn_util import LBFGS_LS_BT_ARMIJO, LBFGSParam
 from std.math import isfinite
@@ -183,7 +160,8 @@ def arima_fit_params(max_iterations: Int = 1000) -> LBFGSParam:
 
 
 # ---------------------------------------------------------------------------
-# host <-> device for the packed parameter vector
+# host <-> device for the packed parameter vector (the fit's x0 down and its
+# answer up, once each)
 # ---------------------------------------------------------------------------
 
 
@@ -212,181 +190,14 @@ def _download(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int) rais
 
 
 # ---------------------------------------------------------------------------
-# the objective: `-loglike / (n_obs - 1)`, evaluated for the WHOLE BATCH
+# the objective (`eval_batch_device`, `arima_eval`) lives in
+# `arima/impl/eval_batch.mojo` (lane n10-dictl-arima-loops, 2026-11-09)
 # ---------------------------------------------------------------------------
-
-
-def eval_batch_device(
-    ctx: DeviceContext,
-    mut d_y_kf: DeviceBuffer[DType.float32],
-    mut d_exog_kf: DeviceBuffer[DType.float32],
-    batch_size: Int,
-    n_obs_kf: Int,
-    order_kf: ARIMAOrder,
-    mut d_x: DeviceBuffer[DType.float32],
-    mut d_grad: DeviceBuffer[DType.float32],
-    mut d_x_pert: DeviceBuffer[DType.float32],
-    mut scratch: ARIMAParams,
-    h: Float32,
-    scale: Float32,
-    mut d_f: DeviceBuffer[DType.float32],
-    mut d_g: DeviceBuffer[DType.float32],
-    mut d_bad: DeviceBuffer[DType.int32],
-) raises:
-    """`fit_helper`'s `f` and `gf` (`arima.pyx:905-919`) in ONE call, at the
-    candidates already in `d_x`, with every result left on the device:
-
-        f(x)  = -loglike(x, trans=True) / (n_obs - 1)          -> d_f
-        gf(x) = -loglike_grad(x, h, trans=True) / (n_obs - 1)  -> d_g
-
-    `scale` is `n_obs - 1` with the ORIGINAL `n_obs`, not the differenced
-    one; theirs is `self.n_obs` and the differencing has already happened by
-    the time the loglike is called. The base log-likelihood is taken from
-    the gradient's own base evaluation (one Kalman pass saved, no bit
-    moved). An INFEASIBLE candidate (a Kalman refusal code or a -inf
-    log-likelihood at the base or at any forward-difference point) is
-    `f = +inf` with a zero gradient, both constants, marked by a kernel:
-    the line search's Armijo test fails and halves the step (cuML's NaN
-    does the same). The host column (`arima_oracle._eval_batch`) writes the
-    same values.
-
-    Nothing is read back here (cpu-gpu-cleanup n-seq, 2026-10-02: the old
-    `eval_batch` uploaded the candidates from host lists and brought the
-    log-likelihoods and the gradient down every evaluation). The Kalman
-    workspaces of the forward-difference points are released after one wait
-    each; the stacked arm (Apple, `ARIMA_FAST_BATCH_GRAD`) evaluates all of
-    them in one batch."""
-    var n = order_kf.complexity()
-    var bs = batch_size
-    var grid = (bs + LBFGS_TPB - 1) // LBFGS_TPB
-    ctx.enqueue_memset(d_bad, Int32(0))
-    var fut = ctx.enqueue_create_buffer[DType.float32](1)
-    comptime if ARIMA_FAST_BATCH_GRAD:
-        if order_kf.n_exog == 0:
-            # ONE stacked evaluation over (n + 1) x batch members: member m's
-            # parameters perturbed in parameter m - 1 (`batched_arima.mojo::
-            # _batched_loglike_grad_stacked`, without its read-back).
-            var m1 = n + 1
-            var eb = m1 * bs
-            var nb_y = bs * n_obs_kf
-            var nb_x = bs * n
-            var y_ext = ctx.enqueue_create_buffer[DType.float32](eb * n_obs_kf)
-            var x_ext = ctx.enqueue_create_buffer[DType.float32](eb * n)
-            for mm in range(m1):
-                ctx.enqueue_copy(
-                    dst_buf=y_ext.create_sub_buffer[DType.float32](mm * nb_y, nb_y),
-                    src_buf=d_y_kf.create_sub_buffer[DType.float32](0, nb_y),
-                )
-                ctx.enqueue_copy(
-                    dst_buf=x_ext.create_sub_buffer[DType.float32](mm * nb_x, nb_x),
-                    src_buf=d_x.create_sub_buffer[DType.float32](0, nb_x),
-                )
-            for i in range(n):
-                var blk = x_ext.unsafe_ptr().unsafe_offset((i + 1) * nb_x)
-                var blk_src = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(blk))
-                ctx.enqueue_function[perturb_kernel](
-                    blk, blk_src, Int32(bs), Int32(n), Int32(i), h,
-                    grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
-                )
-            var p_ext = ARIMAParams(ctx, order_kf, eb)
-            var r = loglike_ws_packed(
-                ctx, y_ext, d_exog_kf, fut, eb, n_obs_kf, order_kf, x_ext, p_ext
-            )
-            ctx.enqueue_function[arima_mark_infeasible_kernel](
-                d_bad.unsafe_ptr(), r.ws.loglike.unsafe_ptr(), r.ws.info_init.unsafe_ptr(),
-                r.ws.info_loop.unsafe_ptr(), Int32(bs), Int32(m1),
-                grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
-            )
-            for i in range(n):
-                ctx.enqueue_function[grad_kernel](
-                    d_grad.unsafe_ptr(),
-                    r.ws.loglike.unsafe_ptr().unsafe_offset((i + 1) * bs),
-                    MutPointer[Float32, MutAnyOrigin](
-                        unsafe_from_address=Int(r.ws.loglike.unsafe_ptr())
-                    ),
-                    Int32(bs), Int32(n), Int32(i), h,
-                    grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
-                )
-            # the caller's scratch ends equal to d_x, as the sequential form leaves it
-            ctx.enqueue_copy(
-                dst_buf=d_x_pert.create_sub_buffer[DType.float32](0, nb_x),
-                src_buf=d_x.create_sub_buffer[DType.float32](0, nb_x),
-            )
-            ctx.enqueue_function[arima_eval_finish_kernel](
-                d_f.unsafe_ptr(), d_g.unsafe_ptr(), r.ws.loglike.unsafe_ptr(),
-                d_grad.unsafe_ptr(), d_bad.unsafe_ptr(), Int32(bs), Int32(n), scale,
-                grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
-            )
-            # the workspaces are released only after their readers ran
-            ctx.synchronize()
-            _ = y_ext^
-            _ = x_ext^
-            _ = p_ext^
-            _ = r^
-            _ = fut^
-            return
-    # THE SEQUENTIAL FORM (`batched_loglike_grad_x`): the base, then one
-    # forward-difference point per parameter, the perturbation reset by a
-    # COPY (a `+ 0.0` would turn a `-0.0` parameter into `+0.0`).
-    ctx.enqueue_copy(
-        dst_buf=d_x_pert.create_sub_buffer[DType.float32](0, n * bs),
-        src_buf=d_x.create_sub_buffer[DType.float32](0, n * bs),
-    )
-    var base = loglike_ws_packed(
-        ctx, d_y_kf, d_exog_kf, fut, bs, n_obs_kf, order_kf, d_x, scratch
-    )
-    ctx.enqueue_function[arima_mark_infeasible_kernel](
-        d_bad.unsafe_ptr(), base.ws.loglike.unsafe_ptr(), base.ws.info_init.unsafe_ptr(),
-        base.ws.info_loop.unsafe_ptr(), Int32(bs), Int32(1),
-        grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
-    )
-    for i in range(n):
-        ctx.enqueue_function[perturb_kernel](
-            d_x_pert.unsafe_ptr(), d_x.unsafe_ptr(), Int32(bs), Int32(n), Int32(i), h,
-            grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
-        )
-        var pert = loglike_ws_packed(
-            ctx, d_y_kf, d_exog_kf, fut, bs, n_obs_kf, order_kf, d_x_pert, scratch
-        )
-        ctx.enqueue_function[arima_mark_infeasible_kernel](
-            d_bad.unsafe_ptr(), pert.ws.loglike.unsafe_ptr(), pert.ws.info_init.unsafe_ptr(),
-            pert.ws.info_loop.unsafe_ptr(), Int32(bs), Int32(1),
-            grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
-        )
-        ctx.enqueue_function[grad_kernel](
-            d_grad.unsafe_ptr(), pert.ws.loglike.unsafe_ptr(), base.ws.loglike.unsafe_ptr(),
-            Int32(bs), Int32(n), Int32(i), h,
-            grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
-        )
-        ctx.enqueue_function[reset_param_kernel](
-            d_x_pert.unsafe_ptr(), d_x.unsafe_ptr(), Int32(bs), Int32(n), Int32(i),
-            grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
-        )
-        # this point's workspace is released only after its readers ran
-        ctx.synchronize()
-        _ = pert^
-    ctx.enqueue_function[arima_eval_finish_kernel](
-        d_f.unsafe_ptr(), d_g.unsafe_ptr(), base.ws.loglike.unsafe_ptr(),
-        d_grad.unsafe_ptr(), d_bad.unsafe_ptr(), Int32(bs), Int32(n), scale,
-        grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
-    )
-    ctx.synchronize()
-    _ = base^
-    _ = fut^
 
 
 # ---------------------------------------------------------------------------
 # the batched L-BFGS
 # ---------------------------------------------------------------------------
-
-
-def _iter_tag(k: Int) -> String:
-    """`fit.iterNNNN`, zero padded so the card's tags sort and align, as
-    `glm/impl/qn/qn_solvers.mojo::_iter_tag` does."""
-    var s = String(k)
-    while s.byte_length() < 4:
-        s = "0" + s
-    return "fit.iter" + s
 
 
 @fieldwise_init
@@ -398,40 +209,11 @@ struct BatchedLBFGSResult(Movable):
     var n_eval: Int
 
 
-def _download_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int) raises -> List[Int32]:
-    var h = ctx.enqueue_create_host_buffer[DType.int32](n if n > 0 else 1)
-    if n > 0:
-        var view = buf.create_sub_buffer[DType.int32](0, n)
-        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
-    ctx.synchronize()
-    var out = List[Int32](length=n, fill=Int32(0))
-    if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
-    _ = h^
-    return out^
-
-
-def _read_flag(ctx: DeviceContext, mut flag: DeviceBuffer[DType.int32], mut host: HostBuffer[DType.int32]) raises -> Bool:
-    """The one control word a step reads back: whether any series is still
-    active (or still searching). One 4-byte copy and its wait."""
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=flag)
-    ctx.synchronize()
-    return host.unsafe_ptr()[0] != 0
-
-
-def _record_iter(
-    ctx: DeviceContext, mut trace: IdentityTrace, tag: String,
-    mut x: DeviceBuffer[DType.float32], mut fx: DeviceBuffer[DType.float32],
-    mut grad: DeviceBuffer[DType.float32], mut lsret: DeviceBuffer[DType.int32],
-    mut ls_iters: DeviceBuffer[DType.int32], batch_size: Int, n: Int,
-) raises:
-    """The per-iteration card, read back only when the trace is on."""
-    trace.record_list_f32(tag + ".x", _download(ctx, x, batch_size * n))
-    trace.record_list_f32(tag + ".loss", _download(ctx, fx, batch_size))
-    trace.record_list_f32(tag + ".grad", _download(ctx, grad, batch_size * n))
-    var ls = _download_i32(ctx, lsret, batch_size)
-    ls.extend(_download_i32(ctx, ls_iters, batch_size))
-    trace.record_list_i32(tag + ".ls", ls)
+# TOMBSTONE: MOJOLEARN_IDN_ARIMA_ASYNC_OFF, MOJOLEARN_ARIMA_FAST_ASYNC_OFF (superseded: the lock-step device solver they kept) deleted 2026-11-09 by lane/n10-dictl-arima-loops; code recoverable at the lane's base f59d913b0b.
+# Restore: git apply experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch
+# (the lock-step loop, `_read_flag`, `_record_iter`, `_iter_tag`,
+# `_download_i32` and its per-iteration `fit.init.*` / `fit.iterNNNN.*` card,
+# which nothing read)
 
 
 def batched_min_lbfgs(
@@ -448,32 +230,24 @@ def batched_min_lbfgs(
     mut trace: IdentityTrace,
 ) raises -> BatchedLBFGSResult:
     """B independent L-BFGS solvers, every series' state ON THE DEVICE, one
-    thread per series (`arima/impl/lbfgs_device.mojo`), sharing ONE batched
-    device evaluation per candidate point (cpu-gpu-cleanup n-seq,
-    2026-10-02; the state machine ran on the host before).
+    thread per series, sharing ONE batched device evaluation per round
+    (`fast_lbfgs_async.mojo::async_min_lbfgs`, on every vendor and in both
+    modes since lane n10-dictl-arima-loops, 2026-11-09).
 
-    THE SHAPE, and the one thing to understand before editing it. The OUTER
-    loop is `k`, the L-BFGS iteration. Inside it, the LINE SEARCH is also a
-    shared loop: at step `t` every still-searching series proposes its own
-    candidate `xp + step_b * drt_b` with its OWN step length, all B
-    candidates go into one `d_x`, and ONE evaluation takes them together.
-    Each series then applies the Armijo test to its own result and either
-    accepts or halves its own step. Series take different numbers of
-    line-search steps and that is fine; the loop runs until none is still
-    searching, at most `param.max_linesearch` times.
-
-    A SERIES THAT IS NOT SEARCHING STILL PROPOSES ITS CURRENT `x`, and its
-    result is discarded. That keeps the BATCH COMPOSITION and the launch
-    geometry a function of the fixture ALONE, never of how many series have
-    converged.
-
-    THE HOST SEQUENCES LAUNCHES AND READS ONE WORD PER STEP: whether any
-    series is still active (per iteration) or still searching (per
-    line-search step), raised by the kernels with an atomic max. Every
-    series' arithmetic is its own thread's and folds nothing across series,
-    so the branch sequence -- and therefore the ITERATION COUNT, which the
-    card records -- is a function of the log-likelihood bits alone, and
-    equals the host column's (`arima_oracle._batched_min_lbfgs`)."""
+    THE SHAPE. Every still-running series proposes its own candidate, all B
+    candidates go into one evaluation (`eval_batch.mojo::arima_eval`: the
+    held stacked workspace when the fit has one, else the sequential Kalman
+    passes; the Kalman filter is the body's kernel either way), and each
+    series then takes its own Armijo test, verdict, history update and next
+    direction in its own thread. A series that has stopped still proposes its
+    current `x` and its result is discarded, so the batch composition and the
+    launch geometry are a function of the fixture alone. Each series'
+    iterates, `n_iter` and `retcode` are the lock-step solver's (deleted)
+    bit for bit and equal the host column's
+    (`arima_oracle._batched_min_lbfgs`); the host reads one word every
+    `ASYNC_READ_EVERY` rounds, never per line-search step. The identity
+    trace records the answer (`fit.x`, `fit.loss`, `fit.n_iter`,
+    `fit.retcode`)."""
     if param.check_param() != 0:
         raise Error(
             "batched_min_lbfgs: invalid parameter (check_param code "
@@ -481,19 +255,9 @@ def batched_min_lbfgs(
         )
     var n = order_kf.complexity()
     var bs = batch_size
-    var b_n = bs * n
-    var m = param.m
-    var past = param.past if param.past > 0 else 0
-    var grid = (bs + LBFGS_TPB - 1) // LBFGS_TPB
-
-    # device workspace, allocated ONCE for the whole solve
-    var d_x = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-    var d_grad = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-    var d_x_pert = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-    var scratch = ARIMAParams(ctx, order_kf, bs)
     # lane/apple-fast-tsa: the stacked evaluation's buffers, held for the
-    # whole solve (`-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1`, FAST on Apple, no
-    # exog; `arima/impl/fast_eval_ws.mojo`). `None` in every other build.
+    # whole solve (`arima/impl/fast_eval_ws.mojo`); `None` when the build or
+    # the fit's size keeps the sequential evaluation (same bits).
     var ews = Optional[FastEvalWS]()
     comptime if KALMAN_FAST_EVAL_WS:
         # IDENTICAL on every vendor since lane/fam-timeseries
@@ -505,223 +269,25 @@ def batched_min_lbfgs(
             if order_kf.n_exog != 0:
                 held.attach_exog(d_exog_kf, order_kf.n_exog)
             ews = held^
-    comptime if ARIMA_FAST_ASYNC:
-        # every series on its own schedule (fast_lbfgs_async.mojo); the
-        # per-iteration card needs the lock-step shape, so a trace keeps it
-        if ews and not trace.enabled:
-            var ar: AsyncLBFGSOut
-            comptime if ARIMA_ORDER_BATCH:
-                ar = order_min_lbfgs(ctx, ews.value(), bs, scale, order_kf, x0, param, h)
-            else:
-                ar = async_min_lbfgs(ctx, ews.value(), bs, scale, order_kf, x0, param, h)
-            trace.record_list_f32("fit.x", ar.x)
-            trace.record_list_f32("fit.loss", ar.fx)
-            trace.record_list_i32("fit.n_iter", ar.n_iter)
-            trace.record_list_i32("fit.retcode", ar.retcode)
-            _ = d_x^
-            _ = d_grad^
-            _ = d_x_pert^
-            _ = scratch^
-            _ = ews^
-            return BatchedLBFGSResult(
-                x=ar.x.copy(), fx=ar.fx.copy(), n_iter=ar.n_iter.copy(),
-                retcode=ar.retcode.copy(), n_eval=ar.n_eval,
-            )
-    var x = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-    var xp = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-    var grad = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-    var gradp = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-    var gradc = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-    var drt = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
-    var S = ctx.enqueue_create_buffer[DType.float32](max(1, b_n * m))
-    var Y = ctx.enqueue_create_buffer[DType.float32](max(1, b_n * m))
-    var yhist = ctx.enqueue_create_buffer[DType.float32](max(1, bs * m))
-    var alpha = ctx.enqueue_create_buffer[DType.float32](max(1, bs * m))
-    var fx_hist = ctx.enqueue_create_buffer[DType.float32](max(1, bs * (past if past > 0 else 1)))
-    var fx = ctx.enqueue_create_buffer[DType.float32](max(1, bs))
-    var fxc = ctx.enqueue_create_buffer[DType.float32](max(1, bs))
-    var fxp = ctx.enqueue_create_buffer[DType.float32](max(1, bs))
-    var fx_init = ctx.enqueue_create_buffer[DType.float32](max(1, bs))
-    var dg_init = ctx.enqueue_create_buffer[DType.float32](max(1, bs))
-    var dg_test = ctx.enqueue_create_buffer[DType.float32](max(1, bs))
-    var gnorm = ctx.enqueue_create_buffer[DType.float32](max(1, bs))
-    var step = ctx.enqueue_create_buffer[DType.float32](max(1, bs))
-    var active = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
-    var searching = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
-    var endv = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
-    var n_vec = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
-    var lsret = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
-    var ls_iters = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
-    var n_iter = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
-    var retcode = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
-    var bad = ctx.enqueue_create_buffer[DType.int32](max(1, bs))
-    var any_active = ctx.enqueue_create_buffer[DType.int32](1)
-    var any_searching = ctx.enqueue_create_buffer[DType.int32](1)
-    var flag_host = ctx.enqueue_create_host_buffer[DType.int32](1)
-    ctx.enqueue_memset(xp, Float32(0.0))
-    ctx.enqueue_memset(gradp, Float32(0.0))
-    ctx.enqueue_memset(gradc, Float32(0.0))
-    ctx.enqueue_memset(drt, Float32(0.0))
-    ctx.enqueue_memset(S, Float32(0.0))
-    ctx.enqueue_memset(Y, Float32(0.0))
-    ctx.enqueue_memset(yhist, Float32(0.0))
-    ctx.enqueue_memset(alpha, Float32(0.0))
-    ctx.enqueue_memset(fx_hist, Float32(0.0))
-    ctx.enqueue_memset(fxc, Float32(0.0))
-    ctx.enqueue_memset(fxp, Float32(0.0))
-    ctx.enqueue_memset(fx_init, Float32(0.0))
-    ctx.enqueue_memset(dg_init, Float32(0.0))
-    ctx.enqueue_memset(dg_test, Float32(0.0))
-    ctx.enqueue_memset(gnorm, Float32(0.0))
-    ctx.enqueue_memset(step, Float32(0.0))
-    ctx.enqueue_memset(active, Int32(0))
-    # x0 up ONCE; `x` is the state, `d_x` the evaluation's candidates
-    _upload(ctx, x, x0)
-    ctx.enqueue_copy(dst_buf=d_x, src_buf=x)
-
-    # `min_lbfgs:161-173`: evaluate at x0, and exit early per series if it
-    # is already a minimizer.
-    var ev0_done = False
-    comptime if KALMAN_FAST_EVAL_WS:
+    comptime if ARIMA_ORDER_BATCH:
         if ews:
-            ews.value().eval(ctx, order_kf, h, scale, d_x, d_grad, d_x_pert, fx, grad, bad)
-            ev0_done = True
-    if not ev0_done:
-        eval_batch_device(
-            ctx, d_y_kf, d_exog_kf, bs, n_obs_kf, order_kf, d_x, d_grad, d_x_pert,
-            scratch, h, scale, fx, grad, bad,
-        )
-    var n_eval = 1
-    if trace.enabled:
-        trace.record_list_f32("fit.init.x", _download(ctx, x, b_n))
-        trace.record_list_f32("fit.init.loss", _download(ctx, fx, bs))
-        trace.record_list_f32("fit.init.grad", _download(ctx, grad, b_n))
-    ctx.enqueue_memset(any_active, Int32(0))
-    ctx.enqueue_function[lbfgs_init_kernel](
-        grad.unsafe_ptr(), drt.unsafe_ptr(), fx.unsafe_ptr(), fxp.unsafe_ptr(),
-        fx_hist.unsafe_ptr(), gnorm.unsafe_ptr(), step.unsafe_ptr(),
-        active.unsafe_ptr(), searching.unsafe_ptr(), endv.unsafe_ptr(), n_vec.unsafe_ptr(),
-        lsret.unsafe_ptr(), ls_iters.unsafe_ptr(), n_iter.unsafe_ptr(), retcode.unsafe_ptr(),
-        any_active.unsafe_ptr(),
-        Int32(bs), Int32(n), Int32(past), param.epsilon, param.delta,
-        grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
-    )
-
-    var k = 1
-    while k <= param.max_iterations:
-        if not _read_flag(ctx, any_active, flag_host):
-            break
-
-        # `min_lbfgs:188-191` and `ls_backtrack:100-108`
-        ctx.enqueue_memset(any_searching, Int32(0))
-        ctx.enqueue_function[lbfgs_prelude_kernel](
-            x.unsafe_ptr(), xp.unsafe_ptr(), grad.unsafe_ptr(), gradp.unsafe_ptr(),
-            drt.unsafe_ptr(), fx.unsafe_ptr(), fxp.unsafe_ptr(), fx_init.unsafe_ptr(),
-            dg_init.unsafe_ptr(), dg_test.unsafe_ptr(), step.unsafe_ptr(),
-            active.unsafe_ptr(), searching.unsafe_ptr(), lsret.unsafe_ptr(),
-            ls_iters.unsafe_ptr(), any_searching.unsafe_ptr(),
-            Int32(bs), Int32(n), param.ftol,
-            grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
-        )
-
-        # THE SHARED LINE SEARCH (`ls_backtrack:109-121`, B at a time)
-        for _t in range(param.max_linesearch):
-            if not _read_flag(ctx, any_searching, flag_host):
-                break
-            ctx.enqueue_memset(any_searching, Int32(0))
-            ctx.enqueue_function[lbfgs_candidate_kernel](
-                d_x.unsafe_ptr(), x.unsafe_ptr(), xp.unsafe_ptr(), drt.unsafe_ptr(),
-                step.unsafe_ptr(), searching.unsafe_ptr(), Int32(bs), Int32(n),
-                grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
-            )
-            var ev_done = False
-            comptime if KALMAN_FAST_EVAL_WS:
-                if ews:
-                    ews.value().eval(
-                        ctx, order_kf, h, scale, d_x, d_grad, d_x_pert, fxc, gradc, bad
-                    )
-                    ev_done = True
-            if not ev_done:
-                eval_batch_device(
-                    ctx, d_y_kf, d_exog_kf, bs, n_obs_kf, order_kf, d_x, d_grad, d_x_pert,
-                    scratch, h, scale, fxc, gradc, bad,
-                )
-            n_eval += 1
-            ctx.enqueue_function[lbfgs_accept_kernel](
-                x.unsafe_ptr(), grad.unsafe_ptr(), fx.unsafe_ptr(), d_x.unsafe_ptr(),
-                gradc.unsafe_ptr(), fxc.unsafe_ptr(), fx_init.unsafe_ptr(),
-                dg_test.unsafe_ptr(), step.unsafe_ptr(), searching.unsafe_ptr(),
-                lsret.unsafe_ptr(), ls_iters.unsafe_ptr(), any_searching.unsafe_ptr(),
-                Int32(bs), Int32(n), param.min_step, param.max_step, param.ls_dec,
-                grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
-            )
-
-        # `min_lbfgs:197-222`: verdict, history update, new direction
-        ctx.enqueue_memset(any_active, Int32(0))
-        ctx.enqueue_function[lbfgs_verdict_kernel](
-            x.unsafe_ptr(), xp.unsafe_ptr(), grad.unsafe_ptr(), gradp.unsafe_ptr(),
-            drt.unsafe_ptr(), S.unsafe_ptr(), Y.unsafe_ptr(), yhist.unsafe_ptr(),
-            alpha.unsafe_ptr(), fx.unsafe_ptr(), fxp.unsafe_ptr(), fx_hist.unsafe_ptr(),
-            gnorm.unsafe_ptr(), step.unsafe_ptr(), active.unsafe_ptr(), endv.unsafe_ptr(),
-            n_vec.unsafe_ptr(), lsret.unsafe_ptr(), n_iter.unsafe_ptr(), retcode.unsafe_ptr(),
-            any_active.unsafe_ptr(),
-            Int32(bs), Int32(n), Int32(m), Int32(past), Int32(k),
-            param.epsilon, param.delta, param.ftol,
-            grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
-        )
-
-        if trace.enabled:
-            _record_iter(ctx, trace, _iter_tag(k), x, fx, grad, lsret, ls_iters, bs, n)
-        k += 1
-
-    # the answer comes down ONCE
-    var x_out = _download(ctx, x, b_n)
-    var fx_out = _download(ctx, fx, bs)
-    var n_iter_out = _download_i32(ctx, n_iter, bs)
-    var retcode_out = _download_i32(ctx, retcode, bs)
-    trace.record_list_f32("fit.x", x_out)
-    trace.record_list_f32("fit.loss", fx_out)
-    trace.record_list_i32("fit.n_iter", n_iter_out)
-    trace.record_list_i32("fit.retcode", retcode_out)
-
-    _ = d_x^
-    _ = d_grad^
-    _ = d_x_pert^
-    _ = scratch^
+            var ao = order_min_lbfgs(ctx, ews.value(), bs, scale, order_kf, x0, param, h)
+            _ = ews^
+            return _answer(trace, ao)
+    var ar = async_min_lbfgs(ctx, ews, d_y_kf, d_exog_kf, n_obs_kf, bs, scale, order_kf, x0, param, h)
     _ = ews^
-    _ = x^
-    _ = xp^
-    _ = grad^
-    _ = gradp^
-    _ = gradc^
-    _ = drt^
-    _ = S^
-    _ = Y^
-    _ = yhist^
-    _ = alpha^
-    _ = fx_hist^
-    _ = fx^
-    _ = fxc^
-    _ = fxp^
-    _ = fx_init^
-    _ = dg_init^
-    _ = dg_test^
-    _ = gnorm^
-    _ = step^
-    _ = active^
-    _ = searching^
-    _ = endv^
-    _ = n_vec^
-    _ = lsret^
-    _ = ls_iters^
-    _ = n_iter^
-    _ = retcode^
-    _ = bad^
-    _ = any_active^
-    _ = any_searching^
-    _ = flag_host^
+    return _answer(trace, ar)
+
+
+def _answer(mut trace: IdentityTrace, ar: AsyncLBFGSOut) raises -> BatchedLBFGSResult:
+    """The solve's answer, recorded on the identity trace."""
+    trace.record_list_f32("fit.x", ar.x)
+    trace.record_list_f32("fit.loss", ar.fx)
+    trace.record_list_i32("fit.n_iter", ar.n_iter)
+    trace.record_list_i32("fit.retcode", ar.retcode)
     return BatchedLBFGSResult(
-        x=x_out^, fx=fx_out^, n_iter=n_iter_out^, retcode=retcode_out^, n_eval=n_eval
+        x=ar.x.copy(), fx=ar.fx.copy(), n_iter=ar.n_iter.copy(),
+        retcode=ar.retcode.copy(), n_eval=ar.n_eval,
     )
 
 

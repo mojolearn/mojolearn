@@ -30,6 +30,8 @@ def _check_configuration() -> Bool:
     # on every cell (docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md, experiments/removed/*.patch).
     # Promoted: the old positive define is refused; -D <NAME>_OFF restores the old path.
     comptime assert not is_defined["MOJOLEARN_IDN_ETS_TEAM"](), "promoted 2026-10-11 (lane/w2-decide-neural): the ETS(A, A|Ad, N) team is the IDENTICAL default (damped-ets 0.014-0.017x, bits change NV==AMD, forecast_rmse equal, nv2 v0099 / amd a1681); drop -D MOJOLEARN_IDN_ETS_TEAM, -D MOJOLEARN_IDN_ETS_TEAM_OFF restores op_ets"
+    comptime assert not is_defined["MOJOLEARN_IDN_ARIMA_ASYNC_OFF"](), "removed 2026-11-09 (lane/n10-dictl-arima-loops): the lock-step ARIMA L-BFGS this kept under IDENTICAL is deleted; the per-series solver (fast_lbfgs_async.mojo, same bits per series) is the device's only arm; code at f59d913b0b; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_ASYNC_OFF"](), "removed 2026-11-09 (lane/n10-dictl-arima-loops): the lock-step ARIMA L-BFGS this restored is deleted (M3 A/B autoarima taxi-hourly 39,639 -> 24,563 ms, synthetic 28,511 -> 14,918 ms for the per-series solver); code at f59d913b0b; see docs/TOMBSTONES.md"
     return True
 
 
