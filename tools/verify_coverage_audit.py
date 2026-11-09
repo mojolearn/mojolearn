@@ -1334,7 +1334,7 @@ NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backwa
                        "x-metrics-classification-report", "x-metrics-permutation-test-score",
                        "classical-float16-sequences",
                        # lane verify-coverage-20261024
-                       "transformer-forward-tape", "public-cnn-classifier-predict", "public-cnn-layer-fit",
+                       "public-cnn-classifier-predict", "public-cnn-layer-fit",
                        "public-numeric-metadata", "public-randomized-search", "public-residual-dropout",
                        "public-scorer-factories", "public-sparse-encode", "public-theta-variants",
                        "public-validation-learning-curves", "scaler-fit-transform", "multioutput-ridge",
@@ -1399,9 +1399,6 @@ NEW_LANE_PURPOSE = {
                                    "float16 rows: the classical input door's `sequence_widen_halves` / "
                                    "`sequence_narrow_halves` and the scalers' `scaler_cast`",
     # lane verify-coverage-20261024
-    "transformer-forward-tape": "TransformerBlock.forward_with_tape, backward_from_tape and "
-                                "TransformerForwardTape.close: `transformer_session_forward_tape`, "
-                                "`transformer_session_backward_tape`, `transformer_session_discard_tape`",
     "public-cnn-layer-fit": "Conv1d, Conv2d, BatchNorm1d and BatchNorm2d fit",
     "public-cnn-classifier-predict": "CNNClassifier.predict and predict_proba",
     "public-numeric-metadata": "training.vendor_used, ensemble.catboost_auto_learning_rate and "
@@ -2280,9 +2277,6 @@ ANNOTATIONS.update({
                                               "it returns nothing a digest can hold"),
     "causal_lm_blocks": ("n/a", [], "an accessor: CausalLM.blocks returns list(model._blocks), no arithmetic; the "
                                     "blocks it returns are the ones every hf-causal-lm forward runs"),
-    "transformer_session_discard_tape": ("covered", ["transformer-forward-tape"],
-                                         "TransformerForwardTape.close; the lane closes a tape, requires the "
-                                         "backward to refuse it and the next tape's gradients to be unchanged"),
     "var_forecast": ("covered", ["sequence-var"],
                      "VAR.fit's owner (bindings/xseq_forecast_native.mojo) builds the VARResults the bridge "
                      "registered (_native_xseq_bridge.register(xseq_var_results=...)); its forecast calls "
