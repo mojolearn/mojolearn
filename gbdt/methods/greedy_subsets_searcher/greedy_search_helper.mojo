@@ -66,6 +66,10 @@ from gbdt.gpu_data.gpu_structures import CFeature
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     choose_scale_kernel,
 )
+from gbdt.methods.greedy_subsets_searcher.kernel.greedy_gate_walk import (
+    greedy_gate_and_tail,
+    root_partition_kernel,
+)
 from gbdt.methods.greedy_subsets_searcher.kernel.split_resolve import (
     RESOLVE_BLOCK_SIZE,
     resolve_and_pack_kernel,
@@ -5551,6 +5555,22 @@ def run_tree_layout_traced[
     var dynamic_cindex: Optional[DeviceBuffer[DType.uint32]] = None,
     dynamic_fold_counts: List[Int] = List[Int](),
     dynamic_one_hot: List[Bool] = List[Bool](),
+    # lane t3-gbdt-greedy-on-device-loop: tree op TREE_OP_GREEDY_SEARCH
+    # (docs/plans/EXECUTOR_T1_TREE_OPS.md section 8). True: the level loop,
+    # then the gates, the rollback and the coverage check ON THE DEVICE
+    # (`greedy_gate_and_tail`) into `structure_out` / `words_out`; nothing
+    # is read back and nothing drains; returns an empty list and leaves
+    # `out_splits` / `out_leaf_values` / `out_leaf_offsets` untouched. With
+    # `apply_to_cursor` the Simple leaves are computed into
+    # `ws[0].leaf_values` (all `1 << max_depth` slots, the empty ones 0) and
+    # the cursor is NOT touched: the caller's gated op adds them. Needs
+    # `mags_dev` (or a float-flush build), `random_strength == 0` (the score
+    # std dev is a host reduction) and the three buffers below.
+    enqueue_only: Bool = False,
+    var gate: Optional[DeviceBuffer[DType.int32]] = None,
+    var bf_table: Optional[DeviceBuffer[DType.uint32]] = None,
+    var structure_out: Optional[DeviceBuffer[DType.int32]] = None,
+    var words_out: Optional[DeviceBuffer[DType.int64]] = None,
 ) raises -> List[Int]:
     """`FitImpl` over a LAYOUT: mixed feature widths, one launch per policy.
 
@@ -5715,14 +5735,38 @@ def run_tree_layout_traced[
     # launches below; the buffers it sizes live in the pool.
     var argmax_blocks = sym_argmax_blocks_for(hist_cells_per_leaf)
 
+    if enqueue_only:
+        if random_strength != Float32(0.0):
+            raise Error(
+                "run_tree_layout_traced(enqueue_only=True): random_strength"
+                " needs the score std dev, a host reduction"
+                " (compute_target_std_dev); take the drained path"
+            )
+        if not (
+            gate.__bool__() and bf_table.__bool__()
+            and structure_out.__bool__() and words_out.__bool__()
+        ):
+            raise Error(
+                "run_tree_layout_traced(enqueue_only=True) needs gate,"
+                " bf_table, structure_out and words_out"
+            )
+        if trace.enabled:
+            raise Error(
+                "run_tree_layout_traced(enqueue_only=True): an identity trace"
+                " records host copies per tree; take the drained path"
+            )
+
     # ---- per-tree state, the only part the pool cannot carry over ----
-    # their `CreateInitialSubsets`' root partition and `FillBuffer` zeroing
-    for i in range(max_leaves):
-        h_off.unsafe_ptr().unsafe_store(i, UInt32(0))
-        h_sz.unsafe_ptr().unsafe_store(i, UInt32(0))
-    h_sz.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
-    ctx.enqueue_copy(dst_buf=p_off, src_ptr=h_off.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=p_sz, src_ptr=h_sz.unsafe_ptr())
+    # their `CreateInitialSubsets`' root partition and `FillBuffer` zeroing,
+    # on the device (lane t3-gbdt-greedy-on-device-loop: the host fill of
+    # `h_off` / `h_sz` and its two uploads per tree are gone; same words, and
+    # an enqueued-ahead round no longer shares a host staging buffer with
+    # the round before it).
+    ctx.enqueue_function[root_partition_kernel](
+        p_off.unsafe_ptr(), p_sz.unsafe_ptr(), Int32(max_leaves), Int32(n_rows),
+        grid_dim=((max_leaves + LEAF_FILL_BLOCK - 1) // LEAF_FILL_BLOCK, 1, 1),
+        block_dim=(LEAF_FILL_BLOCK, 1, 1),
+    )
     # ================= DEVIATION 2007b =================
     # The `hp_off`/`hp_sz` root seeds that stood here (two uploads per
     # tree) are DELETED: both buffers are WRITE-ONLY in this driver.
@@ -6552,6 +6596,48 @@ def run_tree_layout_traced[
         times.end(ctx, "sym.split")
 
         n_live = n_live * 2
+
+    # ---- TREE_OP_GREEDY_SEARCH's tail (lane t3-gbdt-greedy-on-device-loop)
+    # The gates, the multi-level rollback and DEVIATION 2002's coverage
+    # invariant on the device, into the structure record and the partition
+    # words; no drain, no host walk. DEVIATION 2002's canary (leg 1) is not
+    # launched on this arm: it is a witness for the drain below, and this arm
+    # has none (the device loop's register read is the round's only read;
+    # a dead device leaves the loop's poisoned words, `LoopRegisters`).
+    if enqueue_only:
+        var g = gate.value().copy()
+        var table = bf_table.value().copy()
+        var st = structure_out.value().copy()
+        var wd = words_out.value().copy()
+        greedy_gate_and_tail(
+            ctx, g, winners_score, winners_bf, table, hist_cells_per_leaf,
+            max_depth, n_rows, p_off, p_sz, st, wd,
+        )
+        if apply_to_cursor:
+            # the Simple leaves over every slot (the empty ones hold no rows
+            # and come out 0); per-leaf folds, so the kept leaves' bits are
+            # the drained arm's (`compute_partition_stats`' grid y is the
+            # slot, nothing crosses slots)
+            if use_ridx:
+                compute_partition_stats_gather(
+                    ctx, max_leaves, max_live_rows, stat_count, n_rows,
+                    dense_ids, p_off, p_sz, stats, row_index,
+                    stat_partials, part_stats,
+                    sm_count=sm_count,
+                )
+            else:
+                compute_partition_stats(
+                    ctx, max_leaves, max_live_rows, stat_count, n_rows,
+                    dense_ids, p_off, p_sz, stats, stat_partials, part_stats,
+                    sm_count=sm_count,
+                )
+            ctx.enqueue_function[compute_leaf_values_kernel](
+                part_stats.unsafe_ptr(), Int32(stat_count), Int32(max_leaves),
+                l2_leaf_reg, leaf_values.unsafe_ptr(),
+                grid_dim=(max_leaves + LEAF_BLOCK - 1) // LEAF_BLOCK,
+                block_dim=LEAF_BLOCK,
+            )
+        return List[Int]()
 
     # ================= DEVIATION 2002, LEG 1 =================
     # THE PER-TREE DEAD-DEVICE CANARY. The 134 loaded window measured a
