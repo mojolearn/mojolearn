@@ -5829,6 +5829,12 @@ struct EtDeviceLoop(Movable):
     var pt_gpos: DeviceBuffer[DType.int32]
     var pt_splits: DeviceBuffer[DType.uint8]
     var tree_base: DeviceBuffer[DType.int32]
+    #: lane t2-trees-on-executor: the arena / FIFO buffers (and the copy
+    #: views onto them) a growth in `ensure` replaced, kept alive until the
+    #: next header drain settles the copies that read them (`drain` clears
+    #: them), so a growth enqueues its copies and drains nothing itself
+    var retired_u8: List[DeviceBuffer[DType.uint8]]
+    var retired_i32: List[DeviceBuffer[DType.int32]]
 
     def __init__(
         out self, ctx: DeviceContext, g: Int, max_batch: Int, f_cap: Int
@@ -5907,6 +5913,8 @@ struct EtDeviceLoop(Movable):
             g * size_of[Split]()
         )
         self.tree_base = ctx.enqueue_create_buffer[DType.int32](g + 1)
+        self.retired_u8 = List[DeviceBuffer[DType.uint8]]()
+        self.retired_i32 = List[DeviceBuffer[DType.int32]]()
 
     def word(self, w: Int) -> Int:
         """Header word `w` as of the last drain."""
@@ -5916,6 +5924,9 @@ struct EtDeviceLoop(Movable):
         """The loop's one readback: the header, then a synchronize."""
         ctx.enqueue_copy(dst_buf=self.h_hdr, src_buf=self.hdr)
         ctx.synchronize()
+        # past the drain: the buffers an `ensure` growth replaced
+        self.retired_u8.clear()
+        self.retired_i32.clear()
         var ov = self.word(ETL_H_OVERFLOW)
         if ov != 0:
             raise Error(
@@ -5979,7 +5990,13 @@ struct EtDeviceLoop(Movable):
         """Call right after a drain. Grows the node arena so `extra` more
         records fit, and re-packs the FIFO's live stretch `[head, tail)` to
         the front of a buffer with `extra` more entries of room (its header
-        words rewritten to match). Rare (doubling), so it synchronizes."""
+        words rewritten to match). Enqueue only (lane t2-trees-on-executor):
+        the copies run in stream order before the next batch's pop, and the
+        replaced buffers stay alive in `retired_*` until the next header
+        drain; the three synchronizes a growth used to pay are deleted.
+        The growth itself stays a host decision: Mojo has no device-side
+        allocation, and a worst-case arena (2 x rows nodes per tree for the
+        whole group) would cost gigabytes at the group cap."""
         comptime NB = size_of[SparseTreeNode[DType.float32]]()
         var used = self.word(ETL_H_NODES)
         if used + extra > self.node_cap:
@@ -6001,11 +6018,12 @@ struct EtDeviceLoop(Movable):
                     0, used * ETL_META_INTS
                 )
                 ctx.enqueue_copy(dst_buf=dm, src_buf=sm)
-                ctx.synchronize()
-                _ = dn^
-                _ = sn^
-                _ = dm^
-                _ = sm^
+                self.retired_u8.append(dn^)
+                self.retired_u8.append(sn^)
+                self.retired_i32.append(dm^)
+                self.retired_i32.append(sm^)
+            self.retired_u8.append(self.g_nodes.copy())
+            self.retired_i32.append(self.g_meta.copy())
             self.g_nodes = nn^
             self.g_meta = nm^
             self.node_cap = cap
@@ -6023,17 +6041,19 @@ struct EtDeviceLoop(Movable):
                     head * ETL_Q_INTS, live * ETL_Q_INTS
                 )
                 ctx.enqueue_copy(dst_buf=dq, src_buf=sq)
-                ctx.synchronize()
-                _ = dq^
-                _ = sq^
+                self.retired_i32.append(dq^)
+                self.retired_i32.append(sq^)
+            self.retired_i32.append(self.queue.copy())
             self.queue = nq^
             self.queue_cap = qcap
             # The device header equals `h_hdr` here (drained, nothing queued
-            # since): shift the two FIFO words and put the header back.
+            # since): shift the two FIFO words and put the header back. The
+            # upload reads `h_hdr` in stream order before the next drain's
+            # download writes it, and the host does not touch `h_hdr` in
+            # between, so it needs no synchronize of its own.
             self.h_hdr.unsafe_ptr()[unsafe_offset=ETL_H_HEAD] = Int32(0)
             self.h_hdr.unsafe_ptr()[unsafe_offset=ETL_H_TAIL] = Int32(live)
             ctx.enqueue_copy(dst_buf=self.hdr, src_ptr=self.h_hdr.unsafe_ptr())
-            ctx.synchronize()
 
     def enqueue_pop(
         mut self,
