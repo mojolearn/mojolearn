@@ -515,6 +515,8 @@ Deletions reversed by new evidence. The code is back on main; the section and th
 | define | area | deleted | restored | now | patch |
 |---|---|---|---|---|---|
 | [`MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE`](#mojolearn_classical_c25_projection_reuse) | Decomp | 2026-10-08 (`ab4e8e543`) | 2026-10-10 (lane/c25-restore-promote) | IDENTICAL default; `_OFF` restores the old path | [MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch](../experiments/removed/MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE.patch) |
+| [`MOJOLEARN_AUTOGRAD_MOE_OFF`](#moe-backward-on-the-forwards-ops-2026-11-09) | Neural (MoEBlock backward) | removed (the tape is the only MoE backward) | 2026-11-09 | [MOJOLEARN_AUTOGRAD_MOE_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch) |
+| [`OP_MOEB_HIDDEN_FWD` / `OP_MOEB_OUT_FWD` (op codes 2900, 2901)](#moe-backward-on-the-forwards-ops-2026-11-09) | Neural (MoEBlock training forward) | removed (duplicate codes of `OP_MOE_HIDDEN` / `OP_MOE_OUT`) | 2026-11-09 | [MOJOLEARN_AUTOGRAD_MOE_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch) |
 
 ## Trees
 
@@ -4271,3 +4273,24 @@ lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Bits: none for any int32-range or
   lane/a3-admit-decomp-prep-metrics@0cb550c337.
 - `door_rows_call` (the `_arena_io._ROWS_CALL` connection in `_native_msel_dispatch.connect`): no reader after A5 deleted
   `door_rows_host`; removed from the glue and from tools/test_device_rows_door_cv.py.
+
+## MoE backward on the forward's ops (2026-11-09)
+
+- What it was: the MoE block's training step (`moe_tape_train_step`, `autograd/route_ops.mojo`, reached by
+  `MoEBlock.backward` through `moe_backward`) ran its forward through two op codes of its own, `OP_MOEB_HIDDEN_FWD` (2900)
+  and `OP_MOEB_OUT_FWD` (2901) in `autograd/kernels/moe.mojo`, whose bodies were `op_moe_hidden` and `op_moe_out`, the
+  item bodies of the forward's own `OP_MOE_HIDDEN` / `OP_MOE_OUT`. The `AUTOGRAD_MOE` switch (default on;
+  `-D MOJOLEARN_AUTOGRAD_MOE_OFF` made `moe_backward` raise "the backward pass is not available in this build") was the
+  last rollback arm of the tape backward.
+- Now: the training forward launches `OP_MOE_ROUTE`, the grouping, `OP_MOE_HIDDEN` and `OP_MOE_OUT` with `a.i4 = a.i6 = 0`
+  (the item form on every executor, h in pair order as the VJPs index it) and records them on the tape; the tape is the
+  only MoE backward. The grouped / register-tiled device forward forms store h in slot order and stay forward-only.
+- Files: `autograd/kernels/moe.mojo`, `autograd/route_ops.mojo`, `sequence/dispatch.mojo` (comment).
+- Verdict: removed (plan row X9, docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md). Not an A/B loser: the same bodies run
+  under the forward's codes, so the words are unchanged by construction (identity lane `sequence-moe` owes nothing new).
+  No timing: the launch set is one for one.
+- Deleted 2026-11-09 by lane/x9-moe-gcn-rules; recoverable at origin/integ/pre-0867-w2 `f59d913b0b`.
+- Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch` (all code hunks of the deletion: both op codes, their
+  dispatch arms and the switch; `git apply` restores them together).
+- Guard: `MOJOLEARN_AUTOGRAD_MOE_OFF` refused in `autograd/route_ops.mojo` (`moe_tape_train_step`) and in
+  `core/experiment_guards_neural.mojo`. No `grid_controls` entry existed.
