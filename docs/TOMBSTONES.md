@@ -465,6 +465,9 @@ in the tables after the sections.
 | [`MOJOLEARN_RSVD_FAST_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, FAST + Apple) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_IDN_RSVD_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, IDENTICAL) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_RSVD_FAST_DEVSCAN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd finiteness scan, FAST + Apple) | removed (KEPT default, superseded: parallel host scan of the one admission path) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`LinAdmission` / `lin_admitted_c` / `lin_borrow_array` / `lin_convert` / `lin_typed` / `metric_input_snapshot`](#one-multi-dtype-admission-family_view-and-family_fill_i32-2026-11-09) | Admission (linalg ops, low-bit, resample, metrics inputs) | removed (moved onto the one admission path: `AdmittedTyped` / `admitted_typed_c` / `admit_typed` / `admitted_snapshot`) | 2026-11-09 | [A6_LIN_ADMISSION.patch](../experiments/removed/A6_LIN_ADMISSION.patch) |
+| [`family_view` / `cfb_f64_to_i32`](#one-multi-dtype-admission-family_view-and-family_fill_i32-2026-11-09) | Admission (family doors: KMeans init, HDBSCAN, Scaler shards, spectral, metrics, mixture) | removed (second admission of a view; the one path refuses with the same wording) | 2026-11-09 | [A6_FAMILY_VIEW.patch](../experiments/removed/A6_FAMILY_VIEW.patch) |
+| [`family_fill_i32`](#one-multi-dtype-admission-family_view-and-family_fill_i32-2026-11-09) | Clustering (empty-model predict labels) | removed (serial fill; `admitted_fill[DType.int32]` in row tasks) | 2026-11-09 | [A6_FAMILY_FILL_I32.patch](../experiments/removed/A6_FAMILY_FILL_I32.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -4271,3 +4274,31 @@ lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Bits: none for any int32-range or
   lane/a3-admit-decomp-prep-metrics@0cb550c337.
 - `door_rows_call` (the `_arena_io._ROWS_CALL` connection in `_native_msel_dispatch.connect`): no reader after A5 deleted
   `door_rows_host`; removed from the glue and from tools/test_device_rows_door_cv.py.
+
+## One multi-dtype admission, family_view and family_fill_i32 (2026-11-09)
+
+Lane a6-device-x-family-classical (part 3, branch lane/a6-device-x-family-classical-e, base integ/pre-0867-w2
+f59d913b0b). Not experiments: admission helpers that duplicated the one admission path (plan
+docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.3, lanes A2 / A3 follow-ups).
+
+- The multi-dtype admission moved onto the one path, word for word: `LinAdmission` -> `AdmittedTyped`,
+  `lin_admitted_c` -> `admitted_typed_c`, `lin_borrow_array` -> `_typed_borrow_array`, `lin_convert` ->
+  `admitted_typed_convert`, `lin_typed` -> `admit_typed`, `lin_admitted_output` -> `admitted_typed_output`,
+  `lin_admit_exporter` -> `admitted_typed_exporter`, `LinBuf` -> `AdmittedBuf`, `LinBufferPin` /
+  `register_lin_buffer_pin` -> `AdmittedBufferPin` / `register_admitted_buffer_pin` (Python type `_AdmittedBufferPin`),
+  `lin_new` / `lin_array` -> `admitted_zeros`, `lin_width` -> `admitted_width`, `lin_tuple` -> `admitted_shape_tuple`,
+  all in `bindings/admitted_input.mojo`; `metric_input_snapshot` (`providers/python/metric_input_snapshot_pyapi.mojo`,
+  file deleted) -> `admitted_snapshot`, and resample's `_row_dtype_admit` -> `admitted_dtype_admit`. `lin_view` and
+  `lin_c_order` had no caller. `TensorView` and its pure helpers moved to `bindings/tensor_view.mojo` (the optimizer
+  door imports them). `bindings/linalg_ops_buffers.mojo` keeps `lin_truth`, `lin_is_f32`, `lin_dtype_name`.
+- `family_view` (`bindings/family_common.mojo`): the rank / emptiness refusals on a view that the caller then
+  admitted a second time. Callers read `admit_family`, `admit_family_input` + `admit_family_cast`, `admit_typed` or
+  `admit_family_refuse_empty`, same wording. One wording change: a rank-3 Scaler shard input is refused "must be at
+  most 2-D" before the float32 dtype test. `cfb_f64_to_i32` (`core/cfb_impl.mojo`, a serial COO index cast) went with
+  spectral's `_as_i32`, now `admit_typed(source, "<i4", 1, ...)` (Array.astype's rules: a NaN or an out-of-int32 index is
+  refused where it was undefined).
+- `family_fill_i32` (`core/family_cast_impl.mojo`, serial): `admitted_fill[DType.int32]`.
+- Also replaced (no deletion): the base binding `cast_elements` py_calls in `svc_ocsvm_native.mojo`,
+  `svc_kernel_native.mojo`, `msel_common.mojo` (2) and `msel_search.mojo` by `admitted_convert_vector`
+  (`core/admitted_convert.mojo`).
+- Bits: none (the same words reach every kernel). Code recoverable at `f59d913b0b`; patches above.
