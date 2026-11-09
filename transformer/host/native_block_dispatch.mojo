@@ -11,7 +11,7 @@ from transformer.transformer_host_binding_impl import _run_forward, _backward_ru
 def transformer_host_block_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
     if len(f) != 0:
         raise Error("Transformer host provider: unexpected floating scalars")
-    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
     # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
     # (the session-ticket ops 36..40 and the invalidate-tape op 12.)
     if op == 13:

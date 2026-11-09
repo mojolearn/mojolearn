@@ -486,7 +486,7 @@ class TransformerState:
             _native_neural_bridge.CONTEXT)
 
 
-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
 # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
 # (`TransformerForwardTape`, the opaque single-use forward ticket.)
 
@@ -792,7 +792,7 @@ class TransformerBlock(NumericModeMixin, _native_constructor=True):
         return _native_neural_bridge.RUNTIME.neural_block_forward(
             self, x, state, True, None, _native_neural_bridge.CONTEXT)
 
-    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
     # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
     # (`TransformerBlock.forward_with_tape` / `backward_from_tape`; `backward` is the
     # training path.)

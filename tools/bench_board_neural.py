@@ -2409,7 +2409,7 @@ class OursBlock(Ours):
                 self.decode_session = self.block.decode_session(self.decode_state)
             self.info["operation_scope"] = ("zero-state token-by-token decode of the whole input, "
                                             "one public step call per token")
-        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
         # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
         # (the `transformer_forward_vjp_tape` board operation over forward_with_tape.)
         if self.operation == "transformer_windowed_forward":
@@ -2434,7 +2434,7 @@ class OursBlock(Ours):
                 installed_generation=generation, installation_boundary="preparation_in_cold_total")
 
     def call(self):
-        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
         # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
         if self.operation == "mamba_forward_vjp":
             self.out = self.block.forward(self.x)

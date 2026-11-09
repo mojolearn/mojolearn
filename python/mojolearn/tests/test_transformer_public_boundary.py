@@ -106,7 +106,7 @@ def test_state_buffer_protocol_is_not_invoked():
     assert calls == []
 
 
-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
 # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
 # (the forward_with_tape / backward_from_tape lifecycle, ticket and hook tests.)
 
@@ -196,6 +196,6 @@ def test_decode_rejects_replaced_session_owners():
         session.discard()
 
 
-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
 # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
 # (the budget-aware tape retention and replay test.)

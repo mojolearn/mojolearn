@@ -20,7 +20,7 @@ struct _PrefillVerdicts(Defaultable, Movable):
     # (hasattr probes and the compiled `*_forward_tape_enabled` /
     # `*_reports_optional` words, fixed for a binding), resolved once per
     # entries object instead of on every training step. -1 = not resolved.
-    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
     # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
     # (the transformer forward tape: a TransformerBlock prefill keeps no tape.)
     var entries: PythonObject
@@ -180,7 +180,7 @@ def neural_prefill_forward(block: PythonObject, input: PythonObject, context: Py
     var entries = neural_training_entries(fields, context)
     var x = _neural_input(input, Int(py=fields["d_model"]), False, context)
     if kind == "transformer":
-        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
         # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
         # (`transformer_forward_tape`: a TransformerBlock prefill keeps no
         # tape; its backward is `TransformerBlock.backward` on the step op.)

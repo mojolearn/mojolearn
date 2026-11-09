@@ -489,7 +489,7 @@ struct TransformerSession(Movable, Writable):
     var workspace: Optional[TransformerWorkspace]
     var planes: Optional[LlamaInt15Weights]
     var planes_key: List[Int]
-    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
     # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
     # (the retained float32 `weights` with their byte-compare counters and
     # the borrowed session `tape` with its generation served only the
@@ -596,7 +596,7 @@ def _transformer_run_session[discard_cache: Bool = False](
     op's cache is zero-filled on the device, nothing is uploaded or
     downloaded for it, and `s0` is 0. Every call runs on the attention step
     op (`_transformer_run_session_op`, lane x4b)."""
-    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
     # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
     # (the `retain_tape` parameter and its workspace body, the forward tape's
     # alone, went with the tape API.)
@@ -692,7 +692,7 @@ def _transformer_run_session_op[discard_cache: Bool](
 
 
 
-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
 # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
 # (`TransformerForwardTape`, the standalone single-use forward owner, and
 # `_transformer_saved_backward`, its backward over the saved workspace.)
@@ -2266,7 +2266,7 @@ def _transformer_backward_run(
     _ = ctx^
 
 
-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
 # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
 # (`_session_forward_tape_run` / `_session_backward_tape_run`, the budget-aware
 # session tape over training/neural_attention_owner.mojo.)

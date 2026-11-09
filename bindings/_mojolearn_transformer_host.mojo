@@ -369,7 +369,7 @@ def transformer_session_close_binding(session: PythonObject) raises -> PythonObj
     return PythonObject(0)
 
 
-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
 # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
 # (`transformer_session_discard_tape`, `transformer_session_invalidate_tape`,
 # `transformer_session_forward_tape`, `transformer_session_backward_tape`.)

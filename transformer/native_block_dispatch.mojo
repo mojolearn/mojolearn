@@ -17,7 +17,7 @@ from transformer.transformer_binding_impl import (
 # 0 reserve, 1 release (caller GIL/lock held); 2 session fresh, 3 session
 # backward; 4 ephemeral fresh, 5 ephemeral backward. Session operations prepend
 # one checked opaque owner handle to their integer vector. All spans borrowed.
-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
 # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
 # (standalone tape ops 6..10 and 14, session invalidate-tape op 12 and the
 # session-ticket ops 36..40 are refused as unknown operations.)

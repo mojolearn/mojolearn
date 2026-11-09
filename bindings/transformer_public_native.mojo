@@ -345,7 +345,7 @@ def transformer_state_read(mut mods: NativeModules, state: PythonObject, operati
 
 
 
-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
 # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
 # (`TransformerPublicTapeOwner`, the public `TransformerForwardTape` ticket owner.)
 
@@ -385,7 +385,7 @@ def _transformer_same_words(left: List[Int], right: List[Int]) -> Bool:
 
 
 
-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
 # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
 # (`forward_with_tape`, `backward_from_tape` and the ticket's init/close: their
 # entry-record admission, compiled-mode cache, provider, handle and publish helpers.)

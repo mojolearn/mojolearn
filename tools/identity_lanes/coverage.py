@@ -1340,7 +1340,7 @@ _batch_decl("n/a:coverage-probe (the lane checks one public call path the releas
 
 
 # ---------------------------------------------------------------- lane verify-coverage-20261024
-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
 # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
 # (the `transformer-forward-tape` lane: forward_with_tape, backward_from_tape
 # and the tape's close; the block's backward is the `transformer` lane's.)

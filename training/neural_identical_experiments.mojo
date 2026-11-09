@@ -82,7 +82,7 @@ comptime IDN_CHUNKED_LM_HEAD_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_CHUNKED
 # NI36/NI48: immutable native forward tapes, consumed exactly once. Arm 3 of
 # MOJOLEARN_IDN_ACT_RETAIN now reaches only the Mamba-3 tape
 # (mamba/impl/mamba_shell_impl.mojo reads the define itself).
-# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
 # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
 # (`IDN_SAMBA_FORWARD_TAPE`, the transformer half of arm 3.)
 

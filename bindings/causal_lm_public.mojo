@@ -721,7 +721,7 @@ def causal_transformer_admin(mut mods: NativeModules, binding: PythonObject, ses
         _ = neural_descriptor_execute(provider, operation, [], [handle], [], False)
         mods.released()
     else:
-        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+        # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
         # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
         # (operation 12, the session tape's invalidation; 13, close, is the one left.)
         if operation != 13:
