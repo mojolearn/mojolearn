@@ -8,6 +8,7 @@ NumPy expressions they replace produced."""
 from std.memory import bitcast
 from core.classical_cast import classical_f32_bits
 from core.cast_in import cast_f32_bits, cast_i32_bits
+from core.host_finite_scan import host_all_finite_f32
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -122,11 +123,8 @@ def tsa_flags_u8(src: _I32P, dst: _U8P, count: Int):
 
 def xseq_all_finite_f32(src: _F32P, count: Int) -> Bool:
     """`all_finite(a)` of `count` float32 words: no NaN and no infinity."""
-    for i in range(count):
-        var bits = bitcast[DType.uint32](src[i])
-        if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            return False
-    return True
+    # parallel: finiteness scan across host cores (0.8.66 regression C2, serial scan)
+    return host_all_finite_f32(src, count)
 
 
 def xseq_min_max_f32(src: _F32P, count: Int) -> Tuple[Float32, Float32]:
