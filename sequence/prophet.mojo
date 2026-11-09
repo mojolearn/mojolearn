@@ -20,7 +20,7 @@ Features: sin(2 pi (i+1) frac), cos(...) with frac = (t mod P) / P computed
 by the caller in float64 (exact fmod, one rounding) and the trigonometry by
 the portable float32 seams, so the features are the same bits everywhere."""
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_cos, identical_div, identical_exp, identical_sin, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_cos, identical_div, identical_exp, identical_mul, identical_sin, identical_sqrt
 from std.sys.compile import is_defined
 from std.memory import bitcast
 from checks.soft_f64 import SF64_NAN, SF64_ONE, SF64_SIGN, SF64_ZERO, sf64_add, sf64_div, sf64_lt, sf64_sub, sf64_to_f32
@@ -206,31 +206,409 @@ def prophet_fg(d: ProphetData, y: FP, th: FP, g: FP) -> Float32:
 
 
 # ------------------------------------------------------------------ FAST
-def op_prophet_fg_part(t: Int, a: Args):
-    """FAST (apple2): chunk t of i4 chunks of the likelihood. p0 scaled y
-    [N]; p1 t; p2 X; p3 changepoints; p4 prior scales; p5 th [P]; p6 parts
-    [i4, P + 1] out (the chunk's gradient terms, then its sse). i0 N, i1 K,
-    i2 S, i3 multiplicative; f0 tau."""
+# FAST (apple2) long-series fit (N >= PROPHET_FAST_MIN_N), lane
+# n5-prophet-adaboost-loops (2026-11-09, plan EXECUTOR_CONSOLIDATION_AND_CLEANUP
+# section 4 row "Prophet FAST"): the whole L-BFGS runs on the device. Every
+# series of the batch owns one workspace row of `prophet_lb_stride(P)` floats
+# (the state words below, then th, g, dvec, q, s/y memory, rho, alpha, the
+# trial point, its gradient and the likelihood's ordered sums); one
+# evaluation is three launches (op_prophet_fg_part over B x C point chunks,
+# op_prophet_fg_sum over B x (P + 1), op_prophet_lb_step over B), and the
+# driver reads one word (op_prophet_lb_active) per chunk of evaluations.
+# Before, the host ran `lbfgs_prophet_host` (deleted): theta uploaded and the
+# gradient + sse downloaded with a sync on EVERY evaluation, one series at a
+# time. The arithmetic is that host loop's statement for statement (the same
+# `_dot`, `_fg_prior_v`, two-loop recursion, Armijo test and stopping rules,
+# `OP_PROPHET_FG_SUM`'s chunk order), so the FAST bits are unchanged; only
+# where it runs and the batch's concurrency changed.
+
+#: state words at the head of a series' workspace row (floats; the integer
+#: words are exact below 2^24)
+comptime LB_F = 0        # objective at th
+comptime LB_STEP = 1     # line-search step of the current trial
+comptime LB_GD = 2       # g . dvec of the current direction
+comptime LB_NPAIRS = 3
+comptime LB_HEAD = 4
+comptime LB_SMALL = 5    # consecutive small decreases
+comptime LB_IT = 6       # iterations
+comptime LB_PHASE = 7    # 0: the start point's evaluation is pending; 1: a trial is
+comptime LB_DONE = 8     # 1 once the series stopped: every later launch skips it
+comptime LB_TRIALS = 9   # rejected trials of the current line search
+comptime LB_SCALE = 10   # max |y| (1 when every y is 0)
+comptime LB_NSW = 16
+#: the backtracking line search's trial budget (the host loop's `range(40)`)
+comptime LB_MAX_TRIALS = 40
+
+
+@always_inline
+def _lb_th(P: Int) -> Int:
+    return LB_NSW
+
+
+@always_inline
+def _lb_g(P: Int) -> Int:
+    return LB_NSW + P
+
+
+@always_inline
+def _lb_d(P: Int) -> Int:
+    return LB_NSW + 2 * P
+
+
+@always_inline
+def _lb_q(P: Int) -> Int:
+    return LB_NSW + 3 * P
+
+
+@always_inline
+def _lb_sm(P: Int) -> Int:
+    return LB_NSW + 4 * P
+
+
+@always_inline
+def _lb_ym(P: Int) -> Int:
+    return LB_NSW + (4 + MEM) * P
+
+
+@always_inline
+def _lb_rho(P: Int) -> Int:
+    return LB_NSW + (4 + 2 * MEM) * P
+
+
+@always_inline
+def _lb_al(P: Int) -> Int:
+    return _lb_rho(P) + MEM
+
+
+@always_inline
+def _lb_trial(P: Int) -> Int:
+    return _lb_al(P) + MEM
+
+
+@always_inline
+def _lb_gn(P: Int) -> Int:
+    return _lb_trial(P) + P
+
+
+@always_inline
+def _lb_out(P: Int) -> Int:
+    """The likelihood's ordered sums at the trial point: P gradient terms,
+    then the sse (op_prophet_fg_sum writes them)."""
+    return _lb_gn(P) + P
+
+
+@always_inline
+def prophet_lb_stride(P: Int) -> Int:
+    """Floats of one series' workspace row."""
+    return _lb_out(P) + P + 1
+
+
+@always_inline
+def _lb_iv(w: FP, k: Int) -> Int:
+    return Int(ld(w, k))
+
+
+@always_inline
+def _lb_finish(w: FP):
+    st(w, LB_DONE, Float32(1.0))
+
+
+def op_prophet_lb_ymax(t: Int, a: Args):
+    """Chunk c of series b (t = b i4 + c): max |y| over its points into
+    p6[t]. p0 y (B, N) unscaled; i0 N, i4 chunks."""
+    var N = a.i0
+    var C = a.i4
+    var b = t // C
+    var c = t - b * C
+    var ch = (N + C - 1) // C
+    var lo = c * ch
+    var hi = min(N, lo + ch)
+    var y = a.p0 + b * N
+    var m = Float32(0.0)
+    for i in range(lo, hi):
+        var v = abs(ld(y, i))
+        if v > m:
+            m = v
+    st(a.p6, t, m)
+
+
+def op_prophet_lb_init(b: Int, a: Args):
+    """Series b's start: its scale (the chunk maxima of op_prophet_lb_ymax,
+    folded ascending: max is exact, so this is the host loop's max), the
+    line through its first and last scaled points, zeros elsewhere, the
+    state words reset and the trial point = th (the start's evaluation).
+    p0 y (B, N) unscaled (op_prophet_lb_ydiv scales it after this); p1 t;
+    p5 workspace (B rows of i6); p6 chunk maxima (B, i4); i0 N, i1 K,
+    i2 S, i4 chunks, i6 row stride."""
     var N = a.i0
     var P = 3 + a.i2 + a.i1
     var C = a.i4
+    var w = a.p5 + b * a.i6
+    var scale = Float32(0.0)
+    for c in range(C):
+        var v = ld(a.p6, b * C + c)
+        if v > scale:
+            scale = v
+    if scale == Float32(0.0):
+        scale = Float32(1.0)
+    for word in range(LB_NSW):
+        st(w, word, Float32(0.0))
+    st(w, LB_SCALE, scale)
+    var y = a.p0 + b * N
+    var y0 = div(ld(y, 0), scale)
+    var y1 = div(ld(y, N - 1), scale)
+    var t0 = ld(a.p1, 0)
+    var t1 = ld(a.p1, N - 1)
+    var k = div(y1 - y0, t1 - t0) if t1 != t0 else Float32(0.0)
+    var th = w + _lb_th(P)
+    var trial = w + _lb_trial(P)
+    st(th, 0, k)
+    st(th, 1, y0 - ftz(identical_mul(k, t0)))
+    for j in range(2, P):
+        st(th, j, Float32(0.0))
+    for j in range(P):
+        st(trial, j, ld(th, j))
+
+
+def op_prophet_lb_ydiv(t: Int, a: Args):
+    """y / scale in place, point t of the (B, N) batch (the host loop's
+    ftz(identical_div)). p0 y; p5 workspace; i0 N, i6 row stride."""
+    var b = t // a.i0
+    st(a.p0, t, div(ld(a.p0, t), ld(a.p5 + b * a.i6, LB_SCALE)))
+
+
+def op_prophet_fg_part(t: Int, a: Args):
+    """Chunk c of series b (t = b i4 + c) of the likelihood at the series'
+    trial point. p0 scaled y (B, N); p1 t; p2 X; p3 changepoints; p4 prior
+    scales; p5 workspace (B rows of i6: the trial point is read in place,
+    never uploaded); p6 parts (B i4, P + 1) out (the chunk's gradient terms,
+    then its sse). i0 N, i1 K, i2 S, i3 multiplicative, i4 chunks, i6 row
+    stride; f0 tau. A stopped series' chunks are skipped."""
+    var N = a.i0
+    var P = 3 + a.i2 + a.i1
+    var C = a.i4
+    var b = t // C
+    var c = t - b * C
+    var w = a.p5 + b * a.i6
+    if ld(w, LB_DONE) != Float32(0.0):
+        return
     var ch = (N + C - 1) // C
-    var lo = t * ch
+    var lo = c * ch
     var hi = min(N, lo + ch)
     var row = a.p6 + t * (P + 1)
     for j in range(P):
         st(row, j, Float32(0.0))
     var d = ProphetData(a.p1, a.p2, a.p3, a.p4, N, a.i1, a.i2, a.f0, a.i3 != 0)
-    var sse = _fg_data(d, a.p0, a.p5, row, lo, hi) if lo < hi else Float32(0.0)
+    var sse = _fg_data(d, a.p0 + b * N, w + _lb_trial(P), row, lo, hi) if lo < hi else Float32(0.0)
     st(row, P, sse)
 
 
 def op_prophet_fg_sum(t: Int, a: Args):
-    """FAST: p7[t] = sum over the i4 chunks of p6[c, t], in order; i5 = P + 1."""
+    """Coordinate j of series b (t = b i5 + j): the sum over the i4 chunks of
+    p6[b i4 + c, j], in chunk order, into the series' ordered sums. p6
+    parts; p7 workspace; i4 chunks, i5 = P + 1, i6 row stride."""
+    var b = t // a.i5
+    var j = t - b * a.i5
+    var w = a.p7 + b * a.i6
+    if ld(w, LB_DONE) != Float32(0.0):
+        return
     var s = Float32(0.0)
+    var base = b * a.i4
     for c in range(a.i4):
-        s = add(s, ld(a.p6, c * a.i5 + t))
-    st(a.p7, t, s)
+        s = add(s, ld(a.p6, (base + c) * a.i5 + j))
+    st(w + _lb_out(a.i5 - 1), j, s)
+
+
+@always_inline
+def _lb_next(w: FP, P: Int):
+    """The next direction (two-loop recursion over the kept pairs, newest
+    to oldest then oldest to newest; steepest descent when it is not a
+    descent direction) and its first trial th + 1 dvec: the host loop's
+    statements in order."""
+    var th = w + _lb_th(P)
+    var g = w + _lb_g(P)
+    var dvec = w + _lb_d(P)
+    var q = w + _lb_q(P)
+    var sm = w + _lb_sm(P)
+    var ym = w + _lb_ym(P)
+    var rho = w + _lb_rho(P)
+    var al = w + _lb_al(P)
+    var trial = w + _lb_trial(P)
+    var npairs = _lb_iv(w, LB_NPAIRS)
+    var head = _lb_iv(w, LB_HEAD)
+    for i in range(P):
+        st(q, i, ld(g, i))
+    var idx = head
+    for _ in range(npairs):
+        idx = (idx - 1 + MEM) % MEM
+        var aa = mul(ld(rho, idx), _dot(sm + idx * P, q, P))
+        st(al, idx, aa)
+        for i in range(P):
+            st(q, i, sub(ld(q, i), mul(aa, ld(ym + idx * P, i))))
+    var gamma = Float32(1.0)
+    if npairs > 0:
+        var last = (head - 1 + MEM) % MEM
+        var yy = _dot(ym + last * P, ym + last * P, P)
+        if yy > Float32(0.0):
+            gamma = div(_dot(sm + last * P, ym + last * P, P), yy)
+    else:
+        var gg = ftz(identical_sqrt(_dot(g, g, P)))
+        if gg > Float32(1.0):
+            gamma = div(Float32(1.0), gg)
+    for i in range(P):
+        st(q, i, mul(gamma, ld(q, i)))
+    idx = (head - npairs + MEM) % MEM
+    for _ in range(npairs):
+        var bb = mul(ld(rho, idx), _dot(ym + idx * P, q, P))
+        var coef = sub(ld(al, idx), bb)
+        for i in range(P):
+            st(q, i, fma3(coef, ld(sm + idx * P, i), ld(q, i)))
+        idx = (idx + 1) % MEM
+    for i in range(P):
+        st(dvec, i, -ld(q, i))
+    var gd = _dot(g, dvec, P)
+    if not (gd < Float32(0.0)):
+        for i in range(P):
+            st(dvec, i, -ld(g, i))
+        gd = -_dot(g, g, P)
+        st(w, LB_NPAIRS, Float32(0.0))
+    var step = Float32(1.0)
+    st(w, LB_GD, gd)
+    st(w, LB_STEP, step)
+    st(w, LB_TRIALS, Float32(0.0))
+    for i in range(P):
+        st(trial, i, fma3(step, ld(dvec, i), ld(th, i)))
+
+
+def op_prophet_lb_step(b: Int, a: Args):
+    """Series b after the evaluation of its trial point: the priors on top
+    of the ordered sums (the objective and gradient there), then the start
+    (phase 0), or the Armijo test of the trial (phase 1): accepted, the
+    curvature pair, the move and the stopping rules, then the next
+    direction; rejected, the halved step's trial, or the stop after
+    LB_MAX_TRIALS rejections. p0 workspace (B rows of i6); p4 prior scales;
+    i0 N, i1 K, i2 S, i6 row stride, i7 max_iter; f0 tau."""
+    var N = a.i0
+    var K = a.i1
+    var S = a.i2
+    var P = 3 + S + K
+    var w = a.p0 + b * a.i6
+    if ld(w, LB_DONE) != Float32(0.0):
+        return
+    var th = w + _lb_th(P)
+    var g = w + _lb_g(P)
+    var dvec = w + _lb_d(P)
+    var q = w + _lb_q(P)
+    var sm = w + _lb_sm(P)
+    var ym = w + _lb_ym(P)
+    var rho = w + _lb_rho(P)
+    var trial = w + _lb_trial(P)
+    var gn = w + _lb_gn(P)
+    var out = w + _lb_out(P)
+    for j in range(P):
+        st(gn, j, ld(out, j))
+    var fnew = _fg_prior_v(a.p4, a.f0, N, S, K, trial, gn, ld(out, P))
+    var max_iter = a.i7
+    if ld(w, LB_PHASE) == Float32(0.0):
+        st(w, LB_F, fnew)
+        for j in range(P):
+            st(g, j, ld(gn, j))
+        st(w, LB_PHASE, Float32(1.0))
+        if max_iter <= 0:
+            _lb_finish(w)
+            return
+        _lb_next(w, P)
+        return
+    var f = ld(w, LB_F)
+    var step = ld(w, LB_STEP)
+    if not (fnew <= fma3(mul(Float32(1e-4), step), ld(w, LB_GD), f)):
+        var trials = _lb_iv(w, LB_TRIALS) + 1
+        if trials >= LB_MAX_TRIALS:
+            # the line search failed: one more iteration counted, th and f kept
+            st(w, LB_IT, Float32(_lb_iv(w, LB_IT) + 1))
+            _lb_finish(w)
+            return
+        st(w, LB_TRIALS, Float32(trials))
+        step = mul(step, Float32(0.5))
+        st(w, LB_STEP, step)
+        for i in range(P):
+            st(trial, i, fma3(step, ld(dvec, i), ld(th, i)))
+        return
+    var it = _lb_iv(w, LB_IT) + 1
+    st(w, LB_IT, Float32(it))
+    # the new pair, kept only with positive curvature (q and dvec are free
+    # here; the slot is written only when the pair is kept)
+    for i in range(P):
+        st(q, i, sub(ld(trial, i), ld(th, i)))
+        st(dvec, i, sub(ld(gn, i), ld(g, i)))
+    var sy = _dot(q, dvec, P)
+    if sy > Float32(1e-12):
+        var head = _lb_iv(w, LB_HEAD)
+        var npairs = _lb_iv(w, LB_NPAIRS)
+        for i in range(P):
+            st(sm + head * P, i, ld(q, i))
+            st(ym + head * P, i, ld(dvec, i))
+        st(rho, head, div(Float32(1.0), sy))
+        st(w, LB_HEAD, Float32((head + 1) % MEM))
+        if npairs < MEM:
+            st(w, LB_NPAIRS, Float32(npairs + 1))
+    var fscale = abs(f)
+    if abs(fnew) > fscale:
+        fscale = abs(fnew)
+    if fscale < Float32(1.0):
+        fscale = Float32(1.0)
+    var df = sub(f, fnew)
+    for i in range(P):
+        st(th, i, ld(trial, i))
+        st(g, i, ld(gn, i))
+    st(w, LB_F, fnew)
+    var gmax = Float32(0.0)
+    for i in range(P):
+        var v = abs(ld(g, i))
+        if v > gmax:
+            gmax = v
+    if gmax < Float32(1e-5):
+        _lb_finish(w)
+        return
+    if df <= mul(Float32(1e-7), fscale):
+        var small = _lb_iv(w, LB_SMALL) + 1
+        st(w, LB_SMALL, Float32(small))
+        if small >= 3:
+            _lb_finish(w)
+            return
+    else:
+        st(w, LB_SMALL, Float32(0.0))
+    if it >= max_iter:
+        _lb_finish(w)
+        return
+    _lb_next(w, P)
+
+
+def op_prophet_lb_active(t: Int, a: Args):
+    """p1[0] = the number of series still running (one thread; the
+    driver's one word per chunk of evaluations). p0 workspace; i6 row
+    stride, i8 B."""
+    var n = Float32(0.0)
+    for b in range(a.i8):
+        if ld(a.p0 + b * a.i6, LB_DONE) == Float32(0.0):
+            n = add(n, Float32(1.0))
+    st(a.p1, 0, n)
+
+
+def op_prophet_lb_out(t: Int, a: Args):
+    """Coordinate j of series b (t = b P + j): params[t] = th[j]; j = 0
+    also writes the series' info row [scale, f, iterations, 0]. p0
+    workspace; p1 params (B, P); p2 info (B, 4); i1 K, i2 S, i6 row stride."""
+    var P = 3 + a.i2 + a.i1
+    var b = t // P
+    var j = t - b * P
+    var w = a.p0 + b * a.i6
+    st(a.p1, t, ld(w + _lb_th(P), j))
+    if j == 0:
+        st(a.p2, b * 4, ld(w, LB_SCALE))
+        st(a.p2, b * 4 + 1, ld(w, LB_F))
+        st(a.p2, b * 4 + 2, ld(w, LB_IT))
+        st(a.p2, b * 4 + 3, Float32(0.0))
 
 
 @always_inline
