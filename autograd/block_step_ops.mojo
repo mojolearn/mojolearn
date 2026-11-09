@@ -1349,7 +1349,10 @@ def attn_step_train_run(
                 if pe >= 0 and pe != e:
                     sc.attn[pe].next_s = Int(bufs[2])
                     sc.attn[pe].next_q = Int(bufs[3])
-            consume = follows and sc.attn[e].ahead_y == xa and Bool(sc.attn[e].spare.stages)
+            var has_spare = False
+            if sc.attn[e].spare.stages:
+                has_spare = True
+            consume = follows and sc.attn[e].ahead_y == xa and has_spare
             sc.attn[e].ahead_y = 0
             if consume:
                 # run on the stages the previous layer prepared; the old kept
