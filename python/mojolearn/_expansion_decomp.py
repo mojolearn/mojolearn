@@ -4221,12 +4221,10 @@ class LocallyLinearEmbedding(_Base):
 
 # The compiled family owner, connected once at import: every public method
 # of Isomap, ClassicalMDS, MDS and LocallyLinearEmbedding is one native call
-# (bindings/mani_decomp_native.mojo). Its tables: the kit's matrix and device
-# buffer classes and the per-binding broadcast zero (`_dev_one`'s cache), and
-# the metric kinds.
+# (bindings/mani_decomp_native.mojo). Its table: the metric kinds (the native
+# kit, bindings/mani_kit.mojo, never reads the Python _M / _DevBuf classes).
 _NATIVE, _NATIVE_CONTEXT = _native_runtime_manifold_bridge.connect()
-_native_family_bridge.tables(family_mani_M=_M, family_mani_devbuf=_DevBuf, family_mani_dev_one=_DEV_ONE,
-                             family_mani_pd_kind=dict(_PD_KIND))
+_native_family_bridge.tables(family_mani_pd_kind=dict(_PD_KIND))
 
 
 # ================================================================ robust covariance

@@ -264,36 +264,8 @@ def _scan_flag(prog, src, n, mode):
     return flag
 
 
-def _put_proba(prog, a, n, k, binary):
-    """The probabilities' check and layout in the program (`proba_rows`,
-    x_metrics/tail.mojo): (S, FLAGS). S is the (n, k) Float32 matrix the
-    metric reads: `a` itself, or for a binary column the `[1 - p, p]` rows
-    the device packs. FLAGS: three Int32 words (non-finite, outside [0, 1],
-    a row sum off one), read by `_proba_check` after the run."""
-    A = prog.put(a)
-    flags = prog.alloc(3)
-    S = A
-    if binary:
-        S = prog.scratch(2 * n)
-    if n:
-        prog.stage("proba_rows", n, A, n, 1 if binary else k, 1 if binary else 0, S, flags)
-    return S, flags
-
-
 #: probability_rows codes 1..3, in the order the check reports them
 _PROBA_REASONS = ("must be finite", "must lie in [0, 1]", "rows must sum to one within sqrt(float32 eps)")
-
-
-def _proba_code(prog, flags):
-    """0, or the first failed check (1 non-finite, 2 outside [0, 1], 3 a row sum)."""
-    f = prog.ints(flags, 3)
-    return 1 if f[0] else (2 if f[1] else (3 if f[2] else 0))
-
-
-def _proba_check(prog, flags, caller):
-    code = _proba_code(prog, flags)
-    if code:
-        raise ValueError(f"mojolearn {caller}: y_proba " + _PROBA_REASONS[code - 1])
 
 
 # ---------------------------------------------------------------------------
@@ -356,25 +328,6 @@ _WSUM_BLOCK = 256
 _NORM_MODES = {"all": 1, "true": 2, "pred": 3, None: 4}
 #: the kappa weight modes
 _KAPPA_W = {None: 0, "linear": 1, "quadratic": 2}
-
-
-def _wsum_sf64(prog, k):
-    """Lane box-run-2-fix (2026-10-05): stage the weighted COUNT's hit and
-    weight total as soft binary64 sums on the device (x_metrics/cm_epi.mojo
-    `_wsum_leaf`: one unit per WSUM_BLOCK rows, then `_wsum_fold`: one stage
-    per tree level, stride 1, 2, 4, ...), the same stages on every column.
-    Returns the slot whose first 4 words are [hit, total]. Before, both were
-    Float32 PairSums widened to binary64 (precision loss in score with
-    sample_weight)."""
-    match, W, n = prog.rows
-    nb = max(1, -(-n // _WSUM_BLOCK))
-    s = prog.scratch(4 * nb)
-    prog.stage("cm_epi", nb, _CM_WSUM_LEAF, match, W, n, s, k)
-    stride = 1
-    while stride < nb:  # glue: one stage per fold level (log2 of the block count)
-        prog.stage("cm_epi", -(-(nb - stride) // (2 * stride)), _CM_WSUM_FOLD, s, stride, nb)
-        stride *= 2
-    return s
 
 
 # Engineering notes (moved from the docstring):

@@ -59,23 +59,6 @@ def _saved_mode(est):
     return mode.strip().lower()
 
 
-def _restore_mode(obj, arrays):
-    mode = _serialize.scalar_str(arrays, "numeric_mode")
-    if mode not in ("fast", "identical"):
-        raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
-    obj.numeric_mode = mode
-
-
-def _check_saved_by(arrays, path, cls):
-    """The file's `estimator` must be `cls` or a base of it, so the host
-    subclasses of `_classical_host.py` load the plain class's file."""
-    saved_as = _serialize.scalar_str(arrays, "estimator")
-    if saved_as not in (c.__name__ for c in cls.__mro__):  # glue: walks the class hierarchy names
-        raise ValueError(
-            f"mojolearn: {path!r} was saved by {saved_as}, not {cls.__name__}"
-        )
-
-
 # ---------------------------------------------------------------------------
 # Host helpers (DEVIATION 2360). Small on purpose; every one says what it
 # costs.

@@ -99,46 +99,9 @@ def _f32_scalar(v):
     return Array.from_list([float(v)], "<f4").tolist()[0]
 
 
-def _kpca_resident(est):
-    """lane/apple-fast-kapprox: whether KernelPCA.fit builds, centers and
-    solves its kernel matrix on x_decomp's resident kit with one upload of X
-    (FAST + Apple, rollback `-D MOJOLEARN_KPCA_RESIDENT_OFF`), read back from the
-    x_neighbors binding's compile-time constant (no env read)."""
-    fn = getattr(est._bind(), "x_neighbors_kpca_resident", None)
-    return fn is not None and int(fn()) != 0
-
-
 #: the kernels the resident route builds from the kit's sqdist / gemm and
 #: elementwise launches (any other kernel takes main's path)
 _KPCA_RESIDENT_KERNELS = ("rbf", "linear", "poly", "sigmoid")
-
-
-def _kpca_resident_center(kit, X, n, kernel, gamma, coef0, degree):
-    """lane/apple-fast-kapprox: X (an Array) uploaded once from its own
-    buffer; the kernel matrix, sklearn's KernelCenterer (K - rows - cols +
-    all) and the two fit vectors on the device. Returns (Kc, cols, all_)
-    as resident `_M` matrices, or None when this kit has no resident path
-    (the caller then runs main's code)."""
-    from ._expansion_decomp import _M, _DevBuf
-    if not kit._res():
-        return None
-    d = X.shape[1]
-    Xm = _M._on_device(_DevBuf(kit._raw(), X.size), n, d)
-    kit.b.x_decomp_dev_upload(Xm._d.id, addr_ro(X, name="X"), X.size)
-    if kernel == "rbf":
-        K = kit.ew("exp", kit.ew("scale", kit.sqdist(Xm, Xm), s=-gamma))
-    else:
-        K = kit.mm(Xm, Xm, tb=True)
-        if kernel == "poly":
-            K = kit.ew("adds", kit.ew("scale", K, s=gamma), s=coef0)
-            K = kit.ew("sq" if degree == 2 else "cube", K)
-        elif kernel == "sigmoid":
-            K = kit.ew("tanh", kit.ew("adds", kit.ew("scale", K, s=gamma), s=coef0))
-    cols = kit.ew("scale", kit.colsum(K), s=1.0 / n)          # K_fit_rows_ (1 x n)
-    all_ = kit.ew("scale", kit.rowsum(cols), s=1.0 / n)       # K_fit_all_ (1 x 1)
-    colv = _M._on_device(cols._d, n, 1)                        # the same buffer as a column
-    Kc = kit.ew("add", kit.ew("sub", kit.ew("sub", K, cols), colv), all_)
-    return Kc, cols, all_
 
 
 def _argmax_labels(est, classes, M):
@@ -931,18 +894,6 @@ class OneClassSVM(_XNeighbors):
 # owner (bindings/svc_ocsvm_native.mojo); it reads this module's x_neighbors
 # kernel codes and the MOJOLEARN_XN_OLD_ITEMS arm.
 _native_family_bridge.tables(family_svc_xn_kernels=dict(_KERNELS), family_svc_xn_old_items=_OLD_ITEMS)
-
-
-# ====================================================================== KernelPCA
-def _kpca_clamp_count(kit, w):
-    """KernelPCA's eigenvalue tail on the kit's cells (lane
-    cpu2-l9-neighbors): `w` (1 x c, descending) clamped at zero (`maxs`,
-    `x if x > 0 else 0`), and the count of positive clamped values (`gts`
-    flags folded by `total`; 0/1 sums are exact in float32 below 2^24).
-    Returns (clamped 1 x c matrix, count); only the count word is read."""
-    wc = kit.ew("maxs", w, s=0.0)
-    npos = int(kit.total(kit.ew("gts", wc, s=0.0)).s[0])
-    return wc, npos
 
 
 # Reference: scikit-learn `decomposition/_kernel_pca.py` (1.9.0) with

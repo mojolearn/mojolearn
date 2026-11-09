@@ -501,22 +501,6 @@ class ClassLabels(list):
         return (ClassLabels, (list(self),))
 
 
-def classes_member(classes):
-    """`classes_` as the npz member `save` writes: int64 for integer
-    labels, float64 for real labels, the list of str for str labels
-    (`_serialize.write_npz` encodes a list of str as a `<U` member, the
-    dtype `np.asarray` gave them). Bool labels are stored as int64 and
-    come back as ints from `load` (DEVIATION 2340)."""
-    kind = label_kind(classes)
-    if kind == "int" or all(is_bool(c) for c in classes):  # glue: kind test of the class labels (classes-sized: distinct classes)
-        return Array.from_list([int(c) for c in classes], "<i8")  # glue: packs the class table (classes-sized: distinct classes)
-    if kind == "float":
-        return Array.from_list([float(c) for c in classes], "<f8")  # glue: packs the class table (classes-sized: distinct classes)
-    if all(isinstance(c, str) for c in classes):  # glue: kind test of the class labels (classes-sized: distinct classes)
-        return list(classes)
-    raise ValueError("mojolearn: classes_ holds labels no model file can carry")
-
-
 def classes_from_member(member):
     """The inverse of `classes_member`, also reading a 0.6.x file's
     `classes` member (int, float, bool or `<U` from `np.unique`)."""

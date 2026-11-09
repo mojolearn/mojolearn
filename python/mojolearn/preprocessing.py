@@ -36,58 +36,6 @@ def _prep():
     return _expansion_prep
 
 
-def _refuse_inf(pr, st, d):
-    """col_stats rows 3 and 4 (min and max over the non-NaN entries): an
-    infinity is refused as the reference's `ensure_all_finite='allow-nan'`."""
-    lo, hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
-    if any(math.isinf(v) for v in lo + hi):  # glue: raises on an infinite per-column statistic
-        raise ValueError('Scaler input contains infinity; only NaN may be missing')
-
-
-def _sample_weight(sample_weight, n):
-    """The reference's `_check_sample_weight`: a scalar broadcasts, else a
-    one-dimensional float32 vector of n weights (their finiteness is checked
-    on the device by `_standard_stats`, lane cpu2-l3-prep)."""
-    if isinstance(sample_weight, numbers.Real) and not is_bool(sample_weight):
-        w = full((n,), float(sample_weight), "<f4")
-    else:
-        w = as_f32_c(sample_weight, ndim=1, name="sample_weight")[0]
-    if w.ndim != 1 or w.shape[0] != n:
-        raise ValueError(f"sample_weight must have shape ({n},), got {tuple(w.shape)}")
-    return w
-
-
-def _standard_stats(mode, values, weight):
-    """StandardScaler statistics with NaN and / or sample_weight (x_prep
-    `scaler_stats`, then `std_scale`): per column the counted weight, mean,
-    population variance and scale. A NaN-free unweighted fit never comes
-    here: it stays the binding's standard_fit and its recorded bits."""
-    P = _prep()
-    n, d = values.shape
-    pr = P._Prog()
-    xo = pr.put(values)
-    wo = pr.put(weight) if weight is not None else P._NONE
-    st = pr.alloc(6 * d)
-    out = pr.alloc(3 * d)
-    sc = pr.alloc(d)
-    pr.stage("col_stats", d, xo, n, d, st)
-    pr.stage("scaler_stats", d, xo, n, d, wo, out)
-    pr.stage("std_scale", d, out + 2 * d, sc)
-    wbad = None
-    if weight is not None:
-        # the weights' nonfinite count by chunks (x_prep c2_nonfinite + c2_isum, lane cpu2-l3-prep)
-        ch = max(4096, -(-n // 4096))
-        nch = -(-n // ch)
-        wcnt, wbad = pr.alloc(nch), pr.alloc(1)
-        pr.stage("c2_nonfinite", nch, wo, n, ch, wcnt)
-        pr.stage("c2_isum", 1, wcnt, nch, wbad)
-    pr.run(mode)
-    if wbad is not None and pr.get_i32(wbad, 1).tolist()[0]:
-        raise ValueError("sample_weight must be finite")
-    _refuse_inf(pr, st, d)
-    return pr.get(out, d), pr.get(out + d, d), pr.get(out + 2 * d, d), pr.get(sc, d)
-
-
 def _seen(counts, weighted):
     """n_samples_seen_ as the reference keeps it: one number when every
     feature saw the same count, else a per-feature vector (int64 counts,
