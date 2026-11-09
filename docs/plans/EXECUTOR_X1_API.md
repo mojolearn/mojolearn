@@ -61,12 +61,15 @@ int32 word (`OP_LOOP_ITER_WORD`), so `take`/`index` can select token t of an upl
   that tag) runs the transformer stage rule over the kept stages and writes d_x and the packed weights' gradient.
   Program.fit backpropagates with StepOpRules; `grads_out` copies the last minibatch's gradients out. The byte LM trainer
   (`training/byte_lm_program.mojo`) is the first family on it. The Mamba step ops still refuse a recording session.
-- The host arm (lane x7b-step-ops-host-arm, 2026-11-09): `OpsSession[HostExec]` runs all four ops through
+- The host arm (lane x7b-step-ops-host-arm, 2026-11-09; `autograd/block_step_host.mojo`, a host module no GPU
+  binding imports): `OpsSession[HostExec]` reaches it through the executor (`Exec.step_run`, `step_backward`,
+  `step_reports`, `step_forget`, `step_weights_changed`, `step_clear`; the entries live in `HostExec.steps`;
+  `OpsSession.steps_forget` / `steps_weights_changed` / `steps_clear` notify both arms) and runs all four ops through
   `host_block_step_run` (`transformer_block_oracle`, `mamba_block_oracle`, `mamba2_block_oracle`, `mamba3_block_oracle`):
   the weights are read from the weights tensor at every run, the state is read in and written back after a successful run,
   the integers are the words tensor's. A recorded `OPS_ATTN_STEP` on a host session is the same zero-state prefill with
   its stages kept (`host_attn_step_train_run`), and `StepOpRules` runs `transformer_block_backward_oracle` over them
-  (`host_attn_step_backward`). Reports of a host Mamba entry: `host_block_step_reports`. A program that trains or decodes
+  (`host_attn_step_backward`). Reports of a host Mamba entry: `s.ex.step_reports(code, w, st, dsts)`. A program that trains or decodes
   through the step ops runs unchanged on the CPU column (the byte LM's `ByteLmProgram[E, KIND]` is the first).
 - Adding an op: one row in `_info`, one `_run_*` and one arm in `_step_run`; codes stay contiguous
   (`OPS_STEP_FIRST..OPS_STEP_LAST`); raise `PROGRAM_MAX_CODE` and name the op in

@@ -5070,8 +5070,8 @@ RUN OWED: lm-train-step (bytes) and lm-eval, program vs the 0.8.66 path, one run
 Lane x7b-step-ops-host-arm (branched from lane/x7-byte-lm-on-executor at `5fff22515a`), plan row X7 follow-up. Lane x7 moved
 the byte LM's GPU training onto ONE captured program (`training/byte_lm_program.mojo`) but left the CPU column on its composed
 oracle step, so the CPU column no longer gave the GPUs' bits. This lane gives the four block step ops a host arm
-(`autograd/block_step_ops.mojo`: `host_block_step_run`, `host_attn_step_train_run`, `host_attn_step_backward`,
-`host_block_step_reports`; the host block bodies `transformer_block_oracle` / `transformer_block_backward_oracle`,
+(`autograd/block_step_host.mojo`, reached through the host executor's `Exec.step_*` hooks: `host_block_step_run`,
+`host_attn_step_train_run`, `host_attn_step_backward`, `host_block_step_reports`; the host block bodies `transformer_block_oracle` / `transformer_block_backward_oracle`,
 `mamba_block_oracle`, `mamba2_block_oracle`, `mamba3_block_oracle` over the same packed weights, state and words tensors),
 makes the program generic over the executor (`ByteLmProgram[E, KIND]`: `ByteDeviceProgram`, `ByteHostProgram`), and runs the
 CPU column's training step, `train_steps` and loss on a host session of the same program (`training/byte_lm_host_session.mojo`,
