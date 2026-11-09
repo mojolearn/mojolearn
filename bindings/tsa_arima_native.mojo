@@ -29,7 +29,8 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind
 from bindings.classical_pandas import classical_admit_value
 from bindings.tsa_hw_native import tsa_array
-from core.xseq_marshal import xseq_cast_nd, xseq_widen_f32_f64
+from core.xseq_marshal import xseq_widen_f32_f64
+from core.admitted_input_nd import admitted_cast_nd_f32
 from bindings.native_prepared_owner import prepared_get
 from bindings.tsa_arima_resident import (
     ARIMA_RESIDENT_SLOT, arima_resident_words, arima_resident_hit, arima_resident_mint, arima_resident_call,
@@ -124,7 +125,7 @@ def _entry(entries: PythonObject, name: String) raises -> PythonObject:
 
 def _copy_series(source: ArimaBuffer, shape: PythonObject, context: PythonObject) raises -> PythonObject:
     var result = tsa_array("f", "<f4", shape, source.count, 4, context)
-    xseq_cast_nd(source.address, source.shape, source.strides, source.itemsize, source.kind, True,
+    _ = admitted_cast_nd_f32(source.address, source.shape, source.strides, source.itemsize, source.kind, True,
                  _F32P(unsafe_from_address=Int(py=classical_address(result))))
     _ = source
     return result

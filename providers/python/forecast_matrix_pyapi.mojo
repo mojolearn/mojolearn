@@ -12,7 +12,9 @@ from providers.python.autoarima_lifecycle_pyapi import _integer, _number
 from providers.python.forecast_initialize_pyapi import _scalar
 from providers.python.forecast_owner_pyapi import forecast_commit
 from bindings.xseq_native_common import xseq_zeros, xseq_addr, xseq_f32p, xseq_entries, xseq_first
-from core.xseq_marshal import xseq_cast_nd, xseq_var_blocks
+from core.xseq_marshal import xseq_var_blocks
+from core.admitted_input_nd import admitted_cast_nd_f32
+from bindings.admitted_sequence import admitted_ndarray_f32
 from core.cast_in import NPY_DOUBLE, NPY_FLOAT, CAST_KIND_FLOAT
 
 
@@ -50,8 +52,9 @@ def _matrix(value: PythonObject, name: String, context: PythonObject, reject_dou
         raise Error("TypeError: " + name + ": float64 is refused; pass float32")
     if not source.f32_c() or py_type(source.keep) is not context["ndarray"]:
         var shape = Python.tuple(source.shape[0]) if len(source.shape) == 1 else Python.tuple(source.shape[0], source.shape[1])
-        var result = xseq_zeros(shape, context)
-        xseq_cast_nd(source.address, source.shape, source.strides, source.itemsize, source.kind, False, xseq_f32p(result))
+        # One parallel cast into uninitialised storage (REGRESSIONS F3/C3).
+        var result = admitted_ndarray_f32(shape, source.count, context)
+        _ = admitted_cast_nd_f32(source.address, source.shape, source.strides, source.itemsize, source.kind, False, xseq_f32p(result))
         source.keep = result
         source.address = Int(py=xseq_addr(result))
         source.itemsize = 4

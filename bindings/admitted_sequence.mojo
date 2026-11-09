@@ -6,6 +6,8 @@
 # 3.3 row A4 (lane a4-admit-sequence-tsa-neural, 2026-11-08); the rank 0-2
 # X / y / sample_weight doors are bindings/admitted_input.mojo (lane A0).
 #
+#   admitted_ndarray_f32(shape, count, context) -> ndarray
+#                     the uninitialised float32 ndarray a cast fills
 #   admit_nd_f32(value, name, copy, context, double_ints) -> ndarray
 #                     `np.array(value, dtype=float32, order="C", copy=copy)`
 #                     of an admitted ndarray: the array itself when it is
@@ -32,6 +34,17 @@ from core.cast_in import cast_in_kind
 from core.admitted_input_nd import admitted_cast_nd_f32
 
 comptime _AS_F32P = MutPointer[Float32, MutUntrackedOrigin]
+
+
+def admitted_ndarray_f32(shape: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
+    """A C-order float32 ndarray of `shape` (`count` words) whose contents
+    are NOT initialised: the destination of one cast that writes every word
+    before anything reads it. It is the same ndarray-over-bytearray object
+    `sequential_array` makes, without the zero fill."""
+    # REGRESSIONS F3 / C3: the zero fill of a destination the cast then
+    # overwrote in full was a second pass over X.
+    var storage = native_scratch_bytes(count * 4)
+    return py_call(context["ndarray"], shape, dtype=context["float32"], buffer=storage)
 
 
 def admit_nd_f32(value: PythonObject, name: String, copy: Bool, context: PythonObject,
@@ -64,12 +77,7 @@ def admit_nd_f32(value: PythonObject, name: String, copy: Bool, context: PythonO
         dims.append(Int(py=shape[k]))
         steps.append(Int(py=strides[k]))
         count *= dims[k]
-    # REGRESSIONS F3 / C3: the destination is written in full by the one
-    # cast below, so it is an ndarray over an UNINITIALISED bytearray (the
-    # former sequential_array zero-filled it first: a second pass over X).
-    # It is the same ndarray-over-bytearray object sequential_array made.
-    var storage = native_scratch_bytes(count * 4)
-    var out = py_call(context["ndarray"], shape, dtype=context["float32"], buffer=storage)
+    var out = admitted_ndarray_f32(shape, count, context)
     _ = admitted_cast_nd_f32(Int(py=sequential_address(value)), dims, steps, item, cast, double_ints,
                              _AS_F32P(unsafe_from_address=Int(py=sequential_address(out))))
     _ = value  # keep the source alive through the native cast above

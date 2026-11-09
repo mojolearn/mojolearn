@@ -22,7 +22,8 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_reuse, ne
 from sequence.neural_model_dispatch import MODEL_OPERATION_COUNT, MODEL_UNIFORM
 from autograd.model_descriptor import MODEL_ABI_NAME
 from core.cast_in import cast_in_kind
-from core.xseq_marshal import xseq_cast_nd, xseq_column_copy_f32, xseq_column_copy_i64
+from core.xseq_marshal import xseq_column_copy_f32, xseq_column_copy_i64
+from core.admitted_input_nd import admitted_cast_nd_f32
 
 comptime XF32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime XI32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -150,7 +151,7 @@ def xseq_f32(value: PythonObject, name: String, copy: Bool, context: PythonObjec
     for k in range(rank):  # driver-loop: over array rank metadata
         dims.append(Int(py=shape[k]))
         steps.append(Int(py=strides[k]))
-    xseq_cast_nd(Int(py=sequential_address(value)), dims, steps, item, cast, double_ints,
+    _ = admitted_cast_nd_f32(Int(py=sequential_address(value)), dims, steps, item, cast, double_ints,
                  XF32P(unsafe_from_address=Int(py=sequential_address(out))))
     _ = out  # keep the Python object alive through the native call above
     return out

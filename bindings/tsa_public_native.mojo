@@ -20,7 +20,8 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
-from core.xseq_marshal import xseq_cast_nd, tsa_flags_u8
+from core.xseq_marshal import tsa_flags_u8
+from core.admitted_input_nd import admitted_cast_nd_f32
 from bindings.tsa_hw_native import tsa_array, hw_fit, hw_predict, hw_score, hw_initialize, hw_forecast, hw_component, hw_save
 from bindings.tsa_admission import tsa_buffer, tsa_scalar, tsa_truth
 from bindings.native_loaded_module import native_loaded_module
@@ -71,7 +72,7 @@ def _series_major(source: PythonObject, name: String, context: PythonObject) rai
         steps.append(value.strides[1])
     dims.append(rows)
     steps.append(value.strides[0])
-    xseq_cast_nd(value.source.addr, dims, steps, value.source.itemsize, value.source.kind, True,
+    _ = admitted_cast_nd_f32(value.source.addr, dims, steps, value.source.itemsize, value.source.kind, True,
                  _F32P(unsafe_from_address=Int(py=classical_address(out))))
     _ = value
     _ = out
