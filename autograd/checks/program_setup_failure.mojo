@@ -92,6 +92,13 @@ struct FaultExec(Exec, Movable):
     def step_clear(mut self):
         self.host.step_clear()
 
+    def gen_pick(mut self, logits: FP, n_logits: Int, rows: FP, n_rows: Int, ints: List[Int], fs: List[Float32],
+                 ids: FP) raises:
+        self.host.gen_pick(logits, n_logits, rows, n_rows, ints, fs, ids)
+
+    def gen_alive(mut self, rows: FP, n_rows: Int, b: Int, dst: FP) raises:
+        self.host.gen_alive(rows, n_rows, b, dst)
+
 
 def require(condition: Bool, message: String) raises:
     if not condition:

@@ -77,11 +77,13 @@ trait Exec:
     def step_run(mut self, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int], fs: List[Float32],
                  y_out: FP, record: Bool) raises:
         """Run block step op `code` on this executor's arm (`record`: a
-        recorded training run of OPS_ATTN_STEP, its stages kept)."""
+        recorded training run, its stages kept: OPS_ATTN_STEP, and since
+        lane x56d the Mamba steps)."""
         ...
 
     def step_backward(mut self, w: FP, s: FP, q: FP, d_out: FP, d_x: FP, d_w: FP) raises:
-        """The backward of the last recorded OPS_ATTN_STEP over (w, s, q)."""
+        """The backward of the last recorded step run over (w, s, q): an
+        attention or (lane x56d) a Mamba entry."""
         ...
 
     def step_reports(mut self, code: Int, w_addr: Int, s_addr: Int, dsts: List[Int]) raises:
@@ -99,4 +101,17 @@ trait Exec:
 
     def step_clear(mut self):
         """Drop every entry of the arm."""
+        ...
+
+    # Lane x56d-mamba-samba-train-and-host (2026-11-09): the generation ops'
+    # host arm (autograd/generation_host.mojo), reached the same way; a
+    # device session runs the device bodies (autograd/generation_ops.mojo).
+    def gen_pick(mut self, logits: FP, n_logits: Int, rows: FP, n_rows: Int, ints: List[Int], fs: List[Float32],
+                 ids: FP) raises:
+        """OPS_LM_PICK on this executor's arm: each row's pick into `ids`,
+        the rows state updated in place."""
+        ...
+
+    def gen_alive(mut self, rows: FP, n_rows: Int, b: Int, dst: FP) raises:
+        """OPS_LM_ALIVE on this executor's arm: the alive word into dst."""
         ...

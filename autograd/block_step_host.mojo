@@ -24,6 +24,15 @@ zero-state prefill at position 0 with its stages and weights kept in the
 entry; `host_attn_step_backward` runs the backward oracle over them
 (StepOpRules reaches it through `Exec.step_backward`).
 
+Lane x56d-mamba-samba-train-and-host (2026-11-09): a recorded OPS_M{1,2,3}_STEP
+on a host session is the zero-state prefill through the same host body (the
+state tensor zeroed and the words reset first), with the run's input kept in
+the entry; its backward is the CPU column's Mamba prefill backward
+(`mamba{1,2,3}_prefill_backward`, mamba/host/gen/, the host twin of the
+device stage rules, the backward the host binding ran) over the weights
+tensor and that input. `host_step_backward` finds the entry of either
+family by its operands.
+
 This is a HOST module: no GPU binding imports it. The entries live in the host
 executor (`HostExec.steps`, sequence/exec.mojo), and generic session code
 reaches the arm through the executor trait (`Exec.step_run`,
@@ -38,7 +47,7 @@ run's stages are freed eagerly when the call ends (kept only for a recorded
 OPS_ATTN_STEP's backward, as above), and `OpsSession`'s parked count stays 0
 on a host session.
 """
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, memcpy, memset_zero
 from sequence.ops import FP
 from core.host_lanes import host_f32_uninit
 from autograd.block_step_ops import (
@@ -57,6 +66,9 @@ from transformer.checks.transformer_oracle import (
     RopeTable, TransformerKVCache, TransformerStages, build_rope_table_opts, transformer_block_oracle,
 )
 from transformer.checks.transformer_backward_oracle import transformer_block_backward_oracle
+from mamba.host.gen.mamba1_prefill_chain import mamba1_prefill_backward
+from mamba.host.gen.mamba2_prefill_chain import mamba2_prefill_backward
+from mamba.host.gen.mamba3_prefill_chain import mamba3_prefill_backward
 
 
 struct HostStepScratch(Movable):
@@ -93,10 +105,15 @@ struct HostStepScratch(Movable):
     def weights_changed(mut self, addr: Int):
         """The weights at `addr` were rewritten in place: an attention
         entry's kept training stages (computed over the old weights) go, as
-        the device entry does; the weights themselves are read at every run."""
+        the device entry does, and a Mamba entry's recorded run (lane x56d);
+        the weights themselves are read at every run."""
         for i in range(len(self.hattn) - 1, -1, -1):  # driver-loop: over host attention entries
             if self.hattn[i].w_addr == addr:
                 _ = self.hattn.pop(i)
+        for i in range(len(self.hmamba)):  # driver-loop: over host Mamba entries
+            if self.hmamba[i].w_addr == addr:
+                self.hmamba[i].train_l = 0
+                self.hmamba[i].train_x = List[Float32]()
 
     def clear(mut self):
         self.hattn.clear()
@@ -341,6 +358,12 @@ struct _HostMambaBlock(Movable):
     var b: Int
     var dm: Int
     var reports: List[List[Float32]]
+    #: lane x56d: the last recorded run's token count (0: none), its input
+    #: and its dt clamp (Mamba-2), kept for the backward
+    var train_l: Int
+    var train_x: List[Float32]
+    var dt_lo: Float32
+    var dt_hi: Float32
 
     def __init__(out self, code: Int, w: Int, s: Int, q: Int, b: Int, dm: Int):
         self.code = code
@@ -350,6 +373,10 @@ struct _HostMambaBlock(Movable):
         self.b = b
         self.dm = dm
         self.reports = List[List[Float32]]()
+        self.train_l = 0
+        self.train_x = List[Float32]()
+        self.dt_lo = Float32(0)
+        self.dt_hi = Float32(0)
 
 
 def _host_mamba_reports(mut sc: HostStepScratch, code: Int, bufs: List[FP], b: Int, dm: Int,
@@ -367,6 +394,56 @@ def _host_mamba_reports(mut sc: HostStepScratch, code: Int, bufs: List[FP], b: I
     sc.hmamba.append(blk^)
 
 
+def _host_m1_weights(p: FP, ints: List[Int]) raises -> MambaWeights:
+    """The Mamba-1 weights from the packed tensor (`_m1_weight_sizes` order:
+    MambaWeights' fields)."""
+    var q = _host_pieces(p, OPS_M1_STEP, ints, BLOCK_PART_WEIGHTS)
+    var w = MambaWeights(MambaDims.of(ints[1]))
+    w.norm_w = q[0].copy()
+    w.w_in = q[1].copy()
+    w.conv_w = q[2].copy()
+    w.conv_b = q[3].copy()
+    w.w_x = q[4].copy()
+    w.w_dt = q[5].copy()
+    w.b_dt = q[6].copy()
+    w.a_log = q[7].copy()
+    w.d_skip = q[8].copy()
+    w.w_out = q[9].copy()
+    return w^
+
+
+def _host_m2_weights(p: FP, ints: List[Int]) raises -> Mamba2Weights:
+    """The Mamba-2 weights from the packed tensor (Mamba2Weights' fields)."""
+    var q = _host_pieces(p, OPS_M2_STEP, ints, BLOCK_PART_WEIGHTS)
+    var w = Mamba2Weights(Mamba2Dims.of(ints[1]))
+    w.norm_w = q[0].copy()
+    w.w_in = q[1].copy()
+    w.conv_w = q[2].copy()
+    w.conv_b = q[3].copy()
+    w.dt_bias = q[4].copy()
+    w.a_log = q[5].copy()
+    w.d_skip = q[6].copy()
+    w.gnorm_w = q[7].copy()
+    w.w_out = q[8].copy()
+    return w^
+
+
+def _host_m3_weights(p: FP, ints: List[Int]) raises -> Mamba3Weights:
+    """The Mamba-3 weights from the packed tensor (Mamba3Weights' fields)."""
+    var q = _host_pieces(p, OPS_M3_STEP, ints, BLOCK_PART_WEIGHTS)
+    var w = Mamba3Weights(Mamba3Dims.of(ints[1]))
+    w.norm_w = q[0].copy()
+    w.w_in = q[1].copy()
+    w.dt_bias = q[2].copy()
+    w.bnorm_w = q[3].copy()
+    w.cnorm_w = q[4].copy()
+    w.b_bias = q[5].copy()
+    w.c_bias = q[6].copy()
+    w.d_skip = q[7].copy()
+    w.w_out = q[8].copy()
+    return w^
+
+
 def _host_run_m1(mut sc: HostStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int], y_out: FP) raises:
     """`mamba_block_oracle` over the packed weights and state (`_m1_weight_sizes`
     / `_m1_state_sizes` order: MambaWeights' and MambaState's fields)."""
@@ -376,18 +453,7 @@ def _host_run_m1(mut sc: HostStepScratch, bufs: List[FP], counts: List[Int], int
     _expect(OPS_M1_STEP, "weights", counts[1], block_part_floats(OPS_M1_STEP, ints, BLOCK_PART_WEIGHTS))
     _expect(OPS_M1_STEP, "state", counts[2], block_part_floats(OPS_M1_STEP, ints, BLOCK_PART_STATE))
     var dims = MambaDims.of(dm)
-    var p = _host_pieces(bufs[1], OPS_M1_STEP, ints, BLOCK_PART_WEIGHTS)
-    var w = MambaWeights(dims)
-    w.norm_w = p[0].copy()
-    w.w_in = p[1].copy()
-    w.conv_w = p[2].copy()
-    w.conv_b = p[3].copy()
-    w.w_x = p[4].copy()
-    w.w_dt = p[5].copy()
-    w.b_dt = p[6].copy()
-    w.a_log = p[7].copy()
-    w.d_skip = p[8].copy()
-    w.w_out = p[9].copy()
+    var w = _host_m1_weights(bufs[1], ints)
     var q = _host_pieces(bufs[2], OPS_M1_STEP, ints, BLOCK_PART_STATE)
     var st = MambaState(b, dims)
     st.conv_win = q[0].copy()
@@ -415,17 +481,7 @@ def _host_run_m2(mut sc: HostStepScratch, bufs: List[FP], counts: List[Int], int
     var words = _host_words(bufs[3], 1)
     _m2_check_words(words)
     var dims = Mamba2Dims.of(dm)
-    var p = _host_pieces(bufs[1], OPS_M2_STEP, ints, BLOCK_PART_WEIGHTS)
-    var w = Mamba2Weights(dims)
-    w.norm_w = p[0].copy()
-    w.w_in = p[1].copy()
-    w.conv_w = p[2].copy()
-    w.conv_b = p[3].copy()
-    w.dt_bias = p[4].copy()
-    w.a_log = p[5].copy()
-    w.d_skip = p[6].copy()
-    w.gnorm_w = p[7].copy()
-    w.w_out = p[8].copy()
+    var w = _host_m2_weights(bufs[1], ints)
     var q = _host_pieces(bufs[2], OPS_M2_STEP, ints, BLOCK_PART_STATE)
     var st = Mamba2State(b, dims)
     st.conv_win = q[0].copy()
@@ -463,17 +519,7 @@ def _host_run_m3(mut sc: HostStepScratch, bufs: List[FP], counts: List[Int], int
     var words = _host_words(bufs[3], 2)
     _m3_check_words(words)
     var dims = Mamba3Dims.of(dm)
-    var p = _host_pieces(bufs[1], OPS_M3_STEP, ints, BLOCK_PART_WEIGHTS)
-    var w = Mamba3Weights(dims)
-    w.norm_w = p[0].copy()
-    w.w_in = p[1].copy()
-    w.dt_bias = p[2].copy()
-    w.bnorm_w = p[3].copy()
-    w.cnorm_w = p[4].copy()
-    w.b_bias = p[5].copy()
-    w.c_bias = p[6].copy()
-    w.d_skip = p[7].copy()
-    w.w_out = p[8].copy()
+    var w = _host_m3_weights(bufs[1], ints)
     var q = _host_pieces(bufs[2], OPS_M3_STEP, ints, BLOCK_PART_STATE)
     var st = Mamba3State(b, dims)
     st.theta = q[0].copy()
@@ -559,17 +605,137 @@ def host_block_step_reports(sc: HostStepScratch, code: Int, w_addr: Int, s_addr:
 
 
 
+def _host_mamba_entry(mut sc: HostStepScratch, code: Int, bufs: List[FP], b: Int, dm: Int) -> Int:
+    """The host Mamba entry over the run's operands, made when absent."""
+    var q = Int(bufs[3]) if len(bufs) > 3 else 0
+    for i in range(len(sc.hmamba)):  # driver-loop: over host Mamba entries
+        if (sc.hmamba[i].code == code and sc.hmamba[i].w_addr == Int(bufs[1]) and sc.hmamba[i].s_addr == Int(bufs[2])
+                and sc.hmamba[i].q_addr == q):
+            return i
+    sc.hmamba.append(_HostMambaBlock(code, Int(bufs[1]), Int(bufs[2]), q, b, dm))
+    return len(sc.hmamba) - 1
+
+
+def host_mamba_step_train_run(
+    mut sc: HostStepScratch, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int], fs: List[Float32],
+    y_out: FP,
+) raises -> Int:
+    """A recorded run of a Mamba step op on the host (lane x56d): the state
+    tensor zeroed and the words reset (the zero-state prefill), the op's host
+    body, the input kept in the entry for the backward. Returns L. A failed
+    run drops the operands' entries."""
+    _check_ints(code, ints)
+    var b = ints[0]
+    var dm = ints[1]
+    var l = _tokens(code, counts[0], b, dm)
+    try:
+        if counts[2] > 0:
+            memset_zero(bufs[2], counts[2])
+        if code == OPS_M2_STEP:
+            var zero: List[Int] = [0]
+            _host_set_words(bufs[3], zero)
+        elif code == OPS_M3_STEP:
+            var zero: List[Int] = [0, 0]
+            _host_set_words(bufs[3], zero)
+        host_block_step_run(sc, code, bufs, counts, ints, fs, y_out)
+        var e = _host_mamba_entry(sc, code, bufs, b, dm)
+        sc.hmamba[e].b = b
+        sc.hmamba[e].dm = dm
+        sc.hmamba[e].train_x = _host_take(bufs[0], 0, b * l * dm)
+        sc.hmamba[e].train_l = l
+        if code == OPS_M2_STEP:
+            sc.hmamba[e].dt_lo = fs[0]
+            sc.hmamba[e].dt_hi = fs[1]
+    except err:
+        for k in range(1, len(bufs)):  # small-loop(bufs: the op's three or four operands): entry eviction, no data
+            sc.forget(Int(bufs[k]))
+        raise err
+    return l
+
+
+def _host_mamba_step_backward(
+    mut sc: HostStepScratch, e: Int, w: FP, d_out: FP, d_x: FP, d_w: FP,
+) raises:
+    """The CPU column's Mamba prefill backward of entry e's recorded run over
+    the weights tensor at w: d_x and every weight gradient at its
+    `block_offsets` slot of d_w."""
+    ref blk = sc.hmamba[e]
+    var code = blk.code
+    var b = blk.b
+    var dm = blk.dm
+    var l = blk.train_l
+    var n = b * l * dm
+    var ints: List[Int] = [b, dm]
+    var sizes = block_weight_sizes(code, ints)
+    var at = block_offsets(sizes, block_guard(code))
+    var dy = _host_take(d_out, 0, n)
+    if code == OPS_M1_STEP:
+        var g = mamba1_prefill_backward(_host_m1_weights(w, ints), blk.train_x, dy, b, l)
+        _host_put(d_x, 0, g.x, n, "d_x")
+        _host_put(d_w, at[0], g.norm_weight, sizes[0], "d norm_w")
+        _host_put(d_w, at[1], g.in_proj_weight, sizes[1], "d w_in")
+        _host_put(d_w, at[2], g.conv1d_weight, sizes[2], "d conv_w")
+        _host_put(d_w, at[3], g.conv1d_bias, sizes[3], "d conv_b")
+        _host_put(d_w, at[4], g.x_proj_weight, sizes[4], "d w_x")
+        _host_put(d_w, at[5], g.dt_proj_weight, sizes[5], "d w_dt")
+        _host_put(d_w, at[6], g.dt_proj_bias, sizes[6], "d b_dt")
+        _host_put(d_w, at[7], g.A_log, sizes[7], "d a_log")
+        _host_put(d_w, at[8], g.D, sizes[8], "d d_skip")
+        _host_put(d_w, at[9], g.out_proj_weight, sizes[9], "d w_out")
+    elif code == OPS_M2_STEP:
+        var g = mamba2_prefill_backward(_host_m2_weights(w, ints), blk.train_x, dy, b, l, blk.dt_lo, blk.dt_hi)
+        _host_put(d_x, 0, g.x, n, "d_x")
+        _host_put(d_w, at[0], g.block_norm_weight, sizes[0], "d norm_w")
+        _host_put(d_w, at[1], g.in_proj_weight, sizes[1], "d w_in")
+        _host_put(d_w, at[2], g.conv1d_weight, sizes[2], "d conv_w")
+        _host_put(d_w, at[3], g.conv1d_bias, sizes[3], "d conv_b")
+        _host_put(d_w, at[4], g.dt_bias, sizes[4], "d dt_bias")
+        _host_put(d_w, at[5], g.A_log, sizes[5], "d a_log")
+        _host_put(d_w, at[6], g.D, sizes[6], "d d_skip")
+        _host_put(d_w, at[7], g.norm_weight, sizes[7], "d gnorm_w")
+        _host_put(d_w, at[8], g.out_proj_weight, sizes[8], "d w_out")
+    else:
+        var g = mamba3_prefill_backward(_host_m3_weights(w, ints), blk.train_x, dy, b, l)
+        _host_put(d_x, 0, g.x, n, "d_x")
+        _host_put(d_w, at[0], g.block_norm_weight, sizes[0], "d norm_w")
+        _host_put(d_w, at[1], g.in_proj_weight, sizes[1], "d w_in")
+        _host_put(d_w, at[2], g.dt_bias, sizes[2], "d dt_bias")
+        _host_put(d_w, at[3], g.B_norm_weight, sizes[3], "d bnorm_w")
+        _host_put(d_w, at[4], g.C_norm_weight, sizes[4], "d cnorm_w")
+        _host_put(d_w, at[5], g.B_bias, sizes[5], "d b_bias")
+        _host_put(d_w, at[6], g.C_bias, sizes[6], "d c_bias")
+        _host_put(d_w, at[7], g.D, sizes[7], "d d_skip")
+        _host_put(d_w, at[8], g.out_proj_weight, sizes[8], "d w_out")
+
+
+def host_step_backward(
+    mut sc: HostStepScratch, w: FP, s: FP, q: FP, d_out: FP, d_x: FP, d_w: FP,
+) raises:
+    """`HostExec.step_backward`: the backward of the last recorded run over
+    these operands, an attention entry's or (lane x56d) a Mamba entry's."""
+    for i in range(len(sc.hattn)):  # driver-loop: over host attention entries
+        if sc.hattn[i].w_addr == Int(w) and sc.hattn[i].s_addr == Int(s) and sc.hattn[i].q_addr == Int(q):
+            host_attn_step_backward(sc, w, s, q, d_out, d_x, d_w)
+            return
+    for i in range(len(sc.hmamba)):  # driver-loop: over host Mamba entries
+        if sc.hmamba[i].w_addr == Int(w) and sc.hmamba[i].s_addr == Int(s) and sc.hmamba[i].train_l > 0:
+            _host_mamba_step_backward(sc, i, w, d_out, d_x, d_w)
+            return
+    raise Error("ops: step backward: the recorded forward's stages are gone"
+                + " (its weights or state were written outside the step after the run)")
+
+
 def host_step_run(
     mut sc: HostStepScratch, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int], fs: List[Float32],
     y_out: FP, record: Bool,
 ) raises:
-    """`HostExec.step_run`: a recorded run (the session's tape is recording;
-    OPS_ATTN_STEP only, the session refuses the others) is the training
-    prefill with its stages kept, any other run the op's host body."""
+    """`HostExec.step_run`: a recorded run (the session's tape is recording)
+    is the op's training prefill with what its backward reads kept (lanes
+    x7b, x56d), any other run the op's host body."""
     if record:
-        if code != OPS_ATTN_STEP:
-            raise Error("ValueError: ops: " + String(step_op_info(code).name)
-                        + " runs in an inference session (Session(record=False))")
-        _ = host_attn_step_train_run(sc, bufs, counts, ints, y_out)
+        if code == OPS_ATTN_STEP:
+            _ = host_attn_step_train_run(sc, bufs, counts, ints, y_out)
+        else:
+            _ = host_mamba_step_train_run(sc, code, bufs, counts, ints, fs, y_out)
         return
     host_block_step_run(sc, code, bufs, counts, ints, fs, y_out)

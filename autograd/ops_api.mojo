@@ -112,10 +112,11 @@ from autograd.import_api import (
 from sequence.exec_device import DeviceExec
 from autograd.block_step_ops import (
     OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, OPS_ATTN_STEP, BlockStepScratch, is_block_step, block_step_check,
-    ATTN_STEP_TAG, attn_step_train_run,
+    ATTN_STEP_TAG, attn_step_train_run, step_train_tag, mamba_step_train_run,
     block_step_run, block_weight_sizes, block_state_sizes, block_offsets, block_guard, block_int_words,
     block_part_floats, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
 )
+from autograd.rules_step_ops import StepOpRules
 # Generation ops (lane x45c): the language model's token pick and the decode
 # loop's condition, session codes 85, 86 (autograd/generation_ops.mojo).
 from autograd.generation_ops import (
@@ -884,11 +885,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if not self.tape.is_recording():
             raise Error("ops: backward needs a recording session (Session(record=True))")
         var t = self.tensor(h)
-        # ImportRules: RankNRules (NeuralRules plus the rank-N lanes' custom
-        # tags, autograd/rankn_api.mojo) plus the import family's tags
-        # (autograd/import_api.mojo); a graph without those nodes runs as
-        # with NeuralRules
-        self.tape.backward_scalar_with_rules(self.ex, t, ImportRules(), accumulate)
+        # StepOpRules: ImportRules (RankNRules, NeuralRules plus the rank-N
+        # lanes' custom tags, autograd/rankn_api.mojo, and the import
+        # family's tags, autograd/import_api.mojo) plus the block step ops'
+        # recorded-run tags (lane x56d: a session that records a step op
+        # differentiates it here, not only Program.fit); a graph without
+        # those nodes runs as with NeuralRules
+        self.tape.backward_scalar_with_rules(self.ex, t, StepOpRules(self.steps_address()), accumulate)
 
     def gradient_into(mut self, h: Int, dst: FP) raises:
         """The gradient of tensor `h` from the last backward into the caller's memory."""
@@ -1771,11 +1774,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         checked here (x float; weights an upload of floats; state and words
         declared state of the right kind), then the table's run on the
         device (lane x7b: the host arm on a host session), the result a new tensor of x's shape. The state is written
-        in place, so the op is not differentiable through the tape here."""
+        in place. In a recording session (lanes x7, x56d) every step op is the zero-state prefill with its stages
+        kept, recorded as one custom node over [x, weights] (StepOpRules differentiates it)."""
         var info = block_step_check(code, len(x), ints, fs)
+        _ = info
         var recording = self.tape.is_recording()
-        if recording and code != OPS_ATTN_STEP:
-            raise Error("ValueError: ops: " + String(info.name) + " runs in an inference session (Session(record=False))")
         var bufs = List[FP](capacity=len(x))
         var counts = List[Int](capacity=len(x))
         for i in range(len(x)):  # small-loop(x: the op's three or four operands): operand checks, no data
@@ -1805,8 +1808,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             # the zero-state prefill with its stages kept, recorded as one
             # custom node over [x, weights]; its VJP is StepOpRules'
             # (autograd/rules_step_ops.mojo), keyed by the operands' storage.
+            # Lane x56d: the Mamba steps the same way (tags 109-111).
             comptime if Self.E.IS_DEVICE:
-                _ = attn_step_train_run(rebind[DeviceExec](self.ex), self.steps, bufs, counts, ints, out)
+                if code == OPS_ATTN_STEP:
+                    _ = attn_step_train_run(rebind[DeviceExec](self.ex), self.steps, bufs, counts, ints, out)
+                else:
+                    _ = mamba_step_train_run(rebind[DeviceExec](self.ex), self.steps, code, bufs, counts, ints, fs,
+                                             out)
             else:
                 # lane x7b: the executor's host arm, the same zero-state
                 # prefill over the host block body with its stages kept
@@ -1815,11 +1823,12 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             var saved = Args()
             saved.p0 = bufs[1]
             saved.p1 = bufs[2]
-            saved.p2 = bufs[3]
+            # Mamba-1 carries no words tensor
+            saved.p2 = bufs[3] if len(bufs) > 3 else FP(unsafe_from_address=0)
             var rx = List[Tensor]()
             rx.append(x[0])
             rx.append(x[1])
-            var rt = self.tape.custom_nd(self.ex, rx, out, sh, ATTN_STEP_TAG, saved)
+            var rt = self.tape.custom_nd(self.ex, rx, out, sh, step_train_tag(code), saved)
             return self._add(rt, 0, self.tape.requires_grad(rt), 0)
         comptime if Self.E.IS_DEVICE:
             block_step_run(rebind[DeviceExec](self.ex), self.steps, code, bufs, counts, ints, fs, out)
@@ -1868,7 +1877,21 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 lm_alive_run(rebind[DeviceExec](self.ex), rp, n_rows, b, out)
                 t = self.tape.variable(self.ex, out, 1, 1, False)
         else:
-            raise Error("ValueError: ops: " + name + " runs on a GPU session")
+            # lane x56d: the executor's host arm (autograd/generation_host.mojo
+            # through Exec.gen_pick / gen_alive), the same rule over host storage
+            if code == OPS_LM_PICK:
+                var lslot = self._slot(hs[0])
+                if self.int_words[lslot]:
+                    raise Error("ValueError: ops: lm_pick: the logits must hold floating-point values")
+                var lp = self.tape.value_of(self.ex, x[0])
+                var out = self.tape.reserve(self.ex, b)
+                self.ex.gen_pick(lp, self.shapes[lslot].count(), rp, n_rows, ints, fs, out)
+                t = self.tape.variable(self.ex, out, b, 1, False)
+                int_result = True
+            else:
+                var out = self.tape.reserve(self.ex, 1)
+                self.ex.gen_alive(rp, n_rows, b, out)
+                t = self.tape.variable(self.ex, out, 1, 1, False)
         var h = self._add(t, 0, False, 0)
         self.int_words[self._slot(h)] = int_result
         return h

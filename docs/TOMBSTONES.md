@@ -591,6 +591,7 @@ in the tables after the sections.
 
 | [CausalLM resident greedy / sampling reads and the generation engine token loop (host-driven token loops)](#causallm-generate-as-one-programdecode-2026-11-09) | Neural (CausalLM.generate, streams) | removed (superseded: one Program.decode over one session) | 2026-11-09 | [CAUSAL_GENERATE_RESIDENT_READS.patch](../experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch) |
 | [Per-call weight byte compare of block sessions and Mamba programs (weight versioning)](#causallm-generate-as-one-programdecode-2026-11-09) | Neural (TransformerBlock, Mamba blocks) | removed (superseded: address + weight epoch key) | 2026-11-09 | [WEIGHT_BYTE_COMPARE.patch](../experiments/removed/WEIGHT_BYTE_COMPARE.patch) |
+| [`X56D_MAMBA_BACKWARD_RECOMPUTE`: the per-call Mamba-1/2/3 backward bodies (host weight copies, weight upload, forward recompute)](#mamba-backward-through-the-block-step-ops-2026-11-09) | Neural (Mamba blocks) | removed (refactored: the block step op's recorded run and its rule) | 2026-11-09 | [X56D_MAMBA_BACKWARD_RECOMPUTE.patch](../experiments/removed/X56D_MAMBA_BACKWARD_RECOMPUTE.patch) |
 
 | [`SAMBA_THREE_TIER_FORWARD`: `samba_resident_forward` (+ binding, descriptor op 16, `samba_resident_native_forward`), `SambaDecodeResident` (training/samba_decode_resident.mojo), the provider forward (`samba_provider_forward`, `AdmittedSambaExecution.forward`, `NativeSambaModel.forward`), the device per-layer walk of `samba_forward`, `samba_afn_norm_head_forward` (AFN_SAMBA_FUSE fused forward tail), the dead Python `SambaStack._forward*` / `_resident*` / `_afn*` routes](#samba-stack-on-one-executor-program-2026-11-09) | Neural (Samba inference) | SUPERSEDED (one executor program, `SambaStackProgram`; never A/B'd, RUN OWED) | 2026-11-09 | [SAMBA_THREE_TIER_FORWARD.patch](../experiments/removed/SAMBA_THREE_TIER_FORWARD.patch) |
 | [`TRANSFORMER_FORWARD_TAPE_API` (`TransformerBlock.forward_with_tape` / `backward_from_tape`, `TransformerForwardTape`, the session and standalone transformer tapes)](#transformer-forward-tape-api-retired-2026-11-09) | Neural (TransformerBlock training tape, Samba IDN_ACT_RETAIN=3 transformer half) | removed (superseded: the attention step op and the tape rule; `TransformerBlock.backward` is the training path) | 2026-11-09 | [TRANSFORMER_FORWARD_TAPE_API.patch](../experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch) |
@@ -5562,3 +5563,30 @@ docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2 steps 3 and 4). Not
   arms; parameter refusals of NMF / TSNE now come before the non-finite refusal.
 - Bits: none (the same words reach the same kernels; the totals are the ones each fit computed, taken earlier). Code
   recoverable at `0ce88411d3`; restore with `git apply experiments/removed/A8D_DECOMP_MANIFOLD_HOST_FINITE.patch`.
+
+## Mamba backward through the block step ops (2026-11-09)
+
+Lane x56d-mamba-samba-train-and-host (branch `lane/x56d-mamba-samba-train-and-host`, from main 0ce88411d3).
+
+What it tried: the public `mamba{1,2,3}_backward` doors read the caller's weights, x and grad_output into host lists,
+uploaded the weights again and ran the block forward inside `mamba{1,2,3}_tape_backward` before the stage rules, on
+every call. A recorded run of OPS_M1_STEP / OPS_M2_STEP / OPS_M3_STEP is now the zero-state prefill with its stages
+kept in the step op's resident entry (tags 109, 110, 111; autograd/block_step_ops.mojo `mamba_step_train_run`), and its
+VJP is the same stage rules over those stages (`mamba_step_backward`, StepOpRules), so a training program and the
+public door run the forward once. The public doors run it on the cached block program
+(mamba/impl/mamba_block_program.mojo `mamba_block_backward_call`).
+
+| symbols | where | why |
+|---|---|---|
+| the bodies of `_mamba1_backward_run`, `_mamba2_backward_run`, `_mamba3_backward_run` (host weight structs, `mamba{1,2,3}_tape_backward` calls, host gradient writes) | mamba/impl/mamba_shell_impl.mojo | the forward recompute and the per-call weight upload; now `mamba_block_backward_call_abi` |
+| the binding imports of `mamba1_tape_backward`, `mamba2_tape_backward`, `mamba3_tape_backward` | bindings/_mojolearn_mamba.mojo | unused |
+
+Kept: `mamba{1,2}_tape_backward_stack`, `mamba{1,2,3}_tape_backward` (the stack and one-block VJP drivers, now built on
+the same factored graph bodies `_m1_record_backward` / `_m2_record_backward`) for the digest checks in mamba/checks/;
+the Mamba-3 prefill session's retained-stage backward (`_m3_prefill_backward_run`, `_m3_backward_tape_run`).
+
+- Verdict: refactored, never A/B'd. RUN OWED on NVIDIA and AMD: mamba1/mamba2/mamba3 backward rows (the public
+  `backward` door) against main 0ce88411d3; expected faster (one forward, no host copies, weights resident).
+- Bits: unchanged by construction (the same kernels on the same operands in the same order; the weights are views of
+  the packed tensor instead of separate uploads).
+- Recoverable at 0ce88411d3; restore with `git apply experiments/removed/X56D_MAMBA_BACKWARD_RECOMPUTE.patch`.

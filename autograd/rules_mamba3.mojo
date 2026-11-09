@@ -94,7 +94,7 @@ from mamba.checks.mamba3_fixture import (
     Mamba3Dims,
     Mamba3Weights,
 )
-from autograd.kernels.mamba_refusal import mamba_refuse_grad_output
+from autograd.kernels.mamba_refusal import mamba_refuse_grad_output, mamba_refuse_grad_output_on_device
 from mamba.impl.modules.mamba3 import (
     Mamba3DeviceStages,
     Mamba3DeviceWeights,
@@ -886,6 +886,59 @@ def mamba3_tape_backward_on(
     _ = blk^
     _ = params^
     return g^
+
+
+def mamba3_step_backward(
+    ctx: DeviceContext,
+    mut w: Mamba3DeviceWeights,
+    mut st: Mamba3DeviceStages,
+    mut x: DeviceBuffer[DType.float32],
+    d_out: FP,
+    d_x: FP,
+    d_w: FP,
+    at: List[Int],
+    b: Int,
+    l: Int,
+) raises:
+    """The VJP of a RECORDED run of the block step op OPS_M3_STEP (lane
+    x56d-mamba-samba-train-and-host; autograd/block_step_ops.mojo
+    `mamba_step_train_run` kept `st` and `x`, the zero-state prefill on the
+    entry's weights `w`): `mamba3_tape_backward_on` over those stages, no
+    forward recomputed. d(block output) `d_out` (outer tape storage, copied
+    and refused like the public backward's grad_output); d_x and the nine
+    weight gradients at `at` (`_m3_weight_sizes` order: norm_w, w_in,
+    dt_bias, bnorm_w, cnorm_w, b_bias, c_bias, d_skip, w_out) of `d_w`."""
+    var dims = st.dims.copy()
+    var m = b * l
+    var dm = dims.d_model
+    var nh = dims.nheads
+    var d_output = mamba_zeros[False](ctx, m * dm)
+    ctx.enqueue_copy(dst_buf=d_output.create_sub_buffer[DType.float32](0, m * dm),
+                     src_buf=_m3_view(ctx, d_out, m * dm))
+    mamba_refuse_grad_output_on_device(ctx, String("mamba3"), d_output, m * dm)
+    var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
+    var g = mamba3_tape_backward_on(ctx, w, st, x, d_output, b, l, dims, ton)
+    _m3_put(ctx, d_x, g.x, m * dm)
+    _m3_put(ctx, d_w + at[0], g.block_norm_weight, dm)
+    _m3_put(ctx, d_w + at[1], g.in_proj_weight, dims.d_in_proj() * dm)
+    _m3_put(ctx, d_w + at[2], g.dt_bias, nh)
+    _m3_put(ctx, d_w + at[3], g.B_norm_weight, M3_D_STATE)
+    _m3_put(ctx, d_w + at[4], g.C_norm_weight, M3_D_STATE)
+    _m3_put(ctx, d_w + at[5], g.B_bias, nh * M3_D_STATE)
+    _m3_put(ctx, d_w + at[6], g.C_bias, nh * M3_D_STATE)
+    _m3_put(ctx, d_w + at[7], g.D, nh)
+    _m3_put(ctx, d_w + at[8], g.out_proj_weight, dm * dims.d_inner)
+    # the copies read g: one wait before it goes
+    ctx.synchronize()
+    _ = g^
+    _ = d_output^
+
+
+def _m3_put(ctx: DeviceContext, dst: FP, src: DeviceBuffer[DType.float32], n: Int) raises:
+    """dst[0:n] = src[0:n] on the device (a gradient into the outer tape)."""
+    if n <= 0:
+        return
+    ctx.enqueue_copy(dst_buf=_m3_view(ctx, dst, n), src_buf=src.create_sub_buffer[DType.float32](0, n))
 
 
 def mamba3_tape_backward(

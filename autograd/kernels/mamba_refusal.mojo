@@ -131,3 +131,18 @@ def mamba_refuse_grad_output(
             raise Error(tag + " backward: non-finite grad_output at flat index " + String(Int(code // 2)))
     else:
         _refuse_grad_output_host(tag, values)
+
+
+def mamba_refuse_grad_output_on_device(
+    ctx: DeviceContext, tag: String, mut grad: DeviceBuffer[DType.float32], n: Int,
+) raises:
+    """`mamba_refuse_grad_output` for a gradient that is already on the
+    device and has no host copy (lane x56d: the block step op's rule, whose
+    upstream gradient is tape storage). The same message and first flat
+    index; the legacy-refusal build reads the n words back once."""
+    comptime if M3_DEVICE_REFUSAL:
+        var code = m3_first_nonfinite_code(ctx, grad, n)
+        if code != M3_REFUSAL_NONE:
+            raise Error(tag + " backward: non-finite grad_output at flat index " + String(Int(code // 2)))
+    else:
+        _refuse_grad_output_host(tag, m3_download(ctx, grad, n))

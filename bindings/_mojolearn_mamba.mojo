@@ -227,8 +227,6 @@ from autograd.kernels.mamba3_proj import ANY_BWD3_SABOTAGE
 # (autograd/rules_mamba.mojo), which launches the hand kernels in the hand order.
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1/2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
-from autograd.rules_mamba import mamba1_tape_backward, mamba2_tape_backward
-from autograd.rules_mamba3 import mamba3_tape_backward, mamba3_tape_backward_on
 from autograd.kernels.mamba1_prefill import Mamba1PrefillGradients
 from autograd.kernels.mamba2_prefill import Mamba2PrefillGradients
 from autograd.kernels.mamba1_proj import ANY_BWD_SABOTAGE as M1_ANY_BWD_SABOTAGE
