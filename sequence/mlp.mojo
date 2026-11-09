@@ -188,7 +188,7 @@ def op_act_bwd(t: Int, a: Args):
 #:                        then the weight blocks as above. HIGGS: 512 + 512
 #:                        + 56 + 4. (i3 = 2, no row threads for the data sum
 #:                        of -D MOJOLEARN_AUTOGRAD_LOSS, went with that arm.)
-#: TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (opt-in arm, no A/B; the default reported-loss folds kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+#: TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (opt-in arm, no A/B; the default reported-loss folds kept) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
 #: Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
 #:   OP_MLP_LB_FOLD (1601) i11 = 2, once per group of four layers: ceil(B /
 #:                        R(B)) row-block threads on the first group (rowparts

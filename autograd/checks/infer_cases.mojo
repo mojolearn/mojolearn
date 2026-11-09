@@ -244,7 +244,7 @@ def _mlp_case[E: Exec](mut ex: E, name: String, var sizes: List[Int], act: Int, 
     # mlp_predict (the tape forward in inference mode) in chunks of 3 rows
     # (3, 3, 1): each row's value depends on its row only, so it must equal
     # the full-batch forward.
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by c3b7dc42e6; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
     # The hand mlp_predict it was compared with is deleted; proba2 is checked against [1 - p, p] of the prediction.
     var predicted = List[Float32](length=N * O, fill=0)

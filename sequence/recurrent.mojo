@@ -44,7 +44,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_di
 
 from std.sys.compile import is_defined, get_defined_int
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
 # Lane x3-mlp-rnn-predict-on-tape (plan EXECUTOR_CONSOLIDATION_AND_CLEANUP 5.6): the opt-in arm ran rnn_fit's
 # update through autograd/optim.mojo (OptimizerState + step_lr), the same one OP_OPT launch with the same words
@@ -54,14 +54,14 @@ from std.sys.compile import is_defined, get_defined_int
 # opt_step call is gone (opt_step stays for its other callers). Same bits by construction. A/B owed (ms per fit).
 from autograd.optim import OptimizerState, optimizer_config_packed, step_lr
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
 # Lane x3-mlp-rnn-predict-on-tape (plan EXECUTOR_CONSOLIDATION_AND_CLEANUP 5.6; Andrew 2026-11-08: bits may
 # change between versions, never keep a serial fold for old bits): each step's reported loss (losses[k]) comes
 # from autograd/losses.mojo (loss_value_into: the squared-error terms or op_ce's row losses, term for term, then
 # the tape's blocked fold with factor 1 / count) instead of sum_into's one-thread ascending OP_SUM (deleted).
 # The gradient seed w.dy still comes from OP_MSE / OP_CE. NEW BITS in losses[] only (every column together:
-# host, Metal, NVIDIA, AMD run the same fold); parameters unchanged. A/B owed: arm A X3SHA^ (OP_SUM), arm B X3SHA.
+# host, Metal, NVIDIA, AMD run the same fold); parameters unchanged. A/B owed: arm A f7d10d2b09 (OP_SUM), arm B dbab55bea7.
 from autograd.losses import LossScratch, loss_scratch, release_loss_scratch, loss_value_into, REDUCTION_MEAN
 from autograd.loss_ops import LS_MSE, LS_CROSS_ENTROPY
 
@@ -241,7 +241,7 @@ def gather_rows[E: Exec](mut ex: E, Y: FP, idx: FP, dst: FP, B: Int, O: Int, off
     ex.launch[OP_GATHER_ROWS](a, B * O)
 
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
 # sum_into (dst[at] = scale * the n values of X added ascending by ONE thread, OP_SUM) was rnn_fit's reported
 # loss; loss_value_into's blocked fold replaces it.
@@ -303,7 +303,7 @@ struct Work(Movable):
             self.wsplit = self.sq
 
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by 9a9a8e3148; code recoverable at c3b7dc42e6^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
 # The hand forward (every layer over the time-major input: input projection, scan or per-step OP_CELL_FWD_H
 # chain) and head (h_T @ W_o^T + b_o) are gone with their one caller, the hand rnn_predict: prediction records
@@ -408,7 +408,7 @@ def opt_step[E: Exec](
     ex.launch[OP_OPT](a, n)
 
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_DATA (promoted: autograd/data.mojo epoch_order is the one epoch order; the hand launches deleted) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_DATA (promoted: autograd/data.mojo epoch_order is the one epoch order; the hand launches deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch
 # The opt-in arm built rnn_fit's epoch order through autograd/data.mojo (epoch_order), the same OP_MLP_PERM /
 # OP_SEQ_IOTA launches with the same key (same bits by construction). It is now the only path (the data layer
@@ -471,21 +471,21 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     var P = ex.alloc(np_)
     ex.upload(P, Pio, np_)
     var Gr = ex.alloc(np_)
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
     # The optimizer state on the executor (s2 filled with init_acc, Adagrad's initial accumulator).
     var opt_cfg = optimizer_config_packed(cfg.kind, cfg.flags, cfg.f1, cfg.f2, cfg.eps, cfg.wd, cfg.f7, Float32(0.0))
     var opt_state = OptimizerState(ex, opt_cfg, np_, init_acc)
     var dloss = ex.alloc(n_steps)
     var w = Work(ex, net, T, bmax, True)
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
     var loss_ws = loss_scratch(ex, bmax * net.O)
     var step = S()
     for k in range(n_steps):
         var j = k % per
         if j == 0:
-            # TOMBSTONE: MOJOLEARN_AUTOGRAD_DATA (promoted: autograd/data.mojo epoch_order is the one epoch order; the hand launches deleted) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+            # TOMBSTONE: MOJOLEARN_AUTOGRAD_DATA (promoted: autograd/data.mojo epoch_order is the one epoch order; the hand launches deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
             # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch
             ag_epoch_order(ex, shuffle, seed, k // per, N, dord)
         var off = j * bs
@@ -523,6 +523,6 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     ex.download(losses, dloss, n_steps)
 
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by 9a9a8e3148; code recoverable at c3b7dc42e6^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
 # rnn_predict moved to autograd/rules_recurrent.mojo (it runs the tape forward, and that module imports this one).

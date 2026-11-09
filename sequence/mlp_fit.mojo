@@ -82,14 +82,14 @@ from sequence.ops import dummy_ptr
 # It was the hand-assembled backward (arm A above): per layer gemm_epi EPI_L2GRAD
 # (dW), OP_COLSUM_DIV (db), gemm_epi EPI_ACT_BWD (dX); the tape trains every MLP
 # with the same 48 check digests (autograd/checks/mlp_cases_digests.tsv).
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by c3b7dc42e6; code recoverable at c3b7dc42e6^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
 # Lane x3-mlp-rnn-predict-on-tape (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md X3): mlp_predict runs
 # mlp_forward_autograd on a tape in inference mode (what -D MOJOLEARN_AUTOGRAD_PREDICT selected); the hand
 # mlp_forward (gemm_epi EPI_BIAS_ACT a layer on the one-thread OP_GEMM_EPI, + OP_SOFTMAX) and the hand
 # mlp_predict over it are deleted. The fused tape node issues EPI_BIAS_ACT on the tiled GEMM, op_gemm's chain
 # term for term, so the expected digest is the hand forward's; the one pre-release identity run is the proof.
-# A/B owed: arm A X3SHA^ (hand), arm B X3SHA (tape), mlp-predict and sequential-predict, NVIDIA and AMD.
+# A/B owed: arm A f7d10d2b09 (hand), arm B c3b7dc42e6 (tape), mlp-predict and sequential-predict, NVIDIA and AMD.
 # The fused tape node is the tape default (lane ag-pass3-impl, 2026-10-19,
 # PASS3_IDEAS idea 1; lane ag-fusion2 wrote it as the opt-in
 # MOJOLEARN_AUTOGRAD_MLP_FUSED). Each layer is one tape.linear_into node and
@@ -124,14 +124,14 @@ comptime MLP_COMPOSED_OPT_FUSE = not AUTOGRAD_MLP_FUSED and AUTOGRAD_OPT_FUSE
 # (256,) b512: NV 0.388 -> 0.387 s, AMD 0.602 -> 0.599 s, same digest as the default
 # (B = 512 is a power of two, so the scaling rounds identically); noise.
 # Restore: git checkout 91ebd1cb4 -- sequence/mlp_fit.mojo (then merge by hand).
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (opt-in arm, no A/B; the default reported-loss folds kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (opt-in arm, no A/B; the default reported-loss folds kept) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
 # Lane x3-mlp-rnn-predict-on-tape (plan EXECUTOR_CONSOLIDATION_AND_CLEANUP 5.6): the opt-in arm computed each
 # batch's reported data term through autograd/losses.mojo (loss_value_into, _mlp_loss_kind) and handed that one sum
 # to the loss block / op_mlp_bloss; new bits in the reported loss and possibly n_iter, parameters untouched. No A/B
 # ever ran, so today's bits-defining default (the row losses' blocked folds) is the one arm; the A/B is owed.
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
 # Lane x3-mlp-rnn-predict-on-tape (plan EXECUTOR_CONSOLIDATION_AND_CLEANUP 5.6; Andrew 2026-11-08: keep the
 # simpler path): the parameters update through autograd/optim.mojo (OptimizerState + step_lr, step_lr_finish for
@@ -177,13 +177,13 @@ struct MLPNet(Copyable, Movable):
         return self.w_off(self.n_layers())
 
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by c3b7dc42e6; code recoverable at c3b7dc42e6^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
 # gemm_epi (one OP_GEMM_EPI launch) and _act_launch (OP_SOFTMAX / OP_ACT in place) had one caller, the hand
 # mlp_forward; both went with it. The tape issues the same kernels through linear_into.
 
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by c3b7dc42e6; code recoverable at c3b7dc42e6^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
 # mlp_forward (the hand forward, its one caller the hand mlp_predict) is gone: mlp_forward_autograd below is the
 # only MLP forward, for training and for prediction (inference mode).
@@ -629,7 +629,7 @@ def mlp_fit[E: Exec](
     var P = ex.alloc(np_)
     ex.upload(P, Pio, np_)
     var Gr = ex.alloc(np_)
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
     # The optimizer and its state on the executor.
     var opt_cfg = optimizer_config(OPT_SK_ADAM if solver == SOLVER_ADAM else OPT_SK_SGD, lr_init)
@@ -677,7 +677,7 @@ def mlp_fit[E: Exec](
     var lb_l2parts = ex.alloc(mlp_lb_l2_parts(net) if MLP_LOSSBLOCK else 1)
     var lb_rowparts = ex.alloc(mlp_lb_row_parts(bs) if MLP_LOSSBLOCK else 1)
     var lb_epochparts = ex.alloc(mlp_lb_row_parts(n_batches) if MLP_LOSSBLOCK else 1)
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (opt-in arm, no A/B; the default reported-loss folds kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (opt-in arm, no A/B; the default reported-loss folds kept) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
     # MLP_EPOCH_DEV: the epoch losses stay on the executor, one word read back
     var dcurve = ex.alloc(max_iter if MLP_EPOCH_DEV else 1)
@@ -814,7 +814,7 @@ def mlp_fit[E: Exec](
             # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_OFF (DELETED-superseded) deleted 2026-10-19 by 6784245b2; code recoverable at 6784245b2^.
             # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch
             mlp_backward_autograd(tape, ex, net, tape_logits, dlogits, P, Gr, B, alpha)
-            # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+            # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
             # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
             # one OP_OPT launch through autograd/optim.mojo
             t_upd += 1
@@ -879,7 +879,7 @@ def mlp_fit[E: Exec](
     return n_iter
 
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by c3b7dc42e6; code recoverable at c3b7dc42e6^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
 # The hand mlp_predict (the same chunking, copies and proba2 over the hand mlp_forward) is gone; mlp_predict below
 # is the former mlp_predict_autograd under the public name.

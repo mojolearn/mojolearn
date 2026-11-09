@@ -770,7 +770,7 @@ def mlp_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises
     # the (N, 2) probability [1 - p, p] into `out`.
     var n_ip = 7 + len(net.sizes) - 2
     var proba2 = len(ip) == n_ip + 1 and ival(ip, n_ip) == 1 and O == 1
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by c3b7dc42e6; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
     # mlp_predict is the tape's forward in inference mode (the former mlp_predict_autograd).
     mlp_predict(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"), chunk, proba2,

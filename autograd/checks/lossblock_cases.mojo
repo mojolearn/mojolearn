@@ -110,7 +110,7 @@ def _batch_case[E: Exec](
     mlp_loss_block[False](
         ex, net, dP, dpred, dy, rseed, rrow, rl2p, rl2, rloss, 1, B, kind, half, dummy_ptr(),
     )
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (opt-in arm, no A/B; the default reported-loss folds kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (opt-in arm, no A/B; the default reported-loss folds kept) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
     # The handed-in data sum case (the arm's i5 = 1, both layouts) went with the arm.
     # the previous kernels (MLP_BLOCKED_FOLDS), as mlp_fit issued them
