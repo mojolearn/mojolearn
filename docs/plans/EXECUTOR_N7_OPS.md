@@ -33,6 +33,7 @@ their loops onto them and delete the old paths.
 | `chol_op_cho_solve(ctx, l, b, info, n, nrhs)` | potrs (forward then back) | `chol_host_solve` |
 | `chol_op_logdet(ctx, l, info, scratch, out, n)` | out[0] = 2 sum log L_ii, stored only when info == 0; scratch `chol_op_logdet_scratch_floats(n)` | `CholHostFactor.logdet` |
 | `chol_op_info_joins_loop(ctx, words, info, it)` | the pivot failure stops the loop | n/a |
+| `chol_op_zero_on_fail(ctx, info, buf, count)` | `buf[0, count) = +0.0` when info != 0 (a failed fit's zero dual), read-free (lane N8) | n/a |
 
 Per iteration: `chol_op_begin`, the family builds `a` (kernel + ridge, its own kernel), `chol_op_factor`,
 `chol_op_info_joins_loop`, then solves / logdet / the family's gradient. The factor schedule per column: strips
@@ -90,6 +91,12 @@ iteration goes, and so does `SelectScratch` once its last caller moves.
   `copy_vector_from_matrix_diagonal_kernel` + `enqueue_logdet` + `cho_solve` (gaussian_process/gp_optim.mojo,
   gpr_resident.mojo, classifier.mojo, gpc_ovr.mojo, the KRR fit). `potrf_lower` stays for the trace / sabotage
   checks and the multi-GPU owner set only.
+  DONE 2026-11-09 (lane n8-gp-krr-smo): the optimizer runs every start on the device (run sequencer
+  `gp_opt_advance_kernel`, done word read per 8 evaluations); the GPC Newton loop is one `bounded_device_loop`
+  (gaussian_process/gpc_newton.mojo); the fits, lml_grad, sample_y and KRR read `info` at their own sync. KRR's
+  identity-trace route (km_check's `chol.panelNNN.*` records) keeps `potrf_lower`. `potrf_lower`'s other routes
+  stay: the public Cholesky (FAST_NOSYNC / FAST_TALL), GMM's M-step, x_decomp/device.mojo and kit_device.mojo, the
+  checks and the multi-GPU owner set still call it.
 - Decomposition (N9): the host round trips of w, V (kit_device.mojo eigh, ipca_owner.mojo, lanczos_dev.mojo /
   mani_decomp_native.mojo projected solve, lle_iter_dev.mojo), `HostExec.eigh_batch`'s serial loop over problems
   (replace with `eigh_op_dense_host`), and `DevExec._eigh_par_on`'s per-sweep three-scalar read for the k x k
