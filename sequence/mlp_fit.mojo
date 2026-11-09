@@ -64,13 +64,9 @@ from autograd.ops import RELU as AG_RELU
 from autograd.ops import SIGMOID as AG_SIGMOID
 from autograd.ops import SOFTMAX as AG_SOFTMAX
 from autograd.ops import TANH as AG_TANH
-from autograd.optim import OptimizerState, optimizer_config, step_lr
-from autograd.optim import AUTOGRAD_OPT_FUSE, GradFinish, launch_opt_finish, step_lr_finish
+from autograd.optim import AUTOGRAD_OPT_FUSE, GradFinish, launch_opt_finish
 from autograd.data import AUTOGRAD_GATHER_EPOCH, gather_epoch, gather_epoch_fits
 from autograd.fold import fold_partials_bound
-from autograd.losses import LossScratch, loss_scratch, release_loss_scratch, loss_value_into, REDUCTION_SUM
-from autograd.loss_ops import LS_MSE, LS_LOG_PROB, LS_BINARY_LOG_PROB
-from sequence.mlp import LOSS_SQUARED, LOSS_BINARY_LOG
 from sequence.ops import dummy_ptr
 
 # The tape-assembled backward is the default (promoted 2026-10-18). A/B
@@ -128,37 +124,18 @@ comptime MLP_COMPOSED_OPT_FUSE = not AUTOGRAD_MLP_FUSED and AUTOGRAD_OPT_FUSE
 # (256,) b512: NV 0.388 -> 0.387 s, AMD 0.602 -> 0.599 s, same digest as the default
 # (B = 512 is a power of two, so the scaling rounds identically); noise.
 # Restore: git checkout 91ebd1cb4 -- sequence/mlp_fit.mojo (then merge by hand).
-# A/B define (lane ag-loss, default off): -D MOJOLEARN_AUTOGRAD_LOSS computes
-# the data term of each batch's reported loss through autograd/losses.mojo
-# (loss_value_into: one term per element of the B x O output, the same
-# clipped-probability terms as op_mlp_rowloss, summed by the tape's blocked
-# fold) and hands that sum to op_mlp_bloss as its one partial. The L2 term,
-# the batch divide, the epoch fold and the stopping rule are unchanged;
-# OP_MLP_ROWLOSS still writes the gradient seed (the delta at the logits).
-# New bits in the reported loss (and so possibly in n_iter) under the define;
-# the gradients, hence the parameters per epoch, are untouched.
-comptime AUTOGRAD_LOSS = is_defined["MOJOLEARN_AUTOGRAD_LOSS"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (opt-in arm, no A/B; the default reported-loss folds kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
+# Lane x3-mlp-rnn-predict-on-tape (plan EXECUTOR_CONSOLIDATION_AND_CLEANUP 5.6): the opt-in arm computed each
+# batch's reported data term through autograd/losses.mojo (loss_value_into, _mlp_loss_kind) and handed that one sum
+# to the loss block / op_mlp_bloss; new bits in the reported loss and possibly n_iter, parameters untouched. No A/B
+# ever ran, so today's bits-defining default (the row losses' blocked folds) is the one arm; the A/B is owed.
 
-
-def _mlp_loss_kind(loss_kind: Int) -> Int:
-    """The autograd/loss_ops.mojo kind of an MLP loss code."""
-    if loss_kind == LOSS_SQUARED:
-        return LS_MSE
-    if loss_kind == LOSS_BINARY_LOG:
-        return LS_BINARY_LOG_PROB
-    return LS_LOG_PROB
-
-# Lane ag-optim (2026-10-19), default off: -D MOJOLEARN_AUTOGRAD_OPTIM updates
-# the parameters through autograd/optim.mojo (OptimizerState + step_lr)
-# instead of the hand-built OP_OPT launch below. Bits: the same. step_lr
-# issues the same one OP_OPT launch over Gr with the same words the body
-# reads (sklearn Adam: f1 b1, f2 b2, f3 eps, f5 lr sqrt(1 - b2^t) / (1 - b1^t)
-# from running products advanced by one identical_mul a step, as here;
-# sklearn SGD: f0 lr, f1 momentum, i2 Nesterov); the words it sets that the
-# hand path leaves 0 (f0 and i1 for Adam) are not read by those bodies. No
-# fold is involved (the clip is off, the schedule is the caller's lr).
-# The state buffers are the module's (s1, s2 here shrink to one float).
-comptime AUTOGRAD_OPTIM = is_defined["MOJOLEARN_AUTOGRAD_OPTIM"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (opt-in arm, no A/B; the default OP_OPT launch kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
+# The opt-in arm updated the parameters through autograd/optim.mojo (OptimizerState + step_lr / step_lr_finish),
+# the same one OP_OPT launch with the same words (same bits by construction). No A/B ran; the default hand-built
+# OP_OPT launch below is the one arm; the A/B is owed.
 
 comptime SOLVER_ADAM = 0
 comptime SOLVER_SGD = 1
@@ -446,16 +423,14 @@ def mlp_lb_row_parts(max_rows: Int) -> Int:
 
 def mlp_loss_block[E: Exec, //, ROWS: Bool = MLP_LB_ROWS](
     mut ex: E, net: MLPNet, P: FP, pred: FP, y: FP, seed: FP, rowparts: FP, l2parts: FP, l2: FP,
-    dloss: FP, bi: Int, B: Int, loss_kind: Int, half_alpha: Float32, data: FP, data_parts: Int,
-    rowloss: FP,
+    dloss: FP, bi: Int, B: Int, loss_kind: Int, half_alpha: Float32, rowloss: FP,
 ) raises:
     """MLP_LOSSBLOCK (sequence/mlp.mojo): one batch's loss block. seed[0:B O]
     = pred - y, l2[i] = ||W_i||^2 and dloss[bi] = the batch's reported loss
     (data term + half_alpha sum(l2) / B), every sum a blocked fold with the
-    tape's block rule. `data_parts` = 0: the data term is the B row losses'
-    blocked sum (row partials written to `rowparts`); > 0: it is `data`'s
-    `data_parts` partials added ascending (-D MOJOLEARN_AUTOGRAD_LOSS hands
-    its one sum). Launches: one op_mlp_lb_part and one op_mlp_lb_fold per
+    tape's block rule. The data term is the B row losses' blocked sum (row
+    partials written to `rowparts`; the handed-in data sum of the deleted
+    -D MOJOLEARN_AUTOGRAD_LOSS arm went with it, lane X3). Launches: one op_mlp_lb_part and one op_mlp_lb_fold per
     group of four layers (2 for L <= 4).
     ROWS (MLP_LB_ROWS, the default; -D MOJOLEARN_MLP_LOSSBLOCK_ROWS_OFF):
     the row losses one thread per row into `rowloss` (B floats), the row
@@ -463,8 +438,7 @@ def mlp_loss_block[E: Exec, //, ROWS: Bool = MLP_LB_ROWS](
     batch loss: one more launch (3 for L <= 4), the same bits."""
     comptime if ROWS:
         _mlp_loss_block_rows(
-            ex, net, P, pred, y, seed, rowparts, l2parts, l2, dloss, bi, B, loss_kind, half_alpha, data,
-            data_parts, rowloss,
+            ex, net, P, pred, y, seed, rowparts, l2parts, l2, dloss, bi, B, loss_kind, half_alpha, rowloss,
         )
         return
     var L = net.n_layers()
@@ -494,7 +468,7 @@ def mlp_loss_block[E: Exec, //, ROWS: Bool = MLP_LB_ROWS](
     pstart = 0
     for g in range(groups):  # driver-loop: over groups of four layers
         var f = Args()
-        f.p0 = data if data_parts > 0 else rowparts
+        f.p0 = rowparts
         f.p1 = l2parts + pstart
         f.p2 = dloss
         f.p3 = l2
@@ -503,7 +477,7 @@ def mlp_loss_block[E: Exec, //, ROWS: Bool = MLP_LB_ROWS](
         f.i2 = O
         f.i3 = L
         f.i4 = loss_kind
-        f.i5 = data_parts if data_parts > 0 else mlp_lb_blocks(B)
+        f.i5 = mlp_lb_blocks(B)
         f.i10 = 4 * g
         f.i11 = 1 if g == groups - 1 else 0
         f.f0 = half_alpha
@@ -518,18 +492,17 @@ def mlp_loss_block[E: Exec, //, ROWS: Bool = MLP_LB_ROWS](
 
 def _mlp_loss_block_rows[E: Exec](
     mut ex: E, net: MLPNet, P: FP, pred: FP, y: FP, seed: FP, rowparts: FP, l2parts: FP, l2: FP,
-    dloss: FP, bi: Int, B: Int, loss_kind: Int, half_alpha: Float32, data: FP, data_parts: Int,
-    rowloss: FP,
+    dloss: FP, bi: Int, B: Int, loss_kind: Int, half_alpha: Float32, rowloss: FP,
 ) raises:
     """mlp_loss_block under MLP_LB_ROWS (sequence/mlp.mojo's loss-section
     comment): per group of four layers one op_mlp_lb_part (group 0: B O seed
-    threads and, unless the data sum is given, B row threads) and one
+    threads and B row threads) and one
     op_mlp_lb_fold with i11 = 2 (group 0: the row blocks; every group: one
     thread per layer), then one op_mlp_lb_fold with i11 = 3 (1 thread)."""
     var L = net.n_layers()
     var O = net.sizes[L]
     var groups = (L + 3) // 4
-    var rows = 0 if data_parts > 0 else B
+    var rows = B
     var pstart = 0
     for g in range(groups):  # driver-loop: over groups of four layers
         var p = Args()
@@ -542,7 +515,7 @@ def _mlp_loss_block_rows[E: Exec](
         p.i0 = loss_kind
         p.i1 = O
         p.i2 = B if g == 0 else 0
-        p.i3 = 1 if rows > 0 else 2
+        p.i3 = 1
         var threads = (B * O + rows) if g == 0 else 0
         for j in range(4):  # driver-loop: over the group's layers
             var l = 4 * g + j
@@ -573,7 +546,7 @@ def _mlp_loss_block_rows[E: Exec](
                 nl += 1
         ex.launch[OP_MLP_LB_FOLD](f, f.i5 + nl)
     var b = Args()
-    b.p0 = data if data_parts > 0 else rowparts
+    b.p0 = rowparts
     b.p2 = dloss
     b.p3 = l2
     b.i0 = bi
@@ -581,7 +554,7 @@ def _mlp_loss_block_rows[E: Exec](
     b.i2 = O
     b.i3 = L
     b.i4 = loss_kind
-    b.i5 = data_parts if data_parts > 0 else mlp_lb_blocks(B)
+    b.i5 = mlp_lb_blocks(B)
     b.i11 = 3
     b.f0 = half_alpha
     ex.launch[OP_MLP_LB_FOLD](b, 1)
@@ -651,19 +624,11 @@ def mlp_fit[E: Exec](
     var P = ex.alloc(np_)
     ex.upload(P, Pio, np_)
     var Gr = ex.alloc(np_)
-    var s1 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
-    var s2 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
-    var s3 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
-    # -D MOJOLEARN_AUTOGRAD_OPTIM: the optimizer and its state on the executor
-    var opt_cfg = optimizer_config(OPT_SK_ADAM if solver == SOLVER_ADAM else OPT_SK_SGD, lr_init)
-    opt_cfg.beta1 = b1
-    opt_cfg.beta2 = b2
-    opt_cfg.eps = eps
-    opt_cfg.momentum = momentum
-    opt_cfg.nesterov = nesterov
-    var opt_state = OptimizerState()
-    comptime if AUTOGRAD_OPTIM:
-        opt_state = OptimizerState(ex, opt_cfg, np_)
+    var s1 = ex.alloc(np_)
+    var s2 = ex.alloc(np_)
+    var s3 = ex.alloc(np_)
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (opt-in arm, no A/B; the default OP_OPT launch kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
     var acts = List[FP]()
     var tape = Tape()
     var tape_logits = Tensor(0, 0, -1)
@@ -702,12 +667,8 @@ def mlp_fit[E: Exec](
     var lb_l2parts = ex.alloc(mlp_lb_l2_parts(net) if MLP_LOSSBLOCK else 1)
     var lb_rowparts = ex.alloc(mlp_lb_row_parts(bs) if MLP_LOSSBLOCK else 1)
     var lb_epochparts = ex.alloc(mlp_lb_row_parts(n_batches) if MLP_LOSSBLOCK else 1)
-    # MOJOLEARN_AUTOGRAD_LOSS: the loss module's scratch and the batch's data sum
-    var loss_ws = LossScratch(dummy_ptr(), dummy_ptr(), 0)
-    var loss_sum = dummy_ptr()
-    comptime if AUTOGRAD_LOSS:
-        loss_ws = loss_scratch(ex, bs * O)
-        loss_sum = ex.alloc(1)
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (opt-in arm, no A/B; the default reported-loss folds kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
     # MLP_EPOCH_DEV: the epoch losses stay on the executor, one word read back
     var dcurve = ex.alloc(max_iter if MLP_EPOCH_DEV else 1)
     var loss_word = List[Float32](length=1, fill=Float32(0.0))
@@ -775,11 +736,9 @@ def mlp_fit[E: Exec](
                 # loss-section comment). -D MOJOLEARN_MLP_LOSSBLOCK_OFF: below.
                 # lane ag-pass5-loss (MLP_LB_ROWS): row losses one thread per
                 # row into rowloss, 3 launches, the same bits.
-                comptime if AUTOGRAD_LOSS:
-                    loss_value_into(ex, _mlp_loss_kind(loss_kind), acts[L], yb, B, O, REDUCTION_SUM, loss_sum, loss_ws)
                 mlp_loss_block(
                     ex, net, P, acts[L], yb, dlogits, lb_rowparts, lb_l2parts, l2, dloss, bi, B, loss_kind,
-                    ftz(identical_mul(Float32(0.5), alpha)), loss_sum, 1 if AUTOGRAD_LOSS else 0, rowloss,
+                    ftz(identical_mul(Float32(0.5), alpha)), rowloss,
                 )
             else:
                 var a = Args()
@@ -833,11 +792,7 @@ def mlp_fit[E: Exec](
                 bl.i3 = L
                 bl.i4 = loss_kind
                 bl.f0 = ftz(identical_mul(Float32(0.5), alpha))
-                comptime if AUTOGRAD_LOSS:
-                    loss_value_into(ex, _mlp_loss_kind(loss_kind), acts[L], yb, B, O, REDUCTION_SUM, loss_sum, loss_ws)
-                    bl.p3 = loss_sum
-                    bl.i5 = 1
-                elif MLP_BLOCKED_FOLDS:
+                comptime if MLP_BLOCKED_FOLDS:
                     var nrb = (B + MLP_ROW_BLOCK - 1) // MLP_ROW_BLOCK
                     var rp = Args()
                     rp.p0 = rowloss
@@ -851,42 +806,35 @@ def mlp_fit[E: Exec](
             # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_OFF (DELETED-superseded) deleted 2026-10-19 by 6784245b2; code recoverable at 6784245b2^.
             # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch
             mlp_backward_autograd(tape, ex, net, tape_logits, dlogits, P, Gr, B, alpha)
-            comptime if AUTOGRAD_OPTIM:
-                # one OP_OPT launch through autograd/optim.mojo (same words)
+            # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (opt-in arm, no A/B; the default OP_OPT launch kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+            # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
+            var o = Args()
+            o.p0 = P
+            o.p1 = Gr
+            o.p2 = s1
+            o.p3 = s2
+            o.p4 = s3
+            if solver == SOLVER_ADAM:
                 t_upd += 1
-                comptime if MLP_COMPOSED_OPT_FUSE:
-                    finish.divisor = Float32(B)
-                    step_lr_finish(ex, opt_cfg, opt_state, P, Gr, np_, t_upd, lr, finish)
-                else:
-                    step_lr(ex, opt_cfg, opt_state, P, Gr, np_, t_upd, lr)
+                pw1 = ftz(identical_mul(pw1, b1))
+                pw2 = ftz(identical_mul(pw2, b2))
+                o.i0 = OPT_SK_ADAM
+                o.f1 = b1
+                o.f2 = b2
+                o.f3 = eps
+                o.f5 = ftz(identical_div(ftz(identical_mul(lr, ftz(identical_sqrt(Float32(1.0) - pw2)))),
+                                         Float32(1.0) - pw1))
             else:
-                var o = Args()
-                o.p0 = P
-                o.p1 = Gr
-                o.p2 = s1
-                o.p3 = s2
-                o.p4 = s3
-                if solver == SOLVER_ADAM:
-                    t_upd += 1
-                    pw1 = ftz(identical_mul(pw1, b1))
-                    pw2 = ftz(identical_mul(pw2, b2))
-                    o.i0 = OPT_SK_ADAM
-                    o.f1 = b1
-                    o.f2 = b2
-                    o.f3 = eps
-                    o.f5 = ftz(identical_div(ftz(identical_mul(lr, ftz(identical_sqrt(Float32(1.0) - pw2)))),
-                                             Float32(1.0) - pw1))
-                else:
-                    o.i0 = OPT_SK_SGD
-                    o.i2 = 1 if nesterov else 0
-                    o.f0 = lr
-                    o.f1 = momentum
-                comptime if MLP_COMPOSED_OPT_FUSE:
-                    # the composed graph's raw gradients finished in this launch
-                    finish.divisor = Float32(B)
-                    launch_opt_finish(ex, o, finish, np_, True, True, True)
-                else:
-                    ex.launch[OP_OPT](o, np_)
+                o.i0 = OPT_SK_SGD
+                o.i2 = 1 if nesterov else 0
+                o.f0 = lr
+                o.f1 = momentum
+            comptime if MLP_COMPOSED_OPT_FUSE:
+                # the composed graph's raw gradients finished in this launch
+                finish.divisor = Float32(B)
+                launch_opt_finish(ex, o, finish, np_, True, True, True)
+            else:
+                ex.launch[OP_OPT](o, np_)
         var loss: Float64
         comptime if MLP_EPOCH_DEV:
             comptime if MLP_LOSSBLOCK:
@@ -933,11 +881,6 @@ def mlp_fit[E: Exec](
                 break
     # lane ag-fusion: return the tape's storage now, not at the end of ex
     tape.release(ex)
-    comptime if AUTOGRAD_OPTIM:
-        opt_state.release(ex)
-    comptime if AUTOGRAD_LOSS:
-        release_loss_scratch(ex, loss_ws)
-        ex.free(loss_sum)
     ex.sync()
     ex.download(Pio, P, np_)
     _ = perm^

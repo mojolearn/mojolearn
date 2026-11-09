@@ -185,9 +185,11 @@ def op_act_bwd(t: Int, a: Args):
 #: NVIDIA); the seed threads idled after one subtract.
 #:   OP_MLP_LB_PART (1600) i3 = 1: B O seed threads, then B row threads
 #:                        (rowloss[row] = mlp_row_loss(row), chain O terms),
-#:                        then the weight blocks as above. i3 = 2 (the data
-#:                        sum comes from -D MOJOLEARN_AUTOGRAD_LOSS): no row
-#:                        threads. HIGGS: 512 + 512 + 56 + 4.
+#:                        then the weight blocks as above. HIGGS: 512 + 512
+#:                        + 56 + 4. (i3 = 2, no row threads for the data sum
+#:                        of -D MOJOLEARN_AUTOGRAD_LOSS, went with that arm.)
+#: TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (opt-in arm, no A/B; the default reported-loss folds kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+#: Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
 #:   OP_MLP_LB_FOLD (1601) i11 = 2, once per group of four layers: ceil(B /
 #:                        R(B)) row-block threads on the first group (rowparts
 #:                        [k] = rowloss[k R : min((k + 1) R, B)] added
@@ -655,8 +657,8 @@ def op_mlp_lb_part(t: Int, a: Args):
         p5[q] = the block's squared weights, one fma each ascending from
         +0.0 (sumsq_fold), R = mlp_lb_block(c).
     MLP_LB_ROWS (i3 = 1): the row blocks are replaced by B row threads,
-    p3[row] = mlp_row_loss(row) (p3 the row-loss scratch [B]); i3 = 2: no
-    row threads (the data sum comes from elsewhere). i3 = 0: the row blocks."""
+    p3[row] = mlp_row_loss(row) (p3 the row-loss scratch [B]). i3 = 0: the row
+    blocks."""
     var O = a.i1
     var B = a.i2
     var ne = B * O
@@ -667,7 +669,7 @@ def op_mlp_lb_part(t: Int, a: Args):
     if a.i3 != 0:
         # MLP_LB_ROWS: one thread per row, its O terms; the block sums are
         # op_mlp_lb_fold's (i11 = 2)
-        var nrow = B if a.i3 == 1 else 0
+        var nrow = B
         if r < nrow:
             st(a.p3, r, mlp_row_loss(a.p0, a.p1, r * O, O, a.i0))
             return
@@ -705,8 +707,7 @@ def _lb_weight_block(a: Args, q: Int):
 @always_inline
 def op_mlp_lb_fold(t: Int, a: Args):
     """MLP_LOSSBLOCK, the second launch: one thread. p0 the data partials
-    (i5 of them: the row blocks, or the one data sum of -D
-    MOJOLEARN_AUTOGRAD_LOSS), p1 this group's L2 block partials, p2 the batch
+    (i5 of them: the row blocks), p1 this group's L2 block partials, p2 the batch
     losses, p3 the L per-layer ||W||^2. i0 batch index, i1 B, i2 O, i3 L,
     i4 loss, i6..i9 the group's layer counts (0 = absent), i10 the group's
     first layer, i11 = 1 on the last group; f0 = 0.5 alpha.

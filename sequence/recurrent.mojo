@@ -35,7 +35,6 @@ from sequence.ops import (
     OP_OPT,
     OP_SEQ_IOTA,
     OP_MLP_PERM,
-    OP_SUM,
     OPT_ADAGRAD,
     OPT_ADAM,
     OPT_ADAMW,
@@ -44,35 +43,26 @@ from sequence.ops import (
     gates_of,
 )
 from sequence.mlp import mlp_epoch_key, mlp_perm_args
-from autograd.data import epoch_order as ag_epoch_order
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div, identical_mul, identical_pow64, identical_sqrt, ftz
 
 from std.sys.compile import is_defined, get_defined_int
-from autograd.optim import OptimizerState, optimizer_config_packed, step_lr
 
-# Lane ag-optim (2026-10-19), default off: -D MOJOLEARN_AUTOGRAD_OPTIM runs
-# rnn_fit's update through autograd/optim.mojo (OptimizerState + step_lr)
-# instead of opt_step below. Bits: the same. optimizer_config_packed maps
-# OptConfig's words to named fields that pack back to the same words,
-# optimizer_scalars is opt_scalars word for word, and the update is the same
-# one OP_OPT launch over Gr; a slot word the kind's body never reads may
-# differ (RMSprop's f1, a non-SGD kind's flags) and moves no bit. No fold is
-# involved (no clip; the rate is lrs[k] as before).
-comptime AUTOGRAD_OPTIM = is_defined["MOJOLEARN_AUTOGRAD_OPTIM"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (opt-in arm, no A/B; the default OP_OPT launch kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
+# Lane x3-mlp-rnn-predict-on-tape (plan EXECUTOR_CONSOLIDATION_AND_CLEANUP 5.6): the opt-in arm ran rnn_fit's
+# update through autograd/optim.mojo (OptimizerState + step_lr), the same one OP_OPT launch with the same words.
+# No A/B ran; the default opt_step below is the one arm; the A/B is owed.
+
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
+# Lane x3-mlp-rnn-predict-on-tape (plan EXECUTOR_CONSOLIDATION_AND_CLEANUP 5.6; Andrew 2026-11-08: bits may
+# change between versions, never keep a serial fold for old bits): each step's reported loss (losses[k]) comes
+# from autograd/losses.mojo (loss_value_into: the squared-error terms or op_ce's row losses, term for term, then
+# the tape's blocked fold with factor 1 / count) instead of sum_into's one-thread ascending OP_SUM (deleted).
+# The gradient seed w.dy still comes from OP_MSE / OP_CE. NEW BITS in losses[] only (every column together:
+# host, Metal, NVIDIA, AMD run the same fold); parameters unchanged. A/B owed: arm A X3SHA^ (OP_SUM), arm B X3SHA.
 from autograd.losses import LossScratch, loss_scratch, release_loss_scratch, loss_value_into, REDUCTION_MEAN
 from autograd.loss_ops import LS_MSE, LS_CROSS_ENTROPY
-from sequence.ops import dummy_ptr
-
-# A/B define (lane ag-loss, default off): -D MOJOLEARN_AUTOGRAD_LOSS computes
-# each step's reported loss (losses[k]) through autograd/losses.mojo
-# (loss_value_into: the squared-error terms or op_ce's row losses, term for
-# term, then the tape's blocked fold with factor 1 / count) instead of the
-# one-thread ascending OP_SUM. The gradient seed w.dy still comes from
-# OP_MSE / OP_CE; the loss module's VJP would give the same bits (2 (g d)
-# with g = 1 / (B O) equals d (2 / (B O)) exactly, and (softmax - onehot) g
-# is op_ce's expression with g = 1 / B), but the seed is left as it is.
-# New bits in losses[] only; parameters unchanged.
-comptime AUTOGRAD_LOSS = is_defined["MOJOLEARN_AUTOGRAD_LOSS"]()
 
 #: nr-small D3 (2026-10-04): under IDENTICAL the recurrent weight and bias
 #: gradients (C = A B over the K = T B time x batch rows, M N cells of one
@@ -250,14 +240,10 @@ def gather_rows[E: Exec](mut ex: E, Y: FP, idx: FP, dst: FP, B: Int, O: Int, off
     ex.launch[OP_GATHER_ROWS](a, B * O)
 
 
-def sum_into[E: Exec](mut ex: E, X: FP, n: Int, dst: FP, at: Int, scale: Float32) raises:
-    var a = Args()
-    a.p0 = X
-    a.p1 = dst
-    a.i0 = at
-    a.i1 = n
-    a.f0 = scale
-    ex.launch[OP_SUM](a, 1)
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
+# sum_into (dst[at] = scale * the n values of X added ascending by ONE thread, OP_SUM) was rnn_fit's reported
+# loss; loss_value_into's blocked fold replaces it.
 
 
 # ------------------------------------------------------------------ work buffers
@@ -421,14 +407,11 @@ def opt_step[E: Exec](
     ex.launch[OP_OPT](a, n)
 
 
-#: -D MOJOLEARN_AUTOGRAD_DATA (default off): rnn_fit's epoch order comes from
-#: autograd/data.mojo (`epoch_order`), the shared data layer of the tape
-#: trainers, instead of the launches below. That module launches the same
-#: OP_MLP_PERM with the same mlp_epoch_key(seed, epoch), or OP_SEQ_IOTA
-#: without shuffle, so the expected result is the same order and the same
-#: bits as the hand path; the A/B confirms the routing. autograd.data
-#: imports no sequence.recurrent, so there is no import cycle.
-comptime AUTOGRAD_DATA = is_defined["MOJOLEARN_AUTOGRAD_DATA"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_DATA (opt-in arm, no A/B; the default epoch-order launches kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch
+# The opt-in arm built rnn_fit's epoch order through autograd/data.mojo (epoch_order), the same OP_MLP_PERM /
+# OP_SEQ_IOTA launches with the same key (same bits by construction). No A/B ran; the default launches in rnn_fit
+# are the one arm; the A/B is owed.
 
 
 # ------------------------------------------------------------------ training step seam
@@ -486,37 +469,31 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     var P = ex.alloc(np_)
     ex.upload(P, Pio, np_)
     var Gr = ex.alloc(np_)
-    var s1 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
-    var s2 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
-    var s3 = ex.alloc(1 if AUTOGRAD_OPTIM else np_)
-    var opt_cfg = optimizer_config_packed(cfg.kind, cfg.flags, cfg.f1, cfg.f2, cfg.eps, cfg.wd, cfg.f7, Float32(0.0))
-    var opt_state = OptimizerState()
-    comptime if AUTOGRAD_OPTIM:
-        # -D MOJOLEARN_AUTOGRAD_OPTIM: the state on the executor, s2 filled
-        # with init_acc as below
-        opt_state = OptimizerState(ex, opt_cfg, np_, init_acc)
-    else:
-        if init_acc != Float32(0.0):
-            fill(ex, s2, np_, init_acc)
+    var s1 = ex.alloc(np_)
+    var s2 = ex.alloc(np_)
+    var s3 = ex.alloc(np_)
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (opt-in arm, no A/B; the default OP_OPT launch kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
+    if init_acc != Float32(0.0):
+        fill(ex, s2, np_, init_acc)
     var dloss = ex.alloc(n_steps)
     var w = Work(ex, net, T, bmax, True)
-    var loss_ws = LossScratch(dummy_ptr(), dummy_ptr(), 0)
-    comptime if AUTOGRAD_LOSS:
-        loss_ws = loss_scratch(ex, bmax * net.O)
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
+    var loss_ws = loss_scratch(ex, bmax * net.O)
     var st = OptState()
     var step = S()
     for k in range(n_steps):
         var j = k % per
         if j == 0:
-            comptime if AUTOGRAD_DATA:
-                ag_epoch_order(ex, shuffle, seed, k // per, N, dord)
+            # TOMBSTONE: MOJOLEARN_AUTOGRAD_DATA (opt-in arm, no A/B; the default epoch-order launches kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+            # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch
+            if shuffle:
+                ex.launch[OP_MLP_PERM](mlp_perm_args(N, mlp_epoch_key(seed, k // per), dord), N)
             else:
-                if shuffle:
-                    ex.launch[OP_MLP_PERM](mlp_perm_args(N, mlp_epoch_key(seed, k // per), dord), N)
-                else:
-                    var ia = Args()
-                    ia.p0 = dord
-                    ex.launch[OP_SEQ_IOTA](ia, N)
+                var ia = Args()
+                ia.p0 = dord
+                ex.launch[OP_SEQ_IOTA](ia, N)
         var off = j * bs
         var B = min(bs, N - off)
         gather_seq(ex, dX, dord, w.xb, T, B, net.D, off)
@@ -530,10 +507,7 @@ def rnn_fit[E: Exec, //, S: RnnStep](
             a.p3 = w.sq
             a.f0 = Float32(2.0) / Float32(B * net.O)
             ex.launch[OP_MSE](a, B * net.O)
-            comptime if AUTOGRAD_LOSS:
-                loss_value_into(ex, LS_MSE, w.yhat, w.yb, B, net.O, REDUCTION_MEAN, dloss + k, loss_ws)
-            else:
-                sum_into(ex, w.sq, B * net.O, dloss, k, Float32(1.0) / Float32(B * net.O))
+            loss_value_into(ex, LS_MSE, w.yhat, w.yb, B, net.O, REDUCTION_MEAN, dloss + k, loss_ws)
         else:
             gather_rows(ex, dY, dord, w.yb, B, 1, off)
             var a = Args()
@@ -545,19 +519,10 @@ def rnn_fit[E: Exec, //, S: RnnStep](
             a.i1 = net.O
             a.f0 = Float32(1.0) / Float32(B)
             ex.launch[OP_CE](a, B)
-            comptime if AUTOGRAD_LOSS:
-                loss_value_into(ex, LS_CROSS_ENTROPY, w.yhat, w.yb, B, net.O, REDUCTION_MEAN, dloss + k, loss_ws)
-            else:
-                sum_into(ex, w.sq, B, dloss, k, Float32(1.0) / Float32(B))
+            loss_value_into(ex, LS_CROSS_ENTROPY, w.yhat, w.yb, B, net.O, REDUCTION_MEAN, dloss + k, loss_ws)
         step.backward(ex, net, P, Gr, w.xb, T, B, w)
-        comptime if AUTOGRAD_OPTIM:
-            step_lr(ex, opt_cfg, opt_state, P, Gr, np_, k + 1, ftz(lrs.unsafe_load(k)))
-        else:
-            opt_step(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
-    comptime if AUTOGRAD_OPTIM:
-        opt_state.release(ex)
-    comptime if AUTOGRAD_LOSS:
-        release_loss_scratch(ex, loss_ws)
+        opt_step(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
+    release_loss_scratch(ex, loss_ws)
     ex.sync()
     ex.download(Pio, P, np_)
     ex.download(losses, dloss, n_steps)
