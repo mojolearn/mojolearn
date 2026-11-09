@@ -6,7 +6,7 @@ order weight1, bias1, weight2, bias2 at offsets 0, 128, 144, 192, 195), its
 AdamW moments, flags and step counter, its float32-rounded optimizer settings
 and its canonical data schedule live here, in Mojo memory. The Python door
 (`bindings/small_mlp_native.mojo`) converts arguments and calls the compiled
-training entries with addresses into these buffers; nothing here imports
+training program with addresses into these buffers; nothing here imports
 Python.
 """
 from std.ffi import _Global
@@ -81,21 +81,19 @@ struct MlpSlot(Copyable, Movable):
     var live: Bool
     var generation: Int
     var state: MlpState
-    # The Apple FAST device-resident session (-1: none). While it is open it
-    # is the truth for the parameters and moments; `resident_mode` names the
-    # numeric mode whose binding opened it and `resident_cap` its minibatch
-    # capacity.
-    var resident: Int
-    var resident_mode: String
-    var resident_cap: Int
+    # The trainer's captured program on the executor (-1: none;
+    # autograd/small_mlp_program.mojo). While it is open its session
+    # parameters and optimizer state are the truth for the weights and
+    # moments; `program_mode` names the numeric mode whose binding opened it.
+    var program: Int
+    var program_mode: String
 
     def __init__(out self):
         self.live = False
         self.generation = 0
         self.state = MlpState()
-        self.resident = -1
-        self.resident_mode = String()
-        self.resident_cap = 0
+        self.program = -1
+        self.program_mode = String()
 
 
 struct MlpStore(Defaultable, Movable):
@@ -127,9 +125,8 @@ def mlp_store_create(var state: MlpState) raises -> Int:
     store[].slots[index].live = True
     store[].slots[index].generation = generation
     store[].slots[index].state = state^
-    store[].slots[index].resident = -1
-    store[].slots[index].resident_mode = String()
-    store[].slots[index].resident_cap = 0
+    store[].slots[index].program = -1
+    store[].slots[index].program_mode = String()
     return generation * MLP_HANDLE_SPAN + index
 
 
@@ -152,9 +149,8 @@ def mlp_store_release(handle: Int) raises -> Bool:
         return False
     store[].slots[index].live = False
     store[].slots[index].state = MlpState()
-    store[].slots[index].resident = -1
-    store[].slots[index].resident_mode = String()
-    store[].slots[index].resident_cap = 0
+    store[].slots[index].program = -1
+    store[].slots[index].program_mode = String()
     return True
 
 

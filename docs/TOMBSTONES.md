@@ -519,6 +519,12 @@ in the tables after the sections.
 | [`OP_MOEB_HIDDEN_FWD` / `OP_MOEB_OUT_FWD` (op codes 2900, 2901)](#moe-backward-on-the-forwards-ops-2026-11-09) | Neural (MoEBlock training forward) | removed (duplicate codes of `OP_MOE_HIDDEN` / `OP_MOE_OUT`) | 2026-11-09 | [MOJOLEARN_AUTOGRAD_MOE_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch) |
 | [`_gcn_backward_dev` / `_sage_backward_dev` hand entry chains (no define)](#gcnconv-and-sageconv-resident-backward-on-the-tape-2026-11-09) | Neural (GCNConv / SAGEConv resident backward) | removed (superseded by the tape: one native call) | 2026-11-09 | [XCNN_GRAPH_HAND_BACKWARD.patch](../experiments/removed/XCNN_GRAPH_HAND_BACKWARD.patch) |
 | [`GCNConv._backward_dev` / `SAGEConv._backward_dev` (Python, no define)](#gcnconv-and-sageconv-resident-backward-on-the-tape-2026-11-09) | Neural (GCNConv / SAGEConv, dead Python copy) | removed (0 callers) | 2026-11-09 | [XCNN_GRAPH_HAND_BACKWARD.patch](../experiments/removed/XCNN_GRAPH_HAND_BACKWARD.patch) |
+| [`MOJOLEARN_AFN_MLP_FUSED_STEP`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (Apple FAST small MLP fused step) | removed (superseded by the captured program; merged-unmeasured) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
+| [`MOJOLEARN_AFN_MLP_RESIDENT`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (Apple FAST small MLP resident session) | removed (superseded by the captured program; merged-unmeasured) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
+| [`MOJOLEARN_AFN_MLP_MULTISTEP`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (Apple FAST small MLP k-step session) | removed (superseded: train_steps on the program, every vendor) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
+| [`MOJOLEARN_AFN_MLP_ALL`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (Apple FAST small MLP umbrella) | removed (superseded) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
+| [`MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (small MLP step GEMM leaf) | removed (its step deleted; program A/B RUN OWED) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
+| [`mlp_train_step_host (hand step, tape rules, MOJOLEARN_MLP_FUSED=0 route)`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (SmallMLPTrainer) | removed (one path: the captured program, plan row X2) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -4779,3 +4785,34 @@ minibatch-dictionary-learning, sparse-coder when an atom goes unused). Recoverab
 - Patch: `experiments/removed/XCNN_GRAPH_HAND_BACKWARD.patch` (the two code files; it does not remove the new rules file
   or entries, which may stay beside the restored chains).
 - Guard: no define. No `grid_controls` entry.
+## SmallMLPTrainer on the executor (2026-11-09)
+
+Lane x2-small-mlp-on-executor, plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` row X2. `SmallMLPTrainer` now runs
+ONE path: a captured program on the executor (`autograd/small_mlp_program.mojo`, the x_sequence bindings' `small_mlp_program`
+entry): transpose, `OPS_LINEAR` (relu), transpose, `OPS_LINEAR`, then the mean cross-entropy, the tape backward and one AdamW
+`step_lr` per weight through the session optimizer; `predict_logits` is the same program with recording off. The four weights
+are the program's parameters (uploaded once, updated in place), so the session is the trainer's resident copy.
+
+What was deleted (all of it superseded by the program, none of it measured against it yet):
+
+- `training/mlp_ops.mojo::mlp_train_step_host`, its `_gemm` / `_MlpStepKernels` / `_max_ws` and the `MLP_GEMM_LEAF128` step
+  dispatch (`MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF`; grid ge123e6f9 had promoted leaf 128 for this step, NV 2.0 -> 1.7 ms, AMD
+  3.5 -> 3.1 ms, same bits), with `gemm/neural_dispatch.mojo::neural_model_leaf_into` (its only caller).
+- `autograd/rules_small_mlp.mojo` (the step's tape rules) and `training/checks/mlp_tape_step_check.mojo` + its digests
+  (`pixi run check-mlp-tape-step`, the `autograd-small-mlp-tape` smoke entry), `tools/mlp_step_check.py`.
+- `training/mlp_fast.mojo`: the Apple FAST fused step and resident session (`MOJOLEARN_AFN_MLP_FUSED_STEP`, `_RESIDENT`,
+  `_MULTISTEP`, `_ALL`; merged unmeasured, default off), the training binding's `mlp_train_step`, `mlp_resident_*` and
+  `mlp_sessions_resident` entries, and the `registry` argument of `nn_mlp_sessions_device`.
+- `training/small_mlp_dispatch.mojo` (the `small_mlp_api_v1` provider), the door's fused, per-operation
+  (`MOJOLEARN_MLP_FUSED=0`) and resident routes in `bindings/small_mlp_native.mojo`, and the parallel MLP worker's fused
+  gradient route (`bindings/parallel_mlp_native.mojo`; it takes the per-operation primitives, which stay).
+
+Bits: the small MLP's bits changed on every column together (one algorithm: the tape's linear, cross-entropy and OP_OPT
+bodies). Identity lane owed: `mlp` (and every lane that trains a SmallMLPTrainer: `par-mlp`; `neural-trainer-unfused`
+keeps its route). RUN OWED: mlp-train-step and mlp-predict, program vs the 0.8.66 path (0.971 ms on NV and AMD), one run
+per arm on NVIDIA and AMD.
+
+- Guard: `core/experiment_guards_neural.mojo` refuses the five defines; `mlp_gemm_leaf128` moved to `removed` in
+  `experiments/six_lane_integration/grid_controls/neural-gemm-attn-dedupe.json`; rows in `docs/apple-fast/EXPERIMENTS.md`.
+- Code recoverable at `f59d913b0b`; patch `experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch` (the reverse of the
+  lane's change to the code files; `git apply` restores the old routes and removes the program door).

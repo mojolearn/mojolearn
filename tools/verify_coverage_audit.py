@@ -1417,7 +1417,7 @@ NEW_LANE_PURPOSE = {
     "multioutput-ridge": "MultiOutputRegressor over Ridge: `ridge_predict_multi`",
     "x-ridge-cv-kfold": "RidgeCV with an integer cv: `x_linear_best_alpha`",
     "svc-gamma-scale": "SVC and SVR with gamma='scale': `scale_gamma_limbs`",
-    "neural-trainer-unfused": "ParallelNeuralTrainer with MOJOLEARN_MLP_FUSED=0: `mlp_bias_activation`, "
+    "neural-trainer-unfused": "ParallelNeuralTrainer (its per-layer gradient route): `mlp_bias_activation`, "
                               "`mlp_relu_backward`, `mlp_sum_rows`",
 }
 
@@ -2475,7 +2475,7 @@ SABOTAGE_NA_ENTRIES = {
         "forest_release_gpu", "moe_weights_free", "x_trees_dart_open", "x_trees_dart_close",
         "x_trees_tree_shap_cache_release", "causal_lm_session_create", "causal_lm_session_close",
         "msel_alloc", "msel_free", "x_prep_dev_free", "seq_tensor_alloc",
-        "mlp_resident_open", "mlp_resident_close", "rf_data_session_open", "rf_data_session_close")},
+        "rf_data_session_open", "rf_data_session_close")},
     **{e: _METADATA for e in (
         "byte_lm_arithmetic_suffix", "byte_lm_host_arithmetic_suffix", "byte_lm_profile", "byte_lm_step_glue_arm",
         "cholesky_profile_jitter", "bpe_n_vocab", "bpe_max_token_bytes", "x_prep_dev_live",
