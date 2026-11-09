@@ -43,11 +43,15 @@ comptime MDS_LOOP_CHUNK = 8
 
 struct _NmDev(Movable):
     var bufs: List[DMat]
+    # the disparity step's thirteen buffer ids, listed once per start (the
+    # loop body passes them every iteration)
+    var id_list: List[Int]
     var m: Int
     var G: Int
 
     def __init__(out self, Dis: DMat, native: Bool) raises:
         self.bufs = List[DMat]()
+        self.id_list = List[Int]()
         self.m = 0
         self.G = 0
         if not native:
@@ -78,12 +82,8 @@ struct _NmDev(Movable):
         self.bufs.append(setup.pop(0))
         for _ in range(9):  # small-loop(G: nine group-sized buffers): the isotonic step's scratch
             self.bufs.append(DMat(1, max(self.G, 1)))
-
-    def ids(self) -> List[Int]:
-        var out = List[Int]()
-        for i in range(len(self.bufs)):  # small-loop(i: thirteen buffer ids): the disparity step's buffers
-            out.append(self.bufs[i].id)
-        return out^
+        for i in range(13):  # small-loop(i: thirteen buffer ids): the disparity step's buffers
+            self.id_list.append(self.bufs[i].id)
 
 
 def _dist_dev(k: DKit, Y: DMat) raises -> DMat:
@@ -171,7 +171,7 @@ struct _SmacofStep(LoopStep, Movable):
         var disp: DMat
         if self.native:
             mds_disp_dev(
-                self.P.id if it == 1 else self.d.id, self.P.id, self.nm.ids(), n, self.nm.m, self.nm.G, it == 1
+                self.P.id if it == 1 else self.d.id, self.P.id, self.nm.id_list, n, self.nm.m, self.nm.G, it == 1
             )
             var ss = self.k.total(self.k.ew1(OP_SQ, self.P, 0.0))
             var f = self.k.ew1(OP_SQRT, self.k.ew2(OP_DIV, self.half_pairs, ss), 0.0)
