@@ -181,6 +181,8 @@ def program_op_name(code: Int) -> String:
         return "lm_alive"
     if code == 87:
         return "lm_head_v2"
+    if code == 88:
+        return "small_mlp"
     return "op_" + String(code)
 
 

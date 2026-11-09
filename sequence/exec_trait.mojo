@@ -123,3 +123,11 @@ trait Exec:
         """OPS_LM_HEAD_V2's forward (or, `backward`, its VJP) on this
         executor's host arm; buffer order in lm_head_v2_host_run."""
         ...
+
+    # Lane r1-restore-measured-winners (2026-11-09): the small MLP op's host
+    # arm (autograd/small_mlp_host.mojo). A device session launches the op's
+    # kernels itself (autograd/small_mlp_op.mojo), so DeviceExec refuses it.
+    def small_mlp_host(mut self, backward: Bool, bufs: List[FP], dims: List[Int]) raises:
+        """OPS_SMALL_MLP's forward (or, `backward`, its VJP) on this
+        executor's host arm; buffer order in small_mlp_host_run."""
+        ...

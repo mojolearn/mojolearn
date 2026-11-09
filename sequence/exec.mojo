@@ -45,6 +45,7 @@ from autograd.block_step_host import (
 from autograd.generation_host import lm_pick_host, lm_alive_host
 
 from autograd.lm_head_v2_host import lm_head_v2_host_run
+from autograd.small_mlp_host import small_mlp_host_run
 from sequence.ops import (
     FP,
     Args,
@@ -511,3 +512,8 @@ struct HostExec(Exec, Movable):
     # (autograd/lm_head_v2_host.mojo), reached through the Exec trait.
     def lm_head_v2_host(mut self, backward: Bool, bufs: List[FP], rows: Int, vocab: Int, width: Int) raises:
         lm_head_v2_host_run(backward, bufs, rows, vocab, width)
+
+    # Lane r1-restore-measured-winners: the small MLP op's host arm
+    # (autograd/small_mlp_host.mojo), reached through the Exec trait.
+    def small_mlp_host(mut self, backward: Bool, bufs: List[FP], dims: List[Int]) raises:
+        small_mlp_host_run(backward, bufs, dims)
