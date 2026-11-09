@@ -40,7 +40,7 @@ from decomposition.pca_fold import pca_transform_fold
 #: (`bindings/_mojolearn.mojo::_DEVCTX_SLOT`): the same name, so the same
 #: DeviceContext, whose buffers the store holds.
 comptime _MSEL_SLOT = (
-    "MojoCoreContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoCoreContextFast"
+    "MojolearnCoreContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV2"
 )
 # The store's one definition is core/msel_device_x.mojo (lane a6): a kernel
 # entry in any binding that gathers a fold on the device names the same

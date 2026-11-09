@@ -172,7 +172,7 @@ def fast_to_bf16_binding(value: PythonObject) raises -> PythonObject:
     var result = _new_array(source.shape, True)
     var dst_address = Int(py=result._addr)
     with GILReleased(Python()):
-        var ctx = process_ctx["MojoAppleFastBf16PublicContext"]()
+        var ctx = process_ctx["MojolearnAppleFastBf16PublicContextV2"]()
         var src = ctx.enqueue_create_buffer[DType.float32](source.count)
         var dst = ctx.enqueue_create_buffer[DType.uint16](source.count)
         ctx.enqueue_copy(dst_buf=src, src_ptr=f32_ptr(source.address))
@@ -194,7 +194,7 @@ def fast_from_bf16_binding(value: PythonObject) raises -> PythonObject:
     var result = _new_array(source.shape, False)
     var dst_address = Int(py=result._addr)
     with GILReleased(Python()):
-        var ctx = process_ctx["MojoAppleFastBf16PublicContext"]()
+        var ctx = process_ctx["MojolearnAppleFastBf16PublicContextV2"]()
         var src = ctx.enqueue_create_buffer[DType.uint16](source.count)
         var dst = ctx.enqueue_create_buffer[DType.float32](source.count)
         ctx.enqueue_copy(dst_buf=src, src_ptr=u16_ptr(source.address))
@@ -337,7 +337,7 @@ def fast_matmul_bf16_binding(
     var result = out if direct else _new_array(shape, False)
     var dst_address = Int(py=result._addr)
     with GILReleased(Python()):
-        var ctx = process_ctx["MojoAppleFastBf16PublicContext"]()
+        var ctx = process_ctx["MojolearnAppleFastBf16PublicContextV2"]()
         var db = ctx.enqueue_create_buffer[DType.uint16](right.count)
         var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
         ctx.enqueue_copy(dst_buf=db, src_ptr=u16_ptr(right.address))

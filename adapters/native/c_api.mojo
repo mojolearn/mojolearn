@@ -55,7 +55,7 @@ def mojolearn_adapter_train(
             # 2026-10-26-0859-targeted/adapter-context-reproduction.json.
             # DeviceExec(ctx) remains unpooled and drains this queue; tensor
             # ownership and all training arithmetic are unchanged.
-            var ctx = process_ctx["MojoLearnAdapterTrainingContext"]()
+            var ctx = process_ctx["MojolearnAdapterTrainingContextV2"]()
             var gpu = DeviceExec(ctx)
             run_training(gpu, ins, count, outs, prog, n_program, opts, n_options, floats, n_scalars, host_buffers != 0)
         else:

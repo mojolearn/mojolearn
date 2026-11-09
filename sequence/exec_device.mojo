@@ -181,7 +181,7 @@ struct _SeqContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojoXSequenceContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXSequenceContextFast"
+comptime _CTX_NAME = "MojolearnXSequenceContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXSequenceContextFastV2"
 comptime X_SEQUENCE_CONTEXT = _Global[StorageType=_SeqContext, name=_CTX_NAME, init_fn=_SeqContext.__init__]
 
 

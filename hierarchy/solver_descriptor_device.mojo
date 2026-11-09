@@ -16,7 +16,7 @@ from hierarchy.solver_descriptor_schema import (
 
 
 # Exactly bindings/_mojolearn_solver.mojo's slot; no second device context.
-comptime _DEVCTX_SLOT = "MojoSolverContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoSolverContextFast"
+comptime _DEVCTX_SLOT = "MojolearnSolverContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnSolverContextFastV2"
 
 
 def hierarchy_solver_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,

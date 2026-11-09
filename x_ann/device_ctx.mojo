@@ -20,7 +20,7 @@ struct _AnnContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojoXAnnContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXAnnContextFast"
+comptime _CTX_NAME = "MojolearnXAnnContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXAnnContextFastV2"
 comptime X_ANN_CONTEXT = _Global[StorageType=_AnnContext, name=_CTX_NAME, init_fn=_AnnContext.__init__]
 
 

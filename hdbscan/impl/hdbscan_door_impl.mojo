@@ -13,7 +13,7 @@ from hdbscan.impl.prediction_data import generate_prediction_data_device
 
 #: The HDBSCAN binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime HDB_DEVCTX_SLOT = "MojoHdbscanContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoHdbscanContextFast"
+comptime HDB_DEVCTX_SLOT = "MojolearnHdbscanContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnHdbscanContextFastV2"
 comptime _DEVCTX_SLOT = HDB_DEVCTX_SLOT
 
 #: fg-tsne-dbscan H5 (every mode and column, DEFAULT ON, lane fg-tsne-dbscan

@@ -46,7 +46,7 @@ from core.neural_context import process_ctx
 #: `_DEVCTX_SLOT`) and store name in this build's numeric mode: the base
 #: binding's own msel entries (bindings/msel_device.mojo) use these.
 comptime MSEL_CONTEXT_SLOT = (
-    "MojoCoreContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoCoreContextFast"
+    "MojolearnCoreContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV2"
 )
 comptime MSEL_STORE_NAME = (
     "MojoMselStoreIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoMselStoreFast"
@@ -61,7 +61,7 @@ comptime MSEL_STORE = _Global[StorageType=MselStore, name=MSEL_STORE_NAME, init_
 #: own binding was built in, so a fold reader names the identical store and
 #: context explicitly (in an identical build these are MSEL_STORE and
 #: MSEL_CONTEXT_SLOT themselves).
-comptime MSEL_FOLD_CONTEXT_SLOT = "MojoCoreContextIdentical"
+comptime MSEL_FOLD_CONTEXT_SLOT = "MojolearnCoreContextIdenticalV2"
 comptime MSEL_FOLD_STORE = _Global[StorageType=MselStore, name="MojoMselStoreIdentical", init_fn=MselStore.__init__]
 
 comptime MDX_FINITE: Int32 = 0

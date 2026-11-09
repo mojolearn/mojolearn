@@ -204,7 +204,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoCoreContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoCoreContextFast"
+comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnCoreContextFastV2"
 
 
 from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform

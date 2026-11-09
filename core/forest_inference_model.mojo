@@ -223,11 +223,11 @@ comptime ET_IO = _Global[StorageType=ForestIOWorkspace,
     name=("MojoETResidentIOIdentical" if GLOBAL_NUMERIC_MODE == 1 else
           "MojoETResidentIOFast"), init_fn=ForestIOWorkspace.__init__]
 comptime RF_CTX_SLOT = (
-    "MojoRFResidentContextIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-    "MojoRFResidentContextFast")
+    "MojolearnRFResidentContextIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else
+    "MojolearnRFResidentContextFastV2")
 comptime ET_CTX_SLOT = (
-    "MojoETResidentContextIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-    "MojoETResidentContextFast")
+    "MojolearnETResidentContextIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else
+    "MojolearnETResidentContextFastV2")
 
 
 struct ResidentForest(Movable):

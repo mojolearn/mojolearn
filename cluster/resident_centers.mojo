@@ -43,7 +43,7 @@ from core.neural_context import process_ctx, neural_device_plan
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from cluster.estimator import kmeans_predict_device, kmeans_transform_device
 
-comptime _DEVCTX_SLOT = "MojoCoreContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoCoreContextFast"
+comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV2"
 
 
 struct ResidentKMeansCenters(Movable):

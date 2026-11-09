@@ -162,7 +162,7 @@ struct _CnnContext(Defaultable, Movable):
 #: The pinned stages of this binding's downloads (core/staged_download.mojo),
 #: one pool per binding and tier like the context.
 comptime _XCNN_STAGE_POOL = "MojoDownloadStagesXCnnIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDownloadStagesXCnnFast"
-comptime _CTX_NAME = "MojoXCnnContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXCnnContextFast"
+comptime _CTX_NAME = "MojolearnXCnnContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXCnnContextFastV2"
 comptime X_CNN_CONTEXT = _Global[StorageType=_CnnContext, name=_CTX_NAME, init_fn=_CnnContext.__init__]
 
 

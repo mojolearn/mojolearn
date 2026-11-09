@@ -69,7 +69,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL 
 #: device never wrote (x-neighbors-svc-multiclass BATCH_MOVED, gp-optimize,
 #: steward 1790601762837). Same kernels, same order, each entry still
 #: synchronizes before it returns, so no bit moves.
-comptime _CTX_NAME = "MojoMixtureContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoMixtureContextFast"
+comptime _CTX_NAME = "MojolearnMixtureContextIdenticalV2" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnMixtureContextFastV2"
 
 
 def _binding_ctx() raises -> DeviceContext:

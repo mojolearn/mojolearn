@@ -35,7 +35,7 @@ from std.sys.compile import is_defined
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoTsaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoTsaContextFast"
+comptime _DEVCTX_SLOT = "MojolearnTsaContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnTsaContextFastV2"
 
 
 from core.identity_trace import IdentityTrace

@@ -42,7 +42,7 @@ from training.byte_lm_binding_impl import (
 )
 
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
-comptime BYTE_LM_NEURAL_CTX = "MojoNeuralByteLMContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralByteLMContextFast"
+comptime BYTE_LM_NEURAL_CTX = "MojolearnNeuralByteLMContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralByteLMContextFastV2"
 
 
 

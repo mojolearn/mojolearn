@@ -41,7 +41,7 @@ from spectral.impl.spectral_predict_common import (
 
 # The context slot of spectral/estimator.mojo (`spectral_predict_host`), so a
 # resident predict runs where the per-call one does.
-comptime _DEVCTX_SLOT = "MojoMetricsContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoMetricsContextFast"
+comptime _DEVCTX_SLOT = "MojolearnMetricsContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnMetricsContextFastV2"
 
 
 struct SpectralResident(Movable):

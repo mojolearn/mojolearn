@@ -82,7 +82,7 @@ from core.neural_context import neural_ctx
 from training.native_primitive_dispatch import NATIVE_PRIMITIVE_API, native_primitive_operation
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
-comptime _NEURAL_CTX = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingContextFast"
+comptime _NEURAL_CTX = "MojolearnNeuralTrainingContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTrainingContextFastV2"
 from checks.vendor import COMPILED_VENDOR
 from max.gpu.host import DeviceContext, HostBuffer
 

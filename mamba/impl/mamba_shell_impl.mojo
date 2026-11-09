@@ -23,7 +23,7 @@ from core.neural_context import neural_ctx, neural_device_plan
 from core.device_plan import DevicePlan
 from core.device_scan import device_first_nonfinite
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
-comptime _NEURAL_CTX = "MojoNeuralMambaContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralMambaContextFast"
+comptime _NEURAL_CTX = "MojolearnNeuralMambaContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralMambaContextFastV2"
 from checks.vendor import COMPILED_VENDOR
 
 from mamba.checks.mamba_fixture import (

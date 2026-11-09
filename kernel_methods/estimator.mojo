@@ -60,7 +60,7 @@ from std.memory import bitcast
 # on one stream, and every entry still synchronizes before it returns, so no
 # bit moves. This module is compiled into ONE GPU binding, so the slot name
 # (per module and tier) is that binding's own.
-comptime _FAMILY_CTX = "MojoKernelMethodsContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoKernelMethodsContextOther"
+comptime _FAMILY_CTX = "MojolearnKernelMethodsContextIdenticalV2" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnKernelMethodsContextOtherV2"
 
 
 def _family_ctx() raises -> DeviceContext:

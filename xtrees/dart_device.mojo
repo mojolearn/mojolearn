@@ -89,7 +89,7 @@ from core.apple_fast_tree_experiments import AFT_DART_ROWS, AFT_DART_ADD_ROWS
 
 comptime TPB = 256
 comptime GRID_MAX = 65535 * 16
-comptime _DART_CTX = "MojoXTreesDartContext"
+comptime _DART_CTX = "MojolearnXTreesDartContextV2"
 
 
 @always_inline
