@@ -258,6 +258,7 @@ from mamba.impl.mamba_shell_impl import (
     _m1_require_session_open,
     _m1_session_open_run,
     _m1_session_step_run,
+    _m1_session_decode_run,
     _m1_session_export_run,
     _m1_session_load_run,
     _mamba2_run,
@@ -266,6 +267,7 @@ from mamba.impl.mamba_shell_impl import (
     _m2_require_session_open,
     _m2_session_open_run,
     _m2_session_step_run,
+    _m2_session_decode_run,
     _m2_session_export_run,
     _m2_session_load_run,
     _m3_load_weights,
@@ -278,6 +280,7 @@ from mamba.impl.mamba_shell_impl import (
     _m3_session_open_run,
     IDN_M3_DECODE_WINDOW_REUSE,
     _m3_session_step_run,
+    _m3_session_decode_run,
     _m3_session_export_run,
     NN40_OWNED_WEIGHTS,
     Mamba3PrefillSession,
@@ -569,6 +572,34 @@ def mamba1_session_step_binding(
     return PythonObject(0)
 
 
+def mamba1_session_decode_binding(
+    session: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """N decode tokens on an open session in one call (decode plan D2):
+    `addrs` = [x, y_out], both B * N * d_model float32 in (B, N, d_model)
+    order; `params` = [N]. Bytes equal N `mamba1_session_step` calls. A
+    failed call marks the session lost."""
+    var owner = session.downcast_value_ptr[Mamba1DecodeSession]()
+    if len(addrs) != 2 or len(params) != 1:
+        raise Error("mamba1_session_decode: expected 2 addresses and 1 scalar")
+    var px = Int(py=addrs[0])
+    var py = Int(py=addrs[1])
+    var n = Int(py=params[0])
+    if px == 0 or py == 0:
+        raise Error("mamba1_session_decode: null buffer address")
+    _m1_require_session_open(owner[])
+    owner[].busy = True
+    try:
+        with GILReleased(Python()):
+            _m1_session_decode_run(owner[], px, py, n)
+    except error:
+        owner[].busy = False
+        owner[].usable = False
+        raise error
+    owner[].busy = False
+    return PythonObject(0)
+
+
 def mamba1_session_export_state_binding(
     session: PythonObject, addrs: PythonObject,
 ) raises -> PythonObject:
@@ -797,6 +828,31 @@ def mamba2_session_step_binding(session: PythonObject, addrs: PythonObject) rais
     try:
         with GILReleased(Python()):
             q = _m2_session_step_run(owner[], px, py, ph)
+    except error:
+        owner[].busy = False
+        owner[].usable = False
+        raise error
+    owner[].busy = False
+    return PythonObject(q)
+
+
+def mamba2_session_decode_binding(session: PythonObject, addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """N decode tokens in one call (decode plan D2): `addrs` = [x, y, h_last],
+    x and y (B, N, d_model) float32, h_last the last token's report;
+    `params` = [N]. Returns the carried buf_len."""
+    var owner = session.downcast_value_ptr[Mamba2DecodeSession]()
+    if len(addrs) != 3 or len(params) != 1:
+        raise Error("mamba2_session_decode: expected x, y, h_last addresses and N")
+    var px = Int(py=addrs[0]); var py = Int(py=addrs[1]); var ph = Int(py=addrs[2])
+    var n = Int(py=params[0])
+    if px == 0 or py == 0 or ph == 0:
+        raise Error("mamba2_session_decode: null buffer address")
+    _m2_require_session_open(owner[])
+    owner[].busy = True
+    var q = 0
+    try:
+        with GILReleased(Python()):
+            q = _m2_session_decode_run(owner[], px, py, ph, n)
     except error:
         owner[].busy = False
         owner[].usable = False
@@ -1415,6 +1471,29 @@ def mamba3_session_step_binding(session: PythonObject, addrs: PythonObject) rais
     return PythonObject(q)
 
 
+def mamba3_session_decode_binding(session: PythonObject, addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """N decode tokens in one call (decode plan D2): `addrs` = [x, y, h_last,
+    k_last, v_last, theta_last], x and y (B, N, d_model) float32, the reports
+    the last token's; `params` = [N]. Returns the carried buf_len."""
+    var owner = session.downcast_value_ptr[Mamba3DecodeSession]()
+    if len(addrs) != 6 or len(params) != 1: raise Error("mamba3_session_decode: expected 6 addresses and N")
+    var a = List[Int]()
+    for i in range(6):  # small-loop(addrs: fixed-length buffer address list)
+        var p = Int(py=addrs[i])
+        if p == 0: raise Error("mamba3_session_decode: null buffer address")
+        a.append(p)
+    var n = Int(py=params[0])
+    _m3_require_session_open(owner[])
+    owner[].busy = True
+    var q = 0
+    try:
+        with GILReleased(Python()): q = _m3_session_decode_run(owner[], a, n)
+    except error:
+        owner[].busy = False; owner[].usable = False; raise error
+    owner[].busy = False
+    return PythonObject(q)
+
+
 def mamba3_session_export_state_binding(session: PythonObject, addrs: PythonObject) raises -> PythonObject:
     var owner = session.downcast_value_ptr[Mamba3DecodeSession]()
     if len(addrs) != 10: raise Error("mamba3_session_export_state: expected 10 addresses")
@@ -1557,6 +1636,7 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba1_decode_native_handle_binding]("mamba1_decode_native_handle_v1")
         m.def_function[mamba1_session_open_binding]("mamba1_session_open")
         m.def_function[mamba1_session_step_binding]("mamba1_session_step")
+        m.def_function[mamba1_session_decode_binding]("mamba1_session_decode")
         m.def_function[mamba1_session_export_state_binding]("mamba1_session_export_state")
         m.def_function[mamba1_session_load_state_binding]("mamba1_session_load_state")
         # TOMBSTONE: mamba1_session_info, mamba1_forward_fresh, mamba2_forward_fresh (dead native entries: no live caller) deleted 2026-10-26 by 391118b63; code recoverable at a88745022.
@@ -1570,6 +1650,7 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba2_decode_native_handle_binding]("mamba2_decode_native_handle_v1")
         m.def_function[mamba2_session_open_binding]("mamba2_session_open")
         m.def_function[mamba2_session_step_binding]("mamba2_session_step")
+        m.def_function[mamba2_session_decode_binding]("mamba2_session_decode")
         m.def_function[mamba2_session_export_state_binding]("mamba2_session_export_state")
         m.def_function[mamba2_session_load_state_binding]("mamba2_session_load_state")
         m.def_function[mamba2_session_close_binding]("mamba2_session_close")
@@ -1604,6 +1685,7 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba3_decode_native_handle_binding]("mamba3_decode_native_handle_v1")
         m.def_function[mamba3_session_open_binding]("mamba3_session_open")
         m.def_function[mamba3_session_step_binding]("mamba3_session_step")
+        m.def_function[mamba3_session_decode_binding]("mamba3_session_decode")
         m.def_function[mamba3_session_export_state_binding]("mamba3_session_export_state")
         m.def_function[mamba3_session_load_state_binding]("mamba3_session_load_state")
         m.def_function[mamba3_session_close_binding]("mamba3_session_close")
