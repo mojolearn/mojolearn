@@ -334,5 +334,5 @@ def classical_word(value: PythonObject, index: Int = 0) raises -> Float64:
     return Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)[index])
 
 
-# TOMBSTONE: classical_host_weights (orphan function: no caller) deleted 2026-11-08 by @K0SHA_ORPHAN@; code recoverable at 41ffcec665.
+# TOMBSTONE: classical_host_weights (orphan function: no caller) deleted 2026-11-08 by 7b2e1d1d83; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_entries_orphan_functions.patch

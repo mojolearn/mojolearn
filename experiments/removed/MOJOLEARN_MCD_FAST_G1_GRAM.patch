@@ -15,7 +15,7 @@ index 6f7427bc06..f44731f47e 100644
      return PythonObject(mcd_fast_batch_count())
  
  
--# TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (its witnesses mcd_g1_gram_on, mcd_g1_gram_count, mcd_g1_gram_last) deleted 2026-11-08 by @K0SHA_G1@; code recoverable at 41ffcec665.
+-# TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (its witnesses mcd_g1_gram_on, mcd_g1_gram_count, mcd_g1_gram_last) deleted 2026-11-08 by a2159de2cb; code recoverable at 41ffcec665.
 -# Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
 +def mcd_g1_gram_on_py() raises -> PythonObject:
 +    return PythonObject(Int(MCD_G1_GRAM))
@@ -32,7 +32,7 @@ index 6f7427bc06..f44731f47e 100644
          m.def_function[device_plan_enter_binding]("device_plan_enter")
          m.def_function[device_plan_exit_binding]("device_plan_exit")
          m.def_function[device_plan_log_binding]("device_plan_log")
--        # TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (mcd_g1_gram_on, mcd_g1_gram_count, mcd_g1_gram_last) deleted 2026-11-08 by @K0SHA_G1@; code recoverable at 41ffcec665.
+-        # TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (mcd_g1_gram_on, mcd_g1_gram_count, mcd_g1_gram_last) deleted 2026-11-08 by a2159de2cb; code recoverable at 41ffcec665.
 -        # Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
 +        m.def_function[mcd_g1_gram_on_py]("mcd_g1_gram_on")
 +        m.def_function[mcd_g1_gram_count_py]("mcd_g1_gram_count")
@@ -53,7 +53,7 @@ index e2e2bcc1b6..8359824381 100644
  from x_decomp.mcd_experiments import MCD_FAST_ACTIVE_COMPACT, McdCompactWorkspace, compact_candidate_count, mcd_experiment_hit
  
 -# TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (NEUTRAL: rab3-mcdg1 istella +0.1%, taxi -1.2%) and its audit / window defines
--# MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT, MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM deleted 2026-11-08 by @K0SHA_G1@; code recoverable at
+-# MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT, MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM deleted 2026-11-08 by a2159de2cb; code recoverable at
 -# 41ffcec665.
 -# Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
 +# M3 F02/mcd 2026-10-06 MEASURED after real score/prerequisite repair:
@@ -97,7 +97,7 @@ index e2e2bcc1b6..8359824381 100644
                          c.unsafe_store(gi * n + gj, v)
  
  
--# TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (mcd_g1_gram_batched_kernel) deleted 2026-11-08 by @K0SHA_G1@; code recoverable at 41ffcec665.
+-# TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (mcd_g1_gram_batched_kernel) deleted 2026-11-08 by a2159de2cb; code recoverable at 41ffcec665.
 -# Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
 +def mcd_g1_gram_batched_kernel(
 +    c: F32Ptr, a: F32Ptr, gate: I32Ptr, gate_all: Int32,
@@ -123,7 +123,7 @@ index e2e2bcc1b6..8359824381 100644
          splits = min(DFG_BLOCK_TARGET // tiles, k // DFG_MIN_SPLIT_STEPS)
      var ga = Int32(1) if gate_all else Int32(0)
 -    # TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (the TN self-Gram route, its audit counters and legacy window) deleted
--    # 2026-11-08 by @K0SHA_G1@; code recoverable at 41ffcec665.
+-    # 2026-11-08 by a2159de2cb; code recoverable at 41ffcec665.
 -    # Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
 +    # Correctness limits only, no shape window. The batched kernel is a TN
 +    # self-Gram (C = A^T A, one operand pointer and stride), so it needs

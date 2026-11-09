@@ -137,7 +137,7 @@ def _masked_cov(mut kit: DecompKit, m: Int, mask: Int, assume_centered: Bool) ra
         centered = kit.ew(XD_MUL, shifted, mask)
     var rows = kit.nrows(centered)
     var cols = kit.ncols(centered)
-    # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (the x_decomp_dev_mcd_cov final covariance arm) deleted 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+    # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (the x_decomp_dev_mcd_cov final covariance arm) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
     # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
     var gram = kit.mm(centered, centered, ta=True)
     return (loc, kit.ew(XD_SCALE, gram, scalar=1.0 / count))

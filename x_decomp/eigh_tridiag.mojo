@@ -156,7 +156,7 @@ comptime EIGH_FAST_TRIDIAG = (
 #: Either route: `DevExec._eigh_on` reads this.
 comptime EIGH_TRIDIAG_ROUTE = EIGH_FAST_TRIDIAG or EIGH_TD_IDN
 # TOMBSTONE: MOJOLEARN_EIGH_FAST_PANEL_DF (DROPPED-slower: rab3-eighdf 693.09 -> 1107.60 ms, +59.8%) and its _OFF deleted
-# 2026-11-08 by @K0SHA_EIGH@; code recoverable at 41ffcec665.
+# 2026-11-08 by 27c5e3aff3; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch
 comptime TD_NBP = TD_NB + 1
 #: Threads per block of the one-thread-per-eigenvalue kernels (small blocks
@@ -182,7 +182,7 @@ def td_copy_kernel(src: F32Ptr, dst: F32Ptr, count_in: Int32):
 
 
 # TOMBSTONE: MOJOLEARN_EIGH_FAST_PANEL_DF (_td_cell_df, _td_cell_any: the double-float column read) deleted 2026-11-08 by
-# @K0SHA_EIGH@; code recoverable at 41ffcec665.
+# 27c5e3aff3; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch
 
 
@@ -273,7 +273,7 @@ def td_gemv_kernel(
             tau.unsafe_store(j, hh[1])
         return
     var s = Float32(0.0)
-    # TOMBSTONE: MOJOLEARN_EIGH_FAST_PANEL_DF (the double-float GEMV row) deleted 2026-11-08 by @K0SHA_EIGH@; code recoverable at 41ffcec665.
+    # TOMBSTONE: MOJOLEARN_EIGH_FAST_PANEL_DF (the double-float GEMV row) deleted 2026-11-08 by 27c5e3aff3; code recoverable at 41ffcec665.
     # Restore: git apply experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch
     if b < m:
         var row = (j + 1 + b) * n
@@ -417,7 +417,7 @@ def td_syr2k_kernel(a: F32Ptr, vp: F32Ptr, wp: F32Ptr, n_in: Int32, kend_in: Int
         svc[rr * TD_NBP + q] = a3
         swc[rr * TD_NBP + q] = a4
     barrier()
-    # TOMBSTONE: MOJOLEARN_EIGH_FAST_PANEL_DF (the compensated rank-2 tile update) deleted 2026-11-08 by @K0SHA_EIGH@; code recoverable at 41ffcec665.
+    # TOMBSTONE: MOJOLEARN_EIGH_FAST_PANEL_DF (the compensated rank-2 tile update) deleted 2026-11-08 by 27c5e3aff3; code recoverable at 41ffcec665.
     # Restore: git apply experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch
     var acc = InlineArray[Float32, 4](fill=Float32(0.0))
     comptime for q in range(TD_NB):

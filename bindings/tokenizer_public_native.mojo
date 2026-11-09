@@ -1191,7 +1191,7 @@ def tokenizer_vocab_decode(tokenizer: PythonObject, ids: PythonObject, bytes_onl
     return _vocab_decode(tokenizer, ids, _bool(bytes_only, "bytes_only"), errors, _vocab_context())
 
 
-# TOMBSTONE: tokenizer_vocab_pretokenize (orphan wrapper of the deleted vocab_pretokenize_public) deleted 2026-11-08 by @K0SHA_VOCAB@; code recoverable at 41ffcec665.
+# TOMBSTONE: tokenizer_vocab_pretokenize (orphan wrapper of the deleted vocab_pretokenize_public) deleted 2026-11-08 by 00a4418230; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_entries_tokenizer_vocab_public.patch
 
 

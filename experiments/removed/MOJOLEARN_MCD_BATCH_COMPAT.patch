@@ -17,7 +17,7 @@ index df5630732f..1a5074118d 100644
 +# Keep the explicit define opt-in; do not disable the accepted MMA default.
  # See docs/apple-fast/EXPERIMENTS.md and ab/mcd-compat-review.md.
 -# TOMBSTONE: MOJOLEARN_MCD_BATCH_COMPAT (HOLD-quality: the COMPAT-only opt-in arm) deleted 2026-11-08 by
--# @K0SHA_MCDCOMPAT@; code recoverable at 41ffcec665. The shared code stays under the MCD_BATCH_MMA default.
+-# ca0d1c0c53; code recoverable at 41ffcec665. The shared code stays under the MCD_BATCH_MMA default.
 -# Restore: git apply experiments/removed/MOJOLEARN_MCD_BATCH_COMPAT.patch
 -comptime MCD_BATCH_COMPAT = MCD_BATCH_MMA
 +comptime MCD_BATCH_COMPAT = (

@@ -574,7 +574,7 @@ class _Kit:
         self.b.x_decomp_lu_resid(A.addr, X.addr, B.addr, R.addr, [A.r, B.c])
         return R
 
-    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (_Kit.lu_dev_aux, no caller) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at
+    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (_Kit.lu_dev_aux, no caller) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at
     # 41ffcec665.
     # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 
@@ -1640,7 +1640,7 @@ def johnson_lindenstrauss_min_dim(n_samples, *, eps=0.1):
     return _JL_CALL(None, "min_dim", (n_samples, eps), _JL_CONTEXT)
 
 
-# TOMBSTONE: _seed_of (helper of the deleted _rsvd_core) deleted 2026-11-08 by @K0SHA_PY@; code recoverable at 41ffcec665.
+# TOMBSTONE: _seed_of (helper of the deleted _rsvd_core) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_python_loops.patch
 
 
@@ -2576,11 +2576,11 @@ def solve(a, b, *, numeric_mode=None):
     return _LINALG_CALL(None, "solve", (a, b, numeric_mode), _LINALG_CONTEXT)
 
 
-# TOMBSTONE: _orthonormal_cols (helper of the deleted _rsvd_core) deleted 2026-11-08 by @K0SHA_PY@; code recoverable at 41ffcec665.
+# TOMBSTONE: _orthonormal_cols (helper of the deleted _rsvd_core) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_python_loops.patch
 
 
-# TOMBSTONE: _flip_u (orphan helper: the native linalg door flips the signs) deleted 2026-11-08 by @K0SHA_PY@; code recoverable at 41ffcec665.
+# TOMBSTONE: _flip_u (orphan helper: the native linalg door flips the signs) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_python_loops.patch
 
 
@@ -2650,7 +2650,7 @@ def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_it
                                                     transpose, flip_sign, random_state, numeric_mode), _LINALG_CONTEXT)
 
 
-# TOMBSTONE: _rsvd_core (dead Python power-iteration loop: randomized_svd routes to the native linalg door) deleted 2026-11-08 by @K0SHA_PY@; code recoverable at 41ffcec665.
+# TOMBSTONE: _rsvd_core (dead Python power-iteration loop: randomized_svd routes to the native linalg door) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_python_loops.patch
 
 
@@ -3840,7 +3840,7 @@ _PD_KIND = {"manhattan": 1, "cityblock": 1, "l1": 1, "chebyshev": 2, "infinity":
 # (bindings/mani_decomp_native.mojo); `_PD_KIND` is its table.
 
 
-# TOMBSTONE: _lanczos_batch, _lanczos_top (dead Python Lanczos driver: the top-eigenpair route runs in bindings/mani_decomp_native.mojo and x_decomp/kpca_owner.mojo) deleted 2026-11-08 by @K0SHA_PY@; code recoverable at 41ffcec665.
+# TOMBSTONE: _lanczos_batch, _lanczos_top (dead Python Lanczos driver: the top-eigenpair route runs in bindings/mani_decomp_native.mojo and x_decomp/kpca_owner.mojo) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_python_loops.patch
 
 
@@ -4894,7 +4894,7 @@ class SparseCoder(_SparseCoding):
         return _DL_CALL(self, "coder_fit_transform", (X,), _DL_CONTEXT)
 
 
-# TOMBSTONE: _randomized_decompose (dead Python randomized PCA / TruncatedSVD arm: the owners in x_decomp/pca_randomized.mojo and x_decomp/tsvd_owner.mojo run it) deleted 2026-11-08 by @K0SHA_PY@; code recoverable at 41ffcec665.
+# TOMBSTONE: _randomized_decompose (dead Python randomized PCA / TruncatedSVD arm: the owners in x_decomp/pca_randomized.mojo and x_decomp/tsvd_owner.mojo run it) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_python_loops.patch
 
 

@@ -14,7 +14,7 @@ index ce1fa3028f..6f7427bc06 100644
  from providers.python.x_decomp_graph_device_pyapi import (
      dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_radius_geo_py, dev_graph_lle_iw_py, dev_graph_components_py, dev_graph_join_py, dev_graph_dijkstra_py,
  )
--# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+-# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 -# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 +from x_decomp.mcd_bmma import MCD_ORDERED_COV
 +from providers.python.x_decomp_mcd_bmma_pyapi import mcd_cov_reach_py
@@ -28,7 +28,7 @@ index ce1fa3028f..6f7427bc06 100644
          m.def_function[dev_download_py]("x_decomp_dev_download")
          m.def_function[dev_ew_py]("x_decomp_dev_ew")
          m.def_function[dev_gemm_py]("x_decomp_dev_gemm")
--        # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+-        # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 -        # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 +        m.def_function[mcd_cov_reach_py]("x_decomp_mcd_cov_reach")
 +        # Apple simdgroup MMA probe (tools/mcd_ordered_quality.py): NVIDIA/AMD
@@ -48,7 +48,7 @@ index 1144a07969..f77ced0d57 100644
          centered = kit.ew(XD_MUL, shifted, mask)
      var rows = kit.nrows(centered)
      var cols = kit.ncols(centered)
--    # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (the x_decomp_dev_mcd_cov final covariance arm) deleted 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+-    # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (the x_decomp_dev_mcd_cov final covariance arm) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 -    # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 -    var gram = kit.mm(centered, centered, ta=True)
 +    var gram: Int
@@ -85,7 +85,7 @@ index bb084bd030..3f86f1f4a5 100644
      return PythonObject(dev_ew_run(_id(a), _id(b), _id(c), _id(dst), op, count, d, lb, bm, lc, cm, Float64(py=s)))
  
  
--# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its door dev_mcd_cov_py) deleted 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+-# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its door dev_mcd_cov_py) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 -# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 +def dev_mcd_cov_py(a: PythonObject, c: PythonObject, p: PythonObject) raises -> PythonObject:
 +    """Opt-in MCD final masked covariance Gram; no generic GEMM dispatch change."""
@@ -97,7 +97,7 @@ index bb084bd030..3f86f1f4a5 100644
      )
  
  
--# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its test seam door mcd_cov_probe_py) deleted 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+-# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its test seam door mcd_cov_probe_py) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 -# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 +# Test-only direct batched covariance seam, identical API on both arms.
 +def mcd_cov_probe_py(xaddr: PythonObject, gaddr: PythonObject, outaddr: PythonObject,
@@ -139,7 +139,7 @@ index 036bb4d5d2..e2e2bcc1b6 100644
  from x_decomp.device import DFG_BLOCK_TARGET, DFG_MIN_SPLIT_STEPS
  
 -# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (NEUTRAL: rab3-mcdord EE istella -0.3%, MCD istella +0.4%, taxi -2.3%) deleted
--# 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+-# 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 -# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 +#: FAST Apple candidate, default OFF: `-D MOJOLEARN_MCD_ORDERED_COV`.
 +#: Source lane/apple-fast-mcd-ordered-quality-r3@f35a57bd4 (ported
@@ -207,7 +207,7 @@ index 036bb4d5d2..e2e2bcc1b6 100644
  
  
 -# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (_cov_add, ordered_cov_shape, ordered_cov_scratch, mcd_cov_fold_kernel,
--# launch_mcd_cov_ordered, note_cov_route, mcd_cov_reach_run and the reach counters) deleted 2026-11-08 by @K0SHA_MCDORD@; code
+-# launch_mcd_cov_ordered, note_cov_route, mcd_cov_reach_run and the reach counters) deleted 2026-11-08 by 65b756872d; code
 -# recoverable at 41ffcec665.
 -# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 +@always_inline
@@ -390,7 +390,7 @@ index 6f6f82c6e0..df5630732f 100644
              if d > MF_DMAX:
                  pw = d  # the MMA route folds column sums only (npair = 24,310 at d = 220)
          var part_words = max(nc * self.tiles * pw, 1)
--        # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its partials in this buffer) deleted 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+-        # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its partials in this buffer) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 -        # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 +        comptime if MCD_ORDERED_COV and MCD_BMMA:
 +            # Column moments have been consumed before covariance launches;
@@ -403,7 +403,7 @@ index 6f6f82c6e0..df5630732f 100644
          )
          var out = _f(ph.mm_out) + c0*d*d
          comptime if MCD_BMMA:
--            # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (the ordered raw covariance arm) deleted 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+-            # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (the ordered raw covariance arm) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 -            # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 -            if one:
 -                launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
@@ -441,7 +441,7 @@ index 2b83faada9..e9671d3342 100644
  
  
 -# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (dev_mcd_cov_run and its persistent gate, the x_decomp_dev_mcd_cov body) deleted
--# 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+-# 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 -# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 +struct _CovGate(Defaultable, Movable):
 +    """One persistent typed gate on xd_ctx; never released between enqueues."""
@@ -487,7 +487,7 @@ index 2b83faada9..e9671d3342 100644
  
  
 -# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (mcd_cov_probe_run, the x_decomp_mcd_cov_probe test seam of its quality tool) deleted
--# 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+-# 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 -# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 +# Test-only direct batched covariance seam, identical API on both arms.
 +# Inactive outputs retain sentinel, partial storage is poisoned before B.

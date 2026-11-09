@@ -755,7 +755,7 @@ def byte_lm_parallel_create_binding() raises -> PythonObject:
     return PythonObject(alloc=ByteParallelTrainer())
 
 
-# TOMBSTONE: byte_lm_parallel_open, byte_lm_parallel_open_pooled, byte_lm_parallel_close, byte_lm_parallel_rollback, byte_lm_parallel_shard_gradient, byte_lm_parallel_apply_gradient, byte_lm_parallel_reduction_pool_available, byte_lm_parallel_fold_reset, byte_lm_parallel_shard_gradient_fold, byte_lm_parallel_fold_add (dead native entries: no caller; the parallel trainer runs through parallel_shard_call) deleted 2026-11-08 by @K0SHA_BYTELM@; code recoverable at 41ffcec665.
+# TOMBSTONE: byte_lm_parallel_open, byte_lm_parallel_open_pooled, byte_lm_parallel_close, byte_lm_parallel_rollback, byte_lm_parallel_shard_gradient, byte_lm_parallel_apply_gradient, byte_lm_parallel_reduction_pool_available, byte_lm_parallel_fold_reset, byte_lm_parallel_shard_gradient_fold, byte_lm_parallel_fold_add (dead native entries: no caller; the parallel trainer runs through parallel_shard_call) deleted 2026-11-08 by f41ec913f2; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_entries_byte_lm_parallel.patch
 
 
@@ -1679,7 +1679,7 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_step_glue_arm_binding]("byte_lm_step_glue_arm")
         _ = module.add_type[ByteParallelTrainer]("_ByteParallelTrainer")
         module.def_function[byte_lm_parallel_create_binding]("byte_lm_parallel_create")
-        # TOMBSTONE: byte_lm_parallel_open, _open_pooled, _close, _rollback, _shard_gradient, _apply_gradient, _reduction_pool_available, _fold_reset, _shard_gradient_fold, _fold_add (dead native entries: no caller) deleted 2026-11-08 by @K0SHA_BYTELM@; code recoverable at 41ffcec665.
+        # TOMBSTONE: byte_lm_parallel_open, _open_pooled, _close, _rollback, _shard_gradient, _apply_gradient, _reduction_pool_available, _fold_reset, _shard_gradient_fold, _fold_add (dead native entries: no caller) deleted 2026-11-08 by f41ec913f2; code recoverable at 41ffcec665.
         # Restore: git apply experiments/removed/dead_entries_byte_lm_parallel.patch
         module.def_function[byte_lm_pool_fault_available_binding]("byte_lm_pool_fault_available")
         module.def_function[byte_lm_parallel_ownership_binding]("byte_lm_parallel_ownership")

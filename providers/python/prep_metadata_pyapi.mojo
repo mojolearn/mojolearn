@@ -10,7 +10,7 @@ from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_onc
 from core.cast_in import CastIn, cast_in_kind
 
 
-# TOMBSTONE: prep_check_info, prep_scalar_dtype (orphan functions: no caller) deleted 2026-11-08 by @K0SHA_ORPHAN@; code recoverable at 41ffcec665.
+# TOMBSTONE: prep_check_info, prep_scalar_dtype (orphan functions: no caller) deleted 2026-11-08 by 7b2e1d1d83; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_entries_orphan_functions.patch
 
 

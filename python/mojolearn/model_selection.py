@@ -477,7 +477,7 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
                    _NATIVE_CONTEXT)
 
 
-# TOMBSTONE: _prepare_folds (dead Python fold validation: cross_val_score runs family_msel_cross_val_score, bindings/msel_cv.mojo) deleted 2026-11-08 by @K0SHA_PY@; code recoverable at 41ffcec665.
+# TOMBSTONE: _prepare_folds (dead Python fold validation: cross_val_score runs family_msel_cross_val_score, bindings/msel_cv.mojo) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_python_loops.patch
 
 
@@ -497,7 +497,7 @@ def _cv_fast_defines():
     return _resample.fast_defines()
 
 
-# TOMBSTONE: _cv_fast_on, _native_default_cv, _CV_TRUST_FOLDS_BIT (helpers of the deleted _prepare_folds; bindings/msel_cv.mojo msel_fast_on / msel_native_default_cv run them) deleted 2026-11-08 by @K0SHA_PY@; code recoverable at 41ffcec665.
+# TOMBSTONE: _cv_fast_on, _native_default_cv, _CV_TRUST_FOLDS_BIT (helpers of the deleted _prepare_folds; bindings/msel_cv.mojo msel_fast_on / msel_native_default_cv run them) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_python_loops.patch
 
 

@@ -840,7 +840,7 @@ def _py_int_list(values: List[Int]) raises -> PythonObject:
     return arr.tolist()
 
 
-# TOMBSTONE: vocab_encode_public, vocab_decode_public, vocab_pretrained_public, vocab_pretokenize_public, vocab_pattern_name (dead native entries: no caller; Tokenizer runs tokenizer_public_call) deleted 2026-11-08 by @K0SHA_VOCAB@; code recoverable at 41ffcec665.
+# TOMBSTONE: vocab_encode_public, vocab_decode_public, vocab_pretrained_public, vocab_pretokenize_public, vocab_pattern_name (dead native entries: no caller; Tokenizer runs tokenizer_public_call) deleted 2026-11-08 by 00a4418230; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_entries_tokenizer_vocab_public.patch
 
 
@@ -1149,7 +1149,7 @@ def _vocab_public_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr)
     # See std.python.bindings.raise_python_exception (Mojo 1.0).
     try:
         var args = PythonObject(from_borrowed=args_ptr)
-        # TOMBSTONE: vocab_encode_public, vocab_decode_public, vocab_pretrained_public, vocab_pretokenize_public, vocab_pattern_name (operations 3, 4, 5, 6, 8; dead native entries) deleted 2026-11-08 by @K0SHA_VOCAB@; code recoverable at 41ffcec665.
+        # TOMBSTONE: vocab_encode_public, vocab_decode_public, vocab_pretrained_public, vocab_pretokenize_public, vocab_pattern_name (operations 3, 4, 5, 6, 8; dead native entries) deleted 2026-11-08 by 00a4418230; code recoverable at 41ffcec665.
         # Restore: git apply experiments/removed/dead_entries_tokenizer_vocab_public.patch
         comptime count = 5 if operation == 0 or operation == 1 else (6 if operation == 2 else (1 if operation == 9 else 2))
         if len(args) != count:
@@ -1292,7 +1292,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(_vocab_public_c[0], "vocab_init_public")
         module.def_py_c_function(_vocab_public_c[1], "vocab_spelled_public")
         module.def_py_c_function(_vocab_public_c[2], "vocab_json_public")
-        # TOMBSTONE: vocab_encode_public, vocab_decode_public, vocab_pretrained_public, vocab_pretokenize_public, vocab_pattern_name (dead native entries: no caller) deleted 2026-11-08 by @K0SHA_VOCAB@; code recoverable at 41ffcec665.
+        # TOMBSTONE: vocab_encode_public, vocab_decode_public, vocab_pretrained_public, vocab_pretokenize_public, vocab_pattern_name (dead native entries: no caller) deleted 2026-11-08 by 00a4418230; code recoverable at 41ffcec665.
         # Restore: git apply experiments/removed/dead_entries_tokenizer_vocab_public.patch
         module.def_py_c_function(_vocab_public_c[7], "vocab_pretokenize_pattern")
         module.def_py_c_function(_vocab_public_c[9], "native_json_parse")

@@ -453,7 +453,7 @@ def chol_default_nb_hint() -> Int:
 
 comptime CHOL_FAST_CB = 2048
 # TOMBSTONE: MOJOLEARN_CHOL_FAST_NB512 (HOLD-speed: w2-cholnb512-synthetic 260.4 -> 265.7 ms, no benefit) deleted
-# 2026-11-08 by @K0SHA_CHOL@; code recoverable at 41ffcec665.
+# 2026-11-08 by c981cff480; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_NB512.patch
 # NB64/NB128 have no admission implied by that NB512 result.
 comptime CHOL_FAST_NB = 64 if is_defined["MOJOLEARN_CHOL_FAST_NB64"]() else (

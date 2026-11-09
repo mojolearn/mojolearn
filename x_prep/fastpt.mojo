@@ -78,7 +78,7 @@ comptime PT_SCORE = _FAST_APPLE and (is_defined["MOJOLEARN_PT_SCORE"]() or PT_SC
 # M2 quality attributes the 9.5e-3 relative lambda shift to COLBATCH;
 # SI alone keeps lambdas exact. See docs/apple-fast/EXPERIMENTS.md.
 # TOMBSTONE: MOJOLEARN_PT_COLBATCH (DROP quality: the opt-in name alone; its kernels stay as the PT_SCORE default path)
-# deleted 2026-11-08 by @K0SHA_PTCOL@; code recoverable at 41ffcec665.
+# deleted 2026-11-08 by 4da10a301b; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_PT_COLBATCH.patch
 comptime PT_COLBATCH = _FAST_APPLE and PT_SCORE
 # TOMBSTONE: MOJOLEARN_PT_FUSED_TRANSFORM (DROP quality, with COLBATCH: batchv-pt-nospec-* lambda shift 9.5e-3; never A/B-ed

@@ -24,7 +24,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (HOLD-quality: lle trustworthiness_k15 istella 0.8851 -> 0.8615, taxi 0.8662 ->
-# 0.8410 vs FAST main) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at 41ffcec665.
+# 0.8410 vs FAST main) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 # TOMBSTONE: MOJOLEARN_LLE_FAST_NULL_CANON (DROPPED-quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: a canonical LLE answer when the null space is wider than n_components (all of N, then its nc directions of most data variance); trustworthiness down on lle taxi and istella (verdicts batch 6).
@@ -59,6 +59,6 @@ comptime RSVD_IDN_DIRECT_IN = (
 )
 
 
-# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (w4_copy_kernel, dev_lu_aux_run: its device LU) deleted 2026-11-08 by @K0SHA_LLE@; code
+# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (w4_copy_kernel, dev_lu_aux_run: its device LU) deleted 2026-11-08 by ed9ba6e7a1; code
 # recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch

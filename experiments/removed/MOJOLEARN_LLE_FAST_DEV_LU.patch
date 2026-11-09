@@ -7,7 +7,7 @@ index f44731f47e..bcd949e394 100644
  from x_decomp.resident import IDN_EIGH_RESIDENT
  from providers.python.x_decomp_resident_pyapi import dev_eigh_py
 -# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (the w4 alias of `dev_lu_aux_py`; "x_decomp_dev_lu_aux" is now only the
--# IDN_LU_RESIDENT entry) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at 41ffcec665.
+-# IDN_LU_RESIDENT entry) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
 -# Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 -from providers.python.x_decomp_w4_fast_pyapi import w4_flags_py
 +# merge 2026-10-05: both sides export `dev_lu_aux_py`; the w4 (FAST + Apple) one is
@@ -31,7 +31,7 @@ index f44731f47e..bcd949e394 100644
          comptime if LU_RESIDENT_ENTRIES:
              m.def_function[dev_lu_factor_py]("x_decomp_dev_lu_factor")
              m.def_function[dev_lu_solve_py]("x_decomp_dev_lu_solve")
--        # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (its x_decomp_dev_lu_aux registration) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at 41ffcec665.
+-        # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (its x_decomp_dev_lu_aux registration) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
 -        # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 +        comptime if LLE_FAST_DEV_LU:
 +            m.def_function[w4_dev_lu_aux_py]("x_decomp_dev_lu_aux")
@@ -46,7 +46,7 @@ index 782837f62f..1b45a1173c 100644
      var pm: PythonObject
      var im: PythonObject
      var big: Float64
--    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (the w4 bit 1 device-LU arm) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at 41ffcec665.
+-    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (the w4 bit 1 device-LU arm) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
 -    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 -    var fac = k.lu(f0)
 -    lu = fac[0]
@@ -78,7 +78,7 @@ index f5565b113e..776c04bf60 100644
              stats.append(mk_at(st, i, self.ctx))
          return (stats^, diag, pm, im)
  
--    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (kit method lu_dev_aux, its only caller gone) deleted 2026-11-08 by @K0SHA_LLE@;
+-    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (kit method lu_dev_aux, its only caller gone) deleted 2026-11-08 by ed9ba6e7a1;
 -    # code recoverable at 41ffcec665.
 -    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 +    def lu_dev_aux(mut self, a: PythonObject,
@@ -134,7 +134,7 @@ index 6a2e9cd67c..4e424af344 100644
      return PythonObject(f)
  
  
--# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (its door dev_lu_aux_py) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at 41ffcec665.
+-# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (its door dev_lu_aux_py) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
 -# Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 +def dev_lu_aux_py(
 +    a: PythonObject,
@@ -184,7 +184,7 @@ index a1a922ff9a..7f9e628db0 100644
          self.b.x_decomp_lu_resid(A.addr, X.addr, B.addr, R.addr, [A.r, B.c])
          return R
  
--    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (_Kit.lu_dev_aux, no caller) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at
+-    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (_Kit.lu_dev_aux, no caller) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at
 -    # 41ffcec665.
 -    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 +    def lu_dev_aux(self, A, clamp=False):
@@ -261,7 +261,7 @@ index 70cefaf89b..825bef234e 100644
 +from x_decomp.resident import _ptr
  
 -# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (HOLD-quality: lle trustworthiness_k15 istella 0.8851 -> 0.8615, taxi 0.8662 ->
--# 0.8410 vs FAST main) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at 41ffcec665.
+-# 0.8410 vs FAST main) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
 -# Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 +#: HOLD-quality, opt-in only (`-D MOJOLEARN_LLE_FAST_DEV_LU`), measured source
 +#: e9d72edb5 (2026-10-04). M3 afc_ab_def, full board size, 1 run per arm: lle
@@ -285,7 +285,7 @@ index 70cefaf89b..825bef234e 100644
  )
  
  
--# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (w4_copy_kernel, dev_lu_aux_run: its device LU) deleted 2026-11-08 by @K0SHA_LLE@; code
+-# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (w4_copy_kernel, dev_lu_aux_run: its device LU) deleted 2026-11-08 by ed9ba6e7a1; code
 -# recoverable at 41ffcec665.
 -# Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 +def w4_copy_kernel(dst: F32Ptr, src: F32Ptr, n: Int32):

@@ -32,7 +32,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_decomp.mcd_experiments import MCD_FAST_ACTIVE_COMPACT, McdCompactWorkspace, compact_candidate_count, mcd_experiment_hit
 
 # TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (NEUTRAL: rab3-mcdg1 istella +0.1%, taxi -1.2%) and its audit / window defines
-# MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT, MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM deleted 2026-11-08 by @K0SHA_G1@; code recoverable at
+# MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT, MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM deleted 2026-11-08 by a2159de2cb; code recoverable at
 # 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
 
@@ -47,7 +47,7 @@ from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.device import DFG_BLOCK_TARGET, DFG_MIN_SPLIT_STEPS
 
 # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (NEUTRAL: rab3-mcdord EE istella -0.3%, MCD istella +0.4%, taxi -2.3%) deleted
-# 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+# 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 
 # Bound the queued candidate plane independently of features/datasets. This
@@ -220,7 +220,7 @@ def mcd_bmma_kernel[SPLIT: Bool, COMPACT: Bool = False](
                         c.unsafe_store(gi * n + gj, v)
 
 
-# TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (mcd_g1_gram_batched_kernel) deleted 2026-11-08 by @K0SHA_G1@; code recoverable at 41ffcec665.
+# TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (mcd_g1_gram_batched_kernel) deleted 2026-11-08 by a2159de2cb; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
 
 
@@ -256,7 +256,7 @@ def launch_gemm_mma_batched(
         splits = min(DFG_BLOCK_TARGET // tiles, k // DFG_MIN_SPLIT_STEPS)
     var ga = Int32(1) if gate_all else Int32(0)
     # TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (the TN self-Gram route, its audit counters and legacy window) deleted
-    # 2026-11-08 by @K0SHA_G1@; code recoverable at 41ffcec665.
+    # 2026-11-08 by a2159de2cb; code recoverable at 41ffcec665.
     # Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
     # F06 PENDING: reduced active grid is an explicit FAST Apple experiment.
     # Count-read completion/scan overhead is included in whole-call timing.
@@ -315,6 +315,6 @@ def launch_gemm_mma_batched(
 
 
 # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (_cov_add, ordered_cov_shape, ordered_cov_scratch, mcd_cov_fold_kernel,
-# launch_mcd_cov_ordered, note_cov_route, mcd_cov_reach_run and the reach counters) deleted 2026-11-08 by @K0SHA_MCDORD@; code
+# launch_mcd_cov_ordered, note_cov_route, mcd_cov_reach_run and the reach counters) deleted 2026-11-08 by 65b756872d; code
 # recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch

@@ -19,5 +19,5 @@ def w4_flags_py() raises -> PythonObject:
     return PythonObject(f)
 
 
-# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (its door dev_lu_aux_py) deleted 2026-11-08 by @K0SHA_LLE@; code recoverable at 41ffcec665.
+# TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (its door dev_lu_aux_py) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch

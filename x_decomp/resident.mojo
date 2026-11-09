@@ -227,7 +227,7 @@ def dev_ew_run(
 
 
 # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (dev_mcd_cov_run and its persistent gate, the x_decomp_dev_mcd_cov body) deleted
-# 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+# 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 
 
@@ -925,5 +925,5 @@ def _pool_buf_view(id: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
 
 
 # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (mcd_cov_probe_run, the x_decomp_mcd_cov_probe test seam of its quality tool) deleted
-# 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+# 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch

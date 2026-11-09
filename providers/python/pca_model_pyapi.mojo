@@ -46,7 +46,7 @@ def _native_number(value: PythonObject, context: PythonObject, truth: Bool,
     return decoded.to_python_number(kind == "i" or kind == "u" or kind == "b")
 
 
-# TOMBSTONE: pca_query_fields (orphan function: no caller; the owners call _pca_query_fields_from) deleted 2026-11-08 by @K0SHA_ORPHAN@; code recoverable at 41ffcec665.
+# TOMBSTONE: pca_query_fields (orphan function: no caller; the owners call _pca_query_fields_from) deleted 2026-11-08 by 7b2e1d1d83; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_entries_orphan_functions.patch
 
 

@@ -115,7 +115,7 @@ comptime MCD_BATCH_MMA = (
 # support Jaccard .941431 < .99, final covariance rank7 ->6; no promotion.
 # See docs/apple-fast/EXPERIMENTS.md and ab/mcd-compat-review.md.
 # TOMBSTONE: MOJOLEARN_MCD_BATCH_COMPAT (HOLD-quality: the COMPAT-only opt-in arm) deleted 2026-11-08 by
-# @K0SHA_MCDCOMPAT@; code recoverable at 41ffcec665. The shared code stays under the MCD_BATCH_MMA default.
+# ca0d1c0c53; code recoverable at 41ffcec665. The shared code stays under the MCD_BATCH_MMA default.
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_BATCH_COMPAT.patch
 comptime MCD_BATCH_COMPAT = MCD_BATCH_MMA
 
@@ -998,7 +998,7 @@ struct MfPhase(Movable):
             if d > MF_DMAX:
                 pw = d  # the MMA route folds column sums only (npair = 24,310 at d = 220)
         var part_words = max(nc * self.tiles * pw, 1)
-        # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its partials in this buffer) deleted 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+        # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its partials in this buffer) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
         # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
         self.part = ctx.enqueue_create_buffer[DType.float32](part_words)
         self.active = ctx.enqueue_create_buffer[DType.int32](max(nc, 1))
@@ -1061,7 +1061,7 @@ def _mma_covariance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.floa
         )
         var out = _f(ph.mm_out) + c0*d*d
         comptime if MCD_BMMA:
-            # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (the ordered raw covariance arm) deleted 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+            # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (the ordered raw covariance arm) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
             # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
             if one:
                 launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,

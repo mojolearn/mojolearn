@@ -15,7 +15,7 @@ index 36caefe22c..e9fa88a9a7 100644
      return Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)[index])
  
  
--# TOMBSTONE: classical_host_weights (orphan function: no caller) deleted 2026-11-08 by @K0SHA_ORPHAN@; code recoverable at 41ffcec665.
+-# TOMBSTONE: classical_host_weights (orphan function: no caller) deleted 2026-11-08 by 7b2e1d1d83; code recoverable at 41ffcec665.
 -# Restore: git apply experiments/removed/dead_entries_orphan_functions.patch
 +def classical_host_weights(source: PythonObject, rows: Int, context: PythonObject) raises -> PythonObject:
 +    if source is None:
@@ -43,7 +43,7 @@ index 80e53d8033..a089faab08 100644
      return decoded.to_python_number(kind == "i" or kind == "u" or kind == "b")
  
  
--# TOMBSTONE: pca_query_fields (orphan function: no caller; the owners call _pca_query_fields_from) deleted 2026-11-08 by @K0SHA_ORPHAN@; code recoverable at 41ffcec665.
+-# TOMBSTONE: pca_query_fields (orphan function: no caller; the owners call _pca_query_fields_from) deleted 2026-11-08 by 7b2e1d1d83; code recoverable at 41ffcec665.
 -# Restore: git apply experiments/removed/dead_entries_orphan_functions.patch
 +def pca_query_fields(model: PythonObject, context: PythonObject, operation: String = "transform") raises -> PythonObject:
 +    return _pca_query_fields_from(classical_family_admit(model), context, operation)
@@ -63,7 +63,7 @@ index 980d9e6568..fc85e9e761 100644
  from core.cast_in import CastIn, cast_in_kind
  
  
--# TOMBSTONE: prep_check_info, prep_scalar_dtype (orphan functions: no caller) deleted 2026-11-08 by @K0SHA_ORPHAN@; code recoverable at 41ffcec665.
+-# TOMBSTONE: prep_check_info, prep_scalar_dtype (orphan functions: no caller) deleted 2026-11-08 by 7b2e1d1d83; code recoverable at 41ffcec665.
 -# Restore: git apply experiments/removed/dead_entries_orphan_functions.patch
 +def prep_check_info(number: Int) -> Bool:
 +    # Numeric PEP3118 buffers and native ndarray types whose buffer export

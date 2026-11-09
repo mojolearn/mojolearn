@@ -98,7 +98,7 @@ def dev_ew_py(
     return PythonObject(dev_ew_run(_id(a), _id(b), _id(c), _id(dst), op, count, d, lb, bm, lc, cm, Float64(py=s)))
 
 
-# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its door dev_mcd_cov_py) deleted 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its door dev_mcd_cov_py) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 
 
@@ -305,5 +305,5 @@ def dev_move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: Pyth
     )
 
 
-# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its test seam door mcd_cov_probe_py) deleted 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its test seam door mcd_cov_probe_py) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch

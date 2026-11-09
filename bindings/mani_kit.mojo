@@ -1098,7 +1098,7 @@ struct MKit(Movable):
             stats.append(mk_at(st, i, self.ctx))
         return (stats^, diag, pm, im)
 
-    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (kit method lu_dev_aux, its only caller gone) deleted 2026-11-08 by @K0SHA_LLE@;
+    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (kit method lu_dev_aux, its only caller gone) deleted 2026-11-08 by ed9ba6e7a1;
     # code recoverable at 41ffcec665.
     # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 
