@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The one host cast of admitted N-d input words (no Python import): the
-rank-N and integer-id members of the admission path of
+rank-N member of the admission path of
 `core/admitted_input.mojo`.
 
 Plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2 step 2
@@ -14,9 +14,7 @@ Plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2 step 2
         True when none of the written words is a NaN or an infinity.
         Integers take the one admission rule, `Array.astype`'s integer ->
         double -> float32 route (`classical_f32_bits`, as `admit_x`).
-    admitted_ids_i32(addr, s0, s1, rows, cols, item, kind, dst)
-        a strided (rows, cols) integer or bool array as C-order int32 ids
-        (`cast_i32_bits`: exact, saturated outside int32).
+    (the int32 id cast is core/admitted_ids.mojo `admitted_ids_i32`)
 
 Numerics: no arithmetic on values. Each item is one typed load
 (`admitted_raw_word`) and one bit function, written to its own cell; the
@@ -39,13 +37,11 @@ cell is written before return.
 """
 from std.memory import bitcast
 from core.classical_cast import classical_f32_bits
-from core.cast_in import cast_i32_bits
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.admitted_input import admitted_raw_word
 
 comptime _AN_F32P = MutPointer[Float32, MutUntrackedOrigin]
-comptime _AN_I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _AN_INTP = MutPointer[Int, MutUntrackedOrigin]
 comptime _AN_U8P = MutPointer[UInt8, MutUntrackedOrigin]
 comptime _AN_EXP = UInt32(0x7F800000)
@@ -119,25 +115,5 @@ def admitted_cast_nd_f32(
     return all_finite
 
 
-def admitted_ids_i32(addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, kind: Int, dst: _AN_I32P):
-    """A strided (rows, cols) integer or bool array (byte strides `s0`, `s1`)
-    as C-order int32 words in `dst` (`cast_i32_bits`: exact, saturated
-    outside int32)."""
-    # parallel: id cast over row tasks across host cores (was the serial neural_cast_i32_2d)
-    if rows <= 0 or cols <= 0:
-        return
-    var tasks = host_predict_task_count_work(rows, rows * cols * max(item, 1))
-    var chunk = host_predict_chunk(rows, tasks)
-
-    def _rows(t: Int) {imm addr, imm s0, imm s1, imm rows, imm cols, imm item, imm kind, imm dst, imm chunk}:
-        var lo = t * chunk
-        var hi = min(lo + chunk, rows)
-        for r in range(lo, hi):  # native input marshaling: this task's input rows
-            for c in range(cols):  # native input marshaling: one id per position
-                var bits = cast_i32_bits(admitted_raw_word(addr + r * s0 + c * s1, item), kind, item)
-                dst.unsafe_store(r * cols + c, bitcast[DType.int32](bits))
-
-    if tasks <= 1:
-        _rows(0)
-    else:
-        host_parallelize(_rows, tasks)
+# TOMBSTONE: admitted_ids_i32 (lane A4's int32 id cast, a second copy of core/admitted_ids.mojo `admitted_ids_i32`) deleted 2026-11-09 by integ/pre-0867-w2; code recoverable at be7d3f4fb2.
+# Restore: none (never reached main; lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Now core/admitted_ids.mojo `admitted_ids_i32` (signed = kind == CAST_KIND_SIGNED, swap = False).

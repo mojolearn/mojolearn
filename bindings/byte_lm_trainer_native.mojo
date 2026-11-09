@@ -44,7 +44,7 @@ from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR
 from bindings.byte_checkpoint_native import byte_checkpoint_save, byte_checkpoint_load
 from providers.python.byte_lm_json_checkpoint_pyapi import BYTE_JSON_LIMIT, byte_json_payload, byte_json_arrays, byte_json_encode, byte_json_read, byte_json_write
 from bindings.tsa_hw_native import tsa_array
-from core.admitted_input_nd import admitted_ids_i32
+from core.admitted_ids import admitted_ids_i32
 from bindings.byte_perf_helpers import byte_int_list_from_i64
 from core.byte_lm_teardown_switch import byte_lm_teardown_with_gil
 from bindings.native_model_records import records_get, records_put, RECORDS_PREPARED
@@ -95,8 +95,8 @@ def _ids(mut mods: NativeModules, source: PythonObject, shape: _Shape, context: 
         raise Error("ValueError: Byte-LM ids requires finite shape (" + String(rows) + ", " + String(cols) + ")")
     var strides = value.strides
     var tokens = tsa_array("i", "<i4", Python.tuple(rows, cols), rows * cols, 4, context)
-    admitted_ids_i32(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
-                       rows, cols, item, CAST_KIND_SIGNED, _I32P(unsafe_from_address=Int(py=classical_address(tokens))))
+    _ = admitted_ids_i32(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
+                         rows, cols, item, True, False, _I32P(unsafe_from_address=Int(py=classical_address(tokens))))
     _ = value  # keep the Python object alive through the native call above
     _ = tokens  # keep the Python object alive through the native call above
     _ = value^
@@ -1193,8 +1193,8 @@ def _ids_steps(mut mods: NativeModules, source: PythonObject, shape: _Shape,
     var source_address = Int(py=classical_address(value))
     var target_address = Int(py=classical_address(tokens))
     for k in range(n_steps):  # driver-loop: over the step batches (one strided 2-D cast each)
-        admitted_ids_i32(source_address + k * s0, s1, s2, rows, cols, item, CAST_KIND_SIGNED,
-                           _I32P(unsafe_from_address=target_address + k * rows * cols * 4))
+        _ = admitted_ids_i32(source_address + k * s0, s1, s2, rows, cols, item, True, False,
+                             _I32P(unsafe_from_address=target_address + k * rows * cols * 4))
     _ = value  # keep the Python object alive through the native calls above
     _ = tokens  # keep the Python object alive through the native calls above
     _ = value^
@@ -1351,8 +1351,8 @@ def _logits_input(mut mods: NativeModules, source: PythonObject, lengths: Python
     var source_addr = Int(py=classical_address(value))
     var tokens = tsa_array("i", "<i4", Python.tuple(batch, length), batch * length, 4, context)
     var token_addr = Int(py=classical_address(tokens))
-    admitted_ids_i32(source_addr, Int(py=strides[0]), Int(py=strides[1]), batch, length,
-        item, kind, _I32P(unsafe_from_address=token_addr))
+    _ = admitted_ids_i32(source_addr, Int(py=strides[0]), Int(py=strides[1]), batch, length,
+        item, kind == CAST_KIND_SIGNED, False, _I32P(unsafe_from_address=token_addr))
     _ = value^
     var sizes = List[Int](length=batch, fill=length)
     if lengths is not None:

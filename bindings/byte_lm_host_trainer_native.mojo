@@ -36,9 +36,9 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_entry, ne
 from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
-from core.cast_in import CAST_KIND_FLOAT
+from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED
 from core.xseq_marshal import neural_first_bad_id
-from core.admitted_input_nd import admitted_ids_i32
+from core.admitted_ids import admitted_ids_i32
 from bindings.byte_perf_helpers import byte_int_list_from_i32, byte_int_list_from_i64
 
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -76,8 +76,9 @@ def _ids_i32(source: PythonObject, context: PythonObject) raises -> PythonObject
         raise Error("TypeError: ids must be an integer array")
     var store = _zero_store("i", rows * cols, context)
     var tokens = classical_wrap_array(store, Python.tuple(rows, cols), "<i4", "C", context)
-    admitted_ids_i32(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
-                       rows, cols, item, kind, _I32P(unsafe_from_address=Int(py=classical_address(tokens))))
+    _ = admitted_ids_i32(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
+                         rows, cols, item, kind == CAST_KIND_SIGNED, False,
+                         _I32P(unsafe_from_address=Int(py=classical_address(tokens))))
     _ = value  # keep the Python object alive through the native call above
     _ = tokens  # keep the Python object alive through the native call above
     _ = value^
@@ -470,8 +471,8 @@ def byte_lm_host_infer(mut mods: NativeModules, model: PythonObject, operation: 
     var kind = classical_cast_kind(value, item, "ids", context)
     var tokens = tsa_array("i", "<i4", Python.tuple(batch, length), batch * length, 4, context)
     var token_address = Int(py=classical_address(tokens))
-    admitted_ids_i32(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
-        batch, length, item, kind, _I32P(unsafe_from_address=token_address))
+    _ = admitted_ids_i32(Int(py=classical_address(value)), Int(py=strides[0]), Int(py=strides[1]),
+        batch, length, item, kind == CAST_KIND_SIGNED, False, _I32P(unsafe_from_address=token_address))
     _ = value^
     var sizes = List[Int](length=batch, fill=length)
     if args[1] is not None:

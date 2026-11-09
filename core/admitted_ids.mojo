@@ -16,7 +16,9 @@ no door keeps its own byte-assembled walk.
     admitted_ids_i32(addr, s0, s1, rows, cols, item, signed, swap, dst) -> Bool
         the same view narrowed to C-order int32 in the same pass; False when
         any id lies outside int32 (the `c.min() < -(1 << 31) or c.max() >=
-        (1 << 31)` refusal and `_as_i32_1d`'s range rule)
+        (1 << 31)` refusal and `_as_i32_1d`'s range rule); such an id is
+        written saturated. The one int32 id cast: lane A4's copy in
+        core/admitted_input_nd.mojo (the Byte-LM token ids) merged in here
     admitted_narrow_i32(src, count, dst) -> Bool
         `count` int64 words narrowed to int32; False when one lies outside
 
@@ -121,8 +123,12 @@ def admitted_ids_i64(
 def admitted_ids_i32(
     addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, signed: Bool, swap: Bool, dst: _AID_I32P,
 ) -> Bool:
-    """The rows x cols integer view narrowed to C-order int32 words in
-    `dst`; False when any id lies outside int32."""
+    """The rows x cols integer (or bool) view narrowed to C-order int32
+    words in `dst`; False when any id lies outside int32. An id outside int32
+    is written saturated (-2^31 or 2^31 - 1, `cast_i32_bits`' rule), so a
+    caller that keeps the words (the Byte-LM token ids, whose embedding check
+    refuses both saturated values by position) reads the same words as the
+    former core/admitted_input_nd.mojo copy."""
     # parallel: id read and int32 range rule over row tasks across host cores (was two serial byte walks)
     if rows <= 0 or cols <= 0:
         return True
@@ -141,11 +147,15 @@ def admitted_ids_i32(
                 var value = Int64(0)
                 if signed:
                     value = _aid_signed(raw, item)
-                    if value < _AID_I32_MIN or value > _AID_I32_MAX:
+                    if value < _AID_I32_MIN:
                         fits = False
-                        value = 0
+                        value = _AID_I32_MIN
+                    elif value > _AID_I32_MAX:
+                        fits = False
+                        value = _AID_I32_MAX
                 elif raw > UInt64(2147483647):
                     fits = False
+                    value = _AID_I32_MAX
                 else:
                     value = bitcast[DType.int64](raw)
                 dst.unsafe_store(r * cols + c, Int32(value))

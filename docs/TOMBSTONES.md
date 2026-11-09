@@ -427,6 +427,7 @@ in the tables after the sections.
 | [`training_f32_cast_owned` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Byte-LM host trainer (owned float32 buffers) | removed (moved: `admit_nd_owned_f32`) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
 | [`xseq_all_finite_f32` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | xseq score / training (finiteness scan) | removed (second name of `host_all_finite_f32`) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
 | [`neural_cast_i32_2d` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Byte-LM trainers (token ids) | removed (merged: `admitted_ids_i32`, parallel) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
+| [`admitted_ids_i32` in `core/admitted_input_nd.mojo` (second int32 id cast)](#one-int32-id-cast-2026-11-09) | Byte-LM trainers (token ids) | removed (merged: `core/admitted_ids.mojo` `admitted_ids_i32`, lane A3) | 2026-11-09 | none (never reached main; recoverable at lane/a4-admit-sequence-tsa-neural@be7d3f4fb2) |
 | [`neural_block_f32` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Neural block / Mamba / Transformer / CausalLM inputs | removed (merged: `admit_block_f32` BLOCK_OPERATION) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
 | [`neural_block_f32_owned` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Neural constructor weights | removed (merged: `admit_block_f32` BLOCK_RETAINED) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
 | [`neural_block_f32_input` (admission helper)](#sequence-and-neural-admission-helpers-merged-into-the-one-path-2026-11-08) | Neural block x (forward / step / backward) | removed (merged: `admit_block_f32` BLOCK_READ; copy into uninitialised storage, C5) | 2026-11-08 | [A4_ADMISSION_HELPERS.patch](../experiments/removed/A4_ADMISSION_HELPERS.patch) |
@@ -4243,3 +4244,30 @@ the old sequence moved M; the driver always reads M in place and uploads it once
   flip now runs in the selected mode's binding; every step follows RKit's residency), the same on NVIDIA, AMD and Apple
   within the version. RUN OWED: the randomized-svd row on NVIDIA and AMD (speed), the randomized_svd identity lane.
 - Code recoverable at `f7d10d2b09`; patch `experiments/removed/A3_ADMISSION_HELPERS.patch`.
+
+## One int32 id cast (2026-11-09)
+
+Integrator integ/pre-0867-w2 (merge of lanes A3 a3-admit-decomp-prep-metrics 0cb550c337 and A4
+a4-admit-sequence-tsa-neural be7d3f4fb2). Both lanes wrote a parallel int32 id cast with the same name
+`admitted_ids_i32`: A3 in `core/admitted_ids.mojo` (`admit_ids`: signed / byte-swap flags, an int32 range verdict, used
+by the classification metric labels and the ANN candidate ids) and A4 in `core/admitted_input_nd.mojo` (`cast_i32_bits`:
+saturated outside int32, no verdict, used by the Byte-LM token ids). A3's is the survivor: it covers A4's 2-D strided
+integer and bool case, and it now writes an out-of-range id saturated (-2^31 or 2^31 - 1) besides returning False, so
+the Byte-LM callers (which keep the words; the embedding check refuses both saturated values by position) read the
+same words as before. The five Byte-LM call sites in `bindings/byte_lm_trainer_native.mojo` and
+`bindings/byte_lm_host_trainer_native.mojo` call it with `signed = kind == CAST_KIND_SIGNED`, `swap = False`.
+A4's copy is deleted with an inline TOMBSTONE. No patch: the code never reached main (recoverable at
+lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Bits: none for any int32-range or bool id.
+
+## Integration integ/pre-0867-w2 reconciliations (2026-11-09)
+
+- `bindings/admitted_held.mojo` (lane A1 076abee5ea): its registry struct, global and scope / hold / lookup functions were
+  a second copy of lane A5's `bindings/admitted_registry.mojo` (moved there word for word). The file is deleted; the tree
+  doors call `admit_x_unrecorded` (which consults the held registry) where they called `admitted_held_x`, and
+  `bindings/trees_public_meta.mojo` imports the scope functions from `bindings/admitted_registry.mojo`. Never reached
+  main: recoverable at lane/a1-admit-trees-labels@076abee5ea.
+- `_family_extreme_f32` in `core/family_cast_impl.mojo` (lane A3 0cb550c337): a second parallel min / max with the same
+  serial-walk answer as lane A2's `_family_extreme`; A2's is kept. Never reached main: recoverable at
+  lane/a3-admit-decomp-prep-metrics@0cb550c337.
+- `door_rows_call` (the `_arena_io._ROWS_CALL` connection in `_native_msel_dispatch.connect`): no reader after A5 deleted
+  `door_rows_host`; removed from the glue and from tools/test_device_rows_door_cv.py.
