@@ -193,24 +193,27 @@ def _nested_values(mut mods: NativeModules, value: PythonObject, depth: Int, mut
         raise Error("input sequences must be rectangular")
     var b = mods.module("builtins")
     var cls = py_type(value)
-    if cls is not b.list and cls is not b.tuple:
-        # A range or a list / tuple subclass: the element protocol as before.
-        for k in range(n):  # driver-loop: per ELEMENT of a range or sequence subclass input (data-sized)
-            _sequence_values(mods, value[k], depth + 1, dims, values, kind, size, leaf_depth, context, float_target)
-        return
     # Lane p2-labels-lists-arrays: an exact list or tuple is read borrowed
     # from its C storage. An exact float or bool leaf (and an exact int when
     # the target is float) is admitted by one class-pointer compare and
     # appended by PyList_Append: no boxed index, subscript, recursion or
-    # Python append call per element. Every other element takes the general
-    # admission below, unchanged.
+    # Python append call per element. Every other element (and every element
+    # of a range or a list / tuple subclass, through the element protocol as
+    # before) takes the general admission below, unchanged.
+    var exact = cls is b.list or cls is b.tuple
     var is_tuple = cls is b.tuple
     var float_word = Int(b.float._obj_ptr)
     var bool_word = Int(b.bool._obj_ptr)
     var int_word = Int(b.int._obj_ptr) if float_target else 0
     ref cpy = Python().cpython()
     var t = cpython_table()
-    for k in range(n):  # driver-loop: per ELEMENT of a list input (data-sized), one borrowed read each from the C storage
+    # The one pass over the caller's nested sequence (Python objects a kernel
+    # file cannot read): main's recorded input-step debt
+    # (tools/hooks/compute_in_shells_baseline.txt).
+    for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
+        if not exact:
+            _sequence_values(mods, value[k], depth + 1, dims, values, kind, size, leaf_depth, context, float_target)
+            continue
         var raw = p3_item(value, k, is_tuple)
         var word = p3_type_word(raw)
         if word == float_word or word == bool_word or word == int_word:
