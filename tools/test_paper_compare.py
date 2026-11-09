@@ -291,9 +291,10 @@ class Ids(unittest.TestCase):
             self.assertIn("ours: no time", failed["classical/ols/taxi/rows=full"])
             self.assertEqual(failed["trees/gbdt-depthwise/taxi/rows=full"], "no smoke result")
 
-    def test_id_transforms_round_trip(self):
+    def test_smoke_key_matches_the_board(self):
+        # the pass-ids match on bench_board.smoke_key (family/lane/dataset), whatever the smoke id's tail
         for rid in ("classical/kmeans/taxi/rows=full", "neural/gemm/gaussian/shape=full"):
-            self.assertEqual(PC.full_id(PC.smoke_id(rid, 2000)), rid)
+            self.assertEqual(PC.race_smoke_key(PC.smoke_id(rid, 2000)), PC.race_smoke_key(rid))
 
 
 class CommittedRecipes(unittest.TestCase):

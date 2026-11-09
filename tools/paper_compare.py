@@ -301,11 +301,6 @@ def smoke_id(rid, smoke_rows):
     return re.sub(r"/shape=full$", "/shape=" + SMOKE_SHAPE, rid)
 
 
-def full_id(rid):
-    rid = re.sub(r"/rows=[0-9]+$", "/rows=full", rid)
-    return re.sub(r"/shape=%s$" % SMOKE_SHAPE, "/shape=full", rid)
-
-
 def plan_ids(doc, planner):
     """(full ids planned, smoke ids planned, {race id: why not planned})."""
     b = doc["bench_board_args"]
@@ -370,21 +365,30 @@ def cmd_ids(args):
     return 0
 
 
+def race_smoke_key(rid):
+    """bench_board.smoke_key of a race id: family/lane/dataset, the key smoke.json files its races under and the
+    board's smoke gate reads (the same race at smoke and at full size)."""
+    return "/".join(rid.split("/")[:3])
+
+
 def passed_full_ids(full_ids, smoke_docs):
-    """(full ids whose smoke passed, {full id: why not})."""
+    """(full ids whose smoke passed, {full id: why not}). Matched on the smoke key (family/lane/dataset), as the
+    board's own smoke gate does: the 0.8.66 NVIDIA run lost 15 of 62 races to "no smoke result" when this
+    matched the smoke id turned back into a full id (taxi classical lanes, int8 gemm, decode lanes, ...)."""
     passed, seen = set(), {}
     for doc in smoke_docs:
         for key, v in (doc.get("races") or {}).items():
-            fid = full_id(v.get("id") or key)
-            seen[fid] = v
+            k = race_smoke_key(v.get("id") or key) if "/" in (v.get("id") or key) else key
+            seen[k] = v
             if v.get("pass") is True:
-                passed.add(fid)
+                passed.add(k)
     keep, failed = [], {}
     for rid in full_ids:
-        if rid in passed:
+        k = race_smoke_key(rid)
+        if k in passed:
             keep.append(rid)
-        elif rid in seen:
-            v = seen[rid]
+        elif k in seen:
+            v = seen[k]
             fails = v.get("failures") or []
             failed[rid] = short_status("smoke failed: " + "; ".join(
                 "%s: %s" % (f.get("arm"), f.get("reason")) for f in fails if isinstance(f, dict)) if fails
