@@ -42,8 +42,13 @@ comptime TREE_OP_LEAF_ESTIMATE = 9
 comptime TREE_OP_SEED_SNAPSHOT = 10
 comptime TREE_OP_FOREST_BATCHES = 11
 comptime TREE_OP_FOREST_FINISH = 12
+# lane t3-gbdt-greedy-on-device-loop (2026-11-09): the greedy SymmetricTree
+# searcher (the default arm) as an enqueue-only op, and its learn cursor add
+# on the searcher's own partition (EXECUTOR_T1_TREE_OPS.md section 8).
+comptime TREE_OP_GREEDY_SEARCH = 13
+comptime TREE_OP_SEARCHER_APPLY = 14
 comptime TREE_OP_FIRST = TREE_OP_BOOTSTRAP
-comptime TREE_OP_LAST = TREE_OP_FOREST_FINISH
+comptime TREE_OP_LAST = TREE_OP_SEARCHER_APPLY
 comptime N_TREE_OPS = TREE_OP_LAST - TREE_OP_FIRST + 1
 
 
@@ -124,6 +129,21 @@ def _tree_info[CODE: Int]() -> TreeOpInfo:
             "ensemble.decisiontree.batched_levelalgo.builder.Builder._enqueue_loop_batches | extratrees.impl.decisiontree.batched_levelalgo.builder._et_run_depthwise (cycle body)",
             True, True, True,
         )
+    elif CODE == TREE_OP_GREEDY_SEARCH:
+        # the level loop writes round-local scratch only; the gate walk and
+        # the partition tail are gated and write the structure status word
+        # (sentinel, unresolved winner, coverage) the loop joins on
+        return TreeOpInfo(
+            CODE, "tree_greedy_search",
+            "gbdt.methods.greedy_subsets_searcher.greedy_search_helper.run_tree_layout_traced(enqueue_only=True)",
+            False, True, False,
+        )
+    elif CODE == TREE_OP_SEARCHER_APPLY:
+        return TreeOpInfo(
+            CODE, "tree_searcher_apply",
+            "gbdt.methods.kernel_add_model_value.add_model_value_gated_kernel",
+            True, False, False,
+        )
     else:
         return TreeOpInfo(
             CODE, "forest_finish",
@@ -134,7 +154,7 @@ def _tree_info[CODE: Int]() -> TreeOpInfo:
 
 def tree_op_info(code: Int) raises -> TreeOpInfo:
     """The table row of tree op `code`."""
-    comptime for i in range(N_TREE_OPS):  # driver-loop: over the tree-op table (thirteen rows, compile time)
+    comptime for i in range(N_TREE_OPS):  # driver-loop: over the tree-op table (fifteen rows, compile time)
         comptime CODE = TREE_OP_FIRST + i
         if code == CODE:
             return _tree_info[CODE]()
