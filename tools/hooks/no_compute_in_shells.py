@@ -23,6 +23,18 @@ launch work. This checker reports, in every shell file:
                other bound is a `small-bound` hit.
              `# cpu-route:` and any other comment exempt nothing: a cpu-route
              loop is debt to remove (AGENTS.md, "No Python in the runtime").
+             A loop body is read with one level of the helpers it calls (a
+             top-level def of the file, or one imported from a door module): a
+             per-element Python read there counts as in the loop, and such a
+             loop keeps a driver-loop tag only when it is judged structure.
+    unpack   `# unpack: one pass over the caller's <what>`: the declared single
+             pass over a caller's Python list/tuple in the UNPACK step. It holds
+             only in a boundary file (providers/python/**/*_pyapi.mojo,
+             bindings/_mojolearn*.mojo, bindings/admitted_*.mojo,
+             bindings/classical_pandas.mojo, bindings/sequential_inputs.mojo) on
+             a loop whose body writes a typed native buffer and calls no Python
+             code; elsewhere it is a `false-unpack` hit. Every accepted one is an
+             `unpack` hit, so the baseline counts it and the count only shrinks.
     inline   Python iteration inside one expression (the audit's c-inline
              class): `b.sorted`, `b.map`, `b.zip` (also through `bi.` and
              `builtins.`), `.tolist`, `PyObject_GetIter`, `PyIter_Next`,
@@ -233,13 +245,94 @@ def _code_part(line):
     return line
 
 
-def scan(text, stats=None):
+# ---------------------------------------------- loop bodies and helpers ----
+# (2026-11-09, lane P2's report) A per-element Python read moved behind a
+# helper call hid the work from the loop. A loop's body is read with ONE level
+# of the helpers it calls: a top-level def of the same file, or one imported
+# from a door module (`from bindings.x import y`, `from providers.python.x
+# import y`).
+#   PY_READ   a per-element Python-object read or Python call in the body
+#   PY_CALL   Python code being called (what an unpack loop must never do)
+#   TYPED     a write into a typed native buffer
+# A loop whose body reads Python elements keeps a driver-loop tag only when the
+# vocabulary judges it structure: "could not judge" no longer passes.
+PY_READ = re.compile(r"\bPy\w*_GetItem\w*|\bPySequence_\w+|\bPyIter_Next\b|\bPyObject_GetIter\b|\bp3_item\s*\("
+                     r"|\bpy_(?:call|getitem|item|getattr|attr)\w*\s*\(|\bPyObject_(?:Call|GetAttr|GetItem)\w*"
+                     r"|\(\s*py\s*=|\bPython\.\w+\s*\(|\.__getitem__\b")
+PY_CALL = re.compile(r"\bpy_call\w*\s*\(|\bPyObject_Call\w*|\bcallable\b|__call__|\bPython\.\w+\s*\("
+                     r"|\bpy_(?:getattr|attr)\w*\s*\(|\bPyObject_GetAttr\w*|\.\s*__\w+__\s*\(")
+TYPED = re.compile(r"\]\s*=[^=]|\.append\(|\bstore\w*\s*[\[(]|\binit_pointee\w*\s*\(")
+CALLEE = re.compile(r"(?<![\w.])([A-Za-z_]\w*)\s*\(")
+DEF = re.compile(r"^(?:def|fn)\s+(\w+)")
+IMPORT = re.compile(r"^from\s+((?:bindings|providers\.python)\.[\w.]+)\s+import\s+(.*)$")
+# `# unpack: one pass over the caller's <what>`: the one declared pass over a
+# caller's Python list or tuple in the UNPACK step (docs/plans/
+# PYTHON_AT_THE_BOUNDARY.md). It holds only in a boundary file, on a loop whose
+# body (with one level of helpers) writes a typed native buffer and calls no
+# Python code. An accepted unpack loop is still an `unpack` hit: the baseline
+# counts every one and only shrinks, so a new one is refused like any hit.
+UNPACK_TAG = re.compile(r"#\s*unpack:\s*one pass over the caller's\s+\S")
+
+
+def is_boundary(path):
+    """The files where an unpack tag may stand."""
+    name = path.rsplit("/", 1)[-1]
+    return ((path.startswith("providers/python/") and name.endswith("_pyapi.mojo"))
+            or (path.startswith("bindings/") and "/" not in path[len("bindings/"):]
+                and (name.startswith("_mojolearn") or name.startswith("admitted_")
+                     or name in ("classical_pandas.mojo", "sequential_inputs.mojo"))))
+
+
+def top_defs(text):
+    """{name: body code text} of the top-level defs of one file."""
+    out, cur, body = {}, None, []
+    for raw in text.splitlines():
+        m = DEF.match(raw)
+        if m or (raw[:1].strip() and not raw.startswith(("#", ")", "]", "@")) and cur):
+            if cur:
+                out[cur] = "\n".join(body)
+            cur, body = (m.group(1), []) if m else (None, [])
+            continue
+        if cur:
+            body.append(_code_part(raw))
+    if cur:
+        out[cur] = "\n".join(body)
+    return out
+
+
+def door_imports(text):
+    """{alias: (door module path, name)} of the helpers a file imports from door modules."""
+    out = {}
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        m = IMPORT.match(lines[i])
+        if m:
+            rest = m.group(2)
+            if "(" in rest and ")" not in rest:
+                while i + 1 < len(lines) and ")" not in rest:
+                    i += 1
+                    rest += " " + lines[i]
+            path = m.group(1).replace(".", "/") + ".mojo"
+            for part in rest.replace("(", " ").replace(")", " ").split(","):
+                bits = part.split("#")[0].split()
+                if bits:
+                    out[bits[2] if len(bits) >= 3 and bits[1] == "as" else bits[0]] = (path, bits[0])
+        i += 1
+    return out
+
+
+def scan(text, stats=None, path="", ext_defs=None):
     """[(line number, kind, code)] of the loop, inline and launch hits in one
-    shell file (kinds: loop, false-tag, small-bound, inline, launch). stats, a
-    Counter, receives the accepted tags: driver-structure, driver-unknown
-    (could not judge) and small-loop."""
+    shell file (kinds: loop, false-tag, small-bound, unpack, false-unpack,
+    inline, launch). stats, a Counter, receives the accepted tags:
+    driver-structure, driver-unknown (could not judge), small-loop and unpack.
+    ext_defs: {alias: body} of helpers imported from door modules."""
     out = []
     lines = text.splitlines()
+    codes = [_code_part(r) for r in lines]
+    defs = dict(ext_defs or {})
+    defs.update(top_defs(text))
     in_doc = None
     for n, raw in enumerate(lines, 1):
         s = raw.strip()
@@ -247,7 +340,7 @@ def scan(text, stats=None):
             if in_doc in s:
                 in_doc = None
             continue
-        q = '"""' if '"""' in s else ("'''" if "'''" in s else None)
+        q = '"""' if '"""' in s else ("\'\'\'" if "\'\'\'" in s else None)
         if q:
             # a line with a triple quote is docstring or string text, never a loop or a launch
             if s.count(q) % 2 == 1:
@@ -255,9 +348,10 @@ def scan(text, stats=None):
             continue
         if not s or s.startswith("#"):
             continue
-        code = _code_part(raw)
+        code = codes[n - 1]
         if LOOP.match(code):
-            kind = _loop_kind(raw, code, lines[n - 2] if n >= 2 else "", stats)
+            kind = _loop_kind(raw, code, lines[n - 2] if n >= 2 else "", stats,
+                              body=_loop_body(codes, n - 1, defs), path=path)
             if kind:
                 out.append((n, kind, s))
         if LAUNCH.search(code):
@@ -267,16 +361,42 @@ def scan(text, stats=None):
     return out
 
 
-def _loop_kind(raw, code, prev, stats=None):
+def _loop_body(codes, i, defs):
+    """The code of the loop at index i: its header, its indented body, and the
+    bodies of the helpers they call (one level)."""
+    ind = len(codes[i]) - len(codes[i].lstrip())
+    body = [codes[i]]
+    for c in codes[i + 1:]:
+        if c.strip() and len(c) - len(c.lstrip()) <= ind:
+            break
+        body.append(c)
+    own = "\n".join(body)
+    seen = set()
+    extra = []
+    for m in CALLEE.finditer(own):
+        name = m.group(1)
+        if name in defs and name not in seen:
+            seen.add(name)
+            extra.append(defs[name])
+    return own + "\n" + "\n".join(extra)
+
+
+def _loop_kind(raw, code, prev, stats=None, body="", path=""):
     """None for a loop whose tag holds, else the hit kind (see scan)."""
     comment = raw[len(code):]
     above = prev.strip() if prev.strip().startswith("#") else ""
     for tag_text in (comment, above):
+        if UNPACK_TAG.search(tag_text):
+            if not is_boundary(path) or PY_CALL.search(body) or not TYPED.search(body):
+                return "false-unpack"
+            if stats is not None:
+                stats["unpack"] += 1
+            return "unpack"
         d = DRIVER_TAG.search(tag_text)
         if d:
             source, targets = loop_parts(code)
             verdict, _word = judge_loop(source, targets, d.group("what"))
-            if verdict == "data":
+            if verdict == "data" or (verdict == "unknown" and PY_READ.search(body)):
                 return "false-tag"
             if stats is not None:
                 stats["driver-" + verdict] += 1
@@ -348,11 +468,23 @@ def hook_workers():
 
 
 def _scan_many(items):
-    """[(path, hits, stats)] for [(path, text)]: one worker's share."""
+    """[(path, hits, stats)] for [(path, text, imported helper bodies)]: one worker's share."""
     out = []
-    for p, t in items:
+    for p, t, ext in items:
         st = Counter()
-        out.append((p, scan(t, st), st))
+        out.append((p, scan(t, st, p, ext), st))
+    return out
+
+
+def _ext_defs(text, all_texts, cache):
+    """{alias: body} of the helpers text imports from door modules."""
+    out = {}
+    for alias, (mod, name) in door_imports(text).items():
+        if mod in all_texts:
+            if mod not in cache:
+                cache[mod] = top_defs(all_texts[mod])
+            if name in cache[mod]:
+                out[alias] = cache[mod][name]
     return out
 
 
@@ -360,11 +492,12 @@ def hits_at(ref, paths=None, stats=None):
     """[(path, line, kind, code)] at ref, sorted by path and line (only `paths`,
     if given). The files are split across every core (one worker per core);
     stats, a Counter, receives the accepted tag counts."""
-    blobs = _shell_blobs(ref)
-    if paths is not None:
-        blobs = {p: s for p, s in blobs.items() if p in paths}
-    texts = _read(blobs.values())
-    items = [(p, texts[blobs[p]]) for p in sorted(blobs)]
+    allb = _shell_blobs(ref)
+    blobs = allb if paths is None else {p: s for p, s in allb.items() if p in paths}
+    texts = _read(allb.values())
+    by_path = {p: texts[sha] for p, sha in allb.items()}
+    cache = {}
+    items = [(p, by_path[p], _ext_defs(by_path[p], by_path, cache)) for p in sorted(blobs)]
     workers = min(hook_workers(), max(1, len(items) // 64))
     if workers > 1:
         import multiprocessing
@@ -432,6 +565,11 @@ _WHAT = {
     "false-tag": "false driver-loop tag: the loop walks data, not model structure; move it into the kernel file",
     "small-bound": "small-loop note without a constant bound (it needs a literal or an UPPER_CASE constant the "
                    "loop uses); move the loop into the kernel file",
+    "unpack": "unpack loop not in the baseline (every accepted `# unpack:` tag is counted and the count only "
+              "shrinks; rows main lacks are refused)",
+    "false-unpack": "false unpack tag: `# unpack: one pass over the caller's <what>` holds only in a boundary "
+                    "file, on a loop whose body (with one level of helpers) writes a typed native buffer and calls "
+                    "no Python code",
     "inline": "Python iteration inside an expression in a shell file (b.sorted/b.map/b.zip/.tolist/"
               "PyObject_GetIter/PyIter_Next/itertools/.fromkeys); move it into the kernel file",
     "launch": "kernel launch in a shell file; move it into the kernel file",
@@ -486,12 +624,14 @@ def check_tree(ref, branch=False, baseline_file=None):
     kinds = Counter(h[2] for h in hits)
     print(f"no_compute_in_shells: {len(hits)} hits in {len({h[0] for h in hits})} of {len(_shell_blobs(sha))} shell .mojo files scanned at {sha[:9]} "
           f"({kinds['loop']} untagged loops, {kinds['false-tag']} false driver-loop tags, "
-          f"{kinds['small-bound']} small-loop notes without a constant bound, {kinds['inline']} inline iterations, "
+          f"{kinds['small-bound']} small-loop notes without a constant bound, {kinds['false-unpack']} false unpack "
+          f"tags, {kinds['inline']} inline iterations, "
           f"{kinds['launch']} launches; baseline {sum(base.values())}); "
           f"per directory: {_per_dir(hits)}", file=sys.stderr)
     print(f"no_compute_in_shells: accepted tags: {stats['driver-structure']} driver-loop tags judged structure, "
           f"{stats['driver-unknown']} driver-loop tags could not be judged (kept), "
-          f"{stats['small-loop']} small-loop notes with a constant bound", file=sys.stderr)
+          f"{stats['small-loop']} small-loop notes with a constant bound, {stats['unpack']} unpack loops "
+          f"(counted in the baseline)", file=sys.stderr)
     for (p, c), n in sorted(grown.items()):
         print(f"no_compute_in_shells: baseline row {p}: {c} (x{n}) is not in main's baseline; "
               f"the baseline only shrinks", file=sys.stderr)
