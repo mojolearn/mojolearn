@@ -151,6 +151,10 @@ retired with a reason within two weeks. Applies to hardware, firmware and softwa
   full record with reuse behind a flag.
 - Cross-vendor agreement is always checked in full. A lane whose newest result is bad is fixed in code, then
   recorded.
+- Andrew says when it is time to release (2026-11-09). No agent starts, schedules or proposes a release
+  date. 0.8.67 is not rushed: the fixes matter most. The Python-at-the-boundary rollout
+  (`docs/plans/PYTHON_AT_THE_BOUNDARY.md`: Python objects only in the unpack and pack files of each
+  public call, Mojo values everywhere else) is part of 0.8.67 and gates it.
 
 ## Measurement and fairness
 
