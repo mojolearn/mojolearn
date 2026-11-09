@@ -118,7 +118,7 @@ def admit_family_input(source: PythonObject, ndim: Int, name: String, context: P
 
 def admit_family_meta(source: PythonObject, ndim: Int, name: String, context: PythonObject,
                       dense: Bool = False, finite: Bool = False, admitted: Bool = False,
-                      empty: Bool = False) raises -> ArrayMetadata:
+                      empty: Bool = False, refusal: String = "") raises -> ArrayMetadata:
     """The admitted float32 C-order words of a family door's array input, as
     its metadata record: `keep` is the input itself when it already is
     float32 in C order (borrowed, never written), otherwise one cast copy
@@ -127,13 +127,15 @@ def admit_family_meta(source: PythonObject, ndim: Int, name: String, context: Py
     words are not tested (as `_buffer.as_f32_c`). `admitted`: `source` is a
     view classical_view returned in the same native call. `empty` admits a
     view with no words (the cast of an already checked view, which
-    `_buffer.as_f32_c`'s cast step never refused)."""
+    `_buffer.as_f32_c`'s cast step never refused). `refusal`, when given,
+    is the door's own wording of the non-finite refusal."""
     var snapshot = admit_family_input(source, ndim, name, context, dense, admitted, empty)
-    admit_family_cast(snapshot, name, context, finite)
+    admit_family_cast(snapshot, name, context, finite, refusal)
     return snapshot^
 
 
-def admit_family_cast(mut snapshot: ArrayMetadata, name: String, context: PythonObject, finite: Bool = False) raises:
+def admit_family_cast(mut snapshot: ArrayMetadata, name: String, context: PythonObject, finite: Bool = False,
+                      refusal: String = "") raises:
     """The second step of `admit_family_meta` on an `admit_family_input`
     record: borrow a float32 C-order input, else cast it once (row tasks
     across the host's cores) into an owned Array recorded on `snapshot`;
@@ -155,6 +157,8 @@ def admit_family_cast(mut snapshot: ArrayMetadata, name: String, context: Python
                                _AF_F32P(unsafe_from_address=address))
         snapshot.replace_f32(result, address)
     if finite and not ok:
+        if refusal.byte_length() > 0:
+            raise Error(refusal)
         raise Error("Input " + name + " contains NaN or infinity")
 
 
@@ -171,11 +175,11 @@ def admitted_family_x(snapshot: ArrayMetadata, source: PythonObject, finite: Boo
 
 def admit_family(source: PythonObject, ndim: Int, name: String, context: PythonObject,
                  dense: Bool = False, finite: Bool = False, admitted: Bool = False,
-                 empty: Bool = False) raises -> AdmittedX:
+                 empty: Bool = False, refusal: String = "") raises -> AdmittedX:
     """`admit_family_meta` as the AdmittedX contract: `.array` the float32
     C-order array the kernels read, `.borrowed` when it is the input's own
     storage."""
-    var snapshot = admit_family_meta(source, ndim, name, context, dense, finite, admitted, empty)
+    var snapshot = admit_family_meta(source, ndim, name, context, dense, finite, admitted, empty, refusal)
     return admitted_family_x(snapshot, source, finite)
 
 

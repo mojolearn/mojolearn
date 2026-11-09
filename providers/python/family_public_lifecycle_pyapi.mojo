@@ -229,7 +229,10 @@ def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, oper
         columns = Int(py=shape[1])
         _ = admitted.add_input(admitted_input_shape(x_index, source, source, shape, ADMITTED_SPARSE_OTHER))
     elif not (spec.graph and py_type(source) is b.tuple):
-        var snapshot = admit_family_meta(source, 2, "X", context, True)
+        # The finiteness test rides in the admission (the cast's own verdict,
+        # or one parallel scan of a borrowed X): no second pass over X.
+        var snapshot = admit_family_meta(source, 2, "X", context, True, finite=spec.scan,
+                                         refusal="Input X contains NaN or infinity (" + name + ").")
         rows = snapshot.shape[0]
         columns = snapshot.shape[1]
         # The snapshot's buffer and owner, recorded before any refusal below
@@ -240,11 +243,6 @@ def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, oper
             raise Error("Found array with 0 sample(s) (shape=(0, " + String(columns) + ")) while a minimum of 1 is required by " + name + ".")
         if columns == 0 and not spec.graph:
             raise Error("Found array with 0 feature(s) (shape=(" + String(rows) + ", 0)) while a minimum of 1 is required by " + name + ".")
-        if spec.scan:
-            # The shared exponent-mask scan (decomp_input_pyapi uses it too):
-            # no per-element isfinite branch with a raise in the loop body.
-            if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=snapshot.source.addr), snapshot.count):
-                raise Error("Input X contains NaN or infinity (" + name + ").")
         if spec.replace:
             # Perf: a query only reads X (its owners write separate outputs),
             # so an admitted C-order float32 X that is not a readonly view is

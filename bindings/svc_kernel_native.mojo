@@ -24,7 +24,7 @@
 # no resident entry for them.
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.admitted_family import admit_family, admit_family_meta, admit_family_weights
+from bindings.admitted_family import admit_family, admit_family_copied, admit_family_meta, admit_family_weights
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value
 from bindings.host_inference_scalars import host_inference_scalar
@@ -981,7 +981,7 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var fields = py_fields(model)
     _svm_validate(model, fields, True, context)
     var x_meta = admit_family_meta(args[1], 2, "X", context, True)
-    py_setitem(fields, PythonObject("input_copied_"), PythonObject(x_meta.copied))
+    py_setitem(fields, PythonObject("input_copied_"), PythonObject(admit_family_copied(x_meta, args[1])))
     var x = x_meta.keep
     var y = args[2]
     var parsed = _as_labels(y, context)
@@ -1298,7 +1298,7 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var fields = py_fields(model)
     _svm_validate(model, fields, False, context)
     var x_meta = admit_family_meta(args[1], 2, "X", context, True)
-    py_setitem(fields, PythonObject("input_copied_"), PythonObject(x_meta.copied))
+    py_setitem(fields, PythonObject("input_copied_"), PythonObject(admit_family_copied(x_meta, args[1])))
     var x = x_meta.keep
     var n_rows = x_meta.shape[0]
     var n_cols = x_meta.shape[1]

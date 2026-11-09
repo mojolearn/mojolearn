@@ -216,10 +216,9 @@ def hierarchy_public_begin(model: PythonObject, operation: String, args: PythonO
     var source = args[1]
     if host_sparse_format(source).byte_length() > 0:
         raise Error("NotImplementedError: mojolearn AgglomerativeClustering: sparse X is refused; pass a dense matrix")
-    var x = admit_family_meta(source, 2, "X", context)
-    # p3-neighbors-cluster: one eight-lane exponent-bit pass (core/p3nc_scan.mojo).
-    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=x.source.addr), x.count):
-        raise Error("Input X contains NaN or infinity (AgglomerativeClustering).")
+    # The finiteness test rides in the admission (no second pass over X).
+    var x = admit_family_meta(source, 2, "X", context, finite=True,
+                              refusal="Input X contains NaN or infinity (AgglomerativeClustering).")
     if Int(py=depth) == 0:
         if fitting:
             _ = hierarchy_target(args[2], x.shape[0], "AgglomerativeClustering", False, False, False, context)

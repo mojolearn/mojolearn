@@ -180,16 +180,15 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
     var first = 0 if operation == "family_xn_knn_nn_fit" else 1
     var source = args[first]
     var name = classical_estimator_name(model)
-    var snapshot = admit_family_meta(source, 2, "X", context, True)
-    var rows = snapshot.shape[0]
-    var columns = snapshot.shape[1]
     # KNNImputer accepts NaNs. The other local/nearest estimators had a public
     # finite scan; KDE keeps its existing fit/score scan and copy reporting.
-    if not operation.startswith("family_xn_loc_imp_") and not operation.startswith("family_xn_kde_"):
-        # p3-neighbors-cluster: one eight-lane exponent-bit pass over the
-        # admitted words (core/p3nc_scan.mojo), not a scalar isfinite loop.
-        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=snapshot.source.addr), snapshot.count):
-            raise Error("Input X contains NaN or infinity (" + name + ").")
+    # The test rides in the admission (the cast's own verdict, or one
+    # parallel scan of a borrowed X): no second pass over X.
+    var scan = not operation.startswith("family_xn_loc_imp_") and not operation.startswith("family_xn_kde_")
+    var snapshot = admit_family_meta(source, 2, "X", context, True, finite=scan,
+                                     refusal="Input X contains NaN or infinity (" + name + ").")
+    var rows = snapshot.shape[0]
+    var columns = snapshot.shape[1]
     if not fitting and Int(py=depth) == 0:
         var width = py_get(fields, "n_features_in_")
         if width is not None:
