@@ -59,7 +59,7 @@ from sequence.moe_grouped_fold import MOE_FOLD_SLOTS, MOE_GROUPED_GEMM, _fold_dr
 
 # TOMBSTONE: OP_MOEB_HIDDEN_FWD (2900) / OP_MOEB_OUT_FWD (2901) (duplicate codes of OP_MOE_HIDDEN / OP_MOE_OUT's item
 # bodies) deleted 2026-11-09 by lane/x9-moe-gcn-rules; code recoverable at origin/integ/pre-0867-w2 f59d913b0b.
-# Restore: git apply experiments/removed/OP_MOEB_FWD_DUPLICATES.patch
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch (the whole deletion, code files)
 comptime OP_MOEB_GROUP_COUNT = 2902
 comptime OP_MOEB_GROUP_TOTAL = 2903
 comptime OP_MOEB_GROUP_BASE = 2904
