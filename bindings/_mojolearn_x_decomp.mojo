@@ -22,7 +22,7 @@ from x_decomp.decomp_owner_dev import DevDecomp
 from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, kpca_eig_py, rp_fit_py, rp_project_py
 from std.sys.info import has_apple_gpu_accelerator
 from x_decomp.mcd_experiments import mcd_experiment_count
-from x_decomp.mcd_bmma import mcd_fast_batch_count, MCD_G1_GRAM, MCD_G1_AUDIT, mcd_g1_count, mcd_g1_last
+from x_decomp.mcd_bmma import mcd_fast_batch_count
 
 from experiments.apple_fast.gemm.scoped_dispatch import shared_sub_count
 
@@ -36,14 +36,8 @@ def mcd_fast_batch_count_py() raises -> PythonObject:
     return PythonObject(mcd_fast_batch_count())
 
 
-def mcd_g1_gram_on_py() raises -> PythonObject:
-    return PythonObject(Int(MCD_G1_GRAM))
-
-def mcd_g1_gram_count_py(index: PythonObject) raises -> PythonObject:
-    return PythonObject(mcd_g1_count(Int(py=index)))
-
-def mcd_g1_gram_last_py(index: PythonObject) raises -> PythonObject:
-    return PythonObject(mcd_g1_last(Int(py=index)))
+# TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (its witnesses mcd_g1_gram_on, mcd_g1_gram_count, mcd_g1_gram_last) deleted 2026-11-08 by @K0SHA_G1@; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
 
 from providers.python.x_decomp_kit_device_pyapi import mcd_dev_py
 from providers.python.x_decomp_chi2_dev_pyapi import chi2_quantile_dev_py, consistency_factor_dev_py
@@ -116,9 +110,8 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
-        m.def_function[mcd_g1_gram_on_py]("mcd_g1_gram_on")
-        m.def_function[mcd_g1_gram_count_py]("mcd_g1_gram_count")
-        m.def_function[mcd_g1_gram_last_py]("mcd_g1_gram_last")
+        # TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (mcd_g1_gram_on, mcd_g1_gram_count, mcd_g1_gram_last) deleted 2026-11-08 by @K0SHA_G1@; code recoverable at 41ffcec665.
+        # Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
         m.def_function[gemm_py[DevExec]]("x_decomp_gemm")
         m.def_function[ew_py[DevExec]]("x_decomp_ew")
         m.def_function[colsum_py[DevExec]]("x_decomp_colsum")

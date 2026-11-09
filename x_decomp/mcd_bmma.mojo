@@ -30,44 +30,12 @@ from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-from gemm.afn_apple_fast import AFN_GEMM_APPLE
-from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel
 from x_decomp.mcd_experiments import MCD_FAST_ACTIVE_COMPACT, McdCompactWorkspace, compact_candidate_count, mcd_experiment_hit
 
-# M3 F02/mcd 2026-10-06 MEASURED after real score/prerequisite repair:
-# eight EE/MCD fit timings B/A0.8322/0.9304/0.9215/0.9316/0.9202/0.9333/
-# 0.9409/0.9472, captured task quality equal, sharedGram reach positive.
-# One warmup+score; promising scoped winner, default OFF pending existing
-# broader fitted-state/support/rank admission. Separate ordered-covariance
-# HOLD is not waived. Original failures retained; no identity/compile retest.
-# Evidence ab-20261006/repairs-next-5ae0c6f7a/results/F02/mcd.
-comptime MCD_G1_GRAM = AFN_GEMM_APPLE and is_defined["MOJOLEARN_MCD_FAST_G1_GRAM"]()
-# M3 measured reach audit; opt-in only, no production timing default.
-comptime MCD_G1_AUDIT = AFN_GEMM_APPLE and is_defined["MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"]()
-# LEGACY, default OFF: the old window admitted only d 129..256 features and
-# K 128..1023 selected rows, which brackets the board (istella 220 features).
-# Removed as benchmark-tuned on 2026-10-04; the window-free replacement is
-# UNMEASURED.
-comptime MCD_G1_LEGACY_WINDOW = is_defined["MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM"]()
-
-struct MCDG1Audit(Defaultable, Movable):
-    var counts: InlineArray[Int, 4]
-    var last: InlineArray[Int, 7]
-    def __init__(out self):
-        self.counts = InlineArray[Int, 4](fill=0)
-        self.last = InlineArray[Int, 7](fill=0)
-
-comptime MCD_G1_STATE = _Global[StorageType=MCDG1Audit, name="MCDG1GramAuditV1", init_fn=MCDG1Audit.__init__]
-
-def mcd_g1_count(index: Int) raises -> Int:
-    if index < 0 or index >= 4:
-        raise Error("MCD G1 count index out of range")
-    return MCD_G1_STATE.get_or_create_ptr()[].counts[index]
-
-def mcd_g1_last(index: Int) raises -> Int:
-    if index < 0 or index >= 7:
-        raise Error("MCD G1 metadata index out of range")
-    return MCD_G1_STATE.get_or_create_ptr()[].last[index]
+# TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (NEUTRAL: rab3-mcdg1 istella +0.1%, taxi -1.2%) and its audit / window defines
+# MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT, MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM deleted 2026-11-08 by @K0SHA_G1@; code recoverable at
+# 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
@@ -269,22 +237,8 @@ def mcd_bmma_kernel[SPLIT: Bool, ORDERED: Bool = False, COMPACT: Bool = False](
                         c.unsafe_store(gi * n + gj, v)
 
 
-def mcd_g1_gram_batched_kernel(
-    c: F32Ptr, a: F32Ptr, gate: I32Ptr, gate_all: Int32,
-    m: Int32, k: Int32, a_bs: Int32, c_bs: Int32,
-):
-    """Non-split TN self-Gram, with the incumbent candidate gate and strides.
-    The common G1 implementation reads block_idx.x; z selects only the batch.
-    Every block of an inactive candidate returns before touching any operand.
-    """
-    var z = Int(block_idx.z)
-    if gate_all == 0 and gate.unsafe_load(z) == 0:
-        return
-    var x = a + z * Int(a_bs)
-    scoped_kernel[64, 64, False](
-        c + z * Int(c_bs), x, x, m, m, k,
-        Int32(1), m, m, Int32(1), k,
-    )
+# TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (mcd_g1_gram_batched_kernel) deleted 2026-11-08 by @K0SHA_G1@; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
 
 
 def mcd_bmma_zero_kernel(c: F32Ptr, gate: I32Ptr, gate_all: Int32, nc: Int32, cells: Int32, c_bs: Int32):
@@ -318,43 +272,9 @@ def launch_gemm_mma_batched(
     if tiles < DFG_BLOCK_TARGET and k >= 2 * DFG_MIN_SPLIT_STEPS:
         splits = min(DFG_BLOCK_TARGET // tiles, k // DFG_MIN_SPLIT_STEPS)
     var ga = Int32(1) if gate_all else Int32(0)
-    # Correctness limits only, no shape window. The batched kernel is a TN
-    # self-Gram (C = A^T A, one operand pointer and stride), so it needs
-    # m == n, ta, not tb and a == b with equal batch strides. It is the
-    # non-split scoped_kernel[64, 64, False], whose tiles equal MB_BM x MB_BN,
-    # so it applies only where the incumbent plan picks splits == 1 (a split
-    # plan needs the zero seed and atomics below). Every index is
-    # bounds-checked, so any m, k >= 1 is correct. Shapes and batch strides
-    # travel as Int32, so they must fit in Int32. No overlap of C with A.
-    var eligible = (
-        m == n and ta and not tb and a == b and a_bs == b_bs and splits == 1
-        and a_bs >= m * k and c_bs >= m * n and c != a and c != b
-        and max(a_bs, max(c_bs, max(m * k, m * n))) <= 2147483647
-    )
-    comptime if MCD_G1_LEGACY_WINDOW:
-        eligible = eligible and m >= 129 and m <= 256 and k >= 128 and k <= 1023
-    comptime if MCD_G1_AUDIT:
-        var state = MCD_G1_STATE.get_or_create_ptr()
-        state[].counts[0] += 1
-        if eligible:
-            state[].counts[1] += 1
-            state[].counts[3] += nc  # potential slots, NOT active device candidates
-            state[].last[0] = m
-            state[].last[1] = k
-            state[].last[2] = n
-            state[].last[3] = nc
-            state[].last[4] = a_bs
-            state[].last[5] = c_bs
-            state[].last[6] = splits
-    comptime if MCD_G1_GRAM:
-        if eligible:
-            comptime if MCD_G1_AUDIT:
-                MCD_G1_STATE.get_or_create_ptr()[].counts[2] += 1
-            ctx.enqueue_function[mcd_g1_gram_batched_kernel](
-                c, a, gate, ga, Int32(m), Int32(k), Int32(a_bs), Int32(c_bs),
-                grid_dim=(tiles, 1, nc), block_dim=(MB_NT, 1, 1),
-            )
-            return
+    # TOMBSTONE: MOJOLEARN_MCD_FAST_G1_GRAM (the TN self-Gram route, its audit counters and legacy window) deleted
+    # 2026-11-08 by @K0SHA_G1@; code recoverable at 41ffcec665.
+    # Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
     # F06 PENDING: reduced active grid is an explicit FAST Apple experiment.
     # Count-read completion/scan overhead is included in whole-call timing.
     # Original IDs own output slots, gate rechecks and split-K windows/seeds.

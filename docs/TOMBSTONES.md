@@ -412,6 +412,7 @@ in the tables after the sections.
 | [`MOJOLEARN_MCD_BATCH_COMPAT`](#mojolearn_mcd_batch_compat) | Decomp | HOLD-quality; the opt-in name only | 2026-11-08 | [MOJOLEARN_MCD_BATCH_COMPAT.patch](../experiments/removed/MOJOLEARN_MCD_BATCH_COMPAT.patch) |
 | [`MOJOLEARN_CHOL_FAST_NB512`](#mojolearn_chol_fast_nb512) | Linear (Cholesky) | HOLD-speed | 2026-11-08 | [MOJOLEARN_CHOL_FAST_NB512.patch](../experiments/removed/MOJOLEARN_CHOL_FAST_NB512.patch) |
 | [`MOJOLEARN_LLE_FAST_DEV_LU`](#mojolearn_lle_fast_dev_lu) | Decomp | HOLD-quality | 2026-11-08 | [MOJOLEARN_LLE_FAST_DEV_LU.patch](../experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch) |
+| [`MOJOLEARN_MCD_FAST_G1_GRAM`](#mojolearn_mcd_fast_g1_gram) | Decomp (+ MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT, MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM) | NEUTRAL | 2026-11-08 | [MOJOLEARN_MCD_FAST_G1_GRAM.patch](../experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3845,3 +3846,17 @@ public runtime qualification; this entry is not release or performance evidence.
   IDENTICAL `IDN_LU_RESIDENT` entry (x_decomp/resident.mojo), which this did not touch.
 - Deleted by `@K0SHA_LLE@`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch`.
   Refusal in `core/experiment_guards_decomposition.mojo`; no `grid_controls` entry existed.
+
+### MOJOLEARN_MCD_FAST_G1_GRAM
+
+- What it tried: MinCovDet / EllipticEnvelope's batched TN self-Gram (C = A^T A per candidate) through the non-split
+  `scoped_kernel[64, 64, False]` (`mcd_g1_gram_batched_kernel`, x_decomp/mcd_bmma.mojo) where the incumbent plan picks
+  one split, FAST + Apple. `MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT` counted its reach; `MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM`
+  restored the benchmark-tuned d 129..256 / K 128..1023 window (removed as dimension targeting on 2026-10-04).
+- Verdict: NEUTRAL, EXPERIMENTS.md (lane/apple-fast-mcd-g1-gram-remote; rab3-mcdg1, Verdicts batch 4): istella +0.1%, taxi
+  -1.2%; the later F02/mcd measurement (B/A 0.83-0.95, ab-20261006) was never admitted on fitted state.
+- Deleted: the three defines, the kernel, the audit struct and counters, the three witness exports `mcd_g1_gram_on`,
+  `mcd_g1_gram_count`, `mcd_g1_gram_last` (and their `coverage_declared.tsv` rows), and `tools/mcd_g1_quality.py`.
+- Deleted by `@K0SHA_G1@`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch`
+  (x_decomp/mcd_bmma.mojo, bindings/_mojolearn_x_decomp.mojo). Refusal in `core/experiment_guards_decomposition.mojo`; no
+  `grid_controls` entry existed. The F02 manifests under `experiments/performance_ideas/F02/` are records and still name it.
