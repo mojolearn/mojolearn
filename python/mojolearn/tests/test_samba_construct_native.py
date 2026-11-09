@@ -44,7 +44,8 @@ def test_native_constructor_preserves_seeded_initialization_and_views(
     model = SambaStack.__new__(SambaStack)
     with monkeypatch.context() as patch:
         _poison(patch)
-        patch.setattr(samba, "_init_tensor", lambda *a: pytest.fail("Python initializer"))
+        # lane x6 deleted the Python initializer (_samba_impl._init_tensor)
+        assert not hasattr(samba, "_init_tensor")
         patch.setattr(training.AdamW, "__init__", lambda *a, **k: pytest.fail("Python optimizer construction"))
         patch.setattr(training.Generator, "normal", lambda *a: pytest.fail("Python RNG"))
         patch.setattr(training.Generator, "uniform", lambda *a: pytest.fail("Python RNG"))
