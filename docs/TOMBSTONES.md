@@ -3860,7 +3860,8 @@ public runtime qualification; this entry is not release or performance evidence.
 - Deleted: the three defines, the kernel, the audit struct and counters, the three witness exports `mcd_g1_gram_on`,
   `mcd_g1_gram_count`, `mcd_g1_gram_last` (and their `coverage_declared.tsv` rows), and `tools/mcd_g1_quality.py`.
 - Deleted by `a2159de2cb`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch`
-  (x_decomp/mcd_bmma.mojo, bindings/_mojolearn_x_decomp.mojo). Refusal in `core/experiment_guards_decomposition.mojo`; no
+  (x_decomp/mcd_bmma.mojo, bindings/_mojolearn_x_decomp.mojo); apply `MOJOLEARN_MCD_ORDERED_COV.patch` first (it was deleted
+  later in the same files). Refusal in `core/experiment_guards_decomposition.mojo`; no
   `grid_controls` entry existed. The F02 manifests under `experiments/performance_ideas/F02/` are records and still name it.
 
 ### MOJOLEARN_MCD_ORDERED_COV
