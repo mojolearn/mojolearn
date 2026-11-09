@@ -47,7 +47,7 @@ from ._array import Array
 from ._buffer import as_f32_c, as_i32_c, addr_ro, addr as _addr_rw, _as_typed, empty, full
 from . import _labels
 from . import _arena_io
-from ._mode import SklearnTagsMixin, available_if, _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
+from ._mode import SklearnTagsMixin, available_if, _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT, sklearn_tags as _sklearn_tags
 from ._native_declared_params import ENTRY as _DECLARED_PARAMS_SET, CONTEXT as _DECLARED_PARAMS_CONTEXT
 from ._native_robust_bridge import native_method as _native_robust_method
 
@@ -718,7 +718,9 @@ class RobustScaler(_PrepBase):
         return _ROBUST_CALL(self, "set_params", (params,), _ROBUST_CONTEXT)
 
     def __sklearn_tags__(self):
-        return _ROBUST_CALL(self, "tags", (), _ROBUST_CONTEXT)
+        # scikit-learn tag metadata is built in the Python compatibility
+        # layer; no native code calls into tag handling.
+        return _sklearn_tags(self)
 
     def __sklearn_is_fitted__(self):
         return _ROBUST_CALL(self, "is_fitted", (), _ROBUST_CONTEXT)
@@ -794,7 +796,7 @@ class MaxAbsScaler(_PrepBase):
         return _MAXABS_CALL(self, "set_params", (params,), _MAXABS_CONTEXT)
 
     def __sklearn_tags__(self):
-        return _MAXABS_CALL(self, "tags", (), _MAXABS_CONTEXT)
+        return _sklearn_tags(self)
 
     def __sklearn_is_fitted__(self):
         return _MAXABS_CALL(self, "is_fitted", (), _MAXABS_CONTEXT)

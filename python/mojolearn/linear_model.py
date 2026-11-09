@@ -28,7 +28,7 @@ from ._labels import (
     encode_labels, flatten_labels, sorted_classes, threshold_codes,
 )
 from . import _native_archive_bridge, _native_classical_bridge
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin, sklearn_tags as _sklearn_tags
 from ._sample_weight import check_sample_weight
 
 #: The model file formats (the classical host inference lane, 2026-09-13).
@@ -657,7 +657,9 @@ class LinearRegression(NumericModeMixin):
         return _native_classical(self, "is_fitted", (), _CLASSICAL)
 
     def __sklearn_tags__(self):
-        return _native_classical(self, "sklearn_tags", (), _CLASSICAL)
+        # scikit-learn tag metadata is built in the Python compatibility
+        # layer; no native code calls into tag handling.
+        return _sklearn_tags(self)
 
     def vendor_used(self):
         """The backend this estimator runs on.
@@ -936,7 +938,9 @@ class Ridge(NumericModeMixin):
         return _native_classical(self, "is_fitted", (), _CLASSICAL)
 
     def __sklearn_tags__(self):
-        return _native_classical(self, "sklearn_tags", (), _CLASSICAL)
+        # scikit-learn tag metadata is built in the Python compatibility
+        # layer; no native code calls into tag handling.
+        return _sklearn_tags(self)
 
     def vendor_used(self):
         """The backend this estimator runs on.

@@ -191,10 +191,6 @@ def _state_context():
                    native_module_type=ModuleType, not_fitted_bridges=_ERROR_BRIDGES,
                    not_fitted_reduce=_reduce_not_fitted, not_fitted_restore=_restore_not_fitted,
                    active_not_fitted_class=NotFittedError)
-    # The sklearn tag record layout is read natively from the loaded sklearn
-    # module the first time sklearn asks for tags (bindings/classical_tags.mojo),
-    # so connecting never imports the optional sklearn dependency.
-    context.update(classical_tag_plan=None, native_member_descriptor=MemberDescriptorType)
     context.update(connect_warnings())
     context.update(_classical_doors(_binding))
     archive_types = (io.BytesIO, io.FileIO, io.BufferedReader, io.BufferedWriter, io.BufferedRandom)

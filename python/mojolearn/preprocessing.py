@@ -17,7 +17,7 @@ from ._labels import is_bool
 
 from . import _backend, _serialize
 from ._arrays import _addr, _addr_ro
-from ._mode import PublicOutputsMixin
+from ._mode import PublicOutputsMixin, sklearn_tags as _sklearn_tags
 
 __all__ = ['MinMaxScaler', 'StandardScaler']
 
@@ -379,7 +379,9 @@ class MinMaxScaler(_ScalerProtocol):
         return _MINMAX_CALL(self, "set_params", (params,), _MINMAX_CONTEXT)
 
     def __sklearn_tags__(self):
-        return _MINMAX_CALL(self, "tags", (), _MINMAX_CONTEXT)
+        # scikit-learn tag metadata is built in the Python compatibility
+        # layer; no native code calls into tag handling.
+        return _sklearn_tags(self, preserves_dtype=["float32"])
 
     def __sklearn_is_fitted__(self):
         return _MINMAX_CALL(self, "is_fitted", (), _MINMAX_CONTEXT)
@@ -606,7 +608,7 @@ class StandardScaler(_ScalerProtocol):
         return _STANDARD_CALL(self, "set_params", (params,), _STANDARD_CONTEXT)
 
     def __sklearn_tags__(self):
-        return _STANDARD_CALL(self, "tags", (), _STANDARD_CONTEXT)
+        return _sklearn_tags(self, preserves_dtype=["float32"])
 
     def __sklearn_is_fitted__(self):
         return _STANDARD_CALL(self, "is_fitted", (), _STANDARD_CONTEXT)

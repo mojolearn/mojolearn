@@ -20,7 +20,8 @@ from bindings.classical_door_routes import (
 )
 from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
 from bindings.classical_pandas import classical_admit_value, classical_admit_fields
-from bindings.classical_tags import classical_tags
+# TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+# Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
 from bindings.classical_validate import classical_refuse_sparse, classical_estimator_name, classical_weight_refusal
 from bindings.classical_host_owner import classical_host_entries, classical_host_hash
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -241,9 +242,6 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             return result.steal_data()
         if operation == "is_fitted":
             result = classical_is_fitted(model)
-            return result.steal_data()
-        if operation == "sklearn_tags":
-            result = classical_tags(context)
             return result.steal_data()
         if operation == "model_sha256":
             if not Bool(py=py_get(context, "classical_explicit_cpu", False)):
