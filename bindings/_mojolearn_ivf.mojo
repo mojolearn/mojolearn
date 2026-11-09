@@ -55,7 +55,6 @@ from ivf.estimator import (
     ivf_flat_search_host,
 )
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import IvfFlatIndex
-from ivf.impl.neighbors.ivf_flat.ivf_flat_search import ivf_fast_balanced_hits
 from x_ann.stage_timer import AnnStages
 from x_ann.switches import ANN3_PREPARE
 from ivf.resident import (
@@ -479,9 +478,9 @@ def build__mojolearn_ivf() -> PythonObject:
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[ivf_numeric_mode_binding]("ivf_numeric_mode")
-        # NEVER RUN — PENDING MEASUREMENT. New candidate remains opt-in/default OFF.
-        comptime if is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"]():
-            m.def_function[ivf_fast_balanced_hits_binding]("ivf_fast_balanced_hits")
+        # TOMBSTONE: MOJOLEARN_IVF_FAST_BALANCED_TASKS (never measured, deleted) deleted 2026-11-09 by @K1SHA_IVF@; code
+        # recoverable at f59d913b0b (with its MOJOLEARN_IVF_FAST_BALANCED_AUDIT export ivf_fast_balanced_hits).
+        # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_BALANCED_TASKS.patch
         # TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by e760c256b; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_ivf.patch
         m.def_function[ivf_flat_build_binding]("ivf_flat_build")
@@ -500,5 +499,3 @@ def build__mojolearn_ivf() -> PythonObject:
     except e:
         abort(String("failed to create _mojolearn_ivf: ", e))
 
-def ivf_fast_balanced_hits_binding() raises -> PythonObject:
-    return PythonObject(ivf_fast_balanced_hits())

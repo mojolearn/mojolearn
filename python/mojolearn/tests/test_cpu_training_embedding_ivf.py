@@ -118,12 +118,9 @@ def test_bindings_register_the_gpu_names():
             device_only |= {"embedding_forward_dev", "embedding_backward_dev"} | {
                 "seq_tensor_" + op for op in ("alloc", "free", "upload", "download", "copy")}
         if name == "ivf":
-            # registered only under MOJOLEARN_IVF_FAST_BALANCED_AUDIT (a FAST
-            # device audit probe, default off; no Python caller)
-            device_only = {"ivf_fast_balanced_hits"}
             # lane gap-ivf: the resident build (taken via getattr, None on the
             # host binding) and its one-copy export of a resident index
-            device_only |= {"ivf_flat_build_resident", "ivf_flat_index_export"}
+            device_only = {"ivf_flat_build_resident", "ivf_flat_index_export"}
             # Device execution-plan bookkeeping has no host-buffer counterpart.
             device_only |= {"device_plan_enter", "device_plan_exit", "device_plan_log"}
         assert device_only <= gpu and not device_only & host

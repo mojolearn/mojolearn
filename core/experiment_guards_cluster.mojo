@@ -73,6 +73,10 @@ def _check_configuration() -> Bool:
     # one warmup + one scored fit per arm (docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md). Code recoverable at 1a76955b5^.
     # Restore: git apply experiments/removed/MOJOLEARN_RF_FAST_QSAMPLE.patch (or MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch)
     comptime assert not is_defined["MOJOLEARN_IVF_FAST_STRIDED_COARSE"](), "removed 2026-10-15 (lane/tombstone-qsample-ivfstride, 1a76955b5): IVF_FAST_STRIDED_COARSE (FAST coarse quantizer on the IDENTICAL strided trainset and start) was DROPPED-noise: M4 IVFSQIndex 500,000 x 128, n_lists 1024, n_probes 32 3276 -> 3260 ms, recall@8 0.8194 -> 0.8183. Restore with experiments/removed/MOJOLEARN_IVF_FAST_STRIDED_COARSE.patch."
+    # Lane k1-delete-unverdicted-fast (2026-11-09): Apple FAST experiments with no verdict, never to be measured.
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_BALANCED_TASKS.patch
+    comptime assert not is_defined["MOJOLEARN_IVF_FAST_BALANCED_TASKS"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_IVF_FAST_BALANCED_TASKS, F14, the Apple FAST IVF search through the bounded list tasks of ivf_balanced_scan, was never run (pending measurement) and will not be measured; code at f59d913b0b; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_IVF_FAST_BALANCED_AUDIT, the reach counter of MOJOLEARN_IVF_FAST_BALANCED_TASKS (ivf_fast_balanced_hits), deleted with it; code at f59d913b0b; see docs/TOMBSTONES.md"
     return True
 
 
