@@ -465,6 +465,12 @@ in the tables after the sections.
 | [`MOJOLEARN_RSVD_FAST_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, FAST + Apple) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_IDN_RSVD_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, IDENTICAL) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_RSVD_FAST_DEVSCAN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd finiteness scan, FAST + Apple) | removed (KEPT default, superseded: parallel host scan of the one admission path) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`MOJOLEARN_IDN_DECODE_RESIDENT_IO` (transformer decode session arm)](#transformer-on-the-attention-step-op-2026-11-09) | Neural (TransformerDecodeSession step) | removed (superseded: the session runs the attention step op; default off, never measured) | 2026-11-09 | [MOJOLEARN_IDN_DECODE_RESIDENT_IO_TRANSFORMER.patch](../experiments/removed/MOJOLEARN_IDN_DECODE_RESIDENT_IO_TRANSFORMER.patch) |
+| [`MOJOLEARN_TRANSFORMER_FRESH_PREFILL` / `MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL`](#transformer-on-the-attention-step-op-2026-11-09) | Neural (TransformerBlock stateless forward, GPU per-call entry) | removed (superseded: the block session's fresh prefill) | 2026-11-09 | [MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch) |
+| [`MOJOLEARN_TRANSFORMER_LEGACY_SETUP` / `MOJOLEARN_TRANSFORMER_SESSION_FRESH` (runtime switches)](#transformer-on-the-attention-step-op-2026-11-09) | Neural (TransformerBlock forward / backward setup) | removed (superseded: the block session is the one path) | 2026-11-09 | [MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch](../experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch) |
+| [`TransformerBlock._call_impl` (Python call paths)](#transformer-on-the-attention-step-op-2026-11-09) | Neural (TransformerBlock Python glue) | removed (dead: no caller) | 2026-11-09 | [TRANSFORMER_BLOCK_PY_CALL_PATHS.patch](../experiments/removed/TRANSFORMER_BLOCK_PY_CALL_PATHS.patch) |
+| [`_transformer_decode_host_tokens` (decode door host loop)](#transformer-on-the-attention-step-op-2026-11-09) | Neural (TransformerDecodeSession.decode, host) | removed (superseded: `transformer_decode_steps`, one call) | 2026-11-09 | [TRANSFORMER_DECODE_HOST_TOKEN_LOOP.patch](../experiments/removed/TRANSFORMER_DECODE_HOST_TOKEN_LOOP.patch) |
+| [`TransformerDecodeHandle.native_handle` (public session provider arm)](#transformer-on-the-attention-step-op-2026-11-09) | Neural (TransformerDecodeSession, MOJOLEARN_NEURAL_NATIVE_DISPATCH) | removed (superseded: the step-op session) | 2026-11-09 | [TRANSFORMER_DECODE_PROVIDER_ARM.patch](../experiments/removed/TRANSFORMER_DECODE_PROVIDER_ARM.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -4271,3 +4277,44 @@ lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Bits: none for any int32-range or
   lane/a3-admit-decomp-prep-metrics@0cb550c337.
 - `door_rows_call` (the `_arena_io._ROWS_CALL` connection in `_native_msel_dispatch.connect`): no reader after A5 deleted
   `door_rows_host`; removed from the glue and from tools/test_device_rows_door_cv.py.
+
+## Transformer on the attention step op (2026-11-09)
+
+Lane x4-transformer-on-executor (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X4), on
+origin/integ/pre-0867-w2 f59d913b0b.
+
+- The public `TransformerDecodeSession` on a GPU runs on `OPS_ATTN_STEP` (autograd/block_step_ops.mojo, lane X1):
+  `transformer/attn_step_session.mojo` packs the weights into the op's one weight buffer, the caches into its state
+  buffer and the position into its state word; step, forward, decode, export and load run `attn_step_run`, the body
+  `OpsSession._block_step` runs. The session's own LlamaDeviceWeights / KV cache / rotary table / stages are no longer
+  built for it (they stay for CausalLM layer sessions and fixed15_v1 until those move).
+- `MOJOLEARN_IDN_DECODE_RESIDENT_IO`, the transformer session arm (`_session_step_run_deferred`,
+  `_session_resident_io_open`, the deferred window and the two cache snapshots): default off, EXPERIMENTS.md row PENDING,
+  never measured; the session step it wrapped is now the step op's. Mamba-2's arm of the same define stays (X5).
+  Patch `experiments/removed/MOJOLEARN_IDN_DECODE_RESIDENT_IO_TRANSFORMER.patch` (transformer_binding_impl.mojo).
+- The GPU binding's per-call `transformer_forward_fresh` (`transformer_forward_fresh_binding`, descriptor op 4, the
+  `discard_cache` parameter of `_transformer_run`) and its build defines `MOJOLEARN_TRANSFORMER_FRESH_PREFILL` /
+  `MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL`, with `tools/transformer_fresh_prefill_leg.sh`: reached only under the
+  runtime switches `MOJOLEARN_TRANSFORMER_SESSION_FRESH=0` or `MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1`, which are removed
+  too (`bindings/neural_block_public.mojo` forward and backward, the `tools/neural_experiments.py` arms). The host
+  binding keeps its own `transformer_forward_fresh`. No measurement picked the session fresh prefill over the per-call
+  one on NVIDIA; the session is today's default and bits. RUN OWED: transformer-forward on NVIDIA (0.8.66 1.44x slower
+  than 0.8.55). Patch `experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch`; refusal in
+  `core/experiment_guards_neural.mojo`; no `grid_controls` entry existed.
+- `TransformerBlock._call`, `_call_impl`, `_call_fresh`, `_call_fresh_session`, `_call_int15`, `_admit_state_profile`,
+  `_weight_addrs` and the module helpers `_state_buf`, `_batch_tokens`, `_refuse_resident` in
+  `python/mojolearn/_transformer_impl.py`: no caller (forward, step and backward are the native `neural_block_*` door).
+  Patch `experiments/removed/TRANSFORMER_BLOCK_PY_CALL_PATHS.patch`.
+- `_transformer_decode_host_tokens` (`providers/python/transformer_decode_pyapi.mojo`): the decode door's host loop, one
+  `transformer_decode_step` Python call per token; replaced by the host binding's `transformer_decode_steps`
+  (`_run_decode_steps`, one call for N tokens, same bytes). Patch
+  `experiments/removed/TRANSFORMER_DECODE_HOST_TOKEN_LOOP.patch`.
+- The public decode session's descriptor-provider arm (`MOJOLEARN_NEURAL_NATIVE_DISPATCH=1`: open 18/19, step 20,
+  forward 21, export 22, load 23, close 24 through `transformer_resident_decode_call_handle`, `TransformerDecodeHandle
+  .native_handle`) and the descriptor decode ops 5 / 6 (step, forward) of `transformer/native_decode_dispatch.mojo`,
+  which only it called. CausalLM layer sessions keep open / export / load / close. Patch
+  `experiments/removed/TRANSFORMER_DECODE_PROVIDER_ARM.patch`.
+- Bits: none intended. The step op's body is the session's (EXECUTOR_X1_API.md section 2); a default-options block now
+  takes the options constructor with default options (the op's), which X1 states is the same words. Identity lanes
+  that read the public decode session: `transformer-decode-session`, `transformer-decode-load-state`
+  (tools/identity_lanes/coverage.py), re-recorded at the one pre-release verify.

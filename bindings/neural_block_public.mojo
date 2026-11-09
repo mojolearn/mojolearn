@@ -659,8 +659,9 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
     if supplied_state is not None and py_get(_fields(mods, supplied_state), "_resident_session") is not None:
         raise Error("neural block: state is owned by a resident decode session")
     var e = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].entries
-    # Lane x4: MOJOLEARN_TRANSFORMER_LEGACY_SETUP and _SESSION_FRESH removed;
-    # a binding with the session entries always runs on the block's session.
+    # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP / MOJOLEARN_TRANSFORMER_SESSION_FRESH (runtime switches, SUPERSEDED by the block session) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
+    # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch
+    # A binding with the session entries always runs on the block's session.
     var reuse = transformer and py_contains(e, "forward_session")
     var lock = py_get(fields, "_runtime_lock") if transformer else PythonObject(None)
     var lock_lease = OperationLockLease(lock)

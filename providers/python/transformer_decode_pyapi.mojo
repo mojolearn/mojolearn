@@ -554,10 +554,10 @@ def transformer_decode_init(session: PythonObject, block: PythonObject, state: P
             if i != 1:
                 open_p.append(p[i])
         handle.device = _transformer_decode_entry(binding, "transformer_decode_session_create")()
-        # Lane x4: one device open. A float32 session runs on the attention
-        # step op (`transformer_decode_session_open_step_op`); fixed15_v1
-        # keeps its resident planes. The descriptor-provider arm of the
-        # public session (MOJOLEARN_NEURAL_NATIVE_DISPATCH ops 18-24) is gone.
+        # TOMBSTONE: TransformerDecodeHandle.native_handle (the public decode session's descriptor-provider arm under MOJOLEARN_NEURAL_NATIVE_DISPATCH, SUPERSEDED by the step-op session) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
+        # Restore: git apply experiments/removed/TRANSFORMER_DECODE_PROVIDER_ARM.patch
+        # One device open: a float32 session runs on the attention step op
+        # (`transformer_decode_session_open_step_op`); fixed15_v1 keeps its planes.
         cached = Int(py=py_call(_transformer_decode_entry(binding, "transformer_decode_session_open_int15" if packed else "transformer_decode_session_open_step_op"),
             handle.device, py_ints(a), py_ints(open_p)))
     else:
@@ -654,8 +654,8 @@ def transformer_decode_run(session: PythonObject, input: PythonObject, step: Boo
         for i in range(len(h[].optional)):  # driver-loop: native optional-weight address slots
             a.append(0 if len(h[].optional[i]) == 0 else Int(h[].optional[i].unsafe_ptr()))
         if decode:
-            # Lane x4: the host binding's N-token entry, one call (the door's
-            # per-token loop of host step calls is gone).
+            # TOMBSTONE: _transformer_decode_host_tokens (the door's per-token loop of host step calls, SUPERSEDED by transformer_decode_steps) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
+            # Restore: git apply experiments/removed/TRANSFORMER_DECODE_HOST_TOKEN_LOOP.patch
             cached = Int(py=py_call(_transformer_decode_kept(h[], _TRANSFORMER_DECODE_HOST_DECODE), py_ints(a), py_ints(p)))
         elif h[].provider is not None:
             cached = neural_descriptor_execute(h[].provider, 33, a, p, [])

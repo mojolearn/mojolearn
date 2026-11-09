@@ -717,6 +717,8 @@ class TransformerBlock(NumericModeMixin, _native_constructor=True):
         return _native_neural_bridge.RUNTIME.neural_block_allocate(
             self, batch_size, max_tokens, _native_neural_bridge.CONTEXT)
 
+    # TOMBSTONE: TransformerBlock._call_impl (with _call, _call_fresh, _call_fresh_session, _call_int15; dead: no caller, forward/step run the native neural_block door) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
+    # Restore: git apply experiments/removed/TRANSFORMER_BLOCK_PY_CALL_PATHS.patch
     def _extension(self):
         """The `_mojolearn_transformer` binding for THIS block's tier,
         with the binary's own compile-time answer cross-checked against
