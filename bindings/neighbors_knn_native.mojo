@@ -41,6 +41,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.optimizer_public_words import stash_python_error
 from bindings.classical_arrays import classical_address
+from bindings.p3nc_fitted_freeze import fitted_freeze_sole_owner
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classical_pandas import classical_admit_value
 from bindings.host_sparse_native import host_sparse_format
@@ -629,9 +630,18 @@ def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject) 
     knn_release(model)
     # Held on the instance so the memory outlives this call: the search
     # borrows the address at query time (an owned float32 Array: the cast
-    # result itself, or one copy of a caller's float32 block).
+    # result itself; the caller's float32 C-order block itself, frozen
+    # read-only, when it owns its memory; else one parallel copy of it).
+    # 0.8.66 regression C3 (knn fit 8.5x on istella): 0.8.55 kept the
+    # caller's block; the zero-filled copy is gone where the read-only rule
+    # (lesson 10, fitted_freeze_sole_owner) can hold the block in place.
     var input = family_f32_snapshot(x_source, 2, "X", context, True)
-    var idx = family_owned_snapshot(input, context)
+    var idx: PythonObject
+    if (not input.owned_writable and input.f32_c() and not input.copied
+            and fitted_freeze_sole_owner(input.keep)):
+        idx = input.keep
+    else:
+        idx = family_owned_snapshot(input, context)
     if not _eq(family_field(fields, "algorithm"), PythonObject("rbc")):
         var resolved = knn_resolve_metric(cls_name, family_field(fields, "metric"), family_field(fields, "p"), context)
         _check_metric_input(cls_name, Int(py=resolved[0]), input)
