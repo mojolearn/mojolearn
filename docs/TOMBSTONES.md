@@ -465,6 +465,8 @@ in the tables after the sections.
 | [`MOJOLEARN_RSVD_FAST_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, FAST + Apple) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_IDN_RSVD_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, IDENTICAL) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_RSVD_FAST_DEVSCAN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd finiteness scan, FAST + Apple) | removed (KEPT default, superseded: parallel host scan of the one admission path) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS`](#sgd-epoch-re-gather-and-minibatchkmeans-per-step-loop-2026-11-09) | Linear (SGD minibatch, IDENTICAL) | removed (default off, never measured) | 2026-11-09 | [MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS.patch](../experiments/removed/MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS.patch) |
+| [`MOJOLEARN_IDN_MINIBATCH_GROUP_OFF`](#sgd-epoch-re-gather-and-minibatchkmeans-per-step-loop-2026-11-09) | Cluster (MiniBatchKMeans step loop) | removed (superseded by the one group loop) | 2026-11-09 | [MOJOLEARN_IDN_MINIBATCH_GROUP_OFF.patch](../experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP_OFF.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -4271,3 +4273,32 @@ lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Bits: none for any int32-range or
   lane/a3-admit-decomp-prep-metrics@0cb550c337.
 - `door_rows_call` (the `_arena_io._ROWS_CALL` connection in `_native_msel_dispatch.connect`): no reader after A5 deleted
   `door_rows_host`; removed from the glue and from tools/test_device_rows_door_cv.py.
+
+## SGD epoch re-gather and MiniBatchKMeans per-step loop (2026-11-09)
+
+Lane n3-sgd-minibatch-loops (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 4, rows SGD / Perceptron /
+PassiveAggressive and MiniBatchKMeans generic), base integ/pre-0867-w2 `f59d913b0b`.
+
+- `MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS` (lane/classical-structural, 2026-10-07, IDENTICAL, default off). Tried: once per
+  epoch and problem, right after `sgd_perm_kernel`, two launches (`sgd_gather_x_kernel`, `sgd_gather_vec_kernel`) wrote
+  permuted copies of X, y and the sample weights plus an identity order, so the minibatch kernels read contiguous rows.
+  Cost: an n x d device-to-device copy every epoch. Verdict: never A/B'd on its own (it only rode in all-on grid
+  combinations), so the default gathered-load route is kept (the rule: no measurement, keep today's bits-defining path).
+  Files: `x_linear/device.mojo` (the define, the two kernels, the buffers and memory gate in `_sgd_mb_grid`, the
+  per-epoch block). Bits: none. Recoverable at integ/pre-0867-w2 `f59d913b0b`; patch
+  `experiments/removed/MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS.patch`; refusal in `core/experiment_guards_linear.mojo`;
+  `grid_controls/classical-structural.json` entry moved to `removed`.
+- `MOJOLEARN_IDN_MINIBATCH_GROUP_OFF` (fam2-cluster, 2026-10-04): restored MiniBatchKMeans' per-step loop (a host id
+  upload, a wait and the centers download every step), which also ran in FAST off Apple and in every build with
+  `MOJOLEARN_IDN_ALL_OFF`. The group loop in `x_cluster/minibatch.mojo` is now the one loop in every mode and column, and
+  it moves the rest of its per-step host work to the ops: the weighted batch draws (`ClusterOps.mb_wdraw`, the cumulative
+  weights uploaded once per fit, `minibatch_cells.mb_wdraw_cell` in soft binary64 on both columns: the host loop's
+  indices) and the tol > 0 squared center shift (`ClusterOps.fold_sqdiff_at`, the new float-float fold mode
+  `FM_SQDIFF`). The g x k x d centers are no longer downloaded per group: a stop restores the stopping step's centers
+  and counts from the device history (`copy_from`, what `MOJOLEARN_C39_RETAIN_STATE` did for the minibatch half; the
+  bisecting half of C39 is unchanged), and only a reassigning step downloads its k x d centers. Bits: the center shift
+  was an ascending Float64 chain on the host and is now the FM_SQDIFF fold, so a tol > 0 fit can stop one step earlier
+  or later (tol = 0 is unchanged); FAST off Apple now uses the float-float batch inertia. No A/B (superseded, not an
+  experiment loss). Recoverable at integ/pre-0867-w2 `f59d913b0b`; patch
+  `experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP_OFF.patch` (the whole `x_cluster/minibatch.mojo` reversal);
+  refusal in `core/experiment_guards_cluster.mojo`; no grid_controls entry existed.
