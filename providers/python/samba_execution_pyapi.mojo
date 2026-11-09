@@ -330,11 +330,13 @@ struct AdmittedSambaExecution(Movable):
                 var entries = publication.entries
                 var fields = publication.fields
                 var kind = "transformer" if publication.transformer else "mamba3"
-                var tape = Bool(py=py_call(bi.hasattr, entries, kind + "_forward_tape_enabled"))
+                # Only a Mamba-3 layer keeps a forward tape: the transformer
+                # forward tape went with TRANSFORMER_FORWARD_TAPE_API (lane x6);
+                # a TransformerBlock layer runs its backward entry.
+                var tape = not publication.transformer and Bool(py=py_call(bi.hasattr, entries, "mamba3_forward_tape_enabled"))
                 if tape:
-                    tape = Bool(py=_native_function(entries, kind + "_forward_tape_enabled")())
+                    tape = Bool(py=_native_function(entries, "mamba3_forward_tape_enabled")())
                 if publication.transformer:
-                    tape = tape and fields["_int15"] is None and not Bool(py=fields["_extended"])
                     if fields["_int15"] is not None or Bool(py=fields["_extended"]):
                         raise Error("NotImplementedError: TransformerBlock.backward requires default float32 block options (the default block options only)")
                 if not tape and not Bool(py=py_call(bi.hasattr, entries, kind + "_backward")):
@@ -359,17 +361,11 @@ struct AdmittedSambaExecution(Movable):
                 if tape:
                     forward_setup = True
                     var owner = neural_descriptor_construct(publication.provider,
-                        _native_function(entries, kind + "_tape_create_native_v1"))
+                        _native_function(entries, "mamba3_tape_create_native_v1"))
                     var handle = neural_descriptor_handle(publication.provider,
-                        _native_function(entries, kind + "_tape_handle_native_v1"), owner)
-                    var lock_owner = PythonObject(None)
-                    var lock_handle = 0
-                    if publication.transformer:
-                        var lock = OperationLockLease(fields["_runtime_lock"])
-                        lock_owner = lock.owner
-                        lock_handle = lock.handle
-                    var base = 6 if publication.transformer else 10
-                    self.owners.append(AdmittedNativeExecution(publication.provider, owner, handle, base, base + 1, lock_owner, lock_handle))
+                        _native_function(entries, "mamba3_tape_handle_native_v1"), owner)
+                    var base = 10
+                    self.owners.append(AdmittedNativeExecution(publication.provider, owner, handle, base, base + 1, PythonObject(None), 0))
                     layer.endpoint = self.owners[len(self.owners) - 1].endpoint()
                     layer.backward_endpoint = layer.endpoint.copy()
                     self.owners.append(AdmittedNativeExecution(publication.provider, owner, handle, base, base + 1, PythonObject(None), 0))
@@ -377,7 +373,7 @@ struct AdmittedSambaExecution(Movable):
                     layer.operation = base + 2
                     layer.backward_operation = base + 3
                     layer.close_operation = base + 4
-                    layer.reset_operation = 14 if publication.transformer else 19
+                    layer.reset_operation = 19
                     var a: List[Int] = [0]
                     for address in publication.weight_addresses:  # driver-loop: immutable forward snapshot address slots
                         a.append(address)
