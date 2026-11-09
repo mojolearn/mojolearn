@@ -2970,7 +2970,7 @@ def _tree_feat_table(
     var nf = len(layout.features)
     var table = List[UInt32]()
     var have_oh = len(one_hot) == nf
-    for f in range(nf):  # small-loop(n_features: feature layout entries, once per fit): the apply records' feature table
+    for f in range(nf):  # small-loop(nf: feature layout entries, once per fit): the apply records feature table, model structure
         table.append(UInt32(Int(layout.features[f].offset) * n_rows))
         table.append(UInt32(layout.features[f].mask))
         table.append(UInt32(layout.features[f].shift))
@@ -3177,7 +3177,7 @@ struct SymDeviceRounds(LoopStep, Movable):
             var scale_word = rebind[MutPointer[Float32, MutAnyOrigin]](
                 std_scale.unsafe_ptr().unsafe_offset(1)
             )
-            ctx.enqueue_function[choose_scale_kernel](  # small-launch(one thread): the round's fixed-point scale
+            ctx.enqueue_function[choose_scale_kernel](  # small-launch(n: a scalar operand of the scale): one thread of control plane reading two magnitudes, no walk
                 mags.unsafe_ptr(), Int32(n), scale_word,
                 grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
             )
@@ -3558,7 +3558,7 @@ def fit_sym_rounds_on_device(
 
     var hs = h_struct.unsafe_ptr()
     var hl = h_leaf.unsafe_ptr()
-    for r in range(rounds):  # driver-loop: over the committed rounds (the ensemble's trees, model structure)
+    for r in range(rounds):  # small-loop(rounds: the committed trees, model structure): the one download of the fit becomes the host model
         var base = r * sw
         var depth = Int(hs.unsafe_load(base + TREE_STRUCT_DEPTH))
         var structure = TObliviousTreeStructure()
@@ -3570,7 +3570,7 @@ def fit_sym_rounds_on_device(
         var weak = TObliviousTreeModel(structure^)
         weak.dim = 1
         # DEVIATION 256's host rescale, as the host loop stores it
-        for i in range(1 << depth):  # driver-loop: over the tree's leaf values (leaves x approx_dim 1)
+        for i in range(1 << depth):  # small-loop(depth: tree levels, the tree has 1 << depth leaves): the stored leaf values of the host model
             weak.leaf_values.append(hl.unsafe_load(r * nl + i) * learning_rate)
         model.add_weak_model(weak^)
 
@@ -3580,11 +3580,11 @@ def fit_sym_rounds_on_device(
     # caller's one pass after the rounds
     var last_i = rounds - 2 if stopped else rounds - 1
     var hf = h_fv.unsafe_ptr()
-    for i in range(1, last_i + 1):  # driver-loop: over the committed rounds' learn losses (one word each)
+    for i in range(1, last_i + 1):  # small-loop(last_i: the committed trees, one loss word each): the fit result loss history
         losses.append(-Float64(hf.unsafe_load(i)) / loss_norm)
     if has_test:
         var hb = h_losses.unsafe_ptr()
-        for r in range(rounds):  # driver-loop: over the committed rounds' held-out losses (one word each)
+        for r in range(rounds):  # small-loop(rounds: the committed trees, one loss word each): the fit result held-out history
             test_losses.append(bitcast[DType.float64](hb.unsafe_load(r)))
         detector.best_iteration = Int(h_od.unsafe_ptr().unsafe_load(OD_W_BEST_ITERATION))
     if step.test:
