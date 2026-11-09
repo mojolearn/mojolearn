@@ -225,7 +225,6 @@ bindings/admitted_input.mojo:1233: for axis in range(len(v.shape) - 1, -1, -1): 
 bindings/admitted_input.mojo:1377: var types = py_call(b.list, py_call(b.set, py_call(b.map, b.type, value)))
 bindings/admitted_input.mojo:1381: for i in range(len(types)):  # driver-loop: over the distinct exact element types (a handful)
 bindings/admitted_input.mojo:1478: for i in range(len(value)):  # driver-loop: stable nested native metric containers, preserving scalar leaf dtypes
-bindings/admitted_meta_scope.mojo:97: while True:  # driver-loop: over a held row's parent chain (fold rows -> X, a few)
 bindings/admitted_meta_scope.mojo:105: for i in range(len(chain)):  # driver-loop: over the chain's rows
 bindings/admitted_meta_scope.mojo:122: for i in range(len(chain)):  # driver-loop: over the chain's rows
 bindings/admitted_registry.mojo:115: for i in range(len(g[].depth_threads)):  # small-loop(depth_threads: threads with an open scope, a few)
@@ -242,20 +241,14 @@ bindings/archive_schema_native.mojo:476: for i in range(count):  # driver-loop: 
 bindings/archive_schema_native.mojo:524: for e in range(len(elements)):  # driver-loop: over the fitted sub-models of one list field
 bindings/archive_schema_native.mojo:527: for k in range(width):  # driver-loop: over the fixed items of one saved row
 bindings/archive_schema_native.mojo:539: for e in range(len(elements)):  # driver-loop: over the fitted sub-models of one list field
-bindings/archive_schema_native.mojo:747: for i in range(count):  # driver-loop: over the distinct class labels' kinds
-bindings/archive_schema_native.mojo:755: for i in range(count):  # driver-loop: over the distinct class labels
-bindings/archive_schema_native.mojo:759: for i in range(count):  # driver-loop: over the distinct class labels
-bindings/archive_schema_native.mojo:765: for i in range(count):  # driver-loop: over the distinct class labels
 bindings/archive_schema_native.mojo:789: for j in range(2, 4):  # small-loop(leaf parameter and length-scale field names)
 bindings/archive_schema_native.mojo:795: for j in range(1, len(layout)):  # small-loop(pair or saved-node field names)
 bindings/archive_schema_native.mojo:905: for e in range(len(elements)):  # driver-loop: over a fitted model's per-output class lists
 bindings/archive_schema_native.mojo:913: for i in range(len(labels)):  # driver-loop: over one output's class labels
-bindings/archive_unicode_native.mojo:33: for k in range(count):  # driver-loop: over the items of a non-bytes byte sequence (a cold input kind)
 bindings/archive_unicode_native.mojo:60: for offset in range(1, width):  # driver-loop: bounded Unicode continuation bytes
 bindings/archive_unicode_native.mojo:87: for k in range(4):  # driver-loop: fixed UTF-32 word bytes
 bindings/archive_unicode_native.mojo:103: for i in range(len(value)):  # driver-loop: exact Unicode metadata code points
 bindings/arena_cache_binding.mojo:61: for i in range(len(parts)):  # driver-loop: native concatenation of import-tokenized literals and exact native Unicode values
-bindings/arena_cache_get.mojo:42: for i in range(index):  # driver-loop: admit only unchanged native conversion/comparison/text slots
 bindings/arena_cache_get.mojo:99: for i in range(len(classes)):  # driver-loop: exact immutable native scalar class identities
 bindings/arena_cache_get.mojo:267: for i in range(layout.byte_length()):  # driver-loop: parse native dtype unit and multiplier metadata
 bindings/arena_cache_stats.mojo:186: for i in range(len(known.strings)):  # small-loop(two NumPy string scalar identities)
@@ -269,11 +262,8 @@ bindings/arena_materialize_native.mojo:288: for i in range(len(values)):  # driv
 bindings/arena_materialize_native.mojo:297: for i in range(len(values)):  # driver-loop: admitted scalar storage conversion, preserving the old float64/int64 choice
 bindings/arena_prog_native.mojo:196: for i in range(1, n):  # driver-loop: insertion sort of the program's output range pairs
 bindings/arena_prog_native.mojo:207: for i in range(n):  # driver-loop: merge of the sorted output range pairs
-bindings/arena_prog_native.mojo:370: for i in range(nst):  # driver-loop: over the program's stage records
 bindings/arena_prog_native.mojo:495: for i in range(1, n):  # driver-loop: insertion sort of the input and scratch ranges
 bindings/arena_prog_native.mojo:506: for i in range(n):  # driver-loop: complement of the input and scratch ranges
-bindings/arena_prog_native.mojo:547: for i in range(nst):  # driver-loop: over the program's stage records
-bindings/arena_resident_native.mojo:35: for i in range(len(ancestry)-1):  # driver-loop: native instance metadata bypasses application descriptors and attribute hooks
 bindings/arena_resident_plan.mojo:156: for i in range(len(failed)):  # driver-loop: failed records stay owned for a retry
 bindings/array_from_buffer_native.mojo:50: for i in range(len(names)):  # small-loop(retained Array member descriptors)
 bindings/array_from_buffer_native.mojo:58: for name in ["__getattribute__", "__setattr__", "__new__"]:  # small-loop(native storage access protocols)
@@ -294,7 +284,6 @@ bindings/array_native.mojo:128: for i in range(len(values)):  # driver-loop: ove
 bindings/array_native.mojo:135: for i in range(len(values)):  # driver-loop: over array rank metadata
 bindings/array_native.mojo:142: for i in range(len(values)):  # driver-loop: over array rank metadata
 bindings/array_native.mojo:266: return _call(view.tolist)
-bindings/array_native.mojo:325: for i in range(len(ancestry)):  # driver-loop: the connected Array class in the instance's ancestry
 bindings/array_native.mojo:403: return _call(_call(_call(native_buffer_view(flat).cast, PythonObject("B")).cast, PythonObject("d"), c.shape).tolist)
 bindings/array_native.mojo:404: return _call(_call(_call(c._mv.cast, PythonObject("B")).cast, _code(dtype, context), c.shape).tolist)
 bindings/array_native.mojo:455: return _call(b.map, row, _call(b.range, PythonObject(dims[0])))
@@ -372,7 +361,6 @@ bindings/causal_checkpoint.mojo:713: for axis in range(len(pin.layout.value().sh
 bindings/causal_lm_construct.mojo:101: for i in range(2):  # small-loop(packed projection metadata captured before storage)
 bindings/causal_lm_construct.mojo:347: for i in range(len(names)):  # small-loop(only the plan fields consumed by one block)
 bindings/causal_lm_construct.mojo:373: for name in ["embed", "norm", "head"]:  # small-loop(top-level model weights)
-bindings/causal_lm_construct.mojo:575: for i in range(17):  # driver-loop: over the fixed block options record
 bindings/causal_lm_construct.mojo:632: for i in range(len(names)):  # small-loop(block weight name words)
 bindings/causal_lm_construct.mojo:717: for i in range(len(names)):  # small-loop(block weight name words)
 bindings/causal_lm_construct.mojo:775: for name in ["_native_vendor", "_native_numeric_mode", "_native_entries", "_causal_entries_owner"]:  # small-loop(native admission fields published on success and error)
@@ -396,7 +384,6 @@ bindings/causal_lm_public.mojo:2388: for j in range(len(starts)):  # driver-loop
 bindings/causal_lm_public.mojo:2408: for k in range(3):  # small-loop(consumed packed head planes)
 bindings/causal_lm_public.mojo:2425: for k in range(3):  # small-loop(int15 plane triple)
 bindings/causal_lm_public.mojo:2427: for value in weights:  # driver-loop: compare captured live weight spans against KV storage
-bindings/causal_lm_public.mojo:2439: for j in range(len(starts)):  # driver-loop: native byte-span overlap test
 bindings/causal_lm_public.mojo:2850: for k in range(3):  # small-loop(int15 plane triple)
 bindings/causal_lm_public.mojo:2853: for k in range(3):  # small-loop(int15 head plane triple)
 bindings/causal_lm_public.mojo:2871: for name in [String("schema"), String("model"), String("options"), String("maximum"),  # small-loop(checkpoint scalar fields)
@@ -407,7 +394,6 @@ bindings/causal_lm_public.mojo:3091: for i in range(2):  # small-loop(public sta
 bindings/causal_lm_public.mojo:3111: for name in ["batch_size", "max_tokens", "positions"]:  # small-loop(displayed scalar state metadata)
 bindings/causal_lm_public.mojo:3125: for name in ["n_layers", "d_model", "vocab_size", "weight_format", "device"]:  # small-loop(displayed native model metadata)
 bindings/causal_model_config.mojo:102: for i in range(len(value)):  # driver-loop: capture passive model configuration sequence
-bindings/causal_model_config.mojo:135: for i in range(len(ancestry)):  # driver-loop: inspect model record descriptors before storage reads
 bindings/causal_model_config.mojo:140: for hook in [String("__getattribute__"), String("__setattr__")]:  # small-loop(native record access hooks)
 bindings/causal_model_config.mojo:143: for j in range(len(names)):  # small-loop(fixed consumed model field names)
 bindings/causal_model_config.mojo:202: for name in [String("config_class"), String("plan_class"), String("unsupported_class")]:  # small-loop(import-connected model types)
@@ -428,7 +414,6 @@ bindings/causal_operation_owner.mojo:350: for j in range(len(packed[i])):  # sma
 bindings/causal_operation_owner.mojo:398: for i in range(len(rows)):  # driver-loop: over the block class ancestry
 bindings/causal_operation_owner.mojo:406: var iterator_raw = iter_table[].PyObject_GetIter(row._obj_ptr)
 bindings/causal_operation_owner.mojo:412: var key_raw = iter_table[].PyIter_Next(iterator._obj_ptr)
-bindings/causal_operation_owner.mojo:419: for j in range(count):  # driver-loop: over retained class namespace values
 bindings/causal_operation_owner.mojo:438: for i in range(len(classes)):  # driver-loop: over the distinct block classes of the model
 bindings/causal_operation_owner.mojo:475: for name in runtime_names:  # small-loop(runtime-owned model words)
 bindings/causal_operation_owner.mojo:503: for name in ["_arithmetic_profile", "_arithmetic_profile_mode", "_arithmetic_profile_changed"]:  # small-loop(runtime launch words admitted per call)
@@ -455,14 +440,9 @@ bindings/classical_archive.mojo:38: for k in range(width):  # driver-loop: over 
 bindings/classical_archive.mojo:44: for i in range(len(values)):  # driver-loop: over ZIP header metadata fields
 bindings/classical_archive.mojo:76: for storage in range(2):  # small-loop(the two standard pathlib storage names)
 bindings/classical_archive.mojo:185: for i in range(len(value)):  # driver-loop: over the distinct str class labels of one model
-bindings/classical_archive.mojo:208: for i in range(count):  # driver-loop: over the distinct str class labels of one model
-bindings/classical_archive.mojo:213: for i in range(count):  # driver-loop: over the distinct str class labels of one model
 bindings/classical_archive.mojo:300: for k in range(len(records)):  # driver-loop: over NPZ central-directory member records
 bindings/classical_archive_read.mojo:308: for k in range(width):  # small-loop(width: at most eight header bytes)
 bindings/classical_archive_read.mojo:503: for k in range(count):  # driver-loop: over serialized string/bytes metadata entries
-bindings/classical_archive_read.mojo:535: for k in range(len(octets)):  # driver-loop: over ZIP member filename bytes using the fixed CP437 table
-bindings/classical_archive_read.mojo:612: while at < len(central):  # driver-loop: over ZIP central directory records (archive members)
-bindings/classical_archive_read.mojo:633: while extra_at < extra_end:  # driver-loop: over a ZIP record's extra-field records
 bindings/classical_archive_read.mojo:776: while py_type(value) is py_type(Python.list()):  # driver-loop: over the nesting depth of a stored string field
 bindings/classical_attributes.mojo:145: for j in range(len(keys)):  # small-loop(keys: one class namespace): exact string names only
 bindings/classical_attributes.mojo:424: for i in range(len(text_names)):  # driver-loop: over two fixed NumPy scalar type names
@@ -482,26 +462,20 @@ bindings/classical_labels.mojo:862: for t in range(n):  # driver-loop: over the 
 bindings/classical_labels.mojo:893: for i in range(n):  # driver-loop: native copy of the n codes
 bindings/classical_labels.mojo:905: for t in range(n):  # driver-loop: over the sorted labels
 bindings/classical_labels.mojo:987: for i in range(len(classes)):  # driver-loop: exact primitive kinds preserve bool/string object-label output
-bindings/classical_labels.mojo:1023: for i in range(k):  # driver-loop: over the k class values into the gather table
 bindings/classical_labels.mojo:1045: for i in range(n):  # cpu-route: str or bool classes decode to Python objects, the explicit label output step
-bindings/classical_labels.mojo:1087: for i in range(len(items)):  # driver-loop: admit keys before native hashing and values before numeric conversion
 bindings/classical_labels.mojo:1294: for k in range(len(value)):  # cpu-route: the leaf types of a user Python list, the explicit input step
 bindings/classical_labels.mojo:1505: for i in range(n):  # driver-loop: borrowed label reads, one memoized class admission per label
 bindings/classical_labels.mojo:1516: for i in range(n):  # cpu-route: NumPy str_ labels to exact str, the explicit label input step
-bindings/classical_labels.mojo:1548: for i in range(len(order)):  # driver-loop: over the distinct class labels
-bindings/classical_labels.mojo:1556: for i in range(k):  # driver-loop: over the distinct class labels
 bindings/classical_labels.mojo:1615: for i in range(_PARAMS):  # small-loop(params): the fourteen fixed parameter words of one stage
 bindings/classical_labels.mojo:1686: var present = py_call(b.sorted, py_call(_label_set(true).union, _label_set(pred)))
 bindings/classical_labels.mojo:1774: var classes = py_call(b.sorted, py_call(b.set, labels.values))
 bindings/classical_labels.mojo:1798: var present = py_call(b.sorted, py_call(_label_set(true).union, _label_set(pred)))
 bindings/classical_metadata.mojo:75: + ". Valid parameters are: " + String(py_call(bi.repr, py_call(bi.sorted, classical_parameter_names(ridge)))) + ".")
-bindings/classical_metadata.mojo:88: for k in range(len(old)):  # driver-loop: unchanged parameter owners stay retained by values throughout clear/update
 bindings/classical_pandas.mojo:146: for k in range(len(value)):  # driver-loop: over native operation argument containers
 bindings/classical_pandas.mojo:422: for row in range(rows):  # cpu-route: Python objects marshaled one element at a time before the runtime
 bindings/classical_tags.mojo:71: for k in range(len(classes)):  # small-loop(classes: sklearn tag record type names): the four standard records
 bindings/classical_tags.mojo:77: for k in range(len(records)):  # small-loop(records: sklearn tag record types): the four standard records
 bindings/classical_warnings.mojo:154: for k in range(len(filters)):  # driver-loop: over filter row identities for normal filter mutation
-bindings/classifier_public_lifecycle.mojo:78: for c in range(count):  # driver-loop: over Arrow chunks of the column-name index
 bindings/classifier_public_lifecycle.mojo:103: for row in range(length):  # driver-loop: over column names, one stored Arrow string each
 bindings/cluster_fit_a_native.mojo:112: for t in range(3):  # small-loop(the stashed exception's three references)
 bindings/cluster_fit_a_native.mojo:178: for t in range(len(parts)):  # small-loop(the aux block's parts): at most three
@@ -524,7 +498,6 @@ bindings/cross_vendor_native.mojo:439: for k in range(n):  # driver-loop: over o
 bindings/cross_vendor_native.mojo:560: for i in range(4):  # small-loop(four batch-feed dimensions): steps, shards, batch, length + 1
 bindings/cross_vendor_native.mojo:685: for i in range(len(rows)):  # driver-loop: over explicit expected committed hashes
 bindings/cross_vendor_native.mojo:696: for j in range(len(keys)):  # small-loop(expected commit fields): the named keys of one configured row
-bindings/cross_vendor_native.mojo:702: for k in range(len(losses)):  # driver-loop: over logical shard loss words of one configured row
 bindings/cross_vendor_native.mojo:719: for k in range(64):  # small-loop(64 hex characters): one configured digest string
 bindings/cross_vendor_native.mojo:749: for key in [String("parameters"), String("m"), String("v"), String("flags")]:  # small-loop(four state keys): one digest update per named state field
 bindings/cross_vendor_native.mojo:760: for i in range(len(values)):  # driver-loop: over logical shard loss metadata
@@ -547,7 +520,6 @@ bindings/forest_host_strict_binding.mojo:136: for i in range(rows * outputs):  #
 bindings/full_reset_constructor_native.mojo:146: for i in range(len(hooks)):  # driver-loop: instance lookup/assignment protocols stay native
 bindings/full_reset_constructor_native.mojo:236: for i in range(len(targets)):  # driver-loop: original field assignment order into the same dictionary
 bindings/full_reset_params_native.mojo:78: for i in range(len(item)):  # driver-loop: ordinary container elements, no input protocols
-bindings/full_reset_params_native.mojo:82: for i in range(len(pairs)):  # driver-loop: visit key/value owners without hashing caller keys
 bindings/full_reset_params_native.mojo:169: + String(py_call(b.repr, py_call(b.sorted, values))) + ".")
 bindings/generation_buffers.mojo:66: for index in [0, 1, 3]:  # small-loop(generation owner class identities)
 bindings/generation_buffers.mojo:77: for i in range(len(layer_names)):  # small-loop(import-connected layer class registry)
@@ -583,8 +555,6 @@ bindings/gp_regressor_native.mojo:691: for i in range(len(exp_values)):  # drive
 bindings/gp_svm_gp_state.mojo:55: for j in range(len(classes)):  # driver-loop: over the kernel classes already recorded (identity)
 bindings/gp_svm_gp_state.mojo:81: for i in range(len(classes)):  # driver-loop: over the recorded kernel classes
 bindings/gp_svm_gp_state.mojo:89: for i in range(len(classes)):  # driver-loop: over the admitted kernel classes
-bindings/gp_svm_gp_state.mojo:144: for i in range(len(nodes)):  # driver-loop: over the recorded kernel nodes (content words, once per record)
-bindings/gp_svm_gp_state.mojo:166: for i in range(len(nodes)):  # driver-loop: over the recorded kernel nodes (content words, once per record)
 bindings/gp_svm_gp_state.mojo:261: for i in range(len(classes)):  # driver-loop: over the fitted classes
 bindings/gp_svm_gp_state.mojo:300: for name in ["_kernel", "kernel_"]:  # small-loop(fixed kernel state fields)
 bindings/gp_svm_gp_state.mojo:323: for name in ["_kernel", "kernel_"]:  # small-loop(fixed kernel state fields)
@@ -599,10 +569,8 @@ bindings/hdbscan_host_predict.mojo:90: for i in range(1, len(vals)):  # small-lo
 bindings/hdbscan_host_predict.mojo:95: for i in range(len(vals)):  # small-loop(the seven shape words)
 bindings/host_archive_native.mojo:412: return String(py_call(b.repr, py_call(b.sorted, table)))
 bindings/host_archive_native.mojo:671: for i in range(len(value)):  # driver-loop: saved class label nesting
-bindings/host_archive_native.mojo:684: for i in range(count):  # driver-loop: saved distinct class label metadata
 bindings/host_archive_native.mojo:747: for i in range(len(values)):  # driver-loop: over the fixed entries of one order tuple
 bindings/host_archive_native.mojo:1136: var admitted = py_call(PythonObject(", ").join, py_call(b.sorted, table))
-bindings/host_archive_native.mojo:1325: for i in range(count):  # driver-loop: sorted distinct class label metadata
 bindings/host_archive_native.mojo:1649: + _archive_builtin_repr(py_call(builtins.sorted, metrics))
 bindings/host_archive_native.mojo:1778: var kind_list = py_call(kinds._mv.tolist)
 bindings/host_archive_native.mojo:1779: var param_list = py_call(params._mv.tolist)
@@ -621,17 +589,12 @@ bindings/host_archive_native.mojo:2513: for i in range(len(entry.value)):  # dri
 bindings/host_archive_native.mojo:2521: for i in range(len(entry.value)):  # driver-loop: publish native parsed buffer words
 bindings/host_archive_predict_native.mojo:39: for i in range(len(records)):  # driver-loop: over the fixed saved-model class inventory
 bindings/host_density_archive_native.mojo:33: for i in range(len(value)):  # driver-loop: all native formatted sequence elements
-bindings/host_density_archive_native.mojo:39: for i in range(len(pairs)):  # driver-loop: all native formatted mapping keys and values
 bindings/host_density_archive_native.mojo:132: for i in range(len(values)):  # driver-loop: fixed checkpoint metadata vector
 bindings/host_density_constructor_native.mojo:19: for i in range(len(value)):  # driver-loop: native constructor container admission
 bindings/host_iforest_depth_native.mojo:131: for i in range(width):  # driver-loop: publish at most one complex long-double element
-bindings/host_iforest_scalar_repr.mojo:35: for i in range(len(strings)):  # driver-loop: exact text print options
 bindings/host_iforest_scalar_repr.mojo:98: while mantissa.endswith("0"):  # small-loop(text: trailing digits of one scalar parameter error word)
 bindings/host_kde_bandwidth_native.mojo:145: for i in range(8):  # driver-loop: one signed native temporal word, either byte order
-bindings/host_kde_fit_native.mojo:176: while py_type(first) is b.list or py_type(first) is b.tuple:  # driver-loop: target rank metadata
 bindings/host_kde_native.mojo:46: for i in range(len(mro)):  # driver-loop: native string ancestry without value protocols
-bindings/host_logistic_native.mojo:75: for i in range(len(aliases)):  # driver-loop: native class-label storage dtypes
-bindings/host_logistic_native.mojo:89: for i in range(len(mro)):  # driver-loop: connected class-label lifetime admission
 bindings/host_logistic_native.mojo:103: for i in range(Int(py=source.size)):  # driver-loop: distinct native label storage
 bindings/host_logistic_native.mojo:110: for i in range(len(labels)):  # driver-loop: scalar label admission before numeric slots
 bindings/host_logistic_native.mojo:126: for i in range(len(labels)):  # driver-loop: distinct label result-type metadata
@@ -650,8 +613,6 @@ bindings/host_svc_native.mojo:298: for i in range(rows):  # driver-loop: complet
 bindings/host_svc_native.mojo:330: for i in range(rows):  # driver-loop: pair coefficient orientation matches the existing public property
 bindings/host_tree_native.mojo:116: for i in range(len(residual)):  # driver-loop: stored values admitted by more than identity
 bindings/host_tree_native.mojo:200: for i in range(len(classes)):  # driver-loop: distinct saved class label metadata
-bindings/host_tree_native.mojo:226: for c in range(k):  # driver-loop: over the saved class labels (model structure)
-bindings/host_tree_native.mojo:254: for c in range(k):  # driver-loop: over the saved class labels (model structure)
 bindings/host_tree_native.mojo:262: for i in range(rows):  # driver-loop: publish completed native string/bool/large-integer labels
 bindings/host_tree_native.mojo:387: for i in range(len(labels)):  # driver-loop: distinct constructor class labels
 bindings/host_tree_native.mojo:474: for i in range(2):  # driver-loop: fixed native label scalar ABI types
@@ -720,7 +681,6 @@ bindings/lm_corpus_public_native.mojo:596: for j in range(len(bases)):  # small-
 bindings/lm_corpus_scalars.mojo:133: for k in range(4):  # small-loop(four native NumPy scalar kinds)
 bindings/lm_corpus_scalars.mojo:134: for size in [1, 2, 4, 8]:  # small-loop(four supported native NumPy scalar widths)
 bindings/logistic_native.mojo:379: for c in range(n_targets):  # driver-loop: over the fitted coefficient block (model structure)
-bindings/mamba_public_native.mojo:65: for i in range(len(ancestry)):  # driver-loop: record layouts before any attribute read/write
 bindings/mamba_public_native.mojo:69: for hook in [String("__getattribute__"), String("__setattr__")]:  # small-loop(two native record access hooks)
 bindings/mamba_public_native.mojo:159: for name in [String("mamba1"), String("mamba2"), String("mamba3")]:  # small-loop(three connected Mamba session classes)
 bindings/mamba_public_native.mojo:225: for j in range(len(family_names)):  # small-loop(connection family names before lookup)
@@ -732,7 +692,6 @@ bindings/mamba_public_native.mojo:970: for r in range(b):  # driver-loop: over t
 bindings/mamba_public_native.mojo:973: for r in range(b):  # driver-loop: over the session's batch rows, a host-arm copy of token t
 bindings/mani_decomp_native.mojo:78: for i in range(len(choices)):  # small-loop(the fixed choices of one setting)
 bindings/mani_decomp_native.mojo:161: raise Error("NotImplementedError: " + who + ": metric_params " + family_repr(py_call(b.sorted, extra))
-bindings/mani_decomp_native.mojo:274: for jj in range(j, m):  # driver-loop: over this batch's Lanczos steps (at most _LANCZOS_MAX_M)
 bindings/mani_decomp_native.mojo:313: while t > stop_at:  # small-loop(components: the wanted Ritz positions): bounded by n_components
 bindings/mani_decomp_native.mojo:610: for i in range(mk_store_len(store)):  # cpu-route: the refusal names the first query row without a training row in reach
 bindings/mani_decomp_native.mojo:780: for i in range(mk_store_len(store)):  # small-loop(components: the refusal lists each column's squared norm): bounded by n_components
@@ -809,7 +768,6 @@ bindings/mcls_common.mojo:540: var table = family_call(b.list, family_call(b.map
 bindings/mcls_common.mojo:548: var eq = family_call(b.map, native_loaded_module("operator").eq, labels.classes,
 bindings/mcls_common.mojo:550: return mc_gather(labels, family_call(b.list, family_call(b.map, b.int, eq)), context)
 bindings/mcls_common.mojo:822: for i in range(len(values)):  # small-loop(values: the binary64 parameters of one stage): bounded by the call site
-bindings/mcls_ranking.mojo:324: for _ in range(n_pairs + 1):  # driver-loop: over the chunks of class pairs (one program each)
 bindings/metrics_exp_cls.mojo:250: for j in range(k):  # driver-loop: over the reported labels
 bindings/metrics_exp_cls.mojo:257: for j in range(k):  # driver-loop: over the reported labels
 bindings/metrics_exp_cls.mojo:579: var rows = mx_list(py_call(b.zip, names, metric_flatten(per[0], context), metric_flatten(per[1], context),
@@ -836,8 +794,6 @@ bindings/metrics_exp_curve.mojo:195: raise Error("x is neither increasing nor de
 bindings/metrics_native_inputs.mojo:76: for index in range(count):  # driver-loop: materialize explicit label scalars in logical C order
 bindings/metrics_native_inputs.mojo:113: item = py_call(ndarray.tolist, item)
 bindings/metrics_native_inputs.mojo:116: item = py_call(native_buffer_view(item).tolist)
-bindings/metrics_native_inputs.mojo:132: for index in range(len(items)):  # driver-loop: exact native sequence element classes, early exit
-bindings/metrics_native_inputs.mojo:142: for index in range(len(items)):  # driver-loop: flatten one admitted container level, one extend per row
 bindings/minmax_archive_native.mojo:38: for k in range(5):  # small-loop(stats: the five saved extrema statistic fields)
 bindings/minmax_archive_native.mojo:91: for k in range(5):  # small-loop(stats: exact saved feature vectors)
 bindings/minmax_native.mojo:92: for k in range(4):  # small-loop(params: constructor metadata)
@@ -851,7 +807,6 @@ bindings/mixture_native.mojo:225: for p in range(len(parts)):  # small-loop(part
 bindings/mixture_native.mojo:242: for j in range(len(blocks)):  # small-loop(blocks: the eight fitted parameter blocks)
 bindings/mixture_native.mojo:523: for i in range(len(names)):  # small-loop(nine fitted fields read above)
 bindings/mixture_native.mojo:1124: for i in range(len(value)):  # driver-loop: returned sample arrays, not their numerical elements
-bindings/mode_metadata_native.mojo:68: for i in range(len(ancestry)):  # driver-loop: over already admitted class rows in storage precedence order
 bindings/mode_metadata_native.mojo:223: for i in range(row):  # driver-loop: over nearer ancestry rows without a connected plan
 bindings/mode_metadata_native.mojo:311: for j in range(len(value_ancestry)):  # driver-loop: over descriptor class ancestry before attribute access
 bindings/model_catalog_native.mojo:44: for name in ["path", "version", "vendor", "default_mode"]:  # small-loop(static catalog identity metadata)
@@ -874,14 +829,12 @@ bindings/msel_common.mojo:467: for i in range(len(values)):  # driver-loop: over
 bindings/msel_common.mojo:478: for i in range(len(values)):  # driver-loop: over one score per fold or candidate
 bindings/msel_common.mojo:489: for i in range(len(values)):  # driver-loop: over the score block (sizes or candidates x folds)
 bindings/msel_common.mojo:597: store = family_call(array_mod.array, PythonObject("q"), py_call(b.map, b.int, values))
-bindings/msel_common.mojo:1060: for i in range(layout.count):  # driver-loop: native indices copy existing label references into sized output
 bindings/msel_common.mojo:1104: return py_call(msel_b().map, context["family_msel_door"], py_call(itertools.repeat, model),
 bindings/msel_common.mojo:1105: py_call(itertools.repeat, PythonObject(op)), items, py_call(itertools.repeat, context))
 bindings/msel_cv.mojo:507: for i in range(len(items)):  # driver-loop: named native scorer records
 bindings/msel_cv.mojo:863: values = py_call(packed._mv.tolist)
 bindings/msel_cv.mojo:871: for r in range(count):  # driver-loop: native list slices preserve the Array.tolist nesting
 bindings/msel_cv.mojo:879: values = py_call(pred.tolist)
-bindings/msel_cv.mojo:974: for f in range(count):  # driver-loop: fold outputs placed in original row order
 bindings/msel_cv.mojo:981: for k in range(n):  # driver-loop: one native container level, preserving the previous reshape contract
 bindings/msel_cv.mojo:999: for k in range(n):  # driver-loop: exact scalar identity checks before numeric conversion
 bindings/msel_cv.mojo:1005: for k in range(n):  # driver-loop: native integer label output placement
@@ -893,14 +846,11 @@ bindings/msel_device.mojo:183: for s in range(p):  # small-loop(p: one length pe
 bindings/msel_estimator_native.mojo:88: for k in range(len(protected)):  # driver-loop: refuse instance method/protocol overrides before dispatch
 bindings/msel_estimator_native.mojo:394: raise Error("Invalid parameter(s) " + String(py_call(b.repr, py_call(b.sorted, unknown)))
 bindings/msel_fixed_owner.mojo:72: for i in range(len(consumed_held)):  # driver-loop: fitted buffer owners (their storage is not in the record)
-bindings/msel_fixed_owner.mojo:105: for i in range(len(consumed)):  # driver-loop: learner scalars/model text consumed by native prediction
 bindings/msel_fixed_owner.mojo:135: raise Error("Invalid " + String(plan["name"]) + " parameters: " + String(py_call(b.repr, py_call(b.sorted, unknown))))
-bindings/msel_inputs.mojo:74: for i in range(count):  # driver-loop: native code arrays must agree on their row dimension
 bindings/msel_json.mojo:40: for k in range(len(value)):  # driver-loop: descriptor sequence traversal, no Python iterator protocol
 bindings/msel_json.mojo:50: keys = py_call(b.sorted, keys)
 bindings/msel_parallel_wire.mojo:104: for i in range(1, 5):  # small-loop(four native dtype field metadata sequences)
 bindings/msel_parallel_wire.mojo:159: for i in range(len(items)):  # driver-loop: admitted constructor container values
-bindings/msel_parallel_wire.mojo:166: for i in range(len(pairs)):  # driver-loop: structural keys and values preserve insertion order
 bindings/msel_parallel_wire.mojo:198: for i in range(len(value)):  # driver-loop: generated wire metadata, never application iterators
 bindings/msel_parallel_wire.mojo:203: for i in range(len(values)):  # driver-loop: generated configuration record fields
 bindings/msel_parallel_wire.mojo:228: for i in range(1, 4):  # small-loop(three exact range parameters)
@@ -927,7 +877,6 @@ bindings/msel_search.mojo:342: var keys = family_call(b.sorted, py_call(b.set, p
 bindings/msel_search.mojo:346: py_call(b.list, py_call(b.map, getter, candidates)))
 bindings/msel_search.mojo:420: for v in range(len(values)):  # driver-loop: over parameter values
 bindings/msel_search.mojo:475: var sizes_py = family_call(b.sorted, py_call(b.set, chosen))
-bindings/msel_search.mojo:581: for i in range(len(fixed)):  # driver-loop: over the y-free splitter classes
 bindings/msel_search.mojo:599: var kinds = py_call(b.set, py_call(b.map, b.type, y))
 bindings/msel_search.mojo:883: var values = family_call(b.sorted, family_call(b.set, g))
 bindings/msel_search.mojo:884: for gi in range(len(values)):  # driver-loop: over groups
@@ -941,8 +890,6 @@ bindings/msel_search_state.mojo:204: for k in range(n):  # driver-loop: paramete
 bindings/msel_split.mojo:82: for i in range(len(mro)):  # driver-loop: connected storage/lifecycle metadata before reading an instance
 bindings/msel_split.mojo:154: for i in range(len(names)):  # small-loop(16 connected splitter classes): identity compare only
 bindings/msel_split.mojo:285: for i in range(len(data)):  # driver-loop: finished public fold labels, without Array.tolist callbacks
-bindings/msel_split.mojo:529: for at in range(len(nonempty)):  # driver-loop: over nonempty folds (one row id moved each)
-bindings/msel_split.mojo:567: for c in range(gc.m):  # driver-loop: over classes (one first-row word each)
 bindings/msel_split.mojo:598: var keys = py_call(b.list, py_call(b.dict.fromkeys, values))
 bindings/msel_split.mojo:599: var index = py_call(b.dict, py_call(b.zip, keys, py_call(b.range, PythonObject(len(keys)))))
 bindings/msel_split.mojo:600: var codes = family_call(b.list, py_call(b.map, py_call(b.getattr, index, PythonObject("__getitem__")), values))
@@ -951,7 +898,6 @@ bindings/msel_split.mojo:870: var items = py_call(b.zip, py_call(native_loaded_m
 bindings/msel_split.mojo:906: var items = py_call(b.zip, py_call(itertools.repeat, PythonObject(n)), combos)
 bindings/msel_split.mojo:955: var items = py_call(b.zip, py_call(native_loaded_module("itertools").repeat, _group_state(gc)),
 bindings/msel_split.mojo:979: var items = py_call(b.zip, py_call(itertools.repeat, _group_state(gc)), combos)
-bindings/msel_split.mojo:1102: for c in range(k):  # driver-loop: over classes (offsets of the class-ordered rows)
 bindings/msel_split.mojo:1192: for c in range(len(gc.classes)):  # driver-loop: over fold values
 bindings/msel_split.mojo:1426: var all_str = msel_truth(family_call(b.all, py_call(b.map, b.isinstance, labels, py_call(itertools.repeat, b.str))))
 bindings/msel_split.mojo:1434: for i in range(len(labels)):  # driver-loop: admitted scalar identities, without Python ABC callbacks
@@ -1020,12 +966,10 @@ bindings/native_model_records.mojo:779: for i in range(len(item) - 1, -1, -1):  
 bindings/native_model_records.mojo:784: for i in range(len(item) - 1, -1, -1):  # driver-loop: over a stored tuple's items (nested words, once per record)
 bindings/native_model_records.mojo:795: for i in range(len(items)):  # driver-loop: over a stored mapping's entries (once per record)
 bindings/native_model_records.mojo:806: for i in range(len(items) - 1, -1, -1):  # driver-loop: over a stored mapping's values (nested words, once per record)
-bindings/native_model_records.mojo:827: for i in range(len(items)):  # driver-loop: over a model's stored fields (once per record)
 bindings/native_model_records.mojo:866: while i < n:  # driver-loop: over the record's content words (no Python objects built)
 bindings/native_model_records.mojo:878: for k in range(size):  # small-loop(size: one recorded list's items): address compare only
 bindings/native_model_records.mojo:886: for k in range(size):  # small-loop(size: one recorded mapping's entries): borrowed lookups by exact str/int keys
 bindings/native_owner_lifetime.mojo:72: for i in range(len(classes)):  # driver-loop: over exact native dtype identities before inspecting their C descriptors
-bindings/native_owner_lifetime.mojo:81: for j in range(len(pairs)):  # driver-loop: native dtype key/value ownership, no key lookups
 bindings/native_owner_lifetime.mojo:245: for i in range(len(value)):  # driver-loop: old metadata containers may own application finalizers transitively
 bindings/native_posix_transport.mojo:263: while offset < count:  # driver-loop: retain owner until every byte transfers
 bindings/native_prepared_owner.mojo:67: for i in range(len(value)):  # small-loop(value: retained container items): identity only, no hooks
@@ -1040,7 +984,6 @@ bindings/native_prepared_owner.mojo:175: var raw_iterator = cpython_table()[].Py
 bindings/native_prepared_owner.mojo:185: for field_index in range(field_count):  # small-loop(field_count: class fields): admit every namespace key first
 bindings/native_prepared_owner.mojo:186: var raw_key = cpython_table()[].PyIter_Next(iterator._obj_ptr)
 bindings/native_prepared_owner.mojo:199: for field_index in range(field_count):  # small-loop(field_count: class fields): compare admitted namespace values second
-bindings/native_process_pool.mojo:107: for i in range(len(group)):  # driver-loop: over worker device visibility records
 bindings/native_process_pool.mojo:112: for family in [String("KMEANS"), String("GBDT"), String("GRAM"), String("QR"),
 bindings/native_torch_admission.mojo:72: for name in [String("_len_torch_function_stack"), String("_len_torch_dispatch_stack"),
 bindings/native_torch_admission.mojo:90: for name in [String("detach"), String("numpy"), String("data_ptr"), String("stride"),  # small-loop(the fixed native tensor method names)
@@ -1124,16 +1067,10 @@ bindings/neighbors_local_native.mojo:97: for i in range(len(scalars)):  # small-
 bindings/neighbors_local_native.mojo:101: for i in range(len(values)):  # small-loop(fixed native container and buffer owners)
 bindings/neighbors_local_native.mojo:207: while p < count:  # small-loop(bits: doublings to the next power of two of one count): at most 63
 bindings/neighbors_local_native.mojo:345: for i in range(len(values)):  # driver-loop: over a class- or feature-sized int list of model structure
-bindings/neighbors_local_native.mojo:558: for i in range(k):  # driver-loop: over the k class labels (kind test)
-bindings/neighbors_local_native.mojo:565: for i in range(k):  # driver-loop: over the k class values
-bindings/neighbors_local_native.mojo:570: for i in range(k):  # driver-loop: over the k class labels (kind test)
-bindings/neighbors_local_native.mojo:577: for i in range(k):  # driver-loop: over the k class labels as floats
 bindings/neighbors_local_native.mojo:1172: for i in range(1, len(args)):  # small-loop(public data arguments, before native preparation)
 bindings/neighbors_semi_native.mojo:79: for k in range(len(shape)):  # small-loop(shape: array rank metadata): at most two dimensions
 bindings/neighbors_semi_native.mojo:582: for i in range(len(classes)):  # driver-loop: over the k class labels (type test)
 bindings/neighbors_semi_native.mojo:590: for i in range(len(classes)):  # driver-loop: over the k class values
-bindings/neighbors_semi_native.mojo:695: for i in range(len(allc)):  # driver-loop: over the k class labels (the unlabeled marker)
-bindings/neighbors_semi_native.mojo:701: for i in range(len(allc)):  # driver-loop: over the k class labels without the marker
 bindings/neural_block_admission.mojo:92: for i in range(len(value)):  # driver-loop: passive configuration and descriptor words
 bindings/neural_block_admission.mojo:131: for j in range(len(names)):  # small-loop(known operation field names): the record slot's exact name list
 bindings/neural_block_admission.mojo:138: for j in range(len(names)):  # small-loop(known operation field names)
@@ -1164,14 +1101,11 @@ bindings/neural_block_public.mojo:1035: for name in _neural_snapshot_names():  #
 bindings/neural_labels_native.mojo:99: for i in range(layout.count):  # driver-loop: native label schema decoding, never input hooks
 bindings/neural_labels_native.mojo:110: while count > 0 and ptr[count - 1] == 0:  # driver-loop: remove fixed-width byte-label padding
 bindings/neural_labels_native.mojo:117: for k in range(4):  # small-loop(one unicode code point)
-bindings/neural_labels_native.mojo:174: for i in range(count):  # driver-loop: native label kind admission
 bindings/neural_labels_native.mojo:182: for i in range(0 if all_text else count):  # driver-loop: lossless native bytes-to-codepoint key normalization
 bindings/neural_labels_native.mojo:201: for i in range(count):  # driver-loop: distinct text-label metadata and inverse codes
 bindings/neural_labels_native.mojo:214: for i in range(len(unique)):  # driver-loop: retain exact text values with their explicit lengths
 bindings/neural_labels_native.mojo:220: for i in range(len(unique)):  # driver-loop: native class-label result serialization
-bindings/neural_labels_native.mojo:222: for j in range(table.lengths[index]):  # driver-loop: each native class code point
 bindings/neural_labels_native.mojo:227: for k in range(4):  # small-loop(one native unicode result code point)
-bindings/neural_labels_native.mojo:261: for i in range(count):  # driver-loop: publish one predicted label from its native class words
 bindings/normal_dist_helpers.mojo:232: for i in range(n):  # small-loop(n: missing entries of one feature): the user-estimator route's per-entry draw (CPU-only input step)
 bindings/numeric_profile_native.mojo:34: for i in range(len(value)):  # driver-loop: admit ordinary metadata sequences
 bindings/numeric_profile_native.mojo:40: for i in range(len(values)):  # driver-loop: admit ordinary profile registry records
@@ -1203,9 +1137,7 @@ bindings/p3_labels_metrics_native.mojo:452: for i in range(n):  # driver-loop: o
 bindings/p3_labels_metrics_native.mojo:500: for index in range(count):  # driver-loop: one native word read and one C number per element
 bindings/p3_linear_helpers.mojo:34: for i in range(len(indices)):  # cpu-route: object-label output, one stored class reference per predicted row
 bindings/p3nc_label_lists.mojo:31: for i in range(n):  # driver-loop: exact float items read borrowed, one C read per label
-bindings/pandas_arrow_native.mojo:102: for c in range(count):  # driver-loop: over Arrow chunks, admitting one dtype before any copy
 bindings/pandas_arrow_native.mojo:124: for c in range(count):  # driver-loop: over Arrow chunks, one native copy each
-bindings/pandas_arrow_native.mojo:143: for r in range(length):  # driver-loop: storage unpack only, one Arrow bit per output byte
 bindings/parallel_byte_native.mojo:129: for i in range(len(dims)):  # small-loop(dims: nine or ten admitted shape words)
 bindings/parallel_byte_native.mojo:136: for key in [String("parameters"), String("m"), String("v"), String("flags")]:  # small-loop(keys: four state arrays)
 bindings/parallel_byte_native.mojo:198: for name in [String("numeric_mode"), String("vendor"), String("profile"), String("config_profile")]:  # small-loop(names: four profile entry names)
@@ -1260,7 +1192,6 @@ bindings/parallel_mlp_native.mojo:380: for name in [String("optimizer_parallel_a
 bindings/parallel_mlp_native.mojo:418: for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:  # small-loop(the five optimizer config words)
 bindings/parallel_mlp_native.mojo:420: for i in range(4):  # small-loop(the four trailing plan words)
 bindings/parallel_neighbor_worker.mojo:209: while power < nnz:  # driver-loop: segmented sorting network shape
-bindings/parallel_neighbor_worker.mojo:259: for i in range(nq):  # driver-loop: native ragged output assembly, one output Array per query row
 bindings/parallel_neighbor_worker.mojo:296: for i in range(len(classes)):  # driver-loop: class counts per output
 bindings/parallel_neighbor_worker.mojo:307: for i in range(len(classes)):  # driver-loop: original native/fitted class-set check
 bindings/parallel_neighbor_worker.mojo:308: for j in range(len(classes[i])):  # driver-loop: class metadata
@@ -1270,15 +1201,12 @@ bindings/parallel_neighbor_worker.mojo:499: for i in range(len(names)):  # small
 bindings/parallel_neural_admission.mojo:68: for key in [String("_lock"), String("_pool"), String("_update_pool")]:  # small-loop(the three fixed owner field names)
 bindings/parallel_neural_native.mojo:245: var keys = py_call(b[].bi.sorted, py_call(b[].bi.list, value))
 bindings/parallel_neural_native.mojo:255: for i in range(len(value)):  # driver-loop: over state record items
-bindings/parallel_neural_native.mojo:411: for i in range(len(results)):  # driver-loop: over returned logical shard loss/gradient records
 bindings/parallel_public_result.mojo:33: for i in range(len(value)):  # driver-loop: completed multi-output buffers
 bindings/parallel_shard_common.mojo:150: for i in range(len(value)):  # small-loop(a request tuple's few operands)
 bindings/parallel_shard_common.mojo:157: for i in range(len(value)):  # small-loop(a request tuple's few operands)
 bindings/parallel_shard_common.mojo:484: for k in range(1, len(shape)):  # small-loop(the source's trailing dimensions)
 bindings/parallel_shard_common.mojo:537: for k in range(1, len(shape)):  # small-loop(the trailing dimensions)
 bindings/parallel_shard_common.mojo:593: for i in range(len(value)):  # driver-loop: over a structural field's entries
-bindings/parallel_shard_native.mojo:142: for r in range(len(ranges) // 2):  # driver-loop: one worker request per row block
-bindings/parallel_shard_native.mojo:149: for r in range(len(parts)):  # driver-loop: checks one result block per row shard
 bindings/parallel_shard_native.mojo:245: for k in range(len(names)):  # small-loop(the scaler's per-column statistics)
 bindings/parallel_shard_native.mojo:305: for k in range(len(names)):  # small-loop(the scaler's per-column statistics)
 bindings/parallel_shard_native.mojo:373: for k in range(len(classes)):  # driver-loop: over the one-vs-rest classes
@@ -1287,25 +1215,14 @@ bindings/parallel_shard_native.mojo:438: for i in range(len(arrays)):  # small-l
 bindings/parallel_shard_native.mojo:523: for i in range(len(classes)):  # driver-loop: exact connected forest classes
 bindings/parallel_shard_native.mojo:575: for k in range(len(node_names)):  # small-loop(the four flat node arrays)
 bindings/parallel_shard_native.mojo:718: for i in range(len(first)):  # small-loop(the result tuple's components)
-bindings/parallel_shard_native.mojo:720: for p in range(len(parts)):  # driver-loop: one component per query shard
-bindings/parallel_shard_native.mojo:727: for p in range(len(parts)):  # driver-loop: one ragged row list per query shard
-bindings/parallel_shard_native.mojo:732: for p in range(len(parts)):  # driver-loop: one column per query shard
-bindings/parallel_shard_native.mojo:737: for p in range(len(parts)):  # driver-loop: one block per query shard
-bindings/parallel_shard_native.mojo:833: for r in range(n_ranges):  # driver-loop: one token per reference block
 bindings/parallel_shard_native.mojo:846: while first < rows:  # driver-loop: over the query row blocks
-bindings/parallel_shard_native.mojo:877: for r in range(n_ranges):  # driver-loop: one diagnostic record per reference block
-bindings/parallel_shard_native.mojo:909: for p in range(count):  # driver-loop: one candidate table row per reference block
 bindings/parallel_shard_native.mojo:949: while wave < len(tokens):  # driver-loop: over waves of len(devices) stored blocks
 bindings/parallel_shard_native.mojo:951: for r in range(wave, min(wave + workers, len(tokens))):  # driver-loop: one release per stored block
 bindings/parallel_shard_native.mojo:1010: for i in range(len(value)):  # driver-loop: over a carried field's entries
 bindings/parallel_shard_native.mojo:1014: for i in range(len(values)):  # driver-loop: over a carried field's entries
-bindings/parallel_shard_native.mojo:1113: for r in range(len(ranges) // 2):  # driver-loop: one worker request per query row block
-bindings/parallel_shard_native.mojo:1129: for r in range(len(results)):  # driver-loop: one result and diagnostic per query row block
 bindings/params_setter_native.mojo:36: for i in range(len(protected)):  # driver-loop: instance protocols are never product callbacks
 bindings/params_setter_native.mojo:64: while cursor < len(todo):  # driver-loop: iterative ownership walk, including deeply nested/cyclic native data
 bindings/params_setter_native.mojo:141: + String(py_call(b.repr, py_call(b.sorted, values))) + ".")
-bindings/params_setter_native.mojo:166: for i in range(len(fitted)):  # driver-loop: remove only native-owned fitted fields; preserve unrelated user data
-bindings/pca_metadata.mojo:102: for k in range(len(stored)):  # driver-loop: over owned values before resetting the estimator dictionary
 bindings/perf2_shared_fitted_field.mojo:63: for j in range(len(keys)):  # small-loop(keys: one class namespace): exact string names only
 bindings/perf2_shared_fitted_field.mojo:69: for j in range(len(keys)):  # small-loop(keys: one class namespace): admitted exact string names
 bindings/perf3_label_doors_text.mojo:25: for i in range(n):  # driver-loop: exact str label classes by pointer, one C read per label
@@ -1316,12 +1233,9 @@ bindings/prep_classify_common.mojo:329: for i in range(len(vals)):  # driver-loo
 bindings/prep_classify_common.mojo:342: for i in range(len(vals)):  # driver-loop: over the user prior list (class-count sized)
 bindings/prep_classify_common.mojo:434: while ((n + rows - 1) // rows) * cells > GRAM_WORDS and rows < 4194304:  # driver-loop: the block length doubles (a function of the shape only)
 bindings/prep_classify_common.mojo:546: for i in range(len(classes)):  # driver-loop: over the class index table (classes-sized)
-bindings/prep_classify_common.mojo:551: for k in range(len(found)):  # driver-loop: over the batch's distinct labels (classes-sized)
 bindings/prep_classify_common.mojo:559: var named = py_call(b.sorted, py_call(b.set, bad))
-bindings/prep_classify_common.mojo:564: for k in range(len(remap)):  # driver-loop: over the batch's distinct labels (classes-sized)
 bindings/prep_classify_common.mojo:573: for i in range(n):  # cpu-route: Python object labels of any kind, the explicit label input step
 bindings/prep_classify_native.mojo:929: while ((n + rows - 1) // rows) * d * K * cmax > CAT_HIST_WORDS and rows < 4194304:  # driver-loop: the histogram block doubles (a function of the shape only)
-bindings/prep_classify_native.mojo:1183: for i in range(d):  # driver-loop: over the scalings' rows (model structure)
 bindings/prep_classify_prog.mojo:119: for i in range(len(values)):  # driver-loop: over a parameter list (priors, scalars, model-structure words)
 bindings/prep_classify_prog.mojo:134: for i in range(len(values)):  # driver-loop: over a parameter list of int words
 bindings/prep_classify_prog.mojo:156: for i in range(len(params)):  # small-loop(params: at most fourteen stage parameters)
@@ -1344,15 +1258,12 @@ bindings/prep_encode_native.mojo:1200: for i in range(len(values)):  # driver-lo
 bindings/prep_encode_native.mojo:1316: for j in range(len(categories)):  # driver-loop: over the per-column category arrays
 bindings/prep_encode_native.mojo:1544: for i in range(len(values)):  # driver-loop: over one column grouping
 bindings/prep_encode_native.mojo:1659: for j in range(len(cards)):  # driver-loop: validates unknown_value against cardinalities
-bindings/prep_encode_native.mojo:1665: for j in range(len(cards)):  # driver-loop: validates encoded_missing_value argument
 bindings/prep_encode_native.mojo:2126: for _ in range(r):  # driver-loop: over the user knots rows
 bindings/prep_encode_native.mojo:2132: for i in range(r):  # driver-loop: over the user knots rows
 bindings/prep_encode_native.mojo:2134: for j in range(c):  # driver-loop: over one user knots row
 bindings/prep_encode_native.mojo:2141: for i in range(len(outer)):  # driver-loop: over the user knots rows
 bindings/prep_encode_native.mojo:2181: for i in range(nk):  # driver-loop: over the user knots rows
 bindings/prep_encode_native.mojo:2185: for c in range(d):  # driver-loop: over one user knots row
-bindings/prep_encode_native.mojo:2252: for _ in range(d):  # driver-loop: one level row per column
-bindings/prep_encode_native.mojo:2717: for t in range(T):  # driver-loop: over the target's classes
 bindings/prep_encode_native.mojo:2760: for i in range(idx.size):  # cpu-route: one user cv test index list, read once (its rows)
 bindings/prep_encode_native.mojo:2774: for i in range(idx.size):  # cpu-route: one user cv train index list, read once (its rows)
 bindings/prep_encode_native.mojo:2779: for i in range(idx.size):  # cpu-route: one user cv train index list, read once (its rows)
@@ -1381,9 +1292,7 @@ bindings/prep_iterimp_native.mojo:689: for r in range(len(orders)):  # cpu-route
 bindings/prep_iterimp_native.mojo:692: for i in range(len(orders[r])):  # cpu-route: the user estimator, fitted once per feature (user code)
 bindings/prep_iterimp_native.mojo:832: for s in range(len(sequence)):  # cpu-route: the fitted user estimators, one predict per step (user code)
 bindings/prep_labels_native.mojo:134: for i in range(len(values)):  # driver-loop: over a fitted category or label word list
-bindings/prep_labels_native.mojo:267: for i in range(K):  # driver-loop: over the distinct class values the device found
 bindings/prep_labels_native.mojo:383: for i in range(n):  # cpu-route: Python label objects, the explicit label input step (one pass)
-bindings/prep_labels_native.mojo:422: for i in range(K):  # driver-loop: over the distinct class values the device found
 bindings/prep_labels_native.mojo:445: for i in range(len(classes)):  # cpu-route: non-str object labels, the explicit label input step
 bindings/prep_labels_native.mojo:454: for i in range(len(values)):  # cpu-route: non-str object labels, the explicit label input step
 bindings/prep_labels_native.mojo:497: for i in range(len(values)):  # cpu-route: Python code objects read once, the explicit label input step
@@ -1412,16 +1321,12 @@ bindings/prep_labels_native.mojo:1197: var rows = py_call(yt.tolist) if Bool(py=
 bindings/prep_labels_native.mojo:1199: for i in range(len(rows)):  # cpu-route: builds the user list of Python label tuples (object output)
 bindings/prep_labels_native.mojo:1202: for j in range(len(row)):  # cpu-route: builds the user list of Python label tuples (object output)
 bindings/prep_lda_admission.mojo:85: for i in range(len(fitted)):  # driver-loop: consumed fitted state (content words, once per record)
-bindings/prep_lda_admission.mojo:198: for k in range(len(plain)):  # driver-loop: class labels of the fitted classes_ (identity key)
 bindings/prep_lda_admission.mojo:337: for i in range(len(flat) if numeric_float else 0):  # driver-loop: preserve the public classifier target admission before encoding
 bindings/prep_normalizer_lifecycle.mojo:61: for i in range(len(value)):  # driver-loop: admit native invalid-setting repr before formatting
-bindings/prep_normalizer_lifecycle.mojo:66: for i in range(len(pairs)):  # driver-loop: native invalid-setting keys/values before repr
 bindings/prep_normalizer_lifecycle.mojo:143: for i in range(len(names)):  # small-loop(metadata: the seven fixed class setting names)
 bindings/prep_normalizer_lifecycle.mojo:197: for i in range(len(pins)):  # small-loop(ABI: connected numeric modes)
 bindings/prep_normalizer_lifecycle.mojo:243: for i in range(len(names)):  # small-loop(ABI: fixed connected numerical entry points)
 bindings/prep_normalizer_lifecycle.mojo:325: for k in range(3, 7):  # small-loop(metadata: existing width-check exemptions metric/kernel/affinity/dissimilarity)
-bindings/prep_select_native.mojo:645: for i in range(dc):  # driver-loop: scatters device MI values to their columns (continuous feature count)
-bindings/prep_select_native.mojo:648: for i in range(dd):  # driver-loop: scatters device MI values to their columns (discrete feature count)
 bindings/prep_stateless_native.mojo:193: for i in range(len(values)):  # driver-loop: over polynomial term table words
 bindings/prep_stateless_native.mojo:384: for k in range(2, 16):  # small-loop(params: the fixed fourteen-word stage ABI)
 bindings/prep_stateless_native.mojo:662: while s > 1 and ((1 << s) - 1) * n * d > 268435456:  # driver-loop: over speculation depths
@@ -1452,8 +1357,6 @@ bindings/samba_admission.mojo:105: for i in range(len(records)):  # driver-loop:
 bindings/samba_admission.mojo:210: for i in range(len(value)):  # driver-loop: over admitted container elements
 bindings/samba_admission.mojo:238: for i in range(len(records)):  # driver-loop: over connected model/config/state class identities
 bindings/samba_admission.mojo:269: for i in range(n):  # driver-loop: over admitted container elements
-bindings/samba_admission.mojo:316: for j in range(len(live)):  # driver-loop: over native record keys, by identity
-bindings/samba_admission.mojo:320: for j in range(len(present)):  # driver-loop: over the record's admitted fields
 bindings/samba_admission.mojo:351: for i in range(len(guards)):  # driver-loop: over registered runtime record/Array layouts
 bindings/samba_checkpoint_native.mojo:59: for start in range(0, len(raw), SAMBA_TRANSFER_CHUNK):  # driver-loop: over bounded file hashing chunks
 bindings/samba_checkpoint_native.mojo:70: while start < count:  # driver-loop: over bounded file write chunks
@@ -1472,7 +1375,6 @@ bindings/scaler_lifecycle_native.mojo:541: for k in range(3):  # small-loop(stat
 bindings/scaler_lifecycle_native.mojo:574: for k in range(3):  # small-loop(stats: saved StandardScaler statistics)
 bindings/scaler_native.mojo:71: for i in range(len(params)):  # small-loop(params: at most fourteen native stage arguments)
 bindings/scaler_native.mojo:73: for i in range(14 - len(params)):  # small-loop(params: pad the fixed fourteen-word stage ABI)
-bindings/sequence_array_native.mojo:46: for i in range(count):  # driver-loop: over fixed dtype subarray elements
 bindings/sequence_array_warnings.mojo:135: for k in range(len(filters)):  # driver-loop: over filter row identities for normal filter mutation
 bindings/sequence_dtype_native.mojo:47: for i in range(text.byte_length()):  # driver-loop: locate an empty compact-shape component in native parser text
 bindings/sequence_dtype_native.mojo:83: for i in range(len(classes)):  # driver-loop: compare connected native dtype classes
@@ -1497,11 +1399,8 @@ bindings/sequential_admission.mojo:119: for k in range(len(current)):  # small-l
 bindings/sequential_admission.mojo:129: for k in range(1, len(current)):  # small-loop(five fixed type-tuple entries)
 bindings/sequential_admission.mojo:149: for i in range(len(values)):  # driver-loop: over fixed connected admission type identities captured once
 bindings/sequential_admission.mojo:167: for k in range(len(value)):  # driver-loop: over native input container owners and metadata
-bindings/sequential_arrays.mojo:85: for k in range(1, nd):  # driver-loop: over native sample dimensions
-bindings/sequential_description.mojo:118: for k in range(len(source)):  # driver-loop: over a sample's axis permutation
 bindings/sequential_description.mojo:277: for k in range(len(self.sample_dims)):  # driver-loop: over retained native sample dimensions
 bindings/sequential_description.mojo:328: for k in range(len(sample), 8):  # driver-loop: over unused sample dimension slots
-bindings/sequential_description.mojo:391: for k in range(1, nd):  # driver-loop: over the input sample rank
 bindings/sequential_inputs.mojo:193: for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
 bindings/small_mlp_items.mojo:87: for axis in range(1, len(dims)):  # small-loop(trailing native Array rank)
 bindings/small_mlp_items.mojo:100: for i in range(count):  # driver-loop: native row views retain captured storage, never copy scalar words
@@ -1544,7 +1443,6 @@ bindings/svc_linear_native.mojo:65: for i in range(3):  # small-loop(solver fiel
 bindings/svc_linear_native.mojo:135: values = family_call(b.list, family_call(b.map, class_weight.get, classes, family_call(itertools.repeat, PythonObject(1.0))))
 bindings/svc_linear_native.mojo:407: for k in range(n_fits):  # driver-loop: over the one-vs-rest fits (one result row each)
 bindings/svc_linear_native.mojo:425: for i in range(rows):  # cpu-route: the host binding's 0/1 target (equal_elements, cast_elements)
-bindings/svc_linear_native.mojo:451: for c in range(n_fits):  # driver-loop: over the one-vs-rest targets (exact copies of the fitted block)
 bindings/svc_linear_native.mojo:452: for j in range(n_coefs):  # driver-loop: over the coefficients of one target
 bindings/svc_ocsvm_native.mojo:52: for i in range(len(values)):  # small-loop(op ints: at most six parameters)
 bindings/svc_ocsvm_native.mojo:94: var store = family_call(context["array_type"], PythonObject("i"), family_call(b.map, b.int, family_call(value.tolist)))
@@ -1590,7 +1488,6 @@ bindings/training_embedding_native.mojo:183: for i in range(rows):  # driver-loo
 bindings/training_embedding_native.mojo:188: for j in range(width):  # driver-loop: one native read per index of the row
 bindings/training_embedding_native.mojo:192: for i in range(rows):  # driver-loop: one native read per index
 bindings/training_embedding_native.mojo:276: for i in range(len(classes)):  # driver-loop: preserve native complex-scalar refusal before general admission
-bindings/training_extra_native.mojo:324: for i in range(len(views)):  # driver-loop: over the caller's session arrays (shape words, not data)
 bindings/training_loss_options.mojo:68: for i in range(len(classes)):  # driver-loop: fixed native scalar class identities
 bindings/training_loss_options.mojo:129: for i in range(len(classes)):  # driver-loop: recognize the native NumPy unicode scalar
 bindings/training_scalar_native.mojo:126: for i in range(len(classes)):  # driver-loop: exact native scalar class identities
@@ -1601,7 +1498,6 @@ bindings/trees_agnostic_native.mojo:406: while r0 < n:  # driver-loop: one bindi
 bindings/trees_agnostic_native.mojo:420: while s0 < n:  # driver-loop: solve-batch loop (one binding call per batch)
 bindings/trees_agnostic_native.mojo:432: while r0 < n:  # driver-loop: one binding call per row chunk
 bindings/trees_agnostic_native.mojo:445: while r0 < n:  # driver-loop: one binding call per row chunk
-bindings/trees_agnostic_native.mojo:525: for j in range(kk):  # driver-loop: over the fitted output rows (model structure)
 bindings/trees_agnostic_native.mojo:526: for f in range(d):  # driver-loop: one coefficient row copy
 bindings/trees_agnostic_native.mojo:561: while r0 < n:  # driver-loop: one binding call per row chunk
 bindings/trees_agnostic_native.mojo:577: while r0 < n:  # driver-loop: one binding call per row chunk
@@ -1664,9 +1560,6 @@ bindings/trees_public_gbdt_fit.mojo:659: for which in range(2):  # small-loop(li
 bindings/trees_public_gbdt_fit.mojo:765: for i in range(len(digits)):  # small-loop(hex): at most sixteen hex digits of one word
 bindings/trees_public_gbdt_fit.mojo:1137: + "train.cpp:279 is the refusal): " + _repr(py_call(b.sorted, t["non_symmetric_losses"])))
 bindings/trees_public_gbdt_fit.mojo:1261: for i in range(2):  # small-loop(perm_names): the two permutation arguments
-bindings/trees_public_gbdt_fit.mojo:1514: for i in range(k):  # driver-loop: over the distinct class labels
-bindings/trees_public_gbdt_fit.mojo:1520: for i in range(k):  # driver-loop: over the distinct class labels
-bindings/trees_public_gbdt_fit.mojo:1525: for i in range(k):  # driver-loop: over the distinct class labels
 bindings/trees_public_gbdt_fit.mojo:1591: for i in range(len(copied)):  # small-loop(copied): the five learner attributes
 bindings/trees_public_gbdt_fit.mojo:1624: for j in range(len(classes)):  # small-loop(classes): the two training classes
 bindings/trees_public_iforest.mojo:305: for i in range(2):  # small-loop(names): the two device scan probes
@@ -1676,29 +1569,23 @@ bindings/trees_public_inputs.mojo:220: for i in range(len(classes)):  # driver-l
 bindings/trees_public_inputs.mojo:273: for s in range(len(g[].owners)):  # small-loop(_DECODE_SLOTS): at most eight recorded classes_
 bindings/trees_public_inputs.mojo:279: for i in range(len(classes)):  # driver-loop: over the k class objects (identity only)
 bindings/trees_public_inputs.mojo:290: for s in range(len(g[].owners)):  # small-loop(_DECODE_SLOTS): replace this owner's stale entry
-bindings/trees_public_inputs.mojo:352: for i in range(k):  # driver-loop: over the k class values into the gather table
 bindings/trees_public_inputs.mojo:390: for i in range(n):  # cpu-route: str or bool classes decode to Python objects, the explicit label output step
 bindings/trees_public_lifecycle_native.mojo:44: raise Error("Invalid parameter(s) " + String(py_call(b.repr, py_call(b.sorted, unknown))) + " for " + classical_estimator_name(model))
 bindings/trees_public_meta.mojo:574: for pair in pairs:  # cpu-route: user cv splitter or iterable of index pairs, validated natively per pair
 bindings/trees_public_meta.mojo:1294: rows = py_call(b.list, py_call(b.map, b.list, target))  # cpu-route: label objects (str/mixed) no Array holds
 bindings/trees_public_meta.mojo:1304: var column = py_call(b.list, py_call(b.map, py_call(getter, PythonObject(j)), rows))  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
-bindings/trees_public_meta.mojo:1377: for j in range(len(lists)):  # driver-loop: over members (each column's first label)
 bindings/trees_public_meta.mojo:1380: var zipped = py_call(b.list, py_call(b.map, b.list, _call_kw(b.zip, py_call(b.tuple, lists), Python.dict())))  # cpu-route: label objects (str/mixed) no Array holds
-bindings/trees_public_meta.mojo:1388: for i in range(len(zipped)):  # driver-loop: completed output labels
 bindings/trees_public_meta.mojo:1497: rows = py_call(b.list, py_call(b.map, b.list, y))  # cpu-route: label objects (str/mixed) no Array holds
 bindings/trees_public_meta.mojo:1507: var column = py_call(b.list, py_call(b.map, py_call(getter, PythonObject(j)), rows))  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
 bindings/trees_public_meta.mojo:1553: for i in range(len(targets)):  # driver-loop: over members
 bindings/trees_public_meta.mojo:2048: for i in range(len(keys)):  # small-loop(keyword arguments): the caller's fit parameters
 bindings/trees_public_meta.mojo:2112: for i in range(1, len(args)):  # small-loop(args): the call's remaining positional arguments
 bindings/trees_public_mixin_score.mojo:111: for i in range(len(classes)):  # driver-loop: over the fitted classes (the binary vocabulary)
-bindings/trees_public_mixin_score.mojo:118: for i in range(k):  # driver-loop: over the distinct target classes
 bindings/trees_public_mixin_score.mojo:132: for i in range(n):  # cpu-route: Python object labels mapped per row, the explicit label input step
 bindings/trees_public_score.mojo:152: for k in range(len(value)):  # cpu-route: the leaf types of a user Python list, the explicit input step
 bindings/trees_public_score.mojo:381: for i in range(n):  # cpu-route: the label types of user labels, the explicit label input step
 bindings/trees_public_score.mojo:389: for i in range(n):  # cpu-route: str labels, the explicit label input step
 bindings/trees_public_score.mojo:394: for i in range(n):  # cpu-route: Python int labels, the explicit label input step
-bindings/trees_public_score.mojo:419: for i in range(len(order)):  # driver-loop: over the distinct class labels
-bindings/trees_public_score.mojo:427: for i in range(k):  # driver-loop: over the distinct class labels
 bindings/trees_public_score.mojo:440: for i in range(labels.n):  # cpu-route: Python object labels mapped per row, the explicit label input step
 bindings/trees_public_score.mojo:492: for i in range(_PARAMS):  # small-loop(params): the fourteen fixed parameter words of one stage
 bindings/trees_public_score.mojo:579: var present = py_call(b.sorted, py_call(_label_set(true).union, _label_set(pred)))
@@ -1712,7 +1599,6 @@ bindings/trees_side_records.mojo:260: for i in range(len(g[].items)):  # small-l
 bindings/trees_staged_input.mojo:126: for j in range(len(tables)):  # small-loop(tables): at most the two forest binaries per mode
 bindings/trees_staged_input.mojo:135: for j in range(len(tables)):  # small-loop(tables): at most the two forest binaries per mode
 bindings/trees_staged_input.mojo:202: for i in range(n):  # small-loop(staged): at most the two forest binaries per mode
-bindings/tsa_admission.mojo:135: for i in range(len(mro)):  # driver-loop: exact class dictionaries and native instance storage
 bindings/tsa_autoarima_native.mojo:86: for k in range(3):  # small-loop(selected ordinary order words)
 bindings/tsa_autoarima_native.mojo:88: for k in range(4):  # small-loop(selected seasonal order words)
 bindings/tsa_hw_native.mojo:184: for i in range(3):  # small-loop(the three packed components)
@@ -1758,22 +1644,16 @@ bindings/user_objects_native.mojo:548: for a in range(m):  # cpu-route: Python l
 bindings/user_objects_native.mojo:560: for i in range(n):  # cpu-route: Python label objects read once by user_objects_c (f32_exact)
 bindings/user_objects_native.mojo:577: for i in range(n):  # cpu-route: Python list-of-lists y read once by user_objects_c (indicator)
 bindings/user_objects_native.mojo:586: for i in range(n):  # cpu-route: Python list-of-lists y read once by user_objects_c (indicator)
-bindings/user_objects_native.mojo:588: for j in range(w):  # driver-loop: over one row's columns
-bindings/x_linear_native.mojo:363: for j in range(k):  # driver-loop: over the fitted classes' coefficient rows (model structure)
-bindings/x_linear_native.mojo:985: for i in range(count):  # driver-loop: publish completed native Huber result bytes as Python bool slots
 bindings/x_linear_native.mojo:1908: for i in range(len(counts)):  # driver-loop: over the target vector's parts
 bindings/x_linear_native.mojo:1914: for i in range(len(counts)):  # driver-loop: over the target vector's parts
 bindings/x_linear_native.mojo:1980: var floats = py_call(b.list, py_call(b.map, b.float, listed))
 bindings/x_linear_native.mojo:2194: values = py_call(b.sorted, py_call(b.map, b.float, alphas), reverse=PythonObject(True))
 bindings/x_linear_native.mojo:2312: var floats = py_call(b.list, py_call(b.map, b.float, ratios))
-bindings/x_prep_native_inputs.mojo:101: for k in range(len(arrays)):  # driver-loop: native target buffer validation, one call per block
-bindings/x_prep_native_inputs.mojo:129: while py_type(first) is b.list or py_type(first) is b.tuple:  # driver-loop: over target nesting rank metadata
 bindings/x_prep_native_owner.mojo:309: for i in range(len(values)):  # driver-loop: over the run's in-out inputs
 bindings/x_prep_native_owner.mojo:355: for i in range(1, n):  # driver-loop: insertion sort of the program's output range pairs
 bindings/x_prep_native_owner.mojo:366: for i in range(n):  # driver-loop: merge of the sorted output range pairs
 bindings/xcnn_bn_native.mojo:42: for name in ["num_features", "eps", "affine", "momentum", "track_running_stats", "num_batches_tracked_",  # driver-loop: over consumed passive settings
 bindings/xcnn_bn_native.mojo:182: for i in range(c):  # driver-loop: over BatchNorm channels of the initial running variance
-bindings/xcnn_bn_native.mojo:335: for i in range(len(given)):  # driver-loop: over the declared sample shape words
 bindings/xcnn_bn_native.mojo:344: for i in range(len(value)):  # driver-loop: saved forward shape metadata
 bindings/xcnn_classifier_native.mojo:183: for i in range(3):  # small-loop(the three declared image dimensions)
 bindings/xcnn_classifier_native.mojo:197: for i in range(4):  # small-loop(integer classifier settings)
@@ -1790,7 +1670,6 @@ bindings/xcnn_conv_native.mojo:604: for i in range(2):  # small-loop(fixed convo
 bindings/xcnn_conv_native.mojo:920: for name in ["numeric_mode", "input_shape", "training"]:  # small-loop(block configuration)
 bindings/xcnn_conv_native.mojo:922: for name in ["conv1", "conv2", "bn1", "bn2", "relu1", "relu2"]:  # small-loop(fixed residual block layers)
 bindings/xcnn_conv_native.mojo:1012: for name in ["x", "s1", "s2", "xh", "c1", "b1", "r1", "c2", "s", "d1", "sd"]:
-bindings/xcnn_conv_native.mojo:1288: for i in range(len(given)):  # driver-loop: over the declared sample shape words
 bindings/xcnn_graph_native.mojo:70: for i in range(len(views)):  # small-loop(one or two graph inputs)
 bindings/xcnn_graph_native.mojo:90: for i in range(len(sig)):  # small-loop(one or two graph inputs)
 bindings/xcnn_graph_native.mojo:96: for j in range(3):  # small-loop(three layout words of one graph input)
@@ -1800,7 +1679,6 @@ bindings/xcnn_graph_native.mojo:478: for i in range(1, 4):  # small-loop(three c
 bindings/xcnn_graph_native.mojo:671: for name in ["in_channels", "out_channels", "improved", "add_self_loops", "normalize", "bias", "numeric_mode", "project", "root_weight", "aggr"]:  # small-loop(graph layer configuration)
 bindings/xcnn_graph_native.mojo:682: for name in ["in_features", "out_features", "numeric_mode"]:  # small-loop(linear configuration)
 bindings/xcnn_graph_native.mojo:823: for i in range(1, len(saved)):  # small-loop(saved native buffer handles)
-bindings/xcnn_pool_native.mojo:413: for i in range(len(given)):  # driver-loop: over the admitted sample shape words
 bindings/xcnn_pool_native.mojo:506: for i in range(len(xs)):  # driver-loop: over shape words
 bindings/xcnn_tensor_native.mojo:23: for i in range(len(value)):  # driver-loop: passive shape words before any conversion
 bindings/xseq_forecast_native.mojo:264: for row in range(batch):  # driver-loop: over the fitted series (one selected model name each)
@@ -1846,7 +1724,6 @@ providers/python/autograd_graph_metadata_pyapi.mojo:34: for i in range(len(value
 providers/python/autograd_import_metadata_pyapi.mojo:70: for i in range(len(value)):  # driver-loop: one snapshot of declared graph inputs/outputs
 providers/python/autograd_import_metadata_pyapi.mojo:82: for axis in range(len(shape)):  # small-loop(shape: admitted graph rank)
 providers/python/autograd_import_metadata_pyapi.mojo:139: for i in range(len(classes)):  # driver-loop: over fixed native metadata types
-providers/python/autograd_import_metadata_pyapi.mojo:165: for i in range(len(shapes)):  # driver-loop: over native key/value shape pairs
 providers/python/autograd_import_metadata_pyapi.mojo:218: for i in range(len(problems)):  # driver-loop: over native lowerer's refusal records
 providers/python/autograd_model_checkpoint_pyapi.mojo:49: for i in range(len(r.layer_floats)):  # small-loop(layers: one record per model layer): result packing, no data
 providers/python/autograd_model_checkpoint_pyapi.mojo:58: for i in range(len(r.ints)):  # small-loop(ints: the record's option words): result packing, no data
@@ -1929,12 +1806,9 @@ providers/python/causal_lm_program_pyapi.mojo:34: for i in range(n):  # driver-l
 providers/python/causal_lm_program_pyapi.mojo:42: for i in range(n):  # driver-loop: over descriptor floats (argument unpacking, no data)
 providers/python/causal_lm_program_pyapi.mojo:62: for i in range(len(ret)):  # driver-loop: over result words (no data)
 providers/python/classical_family_admission_pyapi.mojo:85: for hook in ["__getattribute__", "__getattr__", "__setattr__", "__delattr__", "__del__", "__class__", "__dict__"]:  # small-loop(fixed storage/lookup hooks)
-providers/python/classical_family_admission_pyapi.mojo:97: for i in range(len(ancestry)):  # driver-loop: reject descriptor replacement before any instance field read
 providers/python/cluster_public_lifecycle_pyapi.mojo:40: for i in range(len(value)):  # driver-loop: native partial-fit seed and scalar state words
 providers/python/compiled_binding_snapshot_pyapi.mojo:69: for i in range(len(g[].modules)):  # small-loop(admitted compiled providers): a few extension modules per process, never data
 providers/python/compiled_binding_snapshot_pyapi.mojo:79: for i in range(len(g[].modules)):  # small-loop(admitted compiled providers): a few extension modules per process, never data
-providers/python/density_public_lifecycle_pyapi.mojo:85: for i in range(3, 6):  # driver-loop: row, feature and metric scalars
-providers/python/density_public_lifecycle_pyapi.mojo:175: for k in range(len(pairs)):  # driver-loop: KDE reads values only; native keys remain safe in diagnostic repr
 providers/python/estimator_binding_pyapi.mojo:152: for i in range(len(g[].modules)):  # small-loop(admitted mode getters): a few compiled extension modules per process, never data
 providers/python/estimator_binding_pyapi.mojo:233: for i in range(1, count):  # small-loop(args: positional arguments of one public call)
 providers/python/family_public_lifecycle_pyapi.mojo:178: for key in ["kernel", "metric", "affinity"]:  # small-loop(three fixed precomputed-mode parameters)
@@ -1954,8 +1828,6 @@ providers/python/gp_public_lifecycle_pyapi.mojo:184: for i in range(len(value)):
 providers/python/gp_public_lifecycle_pyapi.mojo:189: for i in range(len(value)):  # driver-loop: one native array result per output
 providers/python/hierarchy_connectivity_pyapi.mojo:40: for i in range(len(types)):  # small-loop(admitted native numeric dtype identities)
 providers/python/hierarchy_connectivity_pyapi.mojo:66: for axis in range(len(shape)):  # small-loop(captured sparse storage rank words)
-providers/python/hierarchy_connectivity_pyapi.mojo:136: for major in range(outer):  # driver-loop: sparse graph's stored compressed rows or columns
-providers/python/hierarchy_connectivity_pyapi.mojo:144: for r in range(br):  # driver-loop: native sparse block rows
 providers/python/hierarchy_connectivity_pyapi.mojo:191: for at in range(len(pairs)):  # driver-loop: admitted native dictionary coordinate records
 providers/python/hierarchy_connectivity_pyapi.mojo:209: for row in range(n):  # driver-loop: sparse LIL row storage
 providers/python/hierarchy_connectivity_pyapi.mojo:214: for at in range(len(row_data)):  # driver-loop: stored LIL entries without callback conversions
@@ -1967,8 +1839,6 @@ providers/python/hierarchy_resident_pyapi.mojo:37: for i in range(3, 6):  # smal
 providers/python/host_estimator_binding_pyapi.mojo:22: for j in range(len(records)):  # driver-loop: fixed import-connected host family inventory
 providers/python/kernel_method_descriptor_pyapi.mojo:38: for i in range(len(addrs)):  # small-loop(at most eight fixed native buffer slots)
 providers/python/kernel_method_descriptor_pyapi.mojo:42: for i in range(schema[0]):  # small-loop(at most ten scalar parameter slots)
-providers/python/kernel_public_lifecycle_pyapi.mojo:62: for i in range(len(learned)):  # driver-loop: fitted storage names (content words, once per record)
-providers/python/kernel_public_lifecycle_pyapi.mojo:87: for i in range(len(learned)):  # driver-loop: fitted storage names (identity record)
 providers/python/kernel_public_lifecycle_pyapi.mojo:110: for i in range(len(kept)):  # driver-loop: values admitted by more than their identity
 providers/python/kernel_public_lifecycle_pyapi.mojo:122: for i in range(len(residual)):  # driver-loop: values admitted by more than their identity
 providers/python/kernel_public_lifecycle_pyapi.mojo:296: for i in range(len(flat)):  # driver-loop: admitted label storage, never Python element protocols
@@ -2009,7 +1879,6 @@ providers/python/pca_model_pyapi.mojo:136: for index in range(6):  # small-loop(
 providers/python/pca_model_pyapi.mojo:202: for group in range(2):  # small-loop(connected settings, then fitted state)
 providers/python/pca_model_pyapi.mojo:231: for index in range(6):  # small-loop(the six consumed compiled entry names)
 providers/python/pca_model_pyapi.mojo:300: for index in range(len(decoded)):  # small-loop(eight decoded query field names)
-providers/python/pcs_public_lifecycle_pyapi.mojo:49: while py_type(first) is b.list or py_type(first) is b.tuple:  # driver-loop: first-element sequence kind, never buffer metadata
 providers/python/pcs_public_lifecycle_pyapi.mojo:62: for i in range(len(codes)):  # small-loop(four exact native NumPy floating scalar identities)
 providers/python/pcs_public_lifecycle_pyapi.mojo:97: for row in range(data.rows):  # driver-loop: finite check over the captured pre-cast input
 providers/python/pcs_public_lifecycle_pyapi.mojo:106: for row in range(data.rows):  # driver-loop: finite check over the captured pre-cast input
@@ -2022,7 +1891,6 @@ providers/python/prep_arrow_target_pyapi.mojo:31: for word in ["DoubleArray", "F
 providers/python/prep_metadata_pyapi.mojo:35: for axis in [1, 0]:  # small-loop(metadata: dataframe rows and columns)
 providers/python/prep_target_pyapi.mojo:158: for k in range(len(snapshots)):  # driver-loop: original target float words; never narrowed
 providers/python/prep_target_pyapi.mojo:184: for i in range(len(shape)):  # small-loop(rank: passive selected-target shape metadata)
-providers/python/prep_target_pyapi.mojo:208: while py_type(first) is b.list or py_type(first) is b.tuple:  # driver-loop: describe's first-element target category
 providers/python/prep_transform_pyapi.mojo:33: for i in range(len(shape)):  # small-loop(rank: captured shape words)
 providers/python/prep_transform_pyapi.mojo:122: for name in ["NumpyBlock", "NumericBlock", "ObjectBlock", "ExtensionBlock", "DatetimeLikeBlock", "DatetimeTZBlock", "CategoricalBlock"]:  # small-loop(pandas native block layouts)
 providers/python/prophet_buffers_pyapi.mojo:25: for i in range(len(value)):  # driver-loop: exact sequence leaves before inference or conversion
@@ -2031,7 +1899,6 @@ providers/python/prophet_buffers_pyapi.mojo:180: _numbers(py_call(source.tolist)
 providers/python/radius_public_lifecycle_pyapi.mojo:54: for i in range(len(names)):  # small-loop(four current radius settings)
 providers/python/radius_public_lifecycle_pyapi.mojo:89: for i in range(len(value)):  # driver-loop: ignored float targets still preserve their finite-value validation
 providers/python/radius_public_lifecycle_pyapi.mojo:103: for i in range(len(names)):  # small-loop(three exact NumPy complex scalar identities)
-providers/python/radius_public_lifecycle_pyapi.mojo:129: while py_type(first) is b.list or py_type(first) is b.tuple:  # driver-loop: first-element target rank metadata
 providers/python/radius_public_lifecycle_pyapi.mojo:234: for axis in range(len(shape)):  # small-loop(captured target shape and strides)
 providers/python/radius_public_lifecycle_pyapi.mojo:255: for i in range(count):  # driver-loop: native finite scan over the captured target buffer
 providers/python/radius_public_lifecycle_pyapi.mojo:258: for reversed_axis in range(len(dimensions)):  # small-loop(target rank coordinates, not exporter metadata)
@@ -2059,7 +1926,6 @@ providers/python/resample_pandas_pyapi.mojo:866: for i in range(ldata.rows):  # 
 providers/python/resample_pandas_pyapi.mojo:883: for i in range(len(records)):  # driver-loop: one immutable sparse metadata snapshot per public operation
 providers/python/resample_pandas_pyapi.mojo:1279: for byte in range(meaningful):  # driver-loop: native floating-to-bool scalar storage conversion
 providers/python/resample_pandas_pyapi.mojo:1360: for i in range(points):  # driver-loop: admit every sorted sparse position before allocating output
-providers/python/resample_pandas_pyapi.mojo:1379: for j in range(length):  # driver-loop: one native output position per stored sparse point
 providers/python/resample_pandas_pyapi.mojo:1417: for row in range(rows):  # driver-loop: retain arbitrary objects and box exact native scalar fills as pandas does
 providers/python/resample_pandas_pyapi.mojo:1421: for row in range(rows):  # driver-loop: native missing datetime fill has the iNaT representation
 providers/python/resample_pandas_pyapi.mojo:1439: for row in range(rows):  # driver-loop: native scalar storage assignment; no NumPy full/astype
@@ -2119,7 +1985,6 @@ providers/python/training_metadata_pyapi.mojo:46: for i in range(len(value)):  #
 providers/python/training_samba_afn_pyapi.mojo:37: for i in range(want):  # small-loop(want: buffer addresses of one op): address slot admission
 providers/python/transformer_decode_pyapi.mojo:133: for i in range(len(g[].vendor_entries)):  # small-loop(connected decode bindings): a few compiled modules per process, never data
 providers/python/transformer_decode_pyapi.mojo:178: for name in names:  # small-loop(nine fixed decode entry names)
-providers/python/transformer_decode_pyapi.mojo:298: for i in range(11):  # driver-loop: optional weight shapes match the captured option record
 providers/python/transformer_decode_pyapi.mojo:317: for plane in range(3):  # small-loop(three integer plane formats)
 providers/python/transformer_decode_pyapi.mojo:371: for key in [String("cached_tokens"), String("arithmetic_profile"), String("_resident_session")]:  # driver-loop: admitted native state bookkeeping only
 providers/python/transformer_resident_pyapi.mojo:43: for i in range(len(values)):  # driver-loop: native boundary scalar/address metadata
@@ -2143,7 +2008,6 @@ providers/python/x_neighbors_host_pyapi.mojo:99: for k in range(na):  # small-lo
 providers/python/x_neighbors_host_pyapi.mojo:101: for k in range(ni):  # small-loop(the fixed dimension words of the named operation)
 providers/python/x_neighbors_host_pyapi.mojo:105: for k in range(ni, min(ni + optional_ints, len(i_))):  # small-loop(at most the named operation's optional words)
 providers/python/x_neighbors_host_pyapi.mojo:107: for k in range(nf):  # small-loop(the fixed scalar words of the named operation)
-providers/python/xseq_public_lifecycle_pyapi.mojo:68: for i in range(len(items)):  # driver-loop: over the model's stored fields (content words, once per record)
 providers/python/xseq_public_lifecycle_pyapi.mojo:213: for axis in range(len(dimensions)):  # small-loop(admitted rank metadata)
 providers/python/xseq_public_lifecycle_pyapi.mojo:281: for axis in range(len(dimensions)):  # small-loop(public input rank metadata)
 providers/python/xtrees_api_pyapi.mojo:110: for i in range(5):  # small-loop(the five forest address words)
