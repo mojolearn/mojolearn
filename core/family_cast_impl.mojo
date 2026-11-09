@@ -9,19 +9,40 @@ from core.classical_cast import classical_f32_bits
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL, cast_w64_bits
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+from core.host_finite_scan import host_all_finite_f32
+
+
+@always_inline
+def family_raw_word(address: Int, item: Int) -> UInt64:
+    """The little-endian item of `item` bytes at `address`, zero-extended
+    to 64 bits: one typed unaligned load for a 1, 2, 4 or 8-byte item (the
+    word the byte-by-byte assembly built, as the inputs are checked to be in
+    native little-endian order), the byte assembly otherwise."""
+    if item == 4:
+        return UInt64(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=address).unsafe_load[alignment=1](0))
+    if item == 8:
+        return MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=address).unsafe_load[alignment=1](0)
+    if item == 2:
+        return UInt64(MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=address).unsafe_load[alignment=1](0))
+    if item == 1:
+        return UInt64(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address).unsafe_load(0))
+    var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
+    var raw = UInt64(0)
+    for k in range(item):  # native input marshaling: bytes of one item of an unusual width
+        raw |= UInt64(bytes[k]) << UInt64(k * 8)
+    return raw
 
 
 def family_cast_rows(
     addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, kind: Int,
     dst: MutPointer[Float32, MutUntrackedOrigin],
 ) raises:
-    for r in range(rows):  # native input marshaling: input rows, never a model or training loop
-        for c in range(cols):  # native input marshaling: numeric buffer items preserve exact cast bits
-            var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr + r * s0 + c * s1)
-            var raw = UInt64(0)
-            for k in range(item):
-                raw |= UInt64(bytes[k]) << UInt64(k * 8)
-            dst[r * cols + c] = bitcast[DType.float32](classical_f32_bits(raw, kind, item))
+    """The `_buffer.as_f32_c` cast with no finiteness refusal: the same
+    classical_f32_bits word per item as `family_cast_rows_finite`, which
+    does the work (row tasks over the host's cores); its finiteness flag is
+    not read."""
+    # parallel: cast over row tasks across host cores (0.8.66 regression C1, 13 ns/element serial)
+    _ = family_cast_rows_finite(addr, s0, s1, rows, cols, item, kind, dst)
 
 
 def family_cast_rows_finite(
@@ -36,7 +57,9 @@ def family_cast_rows_finite(
     independent (each writes only its own cells and its task's flag), so
     they are split into contiguous row tasks over the host's cores
     (core/host_predict_threads.mojo, with its grain floor); the output words
-    do not depend on the split, and the flag is the AND of the tasks'."""
+    do not depend on the split, and the flag is the AND of the tasks'.
+    Each item is one typed load (`family_raw_word`), not a byte assembly."""
+    # parallel: cast and finiteness test over row tasks across host cores (0.8.66 regression C1, 13 ns/element serial)
     if rows <= 0 or cols <= 0:
         return True
     var tasks = host_predict_task_count_work(rows, rows * cols * max(item, 1))
@@ -50,11 +73,7 @@ def family_cast_rows_finite(
         var finite = True
         for r in range(lo, hi):  # native input marshaling: this task's input rows
             for c in range(cols):  # native input marshaling: numeric buffer items preserve exact cast bits
-                var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr + r * s0 + c * s1)
-                var raw = UInt64(0)
-                for k in range(item):
-                    raw |= UInt64(bytes[k]) << UInt64(k * 8)
-                var bits = classical_f32_bits(raw, kind, item)
+                var bits = classical_f32_bits(family_raw_word(addr + r * s0 + c * s1, item), kind, item)
                 dst.unsafe_store(r * cols + c, bitcast[DType.float32](bits))
                 if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
                     finite = False
@@ -88,32 +107,42 @@ def family_cast_rows_f64(
     dst: MutPointer[Float64, MutUntrackedOrigin],
 ):
     """`_buffer.as_f64_c`'s cast: a float widens exactly, an integer or a
-    bool converts to the nearest binary64."""
-    for r in range(rows):  # native input marshaling: input rows, never a model or training loop
-        for c in range(cols):  # native input marshaling: numeric buffer items
-            var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr + r * s0 + c * s1)
-            var raw = UInt64(0)
-            for k in range(item):
-                raw |= UInt64(bytes[k]) << UInt64(k * 8)
-            var word = cast_w64_bits(raw, kind, item)
-            var value: Float64
-            if kind == CAST_KIND_SIGNED:
-                value = Float64(bitcast[DType.int64](word))
-            elif kind == CAST_KIND_UNSIGNED or kind == CAST_KIND_BOOL:
-                value = Float64(word)
-            else:
-                value = bitcast[DType.float64](word)
-            dst[r * cols + c] = value
+    bool converts to the nearest binary64. Rows are independent (each
+    writes only its own cells), so they are split into contiguous row tasks
+    over the host's cores, as `family_cast_rows_finite`; the output words do
+    not depend on the split."""
+    # parallel: cast over row tasks across host cores (0.8.66 regression C1, 13 ns/element serial)
+    if rows <= 0 or cols <= 0:
+        return
+    var tasks = host_predict_task_count_work(rows, rows * cols * max(item, 1))
+    var chunk = host_predict_chunk(rows, tasks)
+
+    def _rows(t: Int) {imm addr, imm s0, imm s1, imm rows, imm cols, imm item, imm kind, imm dst, imm chunk}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, rows)
+        for r in range(lo, hi):  # native input marshaling: this task's input rows
+            for c in range(cols):  # native input marshaling: numeric buffer items
+                var word = cast_w64_bits(family_raw_word(addr + r * s0 + c * s1, item), kind, item)
+                var value: Float64
+                if kind == CAST_KIND_SIGNED:
+                    value = Float64(bitcast[DType.int64](word))
+                elif kind == CAST_KIND_UNSIGNED or kind == CAST_KIND_BOOL:
+                    value = Float64(word)
+                else:
+                    value = bitcast[DType.float64](word)
+                dst.unsafe_store(r * cols + c, value)
+
+    if tasks <= 1:
+        _rows(0)
+    else:
+        host_parallelize(_rows, tasks)
 
 
 def family_all_finite_f32(src: MutPointer[Float32, MutUntrackedOrigin], count: Int) -> Bool:
     """True when none of `count` float32 words is a NaN or an infinity
     (`_buffer.all_finite`)."""
-    for i in range(count):  # native input marshaling: one finiteness scan over the checked input
-        var bits = bitcast[DType.uint32](src[i])
-        if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            return False
-    return True
+    # parallel: finiteness scan across host cores (0.8.66 regression C2, serial scan)
+    return host_all_finite_f32(src, count)
 
 
 def family_max_f32(src: MutPointer[Float32, MutUntrackedOrigin], count: Int) -> Float32:
