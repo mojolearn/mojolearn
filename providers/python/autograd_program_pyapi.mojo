@@ -403,12 +403,22 @@ def _integer(v: PythonObject, what: String, low: Int) raises -> Int:
     return value
 
 
+def fit_stop_options(options: PythonObject) raises -> Tuple[Float32, Int]:
+    """Program.fit's stopping options (lane x1b), options[8] `tol` and
+    options[9] `n_iter_no_change` when the tuple carries them: tol None is
+    no criterion (n_iter_no_change 0, every epoch runs)."""
+    if len(options) < 10 or options[8] is None:
+        return (Float32(0.0), 0)
+    return (Float32(py=options[8]), _integer(options[9], "n_iter_no_change", 1))
+
+
 def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     sid: PythonObject, pid: PythonObject, arrays: PythonObject, targets: PythonObject,
     optimizer: PythonObject, parameters: PythonObject, loss: PythonObject,
     epochs: PythonObject, batch_size: PythonObject, shuffle: PythonObject,
     seed: PythonObject, delta: PythonObject,
     condition_id: Int = 0, otherwise_id: Int = 0,
+    tol: Float32 = Float32(0.0), n_iter_no_change: Int = 0,
 ) raises -> PythonObject:
     # One public binding call owns option parsing as well as the entire
     # upload/shuffle/batch/backward/update path. Old packed ABI stays usable.
@@ -458,14 +468,19 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     var branches = program_fit_native[E, KIND](
         Int(py=sid), Int(py=pid), owners^, target_owners^, kind, Float32(py=delta), opt, params, count, batch,
         Bool(py=shuffle), seed_word, FP(unsafe_from_address=Int(py=curve.__array_interface__["data"][0])),
-        condition_id, otherwise_id,
+        condition_id, otherwise_id, tol, n_iter_no_change,
     )
     _ = arrays  # descriptors borrow external inputs through the whole native fit
     _ = targets
-    _ = curve
+    var ran = branches[2]
     var out = Python.list()
-    _ = py_call(out.append, curve)
-    _ = py_call(out.append, PythonObject(count))
+    if ran < count:
+        # an early stop: the curve of the epochs that ran (a view, no copy)
+        _ = py_call(out.append, py_call(curve.__getitem__, py_call(b.slice, PythonObject(0), PythonObject(ran))))
+    else:
+        _ = py_call(out.append, curve)
+    _ = curve
+    _ = py_call(out.append, PythonObject(ran))
     if condition_id > 0:
         var counts = b.dict()
         py_setitem(counts, "true", branches[0])
