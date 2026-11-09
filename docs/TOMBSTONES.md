@@ -465,6 +465,9 @@ in the tables after the sections.
 | [`MOJOLEARN_RSVD_FAST_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, FAST + Apple) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_IDN_RSVD_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, IDENTICAL) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_RSVD_FAST_DEVSCAN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd finiteness scan, FAST + Apple) | removed (KEPT default, superseded: parallel host scan of the one admission path) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`MOJOLEARN_NI18_FUSED_EPOCH_GATHER`](#cnnclassifier-hand-epoch-replaced-by-one-captured-program-2026-11-09) | Neural (CNNClassifier device epoch row gather, IDENTICAL) | removed with its route (never measured; the epoch is a captured program) | 2026-11-09 | [X8_CNN_HAND_EPOCH.patch](../experiments/removed/X8_CNN_HAND_EPOCH.patch) |
+| [`MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF`](#cnnclassifier-hand-epoch-replaced-by-one-captured-program-2026-11-09) | Neural (CNNClassifier epoch order and Adam scalars host vs device) | removed with its route (the classifier trains through Program.fit) | 2026-11-09 | [X8_CNN_HAND_EPOCH.patch](../experiments/removed/X8_CNN_HAND_EPOCH.patch) |
+| [`x_cnn_fit_epoch_r`, `x_cnn_fit_epoch_d`, `x_cnn_fit_d`, `x_cnn_predict_r`, `x_cnn_epoch_rows`, `x_cnn_adam_hyper_d`, `cnn_backward_autograd` (CNNClassifier hand epoch)](#cnnclassifier-hand-epoch-replaced-by-one-captured-program-2026-11-09) | Neural (CNNClassifier fit / predict) | removed (replaced by one captured program and Program.fit on the executor) | 2026-11-09 | [X8_CNN_HAND_EPOCH.patch](../experiments/removed/X8_CNN_HAND_EPOCH.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -4271,3 +4274,47 @@ lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Bits: none for any int32-range or
   lane/a3-admit-decomp-prep-metrics@0cb550c337.
 - `door_rows_call` (the `_arena_io._ROWS_CALL` connection in `_native_msel_dispatch.connect`): no reader after A5 deleted
   `door_rows_host`; removed from the glue and from tools/test_device_rows_door_cv.py.
+
+## CNNClassifier hand epoch replaced by one captured program (2026-11-09)
+
+Lane `x8-cnn-on-executor` (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` row X8), branch
+`lane/x8-cnn-on-executor` from `integ/pre-0867-w2` `f59d913b0b`.
+
+- **What moved.** `CNNClassifier.fit` is one captured program (`sequence/cnn_classifier_program.mojo`): per block
+  `OPS_CONV2D` (stride 1, padding k // 2), `OPS_RELU`, `OPS_MAXPOOL2D` where the map holds a window, then
+  `OPS_RESHAPE_N` and `OPS_LINEAR` over `OPS_TRANSPOSE` of the (classes, flat) head weight, trained by `Program.fit`
+  (`train_program_control`: loss kind 5 cross-entropy on the class codes, the session optimizer with SGD dampening as
+  an optional eighth float, the OP_MLP_PERM epoch order with the classifier's splitmix64 seed, every minibatch loss
+  through the new `step_curve`). `predict` / `predict_proba` run the same forward in an inference session over 2048-row
+  chunks, then `OPS_SOFTMAX` and `OPS_ARGMAX`. Python reaches both through the x_sequence whole-model door
+  (`sequence/neural_model_dispatch.mojo` `CNN_FIT` = 18, `CNN_PREDICT` = 19) on the device and the host column alike.
+- **What was deleted.** `x_cnn/device_entries_impl.mojo` `fit_epoch_r_device`, `fit_epoch_d_device`,
+  `sgd_base_rows`, `widen_f32_into`, `_tape_words`; `autograd/rules_cnn.mojo` (`CnnRules`, `cnn_backward_autograd`,
+  tags 96-98 free) and its check `x_cnn/checks/tape_check.mojo` + `tape_check_digests.tsv`; the device-epoch pieces of
+  `x_cnn/device.mojo` (`epoch_rows_download`, `res_gather_pair_perm` and its NI18 kernel, `adam_hyper_resident`,
+  `adam_hyper_download`, `opt_many_resident_h`, `softmax_xent_res_loss`); the element functions of `x_cnn/ops.mojo`
+  (`epoch_key`, `epoch_rows_prm`, `epoch_rows_at`, `epoch_row_val`, `adam_hyper_at`, `adam_hyper_base` and their
+  double-float32 helpers, `IDN_CNN_EPOCH_DEV`; `x_cnn_idn2_flags` bit 1 is reserved, 0); the entries
+  `x_cnn_fit_epoch_r`, `x_cnn_fit_epoch_d`, `x_cnn_fit_d`, `x_cnn_predict_r`, `x_cnn_epoch_rows`, `x_cnn_adam_hyper_d`
+  of both `_mojolearn_x_cnn` and `_mojolearn_x_cnn_host` (and the host helpers `epoch_rows_fill`, `adam_rows`,
+  `widen_f32_into`, `widen_f32_list_into`, `sgd_hyper_rows`, `fit_epoch_r_into`); in
+  `bindings/xcnn_classifier_native.mojo` the resident-array planner, the Python step-loop arm
+  (`MOJOLEARN_XCNN_PY_STEPS`, `_EPOCH_ENTRY`, `_LEGACY_STEP`), the resident predict record (`xcnn_clf_predict_v1`) and
+  the per-step optimizer plumbing; the dead `CNNClassifier` Python helpers (`_params`, `_plan`, `_resident`,
+  `_forward_r`, `_images`); `tools/py_misc/cnn_epoch.py`, `tools/py_misc/cnn_job.sh`,
+  `python/mojolearn/tests/test_x_cnn_native_sessions.py`. The per-layer resident primitives
+  (`x_cnn_conv_block_forward_r` / `_backward_r`, `x_cnn_linear_*_r`, `x_cnn_softmax_xent_r`, `x_cnn_sgd_r`,
+  `x_cnn_adam_r`, `x_cnn_res_*`) stay as the primitive API.
+- **Defines.** `MOJOLEARN_NI18_FUSED_EPOCH_GATHER` (default off, never measured) and `MOJOLEARN_IDN_CNN_EPOCH_DEV_OFF`
+  lost their only code with the epoch; both are refused in `core/experiment_guards_neural.mojo`; NI18 moved to
+  `removed` in `experiments/six_lane_integration/grid_controls/neural-seq-train-dedupe.json`.
+- **Verdict / bits.** Not measured (lanes never time). Bits change for CNNClassifier on every column together: the
+  tape's rank-4 conv (im2col + OP_GEMM, autograd/rankn_conv.mojo) replaces the CNN's pinned GEMM plan, the tape linear
+  and cross-entropy replace `linear_forward_into` / `softmax_xent_into`, OP_OPT through `step_lr` replaces
+  `opt_many_resident` and its device Adam scalars. The epoch order is the same Feistel order (OP_MLP_PERM equals the
+  deleted `epoch_rows_at`). `loss_curve_` is now Program.fit's sample-weighted epoch mean (it was the unweighted mean
+  of the step losses); `losses_` is still every minibatch's mean loss. The layers no longer carry `grad_weight_` /
+  `grad_bias_` and the model no longer carries `_bufs` after a classifier fit. Identity lanes `x-cnn-trainer` and
+  `x-cnn-trainer-options` re-record at the one pre-release run. RUN OWED: board rows `algos/cnn-clf/synthetic` fit and
+  infer on NVIDIA and AMD, program vs `f59d913b0b`.
+- Code recoverable at `f59d913b0b`; patch `experiments/removed/X8_CNN_HAND_EPOCH.patch`.
