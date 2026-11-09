@@ -426,7 +426,6 @@ DEBT = {
     'bindings/x_linear_native.mojo': {'cpython': 1, 'native_loaded_module': 6},
     'bindings/x_prep_native_inputs.mojo': {'cpython': 2, 'native_loaded_module': 6},
     'bindings/x_prep_native_owner.mojo': {'cpython': 1, 'native_loaded_module': 10},
-    'bindings/xcnn_classifier_native.mojo': {'cpython': 1},
     'bindings/xcnn_common.mojo': {'native_loaded_module': 3},
     'bindings/xcnn_pool_native.mojo': {'cpython': 1},
     'bindings/xseq_forecast_native.mojo': {'cpython': 1, 'native_loaded_module': 7},
