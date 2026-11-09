@@ -129,6 +129,57 @@ class ScanTest(unittest.TestCase):
             if old is not None:
                 os.environ["MOJOLEARN_HOOK_WORKERS"] = old
 
+    def test_helper_hidden_per_element_read_is_caught(self):
+        helper = ("def _leaf_into(raw: PyObjectPtr, slot: Int, mut values: List[Float64]) raises:\n"
+                  "    values[slot] = Float64(py=PythonObject(from_borrowed=raw))\n")
+        hidden = helper + ("def fill(c: PythonObject, mut values: List[Float64]) raises:\n"
+                           "    for k in range(len(c)):  # driver-loop: over the entries\n"
+                           "        _leaf_into(p3_raw(c, k), k, values)\n")
+        inline = ("def fill(c: PythonObject, mut values: List[Float64]) raises:\n"
+                  "    for k in range(len(c)):  # driver-loop: over the entries\n"
+                  "        values[k] = Float64(py=c[k])\n")
+        clean = ("def fill(c: NativeList, mut values: List[Float64]) raises:\n"
+                 "    for k in range(len(c)):  # driver-loop: over the entries\n"
+                 "        values[k] = c.at(k)\n")
+        self.assertEqual([k for _n, k, _c in ncs.scan(hidden)], ["false-tag"])
+        self.assertEqual([k for _n, k, _c in ncs.scan(inline)], ["false-tag"])
+        st = ncs.Counter()
+        self.assertEqual(ncs.scan(clean, st), [])
+        self.assertEqual(st["driver-unknown"], 1)
+        # a helper imported from a door module is followed too
+        ext = ncs.top_defs(helper)
+        caller = ("from bindings.leaf_door import _leaf_into\n"
+                  "def fill(c: PythonObject, mut values: List[Float64]) raises:\n"
+                  "    for k in range(len(c)):  # driver-loop: over the entries\n"
+                  "        _leaf_into(p3_raw(c, k), k, values)\n")
+        self.assertEqual(ncs.door_imports(caller), {"_leaf_into": ("bindings/leaf_door.mojo", "_leaf_into")})
+        self.assertEqual([k for _n, k, _c in ncs.scan(caller, ext_defs=ext)], ["false-tag"])
+        self.assertEqual(ncs.scan(caller), [])            # without the helper nothing shows the read
+
+    UNPACK = ("def take(c: PythonObject, mut values: List[Float64]) raises:\n"
+              "    for k in range(len(c)):  # unpack: one pass over the caller's list of floats\n"
+              "        values[k] = Float64(py=p3_item(c, k))\n")
+
+    def test_unpack_is_accepted_in_a_boundary_file_on_a_typed_write(self):
+        for path in ("providers/python/autograd_program_pyapi.mojo", "bindings/_mojolearn_rf.mojo",
+                     "bindings/admitted_input.mojo", "bindings/sequential_inputs.mojo"):
+            st = ncs.Counter()
+            self.assertEqual([k for _n, k, _c in ncs.scan(self.UNPACK, st, path)], ["unpack"], path)
+            self.assertEqual(st["unpack"], 1)
+
+    def test_unpack_is_refused_outside_boundary_files_or_when_it_calls_python(self):
+        for path in ("bindings/prep_labels_native.mojo", "bindings/entry/_mojolearn_rf.mojo", "x_decomp/pca_pyapi.mojo"):
+            self.assertEqual([k for _n, k, _c in ncs.scan(self.UNPACK, None, path)], ["false-unpack"], path)
+        calls = self.UNPACK.replace("Float64(py=p3_item(c, k))", "Float64(py=py_call(conv, p3_item(c, k)))")
+        self.assertEqual([k for _n, k, _c in ncs.scan(calls, None, "bindings/admitted_input.mojo")], ["false-unpack"])
+        via_helper = ("def conv(x: PythonObject) raises -> Float64:\n    return Float64(py=py_call(f, x))\n"
+                      + self.UNPACK.replace("Float64(py=p3_item(c, k))", "conv(p3_item(c, k))"))
+        self.assertEqual([k for _n, k, _c in ncs.scan(via_helper, None, "bindings/admitted_input.mojo")],
+                         ["false-unpack"])
+        no_write = self.UNPACK.replace("values[k] = Float64(py=p3_item(c, k))", "check(p3_item(c, k))")
+        self.assertEqual([k for _n, k, _c in ncs.scan(no_write, None, "bindings/admitted_input.mojo")],
+                         ["false-unpack"])
+
     def test_docstrings_are_skipped(self):
         text = '\n'.join([
             'fn a():',
@@ -265,6 +316,20 @@ class TreeTest(unittest.TestCase):
         self.assertIn("bindings/w.mojo:2: untagged loop", err)
         self.assertIn("baseline row bindings/w.mojo: for i in range(n): (x1) is not in main's baseline", err)
         self.assertNotIn("bindings/x.mojo:2", err)
+
+    def test_unpack_baseline_growth_is_refused(self):
+        unpack = ScanTest.UNPACK
+        self.write("bindings/admitted_input.mojo", CLEAN)
+        self.write(BASELINE, "# main's baseline\n")
+        self.commit("main")
+        self.git("checkout", "-q", "-b", "lane/unpack")
+        self.write("bindings/admitted_input.mojo", unpack)
+        self.write(BASELINE, "# main's baseline\nbindings/admitted_input.mojo:2: " + unpack.splitlines()[1].strip() + "\n")
+        self.commit("lane adds an unpack loop and its own row")
+        for args in (("--tree", "HEAD"), ("--tree", "HEAD", "--branch")):
+            rc, err = self.run_checker(*args)
+            self.assertEqual(rc, 1, args)
+            self.assertIn("bindings/admitted_input.mojo:2: unpack loop not in the baseline", err)
 
     def test_usage(self):
         self.commit()
