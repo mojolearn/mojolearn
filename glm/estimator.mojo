@@ -61,7 +61,7 @@ from glm.impl.linear_model.qn import (
     QNParams,
 )
 from checks.numerics import ftz
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from core.gram_splitk import (
     gram_splitk_applies,
     gram_splitk_chunk_count,
@@ -813,8 +813,12 @@ def qn_fit_ovr_host(
     pams.lbfgs_memory = lbfgs_memory
     pams.fit_intercept = fit_intercept
     pams.penalty_normalized = penalty_normalized
-    var hw = ctx.enqueue_create_host_buffer[DType.float32](n_param)
-    for k in range(n_fits):
+    # lane n2-cd-qn-glm-loops: every fit's weights land in one device block
+    # (row k = fit k) and come home once after the last fit, where each fit
+    # used to download its row behind its own wait
+    var w_all = ctx.enqueue_create_buffer[DType.float32](n_fits * n_param)
+    var hw = ctx.enqueue_create_host_buffer[DType.float32](n_fits * n_param)
+    for k in range(n_fits):  # driver-loop: over the one-vs-rest fits, X shared
         # the solver takes X and y by transfer. X is the one resident upload
         # shared by every class: the handle is copied (a reference count), not
         # the n_rows x n_features words. The QN objective only reads X
@@ -837,7 +841,8 @@ def qn_fit_ovr_host(
             # (`qn_row_weight_kernel`)
             var swb = sw_all
             swk = Optional[DeviceBuffer[DType.float32]](swb^)
-        ctx.synchronize()
+        # no wait here: the target kernel and the memset are ordered before
+        # the solver's launches on the same context (lane n2-cd-qn-glm-loops)
         var trace = IdentityTrace()
         if trace.enabled:
             trace.header(
@@ -850,14 +855,17 @@ def qn_fit_ovr_host(
             ctx, pams, xk^, yk^, n_rows, n_features, 2, w, fx, iters,
             has_sample_weight, trace, Float32(0.0), swk^,
         )
-        ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
-        ctx.synchronize()
-        for i in range(n_param):
-            coef_ptr.unsafe_store(k * n_param + i, hw.unsafe_ptr().unsafe_load(i))
+        ctx.enqueue_copy(
+            dst_buf=w_all.create_sub_buffer[DType.float32](k * n_param, n_param), src_buf=w
+        )
         info_ptr.unsafe_store(3 * k, fx)
         info_ptr.unsafe_store(3 * k + 1, Float32(ret))
         info_ptr.unsafe_store(3 * k + 2, Float32(iters))
         _ = w^
+    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w_all)
+    ctx.synchronize()
+    memcpy(dest=coef_ptr, src=hw.unsafe_ptr(), count=n_fits * n_param)
+    _ = w_all^
     _ = hw^
     _ = sw_all^
     _ = codes^
