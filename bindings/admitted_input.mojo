@@ -440,8 +440,12 @@ def admit_c_view(source: PythonObject, name: String, context: PythonObject, admi
     var view = classical_view(source, context, name, admitted)
     if classical_c_order(view, context):
         return view
+    if classical_is_array(view, context):
+        # An F-ordered 2-D Array (an install without NumPy): its store is in
+        # storage order, so its bytes are not the C-order words.
+        raise Error("TypeError: mojolearn: " + name + " must be a C-ordered Array")
     var typestr = admitted_dtype(view, context)
-    var exported = native_buffer_view(view._mv if classical_is_array(view, context) else view)
+    var exported = native_buffer_view(view)
     var store = native_array_from_bytes(String(_store_code(typestr)), py_call(exported.tobytes, "C"))
     var copy = classical_wrap_array(store, view.shape, typestr, "C", context)
     _ = view^
