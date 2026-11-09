@@ -72,7 +72,11 @@ struct _ArenaPool(Defaultable, Movable):
         self.views = 0
 
 
-comptime _ARENA_NAME = "MojolearnDeviceArenaIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDeviceArenaFastV2"
+comptime _ARENA_NAME_IDN: StaticString = "MojolearnDeviceArenaIdenticalV2"
+comptime _ARENA_NAME_OTHER: StaticString = "MojolearnDeviceArenaFastV2"
+# typed StaticString arms: a conditional of two literals is a String value,
+# which shared_slot_check (StaticString) does not take
+comptime _ARENA_NAME: StaticString = _ARENA_NAME_IDN if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else _ARENA_NAME_OTHER
 comptime DEVICE_ARENA = _Global[StorageType=_ArenaPool, name=_ARENA_NAME, init_fn=_ArenaPool.__init__]
 
 

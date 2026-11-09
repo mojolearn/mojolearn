@@ -63,19 +63,22 @@ def _afs_nonfinite_kernel(src: _AFS_F32, n_: Int32, status: _AFS_I32, slot_: Int
         status.unsafe_store(Int(slot_), AFS_NONFINITE)
 
 
-def enqueue_finite_status(ctx: DeviceContext, d_words: _AFS_F32, n: Int, d_status: _AFS_I32, slot: Int) raises:
+def enqueue_finite_status[wo: MutOrigin, so: MutOrigin, //](
+    ctx: DeviceContext, d_words: MutPointer[Float32, wo], n: Int, d_status: MutPointer[Int32, so], slot: Int,
+) raises:
     """Enqueue the finite test of the `n` resident float32 words at device
     pointer `d_words`; word `slot` of the device status buffer `d_status`
     becomes 1 when any of them is NaN or infinite. The caller fills the
     status buffer with 0 first and reads it back with its result: this adds
     no synchronisation. Spans past one launch's Int32 count go in
-    `AFS_MAX_N`-word launches."""
+    `AFS_MAX_N`-word launches. Either pointer may carry its buffer's origin
+    (a `DeviceBuffer.unsafe_ptr()`); the kernel takes untracked views."""
     var off = 0
     while off < n:  # driver-loop: over Int32-sized launches of one span
         var m = min(AFS_MAX_N, n - off)
         var grid = max(1, min(AFS_REDUCE_BLOCKS, (m + AFS_TPB - 1) // AFS_TPB))
         ctx.enqueue_function[_afs_nonfinite_kernel](
-            d_words + off, Int32(m), d_status, Int32(slot),
+            d_words.unsafe_origin_cast[MutAnyOrigin]() + off, Int32(m), d_status.unsafe_origin_cast[MutAnyOrigin](), Int32(slot),
             grid_dim=grid, block_dim=AFS_TPB,
         )
         off += m

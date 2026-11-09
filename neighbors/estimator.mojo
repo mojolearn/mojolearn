@@ -1951,6 +1951,7 @@ def knn_classifier_predict_resident(
     weights: Int = WEIGHTS_UNIFORM,
     cache: KnnIndexCachePointer = None,
     vote_cache: KnnVoteCachePointer = None,
+    status_addr: Int = 0,
 ) raises -> Int:
     """Reads the device plan once and runs the planned overload below."""
     return knn_classifier_predict_resident(
@@ -1976,6 +1977,7 @@ def knn_classifier_predict_resident(
         weights,
         cache,
         vote_cache,
+        status_addr,
     )
 
 
@@ -2002,6 +2004,7 @@ def knn_classifier_predict_resident(
     weights: Int = WEIGHTS_UNIFORM,
     cache: KnnIndexCachePointer = None,
     vote_cache: KnnVoteCachePointer = None,
+    status_addr: Int = 0,
 ) raises -> Int:
     """`knn_classifier_predict` over an index ALREADY ON THE DEVICE
     (DEVIATION 3002, lane/knn-tiled-distance, 2026-09-17; the same door as
@@ -2045,7 +2048,11 @@ def knn_classifier_predict_resident(
         ctx, trace, retained_indices, True, index, n_index, queries_ptr,
         n_queries, n_features, k, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
         weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3], dplan, cache,
+        False, status_addr,
     )
+    if status_addr != 0 and MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr)[0] != 0:
+        # A non-finite query (lane a7b): the door refuses; no vote.
+        return used_tile
     _knn_classifier_vote(ctx, trace, retained_indices, h_dist.unsafe_ptr(),
         n_index, n_queries, k, y_ptr, n_outputs, n_classes, out_labels_ptr,
         out_proba_ptr, out_uniq_ptr, want_proba, weighted, vote_cache)

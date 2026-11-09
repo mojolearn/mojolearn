@@ -50,9 +50,11 @@ from core.shared_slot import shared_slot_check, shared_slot_word
 comptime MSEL_CONTEXT_SLOT = (
     "MojolearnCoreContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV2"
 )
-comptime MSEL_STORE_NAME = (
-    "MojolearnMselStoreIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnMselStoreFastV2"
-)
+comptime _MSEL_STORE_NAME_IDN: StaticString = "MojolearnMselStoreIdenticalV2"
+comptime _MSEL_STORE_NAME_OTHER: StaticString = "MojolearnMselStoreFastV2"
+# typed StaticString arms: a conditional of two literals is a String value,
+# which shared_slot_check (StaticString) does not take
+comptime MSEL_STORE_NAME: StaticString = _MSEL_STORE_NAME_IDN if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else _MSEL_STORE_NAME_OTHER
 #: The model-selection store (one definition; bindings/msel_device.mojo
 #: imports it). A `_Global` is named process-wide, so every binding module
 #: that names it reads the same store.
@@ -139,9 +141,9 @@ def _mdx_take_finite_kernel(
         t += step
 
 
-def msel_device_x_f32(
+def msel_device_x_f32[so: MutOrigin, //](
     ctx: DeviceContext, base_id: Int, base_rows: Int, cols: Int, index_id: Int, rows: Int,
-    mut d_x: DeviceBuffer[DType.float32], d_status: _MDX_I32, slot: Int,
+    mut d_x: DeviceBuffer[DType.float32], d_status: MutPointer[Int32, so], slot: Int,
 ) raises:
     """Enqueue the gather of fold rows `index_id` (int64, `rows` words) of the
     resident float32 base `base_id` (`base_rows` x `cols`) into `d_x`
@@ -167,7 +169,7 @@ def msel_device_x_f32(
     var src = store[].bufs[base_id].unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]().bitcast[UInt32]()
     var dst = d_x.unsafe_ptr().bitcast[UInt32]()
     ctx.enqueue_function[_mdx_take_finite_kernel](
-        src, Int64(base_rows), Int64(cols), idx, Int64(rows), dst, d_status, Int32(slot),
+        src, Int64(base_rows), Int64(cols), idx, Int64(rows), dst, d_status.unsafe_origin_cast[MutAnyOrigin](), Int32(slot),
         grid_dim=_mdx_grid(rows * cols), block_dim=MSEL_TPB,
     )
 

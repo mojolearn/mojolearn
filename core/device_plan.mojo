@@ -175,9 +175,11 @@ struct _DevicePlanTable(Defaultable, Movable):
 #: Layout version of `_DevicePlanTable` (core/shared_slot.mojo rule). V2:
 #: the table gained `used` (lane perf3-cluster-gp-gate); V3: the layout word.
 comptime _DEVICE_PLAN_LAYOUT = 3
-comptime _DEVICE_PLAN_NAME = (
-    "MojolearnDevicePlanIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnDevicePlanOtherV3"
-)
+comptime _DEVICE_PLAN_NAME_IDN: StaticString = "MojolearnDevicePlanIdenticalV3"
+comptime _DEVICE_PLAN_NAME_OTHER: StaticString = "MojolearnDevicePlanOtherV3"
+# typed StaticString arms: a conditional of two literals is a String value,
+# which shared_slot_check (StaticString) does not take
+comptime _DEVICE_PLAN_NAME: StaticString = _DEVICE_PLAN_NAME_IDN if GLOBAL_NUMERIC_MODE == 1 else _DEVICE_PLAN_NAME_OTHER
 comptime _DEVICE_PLAN_TABLE = _Global[
     StorageType=_DevicePlanTable,
     # a new name per layout version, so a DSO built with an older layout
