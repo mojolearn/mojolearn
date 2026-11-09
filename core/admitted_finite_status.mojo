@@ -16,8 +16,10 @@ the finiteness test moves into the kernel entry that reads X anyway.
               downloads. Word `slot` of the status buffer is 1 when any
               word is NaN or infinite, else it stays at the 0 the entry
               filled it with (`enqueue_fill`).
-  host entry  `host_finite_status(address, n)` (the CPU column, the parallel
-              SIMD scan of core/host_finite_scan.mojo) before it reads X.
+  host entry  the CPU column tests X with core/host_finite_scan.mojo
+              `host_all_finite_f32` before it reads X (this module stays
+              device-only: GPU code imports it, and the host-route fence
+              refuses host threads reached from GPU code).
 
 The entry returns the status word(s) to its door, which refuses through
 `admitted_finite_refuse` (scikit-learn's wording, unchanged). A door that
@@ -32,7 +34,6 @@ constant 1 into its own input's word: no atomics, no order, no 64-bit word
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
-from core.host_finite_scan import host_all_finite_f32
 
 comptime AFS_TPB = 256
 comptime AFS_REDUCE_BLOCKS = 1024
@@ -79,9 +80,4 @@ def enqueue_finite_status(ctx: DeviceContext, d_words: _AFS_F32, n: Int, d_statu
         off += m
 
 
-def host_finite_status(address: Int, n: Int) -> Int32:
-    """The status word of the `n` float32 words at host `address`: 0 when
-    all are finite, 1 otherwise (the parallel SIMD scan; the CPU column of
-    a deferred finite test)."""
-    var p = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
-    return AFS_FINITE if host_all_finite_f32(p, n) else AFS_NONFINITE
+# TOMBSTONE: host_finite_status (the host status word, a wrapper of core/host_finite_scan host_all_finite_f32) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear: no caller, and its host-thread import made this device module unreachable from GPU code; the CPU column calls host_all_finite_f32 directly (bindings/_mojolearn_x_linear_host.mojo `_x_status`). Never reached main: recoverable at f59d913b0b.

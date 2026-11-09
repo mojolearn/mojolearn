@@ -70,8 +70,8 @@
 #   and admit_x then makes NO host pass over a float32 C-order X (it returns
 #   `finite = False`). The GPU entry enqueues `enqueue_finite_status` on the
 #   upload it makes in any case and reads the word back with its result; the
-#   host entry (CPU column) calls `host_finite_status`
-#   (core/admitted_finite_status.mojo); the door refuses through
+#   host entry (CPU column) calls core/host_finite_scan.mojo
+#   `host_all_finite_f32`; the door refuses through
 #   `admitted_finite_refuse`. A door that does not opt in keeps the parallel
 #   host scan here (core/host_finite_scan.mojo). A cast input is tested in
 #   the cast pass itself, so it is never deferred.
