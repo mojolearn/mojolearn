@@ -245,7 +245,12 @@ def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject
     var prepared = source
     if not admitted:
         classical_admit_value(source, context)
-        if native_pandas_exact(source):
+        if door_is_device_rows(source, context):
+            # A model-selection fold (lane a6): its rows gathered on the host
+            # out of the host base in row tasks (no device round trip); the
+            # borrowed float32 C-order rows are then tested below as any X.
+            prepared = admit_rows_host_unchecked(source, context)
+        elif native_pandas_exact(source):
             prepared = native_pandas_f32(source, context)
         elif _ordinary_torch(py_type(source), context):
             prepared = native_torch_numpy(source)
