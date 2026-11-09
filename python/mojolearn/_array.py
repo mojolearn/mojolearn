@@ -32,6 +32,7 @@ arithmetic in half precision.
 from __future__ import annotations
 
 import array
+import copyreg
 import mmap as _array_mmap
 import functools
 import operator
@@ -275,16 +276,6 @@ def _reorder(a, src_order, out):
     _strided_copy(a._addr, out.buffer_info()[0], a.itemsize, shape, src, dst)
 
 
-def _restore_array(raw, shape, dtype, order, readonly):
-    """Pickle restores values and layout, never a borrowed pointer or GPU handle."""
-    if readonly:
-        flat = Array.from_buffer(memoryview(raw).cast(_CODE[dtype]))
-        return Array._view_of(flat, shape, order)
-    store = array.array(_CODE[dtype])
-    store.frombytes(raw)
-    return Array._owned(store, shape, dtype, order)
-
-
 class _ArrayInterface:
     """Carries only an Array's `__array_interface__`, so `Array.__array__`
     can hand NumPy a zero-copy view without recursing into itself. NumPy
@@ -481,15 +472,6 @@ class Array:
     def _has_order(self, order):
         return self.order == order or self._both_orders()
 
-    @property
-    def flags(self):
-        """``{"C_CONTIGUOUS", "F_CONTIGUOUS", "WRITEABLE"}`` as booleans."""
-        return _ARRAY_NATIVE("flags", self, _ARRAY_CONTEXT)
-
-    @property
-    def __array_interface__(self):
-        return _ARRAY_NATIVE("interface", self, _ARRAY_CONTEXT)
-
     def __array__(self, dtype=None, copy=None):
         """`numpy.asarray(a)` through the `__array__` protocol.
 
@@ -504,22 +486,6 @@ class Array:
         """
         return _ARRAY_NATIVE("array", self, _ARRAY_CONTEXT, dtype, copy)
 
-    def __buffer__(self, flags):
-        """Python 3.12+ buffer protocol: a memoryview of the backing store
-        with this Array's shape.
-
-        An F-order block of rank 2+ and a `'<f2'` block RAISE BufferError:
-        a memoryview built from Python cannot carry column-major strides or
-        the `'e'` format, and handing out the flat store instead would be
-        wrong in a way that matters. NumPy consults the buffer protocol
-        BEFORE `__array_interface__` (measured on numpy 2.4 / CPython
-        3.14), so a flat view here would make `numpy.asarray` return a 1-D
-        array for a matrix; on the BufferError it falls through to
-        `__array_interface__`, which describes both cases exactly and is
-        still zero-copy. `tobytes()` and `_flat()` reach the raw store.
-        """
-        return _ARRAY_NATIVE("buffer", self, _ARRAY_CONTEXT)
-
     def _flat(self):
         """A 1-D Array over the storage IN STORAGE ORDER, no copy. For an
         F-order matrix that is the column-major flat, `flat[f * rows + r]
@@ -527,8 +493,13 @@ class Array:
         return Array._view_of(self, (self.size,), "C")
 
     # ------------------------------------------------------------- basic ops
-    def __reduce__(self):
-        return _ARRAY_NATIVE("reduce", self, _ARRAY_CONTEXT)
+    # The protocol methods (`__len__`, `__getitem__`, `__eq__`, `__ne__`,
+    # `__repr__`, `__bool__`, `__iter__`, `__reduce__`, `__setstate__`,
+    # `__buffer__`) and the `flags` / `__array_interface__` properties are
+    # set below the class: each is a C `property` over
+    # `functools.partial(array_native_call, op, context)`, so `len(a)`,
+    # `a[i]`, `a == b`, `repr(a)`, pickling and NumPy's interface read reach
+    # the native entry without entering a Python frame.
 
     def tobytes(self):
         """The raw bytes, in storage order (row-major for a C-order Array, column-major for an F-order one)."""
@@ -657,17 +628,6 @@ class Array:
         """A 1-D view, same as ``reshape(-1)``."""
         return _ARRAY_NATIVE("ravel", self, _ARRAY_CONTEXT)
 
-    def __len__(self):
-        # The first-axis length is read natively (bindings/array_native.mojo).
-        # PYTHON COMPATIBILITY EXCEPTION (Andrew, 2026-10-25), narrowed: the
-        # native Voting/Stacking/MultiOutput/Calibrated meta-estimator paths
-        # still reach this one-line wrapper through len(Array); it does no
-        # Python work besides the native call. See _runtime_fallbacks.py.
-        return _ARRAY_NATIVE("len", self, _ARRAY_CONTEXT)
-
-    def __iter__(self):
-        return _ARRAY_NATIVE("iter", self, _ARRAY_CONTEXT)
-
     def _row_view(self, i, shape, step):
         """Row `i` of a C-order Array as a zero-copy view (`shape` = the
         trailing dimensions, `step` = their element count): the same
@@ -682,23 +642,6 @@ class Array:
         v._readonly = self._readonly
         v._set_meta(shape, self.dtype, "C")
         return v
-
-    def __repr__(self):
-        return _ARRAY_NATIVE("repr", self, _ARRAY_CONTEXT)
-
-    def __bool__(self):
-        return _ARRAY_NATIVE("bool", self, _ARRAY_CONTEXT)
-
-    # ------------------------------------------------------------- indexing
-    def __getitem__(self, key):
-        """Int / slice / tuple of them. Full integer indexing returns a
-        Python scalar; anything else a COPY as a C-order Array."""
-        return _ARRAY_NATIVE("getitem", self, _ARRAY_CONTEXT, key)
-
-    def __eq__(self, other):
-        """Elementwise equality against an Array of the same shape or a
-        scalar, as a `'<u1'` Array of 0/1."""
-        return _ARRAY_NATIVE("eq", self, _ARRAY_CONTEXT, other)
 
     def _native_eq(self, other):
         """DEVIATION 3102: elementwise equality of two same-shape Arrays of
@@ -738,9 +681,6 @@ class Array:
             fill = array.array(_CODE[self.dtype], [v]) * self.size
             fn(a._addr, fill.buffer_info()[0], code, self.size, store.buffer_info()[0])
         return Array._owned(store, self.shape, "<u1", "C")
-
-    def __ne__(self, other):
-        return _ARRAY_NATIVE("ne", self, _ARRAY_CONTEXT, other)
 
     __hash__ = None
 
@@ -890,8 +830,8 @@ class _ArrayReference:
         return self._mv.cast("B").cast(_CODE[self.dtype], self.shape)
 
     def __reduce__(self):
-        return (_restore_array, (self.tobytes(), self.shape, self.dtype,
-                                 self.order, self._readonly))
+        return (copyreg.__newobj__, (type(self),),
+                (self.tobytes(), self.shape, self.dtype, self.order, self._readonly))
 
     def tobytes(self):
         """The raw bytes, in storage order (row-major for a C-order Array, column-major for an F-order one)."""
@@ -1368,7 +1308,7 @@ _ARRAY_CONTEXT = dict(
     aliases=dict(_ALIAS), supported=SUPPORTED_DTYPES, native_min=_NATIVE_MIN,
     empty_address=_EMPTY_ARRAY_STORAGE.buffer_info()[0], empty_storage=_EMPTY_ARRAY_STORAGE,
     struct_pack=struct.pack, struct_unpack=struct.unpack, operator=operator,
-    partial=functools.partial, sys_modules=sys.modules, modules=sys.modules, restore=_restore_array,
+    partial=functools.partial, sys_modules=sys.modules, modules=sys.modules, newobj=copyreg.__newobj__,
     entry=_ARRAY_NATIVE, helpers={}, int_bounds=dict(_INT_BOUNDS), infinity=float("inf"),
     minus_infinity=float("-inf"), scalar_types=(int, float, bool), eq_i64_f64=_EQ_I64_F64,
     not_implemented=NotImplemented, not_table=_NOT, scalar_type_set=_SCALAR_TYPES,
@@ -1377,6 +1317,28 @@ _ARRAY_CONTEXT = dict(
     from_buffer_mmap=_array_mmap.mmap,
     from_buffer_mmap_hooks={name: vars(_array_mmap.mmap).get(name) for name in ("__buffer__", "__release_buffer__")},  # glue: capture native mmap protocol identities at import
     from_buffer_slots={name: Array.__dict__[name] for name in Array.__slots__})  # glue: retain fixed native Array member descriptor identities
+
+
+def _bound(op):
+    """`a.<op>(*args)` as `array_native_call(op, _ARRAY_CONTEXT, a, *args)`:
+    a C `property` whose getter is a C `functools.partial` building another
+    one, so the protocol slots and attribute reads enter no Python frame."""
+    return property(functools.partial(functools.partial, _ARRAY_NATIVE, op, _ARRAY_CONTEXT))
+
+
+Array.__len__ = _bound("len")
+Array.__iter__ = _bound("iter")
+Array.__repr__ = _bound("repr")
+Array.__bool__ = _bound("bool")
+Array.__getitem__ = _bound("getitem")
+Array.__eq__ = _bound("eq")
+Array.__ne__ = _bound("ne")
+Array.__reduce__ = _bound("reduce")
+Array.__setstate__ = _bound("setstate")
+Array.__buffer__ = _bound("buffer")
+Array.flags = property(functools.partial(_ARRAY_NATIVE, "flags", _ARRAY_CONTEXT),
+                       doc='``{"C_CONTIGUOUS", "F_CONTIGUOUS", "WRITEABLE"}`` as booleans.')
+Array.__array_interface__ = property(functools.partial(_ARRAY_NATIVE, "interface", _ARRAY_CONTEXT))
 
 
 def connect_helpers(resolve):
