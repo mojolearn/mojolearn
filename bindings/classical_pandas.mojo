@@ -11,12 +11,12 @@ from core.cast_in import cast_in_kind, cast_w64_bits, f64_to_f32_bits
 from core.classical_pandas_impl import pd_raw_at, _pd_double, pd_mask_check, pd_scatter_numeric
 from bindings.sequential_inputs import _promote
 from bindings.sequential_arrays import sequential_array, sequential_address
-from bindings.sequential_admission import _one_of, sequential_admit_value, _SequentialValueTypes, _sequential_admit_value, _cached_value_types
+from bindings.sequential_admission import _one_of, sequential_admit_value, _SequentialValueTypes, _sequential_admit_value, _cached_value_types, _native_one_of
 from bindings.native_loaded_module import NativeModules
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
-from bindings.p3_labels_metrics_native import p3_type_word
+from bindings.p3_labels_metrics_native import p3_type_word, p3_item
 
 
 def _pd_native_metaclass(cls: PythonObject) raises -> Bool:
@@ -137,14 +137,40 @@ struct _ClassicalAdmitTypes(Movable):
         return cls is self.frame or cls is self.series
 
 
+def _admitted_word(cls: PythonObject, seq: _SequentialValueTypes) -> Int:
+    """The class word of `cls` when the sequential admission accepts it as a
+    leaf (`_sequential_admit_value` returns at once for it), else 0."""
+    if _native_one_of(cls, seq.native_types) or _native_one_of(cls, seq.scalar_types):
+        return Int(cls._obj_ptr)
+    return 0
+
+
 def _classical_admit(mut mods: NativeModules, seq: _SequentialValueTypes, mut kinds: _ClassicalAdmitTypes,
                      value: PythonObject, context: PythonObject, depth: Int) raises:
     if depth > 64:
         raise Error("TypeError: classical input nesting exceeds the supported depth")
     var cls = py_type(value)
     if cls is kinds.tuple_type or cls is kinds.list_type:
-        for k in range(len(value)):  # driver-loop: over native operation argument containers
-            _classical_admit(mods, seq, kinds, value[k], context, depth + 1)
+        # Lane p2-labels-lists-arrays: this walk visits every element of a
+        # list input (it was tagged as a loop over argument containers). Each
+        # element is read borrowed from the exact container's C storage and an
+        # exact builtin scalar leaf (the common X / y list) stops at one class
+        # pointer compare: no boxed index, no subscript, no recursion per leaf.
+        var is_tuple = cls is kinds.tuple_type
+        # A leaf skips only when the admission would accept its class as is
+        # (a connected native or scalar type); 0 never matches a class word.
+        var int_word = _admitted_word(kinds.int_type, seq)
+        var float_word = _admitted_word(kinds.float_type, seq)
+        var bool_word = _admitted_word(kinds.bool_type, seq)
+        var str_word = _admitted_word(kinds.str_type, seq)
+        var none_word = _admitted_word(kinds.none_type, seq)
+        for k in range(len(value)):  # driver-loop: per ELEMENT of a list input (data-sized), one borrowed class-pointer read each from the C storage
+            var raw = p3_item(value, k, is_tuple)
+            var word = p3_type_word(raw)
+            if word == int_word or word == float_word or word == bool_word or word == str_word or word == none_word:
+                continue
+            _classical_admit(mods, seq, kinds, PythonObject(from_borrowed=raw), context, depth + 1)
+        _ = value  # keep the container alive through the borrowed reads above
     elif kinds.builtin_scalar(cls):
         # An exact builtin scalar is never pandas storage: skip the pandas
         # class test.
