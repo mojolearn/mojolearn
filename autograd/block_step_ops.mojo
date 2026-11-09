@@ -632,10 +632,16 @@ struct BlockStepScratch(Movable):
                 _m3_check_words(words)
                 self.m3[i].st.buf_len = words[0]
                 self.m3[i].st.pending = words[1] == 1
-        # an attention entry's cached-token count is read back by a rebuild
-        for i in range(len(self.attn) - 1, -1, -1):  # driver-loop: over resident attention blocks
+        # integ-w3 (lanes x5 + x4b): an attention entry takes the loaded
+        # cached-token count in place, as `attn_step_restart` does (its caches
+        # are views of the state tensor, so the loaded floats need nothing);
+        # dropping it would lose an adopted entry's fixed15 weights.
+        for i in range(len(self.attn)):  # driver-loop: over resident attention blocks
             if self.attn[i].q_addr == addr:
-                _ = self.attn.pop(i)
+                if len(words) < 1 or words[0] < 0 or words[0] > self.attn[i].ints[6]:
+                    raise Error("ValueError: ops: attention_step: cached tokens must be in [0, "
+                                + String(self.attn[i].ints[6]) + "]")
+                self.attn[i].kv.s = words[0]
 
     def weights_changed(mut self, addr: Int):
         """The weights at `addr` were rewritten in place: the block's own
@@ -649,8 +655,10 @@ struct BlockStepScratch(Movable):
         for i in range(len(self.m3)):  # driver-loop: over resident Mamba-3 blocks
             if self.m3[i].w_addr == addr:
                 self.m3[i].w.weights_checked = False
+        # integ-w3: an adopted entry (lane x4b) never reads the weights
+        # tensor (a placeholder), so a write there does not drop it.
         for i in range(len(self.attn) - 1, -1, -1):  # driver-loop: over resident attention blocks
-            if self.attn[i].w_addr == addr:
+            if self.attn[i].w_addr == addr and not self.attn[i].adopted:
                 _ = self.attn.pop(i)
 
 
