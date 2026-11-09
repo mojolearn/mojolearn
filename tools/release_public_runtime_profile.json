@@ -5,9 +5,7 @@
   "required": false,
   "vendor": "metal",
   "numeric_mode": "identical",
-  "allowed_compatibility": {
-    "array-length-metadata": "mojolearn._array.Array.__len__"
-  },
+  "allowed_compatibility": {},
   "suites": {
     "existing": [
       "python/mojolearn/tests/test_mode_readback.py::test_compiled_mode_must_match_selected_mode",

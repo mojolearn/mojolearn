@@ -46,7 +46,6 @@ module, and because it depends only on the contract's `addr_ro`.
 """
 
 import ctypes
-from itertools import chain
 from . import _portable_math as math
 import numbers
 import operator
@@ -90,120 +89,24 @@ def is_bool(value):
     return isinstance(value, bool) or type(value).__name__ == "bool_"
 
 
-def _is_nested(item):
-    return isinstance(item, (list, tuple))
-
-
-def _level(item):
-    """One nesting level of a label list: a list or tuple as is, a label
-    as a one-element tuple."""
-    return item if isinstance(item, (list, tuple)) else (item,)
-
-
 def flatten_labels(y):
     """`y` as a flat Python list of label objects. Anything with
     `tolist()` (an `Array`, an ndarray, an `array.array`) is unpacked
     through it; nested lists and tuples are flattened, which is what
     `np.asarray(y).ravel()` did for a column vector.
 
-    The explicit label input step for Python objects (str labels have no
-    Mojo type): one C-level `chain` pass per nesting LEVEL, so the work is
-    the builtins', and depth-first order is kept (a level at a time
-    expands every list in place)."""
-    if hasattr(y, "tolist") and not isinstance(y, (list, tuple)):
-        y = y.tolist()
-    if isinstance(y, (str, bytes)):
-        raise ValueError("mojolearn: y must be a sequence of labels")
-    if type(y) in (list, tuple) and _plain_labels(y) is not None:
-        # DEVIATION 3103: nothing to flatten (the type set, read in C)
-        return list(y)
-    items = [y]
-    while any(map(_is_nested, items)):  # glue: one pass per nesting level (depth-sized)
-        items = list(chain.from_iterable(map(_level, items)))  # cpu-route: Python label objects, the explicit label input step
-    return items
+    One native call (bindings/classical_labels.mojo `_flatten_labels`):
+    exact containers are read by pointer from their C storage, depth first."""
+    from ._native_labels_bridge import labels_entry, LABELS_OP_FLATTEN
+    entry, context = labels_entry()
+    return entry(LABELS_OP_FLATTEN, (y,), context)
 
 
-_PLAIN_NUMBERS = frozenset((int, float, bool))
-_PLAIN_STR = frozenset((str,))
-
-
-def _plain_labels(labels):
-    """'number' or 'str' when EVERY label is exactly a Python int, float or
-    bool, or exactly a str (the type set, read in C); None for anything
-    else, an empty sequence included."""
-    if not labels:
-        return None
-    kinds = set(map(type, labels))
-    if kinds <= _PLAIN_NUMBERS:
-        return "number"
-    if kinds == _PLAIN_STR:
-        return "str"
-    return None
-
-
-def _classes_and_codes(labels):
-    """The ORDER RULE over labels already checked: the FIRST of equal keys
-    is the one `dict.fromkeys` keeps, the classes sort by Python's own
-    comparison, and each label's code is one dict lookup, driven by `map`."""
-    classes = sorted(dict.fromkeys(labels))  # cpu-route: Python label objects (str or Python numbers), the explicit label input step
-    code = {c: i for i, c in enumerate(classes)}  # glue: class index table (classes-sized: distinct classes)
-    return classes, list(map(code.__getitem__, labels))  # cpu-route: Python label objects, the explicit label input step
-
-
-def _sorted_plain_classes(labels, kind):
-    """DEVIATION 3103: `sorted_classes` for labels `_plain_labels` vouched
-    for: one kind (no mixing) of exact Python types, so only a float can be
-    a NaN."""
-    if kind == "number":
-        # `v != v` in C: True only for a NaN float (an int or bool never,
-        # at any size)
-        if any(map(operator.ne, labels, labels)):  # cpu-route: NaN test of a plain Python label list, the explicit label input step
-            raise ValueError(
-                "mojolearn: y contains a NaN label; NaN is not a class"
-            )
-    return _classes_and_codes(labels)
-
-
-def _kind_of_type(t):
-    """'str', 'number' or None (refused) for one label TYPE: the per-label
-    tests of the ORDER RULE (rules 1 and 2), asked once per distinct type."""
-    if issubclass(t, str):
-        return "str"
-    if issubclass(t, numbers.Real) or t.__name__ == "bool_":
-        return "number"
-    return None
-
-
-def _first_true(flags):
-    """Index of the first true flag, or None."""
-    try:
-        return operator.indexOf(flags, True)
-    except ValueError:
-        return None
-
-
-def _check_label_kinds(labels):
-    """Rules 1, 2 and 4 of the ORDER RULE over a list of label objects, with
-    the refusals in walk order: the first label that is neither a number
-    nor a str, or a NaN before it, then a mix of the two kinds."""
-    kinds = {t: _kind_of_type(t) for t in set(map(type, labels))}  # glue: over the distinct label types (types-sized)
-    refused = frozenset(t for t, kind in kinds.items() if kind is None)  # glue: over the distinct label types (types-sized)
-    stop = _first_true(map(refused.__contains__, map(type, labels))) if refused else None
-    head = labels if stop is None else labels[:stop]
-    if _first_true(map(operator.ne, head, head)) is not None:  # cpu-route: NaN test of Python label objects, the explicit label input step
-        raise ValueError(
-            "mojolearn: y contains a NaN label; NaN is not a class"
-        )
-    if stop is not None:
-        raise ValueError(
-            f"mojolearn: label {labels[stop]!r} is neither a number nor a str"
-        )
-    found = set(kinds.values())
-    if "str" in found and "number" in found:
-        raise ValueError(
-            "mojolearn: y mixes numeric and str labels; encode one kind "
-            "before fitting"
-        )
+# TOMBSTONE: _labels._plain_labels / _classes_and_codes / _sorted_plain_classes /
+# _kind_of_type / _first_true / _check_label_kinds (the Python ORDER RULE walk)
+# deleted 2026-11-09 by lane p2-labels-lists-arrays: `sorted_classes` is one
+# native call (bindings/classical_labels.mojo `_sorted_classes`); the oracle
+# copies live in tests/test_hotpath_native.py.
 
 
 _STR_LABELS = []
@@ -233,15 +136,18 @@ def sorted_classes(labels):
     """`(classes, codes)`: the class list under the ORDER RULE above, and
     one dense code per label, `classes[codes[i]] == labels[i]` under
     Python equality."""
-    if not labels:
-        raise ValueError("mojolearn: y is empty")
-    if type(labels) is not list:
+    classes, codes = _sorted_native(labels)
+    return classes, codes.tolist()
+
+
+def _sorted_native(labels):
+    """`sorted_classes` with the codes as the int32 `Array` the native ORDER
+    RULE writes (one native call; exact label types only, by pointer)."""
+    from ._native_labels_bridge import labels_entry, LABELS_OP_SORTED
+    if type(labels) not in (list, tuple):
         labels = list(labels)
-    kind = _plain_labels(labels)
-    if kind is not None:
-        return _sorted_plain_classes(labels, kind)
-    _check_label_kinds(labels)
-    return _classes_and_codes(labels)
+    entry, context = labels_entry()
+    return entry(LABELS_OP_SORTED, (labels,), context)
 
 
 # DEVIATION 2500 (2026-09-10): the ORDER RULE for ONE numeric buffer, in
@@ -386,83 +292,27 @@ def decode_labels(classes, codes):
     `Array`, real classes a float64 `Array`; str or bool classes give a
     Python list of the label objects, since no `Array` dtype holds them
     (DEVIATION 2340: an ndarray of labels used to come back)."""
-    if isinstance(codes, Array) and codes.ndim == 1 and codes.dtype in ("<i4", "<i8"):
-        # Lane ne1-h-labels (N437): the class kind, the packed class table,
-        # the int32 widening and the gather in ONE native call
-        # (bindings/classical_labels.mojo `labels_decode_labels`); the shell
-        # no longer re-derives the kind or packs the table per call.
-        from ._native_labels_bridge import labels_entry, LABELS_OP_DECODE
-        entry, context = labels_entry()
-        return entry(LABELS_OP_DECODE, (classes, codes), context)
-    kind = label_kind(classes)
-    fast = _decode_labels_native(classes, codes, kind)
-    if fast is not None:
-        return fast
-    values = _decode_list_native(classes, codes)
-    if values is None:
-        values = list(map(classes.__getitem__, map(int, codes)))  # cpu-route: codes the native decode does not take (not an int32/int64 Array, or out of range: Python's IndexError), the explicit label output step
-    try:
-        if kind == "int":
-            return Array.from_list(list(map(int, values)), "<i8")  # cpu-route: int classes past the native decode range, the explicit label output step
-        if kind == "float":
-            return Array.from_list(list(map(float, values)), "<f8")  # cpu-route: float classes past the native decode range, the explicit label output step
-    except (OverflowError, TypeError):
-        # `Array.from_list` reports an int outside int64 as a TypeError
-        # (pre-existing: only OverflowError was caught, so a 2**70 class
-        # raised instead of returning the label objects; fixed 2026-09-10)
-        pass
-    return values
+    # ONE native call (bindings/classical_labels.mojo `labels_decode_labels`):
+    # the class kind, the gathers and, for str / bool / object classes, one
+    # list filled in C. Codes that are not a 1-D int32 / int64 Array are
+    # first made one by the native Array operations (lane
+    # p2-labels-lists-arrays; the Python map / from_list fallbacks are gone).
+    if not isinstance(codes, Array):
+        codes = (Array.from_list(codes, "<i8") if type(codes) in (list, tuple)
+                 else Array.from_buffer(codes))
+    if codes.ndim != 1:
+        codes = codes.reshape(-1)
+    if codes.dtype not in ("<i4", "<i8"):
+        codes = codes.astype("<i8")
+    from ._native_labels_bridge import labels_entry, LABELS_OP_DECODE
+    entry, context = labels_entry()
+    return entry(LABELS_OP_DECODE, (classes, codes), context)
 
 
-def _decode_list_native(classes, codes):
-    """`[classes[c] for c in codes]` as ONE native call (bindings/str_labels_native.mojo
-    "decode"): a presized list filled in C from an int32 or int64 vector code
-    `Array`. None for any other codes, or a code out of range."""
-    if type(classes) not in (list, tuple) or not isinstance(codes, Array):
-        return None
-    if codes.ndim != 1 or codes.dtype not in ("<i4", "<i8"):
-        return None
-    if not _STR_LABELS:
-        from .tokenizer import _binding
-        _STR_LABELS.append(_binding()._module.str_labels_native_call)
-    return _STR_LABELS[0]("decode", classes, codes._addr, int(codes.size),
-                          4 if codes.dtype == "<i4" else 8)
-
-
-def _decode_labels_native(classes, codes, kind):
-    """DEVIATION 2500: `classes[code]` per row through the base binding's
-    `gather_i64` / `gather_f64` when `codes` is an int64 `Array` (what
-    `argmax_rows` returns) and the classes are all int or all float. The
-    dtype of the answer is the one `decode_labels` documents; a class that
-    does not fit int64 leaves the Python arm to raise and fall back."""
-    from ._buffer import _native, _output_store
-
-    if kind not in ("int", "float") or not isinstance(codes, Array):
-        return None
-    if codes.dtype == "<i4" and codes.ndim == 1 and classes:
-        # DEVIATION 3103: int32 codes (`GradientBoostingClassifier.predict`
-        # hands these over) used to take the Python arm, four passes over
-        # the rows. Widened by `Array.astype` they take the gather. A code
-        # the gather refuses (negative: Python indexes from the END, so the
-        # Python arm ANSWERS it) sends the call back to the Python arm.
-        try:
-            return _decode_labels_native(classes, codes.astype("<i8"), kind)
-        except (ImportError, AttributeError):
-            raise
-        except Exception:
-            return None
-    if codes.dtype != "<i8" or codes.ndim != 1 or not classes:
-        return None
-    try:
-        table = (Array.from_list([int(c) for c in classes], "<i8") if kind == "int"  # glue: packs the class table for the native decode (classes-sized: distinct classes)
-                 else Array.from_list([float(c) for c in classes], "<f8"))  # glue: packs the class table for the native decode (classes-sized: distinct classes)
-    except (OverflowError, TypeError):
-        return None  # a class outside int64: the Python arm returns the objects
-    n = int(codes.size)
-    store = _output_store("q" if kind == "int" else "d", n)
-    fn = _native("gather_i64" if kind == "int" else "gather_f64")
-    fn(table._addr, len(classes), codes._addr, n, store.buffer_info()[0])
-    return Array._owned(store, (n,), "<i8" if kind == "int" else "<f8", "C")
+# TOMBSTONE: _labels._decode_list_native / _decode_labels_native (the Python
+# decode seams; every decode is one native call now) deleted 2026-11-09 by lane
+# p2-labels-lists-arrays; the frozen copies the legacy test oracle reads live in
+# tests/_legacy_host_inference.py.
 
 
 _INDEX_DTYPES = ("<i8", "<i4", "<u4", "<u2", "<u1", "<i1")
@@ -497,8 +347,11 @@ class ClassLabels(list):
             codes = codes.astype("<i8")
         return decode_labels(list(self), codes)
 
-    def __reduce__(self):
-        return (ClassLabels, (list(self),))
+    # Pickle and copy take object.__reduce_ex__'s C path: NEWOBJ with no
+    # arguments, then the list items appended. `__slotnames__` is filled
+    # here so CPython never calls copyreg._slotnames (Python) for the class.
+    # The former Python `__reduce__` ran once per pickled classes_ list.
+    __slotnames__ = []
 
 
 def classes_from_member(member):
@@ -628,8 +481,7 @@ def unique_inverse(y):
         native = str_labels("encode", flat) if type(flat) is list else None
         if native is not None:
             return native
-        classes, codes = sorted_classes(flat)  # cpu-route: mixed or non-str object labels, the explicit label input step
-        return classes, Array.from_list(codes, "<i4")
+        return _sorted_native(flat)
     if arr.size == 0:
         raise ValueError("mojolearn: y is empty")
     if arr.size != max(arr.shape):  # glue: largest axis of the shape

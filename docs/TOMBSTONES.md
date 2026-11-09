@@ -35,6 +35,10 @@ in the tables after the sections.
 ## Index
 
 | define | area | verdict | date | patch |
+| [`_array._restore_array` and the Python `def` bodies of `Array.__len__` / `__getitem__` / `__eq__` / `__ne__` / `__repr__` / `__bool__` / `__iter__` / `__reduce__` / `__buffer__` / `flags` / `__array_interface__`](#array-protocol-labels-and-list-inputs-without-python-frames-2026-11-09) | Array (returned results, pickling) | removed (C `property` over `functools.partial(array_native_call, op, context)`; pickle through `copyreg.__newobj__` + native `__setstate__`) | 2026-11-09 | [P2_LABELS_LISTS_ARRAYS.patch](../experiments/removed/P2_LABELS_LISTS_ARRAYS.patch) |
+| [`array-length-metadata` (`_runtime_fallbacks.ARRAY_LENGTH_METADATA`, `_LENGTH_CODE`, `_CONNECTED_METHODS`)](#array-protocol-labels-and-list-inputs-without-python-frames-2026-11-09) | Frozen Python fallback list | removed (len(Array) enters no Python frame; the list is empty) | 2026-11-09 | [P2_LABELS_LISTS_ARRAYS.patch](../experiments/removed/P2_LABELS_LISTS_ARRAYS.patch) |
+| [`_labels` Python ORDER RULE, flatten and decode (`_plain_labels`, `_classes_and_codes`, `_sorted_plain_classes`, `_kind_of_type`, `_first_true`, `_check_label_kinds`, `_level`, `_is_nested`, `_decode_list_native`, `_decode_labels_native`, `ClassLabels.__reduce__`)](#array-protocol-labels-and-list-inputs-without-python-frames-2026-11-09) | Labels (Python shell) | removed (labels entry ops FLATTEN / SORTED / DECODE; oracle copies in the tests) | 2026-11-09 | [P2_LABELS_LISTS_ARRAYS.patch](../experiments/removed/P2_LABELS_LISTS_ARRAYS.patch) |
+| [Per-label / per-row Python object loops: `labels_decode_labels` append loop, MultiOutputClassifier zip/map/extend, prep `_object_codes` `index.get`, `_score` decode + re-encode, list-input subscript walks (classical admission, Sequential, Program inputs), UMAP list set/sorted, GBDT int/str group_id keyed loop](#array-protocol-labels-and-list-inputs-without-python-frames-2026-11-09) | Labels, list inputs | removed (borrowed C-storage reads, native list fills, `p3_dict_codes`, `classical_score_from_codes`) | 2026-11-09 | [P2_LABELS_LISTS_ARRAYS.patch](../experiments/removed/P2_LABELS_LISTS_ARRAYS.patch) |
 |---|---|---|---|---|
 | [`adam_hyper_f64` (native entry)](#dead-native-entries-2026-10-26) | Core binding (CNN Adam hyper block) | removed (dead native entry: no live caller) | 2026-10-26 | [adam_hyper_f64.patch](../experiments/removed/adam_hyper_f64.patch) |
 | [`lr_schedule_fill` (native entry)](#dead-native-entries-2026-10-26) | Core binding (learning-rate schedules) | removed (dead native entry: no live caller) | 2026-10-26 | [lr_schedule_fill.patch](../experiments/removed/lr_schedule_fill.patch) |
@@ -5747,3 +5751,33 @@ that ran inside a native product operation (AGENTS.md "No Python in the runtime"
   `_labels`; lists in `~/mojolearn-evidence/p1/removed_*.tsv`.
 - Code recoverable at `e68654a757`; patches `experiments/removed/P1_*.patch` (the reverse of the lane's change to the
   code files).
+
+## Array protocol, labels and list inputs without Python frames (2026-11-09)
+
+Lane `p2-labels-lists-arrays` (P2 of the pre-0.8.67 Python audit follow-up: audit A worst item 6, audit B worst items 4,
+5, 7, 8 and 10 and its NATIVE* class), branch `lane/p2-labels-lists-arrays` from `integ/pre-0867-w3` `e68654a757`. Not
+experiment defines: Python frames and per-element CPython object loops on product paths. No A/B define: every
+replacement computes the same values in the same order (see the bit notes below).
+
+- **Array** (`python/mojolearn/_array.py`, `bindings/array_native.mojo`): the protocol methods and the `flags` /
+  `__array_interface__` properties are C `property` objects over `functools.partial(array_native_call, op, context)`, so
+  `len(a)`, `a[i]`, `a == b`, `repr(a)`, iteration, `memoryview(a)` and NumPy's interface read enter no Python frame. The
+  entry accepts the bound layout `(op, context, array, *args)` beside `(op, array, context, *args)`. Pickle: `__reduce__`
+  returns `(copyreg.__newobj__, (cls,), state)` and the native `__setstate__` rebuilds the store; `_restore_array` (a
+  Python reconstructor per Array field of every pickled estimator) is gone. A read-only Array restored from a pickle
+  keeps its own dtype (the old reconstructor took the view's, so a read-only float16 came back `<u2`).
+- **Fallback list**: `array-length-metadata`, the one entry of `python/mojolearn/_runtime_fallbacks.py`, is removed; the
+  evidence checker (`tools/release_public_runtime_evidence.py`) refuses any approved fallback, and the profile allows none.
+- **Labels** (`python/mojolearn/_labels.py`, `bindings/labels_native_entry.mojo`): `flatten_labels`, `sorted_classes` and
+  `decode_labels` are one native call each (ops FLATTEN 5, SORTED 6, DECODE 3). The native ORDER RULE admits exact label
+  types only (a subclass's comparison or hash hooks never run), so some refusals are worded as the native walk words
+  them. `ClassLabels` pickles through `object.__reduce_ex__`'s C path (`__slotnames__` preset).
+- **Per-element loops**: `labels_decode_labels` fills str / bool / object labels in C (`p3_decode_list`);
+  `MultiOutputClassifier.predict` object labels by `p3_interleave_columns` / `p3_rows_of`; the classical NB / LDA / QDA
+  `score` reads accuracy from the predicted codes (`classical_score_from_codes`); `_object_codes` by `p3_dict_codes`;
+  list inputs of the classical admission, `Sequential` and `Program.fit` / `run` / `ImportedProgram.run` read borrowed
+  from the C storage (Program inputs: one typed flatten into an output sized once); UMAP categorical list y and GBDT
+  int / str `group_id` lists are coded from C storage.
+- **Restore**: `git apply experiments/removed/P2_LABELS_LISTS_ARRAYS.patch` (the whole lane reversed, code files only;
+  tests and tools keep their new form). Recoverable at `e68654a757`.
+- **Guard / records**: no `-D` define was removed, so no guard refusal and no `grid_controls` entry moves.

@@ -1623,6 +1623,19 @@ class EndpointConnections:
                     and len(args) == 1 and args[0] and args[0][0] == "func"):
                 # `cls.load = classmethod(inspect.unwrap(loader.__func__))`: the same source body
                 return args[0]
+            if (_final(expr.func) == "property" and len(expr.args) == 1
+                    and all(k.arg == "doc" for k in expr.keywords)
+                    and isinstance(expr.args[0], ast.Call) and _final(expr.args[0].func) == "partial"
+                    and expr.args[0].args):
+                # `property(functools.partial(entry, op, ctx))` and
+                # `property(functools.partial(functools.partial, entry, op, ctx))`
+                # (python/mojolearn/_array.py `_bound`): a C property whose
+                # getter is a C partial of a native entry; no Python frame.
+                inner = expr.args[0].args
+                head = inner[1] if _final(inner[0]) == "partial" and len(inner) > 1 else inner[0]
+                got = self.value(head, mod, func, env, depth + 1)
+                if got and got[0] == "native":
+                    return got
             called = self.index.resolve_expr(expr.func, mod.name, func)
             if called and called[0] == "func":
                 # A decorator factory returns a source function, not a native

@@ -13,12 +13,13 @@ live with the tests. `_REFERENCE` is True only inside test_hotpath_native.py's
 reference arm: the Python definitions answer there and nowhere else.
 """
 import array
+import copyreg
 
 from mojolearn._array import (
     Array, _ArrayInterface, _EMPTY_ARRAY_STORAGE, _CODE, _NATIVE_CODE, _NATIVE_MIN, _EQ_I64_F64,
     _REDUCE_MIN, _REDUCE_MAX, _REDUCE_SUM, _REDUCE_ARGMAX, _REDUCE_ISUM, _NOT,
     _INT_BOUNDS, normalize_dtype, _check_shape, _new_store, _prod,
-    _restore_array, _nest, _c_strides, _to_py_values,
+    _nest, _c_strides, _to_py_values,
     _strided_copy, _flatten,
 )
 import struct
@@ -304,8 +305,8 @@ class _ArrayReference:
         return self._mv.cast("B").cast(_CODE[self.dtype], self.shape)
 
     def __reduce__(self):
-        return (_restore_array, (self.tobytes(), self.shape, self.dtype,
-                                 self.order, self._readonly))
+        return (copyreg.__newobj__, (type(self),),
+                (self.tobytes(), self.shape, self.dtype, self.order, self._readonly))
 
     def tobytes(self):
         """The raw bytes, in storage order (row-major for a C-order Array, column-major for an F-order one)."""

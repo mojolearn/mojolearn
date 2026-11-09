@@ -116,7 +116,7 @@ def _outcome(fn):
     return result, [(w.category.__name__, str(w.message)) for w in caught]
 
 
-_LABEL_SEAMS = ("_encode_labels_native", "_decode_labels_native")
+_LABEL_SEAMS = ("_encode_labels_native",)
 
 
 @contextlib.contextmanager
@@ -479,7 +479,7 @@ def test_encode_labels_float_list_takes_the_helper():
     for name in ("floats", "zeros a", "zeros b"):
         y = _label_lists()[name]
         ref = _same(lambda: _labels.encode_labels(y), (), group="labels")  # one native call (N413)
-        assert ref[0][0] == "ok"
+        assert ref[0] == "ok"
     classes, _ = _labels.encode_labels(_label_lists()["zeros b"])
     assert math.copysign(1.0, classes[0]) == -1.0  # the first-seen zero is kept
 
@@ -541,7 +541,7 @@ def test_classification_labels_match(name):
     ref = _same(lambda: M._classification_encoded(y, "y_true"), expect, group="metrics")
     if name in _NATIVE_LABELS and not _EXPECT_SABOTAGE:
         assert isinstance(M._classification_encoded(y, "y_true")[0], M._EncodedLabels), name
-        assert ref[0][0] == "ok"
+        assert ref[0] == "ok"
 
     other = _RNG.integers(-4, 5, 3000)[:len(y)]
 
@@ -779,16 +779,129 @@ def _pinned(module, name, fn, answers=True, ref_fn=None):
     return ref
 
 
+def _flatten_oracle(y):
+    """The former Python `_labels.flatten_labels` (deleted by lane
+    p2-labels-lists-arrays), the reference of the native flatten."""
+    from itertools import chain
+    if hasattr(y, "tolist") and not isinstance(y, (list, tuple)):
+        y = y.tolist()
+    if isinstance(y, (str, bytes)):
+        raise ValueError("mojolearn: y must be a sequence of labels")
+    items = [y]
+    while any(isinstance(item, (list, tuple)) for item in items):
+        items = list(chain.from_iterable(item if isinstance(item, (list, tuple)) else (item,) for item in items))
+    return items
+
+
+# The former Python ORDER RULE of `_labels` (deleted from the package by lane
+# p2-labels-lists-arrays: `sorted_classes` is one native call), kept here as
+# the reference the native answer is held to.
+import numbers as _numbers
+import operator as _operator
+
+
+_ref_PLAIN_NUMBERS = frozenset((int, float, bool))
+_ref_PLAIN_STR = frozenset((str,))
+
+
+def _ref_plain_labels(labels):
+    """'number' or 'str' when EVERY label is exactly a Python int, float or
+    bool, or exactly a str (the type set, read in C); None for anything
+    else, an empty sequence included."""
+    if not labels:
+        return None
+    kinds = set(map(type, labels))
+    if kinds <= _ref_PLAIN_NUMBERS:
+        return "number"
+    if kinds == _ref_PLAIN_STR:
+        return "str"
+    return None
+
+
+def _ref_classes_and_codes(labels):
+    """The ORDER RULE over labels already checked: the FIRST of equal keys
+    is the one `dict.fromkeys` keeps, the classes sort by Python's own
+    comparison, and each label's code is one dict lookup, driven by `map`."""
+    classes = sorted(dict.fromkeys(labels))  # cpu-route: Python label objects (str or Python numbers), the explicit label input step
+    code = {c: i for i, c in enumerate(classes)}  # glue: class index table (classes-sized: distinct classes)
+    return classes, list(map(code.__getitem__, labels))  # cpu-route: Python label objects, the explicit label input step
+
+
+def _ref_sorted_plain_classes(labels, kind):
+    """DEVIATION 3103: `sorted_classes` for labels `_ref_plain_labels` vouched
+    for: one kind (no mixing) of exact Python types, so only a float can be
+    a NaN."""
+    if kind == "number":
+        # `v != v` in C: True only for a NaN float (an int or bool never,
+        # at any size)
+        if any(map(_operator.ne, labels, labels)):  # cpu-route: NaN test of a plain Python label list, the explicit label input step
+            raise ValueError(
+                "mojolearn: y contains a NaN label; NaN is not a class"
+            )
+    return _ref_classes_and_codes(labels)
+
+
+def _ref_kind_of_type(t):
+    """'str', 'number' or None (refused) for one label TYPE: the per-label
+    tests of the ORDER RULE (rules 1 and 2), asked once per distinct type."""
+    if issubclass(t, str):
+        return "str"
+    if issubclass(t, _numbers.Real) or t.__name__ == "bool_":
+        return "number"
+    return None
+
+
+def _ref_first_true(flags):
+    """Index of the first true flag, or None."""
+    try:
+        return _operator.indexOf(flags, True)
+    except ValueError:
+        return None
+
+
+def _ref_check_label_kinds(labels):
+    """Rules 1, 2 and 4 of the ORDER RULE over a list of label objects, with
+    the refusals in walk order: the first label that is neither a number
+    nor a str, or a NaN before it, then a mix of the two kinds."""
+    kinds = {t: _ref_kind_of_type(t) for t in set(map(type, labels))}  # glue: over the distinct label types (types-sized)
+    refused = frozenset(t for t, kind in kinds.items() if kind is None)  # glue: over the distinct label types (types-sized)
+    stop = _ref_first_true(map(refused.__contains__, map(type, labels))) if refused else None
+    head = labels if stop is None else labels[:stop]
+    if _ref_first_true(map(_operator.ne, head, head)) is not None:  # cpu-route: NaN test of Python label objects, the explicit label input step
+        raise ValueError(
+            "mojolearn: y contains a NaN label; NaN is not a class"
+        )
+    if stop is not None:
+        raise ValueError(
+            f"mojolearn: label {labels[stop]!r} is neither a number nor a str"
+        )
+    found = set(kinds.values())
+    if "str" in found and "number" in found:
+        raise ValueError(
+            "mojolearn: y mixes numeric and str labels; encode one kind "
+            "before fitting"
+        )
+
+
 def _general_sorted_classes(y):
     """`sorted_classes` through the general label walk (the kind check and the
-    ORDER RULE), the definition `_sorted_plain_classes` specializes. Since lane
-    migrate-shared-labels the plain seam is always taken (it no longer
-    declines), so declining it would leave `sorted_classes` answering None."""
+    ORDER RULE)."""
     labels = list(y)
     if not labels:
         raise ValueError("mojolearn: y is empty")
-    _labels._check_label_kinds(labels)
-    return _labels._classes_and_codes(labels)
+    _ref_check_label_kinds(labels)
+    return _ref_classes_and_codes(labels)
+
+
+def _agree(new_fn, ref_fn):
+    """The native answer equals the reference's; a reference refusal is a
+    native refusal too (the native walk words some refusals differently)."""
+    new, ref = _outcome(new_fn)[0], _outcome(ref_fn)[0]
+    if ref[0] == "ok":
+        assert new == ref, f"new {new!r:.300} != reference {ref!r:.300}"
+    else:
+        assert new[0] == "refused", f"reference refused {ref!r:.300}, native answered {new!r:.300}"
+    return ref
 
 
 @pytest.mark.parametrize("name", list(_label_lists()))
@@ -800,10 +913,10 @@ def test_plain_label_lists_match_the_label_loop(name):
     # plain types; the NaN test is `v != v`, which holds 2**2000 too
     big = name == "huge ints"
     if isinstance(y, list):
-        _pinned(_labels, "_sorted_plain_classes", lambda: _labels.sorted_classes(y),
-                answers=plain, ref_fn=lambda: _general_sorted_classes(y))
-    _pinned(_labels, "_plain_labels", lambda: _labels.flatten_labels(y),
-            answers=plain or big or name == "tuple")
+        _agree(lambda: _labels.sorted_classes(y), lambda: _general_sorted_classes(y))
+    # flatten_labels is one native call (lane p2-labels-lists-arrays): held
+    # equal to the Python flatten it replaced.
+    _agree(lambda: _labels.flatten_labels(y), lambda: _flatten_oracle(y))
     if plain and name != "nan":
         classes, codes = _labels.sorted_classes(list(y))
         assert all(classes[c] == v for c, v in zip(codes, y))
@@ -812,9 +925,8 @@ def test_plain_label_lists_match_the_label_loop(name):
 def test_first_seen_object_is_kept_by_the_plain_path():
     for y in ([True, 1, 1.0, 0, False, 0.0] * 50, [1.0, 1, True, -0.0, 0, False] * 50,
               [0.0, -0.0] * 99, [-0.0, 0.0] * 99):
-        ref = _pinned(_labels, "_sorted_plain_classes", lambda: _labels.sorted_classes(y),
-                      ref_fn=lambda: _general_sorted_classes(y))
-        assert ref[0][0] == "ok"
+        ref = _agree(lambda: _labels.sorted_classes(y), lambda: _general_sorted_classes(y))
+        assert ref[0] == "ok"
 
 
 @pytest.mark.parametrize("index", range(len(_LISTS)))

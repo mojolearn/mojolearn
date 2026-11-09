@@ -3,63 +3,21 @@
 
 This module does not implement or select a product fallback. The verifier uses
 it to report an existing callback without calling that operation Python-free.
+
+The list is frozen (AGENTS.md "No Python in the runtime"): nothing is added
+without Andrew's explicit word. It is empty. Its one entry,
+`array-length-metadata` (the Python `Array.__len__` frame that native
+Voting/Stacking/MultiOutput/OneVsRest/Calibrated paths reached through
+len(Array)), was removed on lane/p2-labels-lists-arrays: `Array.__len__` and
+the other Array protocol methods are now C properties over the native entry
+(`_array._bound`), so len(Array) from any caller enters no Python frame.
 """
-import sys
-from types import MethodType, ModuleType
 
-from ._array import Array
-
-ARRAY_LENGTH_METADATA = {
-    'id': 'array-length-metadata',
-    'authorization': 'Andrew, 2026-10-25: documented Python fallbacks authorized',
-    'reason': ('len(Array) from these native owners enters Array.__len__, a one-call wrapper into the native '
-               'array_native_call; the owners do not yet read the first-axis length natively, so the '
-               'wrapper frame remains an incomplete native migration.'),
-    'callee': 'mojolearn._array.Array.__len__',
-    'upstream_context': 'https://github.com/modular/modular/issues/7399',
-}
-_LENGTH_CODE = Array.__len__.__code__
-_OWNERS = ('VotingRegressor', 'VotingClassifier', 'StackingRegressor',
-           'StackingClassifier', 'MultiOutputRegressor', 'MultiOutputClassifier',
-           'OneVsRestClassifier', 'CalibratedClassifierCV')
-_METHODS = frozenset(('fit', 'fit_transform', 'predict', 'predict_proba', 'transform', 'score'))
-
-
-def _connected_methods():
-    module = sys.modules.get('mojolearn._expansion_trees')
-    if type(module) is not ModuleType:
-        return {}
-    methods = {}
-    for name in _OWNERS:
-        cls = vars(module).get(name)
-        if type(cls) is not type:
-            continue
-        for method in _METHODS:
-            for base in cls.__mro__:
-                if method in vars(base):
-                    methods[cls, method] = vars(base)[method]
-                    break
-    return methods
-
-
-_CONNECTED_METHODS = _connected_methods()
+# TOMBSTONE: array-length-metadata (removed: len(Array) enters no Python frame) deleted 2026-11-09 by lane p2-labels-lists-arrays; code recoverable at e68654a757.
+# Restore: git apply experiments/removed/P2_LABELS_LISTS_ARRAYS.patch
+FALLBACKS = {}
 
 
 def approved_metadata_callbacks(operation):
-    """Return exact callback code identities for the declared public owners."""
-    if type(operation) is not MethodType or operation.__func__.__name__ not in _METHODS:
-        return {}
-    module = sys.modules.get('mojolearn._expansion_trees')
-    if type(module) is not ModuleType:
-        return {}
-    owner = type(operation.__self__)
-    if not any(owner is vars(module).get(name) for name in _OWNERS):
-        return {}
-    if _CONNECTED_METHODS.get((owner, operation.__func__.__name__)) is not operation.__func__:
-        return {}
-    # A subclass or monkeypatched length implementation is not authorized by
-    # this exception. The callback must be the originally connected body.
-    length = vars(Array).get('__len__')
-    if getattr(length, '__code__', None) is not _LENGTH_CODE:
-        return {}
-    return {_LENGTH_CODE: ARRAY_LENGTH_METADATA}
+    """Return exact callback code identities approved for `operation`: none."""
+    return {}
