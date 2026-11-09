@@ -102,8 +102,9 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
             return ops_program_control_vjp_py[E, KIND](sid, pid,
                 Python.tuple(sid, condition, sid, other, args[5], args[6]), args[2], limit)
         if name == "while_loop":
-            # args[5]: check_every (None = 1), args[6]: iteration (None = False)
-            var every = 1
+            # args[5]: check_every (None = 0: the loop's chunk rule, lane x1b),
+            # args[6]: iteration (None = False)
+            var every = 0
             if args[5] is not None:
                 every = _integer(args[5], "check_every", 1)
             var iteration = False
@@ -118,7 +119,8 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         _arguments(args, 5)
         program_native_sequence(args[0])
         var n = PythonObject(_integer(args[1], "n", 0))
-        var unroll = _integer(args[2], "unroll", 1)
+        # unroll None = 0: the loop's chunk rule (lane x1b)
+        var unroll = 0 if args[2] is None else _integer(args[2], "unroll", 1)
         _option(args[3])
         if args[4] is not None and py_type(args[4]) is not py_type(Python.dict()):
             raise Error("TypeError: decode state must be a dict of state handle -> array, or None")

@@ -1403,7 +1403,7 @@ class Program:
         """Differentiate the executed loop iterations against final output seeds."""
         return _PROGRAM_CALL(self, "vjp_while", (condition, None, arrays, max_iterations, False, seeds, parameters))
 
-    def while_loop(self, *arrays, condition, max_iterations, optimize=False, check_every=1, iteration=False):
+    def while_loop(self, *arrays, condition, max_iterations, optimize=False, check_every=None, iteration=False):
         """Apply this state graph while the scalar condition holds, up to a limit.
 
         The loop runs on the device: the state arrays are uploaded once and
@@ -1422,12 +1422,14 @@ class Program:
             The most body applications, at most 16777216.
         optimize : bool
             Optimize the component graphs before running.
-        check_every : int
+        check_every : int or None
             Iterations between two reads of the loop's status on the host.
             Larger values wait less on the device; up to ``check_every - 1``
             extra iterations may be computed after the stop and are
-            discarded, so the result is the same for every value. Above 1,
-            the body must keep each state array's shape.
+            discarded, including their writes to state tensors
+            (:meth:`Session.state`), so the result is the same for every
+            value. Above 1, the body must keep each state array's shape.
+            None lets the loop choose from the body's cost.
         iteration : bool
             When true, this graph and the condition take one more input, a
             single value holding the number of iterations completed so far.
@@ -1446,7 +1448,7 @@ class Program:
         return _PROGRAM_CALL(self, "while_loop", (condition, None, arrays, max_iterations, optimize,
                                                   check_every, iteration))
 
-    def decode(self, *arrays, n, state=None, unroll=1, iteration=False):
+    def decode(self, *arrays, n, state=None, unroll=None, iteration=False):
         """Generate ``n`` steps with this graph, on the device, in one call.
 
         The graph maps the current tokens (its first input, an ids input)
@@ -1466,9 +1468,10 @@ class Program:
         state : dict or None
             Values written into the session's state tensors before the first
             step, as ``{handle: array}``; None keeps the state they hold.
-        unroll : int
+        unroll : int or None
             Steps enqueued between two reads of the loop's status on the
-            host. The result is the same for every value.
+            host. The result is the same for every value. None reads once,
+            after the last step.
         iteration : bool
             When true, this graph takes one more input, the number of steps
             completed so far (an integer when that input is an ids input).
