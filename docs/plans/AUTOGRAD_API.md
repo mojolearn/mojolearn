@@ -139,8 +139,9 @@ count or executor.
 - Opcodes: dropout is `OP_AG_DROPOUT_FWD`/`OP_AG_DROPOUT_VJP` (1100/1101,
   `autograd/data_ops.mojo`), a range of its own beside the tape family
   (1000..1010), asserted disjoint in `sequence/dispatch.mojo`.
-- Trainers: `-D MOJOLEARN_AUTOGRAD_DATA` routes the recurrent trainer's epoch
-  order through `epoch_order` (same launches, same bits expected). The MLP
+- Trainers: the recurrent trainer's epoch order comes from `epoch_order`
+  (same launches, same bits; `-D MOJOLEARN_AUTOGRAD_DATA` promoted and
+  deleted 2026-11-08). The MLP
   keeps its own `OP_MLP_PERM` launch: `permutation` is that launch with the
   same key, so moving the MLP onto it would change no bits and needs no
   define.
@@ -193,11 +194,10 @@ sum is the fixed fold. The metrics in `metrics/impl/` (DeviceContext kernels
 with shared-memory trees) are not used here because they do not run on
 HostExec; the terms are theirs, the fold order is the tape's.
 
-Trainers under `-D MOJOLEARN_AUTOGRAD_LOSS` (default off): `sequence/
-mlp_fit.mojo` takes each batch's data term from `loss_value_into` (sum of
-per-element terms) and keeps op_mlp_bloss for the L2 term and the divide;
+Trainers (2026-11-08, `-D MOJOLEARN_AUTOGRAD_LOSS` deleted):
 `sequence/recurrent.mojo::rnn_fit` takes `losses[k]` from `loss_value_into`
-(mean) instead of the one-thread OP_SUM. Gradient seeds are unchanged in
+(mean) instead of the one-thread OP_SUM (new bits in `losses[]`); the MLP
+keeps its loss block (already a blocked fold). Gradient seeds are unchanged in
 both. New bits in the reported losses only; n_iter of the MLP can move with
 them through the stopping rule.
 
@@ -777,8 +777,8 @@ So the LM trainers keep their own step until a separate A/B moves them.
 superset of what the MLP and recurrent trainers use), the same element
 body and the same host scalars, plus a global-norm clip (blocked fold, two
 launches, then one scale launch) and host learning-rate schedules
-(constant, step, cosine, linear warmup). Under `-D MOJOLEARN_AUTOGRAD_OPTIM`
-the MLP and recurrent trainers update through it; with the clip off and a
+(constant, step, cosine, linear warmup). The MLP and recurrent trainers
+update through it (`-D MOJOLEARN_AUTOGRAD_OPTIM` promoted 2026-11-08); with the clip off and a
 constant schedule the launches and their arguments are the ones the hand
 update issues, so the bits are the same.
 

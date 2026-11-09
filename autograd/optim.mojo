@@ -9,11 +9,12 @@
 # trainer uses), with the moment buffers owned by the executor, a
 # global-norm gradient clip and host learning-rate schedules.
 #
-# Why it does not import sequence.recurrent: rnn_fit calls this module under
-# -D MOJOLEARN_AUTOGRAD_OPTIM, so sequence.recurrent imports it; this module
+# Why it does not import sequence.recurrent: rnn_fit and mlp_fit update through
+# this module (the -D MOJOLEARN_AUTOGRAD_OPTIM arm, promoted 2026-11-08 by lane
+# x3-mlp-rnn-predict-on-tape), so sequence.recurrent imports it; this module
 # imports only sequence.ops, sequence.exec_trait, checks.numerics,
-# autograd.ops and autograd.composed_ops (sequence.ops and sequence.mlp). recurrent.mojo keeps its opt_scalars / opt_step for the A/B's
-# arm A; once the define is promoted they become this module's functions.
+# autograd.ops and autograd.composed_ops (sequence.ops and sequence.mlp). recurrent.mojo keeps its opt_scalars / opt_step for their
+# other callers (autograd/model.mojo, sequence/opt_resident.mojo, sequence/ops_impl.mojo).
 #
 # Identity: the update is ONE OP_OPT launch over the flat parameter vector
 # (the same element body every sequence trainer already runs) with the
