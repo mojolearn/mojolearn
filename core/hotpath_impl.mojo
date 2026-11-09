@@ -14,8 +14,6 @@ from std.sys.compile import is_defined
 from sequence.schedule import fill_epoch_order, splitmix64
 from checks.numerics import portable_cosf, portable_log64
 from metrics.checks.pinned_sum import canonicalize_nan
-from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 
 
 #: THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` is the core host
@@ -62,23 +60,9 @@ def _ptr[dt: DType](addr: Int) raises -> MutPointer[Scalar[dt], MutUntrackedOrig
 
 
 def _tasks(n: Int) -> Int:
-    """Contiguous element tasks across the host's cores, with the grain floor
-    (core/host_predict_threads.mojo): one task on the calling thread below
-    the floor. Every element is converted, compared or gathered on its own,
-    so the split moves no output bit (lane A1 admit-trees-labels,
-    2026-11-08: this returned 1, so every cast of a public tree, label or
-    output array ran on one core)."""
-    # TOMBSTONE: hotpath `_tasks = 1` (one-task host casts) deleted 2026-11-08 by lane a1-admit-trees-labels; code recoverable at f7d10d2b09.
-    # Restore: experiments/removed/A1_ADMIT_TREES_LABELS.patch.
-    return host_predict_task_count_work(n, n)
-
-
-@always_inline
-def _chunk(n: Int, tasks: Int) -> Int:
-    """Elements per task, rounded up to a whole SIMD run (HP_W), so every
-    task but the last runs whole SIMD words."""
-    var chunk = host_predict_chunk(n, tasks)
-    return ((chunk + HP_W - 1) // HP_W) * HP_W
+    """One task on the calling thread (cpu-gpu-cleanup c-core: the GPU
+    binding runs no host pool; the SIMD loop is a copy/compare)."""
+    return 1
 
 
 # ---------------------------------------------------------------------------
@@ -176,7 +160,7 @@ def _cast_run[src: DType, dst: DType](src_addr: Int, dst_addr: Int, n: Int) rais
     var sp = _ptr[src](src_addr)
     var dp = _ptr[dst](dst_addr)
     var tasks = _tasks(n)
-    var chunk = _chunk(n, tasks)
+    var chunk = n
     var flags = List[Int](length=tasks, fill=0)
     var fp = flags.unsafe_ptr()
 
@@ -204,12 +188,9 @@ def _cast_run[src: DType, dst: DType](src_addr: Int, dst_addr: Int, n: Int) rais
         if bad:
             fp.unsafe_store(c, 1)
 
-    if tasks <= 1:
-        _range(0)
-    else:
-        host_parallelize(_range, tasks)
+    _range(0)
     _ = len(flags)
-    for c in range(tasks):  # driver-loop: over the element tasks' flags (at most one per core)
+    for c in range(tasks):
         if flags[c] != 0:
             return 1
     return 0
@@ -444,7 +425,7 @@ def _equal[dt: DType](a_addr: Int, b_addr: Int, n: Int, dst_addr: Int) raises:
     var bp = _ptr[dt](b_addr)
     var dp = _ptr[DType.uint8](dst_addr)
     var tasks = _tasks(n)
-    var chunk = _chunk(n, tasks)
+    var chunk = n
 
     def _range(c: Int) {imm ap, imm bp, imm dp, imm n, imm chunk}:
         var i = c * chunk
@@ -460,10 +441,7 @@ def _equal[dt: DType](a_addr: Int, b_addr: Int, n: Int, dst_addr: Int) raises:
             dp.unsafe_store(i, one)
             i += 1
 
-    if tasks <= 1:
-        _range(0)
-    else:
-        host_parallelize(_range, tasks)
+    _range(0)
 
 
 def _equal_i64_f64(a_addr: Int, b_addr: Int, n: Int, dst_addr: Int) raises:
@@ -622,7 +600,7 @@ def gather_i32(table_addr: Int, nt: Int, codes_addr: Int, count: Int, dst_addr: 
             break
     if not bad:
         var tasks = _tasks(count)
-        var chunk = _chunk(count, tasks)
+        var chunk = count
 
         def _range(t: Int) {imm tp, imm cp, imm dp, imm count, imm chunk, imm nt}:
             var lo = t * chunk
@@ -633,13 +611,7 @@ def gather_i32(table_addr: Int, nt: Int, codes_addr: Int, count: Int, dst_addr: 
                 else:
                     dp.unsafe_store(i, tp.unsafe_load(Int(cp.unsafe_load(i))))
 
-        if tasks <= 1:
-            if tasks <= 1:
         _range(0)
-    else:
-        host_parallelize(_range, tasks)
-        else:
-            host_parallelize(_range, tasks)
     if bad:
         raise Error("gather_i32: code out of range")
     return 0

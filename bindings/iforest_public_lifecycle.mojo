@@ -11,6 +11,7 @@ from bindings.native_class_admission import class_record, class_admit
 from bindings.classical_attributes import _type_mro
 from bindings.classical_pandas import classical_admit_value
 from bindings.trees_side_records import trees_finite_mark, trees_finite_clear
+from bindings.admitted_held import admitted_held_x
 from bindings.classical_validate import classical_check_x, classical_check_width, classical_estimator_name, classical_view
 from bindings.classical_labels import labels_shape_of
 from bindings.classical_exceptions import classical_require_fitted
@@ -123,7 +124,9 @@ def iforest_public_operation(model: PythonObject, operation: String, args: Pytho
         classical_require_fitted(model, False, method, context)
     var name = classical_estimator_name(model)
     var source = args[0]
-    var x = classical_check_x(source, name, context)
+    # A matrix the running meta-estimator holds is taken as it is
+    # (bindings/admitted_held.mojo); anything else is admitted once.
+    var x = admitted_held_x(source, name, context).array
     var shape = labels_shape_of(x, context)
     var rows = shape[0]
     var columns = shape[1]

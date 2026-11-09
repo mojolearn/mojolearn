@@ -47,7 +47,7 @@ from bindings.str_labels_native import StrTable, _read, _sorted
 from bindings.cpython_table import cpython_table
 from bindings.perf3_label_doors_text import labels_all_exact_str
 from bindings.label_input_sources import LABELS_LIST_INT
-from core.hotpath_impl import cast_elements
+from core.admitted_cast_elements import admitted_cast_elements
 from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64
 from core.admitted_input import admitted_check_weights_f32
 from core.admitted_transpose import admitted_transpose_to_f32
@@ -459,13 +459,13 @@ def labels_cast(src: Int, source: String, dst: Int, target: String, count: Int, 
     storage order, element tasks across the host's cores."""
     # Lane A1 admit-trees-labels: this was a Python call into the base
     # binding's `cast_elements` (one task, `_tasks = 1`); the same typed
-    # kernel now runs in process (core/hotpath_impl.mojo), split across
-    # cores. Same conversion per element: no bit change.
+    # kernel now runs in process (core/admitted_cast_elements.mojo), split
+    # across cores. Same conversion per element: no bit change.
     # TOMBSTONE: labels_cast / trees_cast py_call into the base binding's cast_elements deleted 2026-11-08 by lane a1-admit-trees-labels; code recoverable at f7d10d2b09.
     # Restore: experiments/removed/A1_ADMIT_TREES_LABELS.patch.
     if count == 0:
         return
-    var refused = cast_elements(src, _native_code(source), dst, _native_code(target), count)
+    var refused = admitted_cast_elements(src, _native_code(source), dst, _native_code(target), count)
     if refused != 0:
         raise Error("TypeError: mojolearn: an element does not fit " + target)
 

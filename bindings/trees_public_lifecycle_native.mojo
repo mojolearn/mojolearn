@@ -9,7 +9,7 @@ from bindings.classical_attributes import classical_check_layout
 from bindings.classical_arrays import classical_is_array
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_check_y, classical_check_width, classical_estimator_name
-from bindings.admitted_input import admit_x_unrecorded
+from bindings.admitted_held import admitted_held_x
 from bindings.classical_labels import labels_shape_of, _flatten_labels
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.classifier_public_lifecycle import classifier_after_fit, _feature_names
@@ -86,8 +86,10 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
     # admission instead of walking X again (perf3-nbr-msel-trees).
     # The one admission of X (bindings/admitted_input.mojo): refused with
     # scikit-learn's wording and borrowed when it already is C-order float32
-    # (one parallel finiteness scan, no cast), otherwise one parallel cast.
-    var admitted = admit_x_unrecorded(args[0], name, context, True)
+    # (one parallel finiteness scan, no cast), otherwise one parallel cast;
+    # a matrix the running meta-estimator holds is taken as it is
+    # (bindings/admitted_held.mojo).
+    var admitted = admitted_held_x(args[0], name, context, True)
     var x = admitted.array
     var kind = forest_kind(model, context)
     var classifier = kind.endswith("_classifier")
