@@ -911,9 +911,11 @@ def github_legs(ctx):
         name = f"{vendor}-{arch}"
         rb, out = leg_layout(legs_dir, "github", name)
         defines = candidate_defines(ctx)
+        ref = getattr(getattr(ctx, "args", None), "candidate_ref", "") or ""
         legs.append(Leg(name, vendor, arch,
                         ["python3", "tools/release_github_build.py", "run", "--commit", ctx.commit,
-                         "--arch", arch, "--out", str(out)] + (["--defines", defines] if defines else []),
+                         "--arch", arch, "--out", str(out)] + (["--defines", defines] if defines else [])
+                        + (["--ref", ref] if ref else []),
                         {}, rb, legs_dir, out))
     return legs
 
@@ -6777,7 +6779,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
         return 0
 
 
-def main(argv=None):
+def release_parser():
+    """The release CLI (main); `tools/release.py candidate` parses its Release arguments with it too."""
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     ap.add_argument("version")
@@ -6871,6 +6874,15 @@ def main(argv=None):
                     help="where the AMD build leg rents: auto = DigitalOcean MI325X, Hot Aisle 1x MI300X when "
                          "DigitalOcean has a GPU droplet live (default MOJOLEARN_AMD_PROVIDER, else auto)")
     ap.add_argument("--state-dir", default="", help=argparse.SUPPRESS)
+    return ap
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv[:1] == ["candidate"]:
+        import release_candidate
+        return release_candidate.main(argv[1:], release=sys.modules[__name__])
+    ap = release_parser()
     args = ap.parse_args(argv)
     if args.report and (args.plan or args.status or args.dry_run or args.only or args.redo or args.refreeze):
         ap.error("--report runs nothing; it takes no --plan, --status, --dry-run, --only, --redo or --refreeze")

@@ -7,9 +7,10 @@ line of tools/ops/paper_compare_job.sh (lane measure-prep, 2026-11-09; docs/plan
     python3 tools/ops/measure_candidate.py stage nvidia|amd --version V --source-commit SHA [--wheel-dir DIR]
         [--lane LANE] [--tree DIR] [--b-arm NAME=DIR@SHA ...] [--tag TAG] [--dry-run]
 
-The wheels are the ones tools/release.py packs for the frozen source (its linux-pack step, Release.split_final:
-<release root>/<version>/<commit12>/linux/final/, default ~/mojolearn-evidence/release/...): the core and the vendor
-wheel. They are validated here first with tools/candidate_wheel_install.py build_manifest (wheel RECORD, metadata,
+The wheels are the ones tools/release.py packs (its linux-pack step, Release.split_final): for a candidate build
+(`tools/release.py candidate`, a local version X.Y.Z.devN+<sha12>[.label]) ~/mojolearn-evidence/release-candidates/
+<version>/<commit12>/linux/final/, for a frozen release ~/mojolearn-evidence/release/<version>/<commit12>/linux/final/:
+the core and the vendor wheel. They are validated here first with tools/candidate_wheel_install.py build_manifest (wheel RECORD, metadata,
 tags, the frozen payload's source commit), then copied through the vendor wrapper's own channel and sha256-checked
 on the box by tools/ops/release_gate.py Runner.stage, the same code path the release gate uses for the same wheels
 (no second downloader; nothing is fetched from GitHub or R2 here). A B set (--b-arm, an A/B arm of
@@ -36,6 +37,22 @@ import candidate_wheel_install as C  # noqa: E402
 import release_gate as RG  # noqa: E402
 
 RELEASE_ROOT = Path.home() / "mojolearn-evidence" / "release"
+#: tools/release.py candidate's work root: a local version (X.Y.Z.devN+<sha12>[.label]) is a candidate build there
+CANDIDATE_ROOT = Path.home() / "mojolearn-evidence" / "release-candidates"
+
+
+def default_wheel_dir(version, commit):
+    root = CANDIDATE_ROOT if "+" in version else RELEASE_ROOT
+    return root / version / commit[:12] / "linux" / "final"
+
+
+def dir_version(wheel_dir, fallback):
+    """The version of a wheel dir tools/release.py candidate wrote (its candidate.json), else FALLBACK."""
+    try:
+        import json
+        return json.loads((Path(wheel_dir) / "candidate.json").read_text())["version"]
+    except (OSError, ValueError, KeyError):
+        return fallback
 IN_BASE = "/root/pc-in"
 AMD_TREE = "/root/mojolearn"
 
@@ -103,7 +120,7 @@ def cmd_stage(a):
     commit, version, vendor = a.source_commit, a.version, a.vendor
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise SystemExit("measure-candidate: --source-commit must be the full frozen sha")
-    wdir = Path(a.wheel_dir) if a.wheel_dir else RELEASE_ROOT / version / commit[:12] / "linux" / "final"
+    wdir = Path(a.wheel_dir) if a.wheel_dir else default_wheel_dir(version, commit)
     wheels = pick_wheels(wdir, vendor, version)
     manifest = C.build_manifest(version, vendor, wheels, commit)     # refuses a wheel of another freeze
     print(f"candidate {version} {commit[:12]} {vendor}: " + ", ".join(
@@ -113,8 +130,9 @@ def cmd_stage(a):
     b_lines = []
     for spec in a.b_arm:
         name, bdir, bsha = parse_b_arm(spec)
-        bw = pick_wheels(bdir, vendor, a.b_version or version)
-        C.build_manifest(a.b_version or version, vendor, bw, bsha)
+        bver = dir_version(bdir, a.b_version or version)     # a B candidate has its own local version
+        bw = pick_wheels(bdir, vendor, bver)
+        C.build_manifest(bver, vendor, bw, bsha)
         uploads += [(w, f"{indir}/b-{name}/{vendor}/{w.name}", False) for w in bw]
         b_lines.append(f"{name} {indir}/b-{name}/{vendor} {bsha}\n")
     env = {"PC_WHEEL_DIR": f"{indir}/{vendor}", "PC_SOURCE_COMMIT": commit}
@@ -158,11 +176,13 @@ def main(argv=None):
     s.add_argument("--version", required=True, help="the candidate's version (the freeze, e.g. 0.8.67)")
     s.add_argument("--source-commit", required=True, help="the frozen source commit (40 hex)")
     s.add_argument("--wheel-dir", default=None,
-                   help="default ~/mojolearn-evidence/release/<version>/<commit12>/linux/final (release.py linux-pack)")
+                   help="default ~/mojolearn-evidence/release/<version>/<commit12>/linux/final (release.py linux-pack), "
+                        "or release-candidates/<version>/... for a local version (tools/release.py candidate)")
     s.add_argument("--lane", default="measure", help="NVIDIA lane name: the tree /root/mojolearn-<lane> (default measure)")
     s.add_argument("--tree", default=None, help="the worktree whose tools/ the job runs (default this checkout)")
     s.add_argument("--b-arm", action="append", default=[], help="NAME=DIR@SHA: a B wheel set of the owed A/Bs")
-    s.add_argument("--b-version", default=None, help="the B sets' version (default --version)")
+    s.add_argument("--b-version", default=None, help="the B sets' version (default: each dir's candidate.json, "
+                   "else --version)")
     s.add_argument("--state-dir", default="~/mojolearn-evidence/measure-candidate")
     s.add_argument("--tag", default=None, help="the results tag (default pc-<commit12>-<vendor>)")
     s.add_argument("--dry-run", action="store_true", help="validate locally and print every command; copy nothing")
