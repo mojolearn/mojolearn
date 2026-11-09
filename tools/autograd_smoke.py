@@ -151,8 +151,9 @@ ENTRIES = (
      "what": "native importer operations, including boolean reductions, cumulative sums and multi-index gather"},
     {"name": "autograd-mamba-tape", "source": "mamba/checks/mamba_tape_backward_check.mojo",
      "what": "Mamba-1/2 tape backward against stored gradient digests and the Mamba-1 host oracle"},
-    {"name": "autograd-lm-tape", "source": "training/checks/lm_tape_backward_check.mojo",
-     "what": "language-model tape backward and updated parameters against stored digests"},
+    # byte LM: its hand step, tape backward wrapper (autograd/rules_lm.mojo) and stored-digest check were deleted
+    # with plan row X7 (2026-11-09); the trainer is a captured program on Program.fit, covered by the public
+    # SmallByteLanguageModelTrainer tests and the `byte-lm` identity lane.
     # small MLP: its hand step and tape-rule check were deleted with plan row X2 (2026-11-09); the trainer is a
     # captured program, covered by the public SmallMLPTrainer tests and the `mlp` identity lane.
     {"name": "autograd-samba-tape", "source": "training/checks/samba_tape_step_check.mojo",

@@ -31,7 +31,12 @@ def host_trainer_recover(mut owner: ByteHostSession, completed: Int):
 
 
 def host_trainer_step(mut owner: ByteHostSession, a: List[Int], cfg: ByteConfig,
-                      opt: List[Float64], completed: Int, train: Bool) raises -> Int:
+                      opt: List[Float64], completed: Int, train: Bool, n_steps: Int = 1) raises -> Int:
+    """Operation 1: `n_steps` training steps (a[0] the (n_steps, batch,
+    length + 1) id stack, a[5] n_steps losses; lane x7: the binding's one
+    call for `train_steps`) or one evaluation."""
+    if n_steps < 1 or (n_steps > 1 and not train):
+        raise Error("byte LM trainer: an evaluation takes one batch; a training call at least one")
     if len(a) < 8:
         raise Error("byte LM trainer: expected at least 8 addresses")
     var full = a[7] != 0
@@ -39,11 +44,11 @@ def host_trainer_step(mut owner: ByteHostSession, a: List[Int], cfg: ByteConfig,
         raise Error("byte LM trainer: an evaluation returns no gradient")
     if len(a) != (8 + cfg.n_tensors() if full else 8):
         raise Error("byte LM trainer: expected one named gradient output per parameter tensor")
-    if train and completed >= 999999:
+    if train and completed + n_steps > 999999:
         raise Error("byte LM: completed step outside admitted bound")
     if not train and a[6] != 0:
         raise Error("byte LM trainer: an evaluation requires a null flags output")
-    host_tokens(a[0], cfg.batch * (cfg.length + 1), cfg.vocab_size)
+    host_tokens(a[0], n_steps * cfg.batch * (cfg.length + 1), cfg.vocab_size)
     if not owner.opened:
         if a[2] == 0 and a[3] == 0 and a[4] == 0:
             raise Error("byte LM: session is not open")
@@ -51,8 +56,11 @@ def host_trainer_step(mut owner: ByteHostSession, a: List[Int], cfg: ByteConfig,
     try:
         var step = 0
         if train:
-            step = owner.step([a[0], a[1], a[5], a[6]], cfg, opt, completed)
-            if step != completed + 1:
+            if n_steps > 1:
+                step = owner.steps([a[0], a[5], a[6]], n_steps, completed)
+            else:
+                step = owner.step([a[0], a[1], a[5], a[6]], cfg, opt, completed)
+            if step != completed + n_steps:
                 raise Error("byte LM: successful result has wrong completed step")
             if full:
                 _ = owner.export_gradients(a[7], cfg)
@@ -118,7 +126,7 @@ def host_trainer_run(a: List[Int], cfg: ByteConfig, opt: List[Float64], complete
                 named.append(a[i])
             host_scatter(a[8], named, cfg)
     else:
-        loss = host_loss_bits(byte_host_loss_native([Int(p.unsafe_ptr()), a[4]], cfg, 0, 1))
+        loss = host_loss_bits(byte_host_loss_native([Int(p.unsafe_ptr()), a[4]], cfg))
         host_copy_f32(a[5], p)
         host_copy_f32(a[6], m)
         host_copy_f32(a[7], v)
@@ -148,17 +156,10 @@ def host_trainer_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]
         for i in range(4, count):  # driver-loop: over CPU attention-stage metadata (no device stash)
             out[i] = 0
         return count
+    # TOMBSTONE: operation 12 (the multi-step entry) deleted 2026-11-09 by lane x7-byte-lm-on-executor: operation 1 takes n_steps (p[14]); code recoverable at the deletion commit's parent.
+    # Restore: git apply experiments/removed/BYTE_LM_HAND_STEP.patch
     if op == BYTE_HOST_TRAINER_STEPS:
-        if len(a) != 4 or len(p) != 2 or len(f) != 0 or p[1] < 0 or p[1] >= 1000000:
-            raise Error("byte LM native ABI: invalid multi-step descriptor")
-        try:
-            return owner[].steps([a[1], a[2], a[3]], p[0], p[1])
-        except error:
-            # `step` replaces the state only on success: the session stands
-            # at the last committed step, which recovery keeps.
-            var standing = owner[].completed
-            host_trainer_recover(owner[], standing)
-            raise error
+        raise Error("byte LM native ABI: operation 12 was removed; operation 1 takes n_steps")
     if len(p) != 17 or len(f) != 8 or (p[9] != 0 and p[9] != 1):
         raise Error("byte LM native ABI: invalid configuration descriptor")
     var cfg = ByteConfig(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9] == 1)
@@ -189,7 +190,10 @@ def host_trainer_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]
     if op == 8:
         return host_trainer_run(addresses, cfg, opt, p[11], p[10] == 1)
     if op == 1:
-        return host_trainer_step(owner[], addresses, cfg, opt, p[11], p[10] == 1)
+        # p[14]: the call's step count (0 or 1: one step or one evaluation)
+        if p[14] < 0 or p[14] > 999999:
+            raise Error("byte LM native ABI: invalid step count")
+        return host_trainer_step(owner[], addresses, cfg, opt, p[11], p[10] == 1, max(1, p[14]))
     if op == 10:
         if len(addresses) != 1 and len(addresses) != 1 + cfg.n_tensors():
             raise Error("byte LM trainer: expected the flat gradient and optional named outputs")

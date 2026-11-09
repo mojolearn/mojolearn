@@ -569,6 +569,16 @@ in the tables after the sections.
 | [`_op_lp_iterate_knn_idn` and the FAST kNN hand chunk loop (own flag / step-count words)](#sgd-epochs-and-knn-label-propagation-on-the-bounded-device-loop-2026-11-09) | Neighbors (label propagation kNN graph) | removed (superseded: the bounded device loop, `_LpKnnStep`) | 2026-11-09 | [N3B_SGD_HOST_EPOCH_LOOPS.patch](../experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch) |
 | [`x_neighbors_lp_fast_resident` export (`lp_fast_resident`, both providers, both bindings, generator, manifest row, `_lp_fast_resident`)](#sgd-epochs-and-knn-label-propagation-on-the-bounded-device-loop-2026-11-09) | Neighbors (label propagation) | removed (dead: always 1) | 2026-11-09 | [N3B_SGD_HOST_EPOCH_LOOPS.patch](../experiments/removed/N3B_SGD_HOST_EPOCH_LOOPS.patch) |
 
+| [`_byte_forward_loss`, `_byte_layer_forward_deferred`, `_byte_backward_tape` (byte LM hand step, 8 `llama_decoder_layer_forward` sites)](#smallbytelanguagemodeltrainer-on-the-executor-2026-11-09) | Neural (SmallByteLanguageModelTrainer) | removed (one path: the captured program on Program.fit, plan row X7) | 2026-11-09 | [BYTE_LM_HAND_STEP.patch](../experiments/removed/BYTE_LM_HAND_STEP.patch) |
+| [`autograd/rules_lm.mojo` (`byte_backward_autograd`, `LmRules`), `training/checks/lm_tape_backward_check.mojo` + digests](#smallbytelanguagemodeltrainer-on-the-executor-2026-11-09) | Neural (byte LM tape backward) | removed (no caller after the move) | 2026-11-09 | [BYTE_LM_HAND_STEP.patch](../experiments/removed/BYTE_LM_HAND_STEP.patch) |
+| [`byte_owner_steps`, operation 12 (device and host columns), the binding's `while k < n_steps` driver](#smallbytelanguagemodeltrainer-on-the-executor-2026-11-09) | Neural (byte LM train_steps) | removed (operation 1 takes n_steps: one Program.fit) | 2026-11-09 | [BYTE_LM_HAND_STEP.patch](../experiments/removed/BYTE_LM_HAND_STEP.patch) |
+| [`MOJOLEARN_IDN_TRAIN_ONE_WAIT`, `MOJOLEARN_AFN_LM_NOSYNC`, `MOJOLEARN_AFN_LM_HEAD_FUSE` (+ AFN26 spellings)](#smallbytelanguagemodeltrainer-on-the-executor-2026-11-09) | Neural (byte LM hand-step arms) | removed (their step deleted; default off, never promoted) | 2026-11-09 | [BYTE_LM_HAND_STEP.patch](../experiments/removed/BYTE_LM_HAND_STEP.patch) |
+| [`_byte_glue_update`, `_byte_live_status_*`, eager-release helpers, the trainer's certified optimizer step](#smallbytelanguagemodeltrainer-on-the-executor-2026-11-09) | Neural (byte LM step glue) | removed (the program's AdamW is the update) | 2026-11-09 | [BYTE_LM_HAND_STEP.patch](../experiments/removed/BYTE_LM_HAND_STEP.patch) |
+| [`byte_host_train_step`, `byte_host_gradient`, `training/byte_lm_host_backward.mojo` (the CPU column's composed oracle step)](#byte-lm-cpu-column-on-the-executor-and-x7-leftovers-2026-11-09) | Neural (byte LM CPU column) | removed (one path: the trainer's program on a host session, the step ops' host arm) | 2026-11-09 | [BYTE_LM_HOST_COMPOSED_STEP.patch](../experiments/removed/BYTE_LM_HOST_COMPOSED_STEP.patch) |
+| [`byte_host_loss`, `ce_causal_mean_loss_fast`, `training/chunked_lm_head_host.mojo`, `training/chunked_lm_head_gemm_host.mojo`, `training/loss_host_rows.mojo`](#byte-lm-cpu-column-on-the-executor-and-x7-leftovers-2026-11-09) | Neural (byte LM CPU loss) | removed (the loss is the program's forward) | 2026-11-09 | [BYTE_LM_HOST_COMPOSED_STEP.patch](../experiments/removed/BYTE_LM_HOST_COMPOSED_STEP.patch) |
+| [`ByteOneWait` (`training/byte_lm_one_wait.mojo`), ByteBuffers `dw_emb` / `dw_lm`, `experiments/decode_resident_20261028`, `experiments/grad_views_20261028`](#byte-lm-cpu-column-on-the-executor-and-x7-leftovers-2026-11-09) | Neural (byte LM, lane x7 leftovers) | removed (no reader after lane x7) | 2026-11-09 | [BYTE_LM_X7_LEFTOVERS.patch](../experiments/removed/BYTE_LM_X7_LEFTOVERS.patch) |
+| [`MOJOLEARN_IDN_PARAM_GRAD_VIEWS`, `MOJOLEARN_IDN_LM_RESIDENT_TOKENS` (NI32 / NN51)](#byte-lm-cpu-column-on-the-executor-and-x7-leftovers-2026-11-09) | Neural (byte LM hand-step arms) | removed (their step deleted; default off, never promoted) | 2026-11-09 | [BYTE_LM_X7_LEFTOVERS.patch](../experiments/removed/BYTE_LM_X7_LEFTOVERS.patch) |
+
 ## Retired by lane debt-block-per-n (2026-10-21)
 
 These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
@@ -5234,3 +5244,85 @@ item below is recoverable at 5b5490960d; each patch is the reverse of its deleti
   lq renderer skip / refuse an old plan's pack that names a refused define (the plans under
   `experiments/six_lane_integration/grid/` stay as history).
 
+## SmallByteLanguageModelTrainer on the executor (2026-11-09)
+
+Lane x7-byte-lm-on-executor, plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` row X7. Every step, gradient, update and
+evaluation of `SmallByteLanguageModelTrainer` (and of ParallelByteLM's shard trainers) runs on ONE captured program per trainer
+(`training/byte_lm_program.mojo`): `OPS_EMBEDDING`, one `OPS_ATTN_STEP` per decoder layer (the layer's nine weights packed in one
+step-op weights tensor, its keys/values as declared state), `OPS_TRANSPOSE` + `OPS_MATMUL` for the head and the mean
+`OPS_CROSS_ENTROPY`. `train_step` / `train_steps` are ONE `Program.fit` (`train_program_control`) over the call's batches; a
+recorded attention step is a zero-state prefill with its stages kept, recorded as one custom tape node whose VJP is the transformer
+stage rule (`autograd/rules_step_ops.mojo` `StepOpRules`, tag 108). The trainer's flat buffers stay the committed state (export,
+logits, rollback); a call's result is copied in after the shadow point and re-scanned.
+
+What was deleted:
+
+- `training/byte_lm.mojo`: the per-layer hand forward `_byte_forward_loss` and `_byte_layer_forward_deferred` (eight
+  `llama_decoder_layer_forward` sites), `_byte_backward_tape`, the `IDN_TRAIN_ONE_WAIT` step (`_byte_step_one_wait`), the Apple
+  FAST no-sync step (`_afn_byte_step_nosync`), the step-glue update arms (`_byte_glue_update`, `_byte_live_status_launch` /
+  `_finish`), the eager-scratch release helpers, the per-layer training stage lists, and the trainer's certified optimizer step
+  (`identical_optimizer_step` is no longer called by the trainer; `byte_glue_update_launch` stays for the pooled trainers).
+- `autograd/rules_lm.mojo` (`byte_backward_autograd`, `LmRules`, `byte_lm_tape_eligible`), `training/checks/lm_tape_backward_check.mojo`
+  and its digests, the `check-lm-tape-backward` pixi task and the `autograd-lm-tape` smoke entry.
+- `byte_owner_steps` and operation 12 on the device (`training/byte_lm_native_dispatch.mojo`) and host
+  (`training/byte_lm_host_trainer_dispatch.mojo`) columns, and the binding's `while k < n_steps` driver
+  (`bindings/byte_lm_trainer_native.mojo` `_run_steps`): operation 1 takes the step count (`p[14]`), opens the session when it is
+  not open and exports a 'full' result's gradient, so `train_steps` is one native call. The stateless route keeps one whole-state
+  call per batch by design.
+
+Behaviour: a refused `train_steps` call (non-finite loss, a state failing the after-scans) now commits none of its steps on the
+device column (it committed the steps before the failed one); the host column still commits step by step and the binding
+reconciles either from the session status.
+
+Bits: the byte LM's bits changed on every GPU column together (the executor's embedding, GEMM, cross-entropy and OP_OPT AdamW
+bodies replace the trainer's identical embedding, head GEMM / chunked head v2, CE and optimizer kernels; the blocks keep their
+forward body and stage rule). The host column (`training/byte_lm_host_*`) was NOT moved and no longer matches: identity lane
+`byte-lm` owes the host column on the host executor (an `OPS_ATTN_STEP` host arm), or the column is recorded as differing.
+RUN OWED: lm-train-step (bytes) and lm-eval, program vs the 0.8.66 path, one run per arm on NVIDIA and AMD; ParallelByteLM step.
+
+- Guard: `core/experiment_guards_neural.mojo` refuses `MOJOLEARN_IDN_TRAIN_ONE_WAIT`, `MOJOLEARN_AFN_LM_NOSYNC`,
+  `MOJOLEARN_AFN_LM_HEAD_FUSE` and their AFN26 spellings; no `grid_controls` entry existed; row in `docs/apple-fast/EXPERIMENTS.md`.
+- Code recoverable at `5b5490960d` (the lane's base); patch `experiments/removed/BYTE_LM_HAND_STEP.patch` (the reverse of the
+  lane's change to the code files; `git apply` restores the hand step and removes the program route).
+
+## Byte LM CPU column on the executor and X7 leftovers (2026-11-09)
+
+Lane x7b-step-ops-host-arm (branched from lane/x7-byte-lm-on-executor at `5fff22515a`), plan row X7 follow-up. Lane x7 moved
+the byte LM's GPU training onto ONE captured program (`training/byte_lm_program.mojo`) but left the CPU column on its composed
+oracle step, so the CPU column no longer gave the GPUs' bits. This lane gives the four block step ops a host arm
+(`autograd/block_step_host.mojo`, reached through the host executor's `Exec.step_*` hooks: `host_block_step_run`,
+`host_attn_step_train_run`, `host_attn_step_backward`, `host_block_step_reports`; the host block bodies `transformer_block_oracle` / `transformer_block_backward_oracle`,
+`mamba_block_oracle`, `mamba2_block_oracle`, `mamba3_block_oracle` over the same packed weights, state and words tensors),
+makes the program generic over the executor (`ByteLmProgram[E, KIND]`: `ByteDeviceProgram`, `ByteHostProgram`), and runs the
+CPU column's training step, `train_steps` and loss on a host session of the same program (`training/byte_lm_host_session.mojo`,
+`training/byte_lm_host_execution.mojo`).
+
+What was deleted:
+
+- The CPU column's composed step: `training/byte_lm_host_backward.mojo` (`byte_host_train_step`, `byte_host_gradient`,
+  `ByteHostStep`, `byte_host_split_ids`, `byte_host_step_rows` and `MOJOLEARN_BYTE_LM_HOST_STEP_ROWS`), its probe
+  `training/checks/byte_lm_host_bwd_probe.mojo`, `tools/byte_lm_host_step_profile.mojo` and the rows-vs-oracle comparison
+  `tools/byte_lm_host_step_check.py` (and its line in `tools/hostpr_both.sh`).
+- The CPU column's training loss: `byte_host_loss` (`training/byte_lm_host.mojo`), `ce_causal_mean_loss_fast` and its check,
+  the host chunked-head files `training/chunked_lm_head_host.mojo` and `training/chunked_lm_head_gemm_host.mojo`, and
+  `training/loss_host_rows.mojo` (`ce_host_rows`). Logits and next bytes keep the host inference forward.
+- Lane x7's leftovers: `training/byte_lm_one_wait.mojo` (`ByteOneWait`) and the trainer's `one_wait` field; ByteBuffers
+  `dw_emb` / `dw_lm` (2 x V x d_model floats); the dead arms `MOJOLEARN_IDN_LM_RESIDENT_TOKENS` (NI32, NN51) and
+  `MOJOLEARN_IDN_PARAM_GRAD_VIEWS`; the harnesses `experiments/decode_resident_20261028` (compiled the removed
+  `MOJOLEARN_IDN_TRAIN_ONE_WAIT`) and `experiments/grad_views_20261028`.
+
+Behaviour: the CPU column now follows the GPU trainer's call rules: `train_steps` is ONE Program.fit, a refused call commits none
+of its steps, every momentum flag is set after a step (AdamW writes every tensor's moments), and rollback restores the flags with
+p, m and v.
+
+Bits: the CPU column's byte LM bits change to the GPU columns' (one algorithm: the executor's host embedding, GEMM,
+cross-entropy and OP_OPT AdamW bodies, and the host block bodies, which equal their device blocks). Identity lane `byte-lm`
+is checked once in the global verify. The `MOJOLEARN_BYTE_LM_HOST_SABOTAGE` negative control no longer reaches the loss (it
+reverses the inference head fold only).
+
+- Guard: `core/experiment_guards_neural.mojo` refuses `MOJOLEARN_IDN_PARAM_GRAD_VIEWS` and any nonzero
+  `MOJOLEARN_IDN_LM_RESIDENT_TOKENS`; `lm_resident_tokens` moved to `removed` in
+  `experiments/six_lane_integration/grid_controls/neural-seq-train-dedupe.json`; rows in `docs/apple-fast/EXPERIMENTS.md`.
+- Code recoverable at `5fff22515a` (the lane's base); patches `experiments/removed/BYTE_LM_HOST_COMPOSED_STEP.patch` and
+  `experiments/removed/BYTE_LM_X7_LEFTOVERS.patch` (the reverse of the lane's change to the code files; `git apply` restores
+  them).

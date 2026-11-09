@@ -8,7 +8,7 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from training.byte_lm_binding_impl import ByteLMSession
 from training.byte_lm_native_status import byte_lm_status
-from training.byte_lm_session_ops import byte_owner_step, byte_owner_steps, byte_owner_logits, byte_owner_export_state, byte_owner_export_gradients, byte_scatter_named
+from training.byte_lm_session_ops import byte_owner_step, byte_owner_logits, byte_owner_export_state, byte_owner_export_gradients, byte_scatter_named
 from training.byte_lm_binding_impl import _validate_slot_table
 from training.byte_lm_stateless_run import byte_lm_run_native, byte_lm_run_finalize
 from training.byte_lm_config import ByteConfig
@@ -62,13 +62,10 @@ def byte_lm_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float6
         out[2] = Int(owner[].usable)
         out[3] = Int(Bool(owner[].trainer))
         return 4
+    # TOMBSTONE: operation 12 (BYTE_LM_OPERATION_STEPS, byte_owner_steps) deleted 2026-11-09 by lane x7-byte-lm-on-executor: operation 1 takes n_steps (p[14]) and runs them as one Program.fit; code recoverable at the deletion commit's parent.
+    # Restore: git apply experiments/removed/BYTE_LM_HAND_STEP.patch
     if op == BYTE_LM_OPERATION_STEPS:
-        if len(a) != 4 or len(p) != 2 or len(f) != 0:
-            raise Error("byte LM native ABI: invalid multi-step descriptor")
-        if p[1] < 0 or p[1] >= 1000000:
-            raise Error("byte LM: completed step outside admitted bound")
-        var step_addresses: List[Int] = [a[1], a[2], a[3]]
-        return byte_owner_steps(owner[], step_addresses, p[0], p[1])
+        raise Error("byte LM native ABI: operation 12 was removed; operation 1 takes n_steps")
     if len(p) != 17 or len(f) != 8:
         raise Error("byte LM native ABI: invalid configuration descriptor")
     if p[9] != 0 and p[9] != 1:
@@ -123,7 +120,10 @@ def byte_lm_native_operation(op: Int, a: List[Int], p: List[Int], f: List[Float6
             byte_scatter_named(admitted[8], named, shape)
         return result
     if op == 1:
-        return byte_owner_step(owner[], addresses, completed, cfg, shape, action == 1)
+        # p[14]: the call's step count (0 or 1: one step or one evaluation)
+        if p[14] < 0 or p[14] > 999999:
+            raise Error("byte LM native ABI: invalid step count")
+        return byte_owner_step(owner[], addresses, completed, cfg, shape, action == 1, max(1, p[14]))
     if op == 2 or op == 6:
         var batch = p[14]
         var length = p[15]

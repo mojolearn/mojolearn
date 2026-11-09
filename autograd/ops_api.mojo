@@ -113,6 +113,7 @@ from autograd.import_api import (
 from sequence.exec_device import DeviceExec
 from autograd.block_step_ops import (
     OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, OPS_ATTN_STEP, BlockStepScratch, is_block_step, block_step_check,
+    ATTN_STEP_TAG, attn_step_train_run,
     block_step_run, block_weight_sizes, block_state_sizes, block_offsets, block_guard, block_int_words,
     block_part_floats, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
 )
@@ -443,7 +444,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                     _ = self.buffer_kind.pop(self.owned[slot])
                 except:
                     pass
-            self.steps.forget(self.owned[slot])
+            self.steps_forget(self.owned[slot])
             self.retired.append(self.owned[slot])
             self.owned[slot] = 0
         self.free_slots.append(slot)
@@ -557,7 +558,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         else:
             upload_cast(self.ex, FP(unsafe_from_address=self.owned[slot]), src)
         # a block step op's resident struct over this buffer is stale now
-        self.steps.forget(self.owned[slot])
+        self.steps_forget(self.owned[slot])
 
     def declare_state(mut self, h: Int) raises:
         """Make uploaded tensor h carried state: block step ops (and any
@@ -572,7 +573,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if self.wants_grad[slot]:
             raise Error("ValueError: ops: state tensors take no gradient (requires_grad=False)")
         self.buffer_kind[self.owned[slot]] = OPS_BUFFER_STATE_WORDS if self.int_words[slot] else OPS_BUFFER_STATE
-        self.steps.forget(self.owned[slot])
+        self.steps_forget(self.owned[slot])
 
     def is_state(self, h: Int) raises -> Bool:
         """Whether tensor h is carried state (`declare_state`)."""
@@ -593,6 +594,29 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             return self.buffer_kind[addr]
         except:
             return 0
+
+    def steps_address(mut self) -> Int:
+        """Address of this session's resident step entries (lane x7): the
+        backward rules of a program that trains through a step op read
+        them (autograd/rules_step_ops.mojo StepOpRules). Stable for the
+        session's life (sessions are heap-allocated, never moved)."""
+        return Int(MutPointer(to=self.steps))
+
+    def steps_forget(mut self, addr: Int):
+        """The buffer at `addr` was written from outside a step or freed:
+        the step ops' entries over it go (the device table's here, the host
+        arm's in the executor, lane x7b)."""
+        self.steps.forget(addr)
+        self.ex.step_forget(addr)
+
+    def steps_weights_changed(mut self, addr: Int):
+        """The weights at `addr` were rewritten in place (both arms)."""
+        self.steps.weights_changed(addr)
+        self.ex.step_weights_changed(addr)
+
+    def steps_clear(mut self):
+        self.steps.clear()
+        self.ex.step_clear()
 
     def upload_block(mut self, code: Int, ints: List[Int], part: Int, srcs: List[CastIn],
                      words: List[Int]) raises -> Int:
@@ -700,7 +724,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                             + String(srcs[i].count()) + " values, the block " + String(sizes[i]))
             upload_cast(self.ex, buf + offs[i], srcs[i])
         if part == BLOCK_PART_WEIGHTS:
-            self.steps.weights_changed(addr)
+            self.steps_weights_changed(addr)
 
     def download_block(mut self, h: Int, code: Int, ints: List[Int], part: Int, dsts: List[Int]) raises:
         """`part` (weights or float state) of block tensor h into the caller's
@@ -776,7 +800,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
     def close(mut self) raises:
         """Return every buffer to the executor and wait for its queue."""
         # the resident block structs view session buffers: drop them first
-        self.steps.clear()
+        self.steps_clear()
         self.buffer_kind.clear()
         self.tape.release(self.ex)
         for slot in range(len(self.live)):  # driver-loop: over session handles
@@ -1196,7 +1220,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             var t = self.opt_states[si].t + 1
             var st = self._state_view(si)
             step_lr(self.ex, cfg, st, FP(unsafe_from_address=self.owned[slot]), grads[i], n, t, lr)
-            self.steps.forget(self.owned[slot])  # the weights moved: a step op re-checks them
+            self.steps_forget(self.owned[slot])  # the weights moved: a step op re-checks them
             self.opt_states[si].t = t
             self.opt_states[si].pw1 = st.pw1
             self.opt_states[si].pw2 = st.pw2
@@ -1694,10 +1718,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         """Block step op `code`: operands [x, weights, state, (words)]
         checked here (x float; weights an upload of floats; state and words
         declared state of the right kind), then the table's run on the
-        device, the result a new tensor of x's shape. The state is written
+        device (lane x7b: the host arm on a host session), the result a new tensor of x's shape. The state is written
         in place, so the op is not differentiable through the tape here."""
         var info = block_step_check(code, len(x), ints, fs)
-        if self.tape.is_recording():
+        var recording = self.tape.is_recording()
+        if recording and code != OPS_ATTN_STEP:
             raise Error("ValueError: ops: " + String(info.name) + " runs in an inference session (Session(record=False))")
         var bufs = List[FP](capacity=len(x))
         var counts = List[Int](capacity=len(x))
@@ -1723,10 +1748,31 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             counts.append(self.shapes[slot].count())
         var sh = self.shapes[self._slot(hs[0])]
         var out = self.tape.reserve(self.ex, sh.count())
+        if recording:
+            # Lane x7: a recorded attention step (Program.fit's replay) is
+            # the zero-state prefill with its stages kept, recorded as one
+            # custom node over [x, weights]; its VJP is StepOpRules'
+            # (autograd/rules_step_ops.mojo), keyed by the operands' storage.
+            comptime if Self.E.IS_DEVICE:
+                _ = attn_step_train_run(rebind[DeviceExec](self.ex), self.steps, bufs, counts, ints, out)
+            else:
+                # lane x7b: the executor's host arm, the same zero-state
+                # prefill over the host block body with its stages kept
+                # (autograd/block_step_host.mojo, through Exec.step_run).
+                self.ex.step_run(code, bufs, counts, ints, fs, out, True)
+            var saved = Args()
+            saved.p0 = bufs[1]
+            saved.p1 = bufs[2]
+            saved.p2 = bufs[3]
+            var rx = List[Tensor]()
+            rx.append(x[0])
+            rx.append(x[1])
+            var rt = self.tape.custom_nd(self.ex, rx, out, sh, ATTN_STEP_TAG, saved)
+            return self._add(rt, 0, self.tape.requires_grad(rt), 0)
         comptime if Self.E.IS_DEVICE:
             block_step_run(rebind[DeviceExec](self.ex), self.steps, code, bufs, counts, ints, fs, out)
         else:
-            raise Error("ValueError: ops: " + String(info.name) + " runs on a GPU session")
+            self.ex.step_run(code, bufs, counts, ints, fs, out, False)
         var t: Tensor
         if sh.ndim == 2:
             t = self.tape.variable(self.ex, out, sh.d[0], sh.d[1], False)

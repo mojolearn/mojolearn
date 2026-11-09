@@ -11,7 +11,11 @@ device kernels:
     each block  transformer_block_oracle       llama_decoder_layer_forward
                 (fresh cache, prefill at 0)    (prefill_cache.s = 0)
     head        gemm_oracle(OP_NT)             identical_gemm_into(..., OP_NT)
-    loss        ce_forward_oracle(causal_lm)   identical_ce_forward_into
+
+The training loss is not here (lane x7b-step-ops-host-arm, 2026-11-09): it is
+the trainer's captured program on a host session, the GPU columns'
+algorithm (training/byte_lm_host_execution.mojo `byte_host_loss_native`).
+This file is the logits and next-byte forward.
 
 There is no final norm between the last block and the head, because the
 device forward has none. The parameter registry is
@@ -55,13 +59,10 @@ from gemm.host.neural_gemm import GhrPtr
 from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT
 from gemm.host.neural_gemm import gemm_oracle
 from training.byte_lm_config import ByteConfig
-from training.chunked_lm_head_gemm_host import byte_chunked_head_forward
-from training.chunked_lm_head_host import chunked_lm_head_gemm_host_forward
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
 from training.byte_lm_host_kernels import (
     all_finite_span,
-    ce_causal_mean_loss_fast,
     flushed_span,
     gemm_nt_rows,
     gemm_w,
@@ -78,8 +79,6 @@ from training.byte_lm_host_kernels import (
     rms_norm_fast,
     rope_rows,
 )
-from training.checks.loss_contract import CeConfig
-from training.checks.loss_oracle import ce_forward_oracle
 from transformer.checks.transformer_fixture import (
     attention_scale,
     mask_fill,
@@ -247,8 +246,6 @@ def byte_host_logits(params: List[Float32], inputs: List[Int32], batch: Int,
 #               also split a single row's head product across threads; on
 #               the M4 at [1, 32] that measured slower, 0.70 against 0.57
 #               ms, and it was removed.)
-#   loss        `ce_causal_mean_loss_fast` on the calling thread, the loss
-#               oracle's seams with its folds through `gemm_nt_rows`.
 #
 # No task starts another parallel region. Owners that tasks read through a
 # pointer are transferred only AFTER the join (the step-33 race class,
@@ -944,32 +941,5 @@ def byte_host_next_threaded(params: List[Float32], inputs: List[Int32], batch: I
     return out^
 
 
-def byte_host_loss(params: List[Float32], ids: List[Int32], config: ByteConfig,
-                   threaded: Bool = False, threads: Int = 0) raises -> Float32:
-    """Mean next-byte cross-entropy of ids `[batch, length + 1]` at the
-    configured shape, split exactly as `_byte_forward_loss` splits them.
-    The loss runs on the calling thread: the oracle on the reference path,
-    `ce_causal_mean_loss_fast` on the threaded path."""
-    config.validate()
-    var b = config.batch
-    var l = config.length
-    if len(ids) != b * (l + 1):
-        raise Error("byte LM host: loss ids must be [batch, length + 1]")
-    var inputs = List[Int32](capacity=b * l)
-    var targets = List[Int32](capacity=b * l)
-    for bi in range(b):
-        for li in range(l):
-            inputs.append(ids[bi * (l + 1) + li])
-            targets.append(ids[bi * (l + 1) + li + 1])
-    if config.chunked_lm_head_v2:
-        _validate_logits_inputs(params,inputs,b,l,config)
-        var hidden = _byte_host_hidden(params,inputs,b,l,config)
-        var head = _slice(params,config.offsets(),config.n_tensors()-1)
-        var result = byte_chunked_head_forward(hidden,head,targets,b*l,config.vocab_size,config.d_model)
-        return result.loss
-    if threaded:
-        var fast_logits = byte_host_logits_threaded(params, inputs, b, l, config, threads)
-        return ce_causal_mean_loss_fast(fast_logits, targets, config.vocab_size)
-    var logits = byte_host_logits(params, inputs, b, l, config)
-    var st = ce_forward_oracle(logits, targets, CeConfig.causal_lm(config.vocab_size))
-    return st.loss[0]
+# TOMBSTONE: byte_host_loss (the host column's training loss: the composed oracle forward, its chunked-head and threaded arms) deleted 2026-11-09 by lane x7b-step-ops-host-arm; the loss is the trainer's program on a host session (training/byte_lm_host_execution.mojo byte_host_loss_native). Code recoverable at the deletion commit's parent.
+# Restore: git apply experiments/removed/BYTE_LM_HOST_COMPOSED_STEP.patch

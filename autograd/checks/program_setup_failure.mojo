@@ -73,6 +73,25 @@ struct FaultExec(Exec, Movable):
     def execution_profile_end(mut self) raises -> ExecutionProfile:
         return self.host.execution_profile_end()
 
+    def step_run(mut self, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int], fs: List[Float32],
+                 y_out: FP, record: Bool) raises:
+        self.host.step_run(code, bufs, counts, ints, fs, y_out, record)
+
+    def step_backward(mut self, w: FP, s: FP, q: FP, d_out: FP, d_x: FP, d_w: FP) raises:
+        self.host.step_backward(w, s, q, d_out, d_x, d_w)
+
+    def step_reports(mut self, code: Int, w_addr: Int, s_addr: Int, dsts: List[Int]) raises:
+        self.host.step_reports(code, w_addr, s_addr, dsts)
+
+    def step_forget(mut self, addr: Int):
+        self.host.step_forget(addr)
+
+    def step_weights_changed(mut self, addr: Int):
+        self.host.step_weights_changed(addr)
+
+    def step_clear(mut self):
+        self.host.step_clear()
+
 
 def require(condition: Bool, message: String) raises:
     if not condition:

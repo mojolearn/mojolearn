@@ -10,7 +10,7 @@ pixi install > $O/pixi.log 2>&1
 MOJOLEARN_TARGET_COLUMN=cpu bash bindings/build_byte_lm_host.sh > $O/build-host.log 2>&1; rc build-host $?
 MOJOLEARN_TARGET_COLUMN=nvidia MOJOLEARN_GPU_ARCHS=sm_89 MOJOLEARN_COMPILE_JOBS=4 bash bindings/build.sh > $O/build-base.log 2>&1; rc build-base $?
 MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_VENDOR=cpu timeout 3600 pixi run python tools/byte_lm_cpu_train_gate.py cpu --steps all > $O/train-gate.log 2>&1; rc train-gate $?
-MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_VENDOR=cpu timeout 3600 pixi run python tools/byte_lm_host_step_check.py --steps 4 > $O/step-check.log 2>&1; rc step-check $?
+# TOMBSTONE: tools/byte_lm_host_step_check.py (the composed host step's rows-vs-oracle check) deleted 2026-11-09 by lane x7b-step-ops-host-arm: the host step is the trainer's program; docs/TOMBSTONES.md "BYTE_LM_HOST_COMPOSED_STEP".
 for r in 1 0; do MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT=$r timeout 3600 pixi run python tools/byte_lm_host_gate.py > $O/infer-gate-$r.log 2>&1; rc infer-gate-$r $?; done
 timeout 3600 pixi run python tools/byte_lm_host_path_sweep.py > $O/sweep.log 2>&1; rc sweep $?
 echo done > $O/done

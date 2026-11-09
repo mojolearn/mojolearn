@@ -67,3 +67,36 @@ trait Exec:
 
     def execution_profile_end(mut self) raises -> ExecutionProfile:
         ...
+
+    # Lane x7b-step-ops-host-arm (2026-11-09): the block step ops' host arm
+    # (autograd/block_step_host.mojo). A host executor runs the op through
+    # its own arm and keeps the arm's entries; the device table runs inside
+    # the session (autograd/block_step_ops.mojo), so DeviceExec refuses the
+    # two runs and ignores the three notifications. Generic session code
+    # reaches the host arm only through these, so no GPU module imports it.
+    def step_run(mut self, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int], fs: List[Float32],
+                 y_out: FP, record: Bool) raises:
+        """Run block step op `code` on this executor's arm (`record`: a
+        recorded training run of OPS_ATTN_STEP, its stages kept)."""
+        ...
+
+    def step_backward(mut self, w: FP, s: FP, q: FP, d_out: FP, d_x: FP, d_w: FP) raises:
+        """The backward of the last recorded OPS_ATTN_STEP over (w, s, q)."""
+        ...
+
+    def step_reports(mut self, code: Int, w_addr: Int, s_addr: Int, dsts: List[Int]) raises:
+        """The last run's Mamba reports into the caller's host arrays."""
+        ...
+
+    def step_forget(mut self, addr: Int):
+        """The session buffer at `addr` was written from outside a step or
+        freed: drop the arm's entries over it."""
+        ...
+
+    def step_weights_changed(mut self, addr: Int):
+        """The weights at `addr` were rewritten in place."""
+        ...
+
+    def step_clear(mut self):
+        """Drop every entry of the arm."""
+        ...

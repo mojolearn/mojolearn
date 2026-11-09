@@ -526,7 +526,10 @@ def _after_failure(mut mods: NativeModules, fields: PythonObject) raises:
         _mark_lost(fields)
 
 
-def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonObject, shape: _Shape, binding: PythonObject, context: PythonObject, train: Bool) raises -> PythonObject:
+def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonObject, shape: _Shape, binding: PythonObject, context: PythonObject, train: Bool, n_steps: Int = 1, steps_call: Bool = False) raises -> PythonObject:
+    """One native call: `n_steps` training steps (`tokens` the (n_steps,
+    batch, length + 1) stack; one Program.fit on the device column) or one
+    evaluation. `steps_call`: the result also carries the step `losses`."""
     var b = _b(mods)
     var lost = fields["_lost_at"]
     if lost is not None:
@@ -545,10 +548,12 @@ def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonO
         py_setitem(fields, "_session_entries_binding", binding)
     var state = fields["_state"]
     var completed = Int(py=state["completed_steps"])
-    if train and completed >= _MAX_STEP:
+    if train and completed + n_steps > _MAX_STEP:
         raise Error("ValueError: Byte-LM native call step counter is exhausted")
     var provider = _provider(fields, binding)
     mods.released()
+    if n_steps > 1 and provider is None:
+        raise Error("ImportError: Byte-LM binding lacks the native trainer table (train_steps); rebuild bindings/build_byte_lm.sh")
     if fields["_native_session"] is None:
         py_setitem(fields, "_native_session", neural_descriptor_construct(provider, _entry(binding, "byte_lm_session_create")) if provider is not None else py_call(_entry(binding, "byte_lm_session_create")))
         mods.released()
@@ -557,7 +562,7 @@ def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonO
         py_setitem(fields, "_grad_step", -1)
     var session = fields["_native_session"]
     var full = train and String(py=fields["_step_result"]) == "full"
-    var out_loss = _f32(1, context)
+    var out_loss = _f32(n_steps, context)
     var out_flags = _i32(shape.n_tensors(), context) if train else PythonObject(None)
     var grads = _gradient_outputs(mods, shape, True, context) if full else Python.tuple(PythonObject(None), b.dict())
     # The operation's buffer descriptors as native words (plan row N104): no
@@ -581,7 +586,9 @@ def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonO
     var returned = PythonObject(None)
     try:
         if provider is not None:
-            returned = PythonObject(_native_execute_words(fields, binding, provider, 1, a, shape, state, train))
+            # batch slot (p[14]) = the call's step count (operation 1)
+            returned = PythonObject(_native_execute_words(fields, binding, provider, 1, a, shape, state, train,
+                                                          n_steps))
             mods.released()
         else:
             var addresses = Python.list()
@@ -594,17 +601,24 @@ def _run_resident(mut mods: NativeModules, fields: PythonObject, tokens: PythonO
         _ = out_loss  # keep the Python object alive through the native call above
     except error:
         mods.released()
-        _after_failure(mods, fields)
+        if n_steps > 1 and provider is not None and out_flags is not None:
+            # a column that commits step by step (the host column) may
+            # stand past `completed`; the device column commits none
+            _steps_reconcile(mods, fields, binding, provider, out_flags, completed, n_steps)
+        else:
+            _after_failure(mods, fields)
         raise error^
     _adopt_open(mods, fields)
-    var expected = completed + Int(train)
+    var expected = completed + (n_steps if train else 0)
     if py_type(returned) is not b.int or Int(py=returned) != expected:
         _mark_lost(fields)
         raise Error("RuntimeError: Byte-LM returned an invalid completed-step counter")
     if not train:
         return _loss(out_loss)
     var result = b.dict()
-    py_setitem(result, "loss", _loss(out_loss))
+    py_setitem(result, "loss", PythonObject(Float64(_F32P(unsafe_from_address=Int(py=classical_address(out_loss)))[n_steps - 1])))
+    if steps_call:
+        py_setitem(result, "losses", out_loss)
     py_setitem(result, "step", expected)
     py_setitem(result, "completed_steps", expected)
     py_setitem(result, "next_batch_index", expected)
@@ -1141,17 +1155,14 @@ def byte_lm_train_step(mut mods: NativeModules, trainer: PythonObject, args: Pyt
 
 # ---------------------------------------------------------------- the multi-step entry
 #
-# Plan section 2C (rows N107, N109, N101, N104; 2026-11-07): `train_steps(ids)`
-# takes n_steps batches in one call. The lock, the state admission, the shape,
-# the ids and the binding are admitted ONCE; the first step opens the session
-# through the per-step entry when it is not open yet, and every remaining step
-# runs inside ONE native call (provider operation 12, `byte_owner_steps` on the
-# device and `ByteHostSession.steps` on the host column), which uses the shape,
-# optimizer and flags the session admitted at open. Each step takes the same
-# kernel path as `train_step`, so the losses and the state equal n_steps single
-# steps bit for bit; no fold order changes.
-
-comptime _BYTE_LM_OP_STEPS = 12
+# Plan section 2C (rows N107, N109, N101, N104; 2026-11-07) and lane
+# x7-byte-lm-on-executor (2026-11-09): `train_steps(ids)` takes n_steps
+# batches in one call. The lock, the state admission, the shape, the ids
+# and the binding are admitted ONCE, then ONE native call (operation 1 with
+# the step count) runs every step: on the device column one Program.fit
+# over the batches (training/byte_lm_program.mojo).
+# TOMBSTONE: the binding's `while k < n_steps` step driver (the opening step, 'full' results and the stateless route one call each, the rest through operation 12) deleted 2026-11-09 by lane x7-byte-lm-on-executor; code recoverable at the deletion commit's parent.
+# Restore: git apply experiments/removed/BYTE_LM_HAND_STEP.patch
 
 
 def _ids_steps(mut mods: NativeModules, source: PythonObject, shape: _Shape,
@@ -1237,65 +1248,22 @@ def _steps_reconcile(mut mods: NativeModules, fields: PythonObject, binding: Pyt
 
 def _run_steps(mut mods: NativeModules, fields: PythonObject, stack: PythonObject, n_steps: Int, shape: _Shape,
                binding: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = _b(mods)
+    """`train_steps`: on a resident trainer ONE native call (operation 1 with
+    the step count: the session opens from the host state when it is not
+    open, the steps run as one Program.fit on the device column, a 'full'
+    result exports the last step's gradient). The stateless route
+    (`resident=False`) is one whole-state native call per step by design
+    (the state crosses the boundary every step), so it keeps one call per
+    batch."""
+    if _is_resident(fields, binding, context):
+        return _run_resident(mods, fields, stack, shape, binding, context, True, n_steps, True)
     var losses = _f32(n_steps, context)
-    var losses_address = Int(py=classical_address(losses))
-    var loss_out = _F32P(unsafe_from_address=losses_address)
-    var resident = _is_resident(fields, binding, context)
-    var provider = _provider(fields, binding) if resident else PythonObject(None)
-    mods.released()
-    var lean = String(py=fields["_step_result"]) != "full"
+    var loss_out = _F32P(unsafe_from_address=Int(py=classical_address(losses)))
     var last = PythonObject(None)
-    var k = 0
-    while k < n_steps:  # driver-loop: over the steps the multi-step operation cannot take (the opening step, 'full' results, a binding without the provider table, the stateless route)
-        if (resident and lean and provider is not None and Bool(py=fields["_session_open"])
-                and fields["_lost_at"] is None):
-            break
+    for k in range(n_steps):  # driver-loop: over the stateless route's steps (each one whole-state native call)
         var batch = _ids_batch(stack, k, shape, context)
-        last = _run_resident(mods, fields, batch, shape, binding, context, True) if resident else _run_stateless(
-            mods, fields, batch, shape, binding, context, True)
+        last = _run_stateless(mods, fields, batch, shape, binding, context, True)
         loss_out[k] = Float32(Float64(py=last["loss"]))
-        k += 1
-    if k < n_steps:
-        var remaining = n_steps - k
-        var completed = Int(py=fields["_state"]["completed_steps"])
-        if completed + remaining > _MAX_STEP:
-            raise Error("ValueError: Byte-LM native call step counter is exhausted")
-        var n_tensors = shape.n_tensors()
-        var out_flags = _i32(n_tensors, context)
-        var cells = shape.batch() * (shape.length() + 1)
-        var a = List[Int]()
-        a.append(_session_handle(fields, binding, provider))
-        a.append(Int(py=classical_address(stack)) + k * cells * 4)
-        a.append(losses_address + k * 4)
-        a.append(Int(py=classical_address(out_flags)))
-        var plan: List[Int] = [remaining, completed]
-        py_setitem(fields, "_grad_step", -1)
-        var returned = 0
-        try:
-            returned = neural_descriptor_execute(provider, _BYTE_LM_OP_STEPS, a, plan, List[Float64]())
-            mods.released()
-        except error:
-            mods.released()
-            _steps_reconcile(mods, fields, binding, provider, out_flags, completed, remaining)
-            raise error^
-        _ = stack  # keep the Python object alive through the native call above
-        _ = out_flags  # keep the Python object alive through the native call above
-        var expected = completed + remaining
-        if returned != expected:
-            _mark_lost(fields)
-            raise Error("RuntimeError: Byte-LM returned an invalid completed-step counter")
-        var committed = fields["_state"]
-        py_setitem(committed, "flags", out_flags)
-        py_setitem(committed, "completed_steps", expected)
-        py_setitem(committed, "next_batch_index", expected)
-        py_setitem(fields, "_grad_step", expected)
-        last = b.dict()
-        py_setitem(last, "loss", PythonObject(Float64(loss_out[n_steps - 1])))
-        py_setitem(last, "step", expected)
-        py_setitem(last, "completed_steps", expected)
-        py_setitem(last, "next_batch_index", expected)
-        py_setitem(last, "flags", _copy_i32(out_flags, n_tensors, context))
     py_setitem(last, "losses", losses)
     _ = losses  # keep the Python object alive through the native writes above
     return last

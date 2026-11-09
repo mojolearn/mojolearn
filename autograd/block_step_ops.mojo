@@ -43,9 +43,25 @@ integer words back once.
 Dispatch is one table (`comptime for` over the codes), not one more `elif` per
 op in `OpsSession._op_run_tensors` (lessons 8, 12 of NATIVE_ENTRY_POINTS_AFTER_0866).
 
-Device only: an `OpsSession` on the host executor refuses these codes
-(`Exec.IS_DEVICE`), so a host build never instantiates them. Recording: the
-ops run in an inference session; a family lane that trains through a step op
+The host arm (lane x7b-step-ops-host-arm, 2026-11-09): an `OpsSession` on the
+host executor runs the same four ops through the host block bodies, the
+oracles the CPU identity column runs (`transformer_block_oracle` and
+`transformer_block_backward_oracle`, `mamba_block_oracle`,
+`mamba2_block_oracle`, `mamba3_block_oracle`), over the SAME packed
+layouts: the weights are read from the weights tensor at its `block_offsets`
+slots at every run, the carried state is read from the state tensor and
+written back after a successful run, the integers are the words tensor's.
+So one captured program runs on the GPU columns and the host column with
+one algorithm. The host arm lives in autograd/block_step_host.mojo (a host
+module: no GPU binding imports it) and its entries in the host executor
+(`HostExec.steps`, `HostStepScratch`); a host session reaches it through the
+executor (`Exec.step_run`, `step_backward`, `step_forget`); it keeps only the
+rotary table, a training run's stages and the reports. Every
+cross-row fold inside the bodies is a gemm v1 call and every per-row stage
+runs over host tasks, so a run uses every core; consecutive layers are
+dependent and run in order.
+
+Recording: the ops run in an inference session; a family lane that trains through a step op
 records it with `Tape.custom_nd` over the stage buffers its rule reads
 (`rules_mamba`, `rules_mamba3`, `rules_transformer`), see the API note.
 """
@@ -78,6 +94,8 @@ from transformer.impl.llama.modeling_llama import (
 )
 from transformer.block_options import BlockOptions, BLOCK_OPTION_PARAMS
 from transformer.lean_stages import _lean_for
+from autograd.kernels.transformer import LlamaBackwardStages
+from autograd.rules_transformer import llama_decoder_layer_backward_autograd
 
 # Session operation codes (autograd/ops_api.mojo OPS_*; autograd/program.mojo
 # PROGRAM_MAX_CODE covers them, record version 3).
@@ -491,6 +509,14 @@ struct _AttnBlock(Movable):
     #: the fixed15_v1 planes), not over views of the weights tensor; the
     #: weights operand is then a one-float placeholder the op never reads.
     var adopted: Bool
+    #: lane x7: the last RECORDED run (a training forward on the tape,
+    #: `attn_step_train_run`): its token count (0: none since the entry was
+    #: built), its L > 1 stages and input, kept until the backward reads
+    #: them (`attn_step_backward`), and the backward's own stages.
+    var train_l: Int
+    var kept: AttnPrefill
+    var bst: Optional[LlamaBackwardStages]
+    var bkey: List[Int]
 
     def __init__(out self, ctx: DeviceContext, mut ex: DeviceExec, w: FP, nw: Int, s: FP, ns: Int, q: FP,
                  ints: List[Int]) raises:
@@ -525,6 +551,10 @@ struct _AttnBlock(Movable):
         self.q_addr = Int(q)
         self.ints = ints.copy()
         self.adopted = False
+        self.train_l = 0
+        self.kept = AttnPrefill()
+        self.bst = Optional[LlamaBackwardStages]()
+        self.bkey = List[Int]()
         _ = ns
 
     def __init__(out self, ctx: DeviceContext, mut ex: DeviceExec, var weights: LlamaDeviceWeights, w: FP, s: FP,
@@ -552,6 +582,10 @@ struct _AttnBlock(Movable):
         self.q_addr = Int(q)
         self.ints = ints.copy()
         self.adopted = True
+        self.train_l = 0
+        self.kept = AttnPrefill()
+        self.bst = Optional[LlamaBackwardStages]()
+        self.bkey = List[Int]()
 
 
 def _attn_kv_views(ctx: DeviceContext, ex: DeviceExec, s: FP, ints: List[Int], dims: LlamaDims,
@@ -1047,6 +1081,125 @@ def attn_step_run_kept(
         for k in range(1, len(bufs)):  # small-loop(bufs: the op's four operands): entry eviction, no data
             sc.forget(Int(bufs[k]))
         raise err
+
+
+# ---------------------------------------------------------------- training through the attention step
+# Lane x7-byte-lm-on-executor (2026-11-09; plan row X7, EXECUTOR_X1_API.md
+# section 2 "Training through a step op"). A RECORDED run of OPS_ATTN_STEP
+# (the session's tape is recording: Program.fit's replay) is the
+# zero-state prefill at positions [0, L) through the op's own body with its
+# stages kept in the pair's entry (not forward-only), and the session
+# records it as ONE custom tape node over [x, weights] with tag
+# ATTN_STEP_TAG. Its backward rule (autograd/rules_step_ops.mojo) is the
+# transformer stage rule (`llama_decoder_layer_backward_autograd`, the one
+# the block session's backward and the byte LM trainer ran) over those kept
+# stages: d_x into the input's gradient and the nine weight gradients into
+# the packed weights tensor's gradient at their `block_offsets` slots (the
+# gaps stay the tape's zeros). Same launches as `AttnStepArm.block_backward`,
+# so a block trained through the op has that backward's bits.
+comptime ATTN_STEP_TAG = 108
+
+
+def attn_step_train_run(
+    mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int], y_out: FP,
+) raises -> Int:
+    """A recorded (training) run of OPS_ATTN_STEP: the carried position goes
+    to 0 (no cache fill: a prefill from position 0 reads only the keys and
+    values it appends), the block runs with its stages kept in the pair's
+    entry for the backward, and the word records the L tokens appended.
+    Returns L. A failed run drops the pair's entry, as every run does."""
+    _check_ints(OPS_ATTN_STEP, ints)
+    if len(bufs) != 4 or len(counts) != 4:
+        raise Error("ops: attention_step takes four tensors (x, weights, kv, words)")
+    var l = _tokens(OPS_ATTN_STEP, counts[0], ints[0], ints[1])
+    if l > ints[6]:
+        raise Error("ValueError: ops: attention_step: a training run of " + String(l)
+                    + " tokens needs s_max >= " + String(l) + ", got " + String(ints[6]))
+    try:
+        attn_step_restart(ex, sc, bufs, counts, ints, 0, False)
+        var e = attn_step_entry(ex, sc, bufs, counts, ints)
+        if sc.attn[e].adopted:
+            raise Error("ValueError: ops: attention_step: an adopted (fixed15) block has no backward")
+        # The entry's kept stages move out for the run (the run borrows the
+        # scratch mutably) and back in after it.
+        var pre = AttnPrefill()
+        swap(pre, sc.attn[e].kept)
+        _run_attn_on(ex, sc, bufs, counts, ints, y_out, pre, False)
+        e = attn_step_entry(ex, sc, bufs, counts, ints)
+        swap(pre, sc.attn[e].kept)
+        sc.attn[e].train_l = l
+        _ = pre^
+    except err:
+        for k in range(1, len(bufs)):  # small-loop(bufs: the op's four operands): entry eviction, no data
+            sc.forget(Int(bufs[k]))
+        raise err
+    return l
+
+
+def attn_step_backward(
+    mut ex: DeviceExec, mut sc: BlockStepScratch, w: FP, s: FP, q: FP, d_out: FP, d_x: FP, d_w: FP,
+) raises:
+    """The backward of the last recorded run over (w, s, q): the transformer
+    stage rule over the entry's kept stages, d(residual2) `d_out`; writes
+    d_x (b * L * d_model floats) and the nine weight gradients into `d_w`,
+    the packed weights' gradient (block_offsets layout). Enqueued on the
+    executor's stream; the stage rule's own refusal scan of d_out waits."""
+    var e = -1
+    for i in range(len(sc.attn)):  # driver-loop: over resident attention blocks
+        if sc.attn[i].w_addr == Int(w) and sc.attn[i].s_addr == Int(s) and sc.attn[i].q_addr == Int(q):
+            e = i
+    if e < 0 or sc.attn[e].train_l < 1:
+        raise Error("ops: attention_step backward: the recorded forward's stages are gone"
+                    + " (its weights or state were written outside the step after the run)")
+    var ints = sc.attn[e].ints.copy()
+    var b = ints[0]
+    var dm = ints[1]
+    var l = sc.attn[e].train_l
+    var dims = _attn_dims(ints)
+    var n = b * l * dm
+    var ctx = ex.ctx.copy()
+    var lean = sc.attn[e].lean
+    var key: List[Int] = [b, l, ints[1], ints[2], ints[3], ints[4], ints[5], ints[7], Int(lean)]
+    # The backward stages move out of the entry for the call (the rule
+    # borrows the entry's forward stages, weights and rotary table).
+    var bst = Optional[LlamaBackwardStages]()
+    swap(bst, sc.attn[e].bst)
+    if not bst or not (key == sc.attn[e].bkey):
+        bst = None
+        bst = LlamaBackwardStages(ctx, b, l, l, dims, lean=lean)
+        sc.attn[e].bkey = key^
+    var dout = _view(ex, d_out, n)
+    var off = IdentityTrace.disabled()
+    try:
+        ref blk = sc.attn[e]
+        if l == 1:
+            # L = 1 ran on the entry's resident stages and input buffer.
+            llama_decoder_layer_backward_autograd(
+                ctx, bst.value(), blk.stages, blk.w, blk.rope.cos, blk.rope.sin, blk.dx,
+                dout, b, l, 0, off, String("ops.step.backward"))
+        else:
+            llama_decoder_layer_backward_autograd(
+                ctx, bst.value(), blk.kept.stages.value(), blk.w, blk.rope.cos, blk.rope.sin,
+                blk.kept.dx.value(), dout, b, l, 0, off, String("ops.step.backward"))
+        ref g = bst.value()
+        _d2d(ctx, _view(ex, d_x, n), g.d_x, n)
+        var sizes = block_weight_sizes(OPS_ATTN_STEP, ints)
+        var at = block_offsets(sizes, block_guard(OPS_ATTN_STEP))
+        # block_weight_sizes order: norm1, norm2, q, k, v, o, gate, up, down
+        _d2d(ctx, _view(ex, d_w + at[0], sizes[0]), g.dw_norm1, sizes[0])
+        _d2d(ctx, _view(ex, d_w + at[1], sizes[1]), g.dw_norm2, sizes[1])
+        _d2d(ctx, _view(ex, d_w + at[2], sizes[2]), g.dw_q, sizes[2])
+        _d2d(ctx, _view(ex, d_w + at[3], sizes[3]), g.dw_k, sizes[3])
+        _d2d(ctx, _view(ex, d_w + at[4], sizes[4]), g.dw_v, sizes[4])
+        _d2d(ctx, _view(ex, d_w + at[5], sizes[5]), g.dw_o, sizes[5])
+        _d2d(ctx, _view(ex, d_w + at[6], sizes[6]), g.dw_gate, sizes[6])
+        _d2d(ctx, _view(ex, d_w + at[7], sizes[7]), g.dw_up, sizes[7])
+        _d2d(ctx, _view(ex, d_w + at[8], sizes[8]), g.dw_down, sizes[8])
+    except err:
+        swap(bst, sc.attn[e].bst)
+        raise err
+    swap(bst, sc.attn[e].bst)
+    _ = bst^
 
 
 def block_step_check(code: Int, n_tensors: Int, ints: List[Int], fs: List[Float32]) raises -> StepOpInfo:

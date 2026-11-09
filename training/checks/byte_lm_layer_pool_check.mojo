@@ -4,13 +4,14 @@ from std.os import getenv
 from std.memory import bitcast
 from max.gpu.host import DeviceContext, DeviceBuffer
 from core.identity_trace import IdentityTrace
-from training.byte_lm import ByteTrainer, _pack_block
+from training.byte_lm import ByteTrainer, _pack_block, byte_dims
 from training.byte_lm_layer_pool import ByteLayerPool
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_parallel import _ordered_add_kernel
 from training.checks.optimizer_contract import OptimizerConfig, OPT_ADAMW
 from training.checks.train_loop import _upload, _zeros, _copy_into, download_f32
-from transformer.impl.llama.modeling_llama import llama_decoder_layer_forward
+from transformer.impl.llama.modeling_llama import llama_decoder_layer_forward, LlamaDeviceStages
+from autograd.kernels.transformer import LlamaBackwardStages
 from autograd.rules_transformer import llama_decoder_layer_backward_autograd
 
 
@@ -37,6 +38,14 @@ def check(shape: ByteConfig, devices: List[Int], logical: Int) raises:
     var flags = List[Bool](length=shape.n_tensors(),fill=False)
     var ctx = DeviceContext(device_id=0)
     var reference = ByteTrainer(ctx,p,zero,zero,flags,0,OptimizerConfig(OPT_ADAMW,0.001,0.9,0.999,1e-8,0.01,0,0,False,0),shape)
+    # Lane x7b: the reference's per-layer stages are this check's own (the
+    # trainer keeps none since its step became the captured program), built
+    # as the trainer's hand step built them (lean, full causal).
+    var fwd = List[LlamaDeviceStages]()
+    var bwd = List[LlamaBackwardStages]()
+    for _ in range(shape.n_layers):
+        fwd.append(LlamaDeviceStages(ctx, shape.batch, shape.length, shape.length, byte_dims(shape), lean=True))
+        bwd.append(LlamaBackwardStages(ctx, shape.batch, shape.length, shape.length, byte_dims(shape), lean=True))
     var pool = ByteLayerPool()
     pool.open(devices,p,shape)
     var m = shape.batch*shape.length*shape.d_model
@@ -67,32 +76,32 @@ def check(shape: ByteConfig, devices: List[Int], logical: Int) raises:
         var dyd = _upload(ctx,dy)
         pool.forward_into(ctx,xd,y_pool)
         for i in range(shape.n_layers):
-            var st = reference.forward.pop(i)
+            var st = fwd.pop(i)
             reference.prefill_cache.s = 0
             if i == 0:
                 llama_decoder_layer_forward(ctx,st,reference.prefill_cache,reference.rope,
                     reference.weights[i],xd,shape.batch,shape.length,0,trace,"reference")
             else:
                 llama_decoder_layer_forward(ctx,st,reference.prefill_cache,reference.rope,
-                    reference.weights[i],reference.forward[i-1].residual2,shape.batch,shape.length,0,trace,"reference")
+                    reference.weights[i],fwd[i-1].residual2,shape.batch,shape.length,0,trace,"reference")
             ctx.synchronize()
             same(download_f32(ctx,st.residual2,m),download_f32(pool.contexts[pool.layers[i].owner],pool.layers[i].forward.residual2,m),"layer forward")
-            reference.forward.insert(i,st^)
-        same(download_f32(ctx,reference.forward[shape.n_layers-1].residual2,m),download_f32(ctx,y_pool,m),"forward transfer")
+            fwd.insert(i,st^)
+        same(download_f32(ctx,fwd[shape.n_layers-1].residual2,m),download_f32(ctx,y_pool,m),"forward transfer")
         pool.backward_into(ctx,dyd,dx_pool)
         for i in range(shape.n_layers-1,-1,-1):
-            var st = reference.forward.pop(i)
-            var bw = reference.backward.pop(i)
+            var st = fwd.pop(i)
+            var bw = bwd.pop(i)
             # Copy reference inputs/cotangents only; preserve each original
             # decoder kernel and its full shape, just as ByteTrainer does.
             if i == 0:
                 _copy_into(ctx,reference.buffers.x,xd,0,0,m)
             else:
-                _copy_into(ctx,reference.buffers.x,reference.forward[i-1].residual2,0,0,m)
+                _copy_into(ctx,reference.buffers.x,fwd[i-1].residual2,0,0,m)
             if i == shape.n_layers-1:
                 _copy_into(ctx,reference.buffers.d_h,dyd,0,0,m)
             else:
-                _copy_into(ctx,reference.buffers.d_h,reference.backward[i].d_x,0,0,m)
+                _copy_into(ctx,reference.buffers.d_h,bwd[i].d_x,0,0,m)
             ctx.synchronize()
             llama_decoder_layer_backward_autograd(ctx,bw,st,reference.weights[i],
                 reference.rope.cos,reference.rope.sin,reference.buffers.x,reference.buffers.d_h,
@@ -103,9 +112,9 @@ def check(shape: ByteConfig, devices: List[Int], logical: Int) raises:
             # `_pack_block` no longer waits for itself; this check reads
             # the device below, so it waits here instead. Same behavior.
             ctx.synchronize()
-            reference.forward.insert(i,st^)
-            reference.backward.insert(i,bw^)
-        same(download_f32(ctx,reference.backward[0].d_x,m),download_f32(ctx,dx_pool,m),"backward transfer")
+            fwd.insert(i,st^)
+            bwd.insert(i,bw^)
+        same(download_f32(ctx,bwd[0].d_x,m),download_f32(ctx,dx_pool,m),"backward transfer")
         pool.accumulate(shard)
         if shard == 0:
             _copy_into(ctx,total,reference.buffers.grad,0,0,n)
@@ -128,6 +137,8 @@ def check(shape: ByteConfig, devices: List[Int], logical: Int) raises:
         same(expected,pool.export_gradients(),"refusal atomicity")
     print("PASS layer pool",shape.n_layers,shape.d_model,shape.length,len(devices),logical,"owned",owned)
     _ = pool^
+    _ = fwd^
+    _ = bwd^
     _ = reference^
     _ = y_pool^
     _ = dx_pool^
