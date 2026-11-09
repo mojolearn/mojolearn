@@ -18,7 +18,8 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.py_balanced import py_call, py_get, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.family_common import family_call, family_repr
-from bindings.linalg_ops_buffers import LinBuf, lin_truth, lin_new, lin_array
+from bindings.linalg_ops_buffers import lin_truth
+from bindings.admitted_input import AdmittedBuf, admitted_zeros
 from bindings.linalg_ops_lowbit import lin_operand, lin_state, lin_ints, lin_connected_binding
 from providers.python.linalg_result_pyapi import linalg_result_new
 from bindings.linalg_ops_kit import LinKit, KIT_F32P, OP_MUL, OP_DIV, OP_ABS, OP_SCALE, OP_ADDS, OP_LE
@@ -55,7 +56,7 @@ def _lin_triu(mut kit: LinKit, h: Int, r: Int, context: PythonObject) raises -> 
     """`_triu(h, r).out()`: the first r rows of h, everything below the
     diagonal zeroed (pure data movement)."""
     var c = kit.c(h)
-    var out = lin_array([r, c], "<f4", context)
+    var out = admitted_zeros([r, c], "<f4", context).keep
     var dst = KIT_F32P(unsafe_from_address=Int(py=classical_address(out)))
     _ = out  # keep the Python object alive through the native call above
     if r * c:
@@ -72,17 +73,17 @@ def _lin_triu(mut kit: LinKit, h: Int, r: Int, context: PythonObject) raises -> 
 def _lin_tsqr_release(mut kit: LinKit, context: PythonObject):
     """`_tsqr_release`: drop the factorization the binding kept."""
     try:
-        var one = lin_new([1], "<f4", context)
+        var one = admitted_zeros([1], "<f4", context)
         _ = family_call(kit.entry("x_decomp_tsqr_q"), PythonObject(one.addr), PythonObject(one.addr), lin_ints(1, 1, 0))
         _ = one  # keep the Python object alive through the native call above
     except:
         pass
 
 
-def _lin_tsqr_r(mut kit: LinKit, a: LinBuf, rows: Int, cols: Int, keep: Bool, context: PythonObject) raises -> LinBuf:
+def _lin_tsqr_r(mut kit: LinKit, a: AdmittedBuf, rows: Int, cols: Int, keep: Bool, context: PythonObject) raises -> AdmittedBuf:
     """`_tsqr_r`: R (cols x cols) of the TSQR of a; `keep` holds the
     factorization in the binding for one `_tsqr_q`."""
-    var r = lin_new([cols, cols], "<f4", context)
+    var r = admitted_zeros([cols, cols], "<f4", context)
     # ORDER MATCHES x_decomp/api.mojo tsqr_r_py: (a, b, r_out), params
     # (m, d, nrhs, keep); b is not read when nrhs is 0
     _ = family_call(kit.entry("x_decomp_tsqr_r"), PythonObject(a.addr), PythonObject(a.addr), PythonObject(r.addr),
@@ -91,9 +92,9 @@ def _lin_tsqr_r(mut kit: LinKit, a: LinBuf, rows: Int, cols: Int, keep: Bool, co
     return r^
 
 
-def _lin_tsqr_q(mut kit: LinKit, c_addr: Int, rows: Int, cols: Int, k: Int, context: PythonObject) raises -> LinBuf:
+def _lin_tsqr_q(mut kit: LinKit, c_addr: Int, rows: Int, cols: Int, k: Int, context: PythonObject) raises -> AdmittedBuf:
     """`_tsqr_q`: Q C (rows x k) for the kept factorization; C is cols x k."""
-    var out = lin_new([rows, k], "<f4", context)
+    var out = admitted_zeros([rows, k], "<f4", context)
     _ = family_call(kit.entry("x_decomp_tsqr_q"), PythonObject(c_addr), PythonObject(out.addr), lin_ints(rows, cols, k))
     _ = out  # keep the Python object alive through the native call above
     return out^
@@ -145,11 +146,11 @@ def _lin_svd_tall(mut kit: LinKit, a: Int, full: Bool, context: PythonObject, mu
 # the public functions
 
 
-def lin_svdvals_of(a: LinBuf, context: PythonObject) raises -> PythonObject:
+def lin_svdvals_of(a: AdmittedBuf, context: PythonObject) raises -> PythonObject:
     """`svdvals` of an admitted operand."""
     var rows = a.dim(0)
     var cols = a.dim(1)
-    var buf = LinBuf(a.keep, a.addr, a.shape.copy())
+    var buf = AdmittedBuf(a.keep, a.addr, a.shape.copy())
     if rows < cols:
         # the singular values of a wide A are those of A^T, exactly: the
         # transpose is data movement
@@ -158,14 +159,14 @@ def lin_svdvals_of(a: LinBuf, context: PythonObject) raises -> PythonObject:
             var held = kit.borrow(a.keep, a.addr, rows, cols)
             var t = kit.transpose(held)
             var moved = kit.out(t)
-            buf = LinBuf(moved, Int(py=classical_address(moved)), [cols, rows])
+            buf = AdmittedBuf(moved, Int(py=classical_address(moved)), [cols, rows])
             _ = moved  # keep the Python object alive through the native call above
         finally:
             kit.close()
         var swap = rows
         rows = cols
         cols = swap
-    var out = lin_new([cols], "<f4", context)
+    var out = admitted_zeros([cols], "<f4", context)
     _ = family_call(neural_descriptor_entry(_lin_door(context), "svdvals"),
                     Python.list(PythonObject(buf.addr), PythonObject(out.addr)), lin_ints(rows, cols))
     _ = out  # keep the Python object alive through the native call above
@@ -205,7 +206,7 @@ def _lin_eigh(args: PythonObject, context: PythonObject) raises -> PythonObject:
         kit.close()
 
 
-def _lin_qr_q(a: LinBuf, mode: String, context: PythonObject) raises -> PythonObject:
+def _lin_qr_q(a: AdmittedBuf, mode: String, context: PythonObject) raises -> PythonObject:
     """`_qr_q(a, mode)`: numpy.linalg.qr's 'reduced', 'complete' and 'raw'."""
     var rows = a.dim(0)
     var cols = a.dim(1)
@@ -217,7 +218,7 @@ def _lin_qr_q(a: LinBuf, mode: String, context: PythonObject) raises -> PythonOb
         if mode == "reduced" and _lin_tsqr_on(rows, cols):
             # `_qr_tsqr`: (Q, R), R's diagonal non-negative
             var r = _lin_tsqr_r(kit, a, rows, cols, True, context)
-            var signs = lin_new([cols, cols], "<f4", context)
+            var signs = admitted_zeros([cols, cols], "<f4", context)
             var signed = False
             try:
                 # R's rows signed so its diagonal is non-negative, and C the
@@ -290,7 +291,7 @@ def _lin_qr(args: PythonObject, context: PythonObject) raises -> PythonObject:
             return wide
         finally:
             kit.close()
-    var out = lin_new([cols, cols], "<f4", context)
+    var out = admitted_zeros([cols, cols], "<f4", context)
     # ORDER MATCHES qr_r_binding IN BOTH BINDINGS: addrs (a, r_out), params
     # (n_rows, n_cols); swapping the addresses writes R over the caller's matrix
     _ = family_call(neural_descriptor_entry(_lin_door(context), "qr_r"),

@@ -4,7 +4,7 @@
 of any Array dtype (no Python import): Array.astype's rules (float to float32
 round to nearest even, integers range checked, float to integer truncated
 toward zero). The native linalg / metrics admission
-(bindings/linalg_ops_buffers.mojo `lin_convert`) reads it.
+(bindings/admitted_input.mojo `admitted_typed_convert`) reads it.
 
     admitted_convert(src, shape, strides, count, item, kind, titem, tkind,
                      typestr, dst)
@@ -247,3 +247,60 @@ def admitted_convert(
     _ = failed^
     _ = shape^
     _ = strides^
+
+
+def admitted_typestr_kind(typestr: String, mut item: Int) -> Int:
+    """The CastIn kind of an Array / NumPy typestr ("<f4", "<i8", "|u1",
+    "|b1", ...) with its item width in `item`; -1 for one no conversion
+    reads (complex, object, a non-native byte order)."""
+    if typestr.byte_length() != 3:
+        return -1
+    var order = String(typestr[byte=0])
+    if order != "<" and order != "|" and order != "=":
+        return -1
+    var letter = String(typestr[byte=1])
+    var width = String(typestr[byte=2])
+    if width == "1":
+        item = 1
+    elif width == "2":
+        item = 2
+    elif width == "4":
+        item = 4
+    elif width == "8":
+        item = 8
+    else:
+        return -1
+    if letter == "f" and item >= 2:
+        return CAST_KIND_FLOAT
+    if letter == "i":
+        return CAST_KIND_SIGNED
+    if letter == "u":
+        return CAST_KIND_UNSIGNED
+    if letter == "b" and item == 1:
+        return CAST_KIND_BOOL
+    return -1
+
+
+def admitted_convert_vector(src: Int, src_typestr: String, dst: Int, dst_typestr: String, count: Int) raises -> Bool:
+    """`count` C-contiguous items of `src_typestr` at `src` converted into the
+    `dst_typestr` store at `dst` by `admitted_convert` (Array.astype's rules,
+    split across the host's cores; an out-of-range integer raises its
+    OverflowError). False, with nothing written, when either typestr is one
+    no conversion reads. Replaces the base binding's `cast_elements` py_call
+    for the family doors (lane a6-device-x-family-classical)."""
+    var item = 0
+    var kind = admitted_typestr_kind(src_typestr, item)
+    var titem = 0
+    var tkind = admitted_typestr_kind(dst_typestr, titem)
+    # The target bounds (`_lin_bounds`) are spelled with "<": a store is
+    # always little-endian, so any other spelling of the target is refused.
+    if kind < 0 or tkind < 0 or tkind == CAST_KIND_BOOL or (tkind == CAST_KIND_FLOAT and titem == 2):
+        return False
+    if String(dst_typestr[byte=0]) != "<":
+        return False
+    if count <= 0:
+        return True
+    var shape = List[Int](length=1, fill=count)
+    var strides = List[Int](length=1, fill=item)
+    admitted_convert(src, shape, strides, count, item, kind, titem, tkind, dst_typestr, dst)
+    return True

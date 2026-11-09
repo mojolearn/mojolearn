@@ -6,11 +6,11 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.py_attr import py_attr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.native_numpy_metadata import native_numpy_dtype
-from bindings.native_owner_lifetime import native_release_admit, _released_dtype
+from bindings.native_owner_lifetime import native_release_admit
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_is_array
 from bindings.classical_pandas import classical_admit_value
-from bindings.linalg_ops_buffers import LinAdmission, LinBuf, lin_new, lin_tuple
+from bindings.admitted_input import AdmittedTyped, AdmittedBuf, admitted_dtype_admit, admitted_zeros, admitted_shape_tuple
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from core.borrowed_buffer import BorrowedBufferLayout
@@ -19,28 +19,7 @@ from core.host_predict_threads import host_predict_task_count_work, host_predict
 from bindings.cpython_table import cpython_table
 
 
-def _row_dtype_admit(dtype: PythonObject, context: PythonObject) raises:
-    if _released_dtype(dtype, context, 0):
-        return
-    # NumPy's native variable-length StringDType cannot be copied as raw
-    # allocator bytes. Accept its exact builtin class, with callback-free
-    # missing-value/metadata owners, and use native scalar storage copying.
-    var b = native_loaded_module("builtins")
-    var string_dtype = PythonObject(None)
-    try:
-        string_dtype = py_call(native_numpy_dtype(context), "T")
-    except:
-        pass
-    if string_dtype is None or py_type(dtype) is not py_type(string_dtype):
-        raise Error("TypeError: resample requires a native NumPy dtype")
-    native_release_admit(py_call(b.getattr, dtype, "na_object", PythonObject(None)), context)
-    var metadata = dtype.metadata
-    if metadata is not None:
-        var pairs = py_call(b.list, metadata.items())
-        for i in range(len(pairs)):  # driver-loop: native dtype metadata cannot retain callback owners
-            native_release_admit(pairs[i][0], context)
-            native_release_admit(pairs[i][1], context)
-
+# _row_dtype_admit moved to bindings/admitted_input.mojo admitted_dtype_admit (lane a6-device-x-family-classical; word for word).
 
 
 def _take_rows_contiguous(src: Int, row_stride: Int, row_bytes: Int, n: Int,
@@ -83,7 +62,7 @@ struct ResampleRows(Movable):
     var sequence: PythonObject
     var dtype: PythonObject
     var pin: Optional[AdmittedBorrowedBuffer]
-    var array_owner: Optional[LinAdmission]
+    var array_owner: Optional[AdmittedTyped]
     var layout: BorrowedBufferLayout
     var is_array: Bool
     var has_objects: Bool
@@ -111,7 +90,7 @@ struct ResampleRows(Movable):
             # original owner alive without Array/Python conversion callbacks.
             self.source = py_call(py_attr(context["ndarray"], "view"), source)
             self.dtype = self.source.dtype
-            _row_dtype_admit(self.dtype, context)
+            admitted_dtype_admit(self.dtype, context)
             self.has_objects = Bool(py=self.dtype.hasobject) or String(self.dtype.kind) == "T"
             self.is_array = True
             var item = Int(py=self.dtype.itemsize)
@@ -138,7 +117,7 @@ struct ResampleRows(Movable):
         elif classical_is_array(source, context):
             if py_get(context, "ndarray") is None:
                 raise Error("ImportError: mojolearn: resample requires optional NumPy support for Array outputs")
-            self.array_owner = LinAdmission(source, context)
+            self.array_owner = AdmittedTyped(source, context)
             ref view = self.array_owner.value().view
             self.layout = BorrowedBufferLayout(view.addr, view.itemsize, view.readonly,
                 view.shape.copy(), view.strides.copy(), List[Int](length=len(view.shape), fill=-1))
@@ -188,9 +167,9 @@ struct ResampleRows(Movable):
         shape[0] = count
         # Exact ndarray allocation with a retained native dtype is storage
         # construction only. No asarray, conversion, or caller protocol runs.
-        return py_call(context["ndarray"], lin_tuple(shape), dtype=self.dtype)
+        return py_call(context["ndarray"], admitted_shape_tuple(shape), dtype=self.dtype)
 
-    def take(self, indices: LinBuf, context: PythonObject) raises -> PythonObject:
+    def take(self, indices: AdmittedBuf, context: PythonObject) raises -> PythonObject:
         var rows = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=indices.addr)
         var count = indices.dim(0)
         if not self.is_array:
@@ -243,8 +222,8 @@ struct ResampleRows(Movable):
                     # Exact ndarray scalar storage access preserves object and
                     # structured-dtype reference semantics. The source dtype
                     # and result dtype are identical: no dtype conversion runs.
-                    var value = py_call(py_attr(context["ndarray"], "__getitem__"), self.source, lin_tuple(coordinates))
-                    py_call(py_attr(context["ndarray"], "__setitem__"), out, lin_tuple(out_coordinates), value)
+                    var value = py_call(py_attr(context["ndarray"], "__getitem__"), self.source, admitted_shape_tuple(coordinates))
+                    py_call(py_attr(context["ndarray"], "__setitem__"), out, admitted_shape_tuple(out_coordinates), value)
                 else:
                     memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst + (i * row_items + item) * self.layout.itemsize),
                         src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=self.layout.item_address(coordinates)), count=self.layout.itemsize)
@@ -262,8 +241,8 @@ struct ResampleRows(Movable):
 
 
 def resample_rows_indices(binding: PythonObject, n: Int, count: Int, replace: Bool,
-                          seed: PythonObject, context: PythonObject) raises -> LinBuf:
-    var indices = lin_new([max(count, 0)], "<i4", context)
+                          seed: PythonObject, context: PythonObject) raises -> AdmittedBuf:
+    var indices = admitted_zeros([max(count, 0)], "<i4", context)
     py_call(neural_descriptor_entry(binding, "resample_indices"), Python.list(indices.addr),
             Python.list(n, count, 1 if replace else 0, seed))
     _ = indices
@@ -312,7 +291,7 @@ def resample_rows_narrow(rows: List[ResampleRows], binding: PythonObject, n: Int
     if route is None:
         return PythonObject(None)
     var bound = Int(py=py_call(neural_descriptor_entry(binding, "resample_gather_narrow_bytes")))
-    var indices = lin_new([count], "<i4", context)
+    var indices = admitted_zeros([count], "<i4", context)
     var outputs = Python.list()
     var output_pins = List[AdmittedBorrowedBuffer]()
     var addresses = Python.list(indices.addr)

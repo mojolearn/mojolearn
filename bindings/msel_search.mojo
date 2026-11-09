@@ -11,6 +11,7 @@
 # `row_means_f64` / `row_stds_f64` and the permutations the same counter
 # draws, so every result is unchanged.
 from std.memory import memcpy
+from core.admitted_convert import admitted_convert_vector
 from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
@@ -623,9 +624,13 @@ def _perm_base(y: PythonObject, context: PythonObject) raises -> PythonObject:
         return a
     if d == "<i8" or d == "<u1" or d == "<u4":
         var narrow = msel_new(Int(py=a.size), "<i4", context)
-        if msel_int(family_call(msel_entry("cast_elements", context), PythonObject(msel_addr(a)),
-                                context["family_msel_codes"][a.dtype], PythonObject(msel_addr(narrow)),
-                                PythonObject(2), a.size)) != 0:
+        # The typed parallel conversion (core/admitted_convert.mojo), not a
+        # py_call into the base binding's cast_elements; a label outside
+        # int32 is the conversion's refusal, which keeps the labels as they are.
+        try:
+            if not admitted_convert_vector(msel_addr(a), d, msel_addr(narrow), "<i4", Int(py=a.size)):
+                return PythonObject(None)
+        except:
             return PythonObject(None)
         _ = a  # keep the Python object alive through the native calls above
         _ = narrow  # keep the Python object alive through the native calls above

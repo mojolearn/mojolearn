@@ -27,7 +27,7 @@ from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_is_str, family_is_int, family_isinstance,
-    family_type_name, family_call, family_array, family_view, family_nonfinite, family_shape_repr,
+    family_type_name, family_call, family_array, family_nonfinite, family_shape_repr,
 )
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
 from bindings.cluster_native import cluster_operation, xc_call_floats, _xc_array
@@ -721,13 +721,12 @@ def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
                  context: PythonObject) raises:
     """`HDBSCAN.fit(X)`."""
     var b = native_loaded_module("builtins")
-    var view = family_view(source, 2, "X", context)
-    var x = admit_family(view, -1, "X", context, admitted=True, empty=True).array
+    # The one admission path: the rank and emptiness refusals, then the
+    # borrow or the cast (family_view deleted).
+    var admitted = admit_family(source, 2, "X", context)
+    var x = admitted.array
     # `as_f32_c`'s `copied`: the cast made new storage.
-    var copied = Int(py=classical_address(x)) != Int(py=classical_address(view))
-    _ = x  # keep the Python object alive through the native call above
-    _ = view  # keep the Python object alive through the native call above
-    _ = view^
+    var copied = not admitted.borrowed
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     if n < 2:

@@ -85,8 +85,8 @@ def test_second_admissions_removed():
     assert "labels_shape_of(" not in operation
     assert "classical_check_x(call, args[0], name, context, 0, admitted=True)" in operation
     assert "labels_shape_of(" not in _function(boost, "def _boost_classifier_target(").split('"""', 2)[2]
-    linalg = _read("bindings/linalg_ops_buffers.mojo")
-    assert "LinAdmission(prepared, context, prepared is source)" in _function(linalg, "def lin_typed(")
+    admission = _read("bindings/admitted_input.mojo")
+    assert "AdmittedTyped(prepared, context, prepared is source)" in _function(admission, "def admit_typed(")
     projection = _function(_read("bindings/host_projection_native.mojo"), "def host_projection_inference(")
     assert "host_tree_cast(raw, context)" in projection
     assert re.search(r"lin_operand\(args\[0\], \"a\", context\)(?!, True)", _read("bindings/linalg_ops_decomp.mojo")) is None

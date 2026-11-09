@@ -15,7 +15,6 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.classical_arrays import classical_address, classical_wrap_array, _store_code
 from core.family_cast_impl import family_min_f32
-from bindings.classical_validate import classical_view, RESHAPE_HINT
 from bindings.optimizer_public_words import stash_python_error
 from bindings.native_class_admission import static_builtin_type
 
@@ -159,25 +158,10 @@ def family_shape_repr(view: PythonObject) raises -> String:
     return family_repr(py_call(b.tuple, view.shape))
 
 
-def family_view(source: PythonObject, ndim: Int, name: String, context: PythonObject) raises -> PythonObject:
-    """The admitted input with `_buffer._as_typed`'s rank and emptiness
-    refusals, in its wording; `ndim` < 0 accepts any rank."""
-    var view = classical_view(source, context, name)
-    var nd = Int(py=view.ndim)
-    if ndim >= 0 and nd != ndim:
-        var hint = String("")
-        if ndim == 2 and nd < 2:
-            hint = ". " + String(RESHAPE_HINT)
-        raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(nd)
-                    + "-D shape " + family_shape_repr(view) + hint)
-    if Int(py=view.size) == 0:
-        var what = String("sample(s)")
-        if nd == 2 and Int(py=view.shape[0]) != 0:
-            what = "feature(s)"
-        var shape = family_shape_repr(view)
-        raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 " + what
-                    + " (shape=" + shape + ") while a minimum of 1 is required.")
-    return view
+# TOMBSTONE: family_view (the rank / emptiness refusals on a view before a second admission) deleted 2026-11-09 by lane a6-device-x-family-classical; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A6_FAMILY_VIEW.patch. Its callers read
+# admit_family / admit_family_input (+ admit_family_cast) or admit_typed, which
+# refuse with the same wording on the one metadata capture.
 
 
 # TOMBSTONE: family_f32, family_cast_f32, family_input_snapshot, family_snapshot_f32, family_f32_snapshot, family_as_f32, family_as_f32_dense, family_cast_view, family_cast_view_f64, family_owned, family_owned_snapshot, family_sample_weight, family_sample_weight_snapshot, _family_weight_scalar, _family_weight_buffer (family admission helpers, moved onto the one admission path) deleted 2026-11-08 by lane a2-admit-family; code recoverable at f7d10d2b09.
