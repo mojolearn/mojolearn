@@ -33,8 +33,6 @@ from sequence.ops import (
     OP_GEMM_SPLITK,
     OP_MSE,
     OP_OPT,
-    OP_SEQ_IOTA,
-    OP_MLP_PERM,
     OPT_ADAGRAD,
     OPT_ADAM,
     OPT_ADAMW,
@@ -42,16 +40,19 @@ from sequence.ops import (
     OPT_NADAM,
     gates_of,
 )
-from sequence.mlp import mlp_epoch_key, mlp_perm_args
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div, identical_mul, identical_pow64, identical_sqrt, ftz
 
 from std.sys.compile import is_defined, get_defined_int
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (opt-in arm, no A/B; the default OP_OPT launch kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
 # Lane x3-mlp-rnn-predict-on-tape (plan EXECUTOR_CONSOLIDATION_AND_CLEANUP 5.6): the opt-in arm ran rnn_fit's
-# update through autograd/optim.mojo (OptimizerState + step_lr), the same one OP_OPT launch with the same words.
-# No A/B ran; the default opt_step below is the one arm; the A/B is owed.
+# update through autograd/optim.mojo (OptimizerState + step_lr), the same one OP_OPT launch with the same words
+# (optimizer_config_packed maps OptConfig's words to named fields that pack back to the same words,
+# optimizer_scalars is opt_scalars word for word). Andrew 2026-11-08 (bits may change; keep the simpler path):
+# that shared module is now rnn_fit's only update, the one Sequential and ops.Session already use; rnn_fit's hand
+# opt_step call is gone (opt_step stays for its other callers). Same bits by construction. A/B owed (ms per fit).
+from autograd.optim import OptimizerState, optimizer_config_packed, step_lr
 
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
@@ -407,11 +408,12 @@ def opt_step[E: Exec](
     ex.launch[OP_OPT](a, n)
 
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_DATA (opt-in arm, no A/B; the default epoch-order launches kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_DATA (promoted: autograd/data.mojo epoch_order is the one epoch order; the hand launches deleted) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch
 # The opt-in arm built rnn_fit's epoch order through autograd/data.mojo (epoch_order), the same OP_MLP_PERM /
-# OP_SEQ_IOTA launches with the same key (same bits by construction). No A/B ran; the default launches in rnn_fit
-# are the one arm; the A/B is owed.
+# OP_SEQ_IOTA launches with the same key (same bits by construction). It is now the only path (the data layer
+# distributed_program and partition_runtime already use); rnn_fit's inline launches are gone. A/B owed.
+from autograd.data import epoch_order as ag_epoch_order
 
 
 # ------------------------------------------------------------------ training step seam
@@ -469,31 +471,23 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     var P = ex.alloc(np_)
     ex.upload(P, Pio, np_)
     var Gr = ex.alloc(np_)
-    var s1 = ex.alloc(np_)
-    var s2 = ex.alloc(np_)
-    var s3 = ex.alloc(np_)
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (opt-in arm, no A/B; the default OP_OPT launch kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
-    if init_acc != Float32(0.0):
-        fill(ex, s2, np_, init_acc)
+    # The optimizer state on the executor (s2 filled with init_acc, Adagrad's initial accumulator).
+    var opt_cfg = optimizer_config_packed(cfg.kind, cfg.flags, cfg.f1, cfg.f2, cfg.eps, cfg.wd, cfg.f7, Float32(0.0))
+    var opt_state = OptimizerState(ex, opt_cfg, np_, init_acc)
     var dloss = ex.alloc(n_steps)
     var w = Work(ex, net, T, bmax, True)
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
     var loss_ws = loss_scratch(ex, bmax * net.O)
-    var st = OptState()
     var step = S()
     for k in range(n_steps):
         var j = k % per
         if j == 0:
-            # TOMBSTONE: MOJOLEARN_AUTOGRAD_DATA (opt-in arm, no A/B; the default epoch-order launches kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+            # TOMBSTONE: MOJOLEARN_AUTOGRAD_DATA (promoted: autograd/data.mojo epoch_order is the one epoch order; the hand launches deleted) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
             # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch
-            if shuffle:
-                ex.launch[OP_MLP_PERM](mlp_perm_args(N, mlp_epoch_key(seed, k // per), dord), N)
-            else:
-                var ia = Args()
-                ia.p0 = dord
-                ex.launch[OP_SEQ_IOTA](ia, N)
+            ag_epoch_order(ex, shuffle, seed, k // per, N, dord)
         var off = j * bs
         var B = min(bs, N - off)
         gather_seq(ex, dX, dord, w.xb, T, B, net.D, off)
@@ -521,7 +515,8 @@ def rnn_fit[E: Exec, //, S: RnnStep](
             ex.launch[OP_CE](a, B)
             loss_value_into(ex, LS_CROSS_ENTROPY, w.yhat, w.yb, B, net.O, REDUCTION_MEAN, dloss + k, loss_ws)
         step.backward(ex, net, P, Gr, w.xb, T, B, w)
-        opt_step(ex, cfg, st, k + 1, ftz(lrs.unsafe_load(k)), P, Gr, s1, s2, s3, np_)
+        step_lr(ex, opt_cfg, opt_state, P, Gr, np_, k + 1, ftz(lrs.unsafe_load(k)))
+    opt_state.release(ex)
     release_loss_scratch(ex, loss_ws)
     ex.sync()
     ex.download(Pio, P, np_)

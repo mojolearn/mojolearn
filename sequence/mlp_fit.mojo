@@ -46,7 +46,6 @@ from sequence.ops import (
     OP_MLP_LB_FOLD,
     OP_MLP_LB_EPOCH_PART,
     OP_MLP_LB_EPOCH_FOLD,
-    OP_OPT,
     OP_SOFTMAX,
     OP_SUMSQ,
     OPT_SK_ADAM,
@@ -64,7 +63,8 @@ from autograd.ops import RELU as AG_RELU
 from autograd.ops import SIGMOID as AG_SIGMOID
 from autograd.ops import SOFTMAX as AG_SOFTMAX
 from autograd.ops import TANH as AG_TANH
-from autograd.optim import AUTOGRAD_OPT_FUSE, GradFinish, launch_opt_finish
+from autograd.optim import OptimizerState, optimizer_config, step_lr
+from autograd.optim import AUTOGRAD_OPT_FUSE, GradFinish, step_lr_finish
 from autograd.data import AUTOGRAD_GATHER_EPOCH, gather_epoch, gather_epoch_fits
 from autograd.fold import fold_partials_bound
 from sequence.ops import dummy_ptr
@@ -131,11 +131,16 @@ comptime MLP_COMPOSED_OPT_FUSE = not AUTOGRAD_MLP_FUSED and AUTOGRAD_OPT_FUSE
 # to the loss block / op_mlp_bloss; new bits in the reported loss and possibly n_iter, parameters untouched. No A/B
 # ever ran, so today's bits-defining default (the row losses' blocked folds) is the one arm; the A/B is owed.
 
-# TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (opt-in arm, no A/B; the default OP_OPT launch kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
-# The opt-in arm updated the parameters through autograd/optim.mojo (OptimizerState + step_lr / step_lr_finish),
-# the same one OP_OPT launch with the same words (same bits by construction). No A/B ran; the default hand-built
-# OP_OPT launch below is the one arm; the A/B is owed.
+# Lane x3-mlp-rnn-predict-on-tape (plan EXECUTOR_CONSOLIDATION_AND_CLEANUP 5.6; Andrew 2026-11-08: keep the
+# simpler path): the parameters update through autograd/optim.mojo (OptimizerState + step_lr, step_lr_finish for
+# the composed graph), the optimizer Sequential and ops.Session already use, instead of the hand-built OP_OPT
+# launch (its Adam running products pw1 / pw2 and word assembly, a copy of optimizer_scalars) that is deleted.
+# Bits: the same. step_lr issues the same one OP_OPT launch over Gr with the same words the body reads (sklearn
+# Adam: f1 b1, f2 b2, f3 eps, f5 lr sqrt(1 - b2^t) / (1 - b1^t) from running products advanced by one identical_mul
+# a step; sklearn SGD: f0 lr, f1 momentum, i2 Nesterov); the words it sets that the hand path left 0 are not read
+# by those bodies. A/B owed (ms per fit, mlp-fit rows).
 
 comptime SOLVER_ADAM = 0
 comptime SOLVER_SGD = 1
@@ -624,11 +629,16 @@ def mlp_fit[E: Exec](
     var P = ex.alloc(np_)
     ex.upload(P, Pio, np_)
     var Gr = ex.alloc(np_)
-    var s1 = ex.alloc(np_)
-    var s2 = ex.alloc(np_)
-    var s3 = ex.alloc(np_)
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (opt-in arm, no A/B; the default OP_OPT launch kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
+    # The optimizer and its state on the executor.
+    var opt_cfg = optimizer_config(OPT_SK_ADAM if solver == SOLVER_ADAM else OPT_SK_SGD, lr_init)
+    opt_cfg.beta1 = b1
+    opt_cfg.beta2 = b2
+    opt_cfg.eps = eps
+    opt_cfg.momentum = momentum
+    opt_cfg.nesterov = nesterov
+    var opt_state = OptimizerState(ex, opt_cfg, np_)
     var acts = List[FP]()
     var tape = Tape()
     var tape_logits = Tensor(0, 0, -1)
@@ -682,8 +692,6 @@ def mlp_fit[E: Exec](
     var no_imp = 0
     var lr = lr_init
     var t_upd = 0
-    var pw1 = Float32(1.0)
-    var pw2 = Float32(1.0)
     var t_samples = 0
     var n_iter = 0
     for it in range(max_iter):
@@ -806,35 +814,16 @@ def mlp_fit[E: Exec](
             # TOMBSTONE: MOJOLEARN_AUTOGRAD_MLP_OFF (DELETED-superseded) deleted 2026-10-19 by 6784245b2; code recoverable at 6784245b2^.
             # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_OFF.patch
             mlp_backward_autograd(tape, ex, net, tape_logits, dlogits, P, Gr, B, alpha)
-            # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (opt-in arm, no A/B; the default OP_OPT launch kept) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+            # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
             # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
-            var o = Args()
-            o.p0 = P
-            o.p1 = Gr
-            o.p2 = s1
-            o.p3 = s2
-            o.p4 = s3
-            if solver == SOLVER_ADAM:
-                t_upd += 1
-                pw1 = ftz(identical_mul(pw1, b1))
-                pw2 = ftz(identical_mul(pw2, b2))
-                o.i0 = OPT_SK_ADAM
-                o.f1 = b1
-                o.f2 = b2
-                o.f3 = eps
-                o.f5 = ftz(identical_div(ftz(identical_mul(lr, ftz(identical_sqrt(Float32(1.0) - pw2)))),
-                                         Float32(1.0) - pw1))
-            else:
-                o.i0 = OPT_SK_SGD
-                o.i2 = 1 if nesterov else 0
-                o.f0 = lr
-                o.f1 = momentum
+            # one OP_OPT launch through autograd/optim.mojo
+            t_upd += 1
             comptime if MLP_COMPOSED_OPT_FUSE:
-                # the composed graph's raw gradients finished in this launch
+                # the composed graph's raw gradients finished in the same launch
                 finish.divisor = Float32(B)
-                launch_opt_finish(ex, o, finish, np_, True, True, True)
+                step_lr_finish(ex, opt_cfg, opt_state, P, Gr, np_, t_upd, lr, finish)
             else:
-                ex.launch[OP_OPT](o, np_)
+                step_lr(ex, opt_cfg, opt_state, P, Gr, np_, t_upd, lr)
         var loss: Float64
         comptime if MLP_EPOCH_DEV:
             comptime if MLP_LOSSBLOCK:
@@ -881,6 +870,7 @@ def mlp_fit[E: Exec](
                 break
     # lane ag-fusion: return the tape's storage now, not at the end of ex
     tape.release(ex)
+    opt_state.release(ex)
     ex.sync()
     ex.download(Pio, P, np_)
     _ = perm^
