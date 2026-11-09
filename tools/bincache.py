@@ -2055,6 +2055,48 @@ def shard_entry(mode, script, args):
     return "%s:%s" % (mode, name)
 
 
+def define_named(name, text):
+    """Whether TEXT names the define NAME as a whole identifier."""
+    return re.search(r"(?<![A-Za-z0-9_])" + re.escape(name) + r"(?![A-Za-z0-9_])", text) is not None
+
+
+def scope_build_defines(repo, script, args, environ):
+    """(environ, kept): MOJOLEARN_BUILD_DEFINES cut to the entries whose NAME this build's own source
+    closure names (its Mojo import closure and the shell/Python files it executes; bindings/build_defines.sh,
+    which spells no define, left out). A build whose closure names none of them runs, and is keyed, with
+    the variable unset: the same argv and environment as the build without the defines, so the binding
+    cache serves it the same bytes, and only the bindings that can read a define compile again.
+
+    CANDIDATE B SETS (lane candidate-build, 2026-11-09; tools/release.py candidate --defines): a define A/B
+    is one candidate build of the same commit with MOJOLEARN_BUILD_DEFINES set. Unscoped, every build
+    script reads the variable (bindings/build_defines.sh), so every binding's key moved and the whole set
+    recompiled for a define that a handful of closures read. A define no file of the closure names cannot
+    reach the compile (Mojo reads a -D only through env_get_*/is_defined of that name), so dropping it is
+    exact, not an approximation. A closure that cannot be read keeps every define (never fewer flags)."""
+    raw = environ.get("MOJOLEARN_BUILD_DEFINES", "")
+    entries = [e for e in raw.split(",") if e]
+    if not entries:
+        return environ, None
+    try:
+        sc = source_closure(repo, script, args, environ)
+    except Exception:  # noqa: BLE001 - an unkeyable build keeps its flags; build_fields reports why
+        return environ, entries
+    repo = Path(repo).resolve()
+    texts = []
+    for rel in list(sc["closure"]) + list(sc["inputs"]["files"]):
+        p = repo / rel
+        if p.name != "build_defines.sh" and p.is_file():
+            texts.append(p.read_text(errors="replace"))
+    blob = "\n".join(texts)
+    kept = [e for e in entries if define_named(e.split("=", 1)[0], blob)]
+    out = dict(environ)
+    if kept:
+        out["MOJOLEARN_BUILD_DEFINES"] = ",".join(kept)
+    else:
+        out.pop("MOJOLEARN_BUILD_DEFINES", None)
+    return out, kept
+
+
 def cmd_build(argv, environ=None):
     environ = dict(os.environ if environ is None else environ)
     if not argv:
@@ -2081,6 +2123,10 @@ def cmd_build(argv, environ=None):
         if me not in only:
             print("BINCACHE skipped %s (not in this shard)" % me)
             return 0
+    if environ.get("MOJOLEARN_BUILD_DEFINES", "").strip():
+        environ, kept = scope_build_defines(Path(script).resolve().parent.parent, script, args, environ)
+        print("BINCACHE defines for %s: %s" % (os.path.basename(script) + " " + " ".join(args),
+                                               ",".join(kept) if kept else "none read (built without them)"))
     require_hit = environ.get("MOJOLEARN_BINCACHE_REQUIRE_HIT") == "1"
     def compile_or_refuse(command):
         if require_hit:
