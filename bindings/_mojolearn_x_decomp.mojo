@@ -69,7 +69,7 @@ from providers.python.x_decomp_resident_pyapi import dev_lu_py, dev_lu_aux_py
 from x_decomp.resident import IDN_CODE_RESIDENT
 from providers.python.x_decomp_resident_pyapi import dev_code_rows_py
 from x_decomp.resident import IDN_EIGH_RESIDENT
-from providers.python.x_decomp_resident_pyapi import dev_eigh_py
+from providers.python.x_decomp_resident_pyapi import dev_eigh_py, dev_eigh_to_py
 # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (the w4 alias of `dev_lu_aux_py`; "x_decomp_dev_lu_aux" is now only the
 # IDN_LU_RESIDENT entry) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
@@ -283,6 +283,8 @@ def build__mojolearn_x_decomp() -> PythonObject:
         comptime if IDN_EIGH_RESIDENT:
             # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_EIGH_RESIDENT_OFF) (x_decomp/resident.mojo)
             m.def_function[dev_eigh_py]("x_decomp_dev_eigh")
+            # lane n9-decomp-eigh-families: device outputs (eigh_op_sym), no w / V round trip
+            m.def_function[dev_eigh_to_py]("x_decomp_dev_eigh_to")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch
         # Isomap / LLE graph builds (x_decomp/graph_device.mojo, lane hr2-graph-embed)

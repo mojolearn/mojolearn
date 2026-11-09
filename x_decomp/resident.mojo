@@ -71,6 +71,7 @@ from x_decomp.device import (
     _p,
 )
 from x_decomp.qr_bounded import QRB_CELLS
+from x_decomp.jacobi_par import PJ_TPB, sym_from_triangle_kernel
 from decomposition.linalg_types import _validate_shape
 
 comptime POOL_KEEP_BYTES = 1 << 30
@@ -682,7 +683,46 @@ def dev_eigh_run(ia: Int, pw: F32Ptr, pv: F32Ptr, n: Int, uplo: Int) raises -> I
     ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
     DevExec._eigh_on(ctx, da, pw, pv, n, uplo)
     _ = da^
+    return n
+
+
+def dev_eigh_to_run(ia: Int, iw: Int, iv: Int, n: Int, uplo: Int) raises -> Int:
+    """`x_decomp_eigh` of the device matrix a (n x n, left as it is) into the
+    device matrices w (n) and v (n x n, vectors in columns): the executor op
+    x_decomp/eigh_ops.mojo `eigh_op_sym` (`DevExec.eigh_enq`, `DevExec.eigh`'s
+    route and words) on a device copy; nothing but its status word comes
+    home (lane n9-decomp-eigh-families, 2026-11-09: the resident kits'
+    eigh no longer brings w and V down to upload them again). Waits once,
+    for the status; an unconverged solve raises."""
+    if n < 1:
+        raise Error("x_decomp: the resident eigh needs n >= 1")
+    if uplo > 2:
+        raise Error("x_decomp: eigh uplo is 0, 1 (L) or 2 (U)")
+    var cells = n * n
+    if cells > 2147483647:
+        raise Error("x_decomp: eigh exceeds the Int32 index bound")
+    _ = _ptr(ia, cells)
+    _ = _ptr(iw, n)
+    _ = _ptr(iv, cells)
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    var da = ctx.enqueue_create_buffer[DType.float32](cells)
+    ctx.enqueue_copy(dst_buf=da, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+    if uplo != 0:
+        ctx.enqueue_function[sym_from_triangle_kernel](
+            da.unsafe_ptr(), Int32(n), Int32(uplo), grid_dim=(cells + PJ_TPB - 1) // PJ_TPB, block_dim=PJ_TPB
+        )
+    var dw = pool[].bufs[iw].create_sub_buffer[DType.float32](0, n)
+    var dv = pool[].bufs[iv].create_sub_buffer[DType.float32](0, cells)
+    var status = DevExec.eigh_enq(ctx, da, dw, dv, n)
+    var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
     ctx.synchronize()
+    _ = da^
+    _ = dw^
+    _ = dv^
+    _ = status^
+    DevExec.eigh_status_check(hs, n)
     return n
 
 
