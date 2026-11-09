@@ -471,6 +471,7 @@ in the tables after the sections.
 | [`TransformerBlock._call_impl` (Python call paths)](#transformer-on-the-attention-step-op-2026-11-09) | Neural (TransformerBlock Python glue) | removed (dead: no caller) | 2026-11-09 | [TRANSFORMER_BLOCK_PY_CALL_PATHS.patch](../experiments/removed/TRANSFORMER_BLOCK_PY_CALL_PATHS.patch) |
 | [`_transformer_decode_host_tokens` (decode door host loop)](#transformer-on-the-attention-step-op-2026-11-09) | Neural (TransformerDecodeSession.decode, host) | removed (superseded: `transformer_decode_steps`, one call) | 2026-11-09 | [TRANSFORMER_DECODE_HOST_TOKEN_LOOP.patch](../experiments/removed/TRANSFORMER_DECODE_HOST_TOKEN_LOOP.patch) |
 | [`TransformerDecodeHandle.native_handle` (public session provider arm)](#transformer-on-the-attention-step-op-2026-11-09) | Neural (TransformerDecodeSession, MOJOLEARN_NEURAL_NATIVE_DISPATCH) | removed (superseded: the step-op session) | 2026-11-09 | [TRANSFORMER_DECODE_PROVIDER_ARM.patch](../experiments/removed/TRANSFORMER_DECODE_PROVIDER_ARM.patch) |
+| [`TransformerDecodeSession` block structs and `TransformerSession.backward` (session-owned runtimes)](#transformer-block-causallm-layers-and-fixed15-sessions-on-the-attention-step-op-2026-11-09) | Neural (TransformerBlock, TransformerDecodeSession, CausalLM layers) | removed (superseded: the attention step op) | 2026-11-09 | [TRANSFORMER_DECODE_SESSION_STRUCTS.patch](../experiments/removed/TRANSFORMER_DECODE_SESSION_STRUCTS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -4318,3 +4319,38 @@ origin/integ/pre-0867-w2 f59d913b0b.
   takes the options constructor with default options (the op's), which X1 states is the same words. Identity lanes
   that read the public decode session: `transformer-decode-session`, `transformer-decode-load-state`
   (tools/identity_lanes/coverage.py), re-recorded at the one pre-release verify.
+
+## TransformerBlock, CausalLM layers and fixed15 sessions on the attention step op (2026-11-09)
+
+Lane x4b-transformer-block-and-generate (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X4), on
+origin/lane/x4-transformer-on-executor c0b21c971c.
+
+- What moved: `TransformerBlock.forward` / `.step` (the block session's stateless prefill and the calls over a caller's
+  state, also CausalLM's per-layer forward) and `.backward` run on `OPS_ATTN_STEP` through the block session's
+  `AttnStepArm` (transformer/attn_step_session.mojo: `block_forward`, `block_backward`). The backward is the zero-state
+  prefill through the op (stages kept by the arm) and the transformer stage rule
+  (`llama_decoder_layer_backward_autograd`) over the op's kept stages, weights, rotary table and input. Every
+  `TransformerDecodeSession` (public, CausalLM layer, fixed15_v1) is an arm on the op; the fixed15_v1 planes are handed
+  to the op as an adopted entry (`attn_step_adopt`). `_lm_layers_run` runs each layer through `AttnStepArm.run_device`
+  on one shared prefill workspace.
+- Deleted: the decode session's own block structs (`w`, `kv`, `rope`, `stages`, `dx`) and the bodies over them
+  (`_session_step_run_sync`, the fixed15_v1 per-token loop of `_session_decode_run`, the struct arms of
+  `_session_forward_run` / export / load), `_session_open_step_op` (one open, `_session_open_run`, for both door names),
+  `_lm_prefill_stage_matches`, the "a decoder session opened on the step op is not a layer session" refusals,
+  `TransformerSession.backward` / `backward_workspaces` (the arm keeps the backward stages). Kept for the forward tape
+  only (lane X6 deletes them with `forward_with_tape` / `backward_from_tape`): `_transformer_run_session`'s
+  `retain_tape` body, `TransformerWorkspace`, `TransformerBackwardWorkspace`, `_session_weights` and its byte-compare
+  helpers, `TransformerForwardTape`, `_transformer_saved_backward`.
+- Fixed on the way: `_AttnBlock` viewed the value cache at `s + cache_n`; the packed layout (`block_offsets`, which
+  `AttnStepArm` and `upload_block` write) starts it at the next 256-byte slot, so any cache length that is not a
+  multiple of 64 floats read the wrong values. The step-op state words are written by a device fill, not a staged
+  executor upload per call.
+- Verdict: superseded, never A/B'd. RUN OWED: transformer-forward, transformer-decode, lm-forward, lm-train-step and
+  CausalLM generate on NVIDIA and AMD, step op (this lane) vs c0b21c971c.
+- Bits: the step op's body is the sessions' (same entry, same launches). The block forward still takes
+  `forward_only`; the CausalLM prefill keeps its shared workspace. A cache length off the 64-float slot changes bits
+  (it was wrong before). Identity lanes: `transformer`, `transformer-decode-session`, `transformer-decode-load-state`,
+  the CausalLM generate lanes, re-recorded at the one pre-release verify.
+- Recoverable at c0b21c971c; restore with `git apply experiments/removed/TRANSFORMER_DECODE_SESSION_STRUCTS.patch`
+  (transformer/transformer_binding_impl.mojo, bindings/_mojolearn_transformer.mojo,
+  transformer/native_lm_resident_dispatch.mojo).
