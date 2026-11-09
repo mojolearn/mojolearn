@@ -1958,10 +1958,17 @@ def lanczos_solve_ritz(
     var first = lanczos_which_first(which, ncv, k)
     var evals = List[Float32](length=ncv, fill=Float32(0.0))
     var evecs = List[Float32](length=ncv * ncv, fill=Float32(0.0))
-    var sweeps = DevExec._eigh_par_on(
+    # lane n9-decomp-eigh-families (2026-11-09): the executor op's route
+    # (`DevExec._eigh_on` -> x_decomp/eigh_ops.mojo `eigh_op_sym`: the
+    # one-block Jacobi below TD_MIN_N, the same words as the per-round
+    # launches and per-sweep waits of `_eigh_par_on`, deleted) with one
+    # sync. The op does not report sweeps: 0, as the small route already
+    # reported for ncv <= 32.
+    DevExec._eigh_on(
         ctx, dt, F32Ptr(unsafe_from_address=Int(evals.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(evecs.unsafe_ptr())),
-        ncv,
+        ncv, 0,
     )
+    var sweeps = 0
     _ = dt^
     _ = d_ta^
     _ = d_tb^
@@ -2073,10 +2080,17 @@ def lanczos_solve_ritz_device_t(
     var first = lanczos_which_first(which, ncv, k)
     var evals = List[Float32](length=ncv, fill=Float32(0.0))
     var evecs = List[Float32](length=ncv * ncv, fill=Float32(0.0))
-    var sweeps = DevExec._eigh_par_on(
+    # lane n9-decomp-eigh-families (2026-11-09): the executor op's route
+    # (`DevExec._eigh_on` -> x_decomp/eigh_ops.mojo `eigh_op_sym`: the
+    # one-block Jacobi below TD_MIN_N, the same words as the per-round
+    # launches and per-sweep waits of `_eigh_par_on`, deleted) with one
+    # sync. The op does not report sweeps: 0, as the small route already
+    # reported for ncv <= 32.
+    DevExec._eigh_on(
         ctx, d_t, F32Ptr(unsafe_from_address=Int(evals.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(evecs.unsafe_ptr())),
-        ncv,
+        ncv, 0,
     )
+    var sweeps = 0
     eigenvalues_k.clear()
     eigenvectors_k.clear()
     for c in range(k):  # small-loop(k: selected Ritz values, one per requested eigenpair): k is the eigenpair count, independent of the sample count
