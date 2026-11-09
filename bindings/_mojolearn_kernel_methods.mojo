@@ -266,14 +266,24 @@ def kernel_ridge_fit_ptr_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
     """fam2-kernel-gp (KRR_IDN_PTR_IN; registered as `kernel_ridge_fit_ptr`
-    only when that define is on): `kernel_ridge_fit_binding`'s `addrs` and
-    `params`, exactly, with X and y read from their addresses on the device
-    and `dual_out` written by the device copy (`kernel_ridge_fit_ptr_into`).
-    No owned host copy of X or y is made. Returns `info`."""
-    if len(addrs) != 4 and len(addrs) != 5:
+    only when that define is on): `kernel_ridge_fit_binding`'s `params`,
+    exactly, with X and y read from their addresses on the device and
+    `dual_out` written by the device copy (`kernel_ridge_fit_ptr_into`).
+    No owned host copy of X or y is made.
+
+    `addrs` is `kernel_ridge_fit_binding`'s 4 (or 5, with the weights), or
+    9 (lane a8a): x, y, dual_out, scalars_out, sw (0: unweighted), x_fit_out
+    (0: none; else n * d float32 receiving the device copy of X), then a
+    cross-validation fold's store ids [base id, base rows, index id] (x is
+    then 0 and the fold's rows are gathered on the device).
+
+    Returns [info, finite word, range word] of X (0, 0: finite and in range;
+    a flagged X is not fitted and the door refuses it)."""
+    if len(addrs) != 4 and len(addrs) != 5 and len(addrs) != 9:
         raise Error(
             "kernel_ridge_fit: addrs must contain 4 addresses (x, y,"
-            " dual_out, scalars_out) and optionally sw, got "
+            " dual_out, scalars_out), 5 (and sw) or 9 (sw, x_fit_out and a"
+            " fold's base id, base rows, index id), got "
             + String(len(addrs))
         )
     if len(params) != 8:
@@ -282,8 +292,13 @@ def kernel_ridge_fit_ptr_binding(
             " degree, gamma, coef0, alpha), got "
             + String(len(params))
         )
-    var xp = _f32_ptr(Int(py=addrs[0]))
-    var yp = _f32_ptr(Int(py=addrs[1]))
+    var fold = QueryFold.none()
+    var xfit_addr = 0
+    if len(addrs) == 9:
+        xfit_addr = Int(py=addrs[5])
+        fold = QueryFold(Int(py=addrs[6]), Int(py=addrs[7]), Int(py=addrs[8]))
+    var xaddr = 0 if fold.active() else Int(_f32_ptr(Int(py=addrs[0])))
+    var yaddr = Int(_f32_ptr(Int(py=addrs[1])))
     var dp = _f32_ptr(Int(py=addrs[2]))
     var sp = _f64_ptr(Int(py=addrs[3]))
     var n = Int(py=params[0])
@@ -298,21 +313,19 @@ def kernel_ridge_fit_ptr_binding(
     var alpha = Float32(Float64(py=params[7]))
     var sw = List[Float32]()
     var waddr = 0
-    if len(addrs) == 5:
+    if len(addrs) >= 5 and Int(py=addrs[4]) != 0:
         # cpu2-l6-bindings: the per-row factors sqrt(sample_weight) are
         # formed and refused on the device from the caller's float64
         # weights (`_krr_sqrt_weights_dev`), not in a host loop
         waddr = Int(_f64_ptr(Int(py=addrs[4])))
-    var xaddr = Int(xp)
-    var yaddr = Int(yp)
-    var info = 0
+    var result: Tuple[Int, Int32, Int32]
     with GILReleased(Python()):
         var trace = IdentityTrace()
-        info = kernel_ridge_fit_ptr_into(
-            xaddr, yaddr, n, d, t, kp, alpha, sw, dp, trace, waddr=waddr
+        result = kernel_ridge_fit_ptr_into(
+            xaddr, yaddr, n, d, t, kp, alpha, sw, dp, trace, waddr, fold, xfit_addr
         )
-        sp.unsafe_store(0, Float64(info))
-    return PythonObject(info)
+        sp.unsafe_store(0, Float64(result[0]))
+    return Python.list(result[0], Int(result[1]), Int(result[2]))
 
 
 def kernel_ridge_predict_ptr_binding(

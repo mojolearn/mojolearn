@@ -358,6 +358,11 @@ def kernel_public_refusal(error: Error, fitting: Bool, nested: Bool, rows: Int,
                 native_kind = label
                 break
     var native_untyped = not pending and native_kind.byte_length() == 0
+    # admit_x's own refusal (admitted_finite_refuse / door_rows_refuse, the
+    # one wording 'Input X contains NaN or infinity (<est>).', lane a8a) is
+    # already the public text: raised as a ValueError, never rewrapped.
+    if native_untyped and text.startswith("Input ") and text.find(" contains NaN or infinity (") >= 0:
+        return Error("ValueError: " + text)
     var message = String("")
     var name = String(py_type(model).__name__)
     # A direct descriptor preserves the numerical owner's unprefixed Mojo
