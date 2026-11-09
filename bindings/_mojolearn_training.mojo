@@ -108,7 +108,6 @@ from training.estimator import (
     identical_optimizer_step_resident_io, IDN_OPT_PARAMS_RESIDENT, OPT_IO_ALL, OPT_IO_UP_G, IDN_MAXIMIZE_DEV,
     maximize_negate_device,
 )
-from std.ffi import _Global
 from max.gpu.host import DeviceBuffer
 from training.checks.optimizer_contract import microbatch_split_is_identical
 from training.chunked_lm_head_v2 import (

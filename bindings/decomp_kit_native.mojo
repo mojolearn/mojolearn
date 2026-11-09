@@ -13,7 +13,7 @@
 # value changes; every route `_Kit` chose by residency reads `on_device`,
 # which follows the Python `_M` exactly; an operation that writes a matrix
 # in place drops the copy that went stale (`wrote_device` / `wrote_host`).
-from std.ffi import _Global, external_call, c_size_t
+from std.ffi import external_call, c_size_t
 from std.python import Python, PythonObject
 from bindings.cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr

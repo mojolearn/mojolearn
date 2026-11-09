@@ -96,7 +96,6 @@ from gemm.host_transport import (
     gemm_up_f32,
     gemm_up_u16,
 )
-from std.ffi import _Global
 from gemm.checks.gemm_lowbit import (
     LowbitWorkspace,
     bf16_narrow,

@@ -23,7 +23,6 @@ from core.hostptr import f32_ptr
 from transformer.block_options import BlockOptions
 from bindings.cpython_table import cpython_table
 from bindings.native_model_records import records_stampable, model_generation, ContentRecord, content_value, content_same
-from std.ffi import _Global
 from core.shared_slot import SharedSlot
 
 
