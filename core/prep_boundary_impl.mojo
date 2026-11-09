@@ -10,6 +10,16 @@ from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64, host
 
 
 comptime _PREP_IP = MutPointer[Int, MutUntrackedOrigin]
+comptime _PREP_U8P = MutPointer[UInt8, MutUntrackedOrigin]
+
+
+def _prep_any_flag(flags: List[UInt8], tasks: Int) -> Bool:
+    for t in range(tasks):  # driver-loop: over the row tasks' flags (at most one per core)
+        if flags[t] != UInt8(0):
+            return True
+    return False
+
+
 
 
 @always_inline
@@ -151,38 +161,84 @@ def prep_gather_rows(source: CastIn, indices: Int, rows: Int, output: Int) raise
 
 
 def prep_mask_any(source: CastIn, count: Int) -> Bool:
-    var pointer = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source.addr)
-    for i in range(count):  # native input marshaling: captured one-byte nullable mask
-        if pointer[i * source.s0] != 0:
-            return True
-    return False
+    """Whether any byte of the strided one-byte nullable mask is set."""
+    # parallel: mask test over contiguous tasks across host cores (audit R11, was serial)
+    if count <= 0:
+        return False
+    var tasks = host_predict_task_count_work(count, count)
+    var chunk = host_predict_chunk(count, tasks)
+    var flags = List[UInt8](length=tasks, fill=UInt8(0))
+    var flag_ptr = rebind[_PREP_U8P](flags.unsafe_ptr())
+
+    def _span(t: Int) {imm source, imm count, imm chunk, imm flag_ptr}:
+        var pointer = _PREP_U8P(unsafe_from_address=source.addr)
+        for i in range(t * chunk, min(t * chunk + chunk, count)):  # admitted input: this task's mask bytes
+            if pointer[i * source.s0] != 0:
+                flag_ptr.unsafe_store(t, UInt8(1))
+                return
+
+    if tasks <= 1:
+        _span(0)
+    else:
+        host_parallelize(_span, tasks)
+    var found = _prep_any_flag(flags, tasks)
+    _ = flags^
+    return found
 
 
 def prep_category_flags(codes: CastIn, count: Int, codes_native: Bool,
                         categories: CastIn, category_count: Int,
                         category_native: Bool, dtype: Int) raises -> Tuple[Bool, Bool]:
-    var pointer = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=codes.addr)
-    var values = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=categories.addr)
+    """(any code is missing (-1), every taken float category is finite) over
+    the categorical codes; refuses a code outside its category storage."""
+    # parallel: categorical codes over contiguous tasks across host cores (audit R11, was serial)
+    if count <= 0:
+        return (False, True)
+    var tasks = host_predict_task_count_work(count, count * max(codes.itemsize, 1))
+    var chunk = host_predict_chunk(count, tasks)
+    # Three flags per task: [3t] a missing code, [3t + 1] a non-finite
+    # category, [3t + 2] a code outside the category storage.
+    var flags = List[UInt8](length=3 * tasks, fill=UInt8(0))
+    var flag_ptr = rebind[_PREP_U8P](flags.unsafe_ptr())
+
+    def _span(t: Int) {imm codes, imm codes_native, imm categories, imm category_count, imm category_native, imm dtype, imm count, imm chunk, imm flag_ptr}:
+        var pointer = _PREP_U8P(unsafe_from_address=codes.addr)
+        var values = _PREP_U8P(unsafe_from_address=categories.addr)
+        for i in range(t * chunk, min(t * chunk + chunk, count)):  # admitted input: this task's categorical codes
+            var bits = UInt64(0)
+            for byte in range(codes.itemsize):  # small-loop(bytes of one signed index): at most 8
+                var offset = byte if codes_native else codes.itemsize - 1 - byte
+                bits |= UInt64(pointer[i * codes.s0 + offset]) << UInt64(8 * byte)
+            var index = Int(bitcast[DType.int64](cast_w64_bits(bits, codes.kind, codes.itemsize)))
+            if index == -1:
+                flag_ptr.unsafe_store(3 * t, UInt8(1))
+                continue
+            if index < 0 or index >= category_count:
+                flag_ptr.unsafe_store(3 * t + 2, UInt8(1))
+                return
+            if dtype == 11 or dtype == 12:
+                var raw = UInt64(0)
+                for byte in range(categories.itemsize):  # small-loop(bytes of one float category word): 4 or 8
+                    var offset = byte if category_native else categories.itemsize - 1 - byte
+                    raw |= UInt64(values[index * categories.s0 + offset]) << UInt64(8 * byte)
+                var mask = UInt64(0x7F800000) if dtype == 11 else UInt64(0x7FF0000000000000)
+                if raw & mask == mask:
+                    flag_ptr.unsafe_store(3 * t + 1, UInt8(1))
+
+    if tasks <= 1:
+        _span(0)
+    else:
+        host_parallelize(_span, tasks)
     var missing = False
     var finite = True
-    for i in range(count):  # native input marshaling: categorical label codes, no Python take/reshape
-        var bits = UInt64(0)
-        for byte in range(codes.itemsize):  # native input marshaling: admitted signed index widths
-            var offset = byte if codes_native else codes.itemsize - 1 - byte
-            bits |= UInt64(pointer[i * codes.s0 + offset]) << UInt64(8 * byte)
-        var index = Int(bitcast[DType.int64](cast_w64_bits(bits, codes.kind, codes.itemsize)))
-        if index == -1:
-            missing = True
-            continue
-        if index < 0 or index >= category_count:
-            raise Error("TypeError: pandas categorical code exceeds its category storage")
-        if dtype == 11 or dtype == 12:
-            var raw = UInt64(0)
-            for byte in range(categories.itemsize):  # native input marshaling: original float category words
-                var offset = byte if category_native else categories.itemsize - 1 - byte
-                raw |= UInt64(values[index * categories.s0 + offset]) << UInt64(8 * byte)
-            var mask = UInt64(0x7F800000) if dtype == 11 else UInt64(0x7FF0000000000000)
-            finite = finite and (raw & mask != mask)
+    var outside = False
+    for t in range(tasks):  # driver-loop: over the code tasks' flags (at most one per core)
+        missing = missing or flags[3 * t] != UInt8(0)
+        finite = finite and flags[3 * t + 1] == UInt8(0)
+        outside = outside or flags[3 * t + 2] != UInt8(0)
+    _ = flags^
+    if outside:
+        raise Error("TypeError: pandas categorical code exceeds its category storage")
     return (missing, finite)
 
 
@@ -213,23 +269,59 @@ def _prep_store_word(address: Int, row: Int, width: Int, word: UInt64):
 
 def prep_mask_export(source: CastIn, mask: CastIn, rows: Int, native: Bool,
                      output: CastIn, number: Int):
-    var flags = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=mask.addr)
-    for row in range(rows):  # native input marshaling: nullable export before public validation
-        var word = _prep_missing_word(output.itemsize)
-        if flags[row * mask.s0] == 0:
-            word = _prep_export_word(pd_raw_at(source.addr, row * source.s0, source.itemsize, native), source, number)
-        _prep_store_word(output.addr, row, output.itemsize, word)
+    """The nullable column exported row by row (its missing word where the
+    mask is set), before public validation."""
+    # parallel: export rows over contiguous tasks across host cores (audit R11, was serial)
+    if rows <= 0:
+        return
+    var tasks = host_predict_task_count_work(rows, rows * max(source.itemsize, 1))
+    var chunk = host_predict_chunk(rows, tasks)
+
+    def _span(t: Int) {imm source, imm mask, imm rows, imm native, imm output, imm number, imm chunk}:
+        var flags = _PREP_U8P(unsafe_from_address=mask.addr)
+        for row in range(t * chunk, min(t * chunk + chunk, rows)):  # admitted input: this task's exported rows
+            var word = _prep_missing_word(output.itemsize)
+            if flags[row * mask.s0] == 0:
+                word = _prep_export_word(pd_raw_at(source.addr, row * source.s0, source.itemsize, native), source, number)
+            _prep_store_word(output.addr, row, output.itemsize, word)
+
+    if tasks <= 1:
+        _span(0)
+    else:
+        host_parallelize(_span, tasks)
 
 
 def prep_category_export(codes: CastIn, rows: Int, codes_native: Bool,
                          labels: CastIn, label_count: Int, labels_native: Bool,
                          output: CastIn, number: Int) raises:
-    for row in range(rows):  # native input marshaling: native categorical take, preserving export width
-        var raw = pd_raw_at(codes.addr, row * codes.s0, codes.itemsize, codes_native)
-        var index = Int(bitcast[DType.int64](cast_w64_bits(raw, codes.kind, codes.itemsize)))
-        if index < -1 or index >= label_count:
-            raise Error("TypeError: pandas categorical code exceeds its category storage")
-        var word = _prep_missing_word(output.itemsize)
-        if index >= 0:
-            word = _prep_export_word(pd_raw_at(labels.addr, index * labels.s0, labels.itemsize, labels_native), labels, number)
-        _prep_store_word(output.addr, row, output.itemsize, word)
+    """The categorical column exported row by row (a native take of its
+    labels, the missing word for code -1); refuses a code outside its label
+    storage."""
+    # parallel: export rows over contiguous tasks across host cores (audit R11, was serial)
+    if rows <= 0:
+        return
+    var tasks = host_predict_task_count_work(rows, rows * max(codes.itemsize, 1))
+    var chunk = host_predict_chunk(rows, tasks)
+    var flags = List[UInt8](length=tasks, fill=UInt8(0))
+    var flag_ptr = rebind[_PREP_U8P](flags.unsafe_ptr())
+
+    def _span(t: Int) {imm codes, imm rows, imm codes_native, imm labels, imm label_count, imm labels_native, imm output, imm number, imm chunk, imm flag_ptr}:
+        for row in range(t * chunk, min(t * chunk + chunk, rows)):  # admitted input: this task's exported rows
+            var raw = pd_raw_at(codes.addr, row * codes.s0, codes.itemsize, codes_native)
+            var index = Int(bitcast[DType.int64](cast_w64_bits(raw, codes.kind, codes.itemsize)))
+            if index < -1 or index >= label_count:
+                flag_ptr.unsafe_store(t, UInt8(1))
+                return
+            var word = _prep_missing_word(output.itemsize)
+            if index >= 0:
+                word = _prep_export_word(pd_raw_at(labels.addr, index * labels.s0, labels.itemsize, labels_native), labels, number)
+            _prep_store_word(output.addr, row, output.itemsize, word)
+
+    if tasks <= 1:
+        _span(0)
+    else:
+        host_parallelize(_span, tasks)
+    var outside = _prep_any_flag(flags, tasks)
+    _ = flags^
+    if outside:
+        raise Error("TypeError: pandas categorical code exceeds its category storage")
