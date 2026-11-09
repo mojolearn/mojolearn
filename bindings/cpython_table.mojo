@@ -46,8 +46,8 @@ from core.shared_slot import SharedSlot
 
 #: Layout version of `CPythonTable` (core/shared_slot.mojo rule; the slot
 #: name carries it too). V8: the layout word.
-comptime _CPYTHON_TABLE_LAYOUT = 9
-comptime _CPYTHON_TABLE_NAME = "MojolearnCPythonTableV9"
+comptime _CPYTHON_TABLE_LAYOUT = 10
+comptime _CPYTHON_TABLE_NAME = "MojolearnCPythonTableV10"
 
 # PyObject *PyImport_GetModuleDict(void)  (borrowed)
 comptime _PyImport_GetModuleDict = ExternalFunction[
@@ -284,6 +284,16 @@ comptime _PyLong_AsLongLongAndOverflow = ExternalFunction[
 # int PyCapsule_IsValid(PyObject *capsule, const char *name)  (name as an address word)
 comptime _PyCapsule_IsValid = ExternalFunction[
     "PyCapsule_IsValid", def(PyObjectPtr, Int) thin abi("C") -> c_int]
+# Added by lane p3-msel-parallel-and-process-pool (2026-11-09) for the native
+# unit threads (bindings/native_unit_threads.mojo): a worker thread the
+# interpreter did not create takes the GIL once on entry and gives it back on
+# exit. PyGILState_STATE is a C enum (int).
+# PyGILState_STATE PyGILState_Ensure(void)
+comptime _PyGILState_Ensure = ExternalFunction[
+    "PyGILState_Ensure", def() thin abi("C") -> c_int]
+# void PyGILState_Release(PyGILState_STATE state)
+comptime _PyGILState_Release = ExternalFunction[
+    "PyGILState_Release", def(c_int) thin abi("C") -> NoneType]
 
 
 struct CPythonTable(Defaultable, Movable):
@@ -356,6 +366,8 @@ struct CPythonTable(Defaultable, Movable):
     var PyByteArray_AsString: _PyByteArray_AsString.type
     var PyLong_AsLongLongAndOverflow: _PyLong_AsLongLongAndOverflow.type
     var PyCapsule_IsValid: _PyCapsule_IsValid.type
+    var PyGILState_Ensure: _PyGILState_Ensure.type
+    var PyGILState_Release: _PyGILState_Release.type
 
     def __init__(out self):
         # loads symbol addresses only: running twice is harmless (the
@@ -431,6 +443,8 @@ struct CPythonTable(Defaultable, Movable):
         self.PyByteArray_AsString = _PyByteArray_AsString.load(lib)
         self.PyLong_AsLongLongAndOverflow = _PyLong_AsLongLongAndOverflow.load(lib)
         self.PyCapsule_IsValid = _PyCapsule_IsValid.load(lib)
+        self.PyGILState_Ensure = _PyGILState_Ensure.load(lib)
+        self.PyGILState_Release = _PyGILState_Release.load(lib)
 
 
 # The named global is shared by every Mojo extension in the process (all of

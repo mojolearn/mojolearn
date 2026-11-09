@@ -326,6 +326,14 @@ struct MselFoldRows(Movable):
     var scope_mark: Int
     var fold_mark: Int
     var x_held: Bool
+    # Lane p3-msel-parallel-and-process-pool: True while units of one run
+    # take folds on several threads (MselUnitRun). Each take is then made
+    # alone (the run's gate), the per-fold registry hold is skipped (a hold
+    # scope belongs to the thread that opened it; a member on another thread
+    # re-scans its rows: lost reuse, never a wrong verdict), and a cached
+    # DeviceRows is not handed to a second unit (two concurrent units could
+    # materialize and write one host snapshot).
+    var shared: Bool
 
     def __init__(out self, x: PythonObject, y: PythonObject, folds: PythonObject, device_rows: Bool,
                  context: PythonObject) raises:
@@ -364,6 +372,7 @@ struct MselFoldRows(Movable):
         self.scope_mark = -1
         self.fold_mark = -1
         self.x_held = False
+        self.shared = False
         if not self.dev and msel_is_array(x, context):
             self.scope_mark = admitted_scope_begin()
             try:
@@ -378,7 +387,7 @@ struct MselFoldRows(Movable):
         with X's verdict (rows of a finite X are finite; rows of an untested
         X are linked to it): the previous fold's rows are dropped first, so
         at most one fold's arrays are held beyond their own use."""
-        if not self.x_held:
+        if not self.x_held or self.shared:
             return
         if self.fold_mark >= 0:
             admitted_scope_end(self.fold_mark)
@@ -408,7 +417,7 @@ struct MselFoldRows(Movable):
             return self.rows(x, idx_in, context)
         var key = PythonObject(Int(idx_in._obj_ptr))
         var hit = py_get(self.rows_cache, key)
-        if hit is not None and hit[0] is idx_in:
+        if hit is not None and hit[0] is idx_in and not self.shared:
             # Reused only while no route has taken its host rows: a host
             # snapshot an estimator was handed may since have been written
             # (an in-place transform), so a materialized one is replaced.

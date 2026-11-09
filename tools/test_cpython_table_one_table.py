@@ -43,7 +43,7 @@ def test_table_fields_loads_and_prototypes_agree():
     assert len(names) == len(set(names))
     assert names == [a for a, _ in loads]
     assert sorted(names) == sorted(a for a, _ in protos)
-    assert 'comptime _CPYTHON_TABLE_NAME = "MojolearnCPythonTableV9"' in text
+    assert 'comptime _CPYTHON_TABLE_NAME = "MojolearnCPythonTableV10"' in text
     assert "SharedSlot[CPythonTable, _CPYTHON_TABLE_NAME, _CPYTHON_TABLE_LAYOUT]" in text
 
 
