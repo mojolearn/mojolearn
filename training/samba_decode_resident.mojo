@@ -486,7 +486,7 @@ def samba_decode_tokens(
     mut s: SambaDecodeResident,
     ids_ptr: MutPointer[Int32, MutUntrackedOrigin],
     out_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    n: Int,
+    steps: Int,
 ) raises -> Int:
     """N tokens per row in one call (decode plan D2): the (B, N) ids uploaded
     once, the body of `samba_decode_step` once per token with token t's ids
@@ -495,19 +495,19 @@ def samba_decode_tokens(
     as N `samba_decode_step` calls; the states end where they leave them."""
     comptime if not IDN_SAMBA_RESIDENT_STEP:
         raise Error("mojolearn samba decode: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
-    decode_slab_check(s.b, n, s.vocab, "samba decode")
+    decode_slab_check(s.b, steps, s.vocab, "samba decode")
     ref ctx = s.ctx
-    var ids = ctx.enqueue_create_buffer[DType.int32](s.b * n)
-    var out = ctx.enqueue_create_buffer[DType.float32](s.b * n * s.vocab)
+    var ids = ctx.enqueue_create_buffer[DType.int32](s.b * steps)
+    var out = ctx.enqueue_create_buffer[DType.float32](s.b * steps * s.vocab)
     ctx.enqueue_copy(dst_buf=ids, src_ptr=ids_ptr)
     var position = 0
     var last = List[Mamba3DeviceStages]()
-    for t in range(n):  # driver-loop: over decode tokens, the stack's one-token body each
-        decode_slab_take_ids(ctx, s.ids, ids, s.b, n, t)
+    for t in range(steps):  # driver-loop: over autoregressive decode steps (each reads the state the previous step left), the stack's one-token body each
+        decode_slab_take_ids(ctx, s.ids, ids, s.b, steps, t)
         # The previous token's stages return to the stream-ordered pool.
         last = List[Mamba3DeviceStages]()
         position = _samba_decode_token(s, last)
-        decode_slab_put(ctx, out, s.logits, s.b, n, s.vocab, t)
+        decode_slab_put(ctx, out, s.logits, s.b, steps, s.vocab, t)
     ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
     ctx.synchronize()
     _ = last^
