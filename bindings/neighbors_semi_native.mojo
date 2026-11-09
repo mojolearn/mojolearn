@@ -19,6 +19,7 @@ from core.p3nc_scan import p3nc_dense_nnz_f32, p3nc_dense_to_csr_f32
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module
 from providers.python.x_neighbors_admission_pyapi import xn_capabilities
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
+from providers.python.pcs_rng_pyapi import pcs_seed, _pcs_connect
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family
@@ -179,33 +180,28 @@ def _semi_kfeat_flags(binding: PythonObject, context: PythonObject) raises -> In
     return flags
 
 
-def _semi_seed(seed: PythonObject) raises -> PythonObject:
+def _semi_seed(seed: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_expansion_neighbors._seed_word`: an int as given; None (numpy's
-    global RandomState) or a caller's RandomState gives one draw in
-    [0, 2^31); anything else is refused (bindings/neighbors_native.mojo
-    `_pcs_seed`, the same port)."""
-    var b = _semi_b()
+    global RandomState) or an exact numpy.random.RandomState gives one draw
+    in [0, 2^31), drawn natively through NumPy's BitGenerator capsule
+    (providers/python/pcs_rng_pyapi.mojo `pcs_seed`: the same word as
+    `randint(0, 2**31, size=1)[0]`, no RandomState method runs); anything
+    else is refused before any of its methods is looked up."""
+    # TOMBSTONE: P1_SEMI_SEED_RANDOMSTATE (removed: numpy's global RandomState / caller RandomState .randint drawn through Python) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+    # Restore: experiments/removed/P1_SEMI_SEED_RANDOMSTATE.patch.
     if family_is_int(seed):
         return seed
-    var state = seed
-    if seed is None:
-        var numpy = PythonObject(None)
-        try:
-            numpy = Python.import_module("numpy")
-        except:
-            raise Error("ImportError: mojolearn: _expansion_neighbors requires optional NumPy support. "
-                        + "Install it with: python -m pip install \"mojolearn[numpy]\" "
-                        + "(\"mojolearn[verify]\" also includes NumPy).")
-        state = numpy.random.mtrand._rand
-    elif not (Bool(py=py_call(b.hasattr, seed, PythonObject("randint")))
-              and Bool(py=py_call(b.hasattr, seed, PythonObject("random_sample")))
-              and Bool(py=py_call(b.hasattr, seed, PythonObject("uniform")))):
-        raise Error(family_repr(seed) + " cannot be used to seed a numpy.random.RandomState instance")
-    var keywords = Python.dict()
-    py_setitem(keywords, "size", PythonObject(1))
-    var draw = family_call_kw(py_call(b.getattr, state, PythonObject("randint")), keywords,
-                              PythonObject(0), PythonObject(1 << 31))
-    return family_call(b.int, family_call(py_call(b.getattr, draw, PythonObject("__getitem__")), PythonObject(0)))
+    if seed is not None:
+        # Without a loaded NumPy no RandomState exists; with it, only the
+        # exact class (an identity check, no attribute hook) is drawn from.
+        if py_get(native_loaded_module("sys").modules, "numpy.random.mtrand") is None:
+            raise Error(family_repr(seed) + " cannot be used to seed a numpy.random.RandomState instance")
+        var record = py_get(context, "family_pcs_rng")
+        if record is None:
+            record = _pcs_connect(context)
+        if py_type(seed) is not record["randomstate"]:
+            raise Error(family_repr(seed) + " cannot be used to seed a numpy.random.RandomState instance")
+    return pcs_seed(seed, context)
 
 
 # ---------------------------------------------------------------- AdditiveChi2Sampler
@@ -358,7 +354,7 @@ def _schi2_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     var x = _semi_x(args[1], context)
     var d = Int(py=x.shape[1])
     var nc = _semi_int(family_field(fields, "n_components"))
-    var seed = _semi_seed(family_field(fields, "random_state"))
+    var seed = _semi_seed(family_field(fields, "random_state"), context)
     var usable = family_is_int(seed) and d > 0 and nc > 0
     var flags = 0
     if usable:

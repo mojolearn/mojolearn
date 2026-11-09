@@ -44,9 +44,10 @@ def test_cluster_not_fitted_error_is_native(name):
         model.predict(np.ones((3, 2), dtype=np.float32))
 
 
-def test_cluster_rejects_callback_initializer_without_calling_it():
+@pytest.mark.parametrize('name', ['MiniBatchKMeans', 'KMeans'])
+def test_cluster_rejects_callback_initializer_without_calling_it(name):
     calls = []
-    model = ml.MiniBatchKMeans(n_clusters=2, init=_poison(calls), numeric_mode='identical')
+    model = getattr(ml, name)(n_clusters=2, init=_poison(calls), numeric_mode='identical')
     with pytest.raises(TypeError, match='explicit initial centers'):
         model.fit(np.ones((4, 2), dtype=np.float32))
     assert calls == []

@@ -7,7 +7,8 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
-from bindings.scaler_tags_native import scaler_tags
+# TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+# Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout, classical_getattribute
 from bindings.classical_arrays import classical_typed, classical_is_array, classical_input
 from bindings.native_numpy_metadata import native_numpy_dtype
@@ -322,8 +323,6 @@ def robust_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                     raise Error("mojolearn: invalid parameter for RobustScaler")
                 py_setitem(fields,keys[k],options[keys[k]])
             result = model
-        elif operation == "tags":
-            result = scaler_tags(model,context,PythonObject(None))
         elif operation == "is_fitted":
             result = classical_is_fitted(model)
         elif operation == "fit" or operation == "fit_transform":

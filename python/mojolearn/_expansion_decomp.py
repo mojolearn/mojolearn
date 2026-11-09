@@ -33,12 +33,6 @@ from ._native_declared_params import ENTRY as _DECLARED_PARAMS_SET, CONTEXT as _
 from ._mode import RegressorScoreMixin
 
 
-def _min_samples(n, d, who, minimum=2):
-    """scikit-learn's check_array(ensure_min_samples=...) refusal and wording."""
-    if n < minimum:
-        raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of "
-                         f"{minimum} is required by {who}.")
-
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
            "NMF", "FastICA", "FactorAnalysis",
            "lu_factor", "lu_solve", "solve", "lstsq", "randomized_svd",
@@ -439,14 +433,6 @@ def _host_kit():
     host-address entries). The Python data path and its A/B define are gone
     (Python = glue only, Oct 3 2026): every move is x_decomp/moves.mojo."""
     return _Kit(_backend.default_mode())
-
-
-def _any_negative(M):
-    """Whether any value is < 0, through the cells (x < 0 counted as ones)."""
-    if not len(M.s):
-        return False
-    k = _Kit(_backend.default_mode())
-    return k.total(k.ew("gts", k.ew("scale", M, s=-1.0), s=0.0)).s[0] > 0
 
 
 def _vstack(*ms):
@@ -1367,13 +1353,6 @@ def _mode(numeric_mode):
     return _backend.default_mode() if numeric_mode is None else numeric_mode
 
 
-def _svd_flip_v(Vt):
-    """sklearn `svd_flip(u_based_decision=False)`: each row of Vt signed so its
-    largest-|.| entry (first on a tie) is positive. Exact sign flips."""
-    k = _Kit(_backend.default_mode())
-    return k.ew("mul", Vt, k.absmax_signs(Vt, False))
-
-
 class _Base(SklearnTagsMixin):
     _parameters = ()
 
@@ -1854,34 +1833,6 @@ class SparseRandomProjection(_RandomProjection):
         self.numeric_mode = numeric_mode
 
 
-# ================================================================ thin SVD
-def _thin_svd(k, X, nc, u_based=True):
-    """(U n x nc, S 1 x nc, Vt nc x d) of X through the QR + one-sided Jacobi
-    SVD of X (or of X^T when X is wide), singular values descending, then sklearn's
-    `svd_flip` (u_based: the largest-|.| entry of each COLUMN of U positive;
-    else of each ROW of Vt). U (or Vt) is recovered as X V / S (X^T U / S);
-    a zero singular value gives a zero vector."""
-    n, d = X.r, X.c
-    if d <= n:
-        S, Vt = k.svd(X)
-        S, Vt = S.cols(0, nc), Vt.rows(0, nc)
-        U = k.ew("div", k.mm(X, Vt, tb=True), S)
-    else:
-        S, Ut = k.svd(X.T)
-        S, Ut = S.cols(0, nc), Ut.rows(0, nc)
-        U = Ut.T
-        Vt = k.ew("div", k.mm(U, X, ta=True), S.T)
-    # the signs as a +-1 vector on the device (lane cpu2-l8-decomp): exact
-    # multiplies, no flag list on the host
-    if u_based:
-        sg = k.absmax_signs(U, True)
-        U, Vt = k.ew("mul", U, sg), k.ew("mul", Vt, sg.T)
-    else:
-        sg = k.absmax_signs(Vt, False)
-        U, Vt = k.ew("mul", U, sg.T), k.ew("mul", Vt, sg)
-    return U, S, Vt
-
-
 def _norm(k, v):
     return k.ew("sqrt", k.total(k.ew("sq", v))).s[0]
 
@@ -2204,23 +2155,6 @@ class FastICA(_Base):
 _LOG_2PI = 1.8378770664093453
 
 
-def _dsum_sq(k, M):
-    """The binary64 sum of the squares of M's float32 values (each square
-    exact), DSUM_CHUNK values per partial then the partials folded the same
-    way: on the device in software binary64 for a resident kit (lane
-    cpu3-python), the same words on the host binding (`dsum_sq_host`)."""
-    n = M.r * M.c
-    if not n:
-        return 0.0
-    if k._use(M):
-        out = k._dout(1, 2)
-        k.b.x_decomp_dev_dsum_sq(k._did(M), out._d.id, [n])
-        w = array.array("d")
-        w.frombytes(out.s.tobytes())   # glue: the binary64 result's two words, as bytes
-        return w[0]
-    return float(k.b.x_decomp_dsum_sq(M.addr, n))  # glue: pack addresses for one native call; host matrix (_M buffer) read once by x_decomp_dsum_sq on a CPU-only install
-
-
 # Every public FactorAnalysis operation is one call into the compiled owner
 # (bindings/fa_native.mojo, driver x_decomp/fa_owner.mojo).
 # Reference: scikit-learn `decomposition/_factor_analysis.py`: `fit`,
@@ -2396,32 +2330,6 @@ class FactorAnalysis(_Base):
 # ================================================================ TruncatedSVD explained variance
 # ================================================================ PCA n_components='mle'
 _LOG2, _LOGPI, _LOG2PI_D = 0.6931471805599453, 1.1447298858494002, 1.8378770664093453
-
-
-def _pca_mle_rank(spectrum, n_samples, mode):
-    """scikit-learn `_pca.py::_infer_dimension` / `_assess_dimension`
-    (Minka's MLE of the PCA rank) over the full explained-variance spectrum,
-    in software binary64 on the device on every vendor (x_decomp/pca_mle.mojo,
-    lane cpu3-python): the spectrum goes up once as binary64 words, the rank
-    comes back as one word. The host binding (CPU-only installs, the host
-    column) runs the same phases on the host. The argmax takes the first
-    maximum, as numpy."""
-    k = _Kit(mode)
-    d = len(spectrum)
-    if d < 2:
-        return 0
-    words = array.array("f")
-    words.frombytes(array.array("d", spectrum).tobytes())   # glue: the binary64 words, as bytes
-    if k._res():
-        raw = k._raw()
-        sp = _DevBuf(raw, 2 * d)
-        raw.x_decomp_dev_upload(sp.id, words.buffer_info()[0], 2 * d)
-        out = _DevBuf(raw, 1)
-        raw.x_decomp_dev_pca_mle_rank(sp.id, out.id, [d, int(n_samples)])
-        got = array.array("f", [0.0])
-        raw.x_decomp_dev_download(out.id, got.buffer_info()[0], 1)
-        return int(got[0])
-    return int(k.b.x_decomp_pca_mle_rank(words.buffer_info()[0], [d, int(n_samples)]))  # glue: pack addresses for one native call; array('d') eigenvalue words read once by x_decomp_pca_mle_rank on a CPU-only install
 
 
 # ================================================================ LU
@@ -2739,12 +2647,6 @@ def lstsq(a, b, rcond=None, *, numeric_mode=None):
     >>> x, res, rank, s = mojolearn.lstsq(A, rng.random(100, dtype=np.float32))
     """
     return _LINALG_CALL(None, "lstsq", (a, b, rcond, numeric_mode), _LINALG_CONTEXT)
-
-
-# ================================================================ PLS / CCA
-def _dot(k, a, b):
-    """a . b for two column vectors (n x 1): one gemm cell, rows ascending."""
-    return k.mm(a, b, ta=True)
 
 
 class _PLS(RegressorScoreMixin, _Base):
@@ -4319,12 +4221,10 @@ class LocallyLinearEmbedding(_Base):
 
 # The compiled family owner, connected once at import: every public method
 # of Isomap, ClassicalMDS, MDS and LocallyLinearEmbedding is one native call
-# (bindings/mani_decomp_native.mojo). Its tables: the kit's matrix and device
-# buffer classes and the per-binding broadcast zero (`_dev_one`'s cache), and
-# the metric kinds.
+# (bindings/mani_decomp_native.mojo). Its table: the metric kinds (the native
+# kit, bindings/mani_kit.mojo, never reads the Python _M / _DevBuf classes).
 _NATIVE, _NATIVE_CONTEXT = _native_runtime_manifold_bridge.connect()
-_native_family_bridge.tables(family_mani_M=_M, family_mani_devbuf=_DevBuf, family_mani_dev_one=_DEV_ONE,
-                             family_mani_pd_kind=dict(_PD_KIND))
+_native_family_bridge.tables(family_mani_pd_kind=dict(_PD_KIND))
 
 
 # ================================================================ robust covariance

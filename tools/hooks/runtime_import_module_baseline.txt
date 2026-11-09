@@ -12,11 +12,6 @@ bindings/byte_checkpoint_native.mojo:49: p[].index = Python.import_module("_oper
 bindings/byte_checkpoint_native.mojo:52: g[].arrays = Python.import_module("array").array
 bindings/causal_checkpoint.mojo:64: var posix = Python.import_module("posix")
 bindings/causal_checkpoint.mojo:71: var mmap = Python.import_module("mmap")
-bindings/classical_tags.mojo:15: var b = Python.import_module("builtins")
-bindings/classical_tags.mojo:22: var missing = py_get(py_call(b.object.__getattribute__, Python.import_module("dataclasses"), "__dict__"), "MISSING")
-bindings/classical_tags.mojo:61: var b = Python.import_module("builtins")
-bindings/classical_tags.mojo:62: var module = py_get(Python.import_module("sys").modules, "sklearn.utils._tags")
-bindings/classical_tags.mojo:65: module = Python.import_module("sklearn.utils._tags")
 bindings/cross_vendor_admission.mojo:36: c[].bi = Python.import_module("builtins")
 bindings/cross_vendor_admission.mojo:38: c[].c_array = Python.import_module("array").array
 bindings/cross_vendor_admission.mojo:39: c[].path = Python.import_module("pathlib").PosixPath
@@ -30,7 +25,6 @@ bindings/entry/dev_verifier_repairs.mojo:22: if py_type(original) is not Python.
 bindings/entry/dev_verifier_repairs.mojo:33: if py_type(values) is not Python.import_module("builtins").tuple:
 bindings/host_tree_native.mojo:294: var b = Python.import_module("builtins")
 bindings/host_tree_native.mojo:366: var b = Python.import_module("builtins")
-bindings/kmeans_native.mojo:137: numpy = Python.import_module("numpy")
 bindings/linalg_decomp_native.mojo:208: var bi = Python.import_module("builtins")
 bindings/linalg_decomp_native.mojo:209: _ = py_call(Python.import_module("_warnings").warn,
 bindings/lm_corpus_files.mojo:45: var posix = Python.import_module("posix")
@@ -41,7 +35,6 @@ bindings/lm_corpus_files.mojo:68: var cls = Python.import_module("pathlib").Posi
 bindings/native_idna.mojo:41: var unicode = Python.import_module("unicodedata").ucd_3_2_0
 bindings/native_process_pool.mojo:62: var posix = Python.import_module("posix")
 bindings/native_transport.mojo:51: var entry = Python.import_module("_json").encode_basestring_ascii
-bindings/neighbors_semi_native.mojo:152: numpy = Python.import_module("numpy")
 bindings/optimizer_public_door.mojo:141: var training = Python.import_module("mojolearn._training_impl")
 bindings/parallel_byte_native.mojo:165: p[].bi = Python.import_module("builtins")
 bindings/parallel_byte_native.mojo:169: var ctypes = Python.import_module("ctypes")
@@ -51,15 +44,12 @@ bindings/parallel_mlp_native.mojo:53: b[].bi = Python.import_module("builtins")
 bindings/parallel_mlp_native.mojo:56: b[].lock = Python.import_module("_thread").RLock
 bindings/parallel_neural_native.mojo:60: b[].bi = Python.import_module("builtins")
 bindings/parallel_neural_native.mojo:67: b[].lock = Python.import_module("_thread").RLock
-bindings/prep_encode_native.mojo:1782: var warnings = Python.import_module("warnings")
 bindings/prep_encode_native.mojo:3104: Python.import_module("numbers").Integral)):
 bindings/prep_select_native.mojo:362: var integral = context["integral_type"] if py_contains(context, "integral_type") else Python.import_module("numbers").Integral
 bindings/robust_native.mojo:34: var b = Python.import_module("builtins")
 bindings/robust_native.mojo:38: if module is None or py_type(module) is not py_type(Python.import_module("sys")):
 bindings/samba_checkpoint_native.mojo:101: var os = Python.import_module("posix")
 bindings/samba_checkpoint_native.mojo:197: if Int(py=py_call(Python.import_module("posix").fstat, stream.fileno()).st_size) != expected:
-bindings/scaler_tags_native.mojo:23: module = Python.import_module("sklearn.utils._tags")
-bindings/scaler_tags_native.mojo:135: var missing = py_get(py_fields(Python.import_module("dataclasses")), "MISSING")
 bindings/small_mlp_native.mojo:135: b[].bi = Python.import_module("builtins")
 bindings/small_mlp_native.mojo:139: b[].arrays = Python.import_module("array").array
 bindings/small_mlp_native.mojo:140: b[].rlock = Python.import_module("_thread").RLock

@@ -333,37 +333,6 @@ def encode_labels(y):
     return entry(LABELS_OP_ENCODE, (y, LABELS_KIND_ORDER_RULE), context)
 
 
-def _encode_label_list_native(y):
-    """DEVIATION 3103: a FLAT Python list or tuple whose every label is
-    EXACTLY an `int`, or exactly a `float`, through the native encoder.
-
-    `sorted_classes` keeps the first-seen OBJECT of each class, which only
-    matters when equal labels can be different objects (`1`, `1.0`, `True`).
-    With one exact type they cannot: equal ints are indistinguishable, and
-    for floats the one distinguishable pair, `0.0` and `-0.0`, is kept
-    first-seen by the native encoder too (DEVIATION 2500). So the type set,
-    read in C, decides; a bool, a subclass, a str or a mix takes the label
-    input step, as does an int outside int64. NaN raises the same
-    ValueError. Every length takes it (the 256-label floor that kept short
-    lists in Python is gone with the Python encoder)."""
-    import array
-
-    if type(y) not in (list, tuple) or not y:
-        return None
-    kinds = set(map(type, y))
-    if kinds == {int}:
-        code, dtype = "q", "<i8"
-    elif kinds == {float}:
-        code, dtype = "d", "<f8"
-    else:
-        return None
-    try:
-        store = array.array(code, y)
-    except OverflowError:
-        return None  # an int outside int64: a class only Python can hold
-    return _encode_labels_native(Array._owned(store, (len(store),), dtype, "C"))
-
-
 def _encode_labels_native(y):
     """`(classes, codes)` for one numeric label vector through
     `prepare_targets`, or None for what only the label input step reads
@@ -530,29 +499,6 @@ class ClassLabels(list):
 
     def __reduce__(self):
         return (ClassLabels, (list(self),))
-
-
-def as_class_labels(classes):
-    """`classes` as a `ClassLabels` when it is a plain list, else unchanged."""
-    if type(classes) is list:
-        return ClassLabels(classes)
-    return classes
-
-
-def classes_member(classes):
-    """`classes_` as the npz member `save` writes: int64 for integer
-    labels, float64 for real labels, the list of str for str labels
-    (`_serialize.write_npz` encodes a list of str as a `<U` member, the
-    dtype `np.asarray` gave them). Bool labels are stored as int64 and
-    come back as ints from `load` (DEVIATION 2340)."""
-    kind = label_kind(classes)
-    if kind == "int" or all(is_bool(c) for c in classes):  # glue: kind test of the class labels (classes-sized: distinct classes)
-        return Array.from_list([int(c) for c in classes], "<i8")  # glue: packs the class table (classes-sized: distinct classes)
-    if kind == "float":
-        return Array.from_list([float(c) for c in classes], "<f8")  # glue: packs the class table (classes-sized: distinct classes)
-    if all(isinstance(c, str) for c in classes):  # glue: kind test of the class labels (classes-sized: distinct classes)
-        return list(classes)
-    raise ValueError("mojolearn: classes_ holds labels no model file can carry")
 
 
 def classes_from_member(member):

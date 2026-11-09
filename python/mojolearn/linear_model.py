@@ -28,7 +28,7 @@ from ._labels import (
     encode_labels, flatten_labels, sorted_classes, threshold_codes,
 )
 from . import _native_archive_bridge, _native_classical_bridge
-from ._mode import NumericModeMixin
+from ._mode import NumericModeMixin, sklearn_tags as _sklearn_tags
 from ._sample_weight import check_sample_weight
 
 #: The model file formats (the classical host inference lane, 2026-09-13).
@@ -57,23 +57,6 @@ def _saved_mode(est):
     ):
         raise ValueError(f"mojolearn: cannot save invalid numeric_mode {mode!r}")
     return mode.strip().lower()
-
-
-def _restore_mode(obj, arrays):
-    mode = _serialize.scalar_str(arrays, "numeric_mode")
-    if mode not in ("fast", "identical"):
-        raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
-    obj.numeric_mode = mode
-
-
-def _check_saved_by(arrays, path, cls):
-    """The file's `estimator` must be `cls` or a base of it, so the host
-    subclasses of `_classical_host.py` load the plain class's file."""
-    saved_as = _serialize.scalar_str(arrays, "estimator")
-    if saved_as not in (c.__name__ for c in cls.__mro__):  # glue: walks the class hierarchy names
-        raise ValueError(
-            f"mojolearn: {path!r} was saved by {saved_as}, not {cls.__name__}"
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -172,17 +155,6 @@ def _accuracy_host(pred, y):
     return accuracy_fraction(y, pred)
 
 
-def _target_1d(y, n_rows, ndim_msg, length_msg):
-    """A 1-D C-contiguous float32 target of length `n_rows`, with the
-    estimator's own two messages raised before `_buffer`'s generic ones."""
-    if len(_shape_of(y)) != 1:
-        raise ValueError(ndim_msg)
-    t, _ = as_f32_c(y, ndim=1, name="y")
-    if t.shape[0] != n_rows:
-        raise ValueError(length_msg)
-    return t
-
-
 def _r2_sums(pred, y):
     """`(SS_res, SS_tot)` for scikit-learn's R^2 from float32 predictions
     and the target cast once to float32: the x_metrics binding's grouped
@@ -198,13 +170,6 @@ def _r2_sums(pred, y):
     r = _Reg(t, p, None, "uniform_average", "score", variance_ok=True)
     # lane cpu2-l7-metrics: one program, the y mean rounded on the device
     return _r2_sums_of(r, None)
-
-
-def _r2_host(pred, y):
-    """`1 - SS_res / SS_tot`, and 0.0 for a constant target -- the linear
-    models' NumPy-era convention (`if denom else 0.0`). See `_r2_sums`."""
-    ss_res, ss_tot = _r2_sums(pred, y)
-    return 1.0 - ss_res / ss_tot if ss_tot else 0.0
 
 
 # The centering of LinearRegression and Ridge (lane hr-small-passes,
@@ -657,7 +622,9 @@ class LinearRegression(NumericModeMixin):
         return _native_classical(self, "is_fitted", (), _CLASSICAL)
 
     def __sklearn_tags__(self):
-        return _native_classical(self, "sklearn_tags", (), _CLASSICAL)
+        # scikit-learn tag metadata is built in the Python compatibility
+        # layer; no native code calls into tag handling.
+        return _sklearn_tags(self)
 
     def vendor_used(self):
         """The backend this estimator runs on.
@@ -936,7 +903,9 @@ class Ridge(NumericModeMixin):
         return _native_classical(self, "is_fitted", (), _CLASSICAL)
 
     def __sklearn_tags__(self):
-        return _native_classical(self, "sklearn_tags", (), _CLASSICAL)
+        # scikit-learn tag metadata is built in the Python compatibility
+        # layer; no native code calls into tag handling.
+        return _sklearn_tags(self)
 
     def vendor_used(self):
         """The backend this estimator runs on.
@@ -979,35 +948,10 @@ _QN_LOSS_SVR_L2 = 6
 _QN_LOSS_ABS = 7
 
 
-def _coef_from_w(w, cols, n_targets, fit_intercept):
-    """`coef_` and `intercept_` from the fitted `W` block. One target: the
-    first `cols` entries and the last (a slice of an Array COPIES, the
-    _array contract, so both are detached from `_w`). C targets: cuML's
-    column-major `w[c + C*j]`, the bias column at `j == cols`."""
-    if n_targets == 1:
-        coef = w[:cols].reshape((1, cols))
-        intercept = w[cols:cols + 1] if fit_intercept else zeros((1,), "<f4")
-        return coef, intercept
-    # `w[c + C*j]` is the (c, j) entry of a column-major [C, n_param] block:
-    # one relabeled view and one C-order copy (`Array._as_c`), then two
-    # slices, instead of a Python loop over the parameters (lane
-    # pyglue-sweep, Oct 3).
-    n_param = cols + (1 if fit_intercept else 0)
-    full = Array._view_of(w, (n_targets, n_param), "F")._as_c()
-    coef = full[:, :cols]
-    intercept = full[:, cols] if fit_intercept else zeros((n_targets,), "<f4")
-    return coef, intercept
-
-
 #: lane/apple-fast-py2mojo-linear: `py2mojo_rows` modes (core/py2mojo_rows.mojo)
 #: and the `py2mojo_linear_flags` bit that routes them
 _ROWS_LOG, _ROWS_SGD_PROBA, _ROWS_LRCV_PROBA, _ROWS_SQRT_F32 = 1, 2, 3, 5
 _PY2MOJO_ROWS = 2
-
-
-def _py2mojo_flags(binding):
-    fn = getattr(binding, "py2mojo_linear_flags", None)
-    return int(fn()) if fn is not None else 0
 
 
 # Maintainer notes (moved from the docstring, 2026-10-12):
@@ -1359,43 +1303,6 @@ _native_archive_bridge.register(LogisticRegression, _LOGISTIC_FORMAT, (
 ))
 
 
-def _qn_row_weights(est, sample_weight, class_weight, classes, codes, n):
-    """The quasi-Newton solver's per-row float32 weights, or None for an
-    unweighted fit: `sample_weight` checked with scikit-learn's rules and
-    wording (`check_sample_weight`), times each row's class weight when
-    `class_weight` is a dict or 'balanced' (scikit-learn multiplies the two
-    the same way). The class weights per row and the product are the trees
-    binding's native helpers (`_class_weight_rows`, `x_trees_mul_f32`)."""
-    if sample_weight is None and class_weight is None:
-        return None
-    sw = check_sample_weight(sample_weight, n)
-    if class_weight is None:
-        return sw
-    if isinstance(class_weight, str):
-        if class_weight != "balanced":
-            raise ValueError(
-                f"The 'class_weight' parameter of {type(est).__name__} must be an "
-                "instance of 'dict', a str among {'balanced'} or None. "
-                f"Got {class_weight!r} instead.")
-    elif not isinstance(class_weight, dict):
-        raise ValueError(
-            f"The 'class_weight' parameter of {type(est).__name__} must be an "
-            "instance of 'dict', a str among {'balanced'} or None. "
-            f"Got {class_weight!r} instead.")
-    # the shared class-weight module, not the tree doors: importing those
-    # would put every forest and their bindings behind each linear lane
-    from ._class_weights import _class_weight_rows, _trees_x_bind
-    xb = _trees_x_bind(est)
-    codes32 = codes if codes.dtype == "<i4" else codes.astype("<i4")
-    cw = _class_weight_rows(class_weight, list(classes), codes32, xb)
-    if cw is None:  # every class weight is 1
-        return sw
-    out = empty((n,), "<f4")
-    xb.x_trees_mul_f32(addr_ro(sw, name="sample_weight"), addr_ro(cw, name="class_weight"),
-                       addr(out, name="weights"), [n])
-    return out
-
-
 def _qn_weight_fields(sw):
     """The `qn_fit` params from field 13 on that carry the row weights:
     has_sample_weight, and with weights the address (field 16)."""
@@ -1424,35 +1331,6 @@ def _qn_fit_one_target(est, x, y_enc, n_classes, loss, l1, l2, grad_tol,
         addr(w, name="coef_"), addr(info, name="info"), params,
     )
     return w, int(n_iter), float(info[0]), int(info[1])
-
-
-def _qn_scores(est, X, w, n_targets=1):
-    """`qn_decision_function` on a fitted block: `(n,)` float32 for one
-    target, `(n, n_targets)` for the column-major one-vs-rest block."""
-    x, _ = as_f32_c(X, ndim=2, name="X")
-    if x.shape[1] != est.n_features_in_:
-        raise ValueError(f"mojolearn {type(est).__name__} feature count differs from fit")
-    params = [x.shape[0], x.shape[1], 1 if est.fit_intercept else 0]
-    shape = (x.shape[0],)
-    if n_targets > 1:
-        params.append(n_targets)
-        shape = (x.shape[0], n_targets)
-    out = empty(shape, "<f4")
-    est._bind("_mojolearn_estimators").qn_decision_function(
-        addr_ro(x, name="X"), addr_ro(w, name="coef_"),
-        addr(out, name="scores"), params,
-    )
-    return out
-
-
-def _check_qn_solver_fields(name, tol, max_iter, linesearch_max_iter, lbfgs_memory):
-    if not tol > 0:
-        raise ValueError(f"mojolearn {name}: tol must be positive, got {tol}")
-    for field, value in (("max_iter", max_iter),  # glue: three solver argument checks
-                         ("linesearch_max_iter", linesearch_max_iter),
-                         ("lbfgs_memory", lbfgs_memory)):
-        if int(value) != value or value < 1:
-            raise ValueError(f"mojolearn {name}: {field} must be a positive integer, got {value}")
 
 
 # Maintainer notes (moved from the docstring, 2026-10-12):

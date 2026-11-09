@@ -84,10 +84,10 @@ def _coo_triples(A, who="SpectralClustering"):
     Same behavior as cuML's `spectral_clustering.pyx:306-312`, which accepts
     scipy or cupy sparse in COO/CSR/CSC and calls `sp.coo_matrix(X)` on a
     dense input; converting a dense matrix through COO drops exact zeros. A
-    sparse input is recognized by duck type (a `tocoo()` whose result
-    carries `shape`, `row`, `col` and `data`); nothing is imported to ask.
-    The scan is native (bindings/cfb_spectral.mojo, the base binding's
-    `nonzero_f64_count` / `nonzero_f64_fill`).
+    sparse input is an exact SciPy container, read natively from its stored
+    buffers; no method of the input (`tocoo()`) is called and nothing is
+    imported to ask. The scan is native (bindings/cfb_spectral.mojo, the
+    base binding's `nonzero_f64_count` / `nonzero_f64_fill`).
     """
     return _NATIVE(None, "family_cfb_coo_triples", (A, who),
                    _NATIVE_CONTEXT)

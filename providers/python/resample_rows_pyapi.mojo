@@ -2,6 +2,7 @@
 # Stable input metadata and retained storage for general row resampling.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.py_attr import py_attr
 from bindings.native_loaded_module import native_loaded_module
@@ -17,9 +18,48 @@ from core.borrowed_buffer import BorrowedBufferLayout
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from bindings.cpython_table import cpython_table
+from bindings.native_buffer_address import native_buffer_address
 
 
 # _row_dtype_admit moved to bindings/admitted_input.mojo admitted_dtype_admit (lane a6-device-x-family-classical; word for word).
+
+
+def _object_leaf_offsets(dtype: PythonObject, offset: Int, mut offsets: List[Int], depth: Int = 0) raises -> Bool:
+    """The byte offsets of every object reference inside one item of
+    `dtype` (structured fields and fixed subarrays walked once per operation
+    from the dtype's native metadata), appended to `offsets`. False when a
+    leaf is a StringDType ('T'): its strings live in the array's own arena,
+    so an item's bytes cannot be copied to another array."""
+    if depth > 64:
+        raise Error("TypeError: resample requires a native dtype layout")
+    var fields = dtype.fields
+    if fields is not None:
+        var names = dtype.names
+        for i in range(len(names)):  # driver-loop: over structured dtype field schemas, once per operation
+            var item = fields[names[i]]
+            if not _object_leaf_offsets(item[0], offset + Int(py=item[1]), offsets, depth + 1):
+                return False
+        return True
+    var subarray = dtype.subdtype
+    if subarray is not None:
+        var shape = subarray[1]
+        var count = 1
+        for axis in range(len(shape)):  # driver-loop: over dtype subarray rank metadata
+            count *= Int(py=shape[axis])
+        var size = Int(py=subarray[0].itemsize)
+        var inner = List[Int]()
+        if not _object_leaf_offsets(subarray[0], 0, inner, depth + 1):
+            return False
+        for i in range(count):  # driver-loop: over fixed dtype subarray elements (metadata)
+            for j in range(len(inner)):  # small-loop(object leaves of one subarray element)
+                offsets.append(offset + i * size + inner[j])
+        return True
+    var kind = String(dtype.kind)
+    if kind == "T":
+        return False
+    if kind == "O":
+        offsets.append(offset)
+    return True
 
 
 def _take_rows_contiguous(src: Int, row_stride: Int, row_bytes: Int, n: Int,
@@ -66,6 +106,8 @@ struct ResampleRows(Movable):
     var layout: BorrowedBufferLayout
     var is_array: Bool
     var has_objects: Bool
+    var object_offsets: List[Int]
+    var arena_strings: Bool
     var zero_width: Bool
     var gpu: Bool
     var n: Int
@@ -80,6 +122,8 @@ struct ResampleRows(Movable):
         self.layout = BorrowedBufferLayout(0, 1, False, [0], [1], [-1])
         self.is_array = False
         self.has_objects = False
+        self.object_offsets = List[Int]()
+        self.arena_strings = False
         self.zero_width = False
         self.gpu = False
         self.n = 0
@@ -92,6 +136,11 @@ struct ResampleRows(Movable):
             self.dtype = self.source.dtype
             admitted_dtype_admit(self.dtype, context)
             self.has_objects = Bool(py=self.dtype.hasobject) or String(self.dtype.kind) == "T"
+            if self.has_objects:
+                # P1 (audit A #1): object references are copied natively
+                # (C-API reference counts at each object leaf), not through
+                # one ndarray __getitem__/__setitem__ per row x element.
+                self.arena_strings = not _object_leaf_offsets(self.dtype, 0, self.object_offsets)
             self.is_array = True
             var item = Int(py=self.dtype.itemsize)
             self.zero_width = item == 0
@@ -192,10 +241,28 @@ struct ResampleRows(Movable):
                 _ = item
             _ = indices
             return out
+        for i in range(count):  # driver-loop: refuse an invalid row index before any output is written
+            var row = Int(rows[i])
+            if row < 0 or row >= self.n:
+                raise Error("IndexError: resample returned an invalid row")
+        if self.arena_strings:
+            # StringDType storage is the source array's own arena: one exact
+            # C ndarray.take over a native index array copies every row (no
+            # per-element call, no Python code).
+            var index_array = py_call(context["ndarray"], admitted_shape_tuple([count]),
+                                      dtype=py_call(native_numpy_dtype(context), "<i4"))
+            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(index_array)),
+                src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=indices.addr), count=count * 4)
+            _ = indices
+            return py_call(py_attr(context["ndarray"], "take"), self.source, index_array, 0)
         var out = self.output(count, context)
         # The output's exact native ndarray metadata is read once as well;
-        # datetime and zero-width dtypes need no PEP3118 exporter.
-        var dst = Int(py=out.__array_interface__["data"][0])
+        # datetime and zero-width dtypes need no PEP3118 exporter. An object
+        # or structured-object output is read by its buffer export, which
+        # (unlike __array_interface__ of a structured dtype) runs no NumPy
+        # Python helper.
+        var dst = native_buffer_address(out) if self.has_objects else Int(py=out.__array_interface__["data"][0])
+        ref cpy = Python().cpython()
         var rank = len(self.layout.shape)
         var row_items = 1
         for axis in range(1, rank):  # driver-loop: captured trailing dimensions of one row
@@ -210,31 +277,36 @@ struct ResampleRows(Movable):
             _ = self
             return out
         var coordinates = List[Int](length=rank, fill=0)
-        var out_coordinates = List[Int](length=rank, fill=0)
-        for i in range(count):  # driver-loop: native byte/reference row gathering
-            var row = Int(rows[i])
-            if row < 0 or row >= self.n:
-                raise Error("IndexError: resample returned an invalid row")
-            coordinates[0] = row
-            out_coordinates[0] = i
+        var leaves = len(self.object_offsets)
+        for i in range(count):  # driver-loop: native byte/reference row gathering (object references need the GIL: one thread)
+            coordinates[0] = Int(rows[i])
             for item in range(0 if self.zero_width else row_items):  # driver-loop: copy every captured trailing element without numeric work
+                var at = dst + (i * row_items + item) * self.layout.itemsize
                 if self.has_objects:
-                    # Exact ndarray scalar storage access preserves object and
-                    # structured-dtype reference semantics. The source dtype
-                    # and result dtype are identical: no dtype conversion runs.
-                    var value = py_call(py_attr(context["ndarray"], "__getitem__"), self.source, admitted_shape_tuple(coordinates))
-                    py_call(py_attr(context["ndarray"], "__setitem__"), out, admitted_shape_tuple(out_coordinates), value)
-                else:
-                    memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst + (i * row_items + item) * self.layout.itemsize),
-                        src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=self.layout.item_address(coordinates)), count=self.layout.itemsize)
+                    # TOMBSTONE: P1_RESAMPLE_OBJECT_GETITEM (removed: one ndarray __getitem__/__setitem__ per row x element for object and structured arrays) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+                    # Restore: experiments/removed/P1_RESAMPLE_OBJECT_GETITEM.patch.
+                    # P1 (audit A #1): the fresh output item holds None at
+                    # each object leaf; release those (None has no
+                    # finalizer), copy the item's bytes, then own every
+                    # copied reference. CPython reference counts only: no
+                    # ndarray __getitem__/__setitem__ per element.
+                    for k in range(leaves):  # small-loop(object leaves of one dtype item)
+                        var previous = MutPointer[PyObjectPtr, MutUntrackedOrigin](unsafe_from_address=at + self.object_offsets[k])[0]
+                        if previous:
+                            cpy.Py_DecRef(previous)
+                memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=at),
+                    src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=self.layout.item_address(coordinates)), count=self.layout.itemsize)
+                if self.has_objects:
+                    for k in range(leaves):  # small-loop(object leaves of one dtype item)
+                        var copied = MutPointer[PyObjectPtr, MutUntrackedOrigin](unsafe_from_address=at + self.object_offsets[k])[0]
+                        if copied:
+                            cpy.Py_IncRef(copied)
                 for reverse in range(rank - 1):  # driver-loop: native carry over captured trailing axes
                     var axis = rank - reverse - 1
                     coordinates[axis] += 1
-                    out_coordinates[axis] += 1
                     if coordinates[axis] < self.layout.shape[axis]:
                         break
                     coordinates[axis] = 0
-                    out_coordinates[axis] = 0
         _ = indices
         _ = self
         return out

@@ -31,6 +31,8 @@ from bindings.family_common import (
 )
 from bindings.cfb_spectral import _as_i32
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields
+from bindings.cfb_sparse_read import cfb_sparse_triples
+from core.sparse_coo_csr_impl import sparse_coo_to_csr
 from bindings.neighbors_ann_native import ann_keep_array
 from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
@@ -197,12 +199,44 @@ struct _Csr(Movable):
         self.n = n
 
 
+def _csr_of_triples(triples: PythonObject, n: Int, graph: Bool, context: PythonObject) raises -> PythonObject:
+    """`(indptr, indices, data)` of the square `n` x `n` matrix whose
+    stored `(row, col, data, shape)` triples are given: the entries grouped
+    by row with one stable parallel counting sort (core/sparse_coo_csr_impl
+    .mojo), duplicates kept, entries of one row in stored order; `data` is
+    None unless `graph`."""
+    var rows = _as_i32(triples[0], "rows", context)
+    var cols = _as_i32(triples[1], "cols", context)
+    var nnz = Int(py=rows.shape[0])
+    if Int(py=cols.shape[0]) != nnz:
+        raise Error("the sparse adjacency's row and col differ in length")
+    var src_vals = PythonObject(None)
+    if graph:
+        src_vals = admit_family(triples[2], 1, "data", context).array
+        if Int(py=src_vals.shape[0]) != nnz:
+            raise Error("the CSR adjacency's data must hold one weight per entry")
+    var indptr = family_array(Python.tuple(n + 1), "<i4", context)
+    var indices = family_array(Python.tuple(nnz), "<i4", context)
+    var vals = family_array(Python.tuple(nnz), "<f4", context) if graph else PythonObject(None)
+    var status = sparse_coo_to_csr(n, n, nnz, Int(py=classical_address(rows)), Int(py=classical_address(cols)),
+                                   Int(py=classical_address(src_vals)) if graph else 0,
+                                   Int(py=classical_address(indptr)), Int(py=classical_address(indices)),
+                                   Int(py=classical_address(vals)) if graph else 0)
+    _ = rows  # keep the Python object alive through the native call above
+    _ = cols  # keep the Python object alive through the native call above
+    _ = src_vals  # keep the Python object alive through the native call above
+    if status != 0:
+        raise Error("the sparse adjacency has an entry outside its shape")
+    return Python.tuple(indptr, indices, vals)
+
+
 def _csr_lists(source: PythonObject, graph: Bool, context: PythonObject) raises -> _Csr:
     """`_csr_of(A)` (graph False) or `_csr_graph_of(A)` (graph True): a
-    tuple `(indptr, indices, n)` or a scipy.sparse matrix converted with its
-    own `tocsr()`, the lists as int32 (`as_i32_c`), the weights as float32
-    (`as_f32_c(M.data, ndim=1, name="data")`), with the same refusals in the
-    same order."""
+    tuple `(indptr, indices, n)` or an exact SciPy CSR, CSC or COO matrix
+    read from its stored buffers (a CSC or COO grouped by row natively,
+    `_csr_of_triples`), the lists as int32 (`as_i32_c`), the weights as
+    float32 (`as_f32_c(M.data, ndim=1, name="data")`). No method of the
+    input (`tocsr()`) is called (P1, audit A #3)."""
     var b = _b()
     var indptr = PythonObject(None)
     var indices = PythonObject(None)
@@ -212,10 +246,12 @@ def _csr_lists(source: PythonObject, graph: Bool, context: PythonObject) raises 
     # (the instance dictionary, bindings/host_sparse_native.mojo
     # _sparse_fields): its `tocsr()` returns itself and `shape` is the
     # stored `_shape`, so the same arrays reach the kernels without running
-    # SciPy's Python methods inside the native call. Any other container, or
-    # a CSR whose storage is not the expected shape, keeps `tocsr()`.
+    # SciPy's Python methods inside the native call. A CSC or COO container
+    # is grouped by row natively from its stored triples; any other SciPy
+    # format is refused by name.
     var stored_csr = False
-    if host_sparse_format(source) == "csr":
+    var format = host_sparse_format(source)
+    if format == "csr":
         var fields = _sparse_fields(source)
         var stored_shape = py_get(fields, "_shape")
         if (stored_shape is not None and py_type(stored_shape) is b.tuple and len(stored_shape) == 2
@@ -235,17 +271,21 @@ def _csr_lists(source: PythonObject, graph: Bool, context: PythonObject) raises 
         indptr = source[0]
         indices = source[1]
         n = Int(py=_int(source[2]))
-    elif _truth(family_call(b.hasattr, source, PythonObject("tocsr"))) and _truth(
-            family_call(b.hasattr, source, PythonObject("shape"))):
-        var shape = family_call(b.getattr, source, PythonObject("shape"))
-        if Int(py=family_call(b.len, shape)) != 2 or _ne(shape[0], shape[1]):
+    elif format.byte_length() > 0:
+        # TOMBSTONE: P1_NEIGHBORS_GRAPH_TOCSR (removed: the caller's own tocsr(), SciPy Python code, inside the native graph call) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+        # Restore: experiments/removed/P1_NEIGHBORS_GRAPH_TOCSR.patch.
+        var triples = cfb_sparse_triples(source, context)
+        if triples is None:
+            raise Error("TypeError: a sparse adjacency must be a SciPy CSR, CSC or COO matrix with well-formed, "
+                        + "nonempty stored buffers; got format '" + format + "' (convert it with tocsr() first)")
+        var shape = triples[3]
+        if _ne(shape[0], shape[1]):
             raise Error("the adjacency matrix must be square")
-        var m = family_call(family_call(b.getattr, source, PythonObject("tocsr")))
-        indptr = family_call(b.getattr, m, PythonObject("indptr"))
-        indices = family_call(b.getattr, m, PythonObject("indices"))
-        n = Int(py=_int(family_call(b.getattr, m, PythonObject("shape"))[0]))
-        if graph:
-            vals = admit_family(family_call(b.getattr, m, PythonObject("data")), 1, "data", context).array
+        n = Int(py=_int(shape[0]))
+        var grouped = _csr_of_triples(triples, n, graph, context)
+        indptr = grouped[0]
+        indices = grouped[1]
+        vals = grouped[2]
     else:
         return _Csr(False, PythonObject(None), PythonObject(None), PythonObject(None), 0)
     var ip = _as_i32(indptr, "indptr", context)

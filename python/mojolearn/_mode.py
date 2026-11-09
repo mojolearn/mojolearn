@@ -57,7 +57,7 @@ def _guard_cpu_training(method):
     return method
 
 
-def sklearn_tags(est):
+def sklearn_tags(est, preserves_dtype=None):
     """scikit-learn's tag protocol (1.6+) for a mojolearn estimator, read only
     by scikit-learn, so importing it here needs no dependency.
 
@@ -76,6 +76,9 @@ def sklearn_tags(est):
     - `_sklearn_instance_target_tags()`: target tag overrides that depend
       on the instance's parameters.
     - `_sklearn_requires_fit = False` for a stateless transformer.
+
+    `preserves_dtype` fixes the transformer tags' dtype names for an
+    estimator whose `transform` always keeps them (the float32 scalers).
     """
     from sklearn.utils import (ClassifierTags, InputTags, RegressorTags,  # glue: sklearn tag protocol, imported only when sklearn asks
                                Tags, TargetTags, TransformerTags)
@@ -89,7 +92,8 @@ def sklearn_tags(est):
                 requires_fit=getattr(cls, "_sklearn_requires_fit", True))
     if callable(getattr(est, "transform", None)):
         tags.transformer_tags = TransformerTags(
-            preserves_dtype=list(getattr(cls, "_sklearn_preserves_dtype", ())))
+            preserves_dtype=list(getattr(cls, "_sklearn_preserves_dtype", ()) if preserves_dtype is None
+                                 else preserves_dtype))
     from ._sk_validate import input_tag_overrides
     for name, value in input_tag_overrides(cls).items():  # glue: sklearn tag field overrides by name
         setattr(tags.input_tags, name, value)
@@ -212,6 +216,10 @@ def _needs_fit(method, name, require_fit=True):
 
 
 def _loader(method):
+    # P1 (audit B #2): RBFSampler, Nystroem and KernelRidge.load are marked
+    # `native_method` (kernel_methods.py), so they take the first branch and
+    # no Python post-load wrapper runs; the wrapper below remains only for
+    # loaders whose native owner does not publish the fitted state.
     if getattr(method, "_mojolearn_tracks_fit", False):
         # The native archive owner publishes fitted state and admits any
         # after-fit hook before returning; no Python post-load callback.

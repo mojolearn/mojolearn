@@ -613,6 +613,14 @@ in the tables after the sections.
 
 | [`x_decomp_dev_upload_finite` (lane a8c named entry, `dev_upload_finite_py`)](#integration-w5-duplicate-upload-finite-entry-and-mamba-backward-weight-reload-2026-11-09) | Decomp (PLS deferred X) | removed (duplicate of the kernel-call op `XD_DEV_UPLOAD_FINITE`; never reached main) | 2026-11-09 | lane only |
 | [`MambaBlockProgram.reload_weights` (lane x56d per-call weight rewrite in the backward door)](#integration-w5-duplicate-upload-finite-entry-and-mamba-backward-weight-reload-2026-11-09) | Neural (Mamba-1/2/3 backward) | removed (superseded: `refresh_weights` address + weight-epoch key; never reached main) | 2026-11-09 | lane only |
+| [`P1_RESAMPLE_OBJECT_GETITEM` (per-element `ndarray.__getitem__`/`__setitem__` in row resampling)](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Resample (object / structured rows) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_RESAMPLE_OBJECT_GETITEM.patch](../experiments/removed/P1_RESAMPLE_OBJECT_GETITEM.patch) |
+| [`P1_KMEANS_CALLABLE_INIT` (`_kmeans_callable_init`: user `init(X, k, random_state=...)` + `numpy.asarray` / `RandomState`)](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Cluster (KMeans.fit) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_KMEANS_CALLABLE_INIT.patch](../experiments/removed/P1_KMEANS_CALLABLE_INIT.patch) |
+| [`P1_SPECTRAL_TOCOO` (`_tocoo` and the caller's `tocoo()` / `toarray()`)](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Spectral (precomputed / sparse input) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_SPECTRAL_TOCOO.patch](../experiments/removed/P1_SPECTRAL_TOCOO.patch) |
+| [`P1_NEIGHBORS_GRAPH_TOCSR` (the caller's `tocsr()` in the native graph call)](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Neighbors graph (sparse adjacency) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_NEIGHBORS_GRAPH_TOCSR.patch](../experiments/removed/P1_NEIGHBORS_GRAPH_TOCSR.patch) |
+| [`P1_SEMI_SEED_RANDOMSTATE` (`numpy.random.mtrand._rand` / caller `RandomState.randint` drawn through Python)](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Kernel approximation (SkewedChi2Sampler seed) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_SEMI_SEED_RANDOMSTATE.patch](../experiments/removed/P1_SEMI_SEED_RANDOMSTATE.patch) |
+| [`P1_ONEHOT_WARN_IN_NATIVE` (`warnings.warn` called from the native OneHotEncoder transform)](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Prep (OneHotEncoder.transform) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_ONEHOT_WARN_IN_NATIVE.patch](../experiments/removed/P1_ONEHOT_WARN_IN_NATIVE.patch) |
+| [`P1_NATIVE_SKLEARN_TAGS` (`bindings/classical_tags.mojo`, `bindings/scaler_tags_native.mojo` and their tag operations)](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | sklearn tags (linear models, scalers) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_NATIVE_SKLEARN_TAGS.patch](../experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch) |
+| [`P1_DEAD_PY_CURVE_DRIVERS` (unreachable Python drivers (`_FoldCurve`, `_curves`, `roc_auc_options`, ... 91 defs))](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Metrics, decomp, prep, linear model (Python) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_DEAD_PY_CURVE_DRIVERS.patch](../experiments/removed/P1_DEAD_PY_CURVE_DRIVERS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5705,3 +5713,37 @@ Integration branch `integ/pre-0867-w5` (wave-4 merge). Not experiments: duplicat
   `_causal_lm_fixtures.py`; `tokenizer._byte_to_char` to `_tokenizer_synthetic.byte_to_char`.
 - Recoverable at each commit's parent. Patch: `experiments/removed/dead_code_p5_20261109.patch` (all rows but `_take`,
   whose commit also moved the block drivers: `git show 78dffe4a08^:python/mojolearn/_mamba_impl.py`).
+
+<a id="lane-p1-python-callbacks-removed-from-native-operations-2026-11-09"></a>
+
+## Lane p1-python-callbacks-worst: Python callbacks removed from native operations (2026-11-09)
+
+Branch `lane/p1-python-callbacks-worst` (base `origin/integ/pre-0867-w3` @ `e68654a757`). Not experiments: Python code
+that ran inside a native product operation (AGENTS.md "No Python in the runtime"), from the audits
+`~/mojolearn-evidence/py-audit-a-imports.md` (worst 1-5, 9, 10, 35, 36 and the Python-side drivers) and
+`~/mojolearn-evidence/py-audit-b-callpaths.md` (worst 2-3). Each became native or a refusal before the hook runs.
+
+- `P1_RESAMPLE_OBJECT_GETITEM` (`providers/python/resample_rows_pyapi.mojo`): object and structured-object rows are
+  copied as bytes with CPython reference counts at each object leaf (offsets read once from the dtype); StringDType
+  rows by one `ndarray.take`. Bits: none (the same references).
+- `P1_KMEANS_CALLABLE_INIT` (`bindings/kmeans_native.mojo`): a callable `init` is refused before it is called, naming
+  explicit centers, 'k-means++' and 'random' (as MiniBatchKMeans already did). Interface change: callable init refused.
+- `P1_SPECTRAL_TOCOO` (`bindings/cfb_spectral.mojo`): exact SciPy COO/CSR/CSC read from stored buffers; other SciPy
+  formats densified natively (`host_sparse_dense`); duck-typed sparse objects take the dense admission.
+- `P1_NEIGHBORS_GRAPH_TOCSR` (`bindings/neighbors_graph_native.mojo`, new `core/sparse_coo_csr_impl.mojo`): a CSC or COO
+  adjacency is grouped by row with a stable parallel counting sort; duplicates kept (SciPy's COO `tocsr()` summed
+  them: bits may change for PageRank on a COO input with duplicate entries); BSR/DIA/DOK/LIL refused by name.
+- `P1_SEMI_SEED_RANDOMSTATE` (`bindings/neighbors_semi_native.mojo`): the seed word is drawn natively through NumPy's
+  BitGenerator capsule (`pcs_seed`), the same word as `randint(0, 2**31, size=1)[0]`. Bits: none.
+- `P1_ONEHOT_WARN_IN_NATIVE` (`bindings/prep_encode_native.mojo`): the unknown-category warning goes through the native
+  warning path (`bindings/classical_warnings.mojo` `classical_warning`: filters read natively, only the standard
+  display hooks admitted, a custom `showwarning` refused; an "error" filter raises `UserWarning`), attributed to the
+  caller's frame; the encode context now carries `connect_warnings()`.
+- `P1_NATIVE_SKLEARN_TAGS`: tags are built by `_mode.sklearn_tags` (owner exception 2026-10-24); no native code
+  imports `sklearn.utils._tags`.
+- `P1_DEAD_PY_CURVE_DRIVERS`: Python top-level defs no Python file (product, tests, tools, bench) and no Mojo string
+  lookup reaches (AST reachability, docstrings and comments ignored), 91 defs in `_expansion_metrics`,
+  `_expansion_decomp`, `_expansion_prep`, `preprocessing`, `linear_model`, `_linalg_impl`, `_expansion_neighbors`,
+  `_labels`; lists in `~/mojolearn-evidence/p1/removed_*.tsv`.
+- Code recoverable at `e68654a757`; patches `experiments/removed/P1_*.patch` (the reverse of the lane's change to the
+  code files).
