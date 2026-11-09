@@ -1475,19 +1475,22 @@ def _dirichlet(k: DKit, A: DMat) raises -> DMat:
     return k.ew2(OP_SUB, k.ew1(OP_DIGAMMA, A, 0.0), k.ew1(OP_DIGAMMA, k.rowsum(A), 0.0))
 
 
-def lda_online_dev(
-    X: Mat, mut comps: Mat, mut exp_dir: Mat, bs: Int, max_doc_iter: Int, seed: Int, mut draw: Int,
+def lda_online_pass_dev(
+    mut k: DKit, Xd: DMat, mut C: DMat, mut ED: DMat, bs: Int, max_doc_iter: Int, seed: Int, mut draw: Int,
     mut n_batch_iter: Int, doc_prior: Float64, topic_prior: Float64, offset: Float64, decay: Float64,
     tol: Float64, total_samples: Float64,
 ) raises:
-    """`lda_online_pass` (x_decomp/lda_online.mojo) with X, the components
-    and their Dirichlet expectation resident: the same cells per mini-batch.
-    The pass's weights (one per mini-batch, each `offset + n_batch_iter`
-    rounded once to float32 then logs, scale and exp, elementwise cells)
-    are computed in one vector and read in one sync before the loop."""
-    var k = DKit()
-    var n = X.r
-    var nc = comps.r
+    """`lda_online_pass` (x_decomp/lda_online.mojo) on X, the components and
+    their Dirichlet expectation already resident: the same cells per
+    mini-batch. The pass's weights (one per mini-batch, each
+    `offset + n_batch_iter` rounded once to float32 then logs, scale and
+    exp, elementwise cells) are computed in one vector and read in one sync
+    before the loop. C and ED are replaced by the pass's resident results;
+    nothing is downloaded (the fit loop keeps X, C and ED on the device
+    across epochs: lane consol-n0-readmission, X was re-uploaded and C, ED
+    went home and back every epoch)."""
+    var n = Xd.r
+    var nc = C.r
     var nb = (n + bs - 1) // bs if n > 0 else 0
     var wts = Mat(nb, 1)
     if nb > 0:
@@ -1498,12 +1501,9 @@ def lda_online_dev(
         var wd = k.ew1(OP_EXP, k.ew1(OP_SCALE, k.ew1(OP_LOGS, bd, 1e-30), -decay), 0.0)
         wts = k.get(wd)
         k.sync()
-    var Xd = k.upload(X)
-    var C = k.upload(comps)
-    var ED = k.upload(exp_dir)
     var a = 0
     var j = 0
-    while a < n:
+    while a < n:  # driver-loop: over the pass's mini-batches
         var b = min(a + bs, n)
         var Xb = DMat(rows_of=Xd, row0=a, rows=b - a)
         # _e_step(k, Xb, cal_sstats=True, random_init=True)
@@ -1523,6 +1523,22 @@ def lda_online_dev(
         n_batch_iter += 1
         j += 1
         a = b
+
+
+def lda_online_dev(
+    X: Mat, mut comps: Mat, mut exp_dir: Mat, bs: Int, max_doc_iter: Int, seed: Int, mut draw: Int,
+    mut n_batch_iter: Int, doc_prior: Float64, topic_prior: Float64, offset: Float64, decay: Float64,
+    tol: Float64, total_samples: Float64,
+) raises:
+    """One online pass over host matrices (`partial_fit`): X, the components
+    and their Dirichlet expectation up once, `lda_online_pass_dev`, the two
+    results home."""
+    var k = DKit()
+    var Xd = k.upload(X)
+    var C = k.upload(comps)
+    var ED = k.upload(exp_dir)
+    lda_online_pass_dev(k, Xd, C, ED, bs, max_doc_iter, seed, draw, n_batch_iter, doc_prior, topic_prior,
+                        offset, decay, tol, total_samples)
     comps = k.get(C)
     exp_dir = k.get(ED)
     k.sync()
