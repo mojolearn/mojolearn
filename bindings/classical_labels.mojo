@@ -1039,19 +1039,19 @@ def labels_decode_labels(var classes: PythonObject, codes: PythonObject, context
             _ = out  # keep the Python object alive through the native call above
             _ = wide_codes  # keep the Python object alive through the native call above
             return out
-    var values = Python.list()
-    var p = _I64P(unsafe_from_address=labels_address(wide_codes))
-    _ = wide_codes  # keep the Python object alive through the native call above
-    for i in range(n):  # cpu-route: str or bool classes decode to Python objects, the explicit label output step
-        var c = Int(p[i])
-        if c >= k or c < -k:
-            # Python's list index rule (negative codes index from the end) and
-            # its exception class: a CPython IndexError raised inside the
-            # subscript below would cross the boundary as a ValueError.
-            raise Error("IndexError: list index out of range")
-        _ = py_call(values.append, classes[c])
-        _ = wide_codes  # keep the Python object alive through the native call above
-    return values
+    # Classes the gathers cannot carry (str / bool / object, or ints outside
+    # int64): ONE presized list filled in C from the int64 code words
+    # (p3_decode_list). Lane p2-labels-lists-arrays: the per-row Python
+    # append loop (cpu-route) is gone. Python's list index rule holds
+    # (negative codes index from the end); an out-of-range code raises
+    # Python's IndexError, as the subscript did.
+    if code_dtype != "<i4" and code_dtype != "<i8":
+        raise Error("TypeError: mojolearn: label codes must be int32 or int64, not " + code_dtype)
+    var listed = p3_decode_list(classes, labels_address(wide_codes), 8, n)
+    _ = wide_codes  # keep the Python object alive through the native reads above
+    if listed is None:
+        raise Error("IndexError: list index out of range")
+    return listed
 
 
 def labels_argmax_rows(scores: PythonObject, rows: Int, cols: Int, wide: Bool, context: PythonObject) raises -> PythonObject:
