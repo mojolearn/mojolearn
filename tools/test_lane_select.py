@@ -2448,7 +2448,7 @@ def test_a_subpackage_module_is_attributed_to_the_lanes_that_load_it():
     assert os.path.join(lane_select.PKG, "lowbit.py") in got, got
     assert os.path.join(lane_select.PKG, "_array.py") in got, got
     assert os.path.join(models, "config.py") in got and os.path.join(models, "__init__.py") in got, got
-    # `from .models.safetensors import write_safetensors` at the top level
+    # `from .models.safetensors import INDEX_NAME, SINGLE_NAME` at the top level
     assert os.path.join(models, "safetensors.py") in lane_select._python_imports(
         os.path.join(lane_select.PKG, "_causal_lm_fixtures.py"))
 

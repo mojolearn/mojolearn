@@ -1842,7 +1842,7 @@ def _python_imports(rel):
     #
     # SUBPACKAGES RESOLVE (2026-09-23). `from .safetensors import Checkpoint`
     # inside models/causal_lm.py means models/safetensors.py, and `from
-    # .models.safetensors import write_safetensors` at the top level means the
+    # .models.safetensors import INDEX_NAME, SINGLE_NAME` at the top level means the
     # models package and that module. Resolving every import name to
     # python/mojolearn/<name>.py alone made both edges vanish, and with them
     # every file of models/ (see `_python_files`). Function-local imports

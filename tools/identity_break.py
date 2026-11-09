@@ -6456,7 +6456,7 @@ def _(ml, X, yc, yr, Xh=None):
             os.remove(os.path.join(loose, st.INDEX_NAME))
             bad = os.path.join(d, "bad")
             os.makedirs(bad, exist_ok=True)
-            badfile = st.write_safetensors(os.path.join(bad, "x.safetensors"),
+            badfile = fx.write_safetensors(os.path.join(bad, "x.safetensors"),
                                            {"t.f64": ("F64", (4,), b"\0" * 32)})
             flags = np.asarray([
                 dtypes.tobytes() == sharded_bytes.tobytes(),

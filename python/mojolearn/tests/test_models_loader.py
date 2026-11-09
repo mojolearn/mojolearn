@@ -43,7 +43,8 @@ from mojolearn.models import (CausalLM, Checkpoint, HFConfig, SafetensorsFile, T
                               UnsupportedModel, plan_for)
 from mojolearn.models import causal_lm as _cl
 from mojolearn.models import tokenizer as _tk
-from mojolearn.models.safetensors import write_safetensors, widen_f16
+from mojolearn.models.safetensors import widen_f16
+from mojolearn._causal_lm_fixtures import write_safetensors
 from mojolearn._tokenizer_synthetic import byte_to_char as _byte_to_char
 
 

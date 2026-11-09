@@ -261,7 +261,7 @@ def probe_generate():
     import numpy as np
     import mojolearn
     from mojolearn.models import CausalLM
-    from mojolearn.models.safetensors import write_safetensors
+    from mojolearn._causal_lm_fixtures import write_safetensors
     rng = np.random.default_rng(7)
     L, D, H, F, V = 2, 32, 2, 64, 64
     cfg = {"format": "mojolearn.byte-lm", "n_layers": L, "d_model": D, "n_heads": H, "n_kv": H, "head_dim": D // H,

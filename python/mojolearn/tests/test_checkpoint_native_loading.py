@@ -8,7 +8,7 @@ import pytest
 from mojolearn import Array
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.models import Checkpoint, SafetensorsFile
-from mojolearn.models.safetensors import write_safetensors
+from mojolearn._causal_lm_fixtures import write_safetensors
 
 
 def test_native_checkpoint_reads_all_storage_types_and_closes_maps(tmp_path, monkeypatch):
