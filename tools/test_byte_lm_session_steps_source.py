@@ -19,34 +19,43 @@ def test_train_steps_has_one_native_frontdoor():
     assert body[0].value.args[1].value == 'train_steps'
 
 
-def test_both_columns_expose_operation_12_from_the_admitted_session():
+def test_both_columns_take_n_steps_through_operation_1():
+    # lane x7-byte-lm-on-executor: operation 12 is gone on both columns;
+    # operation 1 takes the step count (p[14]) and the device runs the steps
+    # as ONE Program.fit on the trainer's program.
     device = _read('training/byte_lm_native_dispatch.mojo')
     assert 'BYTE_LM_NATIVE_OPERATION_COUNT = 13' in device
-    assert 'byte_owner_steps(owner[], step_addresses, p[0], p[1])' in device
+    assert 'byte_owner_step(owner[], addresses, completed, cfg, shape, action == 1, max(1, p[14]))' in device
+    assert 'operation 12 was removed' in device
     host = _read('training/byte_lm_host_trainer_dispatch.mojo')
     assert 'BYTE_HOST_TRAINER_COUNT = 13' in host
-    assert 'owner[].steps([a[1], a[2], a[3]], p[0], p[1])' in host
+    assert 'max(1, p[14])' in host and 'owner.steps([a[0], a[5], a[6]], n_steps, completed)' in host
     ops = _read('training/byte_lm_session_ops.mojo')
-    steps = ops.split('def byte_owner_steps(')[1].split('def byte_owner_export_state(')[0]
-    # The same per-step path as train_step, from the session's own config.
-    assert 'byte_session_step_run(' in steps
-    assert '.config.copy()' in steps and '.optimizer.copy()' in steps
-    assert steps.index('byte_validate_tokens(ids') < steps.index('step = byte_session_step_run(')
-    assert 'byte_owner_recover(s[], completed + k)' in steps
-    session = _read('training/byte_lm_host_session.mojo')
-    host_steps = session.split('    def steps(')[1].split('    def evaluate(')[0]
-    assert 'self.step(' in host_steps and 'self.optimizer.copy()' in host_steps
+    assert 'def byte_owner_steps(' not in ops
+    step = ops.split('def byte_owner_step(')[1].split('def byte_owner_export_state(')[0]
+    # every batch admitted before any device work, then one multi-step run
+    assert step.index('byte_validate_tokens(') < step.index('byte_session_steps_run(')
+    assert 'byte_owner_recover(s[], completed)' in step
+    run = ops.split('def byte_session_steps_run(')[1].split('def byte_owner_step(')[0]
+    assert 'byte_train_steps_resident(' in run
+    lm = _read('training/byte_lm.mojo')
+    steps = lm.split('def byte_steps_device(')[1].split('def _byte_step_device(')[0]
+    assert 'byte_program_fit(' in steps
+    program = _read('training/byte_lm_program.mojo')
+    assert 'train_program_control(' in program
 
 
-def test_binding_admits_once_and_runs_the_remaining_steps_in_one_call():
+def test_binding_admits_once_and_runs_every_step_in_one_call():
     native = _read('bindings/byte_lm_trainer_native.mojo')
     assert '"mojolearn.training.byte_lm.v1", 13)' in native
     entry = native.split('def byte_lm_train_steps(')[1].split('def _logits_input(')[0]
     assert entry.count('py_call(lock.acquire)') == 1
     assert entry.count('byte_state_admit(') == 1 and entry.count('_admitted_shape(') == 1
     run = native.split('def _run_steps(')[1].split('def byte_lm_train_steps(')[0]
-    assert run.count('neural_descriptor_execute(provider, _BYTE_LM_OP_STEPS,') == 1
-    assert '_steps_reconcile(' in run
+    assert 'while k < n_steps' not in run
+    assert run.count('_run_resident(mods, fields, stack, shape, binding, context, True, n_steps, True)') == 1
+    resident = native.split('def _run_resident(')[1].split('def _run_stateless(')[0]
+    assert '_steps_reconcile(' in resident
     assert 'if operation == "train_steps":' in native
 
 
