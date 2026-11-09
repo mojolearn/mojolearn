@@ -415,18 +415,18 @@ def msel_validation_curve(args: PythonObject, context: PythonObject) raises -> P
     var te = List[Float64]()
     var count = 0
     var k = 0
-    var values = msel_parameter_values(args[4], context)
+    var param_range = msel_parameter_values(args[4], context)
     var rows = MselFoldRows(xf, yf, folds, msel_device_rows_ok(estimator, scoring, context), context)
     try:
         # Every (value, fold) is one unit (msel_cv_units); each unit clones
         # the base once and sets {param_name: value} on its clone.
         var candidates = Python.list()
-        for v in range(len(values)):  # driver-loop: over parameter values (the candidate dicts)
+        for v in range(len(param_range)):  # driver-loop: over the param_range candidates (one candidate dict each)
             var params = Python.dict()
-            py_setitem(params, args[3], values[v])
+            py_setitem(params, args[3], param_range[v])
             _ = py_call(candidates.append, params)
         var run = msel_cv_units(estimator, candidates, yf, rows, scoring, True, False, error_score, jobs, context)
-        for v in range(len(values)):  # driver-loop: over parameter values (results only)
+        for v in range(len(param_range)):  # driver-loop: over the param_range candidates (results only)
             var r = run.candidate(v, False, context)
             if len(r.names) != 1 or r.names[0] != "score":
                 _ = family_call(py_attr(Python.dict(), "__getitem__"), PythonObject("train_score"))
