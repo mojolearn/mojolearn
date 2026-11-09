@@ -1828,8 +1828,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             var saved = Args()
             saved.p0 = bufs[1]
             saved.p1 = bufs[2]
-            # Mamba-1 carries no words tensor
-            saved.p2 = bufs[3] if len(bufs) > 3 else FP(unsafe_from_address=0)
+            # Mamba-1 carries no words tensor: p2 keeps Args' placeholder (a
+            # Pointer is non-nullable, so no address-0 FP)
+            if len(bufs) > 3:
+                saved.p2 = bufs[3]
             var rx = List[Tensor]()
             rx.append(x[0])
             rx.append(x[1])
