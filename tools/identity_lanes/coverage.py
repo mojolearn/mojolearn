@@ -699,7 +699,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("training-mlp-sessions")
 def _(ml, X, yc, yr, Xh=None):
-    """training.mlp_inference_sessions (`mlp_sessions_rows`, `mlp_sessions`):
+    """training.mlp_inference_sessions (the small-MLP program's SESSIONS forward):
     a seeded 8 -> 24 relu -> 3 model over three sessions of 5, 1 and 64
     fixture rows in one call, and over the held-out rows. The one call is
     held byte for byte in the cell to each session run alone and

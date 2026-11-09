@@ -1371,7 +1371,7 @@ NEW_LANE_PURPOSE = {
                             "`samba_decode_export`, `samba_decode_load`)",
     "training-chunked-lm-head": "training.chunked_lm_head_loss with and without gradients: "
                                 "`chunked_lm_head_v2_loss`, `chunked_lm_head_v2_train`",
-    "training-mlp-sessions": "training.mlp_inference_sessions: `mlp_sessions`",
+    "training-mlp-sessions": "training.mlp_inference_sessions: `small_mlp_program` (op SESSIONS)",
     "samba-optimizer-state": "SambaStack state_dict / load_state_dict on an open resident optimizer slot "
                              "(`optimizer_resident_download`, `optimizer_resident_upload`) and "
                              "optimizer.maximize (`optimizer_resident_step_io`)",
