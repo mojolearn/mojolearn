@@ -17,7 +17,7 @@ def test_small_mlp_runs_one_captured_program():
     program=(ROOT/'autograd/small_mlp_program.mojo').read_text()
     for forbidden in ('PythonObject', 'std.python', 'bindings.', 'providers.'):
         assert forbidden not in program
-    for owner in ('OPS_LINEAR', 'capture(', 'cross_entropy(', 'backward_scalar_with_rules(', 'step_lr('):
+    for owner in ('OPS_SMALL_MLP', 'OPS_LINEAR', 'capture(', 'cross_entropy(', 'backward_scalar_with_rules(', 'step_lr('):
         assert owner in program
     assert not (ROOT/'training/small_mlp_dispatch.mojo').exists()
 
