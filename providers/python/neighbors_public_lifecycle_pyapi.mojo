@@ -225,7 +225,7 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
         # Perf (perf2-neighbors): a dense KDE query (score_samples/score) only
         # reads X and never reports `input_copied_`, so it takes this float32
         # C-order snapshot as `_kde_scores` would have rebuilt it
-        # (`family_as_f32` is this same snapshot's `keep`). A KDE fit keeps
+        # (`admit_family(...).array` is this same snapshot's `keep`). A KDE fit keeps
         # its own capture and copy report; a sparse query keeps its exact
         # densification (bindings/neighbors_kde_native.mojo `_kde_dense`).
         py_setitem(values, PythonObject(first), snapshot.keep)

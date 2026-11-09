@@ -334,7 +334,7 @@ def gp_state_remember(model: PythonObject, fields: PythonObject, context: Python
 #
 # The GP public door admits X with classical_check_x (C-order float32, the
 # scikit-learn refusals) and the numerical owner converted the same X again
-# (`family_as_f32`, a second full metadata snapshot). The door registers its
+# (`admit_family`, a second full metadata snapshot). The door registers its
 # admitted X here for the duration of its operation; the owner skips its
 # conversion only for a registered exact ndarray or Array. Any other caller's
 # X is converted as before. Entries are strong references (no address reuse
