@@ -29,8 +29,8 @@ buffer), and makes ONE download: the probabilities, or the int32
 `OPS_ARGMAX` codes of the whole buffer. The same kernels and fold order as
 the per-call forward it replaces, so no word changes.
 
-TOMBSTONE: the per-call CNN predict (cnn_predict_program uploading every
-parameter at each call and downloading each chunk) deleted 2026-11-09 by
+TOMBSTONE: the per-call CNN predict (a fresh session that uploaded every
+parameter at each call and downloaded each chunk) deleted 2026-11-09 by
 lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575 (it never
 reached main).
 
