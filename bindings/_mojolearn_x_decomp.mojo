@@ -22,10 +22,9 @@ from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial
 from x_decomp.decomp_owner_dev import DevDecomp
 from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, kpca_eig_py, rp_fit_py, rp_project_py
 
-from experiments.apple_fast.gemm.scoped_dispatch import shared_sub_count
-
-def x_decomp_shared_sub_count_py() raises -> PythonObject:
-    return PythonObject(shared_sub_count(False))
+# TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by @K1SHA_SCOPED@; code recoverable at
+# f59d913b0b (its reach counter x_decomp_shared_sub_count, with MOJOLEARN_CHOL_FAST_SHARED_SUB).
+# Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 
 # TOMBSTONE: MOJOLEARN_MCD_FAST_ACTIVE_COMPACT (never measured, deleted) deleted 2026-11-09 by @K1SHA_MCD@; code recoverable
 # at f59d913b0b (the F06 reach counters mcd_experiment_count and mcd_fast_batch_count).
@@ -101,7 +100,6 @@ def build__mojolearn_x_decomp() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_decomp")
         m.def_function[x_decomp_native_api_v1_binding]("x_decomp_native_api_v1")
         # F02 audit belongs to the independent LU route as well as MCD.
-        m.def_function[x_decomp_shared_sub_count_py]("x_decomp_shared_sub_count")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")

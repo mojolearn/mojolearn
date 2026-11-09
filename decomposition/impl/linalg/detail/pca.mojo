@@ -29,7 +29,10 @@ from gemm.afn_apple_fast import (
     afn_strides,
     afn_zero_kernel,
 )
-from experiments.apple_fast.gemm.scoped_dispatch import try_scoped_gemm
+# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by @K1SHA_SCOPED@; code recoverable at
+# f59d913b0b. Same commit: the whole scoped G1/G2 adapter family (MOJOLEARN_SCOPED_GEMM_G1_TALL, _G1_DENSE, _G1_GRAM,
+# _G2_NARROW, _SPLIT, _PCA, MOJOLEARN_LEGACY_NARROW_SCOPED_GEMM; experiments/apple_fast/gemm/scoped_dispatch.mojo) and the
+# try_scoped_gemm arms here. Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 from gemm.contract import OP_TN
 
 #: lane/apple-fast-gap-linalg2-pca (2026-10-03): PCA_FAST_GRAM_MMA, the FAST +
@@ -156,19 +159,10 @@ def compute_covariance(
             var per = (n_rows + splits - 1) // splits
             per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
             splits = (n_rows + per - 1) // per
-            # Opt-in scoped G1 fit remains HOLD (2026-10-04), source201fe736,
-            # scoped-pca-fit-istella-q-v1: singular/noise oracle errors worsen
-            # under zero allowance. Report serialization incomplete; no PASS
-            # or timing admission. Existing accepted AFN default is fallback.
-            # PCA transform/inverse evidence uses another route/contract;
-            # see docs/apple-fast/GEMM_INLINE_OUTCOMES.md before any retry.
-            if not try_scoped_gemm[True, 2](
-                ctx, cp, xp, xp, n_cols, n_cols, n_rows, 1, n_cols, n_cols, 1, splits, per,
-            ):
-                afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
-                    ctx, AFN_TILE_SQUARE, cp, xp, xp, cp, cp,
-                    n_cols, n_cols, n_rows, afn_strides(OP_TN, n_cols, n_cols, n_rows), splits, per,
-                )
+            afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
+                ctx, AFN_TILE_SQUARE, cp, xp, xp, cp, cp,
+                n_cols, n_cols, n_rows, afn_strides(OP_TN, n_cols, n_cols, n_rows), splits, per,
+            )
             ctx.enqueue_function[scale_in_place_kernel](
                 cov.unsafe_ptr(),
                 Int32(n_cols * n_cols),
