@@ -1275,25 +1275,7 @@ def knn_upload_finite_status(ctx: DeviceContext, mut words: DeviceBuffer[DType.f
     return result
 
 
-def knn_upload_finite_status(
-    ctx: DeviceContext,
-    mut a: DeviceBuffer[DType.float32], na: Int,
-    mut b: DeviceBuffer[DType.float32], nb: Int,
-) raises -> Int32:
-    """`knn_upload_finite_status` over two uploads in the one
-    synchronisation (an index and its queries): 1 when either holds a NaN
-    or an infinity."""
-    var status = ctx.enqueue_create_buffer[DType.int32](1)
-    enqueue_fill[DType.int32](ctx, status, Int32(0))
-    enqueue_finite_status(ctx, a.unsafe_ptr(), na, status.unsafe_ptr(), 0)
-    enqueue_finite_status(ctx, b.unsafe_ptr(), nb, status.unsafe_ptr(), 0)
-    var word = ctx.enqueue_create_host_buffer[DType.int32](1)
-    ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
-    ctx.synchronize()
-    var result = word.unsafe_ptr()[0]
-    _ = word^
-    _ = status^
-    return result
+# TOMBSTONE: knn_upload_finite_status's two-buffer overload (an index and its queries in one status word) deleted 2026-11-09 by lane a8b-device-x-neighbors-rest: its one caller, radius_neighbors_count, tests only the queries now (the index is tested once at fit / archive load). Never reached a release; recoverable at 0ce88411d3.
 
 
 def knn_put_status(status_addr: Int, word: Int32):
@@ -2603,10 +2585,11 @@ def radius_neighbors_count(
     """Pass one: how many neighbours, and where each query's row begins.
 
     `status_addr` (not 0; lane a7b-device-x-neighbors): a host int32 word
-    that receives the finite status of the uploaded index and queries, tested
-    behind the uploads in their synchronisation; on a non-finite word the
-    pass stops there (returns 0, `out_indptr_ptr` unwritten) and the door
-    refuses.
+    that receives the finite status of the uploaded queries, tested behind
+    their upload in its synchronisation; on a non-finite word the pass stops
+    there (returns 0, `out_indptr_ptr` unwritten) and the door refuses. The
+    index is not tested here: it was tested once, at fit or at archive load
+    (lane a8b-device-x-neighbors-rest).
 
     Writes `n_queries + 1` int32 into `out_indptr_ptr`, the CSR row starts,
     and returns the total edge count. The caller sizes its index and distance
@@ -2639,7 +2622,7 @@ def radius_neighbors_count(
     ctx.enqueue_copy(dst_buf=x, src_ptr=index_ptr)
     ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
     if status_addr != 0:
-        var word = knn_upload_finite_status(ctx, x, n_index * n_features, queries, n_queries * n_features)
+        var word = knn_upload_finite_status(ctx, queries, n_queries * n_features)
         knn_put_status(status_addr, word)
         if word != 0:
             return 0

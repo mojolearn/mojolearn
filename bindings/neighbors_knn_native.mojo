@@ -374,7 +374,9 @@ def knn_release(model: PythonObject) raises:
 # scan (`defer_finite`). The GPU entries test the words they upload anyway and
 # return the status word: the fit index behind `knn_index_prepare`'s one
 # upload, the queries behind the resident search/classify/regress upload,
-# both behind `radius_neighbors_count`'s (core/admitted_finite_status.mojo).
+# and a radius query behind `radius_neighbors_count`'s
+# (core/admitted_finite_status.mojo). A radius index is tested once, at fit or
+# archive load (lane a8b-device-x-neighbors-rest).
 # A cast X is refused by its cast and a model-selection fold by its gather.
 # The CPU column (a binding without `knn_index_prepare`) and the RBC search
 # (host addresses) keep one parallel host scan (`knn_host_finite`). Every

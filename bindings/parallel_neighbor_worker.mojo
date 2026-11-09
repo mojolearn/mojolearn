@@ -21,7 +21,6 @@ from bindings.neighbors_knn_native import (
     knn_admit_x, knn_x_tested, knn_device_tests, knn_host_finite, knn_with_status,
 )
 from bindings.admitted_input import admitted_finite_refuse
-from core.host_finite_scan import host_finite_status
 from bindings.neighbors_kde_native import _kde_scores, _kde_release
 from bindings.neighbors_ann_native import _ivf_metric, _ann_key_entry
 from bindings.host_inference_scalars import host_inference_scalar
@@ -166,25 +165,24 @@ def _radius(model: PythonObject, source: PythonObject, kwargs: PythonObject,
     var sort = _flag(py_get(kwargs, "sort_results", False), "sort_results", context)
     if sort and not distances:
         raise Error("ValueError: sort_results=True requires return_distance=True")
-    # Lane a7b: the index (the radius fit does not test it) and a borrowed
-    # query are tested behind radius_neighbors_count's uploads (one status
-    # word); on the CPU column by one parallel host scan each.
+    # Lane a8b-device-x-neighbors-rest: the index was tested ONCE, at fit
+    # (radius_public_lifecycle_pyapi.mojo radius_fit) or at archive load
+    # (host_archive_native.mojo host_archive_radius); only a borrowed query
+    # is tested here, behind radius_neighbors_count's query upload (one
+    # status word) on the GPU binding, by one parallel host scan on the CPU
+    # column. A query of the index itself (source None) is not tested again.
     var q = index
     var status = List[Int32](length=1, fill=Int32(0))
     var count_params = Python.list(index.shape[0], PythonObject(0), index.shape[1], r, fields["_metric_value"],
                                    fields["_metric_arg"])
-    var device = knn_device_tests(binding)
-    if device:
-        _ = py_call(count_params.append, PythonObject(Int(status.unsafe_ptr())))
-    else:
-        # parallel: host_finite_status splits the words across the host's cores
-        admitted_finite_refuse(Int(host_finite_status(Int(py=classical_address(index)), Int(py=index.size))),
-                               String(py_type(model).__name__))
     if source is not None:
         var query = knn_admit_x(source, model, context)
         q = query.keep
-        if not device and not knn_x_tested(query, source, context):
-            knn_host_finite(model, query)
+        if not knn_x_tested(query, source, context):
+            if knn_device_tests(binding):
+                _ = py_call(count_params.append, PythonObject(Int(status.unsafe_ptr())))
+            else:
+                knn_host_finite(model, query)
         _ = query^
     if Int(py=q.shape[1]) != Int(py=index.shape[1]):
         raise Error("ValueError: input feature count differs from fit")

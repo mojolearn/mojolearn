@@ -1097,8 +1097,9 @@ def radius_neighbors_count_binding(
     var mtr = Int(py=params[4])
     var marg = Float32(Float64(py=params[5]))
     # Lane a7b-device-x-neighbors: params[6], when present, is the host
-    # address of the int32 finite status word of the uploaded index and
-    # queries (0 = finite; the door refuses otherwise).
+    # address of the int32 finite status word of the uploaded queries (0 =
+    # finite; the door refuses otherwise). The index was tested once at fit
+    # or archive load (lane a8b-device-x-neighbors-rest).
     var status = 0 if len(params) == 6 else Int(py=params[6])
     if status < 0 or status % 4 != 0:
         raise Error("radius_neighbors_count: the status address must be a positive int32-aligned address")
