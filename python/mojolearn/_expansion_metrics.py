@@ -2295,8 +2295,8 @@ _OP = _operation_codes()
 _native_family_bridge.tables(family_metrics_ops=dict(_OPS), family_metrics_terms=dict(_TERM),
                              family_metrics_prog_context=_PROG_CONTEXT,
                              family_metrics_undefined=UndefinedMetricWarning)
-# family_metrics_real and family_mexp_integral (context entries no native owner read) deleted 2026-11-09,
-# lane p5-cpu-route-relabel-and-dead-code (docs/TOMBSTONES.md "Dead code found by the Python audits").
+# TOMBSTONE: family_metrics_real, family_mexp_integral (dead context entries: no native owner read them) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.
+# Restore: git apply experiments/removed/dead_code_p5_20261109.patch
 
 from ._native_owner_lifetime import connect_owner_context as _connect_metric_owners
 _connect_metric_owners(_NATIVE_CONTEXT)

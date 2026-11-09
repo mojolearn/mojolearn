@@ -128,6 +128,10 @@ _M3_CHUNK_SIZE = 64
 _M3_NUM_ROPE_ANGLES = 32
 
 
+# TOMBSTONE: _take (dead code: no caller; the native constructor takes the weight dict) deleted 2026-11-09 by 78dffe4a08; code recoverable at 78dffe4a08^.
+# Restore: git show 78dffe4a08^:python/mojolearn/_mamba_impl.py (the commit also moved the retained block drivers to tests/_mamba_block_reference.py)
+
+
 class Mamba1State:
     """Recurrent state of a `Mamba1Block`, owned by the caller.
 

@@ -541,6 +541,15 @@ in the tables after the sections.
 | [`_transformer_decode_host_tokens` (decode door host loop)](#transformer-on-the-attention-step-op-2026-11-09) | Neural (TransformerDecodeSession.decode, host) | removed (superseded: `transformer_decode_steps`, one call) | 2026-11-09 | [TRANSFORMER_DECODE_HOST_TOKEN_LOOP.patch](../experiments/removed/TRANSFORMER_DECODE_HOST_TOKEN_LOOP.patch) |
 | [`TransformerDecodeHandle.native_handle` (public session provider arm)](#transformer-on-the-attention-step-op-2026-11-09) | Neural (TransformerDecodeSession, MOJOLEARN_NEURAL_NATIVE_DISPATCH) | removed (superseded: the step-op session) | 2026-11-09 | [TRANSFORMER_DECODE_PROVIDER_ARM.patch](../experiments/removed/TRANSFORMER_DECODE_PROVIDER_ARM.patch) |
 | [`TransformerDecodeSession` block structs and `TransformerSession.backward` (session-owned runtimes)](#transformerblock-causallm-layers-and-fixed15-sessions-on-the-attention-step-op-2026-11-09) | Neural (TransformerBlock, TransformerDecodeSession, CausalLM layers) | removed (superseded: the attention step op) | 2026-11-09 | [TRANSFORMER_DECODE_SESSION_STRUCTS.patch](../experiments/removed/TRANSFORMER_DECODE_SESSION_STRUCTS.patch) |
+| [`_cv_fast_defines` (model_selection FAST define reader)](#dead-code-found-by-the-python-audits-2026-11-09) | Model selection (cross-validation) | removed (dead code: no caller) | 2026-11-09 | [dead_code_p5_20261109.patch](../experiments/removed/dead_code_p5_20261109.patch) |
+| [`_fit_score_fold` (Python fold fit and score)](#dead-code-found-by-the-python-audits-2026-11-09) | Model selection (cross-validation) | removed (dead code: no caller) | 2026-11-09 | [dead_code_p5_20261109.patch](../experiments/removed/dead_code_p5_20261109.patch) |
+| [`_proba_column1` (Python proba column reader)](#dead-code-found-by-the-python-audits-2026-11-09) | Model selection (scorers) | removed (dead code: no caller) | 2026-11-09 | [dead_code_p5_20261109.patch](../experiments/removed/dead_code_p5_20261109.patch) |
+| [`family_msel_native`, `family_msel_xm`, `family_msel_fast_defines` (context entries)](#dead-code-found-by-the-python-audits-2026-11-09) | Model selection (native context) | removed (dead code: no native reader) | 2026-11-09 | [dead_code_p5_20261109.patch](../experiments/removed/dead_code_p5_20261109.patch) |
+| [`family_metrics_real`, `family_mexp_integral` (context entries)](#dead-code-found-by-the-python-audits-2026-11-09) | Metrics (native context) | removed (dead code: no native reader) | 2026-11-09 | [dead_code_p5_20261109.patch](../experiments/removed/dead_code_p5_20261109.patch) |
+| [`CausalLM._make_blocks`, `_check_positions` and `CausalLM._ids` (Python helpers)](#dead-code-found-by-the-python-audits-2026-11-09) | Neural (CausalLM) | removed (dead code: no caller) | 2026-11-09 | [dead_code_p5_20261109.patch](../experiments/removed/dead_code_p5_20261109.patch) |
+| [`make_blocks` (ParallelCausalLM native operation and its Python caller)](#dead-code-found-by-the-python-audits-2026-11-09) | Neural (ParallelCausalLM) | removed (dead code: no caller) | 2026-11-09 | [dead_code_p5_20261109.patch](../experiments/removed/dead_code_p5_20261109.patch) |
+| [`x_decomp_dev_eigh` branch of the linalg kit's eigh](#dead-code-found-by-the-python-audits-2026-11-09) | Linalg (eigh, svd hermitian) | removed (dead code: unreachable) | 2026-11-09 | [dead_code_p5_20261109.patch](../experiments/removed/dead_code_p5_20261109.patch) |
+| [`_take` (Mamba weight-dict order helper)](#dead-code-found-by-the-python-audits-2026-11-09) | Neural (Mamba blocks) | removed (dead code: no caller) | 2026-11-09 | none (recoverable at `78dffe4a08`^) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -5665,3 +5674,34 @@ Integration branch `integ/pre-0867-w5` (wave-4 merge). Not experiments: duplicat
   `core/weight_epoch.mojo`): an unchanged weight is not uploaded again. Behaviour: a Mamba block's weight arrays become
   read-only after a backward, as after a generation forward; in-place edits are refused by the array. Bits: none.
 - Never reached main: no patches; code recoverable at the lane shas above.
+
+
+## Dead code found by the Python audits (2026-11-09)
+
+- What it was: Python helpers, native context entries, one native operation and one kernel-route branch that no
+  package code, native owner, tool or identity lane reached. The two Python audits of 2026-11-08
+  (`~/mojolearn-evidence/py-audit-a-imports.md`, `py-audit-b-callpaths.md` section 7 "Removal candidates") listed them;
+  lane p5-cpu-route-relabel-and-dead-code checked each with `rg -w` over python/, bindings/, providers/, tools/ and
+  the kernel trees before deleting it.
+- Verdict: removed as dead code, not an experiment. No timing or quality: no live path changed, so no identity bits move.
+
+| name | where | deleted by | why it was dead |
+|---|---|---|---|
+| `_cv_fast_defines` | `python/mojolearn/model_selection.py` | `cb99d1b18c` | its one reader was the context entry `family_msel_fast_defines`, which no native owner read |
+| `_fit_score_fold` | `python/mojolearn/model_selection.py` | `cb99d1b18c` | no caller; `bindings/msel_cv.mojo` fits and scores every fold natively |
+| `_proba_column1` | `python/mojolearn/model_selection.py` | `cb99d1b18c` | no caller; the native scorer reads column 1 itself |
+| `family_msel_native`, `family_msel_xm`, `family_msel_fast_defines` | `model_selection._NATIVE_CONTEXT` | `cb99d1b18c` | no `context["..."]` read in any binding (the stratification test that poisoned `family_msel_xm` keeps its `_expansion_metrics._binding` poison) |
+| `family_metrics_real`, `family_mexp_integral` | `_expansion_metrics` family tables | `cb99d1b18c` | no native reader |
+| `CausalLM._make_blocks`, `CausalLM._ids`, `CausalLM._check_positions` | `python/mojolearn/models/causal_lm.py` | `57b86ba5ac` | no caller; the native owner builds the blocks and admits ids and positions |
+| `ParallelCausalLM._make_blocks` and the `make_blocks` operation | `models/parallel_causal_lm.py`, `bindings/parallel_causal_native.mojo` | `57b86ba5ac` | the Python method had no caller and was the operation's only caller |
+| device branch of `LinKit.eigh` (`x_decomp_dev_eigh`) | `bindings/linalg_ops_kit.mojo` | `f2b6b13bd3` | both callers (`_lin_eigh`, `svd(hermitian=True)` in `bindings/linalg_ops_decomp.mojo`) pass a freshly borrowed host matrix, so `on_device(a)` was never true; the entry stays (other owners use it) |
+| `_take` | `python/mojolearn/_mamba_impl.py` | `78dffe4a08` | no caller; the native constructor takes the weight dict |
+
+- Moved, not deleted, in the same lane (test and verification oracles out of the product package): `_array._ArrayReference`
+  and its helper wrappers to `python/mojolearn/tests/_array_reference.py`; the Mamba block drivers
+  (`Mamba{1,2,3}Block._call`, `Mamba3Block._call_fresh`) and their helpers to `python/mojolearn/tests/_mamba_block_reference.py`;
+  `_bpe_trainer.py` to `python/mojolearn/tests/_bpe_trainer.py`; the schedules' exact-route references
+  (`_Schedule._lr_at_slow`, `OneCycleLR._lr_at_slow`) into `tools/sched_table_check.py`; `write_safetensors` to
+  `_causal_lm_fixtures.py`; `tokenizer._byte_to_char` to `_tokenizer_synthetic.byte_to_char`.
+- Recoverable at each commit's parent. Patch: `experiments/removed/dead_code_p5_20261109.patch` (all rows but `_take`,
+  whose commit also moved the block drivers: `git show 78dffe4a08^:python/mojolearn/_mamba_impl.py`).

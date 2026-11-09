@@ -480,7 +480,7 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
 # Restore: git apply experiments/removed/dead_python_loops.patch
 
 
-# TOMBSTONE: _cv_fast_defines (dead code: its only reader was the unread context entry family_msel_fast_defines) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.
+# TOMBSTONE: _cv_fast_defines, family_msel_fast_defines, family_msel_native, family_msel_xm (dead code: no native owner read the three context entries, and _cv_fast_defines fed only family_msel_fast_defines) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.
 # Restore: git apply experiments/removed/dead_code_p5_20261109.patch
 
 

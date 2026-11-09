@@ -1,0 +1,235 @@
+diff --git a/python/mojolearn/_expansion_metrics.py b/python/mojolearn/_expansion_metrics.py
+index c791d94066..725670d0d2 100644
+--- a/python/mojolearn/_expansion_metrics.py
++++ b/python/mojolearn/_expansion_metrics.py
+@@ -2294,9 +2294,8 @@ from ._native_ops import codes as _operation_codes  # noqa: E402
+ _OP = _operation_codes()
+ _native_family_bridge.tables(family_metrics_ops=dict(_OPS), family_metrics_terms=dict(_TERM),
+                              family_metrics_prog_context=_PROG_CONTEXT,
+-                             family_metrics_undefined=UndefinedMetricWarning)
+-# family_metrics_real and family_mexp_integral (context entries no native owner read) deleted 2026-11-09,
+-# lane p5-cpu-route-relabel-and-dead-code (docs/TOMBSTONES.md "Dead code found by the Python audits").
++                             family_metrics_undefined=UndefinedMetricWarning, family_metrics_real=numbers.Real,
++                             family_mexp_integral=numbers.Integral)
+ 
+ from ._native_owner_lifetime import connect_owner_context as _connect_metric_owners
+ _connect_metric_owners(_NATIVE_CONTEXT)
+diff --git a/python/mojolearn/model_selection.py b/python/mojolearn/model_selection.py
+index 846a6f8dfb..dd7c96f506 100644
+--- a/python/mojolearn/model_selection.py
++++ b/python/mojolearn/model_selection.py
+@@ -38,6 +38,7 @@ from ._mode import _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
+ # The splitters' random draws (lane/metrics): a module-level import, so the
+ # lane selector sees model_selection reach the x_metrics binding (the native
+ # owner resolves it through this binding getter).
++from ._expansion_metrics import _binding as _x_metrics_binding
+ 
+ #: The binding the splitters' permutations and the scorers' added metrics run
+ #: on (python/mojolearn/_expansion_metrics.py `_BINDING`). Named here because
+@@ -480,16 +481,33 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
+ # Restore: git apply experiments/removed/dead_python_loops.patch
+ 
+ 
+-# TOMBSTONE: _cv_fast_defines (dead code: its only reader was the unread context entry family_msel_fast_defines) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.
+-# Restore: git apply experiments/removed/dead_code_p5_20261109.patch
++# ---------------------------------------------------------------------------
++# FAST + Apple cross-val candidates (recovered from
++# lane/apple-fast-resample@50b96e795, lane apple-fast-rec-resample
++# 2026-10-04). Switched by the resample binding's `resample_fast_defines`
++# mask (build-time defines), never by the environment. Off on every other
++# tier and build.
++# ---------------------------------------------------------------------------
++
++
++def _cv_fast_defines():
++    """The resample binding's FAST define mask (binding acquisition; 0 off
++    the FAST tier), read by the native cross-validation owner."""
++    from . import resample as _resample
++    return _resample.fast_defines()
+ 
+ 
+ # TOMBSTONE: _cv_fast_on, _native_default_cv, _CV_TRUST_FOLDS_BIT (helpers of the deleted _prepare_folds; bindings/msel_cv.mojo msel_fast_on / msel_native_default_cv run them) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
+ # Restore: git apply experiments/removed/dead_python_loops.patch
+ 
+ 
+-# TOMBSTONE: _fit_score_fold (dead code: no caller; bindings/msel_cv.mojo fits and scores each fold natively) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.
+-# Restore: git apply experiments/removed/dead_code_p5_20261109.patch
++def _fit_score_fold(fitted, X_train, y_train, X_test, y_test, scoring):
++    """Shared serial/worker operation; the caller supplies a fresh clone."""
++    fitted.fit(X_train, y_train)
++    score = fitted.score(X_test, y_test) if scoring is None else scoring(fitted, X_test, y_test)
++    if not isinstance(score, numbers.Real):
++        raise TypeError('scoring must return a real scalar')
++    return float(score)
+ 
+ 
+ # ===========================================================================
+@@ -1412,8 +1430,26 @@ class _Scorer:
+ _BINARY_PROBA = {'roc_auc', 'average_precision', 'neg_brier_score', 'neg_log_loss', 'top_k_accuracy'}
+ 
+ 
+-# TOMBSTONE: _proba_column1 (dead code: no caller; the native scorer reads column 1 itself) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.
+-# Restore: git apply experiments/removed/dead_code_p5_20261109.patch
++def _proba_column1(pred):
++    """Column 1 of an (n, 2) float32 or float64 buffer as a float32 Array,
++    read on the device (`msel_proba_column`, lane cpu2-l4-modelsel): one
++    kernel takes column 1 straight out of the row-major block and narrows a
++    float64 to nearest even (the `(float)` cast), so the host makes no cast,
++    no transpose and no column copy. None (a Python list from an external
++    estimator, or another shape) hands it to the caller's route."""
++    if isinstance(pred, (list, tuple)):
++        return None
++    try:
++        a = _materialize(pred, 'pred')[0]
++    except (TypeError, ValueError):
++        return None
++    if a.ndim != 2 or a.shape[1] != 2 or a.dtype not in ('<f4', '<f8') or a.shape[0] < 1:
++        return None
++    n = a.shape[0]
++    c = a._as_c()
++    out = empty((n,), '<f4')
++    _native('msel_proba_column')(_addr_ro(c), _MSEL_CODE[c.dtype], n, 2, 1, _addr(out))
++    return out
+ 
+ 
+ def make_scorer(score_func, *, response_method='predict', greater_is_better=True, **kwargs):
+@@ -2175,7 +2211,7 @@ _native_family_bridge.tables(
+         StratifiedShuffleSplit=StratifiedShuffleSplit, PredefinedSplit=PredefinedSplit, _IterableCV=_IterableCV,
+         ParameterGrid=ParameterGrid, ParameterSampler=ParameterSampler, GridSearchCV=GridSearchCV,
+         RandomizedSearchCV=RandomizedSearchCV, Array=Array),
+-    family_msel_miss=object(),
++    family_msel_native=_native, family_msel_xm=_x_metrics_binding, family_msel_miss=object(),
+     family_msel_integral=numbers.Integral, family_msel_codes=dict(_MSEL_CODE),
+     family_msel_native_code=dict(_ARRAY_CODE), family_msel_reduce_integral=_REDUCE_INTEGRAL,
+     family_msel_native_encode=frozenset(_NATIVE_ENCODE),
+@@ -2184,7 +2220,8 @@ _native_family_bridge.tables(
+     family_msel_splitters=(KFold, StratifiedKFold, GroupKFold, StratifiedGroupKFold, TimeSeriesSplit, LeaveOneOut,
+                            LeavePOut, LeaveOneGroupOut, LeavePGroupsOut, RepeatedKFold, RepeatedStratifiedKFold,
+                            ShuffleSplit, GroupShuffleSplit, StratifiedShuffleSplit, PredefinedSplit, _IterableCV),
+-    family_msel_schema=SPLIT_DESCRIPTOR_SCHEMA, family_msel_arena_io=_arena_io)
++    family_msel_schema=SPLIT_DESCRIPTOR_SCHEMA, family_msel_arena_io=_arena_io,
++    family_msel_fast_defines=_cv_fast_defines)
+ 
+ from ._native_msel_inputs import connect as _connect_msel_inputs  # noqa: E402
+ _connect_msel_inputs(_NATIVE_CONTEXT, _RESIDENT_CONTEXT)
+diff --git a/bindings/parallel_causal_native.mojo b/bindings/parallel_causal_native.mojo
+index 53fbac285d..2a7b64c4d0 100644
+--- a/bindings/parallel_causal_native.mojo
++++ b/bindings/parallel_causal_native.mojo
+@@ -997,9 +997,12 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
+         var destination = _parallel_block_fields(mods, args[0])
+         var created = _parallel_causal_block(mods, args[1], _parallel_word(args[2]), args[3])
+         _ = py_call(destination.update, _parallel_block_fields(mods, created))
+-    # TOMBSTONE: operation "make_blocks" (dead code: its one caller, ParallelCausalLM._make_blocks, had no
+-    # caller) deleted 2026-11-09 by 57b86ba5ac; code recoverable at 57b86ba5ac^.
+-    # Restore: git apply experiments/removed/dead_code_p5_20261109.patch
++    elif operation == "make_blocks":
++        model_sequence(mods, args[1])
++        var result = p[].bi.list()
++        for i in range(len(args[1])):  # driver-loop: over legacy private layer-construction inputs
++            _ = py_call(result.append, _parallel_causal_block(mods, args[0], i, args[1][i]))
++        return result
+     elif operation == "state_init":
+         _parallel_causal_attach(mods, args[0], args[1], args[2])
+     elif operation == "state_snapshot":
+diff --git a/python/mojolearn/models/causal_lm.py b/python/mojolearn/models/causal_lm.py
+index 488044aad5..4ef88fbb75 100644
+--- a/python/mojolearn/models/causal_lm.py
++++ b/python/mojolearn/models/causal_lm.py
+@@ -18,7 +18,7 @@ from .. import _backend
+ from .. import _numeric_profile
+ from .. import lowbit as _lowbit
+ from .._array import Array
+-from .._buffer import _native, addr, addr_ro, all_finite, empty
++from .._buffer import _native, addr, addr_ro, all_finite, as_i32_c, empty
+ from .._bufcheck import is_integer, memcopy, probe
+ from .config import (FIXED_TODAY, INTERFACE_DEFAULTS, POSITION_CEILING, HFConfig,
+                      UnsupportedModel, plan_for)
+@@ -238,10 +238,11 @@ class CausalLM:
+                                         (weight_format, max_positions, device, numeric_profile),
+                                         _NATIVE_CONTEXT)
+ 
+-    # TOMBSTONE: CausalLM._make_blocks, _ids, _check_positions (dead code: no caller; the native
+-    # owner builds blocks and admits ids and positions) deleted 2026-11-09 by 57b86ba5ac; code
+-    # recoverable at 57b86ba5ac^.
+-    # Restore: git apply experiments/removed/dead_code_p5_20261109.patch
++    # The old owner is retained only for ParallelCausalLM's existing RPC path.
++    # It remains explicit runtime debt until that transport has native ownership.
++
++    def _make_blocks(self, cls, layers, kwargs):
++        return [cls(w, **kwargs) for w in layers]  # glue: builds one block per model layer
+ 
+     # ------------------------------------------------------------ loading
+     @classmethod
+@@ -265,6 +266,36 @@ class CausalLM:
+         """Return tensors by checkpoint name."""
+         return _NATIVE.causal_lm_parameters(self)
+ 
++    def _ids(self, x, what, step=False):
++        pb = probe(x)
++        if not is_integer(pb.format):
++            raise TypeError(f"mojolearn {what}: ids must be integer, got buffer format {pb.format!r}")
++        if step:
++            if len(pb.shape) not in (1, 2) or (len(pb.shape) == 2 and pb.shape[1] != 1):
++                raise ValueError(f"mojolearn {what}: ids must be (B,) or (B, 1) for a step, got shape {pb.shape}")
++            ids = as_i32_c(x, ndim=None, name="ids")[0].reshape((int(pb.shape[0]), 1))
++        else:
++            if len(pb.shape) != 2:
++                raise ValueError(f"mojolearn {what}: ids must be (B, L), got shape {pb.shape}")
++            ids = as_i32_c(x, ndim=2, name="ids")[0]
++        b, l = int(ids.shape[0]), int(ids.shape[1])
++        if b < 1 or l < 1:
++            raise ValueError(f"mojolearn {what}: B and L must be positive, got ({b}, {l})")
++        if ids.min() < 0 or ids.max() >= self.vocab_size:
++            raise ValueError(f"mojolearn {what}: ids must be in [0, {self.vocab_size})")
++        return ids
++
++    def _check_positions(self, what, state, l):
++        have = state.positions if state is not None else 0
++        if self.max_positions is not None and have + l > self.max_positions:
++            raise ValueError(
++                f"mojolearn {what}: {have} + {l} positions exceed max_positions={self.max_positions} "
++                "(the transformer block's absolute-position ceiling is 8192, DEVIATION 812)")
++        if state is not None and state.positions + l > state.max_tokens:
++            raise ValueError(
++                f"mojolearn {what}: the state was allocated for {state.max_tokens} tokens and holds "
++                f"{state.positions}; {l} more do not fit")
++
+     def _run(self, ids, state, step, what):
+         return _NATIVE.causal_lm_forward(self, ids, state, step)
+ 
+diff --git a/python/mojolearn/models/parallel_causal_lm.py b/python/mojolearn/models/parallel_causal_lm.py
+index 78108ce041..bc718edc3e 100644
+--- a/python/mojolearn/models/parallel_causal_lm.py
++++ b/python/mojolearn/models/parallel_causal_lm.py
+@@ -120,6 +120,9 @@ class ParallelCausalLM(CausalLM):
+              numeric_profile=None):
+         return _native_parallel_causal("load", (cls, path, layer_devices, (weight_format, max_positions, numeric_profile)), _CAUSAL_CONTEXT)
+ 
++    def _make_blocks(self, cls, layers, kwargs):
++        return _native_parallel_causal("make_blocks", (self, layers, kwargs))
++
+     def _rpc(self, device, operation, args):
+         return _native_parallel_causal("rpc", (self, device, operation, args))
+ 
+diff --git a/bindings/linalg_ops_kit.mojo b/bindings/linalg_ops_kit.mojo
+index afe9301bc1..f7ba68a8ae 100644
+--- a/bindings/linalg_ops_kit.mojo
++++ b/bindings/linalg_ops_kit.mojo
+@@ -626,11 +626,11 @@ struct LinKit(Movable):
+         var w = self.zeros(1, n)
+         v = self.zeros(n, n)
+         var params = Python.list(PythonObject(n), PythonObject(uplo))
+-        # TOMBSTONE: the device-resident x_decomp_dev_eigh branch (dead code: both callers,
+-        # linalg_ops_decomp `_lin_eigh` and `svd(hermitian=True)`, pass a freshly borrowed host
+-        # matrix, so `on_device(a)` was never true) deleted 2026-11-09 by f2b6b13bd3; code recoverable
+-        # at f2b6b13bd3^.
+-        # Restore: git apply experiments/removed/dead_code_p5_20261109.patch
++        if n >= 1 and self.c(a) == n and self.on_device(a) and self.has("x_decomp_dev_eigh"):
++            _ = family_call(self._hot("x_decomp_dev_eigh"), PythonObject(self.matrices[a].device), self.address(w),
++                            self.address(v), params)
++            _ = w  # keep the Python object alive through the native call above
++            return w
+         _ = family_call(self._hot("x_decomp_eigh"), self.address(a), self.address(w), self.address(v), params)
+         _ = w  # keep the Python object alive through the native call above
+         return w
