@@ -36,6 +36,10 @@ from autograd.block_step_ops import (
     BlockStepScratch, ATTN_STEP_TAG, attn_step_backward, step_tag_code, mamba_step_backward,
 )
 from autograd.lm_head_v2_op import LM_HEAD_V2_TAG, lm_head_v2_backward_device
+from autograd.cnn_block_op import (
+    CNN_CONV_BLOCK_TAG, CNN_LINEAR_TAG, CNN_HOST_BLOCK_BACKWARD, CNN_HOST_LINEAR_BACKWARD, cnn_block_words,
+    cnn_block_backward_device, cnn_linear_backward_device,
+)
 
 comptime _ScratchRef = MutPointer[BlockStepScratch, MutUntrackedOrigin]
 
@@ -50,13 +54,18 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
     def supports(self, tag: Int) -> Bool:
         if step_tag_code(tag) != 0:
             return self.scratch != 0
-        if tag == LM_HEAD_V2_TAG:
+        if tag == LM_HEAD_V2_TAG or tag == CNN_CONV_BLOCK_TAG or tag == CNN_LINEAR_TAG:
             return True
         return ImportRules().supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         if tag == LM_HEAD_V2_TAG:
             # the rule writes all of d_hidden and d_weight
+            return False
+        if tag == CNN_CONV_BLOCK_TAG or tag == CNN_LINEAR_TAG:
+            # the x_cnn entries overwrite every word of dx, dW and db (the
+            # hand epoch reused those buffers with no fill); a block's dx
+            # left unwritten belongs to an input that needs no gradient
             return False
         if step_tag_code(tag) != 0:
             # edge 0 (x): the rule writes all of d_x; edge 1 (the packed
@@ -65,7 +74,7 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
         return ImportRules().zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
-        if tag == LM_HEAD_V2_TAG:
+        if tag == LM_HEAD_V2_TAG or tag == CNN_CONV_BLOCK_TAG or tag == CNN_LINEAR_TAG:
             return False
         if step_tag_code(tag) != 0:
             return False
@@ -115,5 +124,40 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
                 var hb: List[FP] = [gradients[0], gradients[1], inputs[0], inputs[1], saved.p0, saved.p1, saved.p2,
                                     upstream]
                 ex.lm_head_v2_host(True, hb, saved.i0, saved.i1, saved.i2)
+            return
+        if tag == CNN_CONV_BLOCK_TAG:
+            # saved: p0 the pool winners, p1 / p2 the kept im2col matrix and
+            # conv output (null: recomputed); i0..i3 N, C, H, W, i4 OC, i5 k,
+            # i6 pad, i7 pool, i8 pool size, i9 dx wanted, i10 kept
+            # (OpsSession._cnn_conv_block). CnnRules._block's call, verbatim.
+            if len(gradients) != 3 or len(inputs) != 3:
+                raise Error("ops: cnn_conv_block backward takes [x, w, b]")
+            var pool = saved.i7 != 0
+            var need_dx = saved.i9 != 0
+            var wd = cnn_block_words(saved.i0, saved.i1, saved.i2, saved.i3, saved.i4, saved.i5, saved.i6, pool, saved.i8)
+            var cprm = wd[0].copy()
+            var pprm = wd[1].copy()
+            comptime if E.IS_DEVICE:
+                cnn_block_backward_device(inputs[0], inputs[1], inputs[2], upstream, saved.p0, cprm, pprm, pool, need_dx,
+                                          gradients[0], gradients[1], gradients[2], saved.p1, saved.p2)
+            else:
+                var kept = saved.i10 != 0
+                var hb: List[FP] = [inputs[0], inputs[1], inputs[2], upstream, saved.p0, gradients[0], gradients[1],
+                                    gradients[2], saved.p1 if kept else upstream, saved.p2 if kept else upstream]
+                var hw: List[Int] = [1 if pool else 0, 1 if need_dx else 0, 1 if kept else 0]
+                ex.cnn_op_host(CNN_HOST_BLOCK_BACKWARD, hb, cprm, pprm, hw)
+            return
+        if tag == CNN_LINEAR_TAG:
+            # saved: i0 rows, i1 inputs, i2 outputs (OpsSession._cnn_linear).
+            # CnnRules._head's call, verbatim.
+            if len(gradients) != 3 or len(inputs) != 3:
+                raise Error("ops: cnn_linear backward takes [h, w, b]")
+            comptime if E.IS_DEVICE:
+                cnn_linear_backward_device(inputs[0], inputs[1], upstream, saved.i0, saved.i1, saved.i2,
+                                           gradients[0], gradients[1], gradients[2])
+            else:
+                var hb: List[FP] = [inputs[0], inputs[1], upstream, gradients[0], gradients[1], gradients[2]]
+                var hw: List[Int] = [saved.i0, saved.i1, saved.i2]
+                ex.cnn_op_host(CNN_HOST_LINEAR_BACKWARD, hb, List[Int32](), List[Int32](), hw)
             return
         ImportRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
