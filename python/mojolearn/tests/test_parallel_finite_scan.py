@@ -42,7 +42,7 @@ def _fitters():
         "ridge": lambda X: ml.Ridge().fit(X, y),
         "kmeans": lambda X: ml.KMeans(n_clusters=3, n_init=1, random_state=0).fit(X),
         "pca": lambda X: ml.PCA(n_components=4).fit(X),
-        "scaler": lambda X: ml.StandardScaler().fit(X),
+        # StandardScaler accepts NaN like scikit-learn (allow-nan); it never refused non-finite input, so it is not a finite-scan door
     }
 
 
