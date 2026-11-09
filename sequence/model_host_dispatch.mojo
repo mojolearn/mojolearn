@@ -9,8 +9,8 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_report, native_descriptor_words
 from autograd.model_descriptor import MODEL_ABI_NAME, MODEL_FIT_LABELS, NativeModelRequest, model_request_execute
 from sequence.neural_model_dispatch import PROGRAM_HOST_RUN, PROGRAM_IMPORT, PROGRAM_DEVICE_RUN, SESSION_OPEN, SESSION_CLOSE, RNN_FIT, MODEL_LABELS, MODEL_ARGMAX, NeuralModelRequest, neural_model_execute
-from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT
-from sequence.cnn_classifier_program import cnn_fit_program, cnn_predict_program
+from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT, CNN_OPEN
+from sequence.cnn_classifier_program import cnn_fit_program, cnn_open_program, cnn_predict_program
 from sequence.model_outputs_host import model_output_host
 from sequence.exec import HostExec
 from core.label_cast import host_unique_inverse_cast
@@ -60,15 +60,23 @@ def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: In
             ops_session_close[HostExec, OPS_HOST](addresses[0])
             MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = 0
             return 0
-        if op == CNN_FIT or op == CNN_PREDICT:
+        if op == CNN_FIT or op == CNN_PREDICT or op == CNN_OPEN:
             # lane x8-cnn-on-executor: CNNClassifier as one captured program
-            # (Program.fit) and its inference forward, on a fresh executor
+            # (Program.fit) on a fresh executor; lane x8b: predict replays the
+            # forward on the resident registry session CNN_OPEN made (the
+            # binding opens it with the GIL held, as SESSION_OPEN)
             var cnn = NeuralModelRequest(op, aa, na, pp, np, ff, nf)
             var written = 0
             if op == CNN_FIT:
                 written = cnn_fit_program[HostExec](HostExec(), cnn.addresses, cnn.options, cnn.floats)
+            elif op == CNN_OPEN:
+                if nf != 0:
+                    raise Error("native CNN: the resident open takes no scalar descriptors")
+                written = cnn_open_program[HostExec, OPS_HOST](HostExec(), cnn.addresses, cnn.options)
             else:
-                written = cnn_predict_program[HostExec](HostExec(), cnn.addresses, cnn.options)
+                if nf != 0:
+                    raise Error("native CNN: predict takes no scalar descriptors")
+                written = cnn_predict_program[HostExec, OPS_HOST](cnn.addresses, cnn.options)
             MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = written
             return 0
         var ex = HostExec()

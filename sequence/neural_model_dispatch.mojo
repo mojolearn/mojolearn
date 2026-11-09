@@ -23,8 +23,11 @@ comptime PROGRAM_HOST_RUN = 17
 # lane x8-cnn-on-executor: CNNClassifier fit and predict on the program
 # executor (sequence/cnn_classifier_program.mojo)
 comptime CNN_FIT = 18
+# lane x8b-cnn-resident-predict: CNN_PREDICT runs on the resident session
+# CNN_OPEN made (the fitted parameters uploaded once)
 comptime CNN_PREDICT = 19
-comptime MODEL_OPERATION_COUNT = 20
+comptime CNN_OPEN = 20
+comptime MODEL_OPERATION_COUNT = 21
 
 
 struct NeuralModelRequest(Movable):
@@ -33,7 +36,7 @@ struct NeuralModelRequest(Movable):
     var floats: List[Float64]
 
     def __init__(out self, op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int) raises:
-        if op < RNN_FIT or (op >= SESSION_OPEN and op != CNN_FIT and op != CNN_PREDICT) or op >= MODEL_OPERATION_COUNT:
+        if op < RNN_FIT or (op >= SESSION_OPEN and op != CNN_FIT and op != CNN_PREDICT and op != CNN_OPEN) or op >= MODEL_OPERATION_COUNT:
             raise Error("native model: unknown operation")
         self.addresses = native_descriptor_words(aa, na)
         self.options = native_descriptor_words(pp, np)
