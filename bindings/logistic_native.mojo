@@ -467,6 +467,8 @@ struct _QueryX(Movable):
                                _name(model))
 
 
+# TOMBSTONE: A8C_LOGISTIC_QUERY_HOST_SCAN (removed: superseded by the entries' device test of their upload) deleted 2026-11-09 by fb8823ee0a; code recoverable at fb8823ee0a^.
+# Restore: git apply experiments/removed/A8C_LOGISTIC_QUERY_HOST_SCAN.patch
 def _query_x(model: PythonObject, fields: PythonObject, source: PythonObject, context: PythonObject) raises -> _QueryX:
     """X for decision_function / predict / predict_proba. The door no longer
     scans a borrowed X on the host (lane a8c): `defer_finite`, and every

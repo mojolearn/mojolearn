@@ -513,10 +513,11 @@ def _member_session(member: PythonObject, x: AdmittedX, row_major: Bool, choice:
     infinity, on the device; the host column in its parallel scan) and is
     refused with TREES_NONFINITE. `choice` is 'exact' or 'share'
     (`_ada_session_choice`)."""
-    # Lane a8c-device-x-linear-prep-rfe: the host scan of X that came before
-    # the open (trees_finite_f32, an O(n d) pass the session's own device
-    # scan repeats) is deleted; `x_finite` went with it. A binary without a
-    # session entry leaves each member fit to test X (its forest door).
+    # TOMBSTONE: A8C_BOOST_HOST_FINITE_SCAN (removed: superseded by the session open's device test) deleted 2026-11-09 by aef0ae764d; code recoverable at aef0ae764d^.
+    # Restore: git apply experiments/removed/A8C_BOOST_HOST_FINITE_SCAN.patch
+    # (the host scan of X before the open, an O(n d) pass the session's own
+    # device scan repeats; `x_finite` went with it. A binary without a
+    # session entry leaves each member fit to test X, its forest door.)
     var mode = _member_mode(member, context)
     var native = trees_table(context, mode, "_mojolearn_rf")
     if trees_entry(native, "rf_data_session_open") is None:
@@ -1670,11 +1671,10 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedX, y32: Ad
     py_setitem(fields, "_bag_at", PythonObject(None))
     var depth_param = fields["max_depth"]
     var max_depth = PythonObject(None) if depth_param is None or Int(py=_int(depth_param)) <= 0 else _int(depth_param)
-    # TOMBSTONE: the DART door's host finite scan of X (trees_finite_f32, the scan of the forest data session
-    # the Python fit opened and the round never read) deleted 2026-11-09 by lane a8c-device-x-linear-prep-rfe:
-    # `x_trees_dart_open` tests the X it uploads (xtrees/dart_device.mojo; the host column in xtrees/dart_host.mojo)
-    # and the refusal is mapped to TREES_NONFINITE at the open below. Never reached main as a define: recoverable at
-    # 0ce88411d3.
+    # TOMBSTONE: A8C_BOOST_HOST_FINITE_SCAN (removed: superseded by the open's device test) deleted 2026-11-09 by aef0ae764d; code recoverable at aef0ae764d^.
+    # Restore: git apply experiments/removed/A8C_BOOST_HOST_FINITE_SCAN.patch
+    # (the DART door's host finite scan of X; `x_trees_dart_open` tests the X it uploads, xtrees/dart_device.mojo,
+    # the host column in xtrees/dart_host.mojo, and the refusal is mapped to TREES_NONFINITE at the open below)
     # `_dart_device`: the round's entries and the leaf-value cap.
     if trees_entry(xt, "x_trees_dart_open") is None:
         raise Error("NotImplementedError: mojolearn DART: this binary has no x_trees_dart_* round (a FAST CPU-only install or a "

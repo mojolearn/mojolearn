@@ -160,6 +160,8 @@ def _pls_input_deferred(source: PythonObject, name: String, context: PythonObjec
     var array = PythonObject(None)
     deferred = False
     if public_name != "" and not public_target:
+        # TOMBSTONE: A8C_PLS_PUBLIC_X_HOST_SCAN (removed: superseded by the kit upload's device test) deleted 2026-11-09 by 197546da0d; code recoverable at 197546da0d^.
+        # Restore: git apply experiments/removed/A8C_PLS_PUBLIC_X_HOST_SCAN.patch
         # Lane a8c-device-x-linear-prep-rfe: with `defer` (the operation's
         # kit tests its upload, DecompKit.defers_finite) a borrowed X takes
         # no host pass here; `deferred` tells the caller to add it through

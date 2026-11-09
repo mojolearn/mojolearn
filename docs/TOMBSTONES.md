@@ -464,6 +464,9 @@ in the tables after the sections.
 | [`MOJOLEARN_AUTOGRAD_OPTIM`](#mojolearn_autograd_optim) | Neural (mlp_fit, rnn_fit update) | promoted (executor optimizer), hand arm removed | 2026-11-08 | [MOJOLEARN_AUTOGRAD_OPTIM.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch) |
 | [`MOJOLEARN_AUTOGRAD_DATA`](#mojolearn_autograd_data) | Neural (rnn_fit epoch order) | promoted (autograd/data.mojo), hand launches removed | 2026-11-08 | [MOJOLEARN_AUTOGRAD_DATA.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch) |
 | [`_gather_cls` (RFE gather program per round)](#rfe-one-program-per-elimination-round-2026-11-09) | Prep (RFE fit rounds; + the host support list per round, the no-scope fallback) | removed (superseded: one program per round, `_stage_block` + `c2_rfe_keep`) | 2026-11-09 | [W1_RFE_GATHER_PROGRAM_PER_ROUND.patch](../experiments/removed/W1_RFE_GATHER_PROGRAM_PER_ROUND.patch) |
+| [`A8C_BOOST_HOST_FINITE_SCAN` (AdaBoost / DART host finite scans of X)](#host-finite-scans-moved-onto-the-upload-lane-a8c-2026-11-09) | Trees (AdaBoost classifier + regressor sessions, DART) | removed (superseded: `rf_data_session_open` / `x_trees_dart_open` test their own upload, NaN and infinity) | 2026-11-09 | [A8C_BOOST_HOST_FINITE_SCAN.patch](../experiments/removed/A8C_BOOST_HOST_FINITE_SCAN.patch) |
+| [`A8C_LOGISTIC_QUERY_HOST_SCAN` (LogisticRegression predict / decision / proba door scan)](#host-finite-scans-moved-onto-the-upload-lane-a8c-2026-11-09) | Linear (LogisticRegression inference) | removed (superseded: the QN entries' status word over their upload; `qn_infer_fold` for a CV fold) | 2026-11-09 | [A8C_LOGISTIC_QUERY_HOST_SCAN.patch](../experiments/removed/A8C_LOGISTIC_QUERY_HOST_SCAN.patch) |
+| [`A8C_PLS_PUBLIC_X_HOST_SCAN` (PLS public X host scan)](#host-finite-scans-moved-onto-the-upload-lane-a8c-2026-11-09) | Decomp (PLSRegression / PLSCanonical / CCA) | removed (superseded: `DecompKit.input_tested`, `x_decomp_dev_upload_finite`) | 2026-11-09 | [A8C_PLS_PUBLIC_X_HOST_SCAN.patch](../experiments/removed/A8C_PLS_PUBLIC_X_HOST_SCAN.patch) |
 | [`pca_input_snapshot` (admission helper)](#admission-helpers-of-the-decomposition-preprocessing-and-metrics-doors-2026-11-08) | PCA admission (X cast + finite) | removed (superseded: `decomp_admit` / `admit_x_unrecorded`) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`decomp_copied` (admission helper)](#admission-helpers-of-the-decomposition-preprocessing-and-metrics-doors-2026-11-08) | TruncatedSVD admission (input_copied_ flag) | removed (superseded: `decomp_input_copied`, read off the admission) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`pca_exact_fit`, `pca_input`, `pca_keep_fit`, `pca_prefix`, `pca_solver_checks`, `PCADimensions`](#admission-helpers-of-the-decomposition-preprocessing-and-metrics-doors-2026-11-08) | PCA (pre-owner exact door) | removed (dead: zero callers) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
@@ -4291,6 +4294,33 @@ Lane `a5-admit-core-followup` (A0 follow-up of `docs/plans/EXECUTOR_CONSOLIDATIO
 - Measurement owed (RUN OWED): `cross_validate`, GridSearchCV and RandomizedSearchCV of ridge, logistic and k-means on
   NVIDIA and AMD, before (`f7d10d2b09`) and after.
 - Recoverable at `f7d10d2b09`; restore with `git apply experiments/removed/A5_DOOR_ROWS_HOST.patch`.
+## Host finite scans moved onto the upload (lane a8c, 2026-11-09)
+
+Lane `a8c-device-x-linear-prep-rfe`, branch `lane/a8c-device-x-linear-prep-rfe` from `origin/main` `0ce88411d3`. Not
+experiment defines: host passes over X that a kernel entry repeated on the words it uploads anyway (plan
+`docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 3.2 step 3; follow-ups A7c, A6). No bit changes: the tests
+only read X; the refusal texts are the doors' own.
+
+- `A8C_BOOST_HOST_FINITE_SCAN` (deletion `aef0ae764d`): `bindings/trees_public_boost.mojo` scanned X on the host
+  (`trees_finite_f32`) before AdaBoost's forest data session open (classifier column-major copy, regressor session) and
+  before DART's round. `rf_data_session_open` now tests NaN and infinity on the device over its upload
+  (`ForestFiniteScan`; it tested NaN only) and the host binding with `host_all_finite_f32`; `x_trees_dart_open` tests
+  its upload under its one synchronize (`xtrees/dart_device.mojo`; host twin `xtrees/dart_host.mojo`). The doors map
+  `RF_NONFINITE_REFUSAL` (`ensemble/nan_refusal.mojo`) to `TREES_NONFINITE`. `_member_session` lost `x_finite`.
+- `A8C_LOGISTIC_QUERY_HOST_SCAN` (deletion `fb8823ee0a`): LogisticRegression decision_function / predict /
+  predict_proba / predict_log_proba admitted X with the host scan. Now `defer_finite`; `qn_decision_function`,
+  `qn_proba`, `qn_predict_binary`, `qn_predict_multiclass` take an optional status address (GPU: `qn_x_status`,
+  `glm/qn_infer.mojo`; host column: `host_finite_status`). An identical-mode cross-validation fold is read on the
+  device by the base binding's new `qn_infer_fold` (`glm/qn_fold.mojo`). The two code kernels moved unchanged from
+  `glm/estimator.mojo` to `glm/qn_infer.mojo`; the synchronize between the uploads and the decision launch is gone.
+- `A8C_PLS_PUBLIC_X_HOST_SCAN` (deletion `197546da0d`): PLS admitted the public X with the host scan. On a GPU kit
+  (`DecompKit.defers_finite`) a borrowed X is admitted with `defer_finite` and added through `DecompKit.input_tested`,
+  which uploads it through the new `x_decomp_dev_upload_finite` (`x_decomp/resident.mojo` `dev_upload_finite_run`) and
+  refuses with admit_x's wording. The CPU column keeps admit_x's scan (no device entries).
+
+Restore: `git apply -3 experiments/removed/<NAME>.patch` (the reverse of each deletion commit on its code files).
+Run owed: AdaBoost / DART fit, LogisticRegression predict / predict_proba, PLS fit / transform rows of paper_compare on
+NVIDIA and AMD against `0ce88411d3`; the cross_val_score rows of LogisticRegression and RidgeClassifier.
 ## RFE one program per elimination round (2026-11-09)
 
 Lane `w1-readmission-rfe` (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 4, row RFE), branch
