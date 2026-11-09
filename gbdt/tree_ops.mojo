@@ -121,15 +121,13 @@ def _tree_info[CODE: Int]() -> TreeOpInfo:
         # its status and queue-empty its criterion, read every LOOP_K batches
         return TreeOpInfo(
             CODE, "forest_batches",
-            "ensemble.decisiontree.batched_levelalgo.builder.Builder._enqueue_loop_batches"
-            + " | extratrees.impl.decisiontree.batched_levelalgo.builder._et_run_depthwise (cycle body)",
+            "ensemble.decisiontree.batched_levelalgo.builder.Builder._enqueue_loop_batches | extratrees.impl.decisiontree.batched_levelalgo.builder._et_run_depthwise (cycle body)",
             True, True, True,
         )
     else:
         return TreeOpInfo(
             CODE, "forest_finish",
-            "ensemble.decisiontree.batched_levelalgo.builder.Builder._finish_tree_device(defer_finish=True)"
-            + " + collect_finished",
+            "ensemble.decisiontree.batched_levelalgo.builder.Builder._finish_tree_device(defer_finish=True) + collect_finished",
             False, False, False,
         )
 
