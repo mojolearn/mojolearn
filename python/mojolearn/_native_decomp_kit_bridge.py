@@ -14,8 +14,8 @@ _OPTIONAL = ("dev_ew", "dev_alloc", "dev_free", "dev_upload", "dev_download", "d
              "eigh", "dev_eigh", "reduce", "argmin_all", "dev_argmin_all", "select_smallest",
              "dev_select_smallest", "lu_aux", "dev_lu_aux", "mcd", "chi2_quantile", "consistency_factor",
              "als_fit", "topn_desc", "gather",
-             "w4_flags", "s_flags", "qfix_flags", "idn_flags", "dev_upload_scan", "orth", "dev_orth",
-             "dev_orth_ws", "order_small", "dev_order_small", "lu_gesv", "dev_lu_factor", "dev_lu_solve",
+             "s_flags", "qfix_flags", "idn_flags", "orth", "dev_orth",
+             "dev_orth_ws", "order_small", "dev_order_small", "lu_gesv", "randomized_svd", "dev_lu_factor", "dev_lu_solve",
              "lu_resid", "tsqr_r", "rank_above", "orth_diag", "dev_orth_diag", "geqrf", "orgqr")
 
 
