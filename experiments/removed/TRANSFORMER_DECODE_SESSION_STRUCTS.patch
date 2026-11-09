@@ -122,7 +122,7 @@ index 417605bbd5..4f9b12be4f 100644
  
  
 diff --git a/transformer/transformer_binding_impl.mojo b/transformer/transformer_binding_impl.mojo
-index d335364e78..87ca19c1e3 100644
+index 9204a83489..87ca19c1e3 100644
 --- a/transformer/transformer_binding_impl.mojo
 +++ b/transformer/transformer_binding_impl.mojo
 @@ -38,6 +38,7 @@ from core.resident_generation_read import ResidentGreedyRead
@@ -299,7 +299,7 @@ index d335364e78..87ca19c1e3 100644
  struct TransformerForwardTape(Movable, Writable):
      """NI36/48 single-use owner of input, weight snapshots and saved stages.
  
-@@ -1074,26 +984,98 @@ def _transformer_run_session_backward(
+@@ -1074,28 +984,98 @@ def _transformer_run_session_backward(
      mut session: TransformerSession, a: List[Int], b: Int, l: Int,
      dm: Int, nh: Int, nkv: Int, hd: Int, it: Int, window: Int,
  ) raises:
@@ -328,8 +328,6 @@ index d335364e78..87ca19c1e3 100644
 -    for i in range(10):  # small-loop(10: x and the nine base weight slots): argument words, no data
 -        fa[i] = a[i]
 -    _session_arm(session, fa, ints, b, dm, nh, nkv, hd, it, l, 0, window, opts)
--    session.arm.value().block_backward(a, ints, l)
--    _session_arm_budget(session)
 +    var qw = dims.q_width()
 +    var kw = dims.kv_width()
 +    var m = b * l
@@ -385,8 +383,10 @@ index d335364e78..87ca19c1e3 100644
 +    )
 +    _btick(ton, tk, "surface.forward")
 +    var offb = IdentityTrace.disabled()
-+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
-+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
+     # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
+     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
+-    session.arm.value().block_backward(a, ints, l)
+-    _session_arm_budget(session)
 +    llama_decoder_layer_backward_autograd(
 +        ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
 +        b, l, 0, offb, String("pyb"),
@@ -413,7 +413,7 @@ index d335364e78..87ca19c1e3 100644
  
  
  # TOMBSTONE: transformer_attention_profile, transformer_session_info, transformer_decode_session_info and the backward timing entries (dead native entries: no live caller) deleted 2026-10-26 by 79853ceba; code recoverable at a88745022.
-@@ -1445,21 +1427,21 @@ def _transformer_run(
+@@ -1447,21 +1427,21 @@ def _transformer_run(
  struct TransformerDecodeSession(Movable, Writable):
      """Python-owned device lifetime for one block's decode. No global
      handles and no retained host pointers: every caller buffer is read or
@@ -445,7 +445,7 @@ index d335364e78..87ca19c1e3 100644
      var b: Int
      var dm: Int
      var nh: Int
-@@ -1473,6 +1455,11 @@ struct TransformerDecodeSession(Movable, Writable):
+@@ -1475,6 +1455,11 @@ struct TransformerDecodeSession(Movable, Writable):
  
      def __init__(out self):
          self.ctx = Optional[DeviceContext]()
@@ -457,7 +457,7 @@ index d335364e78..87ca19c1e3 100644
          self.op = Optional[AttnStepArm]()
          self.b = 0
          self.dm = 0
-@@ -1492,19 +1479,24 @@ struct TransformerDecodeSession(Movable, Writable):
+@@ -1494,19 +1479,24 @@ struct TransformerDecodeSession(Movable, Writable):
          writer.write("TransformerDecodeSession")
  
      def is_open(self) -> Bool:
@@ -486,7 +486,7 @@ index d335364e78..87ca19c1e3 100644
          if self.ctx:
              try:
                  self.ctx.value().synchronize()
-@@ -1533,32 +1525,14 @@ def _require_session_open(s: TransformerDecodeSession) raises:
+@@ -1535,32 +1525,14 @@ def _require_session_open(s: TransformerDecodeSession) raises:
  
  
  
@@ -523,7 +523,7 @@ index d335364e78..87ca19c1e3 100644
      var dims = LlamaDims(dm, nh, nkv, hd, it)
      dims.validate()
      opts.validate(hd)
-@@ -1566,13 +1540,31 @@ def _session_open_run(
+@@ -1568,13 +1540,31 @@ def _session_open_run(
          raise Error(
              String("transformer decode session: cached_tokens must be in [0, ") + String(smax)
              + "], got " + String(s0))
@@ -561,7 +561,7 @@ index d335364e78..87ca19c1e3 100644
      return s0
  
  
-@@ -1585,9 +1577,10 @@ def _session_open_run_int15(
+@@ -1587,9 +1577,10 @@ def _session_open_run_int15(
      (lane/lowbit-default): the weights are the profile constructor's, with
      the seven projections as the planes `a` carries after the options tail
      (`_upload_planes`, the layout of `transformer_session_forward_int15`),
@@ -575,7 +575,7 @@ index d335364e78..87ca19c1e3 100644
      var dims = LlamaDims(dm, nh, nkv, hd, it)
      dims.validate()
      opts.validate(hd)
-@@ -1603,12 +1596,16 @@ def _session_open_run_int15(
+@@ -1605,12 +1596,16 @@ def _session_open_run_int15(
                  "transformer_decode_session_open_int15: float32 projection slot "
                  + String(i) + " must be 0 under the profile (the planes are the weights)"
              )
@@ -593,7 +593,7 @@ index d335364e78..87ca19c1e3 100644
          ctx, dims, opts,
          _upload_addr(ctx, a[1], dm),
          _upload_addr(ctx, a[2], dm),
-@@ -1625,43 +1622,155 @@ def _session_open_run_int15(
+@@ -1627,43 +1622,155 @@ def _session_open_run_int15(
          _optional_upload(ctx, t[9], hd, opts.qk_norm, "q_norm.weight", what),
          _optional_upload(ctx, t[10], hd, opts.qk_norm, "k_norm.weight", what),
      )
@@ -769,7 +769,7 @@ index d335364e78..87ca19c1e3 100644
  
  
  
-@@ -1670,7 +1779,17 @@ def _session_load_run(mut s: TransformerDecodeSession, pk: Int, pv: Int, s0: Int
+@@ -1672,7 +1779,17 @@ def _session_load_run(mut s: TransformerDecodeSession, pk: Int, pv: Int, s0: Int
          raise Error(
              String("transformer decode session: cached_tokens must be in [0, ") + String(s.smax)
              + "], got " + String(s0))
@@ -788,7 +788,7 @@ index d335364e78..87ca19c1e3 100644
  
  
  
-@@ -2105,31 +2224,78 @@ struct _LMRunWorkspace(Movable):
+@@ -2107,31 +2224,78 @@ struct _LMRunWorkspace(Movable):
              self.ws_packed = packed
  
  
@@ -878,7 +878,7 @@ index d335364e78..87ca19c1e3 100644
  
  
  
-@@ -2171,10 +2337,10 @@ struct _LMSamplingCheckpoint(Movable):
+@@ -2173,10 +2337,10 @@ struct _LMSamplingCheckpoint(Movable):
          try:
              for address in layers:
                  var layer = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=address)
@@ -893,7 +893,7 @@ index d335364e78..87ca19c1e3 100644
              # Initial state is a valid recovery point even if the first forward
              # fails. Only the first snapshot is initialized here.
              self.enqueue(ctx, layers)
-@@ -2195,15 +2361,15 @@ struct _LMSamplingCheckpoint(Movable):
+@@ -2197,15 +2361,15 @@ struct _LMSamplingCheckpoint(Movable):
          for i in range(len(layers)):
              var layer = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=layers[i])
              if i == 0:
