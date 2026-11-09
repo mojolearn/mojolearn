@@ -28,13 +28,25 @@
 #   (scikit-learn semantics). Anything else is ONE typed cast into
 #   uninitialised storage, row tasks across the host's cores
 #   (core/admitted_input.mojo), the finite test riding in the same pass.
-# - The finiteness test of a borrowed input is the parallel host scan
-#   (core/host_finite_scan.mojo); it is also the CPU-vendor path. The
-#   classical kernels upload X inside their provider entries
-#   (py_call_typed(entries[...], address, ...)), so no device buffer of X
-#   exists at this door to scan on the device.
-# - A DeviceRows fold resolves through bindings/device_rows_door.mojo
-#   (door_rows_host): these kernels read host addresses.
+# - The finiteness test of a borrowed input belongs to the kernel entry that
+#   reads X anyway (lane a5-admit-core-followup; REGRESSIONS R1): a door
+#   whose entry returns the finite status word passes `defer_finite=True`,
+#   and admit_x then makes NO host pass over a float32 C-order X (it returns
+#   `finite = False`). The GPU entry enqueues `enqueue_finite_status` on the
+#   upload it makes in any case and reads the word back with its result; the
+#   host entry (CPU column) calls `host_finite_status`
+#   (core/admitted_finite_status.mojo); the door refuses through
+#   `admitted_finite_refuse`. A door that does not opt in keeps the parallel
+#   host scan here (core/host_finite_scan.mojo). A cast input is tested in
+#   the cast pass itself, so it is never deferred.
+# - A DeviceRows fold (REGRESSIONS R13) is never downloaded: AdmittedX
+#   carries its handle (`device_rows`, `rows_base`, `rows_indices`). A door
+#   whose entry gathers on the device passes `device_x=True` and gets the
+#   handle with no host words (address 0); any other door gets the rows
+#   gathered on the host straight out of model selection's host base, in
+#   row tasks across the cores with the finite test in the copy
+#   (core/admitted_rows_gather.mojo). The device gather, its download and
+#   the host scan after it are gone.
 # - Numerics: none. The bytes reaching a kernel are the same float32 C-order
 #   bytes as before; the finite and sign tests are predicates.
 from std.python import Python, PythonObject
@@ -50,8 +62,9 @@ from bindings.classical_warnings import classical_warn_column
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.native_array_storage import native_scratch_bytes
-from bindings.device_rows_door import door_is_device_rows, door_rows_host
+from bindings.device_rows_door import door_is_device_rows, DoorRows
 from core.admitted_input import admitted_check_f32, admitted_check_weights_f32
+from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_NONFINITE, ARG_OUT_OF_RANGE
 
 comptime RESHAPE_HINT = "Reshape your data either using array.reshape(-1, 1) if your data has a single feature or array.reshape(1, -1) if it contains a single sample."
 
@@ -76,10 +89,19 @@ struct AdmittedX(Movable):
         ndim: the rank of `array` (0 is stored as a one-word vector).
         borrowed: True when `array` is the caller's float32 C-order array,
             read in place and never written.
-        finite: True once every word was tested finite (always True on
-            return from admit_x: a non-finite input is refused).
+        finite: True once every word was tested finite (a non-finite
+            input is refused). False only when the door passed
+            `defer_finite=True` and X was borrowed: its kernel entry tests
+            the words it uploads and returns the status word, and the door
+            refuses through `admitted_finite_refuse`.
         position: the row of this input in `call.inputs`, -1 when the
             door passed no AdmittedCall.
+        device_rows: True when the caller passed a model-selection fold
+            (`_arena_io.DeviceRows`); `rows_base` is then its float32
+            C-order base and `rows_indices` its int64 row indices: the
+            handle a device entry gathers from (model selection keeps the
+            base resident). With `device_x=True` no host words exist
+            (`array` is None, `address` 0, `finite` False).
     """
     var array: PythonObject
     var source: PythonObject
@@ -90,9 +112,12 @@ struct AdmittedX(Movable):
     var borrowed: Bool
     var finite: Bool
     var position: Int
+    var device_rows: Bool
+    var rows_base: PythonObject
+    var rows_indices: PythonObject
 
     def __init__(out self, array: PythonObject, source: PythonObject, address: Int, rows: Int, cols: Int,
-                 ndim: Int, borrowed: Bool):
+                 ndim: Int, borrowed: Bool, finite: Bool = True):
         self.array = array
         self.source = source
         self.address = address
@@ -100,8 +125,11 @@ struct AdmittedX(Movable):
         self.cols = cols
         self.ndim = ndim
         self.borrowed = borrowed
-        self.finite = True
+        self.finite = finite
         self.position = -1
+        self.device_rows = False
+        self.rows_base = PythonObject(None)
+        self.rows_indices = PythonObject(None)
 
 
 def _repr(value: PythonObject) raises -> String:
