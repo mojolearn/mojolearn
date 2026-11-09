@@ -14,10 +14,20 @@ captured program on the executor (autograd/small_mlp_program.mojo).
 """
 # TOMBSTONE: mlp_train_step_host, its step GEMM dispatch (MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF), the tape rules autograd/rules_small_mlp.mojo and the Apple FAST fused step training/mlp_fast.mojo (superseded by SmallMLPTrainer's captured program, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
 # Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by 3cd0063d7; code recoverable at 3cd0063d7^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from max.gpu.host import DeviceContext
 from checks.numerics import ftz, identical_mul_add
+
+
+# TOMBSTONE (lane grid-act-5, 2026-10-08): neural_gemm_epilogue=mlp (NN06,
+# -D MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE bit 1: the forward's GEMM + bias (+
+# ReLU) as one thread-per-cell kernel, _mlp_gemm_epilogue_kernel /
+# _mlp_fused_projection) was DELETED as an IDENTICAL grid ge123e6f9 loser:
+# mlp-train-step NV 2.0 -> 3.8 ms / AMD 3.5 -> 3.4 ms (1.367x combined
+# SLOWER), same bits. Recoverable at main 8ed94710a; the guard refuses bit 1.
 
 
 def mlp_validate_shape(rows: Int, cols: Int) raises:
