@@ -22,7 +22,7 @@ from bindings.family_common import (
     family_entry, family_array,
 )
 from bindings.svm_mixture_native import _qn_scores
-from core.family_weights_impl import family_fill_f32
+from core.admitted_weights import admitted_fill
 from bindings.classical_labels import labels_real_type, labels_bool_type, labels_text_type, labels_type_name
 from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put
 from bindings.svc_common import (
@@ -204,7 +204,7 @@ def _qn_row_weights(model: PythonObject, fields: PythonObject, sample_weight: Py
     var sw: PythonObject
     if sample_weight is None:
         sw = family_array(Python.tuple(PythonObject(n)), "<f4", context)
-        family_fill_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(sw))), n, Float32(1.0))
+        admitted_fill[DType.float32](FAMILY_F32P(unsafe_from_address=Int(py=classical_address(sw))), n, Float32(1.0))
     else:
         sw = admit_family_weights(sample_weight, n, False, context).keep
     if class_weight is None:

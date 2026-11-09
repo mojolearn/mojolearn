@@ -18,7 +18,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_isinstance, family_call, family_entry, family_array, family_min,
 )
-from core.family_weights_impl import family_fill_f32
+from core.admitted_weights import admitted_fill
 from bindings.gp_svm_records import ocsvm_coef_reused, ocsvm_coef_remember
 from bindings.gp_svm_gp_state import gp_x_known
 from bindings.svc_common import (
@@ -164,7 +164,7 @@ def _ocsvm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
     var m = n
     if sample_weight is None:
         cv = family_array(Python.tuple(PythonObject(n)), "<f4", context)
-        family_fill_f32(FAMILY_F32P(unsafe_from_address=Int(py=_a(cv))), n, Float32(1.0))
+        admitted_fill[DType.float32](FAMILY_F32P(unsafe_from_address=Int(py=_a(cv))), n, Float32(1.0))
     else:
         var wv = admit_family(sample_weight, 1, "sample_weight", context, False).array
         if Int(py=wv.shape[0]) != n:

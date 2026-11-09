@@ -48,7 +48,7 @@ def test_manifold_kit_refuses_proxies_before_looking_up_cells():
 def test_manifold_input_copy_uses_snapshot_words_and_keeps_original_owner():
     source = _source("bindings/mani_kit.mojo")
     capture = source.split("def mk_from_input(", 1)[1]
-    assert capture.count("family_f32_snapshot(") == 1
+    assert capture.count("admit_family_meta(") == 1
     assert "mk_from_snapshot(snapshot, name, ctx)" in capture
     assert "_ = source" in capture
     copy = source.split("def mk_from_snapshot(", 1)[1].split("def mk_from_input(", 1)[0]
@@ -63,7 +63,7 @@ def test_tsne_pca_and_optimizer_share_one_x_snapshot():
     entry = _source("bindings/manifold_native.mojo")
     assert entry.count('manifold_input(source, name, not tsne, context)') == 1
     assert 'snapshot: ArrayMetadata' in source
-    assert 'family_f32_snapshot(args[2]' not in source
+    assert 'admit_family_meta(args[2]' not in source
     assert "_tsne_pca_start(estimators, x_address, n, d, k, context)" in source
     assert "family_call(fit, Python.list(PythonObject(x_address)," in source
     assert "x.shape" not in source
