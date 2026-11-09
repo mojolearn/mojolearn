@@ -5720,7 +5720,7 @@ def fit_device(
         var bayes_read = BAYES_IDN_READ
         comptime if has_apple_gpu_accelerator():
             bayes_read = 1
-        for it in range(max_iter):  # driver-loop: over iterations; the stop word is read every bayes_read
+        for it in range(max_iter):
             iters = it + 1
             if gram_sse:
                 var ng = wit2.begin()
