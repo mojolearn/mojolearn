@@ -1396,6 +1396,8 @@ def causal_lm_session_run_binding(
     for i in range(n_layers):  # small-loop(n_layers: decoder layers of the model): one session pointer per layer, not data
         var sp = layers[i].downcast_value_ptr[TransformerDecodeSession]()
         _require_session_open(sp[])
+        if sp[].op:
+            raise Error("causal lm session: a decoder session opened on the step op is not a layer session")
         if sp[].b != owner[].b or sp[].dm != owner[].d:
             raise Error("causal_lm_session_run: layer " + String(i) + " holds B = " + String(sp[].b)
                 + ", d_model = " + String(sp[].dm) + "; the session has B = " + String(owner[].b)
@@ -1464,6 +1466,8 @@ def causal_lm_session_forward_binding(
     for i in range(n_layers):  # small-loop(n_layers: decoder layers of the model): one session pointer per layer, not data
         var sp = layers[i].downcast_value_ptr[TransformerDecodeSession]()
         _require_session_open(sp[])
+        if sp[].op:
+            raise Error("causal lm session: a decoder session opened on the step op is not a layer session")
         if sp[].b != owner[].b or sp[].dm != owner[].d:
             raise Error("causal_lm_session_forward: layer " + String(i) + " holds B = " + String(sp[].b)
                 + ", d_model = " + String(sp[].dm) + "; the session has B = " + String(owner[].b)
