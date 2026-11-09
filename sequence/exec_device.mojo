@@ -1637,3 +1637,7 @@ struct DeviceExec(Exec, Movable):
 
     def small_mlp_host(mut self, backward: Bool, bufs: List[FP], dims: List[Int]) raises:
         raise Error("ops: a device session launches the small_mlp kernels itself")
+
+    def cnn_op_host(mut self, op: Int, bufs: List[FP], cprm: List[Int32], pprm: List[Int32],
+                    words: List[Int]) raises:
+        raise Error("ops: a device session calls the CNN block entries itself")

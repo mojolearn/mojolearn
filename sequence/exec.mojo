@@ -46,6 +46,7 @@ from autograd.generation_host import lm_pick_host, lm_alive_host
 
 from autograd.lm_head_v2_host import lm_head_v2_host_run
 from autograd.small_mlp_host import small_mlp_host_run
+from autograd.cnn_block_host import cnn_op_host_run
 from sequence.ops import (
     FP,
     Args,
@@ -517,3 +518,9 @@ struct HostExec(Exec, Movable):
     # (autograd/small_mlp_host.mojo), reached through the Exec trait.
     def small_mlp_host(mut self, backward: Bool, bufs: List[FP], dims: List[Int]) raises:
         small_mlp_host_run(backward, bufs, dims)
+
+    # Lane r1-restore-measured-winners: the CNN conv block and head ops'
+    # host arm (autograd/cnn_block_host.mojo), reached through the Exec trait.
+    def cnn_op_host(mut self, op: Int, bufs: List[FP], cprm: List[Int32], pprm: List[Int32],
+                    words: List[Int]) raises:
+        cnn_op_host_run(op, bufs, cprm, pprm, words)

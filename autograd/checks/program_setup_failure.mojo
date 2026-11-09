@@ -105,6 +105,10 @@ struct FaultExec(Exec, Movable):
     def small_mlp_host(mut self, backward: Bool, bufs: List[FP], dims: List[Int]) raises:
         self.host.small_mlp_host(backward, bufs, dims)
 
+    def cnn_op_host(mut self, op: Int, bufs: List[FP], cprm: List[Int32], pprm: List[Int32],
+                    words: List[Int]) raises:
+        self.host.cnn_op_host(op, bufs, cprm, pprm, words)
+
 
 def require(condition: Bool, message: String) raises:
     if not condition:

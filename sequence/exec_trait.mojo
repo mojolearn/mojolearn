@@ -131,3 +131,13 @@ trait Exec:
         """OPS_SMALL_MLP's forward (or, `backward`, its VJP) on this
         executor's host arm; buffer order in small_mlp_host_run."""
         ...
+
+    # Lane r1-restore-measured-winners (2026-11-09): the CNN conv block and
+    # head ops' host arm (autograd/cnn_block_host.mojo). A device session
+    # calls the x_cnn device entries itself (autograd/cnn_block_op.mojo), so
+    # DeviceExec refuses it.
+    def cnn_op_host(mut self, op: Int, bufs: List[FP], cprm: List[Int32], pprm: List[Int32],
+                    words: List[Int]) raises:
+        """OPS_CNN_CONV_BLOCK / OPS_CNN_LINEAR forward or VJP `op` on this
+        executor's host arm; buffer and word order in cnn_op_host_run."""
+        ...
