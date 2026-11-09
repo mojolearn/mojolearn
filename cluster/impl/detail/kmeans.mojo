@@ -1927,8 +1927,8 @@ def kmeans_fit_main_traced(
                 # (`LloydStep`: the same kernels, arguments and order as the
                 # hand-written chunk loop it replaces, so no bit moves), with
                 # one register-block read per KMEANS_CONV_CHUNK iterations.
-                # TOMBSTONE: kmeans-lloyd-chunk-driver-loop (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-08 by lane/fix-d3-executor-loops; code recoverable at the deletion commit^.
-                # Restore: git apply experiments/removed/KMEANS_LLOYD_CHUNK_DRIVER_LOOP.patch; record in docs/TOMBSTONES.md.
+                # TOMBSTONE: kmeans-lloyd-chunk-driver-loop (REFACTORED onto autograd/program_loop_device.mojo) deleted 2026-11-08 by lane/fix-d3-executor-loops; code recoverable at 22ac89b54c.
+                # Restore: git apply experiments/removed/EXECUTOR_LOOP_DRIVER_LOOPS.patch; record in docs/TOMBSTONES.md.
                 var step = LloydStep(
                     x, x_norm, cur_centroids, centroid_norm, labels, min_dist,
                     sums_i32, acc_table, weights, weight_i32, acc_table_w,
