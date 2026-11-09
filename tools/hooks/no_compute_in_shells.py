@@ -11,26 +11,55 @@ and may only unpack PythonObject arguments into typed values, call one typed
 kernel entry and convert the typed result back. It must not loop over data or
 launch work. This checker reports, in every shell file:
 
-    loop     a line starting with `for` or `while`, unless the line itself or
-             the line directly above carries `# small-loop(<what>)` (a loop over
-             argument words of bounded, data-independent length) or
-             `# driver-loop: over <what>` (a driver loop over model structure)
+    loop     a line starting with `for` or `while` that carries no accepted tag.
+             The tag sits on the loop line itself or on a comment-only line
+             directly above it, and it is checked against the loop:
+               `# driver-loop: over <what>` holds only when the loop walks model
+               structure (the LOOP-TAG VOCABULARY below judges the iterable,
+               then the loop variables, then the tag text); a tag on a loop
+               over data is a `false-tag` hit;
+               `# small-loop(<bound>...)` holds only when <bound> is a literal
+               or a named constant (UPPER_CASE) that the loop line uses; any
+               other bound is a `small-bound` hit.
+             `# cpu-route:` and any other comment exempt nothing: a cpu-route
+             loop is debt to remove (AGENTS.md, "No Python in the runtime").
+             A loop body is read with one level of the helpers it calls (a
+             top-level def of the file, or one imported from a door module): a
+             per-element Python read there counts as in the loop, and such a
+             loop keeps a driver-loop tag only when it is judged structure.
+    unpack   `# unpack: one pass over the caller's <what>`: the declared single
+             pass over a caller's Python list/tuple in the UNPACK step. It holds
+             only in a boundary file (providers/python/**/*_pyapi.mojo,
+             bindings/_mojolearn*.mojo, bindings/admitted_*.mojo,
+             bindings/classical_pandas.mojo, bindings/sequential_inputs.mojo) on
+             a loop whose body writes a typed native buffer and calls no Python
+             code; elsewhere it is a `false-unpack` hit. Every accepted one is an
+             `unpack` hit, so the baseline counts it and the count only shrinks.
+    inline   Python iteration inside one expression (the audit's c-inline
+             class): `b.sorted`, `b.map`, `b.zip` (also through `bi.` and
+             `builtins.`), `.tolist`, `PyObject_GetIter`, `PyIter_Next`,
+             `itertools.repeat`, `itertools.chain`, `.fromkeys` (never taggable)
     launch   `enqueue_function`, `DeviceContext(`, `parallelize(`/`parallelize[`,
              `vectorize(`/`vectorize[`, anywhere in code (never taggable)
 
-Comment lines and triple-quoted docstrings are skipped. Hits that were on main
-2026-10-21 are listed in tools/hooks/compute_in_shells_baseline.txt as
-`path:line: code`; a hit is grandfathered by a row with the same path and the
-same code text (the line number is informational, so edits above a row do not
-break it). The thin-* lanes move the work into kernel files and the list only
-shrinks.
+Comment lines and triple-quoted docstrings are skipped. Hits that main carries
+are listed in tools/hooks/compute_in_shells_baseline.txt as `path:line: code`
+(written 2026-10-21, regenerated once on 2026-11-09 when the tags started to be
+checked); a hit is grandfathered by a row with the same path and the same code
+text (the line number is informational, so edits above a row do not break it).
+The thin-* lanes move the work into kernel files and the list only shrinks.
 
 Modes:
     no_compute_in_shells.py --tree [REF] [--branch] [--baseline FILE]
         Scan every shell .mojo file committed at REF (default HEAD). Fail (exit 1)
         on any hit not covered by the baseline. The baseline is REF's file,
-        restricted to the rows main's baseline also has, so a branch cannot grow
-        it. Prints hit counts per directory. Rows no hit matches are stale.
+        restricted to the rows main's baseline also has or, for a row main's
+        baseline lacks, a hit main's own tree carries under this checker, or the
+        tree the 2026-11-09 regeneration was made from when REF contains it
+        (debt that a stricter rule made visible), so a branch cannot grow it
+        with a hit of its own. Prints hit counts per kind and directory, and how many
+        driver-loop tags were judged structure or could not be judged. Rows no
+        hit matches are stale.
         --branch (the pre-push hook passes it for every ref except main): judge
         only the shell files REF adds or changes over merge-base(origin/main, REF);
         a hit that was already in that file at the merge-base is main's debt.
@@ -38,6 +67,8 @@ Modes:
         Rewrite the worktree baseline without its stale rows and with current line
         numbers. It never adds a row.
 Exit 0 clean, 1 on findings, 2 on usage errors. Pure git and regex; no Mojo, no build.
+The files are scanned by worker processes: MOJOLEARN_HOOK_WORKERS=N sets their
+number (any platform); unset, it is 4 on macOS and the core count elsewhere.
 """
 import os
 import re
@@ -48,8 +79,144 @@ from collections import Counter
 BASELINE = "tools/hooks/compute_in_shells_baseline.txt"
 LOOP = re.compile(r"^\s*(for|while)\b")
 LAUNCH = re.compile(r"enqueue_function|\bDeviceContext\s*\(|\b(?:sync_)?parallelize\s*[\[(]|\bvectorize\s*[\[(]")
-TAG = re.compile(r"#\s*small-loop\(|#\s*driver-loop:|#\s*cpu-route:")
+# Python iteration inside one expression (audit A's c-inline class, 2026-11-08)
+INLINE = re.compile(r"\b(?:b|bi|builtins)\.(?:sorted|map|zip)\b|\.tolist\b|\bPyObject_GetIter\b|\bPyIter_Next\b"
+                    r"|\bitertools\.(?:repeat|chain)\b|\.fromkeys\b")
+DRIVER_TAG = re.compile(r"#\s*driver-loop:\s*(?:over\s+)?(?P<what>.*)$")
+SMALL_TAG = re.compile(r"#\s*small-loop\(\s*(?P<bound>[^:()]*?)\s*(?::[^()]*)?\)")
+CONST_BOUND = re.compile(r"[\d_]+|[A-Z][A-Z0-9_]*")
 ROW = re.compile(r"^(?P<path>[^:\s]+\.mojo):(?P<line>\d+):\s?(?P<code>.*)$")
+
+# ------------------------------------------------- loop-tag vocabulary ----
+# THE LOOP-TAG VOCABULARY (2026-11-09). A `# driver-loop: over <what>` tag
+# claims that a loop walks model structure, never data
+# (docs/plans/GPU_PATH_HOST_LOOPS.md). The checker judges the claim from the
+# loop: first its source (the `for x in <expr>` iterable, the `range(<expr>)`
+# bound, the `while` condition), then, when the source says nothing, its loop
+# variables, then the tag text. Every identifier is split into lower-case
+# words (on `_`, digits and case changes):
+#   DATA_PATTERNS   spellings that are data by themselves
+#   DATA_NAMES      whole identifiers, or first words, that name the data (X, y)
+#   DATA_WORDS      a word that names data: rows, samples, labels, values, ...
+#   VALUE_WORDS     a COUNT of these is structure (`range(n_classes)`), the
+#                   sequence itself is data (`for c in classes_`)
+#   STRUCTURE_WORDS a word that names model structure: layers, blocks, heads, ...
+#   COUNT_WORDS     a first word that makes the identifier a count of the rest
+# Before the words are read, a dict view (`.keys()`, `.values()`, `.items()`)
+# is judged by its receiver and an attribute chain by its last name.
+# In the loop's source or variables a data word anywhere makes it data; else a
+# structure word makes it structure. In the tag text a structure word wins and
+# a data word refutes the tag only alone. Otherwise the verdict is "unknown": the tag is kept, as
+# before, and counted as "could not judge". This table is the one place to
+# extend; tools/hooks/no_host_routes.py carries the same table (each hook is
+# installed as one self-contained file), keep the two in step.
+DATA_PATTERNS = re.compile(r"\.shape\s*\[\s*0\s*\]|\.tolist\b|\blen\(\s*[XxYy]\w*\s*\)|\bn_samples\b|\bnnz\b"
+                           r"|\bdownload\w*|\breadback\w*")
+DATA_NAMES = frozenset("x y".split())
+DATA_WORDS = frozenset("""
+row rows sample samples label labels value values val vals element elements elem elems token tokens
+tok toks record records nnz obs observation observations point points query queries pixel pixels
+datum data text texts document documents doc docs sentence sentences char chars byte bytes batch
+batches chunk chunks numel target targets instance instances example examples
+""".split())
+VALUE_WORDS = frozenset("class classes category categories unique uniques".split())
+STRUCTURE_WORDS = frozenset("""
+layer layers block blocks head heads estimator estimators member members fold folds split splits
+candidate candidates device devices gpu gpus rank ranks shard shards field fields param params
+parameter parameters stage stages tree trees feature features column columns col cols dim dims
+dimension dimensions axis axes ndim shape output outputs component components iteration iterations
+iter iters epoch epochs step steps level levels depth leaf leaves arg args argument arguments kwarg
+kwargs key keys name names option options config configs worker workers kernel kernels launch
+launches pass passes round rounds model models module modules child children attr attrs attribute
+attributes slot slots spec specs plan plans op ops phase phases kind kinds dtype dtypes metric
+metrics handle handles span spans bin bins expert experts context contexts stream streams
+""".split())
+COUNT_WORDS = frozenset("n num nb count total".split())
+
+
+def _words(ident):
+    """Lower-case words of one identifier: `n_samplesIn2` -> [n, samples, in]."""
+    out = []
+    for part in re.split(r"[_\d]+", ident):
+        out.extend(w.lower() for w in re.findall(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+", part))
+    return out
+
+
+def judge_text(text, tag_text=False):
+    """("data" | "structure" | "unknown", the deciding word) for one text.
+    tag_text: the words of a tag's <what>, where a value word (classes) is a
+    count, so structure."""
+    if not text or not text.strip():
+        return "unknown", ""
+    m = DATA_PATTERNS.search(text)
+    if m:
+        return "data", m.group(0)
+    # a dict view walks its receiver (`kwargs.items()` walks kwargs); an
+    # attribute chain is judged by its last name (`value.ndim` is a rank)
+    text = re.sub(r"\.(?:keys|values|items)\(\s*\)", "", text)
+    text = re.sub(r"(?<![\w.])(?:[A-Za-z_]\w*(?:\[\])?\.)+(?=[A-Za-z_])", "", text)
+    struct = ""
+    data = ""
+    for ident in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", text):
+        words = _words(ident)
+        if not words:
+            continue
+        if ident == "n" or ident.lower() in DATA_NAMES or (words[0] in DATA_NAMES and ident[:1] in "XxYy"
+                                                             and len(words) > 1 and not tag_text):
+            if not tag_text:
+                return "data", ident
+            data = data or ident
+            continue
+        if words[0] in COUNT_WORDS and len(words) > 1:
+            rest = words[1:]
+            if any(w in DATA_WORDS for w in rest):
+                if not tag_text:
+                    return "data", ident
+                data = data or ident
+                continue
+            if not struct and any(w in STRUCTURE_WORDS or w in VALUE_WORDS for w in rest):
+                struct = ident
+            continue
+        if any(w in DATA_WORDS for w in words) or (not tag_text and any(w in VALUE_WORDS for w in words)):
+            if not tag_text:
+                return "data", ident
+            data = data or ident
+            continue
+        if not struct and any(w in STRUCTURE_WORDS or (tag_text and w in VALUE_WORDS) for w in words):
+            struct = ident
+    # in a tag's own text a structure word wins ("the batch's classes"): the
+    # text refutes the tag only when it names data and no structure
+    if struct:
+        return "structure", struct
+    return ("data", data) if data else ("unknown", "")
+
+
+def judge_loop(source, targets="", what=""):
+    """The verdict on a tagged loop: its source, else its loop variables, else
+    the tag text decides (see the vocabulary above)."""
+    for text, tag in ((source, False), (targets, False), (what, True)):
+        v = judge_text(text, tag)
+        if v[0] != "unknown":
+            return v
+    return "unknown", ""
+
+
+def loop_parts(code):
+    """(source, loop variables) of a `for`/`while` line's code."""
+    m = re.match(r"\s*for\s+(.+?)\s+in\s+(.+?):?\s*$", code)
+    if m:
+        return m.group(2), m.group(1)
+    m = re.match(r"\s*while\b\s*(.*?):?\s*$", code)
+    if m:
+        return m.group(1), ""
+    return code, ""
+
+
+def small_bound_ok(bound, code):
+    """A `small-loop(<bound>)` note holds when the bound is a literal or a named
+    constant and the loop line uses it."""
+    bound = (bound or "").strip()
+    return bool(CONST_BOUND.fullmatch(bound)) and re.search(r"(?<!\w)" + re.escape(bound) + r"(?!\w)", code) is not None
 
 
 def is_shell(path):
@@ -78,10 +245,94 @@ def _code_part(line):
     return line
 
 
-def scan(text):
-    """[(line number, kind, code)] of the untagged loops and the launches in one shell file."""
+# ---------------------------------------------- loop bodies and helpers ----
+# (2026-11-09, lane P2's report) A per-element Python read moved behind a
+# helper call hid the work from the loop. A loop's body is read with ONE level
+# of the helpers it calls: a top-level def of the same file, or one imported
+# from a door module (`from bindings.x import y`, `from providers.python.x
+# import y`).
+#   PY_READ   a per-element Python-object read or Python call in the body
+#   PY_CALL   Python code being called (what an unpack loop must never do)
+#   TYPED     a write into a typed native buffer
+# A loop whose body reads Python elements keeps a driver-loop tag only when the
+# vocabulary judges it structure: "could not judge" no longer passes.
+PY_READ = re.compile(r"\bPy\w*_GetItem\w*|\bPySequence_\w+|\bPyIter_Next\b|\bPyObject_GetIter\b|\bp3_item\s*\("
+                     r"|\bpy_(?:call|getitem|item|getattr|attr)\w*\s*\(|\bPyObject_(?:Call|GetAttr|GetItem)\w*"
+                     r"|\(\s*py\s*=|\bPython\.\w+\s*\(|\.__getitem__\b")
+PY_CALL = re.compile(r"\bpy_call\w*\s*\(|\bPyObject_Call\w*|\bcallable\b|__call__|\bPython\.\w+\s*\("
+                     r"|\bpy_(?:getattr|attr)\w*\s*\(|\bPyObject_GetAttr\w*|\.\s*__\w+__\s*\(")
+TYPED = re.compile(r"\]\s*=[^=]|\.append\(|\bstore\w*\s*[\[(]|\binit_pointee\w*\s*\(")
+CALLEE = re.compile(r"(?<![\w.])([A-Za-z_]\w*)\s*\(")
+DEF = re.compile(r"^(?:def|fn)\s+(\w+)")
+IMPORT = re.compile(r"^from\s+((?:bindings|providers\.python)\.[\w.]+)\s+import\s+(.*)$")
+# `# unpack: one pass over the caller's <what>`: the one declared pass over a
+# caller's Python list or tuple in the UNPACK step (docs/plans/
+# PYTHON_AT_THE_BOUNDARY.md). It holds only in a boundary file, on a loop whose
+# body (with one level of helpers) writes a typed native buffer and calls no
+# Python code. An accepted unpack loop is still an `unpack` hit: the baseline
+# counts every one and only shrinks, so a new one is refused like any hit.
+UNPACK_TAG = re.compile(r"#\s*unpack:\s*one pass over the caller's\s+\S")
+
+
+def is_boundary(path):
+    """The files where an unpack tag may stand."""
+    name = path.rsplit("/", 1)[-1]
+    return ((path.startswith("providers/python/") and name.endswith("_pyapi.mojo"))
+            or (path.startswith("bindings/") and "/" not in path[len("bindings/"):]
+                and (name.startswith("_mojolearn") or name.startswith("admitted_")
+                     or name in ("classical_pandas.mojo", "sequential_inputs.mojo"))))
+
+
+def top_defs(text):
+    """{name: body code text} of the top-level defs of one file."""
+    out, cur, body = {}, None, []
+    for raw in text.splitlines():
+        m = DEF.match(raw)
+        if m or (raw[:1].strip() and not raw.startswith(("#", ")", "]", "@")) and cur):
+            if cur:
+                out[cur] = "\n".join(body)
+            cur, body = (m.group(1), []) if m else (None, [])
+            continue
+        if cur:
+            body.append(_code_part(raw))
+    if cur:
+        out[cur] = "\n".join(body)
+    return out
+
+
+def door_imports(text):
+    """{alias: (door module path, name)} of the helpers a file imports from door modules."""
+    out = {}
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        m = IMPORT.match(lines[i])
+        if m:
+            rest = m.group(2)
+            if "(" in rest and ")" not in rest:
+                while i + 1 < len(lines) and ")" not in rest:
+                    i += 1
+                    rest += " " + lines[i]
+            path = m.group(1).replace(".", "/") + ".mojo"
+            for part in rest.replace("(", " ").replace(")", " ").split(","):
+                bits = part.split("#")[0].split()
+                if bits:
+                    out[bits[2] if len(bits) >= 3 and bits[1] == "as" else bits[0]] = (path, bits[0])
+        i += 1
+    return out
+
+
+def scan(text, stats=None, path="", ext_defs=None):
+    """[(line number, kind, code)] of the loop, inline and launch hits in one
+    shell file (kinds: loop, false-tag, small-bound, unpack, false-unpack,
+    inline, launch). stats, a Counter, receives the accepted tags:
+    driver-structure, driver-unknown (could not judge), small-loop and unpack.
+    ext_defs: {alias: body} of helpers imported from door modules."""
     out = []
     lines = text.splitlines()
+    codes = [_code_part(r) for r in lines]
+    defs = dict(ext_defs or {})
+    defs.update(top_defs(text))
     in_doc = None
     for n, raw in enumerate(lines, 1):
         s = raw.strip()
@@ -89,7 +340,7 @@ def scan(text):
             if in_doc in s:
                 in_doc = None
             continue
-        q = '"""' if '"""' in s else ("'''" if "'''" in s else None)
+        q = '"""' if '"""' in s else ("\'\'\'" if "\'\'\'" in s else None)
         if q:
             # a line with a triple quote is docstring or string text, never a loop or a launch
             if s.count(q) % 2 == 1:
@@ -97,13 +348,67 @@ def scan(text):
             continue
         if not s or s.startswith("#"):
             continue
-        code = _code_part(raw)
-        prev = lines[n - 2] if n >= 2 else ""
-        if LOOP.match(code) and not (TAG.search(raw) or TAG.search(prev)):
-            out.append((n, "loop", s))
-        elif LAUNCH.search(code):
+        code = codes[n - 1]
+        if LOOP.match(code):
+            kind = _loop_kind(raw, code, lines[n - 2] if n >= 2 else "", stats,
+                              body=_loop_body(codes, n - 1, defs), path=path)
+            if kind:
+                out.append((n, kind, s))
+        if LAUNCH.search(code):
             out.append((n, "launch", s))
+        elif INLINE.search(code):
+            out.append((n, "inline", s))
     return out
+
+
+def _loop_body(codes, i, defs):
+    """The code of the loop at index i: its header, its indented body, and the
+    bodies of the helpers they call (one level)."""
+    ind = len(codes[i]) - len(codes[i].lstrip())
+    body = [codes[i]]
+    for c in codes[i + 1:]:
+        if c.strip() and len(c) - len(c.lstrip()) <= ind:
+            break
+        body.append(c)
+    own = "\n".join(body)
+    seen = set()
+    extra = []
+    for m in CALLEE.finditer(own):
+        name = m.group(1)
+        if name in defs and name not in seen:
+            seen.add(name)
+            extra.append(defs[name])
+    return own + "\n" + "\n".join(extra)
+
+
+def _loop_kind(raw, code, prev, stats=None, body="", path=""):
+    """None for a loop whose tag holds, else the hit kind (see scan)."""
+    comment = raw[len(code):]
+    above = prev.strip() if prev.strip().startswith("#") else ""
+    for tag_text in (comment, above):
+        if UNPACK_TAG.search(tag_text):
+            if not is_boundary(path) or PY_CALL.search(body) or not TYPED.search(body):
+                return "false-unpack"
+            if stats is not None:
+                stats["unpack"] += 1
+            return "unpack"
+        d = DRIVER_TAG.search(tag_text)
+        if d:
+            source, targets = loop_parts(code)
+            verdict, _word = judge_loop(source, targets, d.group("what"))
+            if verdict == "data" or (verdict == "unknown" and PY_READ.search(body)):
+                return "false-tag"
+            if stats is not None:
+                stats["driver-" + verdict] += 1
+            return None
+        m = SMALL_TAG.search(tag_text)
+        if m:
+            if not small_bound_ok(m.group("bound"), code):
+                return "small-bound"
+            if stats is not None:
+                stats["small-loop"] += 1
+            return None
+    return "loop"
 
 
 def _git(*args, inp=None):
@@ -149,13 +454,67 @@ def _read(shas):
     return texts
 
 
-def hits_at(ref, paths=None):
-    """[(path, line, kind, code)] at ref, sorted by path and line (only `paths`, if given)."""
-    blobs = _shell_blobs(ref)
-    if paths is not None:
-        blobs = {p: s for p, s in blobs.items() if p in paths}
-    texts = _read(blobs.values())
-    return [(p, n, k, c) for p in sorted(blobs) for n, k, c in scan(texts[blobs[p]])]
+def hook_workers():
+    """Worker processes for the parallel scan: MOJOLEARN_HOOK_WORKERS=N when set
+    (any platform, at least 1), else 4 on macOS (the hooks run on a shared,
+    often loaded laptop) and os.cpu_count() elsewhere (rented hosts and CI)."""
+    env = os.environ.get("MOJOLEARN_HOOK_WORKERS", "").strip()
+    if env:
+        try:
+            return max(1, int(env))
+        except ValueError:
+            pass
+    return 4 if sys.platform == "darwin" else (os.cpu_count() or 1)
+
+
+def _scan_many(items):
+    """[(path, hits, stats)] for [(path, text, imported helper bodies)]: one worker's share."""
+    out = []
+    for p, t, ext in items:
+        st = Counter()
+        out.append((p, scan(t, st, p, ext), st))
+    return out
+
+
+def _ext_defs(text, all_texts, cache):
+    """{alias: body} of the helpers text imports from door modules."""
+    out = {}
+    for alias, (mod, name) in door_imports(text).items():
+        if mod in all_texts:
+            if mod not in cache:
+                cache[mod] = top_defs(all_texts[mod])
+            if name in cache[mod]:
+                out[alias] = cache[mod][name]
+    return out
+
+
+def hits_at(ref, paths=None, stats=None):
+    """[(path, line, kind, code)] at ref, sorted by path and line (only `paths`,
+    if given). The files are split across every core (one worker per core);
+    stats, a Counter, receives the accepted tag counts."""
+    allb = _shell_blobs(ref)
+    blobs = allb if paths is None else {p: s for p, s in allb.items() if p in paths}
+    texts = _read(allb.values())
+    by_path = {p: texts[sha] for p, sha in allb.items()}
+    cache = {}
+    items = [(p, by_path[p], _ext_defs(by_path[p], by_path, cache)) for p in sorted(blobs)]
+    workers = min(hook_workers(), max(1, len(items) // 64))
+    if workers > 1:
+        import multiprocessing
+        chunks = [items[i::workers] for i in range(workers)]
+        try:
+            with multiprocessing.get_context("fork").Pool(workers) as pool:
+                parts = [r for part in pool.map(_scan_many, chunks) for r in part]
+        except (OSError, ValueError):
+            parts = _scan_many(items)
+    else:
+        parts = _scan_many(items)
+    res = []
+    for p, hs, st in sorted(parts, key=lambda r: r[0]):
+        if stats is not None:
+            stats.update(st)
+        res.extend((p, n, k, c) for n, k, c in hs)
+    return res
 
 
 def parse_baseline(text):
@@ -181,6 +540,12 @@ def _baseline_at(ref):
     return parse_baseline(r.stdout.decode("utf-8", "replace")) if r.returncode == 0 else None
 
 
+# The tree the 2026-11-09 baseline was regenerated from (the integration head
+# the judged tags were written on). Its hits were debt before the rules could
+# see them; a tree that contains it may carry them until main does.
+REGEN_ANCHOR = "e68654a7579a3abeef7a97c63ca1a001a7de8a8f"
+
+
 def _main_ref():
     for m in ("refs/remotes/origin/main", "origin/main", "refs/heads/main"):
         if _resolve(m):
@@ -191,6 +556,24 @@ def _main_ref():
 def _per_dir(hits):
     c = Counter(h[0].rsplit("/", 1)[0] if "/" in h[0] else "." for h in hits)
     return ", ".join(f"{d} {n}" for d, n in sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))) or "none"
+
+
+_WHAT = {
+    "loop": "untagged loop in a shell file; move it into the kernel file (a tag holds only for a model-structure "
+            "driver loop `# driver-loop: over <what>` or a constant-bound `# small-loop(<CONST>)`; `# cpu-route:` "
+            "and other comments exempt nothing)",
+    "false-tag": "false driver-loop tag: the loop walks data, not model structure; move it into the kernel file",
+    "small-bound": "small-loop note without a constant bound (it needs a literal or an UPPER_CASE constant the "
+                   "loop uses); move the loop into the kernel file",
+    "unpack": "unpack loop not in the baseline (every accepted `# unpack:` tag is counted and the count only "
+              "shrinks; rows main lacks are refused)",
+    "false-unpack": "false unpack tag: `# unpack: one pass over the caller's <what>` holds only in a boundary "
+                    "file, on a loop whose body (with one level of helpers) writes a typed native buffer and calls "
+                    "no Python code",
+    "inline": "Python iteration inside an expression in a shell file (b.sorted/b.map/b.zip/.tolist/"
+              "PyObject_GetIter/PyIter_Next/itertools/.fromkeys); move it into the kernel file",
+    "launch": "kernel launch in a shell file; move it into the kernel file",
+}
 
 
 def check_tree(ref, branch=False, baseline_file=None):
@@ -209,8 +592,18 @@ def check_tree(ref, branch=False, baseline_file=None):
     if main_rows is not None:
         main_base = _keys(main_rows)
         grown = base - main_base
+        if grown:
+            # a row main's baseline lacks holds only for a hit main's own tree
+            # carries (main's debt that a stricter rule made visible, as on the
+            # 2026-11-09 regeneration); a hit a branch adds is never grandfathered
+            on_main = _keys(hits_at(main)) if _resolve(main) != sha else Counter(grown)
+            if _resolve(REGEN_ANCHOR) and _git("merge-base", "--is-ancestor", REGEN_ANCHOR, sha).returncode == 0:
+                on_main = on_main | _keys(hits_at(REGEN_ANCHOR))
+            main_base = main_base | (grown & on_main)
+            grown = base - main_base
         base = base & main_base  # the baseline only shrinks: rows main lacks are not grandfathered
-    hits = hits_at(sha)
+    stats = Counter()
+    hits = hits_at(sha, stats=stats)
     judged = hits
     allow = Counter(base)
     if branch and main:
@@ -230,8 +623,15 @@ def check_tree(ref, branch=False, baseline_file=None):
     stale = Counter() if branch else base - _keys(hits)
     kinds = Counter(h[2] for h in hits)
     print(f"no_compute_in_shells: {len(hits)} hits in {len({h[0] for h in hits})} of {len(_shell_blobs(sha))} shell .mojo files scanned at {sha[:9]} "
-          f"({kinds['loop']} untagged loops, {kinds['launch']} launches; baseline {sum(base.values())}); "
+          f"({kinds['loop']} untagged loops, {kinds['false-tag']} false driver-loop tags, "
+          f"{kinds['small-bound']} small-loop notes without a constant bound, {kinds['false-unpack']} false unpack "
+          f"tags, {kinds['inline']} inline iterations, "
+          f"{kinds['launch']} launches; baseline {sum(base.values())}); "
           f"per directory: {_per_dir(hits)}", file=sys.stderr)
+    print(f"no_compute_in_shells: accepted tags: {stats['driver-structure']} driver-loop tags judged structure, "
+          f"{stats['driver-unknown']} driver-loop tags could not be judged (kept), "
+          f"{stats['small-loop']} small-loop notes with a constant bound, {stats['unpack']} unpack loops "
+          f"(counted in the baseline)", file=sys.stderr)
     for (p, c), n in sorted(grown.items()):
         print(f"no_compute_in_shells: baseline row {p}: {c} (x{n}) is not in main's baseline; "
               f"the baseline only shrinks", file=sys.stderr)
@@ -239,10 +639,7 @@ def check_tree(ref, branch=False, baseline_file=None):
         print(f"no_compute_in_shells: stale baseline row {p}: {c} (x{n}) matches no hit: "
               f"remove it with --prune-baseline", file=sys.stderr)
     for p, n, k, c in new:
-        what = ("untagged loop in a shell file; move it into the kernel file (or tag a bounded argument-word loop "
-                "`# small-loop(<what>)`, a model-structure driver loop `# driver-loop: over <what>`, or a Python-object input marshaling loop `# cpu-route: <reason>`)"
-                if k == "loop" else "kernel launch in a shell file; move it into the kernel file")
-        print(f"{p}:{n}: {what}: {c}", file=sys.stderr)
+        print(f"{p}:{n}: {_WHAT[k]}: {c}", file=sys.stderr)
     return 1 if new else 0
 
 
