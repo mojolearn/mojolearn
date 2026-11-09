@@ -53,8 +53,7 @@ def _gemm_host(c: FP, a: FP, b: FP, m: Int, n: Int, k: Int, op: Int) raises:
     var tasks = host_predict_task_count_work(m, m * n * max(k, 1))
     var chunk = host_predict_chunk(m, tasks)
 
-    def _rows(t: Int) {imm cp, imm ap, imm bp, imm chunk, imm m, imm n, imm k, imm leaf, imm leaves,
-                       imm asi, imm asp, imm bsp, imm bsj}:
+    def _rows(t: Int) {imm cp, imm ap, imm bp, imm chunk, imm m, imm n, imm k, imm leaf, imm leaves, imm asi, imm asp, imm bsp, imm bsj}:
         var lo = t * chunk
         for row in range(lo, min(lo + chunk, m)):
             for col in range(n):
