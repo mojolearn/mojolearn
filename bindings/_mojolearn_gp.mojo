@@ -87,6 +87,7 @@ from bindings.device_plan_binding import device_plan_enter_binding, device_plan_
 from gaussian_process.unnorm import GP_PY2MOJO, gpc_binary_out, gpc_ovr_targets
 from std.os import abort
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
+from core.device_query_x import QueryFold
 from gaussian_process.host.gp_theta import (
     gp_theta_param,
 )
@@ -1229,18 +1230,30 @@ def gp_resident_stats_binding() raises -> PythonObject:
                         PythonObject(words[3]), PythonObject(words[4]))
 
 
+def _gp_query_fold(addrs: PythonObject, at: Int) raises -> QueryFold:
+    """A fold's store ids at `addrs[at:at + 3]` (lane a7a), or none."""
+    if len(addrs) < at + 3:
+        return QueryFold.none()
+    return QueryFold(Int(py=addrs[at]), Int(py=addrs[at + 1]), Int(py=addrs[at + 2]))
+
+
 def gpr_predict_resident_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """`gpr_predict_ptr` with the same `addrs` (12) in the same order and
     `params` = gpr_predict_ptr's (7, or 10 with normalize_y, y_std, y_mean)
     followed by ONE more word, the lease (`gp_resident_lease`); 0 names no
     lease and uploads the model for this call only. The same outputs; the
     model's X_train, factor and dual are read from the lease's device copies.
-    Returns `n_clamped`."""
-    if len(addrs) != 12:
+    `addrs` may carry three more words (lane a7a): a cross-validation fold's
+    store ids [base id, base rows, index id] (bindings/device_rows_door.mojo
+    door_rows_store); xstar is then 0 and the query rows are gathered on the
+    device. Returns [n_clamped, finite word, range word] (the query's status
+    words: 0, 0 finite and in range; the door refuses otherwise)."""
+    if len(addrs) != 12 and len(addrs) != 15:
         raise Error(
             "gpr_predict_resident: addrs must contain 12 addresses (xtrain, l,"
             " dual, xstar, kinds, kparams, ls_len, ls, mean_out, var_out,"
-            " std_out, clamped_out), got "
+            " std_out, clamped_out) or 15 (and a fold's base id, base rows,"
+            " index id), got "
             + String(len(addrs))
         )
     if len(params) != 8 and len(params) != 11:
@@ -1279,14 +1292,15 @@ def gpr_predict_resident_binding(addrs: PythonObject, params: PythonObject) rais
     var var_addr = Int(py=addrs[9])
     var std_addr = Int(py=addrs[10])
     var clamped_addr = Int(py=addrs[11])
-    var n_clamped = 0
+    var fold = _gp_query_fold(addrs, 12)
+    var result: Tuple[Int, Int32, Int32]
     with GILReleased(Python()):
-        n_clamped = gpr_predict_resident_device(
+        result = gpr_predict_resident_device(
             lease, xt_addr, l_addr, dual_addr, xs_addr, n_train, n_features, n_star, spec,
             return_std, info, unnorm, y_std, y_mean,
-            mean_addr, var_addr, std_addr, clamped_addr,
+            mean_addr, var_addr, std_addr, clamped_addr, fold,
         )
-    return PythonObject(n_clamped)
+    return Python.list(result[0], Int(result[1]), Int(result[2]))
 
 
 # ===========================================================================
