@@ -289,16 +289,13 @@ def _xl_matrix(source: PythonObject, est: String, context: PythonObject) raises 
     admit_x_unrecorded) with scikit-learn's refusals: the caller's float32
     C-order words as they are, anything else one parallel cast."""
     # Lane a1b-doors-opt-in-trees-linear: X was labels_f32 (a second cast
-    # path, no finite test). `fit`: the `x_linear_fit` entry tests the words
-    # it uploads (x_linear/finite_device.mojo XLIN_IDN_DEV_FINITE, or the
-    # entry's own scan), so a borrowed X takes no host pass here
-    # (defer_finite) and a cast X is tested in its cast pass. The decision
-    # entries test nothing, as before: X is admitted as it is
-    # (allow_nonfinite), so no host pass is added to predict.
-    # Lane a1b (part 2): the decision entries (x_linear_decision /
-    # _codes / _rows) now test the X they upload too and return the status
-    # word (`_xl_status`), so predict defers like fit: no host pass over a
-    # borrowed X, the refusal through admitted_finite_refuse.
+    # path, no finite test). Every entry that reads X tests the words it
+    # uploads: `x_linear_fit` (x_linear/finite_device.mojo
+    # XLIN_IDN_DEV_FINITE, or the entry's own scan) and the decision entries
+    # (x_linear_decision / _codes / _rows: the status word, `_xl_status`).
+    # So a borrowed X takes no host pass here (defer_finite), a cast X is
+    # tested in its cast pass, and a predict refuses through
+    # admitted_finite_refuse (before: a predict never tested X).
     return admit_x_unrecorded(source, est, context, defer_finite=True)
 
 
