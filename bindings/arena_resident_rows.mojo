@@ -138,3 +138,29 @@ def arena_materialize(fields: PythonObject, context: PythonObject) raises -> Pyt
     var output = arena_resident_take(_resident_fields(owner,context),fields["base"],fields["indices"],context)
     py_setitem(fields,"_host",output)
     return output
+
+
+def arena_rows_store_ids(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    """(base store id, base rows, row bytes, index store id, rows) of a
+    DeviceRows: the resident store entries of its base and of its int64
+    indices in model selection's store (`_Resident._entry`, each put ONCE
+    per owner and kept for the fold set), so a device kernel entry gathers
+    the fold out of the resident base with no host word read (lane a6:
+    family and classical entries accept a device X; the arena runner's
+    `_rows_gather` is the model). No download and no host gather."""
+    var take = fields["_take"]
+    if py_type(take) is not context["owner_method_class"] or take.__func__ is not context["arena_resident_take"]:
+        raise Error("TypeError: DeviceRows store ids require model_selection._Resident.take; Python gather callbacks cannot execute")
+    var owner_fields = _resident_fields(take.__self__, context)
+    var entries = owner_fields["_entries"]
+    var b = context["arena_native_types"]
+    if py_type(entries) is not b["dict"]:
+        raise Error("TypeError: resident entries require a native dictionary")
+    _admit_keys(entries, context)
+    var base_pair = _entry_info(fields["base"], entries, False, context)
+    var index_pair = _entry_info(fields["indices"], entries, True, context)
+    var base_shape = base_pair[1]["shape"]
+    var n = Int(py=base_shape[0])
+    var row_bytes = Int(py=base_pair[1]["nbytes"]) // n if n else 0
+    return Python.tuple(base_pair[0][2], PythonObject(n), PythonObject(row_bytes), index_pair[0][2],
+                        index_pair[1]["size"])

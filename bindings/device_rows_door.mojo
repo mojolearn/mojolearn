@@ -23,9 +23,10 @@
 #
 # The connected names (import-time glue, `_native_msel_dispatch.connect`, into
 # every owner context model selection calls): `door_rows_class`
-# (`_arena_io.DeviceRows`) and `door_rows_context` (`_arena_io._ROWS_CONTEXT`).
-# The `door_rows_call` connection went with door_rows_host (removed from the
-# glue by integ/pre-0867-w2: no door reads it).
+# (`_arena_io.DeviceRows`), `door_rows_context` (`_arena_io._ROWS_CONTEXT`)
+# and `door_rows_call` (`_arena_io._ROWS_CALL`, lane a6: `door_rows_store`
+# reads the fold's resident store ids through it, the "store_ids" operation
+# of bindings/arena_rows_native.mojo).
 #
 # Numerics: none. The rows a DeviceRows names are the rows model selection's
 # host path gathers (the same device gather, the same order), so a fit or a
@@ -80,3 +81,45 @@ struct DoorRows(Movable):
 # R13) deleted 2026-11-08 by lane a5-admit-core-followup; code recoverable at f7d10d2b09.
 # Restore: experiments/removed/A5_DOOR_ROWS_HOST.patch. admit_x / admit_rows_host
 # (bindings/admitted_input.mojo) read a DeviceRows without the round trip.
+
+
+struct DoorRowsStore(ImplicitlyCopyable, Movable):
+    """The resident store ids of a DeviceRows fold in model selection's
+    store (bindings/msel_device.mojo MSEL_STORE): the float32 C-order base
+    (`base_rows` x `row_words`) and the int64 row indices (`rows` words).
+    A device kernel entry gathers the fold on the device out of these
+    (core/msel_device_x.mojo msel_device_x_f32); no host word is read."""
+    var base_id: Int
+    var base_rows: Int
+    var row_words: Int
+    var index_id: Int
+    var rows: Int
+
+    def __init__(out self, base_id: Int, base_rows: Int, row_words: Int, index_id: Int, rows: Int):
+        self.base_id = base_id
+        self.base_rows = base_rows
+        self.row_words = row_words
+        self.index_id = index_id
+        self.rows = rows
+
+    @staticmethod
+    def none() -> DoorRowsStore:
+        return DoorRowsStore(-1, 0, 0, -1, 0)
+
+    def active(self) -> Bool:
+        return self.base_id >= 0 and self.index_id >= 0 and self.rows > 0
+
+
+def door_rows_store(value: PythonObject, context: PythonObject) raises -> DoorRowsStore:
+    """The resident store ids of a DeviceRows (the base and the indices put
+    once per fold set by its model-selection owner). `DoorRowsStore.none()`
+    for a context without the store connection (a door outside model
+    selection), so the caller gathers on the host instead."""
+    var call = py_get(context, PythonObject("door_rows_call"))
+    if call is None or not door_is_device_rows(value, context):
+        return DoorRowsStore.none()
+    var ids = py_call(call, value, PythonObject("store_ids"), PythonObject(()), context["door_rows_context"])
+    var row_bytes = Int(py=ids[2])
+    if row_bytes % 4 != 0:
+        raise Error("TypeError: DeviceRows requires a float32 base")
+    return DoorRowsStore(Int(py=ids[0]), Int(py=ids[1]), row_bytes // 4, Int(py=ids[3]), Int(py=ids[4]))
