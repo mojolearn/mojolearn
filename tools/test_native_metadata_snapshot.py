@@ -31,15 +31,17 @@ class NativeMetadataSnapshotSourceTests(unittest.TestCase):
 
     def test_prepared_helpers_use_native_metadata_and_retain_owners(self):
         cases = (
-            ('bindings/trees_public_boost.mojo', '_gather_view', ('rows', 'cols')),
-            ('bindings/trees_public_boost.mojo', '_gather_codes_view', ('codes', 'rows')),
-            ('bindings/trees_public_meta.mojo', '_place_view', ('dst', 'rows', 'blk')),
+            ('bindings/trees_public_boost.mojo', '_gather', ('rows', 'cols')),
+            ('bindings/trees_public_boost.mojo', '_gather_codes', ('codes', 'rows')),
+            ('bindings/trees_public_meta.mojo', '_place', ('dst', 'rows')),
             ('bindings/trees_public_meta.mojo', '_indicator', ('codes',)),
         )
         for path, name, owners in cases:
             with self.subTest(name=name):
                 source = function(path, name)
-                self.assertNotRegex(source, r'len\(|trees_address\(|_view_of_array\(')
+                # Lane a1b: the helpers take the Arrays themselves and read each
+                # one's address slot once (trees_address); no view struct.
+                self.assertNotRegex(source, r'len\(|_view_of_array\(')
                 after_call = source[source.index('    _ = py_call_typed'):]
                 for owner in owners:
                     self.assertIn('    _ = ' + owner + '\n', after_call.replace('  #', '\n#'))
