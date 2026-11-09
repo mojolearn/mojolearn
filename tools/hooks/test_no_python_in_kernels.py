@@ -46,10 +46,9 @@ class TreeTest(unittest.TestCase):
         r = subprocess.run([sys.executable, CHECKER, *args], cwd=self.dir, capture_output=True, text=True)
         return r.returncode, r.stderr
 
-    def test_native_imports_and_capi_are_allowed_everywhere(self):
+    def test_native_imports_and_capi_are_allowed_in_doors(self):
         native = IMPORT + 'def native(entry, args):\n    external_call["PyGILState_Ensure", Int]()\n    external_call["Py_INCREF", NoneType](entry)\n    external_call["PyObject_Call", Int](entry, args, 0)\n    for i in range(3):\n        external_call["PyDict_GetItemWithError", Int](entry, args)\n'
-        for path in ("core/x.mojo", "autograd/x.mojo", "transformer/x.mojo", "bindings/x.mojo",
-                     "providers/python/x.mojo", "providers/python/x_pyapi.mojo"):
+        for path in ("bindings/x.mojo", "providers/python/x.mojo", "providers/python/x_pyapi.mojo"):
             self.write(path, native)
         self.commit()
         rc, err = self.run_checker("--tree")
@@ -65,7 +64,69 @@ class TreeTest(unittest.TestCase):
         self.assertEqual(rc, 1, err)
         for path in ("core/x.mojo", "bindings/x.mojo", "providers/python/x.mojo", "x/pca_pyapi.mojo"):
             self.assertIn(path + ":3: explicit Python evaluator call Python.evaluate", err)
+        # core/ and x/ are kernel files: importing Python there is refused on its own
+        self.assertIn("core/x.mojo:1: kernel file imports std.python", err)
+        self.assertIn("x/pca_pyapi.mojo:1: kernel file imports std.python", err)
+        self.assertNotIn("bindings/x.mojo:1: kernel file", err)
         self.assertNotIn("move the Python door", err)
+
+    def test_kernel_files_import_and_name_no_python(self):
+        cases = {
+            "core/a.mojo": "from std.python import PythonObject\n",
+            "autograd/b.mojo": "from python import Python\n",
+            "gemm/c.mojo": "import std.python\n",
+            "x_decomp/d.mojo": "from bindings.family_common import family_call\n",
+            "svm/e.mojo": "from providers.python.x import y\n",
+            "metrics/f.mojo": "fn f(o: PythonObject):\n    pass\n",
+            "glm/g.mojo": "fn f():\n    var m = Python.import_module(\"os\")\n",
+            "umap/h.mojo": "fn f(x: Int):\n    _ = py_call(x)\n",
+            "adapters/i.mojo": "from std.python import PythonObject\n",
+            "x/j_pyapi.mojo": "from std.python import PythonObject\n",
+        }
+        for path, text in cases.items():
+            self.write(path, text)
+        self.commit()
+        rc, err = self.run_checker("--tree")
+        self.assertEqual(rc, 1, err)
+        for path in cases:
+            self.assertRegex(err, path.replace(".", r"\.") + r":\d+: kernel file ")
+        self.assertIn(f"{len(cases)} of {len(cases)} kernel/algorithm/core (K) .mojo files touch Python", err)
+
+    def test_kernel_rule_ignores_strings_comments_local_helpers_and_doors(self):
+        self.write("core/a.mojo", '"""Calls bindings/x.mojo; see Python docs."""\n# PythonObject in a comment\n'
+                                  'fn py_repr(s: String) -> String:\n    return "Python." + s\n'
+                                  'fn g(o: Int):\n    _ = o.py_call\n')
+        self.write("bindings/b.mojo", IMPORT + "fn h(o: PythonObject):\n    _ = py_call(o)\n")
+        self.write("providers/python/c.mojo", IMPORT)
+        self.write("checks/d.mojo", IMPORT)
+        self.write("gemm/tests/e.mojo", IMPORT)
+        self.write("gemm/test_f.mojo", IMPORT)
+        self.write("packaging/cases/g.mojo", IMPORT)
+        self.commit()
+        rc, err = self.run_checker("--tree")
+        self.assertEqual(rc, 0, err)
+        self.assertIn("0 of 1 kernel/algorithm/core (K) .mojo files touch Python", err)
+
+    def test_kernel_rule_in_branch_mode_judges_only_new_touches(self):
+        self.write("core/old.mojo", IMPORT)
+        self.commit("main debt")
+        self.git("checkout", "-q", "-b", "lane/k")
+        self.write("core/old.mojo", IMPORT + "\n# touched\n")
+        self.commit("touch")
+        self.assertEqual(self.run_checker("--tree", "HEAD", "--branch")[0], 0)
+        self.write("gemm/new.mojo", "from python import Python\n")
+        self.commit("new")
+        rc, err = self.run_checker("--tree", "HEAD", "--branch")
+        self.assertEqual(rc, 1, err)
+        self.assertIn("gemm/new.mojo:1: kernel file imports python", err)
+        self.assertNotIn("core/old.mojo:1", err)
+
+    def test_layer_table(self):
+        for path, want in (("bindings/x.mojo", "D"), ("providers/python/x.mojo", "D"), ("providers/__init__.mojo", "K"),
+                           ("adapters/x.mojo", "K"), ("core/x.mojo", "K"), ("x/y_pyapi.mojo", "K"),
+                           ("training/checks/c.mojo", "T"), ("bench/b.mojo", "T"), ("packaging/p.mojo", "T"),
+                           ("gemm/test_g.mojo", "T"), ("tests/t.mojo", "T")):
+            self.assertEqual(_guard.layer(path), want, path)
 
     def test_test_fixtures_are_not_product(self):
         for path in ("bench/b.mojo", "experiments/e.mojo", "tests/x.mojo", "checks/c.mojo", "autograd/checks/c.mojo"):
@@ -74,69 +135,69 @@ class TreeTest(unittest.TestCase):
         self.assertEqual(self.run_checker("--tree")[0], 0)
 
     def test_old_import_baseline_does_not_authorize_execution(self):
-        self.write("core/x.mojo", EVALUATE)
-        self.write(LEGACY_BASELINE, "# historical import debt\ncore/x.mojo\n")
+        self.write("bindings/x.mojo", EVALUATE)
+        self.write(LEGACY_BASELINE, "# historical import debt\nbindings/x.mojo\n")
         self.commit()
         self.assertEqual(self.run_checker("--tree")[0], 1)
         with open(os.path.join(self.dir, LEGACY_BASELINE), encoding="utf-8") as source:
-            self.assertEqual(source.read(), "# historical import debt\ncore/x.mojo\n")
+            self.assertEqual(source.read(), "# historical import debt\nbindings/x.mojo\n")
 
     def test_baseline_grandfathers_and_reports_stale(self):
-        self.write("x_decomp/pca.mojo", EVALUATE)
-        self.write("x_decomp/ica.mojo", CLEAN)
-        self.write(BASELINE, "# comment\nx_decomp/pca.mojo\nx_decomp/ica.mojo\n")
+        self.write("bindings/pca_door.mojo", EVALUATE)
+        self.write("bindings/ica_door.mojo", CLEAN)
+        self.write(BASELINE, "# comment\nbindings/pca_door.mojo\nbindings/ica_door.mojo\n")
         self.commit()
         rc, err = self.run_checker("--tree")
         self.assertEqual(rc, 0, err)
-        self.assertIn("stale baseline row x_decomp/ica.mojo", err)
+        self.assertIn("stale baseline row bindings/ica_door.mojo", err)
         rc, err = self.run_checker("--prune-baseline")
         self.assertEqual(rc, 0, err)
         with open(os.path.join(self.dir, BASELINE), encoding="utf-8") as f:
-            self.assertEqual(f.read(), "# comment\nx_decomp/pca.mojo\n")
+            self.assertEqual(f.read(), "# comment\nbindings/pca_door.mojo\n")
 
     def test_branch_judges_only_its_changes_and_cannot_grow_baseline(self):
-        self.write("x_decomp/pca.mojo", EVALUATE)          # main's debt, not in the baseline
-        self.write("x_decomp/ica.mojo", EVALUATE)
-        self.write(BASELINE, "x_decomp/ica.mojo\n")
+        self.write("bindings/pca_door.mojo", EVALUATE)          # main's debt, not in the baseline
+        self.write("bindings/ica_door.mojo", EVALUATE)
+        self.write(BASELINE, "bindings/ica_door.mojo\n")
         self.commit("main")
         self.git("checkout", "-q", "-b", "lane/x")
-        self.write("x_decomp/pca.mojo", EVALUATE + "\n# touched\n")   # already a hit at the merge-base
-        self.write("x_decomp/ica.mojo", EVALUATE + "\n# touched\n")   # in the baseline
+        self.write("bindings/pca_door.mojo", EVALUATE + "\n# touched\n")   # already a hit at the merge-base
+        self.write("bindings/ica_door.mojo", EVALUATE + "\n# touched\n")   # in the baseline
         self.commit("lane")
         rc, err = self.run_checker("--tree", "HEAD", "--branch")
         self.assertEqual(rc, 0, err)
-        self.write("svm/new.mojo", EVALUATE)
-        self.write(BASELINE, "x_decomp/ica.mojo\nsvm/new.mojo\n")
+        self.write("bindings/svm_new.mojo", EVALUATE)
+        self.write(BASELINE, "bindings/ica_door.mojo\nbindings/svm_new.mojo\n")
         self.commit("grow")
         rc, err = self.run_checker("--tree", "HEAD", "--branch")
         self.assertEqual(rc, 1)
-        self.assertIn("svm/new.mojo:3: explicit Python evaluator call", err)
-        self.assertIn("baseline row svm/new.mojo is not in main's baseline", err)
+        self.assertIn("bindings/svm_new.mojo:3: explicit Python evaluator call", err)
+        self.assertIn("baseline row bindings/svm_new.mojo is not in main's baseline", err)
         rc, err = self.run_checker("--tree", "HEAD")
         self.assertEqual(rc, 1)
-        self.assertIn("x_decomp/pca.mojo:3: explicit Python evaluator call", err)
+        self.assertIn("bindings/pca_door.mojo:3: explicit Python evaluator call", err)
 
     def test_new_call_in_preexisting_file_is_not_grandfathered(self):
-        self.write("core/existing.mojo", EVALUATE)
+        self.write("bindings/existing.mojo", EVALUATE)
         self.commit("main debt")
         self.git("checkout", "-q", "-b", "lane/add-call")
-        self.write("core/existing.mojo", EVALUATE + 'def extra():\n    return Python.evaluate("3+4")\n')
+        self.write("bindings/existing.mojo", EVALUATE + 'def extra():\n    return Python.evaluate("3+4")\n')
         self.commit("add second call")
         rc, err = self.run_checker("--tree", "HEAD", "--branch")
         self.assertEqual(rc, 1, err)
-        self.assertIn("core/existing.mojo:5: explicit Python evaluator call", err)
-        self.assertNotIn("core/existing.mojo:3: explicit Python evaluator call", err)
+        self.assertIn("bindings/existing.mojo:5: explicit Python evaluator call", err)
+        self.assertNotIn("bindings/existing.mojo:3: explicit Python evaluator call", err)
 
     def test_new_baseline_cannot_bootstrap_an_exception(self):
-        self.write("core/x.mojo", CLEAN)
+        self.write("bindings/x.mojo", CLEAN)
         self.commit("main without evaluator baseline")
         self.git("checkout", "-q", "-b", "lane/bootstrap")
-        self.write("core/x.mojo", EVALUATE)
-        self.write(BASELINE, "core/x.mojo\n")
+        self.write("bindings/x.mojo", EVALUATE)
+        self.write(BASELINE, "bindings/x.mojo\n")
         self.commit("unapproved exception")
         rc, err = self.run_checker("--tree", "HEAD", "--branch")
         self.assertEqual(rc, 1, err)
-        self.assertIn("baseline row core/x.mojo is not in main's baseline", err)
+        self.assertIn("baseline row bindings/x.mojo is not in main's baseline", err)
 
     def test_usage(self):
         self.commit()

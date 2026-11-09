@@ -23,6 +23,14 @@ The command/status name is retained for hook/CI compatibility. Modes:
 The old python_in_kernels_baseline.txt remains historical import-debt evidence;
 it is not authorization to execute Python. Exit 0/1/2: clean/findings/usage.
 No product import, Mojo build or runtime execution is performed.
+
+Second rule (2026-10-21, enforced again 2026-11-09): a kernel / algorithm /
+core file (layer K in LAYERS below) imports nothing from `python` or
+`std.python`, imports no `bindings` or `providers` module, and names no
+PythonObject, `Python.`, py_call or other Python object API. Only the door
+layer (bindings/ and providers/python/) may touch Python. There is no baseline
+for this rule: the tree had 0 of 1,959 K files touching Python when it came
+back (audit py-audit-a-imports, 2026-11-09), so any K finding refuses.
 """
 import ast
 import os
@@ -50,6 +58,75 @@ EVALUATORS = frozenset({
 
 def is_tooling(path):
     return path.startswith(TOOLING_PREFIXES) or "/checks/" in path
+
+
+# The one layer table (first match wins). D = door: the only Mojo that may touch
+# Python. T = tooling, tests, checks, packaging cases: not product source.
+# K = everything else: kernels, algorithms, core. Patterns are fnmatch-style on
+# the repo-relative path.
+LAYERS = (
+    ("D", "bindings/*"),
+    ("D", "providers/python/*"),
+    ("T", "bench/*"),
+    ("T", "experiments/*"),
+    ("T", "tests/*"),
+    ("T", "tools/*"),
+    ("T", "checks/*"),
+    ("T", "packaging/*"),
+    ("T", "*/checks/*"),
+    ("T", "*/tests/*"),
+    ("T", "*/test_*.mojo"),
+    ("T", "test_*.mojo"),
+    ("K", "*.mojo"),
+)
+# Names a K file must never use: the Python object layer and its call helpers.
+K_FORBIDDEN_NAMES = frozenset({
+    "PythonObject", "PythonModuleBuilder", "py_call", "py_fields", "py_attr", "py_type",
+    "native_loaded_module", "CPython", "PyObjectPtr",
+})
+K_FORBIDDEN_MODULES = ("python", "std.python", "bindings", "providers")
+
+
+def layer(path):
+    """'D', 'T' or 'K' for a repo-relative .mojo path (LAYERS, first match)."""
+    import fnmatch
+    for name, pattern in LAYERS:
+        if fnmatch.fnmatchcase(path, pattern):
+            return name
+    return "T"
+
+
+def kernel_findings(source):
+    """(line, what) for every Python touch in a K file: an import from python /
+    std.python / bindings / providers, a name in K_FORBIDDEN_NAMES, or
+    `Python.<attr>`. Comments and string literals are never read as code."""
+    if not re.search(r"[Pp]ython|py_|bindings|providers|PyObject", source):
+        return []
+    tokens = [t for t in _tokens(source) if t[2] != "newline"]
+    found = []
+    for i, (text, line, kind) in enumerate(tokens):
+        if kind != "name":
+            continue
+        if text in ("from", "import") and (i == 0 or tokens[i - 1][0] != "."):
+            j, parts = i + 1, []
+            while j < len(tokens) and (tokens[j][2] == "name" or tokens[j][0] == "."):
+                if tokens[j][0] in ("import", "as"):
+                    break
+                parts.append(tokens[j][0])
+                j += 1
+            module = "".join(parts)
+            for bad in K_FORBIDDEN_MODULES:
+                if module == bad or module.startswith(bad + "."):
+                    found.append((line, f"imports {module}"))
+                    break
+            continue
+        if i > 0 and tokens[i - 1][0] == ".":
+            continue
+        if text in K_FORBIDDEN_NAMES:
+            found.append((line, f"names {text}"))
+        elif text == "Python" and i + 1 < len(tokens) and tokens[i + 1][0] == ".":
+            found.append((line, "names Python."))
+    return found
 
 
 
@@ -243,6 +320,29 @@ def _read(shas):
     return texts
 
 
+def _all_mojo_blobs(ref):
+    r = _git("ls-tree", "-r", "--full-tree", ref)
+    if r.returncode != 0:
+        raise SystemExit(f"no_python_in_kernels: cannot list {ref}: {r.stderr.decode().strip()}")
+    out = {}
+    for ln in r.stdout.decode("utf-8", "replace").splitlines():
+        meta, _, path = ln.partition("\t")
+        bits = meta.split()
+        if len(bits) == 3 and bits[1] == "blob" and path.endswith(".mojo"):
+            out[path] = bits[2]
+    return out
+
+
+def kernel_findings_at(ref, paths=None):
+    """({path: [(line, what)]} for K files touching Python, number of K files)."""
+    blobs = {p: s for p, s in _all_mojo_blobs(ref).items() if layer(p) == "K"}
+    total = len(blobs)
+    if paths is not None:
+        blobs = {p: s for p, s in blobs.items() if p in paths}
+    texts = _read(blobs.values())
+    return {p: found for p, s in blobs.items() if (found := kernel_findings(texts[s]))}, total
+
+
 def findings_at(ref, paths=None):
     """Paths with recognized explicit evaluator calls (not an import/purity count)."""
     blobs = _mojo_blobs(ref)
@@ -327,7 +427,35 @@ def check_tree(ref, branch=False, baseline_file=None):
                   "Python source/code execution requires a documented exception", file=sys.stderr)
     print("no_python_in_kernels: narrow source check only; dynamic calls/hooks require target and "
           "type-admission review (runtime-endpoint ledger remains separate)", file=sys.stderr)
-    return 1 if new or grown else 0
+    k_new = check_kernels(sha, main if branch else None)
+    return 1 if new or grown or k_new else 0
+
+
+def check_kernels(sha, main=None):
+    """The K-layer rule. With `main` (branch mode), judge only K files the
+    branch changed, and only findings beyond what its merge-base had."""
+    judged, old = None, {}
+    if main:
+        mb = _git("merge-base", main, sha).stdout.decode().strip()
+        if mb and mb != sha:
+            judged = set(_git("diff", "--name-only", "--no-renames", mb, sha, "--", "*.mojo").stdout.decode().split())
+            old, _ = kernel_findings_at(mb, judged)
+    every, total = kernel_findings_at(sha)
+    n_all = len(every)
+    details = every if judged is None else {p: f for p, f in every.items() if p in judged}
+    new = 0
+    for path in sorted(details):
+        prior = Counter(what for _, what in old.get(path, ()))
+        for line, what in details[path]:
+            if prior[what]:
+                prior[what] -= 1
+                continue
+            new += 1
+            print(f"{path}:{line}: kernel file {what}; only bindings/ and providers/python/ may touch Python "
+                  f"(layer table LAYERS in tools/hooks/no_python_in_kernels.py)", file=sys.stderr)
+    print(f"no_python_in_kernels: {n_all} of {total} kernel/algorithm/core (K) .mojo files touch Python at "
+          f"{sha[:9]}; {new} new finding(s)", file=sys.stderr)
+    return new
 
 
 def prune_baseline(ref):
