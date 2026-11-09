@@ -5,8 +5,9 @@
 its state resident in device buffers, evaluating the likelihood and its
 gradient in place (`gpr_lml_grad_host`'s kernels, in its order) at the
 parameter table the optimizer writes from theta. One call runs every start;
-the only words that come home during a run are the Cholesky's `info` and
-the optimizer's stop word, once per evaluation. Before, the state machine was
+the only word that comes home is the run sequencer's done word, once per
+GP_OPT_EVAL_CHECK evaluations (lane n8-gp-krr-smo: the Cholesky's `info`
+stays on the device, cholesky/chol_ops.mojo). Before, the state machine was
 Python (`_gp_optimizer.py`) and every evaluation rebuilt the kernel on the
 host, uploaded X and y, and downloaded the likelihood and the gradient.
 
@@ -23,19 +24,16 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz
 from cholesky.checks.potrf import (
     CHOL_ELEM_TPB,
-    CHOL_PANEL_TPB,
     add_jitter,
-    chol_default_nb_hint,
-    chol_nb_for,
-    CHOL_NB_PINNED,
     chol_validate_jitter,
-    chol_workspace_floats,
-    enqueue_logdet,
-    potrf_lower,
 )
-from cholesky.impl.matrix.detail.matrix import copy_vector_from_matrix_diagonal_kernel
-from cholesky.logdet_fold import logdet_blocks
-from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve
+from cholesky.chol_ops import (
+    chol_op_begin,
+    chol_op_cho_solve,
+    chol_op_factor,
+    chol_op_logdet,
+    chol_op_logdet_scratch_floats,
+)
 from core.device_zero import enqueue_fill
 from core.identity_trace import IdentityTrace
 from gaussian_process.checks.kernels import (
@@ -89,11 +87,14 @@ from gaussian_process.gp_optim_items import (
     GP_OPT_MAX_LS,
     GP_OPT_SI_BEST,
     GP_OPT_SI_LEN,
+    GP_OPT_SEQ_DONE,
+    GP_OPT_SEQ_LEN,
     GP_OPT_SI_STOP,
     GP_OPT_TPB,
+    GP_STOP_RUNNING,
+    gp_opt_advance_item,
     gp_opt_final_item,
     gp_opt_init_item,
-    gp_opt_run_end_item,
     gp_opt_st_len,
     gp_opt_step_item,
     gp_opt_theta_map,
@@ -101,6 +102,14 @@ from gaussian_process.gp_optim_items import (
 
 comptime _P = MutPointer[Float32, MutAnyOrigin]
 comptime _I = MutPointer[Int32, MutAnyOrigin]
+
+#: Evaluations enqueued between two reads of the done word. An evaluation
+#: costs a Cholesky (n^3 / 3) and an n-RHS solve; past the last stop at most
+#: GP_OPT_EVAL_CHECK - 1 evaluations run their kernel build and gradient
+#: products with the factor and solves gated off. Eight keeps that waste
+#: below one evaluation's factor at every n while cutting the drains per fit
+#: eightfold (a size-free rule: the same at every shape).
+comptime GP_OPT_EVAL_CHECK = 8
 
 
 @fieldwise_init
@@ -149,20 +158,35 @@ def gp_opt_init_kernel(
 
 
 def gp_opt_step_kernel(
-    st: _P, si: _I, tmap: _I, dpar: _P, dls: _P, ydot: _P, work: _P, n: Int32, lml: _P, graw: _P,
-    t: Int32, info: Int32,
+    st: _P, si: _I, tmap: _I, dpar: _P, dls: _P, ydot: _P, ldet: _P, n: Int32, lml: _P, graw: _P,
+    t: Int32, info: _I,
 ):
-    """The optimizer's step after an evaluation. Thread 0 first combines the
-    likelihood's three scalar terms (`gp_log_marginal_likelihood_value(y^T
-    alpha_, log|K| at work[n], n)`, the fit's own) into `lml`; thread 0 is
-    also the only reader of it in the step."""
-    if Int(thread_idx.x) == 0 and Int(info) == 0:
-        lml.unsafe_store(0, gp_log_marginal_likelihood_value(ydot.unsafe_load(0), work.unsafe_load(Int(n)), Int(n)))
-    gp_opt_step_item(Int(thread_idx.x), GP_OPT_TPB, Int(t), st, si, tmap, dpar, dls, lml, graw, Int(info))
+    """The optimizer's step after an evaluation. `info` is the factor's
+    device word (cholesky/chol_ops.mojo), read here instead of on the host.
+    Thread 0 first combines the likelihood's three scalar terms
+    (`gp_log_marginal_likelihood_value(y^T alpha_, log|K| at ldet[0], n)`,
+    the fit's own) into `lml`; thread 0 is also the only reader of it in the
+    step. Once the run's stop word is set the step changes nothing, so the
+    evaluations enqueued past a run's stop (up to the next done-word read)
+    leave the optimizer's state as the stopping step left it; every thread
+    reads the word before the item's first barrier."""
+    if si.unsafe_load(GP_OPT_SI_STOP) != Int32(GP_STOP_RUNNING):
+        return
+    var code = Int(info.unsafe_load(0))
+    if Int(thread_idx.x) == 0 and code == 0:
+        lml.unsafe_store(0, gp_log_marginal_likelihood_value(ydot.unsafe_load(0), ldet.unsafe_load(0), Int(n)))
+    gp_opt_step_item(Int(thread_idx.x), GP_OPT_TPB, Int(t), st, si, tmap, dpar, dls, lml, graw, code)
 
 
-def gp_opt_run_end_kernel(st: _P, si: _I, rec: _P, t: Int32, run: Int32):
-    gp_opt_run_end_item(Int(thread_idx.x), GP_OPT_TPB, Int(t), st, si, rec, Int(run))
+def gp_opt_advance_kernel(
+    st: _P, si: _I, tmap: _I, bnd: _P, dpar: _P, dls: _P, rec: _P, seq: _I, t: Int32, n_runs: Int32,
+    s0: UInt32, s1: UInt32,
+):
+    """`gp_opt_advance_item`: a stopped run's record and the next run's
+    start (or the done word), on the device."""
+    gp_opt_advance_item(
+        Int(thread_idx.x), GP_OPT_TPB, Int(t), st, si, tmap, bnd, dpar, dls, rec, seq, Int(n_runs), s0, s1,
+    )
 
 
 def gp_opt_final_kernel(st: _P, tmap: _I, dpar: _P, dls: _P, res: _P, t: Int32):
@@ -392,10 +416,11 @@ def gpr_optimize_device(
     var dgrad = ctx.enqueue_create_buffer[DType.float32](max(nt * cells, 1))
     # GP_IDN_PRESCALE's scaled copy of X, one for the whole run
     var dxs = ctx.enqueue_create_buffer[DType.float32](max(n * n_features, 1))
-    var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
-    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
-    var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
-    var dlparts = ctx.enqueue_create_buffer[DType.float32](2 * logdet_blocks(n))
+    # the factor's info word, the log-determinant's scratch and its scalar
+    # (cholesky/chol_ops.mojo: enqueued and read-free on every vendor)
+    var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
+    var dldscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
+    var dldet = ctx.enqueue_create_buffer[DType.float32](1)
     var ddual = ctx.enqueue_create_buffer[DType.float32](n)
     var dkinv = ctx.enqueue_create_buffer[DType.float32](cells)
     var nb = gp_grad_blocks(n)
@@ -409,76 +434,81 @@ def gpr_optimize_device(
     var dsi = ctx.enqueue_create_buffer[DType.int32](GP_OPT_SI_LEN)
     var drec = ctx.enqueue_create_buffer[DType.float32](n_runs * 4)
     var dout = ctx.enqueue_create_buffer[DType.float32](2 * nt)
+    # the run sequencer (gp_opt_advance_item): done word, current run
+    var dseq = ctx.enqueue_create_buffer[DType.int32](GP_OPT_SEQ_LEN)
     enqueue_fill(ctx, dst, Float32(0.0))
-    var hstop = ctx.enqueue_create_host_buffer[DType.int32](1)
-    var stop_word = dsi.create_sub_buffer[DType.int32](GP_OPT_SI_STOP, 1)
+    enqueue_fill(ctx, dseq, Int32(0))
+    var hdone = ctx.enqueue_create_host_buffer[DType.int32](1)
+    var done_word = dseq.create_sub_buffer[DType.int32](GP_OPT_SEQ_DONE, 1)
     ctx.synchronize()
     _ = htmap^
 
-    var ctrace = IdentityTrace()
-    # the likelihood's `n` (its `(n/2) log(2 pi)` term and log|K|'s slot in
-    # dwork): a constant of the step's scalar combine, never a loop bound
-    var eval_cap = GP_OPT_MAX_ITER * (GP_OPT_MAX_LS + 1) + 2
-    for run in range(n_runs):
-        ctx.enqueue_function[gp_opt_init_kernel](  # small-launch(nt: hyperparameters): one block over the kernel hyperparameters sets a start, never the rows
-            _gp(dst), _gi(dsi), _gi(dtmap), _gp(dbnd), _gp(dpar), _gp(dls),
-            Int32(nt), Int32(run), seed_lo, seed_hi,
-            grid_dim=1, block_dim=GP_OPT_TPB,
-        )
-        var evals = 0
-        while True:
+    # Every run on the device (lane n8-gp-krr-smo, 2026-11-09). Before, the
+    # host read the factor's info once per panel and the stop word once per
+    # evaluation (evals x (2 + ceil(n/nb)) drains per fit). Now each
+    # evaluation is enqueued read-free: the Cholesky's info stays in `dinfo`
+    # and gates the factor's later launches, the solves and the
+    # log-determinant (CHOL_DEFER_INFO on every vendor); the step reads it on
+    # the device; `gp_opt_advance_kernel` closes a stopped run and starts
+    # the next. The host reads the done word once per GP_OPT_EVAL_CHECK
+    # evaluations. Evaluations enqueued past the last stop find the factor
+    # gated (`chol_op_begin` on the done word: nothing factored or solved)
+    # and the step and the sequencer inert, so the optimizer's state, the
+    # records and the result are the per-evaluation loop's.
+    var eval_cap = n_runs * (GP_OPT_MAX_ITER * (GP_OPT_MAX_LS + 1) + 2)
+    ctx.enqueue_function[gp_opt_init_kernel](  # small-launch(nt: hyperparameters): one block over the kernel hyperparameters sets a start, never the rows
+        _gp(dst), _gi(dsi), _gi(dtmap), _gp(dbnd), _gp(dpar), _gp(dls),
+        Int32(nt), Int32(0), seed_lo, seed_hi,
+        grid_dim=1, block_dim=GP_OPT_TPB,
+    )
+    var evals = 0
+    while True:  # driver-loop: over done-word reads, one per GP_OPT_EVAL_CHECK evaluations, bounded by eval_cap
+        if evals >= eval_cap:
+            raise Error("gpr_optimize: the optimizer passed its evaluation cap without a stop word")
+        for _e in range(GP_OPT_EVAL_CHECK):  # driver-loop: over the evaluations enqueued between two done-word reads
             evals += 1
-            if evals > eval_cap:
-                raise Error("gpr_optimize: the optimizer passed its evaluation cap without a stop word")
             # the likelihood and its gradient at the parameter table, in place
             gp_kernel_matrix_grad_dev(ctx, dk, dx, dpar, dls, dstack, dgrad, n, n_features, kernel, free, dxs)
             add_jitter(ctx, dk, n, alpha, CHOL_ELEM_TPB)
-            var chol = potrf_lower(ctx, dk, ws, n, ctrace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
-            var info = chol.info
-            if info == 0:
-                var diag = dwork.create_sub_buffer[DType.float32](0, n)
-                var scalar = dwork.create_sub_buffer[DType.float32](n, 1)
-                ctx.enqueue_function[copy_vector_from_matrix_diagonal_kernel](
-                    diag.unsafe_ptr(), dk.unsafe_ptr(), Int32(n), Int32(n),
-                    grid_dim=((n + CHOL_ELEM_TPB - 1) // CHOL_ELEM_TPB, 1, 1), block_dim=(CHOL_ELEM_TPB, 1, 1),
+            chol_op_begin(ctx, dseq, dinfo)
+            chol_op_factor(ctx, dk, dinfo, n)
+            chol_op_logdet(ctx, dk, dinfo, dldscr, dldet, n)
+            ctx.enqueue_copy(dst_buf=ddual, src_buf=dy)
+            chol_op_cho_solve(ctx, dk, ddual, dinfo, n, 1)
+            if nbf > 0:
+                ctx.enqueue_function[gpr_ydot_part_kernel](
+                    _gp(dy), _gp(ddual), Int32(n), _gp(dypart), Int32(nbf),
+                    grid_dim=(nbf + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
                 )
-                enqueue_logdet(ctx, _gp(diag), _gp(dlparts), _gp(scalar), n)
-                _ = diag^
-                _ = scalar^
-                ctx.enqueue_copy(dst_buf=ddual, src_buf=dy)
-                cho_solve(ctx, dk, ddual, n, 1, ctrace, CHOL_SOLVE_TPB)
-                if nbf > 0:
-                    ctx.enqueue_function[gpr_ydot_part_kernel](
-                        _gp(dy), _gp(ddual), Int32(n), _gp(dypart), Int32(nbf),
-                        grid_dim=(nbf + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
-                    )
-                ctx.enqueue_function[gpr_ydot_fin_kernel](_gp(dypart), Int32(nbf), _gp(dyd), grid_dim=1, block_dim=1)
-                enqueue_fill(ctx, dkinv, Float32(0.0))
-                ctx.enqueue_function[gp_eye_kernel](
-                    _gp(dkinv), Int32(n), grid_dim=(n + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB
-                )
-                cho_solve(ctx, dk, dkinv, n, n, ctrace, CHOL_SOLVE_TPB)
-                ctx.enqueue_function[gp_grad_part_kernel](
-                    _gp(ddual), _gp(dkinv), _gp(dgrad), Int32(n), Int32(nb), Int32(nt * nb), _gp(dgpart),
-                    grid_dim=(nt * nb + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
-                )
-                ctx.enqueue_function[gp_grad_fin_kernel](
-                    _gp(dgpart), Int32(nb), Int32(nt), gp_grad_half(), _gp(dgraw),
-                    grid_dim=(nt + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
-                )
+            ctx.enqueue_function[gpr_ydot_fin_kernel](_gp(dypart), Int32(nbf), _gp(dyd), grid_dim=1, block_dim=1)
+            enqueue_fill(ctx, dkinv, Float32(0.0))
+            ctx.enqueue_function[gp_eye_kernel](
+                _gp(dkinv), Int32(n), grid_dim=(n + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB
+            )
+            chol_op_cho_solve(ctx, dk, dkinv, dinfo, n, n)
+            ctx.enqueue_function[gp_grad_part_kernel](
+                _gp(ddual), _gp(dkinv), _gp(dgrad), Int32(n), Int32(nb), Int32(nt * nb), _gp(dgpart),
+                grid_dim=(nt * nb + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
+            )
+            ctx.enqueue_function[gp_grad_fin_kernel](
+                _gp(dgpart), Int32(nb), Int32(nt), gp_grad_half(), _gp(dgraw),
+                grid_dim=(nt + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
+            )
             ctx.enqueue_function[gp_opt_step_kernel](  # small-launch(nt: hyperparameters): one block strides the theta-sized optimizer stages; n is a constant of the likelihood
-                _gp(dst), _gi(dsi), _gi(dtmap), _gp(dpar), _gp(dls), _gp(dyd), _gp(dwork), Int32(n),
-                _gp(dlml), _gp(dgraw), Int32(nt), Int32(info),
+                _gp(dst), _gi(dsi), _gi(dtmap), _gp(dpar), _gp(dls), _gp(dyd), _gp(dldet), Int32(n),
+                _gp(dlml), _gp(dgraw), Int32(nt), _gi(dinfo),
                 grid_dim=1, block_dim=GP_OPT_TPB,
             )
-            # the one word home per evaluation: the stop word
-            ctx.enqueue_copy(dst_ptr=hstop.unsafe_ptr(), src_buf=stop_word)
-            ctx.synchronize()
-            if Int(hstop.unsafe_ptr().unsafe_load(0)) != 0:
-                break
-        ctx.enqueue_function[gp_opt_run_end_kernel](  # small-launch(nt: hyperparameters): one block records one restart over the theta entries only
-            _gp(dst), _gi(dsi), _gp(drec), Int32(nt), Int32(run), grid_dim=1, block_dim=GP_OPT_TPB,
-        )
+            ctx.enqueue_function[gp_opt_advance_kernel](  # small-launch(nt: hyperparameters): one block closes a stopped run and starts the next over the theta entries only
+                _gp(dst), _gi(dsi), _gi(dtmap), _gp(dbnd), _gp(dpar), _gp(dls), _gp(drec), _gi(dseq),
+                Int32(nt), Int32(n_runs), seed_lo, seed_hi,
+                grid_dim=1, block_dim=GP_OPT_TPB,
+            )
+        # the one word home per chunk: the done word
+        ctx.enqueue_copy(dst_ptr=hdone.unsafe_ptr(), src_buf=done_word)
+        ctx.synchronize()
+        if Int(hdone.unsafe_ptr().unsafe_load(0)) != 0:
+            break
     ctx.enqueue_function[gp_opt_final_kernel](  # small-launch(nt: hyperparameters): one block writes the winning theta, a few entries only
         _gp(dst), _gi(dtmap), _gp(dpar), _gp(dls), _gp(dout), Int32(nt), grid_dim=1, block_dim=GP_OPT_TPB,
     )
@@ -498,8 +528,8 @@ def gpr_optimize_device(
     _ = out_theta^
     _ = out_values^
     _ = hsi^
-    _ = hstop^
-    _ = stop_word^
+    _ = hdone^
+    _ = done_word^
     _ = dx^
     _ = dy^
     _ = dpar^
@@ -510,9 +540,9 @@ def gpr_optimize_device(
     _ = dstack^
     _ = dgrad^
     _ = dxs^
-    _ = ws^
-    _ = dwork^
-    _ = dlparts^
+    _ = dinfo^
+    _ = dldscr^
+    _ = dldet^
     _ = ddual^
     _ = dkinv^
     _ = dgpart^
@@ -524,6 +554,7 @@ def gpr_optimize_device(
     _ = dsi^
     _ = drec^
     _ = dout^
+    _ = dseq^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
     return GPOptResult(theta^, values^, runs^, best)
