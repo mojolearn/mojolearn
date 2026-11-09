@@ -136,6 +136,9 @@ class DoorNoIncrease(unittest.TestCase):
     def test_door_debt_does_not_grow(self):
         inv = _inventory()
         rows = Ledger.get()["endpoints"]
+        if not (REPO / "tools/mojo_door_sites.py").is_file() or not (REPO / "bindings").is_dir():
+            self.skipTest("the door sources are not in this tree (an old installed pre-push hook does not archive "
+                          "them: run bash tools/hooks/install.sh)")
         current = inv.read_tsv_rows(inv.door_tsv(rows))
         print("no-python-runtime: " + inv.door_headline(rows), file=sys.stderr)
         if not DOOR_BASELINE.is_file():

@@ -2322,7 +2322,10 @@ def endpoint_inventory(root, package="mojolearn", installed_slots=None, door=Tru
         raise ValueError("installed-slot classes do not resolve to current public getters: "
                          + ", ".join(sorted(set(witnessed) - matched_slots)))
     rows.sort(key=lambda row: row["endpoint"])
-    if door:
+    # The door walk needs tools/mojo_door_sites.py and the door sources; an old installed pre-push
+    # hook archives neither (run bash tools/hooks/install.sh), so the walk is then skipped, not faked.
+    door_ready = (Path(__file__).resolve().parent / "mojo_door_sites.py").is_file() and (Path(root) / "bindings").is_dir()
+    if door and door_ready:
         door_classify(index, rows, Path(root))
     else:
         for row in rows:
