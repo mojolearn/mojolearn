@@ -1,0 +1,521 @@
+diff --git a/bindings/cfb_spectral.mojo b/bindings/cfb_spectral.mojo
+index 26c1321022..2fc003e818 100644
+--- a/bindings/cfb_spectral.mojo
++++ b/bindings/cfb_spectral.mojo
+@@ -252,11 +252,10 @@ def _x_decomp_input(source: PythonObject, context: PythonObject) raises -> Pytho
+             and Bool(py=family_call(b.hasattr, x, PythonObject("nnz")))
+             and Bool(py=family_call(b.hasattr, x, PythonObject("format")))):
+         x = family_call(py_call(b.getattr, x, PythonObject("toarray")))
+-    # Lane a8d: the finiteness refusal is the admission's own (tested in the
+-    # cast pass, or one parallel scan of a borrowed X, or in a fold's
+-    # gather), not a second scan after it; the same sentence.
+-    var a = admit_family(x, 2, "X", context, dense=True, finite=True,
+-                         refusal="X: input must be finite; NaN/inf are unsupported").array
++    var a = admit_family(x, 2, "X", context, dense=True).array
++    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a))), Int(py=a.size)):
++        raise Error("X: input must be finite; NaN/inf are unsupported")
++    _ = a  # keep the Python object alive through the native calls above
+     return a
+ 
+ 
+@@ -733,12 +732,13 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
+             _ = coo.cols
+             _ = coo.vals
+     else:
+-        # Lane a8d: the admission's finite test (see `_x_decomp_input`).
+-        var x = admit_family(source, 2, "X", context, finite=True,
+-                             refusal="mojolearn SpectralClustering: X contains NaN or "
+-                             + "infinity (the implemented path refuses it by name before any "
+-                             + "recorded stage)").array
++        var x = admit_family(source, 2, "X", context).array
+         py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
++        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
++            raise Error("mojolearn SpectralClustering: X contains NaN or "
++                        + "infinity (the implemented path refuses it by name before any "
++                        + "recorded stage)")
++        _ = x  # keep the Python object alive through the native calls above
+         n = Int(py=x.shape[0])
+         var d = Int(py=x.shape[1])
+         _sc_check_shape(fields, n, k)
+@@ -888,12 +888,13 @@ def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject
+                         + "'precomputed', X must be the affinity between the new rows "
+                         + "and the " + String(n_train) + " training rows, shape (n_new, " + String(n_train) + "); "
+                         + "got shape " + family_repr(shape))
+-        # Lane a8d: the admission's finite test (see `_x_decomp_input`).
+-        q = admit_family(a, 2, "X", context, finite=True,
+-                         refusal="mojolearn SpectralClustering.predict: the affinity has a "
+-                         + "non-finite entry; refused by name").array
++        q = admit_family(a, 2, "X", context).array
+         if Int(py=q.shape[0]) < 1:
+             raise Error("mojolearn SpectralClustering.predict: X has no rows; refused by name")
++        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(q))), Int(py=q.size)):
++            raise Error("mojolearn SpectralClustering.predict: the affinity has a "
++                        + "non-finite entry; refused by name")
++        _ = q  # keep the Python object alive through the native calls above
+         if family_min(q) < 0:
+             raise Error("mojolearn SpectralClustering.predict: the affinity has a "
+                         + "negative entry; refused by name, as the fit refuses one")
+@@ -1089,10 +1090,11 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
+         _ = coo.cols
+         _ = coo.vals
+     else:
+-        # Lane a8d: the admission's finite test (see `_x_decomp_input`).
+-        var x = admit_family(source, 2, "X", context, finite=True,
+-                             refusal="mojolearn SpectralEmbedding: X contains NaN or infinity").array
++        var x = admit_family(source, 2, "X", context).array
+         py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
++        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
++            raise Error("mojolearn SpectralEmbedding: X contains NaN or infinity")
++        _ = x  # keep the Python object alive through the native calls above
+         var n = Int(py=x.shape[0])
+         var d = Int(py=x.shape[1])
+         _se_check_shape(fields, n, n_lanczos)
+diff --git a/bindings/mani_kit.mojo b/bindings/mani_kit.mojo
+index 9b65cd909d..73dd35a111 100644
+--- a/bindings/mani_kit.mojo
++++ b/bindings/mani_kit.mojo
+@@ -41,7 +41,7 @@ from x_decomp.descriptor_schema import (
+     XD_ABI_NAME, XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES,
+     XD_EW, XD_GEMM, XD_COLSUM, XD_ROWSUM, XD_SQDIST, XD_MOVE,
+     XD_DEV_ALLOC, XD_DEV_UPLOAD, XD_DEV_EW, XD_DEV_GEMM, XD_DEV_COLSUM, XD_DEV_ROWSUM,
+-    XD_DEV_SQDIST, XD_DEV_MOVE, XD_DEV_ISO_GATHER_MIN, XD_DEV_UPLOAD_FINITE,
++    XD_DEV_SQDIST, XD_DEV_MOVE, XD_DEV_ISO_GATHER_MIN,
+ )
+ 
+ # x_decomp/cells.mojo op codes (`_OP` in _expansion_decomp.py)
+@@ -767,22 +767,19 @@ struct MKit(Movable):
+         resident from the start; every route the input takes is an exact
+         copy or a device route on either side, so no bit changes). The
+         finiteness refusal reads the same immutable snapshot, before the
+-        upload, with the same sentence. A host kit keeps mk_from_snapshot.
+-        Lane a8d: the finiteness test runs on the device over the uploaded
+-        words (XD_DEV_UPLOAD_FINITE, read at the upload's own
+-        synchronisation), no host scan; the same refusal sentence."""
++        upload, with the same sentence. A host kit keeps mk_from_snapshot."""
+         if not self.res():
+             return mk_from_snapshot(value, name, self.ctx)
+         var r = value.source.rows
+         var c = value.source.cols
+         if len(value.shape) != 2 or r == 0 or c == 0:
+             raise Error(name + ": a nonempty two-dimensional input is required")
++        var src = FAMILY_F32P(unsafe_from_address=value.source.addr)
++        if not host_all_finite_f32(src, r * c):
++            raise Error(name + ": input must be finite; NaN/inf are unsupported")
+         var nd = self._devbuf(r * c)
+-        var flagged = kit_call(self.xd(), XD_DEV_UPLOAD_FINITE, [value.source.addr],
+-                               [Int(py=device_identifier(nd)), r * c], List[Float64](), True)
++        self.upload(Int(py=device_identifier(nd)), value.source.addr, r * c)
+         _ = value  # keep the snapshot's owners alive through the synchronous upload
+-        if flagged != 0:
+-            raise Error(name + ": input must be finite; NaN/inf are unsupported")
+         return mk_dev_view(nd, r, c, self.ctx)
+ 
+     def dout(mut self, r: Int, c: Int) raises -> PythonObject:
+diff --git a/bindings/mani_tsne_native.mojo b/bindings/mani_tsne_native.mojo
+index 3261ae215a..47bb8853ad 100644
+--- a/bindings/mani_tsne_native.mojo
++++ b/bindings/mani_tsne_native.mojo
+@@ -19,6 +19,7 @@ from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_onc
+ from bindings.classical_validate import classical_view
+ from bindings.manifold_lifecycle_native import _cast
+ from bindings.spectral_umap_routes import spectral_umap_entry as family_entry, spectral_umap_optional_entry
++from core.host_finite_scan import host_all_finite_f32
+ from bindings.family_common import (
+     family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call, family_array,
+     family_field, family_shape_repr, FAMILY_F32P,
+@@ -54,12 +55,9 @@ def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k:
+     var z = family_array(Python.tuple(n, k), "<f4", context)
+     # ORDER MATCHES PCA._fit: x, components, mean, variance, ratio,
+     # singular, out; n, d, nc, dense 0, keep_mode 0, whiten 0, frac 0.0.
+-    # Lane a8d: the trailing 1 asks pca_fit_owned for X's finite status word
+-    # over its own upload (no host scan in the door); a flagged X is refused
+-    # here, before the eigensolver's result is read.
+     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(k), PythonObject(0),
+-                             PythonObject(0), PythonObject(0), PythonObject(Float64(0.0)), PythonObject(1))
+-    var fitted = family_call(fit_owned, PythonObject(x_address), classical_address(components), classical_address(mean),
++                             PythonObject(0), PythonObject(0), PythonObject(Float64(0.0)))
++    _ = family_call(fit_owned, PythonObject(x_address), classical_address(components), classical_address(mean),
+                     classical_address(variance), classical_address(ratio), classical_address(singular),
+                     classical_address(z), params)
+     _ = mean  # keep the Python object alive through the native call above
+@@ -68,8 +66,6 @@ def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k:
+     _ = ratio  # keep the Python object alive through the native call above
+     _ = variance  # keep the Python object alive through the native call above
+     _ = z  # keep the Python object alive through the native call above
+-    if Int(py=fitted[2]) != 0:
+-        raise Error("Input X contains NaN or infinity")
+     _ = components^
+     _ = mean^
+     _ = variance^
+@@ -88,15 +84,14 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
+     var binding = estimator_binding_mode(settings.mode, "_mojolearn_x_ann", context) if args[0] is None else args[0]
+     var estimators = estimator_binding_mode(settings.mode, "_mojolearn_estimators", context) if args[1] is None else args[1]
+     var fields = settings.values
+-    # TSNE's public input refusal for every init mode, tested on the device
+-    # (lane a8d): the PCA start's pca_fit_owned returns X's finite status
+-    # word over its upload, before its eigensolver's result is used; the
+-    # other starts ask x_ann_tsne_fit for it (params[12]). No host scan.
+-    # TOMBSTONE: the door's host_all_finite_f32 scan of X deleted 2026-11-09 by lane a8d-device-x-decomp-manifold; code recoverable at 0ce88411d3.
++    # Reject nonfinite coordinates before PCA initialization reaches its
++    # eigensolver; preserve TSNE's public input refusal for every init mode.
+     var x = snapshot.keep
+     var x_address = snapshot.source.addr
+     var n = snapshot.source.rows
+     var d = snapshot.source.cols
++    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=x_address), snapshot.count):
++        raise Error("Input X contains NaN or infinity")
+     if n < 2:
+         # scikit-learn's TSNE validates X with ensure_min_samples=2
+         raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(d)
+@@ -179,15 +174,12 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
+     # x, y0, y_out, kl_out; n, d, max_iter, exploration_iters, perplexity,
+     # early_exaggeration, learning_rate, post_exaggeration_learning_rate_factor,
+     # init mode, random_state low, high, n_components
+-    var tested = family_call(fit, Python.list(PythonObject(x_address), PythonObject(y0_address), classical_address(embedding),
++    _ = family_call(fit, Python.list(PythonObject(x_address), PythonObject(y0_address), classical_address(embedding),
+                                      classical_address(kl)),
+                     Python.list(PythonObject(n), PythonObject(d), max_iter, PythonObject(exploration),
+                                 PythonObject(perplexity), PythonObject(exag), PythonObject(lr),
+-                                PythonObject(post_factor), PythonObject(mode), low, high, PythonObject(k),
+-                                PythonObject(0 if mode == 2 else 1)))
++                                PythonObject(post_factor), PythonObject(mode), low, high, PythonObject(k)))
+     _ = embedding  # keep the Python object alive through the native call above
+-    if mode != 2 and Int(py=tested[1]) != 0:
+-        raise Error("Input X contains NaN or infinity")
+     _ = x  # keep the Python object alive through the native call above
+     _ = kl  # keep the Python object alive through the native call above
+     _ = snapshot
+diff --git a/bindings/nmf_native.mojo b/bindings/nmf_native.mojo
+index d78ae7a5bc..bccb8204e3 100644
+--- a/bindings/nmf_native.mojo
++++ b/bindings/nmf_native.mojo
+@@ -10,8 +10,8 @@ from bindings.native_loaded_module import native_loaded_module
+ from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
+ from bindings.py_typed_call import py_call_typed
+ from bindings.classical_arrays import classical_address
+-from bindings.admitted_input import admit_x, admitted_finite_refuse
+-from bindings.decomp_inputs import decomp_admit, decomp_input
++from bindings.admitted_input import admit_x
++from bindings.decomp_inputs import decomp_input
+ from bindings.decomp_owner_common import (
+     decomp_attr, decomp_check, decomp_entries, decomp_eq, decomp_f32, decomp_float, decomp_gemm_check, decomp_int,
+     decomp_le, decomp_repr, decomp_seed, decomp_set_mode,
+@@ -68,12 +68,8 @@ def _regs(fields: PythonObject, n: Int, d: Int) raises -> PythonObject:
+ 
+ 
+ def _run(model: PythonObject, fields: PythonObject, x: PythonObject, nc: Int, init: Int, w_in: PythonObject,
+-         h_in: PythonObject, seed: Int, update_h: Bool, beta: Float64, context: PythonObject,
+-         test: Bool = False) raises -> PythonObject:
+-    """One x_decomp_nmf_fit call: (W, H, n_iter_, error). `test` (lane a8d):
+-    X was admitted with `defer_finite` and not scanned; the driver returns
+-    its finite status word (the trailing flag) and a flagged X is refused
+-    with the admission's wording."""
++         h_in: PythonObject, seed: Int, update_h: Bool, beta: Float64, context: PythonObject) raises -> PythonObject:
++    """One x_decomp_nmf_fit call: (W, H, n_iter_, error)."""
+     var entries = decomp_entries(model, fields, Python.tuple("x_decomp_nmf_fit"), context)
+     var n = Int(py=x.shape[0])
+     var d = Int(py=x.shape[1])
+@@ -88,16 +84,12 @@ def _run(model: PythonObject, fields: PythonObject, x: PythonObject, nc: Int, in
+         0 if decomp_eq(fields["solver"], PythonObject("cd")) else 1, 1 if update_h else 0,
+         decomp_int(fields["max_iter"]), 1 if Bool(py=fields["shuffle"]) else 0, classical_address(w),
+         classical_address(h))
+-    if test:
+-        _ = py_call(params.append, PythonObject(1))
+     _ = w  # keep the Python object alive through the native call above
+     _ = h  # keep the Python object alive through the native call above
+     var floats = Python.list(beta, decomp_float(fields["tol"]), regs[0], regs[1], regs[2], regs[3])
+     var got = py_call_typed(entries["x_decomp_nmf_fit"], params, floats)
+     _ = h  # keep the Python object alive through the native call above
+     _ = w  # keep the Python object alive through the native call above
+-    if test:
+-        admitted_finite_refuse(Int(py=got[2]), "NMF")
+     return Python.tuple(w, h, got[0], got[1])
+ 
+ 
+@@ -106,11 +98,7 @@ def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: Python
+     """`NMF.fit_transform(X, W=None, H=None)`: W."""
+     var fields = py_fields(model)
+     decomp_set_mode(fields, context)
+-    # Lane a8d: X is not scanned here (defer_finite); the driver tests it in
+-    # its negativity total and returns the status word.
+-    var admitted = decomp_admit(source, "NMF", context, defer_finite=True)
+-    var test = not admitted.finite
+-    var x = admitted.array
++    var x = decomp_input(source, "NMF", context)
+     var n = Int(py=x.shape[0])
+     var d = Int(py=x.shape[1])
+     var beta = _validate(fields)
+@@ -123,7 +111,7 @@ def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: Python
+         if Int(py=wm.shape[0]) != n or Int(py=wm.shape[1]) != nc or Int(py=hm.shape[1]) != d:
+             raise Error("NMF: W must be (n_samples, n_components) and H (n_components, n_features) for init='custom'")
+         result = _run(model, fields, x, nc, _INIT_GIVEN, wm, hm, decomp_seed(fields["random_state"]), True, beta,
+-                      context, test)
++                      context)
+         _ = wm^
+         _ = hm^
+     else:
+@@ -149,7 +137,7 @@ def nmf_fit_transform(model: PythonObject, source: PythonObject, w_given: Python
+         if code != _INIT_RANDOM and nc > smaller:
+             raise Error("init = 'nndsvd' can only be used when n_components <= min(n_samples, n_features)")
+         result = _run(model, fields, x, nc, code, PythonObject(None), PythonObject(None),
+-                      decomp_seed(fields["random_state"]), True, beta, context, test)
++                      decomp_seed(fields["random_state"]), True, beta, context)
+     var h = result[1]
+     py_setitem(fields, "components_", h)
+     py_setitem(fields, "n_components_", PythonObject(Int(py=h.shape[0])))
+@@ -175,9 +163,7 @@ def nmf_transform(model: PythonObject, source: PythonObject, context: PythonObje
+     """`NMF.transform`: W for the fitted components (H fixed)."""
+     var fields = py_fields(model)
+     decomp_check(model, fields, "components_")
+-    var admitted = decomp_admit(source, "NMF", context, defer_finite=True)
+-    var test = not admitted.finite
+-    var x = admitted.array
++    var x = decomp_input(source, "NMF", context)
+     var d = Int(py=x.shape[1])
+     var fitted = decomp_int(decomp_attr(model, fields, "n_features_in_"))
+     if d != fitted:
+@@ -185,7 +171,7 @@ def nmf_transform(model: PythonObject, source: PythonObject, context: PythonObje
+     var beta = _validate(fields)
+     var h = admit_x(fields["components_"], 2, "components_", context)
+     var result = _run(model, fields, x, Int(py=h.shape[0]), _TRANSFORM, PythonObject(None), h,
+-                      decomp_seed(fields["random_state"]), False, beta, context, test)
++                      decomp_seed(fields["random_state"]), False, beta, context)
+     _ = x^
+     _ = h^
+     return result[0]
+diff --git a/bindings/pca_fit_native.mojo b/bindings/pca_fit_native.mojo
+index 3191042731..82a3344ae8 100644
+--- a/bindings/pca_fit_native.mojo
++++ b/bindings/pca_fit_native.mojo
+@@ -12,7 +12,6 @@ from bindings.pca_exact import pca_too_small, pca_whiten_entries, pca_refusal
+ from providers.python.classical_family_admission_pyapi import classical_family_admit
+ from bindings.decomp_inputs import decomp_admit
+ from bindings.admitted_input import admitted_finite_refuse
+-from bindings.device_rows_door import door_rows_refuse
+ from providers.python.pca_fit_scalar_pyapi import PCAFitScalar, pca_fit_scalar_capture
+ from providers.python.pca_fit_model_pyapi import pca_fit_fields, pca_fit_entries, pca_fit_host_only, pca_fit_preflight
+ 
+@@ -70,21 +69,9 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
+     # parallel cast into uninitialised storage (scikit-learn wording, est PCA).
+     # Lane a7d: the exact solvers' entry (pca_fit_owned) tests a borrowed X
+     # on the device after its upload and returns the status word
+-    # (defer_finite): no host scan of X. Lane a8d: the randomized driver
+-    # returns the word too (its centred-square total, read before the
+-    # decomposition), so no solver scans X here.
+-    # Lane a8d: an identical exact fit (no projection) of a cross-validation
+-    # fold resident on the device is gathered there by the base binding's
+-    # `pca_fit_fold` (no host gather, no upload of X; finite and range
+-    # words from the gather); otherwise a fold's rows are gathered on the
+-    # host by the admission.
+-    var fold_entry = py_get(context, "pca_fit_fold")
+-    var mode = py_get(fields, "numeric_mode")
+-    var identical = (mode is not None and py_type(mode) is py_type(PythonObject(""))
+-                     and String(py_call(py_call(mode.strip).lower)) == "identical")
+-    var fold_ok = fold_entry is not None and identical and not project and solver != "randomized"
+-    var x = decomp_admit(source, "PCA", context, device_x=fold_ok, defer_finite=True)
+-    var on_device = x.store.active()
++    # (defer_finite): no host scan of X. The randomized driver uploads X in
++    # its own executor, so that solver keeps the scan here.
++    var x = decomp_admit(source, "PCA", context, defer_finite=solver != "randomized")
+     var rows = x.rows
+     var cols = x.cols
+     var b = native_loaded_module("builtins")
+@@ -175,33 +162,12 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
+     var noise = PythonObject(None)
+     var keep = count
+     if randomized:
+-        var rparams = Python.list(rows, cols, count, oversamples, iterations, Int(auto), Int(whiten), seed)
+-        if not x.finite:
+-            _ = py_call(rparams.append, PythonObject(1))
+-        var got = PythonObject(None)
+         try:
+-            got = py_call_typed(entries["pca_fit_randomized"], x.address, components.address,
++            noise = py_call_typed(entries["pca_fit_randomized"], x.address, components.address,
+                 mean.address, variance.address, ratio.address, singular.address, projection_address,
+-                rparams)
++                Python.list(rows, cols, count, oversamples, iterations, Int(auto), Int(whiten), seed))
+         except error:
+             raise pca_refusal(error^)
+-        if not x.finite:
+-            admitted_finite_refuse(Int(py=got[1]), "PCA")
+-            noise = got[0]
+-        else:
+-            noise = got
+-    elif on_device:
+-        var fold = py_call_typed(fold_entry, Python.list(x.store.base_id, x.store.base_rows, x.store.index_id),
+-            Python.list(components.address, mean.address, variance.address, ratio.address, singular.address),
+-            Python.list(rows, cols, count, Int(dense), keep_mode, fraction))
+-        door_rows_refuse(Int(py=fold[2]), Int(py=fold[3]), "PCA", x.store.base_rows)
+-        keep = Int(py=fold[0])
+-        noise = fold[1]
+-        if keep != count:
+-            components = components.prefix(keep, cols, context)
+-            variance = variance.prefix(keep, 0, context)
+-            ratio = ratio.prefix(keep, 0, context)
+-            singular = singular.prefix(keep, 0, context)
+     else:
+         var fit_params = Python.list(rows, cols, count, Int(dense), keep_mode, Int(whiten), fraction)
+         if not x.finite:
+diff --git a/bindings/tsvd_native.mojo b/bindings/tsvd_native.mojo
+index 8880597544..7606a1915b 100644
+--- a/bindings/tsvd_native.mojo
++++ b/bindings/tsvd_native.mojo
+@@ -25,7 +25,7 @@ from bindings.py_typed_call import py_call_typed
+ from bindings.classical_attributes import classical_connect_numpy
+ from bindings.classical_arrays import classical_address, classical_typed
+ from bindings.admitted_input import admit_x, AdmittedX, admitted_finite_refuse
+-from bindings.device_rows_door import door_rows_refuse
++from core.host_finite_scan import host_finite_status
+ from bindings.decomp_inputs import decomp_input, decomp_admit, decomp_input_copied
+ from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
+ from bindings.fitted_resident_door import fitted_resident_lease, fitted_resident_drop
+@@ -173,7 +173,7 @@ def _algorithm(fields: PythonObject) raises -> String:
+ 
+ 
+ def _randomized(model: PythonObject, fields: PythonObject, x: PythonObject, rows: Int, cols: Int, nc: Int,
+-                mode: String, context: PythonObject, test: Bool) raises:
++                mode: String, context: PythonObject) raises:
+     """algorithm='randomized': `_randomized_decompose(x, nc, center=False,
+     ...)` as one x_decomp call, its arrays stored as the shell stored them."""
+     var b = native_loaded_module("builtins")
+@@ -203,16 +203,9 @@ def _randomized(model: PythonObject, fields: PythonObject, x: PythonObject, rows
+     var singular = _f32(Python.tuple(nc), context)
+     var variance = _f32(Python.tuple(nc), context)
+     var ratio = _f32(Python.tuple(nc), context)
+-    # Lane a8d: `test` appends the finite flag; the driver returns X's
+-    # finite status word, taken off the variance total it computes anyway.
+-    var rparams = Python.list(rows, cols, nc, oversamples, iterations, 1 if auto else 0, word)
+-    if test:
+-        _ = py_call(rparams.append, PythonObject(1))
+-    var status = py_call_typed(decomp["x_decomp_tsvd_randomized"], classical_address(x), classical_address(components),
+-                               classical_address(singular), classical_address(variance), classical_address(ratio),
+-                               rparams)
+-    if test:
+-        admitted_finite_refuse(Int(py=status), _TSVD_EST)
++    _ = py_call_typed(decomp["x_decomp_tsvd_randomized"], classical_address(x), classical_address(components),
++                      classical_address(singular), classical_address(variance), classical_address(ratio),
++                      Python.list(rows, cols, nc, oversamples, iterations, 1 if auto else 0, word))
+     _ = components  # keep the Python object alive through the native call above
+     _ = ratio  # keep the Python object alive through the native call above
+     _ = variance  # keep the Python object alive through the native call above
+@@ -246,9 +239,12 @@ def _tsqr_route(decomp: PythonObject, rows: Int, cols: Int, nc: Int) raises -> B
+ comptime _TSVD_EST = "TruncatedSVD"
+ 
+ 
+-# TOMBSTONE: _tsvd_scan (the parallel host scan of a deferred X before the TSQR and randomized drivers) deleted 2026-11-09 by lane a8d-device-x-decomp-manifold; code recoverable at 0ce88411d3.
+-# Both drivers now return X's finite status word over their own upload
+-# (x_decomp/tsvd_owner.mojo `finite_word`), as the Gram entries do.
++def _tsvd_scan(x: AdmittedX) raises:
++    """The finite test of an X admitted with `defer_finite` for an arm whose
++    driver uploads X in its own executor (the TSQR and randomized arms): the
++    parallel host scan, the one admission wording."""
++    if not x.finite:
++        admitted_finite_refuse(Int(host_finite_status(x.address, x.rows * x.cols)), _TSVD_EST)
+ 
+ 
+ def _exact(model: PythonObject, fields: PythonObject, admitted: AdmittedX, rows: Int, cols: Int, nc: Int,
+@@ -268,14 +264,12 @@ def _exact(model: PythonObject, fields: PythonObject, admitted: AdmittedX, rows:
+     var components = _f32(Python.tuple(nc, cols), context)
+     var singular = _f32(Python.tuple(nc), context)
+     if _tsqr_route(decomp, rows, cols, nc):
++        _tsvd_scan(admitted)
+         if py_get(decomp, "x_decomp_tsvd_tsqr") is None:
+             raise Error("NotImplementedError: mojolearn TruncatedSVD: this build of _mojolearn_x_decomp does not export "
+                         + "x_decomp_tsvd_tsqr; rebuild it with bindings/build_x_decomp.sh")
+-        var qparams = Python.list(rows, cols, nc, 1) if test else params
+-        var qstatus = py_call_typed(decomp["x_decomp_tsvd_tsqr"], classical_address(x), classical_address(components),
+-                                    classical_address(singular), qparams)
+-        if test:
+-            admitted_finite_refuse(Int(py=qstatus), _TSVD_EST)
++        _ = py_call_typed(decomp["x_decomp_tsvd_tsqr"], classical_address(x), classical_address(components),
++                          classical_address(singular), params)
+         _ = components  # keep the Python object alive through the native call above
+         _ = singular  # keep the Python object alive through the native call above
+         py_setitem(fields, "components_", components)
+@@ -313,10 +307,8 @@ def _exact(model: PythonObject, fields: PythonObject, admitted: AdmittedX, rows:
+     _ = variance  # keep the Python object alive through the native call above
+ 
+ 
+-def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject, fold: Bool = False) raises -> PythonObject:
+-    """`TruncatedSVD.fit`; returns the converted X (kept for fit_transform).
+-    `fold` (lane a8d, `fit` only): a resident fold may be fit on the device
+-    (`tsvd_fit_fold`); None is returned then (no host X exists)."""
++def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
++    """`TruncatedSVD.fit`; returns the converted X (kept for fit_transform)."""
+     var b = native_loaded_module("builtins")
+     var fields = py_fields(model)
+     # New components replace the old: their device copy goes now (N351).
+@@ -331,56 +323,28 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject, f
+                     + "'arpack' is scipy's svds (implicitly restarted Lanczos), a different algorithm; "
+                     + "accepting the name and running the Gram arm would be a silent substitution, which is "
+                     + "why this raises (decomposition/NOT_IMPLEMENTED.tsv)")
++    var host = _host_only(model)
+     # A SciPy sparse X (TruncatedSVD's main input) is densified once, and the
+     # input_copied_ flag is read off the admission (no second view of X).
+     # Lane a7d: a borrowed X is not scanned here (defer_finite); the Gram
+-    # entries test it over their own upload; the TSQR and randomized drivers
+-    # return its status word too (lane a8d).
+-    # Lane a8d: an identical exact (Gram) fit of a cross-validation fold
+-    # resident on the device is gathered there by the base binding's
+-    # `tsvd_fit_fold` (no host gather, no upload of X); the TSQR route is
+-    # `fast` only and the randomized driver uploads X itself, so those (and
+-    # the host class) get the fold's host rows.
+-    var host = _host_only(model)
+-    var mode = _mode(fields, context)
+-    var fold_entry = py_get(context, "tsvd_fit_fold")
+-    var fold_ok = fold and fold_entry is not None and not host and mode == "identical" and algorithm != "randomized"
+-    var admitted = decomp_admit(source, "TruncatedSVD", context, device_x=fold_ok, defer_finite=True)
++    # entries test it over their own upload, the TSQR and randomized arms
++    # scan it in `_tsvd_scan` before their drivers.
++    var admitted = decomp_admit(source, "TruncatedSVD", context, defer_finite=True)
+     py_setitem(fields, "input_copied_", PythonObject(decomp_input_copied(admitted, context)))
++    var x = admitted.array
+     var rows = admitted.rows
+     var cols = admitted.cols
+     if rows < 2 or cols < 2:
+         raise Error(_too_small(rows, cols))
+     var nc = _components(fields, rows, cols)
+-    if admitted.store.active():
+-        var components = _f32(Python.tuple(nc, cols), context)
+-        var singular = _f32(Python.tuple(nc), context)
+-        var variance = _f32(Python.tuple(nc), context)
+-        var ratio = _f32(Python.tuple(nc), context)
+-        var words = py_call_typed(fold_entry, Python.list(admitted.store.base_id, admitted.store.base_rows,
+-                                                          admitted.store.index_id),
+-                                  Python.list(classical_address(components), classical_address(singular),
+-                                              classical_address(variance), classical_address(ratio)),
+-                                  Python.list(rows, cols, nc))
+-        _ = components  # keep the Python object alive through the native call above
+-        _ = singular  # keep the Python object alive through the native call above
+-        _ = variance  # keep the Python object alive through the native call above
+-        _ = ratio  # keep the Python object alive through the native call above
+-        door_rows_refuse(Int(py=words[0]), Int(py=words[1]), _TSVD_EST, admitted.store.base_rows)
+-        py_setitem(fields, "components_", components)
+-        py_setitem(fields, "singular_values_", singular)
+-        py_setitem(fields, "explained_variance_", variance)
+-        py_setitem(fields, "explained_variance_ratio_", ratio)
+-        py_setitem(fields, "n_components_", PythonObject(nc))
+-        py_setitem(fields, "n_features_in_", PythonObject(cols))
+-        return PythonObject(None)
+-    var x = admitted.array
++    var mode = _mode(fields, context)
+     # the host class trains on the CPU: the estimators host binding of its
+     # `_bind` serves the same entry names (CPU TRAINING IS PUBLIC)
+     var entries = (py_call(native_loaded_module("builtins").vars, py_call(model._bind, "_mojolearn_estimators"))
+                    if host else _entries(mode, context))
+     if algorithm == "randomized":
+-        _randomized(model, fields, x, rows, cols, nc, mode, context, not admitted.finite)
++        _tsvd_scan(admitted)
++        _randomized(model, fields, x, rows, cols, nc, mode, context)
+     else:
+         _exact(model, fields, admitted, rows, cols, nc, mode, entries, context)
+     py_setitem(fields, "n_components_", PythonObject(nc))
+@@ -520,7 +484,7 @@ def tsvd_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+         var result = PythonObject(None)
+         try:
+             if operation == "fit":
+-                _ = tsvd_fit(model, args[0], context, True)
++                _ = tsvd_fit(model, args[0], context)
+                 result = model
+             elif operation == "fit_transform":
+                 # the transform projects the X the fit converted: one conversion

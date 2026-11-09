@@ -19,7 +19,6 @@ from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_onc
 from bindings.classical_validate import classical_view
 from bindings.manifold_lifecycle_native import _cast
 from bindings.spectral_umap_routes import spectral_umap_entry as family_entry, spectral_umap_optional_entry
-from core.host_finite_scan import host_all_finite_f32
 from bindings.family_common import (
     family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call, family_array,
     family_field, family_shape_repr, FAMILY_F32P,
@@ -55,9 +54,12 @@ def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k:
     var z = family_array(Python.tuple(n, k), "<f4", context)
     # ORDER MATCHES PCA._fit: x, components, mean, variance, ratio,
     # singular, out; n, d, nc, dense 0, keep_mode 0, whiten 0, frac 0.0.
+    # Lane a8d: the trailing 1 asks pca_fit_owned for X's finite status word
+    # over its own upload (no host scan in the door); a flagged X is refused
+    # here, before the eigensolver's result is read.
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(k), PythonObject(0),
-                             PythonObject(0), PythonObject(0), PythonObject(Float64(0.0)))
-    _ = family_call(fit_owned, PythonObject(x_address), classical_address(components), classical_address(mean),
+                             PythonObject(0), PythonObject(0), PythonObject(Float64(0.0)), PythonObject(1))
+    var fitted = family_call(fit_owned, PythonObject(x_address), classical_address(components), classical_address(mean),
                     classical_address(variance), classical_address(ratio), classical_address(singular),
                     classical_address(z), params)
     _ = mean  # keep the Python object alive through the native call above
@@ -66,6 +68,8 @@ def _tsne_pca_start(estimators: PythonObject, x_address: Int, n: Int, d: Int, k:
     _ = ratio  # keep the Python object alive through the native call above
     _ = variance  # keep the Python object alive through the native call above
     _ = z  # keep the Python object alive through the native call above
+    if Int(py=fitted[2]) != 0:
+        raise Error("Input X contains NaN or infinity")
     _ = components^
     _ = mean^
     _ = variance^
@@ -84,14 +88,16 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     var binding = estimator_binding_mode(settings.mode, "_mojolearn_x_ann", context) if args[0] is None else args[0]
     var estimators = estimator_binding_mode(settings.mode, "_mojolearn_estimators", context) if args[1] is None else args[1]
     var fields = settings.values
-    # Reject nonfinite coordinates before PCA initialization reaches its
-    # eigensolver; preserve TSNE's public input refusal for every init mode.
+    # TSNE's public input refusal for every init mode, tested on the device
+    # (lane a8d): the PCA start's pca_fit_owned returns X's finite status
+    # word over its upload, before its eigensolver's result is used; the
+    # other starts ask x_ann_tsne_fit for it (params[12]). No host scan.
+    # TOMBSTONE: mani_tsne_native.mojo door host scan of X (host_all_finite_f32) deleted 2026-11-09 by lane a8d-device-x-decomp-manifold; code recoverable at 0ce88411d3.
+    # Restore: experiments/removed/A8D_DECOMP_MANIFOLD_HOST_FINITE.patch.
     var x = snapshot.keep
     var x_address = snapshot.source.addr
     var n = snapshot.source.rows
     var d = snapshot.source.cols
-    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=x_address), snapshot.count):
-        raise Error("Input X contains NaN or infinity")
     if n < 2:
         # scikit-learn's TSNE validates X with ensure_min_samples=2
         raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(d)
@@ -174,12 +180,15 @@ def _tsne_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObjec
     # x, y0, y_out, kl_out; n, d, max_iter, exploration_iters, perplexity,
     # early_exaggeration, learning_rate, post_exaggeration_learning_rate_factor,
     # init mode, random_state low, high, n_components
-    _ = family_call(fit, Python.list(PythonObject(x_address), PythonObject(y0_address), classical_address(embedding),
+    var tested = family_call(fit, Python.list(PythonObject(x_address), PythonObject(y0_address), classical_address(embedding),
                                      classical_address(kl)),
                     Python.list(PythonObject(n), PythonObject(d), max_iter, PythonObject(exploration),
                                 PythonObject(perplexity), PythonObject(exag), PythonObject(lr),
-                                PythonObject(post_factor), PythonObject(mode), low, high, PythonObject(k)))
+                                PythonObject(post_factor), PythonObject(mode), low, high, PythonObject(k),
+                                PythonObject(0 if mode == 2 else 1)))
     _ = embedding  # keep the Python object alive through the native call above
+    if mode != 2 and Int(py=tested[1]) != 0:
+        raise Error("Input X contains NaN or infinity")
     _ = x  # keep the Python object alive through the native call above
     _ = kl  # keep the Python object alive through the native call above
     _ = snapshot

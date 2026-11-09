@@ -12,6 +12,7 @@ from bindings.pca_exact import pca_too_small, pca_whiten_entries, pca_refusal
 from providers.python.classical_family_admission_pyapi import classical_family_admit
 from bindings.decomp_inputs import decomp_admit
 from bindings.admitted_input import admitted_finite_refuse
+from bindings.device_rows_door import door_rows_refuse
 from providers.python.pca_fit_scalar_pyapi import PCAFitScalar, pca_fit_scalar_capture
 from providers.python.pca_fit_model_pyapi import pca_fit_fields, pca_fit_entries, pca_fit_host_only, pca_fit_preflight
 
@@ -69,9 +70,21 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     # parallel cast into uninitialised storage (scikit-learn wording, est PCA).
     # Lane a7d: the exact solvers' entry (pca_fit_owned) tests a borrowed X
     # on the device after its upload and returns the status word
-    # (defer_finite): no host scan of X. The randomized driver uploads X in
-    # its own executor, so that solver keeps the scan here.
-    var x = decomp_admit(source, "PCA", context, defer_finite=solver != "randomized")
+    # (defer_finite): no host scan of X. Lane a8d: the randomized driver
+    # returns the word too (its centred-square total, read before the
+    # decomposition), so no solver scans X here.
+    # Lane a8d: an identical exact fit (no projection) of a cross-validation
+    # fold resident on the device is gathered there by the base binding's
+    # `pca_fit_fold` (no host gather, no upload of X; finite and range
+    # words from the gather); otherwise a fold's rows are gathered on the
+    # host by the admission.
+    var fold_entry = py_get(context, "pca_fit_fold")
+    var mode = py_get(fields, "numeric_mode")
+    var identical = (mode is not None and py_type(mode) is py_type(PythonObject(""))
+                     and String(py_call(py_call(mode.strip).lower)) == "identical")
+    var fold_ok = fold_entry is not None and identical and not project and solver != "randomized"
+    var x = decomp_admit(source, "PCA", context, device_x=fold_ok, defer_finite=True)
+    var on_device = x.store.active()
     var rows = x.rows
     var cols = x.cols
     var b = native_loaded_module("builtins")
@@ -162,12 +175,33 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     var noise = PythonObject(None)
     var keep = count
     if randomized:
+        var rparams = Python.list(rows, cols, count, oversamples, iterations, Int(auto), Int(whiten), seed)
+        if not x.finite:
+            _ = py_call(rparams.append, PythonObject(1))
+        var got = PythonObject(None)
         try:
-            noise = py_call_typed(entries["pca_fit_randomized"], x.address, components.address,
+            got = py_call_typed(entries["pca_fit_randomized"], x.address, components.address,
                 mean.address, variance.address, ratio.address, singular.address, projection_address,
-                Python.list(rows, cols, count, oversamples, iterations, Int(auto), Int(whiten), seed))
+                rparams)
         except error:
             raise pca_refusal(error^)
+        if not x.finite:
+            admitted_finite_refuse(Int(py=got[1]), "PCA")
+            noise = got[0]
+        else:
+            noise = got
+    elif on_device:
+        var fold = py_call_typed(fold_entry, Python.list(x.store.base_id, x.store.base_rows, x.store.index_id),
+            Python.list(components.address, mean.address, variance.address, ratio.address, singular.address),
+            Python.list(rows, cols, count, Int(dense), keep_mode, fraction))
+        door_rows_refuse(Int(py=fold[2]), Int(py=fold[3]), "PCA", x.store.base_rows)
+        keep = Int(py=fold[0])
+        noise = fold[1]
+        if keep != count:
+            components = components.prefix(keep, cols, context)
+            variance = variance.prefix(keep, 0, context)
+            ratio = ratio.prefix(keep, 0, context)
+            singular = singular.prefix(keep, 0, context)
     else:
         var fit_params = Python.list(rows, cols, count, Int(dense), keep_mode, Int(whiten), fraction)
         if not x.finite:

@@ -33,15 +33,15 @@ from core.msel_device import (
     device_take_rows,
 )
 from core.neural_context import process_ctx
-from core.msel_device_x import msel_device_x_context, msel_store, MSEL_CONTEXT_SLOT
-from decomposition.pca_fold import pca_transform_fold
+from core.msel_device_x import msel_fold_entry_context, msel_store, MSEL_CONTEXT_SLOT
+from decomposition.pca_fold import pca_transform_fold, pca_fit_fold, tsvd_fit_fold
 from glm.qn_fold import qn_fit_fold, qn_infer_fold
 from cluster.kmeans_fold import kmeans_fit_fold, kmeans_query_fold
 
 #: The store's own context slot (core/msel_device_x.mojo MSEL_CONTEXT_SLOT,
 #: the base binding's `_DEVCTX_SLOT`): one definition, so every reader of the
 #: store's buffers runs on the context that made them. The store itself is
-#: `msel_store()` there, one process-wide `_Global` with a layout word.
+#: `msel_store()` there, one process-wide SharedSlot with a layout word.
 comptime _MSEL_SLOT = MSEL_CONTEXT_SLOT
 
 
@@ -257,9 +257,10 @@ def _mdx_f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
 
 # Lane a6: the device-X entries of family and classical estimators live in
 # this binding (the identical GPU base binding). The placement is a choice,
-# not a need: the fold store is one `_Global` per process by name, so an
+# not a need: the fold store is one SharedSlot per process by name, so an
 # entry in any extension module reaches it through `msel_fold_store()` and
-# runs on `msel_device_x_context()` (core/msel_device_x.mojo).
+# runs on `msel_fold_entry_context()` (core/msel_device_x.mojo; lane a8d: the
+# build's own context, so a `fast` build's entry runs on the `fast` context).
 def pca_transform_fold_binding(
     ids: PythonObject,
     mean_addr: PythonObject,
@@ -286,7 +287,7 @@ def pca_transform_fold_binding(
     var nc = Int(py=params[2])
     var words: Tuple[Int32, Int32]
     with GILReleased(Python()):
-        var ctx = msel_device_x_context()
+        var ctx = msel_fold_entry_context()
         words = pca_transform_fold(ctx, base_id, base_rows, index_id, mp, cp, op, nr, nf, nc)
     return Python.list(Int(words[0]), Int(words[1]))
 
@@ -338,7 +339,7 @@ def qn_fit_fold_binding(
     var wordp = words.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     var iters = 0
     with GILReleased(Python()):
-        var ctx = msel_device_x_context()
+        var ctx = msel_fold_entry_context()
         iters = qn_fit_fold(ctx, base_id, base_rows, index_id, yp, wp, ip, nr, nf, nc, l1, l2, grad_tol,
                             change_tol, max_iter, ls_max, mem, fit_intercept, normalized, has_sw, swp,
                             loss, svr_eps, wordp)
@@ -380,7 +381,7 @@ def qn_infer_fold_binding(
     var log_out = Int(py=params[5]) != 0
     var words: Tuple[Int32, Int32]
     with GILReleased(Python()):
-        var ctx = msel_device_x_context()
+        var ctx = msel_fold_entry_context()
         words = qn_infer_fold(ctx, base_id, base_rows, index_id, cp, oa, nr, nf, fi, nc, mode, log_out)
     return Python.list(Int(words[0]), Int(words[1]))
 
@@ -432,7 +433,7 @@ def kmeans_fit_fold_binding(
     var finite = Int32(0)
     var in_range = Int32(0)
     with GILReleased(Python()):
-        var ctx = msel_device_x_context()
+        var ctx = msel_fold_entry_context()
         var r = kmeans_fit_fold(ctx, base_id, base_rows, index_id, ns, nf, nc, cp, lp,
                                 mi, tl, sd, ninit, ii, mm, ovs)
         inertia = r.fit.inertia
@@ -461,7 +462,7 @@ def _kmeans_query_fold_call(ids: PythonObject, centroids_addr: PythonObject, out
     var mm = Int(py=params[3])
     var words: Tuple[Int32, Int32]
     with GILReleased(Python()):
-        var ctx = msel_device_x_context()
+        var ctx = msel_fold_entry_context()
         words = kmeans_query_fold(ctx, base_id, base_rows, index_id, ns, nf, nc, cp, out, mm, transform)
     return Python.list(Int(words[0]), Int(words[1]))
 
@@ -482,3 +483,76 @@ def kmeans_transform_fold_binding(
     (lane a7d): as `kmeans_predict_fold_binding`, `out_addr` n_samples x
     n_clusters float32."""
     return _kmeans_query_fold_call(ids, centroids_addr, out_addr, params, True)
+
+
+def pca_fit_fold_binding(
+    ids: PythonObject,
+    out_addrs: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """PCA's exact fit (`pca_fit_owned` without a projection) over a
+    model-selection fold resident on the device (lane
+    a8d-device-x-decomp-manifold; decomposition/pca_fold.mojo): `ids` is
+    [base store id, base rows, index store id] (bindings/device_rows_door.mojo
+    door_rows_store), `out_addrs` [components, mean, explained variance,
+    ratio, singular values], `params` [n_rows, n_features, n_components,
+    dense, keep mode, fraction]. Returns [kept count, noise variance, finite
+    word, range word]; a nonzero word means the fold was not fit and the
+    door refuses."""
+    if len(ids) != 3 or len(out_addrs) != 5 or len(params) != 6:
+        raise Error("pca_fit_fold: ids, out_addrs and params must hold 3, 5 and 6 values")
+    var base_id = Int(py=ids[0])
+    var base_rows = Int(py=ids[1])
+    var index_id = Int(py=ids[2])
+    var cp = _mdx_f32_ptr(Int(py=out_addrs[0]))
+    var mp = _mdx_f32_ptr(Int(py=out_addrs[1]))
+    var ep = _mdx_f32_ptr(Int(py=out_addrs[2]))
+    var rp = _mdx_f32_ptr(Int(py=out_addrs[3]))
+    var sp = _mdx_f32_ptr(Int(py=out_addrs[4]))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var dense = Int(py=params[3]) != 0
+    var keep_mode = Int(py=params[4])
+    var frac = Float64(py=params[5])
+    var keep = 0
+    var noise = Float64(0.0)
+    var finite = Int32(0)
+    var in_range = Int32(0)
+    with GILReleased(Python()):
+        var ctx = msel_fold_entry_context()
+        var r = pca_fit_fold(ctx, base_id, base_rows, index_id, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, frac)
+        keep = r.keep
+        noise = r.noise
+        finite = r.finite
+        in_range = r.in_range
+    return Python.list(PythonObject(keep), PythonObject(noise), PythonObject(Int(finite)), PythonObject(Int(in_range)))
+
+
+def tsvd_fit_fold_binding(
+    ids: PythonObject,
+    out_addrs: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """TruncatedSVD's Gram fit and explained variance over a model-selection
+    fold resident on the device (lane a8d; decomposition/pca_fold.mojo
+    `tsvd_fit_fold`): `ids` as `pca_fit_fold_binding`'s, `out_addrs`
+    [components, singular values, explained variance, ratio], `params`
+    [n_rows, n_features, n_components]. Returns [finite word, range word]."""
+    if len(ids) != 3 or len(out_addrs) != 4 or len(params) != 3:
+        raise Error("tsvd_fit_fold: ids, out_addrs and params must hold 3, 4 and 3 values")
+    var base_id = Int(py=ids[0])
+    var base_rows = Int(py=ids[1])
+    var index_id = Int(py=ids[2])
+    var cp = _mdx_f32_ptr(Int(py=out_addrs[0]))
+    var sp = _mdx_f32_ptr(Int(py=out_addrs[1]))
+    var ep = _mdx_f32_ptr(Int(py=out_addrs[2]))
+    var rp = _mdx_f32_ptr(Int(py=out_addrs[3]))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var words: Tuple[Int32, Int32]
+    with GILReleased(Python()):
+        var ctx = msel_fold_entry_context()
+        words = tsvd_fit_fold(ctx, base_id, base_rows, index_id, cp, sp, ep, rp, nr, nf, nc)
+    return Python.list(Int(words[0]), Int(words[1]))

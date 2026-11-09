@@ -91,12 +91,15 @@ def connect(pca_class):
     # the device, exported by the identical GPU base binding next to the
     # fold store it reads (bindings/msel_device.mojo); a build without it
     # (the CPU column) leaves None and the door gathers host rows.
+    # Lane a8d: the exact fit of a resident fold (`pca_fit_fold`), the same
+    # binding and the same rule.
     from ._buffer import _native
-    try:
-        fold = _native('pca_transform_fold')
-    except (ImportError, AttributeError, TypeError, RuntimeError):
-        fold = None
-    context["pca_transform_fold"] = fold if isinstance(fold, BuiltinFunctionType) else None
+    for name in ('pca_transform_fold', 'pca_fit_fold'):  # glue: fixed import-time entry connections
+        try:
+            fold = _native(name)
+        except (ImportError, AttributeError, TypeError, RuntimeError):
+            fold = None
+        context[name] = fold if isinstance(fold, BuiltinFunctionType) else None
     entry = _binding()._module.pca_native_call
     if not isinstance(entry, BuiltinFunctionType):
         raise TypeError("PCA owner requires a compiled pca_native_call")

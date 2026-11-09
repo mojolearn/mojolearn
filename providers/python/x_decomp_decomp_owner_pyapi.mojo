@@ -91,8 +91,10 @@ def nmf_fit_py[E: Exec, D: RDev, RES: Bool, X: DecompDev](p: PythonObject, f: Py
     """NMF fit_transform (init 0..4) or transform (5). p = [x, n, d, nc,
     init, W in (read for init 4), H in (read for init 4 and 5), seed mod
     2^32, solver (0 cd, 1 mu), update_H, max_iter, shuffle, W out, H out];
-    f = [beta, tol, l1W, l1H, l2W, l2H]. Returns (n_iter_, error)."""
-    if len(p) != 14 or len(f) != 6:
+    f = [beta, tol, l1W, l1H, l2W, l2H]. Returns (n_iter_, error). Lane
+    a8d: an optional p[14], the finite flag: 1 asks for X's finite status
+    word, returned third (0 = finite; a flagged X writes nothing)."""
+    if (len(p) != 14 and len(p) != 15) or len(f) != 6:
         raise Error("x_decomp_nmf_fit: params must hold the input, the options and two outputs")
     var x = door_ptr(p, 0)
     var n = door_dim(p, 1)
@@ -108,9 +110,14 @@ def nmf_fit_py[E: Exec, D: RDev, RES: Bool, X: DecompDev](p: PythonObject, f: Py
                              Int(py=p[11]) != 0, seed)
     var w_out = door_ptr(p, 12)
     var h_out = door_ptr(p, 13)
+    var test = len(p) == 15 and Int(py=p[14]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     var got = Tuple[Int, Float64](0, 0.0)
     with GILReleased(Python()):
-        got = nmf_run[E, D, RES, X](x, n, d, nc, init, w_in, h_in, seed, solver, a, w_out, h_out)
+        got = nmf_run[E, D, RES, X](x, n, d, nc, init, w_in, h_in, seed, solver, a, w_out, h_out, word_addr)
+    if test:
+        return Python.tuple(PythonObject(got[0]), PythonObject(got[1]), PythonObject(Int(word[0])))
     return Python.tuple(PythonObject(got[0]), PythonObject(got[1]))
 
 

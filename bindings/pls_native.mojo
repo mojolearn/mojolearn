@@ -212,13 +212,13 @@ def _captured(mut kit: DecompKit, captured: ArrayMetadata, deferred: Bool, est: 
 
 def _pls_defers(fields: PythonObject, fitting: Bool, context: PythonObject) -> Bool:
     """Whether the operation's kit tests X on its upload (the x_decomp GPU
-    binding's `x_decomp_dev_upload_finite`, lane a8c): then the door admits a
+    binding's kernel-call op XD_DEV_UPLOAD_FINITE, lane a8c): then the door admits a
     borrowed X with no host pass. False when the entries cannot be resolved
     here; the kit then raises its own refusal as before."""
     try:
         var mode = fields["numeric_mode"] if fitting else py_get(fields, "numeric_mode_")
         var entries = decomp_entries(mode, context)
-        return py_get(entries, "x_decomp_dev_ew") is not None and py_get(entries, "x_decomp_dev_upload_finite") is not None
+        return py_get(entries, "x_decomp_dev_ew") is not None and py_get(entries, "x_decomp_module") is not None
     except error:
         _ = error^
         return False

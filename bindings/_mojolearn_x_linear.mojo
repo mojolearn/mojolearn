@@ -27,7 +27,7 @@ from x_linear.ridgecv import ridge_best_alpha
 from x_linear.device import fit_device, ridge_resident, decision_device, decision_codes_device, decision_rows_device, decision_huber_out_device, SGD_IDN_DEV_FINITE
 from x_linear.dispatch import isotonic_abi_check, ALGO_SGD, ALGO_RIDGE
 from core.device_zero import enqueue_fill
-from core.msel_device_x import msel_device_x_context, msel_device_x_f32
+from core.msel_device_x import msel_fold_entry_context, msel_device_x_f32
 from checks.numerics import NUMERIC_IDENTICAL
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE
 from x_linear.class_prep_device import class_prep_device
@@ -97,7 +97,7 @@ def fit_fold_binding(algo: PythonObject, ids: PythonObject, y_addr: PythonObject
     (bindings/device_rows_door.mojo door_rows_store); the fold's n x d rows
     are gathered on the device straight into the fit's X buffer, the finite
     and range tests in the same pass (core/msel_device_x.mojo), and the fit
-    runs on the store's context (`msel_device_x_context()`): no host gather
+    runs on `msel_fold_entry_context()` (the one fold-entry context rule): no host gather
     and no upload of X. `dims`, `ip`, `fp` and the result are
     `x_linear_fit`'s. Ridge (algo 8: Ridge with weights, RidgeClassifier)
     only; any other algo is refused by name (its door gathers host rows).
@@ -132,7 +132,7 @@ def fit_fold_binding(algo: PythonObject, ids: PythonObject, y_addr: PythonObject
     var finite = Int32(0)
     var in_range = Int32(0)
     with GILReleased(Python()):
-        var ctx = msel_device_x_context()
+        var ctx = msel_fold_entry_context()
         var dx = ctx.enqueue_create_buffer[DType.float32](n * d)
         var dst = ctx.enqueue_create_buffer[DType.int32](2)
         enqueue_fill[DType.int32](ctx, dst, Int32(0))

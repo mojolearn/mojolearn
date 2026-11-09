@@ -52,7 +52,7 @@ def qn_fit_fold(
 ) raises -> Int:
     """`qn_fit_host` over fold rows `index_id` of the resident base
     `base_id` (`base_rows` x `n_features`). `ctx` is
-    `msel_device_x_context()`. `status_ptr` receives two host words (finite,
+    `msel_fold_entry_context()`. `status_ptr` receives two host words (finite,
     range), both 0 when every gathered word is finite and every index in
     range; otherwise nothing is fitted (returns 0) and the door refuses.
     Returns num_iters."""
@@ -100,7 +100,7 @@ def qn_infer_fold(
     on the device straight into the decision's X buffer (no host gather, no
     upload of X), the finite and range tests in the same pass, then the
     same kernels as the host-address entries (glm/qn_infer.mojo). `ctx` is
-    `msel_device_x_context()`. `out_addr` is the host output (`mode`
+    `msel_fold_entry_context()`. `out_addr` is the host output (`mode`
     QN_FOLD_DECISION: n_rows * n_targets float32; QN_FOLD_CODES: n_rows
     int64; QN_FOLD_PROBA: n_rows * max(n_targets, 2) float64). Returns the
     (finite, range) words, both 0 when the fold was finite and in range

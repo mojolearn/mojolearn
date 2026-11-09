@@ -11,7 +11,6 @@ from x_decomp.resident import (
     pool_free,
     pool_live_count,
     dev_upload_run,
-    dev_upload_finite_run,
     dev_download_run,
     dev_ew_run,
     dev_gemm_run,
@@ -75,17 +74,10 @@ def dev_upload_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises 
     return PythonObject(r)
 
 
-def dev_upload_finite_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises -> PythonObject:
-    """`dev_upload_py` with the finite test of the uploaded words in the same
-    wait; returns the status word (0: every word finite, 1: a NaN or an
-    infinity). Lane a8c-device-x-linear-prep-rfe."""
-    var cnt = Int(py=n)
-    var src = F32Ptr(unsafe_from_address=Int(py=addr))
-    var i = _id(id)
-    var r = 0
-    with GILReleased(Python()):
-        r = dev_upload_finite_run(i, src, cnt)
-    return PythonObject(r)
+# TOMBSTONE: dev_upload_finite_py (named entry x_decomp_dev_upload_finite, lane a8c-device-x-linear-prep-rfe@2141a3451b)
+# folded 2026-11-09 at integration (integ/pre-0867-w5) into the kernel-call op XD_DEV_UPLOAD_FINITE (lane a8d), the
+# same body (x_decomp/resident.mojo dev_upload_finite_run); it never reached main, so no patch: recoverable at
+# lane/a8c-device-x-linear-prep-rfe@2141a3451b.
 
 
 def dev_download_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises -> PythonObject:

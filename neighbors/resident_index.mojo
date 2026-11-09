@@ -53,7 +53,7 @@ from std.atomic import Atomic, Ordering
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx, neural_device_plan
 from core.ctx_key import ctx_cache_key
-from core.msel_device_x import msel_store_context
+from core.msel_device_x import msel_fold_entry_context
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
@@ -388,18 +388,16 @@ def knn_index_prepare(
 
 def knn_fold_ready() raises -> Bool:
     """Whether a resident search can gather a model-selection fold's queries
-    on the device (lane a8b-device-x-neighbors-rest): the folds live in the
-    IDENTICAL store (core/msel_device_x.mojo `msel_fold_store`), so this
-    build must be the identical one (its own store, `msel_store()`, IS the
-    fold store) and the context a resident index of the calling thread lives
-    on (this slot on the device plan's root) must be `msel_store_context()`,
-    the context the store's buffers belong to. Otherwise (a `fast` build, or
-    a plan bound to another device) the door gathers the fold on the host."""
-    comptime if _DEVCTX_MODE == _DEVCTX_IDENTICAL:
-        var ctx = process_ctx[_DEVCTX_SLOT](neural_device_plan())
-        return ctx_cache_key(ctx) == ctx_cache_key(msel_store_context())
-    else:
-        return False
+    on the device (lane a8b-device-x-neighbors-rest): the context a resident
+    index of the calling thread lives on (this slot on the device plan's
+    root) must be `msel_fold_entry_context()`, the ONE context every fold
+    entry runs on (core/msel_device_x.mojo; integration of lanes a8b and
+    a8d, integ/pre-0867-w5): the fold store's context in an identical build,
+    this build's own context in a `fast` build (`msel_device_x_f32` orders
+    the cross-context read). Otherwise (a plan bound to another device) the
+    door gathers the fold on the host."""
+    var ctx = process_ctx[_DEVCTX_SLOT](neural_device_plan())
+    return ctx_cache_key(ctx) == ctx_cache_key(msel_fold_entry_context())
 
 
 def knn_index_release(handle: Int) raises:

@@ -25,7 +25,7 @@ the first rows of Vt each signed so its largest-|.| entry is positive."""
 from x_decomp.api import tsqr_r_run
 from x_decomp.cells import F32Ptr
 from x_decomp.exec_trait import Exec
-from x_decomp.pca_randomized import RDev, RKit, pca_randomized_core
+from x_decomp.pca_randomized import RDev, RKit, pca_randomized_core, rkit_x_nonfinite, rkit_x_retest
 
 # x_decomp/cells.mojo op codes (`_OP` in _expansion_decomp.py)
 comptime _OP_MUL = 2
@@ -37,10 +37,23 @@ comptime _OP_SQDIFF = 21
 def tsvd_randomized_fit_run[E: Exec, D: RDev, RES: Bool](
     x: F32Ptr, components_out: F32Ptr, singular_out: F32Ptr, variance_out: F32Ptr, ratio_out: F32Ptr,
     rows: Int, cols: Int, components: Int, oversamples: Int, iterations: Int, auto_iterations: Bool, seed: Int,
+    finite_word: Int = 0,
 ) raises:
     """`_randomized_decompose(X, components, center=False, ...)`: the four
     public arrays written (components x cols, then components each).
-    `auto_iterations`: n_iter='auto' (scikit-learn's size-ratio rule)."""
+    `auto_iterations`: n_iter='auto' (scikit-learn's size-ratio rule).
+    `finite_word` (lane a8d-device-x-decomp-manifold): when nonzero, the
+    host address of one Int32 that receives X's finite status word (0 =
+    every word finite): the total of X's column variances, which the fit
+    computes anyway, is computed first and read back; it is NaN when X
+    holds a NaN or an infinity (a NaN or an infinity in a column makes that
+    column's mean and spread NaN). A non-finite total from a finite X (a
+    sum that overflows near the float32 limit) is told apart by
+    `rkit_x_nonfinite`, which re-tests X itself only then: a finite X is
+    never refused. A flagged X stops the fit there (nothing written; the
+    door refuses). The kit's
+    steps are the same calls on the same operands, only the variance total
+    is taken before the decomposition: no bit change."""
     if components < 1 or components > min(rows, cols):
         raise Error("n_components must be in [1, min(n_samples, n_features)]")
     var power = iterations
@@ -54,6 +67,18 @@ def tsvd_randomized_fit_run[E: Exec, D: RDev, RES: Bool](
         # k.colmean(M): the column sums scaled by 1 / rows
         var sums = kit.sum(original, True)
         var mean = kit.ew(_OP_SCALE, sums, scalar=1.0 / Float64(rows))
+        # full = total(colsum((M - mean)^2) / n), taken before the
+        # decomposition: it is also X's finite test (see the docstring)
+        var data_spread = kit.ew(_OP_SQDIFF, original, mean)
+        var data_sums = kit.sum(data_spread, True)
+        var data_variance = kit.ew(_OP_SCALE, data_sums, scalar=1.0 / Float64(rows))
+        var full_value = kit.total(data_variance)
+        if finite_word != 0:
+            var flagged = rkit_x_nonfinite(kit, original, full_value)
+            MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = flagged
+            if flagged != 0:
+                kit.close()
+                return
         var decomposed = pca_randomized_core(kit, original, components, oversamples, power, seed)
         var u = decomposed[0]
         var s = decomposed[1]
@@ -71,11 +96,7 @@ def tsvd_randomized_fit_run[E: Exec, D: RDev, RES: Bool](
         var spread = kit.ew(_OP_SQDIFF, xt, xt_mean)
         var spread_sums = kit.sum(spread, True)
         var variance = kit.ew(_OP_SCALE, spread_sums, scalar=1.0 / Float64(rows))
-        # full = total(colsum((M - mean)^2) / n); ratio = ev / full
-        var data_spread = kit.ew(_OP_SQDIFF, original, mean)
-        var data_sums = kit.sum(data_spread, True)
-        var data_variance = kit.ew(_OP_SCALE, data_sums, scalar=1.0 / Float64(rows))
-        var full_value = kit.total(data_variance)
+        # ratio = ev / full (full taken above)
         # the float32 total read back is exact: the 1 x 1 operand holds it
         var full = kit.constant(Float32(full_value))
         var ratio = kit.ew(_OP_DIV, variance, full)
@@ -91,15 +112,46 @@ def tsvd_randomized_fit_run[E: Exec, D: RDev, RES: Bool](
 
 def tsvd_tsqr_components_run[E: Exec, D: RDev, RES: Bool](
     x: F32Ptr, components_out: F32Ptr, singular_out: F32Ptr, rows: Int, cols: Int, components: Int,
+    finite_word: Int = 0,
 ) raises:
     """`_tsvd_tsqr_components(x, components, mode)` on a TSQR shape: the
-    components (components x cols) and singular values (components)."""
+    components (components x cols) and singular values (components).
+    `finite_word` (lane a8d): when nonzero, the host address of one Int32
+    that receives X's finite status word, read off R (cols x cols, already
+    host words): a NaN or an infinity in column j of X reaches column j of
+    R through every reflection that touches it, so a finite R settles it
+    with no scan of X. A non-finite R can also come from a finite X whose
+    column norm overflows float32: only then is X itself re-tested
+    (`rkit_x_retest` on a kit view of X), so a finite X is never
+    refused. A flagged X stops the fit (nothing written)."""
     if components < 1 or components > cols:
         raise Error("x_decomp: TruncatedSVD TSQR route needs 1 <= n_components <= n_features")
     var r_words = List[Float32](length=cols * cols, fill=Float32(0))
     var r_ptr = r_words.unsafe_ptr()
     # ORDER MATCHES `_tsqr_r`: (a, b, r_out), params (m, d, nrhs 0, keep 0)
     _ = tsqr_r_run[E](x, x, F32Ptr(unsafe_from_address=Int(r_ptr)), rows, cols, 0, False)
+    if finite_word != 0:
+        var r_finite = True
+        for i in range(cols * cols):  # small-loop(R: cols x cols host words, cols <= the TSQR width cap)
+            var w = r_words[i]
+            if w != w or w - w != Float32(0):
+                r_finite = False
+                break
+        var flagged = Int32(0)
+        if not r_finite:
+            # R overflowed or X is non-finite: re-test X itself (rare path).
+            var probe = RKit[E, D, RES]()
+            try:
+                var xm = probe.add(Int(x), -1, rows, cols)
+                flagged = rkit_x_retest(probe, xm)
+                probe.close()
+            except error:
+                probe.close()
+                raise error^
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = flagged
+        if flagged != 0:
+            _ = r_words^
+            return
     var kit = RKit[E, D, RES]()
     try:
         var r = kit.add(Int(r_ptr), -1, cols, cols)

@@ -96,9 +96,20 @@ comptime _MDX_I32 = MutPointer[Int32, MutAnyOrigin]
 
 
 def msel_device_x_context() raises -> DeviceContext:
-    """The context the fold store's buffers live in: an entry gathering a
-    fold runs on it."""
+    """The context the fold store's buffers live in (the identical base
+    binding's): an identical entry gathering a fold runs on it."""
     return process_ctx[MSEL_FOLD_CONTEXT_SLOT]()
+
+
+def msel_fold_entry_context() raises -> DeviceContext:
+    """The context a fold entry of THIS build runs its kernels on (lane
+    a8d-device-x-decomp-manifold, 2026-11-09): the build's own process
+    context (slot MSEL_CONTEXT_SLOT, the base binding's `_DEVCTX_SLOT`). In an
+    identical build that is the fold store's context itself; in a `fast`
+    build it is the `fast` context, so a `fast` model's fold fit or query
+    runs its `fast` kernels on the `fast` context, never on the identical
+    one. `msel_device_x_f32` orders the cross-context read (see there)."""
+    return process_ctx[MSEL_CONTEXT_SLOT]()
 
 
 def _mdx_grid(total: Int) -> Int:
@@ -144,17 +155,30 @@ def msel_device_x_f32[so: MutOrigin, //](
     resident float32 base `base_id` (`base_rows` x `cols`) into `d_x`
     (at least rows x cols words, C order), with the finite and range flags
     in words `slot` / `slot + 1` of `d_status` (the caller filled them with
-    0). `ctx` must be `msel_device_x_context()`. No synchronisation."""
+    0). `ctx` must be `msel_fold_entry_context()` (the store's context in
+    an identical build). No synchronisation on the entry's own stream."""
     if rows < 1 or cols < 1:
         return
     if len(d_x) < rows * cols:
         raise Error("msel_device_x_f32: destination holds " + String(len(d_x)) + " words, "
                     + String(rows * cols) + " needed")
-    # the store's buffers belong to its own context slot: a reader on any
-    # other context (another binding's slot name) would race the writer's
-    # stream, so it is refused instead (design note hazard 2)
-    if ctx_cache_key(ctx) != ctx_cache_key(msel_device_x_context()):
-        raise Error("msel_device_x_f32: ctx is not the fold store's context (msel_device_x_context())")
+    # the store's buffers belong to its own context slot: a reader on
+    # another context would race the writer's stream (design note hazard 2).
+    # Lane a8d: a `fast` build's fold entry runs on its own `fast` context
+    # (`msel_fold_entry_context()`): the store's stream is drained first, so
+    # every put of the base and the indices is complete before the `fast`
+    # stream reads them, and the entry synchronises its own stream before it
+    # returns (its result download), before model selection can free or
+    # overwrite the slots. Both contexts are on the same device (the plan
+    # root). Any other context is refused.
+    var store_ctx = msel_device_x_context()
+    if ctx_cache_key(ctx) != ctx_cache_key(store_ctx):
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            raise Error("msel_device_x_f32: ctx is not the fold store's context (msel_device_x_context())")
+        else:
+            if ctx_cache_key(ctx) != ctx_cache_key(msel_fold_entry_context()):
+                raise Error("msel_device_x_f32: ctx is neither the fold store's context nor this build's own")
+            store_ctx.synchronize()
     var store = msel_fold_store()
     store[].check(base_id, base_rows * cols * 4)
     store[].check(index_id, rows * 8)

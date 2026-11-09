@@ -15,6 +15,8 @@ from std.atomic import Atomic, Ordering, fence
 from std.gpu import grid_dim
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 from x_ann.device_ctx import x_ann_ctx
+from core.admitted_finite_status import enqueue_finite_status
+from core.device_zero import enqueue_fill
 from core.device_fold import device_sum_f32_fixed
 from x_ann.tsne_sym_device import tsne_symmetrize_device
 from x_ann.stage_timer import AnnStages
@@ -822,8 +824,14 @@ def _ts_kl(
 def tsne_fit_device(
     x: List[Float32], n: Int, d: Int, y0: List[Float32], perplexity: Float32, exaggeration: Float32,
     learning_rate: Float32, post_exaggeration_lr_factor: Float32, max_iter: Int, exploration: Int,
-    mut y_out: List[Float32], mut kl_out: Float32,
+    mut y_out: List[Float32], mut kl_out: Float32, finite_word: Int = 0,
 ) raises:
+    """`finite_word` (lane a8d-device-x-decomp-manifold): when nonzero, the
+    host address of one Int32 that receives X's finite status word
+    (core/admitted_finite_status.mojo, 0 = every word finite), tested on the
+    device over the upload and read at the perplexity step's
+    synchronisation; a flagged X stops the fit there (y_out and kl_out are
+    not written; the door refuses)."""
     tsne_validate(n, d, perplexity, max_iter, exploration)
     # release-0845: the step size after the exaggeration phase is learning_rate x
     # post_exaggeration_lr_factor (cuML's exact/barnes-hut schedule uses 2.0, t_sne.pyx
@@ -834,6 +842,12 @@ def tsne_fit_device(
     var st = AnnStages("tsne_fit")
     var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
+    var dstatus = ctx.enqueue_create_buffer[DType.int32](1)
+    var hstatus = ctx.enqueue_create_host_buffer[DType.int32](1)
+    if finite_word != 0:
+        enqueue_fill[DType.int32](ctx, dstatus, Int32(0))
+        enqueue_finite_status(ctx, dx.unsafe_ptr(), n * d, dstatus.unsafe_ptr(), 0)
+        ctx.enqueue_copy(dst_ptr=hstatus.unsafe_ptr(), src_buf=dstatus)
     st.mark(ctx, "upload")
     var dnd = ctx.enqueue_create_buffer[DType.float32](n * nn)
     var dni = ctx.enqueue_create_buffer[DType.int32](n * nn)
@@ -845,6 +859,17 @@ def tsne_fit_device(
     ctx.enqueue_function[perplexity_kernel](Int32(n), dnd.unsafe_ptr(), Int32(nn), identical_log(perplexity),
                                             dp.unsafe_ptr(), grid_dim=_grid(n), block_dim=TPB)
     ctx.synchronize()
+    if finite_word != 0:
+        var flagged = hstatus.unsafe_ptr()[0]
+        MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = flagged
+        if flagged != 0:
+            _ = dx^
+            _ = dnd^
+            _ = dni^
+            _ = dp^
+            _ = dstatus^
+            _ = hstatus^
+            return
     st.host("perplexity")
     # lane cgr4-download-loop: P symmetrized on the device
     # (x_ann/tsne_sym_device.mojo), the host function's CSR and words; the

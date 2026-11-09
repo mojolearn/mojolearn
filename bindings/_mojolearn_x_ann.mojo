@@ -177,7 +177,10 @@ def tsne_fit_binding(addrs: PythonObject, params: PythonObject) raises -> Python
     (lane apple-fast-py2mojo-cluster: mode 1 random, 2 the PCA embedding in y0 scaled,
     x_ann/tsne_init.mojo; 0 or absent y0 as given). release-0845: the factor is params[7] and the
     init tail moved from 7..9 to 8..10. Lane sk-kernels: an optional params[11], n_components
-    (1 or 2, default 2); at 1, y0 and y_out hold n floats (`tsne_init_y0`)."""
+    (1 or 2, default 2); at 1, y0 and y_out hold n floats (`tsne_init_y0`). Lane a8d: an
+    optional params[12], the finite flag: 1 asks for X's finite status word, tested on the
+    device over the fit's upload (no host scan in the door); the return is then [n, status
+    word] and a flagged X writes neither output (the door refuses)."""
     var n = p_int(params, 0)
     var d = p_int(params, 1)
     var max_iter = p_int(params, 2)
@@ -195,10 +198,19 @@ def tsne_fit_binding(addrs: PythonObject, params: PythonObject) raises -> Python
     var y0 = tsne_init_y0(
         mode, in_f32(addrs, 1, n * k) if mode != TSNE_INIT_RANDOM else List[Float32](), n, seed, k
     )
+    var test = len(params) > 12 and p_int(params, 12) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     var y = List[Float32]()
     var kl = Float32(0.0)
     with GILReleased(Python()):
-        tsne_fit_device(x, n, d, y0, perplexity, exaggeration, lr, post_factor, max_iter, exploration, y, kl)
+        tsne_fit_device(x, n, d, y0, perplexity, exaggeration, lr, post_factor, max_iter, exploration, y, kl,
+                        word_addr)
+    if test:
+        if word[0] == 0:
+            out_f32(tsne_first_components(y, n, k), addrs, 2)
+            out_f32([kl], addrs, 3)
+        return Python.list(PythonObject(n), PythonObject(Int(word[0])))
     out_f32(tsne_first_components(y, n, k), addrs, 2)
     out_f32([kl], addrs, 3)
     return PythonObject(n)

@@ -61,6 +61,16 @@ def connect(tsvd_class):
             decomp[mode] = type(error).__name__ + ": " + str(error)
     # Fitted arrays are mojolearn Arrays, as `_buffer.empty` made them.
     context["output_context"] = _numpy_free_context()
+    # glue (lane a8d): the Gram fit of a cross-validation fold resident on
+    # the device, exported by the identical GPU base binding next to the
+    # fold store it reads (bindings/msel_device.mojo); a build without it
+    # (the CPU column) leaves None and the door gathers host rows.
+    from ._buffer import _native
+    try:
+        fold = _native('tsvd_fit_fold')
+    except (ImportError, AttributeError, TypeError, RuntimeError):
+        fold = None
+    context["tsvd_fit_fold"] = fold if isinstance(fold, BuiltinFunctionType) else None
     context.update(tsvd_class=tsvd_class, tsvd_bindings=connected, tsvd_decomp=decomp, tsvd_modules=modules)
     entry = _binding()._module.tsvd_native_call
     if not isinstance(entry, BuiltinFunctionType):

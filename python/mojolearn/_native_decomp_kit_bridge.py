@@ -34,6 +34,8 @@ def _entries(binding):
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError(f"the native decomposition owner requires compiled {name}")
         entries[name] = entry
+    # glue: the module itself, for the kernel-call table (DecompKit.xd -> kit_connect)
+    entries["x_decomp_module"] = binding
     return entries
 
 

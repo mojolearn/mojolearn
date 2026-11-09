@@ -45,7 +45,13 @@ comptime XD_DEV_MOVE = 17      # i: [src, idx, dst, op, count, a1, a2, a3, ist, 
 # exactly the take_rows / take_cols / ew ADD / ew MIN sequence the kit made
 # with seven crossings per rank. -> the id of G (q x n), caller-owned.
 comptime XD_DEV_ISO_GATHER_MIN = 18  # i: [d, im, sq, q, dc, nn, one, dn, imn]
-comptime XD_OPERATION_COUNT = 19
+# XD_DEV_UPLOAD with X's finite test on the device over the uploaded words
+# (lane a8d-device-x-decomp-manifold, 2026-11-09): -> 0 when every word is
+# finite, 1 when one is NaN or infinite (read at the upload's own
+# synchronisation; the caller refuses). Replaces the host scan before the
+# manifold kit's resident upload (bindings/mani_kit.mojo from_snapshot).
+comptime XD_DEV_UPLOAD_FINITE = 19  # a: [src]  i: [id, n]
+comptime XD_OPERATION_COUNT = 20
 
 comptime XD_CAP_HOST = 1       # the host-address operations
 comptime XD_CAP_RESIDENT = 2   # the device-resident operations
@@ -74,7 +80,7 @@ def xd_schema(op: Int) raises -> Tuple[Int, Int, Int]:
         return (3, 10, 0)
     if op == XD_DEV_ALLOC or op == XD_DEV_FREE:
         return (0, 1, 0)
-    if op == XD_DEV_UPLOAD or op == XD_DEV_DOWNLOAD:
+    if op == XD_DEV_UPLOAD or op == XD_DEV_DOWNLOAD or op == XD_DEV_UPLOAD_FINITE:
         return (1, 2, 0)
     if op == XD_DEV_EW:
         return (0, 11, 1)
