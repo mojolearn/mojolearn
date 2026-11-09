@@ -35,7 +35,7 @@ class NeuralAdmissionSource(unittest.TestCase):
         self.assertNotIn("block._W_NAMES", PUBLIC)
         self.assertIn("admit_native_buffer_exporter(value)", PUBLIC)
         self.assertIn("neural_native_scalar(mods, batch, context, True)", PUBLIC)
-        self.assertIn("neural_block_f32(mods, grad_output", PUBLIC)
+        self.assertIn("admit_block_f32(mods, grad_output", PUBLIC)
 
     def test_native_dictionary_descriptor_guard_reused(self):
         body = ADMISSION.split("def neural_record_fields(")[1].split("\ndef ", 1)[0]

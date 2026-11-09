@@ -8,11 +8,18 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_array_snapshot import native_array_slots as neural_array_slots, native_array_snapshot as neural_array_snapshot
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from bindings.generation_buffers import generation_array, py_ints
+from bindings.native_array_storage import native_scratch_bytes, native_scratch_address
 from transformer.causal_lm_construct_impl import causal_lm_gather_f32
 from core.hostptr import f32_ptr
 from std.memory import memcpy
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequential_admission import _one_of
+
+# The uses of admit_block_f32 (below): read in place when possible, kept for
+# the operation, or retained by the model.
+comptime BLOCK_READ = 0
+comptime BLOCK_OPERATION = 1
+comptime BLOCK_RETAINED = 2
 
 
 def neural_native_scalar(mut mods: NativeModules, value: PythonObject, context: PythonObject, integer: Bool = False) raises -> Bool:
@@ -242,11 +249,11 @@ def neural_weights_snapshot(mut mods: NativeModules, values: PythonObject, conte
         if value is None:
             py_call(result.append, value)
         elif py_type(value) is context["array_class"]:
-            py_call(result.append, neural_block_f32(mods, value, "weight", context) if f32 else neural_array_snapshot(mods, value, context))
+            py_call(result.append, admit_block_f32(mods, value, "weight", context, BLOCK_OPERATION) if f32 else neural_array_snapshot(mods, value, context))
         else:
             # Foreign model buffers historically copy to native storage on
             # use. Capture that copy once and retain it for this operation.
-            py_call(result.append, neural_block_f32(mods, value, "weight", context))
+            py_call(result.append, admit_block_f32(mods, value, "weight", context, BLOCK_OPERATION))
     return result
 
 
@@ -334,33 +341,33 @@ def neural_model_weights(mut mods: NativeModules, values: PythonObject, context:
                     py_setitem(saved, name, storage)
             py_setitem(result, keys[i], captured)
         else:
-            py_setitem(result, keys[i], neural_block_f32_owned(mods, value, String(keys[i]), context))
+            py_setitem(result, keys[i], admit_block_f32(mods, value, String(keys[i]), context, BLOCK_RETAINED))
     return result
 
 
-def neural_block_f32_owned(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    """`neural_block_f32` for a weight the model RETAINS (constructor
-    weights): always the model's own C-order float32 copy. A C-order float32
-    Array used to be kept as a view of the caller's storage, so an in-place
-    write into the caller's array after construction reached the per-layer
-    and CPU routes but not a kept resident device session (lane
-    p3-neural-blocks; resident sessions are invalidated only through
-    `parameters()`). Every other input already came back as a new array."""
-    if py_type(value) is context["array_class"]:
-        var captured = neural_array_snapshot(mods, value, context)
-        if String(captured.dtype) != "<f4":
-            raise Error(_neural_dtype_refusal(name, String(captured.dtype)))
-        if String(captured.order) == "C":
-            var dims = List[Int]()
-            for i in range(len(captured.shape)):  # driver-loop: over the weight's shape words
-                dims.append(Int(py=captured.shape[i]))
-            var result = generation_array(dims)
-            var count = Int(py=captured.size)
-            if count > 0:
-                memcpy(dest=f32_ptr(Int(py=result._addr)), src=f32_ptr(Int(py=captured._addr)), count=count)
-            _ = captured^
-            return result
-    return neural_block_f32(mods, value, name, context)
+
+# THE ONE NEURAL INPUT DOOR (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md
+# section 3.3 row A4, lane a4-admit-sequence-tsa-neural, 2026-11-08): every
+# float32 tensor a neural block, model or session operation admits goes
+# through `admit_block_f32` with the USE that decides borrow versus copy.
+#
+#   BLOCK_READ       the operation only reads it (a forward / step / backward
+#                    x): a C-order float32 Array or a C-contiguous, four-byte
+#                    aligned float32 export is read in place (a read-only
+#                    Array view); anything else is ONE copy into
+#                    uninitialised storage (0.8.66 regression C5: a fresh
+#                    zero-filled Array per call before the copy).
+#   BLOCK_OPERATION  kept for this operation (weights, grad_output, session
+#                    pieces): a C-order float32 Array is used as it is, any
+#                    other input is the operation's own copy (a native Array).
+#   BLOCK_RETAINED   kept by the model (constructor weights): always the
+#                    model's own C-order copy, so a later in-place write into
+#                    the caller's array cannot reach a resident session.
+#
+# Numerics: none; the same float32 words, in C order, reach the same kernels.
+# TOMBSTONE: neural_block_f32, neural_block_f32_owned and neural_block_f32_input (admission helpers, merged into admit_block_f32) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A4_ADMISSION_HELPERS.patch.
+# (BLOCK_READ / BLOCK_OPERATION / BLOCK_RETAINED are defined after the imports.)
 
 
 def _neural_dtype_refusal(name: String, code: String) -> String:
@@ -377,97 +384,110 @@ def _neural_dtype_refusal(name: String, code: String) -> String:
             + "float16 and float64 are refused rather than converted. Convert to float32.")
 
 
-def neural_block_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    # Callers without an operation handle keep their per-call module checks.
-    var mods = NativeModules()
-    return neural_block_f32(mods, value, name, context)
+def _block_view(mut mods: NativeModules, store: PythonObject, address: Int, dims: List[Int], count: Int,
+                context: PythonObject) raises -> PythonObject:
+    """A read-only C-order float32 Array over `store` (a native memoryview
+    of `count` float32 words at `address`), assembled from its slots: the
+    view holds the one export for the call, no Array callback runs."""
+    var b = mods.module("builtins")
+    var slots = neural_array_slots(mods, context)
+    var result = py_call(b.object.__new__, context["array_class"])
+    var steps = List[Int](length=len(dims), fill=0)
+    var step = 4
+    for i in range(len(dims)):  # small-loop(array shape dimension words)
+        var axis = len(dims) - i - 1
+        steps[axis] = step
+        step *= dims[axis]
+    var typed = py_call(py_call(store.cast, "B").cast, "f")
+    py_call(slots["_store"].__set__, result, store)
+    py_call(slots["_base"].__set__, result, PythonObject(None))
+    py_call(slots["_pin"].__set__, result, PythonObject(None))
+    py_call(slots["_mv"].__set__, result, typed)
+    py_call(slots["_addr"].__set__, result, PythonObject(address))
+    py_call(slots["_readonly"].__set__, result, PythonObject(True))
+    py_call(slots["shape"].__set__, result, py_call(b.tuple, py_ints(dims)))
+    py_call(slots["dtype"].__set__, result, PythonObject("<f4"))
+    py_call(slots["ndim"].__set__, result, PythonObject(len(dims)))
+    py_call(slots["size"].__set__, result, PythonObject(count))
+    py_call(slots["nbytes"].__set__, result, PythonObject(count * 4))
+    py_call(slots["itemsize"].__set__, result, PythonObject(4))
+    py_call(slots["strides"].__set__, result, py_call(b.tuple, py_ints(steps)))
+    py_call(slots["order"].__set__, result, PythonObject("C"))
+    return result
 
 
-def neural_block_f32(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+def _block_destination(mut mods: NativeModules, dims: List[Int], count: Int, use: Int,
+                       context: PythonObject) raises -> PythonObject:
+    """The C-order float32 destination of one copy of `count` words. A
+    BLOCK_READ copy never outlives the operation and is written in full
+    before any kernel reads it, so it is UNINITIALISED storage (a read-only
+    Array view over a native scratch store); a kept copy is a native Array
+    (its array.array store has no uninitialised constructor)."""
+    if use != BLOCK_READ or count == 0:
+        return generation_array(dims)
+    var scratch = native_scratch_bytes(count * 4)
+    var store = py_call(mods.module("builtins").memoryview, scratch)
+    return _block_view(mods, store, native_scratch_address(scratch), dims, count, context)
+
+
+def admit_block_f32(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject,
+                    use: Int) raises -> PythonObject:
+    """The float32 tensor `value` (a mojolearn Array or a native float32
+    buffer export) as a C-order float32 Array for `use` (BLOCK_READ,
+    BLOCK_OPERATION or BLOCK_RETAINED, above). Other dtypes are refused by
+    name, never converted."""
     if py_type(value) is context["array_class"]:
         var captured = neural_array_snapshot(mods, value, context)
         if String(captured.dtype) != "<f4":
             raise Error(_neural_dtype_refusal(name, String(captured.dtype)))
-        if String(captured.order) == "C":
-            return captured
-        # F-order follows the existing byte-preserving C preparation, with
-        # metadata captured once above and the original owner retained.
         var dims = List[Int]()
+        for i in range(len(captured.shape)):  # driver-loop: over the tensor's shape words
+            dims.append(Int(py=captured.shape[i]))
+        var count = Int(py=captured.size)
+        if String(captured.order) == "C":
+            if use != BLOCK_RETAINED:
+                return captured
+            var owned = generation_array(dims)
+            if count > 0:
+                memcpy(dest=f32_ptr(Int(py=owned._addr)), src=f32_ptr(Int(py=captured._addr)), count=count)
+            _ = captured^
+            return owned
+        # F-order: the byte-preserving C gather, metadata captured once above
+        # and the original owner retained.
         var steps = List[Int]()
         for i in range(len(captured.shape)):  # driver-loop: native admission metadata and retained owner registry
-            dims.append(Int(py=captured.shape[i]))
             steps.append(Int(py=captured.strides[i]))
-        var result = generation_array(dims)
-        causal_lm_gather_f32(f32_ptr(Int(py=captured._addr)), f32_ptr(Int(py=result._addr)), Int(py=captured.size), dims, steps)
+        var result = _block_destination(mods, dims, count, use, context)
+        causal_lm_gather_f32(f32_ptr(Int(py=captured._addr)), f32_ptr(Int(py=result._addr)), count, dims, steps)
         _ = captured^
         return result
     admit_native_buffer_exporter(value)
-    var pin = AdmittedBorrowedBuffer(value)
-    if pin.format != "f" and pin.format != "<f" and pin.format != "=f" and pin.format != "@f":
-        raise Error(_neural_dtype_refusal(name, pin.format))
-    var layout = pin.layout.value().copy()
-    if layout.itemsize != 4:
-        raise Error("TypeError: neural float32 input requires four-byte elements")
-    _ = neural_array_slots(mods, context)
-    var result = generation_array(layout.shape)
-    layout.copy_to(Int(py=result._addr))
-    _ = pin^
-    return result
-
-
-def neural_block_f32_input(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    # The float32 input `x` of a block forward, step or backward: READ ONLY
-    # by every kernel it reaches (never an output, a state or a workspace).
-    # 0.8.66 regression C5 (samba-forward 1.55x, mamba1-forward 1.51x,
-    # mamba3-forward 1.35x, mamba2-forward 1.27x): `neural_block_f32` put a
-    # foreign `x` (1x2048x384 float32, 3.1 MB) into a fresh zero-filled
-    # Array and copied it on every call; 0.8.55 read it in place. A
-    # C-contiguous, four-byte-aligned float32 export is now read in place
-    # through an Array view that holds one export of it for the call (its
-    # `_store` memoryview) and is marked read-only. Anything else (strided,
-    # empty or misaligned) keeps the copy, from the same admitted export.
-    # An exact Array already takes its captured snapshot without a copy.
-    if py_type(value) is context["array_class"]:
-        return neural_block_f32(mods, value, name, context)
-    admit_native_buffer_exporter(value)
-    var b = mods.module("builtins")
     # One export of the caller's buffer; every word below is read from it.
-    var store = py_call(b.memoryview, value)
+    var store = py_call(mods.module("builtins").memoryview, value)
     var pin = AdmittedBorrowedBuffer(store)
     if pin.format != "f" and pin.format != "<f" and pin.format != "=f" and pin.format != "@f":
         raise Error(_neural_dtype_refusal(name, pin.format))
     var layout = pin.layout.value().copy()
     if layout.itemsize != 4:
         raise Error("TypeError: neural float32 input requires four-byte elements")
-    var slots = neural_array_slots(mods, context)
-    if not layout.contiguous() or layout.count == 0 or layout.address % 4 != 0:
-        var copied = generation_array(layout.shape)
-        layout.copy_to(Int(py=copied._addr))
+    # The Array class's storage descriptors are admitted before any Array is
+    # assembled or allocated for this input.
+    _ = neural_array_slots(mods, context)
+    if use == BLOCK_READ and layout.contiguous() and layout.count > 0 and layout.address % 4 == 0:
+        # 0.8.66 regression C5 (samba-forward 1.55x, mamba1-forward 1.51x,
+        # mamba3-forward 1.35x, mamba2-forward 1.27x): read in place, as
+        # 0.8.55 did, through a read-only view holding the one export.
+        var view = _block_view(mods, store, layout.address, layout.shape, layout.count, context)
         _ = pin^
-        _ = store^
-        return copied
-    var cls = context["array_class"]
-    var result = py_call(b.object.__new__, cls)
-    var steps = List[Int](length=len(layout.shape), fill=0)
-    var step = 4
-    for i in range(len(layout.shape)):  # small-loop(array shape dimension words)
-        var axis = len(layout.shape) - i - 1
-        steps[axis] = step
-        step *= layout.shape[axis]
-    var typed = py_call(py_call(store.cast, "B").cast, "f")
-    py_call(slots["_store"].__set__, result, store)
-    py_call(slots["_base"].__set__, result, PythonObject(None))
-    py_call(slots["_pin"].__set__, result, PythonObject(None))
-    py_call(slots["_mv"].__set__, result, typed)
-    py_call(slots["_addr"].__set__, result, PythonObject(layout.address))
-    py_call(slots["_readonly"].__set__, result, PythonObject(True))
-    py_call(slots["shape"].__set__, result, py_call(b.tuple, py_ints(layout.shape)))
-    py_call(slots["dtype"].__set__, result, PythonObject("<f4"))
-    py_call(slots["ndim"].__set__, result, PythonObject(len(layout.shape)))
-    py_call(slots["size"].__set__, result, PythonObject(layout.count))
-    py_call(slots["nbytes"].__set__, result, PythonObject(layout.count * 4))
-    py_call(slots["itemsize"].__set__, result, PythonObject(4))
-    py_call(slots["strides"].__set__, result, py_call(b.tuple, py_ints(steps)))
-    py_call(slots["order"].__set__, result, PythonObject("C"))
+        return view
+    var result = _block_destination(mods, layout.shape, layout.count, use, context)
+    layout.copy_to(Int(py=result._addr))
     _ = pin^
+    _ = store^
     return result
+
+
+def admit_block_f32(value: PythonObject, name: String, context: PythonObject, use: Int) raises -> PythonObject:
+    # Callers without an operation handle keep their per-call module checks.
+    var mods = NativeModules()
+    return admit_block_f32(mods, value, name, context, use)

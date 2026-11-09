@@ -11,7 +11,8 @@ from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_error_class import error_without_class
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
-from bindings.neural_block_public import neural_block_fields, neural_block_snapshot, neural_block_f32, neural_training_entries, _neural_input
+from bindings.neural_block_public import neural_block_fields, neural_block_snapshot, neural_training_entries, _neural_input
+from bindings.neural_block_admission import admit_block_f32, BLOCK_OPERATION
 from bindings.neural_block_admission import neural_native_scalar, neural_array_slots, neural_record_fields, neural_string_keys
 from bindings.causal_lm_construct import _model_shape
 from providers.python.operation_lock_pyapi import OperationLockLease
@@ -726,7 +727,7 @@ def transformer_backward_from_tape(mut mods: NativeModules, block: PythonObject,
     var fields = _transformer_block_snapshot(mods, block, neural)
     var entries = _transformer_tape_entries(mods, block, fields, neural)[0]
     _ = _transformer_array_slots(mods, context)
-    var dy = neural_block_f32(input, "Transformer tape grad_output", neural)
+    var dy = admit_block_f32(input, "Transformer tape grad_output", neural, BLOCK_OPERATION)
     _model_shape(dy, owner[].shape, "Transformer tape grad_output")
     var lease = OperationLockLease(fields["_runtime_lock"])
     lease.acquire()
