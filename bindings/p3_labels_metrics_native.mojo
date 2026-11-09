@@ -28,6 +28,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.cpython_table import cpython_table
 from bindings.cpython_borrowed import borrowed_type_word, borrowed_item
+from bindings.py_balanced import py_call, py_setitem
 
 # Py_TPFLAGS_UNICODE_SUBCLASS
 comptime P3_UNICODE_FLAG = 1 << 28
@@ -92,8 +93,10 @@ def p3_decode_list(classes: PythonObject, codes_addr: Int, width: Int, n: Int) r
 def p3_interleave_columns(columns: PythonObject, n: Int) raises -> PythonObject:
     """The row-major flat list of an (n, m) block of label objects given as
     `columns`, an exact list of m exact lists or tuples of n labels each:
-    `[columns[j][i] for i in range(n) for j in range(m)]`, one presized list
-    filled in C (new references to the label objects themselves)."""
+    `[columns[j][i] for i in range(n) for j in range(m)]`. One list of n * m
+    Nones, then one C extended-slice assignment per column
+    (`flat[j::m] = columns[j]`): the label objects themselves, no loop over
+    labels here (lane i3-move-data-loops)."""
     var b = native_loaded_module("builtins")
     if p3_type_word(columns._obj_ptr) != Int(b.list._obj_ptr):
         raise Error("TypeError: label columns require an exact native list")
@@ -105,41 +108,11 @@ def p3_interleave_columns(columns: PythonObject, n: Int) raises -> PythonObject:
         var word = p3_type_word(col._obj_ptr)
         if (word != list_word and word != tuple_word) or len(col) != n:
             raise Error("ValueError: label columns must be exact lists of " + String(n) + " labels")
-    ref cpy = Python().cpython()
-    var t = cpython_table()
-    var out = t[].PyList_New(n * m)
-    if not out:
-        raise cpy.unsafe_get_error()
-    var result = PythonObject(from_owned=out)
-    for j in range(m):  # driver-loop: over the m columns
+    var result = py_call(native_loaded_module("operator").mul, Python.list(PythonObject(None)), PythonObject(n * m))
+    for j in range(m):  # driver-loop: over the m columns (one C slice assignment each)
         var col = PythonObject(from_borrowed=p3_item(columns, j, False))
-        var is_tuple = p3_type_word(col._obj_ptr) == tuple_word
-        for i in range(n):  # driver-loop: native list fill, one borrowed read and one C store per label
-            _ = t[].PyList_SetItem(result._obj_ptr, i * m + j, cpy.Py_NewRef(p3_item(col, i, is_tuple)))
+        py_setitem(result, py_call(b.slice, PythonObject(j), PythonObject(None), PythonObject(m)), col)
     _ = columns  # keep the columns alive through the borrowed reads above
-    return result
-
-
-def p3_rows_of(flat: PythonObject, n: Int, m: Int) raises -> PythonObject:
-    """`[flat[i*m:(i+1)*m] for i in range(n)]` for an exact flat list of n*m
-    label objects: n presized lists filled in C."""
-    var b = native_loaded_module("builtins")
-    if p3_type_word(flat._obj_ptr) != Int(b.list._obj_ptr) or len(flat) != n * m:
-        raise Error("TypeError: row labels require an exact native list of rows x columns labels")
-    ref cpy = Python().cpython()
-    var t = cpython_table()
-    var out = t[].PyList_New(n)
-    if not out:
-        raise cpy.unsafe_get_error()
-    var result = PythonObject(from_owned=out)
-    for i in range(n):  # driver-loop: native row lists, m borrowed reads and C stores each
-        var row = t[].PyList_New(m)
-        if not row:
-            raise cpy.unsafe_get_error()
-        for j in range(m):  # driver-loop: over one row's m labels
-            _ = t[].PyList_SetItem(row, j, cpy.Py_NewRef(p3_item(flat, i * m + j, False)))
-        _ = t[].PyList_SetItem(result._obj_ptr, i, row)
-    _ = flat  # keep the flat list alive through the borrowed reads above
     return result
 
 
