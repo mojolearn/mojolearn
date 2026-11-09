@@ -175,6 +175,10 @@ def program_op_name(code: Int) -> String:
         return "mamba3_step"
     if code == 84:
         return "attention_step"
+    if code == 85:
+        return "lm_pick"
+    if code == 86:
+        return "lm_alive"
     return "op_" + String(code)
 
 
