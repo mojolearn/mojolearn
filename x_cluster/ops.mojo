@@ -268,6 +268,13 @@ trait ClusterOps(Movable):
         each row's distance to its OWN center (fam2-cluster)."""
         ...
 
+    def loop_check_every(self, n: Int, k: Int, d: Int) -> Int:
+        """EM iterations a device loop enqueues between two reads of its
+        stop word (lane n1-gmm-bgmm-loops): the GPU column's cost rule
+        (core/em_loop_chunk.mojo); the host column answers 1 (its read is a
+        pointer load, a chunk would only run discarded iterations)."""
+        ...
+
     def agglo_on_device(self) -> Bool:
         """True on the GPU column: `agglo_merge` runs the unconstrained
         agglomerative merge loop on the device (lane hr2-mds-agglo). The

@@ -4,6 +4,7 @@ bodies.mojo` body for index `t`; nothing is folded across threads, so no
 launch shape can move a bit. Only the GPU binding imports this file."""
 from experiments.classical_identical_ideas.stats_controls import C53_BGMM_STATS
 from mixture.checks.mstep import center_pair_kernel
+from core.em_loop_chunk import em_loop_check_every
 from experiments.classical_identical_ideas.graph_controls import XCLUSTER_ROW_ASSIGN, XCLUSTER_ROW_ASSIGN_ROWS
 #: Rows per thread of `_xc_nearest_group` (MOJOLEARN_XCLUSTER_ROW_ASSIGN=2|4).
 comptime XC_ASSIGN_ROWS = XCLUSTER_ROW_ASSIGN_ROWS if XCLUSTER_ROW_ASSIGN_ROWS > 0 else 2
@@ -2538,6 +2539,9 @@ struct DeviceOps(ClusterOps):
                 grid_dim=_grid((n + g - 1) // g), block_dim=TPB,
             )
         self._ph1("dot_groups")
+
+    def loop_check_every(self, n: Int, k: Int, d: Int) -> Int:
+        return em_loop_check_every(n, k, d)
 
     def agglo_on_device(self) -> Bool:
         return True

@@ -632,6 +632,9 @@ struct HostOps(ClusterOps):
     def alloc(mut self, n: Int) raises -> Int:
         return self.zeros(n)
 
+    def loop_check_every(self, n: Int, k: Int, d: Int) -> Int:
+        return 1
+
     def agglo_on_device(self) -> Bool:
         return False
 
