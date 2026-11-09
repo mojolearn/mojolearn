@@ -1622,3 +1622,12 @@ struct DeviceExec(Exec, Movable):
 
     def step_clear(mut self):
         pass
+
+    # Lane x56d: the generation ops' host-arm hooks; a device session runs
+    # the device bodies (autograd/generation_ops.mojo).
+    def gen_pick(mut self, logits: FP, n_logits: Int, rows: FP, n_rows: Int, ints: List[Int], fs: List[Float32],
+                 ids: FP) raises:
+        raise Error("ops: a device session runs lm_pick's device body")
+
+    def gen_alive(mut self, rows: FP, n_rows: Int, b: Int, dst: FP) raises:
+        raise Error("ops: a device session runs lm_alive's device body")
