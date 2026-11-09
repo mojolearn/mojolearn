@@ -660,8 +660,8 @@ def _program_steps(index: Int, entries: MlpOperationMetadata, x: List[Float32], 
     _ = scratch^
     if written != rows * 3:
         raise Error("RuntimeError: SmallMLPTrainer step returned an invalid result")
-    # the logits, gradients and input gradient were refused on the device when not finite
-    # (autograd/small_mlp_program.mojo OP_MLP_NONFINITE flags; lane m1-followups-misc removed the host scans)
+    # TOMBSTONE: mlp_require_result_finite scans of the step's logits, gradients and input gradient (superseded by the
+    # program's device OP_MLP_NONFINITE flags, autograd/small_mlp_program.mojo) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
     _ = logits
     if mode == _FORWARD:
         _ = losses^
