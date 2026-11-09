@@ -208,6 +208,7 @@ def program_cse(p: OpsProgram) -> OpsProgram:
     q.in_kinds = p.in_kinds.copy()
     q.params = p.params.copy()
     q.param_shapes = p.param_shapes.copy()
+    q.param_kinds = p.param_kinds.copy()
     q.out_shapes = p.out_shapes.copy()
     var refs = List[Int]()
     for k in range(p.n_in):  # driver-loop: over input refs remain unchanged

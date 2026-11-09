@@ -152,6 +152,9 @@ def partition_plan(p: OpsProgram, values: List[GraphBytes], trainable: List[Bool
         plan.trainable.append(trainable[j])
         plan.program.params.append(0)
         plan.program.param_shapes.append(p.param_shapes[j])
+        while len(plan.program.param_kinds) < len(plan.program.params) - 1:  # driver-loop: over parameter kinds owed by earlier weights
+            plan.program.param_kinds.append(0)
+        plan.program.param_kinds.append(p.param_kind(j))
     var refs = List[Int]()
     for j in range(p.n_in):  # driver-loop: input value mapping
         refs.append(j)

@@ -20,8 +20,11 @@ def _merge(mut table: OpsProgram, component: OpsProgram) raises:
                 found = j
                 break
         if found < 0:
+            while len(table.param_kinds) < len(table.params):  # driver-loop: over parameter kinds owed by earlier weights
+                table.param_kinds.append(0)
             table.params.append(component.params[k])
             table.param_shapes.append(component.param_shapes[k])
+            table.param_kinds.append(component.param_kind(k))
         elif not same_shape(table.param_shapes[found], component.param_shapes[k]):
             raise Error("ValueError: shared conditional parameter shapes disagree")
 
@@ -42,6 +45,7 @@ def _bind(component: OpsProgram, table: OpsProgram) -> OpsProgram:
             out.outs[k] = -index[-out.outs[k] - 1] - 1
     out.params = table.params.copy()
     out.param_shapes = table.param_shapes.copy()
+    out.param_kinds = table.param_kinds.copy()
     return out^
 
 
