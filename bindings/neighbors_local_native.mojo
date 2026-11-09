@@ -45,6 +45,7 @@ from bindings.classical_labels import (
     classical_decode_labels, classical_accuracy,
 )
 from bindings.admitted_input import admitted_array, admitted_vector, admit_c_view, admitted_dtype
+from bindings.admitted_input import admitted_finite_refuse
 from checks.numerics import pinned_mul_f64
 
 # x_neighbors/items.mojo's unary codes (`_U_SQRT`, `_U_IDENTITY`).
@@ -244,14 +245,19 @@ def _copy_f32(x: PythonObject, context: PythonObject) raises -> PythonObject:
     return out
 
 
-def _sqdist(binding: PythonObject, a: PythonObject, b: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_XNeighbors._sqdist(A, B)`."""
+def _sqdist(binding: PythonObject, a: PythonObject, b: PythonObject, context: PythonObject,
+            status: Int = 0) raises -> PythonObject:
+    """`_XNeighbors._sqdist(A, B)`; `status`: A's finite status word (its
+    status slot; 0 not asked)."""
     var n = _rows(a)
     var d = _cols(a)
     var m = _rows(b)
     var out = _out(Python.tuple(n, m), "<f4", context)
+    var ints = Python.list(_i(n), _i(m), _i(d))
+    if status != 0:
+        _ = py_call(ints.append, _i(status))
     _op(binding, "sqdist", Python.list(classical_address(a), classical_address(b), classical_address(out)),
-        Python.list(_i(n), _i(m), _i(d)), Python.list(), context)
+        ints, Python.list(), context)
     _ = a  # keep the Python object alive through the native call above
     _ = b  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
@@ -299,14 +305,17 @@ def _unary(binding: PythonObject, x: PythonObject, code: Int, a: Float64, bias: 
 
 
 def _knn(binding: PythonObject, q: PythonObject, r: PythonObject, k: Int, exclude_self: Bool,
-         context: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
+         context: PythonObject, status: Int = 0) raises -> Tuple[PythonObject, PythonObject]:
     """`_XNeighbors._knn(Q, R, k, exclude_self)`: `_knn_sq` (the fused
     `knn_sq_tiled`, `knn_sq` under MOJOLEARN_XN_OLD_ITEMS, sqdist +
-    knn_select under MOJOLEARN_XN_UNFUSED_KNN), then the square root."""
+    knn_select under MOJOLEARN_XN_UNFUSED_KNN), then the square root.
+    `status` (lane a8b-device-x-neighbors-rest; 0: not asked): the host
+    address of the int32 word that receives Q's finite status, from the
+    first op that uploads Q (its status slot)."""
     var sq: PythonObject
     var idx: PythonObject
     if _flag(context, "unfused_knn"):
-        var pair = _knn_select(binding, _sqdist(binding, q, r, context), k, exclude_self, context)
+        var pair = _knn_select(binding, _sqdist(binding, q, r, context, status), k, exclude_self, context)
         sq = pair[0]
         idx = pair[1]
     else:
@@ -315,9 +324,12 @@ def _knn(binding: PythonObject, q: PythonObject, r: PythonObject, k: Int, exclud
         var m = _rows(r)
         sq = _out(Python.tuple(n, k), "<f4", context)
         idx = _out(Python.tuple(n, k), "<i4", context)
+        var ints = Python.list(_i(n), _i(m), _i(d), _i(k), _i(1 if exclude_self else 0))
+        if status != 0:
+            _ = py_call(ints.append, _i(status))
         _op(binding, "knn_sq" if _flag(context, "old_items") else "knn_sq_tiled",
             Python.list(classical_address(q), classical_address(r), classical_address(sq), classical_address(idx)),
-            Python.list(_i(n), _i(m), _i(d), _i(k), _i(1 if exclude_self else 0)), Python.list(), context)
+            ints, Python.list(), context)
         _ = q  # keep the Python object alive through the native call above
         _ = r  # keep the Python object alive through the native call above
     var root = _unary(binding, sq, _U_SQRT, 1.0, 0.0, context)
@@ -405,7 +417,13 @@ def _lof_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(d)
                     + ")) while a minimum of 2 is required.")
     var k = min(Int(py=family_call(b.int, family_field(fields, "n_neighbors"))), n - 1)
-    var pair = _knn(binding, x, x, k, True, context)
+    # Lane a8b-device-x-neighbors-rest: X's finite test rides behind the
+    # k-NN op's upload (the public admission deferred it; a cast X was
+    # refused by its cast).
+    var status = List[Int32](length=1, fill=Int32(0))
+    var pair = _knn(binding, x, x, k, True, context, Int(status.unsafe_ptr()))
+    admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
+    _ = status^
     var dist = pair[0]
     var idx = pair[1]
     var lrd = _out(Python.tuple(n), "<f4", context)
@@ -460,13 +478,18 @@ def _lof_novelty(fields: PythonObject, what: String) raises:
 
 
 def _lof_score_samples(binding: PythonObject, fields: PythonObject, source: PythonObject,
-                       context: PythonObject) raises -> PythonObject:
-    """`LocalOutlierFactor.score_samples(X)` after its novelty check."""
+                       context: PythonObject, name: String) raises -> PythonObject:
+    """`LocalOutlierFactor.score_samples(X)` after its novelty check. The
+    queries' finite test rides behind the k-NN op's upload; `name` words
+    its refusal."""
     var q = _f32(source, context)
     var k = _int_word(family_field(fields, "n_neighbors_"))
     var nf = _int_word(family_field(fields, "n_samples_fit_"))
     var fit_x = family_field(fields, "_fit_X")
-    var pair = _knn(binding, q, fit_x, k, False, context)
+    var status = List[Int32](length=1, fill=Int32(0))
+    var pair = _knn(binding, q, fit_x, k, False, context, Int(status.unsafe_ptr()))
+    admitted_finite_refuse(Int(status[0]), name)
+    _ = status^
     var dist = pair[0]
     var idx = pair[1]
     var nq = _rows(q)
@@ -494,7 +517,7 @@ def _lof_decision(model: PythonObject, args: PythonObject, context: PythonObject
     through the identity unary."""
     var fields = py_fields(model)
     _lof_novelty(fields, "decision_function")
-    var score = _lof_score_samples(args[0], fields, args[1], context)
+    var score = _lof_score_samples(args[0], fields, args[1], context, String(py_type(model).__name__))
     var offset = family_field(fields, "offset_")
     var shift: Float64
     if py_type(offset) is _b().float:
@@ -1133,7 +1156,7 @@ def _neighbors_local_operation(model: PythonObject, operation: String, var args:
     if operation == "family_xn_loc_lof_score_samples":
         var fields = py_fields(model)
         _lof_novelty(fields, "score_samples")
-        return _lof_score_samples(args[0], fields, args[1], context)
+        return _lof_score_samples(args[0], fields, args[1], context, String(py_type(model).__name__))
     if operation == "family_xn_loc_lof_decision_function":
         return _lof_decision(model, args, context)
     if operation == "family_xn_loc_lof_predict":
