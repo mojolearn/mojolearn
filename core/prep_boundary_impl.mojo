@@ -1,20 +1,40 @@
 # SPDX-License-Identifier: Apache-2.0
 # Public preprocessing validation and row-buffer preparation. No model math.
 from core.cast_in import CastIn, cast_w64_bits
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
+from core.admitted_input import admitted_raw_word
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.classical_pandas_impl import pd_raw_at, _pd_double
-from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64
+from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64, host_all_finite_f32_strided
+
+
+comptime _PREP_IP = MutPointer[Int, MutUntrackedOrigin]
+
+
+@always_inline
+def _prep_word_offset(linear: Int, shape: _PREP_IP, strides: _PREP_IP, rank: Int) -> Int:
+    """The byte offset of C-order element `linear` of a strided N-d view."""
+    var remainder = linear
+    var offset = 0
+    for k in range(rank):  # small-loop(the array's rank metadata)
+        var axis = rank - 1 - k
+        var extent = shape.unsafe_load(axis)
+        offset += (remainder % extent) * strides.unsafe_load(axis)
+        remainder //= extent
+    return offset
 
 
 def prep_float_finite(source: CastIn, shape: List[Int], strides: List[Int],
                       count: Int, native: Bool, dtype: Int) -> Bool:
-    # _sk_validate scans Float32/Float64 only, before any narrowing to f32.
+    """True when no float32 (dtype 11) or float64 (dtype 12) word of the
+    strided view is a NaN or an infinity; True for any other dtype
+    (_sk_validate scans Float32/Float64 only, before any narrowing to f32).
+    The verdict is the exponent-bits test on the original words, an AND over
+    tasks, so the split cannot change it."""
     if dtype != 11 and dtype != 12:
         return True
     var width = source.itemsize
-    # parallel: a native-order C-contiguous block is one SIMD finiteness scan
-    # across host cores (0.8.66 regression C1 class, serial byte-wise walk).
-    # The verdict is the same Bool over the same words; only the walk differs.
     if native and (width == 4 or width == 8):
         var contiguous = True
         var expected = width
@@ -27,37 +47,107 @@ def prep_float_finite(source: CastIn, shape: List[Int], strides: List[Int],
             if width == 4:
                 return host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=source.addr), count)
             return host_all_finite_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=source.addr), count)
-    var pointer = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source.addr)
+        if width == 4 and len(shape) == 2:
+            return host_all_finite_f32_strided(source.addr, strides[0], strides[1], shape[0], shape[1])
+    # parallel: the strided / non-native finiteness test over contiguous
+    # element ranges across host cores (it was a serial byte walk)
+    if count <= 0:
+        return True
     var mask = UInt64(0x7F800000) if width == 4 else UInt64(0x7FF0000000000000)
-    for linear in range(count):  # native input marshaling: public finiteness check on original float words
-        var remainder = linear
-        var offset = 0
-        for k in range(len(shape)):  # native input marshaling: captured rank metadata
-            var axis = len(shape) - 1 - k
-            offset += (remainder % shape[axis]) * strides[axis]
-            remainder //= shape[axis]
-        var bits = UInt64(0)
-        for byte in range(width):  # native input marshaling: supported four/eight-byte float words
-            var index = byte if native else width - 1 - byte
-            bits |= UInt64(pointer[offset + index]) << UInt64(8 * byte)
-        if bits & mask == mask:
-            return False
-    return True
+    var tasks = host_predict_task_count_work(count, count * len(shape))
+    var chunk = host_predict_chunk(count, tasks)
+    var flags = List[UInt8](length=tasks, fill=UInt8(1))
+    var flag_ptr = rebind[MutPointer[UInt8, MutUntrackedOrigin]](flags.unsafe_ptr())
+    var base = source.addr
+    var rank = len(shape)
+    var shape_ptr = shape.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    var strides_ptr = strides.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+
+    def _span(t: Int) {imm base, imm width, imm native, imm mask, imm count, imm chunk, imm flag_ptr, imm shape_ptr, imm strides_ptr, imm rank}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, count)
+        var pointer = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=base)
+        for linear in range(lo, hi):  # admitted input: this task's elements, finiteness on original float words
+            var offset = _prep_word_offset(linear, shape_ptr, strides_ptr, rank)
+            var bits = UInt64(0)
+            if native:
+                bits = admitted_raw_word(base + offset, width)
+            else:
+                for byte in range(width):  # small-loop(bytes of one non-native float word): 4 or 8
+                    bits |= UInt64(pointer[offset + width - 1 - byte]) << UInt64(8 * byte)
+            if bits & mask == mask:
+                flag_ptr.unsafe_store(t, UInt8(0))
+                return
+
+    if tasks <= 1:
+        _span(0)
+    else:
+        host_parallelize(_span, tasks)
+    var finite = True
+    for t in range(tasks):  # driver-loop: over the scan tasks' flags (at most one per core)
+        if flags[t] == UInt8(0):
+            finite = False
+    _ = flags^
+    return finite
 
 
 def prep_gather_rows(source: CastIn, indices: Int, rows: Int, output: Int) raises:
+    """The selected rows of the source matrix, raw bytes in C order, at
+    `output` (`rows` x source.cols items). Every index is checked before any
+    row is written; no numeric conversion."""
+    # parallel: index check, then one copy per selected row (a memcpy when the
+    # row is contiguous), row tasks across host cores (it was a serial byte walk)
+    if rows <= 0:
+        return
     var index = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=indices)
-    var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source.addr)
-    var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=output)
-    for r in range(rows):  # native input marshaling: validate selected row indices before any output write
-        var selected = Int(index[r])
-        if selected < 0 or selected >= source.rows:
+    var limit = source.rows
+    var item = source.itemsize
+    var cols = source.cols
+    var tasks = host_predict_task_count_work(rows, rows * max(cols * item, 1))
+    var chunk = host_predict_chunk(rows, tasks)
+    var flags = List[UInt8](length=tasks, fill=UInt8(1))
+    var flag_ptr = rebind[MutPointer[UInt8, MutUntrackedOrigin]](flags.unsafe_ptr())
+
+    def _check(t: Int) {imm index, imm limit, imm rows, imm chunk, imm flag_ptr}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, rows)
+        for r in range(lo, hi):  # admitted input: this task's selected row indices
+            var selected = Int(index.unsafe_load(r))
+            if selected < 0 or selected >= limit:
+                flag_ptr.unsafe_store(t, UInt8(0))
+                return
+
+    if tasks <= 1:
+        _check(0)
+    else:
+        host_parallelize(_check, tasks)
+    for t in range(tasks):  # driver-loop: over the check tasks' flags (at most one per core)
+        if flags[t] == UInt8(0):
             raise Error("gather_rows_bytes: row index out of bounds")
-    for r in range(rows):  # native input marshaling: copy selected rows without numeric conversion
-        var selected = Int(index[r])
-        for c in range(source.cols):  # native input marshaling: captured source columns
-            for byte in range(source.itemsize):  # native input marshaling: raw primitive-buffer bytes
-                dst[(r * source.cols + c) * source.itemsize + byte] = src[selected * source.s0 + c * source.s1 + byte]
+    _ = flags^
+    var base = source.addr
+    var s0 = source.s0
+    var s1 = source.s1
+    var row_bytes = cols * item
+
+    def _copy(t: Int) {imm index, imm base, imm s0, imm s1, imm item, imm cols, imm row_bytes, imm output, imm rows, imm chunk}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, rows)
+        var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=output)
+        for r in range(lo, hi):  # admitted input: this task's selected rows
+            var start = base + Int(index.unsafe_load(r)) * s0
+            if s1 == item or cols == 1:
+                memcpy(dest=dst.unsafe_offset(r * row_bytes),
+                       src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=start), count=row_bytes)
+            else:
+                for c in range(cols):  # admitted input: strided items of one selected row
+                    memcpy(dest=dst.unsafe_offset(r * row_bytes + c * item),
+                           src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=start + c * s1), count=item)
+
+    if tasks <= 1:
+        _copy(0)
+    else:
+        host_parallelize(_copy, tasks)
 
 
 def prep_mask_any(source: CastIn, count: Int) -> Bool:
