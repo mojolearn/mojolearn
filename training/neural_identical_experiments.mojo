@@ -36,23 +36,8 @@ comptime IDN_TRAIN_SWIGLU = _ENABLED and is_defined["MOJOLEARN_IDN_TRAIN_SWIGLU"
 # (NI27). Aliases only; no arithmetic changes.
 comptime IDN_LM_VIEWS_ARM = get_defined_int["MOJOLEARN_IDN_LM_VIEWS", 0]()
 comptime IDN_LM_PARAM_VIEWS = _ENABLED and IDN_LM_VIEWS_ARM == 3
-# grad-views lane (REPORT 2026-10-28 idea 9, roadmap C2), default OFF:
-# -D MOJOLEARN_IDN_PARAM_GRAD_VIEWS=1 makes every parameter and gradient of
-# the byte LM train step (training/byte_lm.mojo) a view of the flat
-# `param` / `grad` owners on NVIDIA, AMD and the host column: the block
-# weights and weight gradients, the embedding and head weights, and (new
-# here) the embedding and head weight GRADIENTS, so the per-step unpack,
-# pack and the two dw_emb / dw_lm copies go. The byte LM layer pool is not
-# touched (IDN_LM_VIEWS=3 owns that). Aliases only: the same kernels read and
-# write the same values in the same order, so the bits cannot move.
-comptime IDN_PARAM_GRAD_VIEWS = _ENABLED and is_defined["MOJOLEARN_IDN_PARAM_GRAD_VIEWS"]()
-# NI32: reuse validation only inside one owned, immutable byte-training call.
-# L11 (2026-10-07): NN51 and NI32 are arms of ONE switch,
-# -D MOJOLEARN_IDN_LM_RESIDENT_TOKENS=0|1|2: 1 = NI32 (the forward's ID check
-# covers the embedding gather/backward), 2 = NN51 (arm 1 plus prerefused
-# targets in the CE forward).
-comptime IDN_LM_RESIDENT_TOKENS_ARM = get_defined_int["MOJOLEARN_IDN_LM_RESIDENT_TOKENS", 0]()
-comptime IDN_LM_OWNED_TOKENS = _ENABLED and IDN_LM_RESIDENT_TOKENS_ARM >= 1
+# TOMBSTONE: MOJOLEARN_IDN_PARAM_GRAD_VIEWS deleted 2026-11-09 by lane x7b-step-ops-host-arm (its train step went with lane x7); refused in core/experiment_guards_neural.mojo.
+# TOMBSTONE: MOJOLEARN_IDN_LM_RESIDENT_TOKENS (NI32 / NN51 arms) deleted 2026-11-09 by lane x7b-step-ops-host-arm (no reader since lane x7); refused in core/experiment_guards_neural.mojo.
 # NI33: keep the original per-cell divides and the same ignored-row stores.
 # NN52 (retired MOJOLEARN_NN52_CE_WEIGHT_GRAD) launched the same fused kernel
 # in identical_ce_backward_into; one switch (L11, 2026-10-07).

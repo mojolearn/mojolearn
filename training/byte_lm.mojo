@@ -38,8 +38,7 @@ from core.device_scan import DeviceScanScratch, device_first_token_oob
 from core.neural_context import neural_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.neural_identical_experiments import (
-    IDN_LM_PARAM_VIEWS, IDN_LM_OWNED_TOKENS, IDN_TRAIN_NO_DECODE_CACHE,
-    IDN_LM_VIEWS_ARM, IDN_LM_RESIDENT_TOKENS_ARM, IDN_PARAM_GRAD_VIEWS,
+    IDN_LM_PARAM_VIEWS, IDN_TRAIN_NO_DECODE_CACHE, IDN_LM_VIEWS_ARM,
 )
 from checks.vendor import COMPILED_VENDOR
 from training.byte_lm_afn import (
@@ -103,7 +102,8 @@ from training.byte_lm_program import (
 from transformer.impl.llama.fused_attention import (
     ATTN_BWD_KV_CORNER_GUARD, ATTN_NO_BWD_CORNER, ATTN_STICKY, IDN_TRAIN_ONE_WAIT,
 )
-from training.byte_lm_one_wait import ByteOneWait
+# TOMBSTONE: training/byte_lm_one_wait.mojo (ByteOneWait, the IDN_TRAIN_ONE_WAIT deferred-check scratch) and the trainer's `one_wait` field deleted 2026-11-09 by lane x7b-step-ops-host-arm (no reader since the one-wait step went with lane x7); code recoverable at the deletion commit's parent.
+# Restore: git apply experiments/removed/BYTE_LM_X7_LEFTOVERS.patch
 from transformer.impl.llama.modeling_llama import (
     BLOCK_ANY_SABOTAGE, LlamaDims, LlamaDeviceWeights, LlamaDeviceStages,
     LlamaRopeTable, LlamaKVCache,
@@ -528,8 +528,6 @@ struct ByteBuffers(Movable):
 
     var emb_w: DeviceBuffer[DType.float32]  # [V, d_model]
     var lm_w: DeviceBuffer[DType.float32]  # [V, d_model]
-    var dw_emb: DeviceBuffer[DType.float32]  # [V, d_model]
-    var dw_lm: DeviceBuffer[DType.float32]  # [V, d_model]
 
     var ids: DeviceBuffer[DType.int32]  # [M]
     var targets: DeviceBuffer[DType.int32]  # [M]
@@ -651,15 +649,8 @@ struct ByteBuffers(Movable):
         else:
             self.emb_w = _zeros(ctx, V * DM)
             self.lm_w = _zeros(ctx, V * DM)
-        comptime if BYTE_LM_EMB_HEAD_GRAD_VIEWS:
-            # Views of the flat gradient (see BYTE_LM_EMB_HEAD_GRAD_VIEWS).
-            self.dw_emb = self.grad.create_sub_buffer[DType.float32](0, V * DM)
-            self.dw_lm = self.grad.create_sub_buffer[DType.float32](
-                self.offsets[config.n_tensors() - 1], V * DM
-            )
-        else:
-            self.dw_emb = _zeros(ctx, V * DM)
-            self.dw_lm = _zeros(ctx, V * DM)
+        # TOMBSTONE: dw_emb / dw_lm (the hand backward's embedding and head gradients, copies or, under MOJOLEARN_IDN_PARAM_GRAD_VIEWS, views of `grad`) deleted 2026-11-09 by lane x7b-step-ops-host-arm: the program's gradient scratch is the gradient (2 x V x d_model floats freed). Code recoverable at the deletion commit's parent.
+        # Restore: git apply experiments/removed/BYTE_LM_X7_LEFTOVERS.patch
 
         self.ids = _zeros_i32(ctx, M)
         self.targets = _zeros_i32(ctx, M)
@@ -852,42 +843,26 @@ def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
 # assumed. These source drafts have no compile/identity/full-model A/B evidence.
 # Rebind from the CURRENT owner each call, including after optimizer swaps.
 # L11 (2026-10-07): NN60's arms are arms 1 and 2 of MOJOLEARN_IDN_LM_VIEWS
-# and NN51 is arm 2 of MOJOLEARN_IDN_LM_RESIDENT_TOKENS
 # (training/neural_identical_experiments.mojo).
 comptime NN60_EMB_HEAD_VIEWS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and IDN_LM_VIEWS_ARM == 2
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
-comptime NN51_RESIDENT_TOKEN_VALIDATION = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and IDN_LM_RESIDENT_TOKENS_ARM == 2
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_IDN_LM_RESIDENT_TOKENS (arms 1 NI32, 2 NN51: resident token validation of the hand training step; no reader since lane x7) deleted 2026-11-09 by lane x7b-step-ops-host-arm; code recoverable at the deletion commit's parent.
+# Restore: git apply experiments/removed/BYTE_LM_X7_LEFTOVERS.patch
 comptime NN60_BLOCK_VIEWS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and IDN_LM_VIEWS_ARM == 1
     and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
 )
-comptime BYTE_LM_BLOCK_VIEWS = AFN_LM_PARAM_VIEWS or NN60_BLOCK_VIEWS or IDN_LM_PARAM_VIEWS or IDN_PARAM_GRAD_VIEWS
+comptime BYTE_LM_BLOCK_VIEWS = AFN_LM_PARAM_VIEWS or NN60_BLOCK_VIEWS or IDN_LM_PARAM_VIEWS
 comptime BYTE_LM_EMB_HEAD_VIEWS = (
-    (TARGET_COLUMN == COLUMN_APPLE or NN60_EMB_HEAD_VIEWS or IDN_LM_PARAM_VIEWS or IDN_PARAM_GRAD_VIEWS)
+    (TARGET_COLUMN == COLUMN_APPLE or NN60_EMB_HEAD_VIEWS or IDN_LM_PARAM_VIEWS)
     and not is_defined["MOJOLEARN_BYTE_LM_COPY_EMB_HEAD"]()
 )
-# grad-views lane (MOJOLEARN_IDN_PARAM_GRAD_VIEWS, default OFF; same bits):
-# `dw_emb` and `dw_lm` are views of the flat `grad` at the offsets the two
-# per-step `_copy_into` calls in `_byte_backward_tape` copied them to (0 and
-# offsets[n_tensors - 1]). Why the bits hold: both are written WHOLE, once a
-# step, before anything reads that range of `grad`: the embedding backward
-# seeds every V x d cell (`emb_seed_kernel`, contract 5.5; EmbConfig.llama
-# has accumulate=False) and then folds the runs; the head dB is a GEMM
-# output (`identical_gemm_backward_b_into`) or, on the chunked v2 head,
-# zeroed then accumulated per chunk (`_chunk_dweight_kernel`). `grad` is
-# never swapped or reassigned (only `param`/m/v swap with their shadows),
-# so the views made once at construction stay bound to the current owner.
-# Nothing reads dw_emb / dw_lm after the old copy point, so the in-place
-# clip inside the update (which now also scales them) is unobservable.
-comptime BYTE_LM_EMB_HEAD_GRAD_VIEWS = IDN_PARAM_GRAD_VIEWS
+# TOMBSTONE: MOJOLEARN_IDN_PARAM_GRAD_VIEWS (every parameter and gradient of the hand train step a view of the flat owners; default off, never promoted; its step went with lane x7) deleted 2026-11-09 by lane x7b-step-ops-host-arm; code recoverable at the deletion commit's parent.
+# Restore: git apply experiments/removed/BYTE_LM_X7_LEFTOVERS.patch
 
 # TOMBSTONE: MOJOLEARN_IDN_LM_LEAN_STEP (noise: lm-train-step 0.982) deleted 2026-10-11 by 8cc78c8ae; code recoverable at 8cc78c8ae^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_LEAN_STEP.patch
@@ -1016,9 +991,6 @@ struct ByteTrainer(Movable):
     # Diagnostic reach witness; counts successful live-status optimizer checks.
     var embedding_runs: List[OwnedEmbeddingRuns]
     var live_status_steps: Int
-    var one_wait: Optional[ByteOneWait]
-    """IDN_TRAIN_ONE_WAIT: the deferred-check scratch, created by the first
-    one-wait step; None on a build without the define."""
     var program: Optional[ByteDeviceProgram]
     """Lane x7: the trainer's captured program (training/byte_lm_program.mojo),
     opened by the first step, gradient or evaluation."""
@@ -1049,7 +1021,6 @@ struct ByteTrainer(Movable):
         self.grad_step = -1
         self.embedding_runs = List[OwnedEmbeddingRuns]()
         self.live_status_steps = 0
-        self.one_wait = Optional[ByteOneWait]()
         self.program = Optional[ByteDeviceProgram]()
         self.program_synced = False
         # lane/neural-pass43: the session's buffers carved from arena chunks

@@ -1,0 +1,1996 @@
+diff --git a/bindings/_mojolearn_byte_lm_host.mojo b/bindings/_mojolearn_byte_lm_host.mojo
+index 7746cda379..c528809df6 100644
+--- a/bindings/_mojolearn_byte_lm_host.mojo
++++ b/bindings/_mojolearn_byte_lm_host.mojo
+@@ -55,10 +55,17 @@ from training.byte_lm_host import (
+     byte_host_logits,
+     byte_host_logits_threaded,
+     byte_host_next_threaded,
++    byte_host_loss,
+     byte_host_sabotage_compiled,
+ )
+-# DEVIATION 2680. The CPU training step and loss: since lane x7b the trainer's
+-# captured program on a host session (training/byte_lm_host_execution.mojo).
++# DEVIATION 2680. The CPU training step. This import is what puts the host
++# backward pass inside the certified CPU inference artifact, so the loss gate's
++# 33 of 33 and the DEVIATION 2612 sabotage catch must both be unmoved
++# afterwards; either one shifting is a stop, not something to reconcile.
++from training.byte_lm_host_backward import (
++    byte_host_adamw,
++    byte_host_train_step,
++)
+ 
+ 
+ comptime BYTE_HOST_MAX_LOGITS = 268435456
+@@ -222,9 +229,11 @@ def byte_lm_host_train_step_binding(addresses: PythonObject, shape: PythonObject
+     Returns the loss's IEEE-754 bits, as `byte_lm_host_loss` does, because a
+     loss compared as a float is a loss compared with a tolerance.
+ 
+-    The step is the trainer's captured program on a host session (the GPU
+-    columns' algorithm); its folds are the executor's and the block body's
+-    fixed ones on every core.
++    NO THREADED PATH. The threaded forward (DEVIATION 2640) has no backward
++    twin and must not grow one by accident: a weight gradient sums over every
++    row of the batch, so unlike the forward it crosses every thread boundary
++    and needs a fixed cross-thread fold rather than threads accumulating as
++    they finish.
+     """
+     var cfg = _host_config(shape)
+     if len(addresses) != 8:
+@@ -245,21 +254,17 @@ def byte_lm_host_train_step_binding(addresses: PythonObject, shape: PythonObject
+ 
+ def byte_lm_host_loss_binding(addresses: PythonObject, shape: PythonObject,
+                               threaded: PythonObject, threads: PythonObject) raises -> PythonObject:
+-    """Loss for addresses [params f32 (n_total), ids i32 (batch * (length + 1))]:
+-    the trainer's training forward on the host. Returns the mean loss's
+-    IEEE-754 bits."""
+-    # lane x7b: the loss is the trainer's program on a host session (the
+-    # GPU columns' algorithm); `threaded` / `threads` are still checked for
+-    # the callers' signature and choose nothing here.
++    """Loss for addresses [params f32 (n_total), ids i32 (batch * (length + 1))].
++    `threaded` and `threads` as for logits. Returns the mean loss's IEEE-754 bits."""
+     var cfg = _host_config(shape)
+     if len(addresses) != 2:
+         raise Error("byte LM host: expected 2 addresses")
+     var use_threads = _index(threaded)
+     if use_threads != 0 and use_threads != 1:
+         raise Error("byte LM host: threaded must be 0 or 1")
+-    _ = _thread_count(threads)
++    var thread_count = _thread_count(threads)
+     var addresses_native: List[Int] = [_index(addresses[0]), _index(addresses[1])]
+-    return PythonObject(byte_host_loss_native(addresses_native, cfg))
++    return PythonObject(byte_host_loss_native(addresses_native, cfg, use_threads, thread_count))
+ 
+ 
+ # ===========================================================================
+diff --git a/tools/byte_lm_host_step_check.py b/tools/byte_lm_host_step_check.py
+new file mode 100644
+index 0000000000..abe0cb7a0e
+--- /dev/null
++++ b/tools/byte_lm_host_step_check.py
+@@ -0,0 +1,127 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The byte LM host training step with its rows over host tasks against the
++serial oracle calls: bits and wall.
++
++lane/neural-pass6 (2026-09-30). `LanguageModelHostTrainer.train_step` runs the
++loss's rows and the optimizer's elements over host tasks
++(`training/loss_host_rows.mojo`, `training/optimizer_host_rows.mojo`) and the
++serial oracle calls for both under `MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0`. The
++two must agree bit for bit on every step's loss, gradient, parameters and
++both moments, because the row paths run the oracle's statements on the
++oracle's operands in the oracle's per-row order, and every cross-row fold is
++the same gemm v1 call. This tool runs both from one initialization over the
++same batches and compares every byte, then reports the median step wall of
++each and the ratio.
++
++    python tools/byte_lm_host_step_check.py                 # the board shape, 4 steps
++    python tools/byte_lm_host_step_check.py --small --steps 16
++    python tools/byte_lm_host_step_check.py --layers 2 --json out.json
++
++The board shape is `lm-host-train-step`'s (batch 1, length 512, d_model 384,
++6 heads, head_dim 64, intermediate 1024, 8 layers, vocab 8192). What this
++tool cannot see, the block oracles' own threaded stages (they have no serial
++switch), `tools/byte_lm_cpu_train_gate.py cpu` sees against the recorded
++three-vendor bytes.
++
++Prints `BYTE_LM_HOST_STEP_CHECK PASS` or `BYTE_LM_HOST_STEP_CHECK FAIL <what>`
++and exits 1 on FAIL. A FAIL is a bug in a row path, never a result.
++"""
++import argparse
++import hashlib
++import json
++import os
++import statistics
++import struct
++import sys
++import time
++from pathlib import Path
++
++import numpy as np
++
++ROOT = Path(__file__).resolve().parents[1]
++ENV = "MOJOLEARN_BYTE_LM_HOST_STEP_ROWS"
++ADAMW = dict(lr=1e-3, betas=(0.9, 0.95), eps=1e-8, weight_decay=0.1)
++BOARD = dict(batch=1, length=512, d_model=384, n_heads=6, n_kv=6, head_dim=64,
++             intermediate=1024, n_layers=8, vocab_size=8192)
++SMALL = dict(batch=2, length=64, d_model=64, n_heads=4, n_kv=2, head_dim=16,
++             intermediate=128, n_layers=2, vocab_size=256)
++
++
++def _sha(a):
++    return hashlib.sha256(np.ascontiguousarray(a).tobytes()).hexdigest()
++
++
++def _run(rows_on, shape, init, m0, v0, batches):
++    """Every step's loss bits and state digests under one setting, and the walls."""
++    from mojolearn._byte_lm_host import LanguageModelHostTrainer
++    os.environ[ENV] = "1" if rows_on else "0"
++    trainer = LanguageModelHostTrainer(init.copy(), m=m0.copy(), v=v0.copy(), shape=shape, **ADAMW)
++    steps, walls = [], []
++    for ids in batches:
++        t0 = time.perf_counter()
++        bits = trainer.train_step(ids)
++        walls.append(time.perf_counter() - t0)
++        steps.append(dict(loss_bits=int(bits), grad=_sha(trainer.gradient_),
++                          param=_sha(trainer.parameters_), m=_sha(trainer.m_), v=_sha(trainer.v_)))
++    return steps, walls
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument("--steps", type=int, default=4)
++    ap.add_argument("--small", action="store_true", help="the small LM shape instead of the board's")
++    ap.add_argument("--layers", type=int, default=None)
++    ap.add_argument("--seed", type=int, default=7)
++    ap.add_argument("--json", default=None)
++    args = ap.parse_args()
++    sys.path.insert(0, str(ROOT / "python"))
++    from mojolearn import ByteLanguageModelConfig
++
++    fields = dict(SMALL if args.small else BOARD)
++    if args.layers:
++        fields["n_layers"] = args.layers
++    shape = ByteLanguageModelConfig(**fields)
++    n = shape.n_total
++    rng = np.random.default_rng(args.seed)
++    init = (rng.standard_normal(n, dtype=np.float32) * np.float32(0.02)).astype("<f4")
++    m0 = (rng.standard_normal(n, dtype=np.float32) * np.float32(1e-3)).astype("<f4")
++    v0 = np.abs(rng.standard_normal(n, dtype=np.float32) * np.float32(1e-4)).astype("<f4")
++    batches = [rng.integers(0, shape.vocab_size, size=(shape.batch, shape.length + 1), dtype=np.int32)
++               for _ in range(args.steps)]
++
++    before = os.environ.get(ENV)
++    try:
++        rows, rows_walls = _run(True, shape, init, m0, v0, batches)
++        serial, serial_walls = _run(False, shape, init, m0, v0, batches)
++    finally:
++        if before is None:
++            os.environ.pop(ENV, None)
++        else:
++            os.environ[ENV] = before
++
++    fails = []
++    for k, (a, b) in enumerate(zip(rows, serial)):
++        for key in a:
++            if a[key] != b[key]:
++                fails.append(f"step {k} {key}: rows {a[key]} serial {b[key]}")
++    rows_med = statistics.median(rows_walls)
++    serial_med = statistics.median(serial_walls)
++    report = dict(shape=fields, steps=args.steps, rows_ms=rows_med * 1e3, serial_ms=serial_med * 1e3,
++                  ratio=serial_med / rows_med if rows_med else None,
++                  losses=[struct.unpack("<f", struct.pack("<I", s["loss_bits"]))[0] for s in rows],
++                  fails=fails)
++    print(f"rows {rows_med * 1e3:.1f} ms/step, serial {serial_med * 1e3:.1f} ms/step, "
++          f"ratio {report['ratio']:.2f}x, losses {report['losses']}")
++    if args.json:
++        Path(args.json).write_text(json.dumps(report, indent=2))
++    if fails:
++        print("BYTE_LM_HOST_STEP_CHECK FAIL " + "; ".join(fails[:4]))
++        return 1
++    print("BYTE_LM_HOST_STEP_CHECK PASS")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/tools/byte_lm_host_step_profile.mojo b/tools/byte_lm_host_step_profile.mojo
+new file mode 100644
+index 0000000000..51c374af78
+--- /dev/null
++++ b/tools/byte_lm_host_step_profile.mojo
+@@ -0,0 +1,314 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""Where one byte LM host training step spends its wall (lane neural-pass6).
++
++The board's `lm-host-train-step` cell runs `byte_host_train_step`
++(`training/byte_lm_host_backward.mojo`) at batch 1, length 512, d_model 384,
++6 heads, head_dim 64, intermediate 1024, 8 layers, vocab 8192. This program
++runs THAT composition, stage by stage, with a wall clock between the stages,
++so a reader learns which stages are serial and which already run through the
++threaded GEMM (`gemm_host_rows`). It computes nothing the step does not; it
++only reads the clock between the calls the step makes, in the step's order.
++
++    pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU \\
++        -I . -I bindings tools/byte_lm_host_step_profile.mojo [--small] [--layers N] [--repeat R]
++
++Prints one `profile <stage> <ms>` line per stage (the best of `repeat` runs,
++default 1): the serial oracle calls (`ce_forward`, `ce_backward`,
++`optimizer_step`) AND their rows-over-host-tasks twins (`ce_rows`,
++`optimizer_rows`, `training/loss_host_rows.mojo` and
++`training/optimizer_host_rows.mojo`), then `profile total <ms>` for the whole
++`byte_host_train_step` call under the process environment
++(`MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0` selects the serial calls), which includes
++the step's own copies. The block stages run the oracles, whose per-row stages
++are over host tasks since lane neural-pass6."""
++
++from std.sys import argv
++from std.time import perf_counter_ns
++
++from embedding.checks.embedding_oracle import (
++    EmbConfig,
++    emb_backward_oracle,
++    emb_forward_oracle,
++)
++from gemm.host.gemm_host_rows import gemm_host_rows
++from gemm.host.identical_gemm import OP_NT
++from training.byte_lm_config import ByteConfig
++from training.byte_lm_host import byte_host_block_weights, byte_host_dims
++from training.byte_lm_host_backward import (
++    byte_host_adamw,
++    byte_host_split_ids,
++    byte_host_train_step,
++)
++from training.checks.loss_oracle import (
++    CeConfig,
++    ce_backward_oracle,
++    ce_forward_oracle,
++)
++from training.checks.optimizer_oracle import optimizer_step_oracle
++from training.loss_host_rows import ce_host_rows
++from training.optimizer_host_rows import adam_host_rows
++from transformer.checks.transformer_backward_oracle import (
++    _gemm_bwd_a,
++    _gemm_bwd_b,
++    transformer_block_backward_oracle,
++)
++from transformer.checks.transformer_fixture import ScorePlant
++from transformer.checks.transformer_oracle import (
++    TransformerKVCache,
++    TransformerStages,
++    build_rope_table,
++    transformer_block_oracle,
++)
++
++
++def _ms(ns: Int) -> Float64:
++    return Float64(ns) / 1.0e6
++
++
++def _lcg_fill(n: Int, scale: Float32, seed: Int) -> List[Float32]:
++    """Deterministic small values in (-scale, scale)."""
++    var out = List[Float32](capacity=n)
++    var state = UInt64(seed)
++    for _ in range(n):
++        state = state * UInt64(6364136223846793005) + UInt64(1442695040888963407)
++        var u = Float32(Int((state >> 33) & UInt64(0xFFFFFF))) / Float32(16777216.0)
++        out.append((u * Float32(2.0) - Float32(1.0)) * scale)
++    return out^
++
++
++def _lcg_ids(n: Int, vocab: Int, seed: Int) -> List[Int32]:
++    var out = List[Int32](capacity=n)
++    var state = UInt64(seed)
++    for _ in range(n):
++        state = state * UInt64(6364136223846793005) + UInt64(1442695040888963407)
++        out.append(Int32(Int((state >> 33) % UInt64(vocab))))
++    return out^
++
++
++def _slice(values: List[Float32], offsets: List[Int], j: Int) -> List[Float32]:
++    var out = List[Float32](capacity=offsets[j + 1] - offsets[j])
++    for i in range(offsets[j], offsets[j + 1]):
++        out.append(values[i])
++    return out^
++
++
++def _extend(mut into: List[Float32], values: List[Float32]):
++    for i in range(len(values)):
++        into.append(values[i])
++
++
++struct Walls(Movable):
++    var names: List[String]
++    var best: List[Int]
++
++    def __init__(out self):
++        self.names = List[String]()
++        self.best = List[Int]()
++
++    def add(mut self, name: String, ns: Int):
++        for i in range(len(self.names)):
++            if self.names[i] == name:
++                if ns < self.best[i]:
++                    self.best[i] = ns
++                return
++        self.names.append(name)
++        self.best.append(ns)
++
++    def report(self):
++        for i in range(len(self.names)):
++            print("profile", self.names[i], _ms(self.best[i]))
++
++
++def _profile_once(params: List[Float32], m_state: List[Float32],
++                  v_state: List[Float32], ids: List[Int32], config: ByteConfig,
++                  mut walls: Walls) raises:
++    """`byte_host_gradient` then the update, the clock read between the calls."""
++    var offsets = config.offsets()
++    var dims = byte_host_dims(config)
++    var rope = build_rope_table(dims)
++    var b = config.batch
++    var l = config.length
++    var m = b * l
++    var dm = config.d_model
++    var v = config.vocab_size
++    var emb_cfg = EmbConfig.llama(v, dm)
++    var ce_cfg = CeConfig.causal_lm(v)
++    var split = byte_host_split_ids(ids, config)
++    var inputs = split[0].copy()
++    var targets = split[1].copy()
++
++    var t0 = perf_counter_ns()
++    var x = emb_forward_oracle(_slice(params, offsets, 0), inputs, emb_cfg)
++    var t1 = perf_counter_ns()
++    walls.add("emb_forward", t1 - t0)
++
++    var inputs_of = List[List[Float32]]()
++    var saved = List[TransformerStages]()
++    var fwd_ns = 0
++    var wslice_ns = 0
++    for layer in range(config.n_layers):
++        var ta = perf_counter_ns()
++        var w = byte_host_block_weights(params, offsets, layer, dims)
++        var tb = perf_counter_ns()
++        wslice_ns += tb - ta
++        var cache = TransformerKVCache(b, dims, l, 0)
++        inputs_of.append(x.copy())
++        var st = transformer_block_oracle(w, x, b, l, cache, rope, ScorePlant.none())
++        x = st.residual2_out.copy()
++        saved.append(st^)
++        fwd_ns += perf_counter_ns() - tb
++    walls.add("block_weights_fwd", wslice_ns)
++    walls.add("blocks_forward", fwd_ns)
++
++    var head_id = config.n_tensors() - 1
++    var t2 = perf_counter_ns()
++    var lm_w = _slice(params, offsets, head_id)
++    var logits = gemm_host_rows(x, lm_w, OP_NT, m, v, dm)
++    var t3 = perf_counter_ns()
++    walls.add("head_gemm", t3 - t2)
++    var ce = ce_forward_oracle(logits, targets, ce_cfg)
++    var t4 = perf_counter_ns()
++    walls.add("ce_forward", t4 - t3)
++    ce_backward_oracle(ce, targets, ce_cfg)
++    var t5 = perf_counter_ns()
++    walls.add("ce_backward", t5 - t4)
++    var ce_rows = ce_host_rows(logits, targets, ce_cfg)
++    var t5b = perf_counter_ns()
++    walls.add("ce_rows", t5b - t5)
++    if ce_rows[0] != ce.loss[0]:
++        raise Error("profile: ce_host_rows loss differs from the oracle")
++    for i in range(len(ce.dlogits)):
++        if ce_rows[1][i] != ce.dlogits[i]:
++            raise Error("profile: ce_host_rows dlogits differ from the oracle at " + String(i))
++    t5 = perf_counter_ns()
++    var d_h = _gemm_bwd_a(ce.dlogits, lm_w, OP_NT, m, v, dm)
++    var t6 = perf_counter_ns()
++    walls.add("head_bwd_dA", t6 - t5)
++    var dw_lm = _gemm_bwd_b(ce.dlogits, x, OP_NT, m, v, dm)
++    var t7 = perf_counter_ns()
++    walls.add("head_bwd_dB", t7 - t6)
++
++    var per_layer = List[List[Float32]]()
++    for _ in range(config.n_layers):
++        per_layer.append(List[Float32]())
++    var d_out = d_h.copy()
++    var bwd_ns = 0
++    var pack_ns = 0
++    for layer in range(config.n_layers - 1, -1, -1):
++        var ta = perf_counter_ns()
++        var w = byte_host_block_weights(params, offsets, layer, dims)
++        var bwd = transformer_block_backward_oracle(w, saved[layer], d_out, b, l, 0, rope)
++        var tb = perf_counter_ns()
++        bwd_ns += tb - ta
++        var packed = List[Float32]()
++        _extend(packed, bwd.dw_norm1)
++        _extend(packed, bwd.dw_q)
++        _extend(packed, bwd.dw_k)
++        _extend(packed, bwd.dw_v)
++        _extend(packed, bwd.dw_o)
++        _extend(packed, bwd.dw_norm2)
++        _extend(packed, bwd.dw_gate)
++        _extend(packed, bwd.dw_up)
++        _extend(packed, bwd.dw_down)
++        per_layer[layer] = packed^
++        d_out = bwd.d_x.copy()
++        pack_ns += perf_counter_ns() - tb
++    walls.add("blocks_backward", bwd_ns)
++    walls.add("blocks_pack", pack_ns)
++
++    var t8 = perf_counter_ns()
++    var dw_emb = emb_backward_oracle(d_out, inputs, emb_cfg, List[Float32]())
++    var t9 = perf_counter_ns()
++    walls.add("emb_backward", t9 - t8)
++    var grad = List[Float32](capacity=config.n_total())
++    _extend(grad, dw_emb)
++    for layer in range(config.n_layers):
++        _extend(grad, per_layer[layer])
++    _extend(grad, dw_lm)
++    var t10 = perf_counter_ns()
++    walls.add("grad_pack", t10 - t9)
++
++    var p_out = params.copy()
++    var g_out = grad.copy()
++    var m_out = m_state.copy()
++    var v_out = v_state.copy()
++    var initialized = List[Bool]()
++    for _ in range(config.n_tensors()):
++        initialized.append(True)
++    var t11 = perf_counter_ns()
++    walls.add("optimizer_copies", t11 - t10)
++    var opt = byte_host_adamw(Float32(1e-3), Float32(0.9), Float32(0.95),
++                              Float32(1e-8), Float32(0.1))
++    _ = optimizer_step_oracle(p_out, g_out, m_out, v_out, initialized, offsets, opt, 1)
++    var t12 = perf_counter_ns()
++    walls.add("optimizer_step", t12 - t11)
++    walls.add("stages_sum", t12 - t0)
++    var p_rows = params.copy()
++    var m_rows = m_state.copy()
++    var v_rows = v_state.copy()
++    var t13 = perf_counter_ns()
++    adam_host_rows(p_rows, grad, m_rows, v_rows, opt, 1)
++    var t14 = perf_counter_ns()
++    walls.add("optimizer_rows", t14 - t13)
++    for i in range(len(p_out)):
++        if p_rows[i] != p_out[i] or m_rows[i] != m_out[i] or v_rows[i] != v_out[i]:
++            raise Error("profile: adam_host_rows differs from the oracle at " + String(i))
++
++
++def main() raises:
++    var small = False
++    var layers = -1
++    var repeat = 1
++    var total_only = False
++    var args = argv()
++    var i = 1
++    while i < len(args):
++        var a = String(args[i])
++        if a == "--small":
++            small = True
++        elif a == "--layers":
++            i += 1
++            layers = Int(String(args[i]))
++        elif a == "--repeat":
++            i += 1
++            repeat = Int(String(args[i]))
++        elif a == "--total-only":
++            total_only = True
++        else:
++            raise Error("unknown argument " + a)
++        i += 1
++
++    var config: ByteConfig
++    if small:
++        config = ByteConfig(2, 64, 64, 4, 2, 16, 128, 2, 256)
++    else:
++        config = ByteConfig(1, 512, 384, 6, 6, 64, 1024, 8, 8192)
++    if layers > 0:
++        config.n_layers = layers
++    config.validate()
++    var n = config.n_total()
++    print("profile shape batch", config.batch, "length", config.length,
++          "d_model", config.d_model, "layers", config.n_layers,
++          "vocab", config.vocab_size, "n_total", n)
++
++    var params = _lcg_fill(n, Float32(0.02), 7)
++    var m_state = _lcg_fill(n, Float32(0.001), 11)
++    var v_state = _lcg_fill(n, Float32(0.0001), 13)
++    for k in range(n):
++        if v_state[k] < Float32(0.0):
++            v_state[k] = -v_state[k]
++    var ids = _lcg_ids(config.batch * (config.length + 1), config.vocab_size, 17)
++    var opt = byte_host_adamw(Float32(1e-3), Float32(0.9), Float32(0.95),
++                              Float32(1e-8), Float32(0.1))
++
++    var walls = Walls()
++    for _ in range(repeat):
++        if not total_only:
++            _profile_once(params, m_state, v_state, ids, config, walls)
++        var t0 = perf_counter_ns()
++        var step = byte_host_train_step(params.copy(), m_state.copy(), v_state.copy(), ids, config, opt, 0)
++        var t1 = perf_counter_ns()
++        walls.add("total", t1 - t0)
++        print("profile loss", step.loss)
++    walls.report()
+diff --git a/tools/hostpr_both.sh b/tools/hostpr_both.sh
+index 154434fff2..8dabbee5f0 100755
+--- a/tools/hostpr_both.sh
++++ b/tools/hostpr_both.sh
+@@ -10,7 +10,7 @@ pixi install > $O/pixi.log 2>&1
+ MOJOLEARN_TARGET_COLUMN=cpu bash bindings/build_byte_lm_host.sh > $O/build-host.log 2>&1; rc build-host $?
+ MOJOLEARN_TARGET_COLUMN=nvidia MOJOLEARN_GPU_ARCHS=sm_89 MOJOLEARN_COMPILE_JOBS=4 bash bindings/build.sh > $O/build-base.log 2>&1; rc build-base $?
+ MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_VENDOR=cpu timeout 3600 pixi run python tools/byte_lm_cpu_train_gate.py cpu --steps all > $O/train-gate.log 2>&1; rc train-gate $?
+-# TOMBSTONE: tools/byte_lm_host_step_check.py (the composed host step's rows-vs-oracle check) deleted 2026-11-09 by lane x7b-step-ops-host-arm: the host step is the trainer's program; docs/TOMBSTONES.md "BYTE_LM_HOST_COMPOSED_STEP".
++MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_VENDOR=cpu timeout 3600 pixi run python tools/byte_lm_host_step_check.py --steps 4 > $O/step-check.log 2>&1; rc step-check $?
+ for r in 1 0; do MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT=$r timeout 3600 pixi run python tools/byte_lm_host_gate.py > $O/infer-gate-$r.log 2>&1; rc infer-gate-$r $?; done
+ timeout 3600 pixi run python tools/byte_lm_host_path_sweep.py > $O/sweep.log 2>&1; rc sweep $?
+ echo done > $O/done
+diff --git a/training/byte_lm_host.mojo b/training/byte_lm_host.mojo
+index 2233b51530..3790b0943c 100644
+--- a/training/byte_lm_host.mojo
++++ b/training/byte_lm_host.mojo
+@@ -11,11 +11,7 @@ device kernels:
+     each block  transformer_block_oracle       llama_decoder_layer_forward
+                 (fresh cache, prefill at 0)    (prefill_cache.s = 0)
+     head        gemm_oracle(OP_NT)             identical_gemm_into(..., OP_NT)
+-
+-The training loss is not here (lane x7b-step-ops-host-arm, 2026-11-09): it is
+-the trainer's captured program on a host session, the GPU columns'
+-algorithm (training/byte_lm_host_execution.mojo `byte_host_loss_native`).
+-This file is the logits and next-byte forward.
++    loss        ce_forward_oracle(causal_lm)   identical_ce_forward_into
+ 
+ There is no final norm between the last block and the head, because the
+ device forward has none. The parameter registry is
+@@ -59,10 +55,13 @@ from gemm.host.neural_gemm import GhrPtr
+ from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT
+ from gemm.host.neural_gemm import gemm_oracle
+ from training.byte_lm_config import ByteConfig
++from training.chunked_lm_head_gemm_host import byte_chunked_head_forward
++from training.chunked_lm_head_host import chunked_lm_head_gemm_host_forward
+ # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch
+ from training.byte_lm_host_kernels import (
+     all_finite_span,
++    ce_causal_mean_loss_fast,
+     flushed_span,
+     gemm_nt_rows,
+     gemm_w,
+@@ -79,6 +78,8 @@ from training.byte_lm_host_kernels import (
+     rms_norm_fast,
+     rope_rows,
+ )
++from training.checks.loss_contract import CeConfig
++from training.checks.loss_oracle import ce_forward_oracle
+ from transformer.checks.transformer_fixture import (
+     attention_scale,
+     mask_fill,
+@@ -246,6 +247,8 @@ def byte_host_logits(params: List[Float32], inputs: List[Int32], batch: Int,
+ #               also split a single row's head product across threads; on
+ #               the M4 at [1, 32] that measured slower, 0.70 against 0.57
+ #               ms, and it was removed.)
++#   loss        `ce_causal_mean_loss_fast` on the calling thread, the loss
++#               oracle's seams with its folds through `gemm_nt_rows`.
+ #
+ # No task starts another parallel region. Owners that tasks read through a
+ # pointer are transferred only AFTER the join (the step-33 race class,
+@@ -941,5 +944,32 @@ def byte_host_next_threaded(params: List[Float32], inputs: List[Int32], batch: I
+     return out^
+ 
+ 
+-# TOMBSTONE: byte_host_loss (the host column's training loss: the composed oracle forward, its chunked-head and threaded arms) deleted 2026-11-09 by lane x7b-step-ops-host-arm; the loss is the trainer's program on a host session (training/byte_lm_host_execution.mojo byte_host_loss_native). Code recoverable at the deletion commit's parent.
+-# Restore: git apply experiments/removed/BYTE_LM_HOST_COMPOSED_STEP.patch
++def byte_host_loss(params: List[Float32], ids: List[Int32], config: ByteConfig,
++                   threaded: Bool = False, threads: Int = 0) raises -> Float32:
++    """Mean next-byte cross-entropy of ids `[batch, length + 1]` at the
++    configured shape, split exactly as `_byte_forward_loss` splits them.
++    The loss runs on the calling thread: the oracle on the reference path,
++    `ce_causal_mean_loss_fast` on the threaded path."""
++    config.validate()
++    var b = config.batch
++    var l = config.length
++    if len(ids) != b * (l + 1):
++        raise Error("byte LM host: loss ids must be [batch, length + 1]")
++    var inputs = List[Int32](capacity=b * l)
++    var targets = List[Int32](capacity=b * l)
++    for bi in range(b):
++        for li in range(l):
++            inputs.append(ids[bi * (l + 1) + li])
++            targets.append(ids[bi * (l + 1) + li + 1])
++    if config.chunked_lm_head_v2:
++        _validate_logits_inputs(params,inputs,b,l,config)
++        var hidden = _byte_host_hidden(params,inputs,b,l,config)
++        var head = _slice(params,config.offsets(),config.n_tensors()-1)
++        var result = byte_chunked_head_forward(hidden,head,targets,b*l,config.vocab_size,config.d_model)
++        return result.loss
++    if threaded:
++        var fast_logits = byte_host_logits_threaded(params, inputs, b, l, config, threads)
++        return ce_causal_mean_loss_fast(fast_logits, targets, config.vocab_size)
++    var logits = byte_host_logits(params, inputs, b, l, config)
++    var st = ce_forward_oracle(logits, targets, CeConfig.causal_lm(config.vocab_size))
++    return st.loss[0]
+diff --git a/training/byte_lm_host_backward.mojo b/training/byte_lm_host_backward.mojo
+new file mode 100644
+index 0000000000..2087107591
+--- /dev/null
++++ b/training/byte_lm_host_backward.mojo
+@@ -0,0 +1,351 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""One byte LM training step on the host, forward and backward (DEVIATION 2680).
++
++COMPOSITION, NOT NEW ARITHMETIC. Every floating point operation below happens
++inside an oracle that is already the normative answer of its own profile:
++
++    embedding forward      emb_forward_oracle
++    each block forward     transformer_block_oracle
++    head                   gemm_oracle, OP_NT (through gemm_host_rows, its bits at
++                           CPU speed)
++    loss and its gradient  ce_forward_oracle, ce_backward_oracle
++    head backward          _gemm_bwd_a / _gemm_bwd_b (host, over gemm_oracle)
++    each block backward    transformer_block_backward_oracle
++    embedding gradient     emb_backward_oracle
++    the update             optimizer_step_oracle
++
++Nothing here adds a seam, a fold or a flush. What this file contributes is the
++ORDER, which is `training/byte_lm.mojo::_byte_step_device`'s order, and the
++byte LM's own parameter layout, taken from `ByteConfig.offsets()` rather than
++spelled a fourth time (`train_offsets`, `pack_grads` and
++`train_step_check.mojo` are the three that already exist, and that lane's own
++plan lists a single shared table as owed).
++
++WHAT IS ALREADY PROVEN, AND WHERE THE GAP WAS. `train_step_check.mojo` has
++compared a composed host step against the device step bitwise, thirteen
++stages, with four negative controls firing, but on ONE device and at a ONE
++BLOCK fixture with its own registry. The byte LM profile has two blocks and a
++34944 element registry, and its recorded capture covers three vendors. So this
++file is the byte LM shaped composition, and `tools/byte_lm_cpu_train_gate.py`
++is what judges it against all three.
++
++TWO BLOCKS IS THE ONE STRUCTURAL DIFFERENCE from that check. Each layer's
++backward needs THAT LAYER'S saved forward stages and THAT LAYER'S input, which
++is the previous layer's `residual2_out` and, for layer 0, the embedding output.
++The forward here therefore retains both per layer instead of overwriting one
++running activation, exactly as the device step keeps `tr.forward[layer]` and
++passes `tr.forward[layer - 1].residual2` down.
++
++NO FAST PATH in this file: the oracles as written, in the oracles' order.
++WHAT RUNS ON MORE THAN ONE CORE, AND WHY THE BITS ARE THE SAME (lane
++neural-cpu 2026-09-28, lane neural-pass6 2026-09-30). Every cross-row fold
++in the step is a gemm v1 call (`gemm/host/gemm_host_rows.mojo` computes
++`gemm_oracle`'s bits, its fixed leaf-and-tree chain over the contraction
++axis, whatever the task count): the projections, the attention products,
++the head, every weight gradient (which is where the sum over the batch
++lives), the norm weight gradients and the loss's denominators. Everything
++else is a per-row or per-element chain, and a chain runs the same
++statements in the same order whichever task runs it, in the calling
++thread's floating-point environment (`core/host_parallel.mojo`, DEVIATION
++5900). So the block oracles' per-row stages, the loss's rows
++(`training/loss_host_rows.mojo`) and the optimizer's elements
++(`training/optimizer_host_rows.mojo`) run over host tasks. The loss and the
++optimizer keep the serial oracle calls one environment value away
++(`MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0`); `tools/byte_lm_host_step_check.py`
++compares the two, every byte of every step, and
++`tools/byte_lm_cpu_train_gate.py cpu` compares either against the recorded
++three-vendor bytes. Nothing lets a thread accumulate as it finishes.
++
++BATCH COMPOSITION IS PART OF THE CLAIM. Nine of the gradients contract over
++the token count, so `gemm_backward.mojo`'s own statement applies: the gradient
++at 1024 tokens is not the bits of the gradient at 512 tokens accumulated
++twice. A pass here is a statement at the shape it ran at.
++"""
++
++from std.memory import unsafe_memcpy
++from std.os import getenv
++
++from core.host_lanes import host_f32_uninit
++from gemm.contract import OP_NT
++from gemm.host.neural_gemm import gemm_oracle
++from gemm.host.neural_gemm import gemm_host_rows
++from training.chunked_lm_head_gemm_host import byte_chunked_head_backward
++from embedding.checks.embedding_oracle import (
++    EmbConfig,
++    emb_backward_oracle,
++    emb_forward_oracle,
++)
++from training.byte_lm_config import ByteConfig
++from training.byte_lm_host import (
++    byte_host_block_weights,
++    byte_host_dims,
++)
++from training.checks.loss_contract import CeConfig
++from training.checks.loss_oracle import ce_backward_oracle, ce_forward_oracle
++from training.checks.optimizer_contract import OPT_ADAMW, OptimizerConfig
++from training.checks.optimizer_oracle import optimizer_step_oracle
++from training.loss_host_rows import ce_host_rows
++from training.chunked_lm_head_host import chunked_lm_head_gemm_host_train
++from training.optimizer_host_rows import adam_host_rows
++from transformer.checks.transformer_fixture import ScorePlant, TransformerWeights
++from transformer.checks.transformer_oracle import (
++    RopeTable,
++    TransformerKVCache,
++    TransformerStages,
++    build_rope_table,
++    transformer_block_oracle,
++)
++from transformer.checks.transformer_backward_oracle import (
++    _gemm_bwd_a,
++    _gemm_bwd_b,
++    transformer_block_backward_oracle,
++)
++
++
++def byte_host_step_rows() -> Bool:
++    """True unless MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0: the loss's rows and the
++    optimizer's elements over host tasks (module note); 0 restores the serial
++    oracle calls for both, which is what the check tool compares against."""
++    return String(getenv("MOJOLEARN_BYTE_LM_HOST_STEP_ROWS")) != "0"
++
++
++def byte_host_adamw(lr: Float32, beta1: Float32, beta2: Float32,
++                    eps: Float32, weight_decay: Float32) -> OptimizerConfig:
++    """The byte LM's optimizer, spelled the one way its own validator allows.
++
++    `byte_validate_optimizer` (training/byte_lm.mojo) refuses anything but
++    positive-lr AdamW with finite legal betas and eps, no clipping, no
++    momentum, no dampening and no nesterov, so the remaining fields are zero
++    because that is the only value they may take here, not because zero is a
++    convenient default."""
++    return OptimizerConfig(OPT_ADAMW, lr, beta1, beta2, eps, weight_decay,
++                           Float32(0.0), Float32(0.0), False, Float32(0.0))
++
++
++struct ByteHostStep(Movable):
++    """One step's outputs, in the order a gate reads them.
++
++    `grad` is the flat gradient in the registry's order, which is the order
++    `post_p` and the capture's `grad.f32` use: embed, then each block's nine
++    tensors, then lm_head. `loss` is the mean next byte cross entropy of the
++    step's own batch, before the update."""
++
++    var loss: Float32
++    var grad: List[Float32]
++    var param: List[Float32]
++    var m_state: List[Float32]
++    var v_state: List[Float32]
++
++    def __init__(out self, loss: Float32, var grad: List[Float32],
++                 var param: List[Float32], var m_state: List[Float32],
++                 var v_state: List[Float32]):
++        self.loss = loss
++        self.grad = grad^
++        self.param = param^
++        self.m_state = m_state^
++        self.v_state = v_state^
++
++
++def byte_host_split_ids(ids: List[Int32], config: ByteConfig) raises
++        -> Tuple[List[Int32], List[Int32]]:
++    """`(inputs, targets)` from ids `[batch, length + 1]`.
++
++    The same split `byte_host_loss` and `_byte_forward_loss` perform: a row's
++    inputs are its first `length` bytes and its targets are that row shifted
++    by one. Spelled once here so the step cannot drift from the loss."""
++    var b = config.batch
++    var l = config.length
++    if len(ids) != b * (l + 1):
++        raise Error("byte LM host step: ids must be [batch, length + 1]")
++    var inputs = List[Int32](capacity=b * l)
++    var targets = List[Int32](capacity=b * l)
++    for bi in range(b):
++        for li in range(l):
++            inputs.append(ids[bi * (l + 1) + li])
++            targets.append(ids[bi * (l + 1) + li + 1])
++    return (inputs^, targets^)
++
++
++def byte_host_gradient(params: List[Float32], ids: List[Int32],
++                       config: ByteConfig) raises
++        -> Tuple[Float32, List[Float32]]:
++    """`(loss, grad)` for one batch, the whole backward pass, no update.
++
++    The order is `_byte_step_device`'s: forward and loss, the loss gradient,
++    the head's two GEMM backwards, the blocks in REVERSE, the embedding
++    gradient, then the pack. No parameter, moment or step is touched."""
++    config.validate()
++    var offsets = config.offsets()
++    var dims = byte_host_dims(config)
++    var rope = build_rope_table(dims)
++    var b = config.batch
++    var l = config.length
++    var m = b * l
++    var dm = config.d_model
++    var v = config.vocab_size
++    var emb_cfg = EmbConfig.llama(v, dm)
++    var ce_cfg = CeConfig.causal_lm(v)
++    # `List` is not `ImplicitlyCopyable`, so reading a list out of a tuple is
++    # an explicit copy or a transfer. Copies here, because both are read again
++    # below (`inputs` by the embedding gradient, `targets` by the loss).
++    var split = byte_host_split_ids(ids, config)
++    var inputs = split[0].copy()
++    var targets = split[1].copy()
++
++    # ---- forward, retaining every layer's stages AND its input ------------
++    # `inputs_of[layer]` is what that layer's backward needs as `x`: the
++    # embedding output for layer 0 and the previous layer's residual2
++    # otherwise. The device step reads the same two things.
++    var x = emb_forward_oracle(_byte_host_slice(params, offsets, 0), inputs, emb_cfg)
++    # Each layer's weights are sliced ONCE a step (lane neural-pass8) and the
++    # backward reads the same lists; the stages keep each layer's input
++    # (`input_x`), so no separate copy of it is held.
++    var weights = List[TransformerWeights]()
++    var saved = List[TransformerStages]()
++    for layer in range(config.n_layers):
++        weights.append(byte_host_block_weights(params, offsets, layer, dims))
++        var cache = TransformerKVCache(b, dims, l, 0)
++        var st = transformer_block_oracle(weights[layer], x, b, l, cache, rope, ScorePlant.none())
++        x = st.residual2_out.copy()
++        saved.append(st^)
++
++    # ---- head, loss, and the loss gradient --------------------------------
++    var head_id = config.n_tensors() - 1
++    var lm_w = _byte_host_slice(params, offsets, head_id)
++    var loss: Float32
++    var d_h: List[Float32]
++    var dw_lm: List[Float32]
++    if config.chunked_lm_head_v2:
++        # ByteLM's device route forms each panel with selected neural GEMM,
++        # then uses the v2 serial vocabulary/row gradient chains. The public
++        # scalar-logit head oracle has a different wide-K graph and is not
++        # a valid replacement for this model composition.
++        var head = byte_chunked_head_backward(x,lm_w,targets,m,v,dm)
++        loss = head.loss
++        d_h = head.d_hidden.copy()
++        dw_lm = head.d_weight.copy()
++    else:
++        var logits = gemm_host_rows(x, lm_w, OP_NT, m, v, dm)
++        var dlogits: List[Float32]
++        if byte_host_step_rows():
++            var got = ce_host_rows(logits, targets, ce_cfg)
++            loss = got[0]
++            dlogits = got[1].copy()
++        else:
++            var ce = ce_forward_oracle(logits, targets, ce_cfg)
++            ce_backward_oracle(ce, targets, ce_cfg)
++            loss = ce.loss[0]
++            dlogits = ce.dlogits.copy()
++        d_h = _gemm_bwd_a(dlogits, lm_w, OP_NT, m, v, dm)
++        dw_lm = _gemm_bwd_b(dlogits, x, OP_NT, m, v, dm)
++        _ = logits^
++        _ = dlogits^
++
++    # ---- the blocks, in reverse -------------------------------------------
++    # Each gradient tensor lands at its registry offset directly (lane
++    # neural-pass8): the same bytes in the same order as the per-layer pack
++    # and the final pack it replaces, written once. `placed` counts floats
++    # so the whole registry is proven covered before the gradient is handed
++    # out (the shape check every tensor passes on its way in).
++    var grad = host_f32_uninit(config.n_total())
++    var placed = 0
++    var d_out = d_h.copy()
++    placed += _place(grad, offsets, head_id, dw_lm)
++    for layer in range(config.n_layers - 1, -1, -1):
++        var bwd = transformer_block_backward_oracle(
++            weights[layer], saved[layer], d_out, b, l, 0, rope
++        )
++        var base = 1 + layer * 9
++        placed += _place(grad, offsets, base, bwd.dw_norm1)
++        placed += _place(grad, offsets, base + 1, bwd.dw_q)
++        placed += _place(grad, offsets, base + 2, bwd.dw_k)
++        placed += _place(grad, offsets, base + 3, bwd.dw_v)
++        placed += _place(grad, offsets, base + 4, bwd.dw_o)
++        placed += _place(grad, offsets, base + 5, bwd.dw_norm2)
++        placed += _place(grad, offsets, base + 6, bwd.dw_gate)
++        placed += _place(grad, offsets, base + 7, bwd.dw_up)
++        placed += _place(grad, offsets, base + 8, bwd.dw_down)
++        d_out = bwd.d_x.copy()
++
++    # ---- the embedding gradient -------------------------------------------
++    # `accumulate` is off, so `dw_prev` is unread and an empty list is the
++    # honest argument; `emb_backward_seed` is the oracle's own decision.
++    var dw_emb = emb_backward_oracle(d_out, inputs, emb_cfg, List[Float32]())
++    placed += _place(grad, offsets, 0, dw_emb)
++    if placed != config.n_total():
++        raise Error(
++            String("byte LM host step: placed gradient is ")
++            + String(placed) + " floats, the registry says "
++            + String(config.n_total())
++        )
++    return (loss, grad^)
++
++
++def byte_host_train_step(var params: List[Float32], var m_state: List[Float32],
++                         var v_state: List[Float32], ids: List[Int32],
++                         config: ByteConfig, opt: OptimizerConfig,
++                         completed_steps: Int) raises -> ByteHostStep:
++    """One whole step: the gradient, then the update.
++
++    `completed_steps` is the number of steps ALREADY taken, so the optimizer's
++    `t` is `completed_steps + 1`, which is what the bias correction of a first
++    step needs and what the capture's `initial_*` arrays are the state for.
++
++    The parameters and both moments arrive OWNED (lane neural-pass8) and come
++    back updated in the same lists: the three 80 MB copies a step used to make
++    here, on one thread, were a tenth of its wall on a 64-core host. A caller
++    that still needs its inputs passes copies."""
++    config.validate()
++    var n = config.n_total()
++    if len(params) != n or len(m_state) != n or len(v_state) != n:
++        raise Error("byte LM host step: parameters and moments must be n_total")
++    if completed_steps < 0:
++        raise Error("byte LM host step: completed_steps must not be negative")
++    # `loss` is a Float32 and copies implicitly; `grad` is a List and does not.
++    var got = byte_host_gradient(params, ids, config)
++    var loss = got[0]
++    var grad = got[1].copy()
++
++    if byte_host_step_rows():
++        # No clipping (`byte_validate_optimizer`), so the gradient is read,
++        # not scaled: the elements over host tasks, written in place.
++        adam_host_rows(params, grad, m_state, v_state, opt, completed_steps + 1)
++        return ByteHostStep(loss, grad^, params^, m_state^, v_state^)
++    # `optimizer_step_oracle` takes five `mut` arguments and clips `grad` in
++    # place, so the gradient is copied for it.
++    var g_out = grad.copy()
++    var initialized = List[Bool]()
++    for _ in range(config.n_tensors()):
++        initialized.append(True)
++    var offsets = config.offsets()
++    _ = optimizer_step_oracle(params, g_out, m_state, v_state, initialized,
++                              offsets, opt, completed_steps + 1)
++    return ByteHostStep(loss, grad^, params^, m_state^, v_state^)
++
++
++def _byte_host_slice(values: List[Float32], offsets: List[Int], j: Int)
++        -> List[Float32]:
++    """Registry tensor `j`. A copy, because the oracles take owned lists; one
++    block copy (lane neural-pass8)."""
++    var n = offsets[j + 1] - offsets[j]
++    var out = host_f32_uninit(n)
++    if n > 0:
++        unsafe_memcpy(dest=out.unsafe_ptr(), src=values.unsafe_ptr().unsafe_offset(offsets[j]), count=n)
++    return out^
++
++
++def _place(mut grad: List[Float32], offsets: List[Int], j: Int,
++           values: List[Float32]) raises -> Int:
++    """Registry tensor `j` of the gradient := `values`, one block copy at the
++    tensor's offset; refuses a length other than the tensor's. Returns the
++    floats written."""
++    var n = offsets[j + 1] - offsets[j]
++    if len(values) != n:
++        raise Error(
++            String("byte LM host step: gradient tensor ") + String(j) + " holds "
++            + String(len(values)) + " floats, the registry says " + String(n)
++        )
++    if n > 0:
++        unsafe_memcpy(dest=grad.unsafe_ptr().unsafe_offset(offsets[j]), src=values.unsafe_ptr(), count=n)
++    return n
+diff --git a/training/byte_lm_host_dispatch.mojo b/training/byte_lm_host_dispatch.mojo
+index 9c84e7ee49..23da66fb83 100644
+--- a/training/byte_lm_host_dispatch.mojo
++++ b/training/byte_lm_host_dispatch.mojo
+@@ -40,9 +40,7 @@ def byte_host_operation(op: Int, addresses: List[Int], words: List[Int], scalars
+     if op == 2:
+         if len(addresses) != 2:
+             raise Error("byte LM host: expected 2 addresses")
+-        # lane x7b: the trainer's program (one algorithm with the GPU
+-        # columns); the thread words choose only the inference forward.
+-        return byte_host_loss_native(addresses, cfg)
++        return byte_host_loss_native(addresses, cfg, use_threads, thread_count)
+     if len(addresses) != 3:
+         raise Error("byte LM host: expected 3 addresses")
+     var dims: List[Int] = [words[12], words[13]]
+diff --git a/training/byte_lm_host_execution.mojo b/training/byte_lm_host_execution.mojo
+index cef63189db..390306b1c8 100644
+--- a/training/byte_lm_host_execution.mojo
++++ b/training/byte_lm_host_execution.mojo
+@@ -1,45 +1,37 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Same host model computations/copy order as the compiled public doors. The
+ # provider and legacy native doors share these owners; no Python ABI lives here.
+-# Lane x7b-step-ops-host-arm (2026-11-09): the training step and the training
+-# loss run the trainer's captured program on a host session
+-# (training/byte_lm_program.mojo ByteHostProgram), the algorithm of the GPU
+-# columns; logits and next bytes keep the host inference forward.
+ from std.memory import bitcast
+ from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
++from core.host_lanes import HostF32Ptr, host_f32_copy, host_f32_uninit
+ from training.byte_lm_config import ByteConfig
+ from training.byte_lm_host_io import byte_host_store_f32, byte_host_store_i32
+-from training.byte_lm_host import byte_host_logits, byte_host_logits_threaded, byte_host_next_threaded
+-from training.checks.optimizer_contract import OPT_ADAMW, OptimizerConfig
+-from training.byte_lm_program import (
+-    ByteHostProgram, byte_host_program_open, byte_host_program_load, byte_host_program_load_params,
+-    byte_host_program_store, byte_program_fit, byte_program_eval,
+-)
++from training.byte_lm_host import byte_host_logits, byte_host_logits_threaded, byte_host_next_threaded, byte_host_loss
++from training.byte_lm_host_backward import byte_host_adamw, byte_host_train_step
+ 
+ comptime BYTE_HOST_MAX_LOGITS = 268435456
+ 
+ 
+-def byte_host_adamw(lr: Float32, beta1: Float32, beta2: Float32,
+-                    eps: Float32, weight_decay: Float32) -> OptimizerConfig:
+-    """The byte LM's optimizer, spelled the one way its own validator allows:
+-    positive-lr AdamW with no clipping, momentum, dampening or nesterov
+-    (`byte_validate_optimizer`), so the remaining fields are zero."""
+-    return OptimizerConfig(OPT_ADAMW, lr, beta1, beta2, eps, weight_decay,
+-                           Float32(0.0), Float32(0.0), False, Float32(0.0))
++def _read_f32_rows(address: Int, n: Int) raises -> List[Float32]:
++    """`read_f32` through the chunked copy: an owned list of the `n` floats at
++    `address`, every element written by the copy."""
++    var src = f32_ptr(address)
++    if n < 0:
++        raise Error("byte LM host: negative float32 copy length")
++    var out = host_f32_uninit(n)
++    if n > 0:
++        host_f32_copy(rebind[HostF32Ptr](out.unsafe_ptr()), rebind[HostF32Ptr](src), n)
++    return out^
+ 
+ 
+-def byte_host_optimizer(scalars: List[Float64]) raises -> OptimizerConfig:
+-    """The admitted optimizer scalars (lr, beta1, beta2, eps, weight_decay
+-    first) as the program's AdamW."""
+-    if len(scalars) < 5:
+-        raise Error("byte LM host: the optimizer takes five scalars")
+-    return byte_host_adamw(Float32(scalars[0]), Float32(scalars[1]), Float32(scalars[2]), Float32(scalars[3]),
+-                           Float32(scalars[4]))
++def _write_span(address: Int, values: List[Float32]) raises:
++    """Copy a host list into a caller-owned buffer at `address`.
+ 
+-
+-def byte_host_eval_optimizer() -> OptimizerConfig:
+-    """The optimizer a loss-only program carries (never stepped)."""
+-    return byte_host_adamw(Float32(1e-3), Float32(0.9), Float32(0.999), Float32(1e-8), Float32(0.0))
++    `raises` because `f32_ptr` refuses a null address, and a function that
++    calls a raising function must say so."""
++    var out = f32_ptr(address)
++    if len(values) > 0:
++        host_f32_copy(rebind[HostF32Ptr](out), rebind[HostF32Ptr](values.unsafe_ptr()), len(values))
+ 
+ 
+ def byte_host_logits_native(addresses: List[Int], dims: List[Int], cfg: ByteConfig,
+@@ -80,32 +72,30 @@ def byte_host_next_native(addresses: List[Int], dims: List[Int], cfg: ByteConfig
+ 
+ def byte_host_train_native(addresses: List[Int], cfg: ByteConfig, scalars: List[Float64],
+                            completed_steps: Int) raises -> Int:
+-    """One stateless training step on the CPU column: addresses = [params,
+-    m, v (read), ids (batch * (length + 1) int32), grad, post_p, post_m,
+-    post_v (written)]. The trainer's program on a host session for this
+-    call: load, one Program.fit step, store. Returns the loss's bits."""
+-    if len(addresses) != 8:
+-        raise Error("byte LM host: train step expects eight buffers")
+-    for i in range(8):  # driver-loop: over the eight admitted training buffers
+-        if addresses[i] == 0:
+-            raise Error("byte LM host: null training buffer")
+-    if completed_steps < 0:
+-        raise Error("byte LM host: completed_steps must not be negative")
+-    var e = byte_host_program_open(cfg, byte_host_optimizer(scalars))
+-    byte_host_program_load(e, addresses[0], addresses[1], addresses[2], completed_steps)
+-    var loss = List[Float32](length=1, fill=Float32(0))
+-    _ = byte_program_fit(e, addresses[3], 1, Int(loss.unsafe_ptr()))
+-    byte_host_program_store(e, addresses[5], addresses[6], addresses[7], addresses[4])
+-    return Int(bitcast[DType.uint32](loss[0]))
++    var n = cfg.n_total()
++    # The three registry-sized inputs come in through the chunked copy (lane
++    # neural-pass8) and go into the step OWNED; the step updates them in place.
++    var params = _read_f32_rows(addresses[0], n)
++    var m_state = _read_f32_rows(addresses[1], n)
++    var v_state = _read_f32_rows(addresses[2], n)
++    var ids = read_i32(addresses[3], cfg.batch * (cfg.length + 1))
++    var opt = byte_host_adamw(
++        Float32(scalars[0]), Float32(scalars[1]),
++        Float32(scalars[2]), Float32(scalars[3]),
++        Float32(scalars[4]),
++    )
++    var step = byte_host_train_step(params^, m_state^, v_state^, ids, cfg, opt,
++                                   completed_steps)
++    _write_span(addresses[4], step.grad)
++    _write_span(addresses[5], step.param)
++    _write_span(addresses[6], step.m_state)
++    _write_span(addresses[7], step.v_state)
++    return Int(bitcast[DType.uint32](step.loss))
+ 
+ 
+-def byte_host_loss_native(addresses: List[Int], cfg: ByteConfig) raises -> Int:
+-    """The training forward's mean loss on one batch (addresses = [params,
+-    ids (batch * (length + 1) int32)]): the trainer's program on a host
+-    session, no backward. Returns the loss's bits."""
+-    if len(addresses) != 2 or addresses[0] == 0 or addresses[1] == 0:
+-        raise Error("byte LM host: the loss expects non-null parameters and ids")
+-    var e = byte_host_program_open(cfg, byte_host_eval_optimizer())
+-    byte_host_program_load_params(e, addresses[0])
+-    var loss = byte_program_eval(e, addresses[1])
++def byte_host_loss_native(addresses: List[Int], cfg: ByteConfig,
++                          use_threads: Int, thread_count: Int) raises -> Int:
++    var params = read_f32(addresses[0], cfg.n_total())
++    var ids = read_i32(addresses[1], cfg.batch * (cfg.length + 1))
++    var loss = byte_host_loss(params, ids, cfg, use_threads == 1, thread_count)
+     return Int(bitcast[DType.uint32](loss))
+diff --git a/training/byte_lm_host_kernels.mojo b/training/byte_lm_host_kernels.mojo
+index 7fa4bc1d38..a138c5602f 100644
+--- a/training/byte_lm_host_kernels.mojo
++++ b/training/byte_lm_host_kernels.mojo
+@@ -1025,5 +1025,77 @@ def hidden_fast(
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch
+ 
+ 
+-# TOMBSTONE: ce_causal_mean_loss_fast (the threaded host loss's cross-entropy) deleted 2026-11-09 by lane x7b-step-ops-host-arm: the host training loss is the trainer's program; code recoverable at the deletion commit's parent (docs/TOMBSTONES.md "BYTE_LM_HOST_COMPOSED_STEP").
+-# Restore: git apply experiments/removed/BYTE_LM_HOST_COMPOSED_STEP.patch
++def ce_causal_mean_loss_fast(logits: List[Float32], targets: List[Int32], vocab: Int) raises -> Float32:
++    """`ce_forward_oracle(logits, targets, CeConfig.causal_lm(vocab)).loss[0]`.
++
++    The oracle's refusals (`ce_refuse_inputs`, called as is) and then its
++    seams per row in its order: L1 the `identical_fmax` fold from `-inf` over
++    the unflushed logits (`fmax_fold_span`), L2 the flushed shift and L3 the exponential with no
++    outer flush (both as lanes), L5 the flushed `identical_log`, L6 the
++    flushed difference, L7 `neg_by_bits`, and a `+0.0` row where the target is
++    `ignore_index`.
++
++    Both folds (L4's denominator per row and the batch total) are `ce_fold`,
++    which is `gemm_oracle(values, ones, OP_NN, 1, 1, count)`. At m = n = 1,
++    OP_NN reads `a[p]` and `b[p]`, which is what OP_NT reads there, so each
++    fold is `gemm_nt_rows` against a ones operand: the same leaves at
++    `contract_leaf_size(count)` and the same balanced tree. The denominators
++    of all rows are one call, one output row per logits row.
++
++    The causal LM configuration only: mean reduction, no label smoothing,
++    which is the only loss `byte_host_loss` computes."""
++    var cfg = CeConfig.causal_lm(vocab)
++    if cfg.smoothing_is_spelled() or cfg.reduction != REDUCTION_MEAN or cfg.num_items != 0:
++        raise Error("byte LM host kernels: the loss kernel is the causal LM mean with no smoothing only")
++    var n = ce_refuse_inputs(logits, targets, cfg)
++    var v = cfg.vocab
++    var lp = logits.unsafe_ptr()
++    var shift = List[Float32](length=n * v, fill=Float32(0.0))
++    var expo = List[Float32](length=n * v, fill=Float32(0.0))
++    var shp = shift.unsafe_ptr()
++    var exp_p = expo.unsafe_ptr()
++    var vbody = v - v % HOST_FW
++    for i in range(n):
++        var base = i * v
++        # L1. The fold starts from -inf, whose key is below every other
++        # non-NaN key, and performs at least one fmax, so it is
++        # `fmax_fold_span` over the row.
++        var mx = fmax_fold_span(logits, base, v)
++        var mxv = F32V(ftz(mx))
++        var jv = 0
++        while jv < vbody:
++            var sv = ftz_lanes(ftz_lanes(lp.unsafe_load[width=HOST_FW](base + jv)) - mxv)
++            shp.unsafe_store[width=HOST_FW](base + jv, sv)
++            exp_p.unsafe_store[width=HOST_FW](base + jv, expf_lanes(sv))
++            jv += HOST_FW
++        while jv < v:
++            var s = ftz(ftz(lp.unsafe_load(base + jv)) - ftz(mx))
++            shp.unsafe_store(base + jv, s)
++            exp_p.unsafe_store(base + jv, identical_exp(s))
++            jv += 1
++    var ones_v = List[Float32](length=v, fill=Float32(1.0))
++    var denom = List[Float32](length=n, fill=Float32(0.0))
++    gemm_nt_rows(expo, ones_v, 1, v, 0, n, denom)
++    var rows = List[Float32](length=n, fill=Float32(0.0))
++    for i in range(n):
++        var y = Int(targets[i])
++        var ignored = y == cfg.ignore_index
++        var logdenom = ftz(identical_log(ftz(denom[i])))
++        var ty = y
++        if ignored:
++            ty = 0
++        var lp_y = ftz(ftz(shp.unsafe_load(i * v + ty)) - ftz(logdenom))
++        var row_loss = neg_by_bits(lp_y)
++        if ignored:
++            row_loss = Float32(0.0)
++        rows[i] = row_loss
++    var ones_n = List[Float32](length=n, fill=Float32(1.0))
++    var total = List[Float32](length=1, fill=Float32(0.0))
++    comptime if NN54_LOSS_PROFILE:
++        total[0] = nn_reduce_host_admitted[128,False](
++            rebind[MutPointer[Float32,MutAnyOrigin]](rows.unsafe_ptr()),n)
++    else:
++        # TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
++        gemm_nt_rows(rows, ones_n, 1, n, 0, 1, total)
++    var divisor = ce_divisor(cfg.reduction, ce_count(targets, cfg.ignore_index), cfg.num_items)
++    return ftz(identical_div(ftz(total[0]), divisor))
+diff --git a/training/byte_lm_host_session.mojo b/training/byte_lm_host_session.mojo
+index 8246b25ccc..540f656b81 100644
+--- a/training/byte_lm_host_session.mojo
++++ b/training/byte_lm_host_session.mojo
+@@ -1,21 +1,12 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Native CPU counterpart of the former _byte_lm_trainer_host session owner.
+-# This owns admission, transactional state and rollback, never new arithmetic.
+-# Lane x7b-step-ops-host-arm (2026-11-09): training and evaluation run the
+-# trainer's captured program on a resident host session (ByteHostProgram,
+-# training/byte_lm_program.mojo), the GPU trainer's algorithm and its call
+-# shape: `train_steps` is ONE Program.fit and a refused call commits none of
+-# its steps; logits and next bytes keep byte_lm_host_execution's forward.
+-from std.math import isfinite
++# This owns admission, transactional state and rollback, never new arithmetic:
++# every forward/backward/AdamW operation uses byte_lm_host_execution unchanged.
+ from std.memory import memcpy, memcmp, bitcast
+ from core.hostptr import read_f32, read_i32, f32_ptr, i32_ptr
+ from training.byte_lm_config import ByteConfig
+ from training.byte_lm_host_io import all_finite_f32_scan
+-from training.byte_lm_host_execution import byte_host_logits_native, byte_host_next_native, byte_host_optimizer
+-from training.byte_lm_program import (
+-    ByteHostProgram, byte_host_program_open, byte_host_program_load, byte_host_program_store, byte_program_fit,
+-    byte_program_eval,
+-)
++from training.byte_lm_host_execution import byte_host_train_native, byte_host_loss_native, byte_host_logits_native, byte_host_next_native
+ from core.training_state_validation import training_admit_moments_and_flags
+ from core.host_helpers_impl import argmax_rows_f32
+ 
+@@ -105,17 +96,12 @@ struct ByteHostSession(Movable, Writable):
+     var shadow_p: List[Float32]
+     var shadow_m: List[Float32]
+     var shadow_v: List[Float32]
+-    var shadow_flags: List[Int32]
+     var completed: Int
+     var grad_step: Int
+     var shadow_step: Int
+     var opened: Bool
+     var usable: Bool
+     var busy: Bool
+-    #: the trainer's program (opened at the first training or evaluation
+-    #: call) and whether it holds the committed p, m, v and step
+-    var program: Optional[ByteHostProgram]
+-    var synced: Bool
+ 
+     def __init__(out self):
+         self.p = List[Float32]()
+@@ -128,15 +114,12 @@ struct ByteHostSession(Movable, Writable):
+         self.shadow_p = List[Float32]()
+         self.shadow_m = List[Float32]()
+         self.shadow_v = List[Float32]()
+-        self.shadow_flags = List[Int32]()
+         self.completed = -1
+         self.grad_step = -1
+         self.shadow_step = -1
+         self.opened = False
+         self.usable = True
+         self.busy = False
+-        self.program = Optional[ByteHostProgram]()
+-        self.synced = False
+ 
+     def write_to(self, mut writer: Some[Writer]):
+         writer.write("ByteHostSession")
+@@ -155,9 +138,6 @@ struct ByteHostSession(Movable, Writable):
+         self.shadow_p = List[Float32]()
+         self.shadow_m = List[Float32]()
+         self.shadow_v = List[Float32]()
+-        self.shadow_flags = List[Int32]()
+-        self.program = None
+-        self.synced = False
+         self.opened = False
+         self.usable = False
+         self.completed = -1
+@@ -202,8 +182,6 @@ struct ByteHostSession(Movable, Writable):
+         self.grad_step = -1
+         self.shadow_step = -1
+         self.grad = List[Float32]()
+-        self.program = None
+-        self.synced = False
+         self.opened = True
+         self.usable = True
+         return completed
+@@ -221,53 +199,27 @@ struct ByteHostSession(Movable, Writable):
+         self.shadow_p = List[Float32]()
+         self.shadow_m = List[Float32]()
+         self.shadow_v = List[Float32]()
+-        self.shadow_flags = List[Int32]()
+ 
+-    def _cfg(self) raises -> ByteConfig:
+-        if len(self.shape) != 10:
+-            raise Error("byte LM: resident model shape mismatch")
+-        return ByteConfig(self.shape[0], self.shape[1], self.shape[2], self.shape[3], self.shape[4],
+-            self.shape[5], self.shape[6], self.shape[7], self.shape[8], self.shape[9] == 1)
+-
+-    def _ready(mut self) raises:
+-        """The program, opened at its first use and loaded from the
+-        committed lists whenever they were written outside it (open,
+-        rollback, a refused call)."""
+-        var cfg = self._cfg()
+-        if not self.program:
+-            self.program = byte_host_program_open(cfg, byte_host_optimizer(self.optimizer))
+-            self.synced = False
+-        if not self.synced:
+-            byte_host_program_load(self.program.value(), Int(self.p.unsafe_ptr()), Int(self.m.unsafe_ptr()),
+-                                   Int(self.v.unsafe_ptr()), self.completed)
+-            self.synced = True
+-
+-    def _fit(mut self, ids: Int, n_steps: Int, losses: Int, completed: Int) raises -> Int:
+-        """`n_steps` training steps as ONE Program.fit (the GPU trainer's
+-        `byte_steps_device`): `ids` the n_steps batches of batch * (length +
+-        1) int32 ids in order, `losses` n_steps float32 step losses. A
+-        non-finite loss or a state that fails the after-scans refuses the
+-        whole call: nothing of it is committed. Returns completed + n_steps."""
+-        var cfg = self._cfg()
+-        var n = cfg.n_total()
++    def step(mut self, a: List[Int], cfg: ByteConfig, opt: List[Float64], completed: Int) raises -> Int:
++        if len(a) != 4 or a[2] == 0 or a[3] == 0:
++            raise Error("byte LM: byte_lm_session_step expects four non-null addresses")
++        if completed >= 999999:
++            raise Error("byte LM: completed step outside admitted bound")
++        host_tokens(a[0], cfg.batch * (cfg.length + 1), cfg.vocab_size)
++        self.admit(cfg, opt, completed, a[1])
+         self.clear_shadow()
+         self.grad_step = -1
+-        self._ready()
+-        self.synced = False
+-        self.busy = True
++        var n = cfg.n_total()
++        var grad = List[Float32](length=n, fill=0)
+         var p = List[Float32](length=n, fill=0)
+         var m = List[Float32](length=n, fill=0)
+         var v = List[Float32](length=n, fill=0)
+-        var grad = List[Float32](length=n, fill=0)
+-        # AdamW writes every tensor's moments: every momentum flag is set
+-        var flags = List[Int32](length=len(self.flags), fill=Int32(1))
++        self.busy = True
++        var loss = 0
+         try:
+-            var mean = byte_program_fit(self.program.value(), ids, n_steps, losses)
+-            if not isfinite(mean):
+-                raise Error("byte LM: nonfinite loss")
+-            byte_host_program_store(self.program.value(), Int(p.unsafe_ptr()), Int(m.unsafe_ptr()),
+-                                    Int(v.unsafe_ptr()), Int(grad.unsafe_ptr()))
+-            host_state_validate(p, m, v, flags, completed + n_steps)
++            loss = host_loss_bits(byte_host_train_native([Int(self.p.unsafe_ptr()), Int(self.m.unsafe_ptr()),
++                Int(self.v.unsafe_ptr()), a[0], Int(grad.unsafe_ptr()), Int(p.unsafe_ptr()), Int(m.unsafe_ptr()),
++                Int(v.unsafe_ptr())], cfg, opt, completed))
+         except error:
+             self.busy = False
+             raise error
+@@ -281,35 +233,22 @@ struct ByteHostSession(Movable, Writable):
+         var old_v = self.v^
+         self.v = v^
+         self.shadow_v = old_v^
+-        var old_flags = self.flags^
+-        self.flags = flags^
+-        self.shadow_flags = old_flags^
+         self.shadow_step = completed
+         self.grad = grad^
+-        self.completed = completed + n_steps
++        self.completed = completed + 1
+         self.grad_step = self.completed
+-        self.synced = True
+-        return self.completed
+-
+-    def step(mut self, a: List[Int], cfg: ByteConfig, opt: List[Float64], completed: Int) raises -> Int:
+-        """One training step: a = [ids, flags_in, out_loss, out_flags]."""
+-        if len(a) != 4 or a[2] == 0 or a[3] == 0:
+-            raise Error("byte LM: byte_lm_session_step expects four non-null addresses")
+-        if completed >= 999999:
+-            raise Error("byte LM: completed step outside admitted bound")
+-        host_tokens(a[0], cfg.batch * (cfg.length + 1), cfg.vocab_size)
+-        self.admit(cfg, opt, completed, a[1])
+-        var step = self._fit(a[0], 1, a[2], completed)
+         host_copy_i32(a[3], self.flags)
+-        return step
++        MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=a[2])[0] = UInt32(loss)
++        return self.completed
+ 
+     def steps(mut self, a: List[Int], n_steps: Int, completed: Int) raises -> Int:
+-        """`n_steps` training steps in ONE call from the shape, optimizer and
+-        flags this session admitted at open. a = [in_ids_i32 (n_steps
+-        batches of batch * (length + 1), one after the other), out_loss
+-        (n_steps), out_flags_i32 (n_tensors)]. Every batch is admitted
+-        first; a refused call commits none of its steps (the GPU trainer's
+-        rule). Returns completed + n_steps."""
++        """The host column of device operation 12: `n_steps` training steps
++        from the shape, optimizer and flags this session admitted at open.
++        a = [in_ids_i32 (n_steps batches of batch * (length + 1), one after
++        the other), out_loss (n_steps), out_flags_i32 (n_tensors)]. Every
++        batch is admitted first; the steps run in order through `step`, so
++        the bits equal those of n_steps single steps. A failure in step k
++        leaves the k earlier steps committed. Returns completed + n_steps."""
+         self.require_open()
+         if len(a) != 3 or a[0] == 0 or a[1] == 0 or a[2] == 0:
+             raise Error("byte LM: the multi-step entry expects three non-null addresses")
+@@ -319,10 +258,19 @@ struct ByteHostSession(Movable, Writable):
+             raise Error("byte LM: resident completed-step mismatch")
+         if completed + n_steps > 999999:
+             raise Error("byte LM: completed step outside admitted bound")
+-        var cfg = self._cfg()
+-        host_tokens(a[0], n_steps * cfg.batch * (cfg.length + 1), cfg.vocab_size)
+-        var step = self._fit(a[0], n_steps, a[1], completed)
++        if len(self.shape) != 10:
++            raise Error("byte LM: resident model shape mismatch")
++        var cfg = ByteConfig(self.shape[0], self.shape[1], self.shape[2], self.shape[3], self.shape[4],
++            self.shape[5], self.shape[6], self.shape[7], self.shape[8], self.shape[9] == 1)
++        var opt = self.optimizer.copy()
++        var n_ids = cfg.batch * (cfg.length + 1)
++        for k in range(n_steps):  # driver-loop: over the training steps of one call
++            host_tokens(a[0] + k * n_ids * 4, n_ids, cfg.vocab_size)
+         host_copy_i32(a[2], self.flags)
++        var step = completed
++        for k in range(n_steps):  # driver-loop: over the training steps of one call
++            var flags_in = Int(self.flags.unsafe_ptr())
++            step = self.step([a[0] + k * n_ids * 4, flags_in, a[1] + k * 4, a[2]], cfg, opt, step)
+         return step
+ 
+     def evaluate(mut self, a: List[Int], cfg: ByteConfig, opt: List[Float64], completed: Int) raises -> Int:
+@@ -331,8 +279,7 @@ struct ByteHostSession(Movable, Writable):
+         host_tokens(a[0], cfg.batch * (cfg.length + 1), cfg.vocab_size)
+         self.admit(cfg, opt, completed, a[1])
+         self.clear_shadow()
+-        self._ready()
+-        var loss = host_loss_bits(Int(bitcast[DType.uint32](byte_program_eval(self.program.value(), a[0]))))
++        var loss = host_loss_bits(byte_host_loss_native([Int(self.p.unsafe_ptr()), a[0]], cfg, 0, 1))
+         MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=a[2])[0] = UInt32(loss)
+         return self.completed
+ 
+@@ -346,14 +293,10 @@ struct ByteHostSession(Movable, Writable):
+             self.shadow_m = List[Float32]()
+             self.v = self.shadow_v^
+             self.shadow_v = List[Float32]()
+-            self.flags = self.shadow_flags^
+-            self.shadow_flags = List[Int32]()
+             self.completed = self.shadow_step
+             self.shadow_step = -1
+             self.grad = List[Float32]()
+             self.grad_step = -1
+-        # the program holds the call's state, not the committed one
+-        self.synced = False
+         return self.completed
+ 
+     def export_state(self, a: List[Int], cfg: ByteConfig) raises -> Int:
+diff --git a/training/byte_lm_host_trainer_dispatch.mojo b/training/byte_lm_host_trainer_dispatch.mojo
+index f5b0ccbc2d..f067e6088c 100644
+--- a/training/byte_lm_host_trainer_dispatch.mojo
++++ b/training/byte_lm_host_trainer_dispatch.mojo
+@@ -125,7 +125,7 @@ def host_trainer_run(a: List[Int], cfg: ByteConfig, opt: List[Float64], complete
+                 named.append(a[i])
+             host_scatter(a[8], named, cfg)
+     else:
+-        loss = host_loss_bits(byte_host_loss_native([Int(p.unsafe_ptr()), a[4]], cfg))
++        loss = host_loss_bits(byte_host_loss_native([Int(p.unsafe_ptr()), a[4]], cfg, 0, 1))
+         host_copy_f32(a[5], p)
+         host_copy_f32(a[6], m)
+         host_copy_f32(a[7], v)
+diff --git a/training/checks/byte_lm_host_bwd_probe.mojo b/training/checks/byte_lm_host_bwd_probe.mojo
+new file mode 100644
+index 0000000000..500d72d4be
+--- /dev/null
++++ b/training/checks/byte_lm_host_bwd_probe.mojo
+@@ -0,0 +1,50 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""Does the host backward oracle compile into a CPU-only build? (DEVIATION 2680)
++
++A PROBE, NOT A CHECK. It asserts nothing about arithmetic. It exists to answer
++one question that was being argued from a source comment rather than measured:
++`transformer/checks/transformer_backward_oracle.mojo` computes on the host and
++imports no device type of its own, but it takes three names from
++`gemm/checks/gemm_backward.mojo`, which imports `max.gpu.host` at its own line
++113, and one name from `core/identity_trace.mojo`, which does the same at 84.
++
++`bindings/_mojolearn_byte_lm_host.mojo` says "HOST ONLY. No DeviceContext, no
++kernel, no GPU, and nothing imported from the GPU side." If that is enforced by
++the compiler or the link, this file fails to build with no accelerator target
++and the error names what has to move. If it builds, the rule is a policy the
++toolchain does not enforce here, which is a smaller problem and a different fix.
++
++Delete this file once the question is settled; it is a measurement, not a gate.
++"""
++
++from transformer.checks.transformer_backward_oracle import (
++    transformer_block_backward_oracle,
++)
++
++# ANSWERED 2026-09-12: probe exit 0 on all seven runners, x86-64, ARM64 and
++# Apple. The rule above is policy the toolchain does not enforce here, so the
++# CPU trainer needs no refactor and no shared certified file has to move.
++#
++# The probe now earns its keep a second way. It imports the byte LM host
++# training step so the same free runners COMPILE that file, which is otherwise
++# a module nothing imports and therefore a module no build would ever check.
++# Written code that has never been through a compiler is not evidence of
++# anything, and main must not carry a module in that state.
++from training.byte_lm_host_backward import (
++    byte_host_adamw,
++    byte_host_gradient,
++    byte_host_split_ids,
++    byte_host_train_step,
++)
++
++
++def main() raises:
++    """Compiling is the test, not running.
++
++    The import above forces the compiler to analyze
++    `transformer_backward_oracle` and everything IT imports, which is where
++    the GPU would enter. So a successful build answers the question whether or
++    not this body ever executes, and the body is deliberately trivial rather
++    than a fixture that could fail for unrelated reasons."""
++    print("host backward oracle compiled into a CPU-only build")
+diff --git a/training/checks/byte_lm_host_kernels_check.mojo b/training/checks/byte_lm_host_kernels_check.mojo
+index 6967ecef77..11ae1b00ad 100644
+--- a/training/checks/byte_lm_host_kernels_check.mojo
++++ b/training/checks/byte_lm_host_kernels_check.mojo
+@@ -32,6 +32,7 @@ from gemm.contract import OP_NT
+ from gemm.host.neural_gemm import gemm_oracle
+ from training.byte_lm_host_kernels import (
+     block_fast,
++    ce_causal_mean_loss_fast,
+     flushed,
+     fmax_fold_span,
+     gemm_nt_rows,
+@@ -279,7 +280,24 @@ def check_fmax_folds(mut rng: Rng, trials: Int) raises -> Int:
+     return report(String("fmax fold, S14 and L1 spellings, ") + String(trials) + " planted rows", bad)
+ 
+ 
+-# TOMBSTONE: check_loss (ce_causal_mean_loss_fast against the loss oracle) deleted 2026-11-09 by lane x7b-step-ops-host-arm with the function it checked.
++def check_loss(mut rng: Rng, n: Int, vocab: Int) raises -> Int:
++    var logits = random_list(rng, n * vocab, Float32(8.0))
++    var targets = List[Int32](capacity=n)
++    for i in range(n):
++        targets.append(Int32(Int(rng.next() >> 33) % vocab))
++    # A row whose exponentials underflow almost everywhere, a flat row, and an
++    # ignored target.
++    for v in range(vocab):
++        logits[v] = Float32(-100.0)
++        logits[vocab + v] = Float32(0.25)
++    logits[3] = Float32(90.0)
++    if n > 2:
++        targets[2] = Int32(IGNORE_INDEX_DEFAULT)
++    var want = ce_forward_oracle(logits, targets, CeConfig.causal_lm(vocab)).loss[0]
++    var got = ce_causal_mean_loss_fast(logits, targets, vocab)
++    var want_l: List[Float32] = [want]
++    var got_l: List[Float32] = [got]
++    return report(String("loss n=") + String(n) + " vocab=" + String(vocab), differing(got_l, want_l))
+ 
+ 
+ def main() raises:
+@@ -307,6 +325,8 @@ def main() raises:
+     bad += check_block(rng, 32, 4, 2, 8, 64, 32, 5)
+     bad += check_block(rng, 24, 4, 4, 6, 40, 16, 16)
+     bad += check_block(rng, 24, 4, 2, 6, 40, 16, 1)
++    bad += check_loss(rng, 64, 256)
++    bad += check_loss(rng, 5, 300)
+     if bad != 0:
+         raise Error("byte LM host kernels check: " + String(bad) + " failures")
+     print("PASS")
+diff --git a/training/chunked_lm_head_gemm_host.mojo b/training/chunked_lm_head_gemm_host.mojo
+new file mode 100644
+index 0000000000..fa07153a28
+--- /dev/null
++++ b/training/chunked_lm_head_gemm_host.mojo
+@@ -0,0 +1,119 @@
++# SPDX-License-Identifier: Apache-2.0
++"""ByteLM's explicit GEMM-logit chunked head, CPU forward and backward.
++
++The separately exposed scalar-logit v2 API keeps its original oracle. This
++model route uses selected neural GEMM logits, global ascending vocabulary
++max/denominator/dHidden folds, ascending row dWeight folds and the existing
++v2 mean-loss tree. A bounded panel is regenerated in each required pass;
++no rows*vocab logits/dlogits owner is created. Source only, unverified.
++"""
++from std.memory import bitcast
++from checks.numerics import ftz, identical_div, identical_exp, identical_fmax, identical_log, identical_mul_add
++from gemm.contract import OP_NT
++from gemm.host.neural_gemm import GhrPtr, gemm_host_rows_into
++from training.checks.loss_contract import CE_NEG_INF_BITS, neg_by_bits, refuse_nonfinite
++from training.checks.chunked_lm_head_oracle import (
++    ChunkedLMHeadV2Result, CHUNKED_LM_HEAD_HOST_SABOTAGE, lm_head_v2_loss_fold,
++)
++from training.chunked_lm_head_profile import LM_HEAD_V2_CHUNK
++
++
++def _admit(hidden: List[Float32], weight: List[Float32], targets: List[Int32],
++           rows: Int, vocab: Int, width: Int) raises:
++    if rows<1 or vocab<2 or width<1:
++        raise Error("ByteLM chunked GEMM head requires positive rows/width and vocab >= 2")
++    if rows>2147483647 or vocab>2147483647 or width>2147483647:
++        raise Error("ByteLM chunked GEMM head dimension exceeds Int32")
++    if rows*width>2147483647 or vocab*width>2147483647 or rows*min(vocab,LM_HEAD_V2_CHUNK)>2147483647:
++        raise Error("ByteLM chunked GEMM head span exceeds Int32")
++    if len(hidden)!=rows*width or len(weight)!=vocab*width or len(targets)!=rows:
++        raise Error("ByteLM chunked GEMM head operand shape mismatch")
++    refuse_nonfinite("ByteLM chunked head hidden",hidden)
++    refuse_nonfinite("ByteLM chunked head weight",weight)
++    for row in range(rows):
++        if targets[row]<0 or Int(targets[row])>=vocab:
++            raise Error("ByteLM chunked GEMM head target outside vocabulary")
++
++
++def _panel(mut logits: List[Float32],hidden: List[Float32],weight: List[Float32],
++           rows: Int,n: Int,width: Int,chunk0: Int) raises:
++    gemm_host_rows_into(rebind[GhrPtr](hidden.unsafe_ptr()),
++        rebind[GhrPtr](weight.unsafe_ptr()+chunk0*width),
++        rebind[GhrPtr](logits.unsafe_ptr()),OP_NT,rows,n,width)
++
++
++def byte_chunked_head_forward(hidden: List[Float32],weight: List[Float32],
++    targets: List[Int32],rows: Int,vocab: Int,width: Int) raises -> ChunkedLMHeadV2Result:
++    _admit(hidden,weight,targets,rows,vocab,width)
++    var panel = List[Float32](length=rows*min(vocab,LM_HEAD_V2_CHUNK),fill=Float32(0))
++    var maxima = List[Float32](length=rows,fill=bitcast[DType.float32](CE_NEG_INF_BITS))
++    var denom = List[Float32](length=rows,fill=Float32(0))
++    var row_loss = List[Float32](length=rows,fill=Float32(0))
++    for chunk0 in range(0,vocab,LM_HEAD_V2_CHUNK):
++        var n = min(LM_HEAD_V2_CHUNK,vocab-chunk0)
++        _panel(panel,hidden,weight,rows,n,width,chunk0)
++        for row in range(rows):
++            var acc = maxima[row]
++            for j in range(n):
++                acc = identical_fmax(acc,panel[row*n+j])
++            maxima[row] = acc
++    for chunk0 in range(0,vocab,LM_HEAD_V2_CHUNK):
++        var n = min(LM_HEAD_V2_CHUNK,vocab-chunk0)
++        _panel(panel,hidden,weight,rows,n,width,chunk0)
++        for row in range(rows):
++            var acc = denom[row]
++            for j in range(n):
++                var shifted = ftz(ftz(panel[row*n+j])-ftz(maxima[row]))
++                acc = ftz(acc+ftz(identical_exp(shifted)))
++                if chunk0+j==Int(targets[row]):
++                    row_loss[row] = shifted
++            denom[row] = acc
++    for row in range(rows):
++        row_loss[row] = neg_by_bits(ftz(ftz(row_loss[row])-ftz(identical_log(ftz(denom[row])))))
++    var loss = lm_head_v2_loss_fold(row_loss,rows)
++    refuse_nonfinite("ByteLM chunked head maxima",maxima)
++    refuse_nonfinite("ByteLM chunked head denominator",denom)
++    refuse_nonfinite("ByteLM chunked head row loss",row_loss)
++    return ChunkedLMHeadV2Result(loss,maxima^,denom^,List[Float32](),List[Float32]())
++
++
++def byte_chunked_head_backward(hidden: List[Float32],weight: List[Float32],
++    targets: List[Int32],rows: Int,vocab: Int,width: Int) raises -> ChunkedLMHeadV2Result:
++    var fwd = byte_chunked_head_forward(hidden,weight,targets,rows,vocab,width)
++    var panel = List[Float32](length=rows*min(vocab,LM_HEAD_V2_CHUNK),fill=Float32(0))
++    var dh = List[Float32](length=rows*width,fill=Float32(0))
++    var dw = List[Float32](length=vocab*width,fill=Float32(0))
++    for chunk0 in range(0,vocab,LM_HEAD_V2_CHUNK):
++        var n = min(LM_HEAD_V2_CHUNK,vocab-chunk0)
++        _panel(panel,hidden,weight,rows,n,width,chunk0)
++        # Each hidden cell carries its exact ascending vocabulary chain
++        # through panel boundaries, including each stored FMA result.
++        for row in range(rows):
++            for j in range(n):
++                var shifted = ftz(ftz(panel[row*n+j])-ftz(fwd.row_max[row]))
++                var probability = ftz(identical_div(ftz(identical_exp(shifted)),ftz(fwd.row_denom[row])))
++                var target = Float32(1) if chunk0+j==Int(targets[row]) else Float32(0)
++                var dl = ftz(identical_div(ftz(probability-target),Float32(rows)))
++                for feature in range(width):
++                    var cell = row*width+feature
++                    dh[cell] = identical_mul_add(dl,weight[(chunk0+j)*width+feature],dh[cell])
++        for j in range(n):
++            for r in range(rows):
++                var row = r
++                comptime if CHUNKED_LM_HEAD_HOST_SABOTAGE:
++                    row = rows-1-r
++                var shifted = ftz(ftz(panel[row*n+j])-ftz(fwd.row_max[row]))
++                var probability = ftz(identical_div(ftz(identical_exp(shifted)),ftz(fwd.row_denom[row])))
++                var target = Float32(1) if chunk0+j==Int(targets[row]) else Float32(0)
++                var dl = ftz(identical_div(ftz(probability-target),Float32(rows)))
++                for feature in range(width):
++                    var cell = (chunk0+j)*width+feature
++                    dw[cell] = identical_mul_add(dl,hidden[row*width+feature],dw[cell])
++            for feature in range(width):
++                var cell = (chunk0+j)*width+feature
++                dw[cell] = ftz(dw[cell])
++    refuse_nonfinite("ByteLM chunked head dHidden",dh)
++    refuse_nonfinite("ByteLM chunked head dWeight",dw)
++    var maxima = fwd.row_max.copy()
++    var denom = fwd.row_denom.copy()
++    return ChunkedLMHeadV2Result(fwd.loss,maxima^,denom^,dh^,dw^)
+diff --git a/training/chunked_lm_head_host.mojo b/training/chunked_lm_head_host.mojo
+new file mode 100644
+index 0000000000..e7097e2702
+--- /dev/null
++++ b/training/chunked_lm_head_host.mojo
+@@ -0,0 +1,107 @@
++# SPDX-License-Identifier: Apache-2.0
++"""NI34 native host counterpart of ByteTrainer's GEMM-chunked LM head.
++
++This is the GEMM-logit variant, not the standalone serial-logit oracle.
++Vocabulary and gradient folds mirror chunked_lm_head_v2_gemm_*_into exactly.
++Only a [rows, <=256] logit chunk is materialized. Source-only, unverified.
++"""
++from std.memory import bitcast
++from checks.numerics import ftz, identical_div, identical_exp, identical_fmax, identical_log, identical_mul_add
++from gemm.contract import OP_NT
++from gemm.host.gemm_host_rows import gemm_host_rows
++from training.checks.chunked_lm_head_oracle import (
++    ChunkedLMHeadV2Result, LM_HEAD_V2_VOCAB_CHUNK, lm_head_v2_loss_fold,
++)
++from training.checks.loss_contract import CE_NEG_INF_BITS, neg_by_bits, refuse_nonfinite
++
++
++def _chunk_logits(hidden: List[Float32], weight: List[Float32], rows: Int,
++                  width: Int, first: Int, columns: Int) raises -> List[Float32]:
++    var part = List[Float32](length=columns * width, fill=Float32(0.0))
++    for i in range(columns * width):
++        part[i] = weight[first * width + i]
++    return gemm_host_rows(hidden, part, OP_NT, rows, columns, width)
++
++
++def _admit(hidden: List[Float32], weight: List[Float32], targets: List[Int32],
++           rows: Int, vocab: Int, width: Int) raises:
++    if rows < 1 or vocab < 2 or width < 1:
++        raise Error("chunked lm head v2: rows/width must be positive and vocab >= 2")
++    if len(hidden) != rows * width or len(weight) != vocab * width or len(targets) != rows:
++        raise Error("chunked lm head v2: shape mismatch")
++    refuse_nonfinite("chunked lm head hidden", hidden)
++    refuse_nonfinite("chunked lm head weight", weight)
++    for row in range(rows):
++        if targets[row] < 0 or Int(targets[row]) >= vocab:
++            raise Error("chunked lm head v2: target outside [0, vocab) at row " + String(row))
++
++
++def chunked_lm_head_gemm_host_forward(
++    hidden: List[Float32], weight: List[Float32], targets: List[Int32],
++    rows: Int, vocab: Int, width: Int,
++) raises -> ChunkedLMHeadV2Result:
++    _admit(hidden, weight, targets, rows, vocab, width)
++    var maxima = List[Float32](length=rows, fill=bitcast[DType.float32](CE_NEG_INF_BITS))
++    var denom = List[Float32](length=rows, fill=Float32(0.0))
++    var row_loss = List[Float32](length=rows, fill=Float32(0.0))
++    for first in range(0, vocab, LM_HEAD_V2_VOCAB_CHUNK):
++        var columns = min(LM_HEAD_V2_VOCAB_CHUNK, vocab - first)
++        var logits = _chunk_logits(hidden, weight, rows, width, first, columns)
++        for row in range(rows):
++            var acc = maxima[row]
++            for j in range(columns):
++                acc = identical_fmax(acc, logits[row * columns + j])
++            maxima[row] = acc
++    for first in range(0, vocab, LM_HEAD_V2_VOCAB_CHUNK):
++        var columns = min(LM_HEAD_V2_VOCAB_CHUNK, vocab - first)
++        var logits = _chunk_logits(hidden, weight, rows, width, first, columns)
++        for row in range(rows):
++            var acc = denom[row]
++            for j in range(columns):
++                var shifted = ftz(ftz(logits[row * columns + j]) - ftz(maxima[row]))
++                acc = ftz(acc + ftz(identical_exp(shifted)))
++                if first + j == Int(targets[row]):
++                    row_loss[row] = shifted
++            denom[row] = acc
++    for row in range(rows):
++        row_loss[row] = neg_by_bits(ftz(ftz(row_loss[row]) - ftz(identical_log(ftz(denom[row])))))
++    var loss = lm_head_v2_loss_fold(row_loss, rows)
++    return ChunkedLMHeadV2Result(loss, maxima^, denom^, List[Float32](), List[Float32]())
++
++
++def _dlogit(logit: Float32, maximum: Float32, denominator: Float32,
++            target: Int32, token: Int, rows: Int) -> Float32:
++    var shifted = ftz(ftz(logit) - ftz(maximum))
++    var p = ftz(identical_div(ftz(identical_exp(shifted)), ftz(denominator)))
++    var t = Float32(1.0) if token == Int(target) else Float32(0.0)
++    return ftz(identical_div(ftz(p - t), Float32(rows)))
++
++
++def chunked_lm_head_gemm_host_train(
++    hidden: List[Float32], weight: List[Float32], targets: List[Int32],
++    rows: Int, vocab: Int, width: Int,
++) raises -> ChunkedLMHeadV2Result:
++    var fwd = chunked_lm_head_gemm_host_forward(hidden, weight, targets, rows, vocab, width)
++    var dh = List[Float32](length=rows * width, fill=Float32(0.0))
++    var dw = List[Float32](length=vocab * width, fill=Float32(0.0))
++    for first in range(0, vocab, LM_HEAD_V2_VOCAB_CHUNK):
++        var columns = min(LM_HEAD_V2_VOCAB_CHUNK, vocab - first)
++        var logits = _chunk_logits(hidden, weight, rows, width, first, columns)
++        # Device _chunk_dhidden_kernel's row owner and ascending token fold.
++        for row in range(rows):
++            for j in range(columns):
++                var dl = _dlogit(logits[row * columns + j], fwd.row_max[row], fwd.row_denom[row], targets[row], first + j, rows)
++                for feature in range(width):
++                    var cell = row * width + feature
++                    dh[cell] = identical_mul_add(dl, weight[(first + j) * width + feature], dh[cell])
++        # Device _chunk_dweight_kernel's token owner and ascending row fold.
++        for j in range(columns):
++            for row in range(rows):
++                var dl = _dlogit(logits[row * columns + j], fwd.row_max[row], fwd.row_denom[row], targets[row], first + j, rows)
++                for feature in range(width):
++                    var cell = (first + j) * width + feature
++                    dw[cell] = identical_mul_add(dl, hidden[row * width + feature], dw[cell])
++            for feature in range(width):
++                var cell = (first + j) * width + feature
++                dw[cell] = ftz(dw[cell])
++    return ChunkedLMHeadV2Result(fwd.loss, fwd.row_max.copy(), fwd.row_denom.copy(), dh^, dw^)
+diff --git a/training/loss_host_rows.mojo b/training/loss_host_rows.mojo
+new file mode 100644
+index 0000000000..1ab5542e94
+--- /dev/null
++++ b/training/loss_host_rows.mojo
+@@ -0,0 +1,194 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The cross-entropy oracle's bits, rows over host tasks (lane neural-pass6).
++
++`ce_forward_oracle` and `ce_backward_oracle` (`training/checks/loss_oracle.mojo`)
++are THE normative answer and stay scalar, single threaded, appending every
++stage to a list. The byte LM host training step ran them at [512, 8192], and
++that was 90 ms of the step's wall on one core while 27 others waited.
++
++This file computes the same bits with the same statements, in a different
++SCHEDULE only:
++
++  - a row's chain (its max, its shifts, its exponentials, its log-denominator,
++    its target log-probability, its gradient cells) is a pure function of that
++    row's logits and target, so rows run on host tasks through
++    `host_parallelize` (the calling thread's floating-point environment on
++    every task, DEVIATION 5900);
++  - the ONE cross-cell fold inside a row, the denominator, is `ce_fold`'s:
++    gemm v1's leaf-and-tree chain over the vocabulary. `ce_fold` makes one
++    `gemm_host_rows` call per row at `(1, 1, V)`; this file makes one call at
++    `(N, 1, V)`, and a gemm v1 cell is a pure function of its row, its column
++    and `k` (DEVIATION 807), so cell `(i, 0)` here is `ce_fold`'s cell for row
++    `i`. No task starts a parallel region: the denominators are folded between
++    the two row passes, on the calling thread;
++  - the cross-row fold, the total, is `ce_fold` over the row losses, the
++    oracle's own call (or the shared NI35 token-total V2 tree when explicitly
++    selected in both the host and device build);
++  - the stage lists the oracle appends (`shift`, `expo`, `weights`, ...) are not
++    materialized except `expo`, which the backward reads; `shift[base + y]` is
++    recomputed by the statement that produced it;
++  - (lane neural-pass8) inside a row, `HOST_FW` cells advance together through
++    the lane twins of the scalar seams (`expf_lanes` for `identical_exp`,
++    `div_lanes` for `identical_div`, `ftz_lanes` for `ftz`), each equal to its
++    scalar on every bit pattern; the row's tail cells take the scalar
++    statements.
++
++Label smoothing (`cfg.eps != 0`) and `REDUCTION_NONE` are refused here; the
++caller runs the oracle for those. `tools/byte_lm_cpu_train_gate.py cpu` is the
++gate: the step's loss bits and gradient against the three-vendor capture.
++"""
++
++from std.math import min
++
++from checks.numerics import ftz, identical_div, identical_exp, identical_log
++from core.host_lanes import (
++    F32V,
++    HOST_FW,
++    div_lanes,
++    expf_lanes,
++    ftz_lanes,
++    host_f32_uninit,
++    host_row_tasks,
++    lanes_are_identical,
++)
++from core.host_parallel import host_parallelize
++from gemm.contract import OP_NN
++from gemm.host.neural_gemm import gemm_host_rows
++from training.checks.loss_contract import (
++    CeConfig,
++    REDUCTION_NONE,
++    ce_count,
++    ce_divisor,
++    ce_refuse_inputs,
++    ce_smoothing_targets,
++    neg_by_bits,
++)
++from training.checks.loss_contract import ce_ones
++from training.checks.loss_oracle import _row_max, ce_fold, ce_total_fold
++
++
++def ce_host_rows(
++    logits: List[Float32], targets: List[Int32], cfg: CeConfig
++) raises -> Tuple[Float32, List[Float32]]:
++    """`(loss, dlogits)`: `ce_forward_oracle`'s `loss[0]` and
++    `ce_backward_oracle`'s `dlogits`, rows over host tasks (module note)."""
++    if cfg.smoothing_is_spelled():
++        raise Error("ce_host_rows: label smoothing takes the oracle path")
++    if cfg.reduction == REDUCTION_NONE:
++        raise Error("ce_host_rows: REDUCTION_NONE has no backward")
++    var n = ce_refuse_inputs(logits, targets, cfg)
++    var v = cfg.vocab
++    var ignore = cfg.ignore_index
++    var tv = ce_smoothing_targets(cfg.eps, v)
++    var t_target = tv[0]
++    var t_other = tv[1]
++
++    # ---- L1-L3 per row: the max, the shift, the exponential ---------------
++    var max_v = List[Float32](length=n, fill=Float32(0.0))
++    var expo = host_f32_uninit(n * v)
++    var tasks = host_row_tasks(n, 4 * v)
++    var chunk = (n + tasks - 1) // tasks
++    var lp = logits.unsafe_ptr()
++    var ep = expo.unsafe_ptr()
++    # LANES (lane neural-pass8): `expf_lanes` equals `identical_exp` on every
++    # bit pattern (byte_lm_host_exp_check), `ftz_lanes` equals `ftz`; the
++    # row's tail cells take the scalar statements.
++    def _expo_rows(t: Int) {imm logits, imm lp, imm ep, mut max_v, imm n, imm v, imm chunk}:
++        for i in range(t * chunk, min((t + 1) * chunk, n)):
++            var base = i * v
++            var m = _row_max(logits, base, v)
++            max_v[i] = m
++            var vv = 0
++            comptime if lanes_are_identical:
++                var mv = ftz_lanes(F32V(m))
++                while vv + HOST_FW <= v:
++                    ep.unsafe_store(base + vv, expf_lanes(ftz_lanes(ftz_lanes(lp.unsafe_load[width=HOST_FW](base + vv)) - mv)))
++                    vv += HOST_FW
++            while vv < v:
++                var s = ftz(ftz(lp.unsafe_load(base + vv)) - ftz(m))
++                ep.unsafe_store(base + vv, identical_exp(s))
++                vv += 1
++    if tasks <= 1:
++        _expo_rows(0)
++    else:
++        host_parallelize(_expo_rows, tasks)
++
++    # ---- L4, the denominators: every row's `ce_fold` in one gemm call ------
++    var ones_v = ce_ones(v)
++    var denom = gemm_host_rows(expo, ones_v, OP_NN, n, 1, v)
++
++    # ---- L5-L7, L11 per row: log-denominator, target log-prob, nll ---------
++    var row = List[Float32](length=n, fill=Float32(0.0))
++    def _loss_rows(t: Int) {imm logits, imm targets, imm max_v, imm denom, mut row, imm n, imm v, imm chunk, imm ignore}:
++        for i in range(t * chunk, min((t + 1) * chunk, n)):
++            var base = i * v
++            var y = Int(targets[i])
++            var ignored = y == ignore
++            var logdenom = ftz(identical_log(ftz(denom[i])))
++            var ty = y
++            if ignored:
++                ty = 0
++            var shift_y = ftz(ftz(logits[base + ty]) - ftz(max_v[i]))
++            var lp_y = ftz(ftz(shift_y) - ftz(logdenom))
++            var nll = neg_by_bits(lp_y)
++            if ignored:
++                nll = Float32(0.0)
++            row[i] = nll
++    if tasks <= 1:
++        _loss_rows(0)
++    else:
++        host_parallelize(_loss_rows, tasks)
++
++    # ---- L12, L13: the total (the oracle's own fold) and the loss ----------
++    var count = ce_count(targets, ignore)
++    var wide = v
++    if n > wide:
++        wide = n
++    var ones = ce_ones(wide)
++    var total = ce_total_fold(row, n, ones)
++    var divisor = ce_divisor(cfg.reduction, count, cfg.num_items)
++    var loss = ftz(identical_div(ftz(total), divisor))
++
++    # ---- L14, L16 per row: the weights and the gradient --------------------
++    var dlogits = host_f32_uninit(n * v)
++    var dp = dlogits.unsafe_ptr()
++    # LANES (lane neural-pass8): `div_lanes` is `portable_divf` on every lane;
++    # every cell of a row takes `t_other` on lanes, then the target's cell is
++    # rewritten by the scalar statement with `t_target`. An ignored row is zeros.
++    def _grad_rows(t: Int) {imm targets, imm ep, imm denom, imm dp, imm n, imm v, imm chunk, imm ignore, imm divisor, imm t_target, imm t_other}:
++        for i in range(t * chunk, min((t + 1) * chunk, n)):
++            var base = i * v
++            var y = Int(targets[i])
++            var ignored = y == ignore
++            var dn = denom[i]
++            if ignored:
++                for vv in range(v):
++                    dp.unsafe_store(base + vv, Float32(0.0))
++                continue
++            var vv = 0
++            comptime if lanes_are_identical:
++                var dnv = ftz_lanes(F32V(dn))
++                var tov = ftz_lanes(F32V(t_other))
++                var dv = F32V(divisor)
++                while vv + HOST_FW <= v:
++                    var w = ftz_lanes(div_lanes(ftz_lanes(ep.unsafe_load[width=HOST_FW](base + vv)), dnv))
++                    dp.unsafe_store(base + vv, ftz_lanes(div_lanes(ftz_lanes(ftz_lanes(w) - tov), dv)))
++                    vv += HOST_FW
++            while vv < v:
++                var w = ftz(identical_div(ftz(ep.unsafe_load(base + vv)), ftz(dn)))
++                dp.unsafe_store(base + vv, ftz(identical_div(ftz(ftz(w) - ftz(t_other)), divisor)))
++                vv += 1
++            var wy = ftz(identical_div(ftz(ep.unsafe_load(base + y)), ftz(dn)))
++            dp.unsafe_store(base + y, ftz(identical_div(ftz(ftz(wy) - ftz(t_target)), divisor)))
++    if tasks <= 1:
++        _grad_rows(0)
++    else:
++        host_parallelize(_grad_rows, tasks)
++    # KEEP-ALIVE: `expo` is reached by `ep` above after its last use by name
++    # (the denominators' gemm call), and Mojo destroys a local at that last
++    # use; without this line the gradient rows read a freed block (which the
++    # allocator had handed back as `dlogits`, so the bytes were right by
++    # chance; lane neural-pass9).
++    _ = expo^
++    return (loss, dlogits^)
