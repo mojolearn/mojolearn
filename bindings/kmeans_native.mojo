@@ -381,7 +381,7 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
             joint = _kmeans_optional_entry(binding, "kmeans_fit_transform", context)
         if joint is not None:
             distances = family_array(Python.tuple(n, k), "<f4", context)
-            result = family_call(joint, x.address, classical_address(centers), classical_address(labels),
+            result = family_call(joint, PythonObject(x.address), classical_address(centers), classical_address(labels),
                                  classical_address(weights), classical_address(distances), params)
             _ = labels  # keep the Python object alive through the native call above
             _ = centers  # keep the Python object alive through the native call above
@@ -389,7 +389,7 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
             _ = weights  # keep the Python object alive through the native call above
         else:
             var fit = family_entry(binding, "kmeans_fit", context)
-            result = family_call(fit, x.address, classical_address(centers), classical_address(labels),
+            result = family_call(fit, PythonObject(x.address), classical_address(centers), classical_address(labels),
                                  classical_address(weights), params)
             _ = labels  # keep the Python object alive through the native call above
             _ = centers  # keep the Python object alive through the native call above
@@ -528,17 +528,17 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
     if transform:
         if handle is not None:
             status = family_call(family_entry(binding, "kmeans_transform_resident", context), handle,
-                                 x.address, classical_address(out), params)
+                                 PythonObject(x.address), classical_address(out), params)
         else:
-            status = family_call(family_entry(binding, "kmeans_transform", context), x.address,
+            status = family_call(family_entry(binding, "kmeans_transform", context), PythonObject(x.address),
                                  classical_address(c), classical_address(out), params)
             _ = c  # keep the Python object alive through the native call above
     else:
         if handle is not None:
             status = family_call(family_entry(binding, "kmeans_predict_resident", context), handle,
-                                 x.address, classical_address(out), params)
+                                 PythonObject(x.address), classical_address(out), params)
         else:
-            status = family_call(family_entry(binding, "kmeans_predict", context), x.address,
+            status = family_call(family_entry(binding, "kmeans_predict", context), PythonObject(x.address),
                                  classical_address(c), classical_address(out), params)
             _ = c  # keep the Python object alive through the native call above
     if test:
