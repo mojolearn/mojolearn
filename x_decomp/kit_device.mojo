@@ -35,6 +35,9 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from x_decomp.cells import F32Ptr, I32Ptr
 from checks.numerics import ftz
 from x_decomp.rr import RR_EIGH_SWEEPS
+from x_decomp.cells import X_DECOMP_SVD_SWEEPS
+from x_decomp.svd_ops import qr_op_q, svd_op_tall
+from core.step_gate import step_gate_open_word
 from x_decomp.device import (
     DevExec,
     LU_SCAL_LEN,
@@ -66,7 +69,7 @@ from x_decomp.device import (
     xd_ctx,
 )
 from x_decomp.kit import (
-    Mat, OP_GTS, OP_SELECT, mat_const, svd_order, OP_ABS, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, OP_SUB,
+    Mat, OP_GTS, OP_SELECT, mat_const, OP_ABS, OP_ADD, OP_ADDS, OP_DIGAMMA, OP_DIV, OP_EXP, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, OP_SUB,
     mat_from,
 )
 from x_decomp.classical_device import contrast_kernel
@@ -90,7 +93,6 @@ from x_decomp.resident import X_DECOMP_POOL, _ptr, pool_alloc, pool_free
 from x_decomp.moves import MOVE_FILL0, MOVE_TAKE_COLS, MOVE_TRANSPOSE
 from x_decomp.cells import LARS_ROW_EXTRA
 from x_decomp.dict_fast import DECOMP_FAST_DICT_DEV, dict_update_dev
-from x_decomp.qr_bounded import QRB_CELLS
 from x_decomp.moves_device import launch_move
 from x_decomp.select_dev import enqueue_sel_reduce, order_small_kernel
 from x_decomp.select_ops import SEL_ORDER_MAX, order_rank
@@ -376,6 +378,11 @@ struct DKit(Movable):
     var eig_word: DMat
     var eig_host: List[Float32]
     var eig_pending: Bool
+    # the SVD op's status words (`svd` below), sticky the same way (lane
+    # n9b-device-svd-qr)
+    var svd_word: DMat
+    var svd_host_word: List[Float32]
+    var svd_pending: Bool
 
     def __init__(out self) raises:
         self.ctx = xd_ctx()
@@ -388,6 +395,9 @@ struct DKit(Movable):
         self.eig_word = DMat(1, 1)
         self.eig_host = List[Float32](length=1, fill=Float32(0))
         self.eig_pending = False
+        self.svd_word = DMat(1, 1)
+        self.svd_host_word = List[Float32](length=1, fill=Float32(0))
+        self.svd_pending = False
         # the unused broadcast operand: Kit's `one`, a 0
         var z = List[Float32](length=1, fill=Float32(0))
         var pool = X_DECOMP_POOL.get_or_create_ptr()
@@ -402,6 +412,9 @@ struct DKit(Movable):
         var ev = pool[].bufs[self.eig_word.id].create_sub_buffer[DType.float32](0, 1)
         enqueue_fill(self.ctx, ev, Float32(0))
         _ = ev^
+        var sv = pool[].bufs[self.svd_word.id].create_sub_buffer[DType.float32](0, 1)
+        enqueue_fill(self.ctx, sv, Float32(0))
+        _ = sv^
 
     # ---- movement
     def _sub(self, D: DMat) raises -> DeviceBuffer[DType.float32]:
@@ -434,6 +447,7 @@ struct DKit(Movable):
     def sync(mut self) raises:
         var check = self.nan_pending
         var echeck = self.eig_pending
+        var scheck = self.svd_pending
         if check:
             var pool = X_DECOMP_POOL.get_or_create_ptr()
             self.ctx.enqueue_copy(
@@ -446,6 +460,12 @@ struct DKit(Movable):
                 dst_ptr=F32Ptr(unsafe_from_address=Int(self.eig_host.unsafe_ptr())),
                 src_buf=pool[].bufs[self.eig_word.id].create_sub_buffer[DType.float32](0, 1),
             )
+        if scheck:
+            var pool = X_DECOMP_POOL.get_or_create_ptr()
+            self.ctx.enqueue_copy(
+                dst_ptr=F32Ptr(unsafe_from_address=Int(self.svd_host_word.unsafe_ptr())),
+                src_buf=pool[].bufs[self.svd_word.id].create_sub_buffer[DType.float32](0, 1),
+            )
         self.ctx.synchronize()
         self.hold_f.clear()
         self.hold_i.clear()
@@ -455,6 +475,14 @@ struct DKit(Movable):
                 raise Error(
                     "eigh: a resident solve did not converge in " + String(RR_EIGH_SWEEPS) + " sweeps."
                     " An unconverged decomposition is not returned as if it were one (DEVIATION 590)."
+                )
+        if scheck:
+            self.svd_pending = False
+            if self.svd_host_word[0] != Float32(0):
+                raise Error(
+                    "x_decomp svd: a resident solve did not converge in " + String(X_DECOMP_SVD_SWEEPS) + " sweeps"
+                    " or a singular value is NaN (a NaN input, or a device launch cut short). An unconverged"
+                    " decomposition is not returned as if it were one (DEVIATION 590)."
                 )
         if check:
             self.nan_pending = False
@@ -656,21 +684,9 @@ struct DKit(Movable):
         var view = DMat(rows_of=D, row0=a, rows=b - a)
         return self.copy(view)
 
-    def svd_host(mut self, A: DMat, mut s: Mat, mut v: Mat) raises:
-        """`_Kit.svd`'s solve of a resident tall A (m >= n): DevExec's
-        launches (`_svd_on`, the resident entry's sequence) on a device copy,
-        s (1 x n) and v (n x n, vectors in columns) home, unordered."""
-        var m = A.r
-        var n = A.c
-        if n <= 0 or m < n:
-            raise Error("x_decomp: svd needs m >= n >= 1 (a tall matrix)")
-        s = Mat(1, n)
-        v = Mat(n, n)
-        var da = self.ctx.enqueue_create_buffer[DType.float32](m * n)
-        self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
-        DevExec._svd_on(self.ctx, da, m, n, s.p(), v.p(), QRB_CELLS)
-        _ = da^
-        self.sync()
+    # TOMBSTONE: `DKit.svd_host` (s and V home through `DevExec._svd_on`, a wait per XD_SVD_GROUP sweeps, the
+    # order on the host, both uploaded again) deleted 2026-11-09 by lane n9b-device-svd-qr; code recoverable at
+    # the lane's base origin/integ/pre-0867-w3 (5b5490960d). Restore: git apply experiments/removed/N9B_RESIDENT_SVD.patch
 
     def sqdist(self, A: DMat, B: DMat) raises -> DMat:
         """`_Kit.sqdist(A, B)` on the device (`launch_sqdist`)."""
@@ -743,16 +759,59 @@ struct DKit(Movable):
         return Int(self.word(self.total(self.ew1(OP_GTS, A, s))))
 
     def svd(mut self, A: DMat, mut S: DMat, mut Vt: DMat) raises:
-        """`_Kit.svd` of a resident tall A: DevExec's solve, the descending
-        order of the values home (`svd_order`), S and Vt back up."""
-        var s = Mat(0, 0)
-        var v = Mat(0, 0)
-        self.svd_host(A, s, v)
-        var sh = Mat(0, 0)
-        var vh = Mat(0, 0)
-        svd_order(s, v, sh, vh)
-        S = self.upload(sh)
-        Vt = self.upload(vh)
+        """`_Kit.svd` of a resident tall A (m >= n >= 1): the executor op
+        `svd_op_tall` (x_decomp/svd_ops.mojo) on a device copy, S (1 x n,
+        descending) and Vt (n x n, row a the right singular vector of S[a])
+        left resident, ENQUEUED. The status word is sticky until the next
+        `sync`, which raises on an unconverged or NaN solve.
+
+        Lane n9b-device-svd-qr (2026-11-09): this ran `DevExec._svd_on` into
+        host Mats (a wait every XD_SVD_GROUP sweeps), ordered them on the host
+        (`svd_order`) and uploaded both again; FactorAnalysis EM, LLE's
+        subspace iteration and PLS read them on the device now. The same
+        words (the op's one-block Jacobi is the round launches' pairs, fold
+        and tree; the order is `svd_order`'s)."""
+        var m = A.r
+        var n = A.c
+        if n <= 0 or m < n:
+            raise Error("x_decomp: svd needs m >= n >= 1 (a tall matrix)")
+        S = DMat(1, n)
+        Vt = DMat(n, n)
+        var da = self.ctx.enqueue_create_buffer[DType.float32](m * n)
+        self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
+        var gate = step_gate_open_word(self.ctx)
+        var status = self.ctx.enqueue_create_buffer[DType.int32](1)
+        var ds = self._sub(S)
+        var dv = self._sub(Vt)
+        svd_op_tall(self.ctx, gate, da, ds, dv, status, m, n)
+        self.ctx.enqueue_function[dk_eig_sticky_kernel](
+            I32Ptr(unsafe_from_address=Int(status.unsafe_ptr())), self.svd_word.p(),
+            grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+        )  # small-launch(one word): the op's status, sticky to the next sync
+        self.svd_pending = True
+        _ = da^
+        _ = gate^
+        _ = status^
+        _ = ds^
+        _ = dv^
+
+    def qr_q(mut self, A: DMat, qc: Int) raises -> DMat:
+        """The first qc columns of Q of the sliced Householder QR of a
+        resident A (`DevExec.geqrf` + `DevExec.orgqr`'s launches, the executor
+        op `qr_op_q`) on a device copy, resident, ENQUEUED (lane
+        n9b-device-svd-qr: was A home, the host-address forms, Q up again)."""
+        var Q = DMat(A.r, qc)
+        if A.n() == 0 or qc <= 0:
+            return Q^
+        var da = self.ctx.enqueue_create_buffer[DType.float32](A.n())
+        self.ctx.enqueue_copy(dst_buf=da, src_buf=self._sub(A))
+        var gate = step_gate_open_word(self.ctx)
+        var dq = self._sub(Q)
+        qr_op_q(self.ctx, gate, da, dq, A.r, A.c, qc)
+        _ = da^
+        _ = gate^
+        _ = dq^
+        return Q^
 
     def lda_bound(self, X: DMat, ddt: DMat, dcomp: DMat, floor: Float64) raises -> DMat:
         """The `_approx_bound` term matrix (`lda_bound_kernel`)."""
