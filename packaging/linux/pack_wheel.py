@@ -397,7 +397,7 @@ RELEASE_REGISTERED_SETS = {tuple(k.split("/")) for k in REGISTERED_ARCHES}  # gl
 
 
 def release_inventory(sets, proof_paths, version, source_root=REPO, required=None,
-                      profile=None, host_composition=None):
+                      profile=None, host_composition=None, local_version=False):
     """Bind the explicit release-linux3 payload to complete per-architecture builds.
 
     File inspection only. Build provenance is not installed/runtime admission.
@@ -424,7 +424,9 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
     optional = {tuple(k.split("/")) for v in full_vendors for k in OPTIONAL_ARCHES[v]}  # glue: registry key spelling
     fills = (required <= keyset and extra <= optional
              and len({normalise_arch("/".join(k)) for k in keyset}) == len(keyset))  # glue: one set per hardware slot
-    if version != read_version(source_root) or len(keys) != len(keyset) or not fills:
+    # a candidate's local version (--local-version) is checked by its own pattern, never against _version.py
+    declared = version if local_version and LOCAL_VERSION_RE.fullmatch(version) else read_version(source_root)
+    if version != declared or len(keys) != len(keyset) or not fills:
         raise SystemExit(profile + ' requires the sets '
                          + (release_contract(sorted({v for v, _ in required})) if required == RELEASE_061_SETS
                             else ', '.join('/'.join(k) for k in sorted(required)))
@@ -779,6 +781,20 @@ def check_proof_indexes(proof, s, reused):
 
 def urlsafe_b64(digest):
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+
+
+#: A CANDIDATE BUILD's version (tools/release.py candidate): the next release's .devN with a PEP 440 local
+#: segment naming the source commit's 12 hex and an optional label. PyPI refuses local versions, so a wheel
+#: carrying one can never be uploaded by mistake, and pip never takes it for the release.
+LOCAL_VERSION_RE = re.compile(r"\d+\.\d+\.\d+\.dev\d+\+[0-9a-f]{12}(\.[a-z0-9]+)*")
+
+
+def candidate_version_py(text, committed, local):
+    """_version.py's text with its one `__version__ = "<committed>"` line set to LOCAL (bytes)."""
+    line = re.compile(r'^__version__ = "' + re.escape(committed) + r'"$', re.M)
+    if len(line.findall(text)) != 1:
+        raise SystemExit("pack_wheel: _version.py must hold one __version__ line of " + committed)
+    return line.sub('__version__ = "' + local + '"', text).encode()
 
 
 def read_version(root=REPO):
@@ -1451,7 +1467,20 @@ def main(argv=None, _gates=True):
                     help='explicit retained common-host assembly receipt; original build proofs remain required')
     ap.add_argument('--source-root', type=pathlib.Path, default=REPO,
                     help='frozen package source checkout; packing tools may be newer than that source')
+    ap.add_argument('--local-version', default='',
+                    help='a CANDIDATE build (tools/release.py candidate): pack as this PEP 440 local version '
+                         '(X.Y.Z.devN+<sha12>[.<label>]) instead of _version.py\'s; the wheel\'s _version.py is '
+                         'generated with it and LINUX_PAYLOAD.json records the committed one. PyPI refuses a '
+                         'local version, so such a wheel can never be published')
+    ap.add_argument('--candidate-defines', default='',
+                    help='with --local-version: the build defines of the sets (MOJOLEARN_BUILD_DEFINES spelling), '
+                         'recorded in LINUX_PAYLOAD.json')
     a = ap.parse_args(argv)
+    if a.candidate_defines and not a.local_version:
+        raise SystemExit('pack_wheel: --candidate-defines needs --local-version (a candidate build)')
+    if a.local_version and not LOCAL_VERSION_RE.fullmatch(a.local_version):
+        raise SystemExit('pack_wheel: --local-version must look like 0.8.67.dev0+0123456789ab[.label] '
+                         '(a PEP 440 local version), not ' + repr(a.local_version))
     source_root = a.source_root.resolve()
     python_root = source_root / 'python'
     package_root = python_root / 'mojolearn'
@@ -1468,6 +1497,12 @@ def main(argv=None, _gates=True):
     if proj["version"] != version:
         raise SystemExit(f"pack_wheel: pyproject says {proj['version']}, "
                          f"_version.py says {version}")
+    committed_version = version
+    if a.local_version:
+        # A CANDIDATE: every name, pin and marker below takes the local version; the committed pair (checked
+        # equal above) stays the source's, and only the shipped _version.py is regenerated (candidate_version_py).
+        version = a.local_version
+        proj = dict(proj, version=version)
     readme = (source_root / "README.md").read_text()
 
     if a.host_composition and not strict:
@@ -1544,7 +1579,8 @@ def main(argv=None, _gates=True):
         except ValueError as exc:
             raise SystemExit(f"pack_wheel: invalid PTX set: {exc}") from exc
     if a.profile == RELEASE_PROFILE:
-        inventory = release_inventory(sets, a.build_proof, version, source_root=source_root, host_composition=a.host_composition)
+        inventory = release_inventory(sets, a.build_proof, version, source_root=source_root, host_composition=a.host_composition,
+                                      local_version=bool(a.local_version))
     elif a.profile == RELEASE_SPLIT_PROFILE:
         plugin_vendors = {gpu_plugins.by_profile(k) for k in kinds if k not in NON_VENDOR_KINDS}
         # A plugin is packed from its own vendor's sets and nothing else; the
@@ -1564,7 +1600,7 @@ def main(argv=None, _gates=True):
                     else set(keys) & RELEASE_REGISTERED_SETS)
         inventory = release_inventory(sets, a.build_proof, version, source_root=source_root, required=required,
                                       host_composition=a.host_composition,
-                                      profile=RELEASE_SPLIT_PROFILE)
+                                      profile=RELEASE_SPLIT_PROFILE, local_version=bool(a.local_version))
     else:
         inventory = None
     if inventory is not None:
@@ -1719,6 +1755,14 @@ def main(argv=None, _gates=True):
     if inventory is not None:
         witness = inventory["source_commit"]
         require_shipped_python_at_commit(entries, witness, repo=source_root)
+        if a.local_version:
+            # the committed _version.py was just proved to be the build commit's; the wheel ships the candidate's
+            version_py = entries.pop("mojolearn/_version.py")
+            candidate_py = candidate_version_py(version_py.read_text(), committed_version, version)
+            inventory["candidate"] = dict(
+                local_version=version, committed_version=committed_version, defines=a.candidate_defines or "",
+                committed_version_py_sha256=sha(version_py).hex(),
+                version_py_sha256=hashlib.sha256(candidate_py).hexdigest())
     else:
         import subprocess
         witness = subprocess.run(["git", "-C", str(source_root), "rev-parse", "HEAD"],
@@ -1771,6 +1815,10 @@ def main(argv=None, _gates=True):
     # METADATA is generated from `proj` a few lines above.
     generated["mojolearn/CITATION.cff"] = (source_root / "CITATION.cff").read_bytes()
     generated["mojolearn/identity_columns/COMMIT"] = (witness + "\n").encode()
+    if a.local_version:
+        if inventory is None:
+            raise SystemExit("pack_wheel: --local-version needs a release profile (a proven candidate build)")
+        generated["mojolearn/_version.py"] = candidate_py
 
     # The split core's METADATA is the combined wheel's plus exactly the two
     # exact plugin requirements (core_project, written by write_split).
