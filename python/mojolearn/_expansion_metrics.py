@@ -75,13 +75,6 @@ _PARAMS = 14
 _NONE = -1
 
 
-def _sq(v):
-    """v * v: one correctly rounded product. `v ** 2` calls the platform pow,
-    which DEVIATION 6106 does not allow (it is not correctly rounded on every
-    host). Lanes py-bugs and py-misc-metrics both made this change."""
-    return v * v
-
-
 def _binding(numeric_mode):
     if numeric_mode is not None and (
         not isinstance(numeric_mode, str)
@@ -104,51 +97,6 @@ def _i32_c(codes):
             return codes
         return codes.astype("<i4")._as_c()
     return Array.from_list(list(codes), "<i4")
-
-
-class _OneHot:
-    """0/1 flags the program forms itself from int32 `codes` (the onehot
-    unit): layout 0 class-major (word c*n + r), layout 1 row-major (word
-    r*k + c). Passed where `_curves` takes flags."""
-
-    __slots__ = ("codes", "n", "k", "layout")
-
-    def __init__(self, codes, n, k, layout):
-        self.codes, self.n, self.k, self.layout = _i32_c(codes), int(n), int(k), int(layout)
-
-
-class _RepRows:
-    """Float32 weights `w` (n) each repeated over k words (the rep_rows
-    unit). Passed where `_curves` takes weights."""
-
-    __slots__ = ("w", "n", "k")
-
-    def __init__(self, w, n, k):
-        self.w, self.n, self.k = w, int(n), int(k)
-
-
-def _put_flags(prog, flags):
-    """The flags' arena offset: an `_OneHot` is formed by a stage on the
-    device (or the host binding), anything else is copied in."""
-    if isinstance(flags, _OneHot):
-        C = prog.put_i32(flags.codes)
-        out = prog.scratch(flags.n * flags.k)
-        prog.stage("onehot", flags.n * flags.k, C, out, flags.n, flags.k, flags.layout)
-        return out
-    return prog.put_i32(flags)
-
-
-def _put_weights(prog, w):
-    """The weights' arena offset (_NONE for none): a `_RepRows` is repeated
-    by a stage, anything else is copied in."""
-    if w is None:
-        return _NONE
-    if isinstance(w, _RepRows):
-        W = prog.put(w.w)
-        out = prog.scratch(w.n * w.k)
-        prog.stage("rep_rows", w.n * w.k, W, out, w.k)
-        return out
-    return prog.put(w)
 
 
 class _Prog:
@@ -316,10 +264,6 @@ def _scan_flag(prog, src, n, mode):
     return flag
 
 
-def _flag_set(prog, flag):
-    return prog.ints(flag, 1)[0] != 0
-
-
 def _put_proba(prog, a, n, k, binary):
     """The probabilities' check and layout in the program (`proba_rows`,
     x_metrics/tail.mojo): (S, FLAGS). S is the (n, k) Float32 matrix the
@@ -394,139 +338,10 @@ def _codes(labels_seq, order):
     return _label_map(labels_seq, lambda v: index.get(v, -1))
 
 
-def _epi_codes(average, zero_division):
-    """(AVG, ZD) of x_metrics/cls_epi.mojo: 0 per label, 1 micro, 3 weighted,
-    2 the plain mean (macro, binary); 0 / 1 / 2 = zero_division 0.0, 1.0, NaN."""
-    zv = _zero_division_value(zero_division)
-    return {None: 0, "micro": 1, "weighted": 3}.get(average, 2), (2 if zv != zv else int(zv))
-
-
-class _Sums:
-    """Per-label tp / pred / true sums and the total, over `order` (every
-    label that can occur; the caller selects a prefix). Unweighted sums are
-    exact integers (the group sizes, differenced on the device: `off_diff`);
-    weighted ones are the Float32 PairSum of each group's weights, read as
-    Python floats. `epi` (lane fam2-prep-metrics; kind, k, AVG, ZD, FMODE,
-    beta^2) stages the set-wise epilogue in the same program (`cls_epi`,
-    x_metrics/cls_epi.mojo: the ratios, micro sums and averages as binary64
-    on the device, both numeric modes since lane cpu2-l7-metrics): `self.epi`
-    = (flags, kept, scalars, per-label values), else None (a list of
-    `epi` tuples stages one epilogue each and `self.epi` is the list of
-    results). `self.prog` and
-    `self.groups` (the three (OFF, OUT) groupings, then the total's) let a
-    caller that staged its own tail (`tail`: a function of (prog, groups)
-    that stages it and returns what to keep) read it back as `self.tail`."""
-
-    def __init__(self, true, pred, w, order, numeric_mode, epi=None, tail=None):
-        n, L = len(true), len(order)
-        yt, yp = _codes(true, order), _codes(pred, order)
-        prog = _Prog()
-        a = prog.put_i32(yt)
-        b = prog.put_i32(yp)
-        match = prog.scratch(n)
-        prog.stage("pair_key", n, a, b, match, L, 1)
-        W = _NONE if w is None else prog.put(w)
-        groups = [_group(prog, k, n, L, weights=W) for k in (match, a, b)]  # glue: the three count groupings
-        if w is not None:
-            zero = prog.scratch(n)          # every row in group 0: the total weight
-            prog.stage("pair_key", n, a, a, zero, 1, 2)
-            groups.append(_group(prog, zero, n, 1, weights=W))
-        cnt = [_counts(prog, off, L) for off, _ in groups] if w is None else None  # glue: the three count slots
-        eos = []
-        for kind, k, avg, zd, fmode, b2 in ([epi] if isinstance(epi, tuple) else (epi or [])):  # glue: one cls_epi stage per requested average
-            col = 0 if w is None else 1
-            bo = 0
-            if fmode == 2:
-                bw = array.array("i")
-                bw.frombytes(array.array("d", [1 + b2, b2]).tobytes())
-                bo = prog.put_i32(list(bw))
-            eo = prog.alloc(8 + 6 * max(L, 1))
-            prog.stage("cls_epi", 1, groups[0][col], groups[1][col], groups[2][col], k, col, kind, avg, zd, eo,
-                       fmode, bo)
-            eos.append(eo)
-        self.tail = None
-        prog.rows = None if w is None else (match, W, n)
-        keep = tail(prog, groups) if tail is not None else None
-        _run(prog, numeric_mode)
-        self.prog, self.groups = prog, groups
-        res = []
-        for eo in eos:  # glue: reads each staged epilogue's flags, scalars and values
-            head = prog.ints(eo, 2)
-            res.append((head[0], head[1], prog.words(eo + 2, 6, "d"), prog.words(eo + 8, 6 * max(L, 1), "d")))
-        self.epi = (res[0] if res else None) if (epi is None or isinstance(epi, tuple)) else res
-        if w is None:
-            self.tp, self.true, self.pred = (prog.ints(c, L) for c in cnt)  # glue: reads the three count slots
-            self.total = n
-        else:
-            self.tp, self.true, self.pred = (prog.floats(out, L) for _, out in groups[:3])  # glue: reads the weighted sums
-            self.total = prog.floats(groups[3][1], 1)[0]
-        self.weighted = w is not None
-        if tail is not None:
-            self.tail = keep
-
-
 class UndefinedMetricWarning(UserWarning):
     """scikit-learn's `UndefinedMetricWarning` (a UserWarning): a metric that
     is ill-defined for the input and was set to a fallback value. Defined
     here so the metrics do not import scikit-learn."""
-
-
-def _undefined_category():
-    """The warning class to raise: scikit-learn's own when the caller has
-    already imported `sklearn.exceptions` (so its filters and `pytest.warns`
-    match), else `UndefinedMetricWarning` above. Never imports scikit-learn."""
-    import sys
-    sk = sys.modules.get("sklearn.exceptions")
-    return getattr(sk, "UndefinedMetricWarning", UndefinedMetricWarning)
-
-
-def _undefined_warning(msg):
-    warnings.warn(msg, _undefined_category(), stacklevel=3)
-
-
-def _zero_division_value(zero_division):
-    if isinstance(zero_division, str):
-        if zero_division == "warn":
-            return 0.0
-    elif not is_bool(zero_division) and isinstance(zero_division, numbers.Real):
-        if zero_division in (0, 1):
-            return float(zero_division)
-        if pmath.isnan(float(zero_division)):
-            return float("nan")
-    raise ValueError("zero_division must be 'warn', 0.0, 1.0 or np.nan")
-
-
-def _set_wise_labels(present, kind, average, labels, pos_label, caller):
-    from ._metrics_impl import _classification_labels, _selected_labels
-    averages = (None, "micro", "macro", "weighted", "samples", "binary")
-    if average not in averages:
-        raise ValueError("average has to be one of (None, 'micro', 'macro', 'weighted', 'samples', 'binary')")
-    if average == "samples":
-        raise NotImplementedError(
-            f"mojolearn {caller}: average='samples' applies to multilabel targets, which are "
-            "NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv)")
-    if average == "binary":
-        if len(present) > 2:
-            raise ValueError("Target is multiclass but average='binary'. Please choose another "
-                             "average setting, one of [None, 'micro', 'macro', 'weighted'].")
-        values, pkind = _classification_labels([pos_label], "pos_label")
-        if pkind != kind:
-            raise ValueError("pos_label must use the same type as the targets")
-        if values[0] not in present and len(present) >= 2:
-            raise ValueError(f"pos_label={pos_label} is not a valid label. It should be one of {present}")
-        return [values[0]]
-    if pos_label not in (None, 1):
-        warnings.warn(f"Note that pos_label (set to {pos_label!r}) is ignored when average != 'binary' "
-                      f"(got {average!r}). You may use labels=[pos_label] to specify a single positive class.",
-                      UserWarning, stacklevel=3)
-    return _selected_labels(labels, kind, present) if labels is not None else list(present)
-
-
-def _label_order(labels, present):
-    """`labels` then every present label not in it (sklearn's hstack with
-    setdiff1d): the extra labels are counted and not reported."""
-    chosen = set(labels)
-    return list(labels) + [v for v in present if v not in chosen]  # glue: appends the present class labels
 
 
 # ---------------------------------------------------------------------------
@@ -560,29 +375,6 @@ def _wsum_sf64(prog, k):
         prog.stage("cm_epi", -(-(nb - stride) // (2 * stride)), _CM_WSUM_FOLD, s, stride, nb)
         stride *= 2
     return s
-
-
-def _cm_stage(prog, groups, w, n, k, kind, size):
-    """Stage a cm_epi tail over a `_Sums` program's groupings (`tail=`):
-    the match / true / pred sums' OFF tables (unweighted) or PairSums
-    (weighted), the first k labels; the total is the row count n or the
-    total grouping's PairSum. Returns the `size`-word output slot."""
-    col = 0 if w is None else 1
-    out = prog.alloc(max(size, 1))
-    tp, tr, pr = groups[0][col], groups[1][col], groups[2][col]
-    tot = n if w is None else groups[3][1]
-    if kind == _CM_COUNT and w is not None:
-        # lane box-run-2-fix: the weighted COUNT reads soft-f64 [hit, total]
-        # (`_wsum_sf64`), not the Float32 PairSums
-        tot = _wsum_sf64(prog, k)
-    if kind == _CM_MLCM:
-        if k:
-            prog.stage("cm_epi", k, kind, tp, tr, pr, k, col, tot, out)
-    elif kind == _CM_MCC:
-        prog.stage("cm_epi", 1, kind, tp, tr, pr, k, col, out)
-    else:
-        prog.stage("cm_epi", 1, kind, tp, k, col, tot, out)
-    return out
 
 
 # Engineering notes (moved from the docstring):
@@ -636,18 +428,6 @@ def fbeta_score(y_true, y_pred, *, beta, labels=None, pos_label=1, average="bina
                    _NATIVE_CONTEXT)
 
 
-def _prf_weighted(y_true, y_pred, labels, pos_label, average, sample_weight, zero_division,
-                  numeric_mode, metric):
-    """precision_score / recall_score / f1_score WITH sample_weight: the
-    unweighted call keeps the original binding and its bits."""
-    names = ("precision", "recall", "f-score")
-    out = precision_recall_fscore_support(
-        y_true, y_pred, beta=1.0, labels=labels, pos_label=pos_label, average=average,
-        warn_for=(names[metric],), sample_weight=sample_weight, zero_division=zero_division,
-        numeric_mode=numeric_mode)
-    return out[metric]
-
-
 def jaccard_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
                   sample_weight=None, zero_division="warn", numeric_mode=None):
     """scikit-learn 1.9 `jaccard_score`, `tp / (tp + fp + fn)` per label,
@@ -671,55 +451,6 @@ def matthews_corrcoef(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
     """scikit-learn 1.9 `matthews_corrcoef` (binary and multiclass): the
     covariance form over the per-class true / predicted sums and the trace."""
     return _NATIVE(None, _OP.family_mexp_cls_matthews, (y_true, y_pred, sample_weight, numeric_mode), _NATIVE_CONTEXT)
-
-
-def _confusion(true, pred, w, order, numeric_mode, tail):
-    """The k x k (weighted) confusion matrix over `order`, rows true, made on
-    the device and finished by `tail(prog, cells, col)` in the same program
-    (a cm_epi stage, x_metrics/cm_epi.mojo): `cells` is the k*k groups' OFF
-    table (col 0: exact counts, read by the unit as group sizes) or their
-    Float32 PairSums (col 1). Returns (prog, what the tail returned)."""
-    n, k = len(true), len(order)
-    if k > 4096:
-        raise ValueError("mojolearn metrics: at most 4096 labels in a confusion matrix")
-    prog = _Prog()
-    a = prog.put_i32(_codes(true, order))
-    b = prog.put_i32(_codes(pred, order))
-    key = prog.scratch(n)
-    prog.stage("pair_key", n, a, b, key, k, 0)
-    W = _NONE if w is None else prog.put(w)
-    off, out = _group(prog, key, n, k * k, weights=W)
-    keep = tail(prog, off if w is None else out, 0 if w is None else 1)
-    _run(prog, numeric_mode)
-    return prog, keep
-
-
-def confusion_matrix_weighted(y_true, y_pred, labels, sample_weight, normalize, numeric_mode):
-    """confusion_matrix with sample_weight (scikit-learn 1.9): Float64 cells,
-    each the Float32 PairSum of its rows' weights; normalize in binary64."""
-    from ._metrics_impl import _selected_labels, _label_set
-    true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "confusion_matrix")
-    chosen = _selected_labels(labels, kind, present)
-    if not set(chosen).intersection(_label_set(true)):
-        raise ValueError("At least one label specified must be in y_true")
-    k = len(chosen)
-    prog, out = _confusion(true, pred, w, chosen, numeric_mode,
-                           lambda prog, cells, col: _normalize(prog, cells, col, k, normalize))
-    return Array._owned(prog.words(out, 2 * k * k, "d"), (k, k), "<f8")
-
-
-def _normalize(prog, cells, col, k, normalize):
-    """Stage the normalization of the k x k cells (x_metrics/cm_epi.mojo,
-    NORM: one unit per row ('true', 'all', none) or column ('pred'), each sum
-    binary64 from 0.0 in ascending index, a zero sum giving 0.0 cells; 'all'
-    first sums every cell in one unit). Returns the binary64 output slot."""
-    out = prog.want(prog.alloc(2 * k * k), 2 * k * k)
-    ts = prog.scratch(2)
-    if normalize == "all":
-        prog.stage("cm_epi", 1, _CM_NORM, cells, k, col, 0, out, ts)
-    if k:
-        prog.stage("cm_epi", k, _CM_NORM, cells, k, col, _NORM_MODES[normalize], out, ts)
-    return out
 
 
 def cohen_kappa_score(y1, y2, *, labels=None, weights=None, sample_weight=None,
@@ -1157,313 +888,15 @@ def _pos_label(pos_label, kind, classes, caller):
     return values[0]
 
 
-class _Curve(tuple):
-    """(fps, tps, thresholds); `keep` = the collinear-drop flags the device
-    computed for an unweighted curve (bytes of 0/1 per slot), else None."""
-    keep = None
-
-
-class _DevCurve:
-    """A curve left in its program's arena (lane metrics-apple2): the
-    offsets of its fps, tps, thresholds and keep words (-1 = none; keep -2 =
-    the device dropped the collinear points, every point is kept) and its
-    point count `c`. `lists()` is the `_Curve` `_curves` returns; the
-    epilogue helpers (`_auc_of`, `_ap_of`, `roc_curve`) read the words in
-    place instead."""
-
-    def __init__(self, prog, fps, tps, thr, keep, c, numeric_mode):
-        self.prog, self.fps, self.tps, self.thr, self.keep, self.c = prog, fps, tps, thr, keep, c
-        self.numeric_mode = numeric_mode
-
-    def last(self):
-        """(fps[c-1], tps[c-1]) as Python floats (c > 0)."""
-        p = self.prog
-        return p.floats(self.fps + self.c - 1, 1)[0], p.floats(self.tps + self.c - 1, 1)[0]
-
-    def lists(self):
-        p, c = self.prog, self.c
-        cur = _Curve((p.floats(self.fps, c), p.floats(self.tps, c),
-                      p.floats(self.thr, c) if self.thr >= 0 else None))
-        if self.keep >= 0:
-            p._check(self.keep, c)
-            lo = 4 * self.keep
-            cur.keep = bytes(_arena_view(p.arena).cast("B")[lo + (0 if _LITTLE else 3):lo + 4 * c:4])
-        elif self.keep == -2:
-            cur.keep = b"\x01" * c       # the device dropped the collinear points already
-        return cur
-
-
-def _f32_weights_addr(w):
-    if w is None:
-        return 0, None
-    if isinstance(w, Array) and w.dtype == "<f4" and w._has_order("C"):
-        return addr_ro(w, name="sample_weight"), w
-    return None, None
-
-
-def _auc_of(cur, max_fpr):
-    """The ROC AUC of a curve
-    when both classes are present, else (or on any doubt) the Python.
-    A `_FoldCurve` (the device fold, lane cgr2-metrics-shap) scores itself."""
-    if isinstance(cur, _FoldCurve):
-        return cur.auc(max_fpr)
-    raise TypeError("mojolearn metrics: an AUC is scored from the device fold (`_curves(..., fold='auc')`)")
-
-
-def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds=True, keep_flags=True,
-            lazy=False, compact=False, fold=None, max_fpr=None, tail=None):
-    """[(fps, tps, thresholds)] per problem, from the device sort and the
-    cumulative counts (Python floats; unweighted counts are exact). An
-    unweighted curve also carries `.keep` (lane metrics-apple). Only the
-    curves come back from the device, each only up to its point count, and
-    thresholds=False (the AUCs) leaves the thresholds on it: the third list
-    is then None; keep_flags=False (the average precisions) computes no
-    `.keep`. compact=True (lazy, unweighted, keep_flags) has the device drop
-    the collinear points itself (bin_curve params 12, 13: the kept fps, tps,
-    thresholds, and their count), so only the kept points come back; the
-    `_DevCurve`s then carry keep = -2, every point kept (lane
-    metrics-apple2). Weighted curves are flagged and compacted too (lane
-    cgr2-metrics-shap: exact two-sum steps on the device).
-
-    fold="auc" (compact) or "ap" (lane cgr2-metrics-shap) adds the device
-    curve fold (x_metrics/par.mojo curve_fold_unit) and brings back only its
-    CF_OUT words per problem, no curve: the list holds `_FoldCurve`s.
-    max_fpr (fold="auc") folds the partial AUC instead. tail (fold only):
-    see `_fold_curves`."""
-    if fold is not None:
-        return _fold_curves(scores, flags, w, n, problems, numeric_mode, stride=stride, fold=fold,
-                            max_fpr=max_fpr, tail=tail)
-    if tail is not None:
-        raise ValueError("mojolearn metrics: a curve tail needs the device fold")
-    prog = _Prog()
-    S = prog.put(scores)
-    POS = _put_flags(prog, flags)
-    W = _put_weights(prog, w)
-    N = n * problems
-    order = prog.scratch(N)
-    flagged = bool(keep_flags)
-    compact = compact and flagged and lazy
-    cnt = prog.want(prog.alloc(problems), problems)
-    fps = prog.alloc(N)
-    tps = prog.alloc(N)
-    thr = prog.alloc(N)
-    keep = _NONE
-    CF = CM = 0
-    if compact:
-        keep = prog.scratch(N)
-        CF = prog.alloc(3 * N)
-        CM = prog.want(prog.alloc(problems), problems)
-        for t in range(problems):  # glue: declares each problem's output ranges
-            for b in range(3 if thresholds else 2):  # glue: declares each curve output range
-                prog.want(CF + b * N + t * n, n, count=CM + t)
-    else:
-        if flagged:
-            keep = prog.alloc(N)
-        for t in range(problems):  # glue: declares each problem's output ranges
-            for b in (fps, tps) + ((thr,) if thresholds else ()) + ((keep,) if flagged else ()):  # glue: declares each curve output range
-                prog.want(b + t * n, n, count=cnt + t)
-    prog.stage("bin_curve", problems, S, stride, POS, W, n, order, fps, tps, thr, cnt,
-               keep, 1 if flagged else 0, CF, CM)
-    _run(prog, numeric_mode)
-    counts = prog.ints(CM if compact else cnt, problems)
-    if compact:
-        return [_DevCurve(prog, CF + t * n, CF + N + t * n, CF + 2 * N + t * n if thresholds else _NONE,
-                          -2, counts[t], numeric_mode) for t in range(problems)]  # glue: one result handle per problem
-    # every caller is lazy (lane pyglue-sweep: the curve lists never come
-    # back to Python whole; the epilogues read the arena words)
-    return [_DevCurve(prog, fps + t * n, tps + t * n, thr + t * n if thresholds else _NONE,
-                      keep + t * n if flagged else _NONE, counts[t], numeric_mode)
-            for t in range(problems)]  # glue: one result handle per problem
-
-
 #: words per problem of the curve fold (x_metrics/par.mojo CF_OUT) and its
 #: points per chunk (x_metrics/plan.mojo CF_CHUNK)
 _CF_OUT = 10
 _CF_CHUNK = 1024
 
 
-def _f32_split(x):
-    """(hi, lo) Int32 bit words of the float-float x = hi + lo (hi the
-    nearest float32, lo the nearest float32 of the remainder)."""
-    import struct
-    hi = struct.unpack("<f", struct.pack("<f", float(x)))[0]
-    lo = float(x) - hi
-    bits = struct.unpack("<ii", struct.pack("<ff", hi, lo))
-    return bits[0], bits[1]
-
-
-def _fold_stages(prog, S, stride, POS, W, n, problems, auc, max_fpr=None, out=None):
-    """The curve (bin_curve) and its fold (curve_fold) as stages of `prog`
-    over scores at S, flags at POS, weights at W (_NONE: none): the fold's
-    CF_OUT words per problem at `out` (allocated and declared when None),
-    returned. Shared by `_fold_curves` and the one-vs-one pairs."""
-    N = n * problems
-    order = prog.scratch(N)
-    cnt = prog.scratch(problems)
-    fps = prog.scratch(N)
-    tps = prog.scratch(N)
-    thr = prog.scratch(N)
-    keep = _NONE
-    CF = CM = 0
-    if auc:
-        keep = prog.scratch(N)
-        CF = prog.scratch(3 * N)
-        CM = prog.scratch(problems)
-    prog.stage("bin_curve", problems, S, stride, POS, W, n, order, fps, tps, thr, cnt,
-               keep, 1 if auc else 0, CF, CM)
-    if out is None:
-        out = prog.want(prog.alloc(_CF_OUT * problems), _CF_OUT * problems)
-    mode, mh, ml = (1, 0, 0) if not auc else ((0, 0, 0) if max_fpr is None else (2,) + _f32_split(max_fpr))
-    if auc:
-        prog.stage("curve_fold", problems, n, CF, CF + N, CM, out, mode, mh, ml, _CF_CHUNK)
-    else:
-        prog.stage("curve_fold", problems, n, fps, tps, cnt, out, mode, mh, ml, _CF_CHUNK)
-    return out
-
-
-def _fold_curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, fold="auc", max_fpr=None, tail=None):
-    """`_curves` with the device curve fold: the curve stays on the device
-    (compacted for the AUCs) and only the fold's words come back.
-
-    tail (lane cpu2-l7-metrics S3b): a function `(prog, S, W, C, out, n,
-    problems)` that stages more units in this program before it runs (S the
-    scores, W the weights or _NONE, C the int32 codes of an `_OneHot` or
-    _NONE, out the fold words); it keeps its own offsets."""
-    prog = _Prog()
-    S = prog.put(scores)
-    C = _NONE
-    if tail is not None and isinstance(flags, _OneHot):
-        # `_put_flags`'s onehot stage, with the codes' offset kept for the tail
-        C = prog.put_i32(flags.codes)
-        POS = prog.scratch(flags.n * flags.k)
-        prog.stage("onehot", flags.n * flags.k, C, POS, flags.n, flags.k, flags.layout)
-    else:
-        POS = _put_flags(prog, flags)
-    W = _put_weights(prog, w)
-    auc = fold == "auc"
-    out = _fold_stages(prog, S, stride, POS, W, n, problems, auc, max_fpr)
-    if tail is not None:
-        tail(prog, S, W, C, out, n, problems)
-    _run(prog, numeric_mode)
-    holder = {}
-
-    def redo():
-        if "c" not in holder:
-            holder["c"] = _curves(scores, flags, w, n, problems, numeric_mode, stride=stride, thresholds=False,
-                                  keep_flags=auc, lazy=True, compact=auc)
-        return holder["c"]
-
-    return [_FoldCurve(prog, out + _CF_OUT * t, max_fpr, redo, t) for t in range(problems)]  # glue: one result handle per problem
-
-
-class _FoldCurve:
-    """A curve's device fold (lane cgr2-metrics-shap): the float-float sum
-    and the few curve words x_metrics/par.mojo `_cf_finish` writes. `auc()`
-    and `ap()` turn them into the score with a handful of binary64 scalar
-    operations; an edge case (an empty class, a zero precision denominator,
-    max_fpr past the last point) recomputes the curve for the Python rule."""
-
-    def __init__(self, prog, off, max_fpr, redo, t):
-        self.prog, self.off, self.max_fpr, self._redo, self.t = prog, off, max_fpr, redo, t
-
-    def _words(self):
-        f = self.prog.floats(self.off, _CF_OUT)
-        i = self.prog.ints(self.off, _CF_OUT)
-        return f[0] + f[1], f[2], f[3], i[4], f[5], f[6], f[7], f[8], i[9]
-
-    def lists(self):
-        return self._redo()[self.t].lists()
-
-    def auc(self, max_fpr):
-        s, F, T, k, a, b, u, v, c = self._words()
-        if c <= 0 or not (F > 0 and T > 0):
-            # the empty-class answer, without bringing the curve back
-            _undefined_warning("Only one class is present in y_true. ROC AUC score is not defined in that case.")
-            return float("nan")
-        if max_fpr is None:
-            return float(s / (2.0 * F * T))
-        if k >= c:
-            # max_fpr at or past the last point (max_fpr = 1: the last fpr is
-            # F / F): the whole area, the device fold's word (lane py-runtime
-            # round 3; the Python fsum rule over the curve is gone, new bits
-            # for max_fpr = 1 only, the same on every column)
-            return float(s / (2.0 * F * T))
-        x0, x1, y0, y1 = a / F, b / F, u / T, v / T
-        yi = y0 if x1 == x0 else y0 + (max_fpr - x0) * (y1 - y0) / (x1 - x0)
-        part = s / (2.0 * F * T) + (max_fpr - x0) * (yi + y0) / 2.0
-        min_area = 0.5 * max_fpr * max_fpr
-        return float(0.5 * (1 + (part - min_area) / (max_fpr - min_area)))
-
-    def ap(self):
-        s, F, T, k, a, b, u, v, c = self._words()
-        if c <= 0 or T == 0:
-            return 0.0
-        if k > 0:
-            # a point with tps + fps == 0: the Python rule's t / (t + f) is a
-            # float division by zero (lane py-runtime round 3: raised from the
-            # fold's count word, no curve walk)
-            raise ZeroDivisionError("float division by zero")
-        return float(max(0.0, s / T))
-
-
 #: x_metrics/curve_out.mojo kinds and statuses
 _CO_ROC, _CO_PR, _CO_DET = 0, 1, 2
 _CO_EMPTY, _CO_ZERO_CLASS = 1, 2
-
-
-def _curve_out(y_true, y_score, pos_label, sample_weight, numeric_mode, caller, kind, drop):
-    """One binary curve's three Float64 output arrays, formed on the device
-    (lane cpu4-python: x_metrics/curve_out.mojo, the units the host column
-    runs too) in the program that sorts and counts: bin_curve (compacted by
-    its collinear drop for a dropping ROC), then curve_out. Only the arrays
-    (up to their length) and six head words come back. Returns (arrays,
-    length, F, T, classes): F, T the last fps and tps."""
-    from ._metrics_impl import _label_map
-    true, kind_y, classes = _targets(y_true, caller)
-    if len(classes) > 2 and pos_label is None:
-        raise ValueError("multiclass format is not supported")
-    pos = _pos_label(pos_label, kind_y, classes, caller)
-    n = len(true)
-    s = _scores(y_score, n, caller, ndim=1)
-    w = _weights(sample_weight, n, caller)
-    flags = _label_map(true, lambda v: int(v == pos))
-    if n <= 0:
-        raise ValueError("mojolearn metrics: an empty curve has no thresholds")
-    prog = _Prog()
-    S = prog.put(s)
-    POS = _put_flags(prog, flags)
-    W = _put_weights(prog, w)
-    order = prog.scratch(n)
-    cnt = prog.scratch(1)
-    fps = prog.scratch(n)
-    tps = prog.scratch(n)
-    thr = prog.scratch(n)
-    roc_drop = kind == _CO_ROC and bool(drop)
-    keep = _NONE
-    CF = CM = 0
-    if roc_drop:
-        keep = prog.scratch(n)
-        CF = prog.scratch(3 * n)
-        CM = prog.scratch(1)
-    prog.stage("bin_curve", 1, S, 1, POS, W, n, order, fps, tps, thr, cnt, keep, 1 if roc_drop else 0, CF, CM)
-    LEN = prog.want(prog.alloc(6), 6)
-    OUT = prog.alloc(6 * (n + 1))
-    for b in range(3):  # glue: declares the three output arrays, each up to its length
-        prog.want(OUT + 2 * b * (n + 1), 2 * (n + 1), count=LEN, mult=2)
-    src = (CF, CF + n, CF + 2 * n, CM) if roc_drop else (fps, tps, thr, cnt)
-    prog.stage("curve_out", 1, kind, n, *src, 1 if (drop and kind != _CO_ROC) else 0, OUT, LEN)
-    _run(prog, numeric_mode)
-    m, status = prog.ints(LEN, 2)
-    if status == _CO_EMPTY:
-        raise ValueError("mojolearn metrics: an empty curve has no thresholds")
-    F, T = prog.words(LEN + 2, 4, "d")
-    if status == _CO_ZERO_CLASS:
-        return None, 0, F, T, classes
-    # precision-recall's thresholds hold one word fewer than its precision and recall
-    lens = (m, m, m - 1) if kind == _CO_PR else (m, m, m)
-    arrays = tuple(Array._owned(prog.words(OUT + 2 * b * (n + 1), 2 * lens[b], "d"), (lens[b],), "<f8", "C")
-                   for b in range(3))  # glue: wraps the three downloaded arrays
-    return arrays, m, F, T, classes
 
 
 # Engineering notes (moved from the docstring):
@@ -1482,19 +915,6 @@ def roc_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_inter
     return _NATIVE(None, _OP.family_mexp_curve_roc,
                    (y_true, y_score, pos_label, sample_weight, drop_intermediate, numeric_mode),
                    _NATIVE_CONTEXT)
-
-
-def precision_recall_curve_options(y_true, y_score, pos_label, sample_weight, drop_intermediate, numeric_mode):
-    """precision_recall_curve with sample_weight or drop_intermediate=True
-    (lane/metrics): Float64 outputs, formed on the device (lane cpu4-python:
-    x_metrics/curve_out.mojo; no positives' recall of one there too); the
-    default call keeps its kernel."""
-    arrays, _, _, T, _ = _curve_out(y_true, y_score, pos_label, sample_weight, numeric_mode,
-                                    "precision_recall_curve", _CO_PR, drop_intermediate)
-    if T == 0:
-        warnings.warn("No positive class found in y_true, recall is set to one for all thresholds.",
-                      UserWarning, stacklevel=3)
-    return arrays
 
 
 # Engineering notes (moved from the docstring):
@@ -1534,135 +954,7 @@ _RANK_ROW_SUM, _RANK_CURVE_SCORE, _RANK_AVERAGE, _RANK_OVO_MASK, _RANK_OVO_PAIR 
 _ROC_ONE_CLASS = "Only one class is present in y_true. ROC AUC score is not defined in that case."
 
 
-def _f64_bits(prog, vals):
-    """Binary64 values as Int32 arena words (low first), an input."""
-    bw = array.array("i")
-    bw.frombytes(array.array("d", vals).tobytes())
-    return prog.put_i32(bw)
-
-
-def _stage_average(prog, SC, SUP, m, average):
-    """`rank_epi` AVERAGE over m binary64 scores at SC (weights at SUP):
-    the declared binary64 result's offset."""
-    res = prog.want(prog.alloc(2), 2)
-    prog.stage("rank_epi", 1, _RANK_AVERAGE, SC, SUP, m, 1 if average == "weighted" else 0, res)
-    return res
-
-
-class _OvrTail:
-    """The one-vs-rest curve program's tail (`_fold_curves` tail=): the
-    multiclass row-sum check (`rank_epi` ROW_SUM), the per-class supports
-    (group sums over the codes: exact counts, or the Float32 PairSums of
-    the weights), the per-class scores from the fold words (CURVE_SCORE) and
-    their average (AVERAGE), all in the program that folds the curves. The
-    host class_sums / row_sum_range walks and the Python averages are gone
-    (lane cpu2-l7-metrics S3b)."""
-
-    def __init__(self, fold, check_rows, average, numeric_mode):
-        """average: None (per-class scores), "macro", "weighted", or
-        "micro" (no per-class work: the row check only)."""
-        self.fold, self.check_rows, self.average = fold, check_rows, average
-        self.score = average != "micro"
-        self.numeric_mode = numeric_mode
-        self.prog = None
-
-    def __call__(self, prog, S, W, C, out, n, k):
-        self.n, self.k = n, k
-        self.prog = prog
-        if self.check_rows:
-            self.rows = prog.want(prog.alloc(1), 1)
-            if n:
-                prog.stage("rank_epi", n, _RANK_ROW_SUM, S, n, k, self.rows)
-        if not self.score:
-            return
-        weighted = W != _NONE
-        off, sums = _group(prog, C, n, k, weights=W)
-        self.sc = prog.want(prog.alloc(2 * k), 2 * k)
-        self.fl = prog.want(prog.alloc(k), k)
-        self.sup = prog.want(prog.alloc(2 * k), 2 * k)
-        prog.stage("rank_epi", k, _RANK_CURVE_SCORE, out, k, 0 if self.fold == "auc" else 1, self.sc, self.fl,
-                   sums if weighted else off, 1 if weighted else 0, self.sup)
-        self.res = _stage_average(prog, self.sc, self.sup, k, self.average) if self.average is not None else _NONE
-
-    def rows_ok(self):
-        return not _flag_set(self.prog, self.rows)
-
-    def result(self, curves):
-        """The averaged score (binary64) or, average=None, the per-class
-        Float64 array. A class whose AP needs the curve rule (a zero
-        precision denominator) takes `_FoldCurve.ap`, and the average then
-        runs in a second small program over the device words."""
-        prog, k = self.prog, self.k
-        fl = prog.ints(self.fl, k)
-        if self.fold == "auc":
-            for c in range(k):  # glue: one warning per class without both labels
-                if fl[c] == 1:
-                    _undefined_warning(_ROC_ONE_CLASS)
-        edge = [c for c in range(k) if fl[c] == 2]  # glue: the classes whose AP takes the curve rule
-        if not edge:
-            if self.average is None:
-                return Array.from_list(list(prog.words(self.sc, 2 * k, "d")), "<f8")
-            return prog.words(self.res, 2, "d")[0]
-        sc = list(prog.words(self.sc, 2 * k, "d"))
-        for c in edge:  # glue: the curve rule's per-class scores
-            sc[c] = curves[c].ap()
-        if self.average is None:
-            return Array.from_list(sc, "<f8")
-        p2 = _Prog()
-        SC = _f64_bits(p2, sc)
-        SUP = p2.put_i32(prog.words(self.sup, 2 * k, "i"))
-        res = _stage_average(p2, SC, SUP, k, self.average)
-        _run(p2, self.numeric_mode)
-        return p2.words(res, 2, "d")[0]
-
-
-def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode, keep_flags=True, fold=None, tail=None):
-    """Binarized one-vs-rest problems over the class columns of y_score.
-    `tail` (an `_OvrTail`, fold only) rides in the curve program."""
-    from ._metrics_impl import _label_map, _selected_labels
-    true, kind, present = _targets(y_true, caller)
-    n = len(true)
-    s = _scores(y_score, n, caller, ndim=2)
-    k = s.shape[1]
-    classes = present if labels is None else _selected_labels(labels, kind, present)
-    if labels is not None:
-        if classes != sorted(classes):  # glue: checks the class labels are sorted
-            raise ValueError("Parameter 'labels' must be ordered")
-        if set(present) - set(classes):
-            raise ValueError("'y_true' contains labels not in parameter 'labels'")
-    if len(classes) != k:
-        raise ValueError("Number of classes in y_true not equal to the number of columns in 'y_score'")
-    w = _weights(sample_weight, n, caller)
-    index = {c: i for i, c in enumerate(classes)}  # glue: class index table
-    codes = _label_map(true, lambda v: index[v])
-    # the class-major flags formed by the onehot unit inside the curve
-    # program, the supports, scores and average by the tail's units in the
-    # same program; no n*k host walk (lane pyglue-sweep: the Python byte
-    # layouts, the -D MOJOLEARN_PY2MOJO_core_OFF arm, are gone)
-    codes = _i32_c(codes)
-    curves = _curves(s, _OneHot(codes, n, k, 0), w, n, k, numeric_mode, stride=k, thresholds=False,
-                     keep_flags=keep_flags, lazy=True, compact=True, fold=fold, tail=tail)
-    return curves, tail, s, codes, classes, w
-
-
 _LITTLE = array.array("i", [1]).tobytes()[0] == 1
-
-
-def _micro_inputs(codes, w, n, k, numeric_mode=None):
-    """The micro average's row-major one-hot flags (an `_OneHot`, word
-    r * k + c is 1 exactly when row r's code is c) and its weights (a
-    `_RepRows`, each of the n repeated k times, or None), both formed by
-    stages of the curve program (x_metrics onehot and rep_rows units)."""
-    codes = _i32_c(codes)
-    if codes.size != n:
-        raise ValueError("mojolearn metrics: micro-average codes do not match the scores")
-    wm = None
-    if w is not None:
-        wa = w if isinstance(w, Array) and w.dtype == "<f4" else as_f32_c(w, ndim=1, name="sample_weight")[0]
-        if wa.size != n:
-            raise ValueError("mojolearn metrics: micro-average weights do not match the scores")
-        wm = _RepRows(wa, n, k)
-    return _OneHot(codes, n, k, 1), wm
 
 
 #: arena words one one-vs-one program may hold (its pairs' curve slots);
@@ -1670,145 +962,6 @@ def _micro_inputs(codes, w, n, k, numeric_mode=None):
 _OVO_WORDS = 1 << 26
 _ROWS_MSG = ("Target scores need to be probabilities for multiclass roc_auc, i.e. they "
              "should sum up to 1.0 over classes")
-
-
-def _ovo_native(true, index, s, n, k, numeric_mode, average):
-    """One-vs-one ROC AUC (scikit-learn _average_multiclass_ovo_score), on
-    the device (lane cpu2-l7-metrics S3b): per program, the scores and codes
-    go up once, the onehot unit forms every class's flags, `rank_epi`
-    OVO_MASK marks each pair's rows as 0/1 curve weights (the curve drops
-    the others: the host `x_metrics_ovo_pair` selection is gone), two curve
-    folds per pair (column a with class a positive, column b with class b),
-    CURVE_SCORE their AUCs, OVO_PAIR the pair score (mean of the two) and
-    prevalence ((count_a + count_b) / n, the counts from a group over the
-    codes: the host class_sums walk is gone), AVERAGE the macro or weighted
-    mean. The first program also runs the multiclass row-sum check
-    (ROW_SUM). Pairs whose curve slots exceed `_OVO_WORDS` go to further
-    programs; their pair words then meet in one small AVERAGE program."""
-    from ._metrics_impl import _label_map
-    codes = _i32_c(_label_map(true, lambda v: index[v]))
-    if codes.size != n:
-        raise ValueError("mojolearn roc_auc_score: y_true and y_score lengths differ")
-    P = k * (k - 1) // 2
-    per_pair = 17 * n + 4 + 4 * _CF_OUT
-    chunk = max(1, min(P, _OVO_WORDS // max(per_pair, 1)))
-    pairs = [(a, b) for a in range(k) for b in range(a + 1, k)]  # glue: the stage parameters of each pair
-    ps_words, prev_words = [], []
-    g0 = 0
-    while g0 < P:  # glue: one program per chunk of pairs
-        m = min(chunk, P - g0)
-        last_only = g0 == 0 and m == P
-        prog = _Prog()
-        S = prog.put(s)
-        C = prog.put_i32(codes)
-        OH = prog.scratch(n * k)
-        if n:
-            prog.stage("onehot", n * k, C, OH, n, k, 0)
-        rows = _NONE
-        if g0 == 0:
-            rows = prog.want(prog.alloc(1), 1)
-            if n:
-                prog.stage("rank_epi", n, _RANK_ROW_SUM, S, n, k, rows)
-        off, _ = _group(prog, C, n, k)
-        prog.want(off + k, 1)
-        CF = prog.scratch(2 * m * _CF_OUT)
-        for t in range(m):  # glue: stages each pair's mask and its two curve folds
-            a, b = pairs[g0 + t]
-            W = prog.scratch(n)
-            if n:
-                prog.stage("rank_epi", n, _RANK_OVO_MASK, C, n, a, b, W)
-            _fold_stages(prog, S + a, k, OH + a * n, W, n, 1, True, out=CF + 2 * t * _CF_OUT)
-            _fold_stages(prog, S + b, k, OH + b * n, W, n, 1, True, out=CF + (2 * t + 1) * _CF_OUT)
-        SC = prog.scratch(4 * m)
-        FL = prog.want(prog.alloc(2 * m), 2 * m)
-        prog.stage("rank_epi", 2 * m, _RANK_CURVE_SCORE, CF, 2 * m, 0, SC, FL, _NONE, 0, 0)
-        if last_only:
-            PS, PREV = prog.scratch(2 * m), prog.scratch(2 * m)
-        else:
-            PS, PREV = prog.want(prog.alloc(2 * m), 2 * m), prog.want(prog.alloc(2 * m), 2 * m)
-        prog.stage("rank_epi", m, _RANK_OVO_PAIR, SC, off, k, n, g0, m, PS, PREV)
-        res = _stage_average(prog, PS, PREV, P, average) if last_only else _NONE
-        _run(prog, numeric_mode)
-        if g0 == 0:
-            if _flag_set(prog, rows):
-                raise ValueError(_ROWS_MSG)
-            if prog.ints(off + k, 1)[0] != n:
-                raise ValueError("mojolearn roc_auc_score: a y_true label is not among the classes")
-        for v in prog.ints(FL, 2 * m):  # glue: one warning per direction without both labels
-            if v == 1:
-                _undefined_warning(_ROC_ONE_CLASS)
-        if last_only:
-            return prog.words(res, 2, "d")[0]
-        ps_words.extend(prog.words(PS, 2 * m, "i"))
-        prev_words.extend(prog.words(PREV, 2 * m, "i"))
-        g0 += m
-    p2 = _Prog()
-    res = _stage_average(p2, p2.put_i32(ps_words), p2.put_i32(prev_words), P, average)
-    _run(p2, numeric_mode)
-    return p2.words(res, 2, "d")[0]
-
-
-def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_class, labels, numeric_mode):
-    """roc_auc_score with sample_weight, max_fpr < 1 or multiclass input
-    (lane/metrics); the binary unweighted full-AUC call keeps its kernel.
-    AUCs are the trapezoid rule over the device curve (host `fsum`)."""
-    from ._metrics_impl import _label_map
-    from ._buffer import materialize_f32_lists
-    shape = materialize_f32_lists(y_score, "y_score")[0].shape
-    true, kind, present = _targets(y_true, "roc_auc_score")
-    multiclass = len(present) > 2 or (len(shape) == 2 and shape[1] > 2)
-    if max_fpr is not None and (is_bool(max_fpr) or not isinstance(max_fpr, numbers.Real)
-                                or not 0 < max_fpr <= 1):
-        raise ValueError(f"Expected max_fpr in range (0, 1], got: {max_fpr!r}")
-    if not multiclass:
-        if average not in (None, "micro", "macro", "samples", "weighted"):
-            raise ValueError("average has to be one of (None, 'micro', 'macro', 'weighted', 'samples')")
-        if len(present) != 2:
-            _undefined_warning("Only one class is present in y_true. ROC AUC score is not defined in that case.")
-            return float("nan")
-        n = len(true)
-        s = _scores(y_score, n, "roc_auc_score", ndim=1)
-        w = _weights(sample_weight, n, "roc_auc_score")
-        flags = _label_map(true, lambda v: int(v == present[1]))
-        mf = None if max_fpr is None or max_fpr == 1 else max_fpr
-        cur = _curves(s, flags, w, n, 1, numeric_mode, fold="auc", max_fpr=mf)[0]
-        return _auc_of(cur, mf)
-    if max_fpr is not None and max_fpr != 1:
-        raise ValueError("Partial AUC computation not available in multiclass setting, 'max_fpr' must be "
-                         f"set to `None`, received `max_fpr={max_fpr}` instead")
-    if multi_class not in ("ovo", "ovr"):
-        raise ValueError("multi_class must be in ('ovo', 'ovr')")
-    options = ("micro", "macro", "weighted", None) if multi_class == "ovr" else ("macro", "weighted", None)
-    if average not in options:
-        raise ValueError(f"average must be one of {options} for multiclass problems")
-    if average is None and multi_class == "ovo":
-        raise NotImplementedError("average=None is not implemented for multi_class='ovo'.")
-    if multi_class == "ovo" and sample_weight is not None:
-        raise ValueError("sample_weight is not supported for multiclass one-vs-one ROC AUC, "
-                         "'sample_weight' must be None in this case.")
-    s_check = _scores(y_score, len(true), "roc_auc_score", ndim=2)
-    k = s_check.shape[1]
-    # the multiclass row-sum check runs in the curve program that follows
-    # (`rank_epi` ROW_SUM; the host row_sum_range walk is gone)
-    if multi_class == "ovr":
-        tail = _OvrTail("auc", True, average, numeric_mode)
-        curves, tail, s, codes, classes, w = _ovr(y_true, y_score, sample_weight, labels, "roc_auc_score",
-                                                  numeric_mode, fold="auc", tail=tail)
-        if not tail.rows_ok():
-            raise ValueError(_ROWS_MSG)
-        if average == "micro":
-            n = len(codes)
-            flags, wm = _micro_inputs(codes, w, n, k, numeric_mode)
-            cur = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, fold="auc")[0]
-            return _auc_of(cur, None)
-        return tail.result(curves)
-    # one-vs-one (scikit-learn _average_multiclass_ovo_score)
-    from ._metrics_impl import _selected_labels
-    classes = present if labels is None else _selected_labels(labels, kind, present)
-    if len(classes) != k:
-        raise ValueError("Number of classes in y_true not equal to the number of columns in 'y_score'")
-    index = {c: i for i, c in enumerate(classes)}  # glue: class index table
-    return _ovo_native(true, index, s_check, len(true), k, numeric_mode, average)
 
 
 def average_precision_score(y_true, y_score, *, average="macro", pos_label=1, sample_weight=None,
@@ -1832,47 +985,6 @@ def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=
 
 #: rank_epi kinds (x_metrics/rank_epi.mojo)
 _RANK_MEAN, _RANK_NDCG_ROW, _RANK_D2_LOG, _RANK_D2_BRIER, _RANK_DCG_DISC = 0, 1, 2, 3, 4
-
-
-def _f64_words(prog, v):
-    """A binary64 scalar as two Int32 arena words (low first), an input."""
-    bw = array.array("i")
-    bw.frombytes(array.array("d", [float(v)]).tobytes())
-    return prog.put_i32(list(bw))
-
-
-def _row_fold(prog, S, cols, Y, n, kind, w, *, K=0, Dt=_NONE):
-    """The row metric and its folds: (TOT, SW, W) offsets: the Float32
-    PairSum of the n row values (weighted when w), the weight total (None
-    unweighted) and the weights' slot."""
-    out = prog.scratch(n)
-    prog.stage("row_metric", n, S, cols, Y, out, _ROW[kind], K, Dt)
-    zero = prog.scratch(n)
-    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
-    W = _NONE if w is None else prog.put(w)
-    tot = _group(prog, zero, n, 1, values=out, weights=W)[1]
-    sw = _group(prog, zero, n, 1, weights=W)[1] if w is not None else None
-    return tot, sw, W
-
-
-def _row_mean(S, cols, Y, n, kind, w, numeric_mode, *, K=0, Dt=_NONE, prog=None, normalize=True, half=False,
-              after=()):
-    """The (weighted) mean of a row metric, binary64: the folds and the
-    division (`rank_epi` MEAN) in one program. `after`: checks of the
-    program's flag words, each a function of the program that raises."""
-    prog = prog or _Prog()
-    tot, sw, _ = _row_fold(prog, S, cols, Y, n, kind, w, K=K, Dt=Dt)
-    res = prog.alloc(2)
-    prog.stage("rank_epi", 1, _RANK_MEAN, tot, n, _NONE if sw is None else sw, int(bool(normalize)),
-               int(bool(half)), res)
-    _run(prog, numeric_mode)
-    for check in after:  # glue: the program's flag checks
-        check(prog)
-    return prog.words(res, 2, "d")[0]
-
-
-def _proba_after(flags, caller):
-    return lambda prog: _proba_check(prog, flags, caller)
 
 
 def _proba(y_true, y_proba, labels, pos_label, caller):
@@ -1918,20 +1030,6 @@ def _proba(y_true, y_proba, labels, pos_label, caller):
     # the values' check (finite, in [0, 1], rows summing to one) and the
     # binary [1 - p, p] layout run in the caller's program (`_put_proba`)
     return codes, a, k, binary
-
-
-def log_loss_options(y_true, y_pred, normalize, sample_weight, labels, numeric_mode, caller="log_loss"):
-    """log_loss with sample_weight (lane/metrics), and without it since lane
-    cpu2-l7-metrics: the probabilities' check, the clipped `-log p_true` per
-    row, its (weighted) PairSum and the division in one device program."""
-    codes, a, k, binary = _proba(y_true, y_pred, labels, None, caller)
-    n = len(codes)
-    w = _weights(sample_weight, n, caller)
-    prog = _Prog()
-    S, flags = _put_proba(prog, a, n, k, binary)
-    Y = prog.put_i32(codes)
-    return float(_row_mean(S, k, Y, n, "logloss", w, numeric_mode, prog=prog, normalize=normalize,
-                           after=(_proba_after(flags, caller),)))
 
 
 def brier_score_loss(y_true, y_proba, *, sample_weight=None, pos_label=None, labels=None,
@@ -2086,97 +1184,6 @@ def _mix64(x):
     return x ^ (x >> 31)
 
 
-class CounterRng:
-    """The splitters' random source: draw k of seed s is a device
-    permutation keyed by `_mix64(s * GOLDEN + k)`. An int seed always
-    gives the same sequence of draws; numpy RandomState / Generator objects
-    are refused by name (their stream is not ours to reproduce)."""
-
-    def __init__(self, random_state):
-        import os
-        if random_state is None:
-            random_state = int.from_bytes(os.urandom(8), "little")
-        if is_bool(random_state) or not isinstance(random_state, numbers.Integral) or random_state < 0:
-            raise ValueError("mojolearn model_selection: random_state must be None or a non-negative int; "
-                             "numpy RandomState / Generator objects are NOT IMPLEMENTED (their stream "
-                             "is numpy's, x_metrics/split.mojo DEVIATION 6108)")
-        self.seed = int(random_state) & _M64
-        self.draws = 0
-        self.binding = _BINDING
-
-    def _salt(self):
-        salt = _mix64(self.seed * 0x9E3779B97F4A7C15 + self.draws + 1)
-        self.draws += 1
-        return salt
-
-    def permute_stage(self, prog, n):
-        """The next draw as a `permute` stage of `prog`; returns its slot."""
-        salt = self._salt()
-        out = prog.alloc(max(n, 1))
-        lo = salt & 0xFFFFFFFF
-        hi = salt >> 32
-        prog.stage("permute", 1, n, out, lo - (1 << 32) if lo >= 1 << 31 else lo,
-                   hi - (1 << 32) if hi >= 1 << 31 else hi)
-        return out
-
-    def approximate_modes(self, counts, n_train, n_test, numeric_mode=None):
-        """StratifiedShuffleSplit's per-class train and test draw counts
-        (lane py-runtime-b; it was Python's `model_selection._approximate_mode`
-        twice): scikit-learn's `_approximate_mode` in exact integers, the
-        train counts n_i over `counts`, then the test counts over counts -
-        n_i, each in one `approx_mode` stage (x_metrics/split.mojo) of one
-        device program. A tie group the remainders cut is broken by the
-        next counter draw, so each call consumes the draws the stages report
-        (0 or 1 each), the same draws in the same order as before. Returns
-        (n_i, t_i) as lists of ints."""
-        k = len(counts)
-        prog = _Prog()
-        C = prog.put_i32(counts)
-        out = prog.want(prog.alloc(2 * k), 2 * k)
-        used = prog.want(prog.alloc(2), 2)
-        words = []
-        for v in (self.seed & 0xFFFFFFFF, self.seed >> 32, self.draws & 0xFFFFFFFF, (self.draws >> 32) & 0xFFFFFFFF):  # glue: four parameter words
-            words.append(v - (1 << 32) if v >= 1 << 31 else v)
-        prog.stage("approx_mode", k, k, C, _NONE, n_train, out, _NONE, used, *words)
-        prog.stage("approx_mode", k, k, C, out, n_test, out + k, used, used + 1, *words)
-        _run(prog, numeric_mode)
-        drew = prog.ints(used, 2)
-        self.draws += drew[0] + drew[1]
-        both = prog.ints(out, 2 * k)
-        return both[:k], both[k:]
-
-    def permutations(self, sizes, numeric_mode=None):
-        """One permutation per size, drawn in order, in one device program."""
-        prog = _Prog()
-        outs = []
-        for n in sizes:  # glue: one output slot per requested draw
-            outs.append((prog.want(self.permute_stage(prog, n), n), n))
-        if not outs:
-            return []
-        _run(prog, numeric_mode)
-        return [prog.ints(o, n) for o, n in outs]  # glue: reads each requested draw's words
-
-    def permutation(self, n, numeric_mode=None):
-        return self.permutations([n], numeric_mode)[0]
-
-    def permutation_rows(self, sizes, numeric_mode=None):
-        """`permutations` (the same draws) as array('q') rows: the device
-        widens each to Int64 words (`rows64`), so no Python int is made
-        per row (lane metrics-apple2)."""
-        prog = _Prog()
-        outs = []
-        for n in sizes:  # glue: one output slot per requested draw
-            o = self.permute_stage(prog, n)
-            w = prog.want(prog.alloc(2 * n), 2 * n)
-            if n:
-                prog.stage("rows64", n, o, w)
-            outs.append((w, n))
-        if not outs:
-            return []
-        _run(prog, numeric_mode)
-        return [prog.words(w, 2 * n, "q") for w, n in outs]  # glue: reads each requested draw's words
-
-
 #: the largest K-fold row table (2 words per row per fold) `fold_rows` builds
 _FOLD_ROWS_BOUND = 1 << 27
 
@@ -2219,46 +1226,6 @@ def _fold_rows_run(prog, n, k, code, order, numeric_mode):
         train = prog.words(base + 2 * c, 2 * (n - c), "q")
         res.append((Array._owned(train, (n - c,), "<i8", "C"), Array._owned(test, (c,), "<i8", "C")))
     return res
-
-
-def stratified_fold_rows(enc, counts, alloc, k, rng, numeric_mode=None):
-    """StratifiedKFold's [(train, test)] in ONE device program (lane
-    metrics-apple2): a stable group_sort of the first-seen class codes
-    `enc`, each class's permutation (the rng's next draws, in class order,
-    the draws `_fold_of_rows` makes) laid out at PB + the class's offset,
-    `strat_codes` (each row's fold, x_metrics/split.mojo), then `fold_rows`.
-    None when the table would exceed `_FOLD_ROWS_BOUND` words."""
-    n, m = len(enc), len(counts)
-    if n < 2 or k < 1 or 2 * n * k > _FOLD_ROWS_BOUND:
-        return None
-    prog = _Prog()
-    # an int32 Array of codes goes in as it is (lane metrics-apple3)
-    ENC = prog.put_i32(enc if isinstance(enc, Array) and enc.dtype == "<i4" and enc.ndim == 1
-                       else Array._owned(array.array("i", enc), (n,), "<i4", "C"))
-    OFF = prog.alloc(m + 1)
-    ORD = prog.scratch(n)
-    prog.stage("group_sort", 1, ENC, n, m, OFF, ORD)
-    PB = _NONE
-    if rng is not None:
-        at = 0
-        for c in range(m):  # glue: one permutation stage per class
-            o = rng.permute_stage(prog, counts[c])
-            if c == 0:
-                PB = o
-            if o != PB + at:
-                raise AssertionError("stratified_fold_rows: the class permutations are not contiguous")
-            at += counts[c]
-    cum = []
-    for c in range(m):  # glue: fold by class offsets for the device code stage (m-sized: class count)
-        acc = 0
-        cum.append(0)
-        for f in range(k):  # glue: fold by class offsets for the device code stage (k-sized: fold count)
-            acc += alloc[f][c]
-            cum.append(acc)
-    CUM = prog.put_i32(Array._owned(array.array("i", cum), (len(cum),), "<i4", "C"))
-    code = prog.scratch(n)
-    prog.stage("strat_codes", n, ENC, ORD, OFF, PB, CUM, k, code)
-    return _fold_rows_run(prog, n, k, code, _NONE, numeric_mode)
 
 
 def regression_report(y_true, y_pred, *, sample_weight=None,
