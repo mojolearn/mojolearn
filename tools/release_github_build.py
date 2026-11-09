@@ -1126,6 +1126,32 @@ def write_run_id(gha, run, attached=False):
         recorded_at=dt.datetime.now(dt.timezone.utc).isoformat()), indent=1) + "\n")
 
 
+DEFINE_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(=[A-Za-z0-9_.+-]*)?")
+
+
+def normalize_defines(text):
+    """The MOJOLEARN_BUILD_DEFINES spelling (NAME=V,NAME2; bindings/build_defines.sh) of TEXT, given either way:
+    `NAME=V,NAME2` or `-D NAME=V -D NAME2`. Sorted by name, so one define set has one spelling (one candidate
+    label, one cache key). Empty for none; a malformed entry or a name given twice is refused."""
+    text = (text or "").strip()
+    if not text:
+        return ""
+    if text.startswith("-D"):
+        parts = text.split()
+        if len(parts) % 2 or any(flag != "-D" for flag in parts[0::2]):
+            raise SystemExit(f"--defines: write '-D NAME=V -D NAME2', not {text!r}")
+        entries = parts[1::2]
+    else:
+        entries = [e for e in text.split(",") if e]
+    bad = [e for e in entries if not DEFINE_RE.fullmatch(e)]
+    if bad:
+        raise SystemExit(f"--defines: not NAME or NAME=VALUE: {', '.join(bad)}")
+    names = [e.split("=", 1)[0] for e in entries]
+    if len(set(names)) != len(names):
+        raise SystemExit(f"--defines: a name is given twice: {text!r}")
+    return ",".join(sorted(entries, key=lambda e: e.split("=", 1)[0]))
+
+
 def cmd_run(a):
     if not re.fullmatch(r"[0-9a-f]{40}", a.commit):
         raise SystemExit("--commit must be a full 40-hex SHA")
@@ -1140,6 +1166,9 @@ def cmd_run(a):
     if a.host and not a.arch and not a.host_donor and not a.run_id:
         raise SystemExit("--host without --arch needs --host-donor DIR (a retained <leg>/release-build/build)")
     modes = run_modes(a.modes)
+    defines = normalize_defines(a.defines)
+    if defines and a.compile_groups:
+        raise SystemExit("--defines builds a candidate set; it takes no --compile-groups")
     vendor = ARCHS.get(a.arch)
     name = f"{vendor}-{a.arch}" if a.arch else None
     out = Path(a.out).resolve()
@@ -1190,12 +1219,14 @@ def cmd_run(a):
            "-f", f"shards={a.shards}", "-f", f"jobs={a.jobs}", "-f", f"tag={tag}", "-f", f"map_url={map_url}",
            "-f", f"modes={' '.join(modes)}", "-f", f"host_donor_url={donor_url}",
            "-f", f"host_donor_sha256={donor_sha}", "-f", f"compile_groups={a.compile_groups}",
-           "-f", f"reuse_host_groups={'true' if a.reuse_host_groups else 'false'}")
+           "-f", f"reuse_host_groups={'true' if a.reuse_host_groups else 'false'}",
+           # only when set: a workflow ref without the `defines` input still takes every release dispatch
+           *(["-f", f"defines={defines}"] if defines else []))
         (gha / "dispatch.json").write_text(json.dumps(dict(
             tag=tag, branch=branch, tooling_commit=head, source_commit=a.commit, arch=a.arch, host=a.host,
             modes=list(modes), shards=a.shards, jobs=a.jobs, bincache=bool(map_url), host_donor=a.host_donor or None,
             host_donor_sha256=donor_sha or None, r2_objects=cleanup, compile_groups=a.compile_groups,
-            reuse_host_groups=a.reuse_host_groups,
+            reuse_host_groups=a.reuse_host_groups, defines=defines or None,
             dispatched_at=dt.datetime.now(dt.timezone.utc).isoformat()), indent=1) + "\n")
         run = find_run(tag, branch, wid)
         say(f"dispatched {run['url']}")
@@ -1339,6 +1370,8 @@ def main(argv=None):
     p.add_argument("--allow-cold-amd", action="store_true")
     p.add_argument("--compile-groups", default="", help="retain only selected compilation archives; no assembly")
     p.add_argument("--reuse-host-groups", action="store_true", help="host producer compiles only changed groups against donor")
+    p.add_argument("--defines", default="", help="candidate build defines (NAME=V,NAME2 or '-D NAME=V -D NAME2'): "
+                   "the workflow's `defines`, MOJOLEARN_BUILD_DEFINES in every compile (tools/release.py candidate)")
     p.add_argument("--run-id", type=int, default=0, help="attach to this run instead of dispatching")
     p.add_argument("--timeout-min", type=int, default=420)
     p.add_argument("--poll", type=int, default=60)
