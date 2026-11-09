@@ -22,7 +22,7 @@ from cluster.host.host_cells import host_cells
 from decomposition.host.linalg_public import eigh_ascending
 from decomposition.host.pca_oracle import host_sign_flip
 from x_decomp.cells import F32Ptr
-from x_decomp.eigh_tridiag_cells import td_bisect_item, td_gap_item, td_vec_item
+from x_decomp.eigh_tridiag_host import host_td_solve
 from x_decomp.rr_solve import host_eigh_rr_sorted
 
 
@@ -95,36 +95,8 @@ def eigh_op_tridiag_host(d: F32Ptr, e: F32Ptr, w: F32Ptr, z: F32Ptr, n: Int) rai
     var wlo = _lp(wll)
     var wt = _lp(wtl)
 
-    def bis(k: Int) {imm dd, imm ee, imm info, imm wh, imm wlo, imm n}:
-        td_bisect_item(dd, ee, info, wh, wlo, n, k)
-
-    # each index writes its own wh / wl cells; info[0] and info[2] are read
-    # only after the join (x_decomp/eigh_tridiag_host.mojo)
-    host_cells(bis, n, 64 * 40 * n)
-
-    def gap(k: Int) {imm wh, imm wlo, imm info, imm wt, imm n}:
-        td_gap_item(wh, wlo, info, wt, n, k)
-
-    host_cells(gap, n, 16)
     var zl = List[Float32](length=n * n, fill=Float32(0.0))
-    var dphl = List[Float32](length=n * n, fill=Float32(0.0))
-    var dpll = List[Float32](length=n * n, fill=Float32(0.0))
-    var dmhl = List[Float32](length=n * n, fill=Float32(0.0))
-    var dmll = List[Float32](length=n * n, fill=Float32(0.0))
-    var zp = _lp(zl)
-    var dph = _lp(dphl)
-    var dpl = _lp(dpll)
-    var dmh = _lp(dmhl)
-    var dml = _lp(dmll)
-
-    def vec(k: Int) {imm dd, imm ee, imm info, imm wh, imm wlo, imm dph, imm dpl, imm dmh, imm dml, imm zp, imm n}:
-        td_vec_item(dd, ee, info, wh, wlo, dph, dpl, dmh, dml, zp, n, k)
-
-    host_cells(vec, n, 120 * n)
-    _ = dphl^
-    _ = dpll^
-    _ = dmhl^
-    _ = dmll^
+    host_td_solve(dd, ee, info, wh, wlo, wt, _lp(zl), n)
     if infol[2] == Float32(0.0):
         host_sign_flip(zl, n)
         var got = eigh_ascending(wtl, zl, n, True, 0)

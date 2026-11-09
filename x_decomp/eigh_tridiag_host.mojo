@@ -300,37 +300,9 @@ def host_eigh_td(mut m: List[Float32], n: Int, w: F32Ptr, v: F32Ptr) raises -> B
     var wlo = _lp(wll)
     var wt = _lp(wtl)
 
-    def bis(k: Int) {imm dd, imm ee, imm info, imm wh, imm wlo, imm n}:
-        td_bisect_item(dd, ee, info, wh, wlo, n, k)
-
-    # every index writes only its own wh / wl cells; info[0] (index 0) and
-    # info[2] (the same 1.0 from any index) are read only after the join
-    host_cells(bis, n, 64 * 40 * n)
-
-    def gap(k: Int) {imm wh, imm wlo, imm info, imm wt, imm n}:
-        td_gap_item(wh, wlo, info, wt, n, k)
-
-    host_cells(gap, n, 16)
-    # 3. eigenvectors of T: td_vec_kernel (column k of z per index)
+    # 3. eigenvectors of T (the device's `td_solve_enqueue`)
     var zl = List[Float32](length=n * n, fill=Float32(0.0))
-    var dphl = List[Float32](length=n * n, fill=Float32(0.0))
-    var dpll = List[Float32](length=n * n, fill=Float32(0.0))
-    var dmhl = List[Float32](length=n * n, fill=Float32(0.0))
-    var dmll = List[Float32](length=n * n, fill=Float32(0.0))
-    var z = _lp(zl)
-    var dph = _lp(dphl)
-    var dpl = _lp(dpll)
-    var dmh = _lp(dmhl)
-    var dml = _lp(dmll)
-
-    def vec(k: Int) {imm dd, imm ee, imm info, imm wh, imm wlo, imm dph, imm dpl, imm dmh, imm dml, imm z, imm n}:
-        td_vec_item(dd, ee, info, wh, wlo, dph, dpl, dmh, dml, z, n, k)
-
-    host_cells(vec, n, 120 * n)
-    _ = dphl^
-    _ = dpll^
-    _ = dmhl^
-    _ = dmll^
+    host_td_solve(dd, ee, info, wh, wlo, wt, _lp(zl), n)
     if infol[2] != Float32(0.0):
         _ = vl^
         _ = wl^
