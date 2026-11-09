@@ -427,6 +427,15 @@ in the tables after the sections.
 | [`MOJOLEARN_MCD_FAST_G1_GRAM`](#mojolearn_mcd_fast_g1_gram) | Decomp (+ MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT, MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM) | NEUTRAL | 2026-11-08 | [MOJOLEARN_MCD_FAST_G1_GRAM.patch](../experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch) |
 | [`MOJOLEARN_MCD_ORDERED_COV`](#mojolearn_mcd_ordered_cov) | Decomp (+ x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) | NEUTRAL | 2026-11-08 | [MOJOLEARN_MCD_ORDERED_COV.patch](../experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch) |
 | [`MOJOLEARN_EIGH_FAST_PANEL_DF`](#mojolearn_eigh_fast_panel_df) | Decomp (+ MOJOLEARN_EIGH_FAST_PANEL_DF_OFF) | DROPPED-slower | 2026-11-08 | [MOJOLEARN_EIGH_FAST_PANEL_DF.patch](../experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch) |
+| [`pca_input_snapshot` (admission helper)](#admission-helpers-of-the-decomposition-preprocessing-and-metrics-doors-2026-11-08) | PCA admission (X cast + finite) | removed (superseded: `decomp_admit` / `admit_x_unrecorded`) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`decomp_copied` (admission helper)](#admission-helpers-of-the-decomposition-preprocessing-and-metrics-doors-2026-11-08) | TruncatedSVD admission (input_copied_ flag) | removed (superseded: `decomp_input_copied`, read off the admission) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`pca_exact_fit`, `pca_input`, `pca_keep_fit`, `pca_prefix`, `pca_solver_checks`, `PCADimensions`](#admission-helpers-of-the-decomposition-preprocessing-and-metrics-doors-2026-11-08) | PCA (pre-owner exact door) | removed (dead: zero callers) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`mcls_read_i64` / `mcls_narrow_i32` (admission helpers)](#admission-helpers-of-the-decomposition-preprocessing-and-metrics-doors-2026-11-08) | Metrics label admission | removed (merged: `admit_ids`, core/admitted_ids.mojo) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`ann_candidates_i32` (core/neighbors_ann_impl.mojo)](#admission-helpers-of-the-decomposition-preprocessing-and-metrics-doors-2026-11-08) | ANN candidate id admission | removed (merged: `admitted_ids_i32`) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`randomized_svd` per-step DecompKit sequence (`_flip_u`, `_same_mode`, `DecompKit.orth` / `order_small` / `grown`)](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (public randomized_svd) | REFACTORED (one driver, `x_decomp_randomized_svd`) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`MOJOLEARN_RSVD_FAST_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, FAST + Apple) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`MOJOLEARN_IDN_RSVD_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, IDENTICAL) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`MOJOLEARN_RSVD_FAST_DEVSCAN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd finiteness scan, FAST + Apple) | removed (KEPT default, superseded: parallel host scan of the one admission path) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3981,3 +3990,57 @@ release (the door is on every path) and the classical/trees/family test suites.
   `byte_lm_parallel_*` entries and no longer applies), and earlier in this batch `tools/kernel_pca_gpu_trial.py`,
   `tools/mcd_g1_quality.py`, `tools/mcd_ordered_quality.py`, `tools/mcd_ordered_pair.py`, `tools/eigh_panel_df_pair.py`
   with the code they drove.
+
+## Admission helpers of the decomposition, preprocessing and metrics doors (2026-11-08)
+
+Lane `a3-admit-decomp-prep-metrics` (A3 of `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 3.3), branch
+`lane/a3-admit-decomp-prep-metrics` from `origin/integ/pre-0867` `f7d10d2b09`. Not experiment defines: admission helpers
+that a door kept beside the one admission path, and a dead door. No A/B: the refusal text of PCA's own snapshot was the
+shared `admit_x` text with `est` = PCA, the id reads write the same words, and nothing reached the dead door.
+
+- `pca_input_snapshot` (`providers/python/pca_input_pyapi.mojo`): PCA fit and transform read `decomp_admit`
+  (`bindings/decomp_inputs.mojo`, `admit_x_unrecorded` after an exact SciPy sparse X is densified). Its cast destination
+  was a zero-filled `sequential_array`; the shared path casts into uninitialised storage (REGRESSIONS F3).
+- `decomp_copied`: TruncatedSVD's `input_copied_` flag took a second `classical_view` / memoryview of X; it is now
+  `decomp_input_copied(x)`, read off the admitted X. `decomp_input` became a thin caller of `decomp_admit`.
+- `pca_exact_fit`, `pca_input`, `pca_keep_fit`, `pca_prefix`, `pca_solver_checks`, `PCADimensions`
+  (`bindings/pca_exact.mojo`): the pre-owner PCA exact door; `bindings/pca_fit_native.mojo` owns fit, nothing called it.
+- `mcls_read_i64`, `mcls_narrow_i32` (`core/mcls_impl.mojo`) and `ann_candidates_i32` (`core/neighbors_ann_impl.mojo`,
+  file deleted): serial byte walks over integer labels and candidate ids. Now `admit_ids` (`core/admitted_ids.mojo`:
+  `admitted_ids_i64`, `admitted_ids_i32`, `admitted_narrow_i32`), one typed load per item, row tasks across the host's
+  cores, the verdict an AND over tasks. `metric_i32_vector` reads and narrows in one pass (it went through a zero-filled
+  int64 store first); ANN's check and its narrowing copy are one pass.
+- Kept: `decomp_input_snapshot` (PLS is its only caller; PLS belongs to lane A1), `LinAdmission` / `lin_admitted_c` /
+  `lin_borrow_array` / `lin_convert` (the multi-dtype linalg/metrics admission: `admit_x` is float32-only; `lin_convert`
+  now runs in element tasks across cores), `metric_input_snapshot` (a dtype-preserving freeze of every metric argument
+  before dispatch, not a float32 admission), `TensorView` (the optimizer door's, neural lanes).
+
+Restore: `git apply -3 experiments/removed/A3_ADMISSION_HELPERS.patch` (the reverse of the lane's `.mojo` / `.py` changes
+from `f7d10d2b09`; it restores every helper, switch and caller together). Run owed: the release identity record of the
+decomposition, metrics, prep, ANN and randomized_svd lanes.
+
+## randomized_svd route switches superseded by its one driver (2026-11-08)
+
+Same lane. The public `randomized_svd` (`bindings/linalg_decomp_native.mojo`) sequenced `_rsvd_core` and `_flip_u`
+through the binding decomp kit: one py_call into an x_decomp entry per step (about 40 for n_iter 4), with `_flip_u`
+moving U and Vt to the process-default mode's kit when the selected mode differed. It is now ONE call,
+`x_decomp_randomized_svd` (`x_decomp/randomized_svd_owner.mojo`, door `providers/python/x_decomp_rsvd_owner_pyapi.mojo`,
+device and host bindings): `pca_randomized_core` on `RKit` (the kit PCA and TruncatedSVD randomized already run on) with
+the orientation given, then `svd_flip(u_based_decision=True)` in the selected mode. The switches below only chose how
+the old sequence moved M; the driver always reads M in place and uploads it once, so no route is left to select.
+
+- `MOJOLEARN_RSVD_FAST_DIRECT_IN` (FAST + Apple default, M3 `e9d72edb5`: istella 517.3 -> 501.3 ms) and
+  `MOJOLEARN_IDN_RSVD_DIRECT_IN` (IDENTICAL default, grid `g50ebe26a5`: the `_OFF` arm 1.931x slower combined): M from the
+  caller's buffer straight into a pooled device matrix. Deleted with their `x_decomp_w4_flags` entry (no other bit was
+  left), its door `w4_flags_py` and the uncalled Python `w4_flags` reader; `x_decomp/w4_fast.mojo` and
+  `providers/python/x_decomp_w4_fast_pyapi.mojo` keep their tombstones only. `grid_controls/fg-pca.json`
+  `rsvd_idn_direct_in` moved to `removed`.
+- `MOJOLEARN_RSVD_FAST_DEVSCAN` (FAST + Apple default, rab15: istella 490.1 -> 435.1 ms with ORTH_WS): the finiteness
+  refusal on the device copy instead of the serial host scan. The serial scan it beat is gone (the one admission path's
+  parallel host scan); deleted with `dev_upload_scan_run`, `dev_upload_scan_py`, `x_decomp_dev_upload_scan` and bit 1 of
+  `x_decomp_s_flags`.
+- Also deleted: `DecompKit.orth`, `order_small`, `grown` and `_same_mode` (only the old sequence used them).
+- Refusal of the `_OFF` names in `core/experiment_guards_decomposition.mojo`. Bits: randomized_svd's may change (the sign
+  flip now runs in the selected mode's binding; every step follows RKit's residency), the same on NVIDIA, AMD and Apple
+  within the version. RUN OWED: the randomized-svd row on NVIDIA and AMD (speed), the randomized_svd identity lane.
+- Code recoverable at `f7d10d2b09`; patch `experiments/removed/A3_ADMISSION_HELPERS.patch`.
