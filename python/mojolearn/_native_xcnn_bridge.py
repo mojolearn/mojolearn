@@ -70,7 +70,6 @@ _NAMES = (
     "x_cnn_res_alloc_nofill",
     "x_cnn_res_download",
     "x_cnn_res_free",
-    "x_cnn_res_gather",
     "x_cnn_res_upload",
     "x_cnn_sgd_r",
     "x_cnn_softmax_xent_r",

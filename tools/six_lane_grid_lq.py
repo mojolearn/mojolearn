@@ -45,7 +45,10 @@ ROOT = TOOLS.parent
 sys.path.insert(0, str(TOOLS))
 import six_lane_timing as T  # noqa: E402  (reuse: PHASES, judge, _spread, VOTERS)
 import six_lane_grid_bb as BBW  # noqa: E402  (pip_arg: what the box runner installs for a line's races)
+from removed_defines import removed_defines, removed_in  # noqa: E402  (the guard modules' refused defines)
 
+#: the defines the build refuses (removed or promoted); an old plan's pack naming one is refused, never queued
+REFUSED_DEFINES = removed_defines(ROOT)
 BOX = {'nvidia': 'nv', 'amd': 'amd'}
 VENDOR_OF_BOX = {v: k for k, v in BOX.items()}
 PAIR_SECONDS = {'nvidia': 38.0, 'amd': 24.0}  # median scored-pair seconds (tools/six_lane_grid.py PAIR_SECONDS)
@@ -311,6 +314,13 @@ def plan_jobs(plan, matrix, vendor, lanes, only_lanes=None, phase=None, board=No
                 continue
             lane, ds, note = r['lane'], r['dataset'], r['note']
             if only_lanes and lane not in only_lanes:
+                continue
+            # an old plan's pack may name a define the build now refuses (tools/removed_defines.py): refused here,
+            # never queued into the guard's refusal (lane m1-followups-misc)
+            gone = removed_in(packs[g['pack']]['defines'], REFUSED_DEFINES)
+            if gone:
+                refused.append(dict(configuration=cid, workload_id=wid, algorithm=algo,
+                                    reason='the pack names removed defines: ' + ', '.join(gone)))
                 continue
             job = jobs.setdefault(g['pack'], dict(pack=g['pack'], regime_rank=REGIME_RANK.get(regime, 9),
                                                   priority=c.get('priority') or 9, configs=set(), cells=[],

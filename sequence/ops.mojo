@@ -229,8 +229,11 @@ comptime OP_MLP_LB_PART = 1600
 comptime OP_MLP_LB_FOLD = 1601
 comptime OP_MLP_LB_EPOCH_PART = 1602
 comptime OP_MLP_LB_EPOCH_FOLD = 1603
+#: lane m1-followups-misc: the small MLP program's device non-finite refusal
+#: (autograd/small_mlp_program.mojo): p1[i0] = 1 when p0[t] is NaN or infinite.
+comptime OP_MLP_NONFINITE = 1604
 comptime OP_MLP_LB_FIRST = OP_MLP_LB_PART
-comptime OP_MLP_LB_LAST = OP_MLP_LB_EPOCH_FOLD
+comptime OP_MLP_LB_LAST = OP_MLP_NONFINITE
 #: lane cpu4-python: p0[t] = t (float32, exact below 2^24): the unshuffled
 #: epoch order of the RNN fit, built on the executor.
 comptime OP_SEQ_IOTA = 95
@@ -800,15 +803,26 @@ def op_gather_rows(t: Int, a: Args):
 
 
 def op_mse(t: Int, a: Args):
-    """grad = (yhat - y) * f0, sq = (yhat - y)^2."""
+    """grad = (yhat - y) * f0 (the squared-error seed; the loss value is
+    autograd/losses.mojo loss_value_into's). Lane m1-followups-misc deleted
+    its unread p3 store of (yhat - y)^2."""
     var d = sub(ld(a.p0, t), ld(a.p1, t))
     st(a.p2, t, mul(d, a.f0))
-    st(a.p3, t, mul(d, d))
+
+
+def op_mlp_nonfinite(t: Int, a: Args):
+    """p1[i0] = 1.0 when p0[t] is NaN or infinite (p1[i0] filled with 0
+    first). Every writer stores the same word, so the flag does not depend
+    on the order the threads run in."""
+    var v = a.p0.unsafe_load(t)
+    if v != v or v - v != v - v:
+        a.p1.unsafe_store(a.i0, Float32(1))
 
 
 def op_ce(t: Int, a: Args):
     """Softmax cross-entropy of row t: p0 logits [B, C], p1 labels [B] (as
-    float), p2 grad [B, C] = (softmax - onehot) * f0, p3 row loss [B].
+    float), p2 grad [B, C] = (softmax - onehot) * f0 (lane m1-followups-misc
+    deleted the unread p3 row-loss store; the loss value is loss_value_into's).
     The max is subtracted first, so no exp overflows and the log reads a sum
     >= 1; the max is the value, so a tie does not matter."""
     var C = a.i1
@@ -822,13 +836,10 @@ def op_ce(t: Int, a: Args):
     var s = Float32(0.0)
     comptime if SEQ_SOFTMAX_ONE_EXP:
         # each exp once: parked in the grad row, read back for the division
-        var zy = ld(a.p0, base + y)
         for c in range(C):
             var e = ftz(identical_exp(sub(ld(a.p0, base + c), m)))
             st(a.p2, base + c, e)
             s = add(s, e)
-        var ls = ftz(identical_log(s))
-        st(a.p3, t, sub(ls, sub(zy, m)))
         for c in range(C):
             var p = ftz(identical_div(ld(a.p2, base + c), s))
             if c == y:
@@ -837,8 +848,6 @@ def op_ce(t: Int, a: Args):
         return
     for c in range(C):
         s = add(s, ftz(identical_exp(sub(ld(a.p0, base + c), m))))
-    var ls = ftz(identical_log(s))
-    st(a.p3, t, sub(ls, sub(ld(a.p0, base + y), m)))
     for c in range(C):
         var p = ftz(identical_div(ftz(identical_exp(sub(ld(a.p0, base + c), m))), s))
         if c == y:

@@ -83,7 +83,7 @@ from providers.python.autograd_import_lower_pyapi import onnx_import_py, onnx_im
 from providers.python.autograd_model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
 from providers.python.autograd_model_checkpoint_pyapi import model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py
 from providers.python.sequence_pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
-from providers.python.sequence_pyapi import moe_backward_py, moe_backward_run
+from providers.python.sequence_pyapi import moe_backward_py, moe_backward_resident
 from providers.python.sequence_opt_resident_pyapi import adafactor_resident_step_dev_py, lamb_resident_step_dev_py, opt_resident_step_dev_py
 from providers.python.sequence_seq_tensor_pyapi import (
     seq_tensor_alloc_py, seq_tensor_copy_py, seq_tensor_download_py, seq_tensor_free_py, seq_tensor_upload_py,
@@ -746,23 +746,14 @@ def moe_forward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonO
 
 
 def moe_backward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """`moe_backward` (providers/python/sequence_pyapi.mojo moe_backward_py): ip = [T, D, F,
+    """`moe_backward` (autograd/route_ops.mojo moe_backward_addrs, the tape step): ip = [T, D, F,
     E, k, renormalise]; a seventh entry > 0 is a `moe_weights_put` handle
-    whose device copies are read instead of addrs[1..3]."""
-    if len(ip) == 7 and ival(ip, 6) > 0:
-        if len(addrs) != 13:
-            raise Error("moe_backward: requires 13 addresses and 7 integer parameters")
-        var T = ival(ip, 0)
-        var D = ival(ip, 1)
-        var F = ival(ip, 2)
-        var En = ival(ip, 3)
-        var k = ival(ip, 4)
-        if T < 1 or D < 1 or F < 1 or En < 1 or k < 1 or k > En:
-            raise Error("moe_backward: T, D, F, E >= 1 and 1 <= k <= E")
-        var w = moe_weights_ptrs(ival(ip, 6))
-        var ex = DeviceExec()
-        return moe_backward_run(ex, addrs, T, D, F, En, k, ival(ip, 5), w[0], w[1], w[2])
+    whose device copies are read instead of addrs[1..3]. The argument
+    checks are the entry's."""
     var ex = DeviceExec()
+    if len(ip) == 7 and ival(ip, 6) > 0:
+        var w = moe_weights_ptrs(ival(ip, 6))
+        return moe_backward_resident(ex, addrs, ip, [Int(w[0]), Int(w[1]), Int(w[2])])
     return moe_backward_py(ex, addrs, ip)
 
 

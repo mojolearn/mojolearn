@@ -47,6 +47,7 @@ from sequence.ops import (
     OP_MLP_LB_FOLD,
     OP_MLP_LB_EPOCH_PART,
     OP_MLP_LB_EPOCH_FOLD,
+    OP_MLP_NONFINITE,
     OP_MLP_LB_FIRST,
     OP_MLP_LB_LAST,
     OP_SEQ_IOTA,
@@ -119,6 +120,7 @@ from sequence.ops import (
     op_gather_rows,
     op_mse,
     op_ce,
+    op_mlp_nonfinite,
     op_sum,
     op_opt,
     op_fill,
@@ -636,6 +638,8 @@ def apply[OP: Int](t: Int, a: Args):
         op_mlp_lb_epoch_part(t, a)
     elif OP == OP_MLP_LB_EPOCH_FOLD:
         op_mlp_lb_epoch_fold(t, a)
+    elif OP == OP_MLP_NONFINITE:
+        op_mlp_nonfinite(t, a)
     elif OP == OP_SEQ_IOTA:
         op_seq_iota(t, a)
     elif OP == OP_PROPHET_PREP:

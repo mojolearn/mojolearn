@@ -46,13 +46,15 @@ FAMILIES = (
             "x_cnn_spmm", "x_cnn_gcn_norm", "x_cnn_pad2d_forward", "x_cnn_pad2d_backward",
             "x_cnn_adaptive_pool", "x_cnn_graph_op",
             "x_cnn_vendor",
-            "x_cnn_res_alloc", "x_cnn_res_free", "x_cnn_res_upload", "x_cnn_res_download", "x_cnn_res_gather",
+            "x_cnn_res_alloc", "x_cnn_res_free", "x_cnn_res_upload", "x_cnn_res_download",
             "x_cnn_conv_block_forward_r", "x_cnn_conv_block_backward_r", "x_cnn_linear_forward_r",
             "x_cnn_linear_backward_r", "x_cnn_softmax_xent_r", "x_cnn_sgd_r", "x_cnn_adam_r",
             "x_cnn_idn2_flags",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "x_cnn_csr_build", "x_cnn_gcn_loops", "x_cnn_bounded_im2col",
             "x_cnn_perm_gather", "x_cnn_vals_t",
+            # lane m1-followups-misc: the graph layers' host-form backward on the tape
+            "x_cnn_gcn_backward_t", "x_cnn_sage_backward_t",
             "x_cnn_neural_tape_budget_bytes", "x_cnn_numerical_profile",
         ),
         gate="tools/identity_break.py (tools/algos_lane_check.sh)",

@@ -83,6 +83,10 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IVF_FAST_BALANCED_AUDIT"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_IVF_FAST_BALANCED_AUDIT, the reach counter of MOJOLEARN_IVF_FAST_BALANCED_TASKS (ivf_fast_balanced_hits), deleted with it; code at f59d913b0b; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_MINIBATCH_GROUP_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_MINIBATCH_GROUP_OFF"](), "removed 2026-11-09 (lane n3-sgd-minibatch-loops): MiniBatchKMeans' per-step loop (one upload, one wait and a centers download a step) is gone; the group loop with device draws and the device center shift is the only path (docs/TOMBSTONES.md)"
+    # Lane m1-followups-misc (2026-11-09): the IDENTICAL IVF balanced-task opt-in, measured slower on NVIDIA and AMD (I16).
+    # TOMBSTONE: MOJOLEARN_IVF_BALANCED_TASKS (loser) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+    # Restore: git apply experiments/removed/MOJOLEARN_IVF_BALANCED_TASKS.patch
+    comptime assert not is_defined["MOJOLEARN_IVF_BALANCED_TASKS"](), "removed 2026-11-09 (lane/m1-followups-misc): MOJOLEARN_IVF_BALANCED_TASKS, the IDENTICAL IVF search through ivf_balanced_scan's bounded list tasks, measured slower on NVIDIA L40S (1.20x-4.17x) and AMD MI325X (3.25x-16.5x) in I16; code at 5b5490960d; see docs/TOMBSTONES.md"
     return True
 
 

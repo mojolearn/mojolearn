@@ -24,7 +24,8 @@ from core.xseq_marshal import tsa_flags_u8
 from core.admitted_input_nd import admitted_cast_nd_f32
 from bindings.native_array_storage import native_scratch_bytes, native_scratch_address
 from bindings.tsa_hw_native import tsa_array, hw_fit, hw_predict, hw_score, hw_initialize, hw_forecast, hw_component, hw_save
-from bindings.tsa_admission import tsa_buffer, tsa_scalar, tsa_truth
+from bindings.tsa_admission import tsa_scalar, tsa_truth
+from bindings.admitted_input import admit_view, admitted_view_kind
 from bindings.native_loaded_module import native_loaded_module
 from bindings.tsa_arima_native import arima_fit, arima_predict, arima_forecast
 from providers.python.arima_lifecycle_pyapi import arima_initialize, arima_parameter, arima_repr
@@ -61,12 +62,13 @@ def _series_major(source: PythonObject, name: String, context: PythonObject) rai
     (never returned or kept), written in full by the one parallel cast, so it
     is uninitialised (`native_scratch_bytes`; REGRESSIONS F3/C3, was a
     zero-filled Array); read its address with `native_scratch_address`."""
-    var value = tsa_buffer(source, name + " y", context)
-    var rank = len(value.shape)
+    var value = admit_view(source, name + " y", context)
+    var kind = admitted_view_kind(value.view, name + " y")
+    var rank = len(value.view.shape)
     if rank != 1 and rank != 2:
         raise Error("mojolearn " + name + ": y must be 1-D or 2-D (n_obs, n_series)")
-    var rows = value.shape[0]
-    var cols = 1 if rank == 1 else value.shape[1]
+    var rows = value.view.shape[0]
+    var cols = 1 if rank == 1 else value.view.shape[1]
     if rows * cols == 0:
         raise Error("mojolearn " + name + ": y is empty")
     var out = native_scratch_bytes(rows * cols * 4)
@@ -74,12 +76,12 @@ def _series_major(source: PythonObject, name: String, context: PythonObject) rai
     var steps = List[Int]()
     if rank == 2:
         dims.append(cols)
-        steps.append(value.strides[1])
+        steps.append(value.view.strides[1])
     dims.append(rows)
-    steps.append(value.strides[0])
-    _ = admitted_cast_nd_f32(value.source.addr, dims, steps, value.source.itemsize, value.source.kind,
+    steps.append(value.view.strides[0])
+    _ = admitted_cast_nd_f32(value.view.addr, dims, steps, kind[1], kind[0],
                  _F32P(unsafe_from_address=native_scratch_address(out)))
-    _ = value
+    _ = value^
     _ = out
     return Python.tuple(out, rows, cols)
 

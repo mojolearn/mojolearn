@@ -492,6 +492,15 @@ def cmd_build(args):
     host = host_info(emulate, args.force_box_usable)
     shimdir = make_shims(out / '.shim', emulate)
     arts = plan['artifacts']
+    # An old plan may name a define the build now refuses (removed or promoted: tools/removed_defines.py); its
+    # artifact is skipped and reported, never compiled into the guard's refusal (lane m1-followups-misc).
+    from removed_defines import removed_defines, removed_in
+    refused = removed_defines(root)
+    skipped = [dict(key=a['key'], binding=a['binding'], removed=removed_in(a['defines'], refused))
+               for a in arts if removed_in(a['defines'], refused)]
+    arts = [a for a in arts if not removed_in(a['defines'], refused)]
+    for row in skipped:
+        print(json.dumps(dict(row, status='SKIPPED_REMOVED_DEFINE')), flush=True)
     if args.binding:
         arts = [a for a in arts if a['binding'] in args.binding]
     if args.limit:

@@ -68,7 +68,7 @@ from x_cnn.ops import (
     BN_FOLD_BLOCK, bn_fold_blocks, bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_at,
     bn_blk_red_at, bn_blk_red_fin_at, DROPOUT2D_CH_MASK, dropout2d_chan_at, dropout2d_apply_at,
     pad_fwd_at, pad_bwd_at, adapt_avg_fwd_at, adapt_avg_bwd_at, adapt_max_fwd_at, adapt_max_bwd_at,
-    sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at, gather_rows_at,
+    sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at,
     chan_slice_at, chan_place_at,
 )
 # lane fix-n1-lm-neural (2026-10-04): the blocked adaptive average fold (audit B9)
@@ -983,25 +983,8 @@ def res_upload(addr: Int, src: FP, n: Int) raises:
     _ = ctx^
 
 
-def res_gather(dst_addr: Int, src_addr: Int, rows: IP, n: Int, row: Int) raises:
-    """Resident dst[r] = resident src[rows[r]] for r < n, `row` 4-byte words
-    each (a word copy; host `rows` are the indices)."""
-    if n <= 0 or row <= 0:
-        return
-    var ctx = cnn_ctx()
-    var di = put_i[False](ctx, 0, rows, n)
-    var prm: List[Int32] = [Int32(row)]
-    var dp = put_prm(ctx, 1, prm)
-    var src = view(ctx, FP(unsafe_from_address=src_addr), 1)
-    var dst = view(ctx, FP(unsafe_from_address=dst_addr), n * row)
-    launch[gather_rows_at](ctx, fp(src), fp(dst), fp(dst), fp(dst), ip(di), ip(dp), n * row)
-    ctx.synchronize()
-    _ = prm^
-    _ = di^
-    _ = dp^
-    _ = src^
-    _ = dst^
-    _ = ctx^
+# TOMBSTONE: x_cnn_res_gather (res_gather, the resident batch row gather; unused: no caller since lane x8, only python/mojolearn/tests/test_x_cnn_repeat.py) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/XCNN_RES_GATHER.patch
 
 
 # TOMBSTONE: x_cnn_res_argmax (CNNClassifier.predict's device argmax; the classifier predicts on the x_sequence program executor since lane x8) deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
@@ -2485,34 +2468,8 @@ def opt_many_resident[adam: Bool](
     _ = ctx^
 
 
-def res_gather_pair(
-    dst_addr: Int, src_addr: Int, row: Int, dst2_addr: Int, src2_addr: Int, row2: Int, rows: IP, n: Int
-) raises:
-    """lane/cnn-apple2: `res_gather` twice on the same host rows (the batch
-    and its labels) in one entry, one upload of the rows and one wait; the
-    same `gather_rows_at` launches on the same words."""
-    if n <= 0:
-        return
-    var ctx = cnn_ctx()
-    var di = put_i[False](ctx, 0, rows, n)
-    var prm: List[Int32] = [Int32(row), Int32(row2)]
-    var dp = put_prm(ctx, 1, prm)
-    var pp = ip(dp)
-    if row > 0:
-        launch[gather_rows_at](
-            ctx, FP(unsafe_from_address=src_addr), FP(unsafe_from_address=dst_addr),
-            FP(unsafe_from_address=dst_addr), FP(unsafe_from_address=dst_addr), ip(di), pp, n * row,
-        )
-    if row2 > 0:
-        launch[gather_rows_at](
-            ctx, FP(unsafe_from_address=src2_addr), FP(unsafe_from_address=dst2_addr),
-            FP(unsafe_from_address=dst2_addr), FP(unsafe_from_address=dst2_addr), ip(di), pp + 1, n * row2,
-        )
-    ctx.synchronize()
-    _ = prm^
-    _ = di^
-    _ = dp^
-    _ = ctx^
+# TOMBSTONE: x_cnn_res_gather (res_gather_pair, its two-gather form; unused: no caller since lane x8, only python/mojolearn/tests/test_x_cnn_repeat.py) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/XCNN_RES_GATHER.patch
 
 
 # TOMBSTONE: the classifier's device epoch pieces (epoch_rows_download, res_gather_pair_perm and its gather kernel, adam_hyper_resident, adam_hyper_download, opt_many_resident_h, softmax_xent_res_loss) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
