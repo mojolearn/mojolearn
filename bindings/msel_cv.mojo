@@ -20,6 +20,7 @@ from bindings.cpython_table import cpython_table
 from bindings.optimizer_public_words import stash_python_error
 from bindings.native_unit_threads import (
     native_unit_threads_run, native_unit_gil_enter, native_unit_gil_leave, native_unit_cores, NativeUnitFailure,
+    native_unit_gate, native_unit_gate_enter, native_unit_gate_leave,
 )
 from core.host_parallel import host_fp_env, host_fp_env_set
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
@@ -701,7 +702,7 @@ struct MselUnitRun(Movable):
     var context: PythonObject
     var next: Int
     var stop: Bool
-    var gate: Bool
+    var gate: List[Int64]
     var test: List[Float64]
     var train: List[Float64]
     var fit_time: List[Float64]
@@ -745,7 +746,7 @@ struct MselUnitRun(Movable):
         self.context = context
         self.next = 0
         self.stop = False
-        self.gate = False
+        self.gate = native_unit_gate()
         self.test = List[Float64](length=self.n_units * self.n_keys, fill=0.0)
         self.train = List[Float64](length=self.n_units * self.n_keys, fill=0.0)
         self.fit_time = List[Float64](length=self.n_units, fill=0.0)
@@ -763,16 +764,13 @@ struct MselUnitRun(Movable):
     def _take(mut self, f: Int) raises -> PythonObject:
         """Fold f's rows, one take at a time across threads: a take can
         release the GIL inside its device gather."""
-        while self.gate:  # driver-loop: wait for another unit's take (GIL released while waiting)
-            with GILReleased(Python()):
-                _ = external_call["sched_yield", c_int]()
-        self.gate = True
+        native_unit_gate_enter(self.gate)
         try:
             var got = self.rows[].take(f, self.y, self.context)
-            self.gate = False
+            native_unit_gate_leave(self.gate)
             return got
         except error:
-            self.gate = False
+            native_unit_gate_leave(self.gate)
             raise error^
 
     def unit(mut self, u: Int) raises:

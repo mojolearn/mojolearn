@@ -20,6 +20,7 @@
 # and gives the GIL back with `native_unit_gil_leave`. The floating-point
 # environment of the caller is installed on every worker (core/host_parallel
 # DEVIATION 5900), so a unit computes the same bits on any thread.
+from std.atomic import Atomic, Ordering
 from std.ffi import c_int, c_size_t, external_call
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -64,6 +65,37 @@ def native_unit_jobs(n_jobs: PythonObject, caller: String) raises -> Int:
     if k < 0:
         return max(cores + 1 + k, 1)
     return k
+
+
+def native_unit_gate() -> List[Int64]:
+    """A gate one unit holds at a time (a unit's gathers or scores that share
+    an owner's program state): one zeroed word on the heap."""
+    return List[Int64](length=1, fill=0)
+
+
+def native_unit_gate_enter(mut gate: List[Int64]):
+    """Take the gate, yielding with the GIL released while another unit
+    holds it. The word is read and written atomically: a plain Bool field of
+    the run, read through `mut self`, may be loaded once and never again
+    (the compiler may assume no other thread writes it), so a waiter spun
+    forever on a gate its holder had already opened (cross_val_score on 2+
+    threads, 2026-11-09)."""
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](gate.unsafe_ptr())
+    while True:  # driver-loop: wait for another unit's gated section (GIL released while waiting)
+        var expected = Int64(0)
+        if Atomic.compare_exchange[
+            success_ordering=Ordering.SEQUENTIAL,
+            failure_ordering=Ordering.RELAXED,
+        ](word, expected, Int64(1)):
+            return
+        with GILReleased(Python()):
+            _ = external_call["sched_yield", c_int]()
+
+
+def native_unit_gate_leave(mut gate: List[Int64]):
+    """Open the gate `native_unit_gate_enter` took."""
+    var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](gate.unsafe_ptr())
+    Atomic.store[ordering=Ordering.RELEASE](word, Int64(0))
 
 
 def native_unit_gil_enter() raises -> c_int:

@@ -61,6 +61,7 @@ from bindings.classical_pandas import native_pandas_exact
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_unit_threads import (
     native_unit_threads_run, native_unit_gil_enter, native_unit_gil_leave, native_unit_jobs, NativeUnitFailure,
+    native_unit_gate, native_unit_gate_enter, native_unit_gate_leave,
 )
 from core.host_parallel import host_fp_env, host_fp_env_set
 from std.python._cpython import GILReleased
@@ -1838,7 +1839,7 @@ struct _CalUnits(Movable):
     # The x_trees gathers, scores and calibrators of a unit run one unit at
     # a time (they share the owner's `xt` program state and can release the
     # GIL inside); only the member fits overlap.
-    var gate: Bool
+    var gate: List[Int64]
 
     def __init__(out self, model: PythonObject, xt: PythonObject, base: PythonObject, Xa: PythonObject,
                  splits: PythonObject, codes: PythonObject, cols: PythonObject, n: Int, d: Int, ensemble: Bool,
@@ -1862,13 +1863,10 @@ struct _CalUnits(Movable):
             _ = py_call(self.results.append, PythonObject(None))
         self.failure = NativeUnitFailure()
         self.fp_env = host_fp_env()
-        self.gate = False
+        self.gate = native_unit_gate()
 
     def _enter(mut self):
-        while self.gate:  # driver-loop: wait for another unit's gather or score (GIL released while waiting)
-            with GILReleased(Python()):
-                _ = external_call["sched_yield", c_int]()
-        self.gate = True
+        native_unit_gate_enter(self.gate)
 
     def unit(mut self, f: Int) raises:
         var tr = self.splits[f][0]
@@ -1881,7 +1879,7 @@ struct _CalUnits(Movable):
             xtr = _gather(self.xt, trees_address(self.Xa), self.n, self.d, tr, self.cols, self.context)
             ytr = _gather_codes(self.xt, self.codes, tr, self.context)
         finally:
-            self.gate = False
+            native_unit_gate_leave(self.gate)
         _fit_member(e, xtr, ytr, PythonObject(None), self.context)
         self._enter()
         try:
@@ -1894,7 +1892,7 @@ struct _CalUnits(Movable):
             else:
                 py_setitem(self.results, PythonObject(f), scores)
         finally:
-            self.gate = False
+            native_unit_gate_leave(self.gate)
         _ = self.Xa  # keep the Python object alive through the native calls above
 
     def drain(mut self):
