@@ -6,9 +6,7 @@ imports it and adds only what is specific to Claude sessions.
 - One rule per topic, current text only. When a rule changes, replace it here; do not append a second version.
 - The later dated owner statement wins unless it is narrower in scope. Older wording, rationale and finished
   campaigns are kept verbatim in [docs/rules/RULES_HISTORY.md](docs/rules/RULES_HISTORY.md); it is history, not rules.
-- Lines marked `<!-- OPEN: question N -->` hold two texts Andrew has not yet chosen between
-  ([docs/rules/RULES_CONSOLIDATION_2026-11-09.md](docs/rules/RULES_CONSOLIDATION_2026-11-09.md)). Until he does, follow the
-  stricter one.
+  How this file was consolidated: [docs/rules/RULES_CONSOLIDATION_2026-11-09.md](docs/rules/RULES_CONSOLIDATION_2026-11-09.md).
 
 ## The name is Mojolearn, with a capital M (Andrew, 2026-11-02)
 
@@ -16,6 +14,65 @@ imports it and adds only what is specific to Claude sessions.
   **Mojolearn**: capital M, the rest lower case. Never "mojolearn", "MojoLearn" or "MOJOLEARN" as the name.
 - Code stays lower case: the package, module and command names (`pip install mojolearn`, `import mojolearn`,
   `python -m mojolearn verify`), paths, URLs and domains (mojolearn.org). Put them in backticks in prose.
+
+## Hard rules (Andrew)
+
+Copied verbatim, with their dates, from Andrew's own rules so that every agent has them. They override anything
+weaker elsewhere. On a rented box the core count is the allocation (affinity or cgroup limits), not the host's
+visible CPUs.
+
+### HARD RULE: no Apple machines, hours or calls without express permission (2026-09-27)
+
+NEVER add, allocate, rent, launch, extend, keep running past its paid
+minimum, or make provider API calls to create any Apple machine: AWS EC2 Mac
+dedicated hosts, MacStadium, Scaleway, or anything similar. Only Andrew's
+express, specific permission allows it.
+- No agent may be given that ability.
+- Each EC2 Mac host bills a 24-hour minimum and keeps billing until released.
+- If Apple capacity is a bottleneck, report it and ask. Never act.
+
+### HARD RULE: use 100 percent of rented CPU (2026-11-05)
+
+Rented hosts and pods are paid for whole. Use all of their cores and memory: every compile, simulation, synthesis
+and test on a rented host runs at the host's full core count, limited only by the memory the jobs actually need.
+Never pass a serial or reduced job count (`--compile-jobs 1`, a fixed `CORES`, `NUM_CORES`, `JOBS` or thread cap
+below the host's vCPUs) to a rented host unless a measured memory limit forces it, and then say so in the report.
+Never carry such a limit forward after the reason for it is fixed. A host sitting mostly idle is a defect to fix in
+code or in the brief, never an accepted state. The laptop's one-core rule for simulations is unchanged.
+
+### HARD RULE: write code to run in parallel (2026-11-05)
+
+Setting a job count to the core count does nothing for a program that is serial inside. All code written or
+changed from now on (compilers, converters, simulation drivers, test runners, study scripts) splits its work into
+independent units and runs them across every core, with the worker count taken from the host's cores and the
+measured memory per worker. A new serial loop over independent units is a defect. Where a stage is serial by
+nature or is a third-party tool that cannot be changed, never rent cores for it: use the smallest host that holds
+its memory, or pack independent variants onto one host up to its memory. Within ten minutes of a job starting,
+check that the host's busy cores match the plan; a host at one busy core is reported and fixed, not waited on.
+Every report on a rented host states busy cores of total.
+
+### HARD RULE: parallelize tests and experiments by default (2026-11-07)
+
+Every test suite, experiment sweep, conversion, compile stage, package load, dump and replay
+splits its independent units (models, batches, bodies, layers, experts, prompts, variants,
+test files) across all cores of the host from the first version, with the worker count from
+nproc and the measured memory per unit. Serial is never the default and never "for now". A
+stage that cannot be split says why in its docstring and gets the smallest host that holds
+its memory. Every brief states the parallel plan before launch; every report states busy
+cores of total; a host at one busy core for ten minutes is fixed or gets a fix lane the same
+session, never waited on. This applies to every project, not only Mambik.
+
+### HARD RULE: remove what a change made unnecessary (2026-11-09)
+
+Whenever a change moves a decision out of a mechanism (into a compiler, a scheduler, a
+controller, a config, a build step), the same change removes the mechanism that used to make
+that decision at run time: the registers, muxes, enables, counters, queues, flags, code paths
+and tests that existed only for it. Keep the old form behind a default-on switch only until the
+new form is measured, then delete it. Every report states what was removed, or "nothing
+identified, because ...". Periodically walk the live design or codebase for mechanisms whose
+decision is already known elsewhere, list them with their cost, and open work to remove the top
+ones. Pricing a removal and not doing it is a defect; each priced removal is implemented or
+retired with a reason within two weeks. Applies to hardware, firmware and software alike.
 
 ## Identity and bits
 
@@ -26,8 +83,8 @@ imports it and adds only what is specific to Claude sessions.
   better fold order, a refactor or a cleanup because it changes an older version's bits. "Keeps the old bits" is
   never a reason to keep a duplicate path, a slower kernel or a serial fold. Change every vendor column and the host
   column together, then record the new reference in the release's one verification.
-- <!-- OPEN: question 4 --> **Host column.** Text A (2026-10-13): "Host digests are recorded, not required."
-  Text B (2026-11-05): the release checks that "the columns match across the GPUs and the CPU".
+- **The CPU column is required (Andrew, 2026-11-09).** It is recorded first, on GitHub runners (free), and the GPU
+  columns are checked against it. The public contract sentence stays about the three GPU vendors.
 - Never accept a vendor-specific reference column to hide a disagreement, and never regenerate expected hashes from
   a failing vendor to make it pass (Andrew, 2026-10-29). A mismatch is a bug to fix in code.
 - Preserve historical tables, raw failures and provenance. Fresh reference hashes are not independent correctness
@@ -50,6 +107,9 @@ imports it and adds only what is specific to Claude sessions.
 - Measure before the release: time the candidate build on NVIDIA and AMD against the last release and the paper
   baseline, fix every regression found, and measure again. Only a candidate with no open regression is frozen.
 - Order: all code in, one compile, measure, fix, measure again until clean, freeze, the one verification, publish.
+- A "measurement build" (`tools/release.py candidate`) is wheels built from a commit to measure them. It is NOT a
+  release candidate: it never touches main, tags or PyPI, and no release happens until everything is fixed and
+  measured clean (Andrew, 2026-11-09).
 
 ### Verify once, before the release, at the very end (Andrew, 2026-11-05)
 
@@ -67,17 +127,14 @@ imports it and adds only what is specific to Claude sessions.
   (2026-10-25). Do not promote a source check or a compile to runtime success, or extend a partial result to
   untested paths or devices. NVIDIA PTX verification records the actual GPU, driver and the selected PTX route.
 
-### Reuse good old runs, automatically
+### Reuse of old runs is opt-in (was: Reuse good old runs, automatically)
 
-<!-- OPEN: question 2 -->
-- Text B, the release (Andrew, 2026-11-05; `tools/release.py`): every release runs everything once. Reuse of old
-  runs is an opt-in bonus (`--reuse-unchanged`), never the default.
-- Text A, the standalone record tool (Andrew, 2026-10-31): `tools/record_identity_column.sh` with no lane options
-  records only the lanes whose closure changed since the newest good evidence of the column's device class and
-  prints `REUSED n / RECORD m` or `NOTHING-CHANGED`; `FULL=1` is the only way to re-record unchanged lanes; a lane
-  whose newest result is bad and whose closure is unchanged is `KNOWN-BAD` until the code is fixed; admission
-  accepts reused older records beside new ones when each older lane is superseded or unchanged.
-- In either mode a full rerun is explicit in code (a named flag), and cross-vendor agreement is checked in full.
+- Reuse of old identity records is opt-in everywhere (Andrew, 2026-11-05, decided 2026-11-09): every release
+  records every lane on every device once, and a reused older record is accepted only when the operator passes the
+  explicit reuse flag (`tools/release.py --reuse-unchanged`). `tools/record_identity_column.sh` must default to a
+  full record with reuse behind a flag.
+- Cross-vendor agreement is always checked in full. A lane whose newest result is bad is fixed in code, then
+  recorded.
 
 ## Measurement and fairness
 
@@ -86,7 +143,6 @@ imports it and adds only what is specific to Claude sessions.
 - Opponents are scored once, stored, and run only by an explicit opponent job. No opponent re-score.
 - One scored run per arm, one seed (Andrew, 2026-10-03 and 2026-10-14): the harness may take one excluded warmup.
   `AB_MULTI_RUN=1` is the only override. Queue A/B lines with reps 1, rounds 1, pairs 1.
-- No Apple machine is ever added, rented, extended or released without Andrew's express permission.
 
 ### Measurement process (owner, 2026-10-05)
 
@@ -197,11 +253,12 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 - **scikit-learn tags (owner, 2026-10-24).** `__sklearn_tags__` and helpers used solely to build its tag metadata
   may run in Python. Native operations must not call back into tag handling. Audit it separately from runtime
   violations. No other metadata protocol is exempt.
-- <!-- OPEN: question 3 --> **Python fallback for a Mojo bug.** Text A (Andrew, 2026-10-20): "No compatibility
-  branch, callback exception or Python fallback is permitted." Text B (owner exception, 2026-10-25): a narrowly
-  scoped Python runtime implementation is allowed where a Mojo/Modular bug blocks a correct supported native
-  implementation; document INLINE the operation, the bug or suspected failure, the Python work and the retained
-  reproduction; record it in release evidence and never call it Python-free.
+- **Python fallbacks for a Mojo or Modular bug are a frozen list (Andrew, 2026-11-09).**
+  `python/mojolearn/_runtime_fallbacks.py` is the COMPLETE list of authorized fallbacks (one entry today:
+  `len(Array)` on certain native owners). Nothing is added without Andrew's explicit word. An agent that believes
+  it has found a Mojo bug stops, writes the smallest reproducer and the ask for Modular, and reports; it does not
+  write Python. Each entry keeps its reproduction and upstream ask; a native fix removes the entry. A path that
+  uses an entry is recorded in release evidence and is never called Python-free.
 - Python test and benchmark controllers, test data preparation and independent oracles are testing tools. Keep
   them distinct from product execution and honest about timing boundaries. Installing a Python package is not a
   runtime repair.
@@ -236,11 +293,10 @@ The Torch and MAX adapters are front-ends over the same compiled kernels and com
 
 - **Code, then queue.** A lane writes code, commits and pushes. It never runs tests, timing, identity or Metal jobs
   on the laptop, and never ssh-es to, rents, extends or releases a box.
-- <!-- OPEN: question 1 --> **Lanes and compiling.** Text A (Andrew, 2026-10-07): lanes never compile, on the laptop
-  or through `lq`; the orchestrator merges finished lanes into one integration branch, compiles it once (every
-  switch on and off, NVIDIA and AMD targets), fixes what breaks, then merges to main. Text B (Andrew, 2026-10-27,
-  "for this migration"): any peer or subagent may rent a RunPod CPU box and compile, and completed provider repairs
-  merge into main after a small successful compile.
+- **Only the orchestrator compiles (Andrew, 2026-10-07, decided 2026-11-09),** plus ONE designated integration
+  compile-fix lane per integration branch that the orchestrator names in its brief. No other lane compiles, on
+  the laptop or through `lq`. The orchestrator merges finished lanes into one integration branch, compiles it once
+  (every switch on and off, NVIDIA and AMD targets), fixes what breaks, then merges to main. Lanes never touch main.
 - A lane makes its code easy to compile: read the call path and the Mojo syntax, keep each switch's code
   self-contained, follow "Mojo rules that cost a build round", and list every binding the integrator must build.
 - **One worktree per lane:** `~/mojolearn-wt/<lane>` on branch `lane/<lane>` (`tools/lean_worktree.sh` when old
@@ -273,7 +329,6 @@ The Torch and MAX adapters are front-ends over the same compiled kernels and com
   target and dependencies match (Andrew, 2026-10-29). Separately compiled groups are valid evidence for the paths
   they actually execute. Keep standard optimized settings. Do not interrupt an active valid build. Do not start a new loader
   or build scheme to make one repair's compile smaller. Test changed loading and linking boundaries at assembly.
-- On a rented box use every allocated core (from affinity or cgroup limits, not the host CPU count).
 
 ### Boxes
 
@@ -281,10 +336,10 @@ The Torch and MAX adapters are front-ends over the same compiled kernels and com
   <branch> <lane[,lane]> <ds[,ds]>` (one build covers every lane x dataset: batch them; RACE is for the algos
   family); `lq add <box> CMD <branch> <tag> '<command>'` (scripts must be committed in the branch); `lq results` and
   `lq log` give grep-sized output. Full-size RACE lines are for speed and quality only.
-- <!-- OPEN: question 5 --> Boxes: nv is the RunPod L40S; amd is the DigitalOcean AMD GPU droplet (rule text:
-  MI325X; the 2026-11-08 runs used an MI300X); apple is the M2 Pro, for same-bits work only, never timing. The M3
-  Ultra belongs to the Apple FAST peer. Each box runs one job at a time; on apple one lane and one dataset per
-  line. `identical` speed work targets NVIDIA and AMD.
+- Boxes: nv is the RunPod L40S. amd is the DigitalOcean AMD GPU droplet: the MI300X (the paper's GPU) is the
+  default, and any other model is flagged as different hardware in the results. apple is the M2 Pro, for
+  same-bits work only, never timing. The M3 Ultra belongs to the Apple FAST peer. Each box runs one job at a
+  time; on apple one lane and one dataset per line. `identical` speed work targets NVIDIA and AMD.
 - **Box jobs persist from the box (Andrew, 2026-10-26).** Outside `lq`, a job on a rented box starts only through
   `tools/nvidia_central.sh submit`, `tools/do_amd_steward.sh run` or `tools/dev_pod.sh run`; each wraps it in
   `tools/box_persist_run.sh`, which uploads the results dir to R2 from the box. `--no-persist` is refused unless

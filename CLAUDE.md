@@ -15,7 +15,8 @@ subagents; a rule that also binds Codex belongs in `AGENTS.md`, never here.
   compile, test, measure or rent (AGENTS.md "Lanes").
 - Fable subagents are for work that is judgment: ideas-only and design lanes, audits, and any change to the rule
   files themselves. Andrew asks for a Fable implementation lane by name when he wants one.
-- One integration lane at a time may compile, on the integration branch only, when its brief says so.
+- Only the orchestrator compiles, plus the one integration compile-fix lane per integration branch that it names
+  in that lane's brief (AGENTS.md "Lanes").
 
 ## Briefs
 

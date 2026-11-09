@@ -7,9 +7,9 @@ Line numbers below are in the files at commit 2c1b720133 (`AGENTS.md` 666 lines,
 old text of both is kept verbatim in [RULES_HISTORY.md](RULES_HISTORY.md). "A:" is old `AGENTS.md`, "C:" is old
 `CLAUDE.md`. "New" names the section of the rewritten `AGENTS.md` unless it says `CLAUDE.md`.
 
-Result: `AGENTS.md` 666 -> 377 lines, `CLAUDE.md` 197 -> 41 lines (863 -> 418 loaded lines). No rule's meaning was
-changed. Where two texts disagree and neither date nor scope settles it, both are kept in the new file under an
-`<!-- OPEN: question N -->` marker and listed in section (d).
+Result: `AGENTS.md` 666 -> 432 lines (56 of them the five hard rules copied in verbatim), `CLAUDE.md` 197 -> 42 lines
+(863 -> 474 loaded lines). Six conflicts that neither date nor scope settled were put to Andrew and are decided in
+section (d).
 
 ## (a) Every topic: where it was, the current rule, where it is now
 
@@ -18,18 +18,18 @@ changed. Where two texts disagree and neither date nor scope settles it, both ar
 | The name | A:3-10, C:5-12 | Prose says Mojolearn; code names stay lower case in backticks. | The name is Mojolearn |
 | Bits between versions | A:12-25, A:87-93, A:261-266, A:212-213, C:88 | Bits may change between versions; only cross-vendor identity within one version is required. | Identity and bits |
 | Three-vendor contract | A:231-233, A:403-408, C:88, C:119-120, C:187-188 | Same bits on Apple, NVIDIA and AMD in `identical`. | Identity and bits |
-| Host column | C:88 ("recorded, not required"), C:156 ("match across the GPUs and the CPU") | OPEN question 4. | Identity and bits |
+| Host column | C:88 ("recorded, not required"), C:156 ("match across the GPUs and the CPU") | The CPU column is required, recorded first; GPUs are checked against it (decided 2026-11-09). | Identity and bits |
 | No vendor-specific references, keep history | A:99-107 | Never hide a disagreement behind a per-vendor reference; keep historical tables. | Identity and bits |
 | `fast` needs no identity | C:89 | `fast` is judged on speed and quality only. | Identity and bits |
 | Focus on `identical`, `fast` investment stopped | A:217-235 | No dedicated `fast` work unless Andrew reopens it. | Identity and bits |
 | Fix everything before a release | A:27-39 | All work in, measure, fix, measure again, then freeze. | Release order |
 | Verify once, pre-release | A:64-74, C:152-164, C:142-150, A:273-275 | One global verify on the frozen source; no ID checks in development; no re-verification of green work. | Release order |
 | What verification consists of | A:261-289 | Bounded fixtures and installed-wheel smokes; never promote a compile to runtime success. | Release order |
-| Reuse of old runs | A:291-316, C:166-176, C:145, C:163-164 | OPEN question 2 (release runs everything; standalone record tool reuses). | Reuse good old runs, automatically |
+| Reuse of old runs | A:291-316, C:166-176, C:145, C:163-164 | Reuse is opt-in everywhere, behind an explicit flag (decided 2026-11-09). | Reuse of old runs is opt-in |
 | Our CPU is never timed | C:35, C:92, C:94 | Never race or time our CPU or a host route. | Measurement and fairness |
 | Opponents scored once | C:94, A:413, A:477 | No opponent re-score. | Measurement and fairness |
 | One run per arm | C:79, A:488-489 | One scored run per arm; the harness may take one excluded warmup. | Measurement and fairness |
-| Never rent Apple | C:93 | No Apple machine without Andrew's express permission. | Measurement and fairness |
+| Never rent Apple | C:93 | The verbatim hard rule. | Hard rules (Andrew) |
 | Measurement process items 1-6 | A:401-413, C:113-125 | Freeze per round; NV+AMD average decides; update boards; fix problems; opponent clocks. | Measurement process |
 | Full-dataset candidate evaluation | A:380-398 | End-to-end A/B on the full dataset; component runs are screening. | Measurement process |
 | Incremental experiment delivery | A:479-506 | Decide each candidate when its evidence is complete; reason beside the switch. | Measurement process, Experiments |
@@ -41,11 +41,11 @@ changed. Where two texts disagree and neither date nor scope settles it, both ar
 | Direct CPython allowed | A:142-160 | C-API calls are allowed during execution; audit hooks. | No Python in the runtime |
 | Exported graph boundary | A:206-215 | Never run a user's Python `forward` or exporter in product execution. | No Python in the runtime |
 | sklearn tags | A:576-594, C:134-140 | Tag metadata may be Python; no callbacks into it. | No Python in the runtime |
-| Python fallback for a Mojo bug | A:558-574 vs A:618-627, A:651-653 | OPEN question 3. | No Python in the runtime |
+| Python fallback for a Mojo bug | A:558-574 vs A:618-627, A:651-653 | `python/mojolearn/_runtime_fallbacks.py` is the complete frozen list (decided 2026-11-09). | No Python in the runtime |
 | Wait for Mojo and Modular | A:349-367, C:96-102 | No workarounds for unsupported toolchain features; record the ask. | Wait for Mojo and Modular |
 | Adapters | A:534-554 | Front-ends only: no identity lanes; qualified by installed-wheel smoke. | Framework adapters are the same API in another format |
 | Lanes: code then queue | C:26-59, A:484-486 | Lanes write and push; never test, time, ssh or rent. | Lanes |
-| Lanes and compiling | C:42-46, A:484-486 vs A:162-204 | OPEN question 1. | Lanes |
+| Lanes and compiling | C:42-46, A:484-486 vs A:162-204 | Only the orchestrator compiles, plus one named integration compile-fix lane (decided 2026-11-09). | Lanes |
 | Worktrees, push, /private/tmp, bash | C:47-55 | One worktree per lane; never `--no-verify`; nothing in `/private/tmp`; bash. | Lanes |
 | Final reply | C:56-64, A:346-347 | Short: branch, changes with `file:line`, deletions, bits, define, queued, owed. | Lanes |
 | Peer communication | A:76-85 | Only to execute authorized work. | Lanes |
@@ -53,6 +53,8 @@ changed. Where two texts disagree and neither date nor scope settles it, both ar
 | Compile slots | C:47, A:186-187 | Mac compiles go through `tools/compile_slot.sh`. | Compiles |
 | Incremental development compilation | A:116-140 | Smallest affected groups; reuse unchanged groups. | Compiles |
 | `lq` and the boxes | C:29-40 | `lq` is the lane's only way to a box; box list. | Boxes |
+| Hard rules: Apple machines, full CPU, parallel code, parallel tests, remove what is unnecessary | private `~/.claude/CLAUDE.md` (read only), C:93, A:174-178 | Copied verbatim with dates. | Hard rules (Andrew) |
+| Measurement build | not in either file | `tools/release.py candidate` builds wheels to measure; it is not a release candidate. | Fix everything before a release |
 | Box jobs persist | C:38 | Jobs start through the three wrappers and persist to R2 from the box. | Boxes |
 | Results leave the box | A:318-334 | Logs and results on the Mac and in R2; archive before teardown. | Boxes |
 | Artifact retention before teardown | A:523-532 | Prove by bytes where every output is stored before terminating. | Boxes |
@@ -139,32 +141,37 @@ The later dated owner statement wins unless it is narrower.
     tokenizer exception (A:203-204), "this campaign covers all NVIDIA/AMD GPU-opponent recipes" (A:450), the
     Daybreak interruption notes (A:569-574, kept inside question 3 text B's history).
 
-## (d) Open questions for Andrew
+## (d) Questions put to Andrew, and his decisions (2026-11-09)
 
-Both texts are kept in the new `AGENTS.md` under the marker. Until answered, agents follow the stricter text.
+All six are decided and applied. No `OPEN` marker remains in `AGENTS.md`; each losing text is listed, dated, at the end
+of RULES_HISTORY.md.
 
-1. **May anything other than the orchestrator compile or rent a build box?** Text A (2026-10-07): lanes never
-   compile; one integration branch, compiled once, then main. Text B (2026-10-27, "for this migration"): any peer
-   or subagent may rent a RunPod CPU box and compile, and provider repairs merge into main after a small compile.
-   *Recommendation:* retire text B (the migration is finished). Lanes never compile, rent or touch main. One
-   designated integration lane may compile on the integration branch, as on 2026-11-09.
-2. **Is reuse of old identity runs the default or opt-in?** `tools/release.py` runs everything and reuses only with
-   `--reuse-unchanged` (2026-11-05). `tools/record_identity_column.sh` still reuses by default and needs `FULL=1` to
-   record everything (2026-10-31). *Recommendation:* keep both as they are and say so in one sentence: a release
-   records everything once; a development record outside a release reuses by default.
-3. **Is the 2026-10-25 "Python fallback where a Mojo bug blocks a native implementation" exception still in
-   force?** It contradicts "no Python fallback is permitted" (2026-10-20), "NO PYTHON COMPUTE IN THE RUNTIME, EVER",
-   and "wait for Mojo and Modular". *Recommendation:* keep it only for the fallbacks that exist in code today, each
-   documented inline; no new Python fallback without your word; a new blocker waits for Modular.
-4. **Must the CPU (host) column match the GPUs?** "Host digests are recorded, not required" (2026-10-13) against
-   "see the columns match across the GPUs and the CPU" (2026-11-05). *Recommendation:* required. The CPU column is
-   recorded first (free) and the GPUs are checked against it; the public contract sentence stays about the three
-   GPU vendors.
-5. **Which AMD box?** The rule text says DigitalOcean MI325X; the 2026-11-08 runs and the paper used an MI300X.
-   *Recommendation:* name the paper's GPU (MI300X) as the measurement box and drop the model from the lane rules.
-6. **(Not in either file.)** The hard rules on parallel code and using every rented core live only in your private
-   `~/.claude/CLAUDE.md`, so Codex never sees them. *Recommendation:* copy them into `AGENTS.md` as a short section.
-   Not done here, because it adds a rule.
+1. **May anything other than the orchestrator compile or rent a build box?** DECIDED: only the orchestrator
+   compiles, plus ONE designated integration compile-fix lane per integration branch that the orchestrator names in
+   its brief. The 2026-10-27 "any peer may rent a CPU box and merge to main for this migration" text is retired.
+2. **Is reuse of old identity runs default or opt-in?** DECIDED: opt-in everywhere. Every release records every
+   lane on every device once; a reused older record is accepted only with the explicit reuse flag.
+   `tools/record_identity_column.sh` still defaults to reuse and must be changed by a follow-up lane (not changed
+   here: the default is exercised by `tools/test_identity_auto_reuse.py` and six other test files, so it cannot be
+   flipped with certainty by reading). What to change: `tools/record_identity_column.sh:256-261` (the `FULL` case
+   and the `elif` that enters reuse when no `LANES`, `SHARD`, `ONLY_CHANGED` or `FULL` is given) so that the default
+   records every lane and reuse needs a named flag (for example `REUSE=1`); its header comment at `:50-65`; and the
+   tests `tools/test_identity_auto_reuse.py`, `tools/test_identity_once.py`,
+   `tools/test_identity_columns_changed_lanes.py`, `tools/test_release_identity_run.py`,
+   `tools/test_record_identity_installed.py`, `tools/test_identity_wheel_record.py`, `tools/test_box_merged_verify.py`.
+3. **Python fallback for a Mojo bug.** DECIDED: a frozen list. `python/mojolearn/_runtime_fallbacks.py` is the
+   complete list (one entry today: `len(Array)` on certain native owners). Nothing is added without Andrew's
+   explicit word; an agent that finds a Mojo bug stops, writes the reproducer and the ask, and reports. "No
+   additional permission is required" is dropped. These paths are never called Python-free.
+4. **Must the CPU column match?** DECIDED: yes. Required, recorded first on GitHub runners, GPUs checked against it.
+5. **Which AMD box?** DECIDED: the DigitalOcean AMD GPU droplet; MI300X is the default and any other model is
+   flagged as different hardware in the results.
+6. **Hard rules from Andrew's private file.** DECIDED: copied verbatim with their dates into one section, "Hard
+   rules (Andrew)" (five rules). The weaker copies ("never add, rent, extend or release an Apple machine", "use
+   every allocated core") were removed in favor of the hard rules.
+
+Also added on Andrew's word: one line in "Fix everything before a release" defining a measurement build
+(`tools/release.py candidate`) as not a release candidate.
 
 ## (e) Rationale cut, and where it went
 
@@ -195,7 +202,8 @@ exists as a heading in the new `AGENTS.md`:
 - "Race fairness: what the measurements are for" (race_fairness.py, test_race_fairness.py, main_board_ingest.py)
 - "Measurement process" and its item 6, OPPONENT CLOCKS (board_clock_audit.py, bench_board.py, main_board_ingest.py,
   bench_board_metrics.py, six_lane_grid_decide.py): still item 6
-- "Reuse good old runs, automatically" (release.py)
+- "Reuse good old runs, automatically" (release.py): the heading is now "Reuse of old runs is opt-in (was: Reuse good
+  old runs, automatically)", so the cited phrase is still found
 - "Full-machine CPU race resources" (paper_compare_job.sh)
 - "No dimension targeting" (six_lane_grid.py)
 - "No Python in the runtime" (mojo_python_callback_audit.py, test_no_python_runtime.py); the anchor

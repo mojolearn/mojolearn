@@ -874,3 +874,29 @@ Additions (Andrew, 2026-10-13):
   never appear in public docs, the README or the site.
 - We are alpha: no enterprise-grade checks. The docs, mojolearn.org and the measurements are generated from the latest
   origin/main by one publish command, run only when Andrew says so. Old URLs may break; no redirects.
+
+## Decisions of 2026-11-09 (Andrew): texts retired from the rules
+
+Each retired text is quoted in full in the file copies above; the pointers give its place there.
+
+1. **Compiling and build boxes.** Retired: `AGENTS.md` "Provider migration CPU builds and peer autonomy (Andrew,
+   2026-10-27)" ("Any peer or subagent may rent a RunPod CPU box when useful for this migration ... superseding the
+   older lane-never-compiles restriction for this migration") and "Provider migration delivery (Andrew, 2026-10-27)"
+   ("Merge completed provider repairs incrementally into main after a successful small local compile"). Current rule:
+   only the orchestrator compiles, plus one designated integration compile-fix lane per integration branch.
+2. **Reuse by default.** Retired: `AGENTS.md` and `CLAUDE.md` "Reuse good old runs, automatically (Andrew, 2026-10-31)"
+   ("`tools/record_identity_column.sh` reuses by default ... `FULL=1` is the only way to re-record lanes whose closure
+   did not change ... New tools that launch identity work reuse by default") and `CLAUDE.md` "Release cost rules"
+   bullet "Re-record only the lanes whose bits can have changed. This is the default of
+   `tools/record_identity_column.sh`". Current rule: reuse is opt-in everywhere, behind an explicit flag.
+3. **Python fallback.** Retired from `AGENTS.md` "No Python in the runtime": the open-ended owner exception of
+   2026-10-25 ("A narrowly scoped Python runtime implementation is allowed where such a bug blocks a correct supported
+   native implementation ... No additional permission is required for a fallback within this authorized scope") and
+   "Previously approved, documented fallbacks after Codex cybersecurity/Daybreak interruptions also remain authorized".
+   Current rule: `python/mojolearn/_runtime_fallbacks.py` is the complete, frozen list.
+4. **Host column.** Retired: `CLAUDE.md` GPU rules "Host digests are recorded, not required" and the lane section's
+   "the host digest is a convenience, not a requirement". Current rule: the CPU column is required and recorded first.
+5. **AMD box.** Retired: `CLAUDE.md` "amd the DO MI325X". Current rule: the DigitalOcean AMD GPU droplet, MI300X by
+   default.
+6. **Hard rules.** Replaced by the verbatim hard rules: `CLAUDE.md` "Never add, rent, extend or release an Apple
+   machine" and `AGENTS.md` "Use all allocated CPU cores for compiler workers or bounded build concurrency".
