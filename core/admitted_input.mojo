@@ -208,13 +208,13 @@ def admitted_check_weights_f32(input: _AI_F32P, output: _AI_F32P, rows: Int, sca
         var negative = False
         var positive = False
         for i in range(lo, hi):  # native input marshaling: weight validation and scalar expansion
-            var v = input[0 if scalar else i]
+            var v = input.unsafe_load(0 if scalar else i)
             if v < 0:
                 negative = True
             if v > 0:
                 positive = True
             if scalar:
-                output[i] = v
+                output.unsafe_store(i, v)
         if negative:
             flag_ptr.unsafe_store(2 * t, UInt8(1))
         if positive:
