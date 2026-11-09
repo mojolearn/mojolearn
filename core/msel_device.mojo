@@ -30,6 +30,7 @@ from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.device_zero import enqueue_fill
+from core.shared_slot import shared_slot_word
 from core.msel_convert import (
     MSEL_I64,
     msel_itemsize,
@@ -83,7 +84,15 @@ def _status(ctx: DeviceContext, mut d_status: DeviceBuffer[DType.int32]) raises 
 # ===========================================================================
 
 
+#: Layout version of `MselStore` (core/shared_slot.mojo rule; the store is
+#: one process-wide `_Global` read by every binding, core/msel_device_x.mojo).
+#: V2: the layout word.
+comptime MSEL_STORE_LAYOUT = 2
+
+
 struct MselStore(Defaultable, Movable):
+    # first field: the layout word (core/shared_slot.mojo)
+    var layout: Int
     var bufs: List[DeviceBuffer[DType.uint8]]
     #: bytes held by each id; -1 for a freed id
     var nbytes: List[Int]
@@ -91,6 +100,7 @@ struct MselStore(Defaultable, Movable):
     var live: Int
 
     def __init__(out self):
+        self.layout = shared_slot_word[MselStore](MSEL_STORE_LAYOUT)
         self.bufs = List[DeviceBuffer[DType.uint8]]()
         self.nbytes = List[Int]()
         self.released = List[Int]()

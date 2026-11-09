@@ -19,7 +19,7 @@ from training.samba_ops import (
     samba_linear_forward_host, samba_linear_backward_host, samba_head_loss_host,
 )
 
-comptime PRIMITIVE_CONTEXT = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingContextFast"
+comptime PRIMITIVE_CONTEXT = "MojolearnNeuralTrainingContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTrainingContextFastV2"
 
 
 def native_primitive_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -112,4 +112,4 @@ struct NativePrimitiveAPI(Defaultable, Movable):
 
 
 comptime NATIVE_PRIMITIVE_API = _Global[StorageType=NativePrimitiveAPI,
-    name="MojoNeuralPrimitiveNativeAPIv1", init_fn=NativePrimitiveAPI.__init__]
+    name=("MojolearnNeuralPrimitiveNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNeuralPrimitiveNativeAPIFastV2"), init_fn=NativePrimitiveAPI.__init__]

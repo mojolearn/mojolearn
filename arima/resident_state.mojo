@@ -37,7 +37,7 @@ from arima.estimator import arima_predict_device, _order, _refuse_shape
 
 # The context slot `_predict_into` uses (arima/estimator.mojo `_DEVCTX_SLOT`):
 # a resident entry and the per-call path share one process context.
-comptime _ARIMA_CTX_SLOT = "MojoArimaContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoArimaContextFast"
+comptime _ARIMA_CTX_SLOT = "MojolearnArimaContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnArimaContextFastV2"
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 

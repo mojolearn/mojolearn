@@ -47,7 +47,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.neural_identical_experiments import IDN_SAMBA_FORWARD_TAPE
 from core.neural_context import neural_ctx
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
-comptime _NEURAL_CTX = "MojoNeuralTransformerContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTransformerContextFast"
+comptime _NEURAL_CTX = "MojolearnNeuralTransformerContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTransformerContextFastV2"
 from checks.vendor import COMPILED_VENDOR
 from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_ANY_BWD_SABOTAGE
 from gemm.checks.gemm_identical import ANY_SABOTAGE as GEMM_ANY_SABOTAGE

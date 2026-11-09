@@ -2,6 +2,7 @@
 # Named block operations on the common native descriptor transport. All math,
 # transfer, reports and retained stages remain in the existing Mamba owners.
 from std.ffi import _Global
+from checks.numerics import GLOBAL_NUMERIC_MODE
 from mamba.native_decode_dispatch import mamba_decode_operation
 from mamba.native_tape_dispatch import mamba_tape_operation
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, MAMBA_BLOCK_ABI_NAME
@@ -231,4 +232,4 @@ struct NativeMambaBlockAPI(Defaultable, Movable):
 
 
 comptime NATIVE_MAMBA_BLOCK_API = _Global[StorageType=NativeMambaBlockAPI,
-    name="MojoMambaBlockNativeAPIv1", init_fn=NativeMambaBlockAPI.__init__]
+    name=("MojolearnMambaBlockNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnMambaBlockNativeAPIFastV2"), init_fn=NativeMambaBlockAPI.__init__]

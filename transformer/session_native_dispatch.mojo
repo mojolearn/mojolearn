@@ -2,6 +2,7 @@
 # Shared execution owner for the Python door and native generation ABI.
 # Numerical implementation remains _transformer_run_session, unchanged.
 from std.ffi import _Global
+from checks.numerics import GLOBAL_NUMERIC_MODE
 from transformer.session_abi import (
     GENERATION_SESSION_ABI_NAME, GenerationErrorSink, GenerationSessionForward,
 )
@@ -95,6 +96,6 @@ struct TransformerNativeAPI(Defaultable, Movable):
 
 
 comptime TRANSFORMER_NATIVE_API = _Global[
-    StorageType=TransformerNativeAPI, name="MojoTransformerSessionNativeAPIv1",
+    StorageType=TransformerNativeAPI, name=("MojolearnTransformerSessionNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnTransformerSessionNativeAPIFastV2"),
     init_fn=TransformerNativeAPI.__init__,
 ]

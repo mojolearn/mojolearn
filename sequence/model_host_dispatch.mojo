@@ -119,4 +119,4 @@ struct NativeModelAPI(Defaultable, Movable):
 
 
 comptime NATIVE_MODEL_API = _Global[StorageType=NativeModelAPI,
-    name="MojoWholeModelHostNativeAPIv1", init_fn=NativeModelAPI.__init__]
+    name=("MojolearnWholeModelHostNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnWholeModelHostNativeAPIFastV2"), init_fn=NativeModelAPI.__init__]

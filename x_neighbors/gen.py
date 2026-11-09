@@ -426,7 +426,7 @@ struct _NeighborsContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojoXNeighborsContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXNeighborsContextFast"
+comptime _CTX_NAME = "MojolearnXNeighborsContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXNeighborsContextFastV2"
 comptime X_NEIGHBORS_CONTEXT = _Global[StorageType=_NeighborsContext, name=_CTX_NAME, init_fn=_NeighborsContext.__init__]
 
 

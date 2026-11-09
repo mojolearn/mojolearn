@@ -39,17 +39,19 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.msel_device import MselStore, MSEL_TPB, MSEL_MAX_BLOCKS
+from core.msel_device import MselStore, MSEL_STORE_LAYOUT, MSEL_TPB, MSEL_MAX_BLOCKS
+from core.ctx_key import ctx_cache_key
 from core.neural_context import process_ctx
+from core.shared_slot import shared_slot_check, shared_slot_word
 
 #: The base binding's process-lifetime context slot (bindings/_mojolearn.mojo
 #: `_DEVCTX_SLOT`) and store name in this build's numeric mode: the base
 #: binding's own msel entries (bindings/msel_device.mojo) use these.
 comptime MSEL_CONTEXT_SLOT = (
-    "MojoCoreContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoCoreContextFast"
+    "MojolearnCoreContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV2"
 )
 comptime MSEL_STORE_NAME = (
-    "MojoMselStoreIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoMselStoreFast"
+    "MojolearnMselStoreIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnMselStoreFastV2"
 )
 #: The model-selection store (one definition; bindings/msel_device.mojo
 #: imports it). A `_Global` is named process-wide, so every binding module
@@ -61,8 +63,32 @@ comptime MSEL_STORE = _Global[StorageType=MselStore, name=MSEL_STORE_NAME, init_
 #: own binding was built in, so a fold reader names the identical store and
 #: context explicitly (in an identical build these are MSEL_STORE and
 #: MSEL_CONTEXT_SLOT themselves).
-comptime MSEL_FOLD_CONTEXT_SLOT = "MojoCoreContextIdentical"
-comptime MSEL_FOLD_STORE = _Global[StorageType=MselStore, name="MojoMselStoreIdentical", init_fn=MselStore.__init__]
+comptime MSEL_FOLD_CONTEXT_SLOT = "MojolearnCoreContextIdenticalV2"
+comptime MSEL_FOLD_STORE_NAME = "MojolearnMselStoreIdenticalV2"
+comptime MSEL_FOLD_STORE = _Global[StorageType=MselStore, name=MSEL_FOLD_STORE_NAME, init_fn=MselStore.__init__]
+
+
+def msel_store() raises -> UnsafePointer[MselStore, MutAnyOrigin]:
+    """This build's store (`MSEL_STORE`), refused when its creator had
+    another layout. Its buffers belong to `msel_store_context()`."""
+    var store = MSEL_STORE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    shared_slot_check(store[].layout, shared_slot_word[MselStore](MSEL_STORE_LAYOUT), MSEL_STORE_NAME)
+    return store
+
+
+def msel_store_context() raises -> DeviceContext:
+    """The context `msel_store()`'s buffers live in (slot MSEL_CONTEXT_SLOT):
+    every put, read, gather and scatter of that store runs on it."""
+    return process_ctx[MSEL_CONTEXT_SLOT]()
+
+
+def msel_fold_store() raises -> UnsafePointer[MselStore, MutAnyOrigin]:
+    """The identical store cross-validation folds live in, refused when its
+    creator had another layout. Its buffers belong to
+    `msel_device_x_context()`."""
+    var store = MSEL_FOLD_STORE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    shared_slot_check(store[].layout, shared_slot_word[MselStore](MSEL_STORE_LAYOUT), MSEL_FOLD_STORE_NAME)
+    return store
 
 comptime MDX_FINITE: Int32 = 0
 comptime MDX_FLAGGED: Int32 = 1
@@ -127,7 +153,12 @@ def msel_device_x_f32(
     if len(d_x) < rows * cols:
         raise Error("msel_device_x_f32: destination holds " + String(len(d_x)) + " words, "
                     + String(rows * cols) + " needed")
-    var store = MSEL_FOLD_STORE.get_or_create_ptr()
+    # the store's buffers belong to its own context slot: a reader on any
+    # other context (another binding's slot name) would race the writer's
+    # stream, so it is refused instead (design note hazard 2)
+    if ctx_cache_key(ctx) != ctx_cache_key(msel_device_x_context()):
+        raise Error("msel_device_x_f32: ctx is not the fold store's context (msel_device_x_context())")
+    var store = msel_fold_store()
     store[].check(base_id, base_rows * cols * 4)
     store[].check(index_id, rows * 8)
     # the store hands out immutable views; the kernel declares mutable

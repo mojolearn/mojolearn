@@ -297,7 +297,7 @@ struct _XdContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime X_DECOMP_CONTEXT = _Global[StorageType=_XdContext, name="MojoXDecompContextIdentical", init_fn=_XdContext.__init__]
+comptime X_DECOMP_CONTEXT = _Global[StorageType=_XdContext, name="MojolearnXDecompContextIdenticalV2", init_fn=_XdContext.__init__]
 
 
 def xd_ctx() raises -> DeviceContext:

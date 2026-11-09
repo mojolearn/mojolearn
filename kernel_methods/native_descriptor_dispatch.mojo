@@ -543,4 +543,4 @@ struct KernelMethodNativeAPI(Defaultable, Movable):
         self.entries.append(km_native_v1)
 
 comptime KERNEL_METHOD_NATIVE_API = _Global[StorageType=KernelMethodNativeAPI,
-    name="MojoKernelMethodNativeAPIv1", init_fn=KernelMethodNativeAPI.__init__]
+    name=("MojolearnKernelMethodNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKernelMethodNativeAPIFastV2"), init_fn=KernelMethodNativeAPI.__init__]

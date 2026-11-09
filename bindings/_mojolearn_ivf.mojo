@@ -33,7 +33,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoIvfContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoIvfContextFast"
+comptime _DEVCTX_SLOT = "MojolearnIvfContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnIvfContextFastV2"
 
 
 from checks.numerics import GLOBAL_NUMERIC_MODE

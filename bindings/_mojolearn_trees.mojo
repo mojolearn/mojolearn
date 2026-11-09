@@ -55,7 +55,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoTreesContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoTreesContextFast"
+comptime _DEVCTX_SLOT = "MojolearnTreesContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnTreesContextFastV2"
 
 
 from extratrees.estimator import (

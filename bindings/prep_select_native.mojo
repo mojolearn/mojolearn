@@ -25,6 +25,9 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_address, classical_typed, classical_input
 from bindings.admitted_input import admit_x
+from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end
+from bindings.admitted_meta_scope import admitted_hold_array_f32
+from bindings.classical_arrays import classical_is_array
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_labels import classical_encode_labels
 from bindings.admitted_input import admit_f32, admitted_vector
@@ -216,21 +219,48 @@ def _rfe_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     # connects when the package imports model_selection, and entering it only
     # records the scope, so the silent "no scope, put X every round" fallback
     # is deleted with it.
+    # S4 (lane s1): X came through admit_x above (refused unless finite), so
+    # every round's block, columns gathered out of it, is finite: it is held
+    # in the admitted registry while that round's estimator fits, and the
+    # member door (in any binding: one registry per process) reads it with
+    # no view, check or scan. A fold's DeviceRows X was not tested here, so
+    # its blocks are not held.
+    var hold = py_type(args[0]) is not cc["maxabs_rows_class"]
+    var mark = -1
     var scope = resident_enter_min(cc, PythonObject(arr.n * arr.d))
     try:
-        _rfe_rounds(model, fields, estimator, g, y, fit_params, arr, context, cc)
+        _rfe_rounds(model, fields, estimator, g, y, fit_params, arr, context, cc, hold, mark)
     except error:
         try:
             _resident_exit(scope, cc)
         except ignored:
             _ = ignored^
+        if mark >= 0:
+            admitted_scope_end(mark)
         raise error^
-    _resident_exit(scope, cc)
+    try:
+        _resident_exit(scope, cc)
+    finally:
+        if mark >= 0:
+            admitted_scope_end(mark)
+
+
+def _rfe_hold_block(block: PythonObject, hold: Bool, mut mark: Int, cc: PythonObject) raises:
+    """Hold this round's block for its fit in the one RFE hold scope: the
+    previous round's scope (`mark`, -1 for none) is closed first, so one
+    block is held at a time; `_rfe_fit` closes the last one on any exit."""
+    if mark >= 0:
+        admitted_scope_end(mark)
+        mark = -1
+    if not hold or not classical_is_array(block, cc):
+        return
+    mark = admitted_scope_begin()
+    _ = admitted_hold_array_f32(block, False)
 
 
 def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObject, g: PythonObject,
                 y: PythonObject, fit_params: PythonObject, arr: XIn, context: PythonObject,
-                cc: PythonObject) raises:
+                cc: PythonObject, hold: Bool, mut mark: Int) raises:
     """The elimination rounds and the final fit of `_rfe_fit`, inside its
     resident scope."""
     var b = native_loaded_module("builtins")
@@ -285,6 +315,7 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
     var block = pr0.get(first[1], n, d, cc)
     var nsup = d
     while nsup > nsel:  # driver-loop: over elimination rounds
+        _rfe_hold_block(block, hold, mark, cc)
         var est = _fit_clone(estimator, block, y, fit_params, context)
         var drop = min(step, nsup - nsel)
         var k = nsup - drop
@@ -302,6 +333,7 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
         feat = pr.get_i32(nxt[0], k, cc)
         block = pr.get(nxt[1], n, k, cc)
         nsup = k
+    _rfe_hold_block(block, hold, mark, cc)
     var final = _fit_clone(estimator, block, y, fit_params, context)
     var mask_list = Python.list()
     var fs = _ptr(support)

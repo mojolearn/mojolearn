@@ -266,7 +266,7 @@ struct _PrepContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojoXPrepContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXPrepContextFast"
+comptime _CTX_NAME = "MojolearnXPrepContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXPrepContextFastV2"
 comptime X_PREP_CONTEXT = _Global[StorageType=_PrepContext, name=_CTX_NAME, init_fn=_PrepContext.__init__]
 
 

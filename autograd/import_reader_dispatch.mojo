@@ -3,6 +3,7 @@
 # This does not allocate an execution Session or GPU context merely to parse
 # an artifact. All graph handles belong to the selected compiled image.
 from std.ffi import _Global
+from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from autograd.import_reader import OnnxInfo, onnx_read, onnx_info, onnx_buffers, onnx_close, onnx_registry_token
@@ -78,4 +79,4 @@ struct NativeReaderTable(Defaultable, Movable):
 
 
 comptime ONNX_READER_TABLE = _Global[StorageType=NativeReaderTable,
-    name="MojoNativeOnnxReaderTableV1", init_fn=NativeReaderTable.__init__]
+    name=("MojolearnNativeOnnxReaderTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNativeOnnxReaderTableFastV2"), init_fn=NativeReaderTable.__init__]

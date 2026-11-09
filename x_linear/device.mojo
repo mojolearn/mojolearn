@@ -110,7 +110,7 @@ struct _LinearContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojoXLinearContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXLinearContextFast"
+comptime _CTX_NAME = "MojolearnXLinearContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXLinearContextFastV2"
 comptime X_LINEAR_CONTEXT = _Global[StorageType=_LinearContext, name=_CTX_NAME, init_fn=_LinearContext.__init__]
 
 

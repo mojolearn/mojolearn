@@ -2,6 +2,7 @@
 # CPU training entry table: same provider transport, original host numerical
 # owners. Inference-only and training-host implementations remain distinct.
 from std.ffi import _Global
+from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, TRANSFORMER_BLOCK_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from transformer.block_options import BLOCK_OPTION_ADDRS, BLOCK_OPTION_PARAMS, BlockOptions
@@ -98,4 +99,4 @@ struct TransformerHostBlockAPI(Defaultable, Movable):
 
 
 comptime NATIVE_TRANSFORMER_HOST_BLOCK_API = _Global[StorageType=TransformerHostBlockAPI,
-    name="MojoTransformerHostBlockAPIv1", init_fn=TransformerHostBlockAPI.__init__]
+    name=("MojolearnTransformerHostBlockAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnTransformerHostBlockAPIFastV2"), init_fn=TransformerHostBlockAPI.__init__]

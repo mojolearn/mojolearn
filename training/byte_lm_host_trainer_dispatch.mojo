@@ -2,6 +2,7 @@
 # CPU implementation of the same ByteLM descriptor table as GPU trainers.
 # Only the session/host execution owner differs; metadata transport is shared.
 from std.ffi import _Global
+from checks.numerics import GLOBAL_NUMERIC_MODE
 from std.memory import memcpy, memcmp
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -267,4 +268,4 @@ struct ByteHostTrainerTable(Defaultable, Movable):
 
 
 comptime BYTE_HOST_TRAINER_TABLE = _Global[StorageType=ByteHostTrainerTable,
-    name="MojoByteHostTrainerTableV1", init_fn=ByteHostTrainerTable.__init__]
+    name=("MojolearnByteHostTrainerTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnByteHostTrainerTableFastV2"), init_fn=ByteHostTrainerTable.__init__]

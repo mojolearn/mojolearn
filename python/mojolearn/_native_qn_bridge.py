@@ -14,8 +14,8 @@ def connect(losses):
     from ._native_labels_bridge import label_context
     context = _state_context()
     # predict's float64 result (bindings/qn_native.mojo labels_cast) calls the
-    # base binding's cast helper through context["labels_helpers"]; without
-    # the label context every public predict raised ValueError('labels_helpers')
+    # label context (context["labels_base_binding"], connected once); without
+    # it every public predict raised ValueError('labels_helpers')
     # (0.8.66 AMD measurement smoke, algos/qn-reg on istella and taxi).
     context.update(label_context())
     from ._native_owner_lifetime import connect_owner_context

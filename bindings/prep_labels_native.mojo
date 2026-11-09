@@ -21,7 +21,7 @@ from bindings.optimizer_public_words import stash_python_error
 from bindings.classical_arrays import classical_address, classical_wrap_array
 from bindings.classical_labels import (
     labels_address, labels_label_kind, labels_cast,
-    labels_helper, _numeric_label_view, _flatten_labels, _sorted_classes)
+    labels_reduce_stat, _numeric_label_view, _flatten_labels, _sorted_classes)
 from bindings.admitted_input import admitted_array, admitted_vector, admit_c_view, admitted_dtype
 from bindings.scaler_native import _stage
 from bindings.scaler_lifecycle_native import _entries
@@ -537,12 +537,11 @@ def _multilabel_buffer(y: PythonObject, shape: PythonObject, context: PythonObje
     labels_cast(Int(py=classical_address(view)), admitted_dtype(view, context), labels_address(wide), "<f8", size,
                 context)
     _ = view  # keep the Python object alive through the native call above
-    var reduce = labels_helper(context, "reduce_stat")
     var addr = labels_address(wide)
-    if not _truth(py_call_typed(reduce, PythonObject(addr), PythonObject(1), PythonObject(size), PythonObject(4))):
+    if not _truth(labels_reduce_stat(context, addr, 1, size, 4)):
         raise Error(REFUSE_MULTIOUTPUT)
-    var lo = Float64(py=py_call_typed(reduce, PythonObject(addr), PythonObject(1), PythonObject(size), PythonObject(0)))
-    var hi = Float64(py=py_call_typed(reduce, PythonObject(addr), PythonObject(1), PythonObject(size), PythonObject(1)))
+    var lo = Float64(py=labels_reduce_stat(context, addr, 1, size, 0))
+    var hi = Float64(py=labels_reduce_stat(context, addr, 1, size, 1))
     var src = F64P(unsafe_from_address=addr)
     var hits = 0
     for i in range(size):  # driver-loop: over the indicator's values (the native equality counts)

@@ -55,7 +55,7 @@ struct _OpsContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojoXTreesOpsContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXTreesOpsContextFast"
+comptime _CTX_NAME = "MojolearnXTreesOpsContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXTreesOpsContextFastV2"
 comptime X_TREES_OPS_CONTEXT = _Global[StorageType=_OpsContext, name=_CTX_NAME, init_fn=_OpsContext.__init__]
 
 

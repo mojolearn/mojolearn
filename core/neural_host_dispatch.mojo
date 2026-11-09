@@ -3,6 +3,7 @@
 # entries. Each path calls the original native host numerical owner; provider
 # admission and lifetime management remain shared and outside this module.
 from std.ffi import _Global
+from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME, MAMBA_BLOCK_ABI_NAME, TRANSFORMER_BLOCK_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from core.mojolearn_neural_host_impl import _run_forward, _transformer_weights_from, _mamba1_run, _mamba2_run, _mamba3_run
@@ -152,7 +153,7 @@ struct NativeHostPrimitiveAPI(Defaultable, Movable):
 
 
 comptime NATIVE_HOST_PRIMITIVE_API = _Global[StorageType=NativeHostPrimitiveAPI,
-    name="MojoNeuralHostPrimitiveAPIv1", init_fn=NativeHostPrimitiveAPI.__init__]
+    name=("MojolearnNeuralHostPrimitiveAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNeuralHostPrimitiveAPIFastV2"), init_fn=NativeHostPrimitiveAPI.__init__]
 
 
 struct NativeHostMambaStateAPI(Defaultable, Movable):
@@ -166,7 +167,7 @@ struct NativeHostMambaStateAPI(Defaultable, Movable):
 
 
 comptime NATIVE_HOST_MAMBA_STATE_API = _Global[StorageType=NativeHostMambaStateAPI,
-    name="MojoNeuralHostMambaStateAPIv1", init_fn=NativeHostMambaStateAPI.__init__]
+    name=("MojolearnNeuralHostMambaStateAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNeuralHostMambaStateAPIFastV2"), init_fn=NativeHostMambaStateAPI.__init__]
 
 
 struct NativeHostTransformerAPI(Defaultable, Movable):
@@ -180,7 +181,7 @@ struct NativeHostTransformerAPI(Defaultable, Movable):
 
 
 comptime NATIVE_HOST_TRANSFORMER_API = _Global[StorageType=NativeHostTransformerAPI,
-    name="MojoNeuralHostTransformerAPIv1", init_fn=NativeHostTransformerAPI.__init__]
+    name=("MojolearnNeuralHostTransformerAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNeuralHostTransformerAPIFastV2"), init_fn=NativeHostTransformerAPI.__init__]
 
 
 struct NativeHostMambaBlockAPI(Defaultable, Movable):
@@ -194,4 +195,4 @@ struct NativeHostMambaBlockAPI(Defaultable, Movable):
 
 
 comptime NATIVE_HOST_MAMBA_BLOCK_API = _Global[StorageType=NativeHostMambaBlockAPI,
-    name="MojoNeuralHostMambaBlockAPIv1", init_fn=NativeHostMambaBlockAPI.__init__]
+    name=("MojolearnNeuralHostMambaBlockAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNeuralHostMambaBlockAPIFastV2"), init_fn=NativeHostMambaBlockAPI.__init__]

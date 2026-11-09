@@ -41,7 +41,7 @@ from bindings.family_common import (
     family_isinstance,
 )
 from bindings.classical_labels import (
-    labels_cast, labels_helper, classical_encode_labels,
+    labels_cast, labels_class_ratio_f64, labels_fsum_f64, classical_encode_labels,
     classical_decode_labels, classical_accuracy,
 )
 from bindings.admitted_input import admitted_array, admitted_vector, admit_c_view, admitted_dtype
@@ -597,8 +597,7 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         var cap = FAMILY_I64P(unsafe_from_address=Int(py=classical_address(ca)))
         for c in range(C):  # driver-loop: over the k class counts
             cap[c] = Int64(counts[c])
-        _ = family_call(labels_helper(context, "class_ratio_f64"), classical_address(ca), _i(C), _i(n), _i(1),
-                        classical_address(prior))
+        _ = labels_class_ratio_f64(context, Int(py=classical_address(ca)), C, n, 1, Int(py=classical_address(prior)))
         _ = ca  # keep the Python object alive through the native call above
     elif py_type(priors) is b.str and String(priors) == "uniform":
         for c in range(C):  # driver-loop: over the k uniform class priors
@@ -630,8 +629,7 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         for i in range(C):  # driver-loop: over the user priors argument (k sized)
             sp[i] = values[i]
         var total = admitted_vector(1, "<f8", context)
-        var status = Int(py=family_call(labels_helper(context, "fsum_f64"), classical_address(src), _i(C),
-                                        classical_address(total)))
+        var status = labels_fsum_f64(Int(py=classical_address(src)), C, Int(py=classical_address(total)))
         _ = src  # keep the Python object alive through the native call above
         var tot = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(total)))[0]
         _ = total  # keep the Python object alive through the read above

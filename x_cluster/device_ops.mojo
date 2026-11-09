@@ -1683,7 +1683,7 @@ struct _ClusterContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojoXClusterContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXClusterContextFast"
+comptime _CTX_NAME = "MojolearnXClusterContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXClusterContextFastV2"
 comptime X_CLUSTER_CONTEXT = _Global[StorageType=_ClusterContext, name=_CTX_NAME, init_fn=_ClusterContext.__init__]
 
 

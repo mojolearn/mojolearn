@@ -53,7 +53,7 @@ from bindings.family_common import (
     family_field, family_snapshot_min,
 )
 from bindings.classical_labels import (
-    labels_cast, labels_helper,
+    labels_cast, labels_reduce_stat, labels_prepare_targets,
     classical_encode_labels, labels_shape_of, labels_reshape, classical_decode_labels, classical_accuracy,
     classical_encode_words,
 )
@@ -288,8 +288,7 @@ def _class_name(model: PythonObject) raises -> String:
 def _reduce(addr: Int, code: Int, count: Int, what: Int, context: PythonObject) raises -> PythonObject:
     """`Array.min()` / `max()` / the integral test: the core helper
     `reduce_stat` over a contiguous block of `count` elements."""
-    return family_call(labels_helper(context, "reduce_stat"), PythonObject(addr), PythonObject(code),
-                       PythonObject(count), PythonObject(what))
+    return labels_reduce_stat(context, addr, code, count, what)
 
 
 def knn_door(binding: PythonObject, name: String) raises -> PythonObject:
@@ -716,10 +715,9 @@ def _whole_float_labels(y: PythonObject, context: PythonObject) raises -> Bool:
         return True
     var classes_store = family_array(Python.tuple(n), "<f8", context)
     var codes = family_array(Python.tuple(n), "<i4", context)
-    var n_distinct = Int(py=family_call(labels_helper(context, "prepare_targets"), PythonObject(addr),
-                               PythonObject(_CODE_F32 if typestr == "<f4" else _CODE_F64), PythonObject(n),
-                               classical_address(classes_store), classical_address(codes),
-                               PythonObject(0), PythonObject(0), PythonObject(0)))
+    var n_distinct = labels_prepare_targets(context, addr, _CODE_F32 if typestr == "<f4" else _CODE_F64, n,
+                                            Int(py=classical_address(classes_store)), Int(py=classical_address(codes)),
+                                            0, 0, 0)
     _ = view  # keep the Python object alive through the native call above
     _ = codes  # keep the Python object alive through the native call above
     var integral = _truth(_reduce(Int(py=classical_address(classes_store)), _CODE_F64, n_distinct, _REDUCE_INTEGRAL, context))

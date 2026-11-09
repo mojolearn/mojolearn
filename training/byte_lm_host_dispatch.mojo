@@ -2,6 +2,7 @@
 # Host ByteLM uses the same native descriptor transport and ownership interface
 # as GPU models. This table owns four existing model operations and profile readback.
 from std.ffi import _Global
+from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix
@@ -79,4 +80,4 @@ struct ByteHostNativeTable(Defaultable, Movable):
 
 
 comptime BYTE_HOST_NATIVE_TABLE = _Global[StorageType=ByteHostNativeTable,
-    name="MojoByteHostNativeTableV1", init_fn=ByteHostNativeTable.__init__]
+    name=("MojolearnByteHostNativeTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnByteHostNativeTableFastV2"), init_fn=ByteHostNativeTable.__init__]

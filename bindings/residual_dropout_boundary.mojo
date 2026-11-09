@@ -12,7 +12,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 # The training binding's context (bindings/_mojolearn_training.mojo
 # _NEURAL_CTX): the train_dev handles live on it.
-comptime _RD_DEV_CTX = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingContextFast"
+comptime _RD_DEV_CTX = "MojolearnNeuralTrainingContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTrainingContextFastV2"
 
 
 def residual_dropout_binding(x_addr: PythonObject,residual_addr: PythonObject,
@@ -29,7 +29,7 @@ def residual_dropout_binding(x_addr: PythonObject,residual_addr: PythonObject,
     var yp = f32_ptr(y)
     var count = 0
     with GILReleased(Python()):
-        var ctx = neural_ctx["MojoNeuralTrainingContextIdentical"]()
+        var ctx = neural_ctx["MojolearnNeuralTrainingContextIdenticalV2"]()
         count = residual_dropout_device[False](ctx,yp,yp,xp,rp,args.n,args.offset,args.p,args.seed_lo,args.seed_hi,args.stream)
     return PythonObject(count)
 
@@ -48,7 +48,7 @@ def residual_dropout_backward_binding(dy_addr: PythonObject,dx_addr: PythonObjec
     var rp = f32_ptr(dr)
     var count = 0
     with GILReleased(Python()):
-        var ctx = neural_ctx["MojoNeuralTrainingContextIdentical"]()
+        var ctx = neural_ctx["MojolearnNeuralTrainingContextIdenticalV2"]()
         count = residual_dropout_device[True](ctx,xp,rp,yp,yp,args.n,args.offset,args.p,args.seed_lo,args.seed_hi,args.stream)
     return PythonObject(count)
 

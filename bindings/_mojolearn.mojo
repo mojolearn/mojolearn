@@ -196,6 +196,17 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
+from std.ffi import _Global
+from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
+from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
+from bindings.labels_native_abi import (
+    LABELS_NATIVE_ABI_NAME, LABELS_CAP_DEVICE, LABELS_OP_MODE, LABELS_OP_CAPABILITIES,
+    LABELS_OP_PREPARE_TARGETS, LABELS_OP_REDUCE_STAT, LABELS_OP_ARGMAX_F32, LABELS_OP_ARGMAX_F64,
+    LABELS_OP_GATHER_I32, LABELS_OP_GATHER_I64, LABELS_OP_GATHER_F64, LABELS_OP_CLASS_RATIO_F64,
+    labels_reduce_stat_encode,
+)
+
 from checks.vendor import COMPILED_VENDOR
 
 from max.gpu.host import DeviceContext
@@ -204,7 +215,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoCoreContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoCoreContextFast"
+comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnCoreContextFastV2"
 
 
 from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform
@@ -2048,6 +2059,95 @@ def prepare_targets_binding(
     return PythonObject(k)
 
 
+# ===========================================================================
+# labels_native_api_v1 (lane s1, S3; bindings/labels_native_abi.mojo): the
+# label path's base-binding steps over THIS binding's device helpers, on the
+# kit_call descriptor ABI. Each operation calls the same entry the Python
+# callable table called (same validation, same kernels, same order), so no
+# byte moves. The caller keeps the GIL (kit_call release_gil=False): every
+# entry below releases it around its own kernel launch.
+# ===========================================================================
+
+
+def _lw(v: Int) -> PythonObject:
+    return PythonObject(v)
+
+
+def labels_native_operation(op: Int, a: List[Int], p: List[Int]) raises -> Int:
+    if op == LABELS_OP_MODE:
+        return Int(GLOBAL_NUMERIC_MODE)
+    if op == LABELS_OP_CAPABILITIES:
+        return LABELS_CAP_DEVICE
+    if op == LABELS_OP_PREPARE_TARGETS:
+        if len(a) != 4 or len(p) != 4:
+            raise Error("labels native ABI: prepare_targets takes 4 addresses and 4 words")
+        return Int(py=prepare_targets_binding(_lw(a[0]), _lw(p[0]), _lw(p[1]), _lw(a[1]), _lw(a[2]),
+                                              _lw(a[3]), _lw(p[2]), _lw(p[3])))
+    if op == LABELS_OP_REDUCE_STAT:
+        if len(a) != 2 or len(p) != 3:
+            raise Error("labels native ABI: reduce_stat takes 2 addresses and 3 words")
+        return labels_reduce_stat_encode(reduce_stat_binding(_lw(a[0]), _lw(p[0]), _lw(p[1]), _lw(p[2])), a[1])
+    if op == LABELS_OP_ARGMAX_F32 or op == LABELS_OP_ARGMAX_F64:
+        if len(a) != 2 or len(p) != 2:
+            raise Error("labels native ABI: argmax_rows takes 2 addresses and 2 words")
+        if op == LABELS_OP_ARGMAX_F64:
+            _ = argmax_rows_f64_binding(_lw(a[0]), _lw(p[0]), _lw(p[1]), _lw(a[1]))
+        else:
+            _ = argmax_rows_f32_binding(_lw(a[0]), _lw(p[0]), _lw(p[1]), _lw(a[1]))
+        return 0
+    if op == LABELS_OP_GATHER_I32 or op == LABELS_OP_GATHER_I64 or op == LABELS_OP_GATHER_F64:
+        if len(a) != 3 or len(p) != 2:
+            raise Error("labels native ABI: gather takes 3 addresses and 2 words")
+        if op == LABELS_OP_GATHER_I32:
+            _ = gather_i32_binding(_lw(a[0]), _lw(p[0]), _lw(a[1]), _lw(p[1]), _lw(a[2]))
+        elif op == LABELS_OP_GATHER_I64:
+            _ = gather_i64_binding(_lw(a[0]), _lw(p[0]), _lw(a[1]), _lw(p[1]), _lw(a[2]))
+        else:
+            _ = gather_f64_binding(_lw(a[0]), _lw(p[0]), _lw(a[1]), _lw(p[1]), _lw(a[2]))
+        return 0
+    if op == LABELS_OP_CLASS_RATIO_F64:
+        if len(a) != 2 or len(p) != 3:
+            raise Error("labels native ABI: class_ratio_f64 takes 2 addresses and 3 words")
+        return Int(py=class_ratio_f64_binding(_lw(a[0]), _lw(p[0]), _lw(p[1]), _lw(p[2]), _lw(a[1])))
+    raise Error("labels native ABI: unknown operation")
+
+
+def labels_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
+                     result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    try:
+        if result == 0 or nf != 0:
+            raise Error("labels native ABI: invalid result or scalar span")
+        var a = native_descriptor_words(aa, na)
+        var p = native_descriptor_words(pp, np)
+        MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[0] = labels_native_operation(op, a, p)
+        return 0
+    except problem:
+        native_descriptor_report(problem, context, sink)
+        return 1
+
+
+struct LabelsNativeTable(Defaultable, Movable):
+    var name: String
+    var entries: List[NativeDescriptorCall]
+
+    def __init__(out self):
+        self.name = String(LABELS_NATIVE_ABI_NAME)
+        self.entries = List[NativeDescriptorCall]()
+        self.entries.append(labels_native_v1)
+
+
+# The slot holds THIS module's dispatch pointer: tier-keyed so a FAST and an
+# IDENTICAL build never hand out each other's code (core/shared_slot.mojo).
+comptime LABELS_NATIVE_TABLE = _Global[StorageType=LabelsNativeTable,
+    name=("MojolearnLabelsNativeTableIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV1"),
+    init_fn=LabelsNativeTable.__init__]
+
+
+def labels_native_api_v1_binding() raises -> PythonObject:
+    var table = LABELS_NATIVE_TABLE.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -2056,6 +2156,7 @@ def build__mojolearn() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn")
         m.def_function[mojolearn_vendor_binding]("mojolearn_vendor")
+        m.def_function[labels_native_api_v1_binding]("labels_native_api_v1")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")

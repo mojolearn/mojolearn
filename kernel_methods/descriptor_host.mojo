@@ -142,4 +142,4 @@ struct KernelMethodHostAPI(Defaultable, Movable):
 
 
 comptime KERNEL_METHOD_HOST_API = _Global[StorageType=KernelMethodHostAPI,
-    name="MojoKernelMethodHostAPIv1", init_fn=KernelMethodHostAPI.__init__]
+    name=("MojolearnKernelMethodHostAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKernelMethodHostAPIFastV2"), init_fn=KernelMethodHostAPI.__init__]

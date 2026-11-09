@@ -1590,7 +1590,7 @@ struct ByteLmScheduleTable(Defaultable, Movable):
 
 
 comptime BYTE_LM_SCHEDULE_TABLE = _Global[StorageType=ByteLmScheduleTable,
-    name="MojoByteLmScheduleTableV1", init_fn=ByteLmScheduleTable.__init__]
+    name=("MojolearnByteLmScheduleTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnByteLmScheduleTableFastV2"), init_fn=ByteLmScheduleTable.__init__]
 
 
 def byte_lm_schedule_api_binding() raises -> PythonObject:

@@ -24,7 +24,7 @@ from bindings.optimizer_public_door import (
     entry_step,
 )
 
-comptime _NEURAL_CTX = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingContextFast"
+comptime _NEURAL_CTX = "MojolearnNeuralTrainingContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTrainingContextFastV2"
 
 
 struct GpuOptKernels(OptKernels):

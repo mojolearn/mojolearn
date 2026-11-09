@@ -11,7 +11,7 @@ from std.sys.info import has_apple_gpu_accelerator
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojoPreprocessingContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoPreprocessingContextFast"
+comptime _DEVCTX_SLOT = "MojolearnPreprocessingContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnPreprocessingContextFastV2"
 
 from metrics.checks.device_io import upload_f32
 from core.device_scan import device_first_nonfinite

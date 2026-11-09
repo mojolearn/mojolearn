@@ -43,6 +43,8 @@ takes the resulting `DevicePlan` value as an argument and calls no
 callers not yet moved.
 """
 from std.atomic import Atomic, Ordering
+
+from core.shared_slot import shared_slot_check, shared_slot_word
 from std.ffi import _Global, external_call
 from std.os import getenv
 
@@ -131,6 +133,8 @@ struct _DevicePlanTable(Defaultable, Movable):
     # case of no plan anywhere in the process).
     # The lists are sized once here and never resized, so their storage
     # addresses are stable for the process.
+    # first field: the layout word every accessor checks (core/shared_slot.mojo)
+    var layout: Int
     var owners: List[Int64]
     var counts: List[Int64]
     var masks: List[Int64]
@@ -155,6 +159,7 @@ struct _DevicePlanTable(Defaultable, Movable):
     var used: List[Int64]
 
     def __init__(out self):
+        self.layout = shared_slot_word[_DevicePlanTable](_DEVICE_PLAN_LAYOUT)
         self.owners = List[Int64](length=DEVICE_PLAN_SLOTS, fill=Int64(0))
         self.counts = List[Int64](length=DEVICE_PLAN_SLOTS, fill=Int64(0))
         self.masks = List[Int64](length=DEVICE_PLAN_SLOTS, fill=Int64(0))
@@ -167,13 +172,26 @@ struct _DevicePlanTable(Defaultable, Movable):
         self.used = List[Int64](length=DEVICE_PLAN_MAX_DEVICES, fill=Int64(0))
 
 
+#: Layout version of `_DevicePlanTable` (core/shared_slot.mojo rule). V2:
+#: the table gained `used` (lane perf3-cluster-gp-gate); V3: the layout word.
+comptime _DEVICE_PLAN_LAYOUT = 3
+comptime _DEVICE_PLAN_NAME = (
+    "MojolearnDevicePlanIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnDevicePlanOtherV3"
+)
 comptime _DEVICE_PLAN_TABLE = _Global[
     StorageType=_DevicePlanTable,
-    # V2: the table gained `used` (lane perf3-cluster-gp-gate); a new name so
-    # a DSO built with the old layout never shares storage with this one.
-    name=("MojoDevicePlanIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojoDevicePlanOtherV2"),
+    # a new name per layout version, so a DSO built with an older layout
+    # never shares storage with this one; the layout word refuses one that
+    # forgot to bump it
+    name=_DEVICE_PLAN_NAME,
     init_fn=_DevicePlanTable.__init__,
 ]
+
+
+def _plan_table() raises -> UnsafePointer[_DevicePlanTable, MutAnyOrigin]:
+    var table = _DEVICE_PLAN_TABLE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    shared_slot_check(table[].layout, shared_slot_word[_DevicePlanTable](_DEVICE_PLAN_LAYOUT), _DEVICE_PLAN_NAME)
+    return table
 
 
 def _thread_id() -> Int64:
@@ -188,7 +206,7 @@ def _words(mut list: List[Int64]) -> MutPointer[Int64, MutUntrackedOrigin]:
 
 def _own_slot() raises -> Int:
     """The calling thread's slot, or -1 when it has no plan."""
-    var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    var table = _plan_table()
     var active = _words(table[].active)
     if Atomic.load[ordering=Ordering.ACQUIRE](active) == 0:
         return -1
@@ -236,7 +254,7 @@ def device_plan_enter(devices: List[Int], families: Int = DEVICE_PLAN_WORKER) ra
         for j in range(i):  # driver-loop: over the earlier selected device indices
             if devices[j] == devices[i]:
                 raise Error("ValueError: devices must be distinct nonnegative integer indices")
-    var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    var table = _plan_table()
     var held = _own_slot()
     if held >= 0:
         # The same plan entered again (the next binding of the same driver
@@ -278,7 +296,7 @@ def device_plan_exit() raises:
     var slot = _own_slot()
     if slot < 0:
         raise Error("RuntimeError: no device plan is bound to this thread")
-    var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    var table = _plan_table()
     var depth = Int(_words(table[].depths)[slot])
     if depth > 1:
         _words(table[].depths)[slot] = Int64(depth - 1)
@@ -295,7 +313,7 @@ def device_plan_size() raises -> Int:
     var slot = _own_slot()
     if slot < 0:
         return 0
-    var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    var table = _plan_table()
     return Int(_words(table[].counts)[slot])
 
 
@@ -303,14 +321,14 @@ def _mark_rank(rank: Int) raises:
     """Record that an owner loop opened rank `rank`'s device (see `used`)."""
     if rank < 0 or rank >= DEVICE_PLAN_MAX_DEVICES:
         return
-    var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    var table = _plan_table()
     Atomic.store[ordering=Ordering.RELEASE](_words(table[].used) + rank, Int64(1))
 
 
 def device_plan_ranks_take() raises -> Int:
     """The number of distinct ranks whose device an owner loop opened under a
     bound plan since the last take, and a cleared record."""
-    var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    var table = _plan_table()
     var used = _words(table[].used)
     var ranks = 0
     for r in range(DEVICE_PLAN_MAX_DEVICES):  # driver-loop: over the fixed rank flags
@@ -322,7 +340,7 @@ def device_plan_ranks_take() raises -> Int:
 
 def _plan_device(slot: Int, rank: Int) raises -> Int:
     """The physical device of owner `rank` in the bound plan of `slot`."""
-    var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    var table = _plan_table()
     var count = Int(_words(table[].counts)[slot])
     if rank < 0 or rank >= count:
         raise Error("device plan: owner rank " + String(rank) + " outside a plan of " + String(count) + " devices")
@@ -347,7 +365,7 @@ def device_plan_root() raises -> Int:
     var slot = _own_slot()
     if slot < 0:
         return -1
-    var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    var table = _plan_table()
     return Int(_words(table[].ids)[slot * DEVICE_PLAN_MAX_DEVICES])
 
 
@@ -357,7 +375,7 @@ def device_plan_setting(name: String, default: String = "") raises -> String:
     `getenv(name, default)`."""
     var slot = _own_slot()
     if slot >= 0:
-        var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+        var table = _plan_table()
         if (Int(_words(table[].masks)[slot]) & _family_bit(name)) != 0:
             return String(Int(_words(table[].counts)[slot]))
     return String(getenv(name, default))
@@ -461,7 +479,7 @@ def plan_for_single() -> DevicePlan:
 
 
 def _log_lock() raises -> MutPointer[Int64, MutUntrackedOrigin]:
-    var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    var table = _plan_table()
     var lock = _words(table[].log_lock)
     while True:  # driver-loop: spin on the placement log's lock word
         var expected = Int64(0)
@@ -475,7 +493,7 @@ def _log_lock() raises -> MutPointer[Int64, MutUntrackedOrigin]:
 
 def _log_plan(devices: List[Int]) raises:
     """Append one bound plan to the placement log (dropped when full)."""
-    var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    var table = _plan_table()
     var lock = _log_lock()
     var used = Int(_words(table[].log_used)[0])
     if used + 1 + len(devices) <= DEVICE_PLAN_LOG_WORDS:
@@ -489,7 +507,7 @@ def _log_plan(devices: List[Int]) raises:
 
 def device_plan_log_take() raises -> List[List[Int]]:
     """The plans bound since the last take, in order, and an empty log."""
-    var table = _DEVICE_PLAN_TABLE.get_or_create_ptr()
+    var table = _plan_table()
     var lock = _log_lock()
     var used = Int(_words(table[].log_used)[0])
     var log = _words(table[].log)

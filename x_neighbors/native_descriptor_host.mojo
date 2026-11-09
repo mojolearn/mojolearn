@@ -1172,4 +1172,4 @@ struct XNeighborsNativeAPI(Defaultable, Movable):
         self.entries.append(xn_native_v1)
 
 comptime XN_NATIVE_API = _Global[StorageType=XNeighborsNativeAPI,
-    name="MojoXNeighborsNativeHostAPIv1", init_fn=XNeighborsNativeAPI.__init__]
+    name=("MojolearnXNeighborsNativeHostAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnXNeighborsNativeHostAPIFastV2"), init_fn=XNeighborsNativeAPI.__init__]

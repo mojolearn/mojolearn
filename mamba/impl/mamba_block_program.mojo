@@ -56,7 +56,7 @@ from autograd.block_step_ops import (
 
 # The process-lifetime DeviceContext of the Mamba bindings (the name
 # mamba/impl/mamba_shell_impl.mojo has used since the neural lane).
-comptime _NEURAL_CTX = "MojoNeuralMambaContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralMambaContextFast"
+comptime _NEURAL_CTX = "MojolearnNeuralMambaContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralMambaContextFastV2"
 
 
 def mamba_step_code(kind: Int) raises -> Int:
