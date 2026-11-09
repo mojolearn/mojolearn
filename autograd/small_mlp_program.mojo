@@ -54,8 +54,8 @@ Entry words (`small_mlp_program_open` / `small_mlp_program_run`):
     CLOSE     -> 0
     SESSIONS  (no handle; `small_mlp_sessions_forward`) addresses [y, x,
               w1 (hidden x width), b1, w2 (out x hidden), b2], ints [rows,
-              width, hidden, out] -> rows * out: the same forward (two
-              transposes, linear + ReLU, linear) for any Linear-ReLU-Linear
+              width, hidden, out] -> rows * out: the same forward (OPS_SMALL_MLP,
+              or the generic ops under the A/B define) for any Linear-ReLU-Linear
               shape on a session opened for the call. The public
               `training.mlp_inference_sessions` runs its packed session rows
               through it.
@@ -508,7 +508,8 @@ def small_mlp_sessions_forward[E: Exec & Movable & Deinitable, KIND: Int](
 ) raises -> Int:
     """SESSIONS: `y = linear(relu(linear(x, w1^T, b1)), w2^T, b2)` for any
     (width, hidden, out), on an inference session opened for this call:
-    the trainer's forward ops (OPS_TRANSPOSE, OPS_LINEAR act 1 / act 0), so
+    the trainer's forward op (OPS_SMALL_MLP; the A/B define: OPS_TRANSPOSE,
+    OPS_LINEAR act 1 / act 0), so
     an 8-16-3 model gives `predict_logits`' words. `x` is the sessions' rows
     packed in order; each row's logits depend only on that row. Refuses a
     non-finite input, weight or logit from device flags, one wait."""
