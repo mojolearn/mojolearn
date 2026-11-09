@@ -1255,9 +1255,9 @@ def copy_f32_gated_kernel(
         dst.unsafe_store(i, src.unsafe_load(i))
 
 
-# TOMBSTONE: kmeans_conv_step_kernel (MERGED into the executor loop's criterion op) deleted 2026-11-08 by lane/fix-d3-executor-loops; code recoverable at the deletion commit^.
+# TOMBSTONE: kmeans_conv_step_kernel (MERGED into the executor loop's criterion op) deleted 2026-11-08 by lane/fix-d3-executor-loops; code recoverable at 22ac89b54c.
 # Its body is `loop_below_kernel` (autograd/program_loop_device.mojo), which also stores the iteration register.
-# Restore: git apply experiments/removed/KMEANS_LLOYD_CHUNK_DRIVER_LOOP.patch; record in docs/TOMBSTONES.md.
+# Restore: git apply experiments/removed/EXECUTOR_LOOP_DRIVER_LOOPS.patch; record in docs/TOMBSTONES.md.
 
 
 def launch_accumulate_centroid_sums_blocked_gated[
