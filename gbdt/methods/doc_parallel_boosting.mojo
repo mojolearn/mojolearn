@@ -2894,9 +2894,7 @@ def _launch_querywise_pointwise_target(
 # sampling (`feature_fraction < 1`: the projection drains), `random_strength
 # != 0` (the score std dev is a host reduction), an identity trace (per-round
 # host records), a multi-device plan (the shards take the scale as a launch
-# value), the greedy searcher (the DEFAULT SymmetricTree arm
-# `run_tree_layout`, which has no enqueue-only op yet), Depthwise /
-# Lossguide, and the FAST + Apple build (no leaf-op arm there: its own
+# value), Depthwise / Lossguide, and the FAST + Apple build (no leaf-op arm there: its own
 # estimator `apple_fast_est`, the SYM_ITER pool and the fused eval stay).
 #
 # A/B: `-D MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF` restores the host loop for these
@@ -3077,8 +3075,9 @@ def sym_device_rounds_eligible(
 
 @fieldwise_init
 struct SymDeviceRounds(LoopStep, Movable):
-    """One pointwise SymmetricTree boosting round as a step of the
-    executor's bounded loop (the block above). The buffers are handle copies
+    """One SymmetricTree boosting round as a step of the executor's bounded
+    loop (the blocks above): the pointwise searcher's round, or with
+    `use_greedy` the greedy searcher's (lane t3). The buffers are handle copies
     of the fit's (`DeviceBuffer.copy()` shares the memory) or buffers owned
     for the loop's span; every call below passes at most one `mut` field of
     `self`, the rest as local handles."""
