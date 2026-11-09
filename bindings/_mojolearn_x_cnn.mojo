@@ -1129,21 +1129,24 @@ def graph_op_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObj
 
 
 def gcn_backward_t_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """GCNConv's resident backward on the tape in one call (autograd/rules_graph.mojo
+    """GCNConv's backward on the tape in one call (autograd/rules_graph.mojo
     `gcn_backward_autograd`): addrs = [g, x, h, out, W, gW, dx, dh, vals_t, csr_t, b, gb, ones];
-    params = [n, d, f, nnz, bias, dx resident, ones resident]."""
+    params = [n, d, f, nnz, bias, dx resident, ones resident(, resident)] (an eighth word 0:
+    the host form, every address a host array)."""
     var a = _addrs(addrs, 13)
-    var p = _addrs(params, 7)
+    var p = _addrs(params, Int(py=len(params)))
     with GILReleased(Python()):
         gcn_backward_autograd(a, p)
     return PythonObject(p[0] * p[1])
 
 
 def sage_backward_t_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """SAGEConv's resident backward on the tape in one call (autograd/rules_graph.mojo
-    `sage_backward_autograd`): 23 addresses, params = [n, d, f, nnz, aggr, normalize, root, dx resident]."""
-    var a = _addrs(addrs, 23)
-    var p = _addrs(params, 8)
+    """SAGEConv's backward on the tape in one call (autograd/rules_graph.mojo
+    `sage_backward_autograd`): 23 addresses and params = [n, d, f, nnz, aggr, normalize, root,
+    dx resident] (the resident form), or 33 addresses and those plus [resident, project] (the
+    host form; autograd/graph_tape.mojo `sage_cfg`)."""
+    var a = _addrs(addrs, Int(py=len(addrs)))
+    var p = _addrs(params, Int(py=len(params)))
     with GILReleased(Python()):
         sage_backward_autograd(a, p)
     return PythonObject(p[0] * p[1])

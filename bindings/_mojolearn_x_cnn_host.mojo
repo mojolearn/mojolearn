@@ -33,6 +33,7 @@ from x_cnn.host.ops_host import map2_into, softmax_xent_into, sgd_into, adam_int
 from x_cnn.host.ops_host import batchnorm_forward_into, batchnorm_backward_into, dropout2d_into
 from x_cnn.ops import relu_fwd_at, relu_bwd_at, add_at, mul_at
 from x_cnn.host.ops_host import graph_op_host as graph_op_impl
+from autograd.rules_graph_host import gcn_backward_host_autograd, sage_backward_host_autograd
 from x_cnn.host.ops_host import adaptive_pool_host as adaptive_pool_impl
 from x_cnn.host.ops_host import pad2d_forward_host as pad2d_forward_impl
 from x_cnn.host.ops_host import pad2d_backward_host as pad2d_backward_impl
@@ -75,6 +76,28 @@ def _ints(params: PythonObject) raises -> List[Int]:
     for k in range(Int(py=len(params))):  # small-loop(the caller's int parameter words)
         out.append(Int(py=params[k]))
     return out^
+
+
+def gcn_backward_t_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """GCNConv's backward on the tape in one call (autograd/rules_graph_host.mojo
+    `gcn_backward_host_autograd`, the host form): addrs = [g, x, h, out, W, gW, dx, dh, vals_t,
+    csr_t, b, gb, ones] host arrays; params = [n, d, f, nnz, bias, 0, 0, 0]."""
+    var a = _ints(addrs)
+    var p = _ints(params)
+    with GILReleased(Python()):
+        gcn_backward_host_autograd(a, p)
+    return PythonObject(p[0] * p[1])
+
+
+def sage_backward_t_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """SAGEConv's backward on the tape in one call (autograd/rules_graph_host.mojo
+    `sage_backward_host_autograd`, the host form): 33 host addresses, params = [n, d, f, nnz,
+    aggr, normalize, root, 0, 0, project] (autograd/graph_tape.mojo `sage_cfg`)."""
+    var a = _ints(addrs)
+    var p = _ints(params)
+    with GILReleased(Python()):
+        sage_backward_host_autograd(a, p)
+    return PythonObject(p[0] * p[1])
 
 
 def gemm_binding(a_addr: PythonObject, b_addr: PythonObject, c_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -894,6 +917,8 @@ def build__mojolearn_x_cnn_host() -> PythonObject:
         m.def_function[pad2d_backward_binding]("x_cnn_pad2d_backward")
         m.def_function[adaptive_pool_binding]("x_cnn_adaptive_pool")
         m.def_function[graph_op_binding]("x_cnn_graph_op")
+        m.def_function[gcn_backward_t_binding]("x_cnn_gcn_backward_t")
+        m.def_function[sage_backward_t_binding]("x_cnn_sage_backward_t")
         # TOMBSTONE: x_cnn_conv_block_forward / _backward (non-resident) and the host x_cnn_numeric_mode alias (dead native entries: every caller uses the _r entries / x_cnn_host_numeric_mode) deleted 2026-10-26 by 352103272; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_cnn.patch
         m.def_function[vendor_binding]("x_cnn_vendor")
