@@ -107,7 +107,7 @@ def _fit_clone(estimator: PythonObject, x: PythonObject, y: PythonObject, fit_pa
 
 # ---------------------------------------------------------------- RFE programs
 # TOMBSTONE: _gather_cls (one gather program per round plus one for the final fit, each putting X) deleted
-# 2026-11-09 by lane w1-readmission-rfe; code recoverable at the deletion commit's parent.
+# 2026-11-09 by d6f2d5ed09 (lane w1-readmission-rfe); code recoverable at d6f2d5ed09^.
 # Restore: git apply experiments/removed/W1_RFE_GATHER_PROGRAM_PER_ROUND.patch
 def _stage_block(mut pr: ClsProg, x_value: PythonObject, n: Int, d: Int, sup: Int,
                  k: Int) raises -> Tuple[Int, Int]:
