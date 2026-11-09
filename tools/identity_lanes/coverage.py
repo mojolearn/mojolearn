@@ -1413,12 +1413,12 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("neural-trainer-unfused")
 def _(ml, X, yc, yr, Xh=None):
-    """ParallelNeuralTrainer over the mlp lane's trainer: the per-layer
-    gradient route (bindings/parallel_mlp_native.mojo
-    mlp_gradients_from_state: the training binding's mlp_bias_activation,
-    ce_loss, mlp_relu_backward and mlp_sum_rows), its only route since the
-    fused step was deleted (plan row X2, 2026-11-09). Parts: the weights
-    after three steps and the logits."""
+    """ParallelNeuralTrainer over the mlp lane's trainer: the shard
+    gradients (bindings/parallel_mlp_native.mojo mlp_gradients_on: the
+    SmallMLPTrainer program's loss-and-gradients run,
+    autograd/small_mlp_program.mojo mode 1; lane m2-neural-leftovers,
+    2026-11-09) and the ordered update. Parts: the weights after three
+    steps and the logits."""
     from mojolearn.parallel_training import ParallelNeuralTrainer
     d = _coverage_digester(ml)
     w = [((np.arange(int(np.prod(s)), dtype=np.float32) % 7 - 3) / 32).reshape(s).astype(np.float32)

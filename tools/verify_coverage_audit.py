@@ -1414,8 +1414,8 @@ NEW_LANE_PURPOSE = {
     "multioutput-ridge": "MultiOutputRegressor over Ridge: `ridge_predict_multi`",
     "x-ridge-cv-kfold": "RidgeCV with an integer cv: `x_linear_best_alpha`",
     "svc-gamma-scale": "SVC and SVR with gamma='scale': `scale_gamma_limbs`",
-    "neural-trainer-unfused": "ParallelNeuralTrainer (its per-layer gradient route): `mlp_bias_activation`, "
-                              "`mlp_relu_backward`, `mlp_sum_rows`",
+    "neural-trainer-unfused": "ParallelNeuralTrainer (its shard gradients on the SmallMLPTrainer program): "
+                              "`small_mlp_program` (loss and gradients)",
 }
 
 
