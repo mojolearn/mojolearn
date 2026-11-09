@@ -129,6 +129,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.math import fma, sqrt
 from core.admitted_finite_status import enqueue_finite_status
 from core.device_zero import enqueue_fill
+from core.device_query_x import QueryFold
+from core.msel_device_x import msel_device_x_f32
 
 comptime KNN_FAST_REFINE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_KNN_FAST_REFINE"]()
@@ -517,10 +519,14 @@ def _knn_search_plan(
     knn_method: Int,
     metric: Int,
     metric_arg: Float32,
+    queries_on_device: Bool = False,
 ) raises -> Tuple[Int, Int, Int, Int]:
     """The refusals and the plan of `_knn_search_traced_retaining`, in its
     order, before any allocation: `(resolved metric, devices, query tile,
-    buf_len)`. Split out 2026-09-17 (DEVIATION 2921) so `knn_search_resident`
+    buf_len)`. `queries_on_device` (lane a8b-device-x-neighbors-rest): the
+    queries are a model-selection fold gathered on the device, so there are
+    no host query words (`queries_ptr` is not read; the cosine metric, whose
+    zero-row refusal reads them, is refused). Split out 2026-09-17 (DEVIATION 2921) so `knn_search_resident`
     refuses and plans exactly as `knn_search` does; the statements are the
     ones that stood at the top of that function."""
     if n_index <= 0:
@@ -567,6 +573,11 @@ def _knn_search_plan(
                 + String(zi)
                 + " is all zeros; cosine distance divides by ||x|| and is"
                 " undefined at the origin (DEVIATION 553)"
+            )
+        if queries_on_device:
+            raise Error(
+                "knn_search: metric='cosine' needs the host query rows for its"
+                " zero-row refusal; device-resident fold queries are not taken"
             )
         var zq = cosine_zero_norm_row_ptr(queries_ptr, n_queries, n_features)
         if zq >= 0:
@@ -1278,6 +1289,17 @@ def knn_upload_finite_status(ctx: DeviceContext, mut words: DeviceBuffer[DType.f
 # TOMBSTONE: knn_upload_finite_status's two-buffer overload (an index and its queries in one status word) deleted 2026-11-09 by lane a8b-device-x-neighbors-rest: its one caller, radius_neighbors_count, tests only the queries now (the index is tested once at fit / archive load). Never reached a release; recoverable at 0ce88411d3.
 
 
+def _knn_status_flagged(status_addr: Int, fold: Bool) -> Bool:
+    """True when the entry's status word (and, for fold queries, the
+    index-range word after it) is set: the door refuses, no vote runs."""
+    if status_addr == 0:
+        return False
+    var words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr)
+    if words[0] != 0:
+        return True
+    return fold and words[1] != 0
+
+
 def knn_put_status(status_addr: Int, word: Int32):
     """Store a status word at the caller's host address (0: not asked)."""
     if status_addr != 0:
@@ -1403,12 +1425,25 @@ def _knn_search_on_device_index(
     cache: KnnIndexCachePointer = None,
     negate_products: Bool = False,
     status_addr: Int = 0,
+    fold_base: Int = -1,
+    fold_base_rows: Int = 0,
+    fold_index: Int = -1,
 ) raises -> Int:
     """`status_addr` (lane a7b-device-x-neighbors), when not 0, is a host
     int32 word that receives the finite status of the uploaded queries
     (`knn_upload_finite_status`), tested behind the upload in the
     synchronisation that follows it; on a non-finite query the search stops
     there (outputs unwritten) and the door refuses.
+
+    `fold_base` / `fold_base_rows` / `fold_index` (lane
+    a8b-device-x-neighbors-rest; -1: none): the queries are a
+    model-selection fold, the rows `fold_index` (int64) of the resident
+    float32 base `fold_base` in model selection's store. They are gathered
+    on the device straight into the query buffer (core/msel_device_x.mojo
+    `msel_device_x_f32`, the finite and range tests in the same pass) and
+    never uploaded; `queries_ptr` is not read. `ctx` must be the fold
+    store's context (the gather refuses any other). `status_addr` then
+    names TWO int32 words: the finite word and the index-range word.
 
     `cache` (DEVIATION 3061) is a resident index's derived buffers, None
     for a per-call index: with it the index norms are copied from the cache
@@ -1487,17 +1522,43 @@ def _knn_search_on_device_index(
     var ns_sort = 0
     comptime if KNN_PHASE_TIMERS:
         t_phase = perf_counter_ns()
-    ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
-    if status_addr != 0:
-        # The finite test rides behind the upload, in its synchronisation.
-        var word = knn_upload_finite_status(ctx, queries, n_queries * n_features)
-        knn_put_status(status_addr, word)
-        if word != 0:
+    var fold = QueryFold(fold_base, fold_base_rows, fold_index)
+    if fold.active():
+        # A model-selection fold (lane a8b-device-x-neighbors-rest): the
+        # query rows are gathered out of the resident base on the device,
+        # tested in the same pass; the two words come back in the one
+        # synchronisation the upload made before.
+        if status_addr == 0:
+            raise Error("knn_search: fold queries need the status words' address")
+        var fold_status = ctx.enqueue_create_buffer[DType.int32](2)
+        enqueue_fill[DType.int32](ctx, fold_status, Int32(0))
+        msel_device_x_f32(ctx, fold.base_id, fold.base_rows, n_features, fold.index_id, n_queries, queries,
+                          fold_status.unsafe_ptr(), 0)
+        var words = ctx.enqueue_create_host_buffer[DType.int32](2)
+        ctx.enqueue_copy(dst_ptr=words.unsafe_ptr(), src_buf=fold_status)
+        ctx.synchronize()
+        var finite_word = words.unsafe_ptr()[0]
+        var range_word = words.unsafe_ptr()[1]
+        _ = words^
+        _ = fold_status^
+        knn_put_status(status_addr, finite_word)
+        knn_put_status(status_addr + 4, range_word)
+        if finite_word != 0 or range_word != 0:
             if pooled:
                 knn_pool_release(cache.value())
             return query_tile
     else:
-        ctx.synchronize()
+        ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
+        if status_addr != 0:
+            # The finite test rides behind the upload, in its synchronisation.
+            var word = knn_upload_finite_status(ctx, queries, n_queries * n_features)
+            knn_put_status(status_addr, word)
+            if word != 0:
+                if pooled:
+                    knn_pool_release(cache.value())
+                return query_tile
+        else:
+            ctx.synchronize()
     comptime if KNN_PHASE_TIMERS:
         ns_upload = perf_counter_ns() - t_phase
         t_phase = perf_counter_ns()
@@ -1934,6 +1995,9 @@ def knn_classifier_predict_resident(
     cache: KnnIndexCachePointer = None,
     vote_cache: KnnVoteCachePointer = None,
     status_addr: Int = 0,
+    fold_base: Int = -1,
+    fold_base_rows: Int = 0,
+    fold_index: Int = -1,
 ) raises -> Int:
     """Reads the device plan once and runs the planned overload below."""
     return knn_classifier_predict_resident(
@@ -1960,6 +2024,9 @@ def knn_classifier_predict_resident(
         cache,
         vote_cache,
         status_addr,
+        fold_base,
+        fold_base_rows,
+        fold_index,
     )
 
 
@@ -1987,6 +2054,9 @@ def knn_classifier_predict_resident(
     cache: KnnIndexCachePointer = None,
     vote_cache: KnnVoteCachePointer = None,
     status_addr: Int = 0,
+    fold_base: Int = -1,
+    fold_base_rows: Int = 0,
+    fold_index: Int = -1,
 ) raises -> Int:
     """`knn_classifier_predict` over an index ALREADY ON THE DEVICE
     (DEVIATION 3002, lane/knn-tiled-distance, 2026-09-17; the same door as
@@ -2023,17 +2093,18 @@ def knn_classifier_predict_resident(
         )
     var plan = _knn_search_plan(
         dplan, index_ptr, n_index, queries_ptr, n_queries, n_features, k, weighted,
-        requested_query_tile, KNN_METHOD_AUTO, metric, metric_arg,
+        requested_query_tile, KNN_METHOD_AUTO, metric, metric_arg, fold_index >= 0,
     )
     var retained_indices = List[DeviceBuffer[DType.uint32]]()
     var used_tile = _knn_search_on_device_index(
         ctx, trace, retained_indices, True, index, n_index, queries_ptr,
         n_queries, n_features, k, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
         weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3], dplan, cache,
-        False, status_addr,
+        False, status_addr, fold_base, fold_base_rows, fold_index,
     )
-    if status_addr != 0 and MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr)[0] != 0:
-        # A non-finite query (lane a7b): the door refuses; no vote.
+    if _knn_status_flagged(status_addr, fold_index >= 0):
+        # A non-finite query (lane a7b) or a fold row out of range: the door
+        # refuses; no vote.
         return used_tile
     _knn_classifier_vote(ctx, trace, retained_indices, h_dist.unsafe_ptr(),
         n_index, n_queries, k, y_ptr, n_outputs, n_classes, out_labels_ptr,
@@ -2061,6 +2132,9 @@ def knn_regressor_predict_resident(
     weights: Int = WEIGHTS_UNIFORM,
     cache: KnnIndexCachePointer = None,
     status_addr: Int = 0,
+    fold_base: Int = -1,
+    fold_base_rows: Int = 0,
+    fold_index: Int = -1,
 ) raises -> Int:
     """Reads the device plan once and runs the planned overload below."""
     return knn_regressor_predict_resident(
@@ -2082,6 +2156,9 @@ def knn_regressor_predict_resident(
         weights,
         cache,
         status_addr,
+        fold_base,
+        fold_base_rows,
+        fold_index,
     )
 
 
@@ -2104,6 +2181,9 @@ def knn_regressor_predict_resident(
     weights: Int = WEIGHTS_UNIFORM,
     cache: KnnIndexCachePointer = None,
     status_addr: Int = 0,
+    fold_base: Int = -1,
+    fold_base_rows: Int = 0,
+    fold_index: Int = -1,
 ) raises -> Int:
     """`knn_regressor_predict` over an index ALREADY ON THE DEVICE
     (DEVIATION 3002): the search is `_knn_search_on_device_index` and the
@@ -2127,17 +2207,18 @@ def knn_regressor_predict_resident(
         )
     var plan = _knn_search_plan(
         dplan, index_ptr, n_index, queries_ptr, n_queries, n_features, k, weighted,
-        requested_query_tile, KNN_METHOD_AUTO, metric, metric_arg,
+        requested_query_tile, KNN_METHOD_AUTO, metric, metric_arg, fold_index >= 0,
     )
     var retained_indices = List[DeviceBuffer[DType.uint32]]()
     var used_tile = _knn_search_on_device_index(
         ctx, trace, retained_indices, False, index, n_index, queries_ptr,
         n_queries, n_features, k, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
         weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3], dplan, cache,
-        False, status_addr,
+        False, status_addr, fold_base, fold_base_rows, fold_index,
     )
-    if status_addr != 0 and MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=status_addr)[0] != 0:
-        # A non-finite query (lane a7b): the door refuses; no vote.
+    if _knn_status_flagged(status_addr, fold_index >= 0):
+        # A non-finite query (lane a7b) or a fold row out of range: the door
+        # refuses; no vote.
         return used_tile
     _knn_regressor_vote(ctx, trace, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
                         n_index, n_queries, k, y_ptr, n_outputs, out_ptr, weighted)
