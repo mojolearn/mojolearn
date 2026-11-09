@@ -429,6 +429,78 @@ def _fitted_w(model: PythonObject, fields: PythonObject) raises -> PythonObject:
     return w
 
 
+# `qn_infer_fold` modes (glm/qn_fold.mojo QN_FOLD_*).
+comptime _FOLD_DECISION = 0
+comptime _FOLD_CODES = 1
+comptime _FOLD_PROBA = 2
+
+
+struct _QueryX(Movable):
+    """The X of one inference call (lane a8c-device-x-linear-prep-rfe):
+    either host words for the estimators entries (`x`, tested by the entry
+    over its own upload through the status word `status`, or already tested
+    when admit_x cast it) or, for an identical-mode cross-validation fold,
+    the fold's resident store ids (`store_ids`, [base id, base rows, index
+    id]) for the base binding's `qn_infer_fold`: no host gather, no upload."""
+    var x: PythonObject
+    var rows: Int
+    var cols: Int
+    var store_ids: PythonObject
+    var status: PythonObject
+
+    def __init__(out self, x: PythonObject, rows: Int, cols: Int, store_ids: PythonObject, status: PythonObject):
+        self.x = x
+        self.rows = rows
+        self.cols = cols
+        self.store_ids = store_ids
+        self.status = status
+
+    def fold(self) -> Bool:
+        return self.store_ids is not None
+
+    def status_address(self) raises -> PythonObject:
+        return PythonObject(labels_address(self.status))
+
+    def refuse(self, model: PythonObject) raises:
+        """The deferred finite refusal of a host X (scikit-learn's wording)."""
+        admitted_finite_refuse(Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=labels_address(self.status))[0]),
+                               _name(model))
+
+
+def _query_x(model: PythonObject, fields: PythonObject, source: PythonObject, context: PythonObject) raises -> _QueryX:
+    """X for decision_function / predict / predict_proba. The door no longer
+    scans a borrowed X on the host (lane a8c): `defer_finite`, and every
+    estimators entry tests the words it uploads (glm/qn_infer.mojo
+    qn_x_status; the host column's parallel scan) and returns the status
+    word. A DeviceRows fold of an identical-mode GPU model is read on the
+    device (`qn_infer_fold`); without it (the CPU column, FAST, a host
+    class) the fold's rows are gathered on the host and tested there."""
+    var fold_entry = py_get(context, "qn_infer_fold")
+    var status = admitted_vector(1, "<i4", context)
+    if (fold_entry is not None and py_get(context, "lr_host_model") is None
+            and Bool(py=_mode(fields, context) == PythonObject("identical"))
+            and door_is_device_rows(source, context)):
+        var fx = admit_x_unrecorded(source, _name(model), context, device_x=True)
+        if fx.store.active():
+            return _QueryX(PythonObject(None), fx.rows, fx.cols,
+                           Python.list(fx.store.base_id, fx.store.base_rows, fx.store.index_id), status)
+        return _QueryX(fx.array, fx.rows, fx.cols, PythonObject(None), status)
+    var x = admit_x(source, 2, "X", context, defer_finite=True)
+    return _QueryX(x, Int(py=x.shape[0]), Int(py=x.shape[1]), PythonObject(None), status)
+
+
+def _infer_fold(model: PythonObject, fields: PythonObject, q: _QueryX, out: PythonObject, mode: Int,
+                n_classes: Int, log_out: Bool, context: PythonObject) raises:
+    """One `qn_infer_fold` call over the fold `q` names into `out`, refused
+    through door_rows_refuse on its words."""
+    var params = Python.list(q.rows, q.cols, 1 if Bool(py=fields["fit_intercept"]) else 0, n_classes, mode,
+                             1 if log_out else 0)
+    var words = py_call_typed(context["qn_infer_fold"], q.store_ids, classical_address(fields["_w"]),
+                              PythonObject(labels_address(out)), params)
+    _ = out  # keep the Python object alive through the native call above
+    door_rows_refuse(Int(py=words[0]), Int(py=words[1]), _name(model), Int(py=q.store_ids[1]))
+
+
 def logistic_decision(model: PythonObject, fields: PythonObject, mut entries: PythonObject, source: PythonObject,
                       context: PythonObject) raises -> PythonObject:
     """`decision_function`: (n,) float32 scores for two classes, (n, C)
@@ -438,9 +510,9 @@ def logistic_decision(model: PythonObject, fields: PythonObject, mut entries: Py
     as before, and handed back for the caller's next step)."""
     if not py_contains(fields, "_w"):
         raise Error("mojolearn LogisticRegression: call fit first")
-    var x = admit_x(source, 2, "X", context)
-    var rows = Int(py=x.shape[0])
-    var cols = Int(py=x.shape[1])
+    var q = _query_x(model, fields, source, context)
+    var rows = q.rows
+    var cols = q.cols
     if Bool(py=PythonObject(cols) != fields["n_features_in_"]):
         raise Error("mojolearn LogisticRegression feature count differs from fit")
     var n_targets = _n_targets(model, fields)
@@ -448,17 +520,21 @@ def logistic_decision(model: PythonObject, fields: PythonObject, mut entries: Py
         entries = _entries(model, fields, context)
     var intercept = 1 if Bool(py=fields["fit_intercept"]) else 0
     var out = PythonObject(None)
-    var params = Python.list(rows, cols, intercept)
     if n_targets == 1:
         out = admitted_vector(rows, "<f4", context)
     else:
         out = admitted_array(Python.tuple(rows, n_targets), "<f4", context)
-        _ = py_call(params.append, PythonObject(n_targets))
-    _ = py_call_typed(_need(entries, "qn_decision_function"), classical_address(x),
+    if q.fold():
+        _infer_fold(model, fields, q, out, _FOLD_DECISION, n_targets if n_targets > 1 else 1, False, context)
+        return out
+    # params: n_rows, n_features, fit_intercept, n_classes (1: the binary
+    # shape), the status word's address (lane a8c)
+    var params = Python.list(rows, cols, intercept, n_targets, q.status_address())
+    _ = py_call_typed(_need(entries, "qn_decision_function"), classical_address(q.x),
                       classical_address(fields["_w"]), PythonObject(labels_address(out)), params)
-    _ = x  # keep the Python object alive through the native call above
+    _ = q.x  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
-    _ = x^
+    q.refuse(model)
     return out
 
 
@@ -467,9 +543,9 @@ def logistic_predict(model: PythonObject, fields: PythonObject, source: PythonOb
     beside the scores, decoded to `classes_`."""
     var n_targets = _n_targets(model, fields)
     if n_targets == 1:
-        var x = admit_x(source, 2, "X", context)
-        var rows = Int(py=x.shape[0])
-        var cols = Int(py=x.shape[1])
+        var q = _query_x(model, fields, source, context)
+        var rows = q.rows
+        var cols = q.cols
         if cols != Int(py=fields["n_features_in_"]):
             raise Error("mojolearn LogisticRegression feature count differs from fit")
         var codes = admitted_vector(rows, "<i8", context)
@@ -479,32 +555,39 @@ def logistic_predict(model: PythonObject, fields: PythonObject, source: PythonOb
             raise Error("RuntimeError: mojolearn LogisticRegression: the estimators binding has no "
                         + "qn_predict_binary; rebuild it")
         var w = _fitted_w(model, fields)
-        _ = py_call_typed(native, classical_address(x), classical_address(w),
+        if q.fold():
+            _infer_fold(model, fields, q, codes, _FOLD_CODES, 1, False, context)
+            return classical_decode_labels(fields["classes_"], codes, context)
+        _ = py_call_typed(native, classical_address(q.x), classical_address(w),
                           PythonObject(labels_address(codes)),
-                          Python.list(rows, cols, 1 if Bool(py=fields["fit_intercept"]) else 0))
+                          Python.list(rows, cols, 1 if Bool(py=fields["fit_intercept"]) else 0, q.status_address()))
         _ = w  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
+        _ = q.x  # keep the Python object alive through the native call above
         _ = codes  # keep the Python object alive through the native call above
-        _ = x^
+        q.refuse(model)
         return classical_decode_labels(fields["classes_"], codes, context)
     var entries = _entries(model, fields, context)
     var native = py_get(entries, "qn_predict_multiclass")
     if native is not None:
         if not py_contains(fields, "_w"):
             raise Error("mojolearn LogisticRegression: call fit first")
-        var x = admit_x(source, 2, "X", context)
-        var rows = Int(py=x.shape[0])
-        var cols = Int(py=x.shape[1])
+        var q = _query_x(model, fields, source, context)
+        var rows = q.rows
+        var cols = q.cols
         if Bool(py=PythonObject(cols) != fields["n_features_in_"]):
             raise Error("mojolearn LogisticRegression feature count differs from fit")
         var codes = admitted_vector(rows, "<i8", context)
+        if q.fold():
+            _infer_fold(model, fields, q, codes, _FOLD_CODES, n_targets, False, context)
+            return classical_decode_labels(fields["classes_"], codes, context)
         if rows:
-            _ = py_call_typed(native, classical_address(x), classical_address(fields["_w"]),
+            _ = py_call_typed(native, classical_address(q.x), classical_address(fields["_w"]),
                               PythonObject(labels_address(codes)),
-                              Python.list(rows, cols, 1 if Bool(py=fields["fit_intercept"]) else 0, n_targets))
-            _ = x  # keep the Python object alive through the native call above
+                              Python.list(rows, cols, 1 if Bool(py=fields["fit_intercept"]) else 0, n_targets,
+                                          q.status_address()))
+            _ = q.x  # keep the Python object alive through the native call above
             _ = codes  # keep the Python object alive through the native call above
-        _ = x^
+            q.refuse(model)
         return classical_decode_labels(fields["classes_"], codes, context)
     # A binding without the device argmax keeps the host scan, the same
     # first-maximum rule (`_labels.argmax_rows`).
@@ -523,29 +606,32 @@ def _logistic_proba_fused(model: PythonObject, fields: PythonObject, mut entries
     has no `qn_proba` (the two-entry path then runs)."""
     if not py_contains(fields, "_w"):
         raise Error("mojolearn LogisticRegression: call fit first")
-    var x = admit_x(source, 2, "X", context)
-    var rows = Int(py=x.shape[0])
-    var cols = Int(py=x.shape[1])
-    if Bool(py=PythonObject(cols) != fields["n_features_in_"]):
-        raise Error("mojolearn LogisticRegression feature count differs from fit")
     var n_targets = _n_targets(model, fields)
     if entries is None:
         entries = _entries(model, fields, context)
     var fused = py_get(entries, "qn_proba")
     if fused is None:
+        # the two-entry path admits X itself (logistic_decision)
         return PythonObject(None)
+    var q = _query_x(model, fields, source, context)
+    var rows = q.rows
+    var cols = q.cols
+    if Bool(py=PythonObject(cols) != fields["n_features_in_"]):
+        raise Error("mojolearn LogisticRegression feature count differs from fit")
     var intercept = 1 if Bool(py=fields["fit_intercept"]) else 0
     var out = admitted_array(Python.tuple(rows, 2 if n_targets == 1 else n_targets), "<f8", context)
-    var params = Python.list(rows, cols, intercept, n_targets)
-    if log_out:
-        # ne2-g-linear (N361): the 5th word asks the entry for log(p) in the
-        # same device session (py2mojo_rows ROWS_LOG's words).
-        _ = py_call(params.append, PythonObject(1))
-    _ = py_call_typed(fused, classical_address(x), classical_address(fields["_w"]), PythonObject(labels_address(out)),
+    if q.fold():
+        _infer_fold(model, fields, q, out, _FOLD_PROBA, n_targets if n_targets > 1 else 1, log_out, context)
+        return out
+    # ne2-g-linear (N361): the 5th word asks the entry for log(p) in the
+    # same device session (py2mojo_rows ROWS_LOG's words); the 6th is the
+    # status word's address (lane a8c).
+    var params = Python.list(rows, cols, intercept, n_targets, 1 if log_out else 0, q.status_address())
+    _ = py_call_typed(fused, classical_address(q.x), classical_address(fields["_w"]), PythonObject(labels_address(out)),
                       params)
-    _ = x  # keep the Python object alive through the native call above
+    _ = q.x  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
-    _ = x^
+    q.refuse(model)
     return out
 
 
