@@ -97,7 +97,7 @@ from autograd.kernels.transformer import (
 # cross-entropy; Program.fit for the steps).
 from sequence.ops import FP
 from training.byte_lm_program import (
-    ByteLmProgram, byte_program_open, byte_program_load, byte_program_load_params, byte_program_store, byte_program_fit,
+    ByteDeviceProgram, byte_program_open, byte_program_load, byte_program_load_params, byte_program_store, byte_program_fit,
     byte_program_eval, byte_program_gradient, byte_program_grad_out, byte_program_apply,
 )
 from transformer.impl.llama.fused_attention import (
@@ -1019,7 +1019,7 @@ struct ByteTrainer(Movable):
     var one_wait: Optional[ByteOneWait]
     """IDN_TRAIN_ONE_WAIT: the deferred-check scratch, created by the first
     one-wait step; None on a build without the define."""
-    var program: Optional[ByteLmProgram]
+    var program: Optional[ByteDeviceProgram]
     """Lane x7: the trainer's captured program (training/byte_lm_program.mojo),
     opened by the first step, gradient or evaluation."""
     var program_synced: Bool
@@ -1050,7 +1050,7 @@ struct ByteTrainer(Movable):
         self.embedding_runs = List[OwnedEmbeddingRuns]()
         self.live_status_steps = 0
         self.one_wait = Optional[ByteOneWait]()
-        self.program = Optional[ByteLmProgram]()
+        self.program = Optional[ByteDeviceProgram]()
         self.program_synced = False
         # lane/neural-pass43: the session's buffers carved from arena chunks
         # (core/device_arena.mojo) between here and `arena_end` below.
