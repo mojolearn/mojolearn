@@ -271,6 +271,11 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
         raise Error("SambaStack.forward: lengths applies to stateless calls only")
     if state is not None and not Bool(py=py_call(bi.isinstance, state, context["state_class"])):
         raise Error("TypeError: SambaStack: state must be a SambaState")
+    if state is not None and py_get(samba_fields(state), "_resident_session") is not None:
+        # A SambaDecodeSession holds this state on the device
+        # (bindings/samba_decode_native.mojo); its arrays are stale.
+        raise Error("SambaStack: the state is owned by an open decode session (its pieces live in the session and the "
+                    + "caller's arrays are stale); call sync_state() or close() on the session first")
     var fields = samba_fields(model)
     var config = samba_fields(fields["config"])
     var entries = PythonObject(None)
