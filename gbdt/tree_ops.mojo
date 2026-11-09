@@ -6,7 +6,8 @@ docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 4 rows "GBDT rounds"
 and "RandomForest / ExtraTrees / DecisionTree levels").
 
 A boosting round becomes one `LoopStep` of `autograd/program_loop_device.mojo`
-built from these ops, enqueued in table order. Each op is a typed enqueue-only
+built from these ops, in the order of docs/plans/EXECUTOR_T1_TREE_OPS.md
+section 3. Each op is a typed enqueue-only
 function in the module that owns its kernel (the op body IS the existing
 kernel, so the words do not change); this table is the one registry of what
 the ops are called, which buffers they write and whether they are behind the
@@ -33,8 +34,16 @@ comptime TREE_OP_PARTITION = 5
 comptime TREE_OP_APPLY = 6
 comptime TREE_OP_HELDOUT_LOSS = 7
 comptime TREE_OP_OD_STEP = 8
+# lane t1b-tree-leaf-and-node-ops (2026-11-09): the leaf estimate and its
+# rerun snapshot (GBDT), and the forest level loop's batches and finish
+# (RandomForest / DecisionTree, ExtraTrees). Codes are table rows, not the
+# round's order: docs/plans/EXECUTOR_T1_TREE_OPS.md section 3 is the order.
+comptime TREE_OP_LEAF_ESTIMATE = 9
+comptime TREE_OP_SEED_SNAPSHOT = 10
+comptime TREE_OP_FOREST_BATCHES = 11
+comptime TREE_OP_FOREST_FINISH = 12
 comptime TREE_OP_FIRST = TREE_OP_BOOTSTRAP
-comptime TREE_OP_LAST = TREE_OP_OD_STEP
+comptime TREE_OP_LAST = TREE_OP_FOREST_FINISH
 comptime N_TREE_OPS = TREE_OP_LAST - TREE_OP_FIRST + 1
 
 
@@ -91,15 +100,43 @@ def _tree_info[CODE: Int]() -> TreeOpInfo:
         return TreeOpInfo(
             CODE, "tree_heldout_loss", "gbdt.methods.doc_parallel_boosting.tree_op_heldout_loss", True, False, False,
         )
-    else:
+    elif CODE == TREE_OP_OD_STEP:
         return TreeOpInfo(
             CODE, "tree_od_step", "gbdt.overfitting_detector.od_device.od_op_step", True, False, True,
+        )
+    elif CODE == TREE_OP_LEAF_ESTIMATE:
+        # round-local walk; its two leaf outputs and its status word are
+        # written only while the gate is open
+        return TreeOpInfo(
+            CODE, "tree_leaf_estimate", "gbdt.methods.doc_parallel_boosting.tree_op_leaf_estimate", False, True, False,
+        )
+    elif CODE == TREE_OP_SEED_SNAPSHOT:
+        return TreeOpInfo(
+            CODE, "tree_seed_snapshot", "gbdt.gpu_util.kernel.bootstrap.tree_op_seed_snapshot", True, False, False,
+        )
+    elif CODE == TREE_OP_FOREST_BATCHES:
+        # the node append (`launch_loop_push`; ExtraTrees `enqueue_push`) and
+        # the queue / node-count bookkeeping in the device header; inert once
+        # the queue is empty (the forest's own gate), the overflow word is
+        # its status and queue-empty its criterion, read every LOOP_K batches
+        return TreeOpInfo(
+            CODE, "forest_batches",
+            "ensemble.decisiontree.batched_levelalgo.builder.Builder._enqueue_loop_batches"
+            + " | extratrees.impl.decisiontree.batched_levelalgo.builder._et_run_depthwise (cycle body)",
+            True, True, True,
+        )
+    else:
+        return TreeOpInfo(
+            CODE, "forest_finish",
+            "ensemble.decisiontree.batched_levelalgo.builder.Builder._finish_tree_device(defer_finish=True)"
+            + " + collect_finished",
+            False, False, False,
         )
 
 
 def tree_op_info(code: Int) raises -> TreeOpInfo:
     """The table row of tree op `code`."""
-    comptime for i in range(N_TREE_OPS):  # driver-loop: over the tree-op table (nine rows, compile time)
+    comptime for i in range(N_TREE_OPS):  # driver-loop: over the tree-op table (thirteen rows, compile time)
         comptime CODE = TREE_OP_FIRST + i
         if code == CODE:
             return _tree_info[CODE]()
