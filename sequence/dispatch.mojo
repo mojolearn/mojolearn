@@ -364,7 +364,7 @@ def apply[OP: Int](t: Int, a: Args):
     comptime assert (OP_CELL_FWD_SCAN < OP_GK_FIRST or OP_CELL_FWD_SCAN > OP_GK_LAST) and (
         OP_CELL_BWD_SCAN < OP_GK_FIRST or OP_CELL_BWD_SCAN > OP_GK_LAST
     ), "pass-6 gemm opcode collides with recurrent scan"
-    # The MoE backward family (autograd/kernels/moe.mojo OP_MOEB_*, 2900..;
+    # The MoE backward family (autograd/kernels/moe.mojo OP_MOEB_*, 2902..;
     # lane ag-moe-backward), disjoint from every autograd range and the scans.
     comptime assert OP_MOEB_FIRST <= OP_MOEB_LAST, "MoE backward opcode range is empty"
     comptime assert OP_MOEB_FIRST > OP_AG_LAST or OP_MOEB_LAST < OP_AG_FIRST, "MoE backward opcodes overlap the tape's"

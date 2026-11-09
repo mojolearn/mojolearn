@@ -83,6 +83,8 @@ _NAMES = (
     "x_cnn_softmax_xent_r",
     "x_cnn_spmm",
     "x_cnn_spmm_m",
+    "x_cnn_gcn_backward_t",
+    "x_cnn_sage_backward_t",
     "x_cnn_vals_t",
     "x_cnn_vendor",
 )

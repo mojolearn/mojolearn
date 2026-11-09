@@ -515,6 +515,10 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_ARIMA_ASYNC_OFF`](#arima-lock-step-l-bfgs-superseded-by-the-per-series-solver-2026-11-09) | Time series (ARIMA fit, IDENTICAL) | removed (KEPT default's `_OFF`, superseded: the lock-step solver is deleted) | 2026-11-09 | [ARIMA_LOCKSTEP_LBFGS.patch](../experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch) |
 | [`MOJOLEARN_ARIMA_FAST_ASYNC_OFF`](#arima-lock-step-l-bfgs-superseded-by-the-per-series-solver-2026-11-09) | Time series (ARIMA fit, FAST) | removed (KEPT default's `_OFF`, superseded: the lock-step solver is deleted) | 2026-11-09 | [ARIMA_LOCKSTEP_LBFGS.patch](../experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch) |
 | [dictionary learning per-iteration host reads (`resample_atom_dev`, `cost_dev`, the used-atom count, A[j, j] per atom)](#dictionary-learning-loops-as-device-programs-2026-11-09) | Decomposition (DictionaryLearning, MiniBatchDictionaryLearning, GPU) | REFACTORED (device program, one read per DL_CHECK_EVERY iterations) | 2026-11-09 | [DICTL_HOST_READS.patch](../experiments/removed/DICTL_HOST_READS.patch) |
+| [`MOJOLEARN_AUTOGRAD_MOE_OFF`](#moe-backward-on-the-forwards-ops-2026-11-09) | Neural (MoEBlock backward) | removed (the tape is the only MoE backward) | 2026-11-09 | [MOJOLEARN_AUTOGRAD_MOE_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch) |
+| [`OP_MOEB_HIDDEN_FWD` / `OP_MOEB_OUT_FWD` (op codes 2900, 2901)](#moe-backward-on-the-forwards-ops-2026-11-09) | Neural (MoEBlock training forward) | removed (duplicate codes of `OP_MOE_HIDDEN` / `OP_MOE_OUT`) | 2026-11-09 | [MOJOLEARN_AUTOGRAD_MOE_OFF.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch) |
+| [`_gcn_backward_dev` / `_sage_backward_dev` hand entry chains (no define)](#gcnconv-and-sageconv-resident-backward-on-the-tape-2026-11-09) | Neural (GCNConv / SAGEConv resident backward) | removed (superseded by the tape: one native call) | 2026-11-09 | [XCNN_GRAPH_HAND_BACKWARD.patch](../experiments/removed/XCNN_GRAPH_HAND_BACKWARD.patch) |
+| [`GCNConv._backward_dev` / `SAGEConv._backward_dev` (Python, no define)](#gcnconv-and-sageconv-resident-backward-on-the-tape-2026-11-09) | Neural (GCNConv / SAGEConv, dead Python copy) | removed (0 callers) | 2026-11-09 | [XCNN_GRAPH_HAND_BACKWARD.patch](../experiments/removed/XCNN_GRAPH_HAND_BACKWARD.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -4733,3 +4737,45 @@ column (`x_decomp/dictl.mojo::resample_atom`), where it was the float64 product 
 of a resampled atom only, on every vendor and the host column together (identity lanes: dictionary-learning,
 minibatch-dictionary-learning, sparse-coder when an atom goes unused). Recoverable at f59d913b0b; patch
 `experiments/removed/DICTL_HOST_READS.patch` (all code hunks).
+## MoE backward on the forward's ops (2026-11-09)
+
+- What it was: the MoE block's training step (`moe_tape_train_step`, `autograd/route_ops.mojo`, reached by
+  `MoEBlock.backward` through `moe_backward`) ran its forward through two op codes of its own, `OP_MOEB_HIDDEN_FWD` (2900)
+  and `OP_MOEB_OUT_FWD` (2901) in `autograd/kernels/moe.mojo`, whose bodies were `op_moe_hidden` and `op_moe_out`, the
+  item bodies of the forward's own `OP_MOE_HIDDEN` / `OP_MOE_OUT`. The `AUTOGRAD_MOE` switch (default on;
+  `-D MOJOLEARN_AUTOGRAD_MOE_OFF` made `moe_backward` raise "the backward pass is not available in this build") was the
+  last rollback arm of the tape backward.
+- Now: the training forward launches `OP_MOE_ROUTE`, the grouping, `OP_MOE_HIDDEN` and `OP_MOE_OUT` with `a.i4 = a.i6 = 0`
+  (the item form on every executor, h in pair order as the VJPs index it) and records them on the tape; the tape is the
+  only MoE backward. The grouped / register-tiled device forward forms store h in slot order and stay forward-only.
+- Files: `autograd/kernels/moe.mojo`, `autograd/route_ops.mojo`, `sequence/dispatch.mojo` (comment).
+- Verdict: removed (plan row X9, docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md). Not an A/B loser: the same bodies run
+  under the forward's codes, so the words are unchanged by construction (identity lane `sequence-moe` owes nothing new).
+  No timing: the launch set is one for one.
+- Deleted 2026-11-09 by lane/x9-moe-gcn-rules; recoverable at origin/integ/pre-0867-w2 `f59d913b0b`.
+- Patch: `experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch` (all code hunks of the deletion: both op codes, their
+  dispatch arms and the switch; `git apply` restores them together).
+- Guard: `MOJOLEARN_AUTOGRAD_MOE_OFF` refused in `autograd/route_ops.mojo` (`moe_tape_train_step`) and in
+  `core/experiment_guards_neural.mojo`. No `grid_controls` entry existed.
+
+## GCNConv and SAGEConv resident backward on the tape (2026-11-09)
+
+- What it was: `bindings/xcnn_graph_native.mojo` `_gcn_backward_dev` and `_sage_backward_dev`, the resident (GPU binding)
+  backward of the two graph layers, chained the x_cnn `_m` entries by hand from the door, one Python crossing each: GCN
+  [bias gemm], transposed spmm, dW gemm, dX gemm (up to 4); SAGE [normalisation graph_op], linear backward, [mean spmm],
+  transposed spmm or max graph_op, [root gemm, gemm, add | download] (up to 9). `GCNConv._backward_dev` and
+  `SAGEConv._backward_dev` in `python/mojolearn/_expansion_cnn.py` were an older Python copy of the same chains with 0
+  callers (`backward` goes through the native door).
+- Now: `autograd/rules_graph.mojo` records each layer's forward (GRAPH_DENSE, GRAPH_AGG the one sparse aggregate op,
+  GRAPH_MAX, GRAPH_SAGE_OUT, GRAPH_L2) and runs one tape backward whose rules launch the same entries' bodies on the same
+  arguments, reached by one call each (`x_cnn_gcn_backward_t`, `x_cnn_sage_backward_t`). The SAGE root's two GEMMs run
+  before the aggregate's transposed fold (independent outputs). The host-form backward (the CPU binding, and SAGE with
+  `project=True` or a non-resident FAST form) keeps its host entry chain.
+- Files: `bindings/xcnn_graph_native.mojo`, `python/mojolearn/_expansion_cnn.py` (deleted); `autograd/rules_graph.mojo`,
+  `bindings/_mojolearn_x_cnn.mojo`, `python/mojolearn/_native_xcnn_bridge.py` (added).
+- Verdict: removed (plan row X9). No A/B yet: RUN OWED on NVIDIA and AMD, identity lane x-cnn-gcn / x-cnn-sage (the
+  same words by construction) and the per-call backward ms (one crossing instead of up to nine).
+- Deleted 2026-11-09 by lane/x9-moe-gcn-rules; recoverable at origin/integ/pre-0867-w2 `f59d913b0b`.
+- Patch: `experiments/removed/XCNN_GRAPH_HAND_BACKWARD.patch` (the two code files; it does not remove the new rules file
+  or entries, which may stay beside the restored chains).
+- Guard: no define. No `grid_controls` entry.

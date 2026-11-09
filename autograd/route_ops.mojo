@@ -7,7 +7,8 @@
 # the structure and every VJP is a new kernel; the words are defined by the
 # fold orders below, the same on the host column and every GPU column (the
 # bodies are Exec element functions), one bit version with all columns.
-# -D MOJOLEARN_AUTOGRAD_MOE_OFF restores the old refusal of the backward.
+# The tape is the only MoE backward (lane x9-moe-gcn-rules, 2026-11-09): the
+# MOJOLEARN_AUTOGRAD_MOE_OFF refusal arm is deleted (tombstone below).
 #
 # ---------------------------------------------------------------- the tape graph
 #   x      (variable_into dx)        [T, D]
@@ -20,9 +21,10 @@
 #                                              saved (non-differentiable, outside the
 #                                              tape: the picks are piecewise constant)
 #   h = MOE_HIDDEN(x, gate_up)        [P, F]   silu(gate) * up per pair (the gather
-#                                              of x by the routing order inside)
+#                                              of x by the routing order inside;
+#                                              OP_MOE_HIDDEN, the forward's op, item form)
 #   y = MOE_OUT(h, down, w)           [T, D]   grad storage = the caller's dy (the seed,
-#                                              read in place, no copy)
+#                                              read in place, no copy; OP_MOE_OUT, item form)
 # Between the route and the hidden product the driver groups the pairs by
 # expert (stable: each expert's pairs in ascending pair index), once; the
 # hidden and out VJPs fold each expert's weight gradient over that order.
@@ -39,7 +41,10 @@
 #
 # ---------------------------------------------------------------- launch inventory
 # forward: OP_MOE_ROUTE (T), grouping COUNT (E nb) + TOTAL (E) + BASE
-# (E nb + 1) + SCATTER (P), HIDDEN_FWD (P F), OUT_FWD (T D)        = 7
+# (E nb + 1) + SCATTER (P), OP_MOE_HIDDEN (P F), OP_MOE_OUT (T D)  = 7
+# (the hidden and out ops with a.i4 = a.i6 = 0: their item bodies on every
+# executor, h in pair order, which the VJPs below index; the grouped and
+# register-tiled device forms store h in slot order and stay forward-only)
 # backward: OUT: Q+dh (P F), DW (P), DDOWN (E D F); HIDDEN: DGU (P F), DX
 # (T D), DGATEUP (E 2F D); ROUTE: ROUTE_VJP (T E), ROUTER_DX (T D),
 # ROUTER_DW (E D); the tape's ACCUMULATE of dx (T D)                  = 10
@@ -49,7 +54,7 @@ from std.sys.compile import is_defined
 
 from autograd.tape import Tape, Tensor, BackwardRules
 from sequence.exec_trait import Exec
-from sequence.ops import FP, Args, OP_MOE_ROUTE
+from sequence.ops import FP, Args, OP_MOE_HIDDEN, OP_MOE_OUT, OP_MOE_ROUTE
 from autograd.kernels.moe import (
     MOEB_GROUP_BLOCK,
     OP_MOEB_DDOWN,
@@ -61,8 +66,6 @@ from autograd.kernels.moe import (
     OP_MOEB_GROUP_COUNT,
     OP_MOEB_GROUP_SCATTER,
     OP_MOEB_GROUP_TOTAL,
-    OP_MOEB_HIDDEN_FWD,
-    OP_MOEB_OUT_FWD,
     OP_MOEB_Q,
     OP_MOEB_ROUTE_VJP,
     OP_MOEB_ROUTER_DW,
@@ -70,8 +73,8 @@ from autograd.kernels.moe import (
     moeb_group_blocks,
 )
 
-# The MoE backward exists by default; MOJOLEARN_AUTOGRAD_MOE_OFF refuses it as before.
-comptime AUTOGRAD_MOE = not is_defined["MOJOLEARN_AUTOGRAD_MOE_OFF"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_MOE_OFF (removed: the tape is the only MoE backward) deleted 2026-11-09 by lane/x9-moe-gcn-rules; code recoverable at origin/integ/pre-0867-w2 f59d913b0b.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch
 
 # Tags 112-114 (LayerNorm 1, recurrent 16-18, transformer 32-47, Mamba 48-63, LM 64-71).
 comptime MOE_ROUTE = 112
@@ -260,8 +263,10 @@ def moe_tape_train_step[E: Exec](
     down [E, D, F] and the output cotangent dy [T, D], the forward's y,
     logits, picks and weights into Y, L, Sel, W and the gradients of x and
     the three weights into DX, DWg, DGu, DDn. Ends on a sync."""
-    comptime if not AUTOGRAD_MOE:
-        raise Error("moe_backward: the backward pass is not available in this build")
+    # removed-define refusal, here (every MoE backward reaches this function) and in core/experiment_guards_neural.mojo
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_MOE_OFF (removed) deleted 2026-11-09 by lane/x9-moe-gcn-rules; code recoverable at origin/integ/pre-0867-w2 f59d913b0b.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_MOE_OFF"](), "removed 2026-11-09 (lane/x9-moe-gcn-rules): MOJOLEARN_AUTOGRAD_MOE_OFF (the refusal of the MoE backward) is deleted; the tape is the only MoE backward. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_MOE_OFF.patch"
     if T < 1 or D < 1 or F < 1 or En < 1 or k < 1 or k > En:
         raise Error("moe_backward: T, D, F, E >= 1 and 1 <= k <= E")
     var P = T * k
@@ -293,7 +298,8 @@ def moe_tape_train_step[E: Exec](
     b.i0 = D
     b.i1 = F
     b.i2 = k
-    ex.launch[OP_MOEB_HIDDEN_FWD](b, P * F)
+    # a.i4 = a.i6 = 0 (Args' zeros): the item body, h in pair order
+    ex.launch[OP_MOE_HIDDEN](b, P * F)
     var c = Args()
     c.p0 = H
     c.p1 = Dn
@@ -303,7 +309,7 @@ def moe_tape_train_step[E: Exec](
     c.i0 = D
     c.i1 = F
     c.i2 = k
-    ex.launch[OP_MOEB_OUT_FWD](c, T * D)
+    ex.launch[OP_MOE_OUT](c, T * D)
     # ---- record (no launches) and differentiate
     var tape = Tape()
     var x = tape.variable_into(ex, X, DX, T, D)
