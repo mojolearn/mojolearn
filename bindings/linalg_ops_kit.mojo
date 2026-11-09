@@ -626,11 +626,11 @@ struct LinKit(Movable):
         var w = self.zeros(1, n)
         v = self.zeros(n, n)
         var params = Python.list(PythonObject(n), PythonObject(uplo))
-        if n >= 1 and self.c(a) == n and self.on_device(a) and self.has("x_decomp_dev_eigh"):
-            _ = family_call(self._hot("x_decomp_dev_eigh"), PythonObject(self.matrices[a].device), self.address(w),
-                            self.address(v), params)
-            _ = w  # keep the Python object alive through the native call above
-            return w
+        # TOMBSTONE: the device-resident x_decomp_dev_eigh branch (dead code: both callers,
+        # linalg_ops_decomp `_lin_eigh` and `svd(hermitian=True)`, pass a freshly borrowed host
+        # matrix, so `on_device(a)` was never true) deleted 2026-11-09 by __SHA__; code recoverable
+        # at __SHA__^.
+        # Restore: git apply experiments/removed/dead_code_p5_20261109.patch
         _ = family_call(self._hot("x_decomp_eigh"), self.address(a), self.address(w), self.address(v), params)
         _ = w  # keep the Python object alive through the native call above
         return w
