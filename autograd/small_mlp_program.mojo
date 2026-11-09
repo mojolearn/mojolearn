@@ -45,6 +45,13 @@ Entry words (`small_mlp_program_open` / `small_mlp_program_run`):
     DOWNLOAD  addresses [w1, b1, w2, b2, m, v] -> 195
     APPLY     addresses [g (195 packed gradients)] -> 195
     CLOSE     -> 0
+    SESSIONS  (no handle; `small_mlp_sessions_forward`) addresses [y, x,
+              w1 (hidden x width), b1, w2 (out x hidden), b2], ints [rows,
+              width, hidden, out] -> rows * out: the same forward (two
+              transposes, linear + ReLU, linear) for any Linear-ReLU-Linear
+              shape on a session opened for the call. The public
+              `training.mlp_inference_sessions` runs its packed session rows
+              through it.
 """
 from std.ffi import _Global
 from std.math import isfinite
@@ -70,6 +77,7 @@ comptime SMALL_MLP_PROGRAM_STEP = 1
 comptime SMALL_MLP_PROGRAM_DOWNLOAD = 2
 comptime SMALL_MLP_PROGRAM_APPLY = 3
 comptime SMALL_MLP_PROGRAM_CLOSE = 4
+comptime SMALL_MLP_PROGRAM_SESSIONS = 5
 
 comptime SMALL_MLP_PROGRAM_FORWARD = 0
 comptime SMALL_MLP_PROGRAM_GRADS = 1
@@ -452,3 +460,67 @@ def small_mlp_program_run[E: Exec & Movable & Deinitable, KIND: Int](
                     CastIn(a[1], CAST_KIND_SIGNED, 4, k * rows, 1, 4, 4))
     _run_steps(s[], e, a, rows, mode, want_dx, k)
     return rows * _OUT
+
+
+def small_mlp_sessions_forward[E: Exec & Movable & Deinitable, KIND: Int](
+    var ex: E, a: List[Int], p: List[Int],
+) raises -> Int:
+    """SESSIONS: `y = linear(relu(linear(x, w1^T, b1)), w2^T, b2)` for any
+    (width, hidden, out), on an inference session opened for this call:
+    the trainer's forward ops (OPS_TRANSPOSE, OPS_LINEAR act 1 / act 0), so
+    an 8-16-3 model gives `predict_logits`' words. `x` is the sessions' rows
+    packed in order; each row's logits depend only on that row. Refuses a
+    non-finite input, weight or logit from device flags, one wait."""
+    if len(a) != 6 or len(p) != 4:
+        raise Error("neural MLP sessions: 6 addresses and [rows, width, hidden, out]")
+    var rows = p[0]
+    var width = p[1]
+    var hidden = p[2]
+    var out_w = p[3]
+    if rows < 1 or width < 1 or hidden < 1 or out_w < 1:
+        raise Error("neural MLP sessions: invalid metadata")
+    var limit = 2147483647
+    var widest = max(width, max(hidden, out_w))
+    if hidden > limit // width or out_w > limit // hidden or rows > limit // widest:
+        raise Error("neural MLP sessions: activation exceeds index range")
+    var sid = ops_session_open[E, KIND](ex^, False)
+    try:
+        var s = ops_session[E, KIND](sid)
+        var w0 = s[].upload(CastIn.f32_c(a[2], hidden, width), False)
+        var w1 = s[].upload(CastIn.f32_c(a[3], 1, hidden), False)
+        var w2 = s[].upload(CastIn.f32_c(a[4], out_w, hidden), False)
+        var w3 = s[].upload(CastIn.f32_c(a[5], 1, out_w), False)
+        var x = s[].upload(CastIn.f32_c(a[1], rows, width), False)
+        var dflag = s[].ex.alloc(2)
+        var fa = Args()
+        fa.p0 = dflag
+        fa.f0 = Float32(0)
+        s[].ex.launch[OP_FILL](fa, 2)
+        _flag(s[].ex, s[].buffer(x), rows * width, dflag, 0)
+        _flag(s[].ex, s[].buffer(w0), hidden * width, dflag, 0)
+        _flag(s[].ex, s[].buffer(w1), hidden, dflag, 0)
+        _flag(s[].ex, s[].buffer(w2), out_w * hidden, dflag, 0)
+        _flag(s[].ex, s[].buffer(w3), out_w, dflag, 0)
+        var none_i = List[Int]()
+        var none_f = List[Float32]()
+        var t1 = s[].op(OPS_TRANSPOSE, [w0], none_i, none_f)
+        var hid = s[].op(OPS_LINEAR, [x, t1, w1], [1], none_f)
+        var t2 = s[].op(OPS_TRANSPOSE, [w2], none_i, none_f)
+        var logits = s[].op(OPS_LINEAR, [hid, t2, w3], [0], none_f)
+        var lv = s[].tape.value_of(s[].ex, s[].tensor(logits))
+        _flag(s[].ex, lv, rows * out_w, dflag, 1)
+        var flags = List[Float32](length=2, fill=Float32(0))
+        s[].ex.download_async(FP(unsafe_from_address=a[0]), lv, rows * out_w)
+        s[].ex.download_async(FP(unsafe_from_address=Int(flags.unsafe_ptr())), dflag, 2)
+        s[].ex.sync()
+        s[].ex.free(dflag)
+        if flags[0] != 0:
+            raise Error("neural MLP sessions: nonfinite input or weights")
+        if flags[1] != 0:
+            raise Error("neural MLP sessions: nonfinite logits")
+        _ = flags^
+    except err:
+        ops_session_close[E, KIND](sid)
+        raise err
+    ops_session_close[E, KIND](sid)
+    return rows * out_w
