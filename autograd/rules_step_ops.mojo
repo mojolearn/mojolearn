@@ -36,6 +36,7 @@ from autograd.block_step_ops import (
     BlockStepScratch, ATTN_STEP_TAG, attn_step_backward, step_tag_code, mamba_step_backward,
 )
 from autograd.lm_head_v2_op import LM_HEAD_V2_TAG, lm_head_v2_backward_device
+from autograd.small_mlp_op import SMALL_MLP_TAG, small_mlp_backward_device
 
 comptime _ScratchRef = MutPointer[BlockStepScratch, MutUntrackedOrigin]
 
@@ -50,13 +51,17 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
     def supports(self, tag: Int) -> Bool:
         if step_tag_code(tag) != 0:
             return self.scratch != 0
-        if tag == LM_HEAD_V2_TAG:
+        if tag == LM_HEAD_V2_TAG or tag == SMALL_MLP_TAG:
             return True
         return ImportRules().supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         if tag == LM_HEAD_V2_TAG:
             # the rule writes all of d_hidden and d_weight
+            return False
+        if tag == SMALL_MLP_TAG:
+            # every launch overwrites its whole destination (dx only when
+            # x wants a gradient; otherwise nobody reads that edge)
             return False
         if step_tag_code(tag) != 0:
             # edge 0 (x): the rule writes all of d_x; edge 1 (the packed
@@ -65,7 +70,7 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
         return ImportRules().zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
-        if tag == LM_HEAD_V2_TAG:
+        if tag == LM_HEAD_V2_TAG or tag == SMALL_MLP_TAG:
             return False
         if step_tag_code(tag) != 0:
             return False
@@ -115,5 +120,22 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
                 var hb: List[FP] = [gradients[0], gradients[1], inputs[0], inputs[1], saved.p0, saved.p1, saved.p2,
                                     upstream]
                 ex.lm_head_v2_host(True, hb, saved.i0, saved.i1, saved.i2)
+            return
+        if tag == SMALL_MLP_TAG:
+            # saved: p0 act, p1 incoming, p2 dhidden, p3 the GEMM workspace;
+            # i0 rows, i1 in, i2 hid, i3 out, i4 workspace floats, i5 x wants
+            # a gradient (OpsSession._small_mlp); inputs [x, w1, b1, w2, b2]
+            if len(gradients) != 5 or len(inputs) != 5:
+                raise Error("ops: small_mlp backward takes [x, w1, b1, w2, b2]")
+            var bb: List[FP] = [inputs[0], inputs[1], inputs[3], saved.p0, upstream, saved.p1, saved.p2, saved.p3,
+                                gradients[0], gradients[1], gradients[2], gradients[3], gradients[4]]
+            comptime if E.IS_DEVICE:
+                var bd: List[Int] = [saved.i0, saved.i1, saved.i2, saved.i3, saved.i4, saved.i5]
+                small_mlp_backward_device(rebind[DeviceExec](ex), bb, bd)
+            else:
+                # the host arm (autograd/small_mlp_host.mojo) through the executor;
+                # bufs[7] (the device workspace) is unread there
+                var hd: List[Int] = [saved.i0, saved.i1, saved.i2, saved.i3, saved.i4, saved.i5]
+                ex.small_mlp_host(True, bb, hd)
             return
         ImportRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
