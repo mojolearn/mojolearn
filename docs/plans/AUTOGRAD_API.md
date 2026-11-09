@@ -488,6 +488,26 @@ runs it and returns whether the criterion held and at which iteration.
 KMeans' Lloyd iterations (`LloydStep`, `cluster/impl/detail/kmeans.mojo`)
 are the first step op.
 
+Integer state (lane x1): a state array of integer ids (an ids input of the
+body) is carried word for word; each body output keeps its input's kind. With
+`iteration=True` and an ids iteration input, the register reaches the body as
+an int32 word, so `take`/`index` can select token t of a slab.
+
+### Carried state, block step ops and decode
+
+Lane x1 (`docs/plans/EXECUTOR_X1_API.md` is the reference):
+
+- `Session.state(x, ids=False)` uploads a state tensor: operations that carry
+  state write it in place, and a captured program records it as a state
+  parameter (program record version 3).
+- Block step ops, session codes 81..84 (`autograd/block_step_ops.mojo`):
+  Mamba-1, Mamba-2, Mamba-3 and Llama-style attention blocks over a packed
+  weights parameter and in-place state, the resident decode sessions' step
+  bodies unchanged. L = 1 is a decode step, L > 1 a prefill.
+- `Program.decode(*arrays, n, state=None, unroll=1, iteration=False)` runs a
+  next-token graph `n` times as a bounded loop with no condition, records
+  every step's tokens on the device and returns them together.
+
 Per-op timers: build with `-D MOJOLEARN_EXECUTOR_TIMERS` to print one line
 per op of every bounded loop,
 `EXECUTOR_TIMER loop=<label> op=<name> calls=<n> total_ms=<ms> mean_us=<us>`.
