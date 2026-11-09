@@ -21,7 +21,7 @@
 # environment of the caller is installed on every worker (core/host_parallel
 # DEVIATION 5900), so a unit computes the same bits on any thread.
 from std.ffi import c_int, c_size_t, external_call
-from std.python import Python
+from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.info import num_physical_cores
 
@@ -154,7 +154,8 @@ struct NativeUnitFailure(Movable):
             self.words = List[Int](length=3, fill=0)
             ref cpy = Python().cpython()
             cpy.lib.get_function[NoneType]("PyErr_Restore")(w[0], w[1], w[2])
-            raise stash_python_error()
+            var err = stash_python_error()
+            raise err^
         raise Error(self.message)
 
 

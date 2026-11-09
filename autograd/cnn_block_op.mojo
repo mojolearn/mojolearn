@@ -132,25 +132,25 @@ def cnn_block_keep(cprm: List[Int32]) -> Bool:
 # ---------------------------------------------------------------- device
 def cnn_block_forward_device(
     x: FP, w: FP, b: FP, cprm: List[Int32], pprm: List[Int32], pool: Bool, dst: FP, idx: FP,
-    save_cols: FP, save_y: FP,
+    save_cols: Int, save_y: Int,
 ) raises:
     """The hand epoch's block forward (`fit_epoch_r_device`'s
-    conv_block_forward_into[True] call) over session device buffers; a null
-    save buffer is not saved."""
+    conv_block_forward_into[True] call) over session device buffers; a save
+    address of 0 is not saved."""
     conv_block_forward_into[True](
-        cnn_xp(x), cnn_xp(w), cnn_xp(b), cprm, pprm, pool, cnn_xp(dst), cnn_xi(idx), Int(save_cols), Int(save_y),
+        cnn_xp(x), cnn_xp(w), cnn_xp(b), cprm, pprm, pool, cnn_xp(dst), cnn_xi(idx), save_cols, save_y,
     )
 
 
 def cnn_block_backward_device(
     x: FP, w: FP, b: FP, g: FP, idx: FP, cprm: List[Int32], pprm: List[Int32], pool: Bool, need_dx: Bool,
-    gx: FP, gw: FP, gb: FP, save_cols: FP, save_y: FP,
+    gx: FP, gw: FP, gb: FP, save_cols: Int, save_y: Int,
 ) raises:
     """`CnnRules._block`'s conv_block_backward_into[True] call, verbatim
     (without dx the entry is handed the bias gradient there, never written)."""
     conv_block_backward_into[True](
         cnn_xp(x), cnn_xp(w), cnn_xp(b), cnn_xp(g), cnn_xi(idx), cprm, pprm, pool, need_dx,
-        cnn_xp(gx) if need_dx else cnn_xp(gb), cnn_xp(gw), cnn_xp(gb), Int(save_cols), Int(save_y),
+        cnn_xp(gx) if need_dx else cnn_xp(gb), cnn_xp(gw), cnn_xp(gb), save_cols, save_y,
     )
 
 

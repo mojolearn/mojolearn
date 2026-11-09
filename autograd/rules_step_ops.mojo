@@ -155,7 +155,7 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
             return
         if tag == CNN_CONV_BLOCK_TAG:
             # saved: p0 the pool winners, p1 / p2 the kept im2col matrix and
-            # conv output (null: recomputed); i0..i3 N, C, H, W, i4 OC, i5 k,
+            # conv output (i10 = 0: placeholders, recomputed); i0..i3 N, C, H, W, i4 OC, i5 k,
             # i6 pad, i7 pool, i8 pool size, i9 dx wanted, i10 kept
             # (OpsSession._cnn_conv_block). CnnRules._block's call, verbatim.
             if len(gradients) != 3 or len(inputs) != 3:
@@ -167,7 +167,8 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
             var pprm = wd[1].copy()
             comptime if E.IS_DEVICE:
                 cnn_block_backward_device(inputs[0], inputs[1], inputs[2], upstream, saved.p0, cprm, pprm, pool, need_dx,
-                                          gradients[0], gradients[1], gradients[2], saved.p1, saved.p2)
+                                          gradients[0], gradients[1], gradients[2],
+                                          Int(saved.p1) if saved.i10 != 0 else 0, Int(saved.p2) if saved.i10 != 0 else 0)
             else:
                 var kept = saved.i10 != 0
                 var hb: List[FP] = [inputs[0], inputs[1], inputs[2], upstream, saved.p0, gradients[0], gradients[1],

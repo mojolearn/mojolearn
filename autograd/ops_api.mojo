@@ -2044,17 +2044,22 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var recording = self.tape.is_recording()
         var keep = recording and cnn_block_keep(cprm)
         var sz = cnn_block_saved_sizes(cprm)
-        var cols = FP(unsafe_from_address=0)
-        var yconv = FP(unsafe_from_address=0)
+        # FP is non-nullable: without the saves, cols / yconv hold dst as a
+        # placeholder that nothing reads (i10 = 0 says so), and the device
+        # entry is handed address 0 ("not saved"), as before.
+        var cols = dst
+        var yconv = dst
         if keep:
             cols = self.tape.reserve(self.ex, sz[0])
             yconv = self.tape.reserve(self.ex, sz[1])
         comptime if Self.E.IS_DEVICE:
-            cnn_block_forward_device(xp, wp, bp, cprm, pprm, pool, dst, idx, cols, yconv)
+            cnn_block_forward_device(
+                xp, wp, bp, cprm, pprm, pool, dst, idx, Int(cols) if keep else 0, Int(yconv) if keep else 0
+            )
         else:
             # the host arm (autograd/cnn_block_host.mojo) through the executor
-            var hcols = cols if keep else dst
-            var hy = yconv if keep else dst
+            var hcols = cols
+            var hy = yconv
             var hb: List[FP] = [xp, wp, bp, dst, idx, hcols, hy]
             var hw: List[Int] = [1 if pool else 0, 1 if keep else 0]
             self.ex.cnn_op_host(CNN_HOST_BLOCK_FORWARD, hb, cprm, pprm, hw)
