@@ -2,24 +2,20 @@
 # scikit-learn's input checks for the native LinearRegression/Ridge owner, in
 # the order and with the wording the public estimators have always raised:
 # sparse, complex, rank and empty X; a missing, complex, column or non-finite
-# y; inconsistent lengths; the sample_weight shape. Only array metadata is read
-# here; values are read by the typed CastIn conversion.
+# y; inconsistent lengths; the sample_weight shape. The checks themselves are
+# the one admission path, bindings/admitted_input.mojo; these are its
+# classical names.
 from bindings.native_loaded_module import native_loaded_module
-from bindings.admitted_call import AdmittedCall, admitted_input_dense, ADMITTED_ITEM_F32
+from bindings.admitted_call import AdmittedCall
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
-from bindings.classical_arrays import classical_array, classical_host_f32, classical_input, classical_kind, classical_address
-from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, classical_admit_value
-from bindings.sequential_admission import _ordinary_torch
-from bindings.native_torch_admission import native_torch_numpy
-from core.classical_arrays_impl import classical_check_weights
-from bindings.device_rows_door import door_is_device_rows, door_rows_host
-
-comptime RESHAPE_HINT = "Reshape your data either using array.reshape(-1, 1) if your data has a single feature or array.reshape(1, -1) if it contains a single sample."
-
-
-def _repr(value: PythonObject) raises -> String:
-    return String(py_call(native_loaded_module("builtins").repr, value))
+# The one admission path (lane consol-a0-admission): the X, y and
+# sample_weight checks live in bindings/admitted_input.mojo; these names are
+# re-exported here for the doors that import them from this module.
+from bindings.admitted_input import (
+    admit_x, admit_x_unrecorded, admit_y, admit_weights, RESHAPE_HINT, classical_view,
+    classical_refuse_sparse, classical_weight_refusal, _cast_x,
+)
 
 
 def classical_estimator_name(model: PythonObject) raises -> String:
@@ -28,199 +24,34 @@ def classical_estimator_name(model: PythonObject) raises -> String:
     return String(cls.__name__)
 
 
-def classical_view(source: PythonObject, context: PythonObject, name: String = "input",
-                   admitted: Bool = False) raises -> PythonObject:
-    """An array view of an admitted input (pandas and Torch storage read
-    natively), before any cast: an ndarray with NumPy, an Array without."""
-    # `admitted`: the caller's native entry already ran classical_admit_value
-    # over this very argument (classical_c admits every operation argument
-    # before dispatch), so the walk is not repeated; storage is still read.
-    if not admitted:
-        classical_admit_value(source, context)
-    var prepared = source
-    if native_pandas_exact(source):
-        prepared = native_pandas_f32(source, context)
-    elif _ordinary_torch(py_type(source), context):
-        prepared = native_torch_numpy(source)
-    return classical_input(prepared, context, name)
-
-
-def classical_refuse_sparse(source: PythonObject, est: String) raises:
-    # scipy.sparse containers are recognized by their defining module, so no
-    # attribute or property of the container runs.
-    # p3-labels-metrics: this runs twice per classical call (the door and
-    # the X check); an exact list or tuple is never sparse, and the module
-    # name is tested as a native string (no Python startswith call).
-    var b = native_loaded_module("builtins")
-    var cls = py_type(source)
-    if cls is b.list or cls is b.tuple:
-        return
-    var module = cls.__module__
-    if py_type(module) is b.str and String(py=module).startswith("scipy.sparse"):
-        raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (" + est + " takes dense X only.)")
-
-
-def _numeric(view: PythonObject, context: PythonObject) raises -> Bool:
-    var kind = classical_kind(view, context)
-    return kind == "b" or kind == "i" or kind == "u" or kind == "f"
-
-
-def _cast_x(view: PythonObject, est: String, context: PythonObject) raises -> PythonObject:
-    var nd = Int(py=view.ndim)
-    if nd != 2:
-        raise Error("mojolearn: X must be 2-D, got " + String(nd) + "-D shape " + _repr(view.shape))
-    if not _numeric(view, context):
-        raise Error("TypeError: mojolearn: X has buffer format " + _repr(py_call(native_loaded_module("builtins").memoryview, view).format) + ", which is not a numeric array")
-    try:
-        return classical_host_f32(view, 2, "X", context, admitted=True)
-    except error:
-        if String(error) == "Input X contains NaN or infinity":
-            raise Error("Input X contains NaN or infinity (" + est + ").")
-        raise Error(String(error))
-
-
 def classical_check_x(source: PythonObject, est: String, context: PythonObject,
                       admitted: Bool = False) raises -> PythonObject:
     """X for fit, predict or score: refused with scikit-learn's wording, then
     cast to C-ordered float32 (the input itself when it already is one)."""
-    # The DeviceRows door (lane ne1-b-door, workstream B): a model-selection
-    # fold's X arrives as `_arena_io.DeviceRows`; these kernels read host
-    # addresses, so it resolves to its rows through its own native
-    # materializer (the device gather out of the resident base) and is then
-    # checked like any Array. Same rows, same order: the same bytes as the
-    # host path.
-    var x_source = source
-    var x_admitted = admitted
-    if door_is_device_rows(source, context):
-        x_source = door_rows_host(source, context)
-        x_admitted = False
-    classical_refuse_sparse(x_source, est)
-    var view = classical_view(x_source, context, "X", x_admitted)
-    var x = _check_x_view(view, est, context)
-    _ = view^
-    return x
+    var x = admit_x_unrecorded(source, est, context, admitted)
+    return x.array
 
 
 def classical_check_x(mut call: AdmittedCall, source: PythonObject, est: String, context: PythonObject,
                       position: Int, admitted: Bool = False) raises -> PythonObject:
     """As above, recording the checked X on the door's admission record at
-    `position`: its rows and columns and the C-ordered float32 result that
-    owns it, so the door reads the shape from the record instead of
-    admitting X again (labels_shape_of; rows N254, N279)."""
-    # The DeviceRows door (lane ne1-b-door, workstream B): a model-selection
-    # fold's X arrives as `_arena_io.DeviceRows`; these kernels read host
-    # addresses, so it resolves to its rows through its own native
-    # materializer (the device gather out of the resident base) and is then
-    # checked like any Array. Same rows, same order: the same bytes as the
-    # host path.
-    var x_source = source
-    var x_admitted = admitted
-    if door_is_device_rows(source, context):
-        x_source = door_rows_host(source, context)
-        x_admitted = False
-    classical_refuse_sparse(x_source, est)
-    var view = classical_view(x_source, context, "X", x_admitted)
-    var x = _check_x_view(view, est, context)
-    # _cast_x refused every rank but 2; the cast keeps the view's shape.
-    var rows = Int(py=view.shape[0])
-    var columns = Int(py=view.shape[1])
-    _ = view^
-    _ = call.add_input(admitted_input_dense(position, source, x, 0, rows, columns, ADMITTED_ITEM_F32, False))
-    return x
-
-
-def _check_x_view(view: PythonObject, est: String, context: PythonObject) raises -> PythonObject:
-    var kind = classical_kind(view, context)
-    if kind == "c":
-        raise Error("Complex data not supported: " + est + " got a complex X.")
-    if _numeric(view, context):
-        var nd = Int(py=view.ndim)
-        if nd < 2:
-            raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape=" + _repr(view.shape) + "). " + RESHAPE_HINT)
-        if nd == 2 and Int(py=view.shape[0]) == 0:
-            raise Error("Found array with 0 sample(s) (shape=" + _repr(view.shape) + ") while a minimum of 1 is required by " + est + ".")
-        if nd == 2 and Int(py=view.shape[1]) == 0:
-            raise Error("Found array with 0 feature(s) (shape=" + _repr(view.shape) + ") while a minimum of 1 is required by " + est + ".")
-    return _cast_x(view, est, context)
+    `position` (bindings/admitted_input.mojo `admit_x`)."""
+    var x = admit_x(call, source, est, context, position, admitted)
+    return x.array
 
 
 def classical_check_y(source: PythonObject, rows: Int, est: String, context: PythonObject,
                       admitted: Bool = False) raises -> PythonObject:
     """The fit target: present, real, one column (a column vector warns and is
     raveled), finite and as long as X."""
-    if source is None:
-        raise Error(est + " requires y to be passed, but the target y is None.")
-    var b = native_loaded_module("builtins")
-    var view = classical_view(source, context, "y", admitted)
-    if classical_kind(view, context) == "c":
-        raise Error("Complex data not supported: " + est + " got a complex y.")
-    var nd = Int(py=view.ndim)
-    var column = nd == 2 and Int(py=view.shape[1]) == 1 and py_type(source) is not b.list and py_type(source) is not b.tuple and py_type(source) is not b.memoryview
-    var y = PythonObject(None)
-    if nd == 1 or column:
-        try:
-            y = classical_host_f32(view, 1, "y", context, column_target=column, admitted=True)
-        except error:
-            if String(error) == "Input y contains NaN or infinity":
-                raise Error("Input y contains NaN or infinity (" + est + ").")
-            raise Error(String(error))
-    var length = 1 if nd == 0 else Int(py=view.shape[0])
-    if length != rows:
-        raise Error("Found input variables with inconsistent numbers of samples: [" + String(rows) + ", " + String(length) + "]")
-    if y is None:
-        raise Error("mojolearn " + est + " currently requires one target")
-    _ = view^
-    return y
-
-
-def classical_weight_refusal(source: PythonObject, error: Error) raises -> Error:
-    """The refusal of a sample_weight the shared admission refused. That
-    refusal names no accepted type; say what a weight may be. An object that
-    only defines __array__ (scikit-learn's _NotAnArray) is never converted:
-    no Python protocol runs in a fit."""
-    if String(error).startswith("TypeError: Sequential requires native input types"):
-        return Error("TypeError: sample_weight must be None, a number, a NumPy array, a buffer "
-                     + "(memoryview, array.array, bytearray), a list or tuple of numbers, a pandas "
-                     + "Series or a Torch tensor; got " + String(py_type(source).__name__)
-                     + ", which is not read because it only converts through Python-defined "
-                     + "methods such as __array__")
-    return Error(String(error))
+    return admit_y(source, rows, est, context, admitted)
 
 
 def classical_check_weights_input(source: PythonObject, rows: Int, context: PythonObject,
                                   admitted: Bool = False) raises -> PythonObject:
     """sample_weight as rows float32 words: None stays None, a scalar fills
     every row; scikit-learn's shape, finiteness, sign and all-zero refusals."""
-    if source is None:
-        return PythonObject(None)
-    var view = PythonObject(None)
-    try:
-        view = classical_view(source, context, "sample_weight", admitted)
-    except error:
-        var refusal = classical_weight_refusal(source, error)
-        raise refusal
-    var nd = Int(py=view.ndim)
-    if nd > 1:
-        raise Error("Sample weights must be 1D array or scalar")
-    var scalar = nd == 0
-    if not scalar and Int(py=view.shape[0]) != rows:
-        raise Error("sample_weight.shape == (" + String(Int(py=view.shape[0])) + ",), expected (" + String(rows) + ",)!")
-    var value = PythonObject(None)
-    try:
-        value = classical_host_f32(view, 0 if scalar else 1, "sample_weight", context, admitted=True)
-    except error:
-        if String(error) == "Input sample_weight contains NaN or infinity":
-            raise Error("Input sample_weight contains NaN or infinity.")
-        raise Error(String(error))
-    var out = classical_array(rows, 0, context) if scalar else value
-    var input = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value)))
-    var output = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))
-    var any_positive = classical_check_weights(input, output, rows, scalar)
-    if not any_positive:
-        raise Error("Sample weights must contain at least one non-zero number.")
-    _ = value^
-    _ = view^
-    return out
+    return admit_weights(source, rows, context, admitted)
 
 
 def classical_check_width(cols: Int, fitted: Int, est: String) raises:

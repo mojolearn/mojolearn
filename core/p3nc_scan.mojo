@@ -21,11 +21,8 @@ comptime _P3NC_F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _P3NC_F64P = MutPointer[Float64, MutUntrackedOrigin]
 
 
-def p3nc_all_finite_f32(p: _P3NC_F32P, n: Int) -> Bool:
-    """True when none of the `n` float32 words at `p` is a NaN or an
-    infinity (exponent bits all ones)."""
-    # parallel: finiteness scan across host cores (0.8.66 regression C2, one-thread scan)
-    return host_all_finite_f32(p, n)
+# TOMBSTONE: p3nc_all_finite_f32 (a second name for the one finiteness scan) deleted 2026-11-08 by lane consol-a0-admission; code recoverable at ef4bce3a7e.
+# Restore: experiments/removed/A0_ADMISSION_HELPERS.patch. Callers read core/host_finite_scan.mojo `host_all_finite_f32`.
 
 
 def p3nc_widen_f32_f64(sp: _P3NC_F32P, dp: _P3NC_F64P, n: Int):

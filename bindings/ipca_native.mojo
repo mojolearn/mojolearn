@@ -18,7 +18,8 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_typed, classical_host_f32
+from bindings.classical_arrays import classical_address, classical_typed
+from bindings.admitted_input import admit_x
 from bindings.decomp_inputs import decomp_input
 from bindings.entries_verified import entries_verified, entries_mark_verified
 from bindings.decomp_public_lifecycle import decomp_public_method, decomp_public_begin, decomp_public_finish
@@ -279,13 +280,13 @@ def ipca_partial_fit(model: PythonObject, source: PythonObject, context: PythonO
     var state_ids = List[Int](length=_IPCA_STATE_COUNT, fill=-1)
     var held = Python.list()
     if seen > 0:
-        var components = classical_host_f32(_attr(model, fields, "components_"), 2, "components_", context)
+        var components = admit_x(_attr(model, fields, "components_"), 2, "components_", context)
         prev_count = Int(py=components.shape[0])
         prev_d = Int(py=components.shape[1])
         _ = py_call(state.append, components)
-        _ = py_call(state.append, classical_host_f32(_attr(model, fields, "singular_values_"), 1, "singular_values_", context))
-        _ = py_call(state.append, classical_host_f32(_attr(model, fields, "mean_"), 1, "mean_", context))
-        _ = py_call(state.append, classical_host_f32(_attr(model, fields, "var_"), 1, "var_", context))
+        _ = py_call(state.append, admit_x(_attr(model, fields, "singular_values_"), 1, "singular_values_", context))
+        _ = py_call(state.append, admit_x(_attr(model, fields, "mean_"), 1, "mean_", context))
+        _ = py_call(state.append, admit_x(_attr(model, fields, "var_"), 1, "var_", context))
         if resident:
             for k in range(4):  # driver-loop: over the four state arrays a step reads
                 var stored = fields[PythonObject(_state_name(k))]
@@ -343,7 +344,7 @@ def _project(model: PythonObject, fields: PythonObject, x: PythonObject, inverse
     var entries = _entries(model, fields, context)
     var n = Int(py=x.shape[0])
     var width = Int(py=x.shape[1])
-    var components = classical_host_f32(fields["components_"], 2, "components_", context)
+    var components = admit_x(fields["components_"], 2, "components_", context)
     var nc = Int(py=components.shape[0])
     var d = Int(py=components.shape[1])
     if not inverse:
@@ -352,8 +353,8 @@ def _project(model: PythonObject, fields: PythonObject, x: PythonObject, inverse
             raise Error("X has " + String(width) + " features, but IncrementalPCA is expecting " + String(fitted))
     elif width != nc:
         raise Error("x_decomp: gemm inner dimensions " + String(width) + " and " + String(nc) + " differ")
-    var mean = classical_host_f32(_attr(model, fields, "mean_"), 1, "mean_", context)
-    var variance = classical_host_f32(_attr(model, fields, "explained_variance_"), 1, "explained_variance_", context)
+    var mean = admit_x(_attr(model, fields, "mean_"), 1, "mean_", context)
+    var variance = admit_x(_attr(model, fields, "explained_variance_"), 1, "explained_variance_", context)
     var out = _f32(Python.tuple(n, d if inverse else nc), context)
     var whiten = Bool(py=_attr(model, fields, "whiten"))
     var params = Python.list(

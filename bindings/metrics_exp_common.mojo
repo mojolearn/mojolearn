@@ -43,7 +43,7 @@ from bindings.metrics_native_support import (
     metric_is_real, metric_float, metric_integer, metric_is_integral, metric_is_integral_type, metric_warn, metric_undefined,
 )
 from bindings.metrics_native_inputs import metric_shape, metric_flatten
-from core.family_cast_impl import family_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32
 from core.cast_in import CastIn, CAST_KIND_FLOAT, label_kind_of
 from core.label_cast import host_unique_inverse_cast
 from core.metrics_exp_impl import mexp_gather_i32
@@ -711,7 +711,7 @@ def mx_scores(source: PythonObject, n: Int, caller: String, ndim: Int, name: Str
         raise Error("mojolearn " + caller + ": " + name + " has " + String(rows) + " rows for " + String(n) + " samples")
     var checked = family_view(view, -1, name, context)
     var a = family_cast_view(checked, name, context)
-    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a))), rows * cols):
+    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a))), rows * cols):
         raise Error("mojolearn " + caller + ": " + name + " must be finite")
     _ = a  # keep the Python object alive through the native calls above
     return MxMat(a, rows, cols, nd)

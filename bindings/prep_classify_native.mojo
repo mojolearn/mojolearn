@@ -22,7 +22,8 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_wrap_array, classical_host_f32, classical_typed
+from bindings.classical_arrays import classical_address, classical_wrap_array, classical_typed
+from bindings.admitted_input import admit_x
 from bindings.classical_validate import classical_view
 from bindings.prep_lda_admission import (
     lda_native_fields, lda_native_labels, lda_native_context, lda_native_initialize,

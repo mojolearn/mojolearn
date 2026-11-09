@@ -4,7 +4,7 @@
 # Manager must first confirm branch base == current main (or merge main).
 # Usage: bash tools/mcd_compat_ab.sh TAG DATASET [LANE] [ROWS]
 # Prebuilt overrides: MCD_A_SO, MCD_B_SO. They must be default/current-main
-# and this commit with MCD_DEFINE (default MOJOLEARN_MCD_BATCH_COMPAT).
+# and this commit with MCD_DEFINE (required; MOJOLEARN_MCD_BATCH_COMPAT was deleted 2026-11-08).
 # MCD_BASELINE_NPZ may reuse a saved A only after manager source review.
 # Comparison still enforces exact dataset/lane/shape/input hash agreement.
 set -euo pipefail
@@ -12,7 +12,7 @@ TAG=$1
 DATASET=$2
 LANE=${3:-min-cov-det}
 ROWS=${4:-}
-MCD_DEFINE=${MCD_DEFINE:-MOJOLEARN_MCD_BATCH_COMPAT}
+MCD_DEFINE=${MCD_DEFINE:?set MCD_DEFINE (MOJOLEARN_MCD_BATCH_COMPAT was deleted 2026-11-08, docs/TOMBSTONES.md)}
 # MCD_DEFINE may list several defines, space or comma separated (w2-mcd2: B =
 # "MOJOLEARN_MCD_WIDE_OFF"; BMMA and WIDE are default since their promotion,
 # so "MOJOLEARN_MCD_BMMA_OFF" / "MOJOLEARN_MCD_WIDE_OFF" build the
@@ -20,7 +20,7 @@ MCD_DEFINE=${MCD_DEFINE:-MOJOLEARN_MCD_BATCH_COMPAT}
 B_DEFINES=
 for D in ${MCD_DEFINE//,/ }; do
   case "$D" in
-    MOJOLEARN_MCD_BATCH_COMPAT|MOJOLEARN_MCD_BATCH_MMA|MOJOLEARN_MCD_BMMA_OFF|MOJOLEARN_MCD_WIDE_OFF) ;;
+    MOJOLEARN_MCD_BATCH_MMA|MOJOLEARN_MCD_BMMA_OFF|MOJOLEARN_MCD_WIDE_OFF) ;;
     # w4-mcd: SKIP_PINVH and DEFLATE are default now (_OFF is the old arm)
     MOJOLEARN_MCD_SKIP_PINVH_OFF|MOJOLEARN_MCD_DEFLATE_OFF) ;;
     MOJOLEARN_MCD_DEFLATE) echo "MCDQ MOJOLEARN_MCD_DEFLATE is default now; use MOJOLEARN_MCD_DEFLATE_OFF for the old arm"; exit 2 ;;

@@ -4,7 +4,8 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_host_f32, classical_is_array, classical_typed, classical_address
+from bindings.classical_arrays import classical_is_array, classical_typed, classical_address
+from bindings.admitted_input import admit_x
 from bindings.classical_labels import labels_cast
 from bindings.scaler_lifecycle_native import _outside
 from bindings.sequential_inputs import sequential_input
@@ -14,7 +15,7 @@ def _output(value: PythonObject, widen: Bool, context: PythonObject) raises -> P
     var b = native_loaded_module("builtins")
     if py_type(value) is py_get(context, "ndarray"):
         if widen and String(value.dtype.kind) == "f" and Int(py=value.dtype.itemsize) < 8:
-            var data = classical_host_f32(value, Int(py=value.ndim), "result", context)
+            var data = admit_x(value, Int(py=value.ndim), "result", context)
             var wide = classical_typed(data.shape, "<f8", context)
             labels_cast(Int(py=classical_address(data)), "<f4", Int(py=classical_address(wide)), "<f8", Int(py=data.size), context)
             return wide

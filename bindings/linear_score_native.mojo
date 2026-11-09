@@ -11,7 +11,8 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
-from bindings.classical_arrays import classical_address, classical_array, classical_host_f32
+from bindings.classical_arrays import classical_address, classical_array
+from bindings.admitted_input import admit_x
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_exceptions import classical_not_fitted_class
 
@@ -52,7 +53,7 @@ def _linear_f32(value: PythonObject, name: String, context: PythonObject) raises
         word[0] = Float32(Float64(py=value))
         return one
     var rank = Int(py=value.ndim)
-    return classical_host_f32(value, rank, name, context)
+    return admit_x(value, rank, name, context)
 
 
 def _linear_finite(values: PythonObject, count: Int, name: String) raises:
@@ -82,7 +83,7 @@ def linear_regressor_score(model: PythonObject, args: PythonObject, context: Pyt
         _ = classical_not_fitted_class(context)
         raise Error("NotFittedError: This " + name + " instance is not fitted yet. Call 'fit' with "
                     + "appropriate arguments before using score.")
-    var x = classical_host_f32(args[0], 2, "X", context)
+    var x = admit_x(args[0], 2, "X", context)
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
     var fitted = Int(py=fields["n_features_in_"])
@@ -108,7 +109,7 @@ def linear_regressor_score(model: PythonObject, args: PythonObject, context: Pyt
     var prediction = classical_array(rows, 1, context)
     _ = py_call(linear["x_linear_decision"], classical_address(x), classical_address(block),
                 Python.list(rows, cols, 1, link), classical_address(prediction))
-    var target = classical_host_f32(args[1], 1, "y", context)
+    var target = admit_x(args[1], 1, "y", context)
     var size = Int(py=target.size)
     if size != rows:
         raise Error("mojolearn metrics: y_true has " + String(size) + " entries and y_pred has "

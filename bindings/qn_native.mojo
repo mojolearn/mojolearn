@@ -27,7 +27,8 @@ from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_typed, classical_host_f32, classical_dtype_str, classical_c_order
+from bindings.classical_arrays import classical_address, classical_typed, classical_dtype_str, classical_c_order
+from bindings.admitted_input import admit_x
 from bindings.classical_validate import classical_view, classical_check_weights_input, classical_check_x, classical_check_y, classical_check_width, classical_estimator_name
 from bindings.classical_score import classical_r2_score
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit, class_record, class_admit
@@ -102,13 +103,13 @@ def _float(value: PythonObject) raises -> Float64:
 def qn_regressor_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     var entries = _qn_entries(fields, context)
-    var x = classical_host_f32(args[0], 2, "X", context)
+    var x = admit_x(args[0], 2, "X", context)
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
     var view = classical_view(args[1], context, "y")
     if Int(py=view.ndim) != 1:
         raise Error("mojolearn QNRegressor requires a 1-D y")
-    var target = classical_host_f32(view, 1, "y", context)
+    var target = admit_x(view, 1, "y", context)
     if Int(py=target.shape[0]) != rows:
         raise Error("mojolearn QNRegressor X and y lengths differ")
     var weights = classical_check_weights_input(args[2], rows, context)
@@ -178,7 +179,7 @@ def qn_regressor_predict(model: PythonObject, source: PythonObject, context: Pyt
     if not py_contains(fields, "_w"):
         raise Error("mojolearn QNRegressor: call fit before predict")
     var entries = _qn_entries(fields, context)
-    var x = classical_host_f32(source, 2, "X", context)
+    var x = admit_x(source, 2, "X", context)
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
     if cols != Int(py=fields["n_features_in_"]):

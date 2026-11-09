@@ -9,7 +9,8 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_address, classical_host_f32
+from bindings.classical_arrays import classical_address
+from bindings.admitted_input import admit_x
 from bindings.decomp_inputs import decomp_input
 from bindings.decomp_owner_common import (
     decomp_attr, decomp_check, decomp_entries, decomp_eq, decomp_f32, decomp_float, decomp_int, decomp_seed,
@@ -61,8 +62,8 @@ def _run(model: PythonObject, fields: PythonObject, op: Int, x: PythonObject, fr
     var state_c = PythonObject(None)
     var state_e = PythonObject(None)
     if not (op == _FIT or (op == _PARTIAL and fresh)):
-        state_c = classical_host_f32(decomp_attr(model, fields, "components_"), 2, "components_", context)
-        state_e = classical_host_f32(decomp_attr(model, fields, "exp_dirichlet_component_"), 2,
+        state_c = admit_x(decomp_attr(model, fields, "components_"), 2, "components_", context)
+        state_e = admit_x(decomp_attr(model, fields, "exp_dirichlet_component_"), 2,
                                      "exp_dirichlet_component_", context)
         nc = Int(py=state_c.shape[0])
     var comps = decomp_f32(Python.tuple(nc, v), context)

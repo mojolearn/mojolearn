@@ -23,7 +23,8 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_typed, classical_host_f32, classical_is_f32
+from bindings.classical_arrays import classical_address, classical_typed, classical_is_f32
+from bindings.admitted_input import admit_x
 from bindings.decomp_inputs import decomp_input, decomp_copied
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from bindings.public_lifecycle_owner import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
@@ -308,7 +309,7 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
     var sparse = host_sparse_format(source)
     if sparse.byte_length() > 0:
         var dense = host_sparse_dense(source, sparse, context)
-        x = classical_host_f32(dense, 2, "X", context)
+        x = admit_x(dense, 2, "X", context)
         py_setitem(fields, "input_copied_", PythonObject(not classical_is_f32(dense, context)))
     else:
         x = decomp_input(source, "TruncatedSVD", context)
@@ -366,7 +367,7 @@ def _project(model: PythonObject, fields: PythonObject, x: PythonObject, context
     var mode = _mode(fields, context)
     var entries = _entries(mode, context)
     var stored = fields["components_"]
-    var components = classical_host_f32(stored, 2, "components_", context)
+    var components = admit_x(stored, 2, "components_", context)
     var lease = _resident_lease(model, mode, entries, "tsvd_transform_resident", stored, components, context)
     if lease > 0:
         # The same gemm over the lease's device copy of the same words.
@@ -405,7 +406,7 @@ def tsvd_inverse_transform(model: PythonObject, source: PythonObject, context: P
     var mode = _mode(fields, context)
     var entries = _entries(mode, context)
     var stored = _attr(model, fields, "components_")
-    var components = classical_host_f32(stored, 2, "components_", context)
+    var components = admit_x(stored, 2, "components_", context)
     var lease = _resident_lease(model, mode, entries, "tsvd_inverse_transform_resident", stored, components, context)
     if lease > 0:
         # The same transpose and gemm over the lease's device copy (N351).

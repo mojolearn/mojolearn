@@ -696,19 +696,14 @@ def _lle_smallest(mut k: MKit, f: PythonObject, nc: Int, max_iter: Int,
     var pm: PythonObject
     var im: PythonObject
     var big: Float64
-    if (k.w4_flags() & 1) != 0:
-        var got = k.lu_dev_aux(f0, True)
-        lu = got[0]
-        pm = got[1]
-        im = got[2]
-        big = got[3][0]
-    else:
-        var fac = k.lu(f0)
-        lu = fac[0]
-        var aux = k.lu_aux(lu, fac[1], True)
-        big = aux[0][0]
-        pm = aux[2]
-        im = aux[3]
+    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (the w4 bit 1 device-LU arm) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at 41ffcec665.
+    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
+    var fac = k.lu(f0)
+    lu = fac[0]
+    var aux = k.lu_aux(lu, fac[1], True)
+    big = aux[0][0]
+    pm = aux[2]
+    im = aux[3]
     if not (big > 0.0 and _mani_finite(big)):
         return (False, PythonObject(None), PythonObject(None))
     var en = mk_zeros(n, 1, ctx)

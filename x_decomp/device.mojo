@@ -2392,7 +2392,9 @@ def orth_on_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, 
     replaced by the orthonormalized columns): R of the matrix (`qr_factor`
     on a device copy, as `device_qr_r`), the rank guard on the host
     (DEVIATION 5318), then A R^-1 by rows (`trsm_kernel`, DEVIATION 5309).
-    Waits for the device (the guard reads R on the host).
+    The two-pass route is enqueued only (the guard reads R on the device);
+    the caller waits before any host read. The TSQR route waits (its R
+    crosses through a host list).
     RSVD_IDN_TSQR_ORTHO: one blocked TSQR pass instead (`_orth_tsqr_device`)
     for the shapes the TSQR takes."""
     comptime if RSVD_IDN_TSQR_ORTHO and TS_SMEM_OK:
@@ -2442,14 +2444,18 @@ def orth_on_device_diag(
         ctx.enqueue_function[trsm_kernel](
             src.unsafe_ptr(), r_buf.unsafe_ptr(), dst.unsafe_ptr(), Int32(m), Int32(l), grid_dim=_blocks(m), block_dim=TPB
         )
-        ctx.synchronize()
         _ = src^
         _ = dst^
+    # Enqueued only (lane consol-n0-readmission): the two synchronize() calls
+    # here (one per pass, one at the end) read nothing. The guard reads R on
+    # the device in stream order, the work buffers are this call's own and go
+    # back in stream order, and every caller downloads and waits before it
+    # reads a result on the host (DevExec.orth / orth_diag, dev_orth_diag_run)
+    # or reads it only from later launches (dev_orth_run).
     _ = dq^
     _ = dw^
     _ = scratch^
     _ = r_buf^
-    ctx.synchronize()
 
 
 def launch_lu(

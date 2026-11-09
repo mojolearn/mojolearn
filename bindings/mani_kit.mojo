@@ -25,7 +25,7 @@ from bindings.manifold_storage_native import (
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_arrays import classical_address
 from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family_array, family_f32_snapshot
-from core.family_cast_impl import family_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32
 from bindings.native_loaded_module import native_loaded_module
 from bindings.spectral_umap_routes import spectral_umap_entry, spectral_umap_optional_entry
 # The x_decomp native kernel-call table (lane ne3-f-kernel-table, rows
@@ -774,7 +774,7 @@ struct MKit(Movable):
         if len(value.shape) != 2 or r == 0 or c == 0:
             raise Error(name + ": a nonempty two-dimensional input is required")
         var src = FAMILY_F32P(unsafe_from_address=value.source.addr)
-        if not family_all_finite_f32(src, r * c):
+        if not host_all_finite_f32(src, r * c):
             raise Error(name + ": input must be finite; NaN/inf are unsupported")
         var nd = self._devbuf(r * c)
         self.upload(Int(py=device_identifier(nd)), value.source.addr, r * c)
@@ -1098,26 +1098,9 @@ struct MKit(Movable):
             stats.append(mk_at(st, i, self.ctx))
         return (stats^, diag, pm, im)
 
-    def lu_dev_aux(mut self, a: PythonObject,
-                   clamp: Bool) raises -> Tuple[PythonObject, PythonObject, PythonObject, List[Float64]]:
-        """LLE_FAST_DEV_LU: `lu` then `lu_aux` on the device, A untouched:
-        (lu, pm, im) device-resident and the four stats."""
-        var n = mk_r(a)
-        var lu = self.dout(n, n)
-        var pm = self.dout(n, 1)
-        var im = self.dout(n, 1)
-        var diag = self.dout(1, n)
-        var st = self.dout(1, 4)
-        var ia = self.did(a)
-        _ = family_call(self.fn("x_decomp_dev_lu_aux"), ia, device_identifier(matrix_device(lu)), device_identifier(matrix_device(pm)), device_identifier(matrix_device(im)), device_identifier(matrix_device(diag)), device_identifier(matrix_device(st)),
-                        mk_ints([n, 1 if clamp else 0]))
-        # The unused diagonal is still a kernel output: its numeric id does
-        # not retain the pooled device buffer while the call is running.
-        _ = diag^
-        var stats = List[Float64]()
-        for i in range(4):  # small-loop(stats: the four lu_aux status words): 4
-            stats.append(mk_at(st, i, self.ctx))
-        return (lu, pm, im, stats^)
+    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (kit method lu_dev_aux, its only caller gone) deleted 2026-11-08 by ed9ba6e7a1;
+    # code recoverable at 41ffcec665.
+    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 
     def trisolve(mut self, lu: PythonObject, idx: PythonObject, b: PythonObject, trans: Int) raises -> PythonObject:
         var n = mk_r(lu)
@@ -1674,7 +1657,7 @@ def mk_from_snapshot(value: ArrayMetadata, name: String, ctx: PythonObject) rais
     memcpy(dest=mk_store_ptr(store), src=src, count=r * c)
     _ = store
     _ = value
-    if not family_all_finite_f32(src, r * c):
+    if not host_all_finite_f32(src, r * c):
         raise Error(name + ": input must be finite; NaN/inf are unsupported")
     _ = value
     return mk_new(store, r, c, ctx)

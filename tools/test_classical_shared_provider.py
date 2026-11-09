@@ -156,8 +156,8 @@ def test_shared_weight_snapshot_keeps_cast_order_and_reuses_admitted_address():
     assert admission.count('array_shape_once(view, context)') == 1
     for old in ('view.shape', 'view.ndim', 'view.size', 'b.hasattr', 'b.float'):
         assert old not in admission
-    assert 'family_cast_rows_f64(raw.addr' in admission
-    assert 'family_cast_rows(raw.addr' in admission
+    assert 'admitted_cast_f64(raw.addr' in admission
+    assert 'admitted_cast_f32(raw.addr' in admission
     validate=take('family_sample_weight_snapshot')
     assert 'snapshot.source.addr' in validate
     assert validate.index('FAMILY_WEIGHTS_NONFINITE') < validate.index('FAMILY_WEIGHTS_NEGATIVE') < validate.index('FAMILY_WEIGHTS_ALL_ZERO')

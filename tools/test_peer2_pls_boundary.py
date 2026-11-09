@@ -52,7 +52,7 @@ def test_native_target_uses_captured_metadata_without_array_or_reshape_protocol(
     assert provider.count('array_shape_once(view, context)') == 1
     assert provider.count('array_metadata_once(view, shape^, name, context, complex_error=complex_error)') == 1
     assert 'snapshot.owner = Python.tuple(original_owner, snapshot.owner)' in provider
-    assert 'family_all_finite_f32(' in provider
+    assert 'host_all_finite_f32(' in provider
 
 
 def test_kit_retains_snapshot_owner_and_drops_address_when_device_writes():

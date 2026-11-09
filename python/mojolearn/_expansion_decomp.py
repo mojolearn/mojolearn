@@ -142,7 +142,6 @@ del _p
 _SOLE_HOLDER = _Probe.seen[0] if _Probe.seen else -1
 
 
-
 def _host_all_finite(a):
     """True/False from the base binding's `all_finite_f32`, or None when this
     install has no such helper (the caller then runs the cell form)."""
@@ -528,9 +527,9 @@ class _Kit:
 
     def w4_flags(self):
         """lane/apple-fast-w4-decomp: the binding's compiled w4 candidates
-        (`x_decomp_w4_flags`: bit 1 LLE_FAST_DEV_LU, bit 2
-        RSVD_FAST_DIRECT_IN on FAST + Apple or RSVD_IDN_DIRECT_IN on
-        IDENTICAL, lane fg-pca R1; 0 on a binding without the entry)."""
+        (`x_decomp_w4_flags`: bit 2 RSVD_FAST_DIRECT_IN on FAST + Apple or
+        RSVD_IDN_DIRECT_IN on IDENTICAL, lane fg-pca R1; bit 1, LLE_FAST_DEV_LU,
+        was deleted 2026-11-08; 0 on a binding without the entry)."""
         f = self.__dict__.get("_w4_flags")
         if f is None:
             try:
@@ -575,17 +574,9 @@ class _Kit:
         self.b.x_decomp_lu_resid(A.addr, X.addr, B.addr, R.addr, [A.r, B.c])
         return R
 
-    def lu_dev_aux(self, A, clamp=False):
-        """lane/apple-fast-w4-decomp LLE_FAST_DEV_LU: `lu` then `lu_aux` on
-        the device (x_decomp/w4_fast.mojo `dev_lu_aux_py`, the same launches
-        on the same words), A untouched. Returns (lu n x n, pm n x 1, im
-        n x 1, stats as four floats), lu / pm / im device-resident."""
-        n = A.r
-        lu, pm, im = self._dout(n, n), self._dout(n, 1), self._dout(n, 1)
-        diag, st = self._dout(1, n), self._dout(1, 4)
-        self.b.x_decomp_dev_lu_aux(self._did(A), lu._d.id, pm._d.id, im._d.id, diag._d.id, st._d.id,
-                                   [n, int(bool(clamp))])
-        return lu, pm, im, [float(v) for v in st.s]  # glue: the four-field lu_aux status
+    # TOMBSTONE: MOJOLEARN_LLE_FAST_DEV_LU (_Kit.lu_dev_aux, no caller) deleted 2026-11-08 by ed9ba6e7a1; code recoverable at
+    # 41ffcec665.
+    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch
 
     def _use(self, *ms):
         """The resident path for this call: the GPU binding, and an operand
@@ -1649,12 +1640,8 @@ def johnson_lindenstrauss_min_dim(n_samples, *, eps=0.1):
     return _JL_CALL(None, "min_dim", (n_samples, eps), _JL_CONTEXT)
 
 
-def _seed_of(random_state):
-    if random_state is None:
-        return 0
-    if isinstance(random_state, bool) or not isinstance(random_state, int):
-        raise TypeError("random_state must be None or an int (the counter-based RNG takes an integer seed)")
-    return random_state
+# TOMBSTONE: _seed_of (helper of the deleted _rsvd_core) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_python_loops.patch
 
 
 class _RandomProjection(_Base):
@@ -2589,20 +2576,12 @@ def solve(a, b, *, numeric_mode=None):
     return _LINALG_CALL(None, "solve", (a, b, numeric_mode), _LINALG_CONTEXT)
 
 
-# ================================================================ lstsq / randomized SVD
-def _orthonormal_cols(k, A):
-    """An orthonormal basis of A's columns (m x l, m >= l): two passes of the
-    Householder QR's R (decomposition/'s TSQR) and Q = A R^-1 one row per
-    thread (x_decomp/cells.mojo `trsm_row`)."""
-    return k.orth(A)
+# TOMBSTONE: _orthonormal_cols (helper of the deleted _rsvd_core) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_python_loops.patch
 
 
-def _flip_u(U, Vt):
-    """sklearn svd_flip(u_based_decision=True): each column of U signed so its
-    largest-|.| entry (first on a tie) is positive; Vt's rows follow."""
-    k = _Kit(_backend.default_mode())
-    sg = k.absmax_signs(U, True)
-    return k.ew("mul", U, sg), k.ew("mul", Vt, sg.T)
+# TOMBSTONE: _flip_u (orphan helper: the native linalg door flips the signs) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_python_loops.patch
 
 
 # Halko et al.; RAFT `linalg/rsvd.cuh` is the same scheme. The Gaussian
@@ -2671,63 +2650,8 @@ def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_it
                                                     transpose, flip_sign, random_state, numeric_mode), _LINALG_CONTEXT)
 
 
-def _rsvd_core(k, A, n_components, n_oversamples, n_iter, power_iteration_normalizer, transpose, flip_sign,
-               random_state):
-    n, d = A.r, A.c
-    if power_iteration_normalizer not in ("auto", "QR", "LU", "none"):
-        raise ValueError("power_iteration_normalizer must be 'auto', 'QR', 'LU' or 'none'")
-    nr = n_components + n_oversamples
-    if n_iter == "auto":
-        n_iter = 7 if n_components < 0.1 * min(n, d) else 4
-    if transpose == "auto":
-        transpose = n < d
-    if transpose:
-        A = A.T
-        n, d = d, n
-    if not 1 <= n_components <= min(n, d):
-        raise ValueError("n_components must be in [1, min(n_samples, n_features)]")
-    nr = min(nr, d, n)
-    Q = k.rand(d, nr, _seed_of(random_state), 30, 1)
-    for _ in range(int(n_iter)):  # glue: drives the fixed randomized-SVD power iterations on the device (n_iter-sized: power iterations)
-        Q = _orthonormal_cols(k, k.mm(A, Q))
-        Q = _orthonormal_cols(k, k.mm(A, Q, ta=True))
-    Q = _orthonormal_cols(k, k.mm(A, Q))
-    # The orth rank guard (DEVIATION 5318) leaves a numerically dependent
-    # column of the range exactly 0. Q^T M then has a zero row, and the
-    # one-sided Jacobi SVD of a rank-deficient matrix rotates the rounding
-    # noise of the column it drives to zero forever, so the small SVD runs on
-    # the live columns only; the components past the numerical rank are 0
-    # (singular value 0, zero vectors), as the zero Q column already says.
-    # lane cpu2-l8-decomp: the live count is one word and the live columns
-    # are compacted where Q lives (the stable order of the 0 (live) / 1
-    # (dead) keys puts them first, in column order)
-    cs = k.colsum(k.ew("abs", Q))
-    nlive = k.count_gt(k.ew("abs", cs), 0.0)
-    if not nlive:
-        raise ValueError("randomized_svd: M is numerically zero")
-    full = Q.c
-    if nlive < full:
-        dead = k.ew("adds", k.ew("scale", k.ew("gts", k.ew("abs", cs), s=0.0), s=-1.0), s=1.0)
-        Q = k.take_cols_m(Q, k.order_small(dead), nlive)
-    B = k.mm(Q, A, ta=True)
-    Uh, S, Vt = _thin_svd(k, B, min(B.r, B.c), u_based=True)
-    if S.c < full:
-        pad = full - S.c
-        S = _M(S.s + array.array("f", [0.0]) * pad, 1, full)
-        Vt = _M(Vt.s + array.array("f", [0.0]) * (pad * Vt.c), full, Vt.c)
-        Uh = Uh.T
-        Uh = _M(Uh.s + array.array("f", [0.0]) * (pad * Uh.c), full, Uh.c).T
-    U = k.mm(Q, Uh)
-    if flip_sign:
-        if not transpose:
-            U, Vt = _flip_u(U, Vt)
-        else:
-            U, Vt = _flip_u(Vt.T, U.T)
-            U, Vt = Vt.T, U.T
-    kc = n_components
-    if transpose:
-        return Vt.rows(0, kc).T, S.cols(0, kc), U.cols(0, kc).T
-    return U.cols(0, kc), S.cols(0, kc), Vt.rows(0, kc)
+# TOMBSTONE: _rsvd_core (dead Python power-iteration loop: randomized_svd routes to the native linalg door) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_python_loops.patch
 
 
 def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False, Ra=None):
@@ -3916,114 +3840,8 @@ _PD_KIND = {"manhattan": 1, "cityblock": 1, "l1": 1, "chebyshev": 2, "infinity":
 # (bindings/mani_decomp_native.mojo); `_PD_KIND` is its table.
 
 
-#: FAST's Lanczos route for the top eigenpairs (lane/decomp-apple2): taken
-#: under sklearn's own ARPACK policy for eigen_solver='auto' (KernelPCA /
-#: Isomap: n > 200 and fewer than 10 components), FAST mode only. ON by
-#: default ON APPLE since lane/decomp-apple3 (opt-in elsewhere,
-#: MOJOLEARN_XD_LANCZOS=1, where it has no quality check): its paired check
-#: (bench/decomp_fast_quality.py) ran on a GPU with a FAST binding (m4-a
-#: 1790626766529, 600 rows, 2 datasets x 2 seeds, Isomap and ClassicalMDS:
-#: 8/8 PASS, every eigenvalue and eigenvector error UNDER the exact dense
-#: solve's against the float64 reference, fits 0.03 to 0.17 s against 1.8 to
-#: 4.1 s). MOJOLEARN_XD_LANCZOS=0 keeps the exact dense solve.
-#: (The route's n > 200 and n_components < 10 policy is in bindings/mani_decomp_native.mojo.)
-#: Ritz residual bound, relative to the largest |Ritz value|, and the basis cap
-#: past which the route gives up and runs the exact dense solve instead.
-_LANCZOS_TOL = 1e-7
-_LANCZOS_MAX_M = 600
-
-
-def _kdot(k, a, b):
-    return float(k.mm(a, b, ta=True).s[0])
-
-
-def _lanczos_batch(run, ab, n, j, m, cap, alphas, betas):
-    """Steps j .. m-1 (`run`), then their alphas and betas appended up to
-    the first stop (`_lanczos_top`'s breakdown test). Returns (j, stop)."""
-    run(j, m)
-    for jj in range(j, m):  # glue: per-step scalars, at most _LANCZOS_MAX_M
-        a, b = float(ab[jj]), float(ab[cap + jj])
-        alphas.append(a)
-        betas.append(b)
-        if b <= 1e-30 * max(1.0, abs(a)) or jj + 1 == n:  # glue: two scalars
-            return jj + 1, True
-    return m, False
-
-
-#: the Lanczos basis cap in floats ((cap + 1) * n): past it the exact dense solve runs
-_LANCZOS_DEV_MAX_FLOATS = 1 << 26
-
-
-def _lanczos_top(k, A, nc):
-    """The nc largest eigenpairs of symmetric A by Lanczos with full
-    reorthogonalization (classical Gram-Schmidt, twice). The basis starts at
-    max(2 nc + 1, 20) vectors (ARPACK's ncv) and doubles until every wanted
-    Ritz pair's residual estimate beta_m |y_m| is at most _LANCZOS_TOL times
-    the largest |Ritz value|. Returns None when that has not happened by
-    _LANCZOS_MAX_M vectors (the caller then runs the exact solve), so the
-    route never returns a less converged answer than it promises. The start
-    vector is a seeded uniform draw centred at 0 (a constant vector is
-    orthogonal to a centred kernel's spectrum).
-
-    Lane cpu2-l8-decomp (re-audit L8, `_lanczos_top`): the steps run in Mojo
-    in every mode, the basis in ONE matrix that never leaves where the kit
-    keeps it: on a GPU kit `x_decomp_dev_lanczos` (x_decomp/lanczos_dev.mojo,
-    enqueued, the alphas and betas read once a batch), on the host column
-    `x_decomp_lanczos` (x_decomp/lanczos_host.mojo, the same steps and
-    words). The Python step that downloaded q and re-uploaded the basis twice
-    a step is deleted, and the Ritz test reads two words (max |theta| and
-    max |beta y|, reduced where they live)."""
-    n = A.r
-    cap = min(n, _LANCZOS_MAX_M)
-    if (cap + 1) * n > _LANCZOS_DEV_MAX_FLOATS:
-        return None
-    q = k.ew("adds", k.rand(n, 1, 0x1A2C05, 91, 0), s=-0.5)
-    q = k.ew("scale", q, s=1.0 / math.sqrt(_kdot(k, q, q)))
-    ab = array.array("f", [0.0]) * (2 * cap)
-    if k._res():
-        Qd = k._dout(cap + 1, n)
-        k.place_rows(Qd, q.reshape(1, n), 0)
-        ABd = k._dout(1, 2 * cap)
-        aid = k._did(A)
-
-        def run(j0, j1):
-            k.b.x_decomp_dev_lanczos(aid, Qd._d.id, ABd._d.id, [n, j0, j1, cap])
-            k.b.x_decomp_dev_download(ABd._d.id, ab.buffer_info()[0], 2 * cap)
-    else:
-        Qd = _M.zeros(cap + 1, n)
-        k.place_rows(Qd, q.reshape(1, n), 0)
-
-        def run(j0, j1):
-            k.b.x_decomp_lanczos(A.addr, Qd.addr, ab.buffer_info()[0], [n, j0, j1, cap])
-    alphas, betas = [], []
-    m = min(n, max(2 * nc + 1, 20))
-    j = 0
-    stop = False
-    while True:
-        if j < m and not stop:
-            j, stop = _lanczos_batch(run, ab, n, j, m, cap, alphas, betas)
-        # the tridiagonal T from the per-step scalars the batch read (m-sized
-        # scalar control, at most _LANCZOS_MAX_M squared words)
-        T = [0.0] * (j * j)
-        for i in range(j):  # glue: the batch's own alphas and betas into T
-            T[i * j + i] = alphas[i]
-            if i + 1 < j:
-                T[i * j + i + 1] = T[(i + 1) * j + i] = betas[i]
-        th, Y = k.eigh(_M.of(T, j, j))
-        top = list(range(j - 1, max(j - 1 - nc, -1), -1))
-        if len(top) < nc:
-            return None
-        big = k.word(k.reduce(th.take_cols(top), k._SEL_MAXABS)) or 1.0
-        res = k.word(k.reduce(k.ew("scale", Y.rows(j - 1, j).take_cols(top), s=betas[j - 1]), k._SEL_MAXABS))
-        if stop or res <= _LANCZOS_TOL * big:
-            break
-        if m >= cap:
-            return None
-        m = min(n, 2 * m, _LANCZOS_MAX_M)
-    Yt = Y.take_cols(top)
-    QM = _M._on_device(Qd._d, j, n) if Qd._d is not None else _M(Qd.s[:j * n], j, n)
-    V = k.mm(QM, Yt, ta=True)
-    return th.take_cols(top), V
+# TOMBSTONE: _lanczos_batch, _lanczos_top (dead Python Lanczos driver: the top-eigenpair route runs in bindings/mani_decomp_native.mojo and x_decomp/kpca_owner.mojo) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_python_loops.patch
 
 
 # Reference: scikit-learn `manifold/_isomap.py` with
@@ -5076,41 +4894,8 @@ class SparseCoder(_SparseCoding):
         return _DL_CALL(self, "coder_fit_transform", (X,), _DL_CONTEXT)
 
 
-# ================================================================ randomized arms of PCA / TruncatedSVD
-def _randomized_decompose(X, nc, *, center, n_oversamples, n_iter, power_iteration_normalizer, random_state,
-                          numeric_mode, binding=None):
-    """The randomized arm of `decomposition.PCA` (sklearn `_pca.py::_fit_truncated`,
-    center=True) and `decomposition.TruncatedSVD` (`_truncated_svd.py`,
-    center=False): `randomized_svd` (flip_sign=False) on the (centered) data,
-    then `svd_flip(u_based_decision=False)`. Returns a dict of float32
-    Arrays and the float noise variance."""
-    k = _Kit(_mode(numeric_mode), binding)
-    M = _M.from_input(X)
-    n, d = M.r, M.c
-    mean = k.colmean(M)
-    A = k.ew("sub", M, mean) if center else M
-    Um, Sm, Vm = _rsvd_core(k, A, nc, n_oversamples, n_iter, power_iteration_normalizer, "auto", False,
-                            random_state)
-    # svd_flip(u_based_decision=False): each row of Vt, U's columns follow
-    sg = k.absmax_signs(Vm, False)
-    Vm, Um = k.ew("mul", Vm, sg), k.ew("mul", Um, sg.T)
-    out = dict(components=Vm.out(), singular_values=Sm.out((nc,)), mean=mean.out((d,)))
-    if center:
-        ev = k.ew("scale", k.ew("sq", Sm), s=1.0 / (n - 1))
-        tot = k.ew("scale", k.total(k.ew("sq", A)), s=1.0 / (n - 1))
-        out["explained_variance"] = ev.out((nc,))
-        out["explained_variance_ratio"] = k.ew("div", ev, tot).out((nc,))
-        r = min(n, d)
-        out["noise_variance"] = (k.ew("scale", k.ew("sub", tot, k.total(ev)), s=1.0 / (r - nc)).s[0]
-                                 if nc < r else 0.0)
-    else:
-        Xt = k.ew("mul", Um, Sm)
-        mt = k.colmean(Xt)
-        ev = k.ew("scale", k.colsum(k.ew("sqdiff", Xt, mt)), s=1.0 / n)
-        full = k.total(k.ew("scale", k.colsum(k.ew("sqdiff", M, mean)), s=1.0 / n))
-        out["explained_variance"] = ev.out((nc,))
-        out["explained_variance_ratio"] = k.ew("div", ev, full).out((nc,))
-    return out
+# TOMBSTONE: _randomized_decompose (dead Python randomized PCA / TruncatedSVD arm: the owners in x_decomp/pca_randomized.mojo and x_decomp/tsvd_owner.mojo run it) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_python_loops.patch
 
 
 # The compiled IncrementalPCA owner, connected once at import.

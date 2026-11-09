@@ -38,7 +38,7 @@ from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance,
     family_call, family_call_kw, family_array, family_cast_view, family_as_f32,
 )
-from core.family_cast_impl import family_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32
 from core.mcls_impl import mcls_read_i64, mcls_narrow_i32
 from core.cast_in import CastIn, CAST_KIND_SIGNED
 from core.label_cast import host_unique_inverse_cast
@@ -652,7 +652,7 @@ def mc_f32_1d(x: PythonObject, name: String, require_finite: Bool, context: Pyth
                     + "(no float64 on this GPU). Cast to float32 yourself so the "
                     + "precision you run at is the one you chose.")
     var out = family_as_f32(x, mc_rank(vs[0]), name, context)
-    if require_finite and not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))),
+    if require_finite and not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))),
                                                     Int(py=out.size)):
         raise Error("mojolearn metrics: " + name + " contains NaN or infinity; refused "
                     + "here (metrics/README.md HAND-OFF ask 3) rather than letting it "

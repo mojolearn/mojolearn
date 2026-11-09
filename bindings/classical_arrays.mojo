@@ -17,7 +17,6 @@ from std.python import Python, PythonObject
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.py_balanced import py_call, py_type, py_get, py_setattr
 from core.cast_in import cast_in_kind, NPY_HALF, NPY_FLOAT, NPY_DOUBLE
-from core.classical_arrays_impl import classical_cast_rows, classical_check_weights
 from bindings.classical_warnings import classical_warn_column
 from bindings.sequential_admission import sequential_admit_value, _ordinary_torch
 from bindings.sequential_arrays import sequential_array, sequential_address
@@ -285,46 +284,9 @@ def classical_f64(value: PythonObject, index: Int) raises -> Float64:
     return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value)))[index]
 
 
-def classical_host_f32(source: PythonObject, ndim: Int, name: String, context: PythonObject, column_target: Bool = False,
-                       admitted: Bool = False) raises -> PythonObject:
-    # `admitted`: `source` is an array view classical_view returned in the
-    # same native call (an ndarray, or an Array without NumPy). It was
-    # admitted and its pandas/Torch storage read there, so the admission walk
-    # and the two storage tests are not repeated for the same value.
-    var b = native_loaded_module("builtins")
-    var prepared = source
-    if not admitted:
-        classical_admit_value(source, context)
-        if native_pandas_exact(source):
-            prepared = native_pandas_f32(source, context)
-        elif _ordinary_torch(py_type(source), context):
-            prepared = native_torch_numpy(source)
-    var value = classical_input(prepared, context, name)
-    var nd = Int(py=value.ndim)
-    var column = column_target and ndim == 1 and nd == 2 and Int(py=value.shape[1]) == 1 and py_type(source) is not b.list and py_type(source) is not b.tuple and py_type(source) is not b.memoryview
-    if column:
-        classical_warn_column(context)
-    if nd != ndim and not column:
-        raise Error(name + " must be " + String(ndim) + "-D")
-    var rows = 1 if nd == 0 else Int(py=value.shape[0])
-    var cols = 1 if nd < 2 else Int(py=value.shape[1])
-    if rows < 1 or cols < 1:
-        raise Error(name + " is empty")
-    # An Array is always in native (little-endian) byte order.
-    if not classical_is_array(value, context) and not Bool(py=value.dtype.isnative):
-        raise Error("TypeError: " + name + " must be in native byte order")
-    var item = Int(py=value.itemsize)
-    var kind = classical_cast_kind(value, item, name, context)
-    var s0 = 0 if nd == 0 else Int(py=value.strides[0])
-    var s1 = 0 if nd < 2 else Int(py=value.strides[1])
-    var addr = Int(py=classical_address(value))
-    var borrowed = not column and classical_is_f32(value, context) and classical_c_order(value, context)
-    var result = value if borrowed else classical_array(rows, cols if ndim == 2 else 0, context)
-    var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result)))
-    classical_cast_rows(addr, s0, s1, rows, cols, item, kind, name, borrowed, out)
-    _ = value^
-    _ = prepared^
-    return result
+# TOMBSTONE: classical_host_f32 (superseded by the one admission path) deleted 2026-11-08 by lane consol-a0-admission; code recoverable at ef4bce3a7e.
+# Restore: experiments/removed/A0_ADMISSION_HELPERS.patch. Its body is
+# bindings/admitted_input.mojo `admit_x(source, ndim, name, context, ...)`, same signature.
 
 
 def classical_word(value: PythonObject, index: Int = 0) raises -> Float64:
@@ -334,21 +296,8 @@ def classical_word(value: PythonObject, index: Int = 0) raises -> Float64:
     return Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)[index])
 
 
-def classical_host_weights(source: PythonObject, rows: Int, context: PythonObject) raises -> PythonObject:
-    if source is None:
-        return PythonObject(None)
-    classical_admit_value(source, context)
-    var prepared = native_pandas_f32(source, context) if native_pandas_exact(source) else source
-    var raw = classical_input(prepared, context, "sample_weight")
-    var scalar = Int(py=raw.ndim) == 0
-    var value = classical_host_f32(source, 0 if scalar else 1, "sample_weight", context)
-    if not scalar and Int(py=value.size) != rows:
-        raise Error("sample_weight length differs from X")
-    var out = classical_array(rows, 0, context) if scalar else value
-    var input = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value)))
-    var output = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))
-    var any_positive = classical_check_weights(input, output, rows, scalar)
-    if not any_positive:
-        raise Error("Sample weights must contain at least one non-zero number.")
-    _ = value^
-    return out
+# TOMBSTONE: classical_host_weights (zero callers) deleted 2026-11-08 by lane consol-a0-admission; code recoverable at ef4bce3a7e.
+# Restore: experiments/removed/A0_ADMISSION_HELPERS.patch. sample_weight is admitted by
+# bindings/admitted_input.mojo `admit_weights`.
+# TOMBSTONE: classical_host_weights (orphan function: no caller) deleted 2026-11-08 by 7b2e1d1d83; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_entries_orphan_functions.patch

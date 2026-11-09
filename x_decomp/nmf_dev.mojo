@@ -138,24 +138,25 @@ def nmf_mu_dev(M: DMat, mut W: DMat, mut H: DMat, a: NmfArgs) raises -> Int:
     return it
 
 
-def _perm_dev(mut k: DKit, kc: Int, a: NmfArgs, mut draws: Int) raises -> List[Int32]:
-    """`NMF._perm`: the identity, or with shuffle a Philox draw's stable order."""
+def _perm_dev(mut k: DKit, ident: DMat, kc: Int, a: NmfArgs, mut draws: Int) raises -> DMat:
+    """`NMF._perm`: the identity (`ident`, uploaded once per fit), or with
+    shuffle a Philox draw's stable order, kept on the device as int32 words
+    (lane consol-n0-readmission: the order came home through a sync and was
+    uploaded again for every half sweep)."""
     if not a.shuffle:
-        var p = List[Int32](length=max(kc, 1), fill=Int32(0))
-        for j in range(kc):  # small-loop(kc: components): the identity coordinate order
-            p[j] = Int32(j)
-        return p^
+        return DMat(rows_of=ident, row0=0, rows=ident.r)  # a view: cd_rows only reads it
     draws += 1
-    return k.order_small(k.rand(1, kc, a.seed, 200 + draws, 0))
+    return k.order_small_dev(k.rand(1, kc, a.seed, 200 + draws, 0))
 
 
 def _cd_side_dev(mut k: DKit, M: DMat, mut W: DMat, Ht: DMat, l1: Float64, l2: Float64,
-                      perm: List[Int32], trans: Bool) raises -> Float64:
-    """`NMF._cd_side`: one half sweep of W against Ht (W in place)."""
+                      perm: DMat, eye: DMat, trans: Bool) raises -> Float64:
+    """`NMF._cd_side`: one half sweep of W against Ht (W in place). `eye` is
+    the k x k identity, uploaded once per fit when an l2 term is set."""
     var HHt = k.mm(Ht, Ht, True, False)
     var XHt = k.mm(M, Ht, trans, False)
     if l2 != 0.0:
-        HHt = k.ew2s(OP_AXPY, HHt, k.upload(mat_eye(HHt.r)), l2)
+        HHt = k.ew2s(OP_AXPY, HHt, eye, l2)
     if l1 != 0.0:
         XHt = k.ew1(OP_ADDS, XHt, -l1)
     return k.cd_rows(W, HHt, XHt, perm)
@@ -169,6 +170,10 @@ def nmf_cd_dev(M: DMat, mut W: DMat, mut H: DMat, a: NmfArgs) raises -> Int:
     var v_init = 0.0
     var have_init = False
     var it = 0
+    var kc = W.c
+    # the per-fit constants, up once (they were uploaded on every half sweep)
+    var ident = k.iota_i32(kc) if not a.shuffle else DMat(0, 0)
+    var eye = k.upload(mat_eye(kc)) if (a.l2w != 0.0 or a.l2h != 0.0) else DMat(0, 0)
     var fixed_gram = DMat(0, 0)
     var fixed_cross = DMat(0, 0)
     comptime if C26_PRODUCTS:
@@ -176,19 +181,19 @@ def nmf_cd_dev(M: DMat, mut W: DMat, mut H: DMat, a: NmfArgs) raises -> Int:
             fixed_gram = k.mm(Ht, Ht, True, False)
             fixed_cross = k.mm(M, Ht, False, False)
             if a.l2w != 0.0:
-                fixed_gram = k.ew2s(OP_AXPY, fixed_gram, k.upload(mat_eye(Ht.c)), a.l2w)
+                fixed_gram = k.ew2s(OP_AXPY, fixed_gram, eye, a.l2w)
             if a.l1w != 0.0:
                 fixed_cross = k.ew1(OP_ADDS, fixed_cross, -a.l1w)
     for i in range(1, a.max_iter + 1):
         it = i
-        var perm = _perm_dev(k, W.c, a, draws)
+        var perm = _perm_dev(k, ident, kc, a, draws)
         var viol = 0.0
         if C26_PRODUCTS and not a.update_h:
             viol = k.cd_rows(W, fixed_gram, fixed_cross, perm)
         else:
-            viol = _cd_side_dev(k, M, W, Ht, a.l1w, a.l2w, perm, False)
+            viol = _cd_side_dev(k, M, W, Ht, a.l1w, a.l2w, perm, eye, False)
         if a.update_h:
-            viol += _cd_side_dev(k, M, Ht, W, a.l1h, a.l2h, _perm_dev(k, W.c, a, draws), True)
+            viol += _cd_side_dev(k, M, Ht, W, a.l1h, a.l2h, _perm_dev(k, ident, kc, a, draws), eye, True)
         if not have_init:
             v_init = viol
             have_init = True

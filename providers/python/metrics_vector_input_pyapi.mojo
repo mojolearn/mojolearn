@@ -6,7 +6,7 @@ from bindings.classical_arrays import classical_is_array
 from bindings.linalg_ops_buffers import LinAdmission, lin_admitted_c, lin_new, lin_tuple
 from bindings.optimizer_public_door import base_format
 from bindings.family_common import family_repr, FAMILY_F32P, FAMILY_I32P, FAMILY_I64P
-from core.family_cast_impl import family_all_finite_f32
+from core.host_finite_scan import host_all_finite_f32
 from core.mcls_impl import mcls_read_i64, mcls_narrow_i32
 
 
@@ -78,7 +78,7 @@ def metric_f32_vector(value: PythonObject, name: String, require_finite: Bool,
     # The numerical owners consume an Array, so keep an operation-owned copy
     # independent of mutable source Array slots after this snapshot returns.
     var output = lin_admitted_c(input^, "<f4", name, context, True)
-    if require_finite and not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=output.addr), count):
+    if require_finite and not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=output.addr), count):
         raise Error("mojolearn metrics: " + name + " contains NaN or infinity; refused "
                     + "here (metrics/README.md HAND-OFF ask 3) rather than letting it "
                     + "reach a kernel whose answer for it is a washed sentinel")

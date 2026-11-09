@@ -20,7 +20,7 @@ from bindings.classical_arrays import classical_address
 from bindings.parallel_public_result import parallel_public_result
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from core.cast_in import cast_in_kind
-from core.family_cast_impl import family_cast_rows
+from core.admitted_input import admitted_cast_f32
 
 
 def manifold_method(operation: String) -> String:
@@ -91,7 +91,7 @@ def _cast(var snapshot: ArrayMetadata, name: String, context: PythonObject) rais
         var output = family_array(snapshot.python_shape(), "<f4", context)
         var address = Int(py=classical_address(output))
         var src = snapshot.source
-        family_cast_rows(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind,
+        _ = admitted_cast_f32(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind,
                          FAMILY_F32P(unsafe_from_address=address))
         snapshot.replace_f32(output, address)
     return snapshot^

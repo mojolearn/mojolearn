@@ -8,7 +8,8 @@ from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.py_typed_call import py_call_typed
-from bindings.classical_arrays import classical_array, classical_host_f32, classical_word
+from bindings.classical_arrays import classical_array, classical_word
+from bindings.admitted_input import admit_x
 from bindings.sequential_inputs import sequential_input
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_description import sequential_fields
@@ -76,7 +77,7 @@ def pca_input(source: PythonObject, context: PythonObject) raises -> PythonObjec
     var format = host_sparse_format(source)
     if format.byte_length() > 0:
         var dense = host_sparse_dense(source, format, context)
-        return classical_host_f32(dense, 2, "X", context)
+        return admit_x(dense, 2, "X", context)
     var view = classical_view(source, context, "X")
     var kind = classical_kind(view, context)
     if kind == "c":
