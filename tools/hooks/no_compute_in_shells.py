@@ -42,9 +42,10 @@ Modes:
         Scan every shell .mojo file committed at REF (default HEAD). Fail (exit 1)
         on any hit not covered by the baseline. The baseline is REF's file,
         restricted to the rows main's baseline also has or, for a row main's
-        baseline lacks, a hit main's own tree carries under this checker (main's
-        debt that a stricter rule made visible), so a branch cannot grow it with
-        a hit of its own. Prints hit counts per kind and directory, and how many
+        baseline lacks, a hit main's own tree carries under this checker, or the
+        tree the 2026-11-09 regeneration was made from when REF contains it
+        (debt that a stricter rule made visible), so a branch cannot grow it
+        with a hit of its own. Prints hit counts per kind and directory, and how many
         driver-loop tags were judged structure or could not be judged. Rows no
         hit matches are stale.
         --branch (the pre-push hook passes it for every ref except main): judge
@@ -376,6 +377,12 @@ def _baseline_at(ref):
     return parse_baseline(r.stdout.decode("utf-8", "replace")) if r.returncode == 0 else None
 
 
+# The tree the 2026-11-09 baseline was regenerated from (the integration head
+# the judged tags were written on). Its hits were debt before the rules could
+# see them; a tree that contains it may carry them until main does.
+REGEN_ANCHOR = "e68654a7579a3abeef7a97c63ca1a001a7de8a8f"
+
+
 def _main_ref():
     for m in ("refs/remotes/origin/main", "origin/main", "refs/heads/main"):
         if _resolve(m):
@@ -422,6 +429,8 @@ def check_tree(ref, branch=False, baseline_file=None):
             # carries (main's debt that a stricter rule made visible, as on the
             # 2026-11-09 regeneration); a hit a branch adds is never grandfathered
             on_main = _keys(hits_at(main)) if _resolve(main) != sha else Counter(grown)
+            if _resolve(REGEN_ANCHOR) and _git("merge-base", "--is-ancestor", REGEN_ANCHOR, sha).returncode == 0:
+                on_main = on_main | _keys(hits_at(REGEN_ANCHOR))
             main_base = main_base | (grown & on_main)
             grown = base - main_base
         base = base & main_base  # the baseline only shrinks: rows main lacks are not grandfathered

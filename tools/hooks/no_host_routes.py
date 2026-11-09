@@ -2196,11 +2196,18 @@ def _main_sha():
     return None
 
 
+# The tree the 2026-11-09 baseline was regenerated from (the integration head
+# the loop-tag rules were written on). Its findings were debt before the rules
+# could see them; a tree that contains it may carry them until main does.
+_REGEN_ANCHOR = "e68654a7579a3abeef7a97c63ca1a001a7de8a8f"
+
+
 def _restrict_to_main(debt_keys, ref, quiet=False):
     """(debt keys that hold, keys refused): the baseline only shrinks. A row
     main's baseline lacks holds only for a finding main's own tree carries
-    under this checker (main's debt that a stricter rule made visible, as on
-    the 2026-11-09 regeneration); a finding a branch adds never does."""
+    under this checker, or the regeneration anchor's tree when ref contains
+    the anchor (debt that a stricter rule made visible); a finding a branch
+    adds never does."""
     main = _main_sha()
     if main is None:
         return debt_keys, collections.Counter()
@@ -2214,6 +2221,8 @@ def _restrict_to_main(debt_keys, ref, quiet=False):
     tip = _git("rev-parse", ref + "^{commit}").stdout.strip()
     on_main = grown if tip == main else _findings_at(main)
     refused = grown - on_main
+    if refused and _git("merge-base", "--is-ancestor", _REGEN_ANCHOR, ref).returncode == 0:
+        refused = refused - _findings_at(_REGEN_ANCHOR)
     if not quiet and grown - refused:
         print(f"no-host-routes: {sum((grown - refused).values())} baseline row(s) main's baseline lacks hold "
               "because main's tree carries the finding", file=sys.stderr)
