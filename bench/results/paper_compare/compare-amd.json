@@ -1,0 +1,3792 @@
+{
+ "flag_counts": {
+  "FASTER": 6,
+  "NOT-RUN": 18,
+  "NOW-LOSES": 1,
+  "NOW-WINS": 1,
+  "PARAMS-DIFF": 2,
+  "REGRESSION": 42,
+  "SAME": 34,
+  "STILL-FAILING": 2
+ },
+ "hw_diff": false,
+ "new_gpus": [
+  "AMD Instinct MI300X VF"
+ ],
+ "new_versions": [
+  "0.8.66"
+ ],
+ "paper_gpu": "AMD Instinct MI300X VF",
+ "paper_version": "0.8.55",
+ "recipes": 102,
+ "rows": [
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "classical",
+   "flags": [
+    "STILL-FAILING"
+   ],
+   "key": "classical/dbscan/istella/rows=full fit ours",
+   "lane": "dbscan",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "REFUSED(error: {\"error\": \"Exception('DBSCAN has no memory left for a single batch row: the fixed cost is 5000000 bytes against a budget of -22000000')\", \"event\": \"error\", \"stage\": \"round 0\"})",
+   "old_ms": null,
+   "old_quality": {},
+   "old_status": "REFUSED(error: {\"error\": \"Exception('DBSCAN has no memory left for a single batch row: the fixed cost is 5000000 bytes against a budget of -22000000')\", \"event\": \"error\", \"stage\": \"round 0\"})",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "INSUFFICIENT",
+   "race_id": "classical/dbscan/istella/rows=full",
+   "ratio": null
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "classical",
+   "flags": [
+    "STILL-FAILING"
+   ],
+   "key": "classical/dbscan/taxi/rows=full fit ours",
+   "lane": "dbscan",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "REFUSED(timeout: null)",
+   "old_ms": null,
+   "old_quality": {},
+   "old_status": "REFUSED(timeout: null)",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "INSUFFICIENT",
+   "race_id": "classical/dbscan/taxi/rows=full",
+   "ratio": null
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "classical",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical/hdbscan/istella/rows=full fit ours",
+   "lane": "hdbscan",
+   "new_ms": 1338.018161999571,
+   "new_quality": {
+    "silhouette": -0.003856329945847392
+   },
+   "new_status": "ok",
+   "old_ms": 1057.3858600000676,
+   "old_quality": {
+    "silhouette": -0.003856329945847392
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/hdbscan/istella/rows=full",
+   "ratio": 1.2654019810700754
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "classical",
+   "flags": [
+    "SAME"
+   ],
+   "key": "classical/hdbscan/taxi/rows=full fit ours",
+   "lane": "hdbscan",
+   "new_ms": 361.27073199986626,
+   "new_quality": {
+    "silhouette": 0.001504981075413525
+   },
+   "new_status": "ok",
+   "old_ms": 347.19714899983956,
+   "old_quality": {
+    "silhouette": 0.001504981075413525
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/hdbscan/taxi/rows=full",
+   "ratio": 1.040534846097003
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "classical",
+   "flags": [
+    "SAME"
+   ],
+   "key": "classical/kde/istella/rows=full fit ours",
+   "lane": "kde",
+   "new_ms": 30.91987099924154,
+   "new_quality": {
+    "mean_log_likelihood": -222.2705830307007
+   },
+   "new_status": "ok",
+   "old_ms": 29.644834999999148,
+   "old_quality": {
+    "mean_log_likelihood": -222.2705830307007
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/kde/istella/rows=full",
+   "ratio": 1.0430103928472676
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "classical",
+   "flags": [
+    "SAME"
+   ],
+   "key": "classical/kde/taxi/rows=full fit ours",
+   "lane": "kde",
+   "new_ms": 4.3270490004942985,
+   "new_quality": {
+    "mean_log_likelihood": -14.826436466217041
+   },
+   "new_status": "ok",
+   "old_ms": 3.9424189999408554,
+   "old_quality": {
+    "mean_log_likelihood": -14.826436466217041
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/kde/taxi/rows=full",
+   "ratio": 1.0975619284909122
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "hipvs-gpu",
+    "clock": "whole",
+    "label": "whole/whole",
+    "opponent_ms": 38814.88122300016,
+    "opponent_status": "ok",
+    "ours_ms": 405.74719799997183,
+    "ours_ms_new": 6297.779272999833,
+    "ratio": 0.010453392750807701,
+    "ratio_new": 0.16225166932284774,
+    "verdict": "MATCHED"
+   },
+   "dataset": "istella",
+   "family": "classical",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical/kmeans/istella/rows=full fit ours",
+   "lane": "kmeans",
+   "new_ms": 6297.779272999833,
+   "new_quality": {
+    "inertia": 6.050717116872483e+17
+   },
+   "new_status": "ok",
+   "old_ms": 405.74719799997183,
+   "old_quality": {
+    "inertia": 6.050717116872483e+17
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "hipvs-gpu",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 38814.88122300016,
+     "opponent_status": "ok",
+     "ours_ms": 405.74719799997183,
+     "ours_ms_new": 6297.779272999833,
+     "ratio": 0.010453392750807701,
+     "ratio_new": 0.16225166932284774,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/kmeans/istella/rows=full",
+   "ratio": 15.521436263868592
+  },
+  {
+   "arm": "ours",
+   "batch": "Xq",
+   "dataset": "istella",
+   "family": "classical",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical/kmeans/istella/rows=full infer ours Xq",
+   "lane": "kmeans",
+   "new_ms": 44.55343300014647,
+   "new_quality": {
+    "eval_inertia": 1.4173552267183102e+17
+   },
+   "new_status": "ok",
+   "old_ms": 18.869887000164454,
+   "old_quality": {
+    "eval_inertia": 1.4173552267183102e+17
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/kmeans/istella/rows=full",
+   "ratio": 2.36108637003275
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "hipvs-gpu",
+    "clock": "whole",
+    "label": "whole/whole",
+    "opponent_ms": 15359.217088999685,
+    "opponent_status": "ok",
+    "ours_ms": 191.61367399965457,
+    "ours_ms_new": 889.5103940003537,
+    "ratio": 0.012475484452712685,
+    "ratio_new": 0.05791378485283755,
+    "verdict": "MATCHED"
+   },
+   "dataset": "taxi",
+   "family": "classical",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical/kmeans/taxi/rows=full fit ours",
+   "lane": "kmeans",
+   "new_ms": 889.5103940003537,
+   "new_quality": {
+    "inertia": 309303365.56516206
+   },
+   "new_status": "ok",
+   "old_ms": 191.61367399965457,
+   "old_quality": {
+    "inertia": 309303365.56516206
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "hipvs-gpu",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 15359.217088999685,
+     "opponent_status": "ok",
+     "ours_ms": 191.61367399965457,
+     "ours_ms_new": 889.5103940003537,
+     "ratio": 0.012475484452712685,
+     "ratio_new": 0.05791378485283755,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/kmeans/taxi/rows=full",
+   "ratio": 4.642207288410728
+  },
+  {
+   "arm": "ours",
+   "batch": "Xq",
+   "dataset": "taxi",
+   "family": "classical",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical/kmeans/taxi/rows=full infer ours Xq",
+   "lane": "kmeans",
+   "new_ms": 3.2721970001148293,
+   "new_quality": {
+    "eval_inertia": 48239340.71589109
+   },
+   "new_status": "ok",
+   "old_ms": 1.9350970001141832,
+   "old_quality": {
+    "eval_inertia": 48239340.71589109
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/kmeans/taxi/rows=full",
+   "ratio": 1.690973113968834
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "hipvs-gpu",
+    "clock": "whole",
+    "label": "whole/whole",
+    "opponent_ms": 96.43831100038369,
+    "opponent_status": "ok",
+    "ours_ms": 32.75209999992512,
+    "ours_ms_new": 33.52709299997514,
+    "ratio": 0.3396171050713944,
+    "ratio_new": 0.34765325784108503,
+    "verdict": "MATCHED"
+   },
+   "dataset": "istella",
+   "family": "classical",
+   "flags": [
+    "SAME"
+   ],
+   "key": "classical/knn/istella/rows=full fit ours",
+   "lane": "knn",
+   "new_ms": 33.52709299997514,
+   "new_quality": {
+    "recall_at_k": 0.97625
+   },
+   "new_status": "ok",
+   "old_ms": 32.75209999992512,
+   "old_quality": {
+    "recall_at_k": 0.97625
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "hipvs-gpu",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 96.43831100038369,
+     "opponent_status": "ok",
+     "ours_ms": 32.75209999992512,
+     "ours_ms_new": 33.52709299997514,
+     "ratio": 0.3396171050713944,
+     "ratio_new": 0.34765325784108503,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/knn/istella/rows=full",
+   "ratio": 1.0236623911154334
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "hipvs-gpu",
+    "clock": "whole",
+    "label": "whole/whole",
+    "opponent_ms": 61.591485000008106,
+    "opponent_status": "ok",
+    "ours_ms": 14.959546999762097,
+    "ours_ms_new": 15.079013000104169,
+    "ratio": 0.24288336285056494,
+    "ratio_new": 0.24482301409199964,
+    "verdict": "MATCHED"
+   },
+   "dataset": "taxi",
+   "family": "classical",
+   "flags": [
+    "SAME"
+   ],
+   "key": "classical/knn/taxi/rows=full fit ours",
+   "lane": "knn",
+   "new_ms": 15.079013000104169,
+   "new_quality": {
+    "recall_at_k": 0.99975390625
+   },
+   "new_status": "ok",
+   "old_ms": 14.959546999762097,
+   "old_quality": {
+    "recall_at_k": 0.99975390625
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "hipvs-gpu",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 61.591485000008106,
+     "opponent_status": "ok",
+     "ours_ms": 14.959546999762097,
+     "ours_ms_new": 15.079013000104169,
+     "ratio": 0.24288336285056494,
+     "ratio_new": 0.24482301409199964,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/knn/taxi/rows=full",
+   "ratio": 1.0079859370303106
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "torch-gpu",
+    "clock": "kernel",
+    "label": "kernel/kernel",
+    "opponent_ms": 6972.080160001497,
+    "opponent_status": "ok",
+    "ours_ms": 412.8222260005714,
+    "ours_ms_new": 6409.775739999532,
+    "ratio": 0.0592107687414315,
+    "ratio_new": 0.919349117179134,
+    "verdict": "MATCHED"
+   },
+   "dataset": "istella",
+   "family": "classical",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical/ols/istella/rows=full fit ours",
+   "lane": "ols",
+   "new_ms": 6443.201700999452,
+   "new_quality": {
+    "r2": 0.3325058860333545,
+    "rmse": 0.6817402610924328
+   },
+   "new_status": "ok",
+   "old_ms": 446.2555700010853,
+   "old_quality": {
+    "r2": 0.3325058860333545,
+    "rmse": 0.6817402610924328
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "torch-gpu",
+     "clock": "kernel",
+     "label": "kernel/kernel",
+     "opponent_ms": 6972.080160001497,
+     "opponent_status": "ok",
+     "ours_ms": 412.8222260005714,
+     "ours_ms_new": 6409.775739999532,
+     "ratio": 0.0592107687414315,
+     "ratio_new": 0.919349117179134,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/ols/istella/rows=full",
+   "ratio": 14.438367012391089
+  },
+  {
+   "arm": "ours",
+   "batch": "Xq",
+   "best_opponent": {
+    "arm": "torch-gpu",
+    "clock": "whole",
+    "label": "whole/whole (kernel not derivable)",
+    "opponent_ms": 9.665845000199624,
+    "opponent_status": "ok",
+    "ours_ms": 20.48839099916222,
+    "ours_ms_new": 1422.0767530005105,
+    "ratio": 2.1196688958636396,
+    "ratio_new": 147.1238937693643,
+    "verdict": "INSUFFICIENT"
+   },
+   "dataset": "istella",
+   "family": "classical",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical/ols/istella/rows=full infer ours Xq",
+   "lane": "ols",
+   "new_ms": 1422.0767530005105,
+   "new_quality": {
+    "predict_max_rel_err_own_fp64": 8.450875017091516e-06,
+    "r2_eval": 0.33250588307920315,
+    "rmse_eval": 0.6817402626010334
+   },
+   "new_status": "ok",
+   "old_ms": 20.48839099916222,
+   "old_quality": {
+    "predict_max_rel_err_own_fp64": 8.450875017091516e-06,
+    "r2_eval": 0.33250588307920315,
+    "rmse_eval": 0.6817402626010334
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "torch-gpu",
+     "clock": "whole",
+     "label": "whole/whole (kernel not derivable)",
+     "opponent_ms": 9.665845000199624,
+     "opponent_status": "ok",
+     "ours_ms": 20.48839099916222,
+     "ours_ms_new": 1422.0767530005105,
+     "ratio": 2.1196688958636396,
+     "ratio_new": 147.1238937693643,
+     "verdict": "INSUFFICIENT"
+    }
+   ],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/ols/istella/rows=full",
+   "ratio": 69.40890346434036
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "torch-gpu",
+    "clock": "kernel",
+    "label": "kernel/kernel",
+    "opponent_ms": 114.42197199903603,
+    "opponent_status": "ok",
+    "ours_ms": 9.86544999977923,
+    "ours_ms_new": 633.9749889993982,
+    "ratio": 0.0862198914021718,
+    "ratio_new": 5.540675256014109,
+    "verdict": "MATCHED"
+   },
+   "dataset": "taxi",
+   "family": "classical",
+   "flags": [
+    "REGRESSION",
+    "NOW-LOSES"
+   ],
+   "key": "classical/ols/taxi/rows=full fit ours",
+   "lane": "ols",
+   "new_ms": 637.2774539995589,
+   "new_quality": {
+    "r2": 0.908836531850806,
+    "rmse": 4.696477352104502
+   },
+   "new_status": "ok",
+   "old_ms": 13.16973900065932,
+   "old_quality": {
+    "r2": 0.908836531850806,
+    "rmse": 4.696477352104502
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "torch-gpu",
+     "clock": "kernel",
+     "label": "kernel/kernel",
+     "opponent_ms": 114.42197199903603,
+     "opponent_status": "ok",
+     "ours_ms": 9.86544999977923,
+     "ours_ms_new": 633.9749889993982,
+     "ratio": 0.0862198914021718,
+     "ratio_new": 5.540675256014109,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/ols/taxi/rows=full",
+   "ratio": 48.38952799046775
+  },
+  {
+   "arm": "ours",
+   "batch": "Xq",
+   "best_opponent": {
+    "arm": "torch-gpu",
+    "clock": "whole",
+    "label": "whole/whole (kernel not derivable)",
+    "opponent_ms": 0.998927000182448,
+    "opponent_status": "ok",
+    "ours_ms": 3.5360379988560453,
+    "ours_ms_new": 73.96781100032968,
+    "ratio": 3.53983624249841,
+    "ratio_new": 74.04726370077083,
+    "verdict": "INSUFFICIENT"
+   },
+   "dataset": "taxi",
+   "family": "classical",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical/ols/taxi/rows=full infer ours Xq",
+   "lane": "ols",
+   "new_ms": 73.96781100032968,
+   "new_quality": {
+    "predict_max_rel_err_own_fp64": 9.438462651199807e-08,
+    "r2_eval": 0.9088365349893381,
+    "rmse_eval": 4.69647727126047
+   },
+   "new_status": "ok",
+   "old_ms": 3.5360379988560453,
+   "old_quality": {
+    "predict_max_rel_err_own_fp64": 9.438462651199807e-08,
+    "r2_eval": 0.9088365349893381,
+    "rmse_eval": 4.69647727126047
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "torch-gpu",
+     "clock": "whole",
+     "label": "whole/whole (kernel not derivable)",
+     "opponent_ms": 0.998927000182448,
+     "opponent_status": "ok",
+     "ours_ms": 3.5360379988560453,
+     "ours_ms_new": 73.96781100032968,
+     "ratio": 3.53983624249841,
+     "ratio_new": 74.04726370077083,
+     "verdict": "INSUFFICIENT"
+    }
+   ],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/ols/taxi/rows=full",
+   "ratio": 20.918273792379843
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "classical",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical/pca/istella/rows=full fit ours",
+   "lane": "pca",
+   "new_ms": 331.344788000024,
+   "new_quality": {
+    "explained_variance_ratio_sum": 1.0000000586899918
+   },
+   "new_status": "ok",
+   "old_ms": 87.00788100031787,
+   "old_quality": {
+    "explained_variance_ratio_sum": 1.0000000586899918
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/pca/istella/rows=full",
+   "ratio": 3.8082158097703065
+  },
+  {
+   "arm": "ours",
+   "batch": "Xq",
+   "dataset": "istella",
+   "family": "classical",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical/pca/istella/rows=full infer ours Xq",
+   "lane": "pca",
+   "new_ms": 88.92422700046154,
+   "new_quality": {
+    "transform_max_rel_err_own_fp64": 3.6901523558001156e-07
+   },
+   "new_status": "ok",
+   "old_ms": 30.212790001314715,
+   "old_quality": {
+    "transform_max_rel_err_own_fp64": 3.6901523558001156e-07
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/pca/istella/rows=full",
+   "ratio": 2.943264326021926
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "classical",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical/pca/taxi/rows=full fit ours",
+   "lane": "pca",
+   "new_ms": 34.30880500036437,
+   "new_quality": {
+    "explained_variance_ratio_sum": 0.9999967221520066
+   },
+   "new_status": "ok",
+   "old_ms": 10.422026000014739,
+   "old_quality": {
+    "explained_variance_ratio_sum": 0.9999967221520066
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/pca/taxi/rows=full",
+   "ratio": 3.2919515841081046
+  },
+  {
+   "arm": "ours",
+   "batch": "Xq",
+   "dataset": "taxi",
+   "family": "classical",
+   "flags": [
+    "SAME"
+   ],
+   "key": "classical/pca/taxi/rows=full infer ours Xq",
+   "lane": "pca",
+   "new_ms": 13.527185000384634,
+   "new_quality": {
+    "transform_max_rel_err_own_fp64": 9.856602811496048e-08
+   },
+   "new_status": "ok",
+   "old_ms": 13.675141999556217,
+   "old_quality": {
+    "transform_max_rel_err_own_fp64": 9.856602811496048e-08
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/pca/taxi/rows=full",
+   "ratio": 0.9891805877279822
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "classical",
+   "flags": [
+    "SAME"
+   ],
+   "key": "classical/svc/istella/rows=full fit ours",
+   "lane": "svc",
+   "new_ms": 41.59489699941332,
+   "new_quality": {
+    "accuracy": 0.9222
+   },
+   "new_status": "ok",
+   "old_ms": 42.96085900023172,
+   "old_quality": {
+    "accuracy": 0.9222
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/svc/istella/rows=full",
+   "ratio": 0.9682044998026917
+  },
+  {
+   "arm": "ours",
+   "batch": "Xq",
+   "dataset": "istella",
+   "family": "classical",
+   "flags": [
+    "FASTER"
+   ],
+   "key": "classical/svc/istella/rows=full infer ours Xq",
+   "lane": "svc",
+   "new_ms": 1.8048920001092483,
+   "new_quality": {
+    "accuracy_eval": 0.9222
+   },
+   "new_status": "ok",
+   "old_ms": 10.264918000757461,
+   "old_quality": {
+    "accuracy_eval": 0.9222
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/svc/istella/rows=full",
+   "ratio": 0.17583111720678754
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "classical",
+   "flags": [
+    "SAME"
+   ],
+   "key": "classical/svc/taxi/rows=full fit ours",
+   "lane": "svc",
+   "new_ms": 1051.0474189995875,
+   "new_quality": {
+    "accuracy": 0.7675
+   },
+   "new_status": "ok",
+   "old_ms": 1052.5179260002915,
+   "old_quality": {
+    "accuracy": 0.7675
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/svc/taxi/rows=full",
+   "ratio": 0.9986028675005165
+  },
+  {
+   "arm": "ours",
+   "batch": "Xq",
+   "dataset": "taxi",
+   "family": "classical",
+   "flags": [
+    "SAME"
+   ],
+   "key": "classical/svc/taxi/rows=full infer ours Xq",
+   "lane": "svc",
+   "new_ms": 11.292671999399317,
+   "new_quality": {
+    "accuracy_eval": 0.7675
+   },
+   "new_status": "ok",
+   "old_ms": 11.742013000912266,
+   "old_quality": {
+    "accuracy_eval": 0.7675
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical/svc/taxi/rows=full",
+   "ratio": 0.9617322003068777
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "classical2",
+   "flags": [
+    "SAME"
+   ],
+   "key": "classical2/kernel-ridge/istella/rows=full fit ours",
+   "lane": "kernel-ridge",
+   "new_ms": 1642.1757540001636,
+   "new_quality": {
+    "r2": 0.38542720764705185,
+    "rmse": 0.6464072874785307
+   },
+   "new_status": "ok",
+   "old_ms": 1651.083196999025,
+   "old_quality": {
+    "r2": 0.38542720764705185,
+    "rmse": 0.6464072874785307
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical2/kernel-ridge/istella/rows=full",
+   "ratio": 0.9946050913636264
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "classical2",
+   "flags": [
+    "SAME"
+   ],
+   "key": "classical2/kernel-ridge/taxi/rows=full fit ours",
+   "lane": "kernel-ridge",
+   "new_ms": 1651.4367210002092,
+   "new_quality": {
+    "r2": 0.7265428586333913,
+    "rmse": 8.330373429807043
+   },
+   "new_status": "ok",
+   "old_ms": 1657.9448100001173,
+   "old_quality": {
+    "r2": 0.7265428586333913,
+    "rmse": 8.330373429807043
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical2/kernel-ridge/taxi/rows=full",
+   "ratio": 0.9960746045582135
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "classical2",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical2/knn-clf/istella/rows=full fit ours",
+   "lane": "knn-clf",
+   "new_ms": 266.575401999944,
+   "new_quality": {
+    "accuracy": 0.92625
+   },
+   "new_status": "ok",
+   "old_ms": 32.434791000923724,
+   "old_quality": {
+    "accuracy": 0.92625
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical2/knn-clf/istella/rows=full",
+   "ratio": 8.218810535648345
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "classical2",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical2/knn-clf/taxi/rows=full fit ours",
+   "lane": "knn-clf",
+   "new_ms": 22.381047999260772,
+   "new_quality": {
+    "accuracy": 0.74175
+   },
+   "new_status": "ok",
+   "old_ms": 11.020187001122395,
+   "old_quality": {
+    "accuracy": 0.74175
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical2/knn-clf/taxi/rows=full",
+   "ratio": 2.0309136312279716
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "classical2",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical2/knn-reg/istella/rows=full fit ours",
+   "lane": "knn-reg",
+   "new_ms": 266.4274230000956,
+   "new_quality": {
+    "r2": 0.418144977111617,
+    "rmse": 0.6253878797285024
+   },
+   "new_status": "ok",
+   "old_ms": 31.310840000514872,
+   "old_quality": {
+    "r2": 0.418144977111617,
+    "rmse": 0.6253878797285024
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical2/knn-reg/istella/rows=full",
+   "ratio": 8.50911131722159
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "classical2",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical2/knn-reg/taxi/rows=full fit ours",
+   "lane": "knn-reg",
+   "new_ms": 19.923804999962158,
+   "new_quality": {
+    "r2": 0.9373226921180847,
+    "rmse": 3.8420276428204088
+   },
+   "new_status": "ok",
+   "old_ms": 9.102955000344082,
+   "old_quality": {
+    "r2": 0.9373226921180847,
+    "rmse": 3.8420276428204088
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical2/knn-reg/taxi/rows=full",
+   "ratio": 2.188718388612166
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "classical2",
+   "flags": [
+    "SAME"
+   ],
+   "key": "classical2/linearsvc/istella/rows=full fit ours",
+   "lane": "linearsvc",
+   "new_ms": 548.1749869995838,
+   "new_quality": {
+    "accuracy": 0.92347
+   },
+   "new_status": "ok",
+   "old_ms": 498.57240300116246,
+   "old_quality": {
+    "accuracy": 0.92347
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical2/linearsvc/istella/rows=full",
+   "ratio": 1.0994892290464493
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "classical2",
+   "flags": [
+    "FASTER"
+   ],
+   "key": "classical2/linearsvc/taxi/rows=full fit ours",
+   "lane": "linearsvc",
+   "new_ms": 20.0518790006754,
+   "new_quality": {
+    "accuracy": 0.76333
+   },
+   "new_status": "ok",
+   "old_ms": 69.03565100037667,
+   "old_quality": {
+    "accuracy": 0.76333
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical2/linearsvc/taxi/rows=full",
+   "ratio": 0.29045686844563817
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "classical2",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical2/linearsvr/istella/rows=full fit ours",
+   "lane": "linearsvr",
+   "new_ms": 206.46965300056763,
+   "new_quality": {
+    "r2": -0.10676062442410594,
+    "rmse": 0.8787943934426654
+   },
+   "new_status": "ok",
+   "old_ms": 104.24833800061606,
+   "old_quality": {
+    "r2": -0.10676062442410594,
+    "rmse": 0.8787943934426654
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical2/linearsvr/istella/rows=full",
+   "ratio": 1.980555824298585
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "classical2",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical2/linearsvr/taxi/rows=full fit ours",
+   "lane": "linearsvr",
+   "new_ms": 45.59029299980466,
+   "new_quality": {
+    "r2": 0.8998140358846077,
+    "rmse": 5.041273179163471
+   },
+   "new_status": "ok",
+   "old_ms": 39.259924000361934,
+   "old_quality": {
+    "r2": 0.8998140358846077,
+    "rmse": 5.041273179163471
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical2/linearsvr/taxi/rows=full",
+   "ratio": 1.1612425179270436
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "classical2",
+   "flags": [
+    "SAME"
+   ],
+   "key": "classical2/svr/istella/rows=full fit ours",
+   "lane": "svr",
+   "new_ms": 86.89486000002944,
+   "new_quality": {
+    "r2": 0.31825814626514914,
+    "rmse": 0.6808156927626244
+   },
+   "new_status": "ok",
+   "old_ms": 86.1120050012687,
+   "old_quality": {
+    "r2": 0.31825814626514914,
+    "rmse": 0.6808156927626244
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical2/svr/istella/rows=full",
+   "ratio": 1.009091124968571
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "classical2",
+   "flags": [
+    "SAME"
+   ],
+   "key": "classical2/svr/taxi/rows=full fit ours",
+   "lane": "svr",
+   "new_ms": 102.5835479995294,
+   "new_quality": {
+    "r2": 0.7675511153386567,
+    "rmse": 7.6803952219241856
+   },
+   "new_status": "ok",
+   "old_ms": 102.56696999931592,
+   "old_quality": {
+    "r2": 0.7675511153386567,
+    "rmse": 7.6803952219241856
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical2/svr/taxi/rows=full",
+   "ratio": 1.0001616309832844
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "classical2",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical2/tsvd/istella/rows=full fit ours",
+   "lane": "tsvd",
+   "new_ms": 2892.85571200071,
+   "new_quality": {
+    "explained_variance_ratio_sum": 0.999999863723371,
+    "relative_reconstruction_error": 0.000131374781371812
+   },
+   "new_status": "ok",
+   "old_ms": 47.56137000003946,
+   "old_quality": {
+    "explained_variance_ratio_sum": 0.999999863723371,
+    "relative_reconstruction_error": 0.000131374781371812
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical2/tsvd/istella/rows=full",
+   "ratio": 60.823641371102426
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "classical2",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "classical2/tsvd/taxi/rows=full fit ours",
+   "lane": "tsvd",
+   "new_ms": 147.8550259998883,
+   "new_quality": {
+    "explained_variance_ratio_sum": 0.999965045949127,
+    "relative_reconstruction_error": 0.0032570735754274115
+   },
+   "new_status": "ok",
+   "old_ms": 4.6892820009816205,
+   "old_quality": {
+    "explained_variance_ratio_sum": 0.999965045949127,
+    "relative_reconstruction_error": 0.0032570735754274115
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "classical2/tsvd/taxi/rows=full",
+   "ratio": 31.530418935977277
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "torch-eager-bf16",
+    "clock": "whole",
+    "label": "whole/whole",
+    "opponent_ms": 17.11225600047328,
+    "opponent_status": "ok",
+    "ours_ms": 48.457670000061626,
+    "ours_ms_new": 57.1656410002106,
+    "ratio": 2.831752283201082,
+    "ratio_new": 3.340625631046517,
+    "verdict": "MATCHED"
+   },
+   "dataset": "gaussian",
+   "family": "neural",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "neural/gemm-bf16/gaussian/shape=full fit ours",
+   "lane": "gemm-bf16",
+   "new_ms": 57.1656410002106,
+   "new_quality": {
+    "max_rel_err_vs_fp64": 1.1548914368712009e-07
+   },
+   "new_status": "ok",
+   "old_ms": 48.457670000061626,
+   "old_quality": {
+    "max_rel_err_vs_fp64": 1.1548914368712009e-07
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "torch-compile-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 18.28434300114168,
+     "opponent_status": "ok",
+     "ours_ms": 48.457670000061626,
+     "ours_ms_new": 57.1656410002106,
+     "ratio": 2.6502275743260735,
+     "ratio_new": 3.126480453612206,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 17.11225600047328,
+     "opponent_status": "ok",
+     "ours_ms": 48.457670000061626,
+     "ours_ms_new": 57.1656410002106,
+     "ratio": 2.831752283201082,
+     "ratio_new": 3.340625631046517,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "neural/gemm-bf16/gaussian/shape=full",
+   "ratio": 1.1797026353132105
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "gaussian",
+   "family": "neural",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "neural/gemm-int8/gaussian/shape=full fit ours",
+   "lane": "gemm-int8",
+   "new_ms": 45.329812999625574,
+   "new_quality": {
+    "max_rel_err_vs_fp64": 0.0
+   },
+   "new_status": "ok",
+   "old_ms": 38.662574999762,
+   "old_quality": {
+    "max_rel_err_vs_fp64": 0.0
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "neural/gemm-int8/gaussian/shape=full",
+   "ratio": 1.1724468171068434
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "torch-eager-bf16",
+    "clock": "whole",
+    "label": "whole/whole",
+    "opponent_ms": 19.295498001156375,
+    "opponent_status": "ok",
+    "ours_ms": 65.80669800132455,
+    "ours_ms_new": 67.68624500000442,
+    "ratio": 3.4104690118586607,
+    "ratio_new": 3.5078775886451856,
+    "verdict": "MATCHED"
+   },
+   "dataset": "gaussian",
+   "family": "neural",
+   "flags": [
+    "SAME"
+   ],
+   "key": "neural/gemm/gaussian/shape=full fit ours",
+   "lane": "gemm",
+   "new_ms": 67.68624500000442,
+   "new_quality": {
+    "max_rel_err_vs_fp64": 2.398716979667606e-07
+   },
+   "new_status": "ok",
+   "old_ms": 65.80669800132455,
+   "old_quality": {
+    "max_rel_err_vs_fp64": 2.398716979667606e-07
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "torch-compile-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 20.184266000796924,
+     "opponent_status": "ok",
+     "ours_ms": 65.80669800132455,
+     "ours_ms_new": 67.68624500000442,
+     "ratio": 3.2602968073610574,
+     "ratio_new": 3.3534162202049855,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-compile-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 22.322999000607524,
+     "opponent_status": "ok",
+     "ours_ms": 65.80669800132455,
+     "ours_ms_new": 67.68624500000442,
+     "ratio": 2.947932667986663,
+     "ratio_new": 3.0321304497734523,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 19.295498001156375,
+     "opponent_status": "ok",
+     "ours_ms": 65.80669800132455,
+     "ours_ms_new": 67.68624500000442,
+     "ratio": 3.4104690118586607,
+     "ratio_new": 3.5078775886451856,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 20.355664999442524,
+     "opponent_status": "ok",
+     "ours_ms": 65.80669800132455,
+     "ours_ms_new": 67.68624500000442,
+     "ratio": 3.232844419630937,
+     "ratio_new": 3.3251797473508296,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "neural/gemm/gaussian/shape=full",
+   "ratio": 1.0285616366686874
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "torch-eager-fp32",
+    "clock": "whole",
+    "label": "whole/whole",
+    "opponent_ms": 18.377053000222077,
+    "opponent_status": "ok",
+    "ours_ms": 58.47755099966889,
+    "ours_ms_new": 66.94548799987388,
+    "ratio": 3.182096226144759,
+    "ratio_new": 3.6428848520524415,
+    "verdict": "MATCHED"
+   },
+   "dataset": "bytes",
+   "family": "neural",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "neural/lm-forward/bytes/shape=full fit ours",
+   "lane": "lm-forward",
+   "new_ms": 66.94548799987388,
+   "new_quality": {
+    "mean_nll": 9.014267046948246
+   },
+   "new_status": "ok",
+   "old_ms": 58.47755099966889,
+   "old_quality": {
+    "mean_nll": 9.015586488714295
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "torch-compile-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 20.442731000002823,
+     "opponent_status": "ok",
+     "ours_ms": 58.47755099966889,
+     "ours_ms_new": 66.94548799987388,
+     "ratio": 2.8605547370192768,
+     "ratio_new": 3.2747820239802907,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-compile-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 21.109938999870792,
+     "opponent_status": "ok",
+     "ours_ms": 58.47755099966889,
+     "ours_ms_new": 66.94548799987388,
+     "ratio": 2.7701430591545915,
+     "ratio_new": 3.171278135871621,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 25.273635999838007,
+     "opponent_status": "ok",
+     "ours_ms": 58.47755099966889,
+     "ours_ms_new": 66.94548799987388,
+     "ratio": 2.31377673556918,
+     "ratio_new": 2.6488269436302305,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 18.377053000222077,
+     "opponent_status": "ok",
+     "ours_ms": 58.47755099966889,
+     "ours_ms_new": 66.94548799987388,
+     "ratio": 3.182096226144759,
+     "ratio_new": 3.6428848520524415,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-graph-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 21.27923300031398,
+     "opponent_status": "ok",
+     "ours_ms": 58.47755099966889,
+     "ours_ms_new": 66.94548799987388,
+     "ratio": 2.748104266671926,
+     "ratio_new": 3.146047980154458,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "neural/lm-forward/bytes/shape=full",
+   "ratio": 1.144806628448803
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "torch-compile-bf16",
+    "clock": "whole",
+    "label": "whole/whole",
+    "opponent_ms": 9.695561999251368,
+    "opponent_status": "ok",
+    "ours_ms": 43.878791000679485,
+    "ours_ms_new": 42.95348100004048,
+    "ratio": 4.52565730630855,
+    "ratio_new": 4.430220858095393,
+    "verdict": "MATCHED"
+   },
+   "dataset": "bytes",
+   "family": "neural",
+   "flags": [
+    "SAME"
+   ],
+   "key": "neural/lm-train-step/bytes/shape=full fit ours",
+   "lane": "lm-train-step",
+   "new_ms": 42.95348100004048,
+   "new_quality": {
+    "loss_last_step": 8.402877807617188
+   },
+   "new_status": "ok",
+   "old_ms": 43.878791000679485,
+   "old_quality": {
+    "loss_last_step": 8.405827522277832
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "torch-compile-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 9.695561999251368,
+     "opponent_status": "ok",
+     "ours_ms": 43.878791000679485,
+     "ours_ms_new": 42.95348100004048,
+     "ratio": 4.52565730630855,
+     "ratio_new": 4.430220858095393,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-compile-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 14.665605998743558,
+     "opponent_status": "ok",
+     "ours_ms": 43.878791000679485,
+     "ours_ms_new": 42.95348100004048,
+     "ratio": 2.9919521228402495,
+     "ratio_new": 2.9288582417746953,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 19.39212400066026,
+     "opponent_status": "ok",
+     "ours_ms": 43.878791000679485,
+     "ours_ms_new": 42.95348100004048,
+     "ratio": 2.262711964877365,
+     "ratio_new": 2.214996201477363,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 17.032671999913873,
+     "opponent_status": "ok",
+     "ours_ms": 43.878791000679485,
+     "ours_ms_new": 42.95348100004048,
+     "ratio": 2.576154287530539,
+     "ratio_new": 2.5218286948904836,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "neural/lm-train-step/bytes/shape=full",
+   "ratio": 0.9789121354636988
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "mamba-ssm-fp32",
+    "clock": "whole",
+    "label": "whole/whole",
+    "opponent_ms": 1.4039460002095439,
+    "opponent_status": "ok",
+    "ours_ms": 3.0194920000212733,
+    "ours_ms_new": 4.563190000226314,
+    "ratio": 2.150718047254384,
+    "ratio_new": 3.2502603373244,
+    "verdict": "MATCHED"
+   },
+   "dataset": "gaussian",
+   "family": "neural",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "neural/mamba1-forward/gaussian/shape=full fit ours",
+   "lane": "mamba1-forward",
+   "new_ms": 4.563190000226314,
+   "new_quality": {
+    "rel_fro_vs_torch_eager_fp32": 7.442349185422313e-09
+   },
+   "new_status": "ok",
+   "old_ms": 3.0194920000212733,
+   "old_quality": {
+    "rel_fro_vs_torch_eager_fp32": 7.442349185422313e-09
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "mamba-ssm-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 1.4039460002095439,
+     "opponent_status": "ok",
+     "ours_ms": 3.0194920000212733,
+     "ours_ms_new": 4.563190000226314,
+     "ratio": 2.150718047254384,
+     "ratio_new": 3.2502603373244,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "neural/mamba1-forward/gaussian/shape=full",
+   "ratio": 1.5112442755914455
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "mamba-ssm-fp32",
+    "clock": "whole",
+    "label": "whole/whole",
+    "opponent_ms": 2.710083001147723,
+    "opponent_status": "ok",
+    "ours_ms": 5.282084999635117,
+    "ours_ms_new": 6.7285539998920285,
+    "ratio": 1.9490491610028728,
+    "ratio_new": 2.4827852124980967,
+    "verdict": "MATCHED"
+   },
+   "dataset": "gaussian",
+   "family": "neural",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "neural/mamba2-forward/gaussian/shape=full fit ours",
+   "lane": "mamba2-forward",
+   "new_ms": 6.7285539998920285,
+   "new_quality": {
+    "rel_fro_vs_torch_eager_fp32": 1.3721580564925481e-07
+   },
+   "new_status": "ok",
+   "old_ms": 5.282084999635117,
+   "old_quality": {
+    "rel_fro_vs_torch_eager_fp32": 1.3721580564925481e-07
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "mamba-ssm-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 2.710083001147723,
+     "opponent_status": "ok",
+     "ours_ms": 5.282084999635117,
+     "ours_ms_new": 6.7285539998920285,
+     "ratio": 1.9490491610028728,
+     "ratio_new": 2.4827852124980967,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "neural/mamba2-forward/gaussian/shape=full",
+   "ratio": 1.2738443247991715
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "gaussian",
+   "family": "neural",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "neural/mamba3-decode/gaussian/shape=full fit ours",
+   "lane": "mamba3-decode",
+   "new_ms": 6242.598718000409,
+   "new_quality": {},
+   "new_status": "ok",
+   "old_ms": 2872.654163998959,
+   "old_quality": {},
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "INSUFFICIENT",
+   "race_id": "neural/mamba3-decode/gaussian/shape=full",
+   "ratio": 2.1731118198057726
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "gaussian",
+   "family": "neural",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "neural/mamba3-forward/gaussian/shape=full fit ours",
+   "lane": "mamba3-forward",
+   "new_ms": 4.696883999713464,
+   "new_quality": {
+    "rel_fro_vs_torch_eager_fp32": 5.2474303751350965e-08
+   },
+   "new_status": "ok",
+   "old_ms": 3.4823890000552638,
+   "old_quality": {
+    "rel_fro_vs_torch_eager_fp32": 5.2474303751350965e-08
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "neural/mamba3-forward/gaussian/shape=full",
+   "ratio": 1.3487533987842617
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "torch-compile-bf16",
+    "clock": "whole",
+    "label": "whole/whole",
+    "opponent_ms": 1.8028649992629653,
+    "opponent_status": "ok",
+    "ours_ms": 3.3180170012201415,
+    "ours_ms_new": 0.97146200005227,
+    "ratio": 1.8404134544608666,
+    "ratio_new": 0.5388434521993696,
+    "verdict": "MATCHED"
+   },
+   "dataset": "gaussian",
+   "family": "neural",
+   "flags": [
+    "FASTER",
+    "NOW-WINS"
+   ],
+   "key": "neural/mlp-train-step/gaussian/shape=full fit ours",
+   "lane": "mlp-train-step",
+   "new_ms": 0.97146200005227,
+   "new_quality": {
+    "loss_last_step": 1.1233608722686768
+   },
+   "new_status": "ok",
+   "old_ms": 3.3180170012201415,
+   "old_quality": {
+    "loss_last_step": 1.1233608722686768
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "torch-compile-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 1.8028649992629653,
+     "opponent_status": "ok",
+     "ours_ms": 3.3180170012201415,
+     "ours_ms_new": 0.97146200005227,
+     "ratio": 1.8404134544608666,
+     "ratio_new": 0.5388434521993696,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-compile-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 2.069170999675407,
+     "opponent_status": "ok",
+     "ours_ms": 3.3180170012201415,
+     "ours_ms_new": 0.97146200005227,
+     "ratio": 1.6035489583705949,
+     "ratio_new": 0.4694933382522103,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 1.9032990003324812,
+     "opponent_status": "ok",
+     "ours_ms": 3.3180170012201415,
+     "ours_ms_new": 0.97146200005227,
+     "ratio": 1.7432978216457464,
+     "ratio_new": 0.5104095572385465,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 1.8467699992470443,
+     "opponent_status": "ok",
+     "ours_ms": 3.3180170012201415,
+     "ours_ms_new": 0.97146200005227,
+     "ratio": 1.796659574593992,
+     "ratio_new": 0.5260330200557457,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "neural/mlp-train-step/gaussian/shape=full",
+   "ratio": 0.2927839127090163
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "torch-compile-bf16",
+    "clock": "whole",
+    "label": "whole/whole",
+    "opponent_ms": 2.221378001195262,
+    "opponent_status": "ok",
+    "ours_ms": 2.3906580008770106,
+    "ours_ms_new": 2.383332999670529,
+    "ratio": 1.0762049500763327,
+    "ratio_new": 1.0729074468136999,
+    "verdict": "MATCHED"
+   },
+   "dataset": "gaussian",
+   "family": "neural",
+   "flags": [
+    "SAME"
+   ],
+   "key": "neural/ops-session-step/gaussian/shape=full fit ours",
+   "lane": "ops-session-step",
+   "new_ms": 2.383332999670529,
+   "new_quality": {
+    "loss": 2.7981626987457275
+   },
+   "new_status": "ok",
+   "old_ms": 2.3906580008770106,
+   "old_quality": {
+    "loss": 2.7981626987457275
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "torch-compile-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 2.221378001195262,
+     "opponent_status": "ok",
+     "ours_ms": 2.3906580008770106,
+     "ours_ms_new": 2.383332999670529,
+     "ratio": 1.0762049500763327,
+     "ratio_new": 1.0729074468136999,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-compile-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 2.7979349997622194,
+     "opponent_status": "ok",
+     "ours_ms": 2.3906580008770106,
+     "ours_ms_new": 2.383332999670529,
+     "ratio": 0.8544365759319567,
+     "ratio_new": 0.8518185732953321,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 2.4255810003523948,
+     "opponent_status": "ok",
+     "ours_ms": 2.3906580008770106,
+     "ours_ms_new": 2.383332999670529,
+     "ratio": 0.985602212636762,
+     "ratio_new": 0.9825823171125895,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 2.5325830010842765,
+     "opponent_status": "ok",
+     "ours_ms": 2.3906580008770106,
+     "ours_ms_new": 2.383332999670529,
+     "ratio": 0.9439603755744616,
+     "ratio_new": 0.9410680710761111,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "neural/ops-session-step/gaussian/shape=full",
+   "ratio": 0.9969359895042308
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "torch-eager-fp32",
+    "clock": "whole",
+    "label": "whole/whole",
+    "opponent_ms": 0.5935740009590518,
+    "opponent_status": "ok",
+    "ours_ms": 1.2483040009101387,
+    "ours_ms_new": 0.822367999717244,
+    "ratio": 2.103030117379171,
+    "ratio_new": 1.3854515163880565,
+    "verdict": "MATCHED"
+   },
+   "dataset": "gaussian",
+   "family": "neural",
+   "flags": [
+    "FASTER"
+   ],
+   "key": "neural/program-run/gaussian/shape=full fit ours",
+   "lane": "program-run",
+   "new_ms": 0.822367999717244,
+   "new_quality": {},
+   "new_status": "ok",
+   "old_ms": 1.2483040009101387,
+   "old_quality": {},
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "torch-compile-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 0.6625900005019503,
+     "opponent_status": "ok",
+     "ours_ms": 1.2483040009101387,
+     "ours_ms_new": 0.822367999717244,
+     "ratio": 1.8839765163441589,
+     "ratio_new": 1.2411415793994063,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-compile-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 0.9175740015052725,
+     "opponent_status": "ok",
+     "ours_ms": 1.2483040009101387,
+     "ours_ms_new": 0.822367999717244,
+     "ratio": 1.3604395927329092,
+     "ratio_new": 0.8962416092523939,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 0.6753210000169929,
+     "opponent_status": "ok",
+     "ours_ms": 1.2483040009101387,
+     "ours_ms_new": 0.822367999717244,
+     "ratio": 1.8484602150365945,
+     "ratio_new": 1.2177438576566566,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 0.5935740009590518,
+     "opponent_status": "ok",
+     "ours_ms": 1.2483040009101387,
+     "ours_ms_new": 0.822367999717244,
+     "ratio": 2.103030117379171,
+     "ratio_new": 1.3854515163880565,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "INSUFFICIENT",
+   "race_id": "neural/program-run/gaussian/shape=full",
+   "ratio": 0.6587882431824742
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "bytes",
+   "family": "neural",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "neural/samba-decode/bytes/shape=full fit ours",
+   "lane": "samba-decode",
+   "new_ms": 5838.021412000671,
+   "new_quality": {
+    "mean_nll": 5.640151126635882
+   },
+   "new_status": "ok",
+   "old_ms": 3708.2818519993452,
+   "old_quality": {
+    "mean_nll": 5.640151126635882
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "neural/samba-decode/bytes/shape=full",
+   "ratio": 1.5743197645165679
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "bytes",
+   "family": "neural",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "neural/samba-forward/bytes/shape=full fit ours",
+   "lane": "samba-forward",
+   "new_ms": 9.430441999938921,
+   "new_quality": {
+    "mean_nll": 5.640151126635882
+   },
+   "new_status": "ok",
+   "old_ms": 6.095143999118591,
+   "old_quality": {
+    "mean_nll": 5.640151126635882
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "neural/samba-forward/bytes/shape=full",
+   "ratio": 1.5472057758278792
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "bytes",
+   "family": "neural",
+   "flags": [
+    "SAME"
+   ],
+   "key": "neural/samba-train-step/bytes/shape=full fit ours",
+   "lane": "samba-train-step",
+   "new_ms": 57.1293479997621,
+   "new_quality": {
+    "loss_last_step": 4.80524206161499
+   },
+   "new_status": "ok",
+   "old_ms": 53.57575099878886,
+   "old_quality": {
+    "loss_last_step": 4.822320938110352
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "neural/samba-train-step/bytes/shape=full",
+   "ratio": 1.0663284589525133
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "torch-eager-fp32",
+    "clock": "whole",
+    "label": "whole/whole",
+    "opponent_ms": 1661.0048669990647,
+    "opponent_status": "ok",
+    "ours_ms": 439.9643799988553,
+    "ours_ms_new": 439.65723600013007,
+    "ratio": 0.264878441201523,
+    "ratio_new": 0.2646935266327414,
+    "verdict": "MATCHED"
+   },
+   "dataset": "synthetic",
+   "family": "neural",
+   "flags": [
+    "SAME",
+    "PARAMS-DIFF"
+   ],
+   "key": "neural/sequential-fit/synthetic/shape=full fit ours",
+   "lane": "sequential-fit",
+   "new_ms": 439.65723600013007,
+   "new_quality": {
+    "accuracy": 0.89907,
+    "auc": 0.9689732335389448
+   },
+   "new_status": "ok",
+   "old_ms": 439.9643799988553,
+   "old_quality": {
+    "accuracy": 0.89907,
+    "auc": 0.9689732335389448
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "torch-compile-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 2092.249790999631,
+     "opponent_status": "ok",
+     "ours_ms": 439.9643799988553,
+     "ours_ms_new": 439.65723600013007,
+     "ratio": 0.21028291262901738,
+     "ratio_new": 0.21013611180243996,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-compile-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 1847.0563470000343,
+     "opponent_status": "ok",
+     "ours_ms": 439.9643799988553,
+     "ours_ms_new": 439.65723600013007,
+     "ratio": 0.23819759516997946,
+     "ratio_new": 0.23803130679484458,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 2095.6728090004617,
+     "opponent_status": "ok",
+     "ours_ms": 439.9643799988553,
+     "ours_ms_new": 439.65723600013007,
+     "ratio": 0.20993944193449635,
+     "ratio_new": 0.20979288088860878,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 1661.0048669990647,
+     "opponent_status": "ok",
+     "ours_ms": 439.9643799988553,
+     "ours_ms_new": 439.65723600013007,
+     "ratio": 0.264878441201523,
+     "ratio_new": 0.2646935266327414,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [
+    "learning_rate"
+   ],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "neural/sequential-fit/synthetic/shape=full",
+   "ratio": 0.9993018889421775
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "torch-eager-fp32",
+    "clock": "whole",
+    "label": "whole/whole",
+    "opponent_ms": 1.1297380005999003,
+    "opponent_status": "ok",
+    "ours_ms": 4.215705999740749,
+    "ours_ms_new": 2.678935000403726,
+    "ratio": 3.7315784699657564,
+    "ratio_new": 2.3712887403815657,
+    "verdict": "MATCHED"
+   },
+   "dataset": "synthetic",
+   "family": "neural",
+   "flags": [
+    "FASTER",
+    "PARAMS-DIFF"
+   ],
+   "key": "neural/sequential-predict/synthetic/shape=full fit ours",
+   "lane": "sequential-predict",
+   "new_ms": 2.678935000403726,
+   "new_quality": {
+    "accuracy": 0.89907,
+    "auc": 0.9689732335389448
+   },
+   "new_status": "ok",
+   "old_ms": 4.215705999740749,
+   "old_quality": {
+    "accuracy": 0.89907,
+    "auc": 0.9689732335389448
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "torch-compile-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 1.453298000342329,
+     "opponent_status": "ok",
+     "ours_ms": 4.215705999740749,
+     "ours_ms_new": 2.678935000403726,
+     "ratio": 2.900785660441097,
+     "ratio_new": 1.8433487142848157,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-compile-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 1.4660520009783795,
+     "opponent_status": "ok",
+     "ours_ms": 4.215705999740749,
+     "ours_ms_new": 2.678935000403726,
+     "ratio": 2.8755501148167797,
+     "ratio_new": 1.8273123999803016,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 1.2376279992167838,
+     "opponent_status": "ok",
+     "ours_ms": 4.215705999740749,
+     "ours_ms_new": 2.678935000403726,
+     "ratio": 3.406278786847584,
+     "ratio_new": 2.164572070201267,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 1.1297380005999003,
+     "opponent_status": "ok",
+     "ours_ms": 4.215705999740749,
+     "ours_ms_new": 2.678935000403726,
+     "ratio": 3.7315784699657564,
+     "ratio_new": 2.3712887403815657,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [
+    "learning_rate"
+   ],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "neural/sequential-predict/synthetic/shape=full",
+   "ratio": 0.6354653290738186
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "torch-eager-fp32",
+    "clock": "whole",
+    "label": "whole/whole",
+    "opponent_ms": 929.1140749992337,
+    "opponent_status": "ok",
+    "ours_ms": 2444.699321000371,
+    "ours_ms_new": 2699.088764999942,
+    "ratio": 2.631215462969267,
+    "ratio_new": 2.905013321428984,
+    "verdict": "MATCHED"
+   },
+   "dataset": "gaussian",
+   "family": "neural",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "neural/transformer-decode/gaussian/shape=full fit ours",
+   "lane": "transformer-decode",
+   "new_ms": 2699.088764999942,
+   "new_quality": {},
+   "new_status": "ok",
+   "old_ms": 2444.699321000371,
+   "old_quality": {},
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "torch-eager-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 1094.0271849995042,
+     "opponent_status": "ok",
+     "ours_ms": 2444.699321000371,
+     "ours_ms_new": 2699.088764999942,
+     "ratio": 2.234587361740448,
+     "ratio_new": 2.4671130681283437,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 929.1140749992337,
+     "opponent_status": "ok",
+     "ours_ms": 2444.699321000371,
+     "ours_ms_new": 2699.088764999942,
+     "ratio": 2.631215462969267,
+     "ratio_new": 2.905013321428984,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "INSUFFICIENT",
+   "race_id": "neural/transformer-decode/gaussian/shape=full",
+   "ratio": 1.1040575590684398
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "best_opponent": {
+    "arm": "torch-graph-fp32",
+    "clock": "whole",
+    "label": "whole/whole",
+    "opponent_ms": 0.9304790000896901,
+    "opponent_status": "ok",
+    "ours_ms": 8.041479999519652,
+    "ours_ms_new": 5.760330999692087,
+    "ratio": 8.64230143694218,
+    "ratio_new": 6.190715748702379,
+    "verdict": "MATCHED"
+   },
+   "dataset": "gaussian",
+   "family": "neural",
+   "flags": [
+    "FASTER"
+   ],
+   "key": "neural/transformer-forward/gaussian/shape=full fit ours",
+   "lane": "transformer-forward",
+   "new_ms": 5.760330999692087,
+   "new_quality": {
+    "rel_fro_vs_torch_eager_fp32": 5.717198077970819e-08
+   },
+   "new_status": "ok",
+   "old_ms": 8.041479999519652,
+   "old_quality": {
+    "rel_fro_vs_torch_eager_fp32": 5.717198077970819e-08
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "torch-compile-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 2.1973240000079386,
+     "opponent_status": "ok",
+     "ours_ms": 8.041479999519652,
+     "ours_ms_new": 5.760330999692087,
+     "ratio": 3.6596696706951723,
+     "ratio_new": 2.6215209953886074,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-compile-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 1.409643000442884,
+     "opponent_status": "ok",
+     "ours_ms": 8.041479999519652,
+     "ours_ms_new": 5.760330999692087,
+     "ratio": 5.70462166448751,
+     "ratio_new": 4.086375768816854,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-bf16",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 1.7081690002669347,
+     "opponent_status": "ok",
+     "ours_ms": 8.041479999519652,
+     "ours_ms_new": 5.760330999692087,
+     "ratio": 4.707660657852363,
+     "ratio_new": 3.372225464103331,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-eager-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 1.5914140003587818,
+     "opponent_status": "ok",
+     "ours_ms": 8.041479999519652,
+     "ours_ms_new": 5.760330999692087,
+     "ratio": 5.0530408791846195,
+     "ratio_new": 3.6196307173327806,
+     "verdict": "MATCHED"
+    },
+    {
+     "arm": "torch-graph-fp32",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 0.9304790000896901,
+     "opponent_status": "ok",
+     "ours_ms": 8.041479999519652,
+     "ours_ms_new": 5.760330999692087,
+     "ratio": 8.64230143694218,
+     "ratio_new": 6.190715748702379,
+     "verdict": "MATCHED"
+    }
+   ],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "neural/transformer-forward/gaussian/shape=full",
+   "ratio": 0.7163272183772358
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-depthwise/istella/rows=full fit ours",
+   "lane": "gbdt-depthwise",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 6764.519,
+   "old_quality": {
+    "auc": 0.983586,
+    "logloss": 0.150066
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "phase": "fit",
+   "race_id": "trees/gbdt-depthwise/istella/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours-prebinned",
+   "batch": null,
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-depthwise/istella/rows=full fit ours-prebinned",
+   "lane": "gbdt-depthwise",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 7517.543,
+   "old_quality": {
+    "auc": 0.98368,
+    "logloss": 0.149425
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "xgboost-gpu",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 8420.702,
+     "opponent_status": "ok",
+     "ours_ms": 7517.543,
+     "ratio": 0.8927454029367148,
+     "ratio_new": null,
+     "verdict": "MATCHED"
+    }
+   ],
+   "phase": "fit",
+   "race_id": "trees/gbdt-depthwise/istella/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours",
+   "batch": "test",
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-depthwise/istella/rows=full infer ours test",
+   "lane": "gbdt-depthwise",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 32.603,
+   "old_quality": {
+    "auc": 0.983586,
+    "logloss": 0.150066
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "phase": "infer",
+   "race_id": "trees/gbdt-depthwise/istella/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours-prebinned",
+   "batch": "test",
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-depthwise/istella/rows=full infer ours-prebinned test",
+   "lane": "gbdt-depthwise",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 33.097,
+   "old_quality": {
+    "auc": 0.98368,
+    "logloss": 0.149425
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "phase": "infer",
+   "race_id": "trees/gbdt-depthwise/istella/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours",
+   "batch": "large",
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-depthwise/istella/rows=full infer ours large",
+   "lane": "gbdt-depthwise",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 51.133,
+   "old_quality": {},
+   "old_status": "not-scored",
+   "opponents": [],
+   "phase": "infer",
+   "race_id": "trees/gbdt-depthwise/istella/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours-prebinned",
+   "batch": "large",
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-depthwise/istella/rows=full infer ours-prebinned large",
+   "lane": "gbdt-depthwise",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 50.959,
+   "old_quality": {},
+   "old_status": "not-scored",
+   "opponents": [],
+   "phase": "infer",
+   "race_id": "trees/gbdt-depthwise/istella/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-depthwise/taxi/rows=full fit ours",
+   "lane": "gbdt-depthwise",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 3224.606,
+   "old_quality": {
+    "auc": 0.632096,
+    "logloss": 0.528044
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "phase": "fit",
+   "race_id": "trees/gbdt-depthwise/taxi/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours-prebinned",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-depthwise/taxi/rows=full fit ours-prebinned",
+   "lane": "gbdt-depthwise",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 3550.105,
+   "old_quality": {
+    "auc": 0.631767,
+    "logloss": 0.528123
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "xgboost-gpu",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 3263.981,
+     "opponent_status": "ok",
+     "ours_ms": 3550.105,
+     "ratio": 1.0876610494975307,
+     "ratio_new": null,
+     "verdict": "MATCHED"
+    }
+   ],
+   "phase": "fit",
+   "race_id": "trees/gbdt-depthwise/taxi/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours",
+   "batch": "test",
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-depthwise/taxi/rows=full infer ours test",
+   "lane": "gbdt-depthwise",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 14.045,
+   "old_quality": {
+    "auc": 0.632096,
+    "logloss": 0.528044
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "phase": "infer",
+   "race_id": "trees/gbdt-depthwise/taxi/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours-prebinned",
+   "batch": "test",
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-depthwise/taxi/rows=full infer ours-prebinned test",
+   "lane": "gbdt-depthwise",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 13.276,
+   "old_quality": {
+    "auc": 0.631767,
+    "logloss": 0.528123
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "phase": "infer",
+   "race_id": "trees/gbdt-depthwise/taxi/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours",
+   "batch": "large",
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-depthwise/taxi/rows=full infer ours large",
+   "lane": "gbdt-depthwise",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 21.828,
+   "old_quality": {},
+   "old_status": "not-scored",
+   "opponents": [],
+   "phase": "infer",
+   "race_id": "trees/gbdt-depthwise/taxi/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours-prebinned",
+   "batch": "large",
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-depthwise/taxi/rows=full infer ours-prebinned large",
+   "lane": "gbdt-depthwise",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 21.1,
+   "old_quality": {},
+   "old_status": "not-scored",
+   "opponents": [],
+   "phase": "infer",
+   "race_id": "trees/gbdt-depthwise/taxi/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-lossguide/taxi/rows=full fit ours",
+   "lane": "gbdt-lossguide",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 19180.618,
+   "old_quality": {
+    "auc": 0.632011,
+    "logloss": 0.527894
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "phase": "fit",
+   "race_id": "trees/gbdt-lossguide/taxi/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours-gain0",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-lossguide/taxi/rows=full fit ours-gain0",
+   "lane": "gbdt-lossguide",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 19538.631,
+   "old_quality": {
+    "auc": 0.631961,
+    "logloss": 0.527761
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "xgboost-gpu",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 17700.776,
+     "opponent_status": "ok",
+     "ours_ms": 19538.631,
+     "ratio": 1.10382906376534,
+     "ratio_new": null,
+     "verdict": "MATCHED"
+    }
+   ],
+   "phase": "fit",
+   "race_id": "trees/gbdt-lossguide/taxi/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours",
+   "batch": "test",
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-lossguide/taxi/rows=full infer ours test",
+   "lane": "gbdt-lossguide",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 13.413,
+   "old_quality": {
+    "auc": 0.632011,
+    "logloss": 0.527894
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "phase": "infer",
+   "race_id": "trees/gbdt-lossguide/taxi/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours-gain0",
+   "batch": "test",
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-lossguide/taxi/rows=full infer ours-gain0 test",
+   "lane": "gbdt-lossguide",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 13.075,
+   "old_quality": {
+    "auc": 0.631961,
+    "logloss": 0.527761
+   },
+   "old_status": "ok",
+   "opponents": [
+    {
+     "arm": "xgboost-gpu",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 60.298,
+     "opponent_status": "ok",
+     "ours_ms": 13.075,
+     "ratio": 0.21683969617566087,
+     "ratio_new": null,
+     "verdict": "MATCHED"
+    }
+   ],
+   "phase": "infer",
+   "race_id": "trees/gbdt-lossguide/taxi/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours",
+   "batch": "large",
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-lossguide/taxi/rows=full infer ours large",
+   "lane": "gbdt-lossguide",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 18.968,
+   "old_quality": {},
+   "old_status": "not-scored",
+   "opponents": [],
+   "phase": "infer",
+   "race_id": "trees/gbdt-lossguide/taxi/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours-gain0",
+   "batch": "large",
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "NOT-RUN"
+   ],
+   "key": "trees/gbdt-lossguide/taxi/rows=full infer ours-gain0 large",
+   "lane": "gbdt-lossguide",
+   "new_ms": null,
+   "new_quality": {},
+   "new_status": "missing",
+   "old_ms": 19.138,
+   "old_quality": {},
+   "old_status": "not-scored",
+   "opponents": [
+    {
+     "arm": "xgboost-gpu",
+     "clock": "whole",
+     "label": "whole/whole",
+     "opponent_ms": 85.798,
+     "opponent_status": "not-scored",
+     "ours_ms": 19.138,
+     "ratio": 0.22305881255973334,
+     "ratio_new": null,
+     "verdict": "MATCHED"
+    }
+   ],
+   "phase": "infer",
+   "race_id": "trees/gbdt-lossguide/taxi/rows=full",
+   "ratio": null,
+   "why": "smoke failed: -: status failed: incomplete worker evidence; recipe excluded, raw evidence retained; missing ours fit: worker library version changed or missing: ours, worker GPU/driver/OS changed or missing: ours, worker runtime settings changed or missing: ours | ours infer: worker library versi..."
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "SAME"
+   ],
+   "key": "trees/gbdt-multiclass/istella/rows=full fit ours",
+   "lane": "gbdt-multiclass",
+   "new_ms": 10511.952,
+   "new_quality": {
+    "accuracy": 0.907556,
+    "mlogloss": 0.258413
+   },
+   "new_status": "ok",
+   "old_ms": 9853.998,
+   "old_quality": {
+    "accuracy": 0.907556,
+    "mlogloss": 0.258413
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/gbdt-multiclass/istella/rows=full",
+   "ratio": 1.0667702591374586
+  },
+  {
+   "arm": "ours",
+   "batch": "test",
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "SAME"
+   ],
+   "key": "trees/gbdt-multiclass/istella/rows=full infer ours test",
+   "lane": "gbdt-multiclass",
+   "new_ms": 28.083,
+   "new_quality": {
+    "accuracy": 0.907556,
+    "mlogloss": 0.258413
+   },
+   "new_status": "ok",
+   "old_ms": 27.988,
+   "old_quality": {
+    "accuracy": 0.907556,
+    "mlogloss": 0.258413
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/gbdt-multiclass/istella/rows=full",
+   "ratio": 1.0033943118479347
+  },
+  {
+   "arm": "ours",
+   "batch": "large",
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "SAME"
+   ],
+   "key": "trees/gbdt-multiclass/istella/rows=full infer ours large",
+   "lane": "gbdt-multiclass",
+   "new_ms": 47.037,
+   "new_quality": {},
+   "new_status": "not-scored",
+   "old_ms": 47.097,
+   "old_quality": {},
+   "old_status": "not-scored",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "INSUFFICIENT",
+   "race_id": "trees/gbdt-multiclass/istella/rows=full",
+   "ratio": 0.9987260335053187
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "SAME"
+   ],
+   "key": "trees/gbdt-multiclass/taxi/rows=full fit ours",
+   "lane": "gbdt-multiclass",
+   "new_ms": 5754.352,
+   "new_quality": {
+    "accuracy": 0.59938,
+    "mlogloss": 1.012595
+   },
+   "new_status": "ok",
+   "old_ms": 5669.512,
+   "old_quality": {
+    "accuracy": 0.59938,
+    "mlogloss": 1.012595
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/gbdt-multiclass/taxi/rows=full",
+   "ratio": 1.0149642508914347
+  },
+  {
+   "arm": "ours",
+   "batch": "test",
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "SAME"
+   ],
+   "key": "trees/gbdt-multiclass/taxi/rows=full infer ours test",
+   "lane": "gbdt-multiclass",
+   "new_ms": 7.627,
+   "new_quality": {
+    "accuracy": 0.59938,
+    "mlogloss": 1.012595
+   },
+   "new_status": "ok",
+   "old_ms": 7.616,
+   "old_quality": {
+    "accuracy": 0.59938,
+    "mlogloss": 1.012595
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/gbdt-multiclass/taxi/rows=full",
+   "ratio": 1.0014443277310925
+  },
+  {
+   "arm": "ours",
+   "batch": "large",
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "SAME"
+   ],
+   "key": "trees/gbdt-multiclass/taxi/rows=full infer ours large",
+   "lane": "gbdt-multiclass",
+   "new_ms": 13.913,
+   "new_quality": {},
+   "new_status": "not-scored",
+   "old_ms": 13.789,
+   "old_quality": {},
+   "old_status": "not-scored",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "INSUFFICIENT",
+   "race_id": "trees/gbdt-multiclass/taxi/rows=full",
+   "ratio": 1.008992675320908
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "trees/gbdt-rank-pairlogit/istella/rows=full fit ours",
+   "lane": "gbdt-rank-pairlogit",
+   "new_ms": 2095.717,
+   "new_quality": {
+    "map": 0.088296,
+    "ndcg10": 0.01799,
+    "ndcg5": 0.018157
+   },
+   "new_status": "ok",
+   "old_ms": 1691.038,
+   "old_quality": {
+    "map": 0.088296,
+    "ndcg10": 0.01799,
+    "ndcg5": 0.018157
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/gbdt-rank-pairlogit/istella/rows=full",
+   "ratio": 1.2393080463005564
+  },
+  {
+   "arm": "ours",
+   "batch": "test",
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "SAME"
+   ],
+   "key": "trees/gbdt-rank-pairlogit/istella/rows=full infer ours test",
+   "lane": "gbdt-rank-pairlogit",
+   "new_ms": 23.371,
+   "new_quality": {
+    "map": 0.088296,
+    "ndcg10": 0.01799,
+    "ndcg5": 0.018157
+   },
+   "new_status": "ok",
+   "old_ms": 23.814,
+   "old_quality": {
+    "map": 0.088296,
+    "ndcg10": 0.01799,
+    "ndcg5": 0.018157
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/gbdt-rank-pairlogit/istella/rows=full",
+   "ratio": 0.9813974972705131
+  },
+  {
+   "arm": "ours",
+   "batch": "large",
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "SAME"
+   ],
+   "key": "trees/gbdt-rank-pairlogit/istella/rows=full infer ours large",
+   "lane": "gbdt-rank-pairlogit",
+   "new_ms": 30.472,
+   "new_quality": {},
+   "new_status": "not-scored",
+   "old_ms": 30.854,
+   "old_quality": {},
+   "old_status": "not-scored",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "INSUFFICIENT",
+   "race_id": "trees/gbdt-rank-pairlogit/istella/rows=full",
+   "ratio": 0.9876191093537305
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "SAME"
+   ],
+   "key": "trees/gbdt-symmetric/istella/rows=full fit ours",
+   "lane": "gbdt-symmetric",
+   "new_ms": 8572.942,
+   "new_quality": {
+    "auc": 0.980093,
+    "logloss": 0.186806
+   },
+   "new_status": "ok",
+   "old_ms": 8052.425,
+   "old_quality": {
+    "auc": 0.980093,
+    "logloss": 0.186806
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/gbdt-symmetric/istella/rows=full",
+   "ratio": 1.0646410242877145
+  },
+  {
+   "arm": "ours",
+   "batch": "test",
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "SAME"
+   ],
+   "key": "trees/gbdt-symmetric/istella/rows=full infer ours test",
+   "lane": "gbdt-symmetric",
+   "new_ms": 23.176,
+   "new_quality": {
+    "auc": 0.980093,
+    "logloss": 0.186806
+   },
+   "new_status": "ok",
+   "old_ms": 23.207,
+   "old_quality": {
+    "auc": 0.980093,
+    "logloss": 0.186806
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/gbdt-symmetric/istella/rows=full",
+   "ratio": 0.998664196147714
+  },
+  {
+   "arm": "ours",
+   "batch": "large",
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "SAME"
+   ],
+   "key": "trees/gbdt-symmetric/istella/rows=full infer ours large",
+   "lane": "gbdt-symmetric",
+   "new_ms": 37.771,
+   "new_quality": {},
+   "new_status": "not-scored",
+   "old_ms": 37.565,
+   "old_quality": {},
+   "old_status": "not-scored",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "INSUFFICIENT",
+   "race_id": "trees/gbdt-symmetric/istella/rows=full",
+   "ratio": 1.0054838280314122
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "SAME"
+   ],
+   "key": "trees/gbdt-symmetric/taxi/rows=full fit ours",
+   "lane": "gbdt-symmetric",
+   "new_ms": 6099.018,
+   "new_quality": {
+    "auc": 0.630249,
+    "logloss": 0.52863
+   },
+   "new_status": "ok",
+   "old_ms": 5994.26,
+   "old_quality": {
+    "auc": 0.630249,
+    "logloss": 0.52863
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/gbdt-symmetric/taxi/rows=full",
+   "ratio": 1.01747638574236
+  },
+  {
+   "arm": "ours",
+   "batch": "test",
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "SAME"
+   ],
+   "key": "trees/gbdt-symmetric/taxi/rows=full infer ours test",
+   "lane": "gbdt-symmetric",
+   "new_ms": 4.637,
+   "new_quality": {
+    "auc": 0.630249,
+    "logloss": 0.52863
+   },
+   "new_status": "ok",
+   "old_ms": 4.584,
+   "old_quality": {
+    "auc": 0.630249,
+    "logloss": 0.52863
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/gbdt-symmetric/taxi/rows=full",
+   "ratio": 1.0115619546247818
+  },
+  {
+   "arm": "ours",
+   "batch": "large",
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "SAME"
+   ],
+   "key": "trees/gbdt-symmetric/taxi/rows=full infer ours large",
+   "lane": "gbdt-symmetric",
+   "new_ms": 8.374,
+   "new_quality": {},
+   "new_status": "not-scored",
+   "old_ms": 8.202,
+   "old_quality": {},
+   "old_status": "not-scored",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "INSUFFICIENT",
+   "race_id": "trees/gbdt-symmetric/taxi/rows=full",
+   "ratio": 1.0209704950012193
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "trees/iforest/istella/rows=full fit ours",
+   "lane": "iforest",
+   "new_ms": 7124.32,
+   "new_quality": {
+    "auc": 0.829336
+   },
+   "new_status": "ok",
+   "old_ms": 180.103,
+   "old_quality": {
+    "auc": 0.829336
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/iforest/istella/rows=full",
+   "ratio": 39.55692020677056
+  },
+  {
+   "arm": "ours",
+   "batch": "test",
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "trees/iforest/istella/rows=full infer ours test",
+   "lane": "iforest",
+   "new_ms": 1486.31,
+   "new_quality": {
+    "auc": 0.829336
+   },
+   "new_status": "ok",
+   "old_ms": 17.959,
+   "old_quality": {
+    "auc": 0.829336
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/iforest/istella/rows=full",
+   "ratio": 82.76128960409822
+  },
+  {
+   "arm": "ours",
+   "batch": "large",
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "trees/iforest/istella/rows=full infer ours large",
+   "lane": "iforest",
+   "new_ms": 2929.935,
+   "new_quality": {},
+   "new_status": "not-scored",
+   "old_ms": 35.552,
+   "old_quality": {},
+   "old_status": "not-scored",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "INSUFFICIENT",
+   "race_id": "trees/iforest/istella/rows=full",
+   "ratio": 82.41266314131413
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "trees/iforest/taxi/rows=full fit ours",
+   "lane": "iforest",
+   "new_ms": 1235.466,
+   "new_quality": {
+    "auc": 0.547466
+   },
+   "new_status": "ok",
+   "old_ms": 189.261,
+   "old_quality": {
+    "auc": 0.547466
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/iforest/taxi/rows=full",
+   "ratio": 6.527842503209853
+  },
+  {
+   "arm": "ours",
+   "batch": "test",
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "trees/iforest/taxi/rows=full infer ours test",
+   "lane": "iforest",
+   "new_ms": 124.291,
+   "new_quality": {
+    "auc": 0.547466
+   },
+   "new_status": "ok",
+   "old_ms": 2.909,
+   "old_quality": {
+    "auc": 0.547466
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/iforest/taxi/rows=full",
+   "ratio": 42.72636644895153
+  },
+  {
+   "arm": "ours",
+   "batch": "large",
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "trees/iforest/taxi/rows=full infer ours large",
+   "lane": "iforest",
+   "new_ms": 233.2,
+   "new_quality": {},
+   "new_status": "not-scored",
+   "old_ms": 7.804,
+   "old_quality": {},
+   "old_status": "not-scored",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "INSUFFICIENT",
+   "race_id": "trees/iforest/taxi/rows=full",
+   "ratio": 29.882111737570476
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "trees/rf/istella/rows=full fit ours",
+   "lane": "rf",
+   "new_ms": 51226.144,
+   "new_quality": {
+    "auc": 0.945385,
+    "logloss": 0.182017
+   },
+   "new_status": "ok",
+   "old_ms": 45439.737,
+   "old_quality": {
+    "auc": 0.945385,
+    "logloss": 0.182017
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/rf/istella/rows=full",
+   "ratio": 1.127342440384283
+  },
+  {
+   "arm": "ours",
+   "batch": "test",
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "trees/rf/istella/rows=full infer ours test",
+   "lane": "rf",
+   "new_ms": 1600.429,
+   "new_quality": {
+    "auc": 0.945385,
+    "logloss": 0.182017
+   },
+   "new_status": "ok",
+   "old_ms": 54.908,
+   "old_quality": {
+    "auc": 0.945385,
+    "logloss": 0.182017
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/rf/istella/rows=full",
+   "ratio": 29.14746485029504
+  },
+  {
+   "arm": "ours",
+   "batch": "large",
+   "dataset": "istella",
+   "family": "trees",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "trees/rf/istella/rows=full infer ours large",
+   "lane": "rf",
+   "new_ms": 2950.603,
+   "new_quality": {},
+   "new_status": "not-scored",
+   "old_ms": 111.668,
+   "old_quality": {},
+   "old_status": "not-scored",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "INSUFFICIENT",
+   "race_id": "trees/rf/istella/rows=full",
+   "ratio": 26.422994949314038
+  },
+  {
+   "arm": "ours",
+   "batch": null,
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "SAME"
+   ],
+   "key": "trees/rf/taxi/rows=full fit ours",
+   "lane": "rf",
+   "new_ms": 17183.095,
+   "new_quality": {
+    "auc": 0.617838,
+    "logloss": 0.525953
+   },
+   "new_status": "ok",
+   "old_ms": 16456.06,
+   "old_quality": {
+    "auc": 0.617838,
+    "logloss": 0.525953
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "fit",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/rf/taxi/rows=full",
+   "ratio": 1.0441803809660393
+  },
+  {
+   "arm": "ours",
+   "batch": "test",
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "trees/rf/taxi/rows=full infer ours test",
+   "lane": "rf",
+   "new_ms": 112.225,
+   "new_quality": {
+    "auc": 0.617838,
+    "logloss": 0.525953
+   },
+   "new_status": "ok",
+   "old_ms": 10.026,
+   "old_quality": {
+    "auc": 0.617838,
+    "logloss": 0.525953
+   },
+   "old_status": "ok",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "PASS",
+   "race_id": "trees/rf/taxi/rows=full",
+   "ratio": 11.193397167364852
+  },
+  {
+   "arm": "ours",
+   "batch": "large",
+   "dataset": "taxi",
+   "family": "trees",
+   "flags": [
+    "REGRESSION"
+   ],
+   "key": "trees/rf/taxi/rows=full infer ours large",
+   "lane": "rf",
+   "new_ms": 224.334,
+   "new_quality": {},
+   "new_status": "not-scored",
+   "old_ms": 19.969,
+   "old_quality": {},
+   "old_status": "not-scored",
+   "opponents": [],
+   "params_diff": [],
+   "phase": "infer",
+   "quality_failures": [],
+   "quality_verdict": "INSUFFICIENT",
+   "race_id": "trees/rf/taxi/rows=full",
+   "ratio": 11.234112874956182
+  }
+ ],
+ "schema": "mojolearn-paper-compare/1",
+ "thresholds": {
+  "faster_ratio_below": 0.9,
+  "quality_policy": "mojolearn.quality-parity.v9",
+  "regression_ratio_above": 1.1
+ },
+ "vendor": "amd"
+}
