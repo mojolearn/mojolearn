@@ -320,11 +320,13 @@ def byte_program_store(mut e: ByteLmProgram, param: DeviceBuffer[DType.float32],
     _move(s[], e, grad, BYTE_PART_GRAD, False)
 
 
-def byte_program_fit(mut e: ByteLmProgram, stack: Int, k: Int, losses: Int) raises:
+def byte_program_fit(mut e: ByteLmProgram, stack: Int, k: Int, losses: Int) raises -> Float32:
     """`k` training steps as ONE Program.fit: `stack` is the host address of
     k * batch rows of length + 1 int32 token ids (the step batches in
     order), `losses` the host address of k float32 step losses. The last
-    step's pre-update gradients land in the gradient scratch."""
+    step's pre-update gradients land in the gradient scratch. Returns the
+    call's mean step loss (Program.fit's epoch curve: non-finite when any
+    step's loss is)."""
     if k < 1:
         raise Error("byte LM: a training call takes at least one step")
     var s = ops_session[DeviceExec, OPS_DEVICE](e.sid)
@@ -343,7 +345,7 @@ def byte_program_fit(mut e: ByteLmProgram, stack: Int, k: Int, losses: Int) rais
         s[], e.pid, srcs, shapes, none, 0, Float32(0), e.opt, e.trained(), 1, b, False, UInt64(0),
         FP(unsafe_from_address=Int(curve.unsafe_ptr())), 0, 0, Float32(0), 0, losses, e.grads,
     )
-    _ = curve^
+    return curve[0]
 
 
 def _replay(mut e: ByteLmProgram, ids: Int, backward: Bool) raises -> Float32:
@@ -447,13 +449,3 @@ def byte_program_apply(mut e: ByteLmProgram, grad: DeviceBuffer[DType.float32]) 
         s[].opt_states[si].pw1 = st.pw1
         s[].opt_states[si].pw2 = st.pw2
         s[].opt_states[si].mu_prod = st.mu_prod
-
-
-def byte_losses_finite(losses: Int, k: Int) -> Int:
-    """Index of the first non-finite of the k host step losses at `losses`,
-    or -1."""
-    var p = FP(unsafe_from_address=losses)
-    for i in range(k):  # small-loop(k: the call's step losses, one scalar each)
-        if not isfinite(p[i]):
-            return i
-    return -1

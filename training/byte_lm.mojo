@@ -98,7 +98,7 @@ from autograd.kernels.transformer import (
 from sequence.ops import FP
 from training.byte_lm_program import (
     ByteLmProgram, byte_program_open, byte_program_load, byte_program_load_params, byte_program_store, byte_program_fit,
-    byte_program_eval, byte_program_gradient, byte_program_grad_out, byte_program_apply, byte_losses_finite,
+    byte_program_eval, byte_program_gradient, byte_program_grad_out, byte_program_apply,
 )
 from transformer.impl.llama.fused_attention import (
     ATTN_BWD_KV_CORNER_GUARD, ATTN_NO_BWD_CORNER, ATTN_STICKY, IDN_TRAIN_ONE_WAIT,
@@ -1508,8 +1508,7 @@ def _byte_commit(ctx: DeviceContext, mut tr: ByteTrainer, k: Int) raises:
     _byte_shadow_point(ctx, tr)
     byte_program_store(tr.program.value(), tr.buffers.param, tr.buffers.m_state, tr.buffers.v_state,
                        tr.buffers.grad)
-    for j in range(len(tr.buffers.buf_initialized)):  # small-loop(n_tensors: momentum flags, one per parameter tensor): flags, no data
-        tr.buffers.buf_initialized[j] = True
+    tr.buffers.buf_initialized = List[Bool](length=len(tr.buffers.buf_initialized), fill=True)
     _maybe_fault(ctx, tr.buffers.v_state, "after_nonfinite", 3, _FAULT_INF)
     _maybe_fault(ctx, tr.buffers.v_state, "after_negative", 3, _FAULT_MINUS_ONE)
     tr.validate_device_state(ctx, next_step)
@@ -1527,10 +1526,9 @@ def byte_steps_device(ctx: DeviceContext, mut tr: ByteTrainer, stack: Int, k: In
     _byte_program_ready(ctx, tr)
     tr.program_synced = False
     tr.grad_step = -1
-    byte_program_fit(tr.program.value(), stack, k, losses)
-    var bad = byte_losses_finite(losses, k)
-    if bad >= 0:
-        raise Error("byte LM: nonfinite loss at " + String(bad))
+    var mean: List[Float32] = [byte_program_fit(tr.program.value(), stack, k, losses)]
+    # the call's mean step loss is non-finite when any step's is
+    _require_finite(mean, "loss")
     _byte_commit(ctx, tr, k)
     tr.program_synced = True
 
