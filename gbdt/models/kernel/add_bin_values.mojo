@@ -71,7 +71,13 @@ comptime IDN_APPLY_WIDE = (
 comptime APPLY_WIDE_TREES = 64
 
 
-def compute_bins_and_add_kernel(
+# integ-w3: the kernel bodies are inlined device functions. The gated tree-op
+# kernels (TREE_OP_LEAF_BINS / TREE_OP_APPLY below) call them; a module that
+# also LAUNCHED the plain kernel and called it from another kernel lost one
+# of the two from its offload result ("compile offload result missing
+# kernelId", the GBDT binding once lane T2 reached the gated ops).
+@always_inline
+def _compute_bins_and_add_body(
     compressed_index: MutPointer[UInt32, MutAnyOrigin],
     feature_offset: MutPointer[UInt32, MutAnyOrigin],
     feature_shift: MutPointer[UInt32, MutAnyOrigin],
@@ -261,7 +267,8 @@ def compute_bins_and_add_four_kernel(
         i += stride
 
 
-def compute_bins_kernel(
+@always_inline
+def _compute_bins_body(
     compressed_index: MutPointer[UInt32, MutAnyOrigin],
     feature_offset: MutPointer[UInt32, MutAnyOrigin],
     feature_shift: MutPointer[UInt32, MutAnyOrigin],
@@ -348,6 +355,45 @@ def compute_bins_kernel(
 # per-feature one; the deviation block below says what ours does instead.
 
 
+def compute_bins_and_add_kernel(
+    compressed_index: MutPointer[UInt32, MutAnyOrigin],
+    feature_offset: MutPointer[UInt32, MutAnyOrigin],
+    feature_shift: MutPointer[UInt32, MutAnyOrigin],
+    feature_mask: MutPointer[UInt32, MutAnyOrigin],
+    split_bin: MutPointer[UInt32, MutAnyOrigin],
+    take_equal: MutPointer[UInt8, MutAnyOrigin],
+    depth_in: Int32,
+    leaf_values: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    cursor: MutPointer[Float32, MutAnyOrigin],
+    dim_count_in: Int32,
+    cursor_stride_in: Int32,
+):
+    """`AddObliviousTreeImpl`: `_compute_bins_and_add_body` as a kernel."""
+    _compute_bins_and_add_body(
+        compressed_index, feature_offset, feature_shift, feature_mask, split_bin, take_equal,
+        depth_in, leaf_values, n_rows_in, cursor, dim_count_in, cursor_stride_in,
+    )
+
+
+def compute_bins_kernel(
+    compressed_index: MutPointer[UInt32, MutAnyOrigin],
+    feature_offset: MutPointer[UInt32, MutAnyOrigin],
+    feature_shift: MutPointer[UInt32, MutAnyOrigin],
+    feature_mask: MutPointer[UInt32, MutAnyOrigin],
+    split_bin: MutPointer[UInt32, MutAnyOrigin],
+    take_equal: MutPointer[UInt8, MutAnyOrigin],
+    depth_in: Int32,
+    n_rows_in: Int32,
+    out_bins: MutPointer[UInt32, MutAnyOrigin],
+):
+    """`ComputeObliviousTreeBinsImpl`: `_compute_bins_body` as a kernel."""
+    _compute_bins_body(
+        compressed_index, feature_offset, feature_shift, feature_mask, split_bin, take_equal,
+        depth_in, n_rows_in, out_bins,
+    )
+
+
 def compute_bins_gated_kernel(
     gate: MutPointer[Int32, MutAnyOrigin],
     depth_word: MutPointer[Int32, MutAnyOrigin],
@@ -367,7 +413,7 @@ def compute_bins_gated_kernel(
     reads the same two words first, so the early return is block-uniform."""
     if gate.unsafe_load(0) != Int32(0):
         return
-    compute_bins_kernel(
+    _compute_bins_body(
         compressed_index, feature_offset, feature_shift, feature_mask,
         split_bin, take_equal, depth_word.unsafe_load(0), n_rows_in, out_bins,
     )
@@ -401,7 +447,7 @@ def compute_bins_and_add_gated_kernel(
     var depth = depth_word.unsafe_load(0)
     if depth < Int32(0) or (depth == Int32(0) and root_adds == Int32(0)):
         return
-    compute_bins_and_add_kernel(
+    _compute_bins_and_add_body(
         compressed_index, feature_offset, feature_shift, feature_mask,
         split_bin, take_equal, depth, leaf_values, n_rows_in, cursor,
         dim_count_in, cursor_stride_in,
