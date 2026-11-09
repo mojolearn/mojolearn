@@ -50,16 +50,7 @@ class NativeMetadataSnapshotSourceTests(unittest.TestCase):
         self.assertNotIn('_rows(', source)
         self.assertIn('n: Int, binary: Bool', source)
 
-    def test_admission_reads_shape_and_strides_once(self):
-        for name, value in (('_view_of_array', 'value'), ('_view_of_buffer', 'view')):
-            with self.subTest(name=name):
-                # The one copy of the admission helpers (lane consol-a0-admission).
-                source = function('bindings/classical_labels.mojo', name)
-                self.assertEqual(source.count(value + '.shape'), 1)
-                self.assertEqual(source.count(value + '.strides'), 1)
-                loop = source[source.index('    for k in range(rank):'):]
-                self.assertNotIn(value + '.shape', loop)
-                self.assertNotIn(value + '.strides', loop)
+    # TOMBSTONE: test_admission_reads_shape_and_strides_once (classical_labels _view_of_array / _view_of_buffer) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear: the helpers are gone (bindings/admitted_input.mojo admit_c_view reads the exporter's view once).
 
     def test_known_array_lengths_do_not_reappear_in_glue(self):
         for path, names in (
