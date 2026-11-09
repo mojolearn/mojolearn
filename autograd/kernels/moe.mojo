@@ -4,7 +4,7 @@
 (lane ag-moe-backward, 2026-10-19; the tape plan's path 5, now
 docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md). HOST-SAFE:
 every body below is an element function `(t, Args)` that HostExec and
-DeviceExec both run through `sequence/dispatch.mojo` (codes 2900..2914),
+DeviceExec both run through `sequence/dispatch.mojo` (codes 2902..2914),
 so the host column and every GPU column compute the same words by
 construction. The tape assembly (graph, rules, driver) is
 `autograd/route_ops.mojo`.
@@ -13,15 +13,18 @@ Notation: T tokens, D model width, F expert width, E experts, k picks;
 a pair p = tok * k + j (token tok's j-th pick), P = T * k pairs, e_p its
 expert (`sel[p]`, a float holding an integer), w_p its routing weight.
 
-FORWARD (training): the forward's own route (OP_MOE_ROUTE: logits,
-softmax, top-k, renormalised weights), then the pairs grouped by expert
-(OP_MOEB_GROUP_*: a stable counting sort, integer counts, exact), then
-h[p, f] = silu(g) * u (OP_MOEB_HIDDEN_FWD = `op_moe_hidden`, pair order)
-and y[tok, d] = sum_j w_j (h_j . down[e_j, d, :]) (OP_MOEB_OUT_FWD =
-`op_moe_out`). Those two are the host column's forward bodies; under the
-IDENTICAL default (MOE_GROUPED_GEMM) their cells are the identical GEMM's
-contract cell, the words the device's grouped forward stores, so the
-training forward's y equals MoEBlock.forward's.
+FORWARD (training): the forward's own ops, recorded on the tape
+(autograd/route_ops.mojo): OP_MOE_ROUTE (logits, softmax, top-k,
+renormalised weights), then the pairs grouped by expert (OP_MOEB_GROUP_*:
+a stable counting sort, integer counts, exact), then OP_MOE_HIDDEN
+h[p, f] = silu(g) * u and OP_MOE_OUT y[tok, d] = sum_j w_j (h_j .
+down[e_j, d, :]) in their item form (no grouping words, a.i4 = a.i6 = 0:
+`op_moe_hidden` / `op_moe_out`, h in pair order on every executor). Under
+the IDENTICAL default (MOE_GROUPED_GEMM) their cells are the identical
+GEMM's contract cell, the words the device's grouped forward stores, so
+the training forward's y equals MoEBlock.forward's. Lane x9-moe-gcn-rules
+(2026-11-09) deleted the two duplicate codes OP_MOEB_HIDDEN_FWD (2900) and
+OP_MOEB_OUT_FWD (2901), which ran those same two bodies under other codes.
 
 BACKWARD (NEW BITS, a capability with no earlier version; every column
 together). Every contraction is the identical GEMM's contract cell
@@ -52,11 +55,11 @@ gradient's two terms (experts, router) are added by the tape
 from checks.numerics import ftz, identical_div, identical_exp, identical_mul_add, identical_sigmoid, identical_silu
 from gemm.contract import contract_leaf_size, leaf_count
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
-from sequence.moe import op_moe_hidden, op_moe_out
 from sequence.moe_grouped_fold import MOE_FOLD_SLOTS, MOE_GROUPED_GEMM, _fold_drain16, _fold_push16, moe_contract_cell
 
-comptime OP_MOEB_HIDDEN_FWD = 2900
-comptime OP_MOEB_OUT_FWD = 2901
+# TOMBSTONE: OP_MOEB_HIDDEN_FWD (2900) / OP_MOEB_OUT_FWD (2901) (duplicate codes of OP_MOE_HIDDEN / OP_MOE_OUT's item
+# bodies) deleted 2026-11-09 by lane/x9-moe-gcn-rules; code recoverable at origin/integ/pre-0867-w2 f59d913b0b.
+# Restore: git apply experiments/removed/OP_MOEB_FWD_DUPLICATES.patch
 comptime OP_MOEB_GROUP_COUNT = 2902
 comptime OP_MOEB_GROUP_TOTAL = 2903
 comptime OP_MOEB_GROUP_BASE = 2904
@@ -70,7 +73,7 @@ comptime OP_MOEB_DGATEUP = 2911
 comptime OP_MOEB_ROUTE_VJP = 2912
 comptime OP_MOEB_ROUTER_DX = 2913
 comptime OP_MOEB_ROUTER_DW = 2914
-comptime OP_MOEB_FIRST = OP_MOEB_HIDDEN_FWD
+comptime OP_MOEB_FIRST = OP_MOEB_GROUP_COUNT
 comptime OP_MOEB_LAST = OP_MOEB_ROUTER_DW
 
 #: pairs per counting block of the grouping (a constant: no shape rule)
@@ -393,11 +396,7 @@ def op_moeb_router_dw(t: Int, a: Args):
 @always_inline
 def apply_moe_backward[OP: Int](t: Int, a: Args):
     """The OP_MOEB_FIRST..OP_MOEB_LAST family (sequence/dispatch.mojo)."""
-    comptime if OP == OP_MOEB_HIDDEN_FWD:
-        op_moe_hidden(t, a)
-    elif OP == OP_MOEB_OUT_FWD:
-        op_moe_out(t, a)
-    elif OP == OP_MOEB_GROUP_COUNT:
+    comptime if OP == OP_MOEB_GROUP_COUNT:
         op_moeb_group_count(t, a)
     elif OP == OP_MOEB_GROUP_TOTAL:
         op_moeb_group_total(t, a)
