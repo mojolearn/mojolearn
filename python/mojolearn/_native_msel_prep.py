@@ -241,8 +241,22 @@ def _connect_device_rows(registry):
     # transform through x_prep_native_owner.xprep_values, which keeps the
     # rows on the device. The same rows in the same order reach the same
     # kernels: no bit changes (tools/test_device_rows_door_cv.py).
-    from . import linear_model, _expansion_prep as prep
-    for cls in (linear_model.LinearRegression, linear_model.Ridge, prep.MaxAbsScaler, prep.RobustScaler):  # glue: fixed ABI metadata connected once during package import
+    # Lane a6: every family and classical estimator whose CV methods admit X
+    # through the one path (admit_x / admit_family_meta / family_lifecycle_begin
+    # / classical_view, each of which resolves a DeviceRows) opts in, so its
+    # folds are never downloaded: a host-address kernel takes the rows
+    # gathered on the host out of model selection's host base (row tasks
+    # across the cores), a device-X entry gathers them on the device out of
+    # the resident base (core/msel_device_x.mojo). The same rows in the same
+    # order: no bit changes. Lasso / ElasticNet (x_linear door, labels_view)
+    # join when that door is on admit_x (lane A1b).
+    from . import linear_model, _expansion_prep as prep, decomposition
+    from . import _svm_impl as svm, svm as linear_svm, _gp_impl as gp, kernel_methods as km, neighbors
+    for cls in (linear_model.LinearRegression, linear_model.Ridge, prep.MaxAbsScaler, prep.RobustScaler,  # glue: fixed ABI metadata connected once during package import
+                decomposition.PCA, svm.SVC, svm.SVR, linear_svm.LinearSVC, linear_svm.LinearSVR,
+                gp.GaussianProcessRegressor, km.KernelRidge,
+                neighbors.KNeighborsClassifier, neighbors.KNeighborsRegressor,
+                linear_model.LogisticRegression, linear_model.QNRegressor):
         if cls in registry:
             registry[cls]['device_rows'] = True
 
