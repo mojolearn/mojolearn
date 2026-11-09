@@ -209,6 +209,16 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
         # the owned copy.
         var borrow = (not fitting and not operation.startswith("family_xn_loc_imp_")
                       and not snapshot.readonly and snapshot.f32_c())
+        # 0.8.66 regression C3 (knn-reg / knn-clf fit 8.5x on istella, 2.2x
+        # on taxi): a k-NN fit keeps a reference to the caller's float32
+        # C-order matrix as its index, as 0.8.55 and scikit-learn's brute
+        # NearestNeighbors do, instead of a zero-filled copy. The caller's
+        # array is never frozen or otherwise changed (coordinator decision
+        # 2026-11-08); the fit docstring tells users to refit after an
+        # in-place edit.
+        if (fitting and not borrow and operation.startswith("family_xn_knn_") and snapshot.f32_c()
+                and not snapshot.copied):
+            borrow = True
         py_setitem(values, PythonObject(first), snapshot.keep if borrow else family_owned_snapshot(snapshot, context))
     elif not fitting and host_sparse_format(source).byte_length() == 0:
         # Perf (perf2-neighbors): a dense KDE query (score_samples/score) only

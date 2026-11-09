@@ -20,6 +20,7 @@ from bindings.classical_arrays import (
 )
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from core.family_cast_impl import family_cast_rows, family_cast_rows_f64, family_min_f32
+from core.host_parallel_copy import host_parallel_copy_bytes
 from core.cast_in import CastIn, CAST_KIND_FLOAT, NPY_FLOAT, NPY_DOUBLE
 from bindings.classical_validate import classical_view, RESHAPE_HINT
 from bindings.optimizer_public_words import stash_python_error
@@ -349,8 +350,9 @@ def family_owned_snapshot(value: ArrayMetadata, context: PythonObject) raises ->
     if value.owned_writable:
         return value.keep
     var result = family_array(value.python_shape(), "<f4", context)
-    memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))),
-           src=FAMILY_F32P(unsafe_from_address=value.source.addr), count=value.count)
+    # parallel: the owned float32 copy across host cores (0.8.66 regression
+    # C3, knn fit 8.5x on istella: one serial memcpy of 176 MB).
+    host_parallel_copy_bytes(Int(py=classical_address(result)), value.source.addr, value.count * 4)
     _ = result
     return result
 
@@ -366,9 +368,10 @@ def family_owned(value: PythonObject, context: PythonObject) raises -> PythonObj
         return value
     var b = native_loaded_module("builtins")
     var result = family_array(py_call(b.tuple, value.shape), "<f4", context)
-    memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))),
-           src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(value))), count=Int(py=value.size))
+    # parallel: the owned float32 copy across host cores (0.8.66 regression C3).
+    host_parallel_copy_bytes(Int(py=classical_address(result)), Int(py=classical_address(value)), Int(py=value.size) * 4)
     _ = result  # keep the Python object alive through the native call above
+    _ = value
     return result
 
 

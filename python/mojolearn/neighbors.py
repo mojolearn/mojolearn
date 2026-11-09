@@ -693,6 +693,8 @@ class NearestNeighbors(NumericModeMixin):
         ----------
         X : array-like of shape (n_samples, n_features)
             Points to search; converted to float32.
+            A float32 C-order `X` is kept by reference, not copied, as
+            scikit-learn does: after changing it in place, call `fit` again.
         y : ignored
             Accepted for scikit-learn compatibility.
 
@@ -912,6 +914,8 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
         ----------
         X : array-like of shape (n_samples, n_features)
             Training points; converted to float32.
+            A float32 C-order `X` is kept by reference, not copied, as
+            scikit-learn does: after changing it in place, call `fit` again.
         y : array-like of int, shape (n_samples,) or (n_samples, n_outputs)
             Integer class labels of any values (negative values and gaps are
             fine) within the int32 range. A 2-D `y` votes each column
@@ -1133,6 +1137,8 @@ class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
         ----------
         X : array-like of shape (n_samples, n_features)
             Training points; converted to float32.
+            A float32 C-order `X` is kept by reference, not copied, as
+            scikit-learn does: after changing it in place, call `fit` again.
         y : array-like, shape (n_samples,) or (n_samples, n_outputs)
             Numeric targets; converted to float32. A 2-D `y` is averaged
             column by column.

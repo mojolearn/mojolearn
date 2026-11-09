@@ -629,9 +629,17 @@ def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject) 
     knn_release(model)
     # Held on the instance so the memory outlives this call: the search
     # borrows the address at query time (an owned float32 Array: the cast
-    # result itself, or one copy of a caller's float32 block).
+    # result itself, or the caller's float32 C-order block by reference,
+    # never frozen or changed; any other layout is cast into an owned Array).
+    # 0.8.66 regression C3 (knn fit 8.5x on istella): 0.8.55 and
+    # scikit-learn's brute NearestNeighbors keep the caller's block; the
+    # zero-filled copy is gone.
     var input = family_f32_snapshot(x_source, 2, "X", context, True)
-    var idx = family_owned_snapshot(input, context)
+    var idx: PythonObject
+    if input.f32_c() and not input.copied:
+        idx = input.keep
+    else:
+        idx = family_owned_snapshot(input, context)
     if not _eq(family_field(fields, "algorithm"), PythonObject("rbc")):
         var resolved = knn_resolve_metric(cls_name, family_field(fields, "metric"), family_field(fields, "p"), context)
         _check_metric_input(cls_name, Int(py=resolved[0]), input)
