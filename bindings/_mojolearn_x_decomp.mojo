@@ -16,6 +16,7 @@ from providers.python.x_decomp_api_pyapi import (
 from x_decomp.device import DevExec
 from x_decomp.pca_randomized_dev import DevRDev
 from providers.python.x_decomp_tsvd_owner_pyapi import tsvd_randomized_py, tsvd_tsqr_py
+from providers.python.x_decomp_rsvd_owner_pyapi import randomized_svd_py
 from x_decomp.ipca_owner_dev import DevIpcaDev
 from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
 from x_decomp.decomp_owner_dev import DevDecomp
@@ -154,6 +155,9 @@ def build__mojolearn_x_decomp() -> PythonObject:
         # (x_decomp/tsvd_owner.mojo; bindings/tsvd_native.mojo calls them)
         m.def_function[tsvd_randomized_py[DevExec, DevRDev, True]]("x_decomp_tsvd_randomized")
         m.def_function[tsvd_tsqr_py[DevExec, DevRDev, True]]("x_decomp_tsvd_tsqr")
+        # The public randomized_svd, one driver (x_decomp/randomized_svd_owner.mojo;
+        # bindings/linalg_decomp_native.mojo calls it)
+        m.def_function[randomized_svd_py[DevExec, DevRDev, True]]("x_decomp_randomized_svd")
         # IncrementalPCA fit / partial_fit / transform + inverse_transform, one driver each
         # (x_decomp/ipca_owner.mojo; bindings/ipca_native.mojo calls them)
         m.def_function[ipca_fit_py[DevExec, DevRDev, True, DevIpcaDev]]("x_decomp_ipca_fit")
