@@ -39,7 +39,7 @@ from bindings.family_common import (
     family_call, family_call_kw, family_array, family_cast_view, family_as_f32,
 )
 from core.host_finite_scan import host_all_finite_f32
-from core.mcls_impl import mcls_read_i64, mcls_narrow_i32
+from core.admitted_ids import admitted_ids_i64, admitted_narrow_i32
 from core.cast_in import CastIn, CAST_KIND_SIGNED
 from core.label_cast import host_unique_inverse_cast
 from core.metrics_exp_impl import mexp_gather_i32
@@ -383,7 +383,7 @@ def mc_int_store(values: PythonObject, context: PythonObject) raises -> PythonOb
     # One zeroed int64 store (it was a bytes object copied into an array).
     var store = native_array_zeros(String("q"), count)
     var dst = FAMILY_I64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0]))
-    if not mcls_read_i64(Int(py=classical_address(view)), stride, count, item, kind == 1, dst):
+    if not admitted_ids_i64(Int(py=classical_address(view)), stride, 0, count, 1, item, kind == 1, False, dst):
         return PythonObject(None)
     _ = view^
     return Python.tuple(store, PythonObject(count))
@@ -629,7 +629,7 @@ def mc_i32_1d(x: PythonObject, name: String, context: PythonObject) raises -> Py
         store = packed[0]
         count = Int(py=packed[1])
     var out = family_array(Python.tuple(count), "<i4", context)
-    if not mcls_narrow_i32(FAMILY_I64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0])), count,
+    if not admitted_narrow_i32(FAMILY_I64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0])), count,
                            FAMILY_I32P(unsafe_from_address=Int(py=classical_address(out)))):
         raise Error("mojolearn metrics: " + name + " does not fit in int32; the implemented "
                     + "kernels are the int32 instantiation (the int64 overload of "

@@ -23,7 +23,9 @@ from bindings.family_common import (
     FAMILY_I32P, family_repr, family_str, family_is_str, family_isinstance, family_call, family_array,
     family_as_f32, family_f32_snapshot, family_field, family_type_name,
 )
-from core.neighbors_ann_impl import ann_candidates_i32
+from core.admitted_ids import admitted_ids_i32
+# TOMBSTONE: ann_candidates_i32 / _ann_item (core/neighbors_ann_impl.mojo, a two-pass serial byte walk, merged into admit_ids) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
 from bindings.parallel_public_result import parallel_public_result
 from bindings.neighbors_ann_query_native import neighbors_ann_search, ann_pq_materialize, ann_stored_drop
 from bindings.mode_metadata_native import _fields
@@ -696,7 +698,7 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # id beyond int32 is refused here, then the ids are narrowed to int32.
     var c32 = _ann_empty(m * k0, "<i4", context)
     if m * k0 > 0:
-        var fits = ann_candidates_i32(c.source.addr, c.source.s0, c.source.s1, m, k0,
+        var fits = admitted_ids_i32(c.source.addr, c.source.s0, c.source.s1, m, k0,
                                       c.source.itemsize, c.source.kind == CAST_KIND_SIGNED, not c.native_byte_order,
                                       FAMILY_I32P(unsafe_from_address=Int(py=classical_address(c32))))
         _ = c
