@@ -559,6 +559,11 @@ in the tables after the sections.
 | [`labels_helper` / `labels_call` and the `labels_helpers` callables table (`_native_labels_bridge._helpers`)](#labels-steps-on-the-native-device-or-host-selector-2026-11-09) | Labels (prepare_targets, reduce_stat, argmax_rows, gather, class_ratio, fsum) | removed (onto `labels_native_api_v1`, `bindings/labels_native_abi.mojo`, and the in-process host column) | 2026-11-09 | [S1_LABELS_PY_CALL_SELECTOR.patch](../experiments/removed/S1_LABELS_PY_CALL_SELECTOR.patch) |
 | [Synchronising query finite scans of the SVM / GP / KernelRidge predict entries](#svm-gp-and-kernelridge-queries-on-the-device-query-x-2026-11-09) | SVC / SVR / GaussianProcessRegressor / GaussianProcessClassifier / KernelRidge | REFACTORED (status word read back with the result; fold gathered on the device; no bit change) | 2026-11-09 | lane only (lane/a7a-device-x-svm-gp-krr from 5b5490960d) |
 | [`_kmeans_nonfinite` / `_kmeans_f32` and the KMeans query host scan of X](#kmeans-tsvd-pca-deferred-finite-tests-and-fold-entries-2026-11-09) | KMeans (fit, predict, transform) | removed (the kernel entry tests X over its own upload and returns the status word; one refusal wording) | 2026-11-09 | [A7D_KMEANS_HOST_FINITE.patch](../experiments/removed/A7D_KMEANS_HOST_FINITE.patch) |
+| [TruncatedSVD `_tsvd_scan` (host scan before the TSQR and randomized drivers) and PCA randomized's admission scan](#a8d-decomp-manifold-device-finite-words-and-fold-entries-2026-11-09) | TruncatedSVD (randomized, TSQR) / PCA (svd_solver='randomized') | removed (the drivers return X's finite status word off a total they compute anyway) | 2026-11-09 | [A8D_DECOMP_MANIFOLD_HOST_FINITE.patch](../experiments/removed/A8D_DECOMP_MANIFOLD_HOST_FINITE.patch) |
+| [TSNE door host scan of X (`mani_tsne_native.mojo`)](#a8d-decomp-manifold-device-finite-words-and-fold-entries-2026-11-09) | TSNE | removed (x_ann_tsne_fit / the PCA start test X on the device) | 2026-11-09 | [A8D_DECOMP_MANIFOLD_HOST_FINITE.patch](../experiments/removed/A8D_DECOMP_MANIFOLD_HOST_FINITE.patch) |
+| [Manifold kit resident upload host scan (`mani_kit.mojo` from_snapshot)](#a8d-decomp-manifold-device-finite-words-and-fold-entries-2026-11-09) | Isomap / LLE / MDS / SpectralEmbedding kit inputs | removed (XD_DEV_UPLOAD_FINITE) | 2026-11-09 | [A8D_DECOMP_MANIFOLD_HOST_FINITE.patch](../experiments/removed/A8D_DECOMP_MANIFOLD_HOST_FINITE.patch) |
+| [Spectral doors' second host scans after admission (`cfb_spectral.mojo`, four sites)](#a8d-decomp-manifold-device-finite-words-and-fold-entries-2026-11-09) | SpectralClustering / SpectralEmbedding | removed (the admission's own finite test, same sentences) | 2026-11-09 | [A8D_DECOMP_MANIFOLD_HOST_FINITE.patch](../experiments/removed/A8D_DECOMP_MANIFOLD_HOST_FINITE.patch) |
+| [NMF admission host scan of a borrowed X](#a8d-decomp-manifold-device-finite-words-and-fold-entries-2026-11-09) | NMF (fit, fit_transform, transform) | removed (the driver's negativity total carries the finite test) | 2026-11-09 | [A8D_DECOMP_MANIFOLD_HOST_FINITE.patch](../experiments/removed/A8D_DECOMP_MANIFOLD_HOST_FINITE.patch) |
 | [`DKit.svd_host`, `svd_desc`, LLE's host-address `DevExec.geqrf` / `orgqr` round trip](#n9b-device-svd-and-qr-ops-2026-11-09) | FactorAnalysis EM / LLE subspace iteration / PLS (resident SVD and QR) | REFACTORED (`svd_op_tall` / `qr_op_q`; same words) | 2026-11-09 | [N9B_RESIDENT_SVD.patch](../experiments/removed/N9B_RESIDENT_SVD.patch) |
 | [KernelPCA `_cols_desc` host-built index list](#n9b-device-svd-and-qr-ops-2026-11-09) | KernelPCA (descending columns) | REFACTORED (the REV_COLS move; same words) | 2026-11-09 | [N9B_RESIDENT_SVD.patch](../experiments/removed/N9B_RESIDENT_SVD.patch) |
 | [`MOJOLEARN_X_LINEAR_JACOBI_LEAD` (with `t_jacobi_eig`)](#n9b-device-svd-and-qr-ops-2026-11-09) | BayesianRidge (eigh of the centered Gram) | removed (superseded: the executor eigh op; bits change) | 2026-11-09 | [N9B_BAYES_EIGH.patch](../experiments/removed/N9B_BAYES_EIGH.patch) |
@@ -5430,3 +5435,26 @@ Lane x6-tape-retire (sub-lane of x6-samba-on-executor; plan docs/plans/EXECUTOR_
   default builds never reached the deleted bodies; the `transformer` lane covers the block backward.
 - Recoverable at 4f41e3d67d; restore with `git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch` (code files
   outside tools/; the tools come back from 4f41e3d67d).
+
+<a id="a8d-decomp-manifold-device-finite-words-and-fold-entries-2026-11-09"></a>
+
+## A8d: decomposition and manifold device finite words and fold entries (2026-11-09)
+
+Lane a8d-device-x-decomp-manifold (branch `lane/a8d-device-x-decomp-manifold` from `origin/main` 0ce88411d3). Not an
+experiment: host scans of X whose decision moved into the kernel entry or driver (follow-up of a7d; plan
+docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2 steps 3 and 4). Not measured (lanes never measure).
+
+- Removed: `_tsvd_scan` (bindings/tsvd_native.mojo) and PCA randomized's admission scan (bindings/pca_fit_native.mojo admits
+  every solver with `defer_finite`). `tsvd_randomized_fit_run` and `pca_randomized_fit_run` take the column-variance /
+  centred-square total before the decomposition and return it as the status word (NaN exactly for a NaN or an infinity in X);
+  `tsvd_tsqr_components_run` reads R's host words. The TSNE door's `host_all_finite_f32` (x_ann_tsne_fit params[12] and
+  pca_fit_owned's flag), the manifold kit's resident upload scan (new x_decomp op XD_DEV_UPLOAD_FINITE, op count 19 -> 20),
+  the four spectral scans after admission (`admit_family(finite=True, refusal=...)`), NMF's borrowed-X scan (`nmf_run`
+  `_nonfinite_or_negative`: x * 0 added to the negativity count).
+- Added, no deletion: `pca_fit_fold` / `tsvd_fit_fold` (decomposition/pca_fold.mojo) and their base binding entries; the
+  PCA covariance / R-SVD bodies split out as `pca_fit_cov_device_x` / `pca_fit_full_device_x`, `pca_keep_finish` shared;
+  `msel_fold_entry_context()`: a `fast` build's fold entries run on the `fast` context.
+- Behaviour: a finite X near the float32 limit whose column sums overflow both ways is refused by the randomized and TSQR
+  arms; parameter refusals of NMF / TSNE now come before the non-finite refusal.
+- Bits: none (the same words reach the same kernels; the totals are the ones each fit computed, taken earlier). Code
+  recoverable at `0ce88411d3`; restore with `git apply experiments/removed/A8D_DECOMP_MANIFOLD_HOST_FINITE.patch`.
