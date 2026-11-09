@@ -825,35 +825,8 @@ class _Linear(_Layer):
         return _XCNN(self, "linear_backward", (grad_out,), _XCNN_CONTEXT)
 
 
-def _adam_hyper(step, lr, betas, eps, weight_decay, decoupled, binding=None):
-    """adam_at's hyper block for 1-based step `step` (the scalars in double,
-    as torch computes them in Python) for the resident fit.
-    DEVIATION 6900: torch's `beta ** step` calls the platform pow; here it is
-    `_pm.powi`, correctly rounded (the platform's bits wherever its pow is),
-    the same bits on every host. sqrt is correctly rounded everywhere."""
-    if step != int(step):
-        raise ValueError(f"Adam step must be a whole number, got {step!r}")
-    return _adam_hyper_block(int(step), 1, lr, betas, eps, weight_decay, decoupled, binding).reshape(-1).tolist()
-
-
-def _adam_hyper_block(step0, nsteps, lr, betas, eps, weight_decay, decoupled, binding=None):
-    """`_adam_hyper` of steps step0 .. step0 + nsteps - 1 as an (nsteps, 9)
-    float64 array, made by the binding's `x_cnn_adam_hyper_d` kernel (lane
-    fam2-neural; the host `adam_hyper_f64` arm left the GPU route in lane
-    cpu3-python): the same bits on every column."""
-    np = _np()
-    out = np.empty((max(int(nsteps), 1), 9), dtype=np.float64)
-    if binding is None:
-        raise ValueError("mojolearn CNN: the Adam step scalars come from the binding's kernel; pass the binding")
-    # lane fam2-neural: the step scalars from the binding's own kernel
-    # (`adam_hyper_at`, float32 pairs; the same words on every column). Lane
-    # cpu3-python: on every build, the host `adam_hyper_f64` arm is gone.
-    if int(step0) < 1:
-        raise ValueError("Adam step must be at least 1")
-    binding.x_cnn_adam_hyper_d(out.ctypes.data, [int(step0), int(nsteps)],
-                               [float(lr), float(betas[0]), float(betas[1]), float(eps), float(weight_decay),
-                                1.0 if decoupled else 0.0])
-    return out[:int(nsteps)]
+# integ-w3: _adam_hyper / _adam_hyper_block deleted (no caller; they called the binding's
+# x_cnn_adam_hyper_d, which lane x8-cnn-on-executor deleted with the hand epoch).
 
 
 class _Res:
