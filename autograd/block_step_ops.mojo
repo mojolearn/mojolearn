@@ -91,7 +91,9 @@ from mamba.impl.modules.mamba3 import (
 )
 from transformer.impl.llama.modeling_llama import (
     LlamaDims, LlamaDeviceWeights, LlamaKVCache, LlamaRopeTable, LlamaDeviceStages, llama_decoder_layer_forward,
+    residual_next_norm_fusion_enabled,
 )
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
 from transformer.block_options import BlockOptions, BLOCK_OPTION_PARAMS
 from transformer.lean_stages import _lean_for
 from autograd.kernels.transformer import LlamaBackwardStages
@@ -543,6 +545,14 @@ struct _AttnBlock(Movable):
     var kept: AttnPrefill
     var bst: Optional[LlamaBackwardStages]
     var bkey: List[Int]
+    #: lane r1 (ATTN_STEP_NEXT_NORM): the entry whose recorded run followed
+    #: this one's last time (its state and word addresses; 0: none), the
+    #: spare stages the previous layer's run prepares and writes this
+    #: entry's norm1 into, and that run's output address (0: none pending).
+    var next_s: Int
+    var next_q: Int
+    var spare: AttnPrefill
+    var ahead_y: Int
 
     def __init__(out self, ctx: DeviceContext, mut ex: DeviceExec, w: FP, nw: Int, s: FP, ns: Int, q: FP,
                  ints: List[Int]) raises:
@@ -581,6 +591,10 @@ struct _AttnBlock(Movable):
         self.kept = AttnPrefill()
         self.bst = Optional[LlamaBackwardStages]()
         self.bkey = List[Int]()
+        self.next_s = 0
+        self.next_q = 0
+        self.spare = AttnPrefill()
+        self.ahead_y = 0
         _ = ns
 
     def __init__(out self, ctx: DeviceContext, mut ex: DeviceExec, var weights: LlamaDeviceWeights, w: FP, s: FP,
@@ -612,6 +626,10 @@ struct _AttnBlock(Movable):
         self.kept = AttnPrefill()
         self.bst = Optional[LlamaBackwardStages]()
         self.bkey = List[Int]()
+        self.next_s = 0
+        self.next_q = 0
+        self.spare = AttnPrefill()
+        self.ahead_y = 0
 
 
 def _attn_kv_views(ctx: DeviceContext, ex: DeviceExec, s: FP, ints: List[Int], dims: LlamaDims,
@@ -651,6 +669,11 @@ struct BlockStepScratch(Movable):
     var parked_m3: List[Mamba3DeviceStages]
     var parked_attn: List[AttnPrefill]
     var parked_x: List[DeviceBuffer[DType.float32]]
+    #: lane r1 (ATTN_STEP_NEXT_NORM): the last recorded attention run's
+    #: state and word addresses and its output address (0: none).
+    var last_train_s: Int
+    var last_train_q: Int
+    var last_train_y: Int
 
     def __init__(out self):
         self.m1 = List[_M1Block]()
@@ -662,6 +685,9 @@ struct BlockStepScratch(Movable):
         self.parked_m3 = List[Mamba3DeviceStages]()
         self.parked_attn = List[AttnPrefill]()
         self.parked_x = List[DeviceBuffer[DType.float32]]()
+        self.last_train_s = 0
+        self.last_train_q = 0
+        self.last_train_y = 0
 
     def parked(self) -> Int:
         return (len(self.parked_m1) + len(self.parked_m2) + len(self.parked_m3) + len(self.parked_attn)
@@ -993,6 +1019,11 @@ struct AttnPrefill(Movable):
     var b: Int
     var l: Int
     var pos0: Int
+    #: lane r1 (ATTN_STEP_NEXT_NORM): the previous layer's run prepared
+    #: (reset) these stages and wrote their norm1 (`ahead`); `prepare` then
+    #: keeps them as they are for a run of the same shape (`ahead_used`).
+    var ahead: Bool
+    var ahead_used: Bool
 
     def __init__(out self):
         self.stages = Optional[LlamaDeviceStages]()
@@ -1001,6 +1032,8 @@ struct AttnPrefill(Movable):
         self.b = 0
         self.l = 0
         self.pos0 = -1
+        self.ahead = False
+        self.ahead_used = False
 
     def clear(mut self):
         self.stages = None
@@ -1011,13 +1044,18 @@ struct AttnPrefill(Movable):
     def prepare(mut self, ctx: DeviceContext, b: Int, l: Int, smax: Int, dims: LlamaDims, window: Int,
                 lean: Bool) raises:
         var reused = False
+        self.ahead_used = False
         if self.stages:
             ref st = self.stages.value()
             reused = (st.b == b and st.l == l and st.s_max == smax and st.window == window
                       and st.dims.d_model == dims.d_model and st.dims.n_heads == dims.n_heads
                       and st.dims.n_kv == dims.n_kv and st.dims.head_dim == dims.head_dim
                       and st.dims.intermediate == dims.intermediate and self.lean == lean)
-        if reused:
+        if reused and self.ahead:
+            # lane r1: already reset by the previous layer's run, which wrote
+            # norm1 into them behind the reset (same stream).
+            self.ahead_used = True
+        elif reused:
             # Every constructor zero and route flag back before the next run.
             self.stages.value().reset(ctx)
             self.stages.value().int15_on = False
@@ -1026,6 +1064,7 @@ struct AttnPrefill(Movable):
             self.stages = None
             self.stages = LlamaDeviceStages(ctx, b, l, smax, dims, window, lean=lean)
             self.lean = lean
+        self.ahead = False
         var n = b * l * dims.d_model
         if not self.dx or len(self.dx.value()) != n:
             self.dx = ctx.enqueue_create_buffer[DType.float32](n)
