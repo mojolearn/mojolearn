@@ -90,7 +90,8 @@ from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, cl
 from bindings.classical_warnings import classical_warn_column
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
-from bindings.native_array_storage import native_scratch_bytes, native_array_zeros
+from bindings.native_array_storage import native_scratch_bytes, native_array_zeros, native_array_from_values
+from bindings.py_attr import py_attr
 from bindings.admitted_registry import admitted_held_index, admitted_held_address, admitted_held_rows, admitted_held_cols
 from bindings.device_rows_door import door_is_device_rows, DoorRows
 from core.admitted_input import admitted_check_f32, admitted_check_weights_f32, admitted_cast_f32
@@ -384,10 +385,11 @@ def admit_weight_words(source: PythonObject, rows: Int, context: PythonObject,
     # Lane a1b: the former labels_check_sample_weight / trees_check_sample_weight.
     var w: PythonObject
     if source is None:
-        w = admitted_storage_f32(rows, 0, context, "C", True)
-        var p = _ADM_F32P(unsafe_from_address=Int(py=classical_address(w)))
-        for i in range(rows):  # native input marshaling: the ones of an unweighted fit, one store per row
-            p[i] = 1.0
+        # One float32 1.0 repeated in C (`array.array.__mul__`), the store
+        # labels_full_f32 made.
+        var one = native_array_from_values(String("f"), Python.list(PythonObject(1.0)))
+        w = classical_wrap_array(py_call(py_attr(one, "__mul__"), PythonObject(rows)), Python.tuple(rows), "<f4",
+                                 "C", context)
     else:
         w = admit_weights(source, rows, context, admitted)
     var x = AdmittedX(w, source, Int(py=classical_address(w)), rows, 1, 1, w is source, True)
