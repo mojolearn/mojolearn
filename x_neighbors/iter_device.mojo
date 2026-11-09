@@ -62,7 +62,7 @@ from x_neighbors.items import XN_TREE, XN_TREE_ON, xn_tree_slot
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
 from x_neighbors.device_ops import (
-    xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK,
+    xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK, xn_finite_behind,
     absdiff_sum_k0, absdiff_sum_k1, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
     pagerank_step_kernel, cc_step_kernel,
     pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq, op_knn_impute_cells,
@@ -1077,14 +1077,18 @@ def knn_sq_tiled2_kernel(
 
 def op_knn_sq_tiled(
     x: Int, y: Int, dist: Int, idx: Int, n: Int, m: Int, d: Int, k: Int, exclude_self: Int,
+    status: Int = 0,
 ) raises:
     """The fused k-NN (`knn_sq`) with y staged per block; d above
-    KNN_TILE_MAX_D takes the one-thread-per-row item kernel."""
+    KNN_TILE_MAX_D takes the one-thread-per-row item kernel. `status` (lane
+    a8b-device-x-neighbors-rest; 0: not asked): the host int32 word that
+    receives the finite status of `x`, tested behind its upload
+    (`xn_finite_behind`)."""
     if d > KNN_TILE_MAX_D:
         # the 2-D tiled kernel's threadgroup pages (25,344 bytes) under every
         # column's limit, or the row kernel (every shared page has a fits gate)
         comptime if is_defined["MOJOLEARN_XN_KNN_ROWWISE"]() or not lib_smem_page_fits_for[TARGET_COLUMN, KNN2_SMEM_BYTES]():
-            op_knn_sq(x, y, dist, idx, n, m, d, k, exclude_self)
+            op_knn_sq(x, y, dist, idx, n, m, d, k, exclude_self, status)
             return
         # direct device copies in and out (no host-thread staging)
         var ctx2 = xn_ctx()
@@ -1092,6 +1096,7 @@ def op_knn_sq_tiled(
         var d_y2 = ctx2.enqueue_create_buffer[DType.float32](max(m * d, 1))
         if n * d > 0:
             ctx2.enqueue_copy(dst_buf=d_x2, src_ptr=FP(unsafe_from_address=x))
+        var d_s2 = xn_finite_behind(ctx2, d_x2, n * d, status)
         if m * d > 0:
             ctx2.enqueue_copy(dst_buf=d_y2, src_ptr=FP(unsafe_from_address=y))
         var d_dist2 = ctx2.enqueue_create_buffer[DType.float32](max(n * k, 1))
@@ -1105,6 +1110,7 @@ def op_knn_sq_tiled(
             ctx2.enqueue_copy(dst_ptr=FP(unsafe_from_address=dist), src_buf=d_dist2)
         _down_i(ctx2, d_idx2, idx, n * k)
         ctx2.synchronize()
+        _ = d_s2^
         _ = d_x2^
         _ = d_y2^
         _ = d_dist2^
@@ -1113,6 +1119,7 @@ def op_knn_sq_tiled(
         return
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d, True)
+    var d_s = xn_finite_behind(ctx, d_x, n * d, status)
     var d_y = _buf(ctx, y, m * d, True)
     var d_dist = _buf(ctx, 0, n * k, False)
     var d_idx = _buf_i(ctx, 0, n * k, False)
@@ -1124,6 +1131,7 @@ def op_knn_sq_tiled(
     _down(ctx, d_dist, dist, n * k)
     _down_i(ctx, d_idx, idx, n * k)
     ctx.synchronize()
+    _ = d_s^
     _ = d_x^
     _ = d_y^
     _ = d_dist^
@@ -3152,11 +3160,14 @@ def nc_std_red_kernel(pss: FP, std: FP, n_: Int64, d_: Int64, nc_: Int64, nch_: 
             std.unsafe_store(f, sqrt(ss / Float32(dof)) if dof > 0 else Float32(0))
 
 
-def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int, d: Int, n_classes: Int) raises:
+def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int, d: Int, n_classes: Int,
+                status: Int = 0) raises:
     if (n_classes + 1) * NCS_TC > 8 * NCS_NT:
         raise Error("nc_stats: more classes than the staged kernel's chains (" + String(n_classes) + ")")
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d, True)
+    # lane a8b-device-x-neighbors-rest: X's finite status behind its upload
+    var d_s = xn_finite_behind(ctx, d_x, n * d, status)
     var d_lab = _buf_i(ctx, lab, n, True)
     var d_cent = _buf(ctx, cent, n_classes * d, False)
     var d_std = _buf(ctx, std, d, False)
@@ -3202,6 +3213,7 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
     _down(ctx, d_std, std, d)
     _down(ctx, d_dsc, dsc, d)
     ctx.synchronize()
+    _ = d_s^
     _ = d_ps^
     _ = d_pc^
     _ = d_pss^
