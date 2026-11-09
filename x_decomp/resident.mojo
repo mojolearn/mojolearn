@@ -18,6 +18,7 @@ POOL_KEEP_BYTES is released after a sync."""
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
+from core.admitted_finite_status import enqueue_finite_status
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
@@ -201,6 +202,32 @@ def dev_upload_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
     _up_into(ctx, p[].bufs[i], src, cnt)
     ctx.synchronize()
     return cnt
+
+
+def dev_upload_finite_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
+    """`dev_upload_run`, and the finite test of the uploaded words in the
+    same wait (lane a8c-device-x-linear-prep-rfe; core/admitted_finite_status.mojo,
+    NaN or infinity on bits): returns the status word, 0 when every word is
+    finite. A door that admitted X with `defer_finite` (no host pass over a
+    borrowed X: PLS) uploads it through this and refuses on a 1."""
+    var p = X_DECOMP_POOL.get_or_create_ptr()
+    _ = _ptr(i, cnt)
+    var ctx = xd_ctx()
+    _up_into(ctx, p[].bufs[i], src, cnt)
+    var dstat = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill[DType.int32](ctx, dstat, Int32(0))
+    if cnt > 0:
+        enqueue_finite_status(
+            ctx, p[].bufs[i].unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), cnt,
+            dstat.unsafe_ptr(), 0,
+        )
+    var word = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=word, src_buf=dstat)
+    ctx.synchronize()
+    var status = Int(word.unsafe_ptr().unsafe_load(0))
+    _ = dstat^
+    _ = word^
+    return status
 
 
 def dev_download_run(i: Int, dst: F32Ptr, cnt: Int) raises -> Int:

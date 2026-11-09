@@ -52,7 +52,7 @@ from providers.python.x_decomp_graph_device_pyapi import (
 # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by 65b756872d; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 from providers.python.x_decomp_resident_pyapi import (
-    dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_live_py, dev_gemm_py, dev_rand_py, dev_trisolve_py, dev_rowsum_py, dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_move_py,
+    dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_live_py, dev_gemm_py, dev_rand_py, dev_trisolve_py, dev_rowsum_py, dev_sqdist_py, dev_upload_py, dev_upload_finite_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_move_py,
 )
 from x_decomp.resident import GRP_CLS2_ANY
 from providers.python.x_decomp_resident_pyapi import grp_cls2_py
@@ -225,6 +225,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[dev_free_py]("x_decomp_dev_free")
         m.def_function[dev_live_py]("x_decomp_dev_live")
         m.def_function[dev_upload_py]("x_decomp_dev_upload")
+        m.def_function[dev_upload_finite_py]("x_decomp_dev_upload_finite")
         m.def_function[dev_download_py]("x_decomp_dev_download")
         m.def_function[dev_ew_py]("x_decomp_dev_ew")
         m.def_function[dev_gemm_py]("x_decomp_dev_gemm")

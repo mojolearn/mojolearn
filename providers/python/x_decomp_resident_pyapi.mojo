@@ -11,6 +11,7 @@ from x_decomp.resident import (
     pool_free,
     pool_live_count,
     dev_upload_run,
+    dev_upload_finite_run,
     dev_download_run,
     dev_ew_run,
     dev_gemm_run,
@@ -71,6 +72,19 @@ def dev_upload_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises 
     var r = 0
     with GILReleased(Python()):
         r = dev_upload_run(i, src, cnt)
+    return PythonObject(r)
+
+
+def dev_upload_finite_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    """`dev_upload_py` with the finite test of the uploaded words in the same
+    wait; returns the status word (0: every word finite, 1: a NaN or an
+    infinity). Lane a8c-device-x-linear-prep-rfe."""
+    var cnt = Int(py=n)
+    var src = F32Ptr(unsafe_from_address=Int(py=addr))
+    var i = _id(id)
+    var r = 0
+    with GILReleased(Python()):
+        r = dev_upload_finite_run(i, src, cnt)
     return PythonObject(r)
 
 
