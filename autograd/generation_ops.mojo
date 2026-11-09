@@ -235,10 +235,10 @@ def _lm_status_kernel(rows: MutPointer[Float32, MutAnyOrigin], ids: MutPointer[F
         _put(rows, 3 * batch + 2, _w(rows, 3 * batch + 2) + 1)
 
 
-def _lm_alive_kernel(rows: MutPointer[Float32, MutAnyOrigin], out: MutPointer[Float32, MutAnyOrigin],
+def _lm_alive_kernel(rows: MutPointer[Float32, MutAnyOrigin], dst: MutPointer[Float32, MutAnyOrigin],
                      batch_in: Int32):
     if Int(thread_idx.x) == 0:
-        out[0] = Float32(1.0) if _w(rows, 3 * Int(batch_in)) != 0 else Float32(0.0)
+        dst[0] = Float32(1.0) if _w(rows, 3 * Int(batch_in)) != 0 else Float32(0.0)
 
 
 def generation_op_check(code: Int, n_tensors: Int, ints: List[Int], fs: List[Float32]) raises:
@@ -297,10 +297,10 @@ def lm_pick_run(
     ctx.enqueue_function[_lm_status_kernel](rp, ip, Int32(b), grid_dim=(1, 1, 1), block_dim=(_TPB, 1, 1))
 
 
-def lm_alive_run(mut ex: DeviceExec, rows: FP, n_rows: Int, b: Int, out: FP) raises:
+def lm_alive_run(mut ex: DeviceExec, rows: FP, n_rows: Int, b: Int, dst: FP) raises:
     if n_rows < 3 * b + 4:
         raise Error("ValueError: ops: lm_alive: the rows state holds " + String(n_rows) + " words, fewer than 3 * b + 4")
     var ctx = ex.ctx.copy()
     var rp = block_buffer_view(ex, rows, n_rows).unsafe_ptr()
-    var op = block_buffer_view(ex, out, 1).unsafe_ptr()
+    var op = block_buffer_view(ex, dst, 1).unsafe_ptr()
     ctx.enqueue_function[_lm_alive_kernel](rp, op, Int32(b), grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
