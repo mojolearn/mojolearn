@@ -213,7 +213,7 @@ def samba_decode_step(session: PythonObject, inputs: PythonObject, context: Pyth
     var handle = values["_handle"]
     if handle is None:
         # The host arm: the per-call step on the caller's own state.
-        return samba_forward(values["_model"], inputs, values["_state"], PythonObject(None), True, True, context)
+        return samba_forward(values["_model"], inputs, values["_state"], PythonObject(None), True, context)
     var b = Int(py=values["_rows"])
     var v = Int(py=values["_vocab"])
     # The per-call step's own id admission: (B,) or (B, 1) native-endian
@@ -258,7 +258,7 @@ def samba_decode_tokens(session: PythonObject, inputs: PythonObject, context: Py
             var col = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=column._addr))
             for r in range(b):  # driver-loop: over the batch rows, a host-arm copy of token t's id
                 col.unsafe_store(r, src.unsafe_load(r * n + t))
-            var logits = samba_forward(values["_model"], column, values["_state"], PythonObject(None), True, True, context)
+            var logits = samba_forward(values["_model"], column, values["_state"], PythonObject(None), True, context)
             var row = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=logits._addr))
             for r in range(b):  # driver-loop: over the batch rows, a host-arm copy of token t's logits
                 memcpy(dest=dst + (r * n + t) * v, src=row + r * v, count=v)

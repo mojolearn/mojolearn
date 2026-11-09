@@ -58,9 +58,9 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         if operation == "model_train_step":
             result = samba_train_step(values[0], values[1], values[2], context)
         elif operation == "forward":
-            result = samba_forward(values[0], values[1], values[2], values[3], False, True, context)
+            result = samba_forward(values[0], values[1], values[2], values[3], False, context)
         elif operation == "step":
-            result = samba_forward(values[0], values[1], values[2], PythonObject(None), True, True, context)
+            result = samba_forward(values[0], values[1], values[2], PythonObject(None), True, context)
         elif operation == "allocate_state":
             result = samba_allocate(values[0], values[1], values[2], context)
         elif operation == "state_construct":
@@ -80,9 +80,9 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         elif operation == "inference_checkpoint":
             result = samba_inference_checkpoint(values[0], values[1], context)
         elif operation == "inference_forward":
-            result = samba_forward(values[0], values[1], values[2], values[3], False, False, context)
+            result = samba_forward(values[0], values[1], values[2], values[3], False, context)
         elif operation == "inference_step":
-            result = samba_forward(values[0], values[1], values[2], PythonObject(None), True, False, context)
+            result = samba_forward(values[0], values[1], values[2], PythonObject(None), True, context)
         elif operation == "decode_session_open":
             result = samba_decode_open(values[0], values[1], context)
         elif operation == "decode_session_init":
