@@ -2,17 +2,17 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """x_decomp/fa_em.mojo's FactorAnalysis EM loop on resident device matrices
 (lane py-runtime-b): the same statements on `DKit`. The d x d spectral
-step comes home where `_Kit.svd` / `_Kit.eigh` brought it (DevExec's solve
-writes host s and V): its descending order, the column reversal and the
-transposes are exact copies of d x d words (`svd_desc`, `rev_cols`), and the
+step: the SVD branch (n >= d) comes home where `_Kit.svd` brought it
+(`svd_desc`'s descending order); the eigh branch (n < d) stays resident
+(`DKit.eigh`, its reversal and transpose as device copies), and the
 log-likelihood's float32 words come home for `_dsum`, as Python read them.
 GPU binding only."""
 from std.math import inf, sqrt
 from experiments.classical_identical_ideas.linear_controls import C27_FA_COMPONENTS
 from x_decomp.cells import F32Ptr, OP_CLASSICAL_FA_LOAD
-from x_decomp.fa_em import FA_LOG_FLOOR, FA_SMALL, FaArgs, dsum, fa_mask, rev_cols, svd_desc
+from x_decomp.fa_em import FA_LOG_FLOOR, FA_SMALL, FaArgs, dsum, fa_mask, svd_desc
 from x_decomp.kit import (
-    Mat, OP_ADD, OP_ADDS, OP_DIV, OP_LOGS, OP_MAXS, OP_MINS, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT, mat_from, mat_t,
+    Mat, OP_ADD, OP_ADDS, OP_DIV, OP_LOGS, OP_MAXS, OP_MINS, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT, mat_from,
 )
 from x_decomp.kit_device import DKit, DMat
 
@@ -33,24 +33,25 @@ def fa_em_dev(mut k: DKit, A: DMat, mut psi: DMat, mut W: DMat, mut ll_out: List
         it = i
         var sqrt_psi = k.ew1(OP_ADDS, k.ew1(OP_SQRT, psi, 0.0), FA_SMALL)
         var s2: DMat
-        var Vh: Mat
+        var Vfull: DMat
         if n >= d:
             var B = k.ew1(OP_SCALE, k.ew2(OP_DIV, A, sqrt_psi), 1.0 / nsqrt)
             var s = Mat(0, 0)
             var v = Mat(0, 0)
             k.svd_host(B, s, v)
             var sv = Mat(0, 0)
-            Vh = Mat(0, 0)
+            var Vh = Mat(0, 0)
             svd_desc(s, v, sv, Vh)
             s2 = k.ew1(OP_SQ, k.upload(sv), 0.0)
+            Vfull = k.upload(Vh)
         else:
             var Z = k.ew1(OP_SCALE, k.ew2(OP_DIV, A, sqrt_psi), 1.0 / nsqrt)
             var e = k.eigh(k.mm(Z, Z, True, False))
-            var vh = k.get(e.vd)
-            k.sync()
-            s2 = k.ew1(OP_MAXS, k.upload(rev_cols(e.wh)), 0.0)
-            Vh = mat_t(rev_cols(vh))
-        var Vfull = k.upload(Vh)
+            # lane n9-decomp-eigh-families: the descending order and V^T on
+            # the device (the same words `rev_cols` / `mat_t` copied on the
+            # host after w and V came home and went up again)
+            s2 = k.ew1(OP_MAXS, k.rev_vec(e.wd), 0.0)
+            Vfull = k.rev_cols_t(e.vd)
         var Vt = k.rows(Vfull, 0, nc)
         # perf-decomp-slow (2026-11-06): s2's words come home with the two
         # log vectors below, at ONE sync per iteration (was a second sync
