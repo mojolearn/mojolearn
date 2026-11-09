@@ -26,7 +26,7 @@ from sequence.ops import FP, Args
 from autograd.tape import BackwardRules
 from autograd.import_api import ImportRules
 from autograd.block_step_ops import BlockStepScratch, ATTN_STEP_TAG, attn_step_backward
-from autograd.lm_head_v2_op import LM_HEAD_V2_TAG, lm_head_v2_backward_device, lm_head_v2_backward_host
+from autograd.lm_head_v2_op import LM_HEAD_V2_TAG, lm_head_v2_backward_device
 
 comptime _ScratchRef = MutPointer[BlockStepScratch, MutUntrackedOrigin]
 
@@ -89,7 +89,9 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
                 lm_head_v2_backward_device(rebind[DeviceExec](ex), gradients[0], gradients[1], inputs[0], inputs[1],
                                            saved.p0, saved.p1, saved.p2, upstream, saved.i0, saved.i1, saved.i2)
             else:
-                lm_head_v2_backward_host(gradients[0], gradients[1], inputs[0], inputs[1],
-                                         saved.p0, saved.p1, saved.p2, upstream, saved.i0, saved.i1, saved.i2)
+                # the host arm (autograd/lm_head_v2_host.mojo) through the executor
+                var hb: List[FP] = [gradients[0], gradients[1], inputs[0], inputs[1], saved.p0, saved.p1, saved.p2,
+                                    upstream]
+                ex.lm_head_v2_host(True, hb, saved.i0, saved.i1, saved.i2)
             return
         ImportRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)

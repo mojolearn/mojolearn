@@ -119,9 +119,7 @@ from autograd.block_step_ops import (
 )
 # Generation ops (lane x45c): the language model's token pick and the decode
 # loop's condition, session codes 85, 86 (autograd/generation_ops.mojo).
-from autograd.lm_head_v2_op import (
-    OPS_LM_HEAD_V2, LM_HEAD_V2_TAG, lm_head_v2_check, lm_head_v2_forward_device, lm_head_v2_forward_host,
-)
+from autograd.lm_head_v2_op import OPS_LM_HEAD_V2, LM_HEAD_V2_TAG, lm_head_v2_check, lm_head_v2_forward_device
 from autograd.generation_ops import (
     OPS_LM_PICK, OPS_LM_ALIVE, is_generation_op, generation_op_check, generation_op_name, lm_pick_run,
     lm_alive_run, LM_PICK_SAMPLE,
@@ -1874,7 +1872,9 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             lm_head_v2_forward_device(rebind[DeviceExec](self.ex), hp, wp, cp, targets, maxima, denom, row_loss,
                                       loss, rows, vocab, width)
         else:
-            lm_head_v2_forward_host(hp, wp, cp, targets, maxima, denom, row_loss, loss, rows, vocab, width)
+            # the host arm (autograd/lm_head_v2_host.mojo) through the executor
+            var hb: List[FP] = [hp, wp, cp, targets, maxima, denom, row_loss, loss]
+            self.ex.lm_head_v2_host(False, hb, rows, vocab, width)
         if not self.tape.is_recording():
             var t = self.tape.variable(self.ex, loss, 1, 1, False)
             return self._add(t, 0, False, 0)

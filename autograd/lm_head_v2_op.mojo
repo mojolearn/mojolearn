@@ -17,8 +17,9 @@ row owner per thread, dWeight one vocabulary owner per thread, both folds
 ascending, each scaled by the upstream gradient. Memory: three row vectors and
 the int32 codes, no logits.
 
-One algorithm on every column: the device kernels and the host arm call the
-same @always_inline bodies (`chunked_lm_head_v2_row_body`,
+One algorithm on every column: the device kernels here and the host arm
+(autograd/lm_head_v2_host.mojo, reached through `Exec.lm_head_v2_host`, so no
+GPU module imports it) call the same @always_inline bodies (`chunked_lm_head_v2_row_body`,
 `chunked_lm_head_v2_dhidden_body`, `chunked_lm_head_v2_dweight_body`); the
 host arm splits rows (and vocabulary entries) across cores, the fold inside
 each owner is unchanged. The codes are class indices as float values (the
@@ -30,13 +31,10 @@ from std.gpu import block_dim, block_idx, thread_idx
 from sequence.ops import FP
 from sequence.exec_device import DeviceExec
 from checks.numerics import ftz, identical_div, identical_mul
-from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from autograd.block_step_ops import block_buffer_view
 from training.chunked_lm_head_v2 import (
     LM_HEAD_V2_TPB, LM_HEAD_V2_LOSS_LEAF,
     chunked_lm_head_v2_rows_kernel, chunked_lm_head_v2_dhidden_kernel, chunked_lm_head_v2_dweight_kernel,
-    chunked_lm_head_v2_row_body, chunked_lm_head_v2_dhidden_body, chunked_lm_head_v2_dweight_body,
     _enqueue_loss_total,
 )
 
@@ -126,99 +124,3 @@ def lm_head_v2_backward_device(
         )
         ctx.enqueue_function[_scale_kernel](_fp(d_weight), _fp(upstream), Int32(vocab * width),
                                             grid_dim=_grid(vocab * width), block_dim=LM_HEAD_V2_TPB)
-
-
-# ---------------------------------------------------------------- host
-def _host_loss_total(loss: _F, row_loss: _F, rows: Int):
-    """`_enqueue_loss_total`'s fold on the host: leaves of LM_HEAD_V2_LOSS_LEAF
-    rows ascending from +0.0, then the balanced tree over the leaf partials in
-    ascending order (an odd tail carried), then `ftz(total / rows)`."""
-    var leaves = (rows + LM_HEAD_V2_LOSS_LEAF - 1) // LM_HEAD_V2_LOSS_LEAF
-    var level = List[Float32](length=leaves, fill=Float32(0))
-    for j in range(leaves):  # small-loop(leaves: one partial per 256 rows): the fixed fold, not data-parallel work
-        var acc = Float32(0.0)
-        for row in range(j * LM_HEAD_V2_LOSS_LEAF, min((j + 1) * LM_HEAD_V2_LOSS_LEAF, rows)):  # small-loop(a leaf's rows, ascending): the fixed fold
-            acc = ftz(acc + row_loss.unsafe_load(row))
-        level[j] = acc
-    if leaves == 1:
-        loss.unsafe_store(0, ftz(identical_div(level[0], Float32(rows))))
-        return
-    var width = leaves
-    while width > 1:  # small-loop(tree levels): the fixed fold
-        var out_width = (width + 1) // 2
-        var next = List[Float32](length=out_width, fill=Float32(0))
-        for q in range(out_width):  # small-loop(a tree level's nodes): the fixed fold
-            if 2 * q + 1 < width:
-                next[q] = ftz(ftz(level[2 * q]) + ftz(level[2 * q + 1]))
-            else:
-                next[q] = level[2 * q]
-        level = next^
-        width = out_width
-    loss.unsafe_store(0, ftz(identical_div(ftz(level[0]), Float32(rows))))
-
-
-def lm_head_v2_forward_host(
-    hidden: FP, weight: FP, codes: FP, targets: FP,
-    maxima: FP, denom: FP, row_loss: FP, loss: FP, rows: Int, vocab: Int, width: Int,
-) raises:
-    """The device forward's words on the host, rows split across cores."""
-    var h = _fp(hidden)
-    var w = _fp(weight)
-    var c = _fp(codes)
-    var t = _ip(targets)
-    var mx = _fp(maxima)
-    var dn = _fp(denom)
-    var rl = _fp(row_loss)
-    var tasks = host_predict_task_count_work(rows, rows * vocab * width)
-    var chunk = host_predict_chunk(rows, tasks)
-
-    def _rows(k: Int) {imm h, imm w, imm c, imm t, imm mx, imm dn, imm rl, imm chunk, imm rows, imm vocab, imm width}:
-        var lo = k * chunk
-        for row in range(lo, min(lo + chunk, rows)):
-            t.unsafe_store(row, c.unsafe_load(row).cast[DType.int32]())
-            chunked_lm_head_v2_row_body(row, mx, dn, rl, h, w, t, vocab, width)
-
-    host_parallelize(_rows, tasks)
-    _host_loss_total(_fp(loss), rl, rows)
-
-
-def lm_head_v2_backward_host(
-    d_hidden: FP, d_weight: FP, hidden: FP, weight: FP, targets: FP,
-    maxima: FP, denom: FP, upstream: FP, rows: Int, vocab: Int, width: Int,
-) raises:
-    """The device VJP's words on the host: row owners, then vocabulary
-    owners, each split across cores; then the upstream factor."""
-    var h = _fp(hidden)
-    var w = _fp(weight)
-    var t = _ip(targets)
-    var mx = _fp(maxima)
-    var dn = _fp(denom)
-    var up = _fp(upstream).unsafe_load(0)
-    if Int(d_hidden) != 0:
-        var dh = _fp(d_hidden)
-        var tasks = host_predict_task_count_work(rows, rows * vocab * width)
-        var chunk = host_predict_chunk(rows, tasks)
-
-        def _rows(k: Int) {imm dh, imm h, imm w, imm t, imm mx, imm dn, imm up, imm chunk, imm rows, imm vocab, imm width}:
-            var lo = k * chunk
-            for row in range(lo, min(lo + chunk, rows)):
-                chunked_lm_head_v2_dhidden_body(row, dh, h, w, t, mx, dn, rows, vocab, width)
-                for f in range(width):
-                    var cell = row * width + f
-                    dh.unsafe_store(cell, ftz(identical_mul(dh.unsafe_load(cell), up)))
-
-        host_parallelize(_rows, tasks)
-    if Int(d_weight) != 0:
-        var dw = _fp(d_weight)
-        var vtasks = host_predict_task_count_work(vocab, rows * vocab * width)
-        var vchunk = host_predict_chunk(vocab, vtasks)
-
-        def _tokens(k: Int) {imm dw, imm h, imm w, imm t, imm mx, imm dn, imm up, imm vchunk, imm rows, imm vocab, imm width}:
-            var lo = k * vchunk
-            for token in range(lo, min(lo + vchunk, vocab)):
-                chunked_lm_head_v2_dweight_body(token, dw, h, w, t, mx, dn, rows, width)
-                for f in range(width):
-                    var cell = token * width + f
-                    dw.unsafe_store(cell, ftz(identical_mul(dw.unsafe_load(cell), up)))
-
-        host_parallelize(_tokens, vtasks)

@@ -92,6 +92,9 @@ struct FaultExec(Exec, Movable):
     def step_clear(mut self):
         self.host.step_clear()
 
+    def lm_head_v2_host(mut self, backward: Bool, bufs: List[FP], rows: Int, vocab: Int, width: Int) raises:
+        self.host.lm_head_v2_host(backward, bufs, rows, vocab, width)
+
 
 def require(condition: Bool, message: String) raises:
     if not condition:

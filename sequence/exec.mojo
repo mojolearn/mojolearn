@@ -41,6 +41,7 @@ from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_
 from autograd.block_step_host import (
     HostStepScratch, host_step_run, host_attn_step_backward, host_block_step_reports,
 )
+from autograd.lm_head_v2_host import lm_head_v2_host_run
 from sequence.ops import (
     FP,
     Args,
@@ -494,3 +495,8 @@ struct HostExec(Exec, Movable):
 
     def step_clear(mut self):
         self.steps.clear()
+
+    # Lane m2-neural-leftovers: the chunked LM head op's host arm
+    # (autograd/lm_head_v2_host.mojo), reached through the Exec trait.
+    def lm_head_v2_host(mut self, backward: Bool, bufs: List[FP], rows: Int, vocab: Int, width: Int) raises:
+        lm_head_v2_host_run(backward, bufs, rows, vocab, width)
