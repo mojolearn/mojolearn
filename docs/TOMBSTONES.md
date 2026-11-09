@@ -530,6 +530,7 @@ in the tables after the sections.
 | [`x_cnn_fit_epoch_r`, `x_cnn_fit_epoch_d`, `x_cnn_fit_d`, `x_cnn_predict_r`, `x_cnn_epoch_rows`, `x_cnn_adam_hyper_d`, `cnn_backward_autograd` (CNNClassifier hand epoch)](#cnnclassifier-hand-epoch-replaced-by-one-captured-program-2026-11-09) | Neural (CNNClassifier fit / predict) | removed (replaced by one captured program and Program.fit on the executor) | 2026-11-09 | [X8_CNN_HAND_EPOCH.patch](../experiments/removed/X8_CNN_HAND_EPOCH.patch) |
 | [`x_cnn_res_argmax` (`res_argmax`, `argmax_rows_into`, `argmax_row_at`) and the per-call CNN predict](#cnnclassifier-predict-on-a-resident-session-2026-11-09) | Neural (CNNClassifier predict) | removed (the predict replays the forward on a resident session; its argmax is OPS_ARGMAX on the executor) | 2026-11-09 | [X8B_XCNN_RES_ARGMAX.patch](../experiments/removed/X8B_XCNN_RES_ARGMAX.patch) |
 | [`tools/identical_wave_quality.py cnn_controls`, `tools/identical_wave_cnn_sgd_gate.py --suite cnn-primitives`](#cnnclassifier-predict-on-a-resident-session-2026-11-09) | Neural (CNN gate fixtures) | removed (their entries went with the CNNClassifier hand epoch) | 2026-11-09 | none (recoverable at `7c9d9d5575`) |
+| [`_mamba1_run`, `_mamba2_run`, `_mamba3_run`, their arena twins, `Mamba2PublicWorkspace` and the three Mamba decode-session bodies](#mamba-blocks-on-the-block-step-op-2026-11-09) | Mamba (per-call doors, decode sessions, Mamba-2 public step) | removed (superseded: one body, the block step op) | 2026-11-09 | [X5_MAMBA_PER_CALL_BODIES.patch](../experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -4900,3 +4901,34 @@ Lane `x8b-cnn-resident-predict` (follow-up of row X8 of `docs/plans/EXECUTOR_CON
   and fold order run per row, the chunking is per row, and the argmax reads the same probabilities. RUN OWED:
   board rows `algos/cnn-clf/synthetic` infer on NVIDIA and AMD (resident vs X8 `7c9d9d5575`).
 - Code recoverable at `7c9d9d5575`; patch `experiments/removed/X8B_XCNN_RES_ARGMAX.patch`.
+
+## Mamba blocks on the block step op (2026-11-09)
+
+Lane x5-mamba-on-executor (docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X5), deletion commits
+`844ea17a80` (the bodies) and `08332f3665` (the doors and the Mamba-2 workspace), code recoverable at `25e5650c14`.
+Every Mamba-1/2/3 block call now runs the block step op of autograd/block_step_ops.mojo (`OPS_M1_STEP` 81,
+`OPS_M2_STEP` 82, `OPS_M3_STEP` 83) on one executor program per block (`MambaBlockProgram`,
+mamba/impl/mamba_block_program.mojo: the weights one uploaded parameter tensor, the carried state one declared state
+tensor, the carried integers one int32-word state tensor). The decode sessions own their program; the per-call doors
+share a process-wide cache of programs (at most 64, least recently used idle one evicted) whose weights stay on the
+device while the caller's bytes are unchanged (a memcmp against the program's host copy, the Mamba-3 prefill
+session's rule). What went:
+
+| symbols | where | why |
+|---|---|---|
+| `_mamba1_run`, `_mamba1_run_arena` | mamba/impl/mamba_shell_impl.mojo | the per-call Mamba-1 body: ten weight uploads, two state uploads, x, three downloads per call; now `mamba_block_call(OPS_M1_STEP, ...)` |
+| `_mamba2_run`, `_mamba2_run_arena`, `_mamba2_arena_execute`, `_mamba2_arena_execute_prepared` | same | the per-call Mamba-2 body and its arena twins (nine weight uploads per call) |
+| `Mamba2PublicWorkspace`, `_mamba2_workspace_step` (both overloads), mamba/native_workspace_dispatch.mojo, core/native_mamba_workspace_abi.mojo, `mamba2_workspace_api_v1`, the `mamba2_workspace_provider` entry and `NativeBlockPlan.mamba2_workspace*` | mamba, core, bindings/_mojolearn_mamba.mojo, bindings/causal_lm_public.mojo, bindings/neural_block_public.mojo, bindings/causal_operation_owner.mojo | the Mamba-2 public step's retained storage that still re-uploaded every weight per call; the cached program is that storage with the weights resident |
+| `_mamba3_run`, `_mamba3_check_state_words`, `_mamba3_run_on`, `_mamba3_run_arena` | mamba/impl/mamba_shell_impl.mojo | the per-call Mamba-3 body (nine weight and ten state uploads, fifteen downloads per call: regression C4's device half); the discard-state prefill is `mamba_block_call(..., fresh=True)` |
+| the bodies of `Mamba1DecodeSession`, `Mamba2DecodeSession`, `Mamba3DecodeSession` and their `_m{1,2,3}_session_*_run` helpers, `_m2_session_download_direct`, the Mamba-2 site of `MOJOLEARN_IDN_DECODE_RESIDENT_IO` (`IDN_DECODE_RESIDENT_IO_M2`) | same | the sessions duplicated the step op's device-copy wrapper; they are thin owners of a `MambaBlockProgram` now. The Mamba-2 session returns y and h_last straight into the caller's arrays behind one wait, which was that define's ON arm; the define stays for the transformer session |
+
+Kept and moved, not deleted: `MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE` (NI47, default off) is now an arm of the one Mamba-3
+step body in autograd/block_step_ops.mojo; `_mamba3_run_owned` (NN40, default off) keeps its name and runs the cached
+program over the installed snapshot's host copy. `MOJOLEARN_AFN_MAMBA_ARENA` / `IDN_MAMBA_ARENA` stay (the block
+structs' arena constructors); only the per-call bodies that used them went.
+
+Bits: the step op is the session bodies' launch set, so a decode step and a prefill are the same kernels in the same
+order. One possible change: a per-call Mamba-1 forward with L = 1 now runs `mamba_step` (the L = 1 arm of the op)
+where `_mamba1_run` ran `mamba_block_forward` at L = 1; every vendor and the host column move together if the two
+round differently. A/B owed: the per-call program against the 0.8.66 arena bodies on mamba1-forward, mamba2-forward,
+mamba3-forward, mamba3-decode, mamba2-decode and samba-decode (NVIDIA and AMD, one run per arm).

@@ -25,7 +25,6 @@ from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allo
 from core.hostptr import f32_ptr
 from core.host_helpers_impl import all_finite_f32
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
-from core.native_mamba_workspace_abi import MAMBA2_WORKSPACE_CREATE, MAMBA2_WORKSPACE_CLOSE
 from providers.python.operation_lock_pyapi import OperationLockLease, operation_lock_create
 from bindings.native_model_records import bump_model_generation
 from providers.python.neural_descriptor_pyapi import (
@@ -52,8 +51,6 @@ struct NativeBlockPlan(Movable, Writable):
     var state_scalars: PythonObject
     var state_buffers: PythonObject
     var state_fields: PythonObject
-    var mamba2_workspace_provider: PythonObject
-    var mamba2_workspace: PythonObject
 
     def __init__(out self, owner: PythonObject, layer: PythonObject) raises:
         self.context = owner._native_context
@@ -63,8 +60,6 @@ struct NativeBlockPlan(Movable, Writable):
         self.numeric_profile = owner.numeric_profile
         self.packed = owner._head_int15 is not None
         self.layer = layer
-        self.mamba2_workspace_provider = py_get(self.entries, "mamba2_workspace_provider")
-        self.mamba2_workspace = PythonObject(None)
         # Immutable schema belongs to the retained execution plan. Live class
         # hooks, scalar values and Array metadata are still admitted each call.
         self.state_scalars = Python.tuple("batch_size", "n_kv_heads", "head_dim", "max_tokens", "window", "cached_tokens",
@@ -180,10 +175,6 @@ def _neural_owner_key(mut mods: NativeModules, block: PythonObject, live: Python
     if entries is None or py_type(entries) is not bi.dict:
         return PythonObject(None)
     key.add(entries)
-    if String(kind) == "mamba2" and String(route) == "gpu":
-        # A same-module capability replacement/addition/removal invalidates the
-        # retained provider/resource too; module identity alone is insufficient.
-        key.add_identity(py_get(_native_entry_fields(mods, entries["mamba2"]), "mamba2_workspace_api_v1"))
     key.watch_arrays(mods, context)
     if key.retains(block):
         return PythonObject(None)
@@ -203,9 +194,6 @@ def _neural_owner_matches(mut mods: NativeModules, key: PythonObject, block: Pyt
     var entries = py_get(table, binding_key)
     if not native.matches(entries, offset):
         return False
-    if String(live["_native_kind"]) == "mamba2" and String(live["_native_route"]) == "gpu":
-        if not native.matches_identity(py_get(_native_entry_fields(mods, entries["mamba2"]), "mamba2_workspace_api_v1"), offset):
-            return False
     return native.complete(offset) and native.arrays_match(mods, context)
 
 
@@ -421,24 +409,13 @@ def _neural_allocate(mut mods: NativeModules, owner: NativeBlockExecution, b: In
 
 
 def _neural_layer_run(mut mods: NativeModules, owner: NativeBlockExecution, x: PythonObject, state: PythonObject, step: Bool) raises -> PythonObject:
+    # TOMBSTONE: the Mamba-2 public-step workspace owner (Mamba2PublicWorkspace, mamba2_workspace_api_v1) (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by 08332f3665; code recoverable at 25e5650c14.
+    # Restore: git apply experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch
+    # Every Mamba step and forward reaches the cached block program through
+    # the one native Mamba descriptor (mamba/native_state_dispatch.mojo).
     ref plan = owner.plan.downcast_value_ptr[NativeBlockPlan]()[]
-    var workspace = PythonObject(None)
-    if step and plan.kind == "mamba2" and plan.mamba2_workspace_provider is not None:
-        if plan.mamba2_workspace is None:
-            # Creation is native metadata allocation only, under the GIL. Thus
-            # concurrent calls cannot publish competing owners into this plan.
-            # Adoption closes the handle if boxing fails. Device allocation and
-            # live-byte refresh happen inside the actual public step operation.
-            var handle = neural_descriptor_execute(plan.mamba2_workspace_provider,
-                MAMBA2_WORKSPACE_CREATE, [], [], [], False)
-            if handle == 0:
-                raise Error("Mamba2 public workspace: native create returned a null owner")
-            plan.mamba2_workspace = neural_descriptor_adopt(plan.mamba2_workspace_provider,
-                handle, MAMBA2_WORKSPACE_CLOSE, [])
-        workspace = plan.mamba2_workspace
     var result = causal_layer_run_fields(mods, owner.fields, plan.entries, plan.kind, plan.d_model,
-        plan.packed, plan.layer, x, state, step, workspace)
-    _ = workspace  # pin the native resource/image through the complete call
+        plan.packed, plan.layer, x, state, step)
     _ = owner
     return result
 

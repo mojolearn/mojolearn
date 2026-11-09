@@ -238,8 +238,8 @@ from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_ANY_BWD_SABOTAGE
 from gemm.checks.gemm_identical import ANY_SABOTAGE as GEMM_ANY_SABOTAGE
 
 from mamba.native_state_dispatch import NATIVE_MAMBA_STATE_API, mamba_state_operation
+from mamba.impl.mamba_block_program import mamba_block_call_abi
 from mamba.native_block_dispatch import NATIVE_MAMBA_BLOCK_API
-from mamba.native_workspace_dispatch import NATIVE_MAMBA2_WORKSPACE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 
 from mamba.impl.mamba_shell_impl import (
@@ -251,8 +251,6 @@ from mamba.impl.mamba_shell_impl import (
     _m3_write_f32,
     _m3_upload_addr,
     _m3_download_addr,
-    _mamba1_run,
-    _mamba1_run_arena,
     _mamba1_backward_run,
     Mamba1DecodeSession,
     _m1_require_session_open,
@@ -261,8 +259,6 @@ from mamba.impl.mamba_shell_impl import (
     _m1_session_decode_run,
     _m1_session_export_run,
     _m1_session_load_run,
-    _mamba2_run,
-    _mamba2_run_arena,
     Mamba2DecodeSession,
     _m2_require_session_open,
     _m2_session_open_run,
@@ -271,14 +267,11 @@ from mamba.impl.mamba_shell_impl import (
     _m2_session_export_run,
     _m2_session_load_run,
     _m3_load_weights,
-    _mamba3_run,
     _mamba3_run_owned,
-    _mamba3_run_arena,
     Mamba3DecodeSession,
     _m3_require_session_open,
     _m3_session_copy_in,
     _m3_session_open_run,
-    IDN_M3_DECODE_WINDOW_REUSE,
     _m3_session_step_run,
     _m3_session_decode_run,
     _m3_session_export_run,
@@ -380,9 +373,8 @@ def mamba_block_api_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
-def mamba2_workspace_api_binding() raises -> PythonObject:
-    var api = NATIVE_MAMBA2_WORKSPACE_API.get_or_create_ptr()
-    return neural_descriptor_capsule(api[].name, api[].entries)
+# TOMBSTONE: mamba2_workspace_api_v1 (the Mamba-2 public-step workspace descriptor) (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by 08332f3665; code recoverable at 25e5650c14.
+# Restore: git apply experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch
 
 
 def mamba_prefill_native_handle_binding(session: PythonObject) raises -> PythonObject:
@@ -1038,7 +1030,7 @@ def mamba3_forward_fresh_binding(addrs: PythonObject, params: PythonObject) rais
         raise Error("mamba3_forward_fresh: B and L must be positive")
     var out_len = 0
     with GILReleased(Python()):
-        out_len = _mamba3_run[True](a, b, l, dm, 0, 0)
+        out_len = mamba_block_call_abi(3, a, b, l, dm, 0, 0, Float32(0), Float32(0), True)
     return PythonObject(out_len)
 
 
@@ -1512,7 +1504,7 @@ def mamba3_session_export_state_binding(session: PythonObject, addrs: PythonObje
     owner[].busy = False
     var result = Python.list()
     _ = py_call(result.append, PythonObject(q))
-    _ = py_call(result.append, PythonObject(1 if owner[].state.value().pending else 0))
+    _ = py_call(result.append, PythonObject(1 if owner[].pending else 0))
     return result
 
 
@@ -1623,7 +1615,6 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba1_profile_binding]("mamba1_profile")
         m.def_function[mamba_state_api_binding]("mamba_state_api_v1")
         m.def_function[mamba_block_api_binding]("mamba_block_api_v1")
-        m.def_function[mamba2_workspace_api_binding]("mamba2_workspace_api_v1")
         m.def_function[mamba3_tape_create_native_binding]("mamba3_tape_create_native_v1")
         m.def_function[mamba3_tape_handle_native_binding]("mamba3_tape_handle_native_v1")
         m.def_function[mamba_prefill_native_handle_binding]("mamba_prefill_native_handle_v1")

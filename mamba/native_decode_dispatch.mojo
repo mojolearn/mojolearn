@@ -170,7 +170,7 @@ def mamba_decode_operation(kind: Int, op: Int, a: List[Int], words: List[Int], f
                 return _m3_session_step_run(owner[], a)
             if op == 5:
                 var q = _m3_session_export_run(owner[], a)
-                return 2 * q + Int(owner[].state.value().pending)
+                return 2 * q + Int(owner[].pending)
             _m3_session_copy_in(owner[], a, p[0], p[1])
             return 0
         except problem:

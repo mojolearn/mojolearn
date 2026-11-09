@@ -50,13 +50,15 @@ records it with `Tape.custom_nd` over the stage buffers its rule reads
 (`rules_mamba`, `rules_mamba3`, `rules_transformer`), see the API note.
 """
 from std.memory import bitcast
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.ops import FP
 from sequence.exec_device import DeviceExec
 from core.identity_trace import IdentityTrace
 from mamba.checks.mamba_fixture import MambaDims
-from mamba.checks.mamba2_fixture import Mamba2Dims, M2_CHUNK_SIZE
-from mamba.checks.mamba3_fixture import Mamba3Dims, M3_CHUNK_SIZE
+from mamba.checks.mamba2_fixture import Mamba2Dims, M2_CHUNK_SIZE, M2_HEADDIM, M2_D_STATE
+from mamba.checks.mamba3_fixture import Mamba3Dims, M3_CHUNK_SIZE, M3_HEADDIM, M3_D_STATE, M3_NUM_ROPE_ANGLES
 from mamba.impl.modules.afn_arena import MambaArena
 from mamba.impl.modeling.modeling_mamba import (
     MambaDeviceWeights, MambaDeviceState, MambaDeviceStages, mamba_block_forward, mamba_zeros, MAMBA_GUARD,
@@ -94,6 +96,33 @@ comptime BLOCK_PART_WORDS = 2
 
 # The attention op's own integer arguments before the options tail.
 comptime ATTN_STEP_INTS = 8
+
+# NI47 same-graph boundary scheduling (moved here with the Mamba-3 decode
+# session body, lane x5-mamba-on-executor 2026-11-09; the define and its arm
+# are unchanged): retained capacity for one physical open chunk plus a new
+# token, so an L = 1 step reuses the previous step's stages instead of
+# building them at the carried buf_len. The extent comes from the model state
+# contract, never a board row. Default OFF; its A/B is owed (EXPERIMENTS.md).
+comptime IDN_M3_DECODE_WINDOW_REUSE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE"]()
+    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
+    and MAMBA_GUARD == 0
+)
+
+
+def m2_report_floats(b: Int, dm: Int) raises -> Int:
+    """The Mamba-2 h_last report: b * heads * 64 * 128 floats."""
+    return b * Mamba2Dims.of(dm).nheads * M2_HEADDIM * M2_D_STATE
+
+
+def m3_report_floats(b: Int, dm: Int) raises -> List[Int]:
+    """The four Mamba-3 reports (h_last, k_last, v_last, theta_last), in
+    that order, as float counts."""
+    var nh = Mamba3Dims.of(dm).nheads
+    var out: List[Int] = [b * nh * M3_HEADDIM * M3_D_STATE, b * nh * M3_D_STATE, b * nh * M3_HEADDIM,
+                          b * nh * M3_NUM_ROPE_ANGLES]
+    return out^
 
 
 def is_block_step(code: Int) -> Bool:
@@ -283,6 +312,35 @@ def _read_words(mut ex: DeviceExec, p: FP, k: Int) raises -> List[Int]:
     return out^
 
 
+def _m2_check_words(words: List[Int]) raises:
+    """The Mamba-2 carried integer: buf_len in [0, CHUNK) (contract section 5:
+    the open-chunk buffer holds at most CHUNK_SIZE - 1 rows between calls)."""
+    if len(words) != 1 or words[0] < 0 or words[0] >= M2_CHUNK_SIZE:
+        raise Error("ValueError: mamba2: buf_len must be in [0, " + String(M2_CHUNK_SIZE) + "), got "
+                    + (String(words[0]) if len(words) > 0 else String("nothing"))
+                    + "; the two sides of this boundary disagree about the state")
+
+
+def _m3_check_words(words: List[Int]) raises:
+    """The Mamba-3 carried integers [buf_len, pending] (`_m3_session_copy_in`'s
+    checks, word for word): buf_len in [0, Q] inclusive (the buffer never
+    empties, DEVIATION 832(i)), pending 0 or 1, and a pending Input_States
+    continuation only on a fresh state."""
+    if len(words) != 2:
+        raise Error("ValueError: mamba3: the state carries buf_len and pending")
+    var q0 = words[0]
+    var pend = words[1]
+    if q0 < 0 or q0 > M3_CHUNK_SIZE:
+        raise Error("ValueError: mamba3: buf_len must be in [0, " + String(M3_CHUNK_SIZE) + "] (INCLUSIVE -- the "
+                    + "buffer never empties, DEVIATION 832(i)), got " + String(q0)
+                    + "; the two sides of this boundary disagree about the state")
+    if pend != 0 and pend != 1:
+        raise Error("ValueError: mamba3: pending must be 0 or 1, got " + String(pend)
+                    + "; the two sides of this boundary disagree about the state")
+    if pend == 1 and q0 != 0:
+        raise Error("ValueError: mamba3: Input_States pending requires a fresh state (buf_len 0)")
+
+
 def _write_words(mut ex: DeviceExec, p: FP, words: List[Int]) raises:
     """Queue the carried state's host integers into their int32 words (the
     executor stages the bytes at once; no wait)."""
@@ -336,16 +394,22 @@ struct _M2Block(Movable):
     var w: Mamba2DeviceWeights
     var st: Mamba2DeviceState
     var dx: DeviceBuffer[DType.float32]
+    #: the last run's h_last report (stage S17 after the final padded chunk,
+    #: NOT the resumption state), copied out of the call-shaped stages
+    var h_last: DeviceBuffer[DType.float32]
 
     def __init__(out self, ctx: DeviceContext, mut ex: DeviceExec, w: FP, nw: Int, s: FP, ns: Int, q: FP,
                  b: Int, dm: Int) raises:
         var dims = Mamba2Dims.of(dm)
         var words = _read_words(ex, q, 1)
-        if words[0] < 0 or words[0] >= M2_CHUNK_SIZE:
-            raise Error("ValueError: ops: mamba2_step: buf_len must be in [0, " + String(M2_CHUNK_SIZE)
-                        + "), got " + String(words[0]))
+        _m2_check_words(words)
         var aw = MambaArena(over=_view(ex, w, nw), cap=nw, guard=MAMBA_GUARD)
         var dw = Mamba2DeviceWeights(ctx, dims, aw)
+        # The state fields are VIEWS of the session tensor and are never
+        # replaced: replacing a Mamba2DeviceState field faults on AMD (HIP
+        # memory fault, the B2/L4/DM32 note of the retired `_mamba2_run`).
+        # Every state write goes into the session tensor in place
+        # (`OpsSession.load_block`).
         var as_ = MambaArena(over=_view(ex, s, ns), cap=ns, guard=MAMBA_GUARD)
         var ds = Mamba2DeviceState(ctx, b, dims, as_)
         ds.buf_len = words[0]
@@ -355,6 +419,7 @@ struct _M2Block(Movable):
         self.b = b
         self.dm = dm
         self.dx = mamba_zeros(ctx, b * dm)
+        self.h_last = mamba_zeros(ctx, m2_report_floats(b, dm))
         self.arena_w = aw^
         self.arena_s = as_^
         self.w = dw^
@@ -372,6 +437,11 @@ struct _M3Block(Movable):
     var w: Mamba3DeviceWeights
     var st: Mamba3DeviceState
     var dx: DeviceBuffer[DType.float32]
+    #: the last run's four reports (h_last, k_last, v_last, theta_last: the
+    #: contract's REPORT stages, distinct from the resumption state)
+    var reports: List[DeviceBuffer[DType.float32]]
+    #: IDN_M3_DECODE_WINDOW_REUSE: the previous L = 1 step's stages
+    var decode_stages: Optional[Mamba3DeviceStages]
 
     def __init__(out self, ctx: DeviceContext, mut ex: DeviceExec, w: FP, nw: Int, s: FP, ns: Int, q: FP,
                  b: Int, dm: Int) raises:
@@ -379,13 +449,7 @@ struct _M3Block(Movable):
         var words = _read_words(ex, q, 2)
         var q0 = words[0]
         var pend = words[1]
-        # `_m3_session_copy_in`'s checks, word for word.
-        if q0 < 0 or q0 > M3_CHUNK_SIZE:
-            raise Error("ValueError: ops: mamba3_step: buf_len out of range")
-        if pend != 0 and pend != 1:
-            raise Error("ValueError: ops: mamba3_step: pending must be 0 or 1")
-        if pend == 1 and q0 != 0:
-            raise Error("ValueError: ops: mamba3_step: Input_States pending requires a fresh state")
+        _m3_check_words(words)
         var aw = MambaArena(over=_view(ex, w, nw), cap=nw, guard=MAMBA_GUARD)
         var dw = Mamba3DeviceWeights(ctx, dims, aw)
         var as_ = MambaArena(over=_view(ex, s, ns), cap=ns, guard=MAMBA_GUARD)
@@ -398,6 +462,11 @@ struct _M3Block(Movable):
         self.b = b
         self.dm = dm
         self.dx = mamba_zeros(ctx, b * dm)
+        var sizes = m3_report_floats(b, dm)
+        self.reports = List[DeviceBuffer[DType.float32]](capacity=4)
+        for i in range(4):  # small-loop(the four Mamba-3 report buffers)
+            self.reports.append(mamba_zeros(ctx, sizes[i]))
+        self.decode_stages = None
         self.arena_w = aw^
         self.arena_s = as_^
         self.w = dw^
@@ -507,6 +576,41 @@ struct BlockStepScratch(Movable):
         self.m3.clear()
         self.attn.clear()
 
+    def set_words(mut self, addr: Int, words: List[Int]) raises:
+        """The carried integers of every Mamba entry whose state words live at
+        `addr` were written in place (`OpsSession.load_block`): the entries
+        keep their structs (the float state is a view, so it needs nothing)
+        and take the new host integers, checked as a new entry checks them."""
+        for i in range(len(self.m2)):  # driver-loop: over resident Mamba-2 blocks
+            if self.m2[i].q_addr == addr:
+                _m2_check_words(words)
+                self.m2[i].st.buf_len = words[0]
+        for i in range(len(self.m3)):  # driver-loop: over resident Mamba-3 blocks
+            if self.m3[i].q_addr == addr:
+                _m3_check_words(words)
+                self.m3[i].st.buf_len = words[0]
+                self.m3[i].st.pending = words[1] == 1
+        # an attention entry's cached-token count is read back by a rebuild
+        for i in range(len(self.attn) - 1, -1, -1):  # driver-loop: over resident attention blocks
+            if self.attn[i].q_addr == addr:
+                _ = self.attn.pop(i)
+
+    def weights_changed(mut self, addr: Int):
+        """The weights at `addr` were rewritten in place: the block's own
+        refusal of non-finite weights runs again at the next step."""
+        for i in range(len(self.m1)):  # driver-loop: over resident Mamba-1 blocks
+            if self.m1[i].w_addr == addr:
+                self.m1[i].w.weights_checked = False
+        for i in range(len(self.m2)):  # driver-loop: over resident Mamba-2 blocks
+            if self.m2[i].w_addr == addr:
+                self.m2[i].w.weights_checked = False
+        for i in range(len(self.m3)):  # driver-loop: over resident Mamba-3 blocks
+            if self.m3[i].w_addr == addr:
+                self.m3[i].w.weights_checked = False
+        for i in range(len(self.attn) - 1, -1, -1):  # driver-loop: over resident attention blocks
+            if self.attn[i].w_addr == addr:
+                _ = self.attn.pop(i)
+
 
 # ---------------------------------------------------------------- the runs
 def _tokens(code: Int, nx: Int, b: Int, dm: Int) raises -> Int:
@@ -586,11 +690,13 @@ def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     var trace = IdentityTrace.disabled()
     # `_m2_session_step_run`: call-shaped stages at the open chunk's length.
     var stages = Mamba2DeviceStages(ctx, b, l, blk.st.buf_len, dims)
+    var h_n = m2_report_floats(b, dm)
     if l == 1:
         _d2d(ctx, blk.dx, x, n)
         mamba2_block_forward(ctx, stages, blk.st, blk.w, blk.dx, b, 1, fs[0], fs[1], trace,
                              String("ops.step"))
         _d2d(ctx, y, stages.residual_out, n)
+        _d2d(ctx, blk.h_last, stages.h_last, h_n)
         ctx.synchronize()  # the call-shaped stages go at return
     else:
         var dx = mamba_zeros(ctx, n)
@@ -598,6 +704,7 @@ def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
         mamba2_block_forward(ctx, stages, blk.st, blk.w, dx, b, l, fs[0], fs[1], trace,
                              String("ops.step"))
         _d2d(ctx, y, stages.residual_out, n)
+        _d2d(ctx, blk.h_last, stages.h_last, h_n)
         ctx.synchronize()
         _ = dx^
     _ = stages^
@@ -628,14 +735,27 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     var x = _view(ex, bufs[0], n)
     var y = _view(ex, y_out, n)
     var trace = IdentityTrace.disabled()
-    # `_m3_session_step_run` (its default arm: stages built per call at the
-    # open chunk's length).
-    var stages = Mamba3DeviceStages(ctx, b, l, blk.st.buf_len, dims)
+    # The Mamba-3 decode session's body (the one body since lane
+    # x5-mamba-on-executor): stages built per call at the open chunk's
+    # length, or, under IDN_M3_DECODE_WINDOW_REUSE, the previous L = 1
+    # step's stages re-windowed at the carried buf_len.
+    var stages: Mamba3DeviceStages
+    comptime if IDN_M3_DECODE_WINDOW_REUSE:
+        if l == 1 and blk.decode_stages:
+            stages = blk.decode_stages.take()
+        elif l == 1:
+            stages = Mamba3DeviceStages(ctx, b, 1, M3_CHUNK_SIZE, dims)
+        else:
+            stages = Mamba3DeviceStages(ctx, b, l, blk.st.buf_len, dims)
+        if l == 1:
+            stages.reuse_decode_window(blk.st.buf_len)
+    else:
+        stages = Mamba3DeviceStages(ctx, b, l, blk.st.buf_len, dims)
+    var report_n = m3_report_floats(b, dm)
     if l == 1:
         _d2d(ctx, blk.dx, x, n)
         mamba3_block_forward(ctx, stages, blk.st, blk.w, blk.dx, b, 1, trace, String("ops.step"))
         _d2d(ctx, y, stages.residual_out, n)
-        ctx.synchronize()
     else:
         var dx = mamba_zeros(ctx, n)
         _d2d(ctx, dx, x, n)
@@ -643,7 +763,19 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
         _d2d(ctx, y, stages.residual_out, n)
         ctx.synchronize()
         _ = dx^
-    _ = stages^
+    _d2d(ctx, blk.reports[0], stages.h_last, report_n[0])
+    _d2d(ctx, blk.reports[1], stages.k_last, report_n[1])
+    _d2d(ctx, blk.reports[2], stages.v_last, report_n[2])
+    _d2d(ctx, blk.reports[3], stages.theta_last, report_n[3])
+    ctx.synchronize()
+    comptime if IDN_M3_DECODE_WINDOW_REUSE:
+        if l == 1:
+            # Every report copy above completed before capacity is retained.
+            blk.decode_stages = stages^
+        else:
+            _ = stages^
+    else:
+        _ = stages^
     var words: List[Int] = [blk.st.buf_len, 1 if blk.st.pending else 0]
     _write_words(ex, bufs[3], words)
 
@@ -749,3 +881,62 @@ def block_step_run(
             sc.forget(Int(bufs[k]))
         raise err
     raise Error("ops: " + String(code) + " is not a block step op")
+
+
+# ---------------------------------------------------------------- resident readers
+# Lane x5-mamba-on-executor (2026-11-09): what a family's program reads back
+# from the resident entry of a (weights, state) pair after a run, with no
+# device round trip for the host integers.
+def block_buffer_view(ex: DeviceExec, p: FP, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """The executor's storage [p, p + n) as a device buffer (no copy)."""
+    return _view(ex, p, n)
+
+
+def block_step_words(sc: BlockStepScratch, code: Int, w_addr: Int, s_addr: Int) raises -> List[Int]:
+    """The carried host integers of the resident entry over (weights, state):
+    Mamba-2 [buf_len], Mamba-3 [buf_len, pending], Mamba-1 none."""
+    if code == OPS_M2_STEP:
+        for i in range(len(sc.m2)):  # driver-loop: over resident Mamba-2 blocks
+            if sc.m2[i].w_addr == w_addr and sc.m2[i].s_addr == s_addr:
+                var out: List[Int] = [sc.m2[i].st.buf_len]
+                return out^
+    elif code == OPS_M3_STEP:
+        for i in range(len(sc.m3)):  # driver-loop: over resident Mamba-3 blocks
+            if sc.m3[i].w_addr == w_addr and sc.m3[i].s_addr == s_addr:
+                var out: List[Int] = [sc.m3[i].st.buf_len, 1 if sc.m3[i].st.pending else 0]
+                return out^
+    elif code == OPS_M1_STEP:
+        return List[Int]()
+    raise Error("ops: " + String(code) + ": no resident block over these weights and state (run the step first)")
+
+
+def block_step_reports_to_host(ctx: DeviceContext, sc: BlockStepScratch, code: Int, w_addr: Int, s_addr: Int,
+                               dsts: List[Int]) raises:
+    """Enqueue the last run's reports of the resident entry over (weights,
+    state) into the caller's host arrays (a 0 address skips that report):
+    Mamba-2 [h_last], Mamba-3 [h_last, k_last, v_last, theta_last]. No wait;
+    the caller synchronizes before it reads them."""
+    if code == OPS_M2_STEP:
+        for i in range(len(sc.m2)):  # driver-loop: over resident Mamba-2 blocks
+            if sc.m2[i].w_addr == w_addr and sc.m2[i].s_addr == s_addr:
+                if len(dsts) != 1:
+                    raise Error("ops: mamba2_step has one report (h_last)")
+                if dsts[0] != 0:
+                    var n = m2_report_floats(sc.m2[i].b, sc.m2[i].dm)
+                    ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dsts[0]),
+                                     src_buf=sc.m2[i].h_last.create_sub_buffer[DType.float32](0, n))
+                return
+    elif code == OPS_M3_STEP:
+        for i in range(len(sc.m3)):  # driver-loop: over resident Mamba-3 blocks
+            if sc.m3[i].w_addr == w_addr and sc.m3[i].s_addr == s_addr:
+                if len(dsts) != 4:
+                    raise Error("ops: mamba3_step has four reports (h_last, k_last, v_last, theta_last)")
+                var sizes = m3_report_floats(sc.m3[i].b, sc.m3[i].dm)
+                for k in range(4):  # small-loop(the four Mamba-3 report buffers)
+                    if dsts[k] != 0:
+                        ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dsts[k]),
+                                         src_buf=sc.m3[i].reports[k].create_sub_buffer[DType.float32](0, sizes[k]))
+                return
+    else:
+        raise Error("ops: " + String(code) + " keeps no reports")
+    raise Error("ops: " + String(code) + ": no resident block over these weights and state (run the step first)")
