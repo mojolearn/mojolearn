@@ -199,6 +199,13 @@ def program_fit_parameters[E: Exec & Movable & Deinitable, KIND: Int](
                 params.append(other.params[k])
     if explicit:
         params = selected.copy()
+    else:
+        # lane x1: carried state is never a default training parameter
+        var weights = List[Int]()
+        for k in range(len(params)):  # driver-loop: over the default parameters, dropping carried state
+            if not s[].is_state(params[k]):
+                weights.append(params[k])
+        params = weights^
     return params^
 
 
