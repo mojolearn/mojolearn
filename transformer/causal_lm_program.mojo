@@ -420,3 +420,160 @@ struct CausalLMProgram(Movable):
                 result.tokens.append(bitcast[DType.int32](h.data[k]))
             result.wrote += iters
 
+
+
+# ---------------------------------------------------------------- the read
+# The one native entry of a CausalLM read on the decode program (the shell,
+# bindings/causal_lm_public.mojo `_read_program`, admits the Python model and
+# state and calls this through providers/python/causal_lm_program_pyapi.mojo).
+#
+# p: [b, vocab, d_model, n_layers, n_eos, pad, greedy, top_k, seed_lo, seed_hi,
+#     length, n, position]
+# f: [eps, temperature, top_p, then each Mamba-2 layer's dt_lo, dt_hi]
+# a: [embedding, norm, head, ids (b, length) int32, tokens out (b * n) int32
+#     step-major, finished in/out (b) int32, lengths in/out (b) int32,
+#     eos ids..., then per layer: code, n_ints, ints..., n_weights, weights...,
+#     n_state, state arrays..., n_words, words..., n_reports, reports...]
+# Returns [wrote, forwards, bad token (-1 none), alive, per layer its words...].
+comptime CAUSAL_PROGRAM_P = 13
+comptime CAUSAL_PROGRAM_A = 7
+
+
+struct _Cursor:
+    var at: Int
+
+    def __init__(out self, at: Int):
+        self.at = at
+
+    def take(mut self, a: List[Int]) raises -> Int:
+        if self.at >= len(a):
+            raise Error("CausalLM: decode program descriptor is short")
+        var v = a[self.at]
+        self.at += 1
+        return v
+
+    def take_list(mut self, a: List[Int]) raises -> List[Int]:
+        var n = self.take(a)
+        if n < 0:
+            raise Error("CausalLM: decode program descriptor holds a negative count")
+        var out = List[Int](capacity=n)
+        for _ in range(n):  # small-loop(n: a layer's descriptor words): argument words, no data
+            out.append(self.take(a))
+        return out^
+
+
+struct CausalProgramLayout(Movable):
+    """The parsed per-layer part of a read descriptor."""
+    var specs: List[CausalLMLayerSpec]
+    var states: List[List[Int]]
+    var words: List[List[Int]]
+    var reports: List[List[Int]]
+    var eos: List[Int]
+    var key: List[Int]
+
+    def __init__(out self, a: List[Int], p: List[Int], f: List[Float32]) raises:
+        if len(p) != CAUSAL_PROGRAM_P or len(a) < CAUSAL_PROGRAM_A:
+            raise Error("CausalLM: invalid decode program descriptor")
+        var b = p[0]
+        var n_layers = p[3]
+        var n_eos = p[4]
+        self.specs = List[CausalLMLayerSpec]()
+        self.states = List[List[Int]]()
+        self.words = List[List[Int]]()
+        self.reports = List[List[Int]]()
+        self.eos = List[Int]()
+        self.key = [a[0], a[1], a[2], b]
+        var c = _Cursor(CAUSAL_PROGRAM_A)
+        for _ in range(n_eos):  # small-loop(n_eos: the stream's end ids): argument words, no data
+            self.eos.append(c.take(a))
+        var fat = 3
+        for _ in range(n_layers):  # driver-loop: over the model's layers (descriptor parse)
+            var code = c.take(a)
+            var ints = c.take_list(a)
+            var weights = c.take_list(a)
+            var fs = List[Float32]()
+            if code == OPS_M2_STEP:
+                if fat + 2 > len(f):
+                    raise Error("CausalLM: decode program descriptor misses a Mamba-2 dt limit")
+                fs.append(f[fat])
+                fs.append(f[fat + 1])
+                fat += 2
+            for k in range(len(ints)):  # small-loop(ints: a layer's op words): key words, no data
+                self.key.append(ints[k])
+            for k in range(len(weights)):  # small-loop(weights: a layer's weight addresses): key words, no data
+                self.key.append(weights[k])
+            self.specs.append(CausalLMLayerSpec(code, ints^, fs^, weights^))
+            self.states.append(c.take_list(a))
+            self.words.append(c.take_list(a))
+            self.reports.append(c.take_list(a))
+
+
+def causal_program_open(a: List[Int], p: List[Int], f: List[Float32]) raises -> CausalLMProgram:
+    """A new decode program for the read descriptor's model."""
+    var layout = CausalProgramLayout(a, p, f)
+    return CausalLMProgram(a[0], p[1], p[2], a[1], f[0], a[2], p[0], layout.specs, p[4])
+
+
+def causal_program_matches(prog: CausalLMProgram, a: List[Int], p: List[Int], f: List[Float32]) raises -> Bool:
+    var layout = CausalProgramLayout(a, p, f)
+    return prog.matches(layout.key, p[4]) and prog.v == p[1] and prog.d == p[2]
+
+
+def causal_program_read(mut prog: CausalLMProgram, a: List[Int], p: List[Int], f: List[Float32]) raises -> List[Int]:
+    """One read: load every layer's state and the rows, run the prompt (or
+    the current token) and up to n - 1 more tokens as the decode loop,
+    export the state, the rows and the tokens. A failure leaves the
+    caller's arrays as the last export (this read's state is lost: the
+    caller marks the stream unusable)."""
+    var layout = CausalProgramLayout(a, p, f)
+    var b = p[0]
+    var length = p[10]
+    var n = p[11]
+    var fin = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=a[5])
+    var lens = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=a[6])
+    var finished = List[Bool](capacity=b)
+    var lengths = List[Int](capacity=b)
+    for r in range(b):  # driver-loop: over batch rows (row flags, no data)
+        finished.append(fin[r] != 0)
+        lengths.append(Int(lens[r]))
+    for i in range(len(layout.specs)):  # driver-loop: over the model's layers (state load)
+        prog.load_layer(i, layout.states[i], layout.words[i])
+    prog.load_rows(finished, lengths, layout.eos, p[12])
+    prog.set_policy(p[5], p[6] != 0, p[7], (UInt64(p[9]) << 32) | UInt64(p[8]), f[1], f[2])
+    var result = CausalLMDecodeResult()
+    var alive = True
+    if n >= 1:
+        var ids = List[Int32]()
+        alive = prog.step(a[3], length, ids)
+        result.forwards = 1
+        result.wrote = 1
+        result.tokens = ids.copy()
+        if alive and n > 1 and length > 1 and prog.body == 0:
+            # The body is captured at the first one-token step.
+            var next = List[Int32]()
+            alive = prog.step(Int(ids.unsafe_ptr()), 1, next)
+            result.forwards += 1
+            result.wrote += 1
+            for r in range(b):  # driver-loop: over batch rows (id words, no data)
+                result.tokens.append(next[r])
+            ids = next^
+        if alive and result.wrote < n:
+            prog.decode(ids, n - result.wrote, result)
+    var row = prog.read_rows(finished, lengths)
+    var bad = row[1]
+    if bad >= 0:
+        # The failing forward ran; its pick did not commit.
+        result.wrote -= 1
+    var words = List[List[Int]]()
+    prog.export_layers(layout.states, words, layout.reports)
+    for r in range(b):  # driver-loop: over batch rows (row flags, no data)
+        fin[r] = Int32(1 if finished[r] else 0)
+        lens[r] = Int32(lengths[r])
+    var out = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=a[4])
+    for k in range(result.wrote * b):  # driver-loop: over the committed token record (id words, no data)
+        out[k] = result.tokens[k]
+    var ret: List[Int] = [result.wrote, result.forwards, bad, row[0]]
+    for i in range(len(words)):  # driver-loop: over the model's layers (carried integers)
+        for k in range(len(words[i])):  # small-loop(at most two state words)
+            ret.append(words[i][k])
+    return ret^
