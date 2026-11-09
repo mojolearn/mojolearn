@@ -407,7 +407,7 @@ DEBT = {
     'bindings/trees_gbdt_adapter_lifecycle.mojo': {'native_loaded_module': 7},
     'bindings/trees_gbdt_parameters.mojo': {'native_loaded_module': 1},
     'bindings/trees_meta_admission.mojo': {'cpython': 1, 'native_loaded_module': 4},
-    'bindings/trees_public_inputs.mojo': {'cpython': 3, 'native_loaded_module': 1},
+    'bindings/trees_public_inputs.mojo': {'cpython': 2, 'native_loaded_module': 1},
     'bindings/trees_public_lifecycle_native.mojo': {'native_loaded_module': 2},
     'bindings/trees_public_meta.mojo': {'cpython': 1, 'native_loaded_module': 1},
     'bindings/trees_public_meta_lifecycle.mojo': {'native_loaded_module': 1},
