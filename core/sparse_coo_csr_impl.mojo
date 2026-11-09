@@ -4,8 +4,10 @@
 # stored buffers, bindings/cfb_sparse_read.mojo) grouped by row with a stable
 # counting sort, split across the host's cores. It replaces the call to the
 # caller's own `tocsr()` (SciPy's Python conversion) inside the native
-# operation. Entries keep their stored order within a row and duplicates are
-# kept (each is one edge); no value arithmetic runs.
+# operation. `sparse_coo_to_csr` keeps the stored order within a row and keeps
+# duplicates; `sparse_coo_to_csr_summed` (below) merges them as `tocsr()` does,
+# and `sparse_dense_row_counts` / `sparse_dense_fill` take the nonzeros of a
+# natively densified BSR / DIA / DOK / LIL container.
 from std.sys.info import num_physical_cores
 from core.host_parallel import host_parallelize
 
@@ -149,3 +151,216 @@ def sparse_coo_to_csr(n_rows: Int, n_cols: Int, nnz: Int, rows_addr: Int, cols_a
     _ = len(counts)
     _ = len(failed)
     return 0
+
+
+# ------------------------------------------------- duplicates summed, dense
+# Integration lane i2 (2026-11-09), correction to P1_NEIGHBORS_GRAPH_TOCSR:
+# SciPy's `coo.tocsr()` SUMS duplicate (row, col) entries; the grouping above
+# keeps them, so a graph built from a COO adjacency with repeated edges gave
+# wrong PageRank weights and degrees. `sparse_coo_to_csr_summed` groups the
+# entries by column, then by row (two stable counting sorts, so entries of one
+# row come out in ascending column and repeated (row, col) entries in their
+# stored order), then merges each run of one column into one entry whose value
+# is the sum of the run IN STORED ORDER, left to right: one fixed order on
+# every host, so the same bits wherever it runs.
+
+
+def _expand_major(n_major: Int, nnz: Int, ptr: _I32P, out_major: _I32P):
+    """`out_major[k] = c` for every k in `[ptr[c], ptr[c + 1])`, column blocks
+    across the cores."""
+    var split = _row_blocks(n_major, n_major + nnz)
+    var blocks = split[0]
+    var chunk = split[1]
+
+    def _task(b: Int) {imm ptr, imm out_major, imm chunk, imm n_major}:
+        var lo = b * chunk
+        var hi = lo + chunk
+        if hi > n_major:
+            hi = n_major
+        for c in range(lo, hi):
+            for k in range(Int(ptr[c]), Int(ptr[c + 1])):
+                out_major.unsafe_store(k, Int32(c))
+
+    if blocks == 1:
+        _task(0)
+    else:
+        host_parallelize(_task, blocks)
+
+
+def _row_blocks(n_rows: Int, work: Int) -> Tuple[Int, Int]:
+    """(blocks, rows per block) for a pass over rows that touches `work`
+    words in all, across the cores (one block per `_MIN_ENTRIES_PER_TASK`
+    words, at most one per core, never more blocks than rows)."""
+    var cores = num_physical_cores()
+    var blocks = (work + _MIN_ENTRIES_PER_TASK - 1) // _MIN_ENTRIES_PER_TASK
+    if blocks > n_rows:
+        blocks = n_rows
+    if blocks > cores:
+        blocks = cores
+    if blocks < 1:
+        blocks = 1
+    return (blocks, (n_rows + blocks - 1) // blocks)
+
+
+def sparse_coo_to_csr_summed(n_rows: Int, n_cols: Int, nnz: Int, rows_addr: Int, cols_addr: Int, vals_addr: Int,
+                             indptr_out: Int, indices_out: Int, vals_out: Int) -> Int:
+    """`sparse_coo_to_csr` with duplicate (row, col) entries merged, as
+    SciPy's `coo.tocsr()` does: `indptr_out` gets `n_rows + 1` offsets, the
+    first m words of `indices_out` (and of `vals_out`, when both value
+    addresses are nonzero) the ascending columns of each row and the summed
+    values. `indices_out` / `vals_out` must hold `nnz` words. Returns m
+    (the entry count after merging), or -1 when an entry lies outside the
+    shape."""
+    if n_rows < 1 or n_cols < 1 or nnz < 0 or nnz > 2147483647:
+        return -1
+    var with_values = vals_addr != 0 and vals_out != 0
+    var nv = nnz if with_values else 0
+    # Pass 1: grouped by column (rows as the minor index), stored order kept.
+    var tptr = List[Int32](length=n_cols + 1, fill=0)
+    var trow = List[Int32](length=nnz, fill=0)
+    var tval = List[Float32](length=nv, fill=0)
+    if sparse_coo_to_csr(n_cols, n_rows, nnz, cols_addr, rows_addr, vals_addr if with_values else 0,
+                         Int(tptr.unsafe_ptr()), Int(trow.unsafe_ptr()),
+                         Int(tval.unsafe_ptr()) if with_values else 0) != 0:
+        return -1
+    var tcol = List[Int32](length=nnz, fill=0)
+    _expand_major(n_cols, nnz, _I32P(unsafe_from_address=Int(tptr.unsafe_ptr())),
+                  _I32P(unsafe_from_address=Int(tcol.unsafe_ptr())))
+    # Pass 2: grouped by row; within a row ascending column, ties in stored order.
+    var gptr = List[Int32](length=n_rows + 1, fill=0)
+    var gcol = List[Int32](length=nnz, fill=0)
+    var gval = List[Float32](length=nv, fill=0)
+    if sparse_coo_to_csr(n_rows, n_cols, nnz, Int(trow.unsafe_ptr()), Int(tcol.unsafe_ptr()),
+                         Int(tval.unsafe_ptr()) if with_values else 0,
+                         Int(gptr.unsafe_ptr()), Int(gcol.unsafe_ptr()),
+                         Int(gval.unsafe_ptr()) if with_values else 0) != 0:
+        return -1
+    var gp = _I32P(unsafe_from_address=Int(gptr.unsafe_ptr()))
+    var gc = _I32P(unsafe_from_address=Int(gcol.unsafe_ptr()))
+    var gv = _F32P(unsafe_from_address=Int(gval.unsafe_ptr()))
+    var ip = _I32P(unsafe_from_address=indptr_out)
+    var ix = _I32P(unsafe_from_address=indices_out)
+    var vo = _F32P(unsafe_from_address=vals_out)
+    var split = _row_blocks(n_rows, n_rows + nnz)
+    var blocks = split[0]
+    var row_chunk = split[1]
+
+    # Distinct columns per row.
+    def _count_task(b: Int) {imm gp, imm gc, imm ip, imm row_chunk, imm n_rows}:
+        var lo = b * row_chunk
+        var hi = lo + row_chunk
+        if hi > n_rows:
+            hi = n_rows
+        for r in range(lo, hi):
+            var start = Int(gp[r])
+            var stop = Int(gp[r + 1])
+            var distinct = 0
+            for k in range(start, stop):
+                if k == start or gc[k] != gc[k - 1]:
+                    distinct += 1
+            ip.unsafe_store(r + 1, Int32(distinct))
+
+    if blocks == 1:
+        _count_task(0)
+    else:
+        host_parallelize(_count_task, blocks)
+    ip.unsafe_store(0, Int32(0))
+    for r in range(n_rows):  # driver-loop: prefix sum over rows (serial by nature: each offset needs the previous)
+        ip.unsafe_store(r + 1, ip[r + 1] + ip[r])
+
+    # One entry per run; the run's values summed in stored order.
+    def _fill_task(b: Int) {imm gp, imm gc, imm gv, imm ip, imm ix, imm vo, imm with_values, imm row_chunk, imm n_rows}:
+        var lo = b * row_chunk
+        var hi = lo + row_chunk
+        if hi > n_rows:
+            hi = n_rows
+        for r in range(lo, hi):
+            var start = Int(gp[r])
+            var stop = Int(gp[r + 1])
+            var at = Int(ip[r]) - 1
+            for k in range(start, stop):
+                if k == start or gc[k] != gc[k - 1]:
+                    at += 1
+                    ix.unsafe_store(at, gc[k])
+                    if with_values:
+                        vo.unsafe_store(at, gv[k])
+                elif with_values:
+                    vo.unsafe_store(at, vo[at] + gv[k])
+
+    if blocks == 1:
+        _fill_task(0)
+    else:
+        host_parallelize(_fill_task, blocks)
+    _ = len(tptr)
+    _ = len(trow)
+    _ = len(tval)
+    _ = len(tcol)
+    _ = len(gptr)
+    _ = len(gcol)
+    _ = len(gval)
+    return Int(ip[n_rows])
+
+
+def sparse_dense_row_counts(n_rows: Int, n_cols: Int, dense_addr: Int, indptr_out: Int) -> Int:
+    """`indptr_out` (`n_rows + 1` int32 offsets) of the nonzero entries of the
+    C-order float32 `n_rows` x `n_cols` matrix at `dense_addr` (a value is
+    stored when it is not 0; NaN is stored); returns their count. Row blocks
+    across the cores, then one serial prefix."""
+    var dp = _F32P(unsafe_from_address=dense_addr)
+    var ip = _I32P(unsafe_from_address=indptr_out)
+    var split = _row_blocks(n_rows, n_rows * n_cols)
+    var row_chunk = split[1]
+
+    def _task(b: Int) {imm dp, imm ip, imm row_chunk, imm n_rows, imm n_cols}:
+        var lo = b * row_chunk
+        var hi = lo + row_chunk
+        if hi > n_rows:
+            hi = n_rows
+        for r in range(lo, hi):
+            var count = 0
+            for c in range(n_cols):
+                if dp[r * n_cols + c] != 0:
+                    count += 1
+            ip.unsafe_store(r + 1, Int32(count))
+
+    if split[0] == 1:
+        _task(0)
+    else:
+        host_parallelize(_task, split[0])
+    ip.unsafe_store(0, Int32(0))
+    for r in range(n_rows):  # driver-loop: prefix sum over rows (serial by nature: each offset needs the previous)
+        ip.unsafe_store(r + 1, ip[r + 1] + ip[r])
+    return Int(ip[n_rows])
+
+
+def sparse_dense_fill(n_rows: Int, n_cols: Int, dense_addr: Int, indptr_addr: Int, indices_out: Int, vals_out: Int):
+    """The nonzero entries counted by `sparse_dense_row_counts`, row by row in
+    ascending column: columns into `indices_out`, values into `vals_out`
+    (skipped when 0)."""
+    var dp = _F32P(unsafe_from_address=dense_addr)
+    var ip = _I32P(unsafe_from_address=indptr_addr)
+    var ix = _I32P(unsafe_from_address=indices_out)
+    var vo = _F32P(unsafe_from_address=vals_out)
+    var with_values = vals_out != 0
+    var split = _row_blocks(n_rows, n_rows * n_cols)
+    var row_chunk = split[1]
+
+    def _task(b: Int) {imm dp, imm ip, imm ix, imm vo, imm with_values, imm row_chunk, imm n_rows, imm n_cols}:
+        var lo = b * row_chunk
+        var hi = lo + row_chunk
+        if hi > n_rows:
+            hi = n_rows
+        for r in range(lo, hi):
+            var at = Int(ip[r])
+            for c in range(n_cols):
+                var v = dp[r * n_cols + c]
+                if v != 0:
+                    ix.unsafe_store(at, Int32(c))
+                    if with_values:
+                        vo.unsafe_store(at, v)
+                    at += 1
+
+    if split[0] == 1:
+        _task(0)
+    else:
+        host_parallelize(_task, split[0])

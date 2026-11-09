@@ -30,9 +30,10 @@ from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_call, family_isinstance, family_str, family_array,
 )
 from bindings.cfb_spectral import _as_i32
-from bindings.host_sparse_native import host_sparse_format, _sparse_fields
+from std.memory import memcpy
+from bindings.host_sparse_native import host_sparse_format, _sparse_fields, host_sparse_dense
 from bindings.cfb_sparse_read import cfb_sparse_triples
-from core.sparse_coo_csr_impl import sparse_coo_to_csr
+from core.sparse_coo_csr_impl import sparse_coo_to_csr_summed, sparse_dense_row_counts, sparse_dense_fill
 from bindings.neighbors_ann_native import ann_keep_array
 from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
@@ -201,10 +202,11 @@ struct _Csr(Movable):
 
 def _csr_of_triples(triples: PythonObject, n: Int, graph: Bool, context: PythonObject) raises -> PythonObject:
     """`(indptr, indices, data)` of the square `n` x `n` matrix whose
-    stored `(row, col, data, shape)` triples are given: the entries grouped
-    by row with one stable parallel counting sort (core/sparse_coo_csr_impl
-    .mojo), duplicates kept, entries of one row in stored order; `data` is
-    None unless `graph`."""
+    stored `(row, col, data, shape)` triples are given, as SciPy's
+    `tocsr()` builds it: the entries grouped by row in ascending column and
+    repeated (row, col) entries merged, their weights summed in stored order
+    (core/sparse_coo_csr_impl.mojo `sparse_coo_to_csr_summed`, parallel);
+    `data` is None unless `graph`."""
     var rows = _as_i32(triples[0], "rows", context)
     var cols = _as_i32(triples[1], "cols", context)
     var nnz = Int(py=rows.shape[0])
@@ -216,27 +218,90 @@ def _csr_of_triples(triples: PythonObject, n: Int, graph: Bool, context: PythonO
         if Int(py=src_vals.shape[0]) != nnz:
             raise Error("the CSR adjacency's data must hold one weight per entry")
     var indptr = family_array(Python.tuple(n + 1), "<i4", context)
-    var indices = family_array(Python.tuple(nnz), "<i4", context)
-    var vals = family_array(Python.tuple(nnz), "<f4", context) if graph else PythonObject(None)
-    var status = sparse_coo_to_csr(n, n, nnz, Int(py=classical_address(rows)), Int(py=classical_address(cols)),
-                                   Int(py=classical_address(src_vals)) if graph else 0,
-                                   Int(py=classical_address(indptr)), Int(py=classical_address(indices)),
-                                   Int(py=classical_address(vals)) if graph else 0)
+    # The merged entries land in native scratch sized for the stored count,
+    # then the m that remain are copied into exact-size arrays.
+    var merged_indices = List[Int32](length=nnz, fill=0)
+    var merged_vals = List[Float32](length=nnz if graph else 0, fill=0)
+    var m = sparse_coo_to_csr_summed(n, n, nnz, Int(py=classical_address(rows)), Int(py=classical_address(cols)),
+                                     Int(py=classical_address(src_vals)) if graph else 0,
+                                     Int(py=classical_address(indptr)), Int(merged_indices.unsafe_ptr()),
+                                     Int(merged_vals.unsafe_ptr()) if graph else 0)
     _ = rows  # keep the Python object alive through the native call above
     _ = cols  # keep the Python object alive through the native call above
     _ = src_vals  # keep the Python object alive through the native call above
-    if status != 0:
+    if m < 0:
         raise Error("the sparse adjacency has an entry outside its shape")
+    var indices = family_array(Python.tuple(m), "<i4", context)
+    var vals = family_array(Python.tuple(m), "<f4", context) if graph else PythonObject(None)
+    if m > 0:
+        memcpy(dest=FAMILY_I32P(unsafe_from_address=Int(py=classical_address(indices))),
+               src=FAMILY_I32P(unsafe_from_address=Int(merged_indices.unsafe_ptr())), count=m)
+        if graph:
+            memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(vals))),
+                   src=FAMILY_F32P(unsafe_from_address=Int(merged_vals.unsafe_ptr())), count=m)
+    _ = len(merged_indices)  # keep the scratch alive through the copies above
+    _ = len(merged_vals)
     return Python.tuple(indptr, indices, vals)
+
+
+def _csr_of_dense(dense: PythonObject, n: Int, graph: Bool, context: PythonObject) raises -> PythonObject:
+    """`(indptr, indices, data)` of the nonzero entries of a natively
+    densified square float32 adjacency (a BSR / DIA / DOK / LIL container,
+    `host_sparse_dense`, which sums duplicates as `tocsr()` does), row by
+    row in ascending column (core/sparse_coo_csr_impl.mojo, parallel);
+    `data` is None unless `graph`."""
+    var indptr = family_array(Python.tuple(n + 1), "<i4", context)
+    var address = Int(py=classical_address(dense))
+    var m = sparse_dense_row_counts(n, n, address, Int(py=classical_address(indptr)))
+    var indices = family_array(Python.tuple(m), "<i4", context)
+    var vals = family_array(Python.tuple(m), "<f4", context) if graph else PythonObject(None)
+    if m > 0:
+        sparse_dense_fill(n, n, address, Int(py=classical_address(indptr)), Int(py=classical_address(indices)),
+                          Int(py=classical_address(vals)) if graph else 0)
+    _ = dense  # keep the Python object alive through the native calls above
+    return Python.tuple(indptr, indices, vals)
+
+
+def _duck_attr(source: PythonObject, name: String) raises -> PythonObject:
+    """`getattr(source, name, None)`: one CPython attribute read (no method
+    of the object is called)."""
+    return py_call(_b().getattr, source, PythonObject(name), PythonObject(None))
+
+
+def _duck_array(value: PythonObject, context: PythonObject) raises -> Bool:
+    """Whether `value` is exactly a NumPy ndarray or a mojolearn Array."""
+    if value is None:
+        return False
+    var cls = py_type(value)
+    var ndarray = py_get(context, "ndarray")
+    var array_class = py_get(context, "array_class")
+    return (ndarray is not None and cls is ndarray) or (array_class is not None and cls is array_class)
+
+
+def _duck_kind(source: PythonObject, context: PythonObject) raises -> Int:
+    """1 when `source` (not a SciPy container) exposes `shape` and an
+    `indptr` array (CSR), 2 when it exposes `shape` and `row` and `col`
+    arrays (COO), else 0 (a dense input). Attribute reads only; the arrays
+    must be exact NumPy ndarrays or mojolearn Arrays."""
+    if _duck_array(source, context) or _duck_attr(source, "shape") is None:
+        return 0
+    if _duck_array(_duck_attr(source, "indptr"), context):
+        return 1
+    if _duck_array(_duck_attr(source, "row"), context) and _duck_array(_duck_attr(source, "col"), context):
+        return 2
+    return 0
 
 
 def _csr_lists(source: PythonObject, graph: Bool, context: PythonObject) raises -> _Csr:
     """`_csr_of(A)` (graph False) or `_csr_graph_of(A)` (graph True): a
-    tuple `(indptr, indices, n)` or an exact SciPy CSR, CSC or COO matrix
-    read from its stored buffers (a CSC or COO grouped by row natively,
-    `_csr_of_triples`), the lists as int32 (`as_i32_c`), the weights as
-    float32 (`as_f32_c(M.data, ndim=1, name="data")`). No method of the
-    input (`tocsr()`) is called (P1, audit A #3)."""
+    tuple `(indptr, indices, n)`, an exact SciPy sparse matrix of any format
+    read from its stored buffers (CSR as stored; CSC / COO grouped by row
+    with duplicates summed, `_csr_of_triples`; BSR / DIA / DOK / LIL
+    densified natively, `_csr_of_dense`), or any other object exposing
+    `shape` with CSR (`indptr`, `indices`, `data`) or COO (`row`, `col`,
+    `data`) arrays, read as attributes; the lists as int32 (`as_i32_c`), the
+    weights as float32 (`as_f32_c(M.data, ndim=1, name="data")`). No method
+    of the input (`tocsr()`) is called (P1, audit A #3)."""
     var b = _b()
     var indptr = PythonObject(None)
     var indices = PythonObject(None)
@@ -247,8 +312,8 @@ def _csr_lists(source: PythonObject, graph: Bool, context: PythonObject) raises 
     # _sparse_fields): its `tocsr()` returns itself and `shape` is the
     # stored `_shape`, so the same arrays reach the kernels without running
     # SciPy's Python methods inside the native call. A CSC or COO container
-    # is grouped by row natively from its stored triples; any other SciPy
-    # format is refused by name.
+    # is grouped by row natively from its stored triples; BSR / DIA / DOK /
+    # LIL are densified natively from their stored buffers.
     var stored_csr = False
     var format = host_sparse_format(source)
     if format == "csr":
@@ -274,18 +339,59 @@ def _csr_lists(source: PythonObject, graph: Bool, context: PythonObject) raises 
     elif format.byte_length() > 0:
         # TOMBSTONE: P1_NEIGHBORS_GRAPH_TOCSR (removed: the caller's own tocsr(), SciPy Python code, inside the native graph call) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
         # Restore: experiments/removed/P1_NEIGHBORS_GRAPH_TOCSR.patch.
+        # i2 correction: CSC / COO duplicates are summed as `tocsr()` summed
+        # them, and BSR / DIA / DOK / LIL (or a CSR / CSC / COO whose stored
+        # buffers are not well formed) are converted natively, not refused:
+        # `host_sparse_dense` (the path spectral takes for them) sums
+        # duplicates from the stored buffers, then the nonzeros by row.
         var triples = cfb_sparse_triples(source, context)
-        if triples is None:
-            raise Error("TypeError: a sparse adjacency must be a SciPy CSR, CSC or COO matrix with well-formed, "
-                        + "nonempty stored buffers; got format '" + format + "' (convert it with tocsr() first)")
-        var shape = triples[3]
-        if _ne(shape[0], shape[1]):
-            raise Error("the adjacency matrix must be square")
-        n = Int(py=_int(shape[0]))
-        var grouped = _csr_of_triples(triples, n, graph, context)
+        var grouped: PythonObject
+        if triples is not None:
+            var shape = triples[3]
+            if _ne(shape[0], shape[1]):
+                raise Error("the adjacency matrix must be square")
+            n = Int(py=_int(shape[0]))
+            grouped = _csr_of_triples(triples, n, graph, context)
+        else:
+            var dense = host_sparse_dense(source, format, context)
+            var shape = dense.shape
+            if _ne(shape[0], shape[1]):
+                raise Error("the adjacency matrix must be square")
+            n = Int(py=_int(shape[0]))
+            grouped = _csr_of_dense(dense, n, graph, context)
         indptr = grouped[0]
         indices = grouped[1]
         vals = grouped[2]
+    elif _duck_kind(source, context) != 0:
+        # i2 correction: a sparse object that is not a SciPy container (it
+        # used to reach its own `tocsr()`) is read from its CSR or COO arrays
+        # by attribute; a COO is grouped by row with duplicates summed.
+        var shape = _duck_attr(source, "shape")
+        if (py_type(shape) is not b.tuple or len(shape) != 2 or py_type(shape[0]) is not b.int
+                or py_type(shape[1]) is not b.int):
+            raise Error("TypeError: a sparse adjacency's shape must be a tuple of two ints")
+        if _ne(shape[0], shape[1]):
+            raise Error("the adjacency matrix must be square")
+        n = Int(py=_int(shape[0]))
+        if _duck_kind(source, context) == 1:
+            indptr = _duck_attr(source, "indptr")
+            indices = _duck_attr(source, "indices")
+            if indices is None:
+                raise Error("TypeError: a CSR adjacency must expose indptr, indices and data arrays")
+            if graph:
+                var data = _duck_attr(source, "data")
+                if data is None:
+                    raise Error("TypeError: a CSR adjacency must expose indptr, indices and data arrays")
+                vals = admit_family(data, 1, "data", context).array
+        else:
+            var data = _duck_attr(source, "data") if graph else PythonObject(None)
+            if graph and data is None:
+                raise Error("TypeError: a COO adjacency must expose row, col and data arrays")
+            var grouped = _csr_of_triples(Python.tuple(_duck_attr(source, "row"), _duck_attr(source, "col"), data,
+                                                       shape), n, graph, context)
+            indptr = grouped[0]
+            indices = grouped[1]
+            vals = grouped[2]
     else:
         return _Csr(False, PythonObject(None), PythonObject(None), PythonObject(None), 0)
     var ip = _as_i32(indptr, "indptr", context)
