@@ -465,6 +465,9 @@ in the tables after the sections.
 | [`MOJOLEARN_RSVD_FAST_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, FAST + Apple) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_IDN_RSVD_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, IDENTICAL) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_RSVD_FAST_DEVSCAN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd finiteness scan, FAST + Apple) | removed (KEPT default, superseded: parallel host scan of the one admission path) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`MOJOLEARN_IDN_GPC_NEWTON_LOGDET_OFF`](#gp-gpc-and-krr-on-the-executors-cholesky-ops-20261109) | Gaussian process classification (Newton loop log-determinant, IDENTICAL) | removed (KEPT default, superseded: the Newton loop is one device loop, log-determinant always on the device) | 2026-11-09 | [N8_GPC_NEWTON_ONE_LOOP.patch](../experiments/removed/N8_GPC_NEWTON_ONE_LOOP.patch) |
+| [`gpc_b_matrix_kernel`, `gpc_w_kernel`, `gpc_rhs_kernel`, `gpc_scale_nan_kernel`, `gpc_a_kernel`, `gpc_lml_part_kernel`, `gpc_lml_fin_kernel` and the two Newton loop copies](#gp-gpc-and-krr-on-the-executors-cholesky-ops-20261109) | Gaussian process classification (binary and one-vs-rest Newton loops) | REFACTORED (one gated device loop, gaussian_process/gpc_newton.mojo) | 2026-11-09 | [N8_GPC_NEWTON_ONE_LOOP.patch](../experiments/removed/N8_GPC_NEWTON_ONE_LOOP.patch) |
+| [`gp_opt_run_end_kernel` and the per-evaluation host loop of `gpr_optimize_device`](#gp-gpc-and-krr-on-the-executors-cholesky-ops-20261109) | Gaussian process regression (hyperparameter optimizer) | REFACTORED (device run sequencer, `gp_opt_advance_kernel`) | 2026-11-09 | [N8_GP_OPT_DEVICE_RUNS.patch](../experiments/removed/N8_GP_OPT_DEVICE_RUNS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -4271,3 +4274,39 @@ lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Bits: none for any int32-range or
   lane/a3-admit-decomp-prep-metrics@0cb550c337.
 - `door_rows_call` (the `_arena_io._ROWS_CALL` connection in `_native_msel_dispatch.connect`): no reader after A5 deleted
   `door_rows_host`; removed from the glue and from tools/test_device_rows_door_cv.py.
+
+## GP, GPC and KRR on the executor's Cholesky ops (2026-11-09)
+
+Lane n8-gp-krr-smo (docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 4, rows "GP regressor / GPC Laplace"
+and "KRR"; the ops are lane N7's, docs/plans/EXECUTOR_N7_OPS.md). Every Gaussian process and kernel ridge Cholesky now
+runs `chol_op_factor` / `chol_op_cho_solve` / `chol_op_logdet` (cholesky/chol_ops.mojo): the factor's `info` stays in a
+device word that gates the later launches (CHOL_DEFER_INFO on every vendor) and comes home at the family's own sync.
+
+- `MOJOLEARN_IDN_GPC_NEWTON_LOGDET_OFF` (the `_OFF` arm of GPC_IDN_NEWTON_LOGDET, fam2-kernel-gp 2026-10-04, IDENTICAL
+  default ON, no A/B of its own: the default kept log|B| on the device, the arm read it home per iteration through
+  `chol_logdet`). The Newton loop is now one bounded device loop, so the host read the arm restored has nowhere to go;
+  the log-determinant is always `chol_op_logdet`. No `grid_controls` entry existed. Refusal in
+  `core/experiment_guards_kernel.mojo`.
+- The two copies of the Laplace Newton loop (`classifier.mojo::_gpc_fit_binary_device` and
+  `gpc_ovr.mojo::gpc_newton_device`, the same launches in the same order) and the seven ungated kernels only they
+  launched (`gpc_b_matrix_kernel`, `gpc_w_kernel`, `gpc_rhs_kernel`, `gpc_scale_nan_kernel`, `gpc_a_kernel`,
+  `gpc_lml_part_kernel`, `gpc_lml_fin_kernel`, plus `gpc_ovr.mojo::gpc_lml_fin_dev_kernel`): replaced by
+  `gaussian_process/gpc_newton.mojo` (`GPCNewtonStep` on `bounded_device_loop`, the same items gated on the loop's done
+  word, the NaN guard and DEVIATION 2830's stop test as one criterion kernel). Per fit: 2-3 drains per Newton iteration
+  became one register read per 8 iterations plus one read of the likelihood. The `+0.0` `add_jitter` launch on B was
+  dropped: B's diagonal is `ftz(1 + cell)`, never -0.0, so it changed no bit.
+- `gp_opt_run_end_kernel` and `gpr_optimize_device`'s per-run host loop (the stop word read after every evaluation,
+  the Cholesky's `info` read inside `potrf_lower`): replaced by `gp_opt_advance_kernel` (`gp_opt_advance_item`: a stopped
+  run's record and the next run's start on the device) and a done word read once per 8 evaluations
+  (`GP_OPT_EVAL_CHECK`).
+- Also moved, no record of their own: `gpr_resident.mojo::gpr_fit_ptr_device`, `estimator.mojo::gpr_fit_host`,
+  `gpr_lml_grad_host` (four drains to one) and `gpr_sample_y_host`; KRR's `kernel_ridge_solve` off the trace route and
+  `kernel_ridge_fit_ptr` (info read with the dual download; new `kernel_ridge_factor_solve_enqueue`).
+  `chol_op_zero_on_fail` was added to cholesky/chol_ops.mojo for the failed-fit zero dual.
+- Bits: none intended on NVIDIA, AMD or Apple IDENTICAL (the ops run `potrf_lower`'s strip / left-looking launches and
+  `cho_solve`'s chains, and the GPC items and block sizes are unchanged). A failed factor's returned L is the one frozen
+  at the failing panel rather than LAPACK's completed partial factor. Apple FAST GP / GPC / KRR words change (strip
+  schedule instead of the vendor-GEMM panel route; FAST needs quality only).
+- Code recoverable at `f59d913b0b`; patches `experiments/removed/N8_GPC_NEWTON_ONE_LOOP.patch` (classifier.mojo,
+  gpc_ovr.mojo) and `experiments/removed/N8_GP_OPT_DEVICE_RUNS.patch` (gp_optim.mojo, gp_optim_items.mojo).
+
