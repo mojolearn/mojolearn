@@ -436,10 +436,16 @@ def _destroy(p: _ProgramPtr):
 def _claim(code: Int, b: Int, dm: Int, fs: List[Float32], weights: List[Int]) raises -> Tuple[_ProgramPtr, Bool]:
     """An idle cached program for this block (marked busy), or a new one:
     cached when the cache has room or an idle entry to evict, else a
-    temporary (second flag False) the caller destroys."""
+    temporary (second flag False) the caller destroys. A program matches by
+    its weight addresses, or, when the caller's arrays moved (a converted
+    copy has a new address every call), by its weight bytes: a same-shape
+    idle program holding exactly these bytes is the same block."""
+    var ints: List[Int] = [b, dm]
+    var wsizes = block_weight_sizes(code, ints)
     var c = _cache()
     _lock(c)
     var victim = -1
+    var hit = -1
     try:
         c[].tick += 1
         for i in range(len(c[].programs)):  # driver-loop: over cached Mamba programs (at most the cap)
@@ -447,13 +453,25 @@ def _claim(code: Int, b: Int, dm: Int, fs: List[Float32], weights: List[Int]) ra
             if p[].busy:
                 continue
             if p[].code == code and p[].b == b and p[].dm == dm and p[].w_addrs == weights:
-                p[].busy = True
-                p[].stamp = c[].tick
-                p[].fs = fs.copy()
-                _unlock(c)
-                return (p, True)
+                hit = i
+                break
             if victim < 0 or p[].stamp < _ProgramPtr(unsafe_from_address=c[].programs[victim])[].stamp:
                 victim = i
+        if hit < 0:
+            for i in range(len(c[].programs)):  # driver-loop: over cached Mamba programs (at most the cap)
+                var p = _ProgramPtr(unsafe_from_address=c[].programs[i])
+                if (not p[].busy and p[].code == code and p[].b == b and p[].dm == dm
+                        and _same_bits(weights, wsizes, p[].w_host)):
+                    p[].w_addrs = weights.copy()
+                    hit = i
+                    break
+        if hit >= 0:
+            var p = _ProgramPtr(unsafe_from_address=c[].programs[hit])
+            p[].busy = True
+            p[].stamp = c[].tick
+            p[].fs = fs.copy()
+            _unlock(c)
+            return (p, True)
     except error:
         _unlock(c)
         raise error
