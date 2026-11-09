@@ -22,7 +22,6 @@ non-finite refusals as device scans: no bit moves. IDENTICAL, GPU columns;
 `-D MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF` (or MOJOLEARN_IDN_ALL_OFF) leaves
 the entries unregistered and the Python functions then refuse a device
 array by name."""
-from std.ffi import _Global
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -42,6 +41,7 @@ from training.neural_identical_experiments import IDN_TRAIN_BACKWARD_SCRATCH
 from training.neural_gemm_workspace import (
     IDN_TRAINING_GEMM_WORKSPACE, training_gemm_cached_into, training_gemm_cached_close,
 )
+from core.shared_slot import SharedSlot
 
 comptime IDN_TRAIN_DEV_TENSORS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -68,8 +68,8 @@ struct _DevPool(Defaultable, Movable):
         self.workspace = List[GemmWorkspace]()
 
 
-comptime _DEV_POOL_NAME = "MojoTrainingDevTensorsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoTrainingDevTensorsFast"
-comptime _DEV_POOL = _Global[StorageType=_DevPool, name=_DEV_POOL_NAME, init_fn=_DevPool.__init__]
+comptime _DEV_POOL_NAME = "MojolearnTrainingDevTensorsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnTrainingDevTensorsFastV1"
+comptime _DEV_POOL = SharedSlot[_DevPool, _DEV_POOL_NAME]
 
 
 def train_dev_alloc(ctx: DeviceContext, n: Int) raises -> Int:

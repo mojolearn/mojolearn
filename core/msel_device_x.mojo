@@ -48,7 +48,7 @@ from core.shared_slot import shared_slot_check, shared_slot_word
 #: `_DEVCTX_SLOT`) and store name in this build's numeric mode: the base
 #: binding's own msel entries (bindings/msel_device.mojo) use these.
 comptime MSEL_CONTEXT_SLOT = (
-    "MojolearnCoreContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV2"
+    "MojolearnCoreContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV3"
 )
 comptime _MSEL_STORE_NAME_IDN: StaticString = "MojolearnMselStoreIdenticalV2"
 comptime _MSEL_STORE_NAME_OTHER: StaticString = "MojolearnMselStoreFastV2"
@@ -65,7 +65,7 @@ comptime MSEL_STORE = _Global[StorageType=MselStore, name=MSEL_STORE_NAME, init_
 #: own binding was built in, so a fold reader names the identical store and
 #: context explicitly (in an identical build these are MSEL_STORE and
 #: MSEL_CONTEXT_SLOT themselves).
-comptime MSEL_FOLD_CONTEXT_SLOT = "MojolearnCoreContextIdenticalV2"
+comptime MSEL_FOLD_CONTEXT_SLOT = "MojolearnCoreContextIdenticalV3"
 comptime MSEL_FOLD_STORE_NAME = "MojolearnMselStoreIdenticalV2"
 comptime MSEL_FOLD_STORE = _Global[StorageType=MselStore, name=MSEL_FOLD_STORE_NAME, init_fn=MselStore.__init__]
 

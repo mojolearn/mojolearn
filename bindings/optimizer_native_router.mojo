@@ -2,7 +2,6 @@
 # Native public-operation routing, constructors, state preparation and resident IO.
 from bindings.embedding_layer_native import emblayer_operation
 from std.os import getenv
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
@@ -29,6 +28,7 @@ from bindings.training_embedding_native import training_embedding_operation
 from bindings.training_cross_entropy_native import training_cross_entropy
 from bindings.training_metadata_native import training_metadata
 from bindings.native_model_records import bump_model_generation
+from core.shared_slot import SharedSlot
 
 
 def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -72,8 +72,7 @@ struct OptModeChecked(Defaultable, Movable):
         self.table = PythonObject(None)
 
 
-comptime OPT_MODE_CHECKED = _Global[StorageType=OptModeChecked,
-    name="MojolearnP3OptimizerModeCheckedV1", init_fn=OptModeChecked.__init__]
+comptime OPT_MODE_CHECKED = SharedSlot[OptModeChecked, "MojolearnP3OptimizerModeCheckedV2"]
 
 
 def optimizer_step_entry(entry: PythonObject, arguments: PythonObject, context: PythonObject) raises -> PythonObject:

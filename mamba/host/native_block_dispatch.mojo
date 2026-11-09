@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # CPU training siblings use the common provider ABI and their original host
 # numerical owners. No GPU implementation or Python dispatch enters this file.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -11,6 +10,7 @@ from mamba.host.mamba_host_shell_impl import (
     _m3_owned_forward_run, _m3_owned_backward_run, _m3_owned_state_run,
     _m3_owned_export_run, _nn40_host_require,
 )
+from core.shared_slot import SharedSlot
 
 
 def mamba_host_block_operation(op: Int, a: List[Int], words: List[Int], f: List[Float64]) raises -> Int:
@@ -142,8 +142,7 @@ struct MambaHostBlockAPI(Defaultable, Movable):
         self.entries.append(mamba_host_block_v1)
 
 
-comptime NATIVE_MAMBA_HOST_BLOCK_API = _Global[StorageType=MambaHostBlockAPI,
-    name=("MojolearnMambaHostBlockAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnMambaHostBlockAPIFastV2"), init_fn=MambaHostBlockAPI.__init__]
+comptime NATIVE_MAMBA_HOST_BLOCK_API = SharedSlot[MambaHostBlockAPI, ("MojolearnMambaHostBlockAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnMambaHostBlockAPIFastV3")]
 
 
 def mamba_host_state_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -196,5 +195,4 @@ struct MambaHostStateAPI(Defaultable, Movable):
         self.entries.append(mamba_host_state_v1)
 
 
-comptime NATIVE_MAMBA_HOST_STATE_API = _Global[StorageType=MambaHostStateAPI,
-    name=("MojolearnMambaHostStateAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnMambaHostStateAPIFastV2"), init_fn=MambaHostStateAPI.__init__]
+comptime NATIVE_MAMBA_HOST_STATE_API = SharedSlot[MambaHostStateAPI, ("MojolearnMambaHostStateAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnMambaHostStateAPIFastV3")]

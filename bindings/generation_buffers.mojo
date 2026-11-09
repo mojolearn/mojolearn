@@ -9,7 +9,6 @@ bindings/py_balanced.mojo: Mojo 1.0's PythonObject call and `__setattr__` keep
 one extra reference on each argument or value (docs/MODULAR_ASKS.md), which
 kept every array built here, and the caller's buffers, alive for ever.
 """
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit
@@ -22,6 +21,7 @@ from core.weight_epoch import weight_epoch_bump
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
 from core.generation_buffers_impl import generation_ids_into
 from std.memory import memcpy
+from core.shared_slot import SharedSlot
 
 
 struct GenerationBoundary(Defaultable, Movable):
@@ -52,10 +52,7 @@ struct GenerationBoundary(Defaultable, Movable):
         self.admitted_layer_count = -1
 
 
-comptime GENERATION_BOUNDARY = _Global[
-    StorageType=GenerationBoundary, name="MojoCausalGenerationBoundary",
-    init_fn=GenerationBoundary.__init__,
-]
+comptime GENERATION_BOUNDARY = SharedSlot[GenerationBoundary, "MojolearnCausalGenerationBoundaryV1"]
 
 
 def generation_initialize_binding(classes: PythonObject) raises -> PythonObject:

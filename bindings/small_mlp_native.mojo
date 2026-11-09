@@ -16,7 +16,6 @@ admission checks passive class storage and reads its handle without invoking
 Python descriptors. Shared exact input admission precedes native buffer reads;
 balanced call helpers retain original owners without leaking references.
 """
-from std.ffi import _Global
 from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -59,6 +58,7 @@ from core.small_mlp_state_impl import (
     mlp_store_release,
 )
 from training.parallel_byte_impl import parallel_copy_words
+from core.shared_slot import SharedSlot
 
 # The program's STEP modes (autograd/small_mlp_program.mojo).
 comptime _FORWARD = 0
@@ -104,10 +104,7 @@ struct SmallMlpBoundary(Defaultable, Movable):
         self.trainer_finalizer = PythonObject(None)
 
 
-comptime SMALL_MLP_BOUNDARY = _Global[
-    StorageType=SmallMlpBoundary, name="MojoSmallMlpTrainerBoundary",
-    init_fn=SmallMlpBoundary.__init__,
-]
+comptime SMALL_MLP_BOUNDARY = SharedSlot[SmallMlpBoundary, "MojolearnSmallMlpTrainerBoundaryV1"]
 
 
 def _names() -> List[String]:
@@ -200,8 +197,7 @@ struct SmallMlpModeVerified(Defaultable, Movable):
         self.mode = String()
 
 
-comptime SMALL_MLP_MODE_VERIFIED = _Global[StorageType=SmallMlpModeVerified,
-    name="MojolearnP3SmallMlpModeVerifiedV1", init_fn=SmallMlpModeVerified.__init__]
+comptime SMALL_MLP_MODE_VERIFIED = SharedSlot[SmallMlpModeVerified, "MojolearnP3SmallMlpModeVerifiedV2"]
 
 
 def _mode_name(entries: MlpOperationMetadata) raises -> String:

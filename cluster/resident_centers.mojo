@@ -35,7 +35,6 @@ resident transform `kmeans_transform_device` (cluster/estimator.mojo),
 the bodies `kmeans_predict` and `kmeans_transform` run after their own
 upload, over the same centroid bytes: the bits are the same.
 """
-from std.ffi import _Global
 from std.atomic import Atomic, Ordering
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -44,8 +43,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from cluster.estimator import kmeans_predict_device, kmeans_transform_device
 from core.device_zero import enqueue_fill
 from core.admitted_finite_status import enqueue_finite_status
+from core.shared_slot import SharedSlot
 
-comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV2"
+comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV3"
 
 
 struct ResidentKMeansCenters(Movable):
@@ -91,7 +91,7 @@ def _device_of(root: Int) -> Int:
     return root if root > 0 else 0
 
 
-struct KMeansCentersRegistry(Movable):
+struct KMeansCentersRegistry(Defaultable, Movable):
     var entries: Dict[Int, ResidentKMeansCenters]
     var next_id: Int
     # One lock word: queries run with the GIL released (see the module note).
@@ -103,14 +103,7 @@ struct KMeansCentersRegistry(Movable):
         self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime KMEANS_CENTERS_REGISTRY = _Global[
-    StorageType=KMeansCentersRegistry,
-    name=(
-        "MojoKMeansResidentCentersIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-        "MojoKMeansResidentCentersFast"
-    ),
-    init_fn=KMeansCentersRegistry.__init__,
-]
+comptime KMEANS_CENTERS_REGISTRY = SharedSlot[KMeansCentersRegistry, ( "MojolearnKMeansResidentCentersIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKMeansResidentCentersFastV1" )]
 
 
 def _registry_lock(state: UnsafePointer[KMeansCentersRegistry, MutAnyOrigin]) raises:

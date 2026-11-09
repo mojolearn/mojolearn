@@ -86,7 +86,7 @@ from std.sys.compile import is_defined
 #: ~50 ms per GB), and the two n x d alias buffers that arm never reads are
 #: 1 float. Copies and allocations only: no bit moves.
 comptime PCA_FAST_POOL = PCA_FAST_GRAM_MMA and not is_defined["MOJOLEARN_PCA_FAST_POOL_OFF"]()
-comptime _PCA_POOL = "MojoEstimatorsPcaFastX"
+comptime _PCA_POOL = "MojolearnEstimatorsPcaFastXV1"
 #: lane/apple-fast-s-linalg (2026-10-04), FAST + Apple only; both the
 #: default since verdicts batch 6 (2026-10-05). TruncatedSVD.fit's `tsvd_explained_host` (every fit, both component
 #: routes) reads the whole X again. Board: tsvd istella 864 ms (TSVD_QFIX),

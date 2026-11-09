@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native normalization for the existing Session API. Public wrappers hand
 # over objects unchanged; this boundary owns descriptors, options and outputs.
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type
@@ -25,6 +24,7 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_resource_
 from providers.python.autograd_execution_profile_pyapi import execution_profile_object
 from providers.python.autograd_control_checkpoint_pyapi import control_save_py, control_load_py
 from providers.python.autograd_gradient_diagnostics_pyapi import gradient_report_py
+from core.shared_slot import SharedSlot
 
 
 # Session operation codes (row N089, lesson 12): the operation name is looked up
@@ -308,10 +308,7 @@ struct _SessionOpCodes(Defaultable, Movable):
 
 
 # One table per process (identical contents in every extension that links this file).
-comptime _SESSION_OP_CODES = _Global[
-    StorageType=_SessionOpCodes, name="MojolearnSessionOpCodesV1",
-    init_fn=_SessionOpCodes.__init__,
-]
+comptime _SESSION_OP_CODES = SharedSlot[_SessionOpCodes, "MojolearnSessionOpCodesV2"]
 
 
 def _session_op_code(name: String) raises -> Int:

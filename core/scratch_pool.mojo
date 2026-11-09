@@ -30,13 +30,13 @@ Single threaded by design, as the sequence executor's pool is: one session
 steps at a time in a process. A buffer is given back only after the wait
 that ends its last use.
 """
-from std.ffi import _Global
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.ctx_key import ctx_cache_key
 from core.step_phase import step_count_device_alloc, step_count_host_alloc
+from core.shared_slot import SharedSlot
 
 comptime IDN_SCRATCH_POOL = is_defined["MOJOLEARN_IDN_SCRATCH_POOL"]() and not (
     is_defined["MOJOLEARN_IDN_SCRATCH_POOL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
@@ -75,8 +75,8 @@ struct _ScratchPool(Defaultable, Movable):
         self.di_k = List[Int]()
 
 
-comptime _SCRATCH_NAME = "MojoScratchPoolIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoScratchPoolFast"
-comptime SCRATCH_POOL = _Global[StorageType=_ScratchPool, name=_SCRATCH_NAME, init_fn=_ScratchPool.__init__]
+comptime _SCRATCH_NAME = "MojolearnScratchPoolIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnScratchPoolFastV1"
+comptime SCRATCH_POOL = SharedSlot[_ScratchPool, _SCRATCH_NAME]
 
 
 def _pick(caps: List[Int], keys: List[Int], key: Int, n: Int) -> Int:

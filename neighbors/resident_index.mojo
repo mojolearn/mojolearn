@@ -48,7 +48,6 @@ thread is bound to another device (the device plan's root) moves the index
 there first (device to host to device, the same bytes) under the same
 handle, so a handle never runs on a device the caller did not select.
 """
-from std.ffi import _Global
 from std.atomic import Atomic, Ordering
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -57,7 +56,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnCoreContextFastV2"
+comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnCoreContextFastV3"
 
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -76,6 +75,7 @@ from neighbors.impl.detail.knn_brute_force import (
     KnnIndexCache,
     METRIC_FROM_IS_SQRT,
 )
+from core.shared_slot import SharedSlot
 
 
 struct ResidentKnnIndex(Movable):
@@ -132,7 +132,7 @@ def _device_of(root: Int) -> Int:
     return root if root > 0 else 0
 
 
-struct KnnIndexRegistry(Movable):
+struct KnnIndexRegistry(Defaultable, Movable):
     var entries: Dict[Int, ResidentKnnIndex]
     #: DEVIATION 3061: what every search derives from an entry's `index`
     #: alone, built by the first search that needs it and kept for the
@@ -156,14 +156,7 @@ struct KnnIndexRegistry(Movable):
         self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime KNN_INDEX_REGISTRY = _Global[
-    StorageType=KnnIndexRegistry,
-    name=(
-        "MojoKnnResidentIndexIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-        "MojoKnnResidentIndexFast"
-    ),
-    init_fn=KnnIndexRegistry.__init__,
-]
+comptime KNN_INDEX_REGISTRY = SharedSlot[KnnIndexRegistry, ( "MojolearnKnnResidentIndexIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKnnResidentIndexFastV1" )]
 
 
 def _registry_lock(state: UnsafePointer[KnnIndexRegistry, MutAnyOrigin]) raises:

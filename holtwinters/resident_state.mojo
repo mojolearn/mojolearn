@@ -23,7 +23,6 @@ trend and season words (`holtwinters_forecast_ptr`), and with the identity
 trace on the forecast runs `holtwinters_forecast_ptr` itself over a host copy
 of the same words: the bits are the per-call path's.
 """
-from std.ffi import _Global
 from std.atomic import Atomic, Ordering
 from std.memory import memcpy
 
@@ -34,10 +33,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from holtwinters.impl.holtwinters import forecast
 from holtwinters.impl.tsa.holtwinters_params import SEASONAL_ADDITIVE, seasonal_from_name
 from holtwinters.estimator import hw_predict_in_sample_kernel, HW_PREDICT_TPB, holtwinters_forecast_ptr
+from core.shared_slot import SharedSlot
 
 # The context slot of holtwinters/estimator.mojo `_DEVCTX_SLOT`: resident
 # entries and the per-call path share one process context.
-comptime _HW_CTX_SLOT = "MojolearnTsaContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnTsaContextFastV2"
+comptime _HW_CTX_SLOT = "MojolearnTsaContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnTsaContextFastV3"
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
@@ -86,7 +86,7 @@ struct ResidentHWComponents(Movable):
         _ = self.ctx^
 
 
-struct HWResidentRegistry(Movable):
+struct HWResidentRegistry(Defaultable, Movable):
     var entries: Dict[Int, ResidentHWComponents]
     var next_id: Int
     var lock: List[Int64]
@@ -97,14 +97,7 @@ struct HWResidentRegistry(Movable):
         self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime HW_RESIDENT_REGISTRY = _Global[
-    StorageType=HWResidentRegistry,
-    name=(
-        "MojoHWResidentComponentsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else
-        "MojoHWResidentComponentsFast"
-    ),
-    init_fn=HWResidentRegistry.__init__,
-]
+comptime HW_RESIDENT_REGISTRY = SharedSlot[HWResidentRegistry, ( "MojolearnHWResidentComponentsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnHWResidentComponentsFastV1" )]
 
 
 def _registry() raises -> UnsafePointer[HWResidentRegistry, MutAnyOrigin]:

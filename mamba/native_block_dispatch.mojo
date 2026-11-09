@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Named block operations on the common native descriptor transport. All math,
 # transfer, reports and retained stages remain in the existing Mamba owners.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from mamba.native_decode_dispatch import mamba_decode_operation
 from mamba.native_tape_dispatch import mamba_tape_operation
@@ -16,6 +15,7 @@ from mamba.impl.mamba_shell_impl import (
     _m3_prefill_backward_run, _M3_BWD_NONFINITE_DY, NN40_OWNED_WEIGHTS,
     _m3_install_weights_run, _m3_export_weights_run, _mamba3_run_owned,
 )
+from core.shared_slot import SharedSlot
 
 # 0/1 reserve/release under the provider GIL; 2/3/4 Mamba1/2/3 VJP;
 # 5 fresh Mamba3 prefill; 6/7 session prefill/VJP; 8/9 owned prefill/VJP.
@@ -231,5 +231,4 @@ struct NativeMambaBlockAPI(Defaultable, Movable):
         self.entries.append(mamba_block_v1)
 
 
-comptime NATIVE_MAMBA_BLOCK_API = _Global[StorageType=NativeMambaBlockAPI,
-    name=("MojolearnMambaBlockNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnMambaBlockNativeAPIFastV2"), init_fn=NativeMambaBlockAPI.__init__]
+comptime NATIVE_MAMBA_BLOCK_API = SharedSlot[NativeMambaBlockAPI, ("MojolearnMambaBlockNativeAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnMambaBlockNativeAPIFastV3")]

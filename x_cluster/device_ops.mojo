@@ -19,7 +19,6 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
-from std.ffi import _Global
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -155,6 +154,7 @@ from std.gpu import WARP_SIZE
 from std.gpu.primitives.warp import shuffle_idx
 from x_cluster.minibatch_cells import mb_center_wsum, mb_center_word, mb_wdraw_cell
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
+from core.shared_slot import SharedSlot
 
 comptime TPB = 128
 
@@ -1684,8 +1684,8 @@ struct _ClusterContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojolearnXClusterContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXClusterContextFastV2"
-comptime X_CLUSTER_CONTEXT = _Global[StorageType=_ClusterContext, name=_CTX_NAME, init_fn=_ClusterContext.__init__]
+comptime _CTX_NAME = "MojolearnXClusterContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXClusterContextFastV3"
+comptime X_CLUSTER_CONTEXT = SharedSlot[_ClusterContext, _CTX_NAME]
 
 
 def x_cluster_ctx() raises -> DeviceContext:

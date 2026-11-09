@@ -20,7 +20,6 @@ from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn
 from providers.python.x_neighbors_admission_pyapi import xn_capabilities
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from std.memory import bitcast
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module
@@ -35,6 +34,7 @@ from providers.python.estimator_binding_pyapi import estimator_arguments
 from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_accuracy
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
+from core.shared_slot import SharedSlot
 
 #: `_expansion_neighbors._U_LOG`, the unary op code of `log(a * x + b)`.
 comptime _SEMI_U_LOG = 1
@@ -144,8 +144,7 @@ struct _SemiKfeatCache(Defaultable, Movable):
         self.flags = 0
 
 
-comptime _SEMI_KFEAT_CACHE = _Global[StorageType=_SemiKfeatCache, name="MojolearnSemiKfeatFlagsV1",
-    init_fn=_SemiKfeatCache.__init__]
+comptime _SEMI_KFEAT_CACHE = SharedSlot[_SemiKfeatCache, "MojolearnSemiKfeatFlagsV2"]
 
 
 def _semi_kfeat_flags_read(binding: PythonObject, context: PythonObject) raises -> Int:

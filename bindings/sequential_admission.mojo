@@ -3,13 +3,13 @@
 # Admission compares exact type identities before reading attributes or
 # walking containers, so subclass properties/iterators cannot run first.
 from bindings.native_loaded_module import native_loaded_module, NativeModules
-from std.ffi import _Global
 from std.collections import Dict
 from std.python import Python, PythonObject
 from bindings.native_torch_admission import native_torch_exact, native_torch_admit
 from bindings.py_balanced import py_call, py_type, py_fields, py_contains, py_get, py_setitem
 from bindings.native_prepared_owner import prepared_get, prepared_put
 from bindings.native_identity_key import NativeIdentityKey
+from core.shared_slot import SharedSlot
 
 
 def _one_of(cls: PythonObject, types: PythonObject) raises -> Bool:
@@ -98,10 +98,7 @@ struct _SequentialValueTypesCache(Defaultable, Movable):
         self.types = List[_SequentialValueTypes]()
 
 
-comptime _SEQUENTIAL_VALUE_TYPES = _Global[
-    StorageType=_SequentialValueTypesCache, name="MojolearnSequentialValueTypesV1",
-    init_fn=_SequentialValueTypesCache.__init__,
-]
+comptime _SEQUENTIAL_VALUE_TYPES = SharedSlot[_SequentialValueTypesCache, "MojolearnSequentialValueTypesV2"]
 
 comptime _VALUE_TYPE_CONTEXTS = 8
 
@@ -244,10 +241,7 @@ struct _SequentialFieldNames(Defaultable, Movable):
         self.names = List[PythonObject]()
 
 
-comptime _SEQUENTIAL_FIELD_NAMES = _Global[
-    StorageType=_SequentialFieldNames, name="MojolearnSequentialFieldNamesV1",
-    init_fn=_SequentialFieldNames.__init__,
-]
+comptime _SEQUENTIAL_FIELD_NAMES = SharedSlot[_SequentialFieldNames, "MojolearnSequentialFieldNamesV2"]
 
 
 def _read_fields(operation: String) raises -> PythonObject:

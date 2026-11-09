@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # Normalizer operations own their complete previously decorated public calls.
-from std.ffi import _Global
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
@@ -18,6 +17,7 @@ from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_run
 from bindings.parallel_public_result import parallel_public_result
 from bindings.prep_entry_cache import prep_mode_checked
 from providers.python.prep_transform_pyapi import prep_transform_snapshot, prep_transform_values
+from core.shared_slot import SharedSlot
 
 
 def _setting(model: PythonObject, fields: PythonObject, name: String, fallback: PythonObject) raises -> PythonObject:
@@ -177,10 +177,7 @@ struct _PinnedEntries(Defaultable, Movable):
         self.expected = PythonObject(None)
 
 
-comptime _PINNED_ENTRIES = _Global[
-    StorageType=_PinnedEntries, name="MojolearnPrepNormalizerPinnedEntriesV1",
-    init_fn=_PinnedEntries.__init__,
-]
+comptime _PINNED_ENTRIES = SharedSlot[_PinnedEntries, "MojolearnPrepNormalizerPinnedEntriesV2"]
 
 
 def _expected_entries(pins: PythonObject, mode: PythonObject, b: PythonObject) raises -> PythonObject:

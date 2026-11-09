@@ -55,7 +55,6 @@ from core.weight_compact_host import (
     host_gather_f32,
     host_nonzero_weight_rows,
 )
-from std.ffi import _Global
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
@@ -106,6 +105,7 @@ from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_MSE,
     CRITERION_POISSON,
 )
+from core.shared_slot import SharedSlot
 
 
 comptime N_FIT_PARAMS = 22
@@ -113,11 +113,7 @@ comptime N_FIT_PARAMS = 22
 same order (that docstring is the contract; slot 20 is `device`, 21 the
 criterion code)."""
 
-comptime ET_HOST_EXPORTS = _Global[
-    StorageType=ForestExportRegistry[FitResult],
-    name="MojoETFitExportHost",
-    init_fn=ForestExportRegistry[FitResult].__init__,
-]
+comptime ET_HOST_EXPORTS = SharedSlot[ForestExportRegistry[FitResult], "MojolearnETFitExportHostV1"]
 
 
 def _index(value: PythonObject) raises -> Int:

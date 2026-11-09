@@ -38,7 +38,6 @@ THE ADDRESSES (mirrored in python/mojolearn/_expansion_ann.py):
                     params m, k, itopk_size, search_width, max_iterations, n_seeds[, rs]
   release(handle)
 """
-from std.ffi import _Global
 from x_ann.switches import ANN3_PREPARE
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -54,6 +53,7 @@ from x_ann.ivf_pq_device import ivf_pq_search_on, ivf_sq_search_on, ivf_rabitq_s
 from x_ann.ivf_pq_device import IvfPqDevice
 from x_ann.ivf_scan_device import scan_gather_f32, scan_gather_i32
 from x_ann.cagra_device import cagra_search_on
+from core.shared_slot import SharedSlot
 
 comptime KIND_PQ = 0
 comptime KIND_SQ = 1
@@ -243,7 +243,7 @@ struct AnnResident(Movable):
         _ = built^
 
 
-struct AnnRegistry(Movable):
+struct AnnRegistry(Defaultable, Movable):
     var entries: Dict[Int, AnnResident]
     var next_id: Int
 
@@ -252,14 +252,7 @@ struct AnnRegistry(Movable):
         self.next_id = 1
 
 
-comptime ANN_REGISTRY = _Global[
-    StorageType=AnnRegistry,
-    name=(
-        "MojoXAnnResidentIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-        "MojoXAnnResidentFast"
-    ),
-    init_fn=AnnRegistry.__init__,
-]
+comptime ANN_REGISTRY = SharedSlot[AnnRegistry, ( "MojolearnXAnnResidentIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnXAnnResidentFastV1" )]
 
 
 def x_ann_index_prepare(kind: Int, addrs: List[Int], params: List[Int]) raises -> Int:

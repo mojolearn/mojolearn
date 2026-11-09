@@ -44,7 +44,6 @@ Entry words (`small_mlp_program_open` / `small_mlp_program_run`):
     APPLY     addresses [g (195 packed gradients)] -> 195
     CLOSE     -> 0
 """
-from std.ffi import _Global
 from std.math import isfinite
 from sequence.exec_trait import Exec
 from sequence.ops import FP, OPT_ADAMW, Args, OP_FILL, OP_MLP_NONFINITE
@@ -62,6 +61,7 @@ from autograd.cast_ops import upload_cast
 from autograd.losses import cross_entropy
 from autograd.import_api import ImportRules
 from autograd.optim import step_lr
+from core.shared_slot import SharedSlot
 
 comptime SMALL_MLP_PROGRAM_OPEN = 0
 comptime SMALL_MLP_PROGRAM_STEP = 1
@@ -131,8 +131,8 @@ struct _MlpProgramStore(Defaultable, Movable):
         self.entries = List[_MlpProgram]()
 
 
-comptime _STORE_NAME = "MojoSmallMlpProgramsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoSmallMlpProgramsFast"
-comptime _STORE = _Global[StorageType=_MlpProgramStore, name=_STORE_NAME, init_fn=_MlpProgramStore.__init__]
+comptime _STORE_NAME = "MojolearnSmallMlpProgramsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnSmallMlpProgramsFastV1"
+comptime _STORE = SharedSlot[_MlpProgramStore, _STORE_NAME]
 
 
 def _find(handle: Int, kind: Int) raises -> Int:

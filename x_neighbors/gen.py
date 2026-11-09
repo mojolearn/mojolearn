@@ -426,7 +426,7 @@ struct _NeighborsContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojolearnXNeighborsContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXNeighborsContextFastV2"
+comptime _CTX_NAME = "MojolearnXNeighborsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXNeighborsContextFastV3"
 comptime X_NEIGHBORS_CONTEXT = _Global[StorageType=_NeighborsContext, name=_CTX_NAME, init_fn=_NeighborsContext.__init__]
 
 
@@ -554,7 +554,7 @@ struct _XnHostSerial(Defaultable, Movable):
 
 
 comptime _XN_HOST_SERIAL = _Global[StorageType=_XnHostSerial,
-    name="MojolearnXnHostSerialV1", init_fn=_XnHostSerial.__init__]
+    name="MojolearnXnHostSerialV2", init_fn=_XnHostSerial.__init__]
 
 
 #: MOJOLEARN_XN_HOST_SERIAL=1: every op's items one after another on one

@@ -39,7 +39,6 @@ Two owners:
 Same kernels, same launch order and same bytes as the resident session
 bodies the op lifted. No arithmetic here.
 """
-from std.ffi import _Global
 from std.atomic import Atomic, Ordering
 from core.weight_epoch import weight_epoch
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -55,10 +54,11 @@ from autograd.block_step_ops import (
     block_weight_sizes, block_state_sizes, block_int_words, block_step_words, block_step_reports_to_host,
     block_buffer_view, block_part_floats,
 )
+from core.shared_slot import SharedSlot
 
 # The process-lifetime DeviceContext of the Mamba bindings (the name
 # mamba/impl/mamba_shell_impl.mojo has used since the neural lane).
-comptime _NEURAL_CTX = "MojolearnNeuralMambaContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralMambaContextFastV2"
+comptime _NEURAL_CTX = "MojolearnNeuralMambaContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralMambaContextFastV3"
 
 
 def mamba_step_code(kind: Int) raises -> Int:
@@ -367,7 +367,7 @@ struct MambaBlockProgram(Movable):
 comptime MAMBA_PROGRAM_CACHE_BYTES = 1 << 30
 
 
-struct MambaProgramCache(Movable):
+struct MambaProgramCache(Defaultable, Movable):
     var programs: List[Int]
     var tick: Int
     # One lock word: the doors run with the GIL released.
@@ -379,11 +379,7 @@ struct MambaProgramCache(Movable):
         self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime MAMBA_PROGRAM_CACHE = _Global[
-    StorageType=MambaProgramCache,
-    name=("MojoMambaProgramCacheIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoMambaProgramCacheFast"),
-    init_fn=MambaProgramCache.__init__,
-]
+comptime MAMBA_PROGRAM_CACHE = SharedSlot[MambaProgramCache, ("MojolearnMambaProgramCacheIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnMambaProgramCacheFastV1")]
 
 comptime _ProgramPtr = UnsafePointer[MambaBlockProgram, MutUntrackedOrigin]
 

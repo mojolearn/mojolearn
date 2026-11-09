@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native ownership for the existing sequential layer-partitioned CausalLM."""
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -19,6 +18,7 @@ from bindings.native_json import native_path, native_path_exists
 from bindings.native_process_pool import process_pool_create, process_pool_start, process_pool_call, process_pool_close, process_worker_connect, process_worker_next, process_send
 from bindings.native_transport import transport_close, _transport_state
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
+from core.shared_slot import SharedSlot
 
 
 struct ParallelCausalBoundary(Defaultable, Movable):
@@ -34,10 +34,7 @@ struct ParallelCausalBoundary(Defaultable, Movable):
         self.entry = PythonObject(None)
 
 
-comptime PARALLEL_CAUSAL = _Global[
-    StorageType=ParallelCausalBoundary, name="MojoParallelCausalOwner",
-    init_fn=ParallelCausalBoundary.__init__,
-]
+comptime PARALLEL_CAUSAL = SharedSlot[ParallelCausalBoundary, "MojolearnParallelCausalOwnerV1"]
 
 
 def parallel_causal_initialize(mut mods: NativeModules, args: PythonObject) raises:

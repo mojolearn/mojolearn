@@ -19,8 +19,8 @@ Int test. The table is process-wide (`std.ffi._Global`) so a report can be
 read after a fit whose tape and executor are gone (autograd/profile.mojo
 `ag_profile_report`). Every loop here walks profile rows (distinct codes
 and kinds, a few dozen), never data."""
-from std.ffi import _Global
 from std.os import getenv
+from core.shared_slot import SharedSlot
 
 comptime PROFILE_FORWARD = 0
 comptime PROFILE_BACKWARD = 1
@@ -148,7 +148,7 @@ struct LaunchProfile(Copyable, Defaultable, Movable):
         self.pending_ns = 0
 
 
-comptime X_LAUNCH_PROFILE = _Global[StorageType=LaunchProfile, name="MojolearnLaunchProfileV1", init_fn=LaunchProfile.__init__]
+comptime X_LAUNCH_PROFILE = SharedSlot[LaunchProfile, "MojolearnLaunchProfileV2"]
 
 
 def launch_profile_record(op: Int, n: Int, ns: Int, level: Int) raises:

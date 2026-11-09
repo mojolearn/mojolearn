@@ -7,7 +7,6 @@
 # predict), drives the chunk loops and returns the shaped float64 values.
 # A Python callable model is refused: native code never calls back into it.
 from std.memory import memcpy
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native import _fields, _class_fields
@@ -22,6 +21,7 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.trees_public_forest import forest_effective_mode, _engine, _ordered_export, _resident, _family
 from bindings.trees_public_boost import _seed
 from bindings.trees_explainer_native import _get, _int, _entry, _snapshot, _replace, _tree_mode
+from core.shared_slot import SharedSlot
 
 comptime _I64 = MutPointer[Int64, MutUntrackedOrigin]
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
@@ -55,7 +55,7 @@ def _name(permutation: Bool) -> String:
     return "PermutationExplainer" if permutation else "KernelExplainer"
 
 
-struct _SwitchFacts(Movable):
+struct _SwitchFacts(Defaultable, Movable):
     """`x_trees_fast_switches()` of each loaded x_trees binary, keyed on the
     compiled entry's address (its connected table holds it for the life of
     the process). The bits are compile-time constants; every shap_values
@@ -67,9 +67,7 @@ struct _SwitchFacts(Movable):
         self.answers = Dict[Int, Int]()
 
 
-comptime _SWITCH_FACTS = _Global[
-    StorageType=_SwitchFacts, name="MojoTreesAgnosticSwitchFactsV1", init_fn=_SwitchFacts.__init__,
-]
+comptime _SWITCH_FACTS = SharedSlot[_SwitchFacts, "MojolearnTreesAgnosticSwitchFactsV2"]
 
 
 def _switches(table: PythonObject) raises -> Int:

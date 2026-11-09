@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Shared execution owner for the Python door and native generation ABI.
 # Numerical implementation remains _transformer_run_session, unchanged.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from transformer.session_abi import (
     GENERATION_SESSION_ABI_NAME, GenerationErrorSink, GenerationSessionForward,
@@ -10,6 +9,7 @@ from transformer.block_options import BLOCK_OPTION_ADDRS, BLOCK_OPTION_PARAMS, B
 from transformer.transformer_binding_impl import (
     TransformerSession, _check_base_addrs, _transformer_run_session,
 )
+from core.shared_slot import SharedSlot
 
 
 def transformer_session_forward_native(
@@ -95,7 +95,4 @@ struct TransformerNativeAPI(Defaultable, Movable):
         self.entries.append(transformer_session_forward_v1)
 
 
-comptime TRANSFORMER_NATIVE_API = _Global[
-    StorageType=TransformerNativeAPI, name=("MojolearnTransformerSessionNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnTransformerSessionNativeAPIFastV2"),
-    init_fn=TransformerNativeAPI.__init__,
-]
+comptime TRANSFORMER_NATIVE_API = SharedSlot[TransformerNativeAPI, ("MojolearnTransformerSessionNativeAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnTransformerSessionNativeAPIFastV3")]

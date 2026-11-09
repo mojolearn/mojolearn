@@ -61,7 +61,6 @@ differs.
 from core.experiment_guards_trees import TREES_GUARDS_OK
 from ensemble.host.importance import rf_host_importance
 from ensemble.host.oob import rf_host_oob
-from std.ffi import _Global
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
@@ -129,17 +128,14 @@ from ensemble.host.rf_oracle import (
     n_sampled_rows_host,
     rf_host_fit,
 )
+from core.shared_slot import SharedSlot
 
 
 comptime N_RF_FIT_PARAMS = 16
 """`bindings/_mojolearn_rf.mojo::N_RF_FIT_PARAMS`, the same 16 slots in the
 same order (that docstring is the contract)."""
 
-comptime RF_HOST_EXPORTS = _Global[
-    StorageType=ForestExportRegistry[RfHostForest],
-    name="MojoRFFitExportHost",
-    init_fn=ForestExportRegistry[RfHostForest].__init__,
-]
+comptime RF_HOST_EXPORTS = SharedSlot[ForestExportRegistry[RfHostForest], "MojolearnRFFitExportHostV1"]
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -687,11 +683,7 @@ def rf_regressor_fit_shard_export_binding(
 # host column computes the bits it computes without a session. The same
 # names, params and refusals as the GPU binding. One thread uses a session at
 # a time.
-comptime RF_HOST_SESSIONS = _Global[
-    StorageType=RfHostSessionRegistry,
-    name="MojoRFDataSessionHost",
-    init_fn=RfHostSessionRegistry.__init__,
-]
+comptime RF_HOST_SESSIONS = SharedSlot[RfHostSessionRegistry, "MojolearnRFDataSessionHostV1"]
 
 
 def rf_data_session_open_binding(

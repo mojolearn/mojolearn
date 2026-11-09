@@ -25,7 +25,6 @@ use distinct buffers keyed by core/ctx_key.mojo.
 restores `identical_gemm[False]` at every site. FAST builds always take
 `identical_gemm[False]`, as before.
 """
-from std.ffi import _Global
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -36,6 +35,7 @@ from gemm.neural_dispatch import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
+from core.shared_slot import SharedSlot
 
 comptime IDN_MAMBA_GEMM_WS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -71,8 +71,7 @@ struct _MambaGemmWs(Defaultable, Movable):
         self.bufs = List[DeviceBuffer[DType.float32]]()
 
 
-comptime _MAMBA_GEMM_WS = _Global[StorageType=_MambaGemmWs,
-    name="MojolearnMambaGemmWsV1", init_fn=_MambaGemmWs.__init__]
+comptime _MAMBA_GEMM_WS = SharedSlot[_MambaGemmWs, "MojolearnMambaGemmWsV2"]
 
 
 def mamba_proj_gemm(

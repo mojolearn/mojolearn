@@ -75,7 +75,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnRfContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnRfContextFastV2"
+comptime _DEVCTX_SLOT = "MojolearnRfContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnRfContextFastV3"
 
 
 from ensemble.decisiontree.batched_levelalgo.bins import (
@@ -125,6 +125,7 @@ from ensemble.randomforest import (
     launch_gather_rows_colmajor,
     n_sampled_rows_for,
 )
+from core.shared_slot import SharedSlot
 
 comptime DT = DType.float32
 comptime CLT = DType.int32
@@ -445,7 +446,6 @@ def _forest_out_i32(forest: RandomForestMetaData[DT, CLT]) raises -> PythonObjec
 
 # DEVIATION 2482: both RF label types own the same typed tree list. Moving it
 # into the export registry retains existing native storage without flattening.
-from std.ffi import _Global
 from forest_export_binding import (
     ForestExportRegistry, validate_forest_export_destinations,
     copy_forest_export_leaves, forest_export_py_list_f64,
@@ -453,9 +453,7 @@ from forest_export_binding import (
 )
 from core.mojolearn_rf_impl import rf_export_trees_into, rf_flatten_trees
 comptime RFExportTrees = List[TreeMetaDataNode[DT]]
-comptime RF_EXPORTS = _Global[StorageType=ForestExportRegistry[RFExportTrees],
-    name=("MojoRFFitExportIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoRFFitExportFast"), init_fn=ForestExportRegistry[RFExportTrees].__init__]
+comptime RF_EXPORTS = SharedSlot[ForestExportRegistry[RFExportTrees], ("MojolearnRFFitExportIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFFitExportFastV1")]
 
 
 def _retain_rf_export(var trees: RFExportTrees, notices: Int) raises -> PythonObject:
@@ -831,9 +829,7 @@ struct RfSessionRegistry(Defaultable, Movable):
         raise Error("unknown or closed forest data session handle")
 
 
-comptime RF_SESSIONS = _Global[StorageType=RfSessionRegistry,
-    name=("MojoRFDataSessionIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoRFDataSessionFast"), init_fn=RfSessionRegistry.__init__]
+comptime RF_SESSIONS = SharedSlot[RfSessionRegistry, ("MojolearnRFDataSessionIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFDataSessionFastV1")]
 
 
 def rf_data_session_open_binding(

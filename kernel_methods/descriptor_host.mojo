@@ -2,7 +2,6 @@
 # CPU implementation of the existing kernel-method descriptor ABI. These are
 # the same typed host owners used by _mojolearn_kernel_methods_host; only the
 # argument transport changes. No Python entry, device route or arithmetic copy.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -15,6 +14,7 @@ from kernel_methods.host.km_host_impl import (
     kmh_rbf_sampler_fit_into, kmh_rbf_sampler_transform_into, kmh_sqrt_weights,
 )
 from svm.host.scale_gamma_host import scale_gamma_limbs_host
+from core.shared_slot import SharedSlot
 
 
 def km_host_operation(operation: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -141,5 +141,4 @@ struct KernelMethodHostAPI(Defaultable, Movable):
         self.entries.append(km_host_v1)
 
 
-comptime KERNEL_METHOD_HOST_API = _Global[StorageType=KernelMethodHostAPI,
-    name=("MojolearnKernelMethodHostAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKernelMethodHostAPIFastV2"), init_fn=KernelMethodHostAPI.__init__]
+comptime KERNEL_METHOD_HOST_API = SharedSlot[KernelMethodHostAPI, ("MojolearnKernelMethodHostAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKernelMethodHostAPIFastV3")]

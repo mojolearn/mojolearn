@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Common private descriptor ABI over existing SVC solver/predict owners.
 # No estimator-specific provider, Python dependency or new numerical route.
-from std.ffi import _Global
 from std.memory import memcpy
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -13,6 +12,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from svm.native_auxiliary_dispatch import svc_native_auxiliary
 from svm.native_svr_dispatch import native_svr_fit, native_svr_predict
 from svm.estimator import svc_fit_host_borrowed, svc_predict_host
+from core.shared_slot import SharedSlot
 
 
 def svc_binary_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -110,5 +110,4 @@ struct SvcNativeAPI(Defaultable, Movable):
         self.entries.append(svc_binary_v1)
 
 
-comptime SVC_NATIVE_API = _Global[StorageType=SvcNativeAPI,
-    name=("MojolearnSvcNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnSvcNativeAPIFastV2"), init_fn=SvcNativeAPI.__init__]
+comptime SVC_NATIVE_API = SharedSlot[SvcNativeAPI, ("MojolearnSvcNativeAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnSvcNativeAPIFastV3")]

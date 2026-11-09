@@ -4,11 +4,11 @@
 # touching a Tensor. Never disable modes or call Python torch.overrides /
 # torch.utils._python_dispatch helpers. The C entries are the ones used by
 # those helpers in the supported installed Torch, and are checked before cache.
-from std.ffi import _Global
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_class_admission import class_record, class_admit
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
+from core.shared_slot import SharedSlot
 
 
 struct NativeTorchBoundary(Defaultable, Movable):
@@ -32,8 +32,7 @@ struct NativeTorchBoundary(Defaultable, Movable):
         self.pre_dispatch = PythonObject(None)
 
 
-comptime NATIVE_TORCH = _Global[StorageType=NativeTorchBoundary,
-    name="MojoNativeTorchAdmission", init_fn=NativeTorchBoundary.__init__]
+comptime NATIVE_TORCH = SharedSlot[NativeTorchBoundary, "MojolearnNativeTorchAdmissionV1"]
 
 
 def _torch_type_fields(cls: PythonObject) raises -> PythonObject:

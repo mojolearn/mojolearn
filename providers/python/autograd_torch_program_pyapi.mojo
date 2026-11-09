@@ -9,7 +9,6 @@ from std.memory import memcpy
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from std.ffi import _Global
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
 from bindings.py_balanced import py_call, py_get, py_fields, py_type, py_setitem
 from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
@@ -29,6 +28,7 @@ from providers.python.autograd_program_pyapi import _imported_session_dims
 from providers.python.autograd_device_provider_pyapi import imported_device_provider_run
 from providers.python.autograd_import_metadata_pyapi import imported_program_snapshot
 from bindings.cpython_table import cpython_table
+from core.shared_slot import SharedSlot
 
 
 def _torch_entry(context: PythonObject, name: String) raises -> PythonObject:
@@ -210,8 +210,7 @@ struct TorchArtifactBase(Defaultable, Movable):
         self.native_namespace = PythonObject(None)
 
 
-comptime TORCH_ARTIFACT_BASE = _Global[StorageType=TorchArtifactBase,
-    name="MojolearnP3TorchArtifactBaseV1", init_fn=TorchArtifactBase.__init__]
+comptime TORCH_ARTIFACT_BASE = SharedSlot[TorchArtifactBase, "MojolearnP3TorchArtifactBaseV2"]
 
 
 def _torch_artifact_context(snapshot: PythonObject) raises -> PythonObject:

@@ -2,7 +2,6 @@
 # Shared import-connected binding admission for estimator frontends. The caller
 # enters compiled code once; runtime selection reads current mode/registry data
 # and never invokes Python _bind/load_set/_ModeSet.__getattr__ callbacks.
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.os import getenv
 from bindings.native_loaded_module import native_loaded_module
@@ -12,6 +11,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.mode_metadata_native import _fields
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from providers.python.x_neighbors_admission_pyapi import xn_admit_checked
+from core.shared_slot import SharedSlot
 
 
 def estimator_binding(model: PythonObject, name: String, context: PythonObject, check_mode: Bool = True) raises -> PythonObject:
@@ -144,8 +144,7 @@ struct EstimatorModeWords(Defaultable, Movable):
 
 # The named global may be shared by every Mojo extension in the process:
 # bump the name's version whenever EstimatorModeWords' layout changes.
-comptime ESTIMATOR_MODE_WORDS = _Global[StorageType=EstimatorModeWords,
-    name="MojolearnEstimatorModeWordsV1", init_fn=EstimatorModeWords.__init__]
+comptime ESTIMATOR_MODE_WORDS = SharedSlot[EstimatorModeWords, "MojolearnEstimatorModeWordsV2"]
 
 
 def _estimator_mode_word(module: PythonObject, getter: PythonObject) raises -> Int:

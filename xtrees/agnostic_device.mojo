@@ -10,7 +10,6 @@ the calls but the model. The host column (xtrees/agnostic_host.mojo) runs
 the same units in the same stage order: the same words."""
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.ffi import _Global
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
@@ -24,6 +23,7 @@ from xtrees.agnostic import (
     pshap_dsynth_unit, pshap_dmap_unit, bg_mean_mapped_unit,
 )
 from std.memory import bitcast
+from core.shared_slot import SharedSlot
 
 comptime AGN_TPB = 128
 #: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple default
@@ -138,7 +138,7 @@ comptime SHAP_PERM_CACHE = PSHAP_DELTA and not is_defined["MOJOLEARN_SHAP_PERM_C
 #: on lane/owed-deletions-D1 (next chunk's delta rows + download overlapped with the model); code recoverable at b639a2bd2.
 #: Restore: git apply experiments/removed/MOJOLEARN_PSHAP_FAST_OVERLAP.patch; record in docs/TOMBSTONES.md.
 comptime AGN_MAX_BLOCKS = 65535 * 16
-comptime _CTX = "MojoXTreesAgnosticIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXTreesAgnosticFast"
+comptime _CTX = "MojolearnXTreesAgnosticIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXTreesAgnosticFastV1"
 
 
 def _ctx() raises -> DeviceContext:
@@ -363,10 +363,10 @@ struct _AgnPool(Defaultable, Movable):
 
 
 comptime _AGN_POOL_NAME = (
-    "MojoXTreesAgnosticSynPoolIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    else "MojoXTreesAgnosticSynPoolFast"
+    "MojolearnXTreesAgnosticSynPoolIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    else "MojolearnXTreesAgnosticSynPoolFastV1"
 )
-comptime AGN_POOL = _Global[StorageType=_AgnPool, name=_AGN_POOL_NAME, init_fn=_AgnPool.__init__]
+comptime AGN_POOL = SharedSlot[_AgnPool, _AGN_POOL_NAME]
 
 
 def _pool_syn(ctx: DeviceContext, total: Int) raises -> F32P:
@@ -770,10 +770,10 @@ struct _AgnModel(Defaultable, Movable):
 
 
 comptime _AGN_MODEL_NAME = (
-    "MojoXTreesAgnosticModelIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    else "MojoXTreesAgnosticModelFast"
+    "MojolearnXTreesAgnosticModelIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    else "MojolearnXTreesAgnosticModelFastV1"
 )
-comptime AGN_MODEL = _Global[StorageType=_AgnModel, name=_AGN_MODEL_NAME, init_fn=_AgnModel.__init__]
+comptime AGN_MODEL = SharedSlot[_AgnModel, _AGN_MODEL_NAME]
 
 
 def model_release() raises:
@@ -1090,7 +1090,7 @@ struct _DeltaSlot(Defaultable, Movable):
         self.key = List[Int]()
 
 
-comptime AGN_DELTA_SLOT = _Global[StorageType=_DeltaSlot, name="MojoXTreesAgnosticDeltaFast", init_fn=_DeltaSlot.__init__]
+comptime AGN_DELTA_SLOT = SharedSlot[_DeltaSlot, "MojolearnXTreesAgnosticDeltaFastV1"]
 
 
 def _delta_key(x: Int, bg: Int, tot: Int, R: Int, nb: Int, d: Int, np: Int, seed: Int, row0: Int) -> List[Int]:

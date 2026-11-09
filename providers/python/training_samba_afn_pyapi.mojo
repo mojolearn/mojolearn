@@ -21,9 +21,9 @@ from training.samba_afn import (
 # ===========================================================================
 
 comptime _AFN_NEURAL_CTX = (
-    "MojolearnNeuralTrainingContextIdenticalV2"
+    "MojolearnNeuralTrainingContextIdenticalV3"
     if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    else "MojolearnNeuralTrainingContextFastV2"
+    else "MojolearnNeuralTrainingContextFastV3"
 )
 
 

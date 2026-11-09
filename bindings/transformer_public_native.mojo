@@ -12,9 +12,9 @@ from bindings.native_error_class import error_without_class
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from bindings.neural_block_admission import neural_native_scalar, neural_array_slots
-from std.ffi import _Global
 from bindings.native_prepared_owner import prepared_key_add, prepared_key_same
 from bindings.native_class_admission import class_record, class_admit, class_watch_ready
+from core.shared_slot import SharedSlot
 
 
 struct _GenerationStamp(Defaultable, Movable):
@@ -28,10 +28,7 @@ struct _GenerationStamp(Defaultable, Movable):
         self.key = PythonObject(None)
 
 
-comptime _GENERATION_STAMP = _Global[
-    StorageType=_GenerationStamp, name="MojolearnTransformerGenerationStampV1",
-    init_fn=_GenerationStamp.__init__,
-]
+comptime _GENERATION_STAMP = SharedSlot[_GenerationStamp, "MojolearnTransformerGenerationStampV2"]
 
 
 def _generation_connected(mut mods: NativeModules, classes: PythonObject) raises:

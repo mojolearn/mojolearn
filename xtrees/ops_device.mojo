@@ -22,7 +22,6 @@ row) from the per-cell codes it reads back, so the message is the one the
 serial loop raised.
 """
 from std.atomic import Atomic
-from std.ffi import _Global
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv
 from std.memory import bitcast
@@ -31,6 +30,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
 from checks.soft_f64 import SF64_SIGN, SF64_ZERO, sf64_add, sf64_from_int, sf64_gt, sf64_is_nan, sf64_lt, sf64_mul
 from xtrees.ops import WS_CHUNK, draw, stream_base
+from core.shared_slot import SharedSlot
 
 comptime OPS_TPB = 256
 comptime OPS_MAX_BLOCKS = 65535
@@ -55,8 +55,8 @@ struct _OpsContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojolearnXTreesOpsContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXTreesOpsContextFastV2"
-comptime X_TREES_OPS_CONTEXT = _Global[StorageType=_OpsContext, name=_CTX_NAME, init_fn=_OpsContext.__init__]
+comptime _CTX_NAME = "MojolearnXTreesOpsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXTreesOpsContextFastV3"
+comptime X_TREES_OPS_CONTEXT = SharedSlot[_OpsContext, _CTX_NAME]
 
 
 def _ctx() raises -> DeviceContext:

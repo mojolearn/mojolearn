@@ -6,7 +6,6 @@ from experiments.classical_identical_ideas.shared_controls import C07_RADIX_ROWS
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 from std.gpu import block_idx, block_dim, thread_idx
-from std.ffi import _Global
 from std.memory import bitcast
 from std.os import getenv
 from std.time import perf_counter_ns
@@ -60,7 +59,7 @@ from core.device_pool import pool_take, pool_give
 #: the raw host-pointer copies.
 comptime X_PREP_STAGED_OUT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
                               and not is_defined["MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF"]())
-comptime _XP_STAGE_POOL = "MojoXPrepDownloadStagesFast"
+comptime _XP_STAGE_POOL = "MojolearnXPrepDownloadStagesFastV1"
 
 #: lane/apple-fast-w2-prep (2026-10-04), DEFAULT in FAST + Apple; rollback
 #: -D MOJOLEARN_X_PREP_POOL_ARENA_OFF (IDENTICAL and other vendors compile
@@ -102,7 +101,7 @@ comptime X_PREP_POOL_ARENA_IDN = (GLOBAL_NUMERIC_MODE != NUMERIC_FAST and has_ac
                                  and not is_defined["MOJOLEARN_XPREP_ARENA_POOL_OFF"]())
 comptime X_PREP_POOL_ARENA = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
                              and not is_defined["MOJOLEARN_X_PREP_POOL_ARENA_OFF"]()) or X_PREP_POOL_ARENA_IDN
-comptime _XP_DF_POOL = "MojoXPrepArenaPoolFast" if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else "MojoXPrepArenaPoolIdentical"
+comptime _XP_DF_POOL = "MojolearnXPrepArenaPoolFastV1" if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else "MojolearnXPrepArenaPoolIdenticalV1"
 #: 2^24 words = 64 MB: smaller programs keep the fresh allocation
 comptime _XP_POOL_MIN_WORDS = 1 << 24
 
@@ -148,6 +147,7 @@ from x_prep.da_par import (
     lda3_scal_kernel, lda3_tmp_kernel, lda3_inter_kernel, lda3_coef_kernel, lda3_dot_kernel, qda_prep_scal_kernel,
     qda_prep_rot_kernel, qda_dec_tile_kernel,
 )
+from core.shared_slot import SharedSlot
 
 
 def _da_blocks(t: Int) -> Int:
@@ -266,8 +266,8 @@ struct _PrepContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojolearnXPrepContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXPrepContextFastV2"
-comptime X_PREP_CONTEXT = _Global[StorageType=_PrepContext, name=_CTX_NAME, init_fn=_PrepContext.__init__]
+comptime _CTX_NAME = "MojolearnXPrepContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXPrepContextFastV3"
+comptime X_PREP_CONTEXT = SharedSlot[_PrepContext, _CTX_NAME]
 
 
 def x_prep_ctx() raises -> DeviceContext:
@@ -280,8 +280,8 @@ def x_prep_ctx() raises -> DeviceContext:
 
 #: The binding's resident input store (core/device_store.mojo; lane
 #: py-shared): `x_prep_dev_put` / `_free` / `_live`, one per tier.
-comptime _STORE_NAME = "MojoXPrepStoreIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXPrepStoreFast"
-comptime X_PREP_STORE = _Global[StorageType=DeviceStore, name=_STORE_NAME, init_fn=DeviceStore.__init__]
+comptime _STORE_NAME = "MojolearnXPrepStoreIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXPrepStoreFastV1"
+comptime X_PREP_STORE = SharedSlot[DeviceStore, _STORE_NAME]
 
 
 def run_program_device_ranges(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int, scratch_len: Int,

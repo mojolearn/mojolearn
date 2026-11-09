@@ -21,7 +21,6 @@
 # classifier `predict` decodes the resident labels (or the argmax of the
 # vote) without returning to Python between the vote and the decode.
 from std.math import sqrt
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.py_typed_call import py_call_typed
@@ -55,6 +54,7 @@ from ensemble.rf_notices import (
     RF_NOTICE_MAX_SAMPLES_IGNORED, RF_NOTICE_OOB_PARTIAL,
 )
 from checks.numerics import portable_log2_64
+from core.shared_slot import SharedSlot
 
 comptime _INT32_MAX = 2147483647
 comptime _MODEL_FIELDS = 5
@@ -1576,7 +1576,7 @@ def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: Fores
     return out
 
 
-struct _FusedLabelFacts(Movable):
+struct _FusedLabelFacts(Defaultable, Movable):
     """`forest_identical_fused_labels()` of each loaded forest binary, keyed
     on the compiled entry's address (a bound function its connected table
     holds for the life of the process). The answer is compile-time; every
@@ -1587,9 +1587,7 @@ struct _FusedLabelFacts(Movable):
         self.answers = Dict[Int, Bool]()
 
 
-comptime _FUSED_LABEL_FACTS = _Global[
-    StorageType=_FusedLabelFacts, name="MojoTreesForestFusedLabelFacts", init_fn=_FusedLabelFacts.__init__,
-]
+comptime _FUSED_LABEL_FACTS = SharedSlot[_FusedLabelFacts, "MojolearnTreesForestFusedLabelFactsV1"]
 
 
 def _fused_labels_capable(native: PythonObject) raises -> Bool:

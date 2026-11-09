@@ -16,8 +16,8 @@ binding and tier, as the contexts), capped at POOL_KEEP_BYTES of idle
 buffers. A taken buffer's words are whatever the last holder left, as a
 fresh allocation's are unspecified: callers write before they read.
 Storage only: no bit moves."""
-from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.shared_slot import SharedSlot
 
 comptime POOL_KEEP_BYTES = 2 * 1024 * 1024 * 1024
 
@@ -34,7 +34,7 @@ struct _DevPool(Defaultable, Movable):
 def pool_take[name: StaticString](ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
     """An idle pooled buffer of exactly `n` floats (at least one), else a
     fresh allocation. Its words are unspecified, as a fresh one's are."""
-    comptime SLOT = _Global[StorageType=_DevPool, name=name, init_fn=_DevPool.__init__]
+    comptime SLOT = SharedSlot[_DevPool, name]
     var p = SLOT.get_or_create_ptr()
     var need = n if n > 0 else 1
     for i in range(len(p[].bufs)):
@@ -47,7 +47,7 @@ def pool_take[name: StaticString](ctx: DeviceContext, n: Int) raises -> DeviceBu
 def pool_give[name: StaticString](var b: DeviceBuffer[DType.float32]) raises:
     """Return a taken buffer; the caller has waited on every use of it. Over
     POOL_KEEP_BYTES the oldest idle buffers are freed first."""
-    comptime SLOT = _Global[StorageType=_DevPool, name=name, init_fn=_DevPool.__init__]
+    comptime SLOT = SharedSlot[_DevPool, name]
     var p = SLOT.get_or_create_ptr()
     var nb = len(b) * 4
     if nb > POOL_KEEP_BYTES:

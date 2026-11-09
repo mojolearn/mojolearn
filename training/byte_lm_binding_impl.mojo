@@ -7,7 +7,6 @@ Python here; the binding unpacks its arguments and calls these."""
 from core.hostptr import f32_ptr, read_f32, copy_f32, list_i32
 from std.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
-from std.ffi import _Global
 from std.memory import bitcast, memcmp
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -18,6 +17,7 @@ from training.checks.optimizer_contract import OptimizerConfig
 from training.byte_lm_config import ByteConfig
 from training.byte_lm import ByteTrainer
 from training.byte_lm_logits import ByteLogitsScratch
+from core.shared_slot import SharedSlot
 
 
 struct ByteLMSession(Movable, Writable):
@@ -111,8 +111,7 @@ struct _ContextKeeper(Defaultable, Movable):
         return Bool(self.ctx)
 
 
-comptime BYTE_LM_CONTEXT_KEEPER = _Global[StorageType=_ContextKeeper,
-    name="MojolearnByteLMContextKeeperIdenticalV2", init_fn=_ContextKeeper.__init__]
+comptime BYTE_LM_CONTEXT_KEEPER = SharedSlot[_ContextKeeper, "MojolearnByteLMContextKeeperIdenticalV3"]
 
 
 

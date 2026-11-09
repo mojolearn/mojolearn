@@ -97,13 +97,13 @@ comptime ORD_DOC_ID_STORAGE = T22 or (
 
 
 from std.atomic import Atomic, Ordering
-from std.ffi import _Global
+from core.shared_slot import SharedSlot
 
 struct _OrderedDocAudit(Defaultable,Movable):
     var submissions: Int64
     def __init__(out self):self.submissions=Int64(0)
 
-comptime _ORD_DOC_AUDIT=_Global[StorageType=_OrderedDocAudit,name="MojoOrderedDocAuditV1",init_fn=_OrderedDocAudit.__init__]
+comptime _ORD_DOC_AUDIT=SharedSlot[_OrderedDocAudit, "MojolearnOrderedDocAuditV2"]
 
 def ordered_doc_count() raises -> Int:
     comptime if ORD_DOC_ID_STORAGE:

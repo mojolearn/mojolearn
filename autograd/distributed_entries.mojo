@@ -3,7 +3,6 @@
 # The Python door (distributed_pyapi.mojo) converts arrays and options and
 # builds results; topology, ownership, graph walks and checkpoint bytes stay
 # here.
-from std.ffi import _Global
 from std.memory import alloc, memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import FP, OPT_SGD, OPT_ADAM, OPT_ADAMW
@@ -21,9 +20,10 @@ from autograd.optim import OptimizerConfig, optimizer_slots, optimizer_config_pa
 from core.cast_in import CastIn
 from training.checkpoint import read_checkpoint_unchecked
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.shared_slot import SharedSlot
 
-comptime _DISTRIBUTED_NAME = "MojoCapturedDistributedIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoCapturedDistributedFast"
-comptime _DISTRIBUTED = _Global[StorageType=_OpsStore, name=_DISTRIBUTED_NAME, init_fn=_OpsStore.__init__]
+comptime _DISTRIBUTED_NAME = "MojolearnCapturedDistributedIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCapturedDistributedFastV1"
+comptime _DISTRIBUTED = SharedSlot[_OpsStore, _DISTRIBUTED_NAME]
 
 
 def check_device_ids(ids: List[Int]) raises:

@@ -15,7 +15,6 @@ POOL: a freed buffer is kept and handed to the next request that fits
 DeviceContext runs its work in order, so a buffer reused by a later launch
 is written only after every earlier launch that read it. Free capacity past
 POOL_KEEP_BYTES is released after a sync."""
-from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 from std.sys.compile import is_defined
@@ -73,6 +72,7 @@ from x_decomp.device import (
 from x_decomp.qr_bounded import QRB_CELLS
 from x_decomp.jacobi_par import PJ_TPB, sym_from_triangle_kernel
 from decomposition.linalg_types import _validate_shape
+from core.shared_slot import SharedSlot
 
 comptime POOL_KEEP_BYTES = 1 << 30
 comptime POOL_CLASSES = 40
@@ -116,7 +116,7 @@ struct _Pool(Defaultable, Movable):
         self.free_count = 0
 
 
-comptime X_DECOMP_POOL = _Global[StorageType=_Pool, name="MojoXDecompPool", init_fn=_Pool.__init__]
+comptime X_DECOMP_POOL = SharedSlot[_Pool, "MojolearnXDecompPoolV1"]
 
 
 def pool_alloc(n: Int) raises -> Int:
@@ -942,7 +942,7 @@ struct _GrpStage(Defaultable, Movable):
         self.host = Optional[HostBuffer[DType.int32]]()
 
 
-comptime GRP_STAGE = _Global[StorageType=_GrpStage, name="MojoXDecompGrpFusedStage", init_fn=_GrpStage.__init__]
+comptime GRP_STAGE = SharedSlot[_GrpStage, "MojolearnXDecompGrpFusedStageV1"]
 
 
 def grp_fit_fused_run(
@@ -972,7 +972,7 @@ def grp_fit_fused_run(
         st[].part = ctx.enqueue_create_buffer[DType.int32](513)
         st[].host = ctx.enqueue_create_host_buffer[DType.int32](1)
     var blocks = _scan_blocks(cnt) if cnt > 0 else 0
-    var buf = pool_take["MojoXDecompCls2Scan"](ctx, max(cnt, 1))
+    var buf = pool_take["MojolearnXDecompCls2ScanV1"](ctx, max(cnt, 1))
     if cnt > 0:
         ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, cnt), src_ptr=src)
         ctx.enqueue_function[nonfinite_partial_kernel](
@@ -1005,7 +1005,7 @@ def grp_fit_fused_run(
     ctx.synchronize()
     if cnt > 0:
         best = st[].host.value().unsafe_ptr()[0]
-    pool_give["MojoXDecompCls2Scan"](buf^)
+    pool_give["MojolearnXDecompCls2ScanV1"](buf^)
     return -1 if best == NONFINITE_NONE else Int(best)
 
 

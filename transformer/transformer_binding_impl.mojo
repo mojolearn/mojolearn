@@ -28,7 +28,6 @@ from std.os import abort
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast, memcpy
 from std.os import getenv
-from std.ffi import _Global
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
@@ -43,7 +42,7 @@ from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
-comptime _NEURAL_CTX = "MojolearnNeuralTransformerContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTransformerContextFastV2"
+comptime _NEURAL_CTX = "MojolearnNeuralTransformerContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTransformerContextFastV3"
 from checks.vendor import COMPILED_VENDOR
 from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE as GEMM_ANY_BWD_SABOTAGE
 from gemm.checks.gemm_identical import ANY_SABOTAGE as GEMM_ANY_SABOTAGE
@@ -239,6 +238,7 @@ def _btick(on: Bool, mut t: Int, name: String):
 # transformer_lean_stages and _lean_for live in transformer/lean_stages.mojo
 # (lane x4: the attention step op imports them without a cycle).
 from transformer.lean_stages import transformer_lean_stages, _lean_for
+from core.shared_slot import SharedSlot
 
 
 
@@ -573,8 +573,7 @@ struct _TransformerSessionEnv(Defaultable, Movable):
 
 
 # Process-wide (one environment per process); bump the name with the layout.
-comptime _TRANSFORMER_SESSION_ENV = _Global[StorageType=_TransformerSessionEnv,
-    name="MojolearnTransformerSessionEnvV2", init_fn=_TransformerSessionEnv.__init__]
+comptime _TRANSFORMER_SESSION_ENV = SharedSlot[_TransformerSessionEnv, "MojolearnTransformerSessionEnvV3"]
 
 
 def _session_retain_cap_bytes() raises -> Int:

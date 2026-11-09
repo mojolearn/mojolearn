@@ -5,7 +5,6 @@ Workers import their installed ABI connection once, then enter a compiled
 dispatch loop. The coordinator owns device visibility, framing, authentication,
 process cleanup and request ordering. No pickle or Python worker loop is used.
 """
-from std.ffi import _Global
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -20,6 +19,7 @@ from bindings.native_transport import (
 from bindings.native_codec import codec_pack_owned, codec_unpack
 from bindings.native_json import native_json_parse
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
+from core.shared_slot import SharedSlot
 
 
 comptime PROCESS_MAX_BYTES = (1 << 63) - 1
@@ -42,10 +42,7 @@ struct ProcessBoundary(Defaultable, Movable):
         self.vendor = String()
 
 
-comptime PROCESS_BOUNDARY = _Global[
-    StorageType=ProcessBoundary, name="MojoNativeProcessPool",
-    init_fn=ProcessBoundary.__init__,
-]
+comptime PROCESS_BOUNDARY = SharedSlot[ProcessBoundary, "MojolearnNativeProcessPoolV1"]
 
 
 def process_initialize(executable: String, environ: PythonObject, vendor: String) raises:

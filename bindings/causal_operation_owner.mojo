@@ -3,7 +3,6 @@
 # only for identity and native dictionary publication, never runtime attributes.
 from std.python import Python, PythonObject
 from std.collections import Dict
-from std.ffi import _Global
 from bindings.native_identity_key import NativeIdentityKey
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
@@ -14,6 +13,7 @@ from bindings.neural_block_admission import neural_plain_value, neural_string_ke
 from bindings.mode_metadata_native import _fields
 from bindings.generation_buffers import generation_array_snapshot, generation_buffer_view
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
+from core.shared_slot import SharedSlot
 
 
 struct CausalFieldNames(Defaultable, Movable):
@@ -34,8 +34,7 @@ struct CausalFieldNames(Defaultable, Movable):
         self.resident = PythonObject(None)
 
 
-comptime CAUSAL_FIELD_NAMES = _Global[StorageType=CausalFieldNames,
-    name="MojolearnCausalFieldNamesV1", init_fn=CausalFieldNames.__init__]
+comptime CAUSAL_FIELD_NAMES = SharedSlot[CausalFieldNames, "MojolearnCausalFieldNamesV2"]
 
 
 def causal_snapshot_fields(mut mods: NativeModules, value: PythonObject) raises -> PythonObject:

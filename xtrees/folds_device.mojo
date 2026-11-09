@@ -370,7 +370,7 @@ def device_folds(
     ascending, then inside it ascending). Returns 0, 1 (n_splits exceeds
     every class count: the Python refusal) or 2 (a code outside [0, k))."""
     comptime if TE_DEVICE_FOLDS:
-        var ctx = process_ctx["MojolearnXTreesPermContextV2"]()
+        var ctx = process_ctx["MojolearnXTreesPermContextV3"]()
         var kk = max(1, k)
         var d_flags = ctx.enqueue_create_buffer[DType.int32](n)
         var d_scanned = ctx.enqueue_create_buffer[DType.int32](n)
@@ -489,7 +489,7 @@ def leaf_numbering(
     if nn <= 0:
         return 0
     comptime if TE_DEVICE_FOLDS:
-        var ctx = process_ctx["MojolearnXTreesPermContextV2"]()
+        var ctx = process_ctx["MojolearnXTreesPermContextV3"]()
         var d_left = ctx.enqueue_create_buffer[DType.int32](nn)
         ctx.enqueue_copy(dst_buf=d_left, src_ptr=left)
         var d_flags = ctx.enqueue_create_buffer[DType.int32](nn)

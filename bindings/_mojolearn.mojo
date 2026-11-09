@@ -200,7 +200,6 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
-from std.ffi import _Global
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
@@ -219,7 +218,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnCoreContextFastV2"
+comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnCoreContextFastV3"
 
 
 from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform
@@ -248,6 +247,7 @@ from neighbors.estimator import (
     radius_neighbors_fill,
     rbc_knn_search,
 )
+from core.shared_slot import SharedSlot
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -2229,9 +2229,7 @@ struct LabelsNativeTable(Defaultable, Movable):
 
 # The slot holds THIS module's dispatch pointer: tier-keyed so a FAST and an
 # IDENTICAL build never hand out each other's code (core/shared_slot.mojo).
-comptime LABELS_NATIVE_TABLE = _Global[StorageType=LabelsNativeTable,
-    name=("MojolearnLabelsNativeTableIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV1"),
-    init_fn=LabelsNativeTable.__init__]
+comptime LABELS_NATIVE_TABLE = SharedSlot[LabelsNativeTable, ("MojolearnLabelsNativeTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV2")]
 
 
 def labels_native_api_v1_binding() raises -> PythonObject:

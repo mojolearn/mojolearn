@@ -48,7 +48,6 @@ resolved path); `onnx_buffers` gives each one's address."""
 # step before the runtime: names, dims, attributes and byte ranges, on the
 # host; tensor element values are never computed on (integer and bool
 # tensors are decoded to integers, the description the shape folding reads).
-from std.ffi import _Global
 from std.memory import bitcast, memcpy
 from std.os.path import exists, isfile, realpath
 
@@ -57,6 +56,7 @@ from autograd.import_proto import (
     PB_FIXED32, PB_FIXED64, PB_LEN, PB_UTF8_PREFIX, PB_VARINT, PbField, PbFields, pb_f32,
     pb_packed_ints, pb_utf8,
 )
+from core.shared_slot import SharedSlot
 
 comptime ONNX_READ_MAGIC = 0x4F4E5852  # "ONXR"
 comptime ONNX_READ_VERSION = 1
@@ -1580,8 +1580,8 @@ struct _OnnxStore(Defaultable, Movable):
         self.next_id = 1
 
 
-comptime _ONNX_NAME = "MojoOnnxReaderGraphsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoOnnxReaderGraphsFast"
-comptime _ONNX_GRAPHS = _Global[StorageType=_OnnxStore, name=_ONNX_NAME, init_fn=_OnnxStore.__init__]
+comptime _ONNX_NAME = "MojolearnOnnxReaderGraphsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnOnnxReaderGraphsFastV1"
+comptime _ONNX_GRAPHS = SharedSlot[_OnnxStore, _ONNX_NAME]
 comptime OnnxPtr = UnsafePointer[OnnxGraph, MutUntrackedOrigin]
 
 

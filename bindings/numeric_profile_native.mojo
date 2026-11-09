@@ -9,8 +9,8 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit
-from std.ffi import _Global
 from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
+from core.shared_slot import SharedSlot
 
 
 def _dict(value: PythonObject, key_bytes: Bool = False) raises:
@@ -66,10 +66,7 @@ struct ProfileAdmission(Defaultable, Movable):
         self.dicts = List[PythonObject]()
 
 
-comptime PROFILE_ADMISSION = _Global[
-    StorageType=ProfileAdmission, name="MojolearnNumericProfileAdmissionV1",
-    init_fn=ProfileAdmission.__init__,
-]
+comptime PROFILE_ADMISSION = SharedSlot[ProfileAdmission, "MojolearnNumericProfileAdmissionV2"]
 
 
 def _collect(value: PythonObject, mut dicts: List[PythonObject], depth: Int = 0) raises -> Bool:

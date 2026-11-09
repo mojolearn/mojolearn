@@ -55,7 +55,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnTreesContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnTreesContextFastV2"
+comptime _DEVCTX_SLOT = "MojolearnTreesContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnTreesContextFastV3"
 
 
 from extratrees.estimator import (
@@ -83,7 +83,6 @@ from core.forest_inference_model import (
 
 
 # DEVIATION 2482: fit/export ownership is separate from inference residency.
-from std.ffi import _Global
 from std.sys.compile import is_defined
 from forest_export_binding import (
     ForestExportRegistry, validate_forest_export_destinations,
@@ -91,9 +90,8 @@ from forest_export_binding import (
     forest_export_py_list_i64,
 )
 from core.mojolearn_trees_host_impl import et_export_into, et_forest_lists
-comptime ET_EXPORTS = _Global[StorageType=ForestExportRegistry[FitResult],
-    name=("MojoETFitExportIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoETFitExportFast"), init_fn=ForestExportRegistry[FitResult].__init__]
+from core.shared_slot import SharedSlot
+comptime ET_EXPORTS = SharedSlot[ForestExportRegistry[FitResult], ("MojolearnETFitExportIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnETFitExportFastV1")]
 
 
 # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.

@@ -2,7 +2,6 @@
 # Provider-boundary ownership and dispatch for independent captured programs.
 # Python objects remain here under the GIL; only the selected image's typed
 # distributed/partition implementation receives the execution request.
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem, py_contains
 from bindings.native_loaded_module import native_loaded_module, NativeModules
@@ -13,6 +12,7 @@ from providers.python.neural_descriptor_pyapi import (
     NeuralDescriptorProvider, NativeDescriptorResource, neural_descriptor_entry,
     neural_descriptor_connect, neural_descriptor_execute, neural_descriptor_adopt,
 )
+from core.shared_slot import SharedSlot
 
 comptime OWNED_PROGRAM_ABI_NAME = "mojolearn.owned_program.public.v1"
 
@@ -40,8 +40,7 @@ struct _OwnedProgramConnections(Defaultable, Movable):
         self.rows = List[_OwnedProgramConnection]()
 
 
-comptime _OWNED_PROGRAMS = _Global[StorageType=_OwnedProgramConnections,
-    name="MojolearnOwnedProgramPublicV1", init_fn=_OwnedProgramConnections.__init__]
+comptime _OWNED_PROGRAMS = SharedSlot[_OwnedProgramConnections, "MojolearnOwnedProgramPublicV2"]
 
 
 struct NativeOwnedProgramRequest(Movable):

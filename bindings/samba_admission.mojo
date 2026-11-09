@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native admission before Samba can encounter a Python-defined protocol."""
 from std.python import Python, PythonObject
-from std.ffi import _Global
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.p3_numpy_types import numpy_admitted_type
 from bindings.p3_guard_records import guard_row_admitted, guard_row_admit
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
+from core.shared_slot import SharedSlot
 
 
 def _samba_exact(cls: PythonObject, types: PythonObject) raises -> Bool:
@@ -190,8 +190,7 @@ struct SambaAdmissionShadows(Defaultable, Movable):
 
 # Named globals may be shared by every Mojo extension in the process: bump the
 # name's version whenever the shadow layout above changes.
-comptime SAMBA_ADMISSION_SHADOWS = _Global[StorageType=SambaAdmissionShadows,
-    name="MojolearnSambaAdmissionShadowsV1", init_fn=SambaAdmissionShadows.__init__]
+comptime SAMBA_ADMISSION_SHADOWS = SharedSlot[SambaAdmissionShadows, "MojolearnSambaAdmissionShadowsV2"]
 
 
 def _samba_shadow_table() raises -> PythonObject:

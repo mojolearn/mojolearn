@@ -9,7 +9,6 @@ with integer descriptors. Trainer classes are admitted once at import; each
 trainer keeps one native owner record, so no per-instance Python callable,
 schedule string or mutable attribute selects what runs.
 """
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -30,6 +29,7 @@ from training.parallel_byte_impl import (
     parallel_require_finite_f32,
     parallel_require_nonnegative_f32,
 )
+from core.shared_slot import SharedSlot
 
 
 # The byte-LM schedule descriptor ABI (bindings/_mojolearn_byte_lm.mojo).
@@ -80,10 +80,7 @@ struct ParallelByteBoundary(Defaultable, Movable):
             self.classes.append(PythonObject(None))
 
 
-comptime PARALLEL_BYTE_BOUNDARY = _Global[
-    StorageType=ParallelByteBoundary, name="MojoParallelByteBoundary",
-    init_fn=ParallelByteBoundary.__init__,
-]
+comptime PARALLEL_BYTE_BOUNDARY = SharedSlot[ParallelByteBoundary, "MojolearnParallelByteBoundaryV1"]
 
 
 struct ParallelByteOwner(Movable, Writable):

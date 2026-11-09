@@ -13,7 +13,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnLinalgContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnLinalgContextFastV2"
+comptime _DEVCTX_SLOT = "MojolearnLinalgContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnLinalgContextFastV3"
 
 
 from x_decomp.cells import F32Ptr
@@ -34,7 +34,6 @@ from gemm.host_transport import (
     gemm_up_f32,
     gemm_up_u16,
 )
-from std.ffi import _Global
 from gemm.checks.gemm_lowbit import (
     LowbitWorkspace,
     bf16_narrow,
@@ -68,6 +67,7 @@ from gemm.checks.gemm_int15 import (
 from gemm.contract import INT15_MAX_K, INT15_PROFILE_VERSION, OP_NN, OP_NT, OP_TN
 from max.gpu.host import DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.shared_slot import SharedSlot
 
 
 
@@ -125,7 +125,7 @@ struct _LowbitSlot(Defaultable, Movable):
     def __init__(out self):
         self.work = Optional[LowbitWorkspace]()
 
-comptime _LOWBIT_POOL = _Global[StorageType=_LowbitSlot, name="MojoGemmLowbitPool", init_fn=_LowbitSlot.__init__]
+comptime _LOWBIT_POOL = SharedSlot[_LowbitSlot, "MojolearnGemmLowbitPoolV1"]
 
 def _lowbit_run(
     ctx: DeviceContext,

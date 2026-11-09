@@ -12,7 +12,7 @@ from providers.python.neural_descriptor_pyapi import (
 )
 from bindings.causal_lm_construct import _model_f32, _model_shape
 from bindings.causal_lm_public import _native_function
-from std.ffi import _Global
+from core.shared_slot import SharedSlot
 
 
 struct _PrefillVerdicts(Defaultable, Movable):
@@ -35,10 +35,7 @@ struct _PrefillVerdicts(Defaultable, Movable):
         self.optional_mamba3 = -1
 
 
-comptime _PREFILL_VERDICTS = _Global[
-    StorageType=_PrefillVerdicts, name="MojolearnNeuralPrefillVerdictsV1",
-    init_fn=_PrefillVerdicts.__init__,
-]
+comptime _PREFILL_VERDICTS = SharedSlot[_PrefillVerdicts, "MojolearnNeuralPrefillVerdictsV2"]
 
 
 def _prefill_hold(entries: PythonObject) raises:

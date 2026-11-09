@@ -26,7 +26,6 @@ the existing entry for that route called with the same arguments it always
 had: the resident step, the resident step with its transfers named (the
 device-parameter step and the device sign flip), or the per-call step. The
 same kernels on the same buffers in the same order: the same bits."""
-from std.ffi import _Global
 from std.memory import memcpy
 from std.os import getenv
 
@@ -51,6 +50,7 @@ from training.optimizer_public_common import (
     F32P, I32P, Flat, GRADS_DEVICE, GRADS_HOST, GRADS_RESIDENT, OptHyper, PublicStep, PublicStepOut,
     gather, registry_check, resident_wanted_by_env, scatter, sizes_check, stack_microbatches, step_lr,
 )
+from core.shared_slot import SharedSlot
 
 
 # ===========================================================================
@@ -91,8 +91,8 @@ struct OptPool(Defaultable, Movable):
         self.on_host = List[Bool]()
 
 
-comptime _OPT_POOL_NAME = "MojoNeuralTrainingOptPoolIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingOptPoolFast"
-comptime OPT_POOL = _Global[StorageType=OptPool, name=_OPT_POOL_NAME, init_fn=OptPool.__init__]
+comptime _OPT_POOL_NAME = "MojolearnNeuralTrainingOptPoolIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTrainingOptPoolFastV1"
+comptime OPT_POOL = SharedSlot[OptPool, _OPT_POOL_NAME]
 
 
 def opt_pool_handle(h: Int, want: Int) raises -> Int:

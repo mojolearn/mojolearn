@@ -70,7 +70,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnGbdtContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnGbdtContextFastV2"
+comptime _DEVCTX_SLOT = "MojolearnGbdtContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnGbdtContextFastV3"
 
 
 from gbdt.estimator import (
@@ -96,8 +96,8 @@ from gbdt.resident_model import (
     gbdt_resident_predict,
     gbdt_resident_release,
 )
-from std.ffi import _Global
 from std.atomic import Atomic, Ordering
+from core.shared_slot import SharedSlot
 
 
 # Hazard B (p3-trees): GBDT_MODEL_REGISTRY is one process-wide Dict, and
@@ -111,21 +111,14 @@ from std.atomic import Atomic, Ordering
 # the entry's workspace) on the same registry at once. The spin runs with the
 # GIL released, so a waiting thread never blocks the holder or other Python
 # threads.
-struct _GbdtRegistryLock(Movable):
+struct _GbdtRegistryLock(Defaultable, Movable):
     var word: List[Int64]
 
     def __init__(out self):
         self.word = List[Int64](length=1, fill=Int64(0))
 
 
-comptime _GBDT_REGISTRY_LOCK = _Global[
-    StorageType=_GbdtRegistryLock,
-    name=(
-        "MojoGbdtResidentLockIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else
-        "MojoGbdtResidentLockFast"
-    ),
-    init_fn=_GbdtRegistryLock.__init__,
-]
+comptime _GBDT_REGISTRY_LOCK = SharedSlot[_GbdtRegistryLock, ( "MojolearnGbdtResidentLockIdenticalV1" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnGbdtResidentLockFastV1" )]
 
 
 def _gbdt_lock_word() raises -> MutPointer[Int64, MutUntrackedOrigin]:

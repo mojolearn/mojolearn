@@ -4,7 +4,6 @@
 # and the admitted-X registry. The validity rules are those of
 # bindings/gp_svm_records.mojo (identity keys in the weak-keyed prepared-owner
 # registry, class-state records through CPython type watchers).
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.native_class_admission import class_record, class_admit
@@ -22,6 +21,7 @@ from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.gp_kernel_public_native import gp_kernel_snapshot, gp_admit_kernel
 from bindings.gp_common_native import gp_kernel_arrays
 from bindings.gp_svm_records import gpsvm_builtin_scalar, gpsvm_key_fields, gpsvm_context_key
+from core.shared_slot import SharedSlot
 
 
 comptime _KERNEL_CLASS_SLOT = "gp_kernel_class_admitted_v1"
@@ -355,8 +355,7 @@ struct GpAdmittedInputs(Defaultable, Movable):
         self.deferred = List[Bool]()
 
 
-comptime GP_ADMITTED_X = _Global[StorageType=GpAdmittedInputs, name="MojolearnGpAdmittedInputsV1",
-                                 init_fn=GpAdmittedInputs.__init__]
+comptime GP_ADMITTED_X = SharedSlot[GpAdmittedInputs, "MojolearnGpAdmittedInputsV2"]
 
 
 def gp_x_mark(value: PythonObject, deferred: Bool = False) raises:

@@ -13,7 +13,6 @@
 # (`kmeans_centers_prepare`, cluster/resident_centers.mojo) instead of
 # uploading them per call; a binding without those doors (the CPU host
 # binding) takes the per-call entries as before.
-from std.ffi import _Global
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.admitted_family import (
@@ -36,6 +35,7 @@ from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
 from bindings.cpython_table import cpython_table
+from core.shared_slot import SharedSlot
 
 comptime _INIT_ARRAY = 2
 comptime _HOLDER = "_resident_holder"
@@ -94,8 +94,7 @@ struct _KMeansDoorless(Defaultable, Movable):
         self.names = List[String]()
 
 
-comptime _KMEANS_DOORLESS = _Global[StorageType=_KMeansDoorless, name="MojolearnKMeansDoorlessV2",
-                                    init_fn=_KMeansDoorless.__init__]
+comptime _KMEANS_DOORLESS = SharedSlot[_KMeansDoorless, "MojolearnKMeansDoorlessV3"]
 
 
 def _kmeans_door_absent(binding: PythonObject, name: String) raises -> Bool:

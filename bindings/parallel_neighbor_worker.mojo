@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native handlers for the neighbor/IVF shard protocol. The same compiled
 # search/vote entries as the plain API; no estimator Python method is invoked.
-from std.ffi import _Global
 from std.math import isfinite
 from std.memory import memcpy
 from std.python import Python, PythonObject
@@ -25,6 +24,7 @@ from core.host_finite_scan import host_finite_status
 from bindings.neighbors_kde_native import _kde_scores, _kde_release
 from bindings.neighbors_ann_native import _ivf_metric, _ann_key_entry
 from bindings.host_inference_scalars import host_inference_scalar
+from core.shared_slot import SharedSlot
 
 
 struct NeighborSnapshots(Defaultable, Movable):
@@ -34,8 +34,7 @@ struct NeighborSnapshots(Defaultable, Movable):
         self.models = PythonObject(None)
 
 
-comptime NEIGHBOR_SNAPSHOTS = _Global[StorageType=NeighborSnapshots,
-    name="MojoParallelNeighborSnapshots", init_fn=NeighborSnapshots.__init__]
+comptime NEIGHBOR_SNAPSHOTS = SharedSlot[NeighborSnapshots, "MojolearnParallelNeighborSnapshotsV1"]
 
 
 def _snapshots() raises -> PythonObject:

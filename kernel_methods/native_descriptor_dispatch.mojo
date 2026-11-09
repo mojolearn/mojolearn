@@ -2,7 +2,6 @@
 # Native descriptor transport over the existing kernel-method owners. Bodies
 # below preserve the packed binding's refusals, routes, conversions and calls.
 # No Python/provider dependency or new numerical implementation belongs here.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -29,6 +28,7 @@ from svm.impl.scale_gamma_device import scale_gamma_limbs_device
 from kernel_methods.estimator import _family_ctx
 
 from kernel_methods.descriptor_schema import KERNEL_METHOD_ABI, KERNEL_METHOD_OPERATIONS
+from core.shared_slot import SharedSlot
 
 def km_native_kernel_ridge_fit(a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
     if len(a) != 4 and len(a) != 5:
@@ -546,5 +546,4 @@ struct KernelMethodNativeAPI(Defaultable, Movable):
         self.entries = List[NativeDescriptorCall]()
         self.entries.append(km_native_v1)
 
-comptime KERNEL_METHOD_NATIVE_API = _Global[StorageType=KernelMethodNativeAPI,
-    name=("MojolearnKernelMethodNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKernelMethodNativeAPIFastV2"), init_fn=KernelMethodNativeAPI.__init__]
+comptime KERNEL_METHOD_NATIVE_API = SharedSlot[KernelMethodNativeAPI, ("MojolearnKernelMethodNativeAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKernelMethodNativeAPIFastV3")]

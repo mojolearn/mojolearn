@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native codec for the existing streamed byte-LM archive, including raw words."""
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.cross_vendor_admission import cv_types_initialize, cv_buffer, cv_path, cv_int, cv_json, cv_state, CROSS_VENDOR_TYPES
 from bindings.native_json import native_json_parse
@@ -12,6 +11,7 @@ from bindings.sha256_door import sha256_update, sha256_hexdigest, sha256_digest_
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.py_typed_call import py_call_typed
 from core.sha256 import Sha256
+from core.shared_slot import SharedSlot
 
 
 struct ByteCheckpointBoundary(Defaultable, Movable):
@@ -25,9 +25,7 @@ struct ByteCheckpointBoundary(Defaultable, Movable):
         self.magic = PythonObject(None)
 
 
-comptime BYTE_CHECKPOINT_BOUNDARY = _Global[
-    StorageType=ByteCheckpointBoundary, name="MojoByteCheckpointBoundary", init_fn=ByteCheckpointBoundary.__init__,
-]
+comptime BYTE_CHECKPOINT_BOUNDARY = SharedSlot[ByteCheckpointBoundary, "MojolearnByteCheckpointBoundaryV1"]
 comptime BYTE_CHECKPOINT_CHUNK = 1048576
 comptime BYTE_CHECKPOINT_HEADER_LIMIT = 1048576
 

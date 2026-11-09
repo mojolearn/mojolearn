@@ -5,7 +5,6 @@ fits and predictions over the SMO oracle and the isolation forest run, with
 no Python import. The binding unpacks its PythonObject arguments, calls one
 function here and converts the result back (lane thin-core, 2026-10-21: the
 bodies moved word for word, no bit change)."""
-from std.ffi import _Global
 from std.math import isnan
 from std.time import perf_counter_ns
 
@@ -51,6 +50,7 @@ from svm.impl.svm_parameter import (
     check_rung1_scope,
 )
 from svm.host.finite_scan import check_finite_ptr
+from core.shared_slot import SharedSlot
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -529,11 +529,9 @@ struct _IForestHostStore(Defaultable, Movable):
         self.nonce = 0
 
 
-comptime _IF_HOST_RESIDENT_SLOT = "MojoIForestHostResidentIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoIForestHostResidentOther"
+comptime _IF_HOST_RESIDENT_SLOT = "MojolearnIForestHostResidentIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnIForestHostResidentOtherV1"
 
-comptime IF_HOST_RESIDENT_STORE = _Global[
-    StorageType=_IForestHostStore, name=_IF_HOST_RESIDENT_SLOT, init_fn=_IForestHostStore.__init__
-]
+comptime IF_HOST_RESIDENT_STORE = SharedSlot[_IForestHostStore, _IF_HOST_RESIDENT_SLOT]
 
 
 def if_host_resident_new_token() raises -> Int:

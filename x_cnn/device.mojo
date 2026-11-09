@@ -13,7 +13,6 @@ from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.ffi import _Global
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -79,6 +78,7 @@ from x_cnn.ops import (
 )
 # lane fam2-neural (2026-10-04): the device loss fold
 from x_cnn.ops import IDN_XENT_DEV_FOLD, LOSS_FOLD_BLOCK, blk_fold_at, fold_plan
+from core.shared_slot import SharedSlot
 
 comptime TPB = 256
 # Neural 2026-10-06 source-only experiment controls. Every new control is
@@ -161,9 +161,9 @@ struct _CnnContext(Defaultable, Movable):
 
 #: The pinned stages of this binding's downloads (core/staged_download.mojo),
 #: one pool per binding and tier like the context.
-comptime _XCNN_STAGE_POOL = "MojoDownloadStagesXCnnIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDownloadStagesXCnnFast"
-comptime _CTX_NAME = "MojolearnXCnnContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXCnnContextFastV2"
-comptime X_CNN_CONTEXT = _Global[StorageType=_CnnContext, name=_CTX_NAME, init_fn=_CnnContext.__init__]
+comptime _XCNN_STAGE_POOL = "MojolearnDownloadStagesXCnnIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDownloadStagesXCnnFastV1"
+comptime _CTX_NAME = "MojolearnXCnnContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXCnnContextFastV3"
+comptime X_CNN_CONTEXT = SharedSlot[_CnnContext, _CTX_NAME]
 
 
 def cnn_ctx() raises -> DeviceContext:

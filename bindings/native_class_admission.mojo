@@ -29,7 +29,6 @@ Records live in the prepared-owner registry keyed by a weak reference to the
 class, so a dead class's records are dropped and a recycled address never
 matches. A record must not strongly retain the class it belongs to.
 """
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
@@ -49,10 +48,7 @@ struct ClassWatch(Defaultable, Movable):
         self.epochs = Dict[Int, Int]()
 
 
-comptime CLASS_WATCH = _Global[
-    StorageType=ClassWatch, name="MojolearnClassWatchV1",
-    init_fn=ClassWatch.__init__,
-]
+comptime CLASS_WATCH = SharedSlot[ClassWatch, "MojolearnClassWatchV2"]
 
 
 def _class_modified_c(type_ptr: PyObjectPtr) abi("C") -> Int32:
@@ -177,6 +173,7 @@ def class_admit(mut mods: NativeModules, slot: String, cls: PythonObject, payloa
 # Lane ne2-i-j (2026-11-07): the CPython 3.10 / 3.11 stamps.
 from bindings.native_loaded_module import shared_dict_stamped
 from bindings.py_version_tags import type_version_tags, type_version_tag, type_version_tag_assign
+from core.shared_slot import SharedSlot
 # The same idea for exact dictionaries whose key admission (every key an
 # exact str, so a keyed lookup cannot run a foreign __eq__) used to be
 # repeated per call: module namespaces read by native metadata. Python >=
@@ -197,10 +194,7 @@ struct DictWatch(Defaultable, Movable):
         self.admitted = Dict[Int, Int]()
 
 
-comptime DICT_WATCH = _Global[
-    StorageType=DictWatch, name="MojolearnDictWatchV2",
-    init_fn=DictWatch.__init__,
-]
+comptime DICT_WATCH = SharedSlot[DictWatch, "MojolearnDictWatchV3"]
 
 
 def dict_keys_admitted(fields: PythonObject) raises -> Bool:
@@ -241,10 +235,7 @@ struct StaticTypes(Defaultable, Movable):
         self.types = Dict[String, PythonObject]()
 
 
-comptime STATIC_TYPES = _Global[
-    StorageType=StaticTypes, name="MojolearnStaticTypesV1",
-    init_fn=StaticTypes.__init__,
-]
+comptime STATIC_TYPES = SharedSlot[StaticTypes, "MojolearnStaticTypesV2"]
 
 
 def static_builtin_type(module: String, name: String) raises -> PythonObject:

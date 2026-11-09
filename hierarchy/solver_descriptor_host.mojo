@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Direct native transport to the existing host linkage body. No Python objects,
 # callbacks or arithmetic changes belong in this dispatcher.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.hostptr import i32_ptr
 from core.mojolearn_solver_host_impl import linkage_fit_host_into
@@ -12,6 +11,7 @@ from hierarchy.solver_descriptor_schema import (
     HIERARCHY_SOLVER_CAP_LINKAGE, hierarchy_solver_validate_call,
     hierarchy_solver_validate_buffers,
 )
+from core.shared_slot import SharedSlot
 
 
 def hierarchy_solver_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
@@ -51,5 +51,4 @@ struct HierarchySolverHostAPI(Defaultable, Movable):
 
 
 # PyCapsule borrows both table and name: the module image owns them for life.
-comptime HIERARCHY_SOLVER_HOST_API = _Global[StorageType=HierarchySolverHostAPI,
-    name=("MojolearnHierarchySolverHostAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnHierarchySolverHostAPIFastV2"), init_fn=HierarchySolverHostAPI.__init__]
+comptime HIERARCHY_SOLVER_HOST_API = SharedSlot[HierarchySolverHostAPI, ("MojolearnHierarchySolverHostAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnHierarchySolverHostAPIFastV3")]

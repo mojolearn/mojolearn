@@ -91,7 +91,6 @@ time.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.memory import memcpy
 from std.gpu import block_dim, block_idx, thread_idx
@@ -153,6 +152,7 @@ from training.checks.optimizer_contract import (
     OptimizerConfig,
     refuse_nonfinite_scalar,
 )
+from core.shared_slot import SharedSlot
 
 
 # ===========================================================================
@@ -539,8 +539,8 @@ struct _OptStage(Defaultable, Movable):
         self.ch = 0
 
 
-comptime _STAGE_NAME = "MojoTrainingOptPipeStageIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoTrainingOptPipeStageFast"
-comptime _STAGE = _Global[StorageType=_OptStage, name=_STAGE_NAME, init_fn=_OptStage.__init__]
+comptime _STAGE_NAME = "MojolearnTrainingOptPipeStageIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnTrainingOptPipeStageFastV1"
+comptime _STAGE = SharedSlot[_OptStage, _STAGE_NAME]
 
 
 def _stage_half(ctx: DeviceContext, ch: Int, half: Int) raises -> _FP:
@@ -1328,7 +1328,7 @@ def identical_ce_admit_call(reduction: Int, want_grad: Int, n_rows: Int) raises:
 # recorded stage; nothing is written to the caller's outputs on a refusal.
 # The A/B switch back to the mirror is removed (lane gap-neural-overhead2).
 # No bit moves: the same kernels read the same uploaded bytes.
-comptime _CE_STAGE_POOL = "MojoDownloadStagesTrainingIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDownloadStagesTrainingFast"
+comptime _CE_STAGE_POOL = "MojolearnDownloadStagesTrainingIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDownloadStagesTrainingFastV1"
 # The N * V device buffers of the host entry (logits, dlogits, shift, expo,
 # weights, the smoothing logp) and the GEMM workspace are kept between calls
 # in this pool (core/device_pool.mojo, lane gap-neural-overhead2) instead of
@@ -1337,7 +1337,7 @@ comptime _CE_STAGE_POOL = "MojoDownloadStagesTrainingIdentical" if GLOBAL_NUMERI
 # cell, ignored rows included), the logits are uploaded whole, and the
 # workspace is gated dirty-safe (`identical_ce_workspace_max_floats`): a
 # buffer's previous words never reach a result. Storage only: no bit moves.
-comptime _CE_DEV_POOL = "MojoDevPoolCeIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDevPoolCeFast"
+comptime _CE_DEV_POOL = "MojolearnDevPoolCeIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDevPoolCeFastV1"
 
 
 #: lane fam-neural (2026-10-04): THE LOGITS GO UP THROUGH THE PIPELINED

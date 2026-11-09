@@ -34,11 +34,11 @@ timer helpers' own waits excluded). A launch or wait the MAX runtime makes
 internally is not visible here and is not counted.
 """
 
-from std.ffi import _Global
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
+from core.shared_slot import SharedSlot
 
 # I02 current experiment: NEVER RUN — PENDING MEASUREMENT; existing defaults preserved.
 comptime STEP_PHASE_TIMERS = is_defined["MOJOLEARN_STEP_PHASE_TIMERS"]()
@@ -71,8 +71,7 @@ struct _StepCountsStore(Defaultable, Movable):
 # The `std.ffi._Global` slot the trees, RF and byte LM bindings use for
 # their process-lifetime state; referenced only inside the comptime branches
 # below, so a build without the define never creates it.
-comptime STEP_COUNTS = _Global[StorageType=_StepCountsStore,
-    name="MojolearnStepPhaseCountsV1", init_fn=_StepCountsStore.__init__]
+comptime STEP_COUNTS = SharedSlot[_StepCountsStore, "MojolearnStepPhaseCountsV2"]
 
 
 def step_phase_on() -> Bool:

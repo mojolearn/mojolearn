@@ -13,13 +13,13 @@ from bindings.native_buffer_address import native_buffer_address
 from bindings.native_instance_item import native_instance_item
 from bindings.mode_metadata_native import _fields, _class_fields
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from std.math import isfinite
+from core.shared_slot import SharedSlot
 
 
 struct CodecBoundary(Defaultable, Movable):
@@ -37,10 +37,7 @@ struct CodecBoundary(Defaultable, Movable):
         self.int8_cls = PythonObject(None)
 
 
-comptime CODEC_BOUNDARY = _Global[
-    StorageType=CodecBoundary, name="MojoNativeStateCodec",
-    init_fn=CodecBoundary.__init__,
-]
+comptime CODEC_BOUNDARY = SharedSlot[CodecBoundary, "MojolearnNativeStateCodecV1"]
 
 
 def codec_initialize(array_cls: PythonObject, bf16_cls: PythonObject, int8_cls: PythonObject) raises:

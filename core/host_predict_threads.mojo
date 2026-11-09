@@ -37,9 +37,9 @@ what the row computes, so the kernel matrix does not carry it; the CPU
 identity column proves it by reading every cell IDENTICAL at the default
 count and at 1.
 """
-from std.ffi import _Global
 from std.os import getenv
 from std.sys.info import num_physical_cores
+from core.shared_slot import SharedSlot
 
 #: The most tasks one call splits into, whatever the box reports; the byte
 #: LM host's `BYTE_HOST_MAX_THREADS` bound, kept so a misread environment
@@ -109,8 +109,7 @@ struct _HostThreadPolicy(Defaultable, Movable):
         self.workers = _host_threads_resolve(self.requested)
 
 
-comptime _HOST_THREAD_POLICY = _Global[StorageType=_HostThreadPolicy,
-    name="MojolearnHostThreadPolicyV1", init_fn=_HostThreadPolicy.__init__]
+comptime _HOST_THREAD_POLICY = SharedSlot[_HostThreadPolicy, "MojolearnHostThreadPolicyV2"]
 
 
 def host_predict_threads_requested() -> Int:
