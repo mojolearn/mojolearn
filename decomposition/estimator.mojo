@@ -302,7 +302,7 @@ def pca_transform_host(
     ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
     # The host words stay valid until the one synchronisation below; the
     # stream orders the copies before the kernels (no sync in between).
-    enqueue_finite_status(ctx, x.unsafe_ptr(), n_rows * n_features, status.unsafe_ptr(), 0)
+    enqueue_finite_status(ctx, x.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), n_rows * n_features, status.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), 0)
     pca_transform(ctx, x, mu, components, out, n_rows, n_features, n_components)
     var word = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)

@@ -5772,7 +5772,7 @@ def _decision_status(ctx: DeviceContext, dx: DeviceBuffer[DType.float32], count:
     if status != 0:
         dstat.enqueue_fill(Int32(0))
         if count > 0:
-            enqueue_finite_status(ctx, dx.unsafe_ptr(), count, dstat.unsafe_ptr(), 0)
+            enqueue_finite_status(ctx, dx.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), count, dstat.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), 0)
         ctx.enqueue_copy(dst_ptr=IP(unsafe_from_address=status), src_buf=dstat)
     return dstat^
 

@@ -33,6 +33,7 @@ main zeroed its operands and discarded its output (guarded publication).
 # 41ffcec665.
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
 
+from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceContext

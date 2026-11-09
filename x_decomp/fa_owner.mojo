@@ -22,7 +22,7 @@ from x_decomp.fa_em import FaArgs, dsum_f32_run, fa_em_main_check
 from x_decomp.pca_randomized import RDev, RKit
 from x_decomp.decomp_owner_kit import (
     DecompDev, OP_ADD, OP_ADDS, OP_DIV, OP_LOGS, OP_MAXS, OP_MINS, OP_MUL, OP_SCALE, OP_SQ, OP_SQRT, OP_SUB,
-    kit_colmean, kit_diag_add, kit_eigh, kit_eye, kit_inv, kit_logdet, kit_reversed_columns, kit_rows,
+    kit_colmean, kit_diag_add, kit_eigh, kit_eigh_desc, kit_eye, kit_inv, kit_logdet, kit_reversed_columns, kit_rows,
 )
 
 comptime LOG_2PI = 1.8378770664093453

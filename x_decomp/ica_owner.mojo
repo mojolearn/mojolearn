@@ -15,7 +15,7 @@ from x_decomp.exec_trait import Exec
 from x_decomp.pca_randomized import RDev, RKit
 from x_decomp.decomp_owner_kit import (
     DecompDev, OP_ADD, OP_DIV, OP_MAXS, OP_MUL, OP_SCALE, OP_SQDIFF, OP_SQRT, OP_SUB,
-    kit_colmean, kit_eigh, kit_pinv_rows, kit_rand, kit_reversed_columns, kit_rows,
+    kit_colmean, kit_eigh, kit_eigh_desc, kit_pinv_rows, kit_rand, kit_reversed_columns, kit_rows,
 )
 
 #: `_F32_EPS * 10`: the eigenvalue floor before the whitening's sqrt

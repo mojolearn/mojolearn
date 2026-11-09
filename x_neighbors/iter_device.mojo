@@ -151,6 +151,12 @@ def _c43_graph_degree(a: FP,degree: FP,n: Int32,variant: Int32):
         classical_graph_degree(t,a,degree,Int(n),Int(variant))
 
 
+# The step keeps its device addresses untracked (a struct field cannot expose
+# AnyOrigin); enqueue_step hands the kernels MutAnyOrigin views of them.
+comptime _LpF = MutPointer[Float32, MutUntrackedOrigin]
+comptime _LpI = MutPointer[Int32, MutUntrackedOrigin]
+
+
 struct _LpDenseStep(LoopStep, Movable):
     """One iteration of `_LabelPropagationBase.fit` over the dense (or raw
     affinity) graph as a step of the bounded device loop: the stopping sum
@@ -159,17 +165,17 @@ struct _LpDenseStep(LoopStep, Movable):
     clamp into the buffer the old prev held. The ping-pong pair is chosen by
     the iteration's parity, so a stop at iteration `it` leaves the last
     distributions in a when (it - 1) is even."""
-    var graph: FP
-    var degree: FP
-    var a: FP
-    var b: FP
-    var nxt: FP
-    var ys: FP
-    var unl: IP
-    var part: FP
-    var cnt: IP
-    var cols: IP
-    var vals: FP
+    var graph: _LpF
+    var degree: _LpF
+    var a: _LpF
+    var b: _LpF
+    var nxt: _LpF
+    var ys: _LpF
+    var unl: _LpI
+    var part: _LpF
+    var cnt: _LpI
+    var cols: _LpI
+    var vals: _LpF
     var s: DeviceBuffer[DType.float32]
     var flag: DeviceBuffer[DType.int32]
     var n: Int
@@ -186,17 +192,17 @@ struct _LpDenseStep(LoopStep, Movable):
         vals: FP, s: DeviceBuffer[DType.float32], flag: DeviceBuffer[DType.int32], n: Int, c: Int, maxk: Int,
         raw_graph: Bool, use_sparse: Bool, variant: Int, alpha: Float32, threshold: Float32,
     ):
-        self.graph = graph
-        self.degree = degree
-        self.a = a
-        self.b = b
-        self.nxt = nxt
-        self.ys = ys
-        self.unl = unl
-        self.part = part
-        self.cnt = cnt
-        self.cols = cols
-        self.vals = vals
+        self.graph = graph.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.degree = degree.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.a = a.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.b = b.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.nxt = nxt.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.ys = ys.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.unl = unl.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.part = part.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.cnt = cnt.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.cols = cols.unsafe_origin_cast[MutUntrackedOrigin]()
+        self.vals = vals.unsafe_origin_cast[MutUntrackedOrigin]()
         self.s = s.copy()
         self.flag = flag.copy()
         self.n = n
@@ -212,31 +218,37 @@ struct _LpDenseStep(LoopStep, Movable):
         mut self, ctx: DeviceContext, mut registers: LoopRegisters, it: Int, mut timers: LoopTimers,
     ) raises:
         var nc = self.n * self.c
+        var graph: FP = self.graph.unsafe_origin_cast[MutAnyOrigin]()
+        var degree: FP = self.degree.unsafe_origin_cast[MutAnyOrigin]()
+        var a: FP = self.a.unsafe_origin_cast[MutAnyOrigin]()
+        var b: FP = self.b.unsafe_origin_cast[MutAnyOrigin]()
+        var nxt: FP = self.nxt.unsafe_origin_cast[MutAnyOrigin]()
+        var ys: FP = self.ys.unsafe_origin_cast[MutAnyOrigin]()
+        var part: FP = self.part.unsafe_origin_cast[MutAnyOrigin]()
+        var vals: FP = self.vals.unsafe_origin_cast[MutAnyOrigin]()
+        var unl: IP = self.unl.unsafe_origin_cast[MutAnyOrigin]()
+        var cnt: IP = self.cnt.unsafe_origin_cast[MutAnyOrigin]()
+        var cols: IP = self.cols.unsafe_origin_cast[MutAnyOrigin]()
         var even = (it - 1) % 2 == 0
-        var cur = self.a if even else self.b
-        var prev = self.b if even else self.a
+        var cur = a if even else b
+        var prev = b if even else a
         var sp: FP = self.s.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        _absdiff_launch(ctx, cur, prev, sp, self.part, nc)
+        _absdiff_launch(ctx, cur, prev, sp, part, nc)
         loop_criterion_below(ctx, registers, self.s, self.threshold, it)
         loop_lap(ctx, timers, "stopping_sum")
         var gate: IP = registers.words.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         if self.use_sparse:
-            var cnt = self.cnt
-            var cols = self.cols
-            var vals = self.vals
-            var graph = self.graph
-            var nxt = self.nxt
             lp_ell_spmm_enqueue(ctx, gate, self.flag, cnt, cols, vals, self.maxk, graph, cur, nxt, self.n, self.c, BLOCK)
         else:
             ctx.enqueue_function[lp_dense_product_gated](
-                gate, self.graph, cur, self.nxt, Int32(self.n), Int32(self.c), self.degree,
+                gate, graph, cur, nxt, Int32(self.n), Int32(self.c), degree,
                 Int32(1 if self.raw_graph else 0), Int32(self.variant), grid_dim=_grid(nc), block_dim=BLOCK,
             )
         loop_lap(ctx, timers, "product")
         # prev = ld; ld = clamp(nxt): the clamp writes over the buffer the old
         # prev held; the next iteration's parity swaps the two names.
         ctx.enqueue_function[lp_clamp_gated](
-            gate, self.nxt, self.ys, self.unl, prev, Int32(self.n), Int32(self.c), Int32(self.variant), self.alpha,
+            gate, nxt, ys, unl, prev, Int32(self.n), Int32(self.c), Int32(self.variant), self.alpha,
             grid_dim=_grid(nc), block_dim=BLOCK,
         )
         loop_lap(ctx, timers, "clamp")

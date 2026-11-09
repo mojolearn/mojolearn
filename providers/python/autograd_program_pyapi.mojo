@@ -476,7 +476,7 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
     var out = Python.list()
     if ran < count:
         # an early stop: the curve of the epochs that ran (a view, no copy)
-        _ = py_call(out.append, py_call(curve.__getitem__, py_call(b.slice, PythonObject(0), PythonObject(ran))))
+        _ = py_call(out.append, curve[py_call(b.slice, PythonObject(0), PythonObject(ran))])
     else:
         _ = py_call(out.append, curve)
     _ = curve

@@ -44,7 +44,7 @@ def pca_transform_fold(
     var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
     var status = ctx.enqueue_create_buffer[DType.int32](2)
     enqueue_fill[DType.int32](ctx, status, Int32(0))
-    msel_device_x_f32(ctx, base_id, base_rows, n_features, index_id, n_rows, x, status.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0)
+    msel_device_x_f32(ctx, base_id, base_rows, n_features, index_id, n_rows, x, status.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), 0)
     ctx.enqueue_copy(dst_buf=mu, src_ptr=mean_ptr)
     ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
     pca_transform(ctx, x, mu, components, out, n_rows, n_features, n_components)
