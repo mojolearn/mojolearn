@@ -524,20 +524,12 @@ def _pair_select(binding: PythonObject, codes: PythonObject, ci: Int, cj: Int, c
 
 
 def _solve(fields: PythonObject, binding: PythonObject, x_addr: Int, n_rows: Int, n_cols: Int, labels_addr: Int,
-           gamma: Float64, c_rows_addr: Int, context: PythonObject,
-           settings: SvcOperationSettings, native: PythonObject) raises -> PythonObject:
-    """`SVC._solve`: ONE binary C-SVC solve on host X words; (n_support,
-    dual, support, sv, info) with the worst-case buffers uncut. `c_rows_addr`
-    0 = unweighted."""
-    return _solve_with(fields, binding, x_addr, n_rows, n_cols, labels_addr, gamma, c_rows_addr, context, settings,
-                       native, DoorRowsStore.none(), False, False)
-
-
-def _solve_with(fields: PythonObject, binding: PythonObject, x_addr: Int, n_rows: Int, n_cols: Int, labels_addr: Int,
                 gamma: Float64, c_rows_addr: Int, context: PythonObject,
                 settings: SvcOperationSettings, native: PythonObject, fold: DoorRowsStore, scale_gamma: Bool,
                 device_form: Bool) raises -> PythonObject:
-    """`_solve`; `device_form` (the GPU binding, lane a8a) calls `svc_fit`'s
+    """`SVC._solve`: ONE binary C-SVC solve; (n_support, dual, support, sv,
+    info) with the worst-case buffers uncut. `c_rows_addr` 0 = unweighted.
+    `device_form` (the GPU binding, lane a8a) calls `svc_fit`'s
     15-value form: X is the host words at `x_addr` or the fold `fold`
     gathered on the device, gamma='scale' (`scale_gamma`) is resolved from
     the fit's device copy, and info's slots 5-7 return X's finite and range
@@ -879,7 +871,8 @@ def _platt(fields: PythonObject, binding: PythonObject, x_meta: ArrayMetadata, c
                     _ = rows_held  # keep the Python object alive through the native call above
                 var cols = Int(py=sub.shape[1])
                 var solved = _solve(fields, binding, _addr(sub), nt, cols, _addr(lab), gamma,
-                                    0 if sub_c is None else _addr(sub_c), context, settings, native)
+                                    0 if sub_c is None else _addr(sub_c), context, settings, native,
+                                    DoorRowsStore.none(), False, False)
                 _ = lab  # keep the Python object alive through the native call above
                 _ = sub_c  # keep the Python object alive through the native call above
                 var q: PythonObject
@@ -986,7 +979,8 @@ def _fit_ovo(fields: PythonObject, binding: PythonObject, x_meta: ArrayMetadata,
                 _ = idx_a  # keep the Python object alive through the native call above
             var sub_c = sel[2]
             var solved = _solve(fields, binding, _addr(sub), m, Int(py=sub.shape[1]), _addr(sel[1]), gamma,
-                                0 if sub_c is None else _addr(sub_c), context, settings, native)
+                                0 if sub_c is None else _addr(sub_c), context, settings, native,
+                                DoorRowsStore.none(), False, False)
             _ = sub_c  # keep the Python object alive through the native call above
             var info = solved[4]
             _ = sub_c  # keep the Python object alive through the native call above
@@ -1148,9 +1142,9 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
         return
     if py_contains(fields, PythonObject("_pairs")):
         _ = family_call(fields.pop, PythonObject("_pairs"), PythonObject(None))
-    var solved = _solve_with(fields, binding, x_meta.source.addr, n_rows, n_cols, _addr(labels), gamma,
-                             0 if c_rows is None else _addr(c_rows), context, settings, native, fold, scale_gamma,
-                             device_x)
+    var solved = _solve(fields, binding, x_meta.source.addr, n_rows, n_cols, _addr(labels), gamma,
+                        0 if c_rows is None else _addr(c_rows), context, settings, native, fold, scale_gamma,
+                        device_x)
     _ = labels  # keep the Python object alive through the native call above
     var info = solved[4]
     if device_x:

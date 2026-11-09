@@ -67,7 +67,7 @@ def _assert_x_admitted_once_per_operation(source):
         assert body(source, door).count(admit) == 1, door
     inner = body(source, '_kernel_methods_operation')
     assert 'admit_family_meta(args[1]' not in inner
-    for call in ('_krr_fit(model, args, context, x)', '_nys_fit(model, args, context, x)',
+    for call in ('_krr_fit(model, args, context, x, fold)', '_nys_fit(model, args, context, x)',
                  '_nys_transform(model, args, context, x)', '_rbf_transform(model, args, context, x)',
                  '_rbf_fit(model, args, False, context, x)', '_rbf_fit(model, args, True, context, x)'):
         assert call in inner, call

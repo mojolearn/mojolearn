@@ -52,7 +52,7 @@ def test_common_provider_is_selected_without_new_provider_type():
 
 
 def test_original_numerical_owners_and_output_layout_are_preserved():
-    assert 'svc_fit_host_borrowed(xp, y, n, d,' in NATIVE
+    assert 'svc_fit_host_borrowed(Int(xp), QueryFold.none(), y, n, d,' in NATIVE
     assert 'svc_predict_host(x, n, d, support, dual, count,' in NATIVE
     assert 'if p[3] != 4:' in NATIVE  # precomputed does not read support rows
     for slot, field in enumerate(('b', 'n_support', 'n_iter', 'label0', 'label1')):
@@ -101,7 +101,7 @@ def test_epilogue_typed_bridge_retains_numerical_owners():
 def test_svr_uses_same_provider_and_retains_native_solver():
     source = (ROOT / 'svm/native_svr_dispatch.mojo').read_text()
     assert 'Python' not in source and 'py=' not in source
-    assert 'svr_fit_host(' in source and 'svr_predict_host(' in source
+    assert 'svr_fit_host_borrowed(' in source and 'svr_predict_host(' in source
     assert 'if kernel != 4:' in source
     for name in ('_svr_fit', '_svr_predict'):
         assert 'svr_execute(binding, native,' in body(name)
@@ -135,8 +135,9 @@ def test_svm_shared_inputs_are_snapshotted_outside_pair_and_fold_loops():
             assert repeated not in src
     for name in ('_svc_fit', '_svr_fit'):
         src=body(name)
-        assert src.count('admit_family_meta(args[1],') == 1
+        assert src.count('_svm_fit_admit(args[1],') == 1
         assert '_ = x_meta' in src
+    assert body('_svm_fit_admit').count('admit_family_meta(source,') == 1
     for name in ('_run', '_pair_decisions', '_svr_predict'):
         assert 'q_meta.source.addr' in body(name)
         assert '_ = q_meta' in body(name)
