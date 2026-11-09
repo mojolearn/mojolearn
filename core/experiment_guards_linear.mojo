@@ -82,6 +82,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_LEGACY_NARROW_SOFTMAX_G2"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_LEGACY_NARROW_SOFTMAX_G2, the benchmark-tuned window of MOJOLEARN_SOFTMAX_FAST_G2_NARROW, deleted with it; code at f59d913b0b; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_SGD_EPOCH_CONTIGUOUS"](), "removed 2026-11-09 (lane n3-sgd-minibatch-loops): CLASSICAL_SGD_EPOCH_CONTIGUOUS (a per-epoch n x d re-gather of X, y, sw into permuted copies) was default off and never measured on its own; the batch kernels read the rows through the epoch's order (docs/TOMBSTONES.md)"
+    comptime assert not is_defined["MOJOLEARN_X_LINEAR_JACOBI_LEAD"](), "removed 2026-11-09 (lane n9b-device-svd-qr): MOJOLEARN_X_LINEAR_JACOBI_LEAD restored the lead-only cyclic Jacobi of the team eigh `t_jacobi_eig`, deleted with it; BayesianRidge takes the executor eigh op (x_decomp/eigh_ops.mojo eigh_op_dense); code at 5b5490960d; see docs/TOMBSTONES.md"
     return True
 
 
