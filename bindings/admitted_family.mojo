@@ -41,7 +41,9 @@
 # the finiteness and sign tests are predicates.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call, py_type, py_contains, py_setitem
+from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_setattr
+from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
+from bindings.native_array_storage import native_scratch_bytes, native_scratch_address
 from bindings.classical_arrays import (
     classical_address, classical_is_array, classical_cast_kind, classical_dtype_str, classical_c_order,
 )
@@ -71,6 +73,54 @@ def _shape_tuple(shape: List[Int]) raises -> PythonObject:
     for word in shape:  # small-loop(admitted rank for an error message)
         _ = py_call(shape_words.append, word)
     return py_call(native_loaded_module("builtins").tuple, shape_words)
+
+
+def admitted_array(shape: PythonObject, typestr: String, context: PythonObject) raises -> PythonObject:
+    """A new C-order mojolearn Array of `shape` ("<f4" or "<f8") whose words
+    are NOT initialised: the destination of a cast, a copy or a fill that
+    writes every word before anything reads it. It is an ordinary owned
+    Array that may be kept as a fitted field or returned: its store is an
+    uninitialised bytearray (native_scratch_bytes, no fill pass) and its
+    `_mv` the typed memoryview of that store, the layout every Array reader
+    and the save path (bindings/native_array_snapshot.mojo) accept. An empty
+    shape takes the zero-length family_array."""
+    # Regression audit R6 / REGRESSIONS C3: family_array zero-filled every
+    # destination (native_array_zeros) that the cast or copy then overwrote
+    # in full, a second pass over X.
+    var b = native_loaded_module("builtins")
+    var rank = len(shape)
+    var count = 1
+    for k in range(rank):  # driver-loop: over array rank metadata
+        count *= Int(py=shape[k])
+    if count == 0:
+        return family_array(shape, typestr, context)
+    var item = 8 if typestr == "<f8" else 4
+    var store = native_scratch_bytes(count * item)
+    var view = py_call(native_buffer_view(store).cast, PythonObject("d" if item == 8 else "f"))
+    var steps = List[Int](length=rank, fill=0)
+    var step = item
+    for k in range(rank):  # driver-loop: over array rank metadata
+        steps[rank - 1 - k] = step
+        step *= Int(py=shape[rank - 1 - k])
+    var strides = Python.list()
+    for k in range(rank):  # driver-loop: over array rank metadata
+        _ = py_call(strides.append, steps[k])
+    var array = native_storage_allocate(context["array_class"])
+    py_setattr(array, "_store", store)
+    py_setattr(array, "_base", PythonObject(None))
+    py_setattr(array, "_pin", PythonObject(None))
+    py_setattr(array, "_mv", view)
+    py_setattr(array, "_addr", PythonObject(native_scratch_address(store)))
+    py_setattr(array, "_readonly", PythonObject(False))
+    py_setattr(array, "shape", py_call(b.tuple, shape))
+    py_setattr(array, "dtype", PythonObject(typestr))
+    py_setattr(array, "ndim", PythonObject(rank))
+    py_setattr(array, "size", PythonObject(count))
+    py_setattr(array, "nbytes", PythonObject(count * item))
+    py_setattr(array, "itemsize", PythonObject(item))
+    py_setattr(array, "strides", py_call(b.tuple, strides))
+    py_setattr(array, "order", PythonObject("C"))
+    return array
 
 
 def admit_family_input(source: PythonObject, ndim: Int, name: String, context: PythonObject,
@@ -149,8 +199,9 @@ def admit_family_cast(mut snapshot: ArrayMetadata, name: String, context: Python
             ok = host_all_finite_f32_strided(src.addr, src.s0, src.s1, src.rows, src.cols)
     else:
         # The destination is an owned mojolearn Array (the type the family
-        # outputs and fitted fields always had); the cast writes every word.
-        var result = family_array(snapshot.python_shape(), "<f4", context)
+        # outputs and fitted fields always had), uninitialised: the cast
+        # writes every word.
+        var result = admitted_array(snapshot.python_shape(), "<f4", context)
         var address = Int(py=classical_address(result))
         # parallel: one typed cast over row tasks, the finiteness verdict in the same pass
         ok = admitted_cast_f32(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind,
@@ -213,7 +264,7 @@ def admit_family_f64(view: PythonObject, name: String, context: PythonObject) ra
     var strides = view.strides if nd > 0 else PythonObject(None)
     var s0 = 0 if nd == 0 else Int(py=strides[0])
     var s1 = 0 if nd < 2 else Int(py=strides[1])
-    var result = family_array(py_call(b.tuple, shape), "<f8", context)
+    var result = admitted_array(py_call(b.tuple, shape), "<f8", context)
     admitted_cast_f64(Int(py=classical_address(view)), s0, s1, rows, cols, item, kind,
                       _AF_F64P(unsafe_from_address=Int(py=classical_address(result))))
     _ = result  # keep the Python object alive through the native call above
@@ -227,7 +278,7 @@ def admit_family_owned(value: ArrayMetadata, context: PythonObject) raises -> Py
     words, so a caller editing its array after fit changes nothing."""
     if value.owned_writable:
         return value.keep
-    var result = family_array(value.python_shape(), "<f4", context)
+    var result = admitted_array(value.python_shape(), "<f4", context)
     # parallel: the owned float32 copy across host cores (0.8.66 regression C3).
     host_parallel_copy_bytes(Int(py=classical_address(result)), value.source.addr, value.count * 4)
     _ = result
@@ -240,7 +291,7 @@ def admit_family_owned(value: PythonObject, context: PythonObject) raises -> Pyt
     if classical_is_array(value, context) and value._base is None and not Bool(py=value._readonly):
         return value
     var b = native_loaded_module("builtins")
-    var result = family_array(py_call(b.tuple, value.shape), "<f4", context)
+    var result = admitted_array(py_call(b.tuple, value.shape), "<f4", context)
     # parallel: the owned float32 copy across host cores (0.8.66 regression C3).
     host_parallel_copy_bytes(Int(py=classical_address(result)), Int(py=classical_address(value)),
                              Int(py=value.size) * 4)
@@ -251,7 +302,7 @@ def admit_family_owned(value: PythonObject, context: PythonObject) raises -> Pyt
 
 def _weight_scalar(value: Float64, n: Int, wide: Bool, context: PythonObject) raises -> ArrayMetadata:
     var item = 8 if wide else 4
-    var weights = family_array(Python.tuple(n), "<f8" if wide else "<f4", context)
+    var weights = admitted_array(Python.tuple(n), "<f8" if wide else "<f4", context)
     var address = Int(py=classical_address(weights))
     if wide:
         admitted_fill[DType.float64](_AF_F64P(unsafe_from_address=address), n, value)
@@ -305,7 +356,7 @@ def _weight_buffer(source: PythonObject, n: Int, wide: Bool, context: PythonObje
     var snapshot = array_metadata_once(view, shape^, "sample_weight", context)
     var ready = snapshot.c_order and snapshot.dtype_number == (NPY_DOUBLE if wide else NPY_FLOAT)
     if not ready:
-        var weights = family_array(Python.tuple(n), "<f8" if wide else "<f4", context)
+        var weights = admitted_array(Python.tuple(n), "<f8" if wide else "<f4", context)
         var address = Int(py=classical_address(weights))
         var raw = snapshot.source
         if wide:

@@ -10,7 +10,7 @@
 # binding's `gather_i32` and `cast_elements`: the bits do not move.
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module, xn_capabilities
 from std.python import Python, PythonObject
-from bindings.admitted_family import admit_family
+from bindings.admitted_family import admit_family, admitted_array
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.classical_arrays import classical_address, classical_wrap_array
@@ -163,7 +163,7 @@ def _ocsvm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
     var cv: PythonObject
     var m = n
     if sample_weight is None:
-        cv = family_array(Python.tuple(PythonObject(n)), "<f4", context)
+        cv = admitted_array(Python.tuple(PythonObject(n)), "<f4", context)
         admitted_fill[DType.float32](FAMILY_F32P(unsafe_from_address=Int(py=_a(cv))), n, Float32(1.0))
     else:
         var wv = admit_family(sample_weight, 1, "sample_weight", context, False).array

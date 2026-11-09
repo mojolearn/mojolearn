@@ -11,7 +11,7 @@
 from std.memory import memcpy
 from std.collections import Dict
 from std.python import Python, PythonObject
-from bindings.admitted_family import admit_family, admit_family_copied, admit_family_meta, admit_family_weights
+from bindings.admitted_family import admit_family, admit_family_copied, admit_family_meta, admit_family_weights, admitted_array
 from bindings.native_loaded_module import native_loaded_module
 from bindings.label_admission_native import labels_primitive_kind
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
@@ -27,7 +27,7 @@ from bindings.classical_labels import labels_real_type, labels_bool_type, labels
 from bindings.gp_svm_records import gpsvm_side_get, gpsvm_side_put
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_isfinite, svc_base,
-    svc_mode, svc_binding, svc_zero_division, svc_shape_of, svc_labels_1d, svc_sorted_classes, svc_encode_1d,
+    svc_mode, svc_binding, svc_zero_division, svc_shape_of, svc_labels_1d, svc_sorted_classes,
     svc_decode, svc_threshold_codes, svc_argmax_rows, svc_r2_sums, svc_accuracy,
 )
 
@@ -203,7 +203,7 @@ def _qn_row_weights(model: PythonObject, fields: PythonObject, sample_weight: Py
         return PythonObject(None)
     var sw: PythonObject
     if sample_weight is None:
-        sw = family_array(Python.tuple(PythonObject(n)), "<f4", context)
+        sw = admitted_array(Python.tuple(PythonObject(n)), "<f4", context)
         admitted_fill[DType.float32](FAMILY_F32P(unsafe_from_address=Int(py=classical_address(sw))), n, Float32(1.0))
     else:
         sw = admit_family_weights(sample_weight, n, False, context).keep
@@ -355,13 +355,13 @@ def _linear_svc_fit(model: PythonObject, args: PythonObject, context: PythonObje
     var x = xc.keep
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
-    var encoded = svc_encode_1d(args[2], context)
-    if encoded[0] is None:
+    if len(svc_shape_of(args[2], context)) != 1:
         raise Error("mojolearn LinearSVC requires a 1-D y")
-    if Int(py=encoded[2]) != rows:
+    var encoded = classical_encode_labels(args[2], context)
+    if encoded.n != rows:
         raise Error("mojolearn LinearSVC X and y lengths differ")
-    var classes = encoded[0]
-    var codes = encoded[1]
+    var classes = encoded.classes
+    var codes = encoded.codes
     py_setitem(fields, PythonObject("classes_"), classes)
     var n_classes = len(classes)
     if n_classes < 2:

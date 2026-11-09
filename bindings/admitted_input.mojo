@@ -80,11 +80,6 @@ struct AdmittedX(Movable):
             return from admit_x: a non-finite input is refused).
         position: the row of this input in `call.inputs`, -1 when the
             door passed no AdmittedCall.
-        owned: True when `array` belongs to this call alone and may be
-            kept by the model without a copy (the cast result, or an Array
-            the exporter made for this call); False for the caller's own
-            storage (lane A2: the borrow rule of a fitted copy).
-        readonly: True when the caller's storage is read-only.
     """
     var array: PythonObject
     var source: PythonObject
@@ -95,8 +90,6 @@ struct AdmittedX(Movable):
     var borrowed: Bool
     var finite: Bool
     var position: Int
-    var owned: Bool
-    var readonly: Bool
 
     def __init__(out self, array: PythonObject, source: PythonObject, address: Int, rows: Int, cols: Int,
                  ndim: Int, borrowed: Bool):
@@ -109,8 +102,6 @@ struct AdmittedX(Movable):
         self.borrowed = borrowed
         self.finite = True
         self.position = -1
-        self.owned = not borrowed
-        self.readonly = False
 
 
 def _repr(value: PythonObject) raises -> String:
