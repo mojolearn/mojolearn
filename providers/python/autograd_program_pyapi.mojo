@@ -5,7 +5,7 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_setitem, py_type, py_contains
-from bindings.p3_labels_metrics_native import p3_type_word, p3_item
+from bindings.cpython_borrowed import borrowed_type_word as p3_type_word, borrowed_item as p3_item
 from bindings.cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
 from std.memory import memcpy
@@ -235,16 +235,16 @@ def _sequence_fill(c: PythonObject, level: Int, dims: List[Int], integer: Bool, 
     if n != dims[level]:
         raise Error("ValueError: program input sequences must be rectangular")
     if level + 1 < len(dims):
-        for k in range(n):  # driver-loop: over the containers of one level (at most eight levels)
+        for k in range(n):  # cpu-route: the user's Python list input, one borrowed C read per nested container (Python objects never reach a device)
             _sequence_fill(PythonObject(from_borrowed=p3_item(c, k, is_tuple)), level + 1, dims, integer, pos,
                            values, ids, words)
         _ = c  # keep the container alive through the borrowed reads above
         return
     if integer:
-        for k in range(n):  # driver-loop: per ELEMENT of a list input (data-sized), one borrowed read and one C conversion each
+        for k in range(n):  # cpu-route: the user's Python list input, one borrowed C read and C conversion per element into one typed buffer (Python objects never reach a device)
             ids[pos + k] = _leaf_i64(p3_item(c, k, is_tuple), words)
     else:
-        for k in range(n):  # driver-loop: per ELEMENT of a list input (data-sized), one borrowed read and one C conversion each
+        for k in range(n):  # cpu-route: the user's Python list input, one borrowed C read and C conversion per element into one typed buffer (Python objects never reach a device)
             values[pos + k] = _leaf_f64(p3_item(c, k, is_tuple), words)
     pos += n
     _ = c  # keep the container alive through the borrowed reads above
@@ -263,6 +263,7 @@ def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
     if depth != 0 or len(dims) != 0:
         raise Error("ValueError: program input sequences are read from the top level")
     var words = _sequence_words()
+    var total = 1
     var probe = a
     while True:  # driver-loop: down the first element of each level (the input's rank, at most eight)
         var word = p3_type_word(probe._obj_ptr)
@@ -272,11 +273,9 @@ def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
         if len(dims) >= 8 or n == 0:
             raise Error("ValueError: program input sequences must be nonempty and have rank at most eight")
         dims.append(n)
+        total *= n
         probe = PythonObject(from_borrowed=p3_item(probe, 0, word == words.tuple_word))
     leaf_depth = len(dims)
-    var total = 1
-    for k in range(len(dims)):  # small-loop(rank: at most eight dimensions)
-        total *= dims[k]
     if integer:
         ids = List[Int64](unsafe_uninit_length=total)
     else:

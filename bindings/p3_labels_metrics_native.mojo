@@ -27,6 +27,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.cpython_table import cpython_table
+from bindings.cpython_borrowed import borrowed_type_word, borrowed_item
 
 # Py_TPFLAGS_UNICODE_SUBCLASS
 comptime P3_UNICODE_FLAG = 1 << 28
@@ -43,24 +44,13 @@ def p3_call_object(entry: PythonObject, args: PythonObject) raises -> PythonObje
 
 
 def p3_type_word(raw: PyObjectPtr) raises -> Int:
-    """The class pointer of a live object as a word (the reference
-    PyObject_Type returns is dropped at once; the object keeps its class
-    alive)."""
-    ref cpy = Python().cpython()
-    var cls = cpy.PyObject_Type(raw)
-    var word = Int(cls)
-    cpy.Py_DecRef(cls)
-    return word
+    """`borrowed_type_word` (bindings/cpython_borrowed.mojo)."""
+    return borrowed_type_word(raw)
 
 
 def p3_item(container: PythonObject, index: Int, is_tuple: Bool) raises -> PyObjectPtr:
-    """A borrowed item of an exact list or tuple (the caller holds the
-    container and runs no Python code while it uses the item)."""
-    ref cpy = Python().cpython()
-    var raw = cpython_table()[].PyTuple_GetItem(container._obj_ptr, index) if is_tuple else cpython_table()[].PyList_GetItem(container._obj_ptr, index)
-    if not raw:
-        raise cpy.unsafe_get_error()
-    return raw
+    """`borrowed_item` (bindings/cpython_borrowed.mojo)."""
+    return borrowed_item(container, index, is_tuple)
 
 
 # ------------------------------------------------------------ decode
