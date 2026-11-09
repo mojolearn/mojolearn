@@ -605,7 +605,7 @@ index 0000000000..bb73b9a86a
 +done
 +exit $final
 diff --git a/training/byte_lm.mojo b/training/byte_lm.mojo
-index 09d1e1a264..1e629fb4e0 100644
+index 09d1e1a264..2c2c7522da 100644
 --- a/training/byte_lm.mojo
 +++ b/training/byte_lm.mojo
 @@ -38,7 +38,8 @@ from core.device_scan import DeviceScanScratch, device_first_token_oob
@@ -618,7 +618,14 @@ index 09d1e1a264..1e629fb4e0 100644
  )
  from checks.vendor import COMPILED_VENDOR
  from training.byte_lm_afn import (
-@@ -102,8 +103,7 @@ from training.byte_lm_program import (
+@@ -96,14 +97,13 @@ from autograd.kernels.transformer import (
+ # cross-entropy; Program.fit for the steps).
+ from sequence.ops import FP
+ from training.byte_lm_program import (
+-    ByteDeviceProgram, byte_program_open, byte_program_load, byte_program_load_params, byte_program_store, byte_program_fit,
++    ByteLmProgram, byte_program_open, byte_program_load, byte_program_load_params, byte_program_store, byte_program_fit,
+     byte_program_eval, byte_program_gradient, byte_program_grad_out, byte_program_apply,
+ )
  from transformer.impl.llama.fused_attention import (
      ATTN_BWD_KV_CORNER_GUARD, ATTN_NO_BWD_CORNER, ATTN_STICKY, IDN_TRAIN_ONE_WAIT,
  )
@@ -704,24 +711,28 @@ index 09d1e1a264..1e629fb4e0 100644
  
  # TOMBSTONE: MOJOLEARN_IDN_LM_LEAN_STEP (noise: lm-train-step 0.982) deleted 2026-10-11 by 8cc78c8ae; code recoverable at 8cc78c8ae^.
  # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_LEAN_STEP.patch
-@@ -991,6 +1016,9 @@ struct ByteTrainer(Movable):
+@@ -991,7 +1016,10 @@ struct ByteTrainer(Movable):
      # Diagnostic reach witness; counts successful live-status optimizer checks.
      var embedding_runs: List[OwnedEmbeddingRuns]
      var live_status_steps: Int
+-    var program: Optional[ByteDeviceProgram]
 +    var one_wait: Optional[ByteOneWait]
 +    """IDN_TRAIN_ONE_WAIT: the deferred-check scratch, created by the first
 +    one-wait step; None on a build without the define."""
-     var program: Optional[ByteDeviceProgram]
++    var program: Optional[ByteLmProgram]
      """Lane x7: the trainer's captured program (training/byte_lm_program.mojo),
      opened by the first step, gradient or evaluation."""
-@@ -1021,6 +1049,7 @@ struct ByteTrainer(Movable):
+     var program_synced: Bool
+@@ -1021,7 +1049,8 @@ struct ByteTrainer(Movable):
          self.grad_step = -1
          self.embedding_runs = List[OwnedEmbeddingRuns]()
          self.live_status_steps = 0
+-        self.program = Optional[ByteDeviceProgram]()
 +        self.one_wait = Optional[ByteOneWait]()
-         self.program = Optional[ByteDeviceProgram]()
++        self.program = Optional[ByteLmProgram]()
          self.program_synced = False
          # lane/neural-pass43: the session's buffers carved from arena chunks
+         # (core/device_arena.mojo) between here and `arena_end` below.
 diff --git a/training/byte_lm_one_wait.mojo b/training/byte_lm_one_wait.mojo
 new file mode 100644
 index 0000000000..810f864726

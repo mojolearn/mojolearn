@@ -1113,13 +1113,15 @@ index cef63189db..390306b1c8 100644
 +    var loss = byte_host_loss(params, ids, cfg, use_threads == 1, thread_count)
      return Int(bitcast[DType.uint32](loss))
 diff --git a/training/byte_lm_host_kernels.mojo b/training/byte_lm_host_kernels.mojo
-index 7fa4bc1d38..a138c5602f 100644
+index 9144f9d804..a138c5602f 100644
 --- a/training/byte_lm_host_kernels.mojo
 +++ b/training/byte_lm_host_kernels.mojo
-@@ -1025,5 +1025,77 @@ def hidden_fast(
+@@ -1025,7 +1025,77 @@ def hidden_fast(
  # Restore: git apply experiments/removed/MOJOLEARN_IDN_CE_TOKEN_FOLD-arm2.patch
  
  
+-# Kept verbatim from inside the deleted function (tombstone markers are permanent):
+-# TOMBSTONE: MOJOLEARN_IDN_CE_TOKEN_FOLD=2 (noise) deleted 2026-10-10 by 3034789a2; code recoverable at ca25d9321.
 -# TOMBSTONE: ce_causal_mean_loss_fast (the threaded host loss's cross-entropy) deleted 2026-11-09 by lane x7b-step-ops-host-arm: the host training loss is the trainer's program; code recoverable at the deletion commit's parent (docs/TOMBSTONES.md "BYTE_LM_HOST_COMPOSED_STEP").
 -# Restore: git apply experiments/removed/BYTE_LM_HOST_COMPOSED_STEP.patch
 +def ce_causal_mean_loss_fast(logits: List[Float32], targets: List[Int32], vocab: Int) raises -> Float32:
