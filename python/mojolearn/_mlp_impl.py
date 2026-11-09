@@ -294,8 +294,6 @@ class SmallMLPTrainer:
         rows ``i * batch`` to ``(i + 1) * batch``, each 1 to 256 rows. Returns a dict
         with `step`, `losses` (one per minibatch), and `loss`, `logits` and `gradients`
         of the last minibatch.
-
-        Available only on builds that provide it; otherwise raises `RuntimeError`.
         """
         return _NATIVE('owner_train_steps', (self, X, targets, k))
 
@@ -446,11 +444,7 @@ def _decode_state(payload):
 
 #: The compiled training entries the native owner calls, resolved once at import.
 _TRAINING_ENTRIES = (
-    'training_numeric_mode', 'small_mlp_api_v1', 'neural_gemm', 'mlp_bias_activation', 'mlp_relu_backward',
-    'mlp_sum_rows', 'ce_loss', 'optimizer_step', 'mlp_train_step', 'mlp_resident_open',
-    'mlp_resident_download', 'mlp_resident_close', 'mlp_resident_step', 'mlp_resident_steps',
-    'mlp_sessions', 'mlp_sessions_rows', 'sha256_hex', 'neural_arithmetic_profile',
-    'mlp_resident_apply', 'mlp_sessions_resident',
+    'training_numeric_mode', 'mlp_sessions', 'mlp_sessions_rows', 'sha256_hex', 'neural_arithmetic_profile',
 )
 
 
@@ -474,9 +468,10 @@ def _connect():
             if 'training_numeric_mode' not in entries:
                 raise ImportError('SmallMLPTrainer requires a compiled training binding')
             try:
-                gemm = _backend.binding('_mojolearn_linalg', mode).gemm
-                if isinstance(gemm, BuiltinFunctionType):
-                    entries['linalg_gemm'] = gemm
+                # the trainer's captured program (autograd/small_mlp_program.mojo)
+                program = _backend.binding('_mojolearn_x_sequence', mode).small_mlp_program
+                if isinstance(program, BuiltinFunctionType):
+                    entries['small_mlp_program'] = program
             except Exception:
                 pass
             modes[mode] = entries
