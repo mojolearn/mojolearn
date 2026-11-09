@@ -427,6 +427,10 @@ in the tables after the sections.
 | [`MOJOLEARN_MCD_FAST_G1_GRAM`](#mojolearn_mcd_fast_g1_gram) | Decomp (+ MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT, MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM) | NEUTRAL | 2026-11-08 | [MOJOLEARN_MCD_FAST_G1_GRAM.patch](../experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch) |
 | [`MOJOLEARN_MCD_ORDERED_COV`](#mojolearn_mcd_ordered_cov) | Decomp (+ x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) | NEUTRAL | 2026-11-08 | [MOJOLEARN_MCD_ORDERED_COV.patch](../experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch) |
 | [`MOJOLEARN_EIGH_FAST_PANEL_DF`](#mojolearn_eigh_fast_panel_df) | Decomp (+ MOJOLEARN_EIGH_FAST_PANEL_DF_OFF) | DROPPED-slower | 2026-11-08 | [MOJOLEARN_EIGH_FAST_PANEL_DF.patch](../experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch) |
+| [`MOJOLEARN_AUTOGRAD_PREDICT`](#mojolearn_autograd_predict) | Neural (MLP + GRU/LSTM/RNN predict) | folded in (the tape forward is the one predict path) | 2026-11-08 | [MOJOLEARN_AUTOGRAD_PREDICT.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch) |
+| [`MOJOLEARN_AUTOGRAD_LOSS`](#mojolearn_autograd_loss) | Neural (rnn_fit, mlp_fit reported loss) | rnn_fit promoted (blocked fold), mlp_fit opt-in arm removed | 2026-11-08 | [MOJOLEARN_AUTOGRAD_LOSS.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch) |
+| [`MOJOLEARN_AUTOGRAD_OPTIM`](#mojolearn_autograd_optim) | Neural (mlp_fit, rnn_fit update) | promoted (executor optimizer), hand arm removed | 2026-11-08 | [MOJOLEARN_AUTOGRAD_OPTIM.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch) |
+| [`MOJOLEARN_AUTOGRAD_DATA`](#mojolearn_autograd_data) | Neural (rnn_fit epoch order) | promoted (autograd/data.mojo), hand launches removed | 2026-11-08 | [MOJOLEARN_AUTOGRAD_DATA.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -2636,6 +2640,47 @@ One section for the three label-binarizer switches (`MOJOLEARN_IDN_LAB_UNIQUE_HI
 
 
 ## Neural
+
+### MOJOLEARN_AUTOGRAD_PREDICT
+
+- What it was: `-D MOJOLEARN_AUTOGRAD_PREDICT` (lane ag-forward, default off, never A/B'd) routed `mlp_predict_impl` to `mlp_predict_autograd` (the tape forward in inference mode) instead of the hand `mlp_predict` over the hand `mlp_forward` (`gemm_epi` EPI_BIAS_ACT a layer on the one-thread OP_GEMM_EPI, `_act_launch` for softmax). The recurrent predict had no switch: `rnn_predict` ran the hand `forward` + `head` of `sequence/recurrent.mojo`.
+- Verdict: folded in. The tape forward is the one forward for fit and predict: `mlp_predict` is the former `mlp_predict_autograd`; `rnn_predict` moved to `autograd/rules_recurrent.mojo` and runs `rnn_forward_autograd` (now taking the head's output buffer) with `tape.no_grad()`. Deleted: hand `mlp_predict`, `mlp_forward`, `gemm_epi`, `_act_launch` (no other caller), recurrent `forward`, `head`, the old `rnn_predict`. Commits `c3b7dc42e6` (MLP) and `9a9a8e3148` (recurrent).
+- Lane: `lane/x3-mlp-rnn-predict-on-tape` from `origin/integ/pre-0867` (`f7d10d2b09`), plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` rows X3 and 5.6. Recoverable at `c3b7dc42e6^` (= `f7d10d2b09`, every deleted arm intact).
+- Files the patch restores: `sequence/mlp_fit.mojo`, `sequence/ops_impl.mojo`, `autograd/checks/infer_cases.mojo` (the hand-vs-tape tolerance case), `sequence/recurrent.mojo`, `autograd/rules_recurrent.mojo`.
+- Bits: recurrent predict runs the hand chain's launches argument for argument (same bits). MLP predict moves from OP_GEMM_EPI to the tape's tiled GEMM with the same epilogue, op_gemm's chain term for term, so the expected digest is unchanged; the one pre-release identity run (lanes `mlp`, the gru/lstm/rnn lanes) is the proof.
+- Numbers: none. RUN OWED NVIDIA + AMD, one run per arm: arm A `f7d10d2b09`, arm B the lane head, board rows mlp-predict, sequential-predict, gru/lstm/rnn predict.
+- The four lane patches (PREDICT, LOSS, OPTIM, DATA) are each the reverse of the whole lane restricted to the files listed, so they share hunks in `sequence/mlp_fit.mojo` and `sequence/recurrent.mojo`: apply one of them (`git apply -3` once main moves), not several.
+- Guard refusal: `core/experiment_guards_neural.mojo`, block "lane x3-mlp-rnn-predict-on-tape". No grid_controls entry existed. EXPERIMENTS.md: section "Hand-path deletions (2026-10-19)", the lane's rows.
+
+### MOJOLEARN_AUTOGRAD_LOSS
+
+- What it was: `-D MOJOLEARN_AUTOGRAD_LOSS` (lane ag-loss, default off, EXPERIMENTS row PENDING, never measured) computed the reported loss through `autograd/losses.mojo` `loss_value_into` (the tape's blocked fold): in `rnn_fit` instead of `sum_into` (one-thread ascending OP_SUM), in `mlp_fit` beside the loss block as a handed-in data sum (`mlp_loss_block` `data` / `data_parts`, OP_MLP_LB_PART i3 = 2, OP_MLP_BLOSS i5 = 1).
+- Verdict (Andrew 2026-11-08: bits may change between versions; never keep a serial fold for old bits): rnn_fit PROMOTED, `sum_into` deleted, new bits in the reported `losses[]` only (gradients and parameters unchanged; all columns together). mlp_fit: the opt-in arm deleted (its default loss block is already a blocked fold; the arm only added launches), with the handed-in sum parameters of `mlp_loss_block`, the kernel's i3 = 2 arm and the check case for it. Commit `dbab55bea7`.
+- Lane: `lane/x3-mlp-rnn-predict-on-tape` from `origin/integ/pre-0867` (`f7d10d2b09`), plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` rows X3 and 5.6. Recoverable at `c3b7dc42e6^` (= `f7d10d2b09`, every deleted arm intact).
+- Files the patch restores: `sequence/mlp_fit.mojo`, `sequence/mlp.mojo`, `autograd/checks/lossblock_cases.mojo`, `sequence/recurrent.mojo`.
+- Numbers: none. RUN OWED NVIDIA + AMD: gru-fit, lstm-fit, rnn fit (losses[] digest moves), mlp-fit (no bit change expected).
+- The four lane patches (PREDICT, LOSS, OPTIM, DATA) are each the reverse of the whole lane restricted to the files listed, so they share hunks in `sequence/mlp_fit.mojo` and `sequence/recurrent.mojo`: apply one of them (`git apply -3` once main moves), not several.
+- Guard refusal: `core/experiment_guards_neural.mojo`, block "lane x3-mlp-rnn-predict-on-tape". No grid_controls entry existed. EXPERIMENTS.md: section "Hand-path deletions (2026-10-19)", the lane's rows.
+
+### MOJOLEARN_AUTOGRAD_OPTIM
+
+- What it was: `-D MOJOLEARN_AUTOGRAD_OPTIM` (lane ag-optim, default off, never measured) updated `mlp_fit` and `rnn_fit` through `autograd/optim.mojo` (`OptimizerState` + `step_lr`, `step_lr_finish` for the composed MLP graph) instead of the hand-built OP_OPT launch (mlp_fit: inline Adam running products and word assembly; rnn_fit: `opt_step`).
+- Verdict: PROMOTED (one optimizer implementation, the one Sequential and ops.Session use); the hand arms deleted (`opt_step` / `opt_scalars` stay for their other callers). Same OP_OPT launch with the same words, so the same bits by construction. Commit `75825f479c` (an intermediate commit `dbab55bea7` had kept the hand arm; superseded the same night).
+- Lane: `lane/x3-mlp-rnn-predict-on-tape` from `origin/integ/pre-0867` (`f7d10d2b09`), plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` rows X3 and 5.6. Recoverable at `c3b7dc42e6^` (= `f7d10d2b09`, every deleted arm intact).
+- Files the patch restores: `sequence/mlp_fit.mojo`, `sequence/recurrent.mojo`, `autograd/optim.mojo` (comment).
+- Numbers: none. RUN OWED NVIDIA + AMD: mlp-fit, gru-fit, lstm-fit (ms per fit; digests must not move).
+- The four lane patches (PREDICT, LOSS, OPTIM, DATA) are each the reverse of the whole lane restricted to the files listed, so they share hunks in `sequence/mlp_fit.mojo` and `sequence/recurrent.mojo`: apply one of them (`git apply -3` once main moves), not several.
+- Guard refusal: `core/experiment_guards_neural.mojo`, block "lane x3-mlp-rnn-predict-on-tape". No grid_controls entry existed. EXPERIMENTS.md: section "Hand-path deletions (2026-10-19)", the lane's rows.
+
+### MOJOLEARN_AUTOGRAD_DATA
+
+- What it was: `-D MOJOLEARN_AUTOGRAD_DATA` (default off, never measured) took `rnn_fit`'s epoch order from `autograd/data.mojo` `epoch_order` instead of its inline OP_MLP_PERM / OP_SEQ_IOTA launches.
+- Verdict: PROMOTED (the data layer `distributed_program` and `partition_runtime` use); the inline launches deleted. Same launches with the same `mlp_epoch_key(seed, epoch)`, same bits. Commit `75825f479c`.
+- Lane: `lane/x3-mlp-rnn-predict-on-tape` from `origin/integ/pre-0867` (`f7d10d2b09`), plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` rows X3 and 5.6. Recoverable at `c3b7dc42e6^` (= `f7d10d2b09`, every deleted arm intact).
+- Files the patch restores: `sequence/recurrent.mojo`.
+- Numbers: none. RUN OWED with OPTIM (gru-fit, lstm-fit).
+- The four lane patches (PREDICT, LOSS, OPTIM, DATA) are each the reverse of the whole lane restricted to the files listed, so they share hunks in `sequence/mlp_fit.mojo` and `sequence/recurrent.mojo`: apply one of them (`git apply -3` once main moves), not several.
+- Guard refusal: `core/experiment_guards_neural.mojo`, block "lane x3-mlp-rnn-predict-on-tape". No grid_controls entry existed. EXPERIMENTS.md: section "Hand-path deletions (2026-10-19)", the lane's rows.
 
 ### MOJOLEARN_AUTOGRAD_RNN_OFF
 
