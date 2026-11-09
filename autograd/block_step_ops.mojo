@@ -649,12 +649,7 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
 
 
 def _same_ints(a: List[Int], b: List[Int]) -> Bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):  # small-loop(ints: the op's integer arguments): argument compare, no data
-        if a[i] != b[i]:
-            return False
-    return True
+    return a == b
 
 
 def _run_attn(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
