@@ -96,6 +96,11 @@ from transformer.block_options import BlockOptions, BLOCK_OPTION_PARAMS
 from transformer.lean_stages import _lean_for
 from autograd.kernels.transformer import LlamaBackwardStages
 from autograd.rules_transformer import llama_decoder_layer_backward_autograd
+from autograd.rules_mamba import (
+    Mamba1TapeStack, Mamba2TapeStack, mamba1_step_forward, mamba1_step_backward, mamba2_step_forward,
+    mamba2_step_backward,
+)
+from autograd.rules_mamba3 import mamba3_step_backward
 
 # Session operation codes (autograd/ops_api.mojo OPS_*; autograd/program.mojo
 # PROGRAM_MAX_CODE covers them, record version 3).
@@ -383,6 +388,12 @@ struct _M1Block(Movable):
     #: the L = 1 stages and x buffer, as `Mamba1DecodeSession` keeps them
     var stages: MambaDeviceStages
     var dx: DeviceBuffer[DType.float32]
+    #: lane x56d: the last RECORDED run (`mamba_step_train_run`): its token
+    #: count (0: none) and its one-block tape stack (weights over the
+    #: weights tensor, input copy, stages, backward workspaces), kept until
+    #: the backward reads it
+    var train_l: Int
+    var train: Optional[Mamba1TapeStack]
 
     def __init__(out self, ctx: DeviceContext, ex: DeviceExec, w: FP, nw: Int, s: FP, ns: Int, b: Int, dm: Int) raises:
         var dims = MambaDims.of(dm)
@@ -396,6 +407,8 @@ struct _M1Block(Movable):
         self.dm = dm
         self.stages = MambaDeviceStages(ctx, b, 1, dims)
         self.dx = mamba_zeros(ctx, b * dm)
+        self.train_l = 0
+        self.train = None
         self.arena_w = aw^
         self.arena_s = as_^
         self.w = dw^
@@ -416,6 +429,9 @@ struct _M2Block(Movable):
     #: the last run's h_last report (stage S17 after the final padded chunk,
     #: NOT the resumption state), copied out of the call-shaped stages
     var h_last: DeviceBuffer[DType.float32]
+    #: lane x56d: the last recorded run's token count and tape stack
+    var train_l: Int
+    var train: Optional[Mamba2TapeStack]
 
     def __init__(out self, ctx: DeviceContext, mut ex: DeviceExec, w: FP, nw: Int, s: FP, ns: Int, q: FP,
                  b: Int, dm: Int) raises:
@@ -439,6 +455,8 @@ struct _M2Block(Movable):
         self.dm = dm
         self.dx = mamba_zeros(ctx, b * dm)
         self.h_last = mamba_zeros(ctx, m2_report_floats(b, dm))
+        self.train_l = 0
+        self.train = None
         self.arena_w = aw^
         self.arena_s = as_^
         self.w = dw^
@@ -461,6 +479,11 @@ struct _M3Block(Movable):
     var reports: List[DeviceBuffer[DType.float32]]
     #: IDN_M3_DECODE_WINDOW_REUSE: the previous L = 1 step's stages
     var decode_stages: Optional[Mamba3DeviceStages]
+    #: lane x56d: the last recorded run's token count, its zero-state stages
+    #: and its input copy, kept until the backward reads them
+    var train_l: Int
+    var train_st: Optional[Mamba3DeviceStages]
+    var train_x: Optional[DeviceBuffer[DType.float32]]
 
     def __init__(out self, ctx: DeviceContext, mut ex: DeviceExec, w: FP, nw: Int, s: FP, ns: Int, q: FP,
                  b: Int, dm: Int) raises:
@@ -486,6 +509,9 @@ struct _M3Block(Movable):
         for i in range(4):  # small-loop(the four Mamba-3 report buffers)
             self.reports.append(mamba_zeros(ctx, sizes[i]))
         self.decode_stages = None
+        self.train_l = 0
+        self.train_st = None
+        self.train_x = None
         self.arena_w = aw^
         self.arena_s = as_^
         self.w = dw^
@@ -720,15 +746,25 @@ struct BlockStepScratch(Movable):
     def weights_changed(mut self, addr: Int):
         """The weights at `addr` were rewritten in place: the block's own
         refusal of non-finite weights runs again at the next step."""
+        # lane x56d: a recorded run's kept stages were computed over the old
+        # weights: they go (a backward after the write is refused), as the
+        # attention entry's do.
         for i in range(len(self.m1)):  # driver-loop: over resident Mamba-1 blocks
             if self.m1[i].w_addr == addr:
                 self.m1[i].w.weights_checked = False
+                self.m1[i].train = None
+                self.m1[i].train_l = 0
         for i in range(len(self.m2)):  # driver-loop: over resident Mamba-2 blocks
             if self.m2[i].w_addr == addr:
                 self.m2[i].w.weights_checked = False
+                self.m2[i].train = None
+                self.m2[i].train_l = 0
         for i in range(len(self.m3)):  # driver-loop: over resident Mamba-3 blocks
             if self.m3[i].w_addr == addr:
                 self.m3[i].w.weights_checked = False
+                self.m3[i].train_st = None
+                self.m3[i].train_x = None
+                self.m3[i].train_l = 0
         # integ-w3: an adopted entry (lane x4b) never reads the weights
         # tensor (a placeholder), so a write there does not drop it.
         for i in range(len(self.attn) - 1, -1, -1):  # driver-loop: over resident attention blocks
@@ -751,6 +787,44 @@ def _expect(code: Int, what: String, have: Int, want: Int) raises:
                     + " (pack it with upload_block)")
 
 
+def _m1_entry(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], b: Int,
+             dm: Int) raises -> Int:
+    """The index in `sc.m1` of the resident entry over (weights, state),
+    built at the pair's first run."""
+    for i in range(len(sc.m1)):  # driver-loop: over resident Mamba-1 blocks
+        if sc.m1[i].w_addr == Int(bufs[1]) and sc.m1[i].s_addr == Int(bufs[2]) and sc.m1[i].b == b and sc.m1[i].dm == dm:
+            return i
+    var ctx = ex.ctx.copy()
+    sc.m1.append(_M1Block(ctx, ex, bufs[1], counts[1], bufs[2], counts[2], b, dm))
+    return len(sc.m1) - 1
+
+
+def _m2_entry(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], b: Int,
+             dm: Int) raises -> Int:
+    """The index in `sc.m2` of the resident entry over (weights, state,
+    words), built at the triple's first run."""
+    for i in range(len(sc.m2)):  # driver-loop: over resident Mamba-2 blocks
+        if (sc.m2[i].w_addr == Int(bufs[1]) and sc.m2[i].s_addr == Int(bufs[2]) and sc.m2[i].q_addr == Int(bufs[3])
+                and sc.m2[i].b == b and sc.m2[i].dm == dm):
+            return i
+    var ctx = ex.ctx.copy()
+    sc.m2.append(_M2Block(ctx, ex, bufs[1], counts[1], bufs[2], counts[2], bufs[3], b, dm))
+    return len(sc.m2) - 1
+
+
+def _m3_entry(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], b: Int,
+             dm: Int) raises -> Int:
+    """The index in `sc.m3` of the resident entry over (weights, state,
+    words), built at the triple's first run."""
+    for i in range(len(sc.m3)):  # driver-loop: over resident Mamba-3 blocks
+        if (sc.m3[i].w_addr == Int(bufs[1]) and sc.m3[i].s_addr == Int(bufs[2]) and sc.m3[i].q_addr == Int(bufs[3])
+                and sc.m3[i].b == b and sc.m3[i].dm == dm):
+            return i
+    var ctx = ex.ctx.copy()
+    sc.m3.append(_M3Block(ctx, ex, bufs[1], counts[1], bufs[2], counts[2], bufs[3], b, dm))
+    return len(sc.m3) - 1
+
+
 def _run_m1(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
             y_out: FP) raises:
     var ctx = ex.ctx.copy()
@@ -759,13 +833,7 @@ def _run_m1(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     var l = _tokens(OPS_M1_STEP, counts[0], b, dm)
     _expect(OPS_M1_STEP, "weights", counts[1], block_part_floats(OPS_M1_STEP, ints, BLOCK_PART_WEIGHTS))
     _expect(OPS_M1_STEP, "state", counts[2], block_part_floats(OPS_M1_STEP, ints, BLOCK_PART_STATE))
-    var e = -1
-    for i in range(len(sc.m1)):  # driver-loop: over resident Mamba-1 blocks
-        if sc.m1[i].w_addr == Int(bufs[1]) and sc.m1[i].s_addr == Int(bufs[2]) and sc.m1[i].b == b and sc.m1[i].dm == dm:
-            e = i
-    if e < 0:
-        sc.m1.append(_M1Block(ctx, ex, bufs[1], counts[1], bufs[2], counts[2], b, dm))
-        e = len(sc.m1) - 1
+    var e = _m1_entry(ex, sc, bufs, counts, b, dm)
     ref blk = sc.m1[e]
     var n = b * l * dm
     var x = _view(ex, bufs[0], n)
@@ -799,14 +867,7 @@ def _run_m2(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     _expect(OPS_M2_STEP, "weights", counts[1], block_part_floats(OPS_M2_STEP, ints, BLOCK_PART_WEIGHTS))
     _expect(OPS_M2_STEP, "state", counts[2], block_part_floats(OPS_M2_STEP, ints, BLOCK_PART_STATE))
     _expect(OPS_M2_STEP, "state words", counts[3], 1)
-    var e = -1
-    for i in range(len(sc.m2)):  # driver-loop: over resident Mamba-2 blocks
-        if (sc.m2[i].w_addr == Int(bufs[1]) and sc.m2[i].s_addr == Int(bufs[2]) and sc.m2[i].q_addr == Int(bufs[3])
-                and sc.m2[i].b == b and sc.m2[i].dm == dm):
-            e = i
-    if e < 0:
-        sc.m2.append(_M2Block(ctx, ex, bufs[1], counts[1], bufs[2], counts[2], bufs[3], b, dm))
-        e = len(sc.m2) - 1
+    var e = _m2_entry(ex, sc, bufs, counts, b, dm)
     ref blk = sc.m2[e]
     var dims = Mamba2Dims.of(dm)
     var n = b * l * dm
@@ -846,14 +907,7 @@ def _run_m3(mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts
     _expect(OPS_M3_STEP, "weights", counts[1], block_part_floats(OPS_M3_STEP, ints, BLOCK_PART_WEIGHTS))
     _expect(OPS_M3_STEP, "state", counts[2], block_part_floats(OPS_M3_STEP, ints, BLOCK_PART_STATE))
     _expect(OPS_M3_STEP, "state words", counts[3], 2)
-    var e = -1
-    for i in range(len(sc.m3)):  # driver-loop: over resident Mamba-3 blocks
-        if (sc.m3[i].w_addr == Int(bufs[1]) and sc.m3[i].s_addr == Int(bufs[2]) and sc.m3[i].q_addr == Int(bufs[3])
-                and sc.m3[i].b == b and sc.m3[i].dm == dm):
-            e = i
-    if e < 0:
-        sc.m3.append(_M3Block(ctx, ex, bufs[1], counts[1], bufs[2], counts[2], bufs[3], b, dm))
-        e = len(sc.m3) - 1
+    var e = _m3_entry(ex, sc, bufs, counts, b, dm)
     ref blk = sc.m3[e]
     var dims = Mamba3Dims.of(dm)
     var n = b * l * dm
@@ -1241,6 +1295,186 @@ def attn_step_backward(
         raise err
     swap(bst, sc.attn[e].bst)
     _ = bst^
+
+
+# ---------------------------------------------------------------- training through the Mamba steps
+# Lane x56d-mamba-samba-train-and-host (2026-11-09; the attention step's
+# contract above, for the three Mamba codes). A RECORDED run of OPS_M1_STEP /
+# OPS_M2_STEP / OPS_M3_STEP is the zero-state prefill through the op's
+# block forward: the state tensor is zeroed and the words set to [0] / [0, 0]
+# first, the L-token stages and an input copy are kept in the pair's entry
+# (not parked), the state tensor holds the post-prefill state afterwards and
+# the words the post-prefill integers. The session records it as ONE custom
+# node over [x, weights] with tag M{1,2,3}_STEP_TAG; its VJP (StepOpRules,
+# autograd/rules_step_ops.mojo) is `mamba_step_backward`: the Mamba stage
+# rules (autograd/rules_mamba.mojo, rules_mamba3.mojo) over the KEPT stages.
+# The rules ran the block forward themselves before this lane
+# (`mamba{1,2,3}_tape_backward`): the forward a training step ran is no
+# longer computed twice.
+comptime M1_STEP_TAG = 109
+comptime M2_STEP_TAG = 110
+comptime M3_STEP_TAG = 111
+
+
+def step_train_tag(code: Int) raises -> Int:
+    """The tape tag of a recorded run of step op `code`."""
+    if code == OPS_M1_STEP:
+        return M1_STEP_TAG
+    if code == OPS_M2_STEP:
+        return M2_STEP_TAG
+    if code == OPS_M3_STEP:
+        return M3_STEP_TAG
+    if code == OPS_ATTN_STEP:
+        return ATTN_STEP_TAG
+    raise Error("ops: " + String(code) + " is not a block step op")
+
+
+def step_tag_code(tag: Int) -> Int:
+    """The step op of a recorded-run tag (0: not a step tag)."""
+    if tag == M1_STEP_TAG:
+        return OPS_M1_STEP
+    if tag == M2_STEP_TAG:
+        return OPS_M2_STEP
+    if tag == M3_STEP_TAG:
+        return OPS_M3_STEP
+    if tag == ATTN_STEP_TAG:
+        return OPS_ATTN_STEP
+    return 0
+
+
+def mamba_step_train_run(
+    mut ex: DeviceExec, mut sc: BlockStepScratch, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int],
+    fs: List[Float32], y_out: FP,
+) raises -> Int:
+    """A recorded (training) run of a Mamba step op: the zero-state prefill
+    with its stages kept in the pair's entry for the backward. Returns L. A
+    failed run drops the pair's entry, as every run does."""
+    _ = block_step_check(code, len(bufs), ints, fs)
+    var ctx = ex.ctx.copy()
+    var b = ints[0]
+    var dm = ints[1]
+    var l = _tokens(code, counts[0], b, dm)
+    _expect(code, "weights", counts[1], block_part_floats(code, ints, BLOCK_PART_WEIGHTS))
+    _expect(code, "state", counts[2], block_part_floats(code, ints, BLOCK_PART_STATE))
+    var n = b * l * dm
+    try:
+        # the zero state of a training run (the carried state is not an input
+        # of the recorded graph)
+        var sv = _view(ex, bufs[2], counts[2])
+        sv.enqueue_fill(Float32(0.0))
+        var x = _view(ex, bufs[0], n)
+        if code == OPS_M1_STEP:
+            var e = _m1_entry(ex, sc, bufs, counts, b, dm)
+            var dims = MambaDims.of(dm)
+            var aw = MambaArena(over=_view(ex, bufs[1], counts[1]), cap=counts[1], guard=MAMBA_GUARD)
+            var w = MambaDeviceWeights(ctx, dims, aw)
+            sc.m1[e].train = None
+            sc.m1[e].train_l = 0
+            var S = Mamba1TapeStack(ctx, w^, x, b, l)
+            ref blk = sc.m1[e]
+            mamba1_step_forward(S, blk.st, y_out)
+            blk.train = S^
+            blk.train_l = l
+        elif code == OPS_M2_STEP:
+            _expect(code, "state words", counts[3], 1)
+            var zero: List[Int] = [0]
+            _write_words(ex, bufs[3], zero)
+            var e = _m2_entry(ex, sc, bufs, counts, b, dm)
+            var dims = Mamba2Dims.of(dm)
+            var aw = MambaArena(over=_view(ex, bufs[1], counts[1]), cap=counts[1], guard=MAMBA_GUARD)
+            var w = Mamba2DeviceWeights(ctx, dims, aw)
+            sc.m2[e].train = None
+            sc.m2[e].train_l = 0
+            var S = Mamba2TapeStack(ctx, w^, x, b, l, fs[0], fs[1])
+            ref blk = sc.m2[e]
+            blk.st.buf_len = 0
+            mamba2_step_forward(S, blk.st, y_out)
+            _d2d(ctx, blk.h_last, S.stages[0].h_last, m2_report_floats(b, dm))
+            var words: List[Int] = [blk.st.buf_len]
+            _write_words(ex, bufs[3], words)
+            blk.train = S^
+            blk.train_l = l
+        elif code == OPS_M3_STEP:
+            _expect(code, "state words", counts[3], 2)
+            var zero: List[Int] = [0, 0]
+            _write_words(ex, bufs[3], zero)
+            var e = _m3_entry(ex, sc, bufs, counts, b, dm)
+            var dims = Mamba3Dims.of(dm)
+            sc.m3[e].train_st = None
+            sc.m3[e].train_x = None
+            sc.m3[e].train_l = 0
+            ref blk = sc.m3[e]
+            blk.st.buf_len = 0
+            blk.st.pending = False
+            var stages = Mamba3DeviceStages(ctx, b, l, 0, dims)
+            var dx = mamba_zeros(ctx, n)
+            _d2d(ctx, dx, x, n)
+            var trace = IdentityTrace.disabled()
+            mamba3_block_forward(ctx, stages, blk.st, blk.w, dx, b, l, trace, String("ops.step.train"))
+            var y = _view(ex, y_out, n)
+            _d2d(ctx, y, stages.residual_out, n)
+            var report_n = m3_report_floats(b, dm)
+            _d2d(ctx, blk.reports[0], stages.h_last, report_n[0])
+            _d2d(ctx, blk.reports[1], stages.k_last, report_n[1])
+            _d2d(ctx, blk.reports[2], stages.v_last, report_n[2])
+            _d2d(ctx, blk.reports[3], stages.theta_last, report_n[3])
+            var words: List[Int] = [blk.st.buf_len, 1 if blk.st.pending else 0]
+            _write_words(ex, bufs[3], words)
+            blk.train_st = stages^
+            blk.train_x = dx^
+            blk.train_l = l
+        else:
+            raise Error("ops: " + String(code) + " is not a Mamba step op")
+    except err:
+        for k in range(1, len(bufs)):  # small-loop(bufs: the op's three or four operands): entry eviction, no data
+            sc.forget(Int(bufs[k]))
+        raise err
+    return l
+
+
+def mamba_step_backward(
+    mut ex: DeviceExec, mut sc: BlockStepScratch, code: Int, w: FP, s: FP, d_out: FP, d_x: FP, d_w: FP,
+) raises:
+    """The backward of the last recorded run of Mamba step op `code` over
+    (w, s): the stage rules over the entry's kept stages, d(block output)
+    `d_out`; writes d_x (b * L * d_model floats) and every weight gradient
+    into `d_w`, the packed weights' gradient (block_offsets layout; the gaps
+    are the caller's zeros)."""
+    var ctx = ex.ctx.copy()
+    var gone = String("ops: ") + String(step_op_info(code).name) + (
+        " backward: the recorded forward's stages are gone"
+        + " (its weights or state were written outside the step after the run)")
+    if code == OPS_M1_STEP:
+        for i in range(len(sc.m1)):  # driver-loop: over resident Mamba-1 blocks
+            if sc.m1[i].w_addr == Int(w) and sc.m1[i].s_addr == Int(s) and sc.m1[i].train_l > 0 and sc.m1[i].train:
+                var ints: List[Int] = [sc.m1[i].b, sc.m1[i].dm]
+                var at = block_offsets(block_weight_sizes(code, ints), block_guard(code))
+                ref blk = sc.m1[i]
+                mamba1_step_backward(blk.train.value(), d_out, d_x, d_w, at)
+                return
+    elif code == OPS_M2_STEP:
+        for i in range(len(sc.m2)):  # driver-loop: over resident Mamba-2 blocks
+            if sc.m2[i].w_addr == Int(w) and sc.m2[i].s_addr == Int(s) and sc.m2[i].train_l > 0 and sc.m2[i].train:
+                var ints: List[Int] = [sc.m2[i].b, sc.m2[i].dm]
+                var at = block_offsets(block_weight_sizes(code, ints), block_guard(code))
+                ref blk = sc.m2[i]
+                mamba2_step_backward(blk.train.value(), d_out, d_x, d_w, at)
+                return
+    elif code == OPS_M3_STEP:
+        for i in range(len(sc.m3)):  # driver-loop: over resident Mamba-3 blocks
+            if (sc.m3[i].w_addr == Int(w) and sc.m3[i].s_addr == Int(s) and sc.m3[i].train_l > 0
+                    and sc.m3[i].train_st and sc.m3[i].train_x):
+                var ints: List[Int] = [sc.m3[i].b, sc.m3[i].dm]
+                var at = block_offsets(block_weight_sizes(code, ints), block_guard(code))
+                var b = sc.m3[i].b
+                var l = sc.m3[i].train_l
+                ref blk = sc.m3[i]
+                mamba3_step_backward(ctx, blk.w, blk.train_st.value(), blk.train_x.value(), d_out, d_x, d_w, at,
+                                     b, l)
+                return
+    else:
+        raise Error("ops: " + String(code) + " is not a Mamba step op")
+    raise Error(gone)
 
 
 def block_step_check(code: Int, n_tensors: Int, ints: List[Int], fs: List[Float32]) raises -> StepOpInfo:
