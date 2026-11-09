@@ -29,7 +29,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.py_attr import py_attr
 from std.python._cpython import PyObjectPtr
 from bindings.py_typed_call import py_call_typed, typed_python_error
-from bindings.native_buffer_owner import native_buffer_view
+from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.classical_arrays import classical_wrap_array, _store_code, _buffer_typestr
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, _pd_fields, _pd_get, classical_admit_value
 from bindings.sequential_admission import _ordinary_torch
@@ -347,7 +347,42 @@ def labels_full_f32(count: Int, value: Float64, context: PythonObject) raises ->
 def labels_reshape(array: PythonObject, shape: PythonObject, context: PythonObject) raises -> PythonObject:
     """`array.reshape(shape)` of a fresh C-order Array: the same store under
     a new shape (the Array the Python reshape returned)."""
-    return classical_wrap_array(array._store, shape, String(array.dtype), "C", context)
+    # The store may be an `array.array` (classical_wrap_array) or the
+    # uninitialised bytearray of admitted_family.admitted_array, which has no
+    # `itemsize`: the new Array shares the source's store, typed view and
+    # address, and only the shape, strides and rank are new.
+    var b = native_loaded_module("builtins")
+    var rank = len(shape)
+    var size = 1
+    for k in range(rank):  # driver-loop: over array rank metadata
+        size *= Int(py=shape[k])
+    if size != Int(py=array.size):
+        raise Error("RuntimeError: an array store does not match its shape")
+    var item = Int(py=array.itemsize)
+    var steps = List[Int](length=rank, fill=0)
+    var step = item
+    for k in range(rank):  # driver-loop: over array rank metadata
+        steps[rank - 1 - k] = step
+        step *= Int(py=shape[rank - 1 - k])
+    var strides = Python.list()
+    for k in range(rank):  # driver-loop: over array rank metadata
+        _ = py_call(strides.append, steps[k])
+    var out = native_storage_allocate(context["array_class"])
+    py_setattr(out, "_store", array._store)
+    py_setattr(out, "_base", PythonObject(None))
+    py_setattr(out, "_pin", PythonObject(None))
+    py_setattr(out, "_mv", array._mv)
+    py_setattr(out, "_addr", array._addr)
+    py_setattr(out, "_readonly", PythonObject(False))
+    py_setattr(out, "shape", py_call(b.tuple, shape))
+    py_setattr(out, "dtype", array.dtype)
+    py_setattr(out, "ndim", PythonObject(rank))
+    py_setattr(out, "size", PythonObject(size))
+    py_setattr(out, "nbytes", PythonObject(size * item))
+    py_setattr(out, "itemsize", PythonObject(item))
+    py_setattr(out, "strides", py_call(b.tuple, strides))
+    py_setattr(out, "order", PythonObject("C"))
+    return out
 
 
 def labels_freeze(array: PythonObject) raises:
