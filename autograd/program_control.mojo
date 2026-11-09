@@ -554,7 +554,7 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
                 # chunk fill): drop it, so the next run rebuilds it from the
                 # state words the stopping iteration left.
                 for k in range(len(shadow_live)):  # driver-loop: over declared state shadows
-                    s[].steps.forget(Int(shadow_live[k]))
+                    s[].steps_forget(Int(shadow_live[k]))
             if mirror[LOOP_BAD] != Float32(0.0):
                 raise Error("control-flow condition must be finite")
             stopped = mirror[LOOP_STOPPED] != Float32(0.0)
@@ -586,7 +586,7 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
         for k in range(len(buffers)):  # driver-loop: over current state owners
             s[].ex.free(buffers[k])
         for k in range(len(shadow_live)):  # driver-loop: over declared state shadows (resident entries rebuild)
-            s[].steps.forget(Int(shadow_live[k]))
+            s[].steps_forget(Int(shadow_live[k]))
         _free_loop_owners(s[], extras, scratch, scratch_n)
         var message = String(err)
         var context = "program control flow after " + String(iterations) + " iterations: "

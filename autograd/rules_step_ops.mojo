@@ -16,15 +16,16 @@ session is heap-allocated by `ops_session_open` and never moves). It is
 built per backward by the session's training loop (Program.fit,
 autograd/program_runtime.mojo `train_program_control`) and never stored on
 the tape. On a host session (lane x7b-step-ops-host-arm) the same tag runs
-the host arm: `transformer_block_backward_oracle` over the stages the host
-recorded run kept (`host_attn_step_backward`), the same rule's host body.
+the executor's host arm (`Exec.step_backward`: HostExec's
+`host_attn_step_backward`, autograd/block_step_host.mojo): the backward
+oracle over the stages the host recorded run kept, the rule's host body.
 """
 from sequence.exec_trait import Exec
 from sequence.exec_device import DeviceExec
 from sequence.ops import FP, Args
 from autograd.tape import BackwardRules
 from autograd.import_api import ImportRules
-from autograd.block_step_ops import BlockStepScratch, ATTN_STEP_TAG, attn_step_backward, host_attn_step_backward
+from autograd.block_step_ops import BlockStepScratch, ATTN_STEP_TAG, attn_step_backward
 
 comptime _ScratchRef = MutPointer[BlockStepScratch, MutUntrackedOrigin]
 
@@ -60,15 +61,15 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
         if tag == ATTN_STEP_TAG:
             if self.scratch == 0 or len(gradients) != 2:
                 raise Error("ops: attention_step backward needs the session's step entries")
-            var sc = _ScratchRef(unsafe_from_address=self.scratch)
             # saved: p0 the weights, p1 the kv state, p2 the state words
             # (the entry's key, `OpsSession._block_step`)
             comptime if E.IS_DEVICE:
+                var sc = _ScratchRef(unsafe_from_address=self.scratch)
                 attn_step_backward(rebind[DeviceExec](ex), sc[], saved.p0, saved.p1, saved.p2,
                                    upstream, gradients[0], gradients[1])
             else:
                 # the host runs every launch before it returns: the upstream
                 # gradient is final here
-                host_attn_step_backward(sc[], saved.p0, saved.p1, saved.p2, upstream, gradients[0], gradients[1])
+                ex.step_backward(saved.p0, saved.p1, saved.p2, upstream, gradients[0], gradients[1])
             return
         ImportRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)

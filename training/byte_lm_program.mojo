@@ -335,7 +335,7 @@ def _loaded[E: Exec & Movable & Deinitable, KIND: Int](mut e: ByteLmProgram[E, K
     # the weights were written from outside a step: the attention entries
     # re-check them at their next run
     for l in range(len(e.blocks)):  # driver-loop: over decoder layers
-        s[].steps.weights_changed(Int(s[].buffer(e.blocks[l])))
+        s[].steps_weights_changed(Int(s[].buffer(e.blocks[l])))
 
 
 def byte_program_load(mut e: ByteDeviceProgram, param: DeviceBuffer[DType.float32], m: DeviceBuffer[DType.float32],
@@ -364,7 +364,7 @@ def byte_host_program_load_params(mut e: ByteHostProgram, param: Int) raises:
     var s = ops_session[HostExec, OPS_HOST](e.sid)
     _move_host(s[], e, param, BYTE_PART_PARAM, True)
     for l in range(len(e.blocks)):  # driver-loop: over decoder layers
-        s[].steps.weights_changed(Int(s[].buffer(e.blocks[l])))
+        s[].steps_weights_changed(Int(s[].buffer(e.blocks[l])))
 
 
 def byte_host_program_store(mut e: ByteHostProgram, param: Int, m: Int, v: Int, grad: Int) raises:
@@ -384,7 +384,7 @@ def byte_program_load_params(mut e: ByteDeviceProgram, param: DeviceBuffer[DType
     var s = ops_session[DeviceExec, OPS_DEVICE](e.sid)
     _move(s[], e, param, BYTE_PART_PARAM, True)
     for l in range(len(e.blocks)):  # driver-loop: over decoder layers
-        s[].steps.weights_changed(Int(s[].buffer(e.blocks[l])))
+        s[].steps_weights_changed(Int(s[].buffer(e.blocks[l])))
 
 
 def byte_program_store(mut e: ByteDeviceProgram, param: DeviceBuffer[DType.float32], m: DeviceBuffer[DType.float32],
