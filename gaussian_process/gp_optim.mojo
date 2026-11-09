@@ -178,6 +178,8 @@ def gp_opt_step_kernel(
     gp_opt_step_item(Int(thread_idx.x), GP_OPT_TPB, Int(t), st, si, tmap, dpar, dls, lml, graw, code)
 
 
+# TOMBSTONE: gp_opt_run_end_kernel and the per-evaluation host loop of gpr_optimize_device (superseded by the device run sequencer) deleted 2026-11-09 by lane/n8-gp-krr-smo; code recoverable at f59d913b0b.
+# Restore: git apply experiments/removed/N8_GP_OPT_DEVICE_RUNS.patch
 def gp_opt_advance_kernel(
     st: _P, si: _I, tmap: _I, bnd: _P, dpar: _P, dls: _P, rec: _P, seq: _I, t: Int32, n_runs: Int32,
     s0: UInt32, s1: UInt32,
