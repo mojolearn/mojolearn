@@ -108,3 +108,40 @@ def decode_slab_put(
 ) raises:
     """A (rows, width) buffer into token `t` of a (rows, tokens, width) slab."""
     decode_slab_rows(ctx, slab, tokens * width, t * width, token, width, 0, rows, width)
+
+
+def decode_slab_ids_kernel(
+    dst: MutPointer[Int32, MutAnyOrigin],
+    src: MutPointer[Int32, MutAnyOrigin],
+    rows_in: Int32,
+    tokens_in: Int32,
+    t_in: Int32,
+):
+    """Column `t` of a (rows, tokens) id slab into a (rows,) id buffer."""
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if r >= Int(rows_in):
+        return
+    dst.unsafe_store(r, src.unsafe_load(r * Int(tokens_in) + Int(t_in)))
+
+
+def decode_slab_take_ids(
+    ctx: DeviceContext,
+    mut token: DeviceBuffer[DType.int32],
+    mut slab: DeviceBuffer[DType.int32],
+    rows: Int,
+    tokens: Int,
+    t: Int,
+) raises:
+    """Token `t` of a (rows, tokens) id slab into a (rows,) buffer (no wait)."""
+    var grid = (rows + DECODE_SLAB_TPB - 1) // DECODE_SLAB_TPB
+    if grid < 1:
+        grid = 1
+    ctx.enqueue_function[decode_slab_ids_kernel](
+        token.unsafe_ptr(),
+        slab.unsafe_ptr(),
+        Int32(rows),
+        Int32(tokens),
+        Int32(t),
+        grid_dim=(grid, 1, 1),
+        block_dim=(DECODE_SLAB_TPB, 1, 1),
+    )
