@@ -28,6 +28,14 @@
 #   [LOOP_BAD]        program loop: the condition was not finite
 #   [LOOP_GATE]       program loop: nonzero when this iteration's state is
 #                     committed (set by the tick, read by the commits)
+#   [LOOP_FIT_BEST]   Program.fit: the best epoch loss so far (lane x1b)
+#   [LOOP_FIT_STALL]  Program.fit: epochs since the loss last improved
+#
+# Lane x1b: every write an iteration makes is behind the gate, including
+# the declared state a body writes in place (a block step op's state, kv and
+# words): the loop shadows it (OP_LOOP_SHADOW), so a body needs no gate of
+# its own and no body op changes. A step op of the device loop below takes
+# the gate itself (core/step_gate.mojo).
 #
 # Per-op timers: `-D MOJOLEARN_EXECUTOR_TIMERS` (default off). Each loop
 # drains the stream around every op it times (so the timing is relative and
@@ -49,18 +57,74 @@ comptime LOOP_BAD = 4
 comptime LOOP_GATE = 5
 comptime LOOP_WORDS = 8
 
+#: Program.fit's register block only (lane x1b): the best epoch loss so far
+#: and the epochs since it last improved by `tol`. The step-op device loop's
+#: Int32 block keeps STEP_FAIL in word 6 (core/step_gate.mojo); the two
+#: blocks are never the same buffer.
+comptime LOOP_FIT_BEST = 6
+comptime LOOP_FIT_STALL = 7
+
 #: The largest bound the float32 register block counts exactly (2**24).
 comptime LOOP_MAX_EXACT = 16777216
 
 comptime EXECUTOR_TIMERS = is_defined["MOJOLEARN_EXECUTOR_TIMERS"]()
 
+# ---------------------------------------------------------------- the chunk rule
+# Lane x1b-executor-gated-state-chunked-loop (2026-11-08). A loop enqueues k
+# iterations between two host reads of its register block. Every write an
+# iteration makes is behind the gate (the commits; OP_LOOP_SHADOW for the
+# declared state a body writes in place), so the result never depends on k;
+# only the cost does:
+#   - a read drains the stream: about one host round trip (~10 us on the
+#     L40S / MI325X class, the launch latency of a few small kernels);
+#   - an iteration enqueued past the stop is wasted (at most k - 1 of them,
+#     once per loop);
+#   - a body that writes declared state in place pays one bit copy of that
+#     state per iteration (OP_LOOP_SHADOW) once k > 1.
+# So: no condition (a decode of a fixed count) never runs past the stop and
+# reads once at the bound; a body whose in-place state copy costs more than
+# a drain (LOOP_DRAIN_FLOATS: 2**20 floats, 8 MiB moved, ~10 us at ~1 TB/s)
+# reads every iteration; otherwise LOOP_AUTO_CHUNK iterations per read, the
+# 8-16 the hand-written solver loops poll at (KMEANS_CONV_CHUNK 8, the async
+# L-BFGS flags every 4 rounds). Program.fit reads once per
+# FIT_STEPS_PER_READ optimizer steps (whole epochs), under the same copy
+# bound. None of these is a board shape: they are latency and bandwidth
+# ratios, and every shape below or above them takes the same rule.
+comptime LOOP_CHECK_AUTO = 0
+comptime LOOP_AUTO_CHUNK = 8
+comptime LOOP_DRAIN_FLOATS = 1 << 20
+comptime FIT_STEPS_PER_READ = 16
+
 
 def loop_check_every(check_every: Int, context: String) raises -> Int:
     """The validated flag-read interval of a bounded loop: a positive count of
-    iterations between two host reads of the register block."""
-    if check_every < 1:
+    iterations between two host reads of the register block, or
+    LOOP_CHECK_AUTO (0): the loop chooses it (`loop_auto_chunk`)."""
+    if check_every < 0:
         raise Error("ValueError: " + context + " check_every must be a positive integer, got " + String(check_every))
     return check_every
+
+
+def loop_auto_chunk(maximum: Int, has_condition: Bool, shadow_floats: Int) -> Int:
+    """The chunk rule above for a program loop: iterations enqueued between
+    two reads, given the bound, whether a condition can stop the loop early
+    and the floats of declared state its body writes in place."""
+    if not has_condition:
+        return max(1, maximum)
+    if shadow_floats > LOOP_DRAIN_FLOATS:
+        return 1
+    return max(1, min(LOOP_AUTO_CHUNK, maximum))
+
+
+def fit_epochs_per_read(n_batches: Int, epochs: Int, shadow_floats: Int) -> Int:
+    """The chunk rule above for Program.fit with a stopping criterion: whole
+    epochs between two reads, about FIT_STEPS_PER_READ optimizer steps, and
+    one epoch when the per-epoch shadow of the trained parameters and their
+    optimizer moments costs more than a drain."""
+    if shadow_floats > LOOP_DRAIN_FLOATS:
+        return 1
+    var per = (FIT_STEPS_PER_READ + n_batches - 1) // max(1, n_batches)
+    return max(1, min(per, epochs))
 
 
 struct LoopTimers(Movable):
@@ -126,6 +190,11 @@ comptime OP_LOOP_ADVANCE = 1802
 # iteration register as an int32 word.
 comptime OP_LOOP_APPEND = 1803
 comptime OP_LOOP_ITER_WORD = 1804
+# lane x1b-executor-gated-state-chunked-loop: the gated shadow of state a
+# body writes in place, and Program.fit's epoch gate and stopping criterion.
+comptime OP_LOOP_SHADOW = 1805
+comptime OP_LOOP_OPEN = 1806
+comptime OP_LOOP_FIT_TICK = 1807
 comptime OP_LOOP_FIRST = OP_LOOP_TICK
 comptime OP_LOOP_LAST = 1809
 
@@ -193,6 +262,68 @@ def op_loop_iter_word(t: Int, a: Args):
     a.p1.unsafe_store(0, bitcast[DType.float32](r))
 
 
+def op_loop_shadow(t: Int, a: Args):
+    """The gated shadow of one declared state tensor a body writes in place
+    (a block step op's state, kv or words). p0: the live tensor, p1: its
+    shadow, p2: the register block. Launched after every body: when the
+    iteration commits (gate open) the shadow takes the new value; when it
+    does not (an iteration enqueued past the stop) the live tensor gets the
+    committed value back. A bit copy either way (int32 words move word for
+    word), so the state after the loop is the stopping iteration's for every
+    chunk size."""
+    if a.p2.unsafe_load(LOOP_GATE) != Float32(0.0):
+        a.p1.unsafe_store(t, a.p0.unsafe_load(t))
+    else:
+        a.p0.unsafe_store(t, a.p1.unsafe_load(t))
+
+
+def op_loop_open(t: Int, a: Args):
+    """One element: Program.fit's epoch gate. p0: the register block; the
+    gate opens while the loop runs (the done word is 0) and closes after the
+    stop, so the epoch's commits, shadows and criterion do nothing."""
+    var w = a.p0
+    if w.unsafe_load(LOOP_DONE) == Float32(0.0):
+        w.unsafe_store(LOOP_GATE, Float32(1.0))
+    else:
+        w.unsafe_store(LOOP_GATE, Float32(0.0))
+
+
+def op_loop_fit_tick(t: Int, a: Args):
+    """One element, after an epoch: p0 the register block, p1 the epoch's
+    mean loss, f0 `tol`, i0 `n_iter_no_change` (0: no criterion). While the
+    gate is open the iteration register counts the committed epoch; with a
+    criterion, scikit-learn's SGD rule: an epoch whose loss is above the best
+    so far minus `tol` adds one to the stall count (otherwise it is reset),
+    the best is kept, and `n_iter_no_change` stalled epochs in a row stop the
+    loop after this epoch (LOOP_STOPPED, LOOP_STOP_ITER, the done word). The
+    first epoch compares against +inf. Float32 compares only: the same bit on
+    every vendor and on the host."""
+    var w = a.p0
+    if w.unsafe_load(LOOP_GATE) == Float32(0.0):
+        return
+    var it = w.unsafe_load(LOOP_ITER) + Float32(1.0)
+    w.unsafe_store(LOOP_ITER, it)
+    if a.i0 <= 0:
+        return
+    var loss = a.p1.unsafe_load(0)
+    var best = w.unsafe_load(LOOP_FIT_BEST)
+    if it == Float32(1.0):
+        best = bitcast[DType.float32](UInt32(0x7F800000))
+    var stall = w.unsafe_load(LOOP_FIT_STALL)
+    if loss > best - a.f0:
+        stall = stall + Float32(1.0)
+    else:
+        stall = Float32(0.0)
+    if loss < best:
+        best = loss
+    w.unsafe_store(LOOP_FIT_BEST, best)
+    w.unsafe_store(LOOP_FIT_STALL, stall)
+    if stall >= Float32(a.i0):
+        w.unsafe_store(LOOP_STOPPED, Float32(1.0))
+        w.unsafe_store(LOOP_STOP_ITER, it)
+        w.unsafe_store(LOOP_DONE, Float32(1.0))
+
+
 def apply_loop[OP: Int](t: Int, a: Args):
     comptime if OP == OP_LOOP_TICK:
         op_loop_tick(t, a)
@@ -204,3 +335,9 @@ def apply_loop[OP: Int](t: Int, a: Args):
         op_loop_append(t, a)
     elif OP == OP_LOOP_ITER_WORD:
         op_loop_iter_word(t, a)
+    elif OP == OP_LOOP_SHADOW:
+        op_loop_shadow(t, a)
+    elif OP == OP_LOOP_OPEN:
+        op_loop_open(t, a)
+    elif OP == OP_LOOP_FIT_TICK:
+        op_loop_fit_tick(t, a)

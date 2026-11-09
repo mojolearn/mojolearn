@@ -9,7 +9,7 @@ from autograd.ops_api import ops_session
 from autograd.control_checkpoint import control_save
 from providers.python.autograd_program_owner_pyapi import program_owner_fields, program_native_sequence, program_release_fields
 from providers.python.autograd_program_arrays_pyapi import program_numeric_scalar, program_admit_value, uint64_input
-from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, _integer
+from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, fit_stop_options, _integer
 from providers.python.autograd_program_control_pyapi import ops_program_control_py, ops_program_decode_py
 from providers.python.autograd_program_control_grad_pyapi import ops_program_control_vjp_py
 from providers.python.autograd_program_save_pyapi import ops_program_save_fields_py
@@ -102,8 +102,9 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
             return ops_program_control_vjp_py[E, KIND](sid, pid,
                 Python.tuple(sid, condition, sid, other, args[5], args[6]), args[2], limit)
         if name == "while_loop":
-            # args[5]: check_every (None = 1), args[6]: iteration (None = False)
-            var every = 1
+            # args[5]: check_every (None = 0: the loop's chunk rule, lane x1b),
+            # args[6]: iteration (None = False)
+            var every = 0
             if args[5] is not None:
                 every = _integer(args[5], "check_every", 1)
             var iteration = False
@@ -118,7 +119,8 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         _arguments(args, 5)
         program_native_sequence(args[0])
         var n = PythonObject(_integer(args[1], "n", 0))
-        var unroll = _integer(args[2], "unroll", 1)
+        # unroll None = 0: the loop's chunk rule (lane x1b)
+        var unroll = 0 if args[2] is None else _integer(args[2], "unroll", 1)
         _option(args[3])
         if args[4] is not None and py_type(args[4]) is not py_type(Python.dict()):
             raise Error("TypeError: decode state must be a dict of state handle -> array, or None")
@@ -132,7 +134,7 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
             otherwise = Int(py=_component(args[1], session))
         program_native_sequence(args[2])
         var options = args[4]
-        _arguments(options, 8)
+        _arguments(options, 10)
         program_admit_value(options)
         if py_type(options[2]) is not py_type(PythonObject("")):
             raise Error("TypeError: Program loss requires an exact native string")
@@ -140,9 +142,10 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
         _option(options[7])
         var replaced = Python.tuple("loss_curve_", "n_iter_", "branch_counts_") if name == "fit_if" else Python.tuple("loss_curve_", "n_iter_")
         program_release_fields(output_fields, replaced)
+        var stop = fit_stop_options(options)
         var result = ops_program_fit_native_py[E, KIND](sid, pid, args[2], args[3],
             options[0], options[1], options[2], options[3], options[4], options[5], options[6], options[7],
-            condition, otherwise)
+            condition, otherwise, stop[0], stop[1])
         py_setitem(output_fields, "loss_curve_", result[0])
         py_setitem(output_fields, "n_iter_", result[1])
         if name == "fit_if":

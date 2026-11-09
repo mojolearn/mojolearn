@@ -9,7 +9,7 @@ from providers.python.autograd_python_errors_pyapi import graph_int
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.ops_api import ops_session, ops_session_registry_token
-from providers.python.autograd_program_pyapi import program_input, _integer, ops_program_fit_native_py, ops_program_execute_py
+from providers.python.autograd_program_pyapi import program_input, _integer, ops_program_fit_native_py, ops_program_execute_py, fit_stop_options
 from autograd.ops_frontend_impl import session_split, clip_low_unbounded, clip_high_unbounded
 from providers.python.autograd_program_arrays_pyapi import output_array, is_integer_input, uint64_input, program_admit_value, program_numeric_scalar
 from providers.python.autograd_pyapi import program_info, ops_profile_reset_py, ops_profile_report_py
@@ -466,9 +466,10 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
             condition = _int(args[1]._id, "condition", 1)
             otherwise = _int(args[2]._id, "otherwise", 1)
         var options = args[5]
+        var stop = fit_stop_options(options)
         var result = ops_program_fit_native_py[E, KIND](
             sid, program._id, args[3], args[4], options[0], options[1], options[2], options[3],
-            options[4], options[5], options[6], options[7], condition, otherwise)
+            options[4], options[5], options[6], options[7], condition, otherwise, stop[0], stop[1])
         py_setattr(program, "loss_curve_", result[0])
         py_setattr(program, "n_iter_", result[1])
         if op == _SOP_FIT_IF:

@@ -87,7 +87,7 @@ var q = s.upload_block(OPS_M3_STEP, ints, BLOCK_PART_WORDS, List[CastIn](), [q0,
 the native door `ops_program_decode_py` (`providers/python/autograd_program_control_pyapi.mojo`) loads
 `state` into the session's state tensors, then runs the body `n` times as the bounded loop with no condition
 (`control_prepare(..., condition_id=0, history=True)`), `unroll` iterations enqueued between two status reads
-(the unrolled body: the result does not depend on it), recording state 0 after every committed iteration on
+(the unrolled body: the result does not depend on it; `None` / 0 is the chunk rule of section 5), recording state 0 after every committed iteration on
 the device (`OP_LOOP_APPEND`). Returns `{"tokens": (n, tokens per step) int32, "outputs": final inputs,
 "iterations": n}`.
 
@@ -98,7 +98,43 @@ argmax. Capture it in an inference session, then `body.decode(first_ids, n=N)`.
 From Mojo, a family entry calls `control_prepare[E, KIND](sid, body, 0, 0, sid, sid, n, False, unroll,
 iteration, True)` and `control_run`, and reads `ControlResult.history[0]`.
 
-## 5. What X1 did not do (owned by the family lanes)
+## 5. The gate: how a body's writes stop at the loop's stop (lane x1b)
+
+Lane `x1b-executor-gated-state-chunked-loop` (2026-11-08). Every write an iteration makes is behind the loop's
+gate, so a loop may enqueue k iterations between two status reads and the result is still the per-iteration
+loop's. A body never needs the gate itself:
+
+| writer | how it is gated | where |
+|---|---|---|
+| loop-carried state (the body's outputs) | `OP_LOOP_COMMIT`, a bit copy when `LOOP_GATE` is open | `_commit_state` |
+| the token record, the iteration register | `OP_LOOP_APPEND`, `OP_LOOP_ADVANCE` on `LOOP_GATE` | `control_run` |
+| declared state a body op writes in place (a block step op's state, kv and words: any body parameter that `is_state`) | `OP_LOOP_SHADOW` after every body: gate open, the shadow takes the new value; closed, the live tensor gets the committed value back | `control_run`, `ControlPlan.shadow` |
+| a block step op's host integers (positions, chunk fill) | after a loop whose bodies ran past the stop, `OpsSession.steps.forget` on every shadowed buffer: the next run rebuilds the entry from the restored words | `control_run` |
+| Program.fit's parameters and optimizer moments | `OP_LOOP_SHADOW` once per epoch; the host step counts, bias-correction products and schedule epoch go back to the stopping epoch's (`_FitMark`) | `train_program_control` |
+| a step op of the device loop (`LoopStep`, N7's Cholesky / eigh / sort / compaction) | the op takes the gate (`registers.words`, word 0 the done word; core/step_gate.mojo) | `program_loop_device.mojo` |
+
+So a family that writes a body with block step ops or other in-place state writes nothing for the gate: the
+executor shadows every declared state parameter of the body when iterations can run past the stop (a condition
+and a chunk above 1), and only then. A body enqueued between two reads that raises (a step op's host position
+past its cache, say) is judged at a read: if the loop had already stopped, the error is dropped (the
+per-iteration loop would never have run that body) and its in-place writes are undone by the closed gate.
+
+The chunk k (`check_every`, decode's `unroll`) is a program value (`ControlPlan.check_every`). `0` (Python
+`None`, the default) is the cost rule `loop_auto_chunk` (`autograd/program_loop.mojo`): no condition reads
+once at the bound; a body whose declared in-place state exceeds `LOOP_DRAIN_FLOATS` (2**20 floats: its copy
+costs more than a drain) reads every iteration and shadows nothing; otherwise `LOOP_AUTO_CHUNK` = 8. The
+first iteration is read first, and the loop keeps k only when that iteration kept every state shape. k never
+enqueues a body past `max_iterations`; `iterations` is the device's iteration register.
+
+Program.fit (`autograd/program_runtime.mojo train_program_control`) is the same loop with the epoch as the
+iteration: `OP_LOOP_OPEN` opens the gate, the row order (`permutation` / iota), the minibatch gathers and the
+optimizer steps are enqueued on the device, the loss curve is a gated commit, and `OP_LOOP_FIT_TICK` counts
+the committed epoch and applies scikit-learn SGD's stopping rule when `tol` is given (`n_iter_no_change`
+stalled epochs). The host reads once per `fit_epochs_per_read` epochs (about `FIT_STEPS_PER_READ` = 16
+optimizer steps), and never without a criterion. Returns the epochs run (`n_iter_`). This is the shape the SGD
+family moves onto (lane N3b): its losses as loss kinds, `tol` / `n_iter_no_change` as Program.fit's.
+
+## 6. What X1 did not do (owned by the family lanes)
 
 - No family door moved; no hand forward deleted (plan row X1: "nothing yet, shared layer").
 - No Python session method per step op: the family lanes reach them from Mojo.

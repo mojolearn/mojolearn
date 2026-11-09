@@ -465,6 +465,7 @@ in the tables after the sections.
 | [`MOJOLEARN_RSVD_FAST_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, FAST + Apple) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_IDN_RSVD_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, IDENTICAL) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_RSVD_FAST_DEVSCAN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd finiteness scan, FAST + Apple) | removed (KEPT default, superseded: parallel host scan of the one admission path) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [Executor per-iteration status read of a body with a block step op; Program.fit ungated epoch loop (no define)](#executor-gated-state-and-chunked-loop-2026-11-08) | Autograd executor | REFACTORED (in-place state shadowed behind the gate; Program.fit as the bounded device loop) | 2026-11-08 | [EXECUTOR_GATED_STATE_CHUNKED_LOOP.patch](../experiments/removed/EXECUTOR_GATED_STATE_CHUNKED_LOOP.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -4271,3 +4272,37 @@ lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Bits: none for any int32-range or
   lane/a3-admit-decomp-prep-metrics@0cb550c337.
 - `door_rows_call` (the `_arena_io._ROWS_CALL` connection in `_native_msel_dispatch.connect`): no reader after A5 deleted
   `door_rows_host`; removed from the glue and from tools/test_device_rows_door_cv.py.
+
+## Executor gated state and chunked loop (2026-11-08)
+
+- **What it was**: two loop mechanisms that the executor's gate now makes unnecessary (lane
+  x1b-executor-gated-state-chunked-loop; docs/plans/EXECUTOR_X1_API.md section 5). (1) In
+  `autograd/program_control.mojo control_prepare`, a `while_loop` body holding a block step op (`is_block_step`) with
+  a condition was forced to `check_every = 1`: one status read per iteration, because the step op writes the
+  session's state in place, not behind the gate. Every solver loop moved onto the executor with in-place state was
+  therefore no better than its hand loop (which polls every 8-16 iterations). Now every declared state parameter of
+  the body is shadowed behind the gate (`OP_LOOP_SHADOW` after each body: open, the shadow takes the value; closed,
+  the live tensor gets the committed value back), resident step entries are rebuilt after bodies past the stop, a
+  blind body's error past the stop is dropped, and the loop reads once per chunk for every body; `check_every` /
+  `unroll` default to the chunk rule (`loop_auto_chunk`). (2) `autograd/program_runtime.mojo
+  train_program_control`'s epoch loop: an ungated host loop with no stopping criterion (the loss curve an ungated
+  copy, no iteration register). It is now the bounded device loop: `OP_LOOP_OPEN` per epoch, a gated loss commit,
+  `OP_LOOP_FIT_TICK` (the device iteration register and scikit-learn SGD's `tol` / `n_iter_no_change` rule), one
+  read per `fit_epochs_per_read` epochs, parameters and optimizer moments shadowed and the host optimizer scalars
+  restored for epochs past the stop. Returns the epochs run.
+- **Versions and measurements**: one form each; no measurement exists. Kept: the gated forms. The per-iteration
+  read stays reachable as `check_every=1` (and is what the chunk rule picks for a body whose in-place state is
+  above `LOOP_DRAIN_FLOATS`). A/B owed: a Mamba-1 / Mamba-3 decode `while_loop` with an EOS condition, default
+  vs `check_every=1`, and Program.fit with and without `tol` (SGD shapes of lane N3b), on NVIDIA and AMD.
+- **Verdict**: REFACTORED (no define removed). Bits: none for any existing program (the shadows and gates are bit
+  copies; the fit's curve copy is now a gated bit copy of the same value; the optimizer steps are unchanged).
+  Quality: unchanged.
+- **Run ids**: none (lanes never run; RUN OWED in the lane reply).
+- **Recoverable**: `f59d913b0b` (origin/integ/pre-0867-w2 at the lane's base; the forced read never reached main,
+  the fit loop did); deleted on lane/x1b-executor-gated-state-chunked-loop.
+- **Patch**: `experiments/removed/EXECUTOR_GATED_STATE_CHUNKED_LOOP.patch`, `git diff <lane head> f59d913b0b --`
+  the lane's code files (autograd/program_control.mojo, program_runtime.mojo, program_entries.mojo,
+  program_loop.mojo, the three providers/python doors, python/mojolearn/ops.py, the two experiments compile
+  wrappers); `git apply` restores them on the lane head, `git apply -3` once main has moved.
+- **Guard / records**: no `-D` define was removed, so no guard refusal and no `grid_controls` entry moves. One row in
+  `docs/apple-fast/EXPERIMENTS.md`.

@@ -1,0 +1,985 @@
+diff --git a/autograd/program_control.mojo b/autograd/program_control.mojo
+index 1cb6cd4687..6f78f95fce 100644
+--- a/autograd/program_control.mojo
++++ b/autograd/program_control.mojo
+@@ -7,13 +7,13 @@ from std.memory import bitcast
+ from sequence.exec_trait import Exec
+ from sequence.ops import FP, Args, OP_COPY
+ from autograd.program_loop import (
+-    LOOP_DONE, LOOP_ITER, LOOP_STOPPED, LOOP_BAD, LOOP_WORDS, LOOP_MAX_EXACT, EXECUTOR_TIMERS, LOOP_CHECK_AUTO,
+-    OP_LOOP_TICK, OP_LOOP_COMMIT, OP_LOOP_ADVANCE, OP_LOOP_APPEND, OP_LOOP_ITER_WORD, OP_LOOP_SHADOW, LoopTimers,
+-    loop_check_every, loop_auto_chunk,
++    LOOP_DONE, LOOP_ITER, LOOP_STOPPED, LOOP_BAD, LOOP_WORDS, LOOP_MAX_EXACT, EXECUTOR_TIMERS,
++    OP_LOOP_TICK, OP_LOOP_COMMIT, OP_LOOP_ADVANCE, OP_LOOP_APPEND, OP_LOOP_ITER_WORD, LoopTimers, loop_check_every,
+ )
+ from autograd.ops_api import OpsSession, ops_session
+ from autograd.program import OpsProgram, PROGRAM_IN_IDS
+ from autograd.program_optimize import program_optimize
++from autograd.block_step_ops import is_block_step
+ from autograd.program_runtime import parameter_buffers, replay_values_prepared
+ from autograd.control_replay_metadata import ControlReplay
+ from autograd.cast_ops import upload_cast, upload_cast_i32
+@@ -195,19 +195,10 @@ struct ControlPlan(Movable):
+     #: lane x1: record state 0 after every committed iteration (the tokens
+     #: of a decode loop), returned as ControlResult.history
+     var history: Bool
+-    #: lane x1b: `check_every` came from the chunk rule (check_every 0): the
+-    #: first iteration is read first, and the loop keeps `check_every` only
+-    #: when that iteration kept every state tensor's shape (1 otherwise)
+-    var auto_chunk: Bool
+-    #: lane x1b: iterations can run past the stop (a condition and a chunk
+-    #: above 1) and the body writes declared state in place: the loop
+-    #: shadows that state behind the gate (OP_LOOP_SHADOW)
+-    var shadow: Bool
+ 
+     def __init__(out self, var body: OpsProgram, var condition: OpsProgram, var other: OpsProgram,
+                  is_loop: Bool, maximum: Int, check_every: Int = 1, iteration_input: Bool = False,
+-                 has_condition: Bool = True, history: Bool = False, auto_chunk: Bool = False,
+-                 shadow: Bool = False):
++                 has_condition: Bool = True, history: Bool = False):
+         self.body = body^
+         self.condition = condition^
+         self.other = other^
+@@ -217,8 +208,6 @@ struct ControlPlan(Movable):
+         self.iteration_input = iteration_input
+         self.has_condition = has_condition
+         self.history = history
+-        self.auto_chunk = auto_chunk
+-        self.shadow = shadow
+ 
+ 
+ struct ControlResult(Movable):
+@@ -269,8 +258,15 @@ def control_prepare[E: Exec & Movable & Deinitable, KIND: Int](
+     var every = 1
+     if is_loop:
+         every = loop_check_every(check_every, "while_loop")
+-        # TOMBSTONE: the forced per-iteration status read of a body with a block step op (REFACTORED: in-place state is shadowed behind the gate, OP_LOOP_SHADOW) deleted 2026-11-08 by lane/x1b-executor-gated-state-chunked-loop; code recoverable at f59d913b0b.
+-        # Restore: git apply experiments/removed/EXECUTOR_GATED_STATE_CHUNKED_LOOP.patch; record in docs/TOMBSTONES.md.
++        # lane x1: a block step op writes the session's state in place, not
++        # behind the loop's gate, so no body may run past the stop: with a
++        # condition the loop reads its status before every body (the
++        # result is the same for every check_every); with none, control_run
++        # never enqueues more bodies than max_iterations.
++        if condition_id != 0:
++            for k in range(body.n_nodes()):  # driver-loop: over body nodes, for in-place state writers
++                if is_block_step(body.code[k]):
++                    every = 1
+         if maximum > LOOP_MAX_EXACT:
+             raise Error("ValueError: while_loop max_iterations must be at most " + String(LOOP_MAX_EXACT)
+                         + ", got " + String(maximum))
+@@ -302,24 +298,7 @@ def control_prepare[E: Exec & Movable & Deinitable, KIND: Int](
+         body = body_plan.program.copy()
+         condition = condition_plan.program.copy()
+         other = other_plan.program.copy()
+-    var auto_chunk = False
+-    var shadow = False
+-    if is_loop:
+-        # lane x1b: the declared state the body writes in place (a block step
+-        # op's state, kv and words are its parameters; state is a property of
+-        # the buffer, OpsSession.buffer_kind).
+-        var shadow_floats = 0
+-        for j in range(len(body.params)):  # driver-loop: over body parameters, for declared state written in place
+-            if s[].is_state(body.params[j]):
+-                shadow_floats += body.param_shapes[j].count()
+-        if every == LOOP_CHECK_AUTO:
+-            auto_chunk = True
+-            every = loop_auto_chunk(maximum, has_condition, shadow_floats)
+-        # Bodies past the stop exist only when a condition can stop the loop
+-        # between two reads; with none every enqueued body commits.
+-        shadow = has_condition and every > 1 and shadow_floats > 0
+-    return ControlPlan(body^, condition^, other^, is_loop, maximum, every, iteration_input, has_condition, history,
+-                       auto_chunk, shadow)
++    return ControlPlan(body^, condition^, other^, is_loop, maximum, every, iteration_input, has_condition, history)
+ 
+ 
+ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
+@@ -364,11 +343,6 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
+     var extras = List[FP]()
+     var scratch = List[FP]()
+     var scratch_n = List[Int]()
+-    # lane x1b: the declared state the body writes in place, its shadows
+-    # (owned by `extras`) and their float counts.
+-    var shadow_live = List[FP]()
+-    var shadow_copy = List[FP]()
+-    var shadow_n = List[Int]()
+     try:
+         s[].tape.no_grad()
+         if is_loop:
+@@ -385,19 +359,8 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
+             # enqueued past the stop leave the state as the stopping
+             # iteration left it (closed gate), so the outputs, `iterations`
+             # and `stopped` do not depend on `check_every`.
+-            #
+-            # Lane x1b (2026-11-08): the same holds for a body that writes
+-            # declared state in place (a block step op): its state is
+-            # shadowed behind the gate (OP_LOOP_SHADOW after every body), so
+-            # no body op needs the gate and the loop reads its status once
+-            # per chunk for every body. `check_every` 0 is the chunk rule
+-            # (`loop_auto_chunk`, autograd/program_loop.mojo); the committed
+-            # count is the device's iteration register.
+             var every = plan.check_every
+-            var chunk = 1 if plan.auto_chunk else every
+-            var probing = plan.auto_chunk and every > 1
+             var n_state = len(buffers)
+-            var first_shapes = shapes.copy()
+             var words = s[].ex.alloc(LOOP_WORDS)
+             extras.append(words)
+             for _k in range(n_state):  # driver-loop: over loop-carried state tensors (staging slots)
+@@ -426,28 +389,13 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
+             if plan.history and maximum > 0:
+                 record = s[].ex.alloc(maximum * per_token)
+                 extras.append(record)
+-            if plan.shadow:
+-                # Each shadow starts as the state before the first body.
+-                var params = parameter_buffers(s[], body)
+-                for j in range(len(body.params)):  # driver-loop: over body parameters (declared state shadows)
+-                    if s[].is_state(body.params[j]):
+-                        var n = body.param_shapes[j].count()
+-                        var copy = s[].ex.alloc(n)
+-                        extras.append(copy)
+-                        shadow_live.append(params[j])
+-                        shadow_copy.append(copy)
+-                        shadow_n.append(n)
+-                        var c = Args()
+-                        c.p0 = params[j]
+-                        c.p1 = copy
+-                        s[].ex.launch[OP_COPY](c, n)
+             var timers = LoopTimers("while_loop")
+             var done = False
+             #: bodies enqueued so far; never more than the bound
+             var enqueued = 0
+             while not done:  # driver-loop: over flag-read chunks of the bounded loop, bounded by max_iterations
+                 var j = 0
+-                while j < chunk:  # driver-loop: over loop iterations enqueued between two flag reads
++                while j < every:  # driver-loop: over loop iterations enqueued between two flag reads
+                     var in_buffers = buffers.copy()
+                     var in_shapes = shapes.copy()
+                     if plan.iteration_input:
+@@ -470,8 +418,7 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
+                     s[].ex.launch[OP_LOOP_TICK](tick, 1)
+                     _lap(s[], timers, "condition")
+                     j += 1
+-                    var known_open = j == chunk or enqueued >= maximum
+-                    if known_open:
++                    if j == every or enqueued >= maximum:
+                         # at the bound the tick has stopped the loop: read it
+                         # rather than enqueue a body past max_iterations
+                         s[].ex.download(mirror_p, words, LOOP_WORDS)
+@@ -480,46 +427,12 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
+                         if mirror[LOOP_DONE] != Float32(0.0):
+                             done = True
+                             break
+-                    var outputs = List[Int]()
+-                    var past_stop = False
+-                    try:
+-                        outputs = _execute(s[], body, body_replay, in_buffers, in_shapes, temps)
+-                    except err:
+-                        if known_open:
+-                            raise err
+-                        # lane x1b: a body enqueued between two reads may
+-                        # run after the stop (a step op's host position past
+-                        # its cache, say). Read the block: when the loop had
+-                        # stopped, that body was never committed and the
+-                        # per-iteration loop would not have run it, so its
+-                        # error is not the loop's. Its in-place writes are
+-                        # undone by the closed gate's shadow.
+-                        s[].ex.download(mirror_p, words, LOOP_WORDS)
+-                        iterations = Int(mirror[LOOP_ITER])
+-                        if mirror[LOOP_DONE] == Float32(0.0):
+-                            raise err
+-                        past_stop = True
+-                    if past_stop:
+-                        for k in range(len(shadow_live)):  # driver-loop: over declared state shadows
+-                            var r = Args()
+-                            r.p0 = shadow_live[k]
+-                            r.p1 = shadow_copy[k]
+-                            r.p2 = words
+-                            s[].ex.launch[OP_LOOP_SHADOW](r, shadow_n[k])
+-                        enqueued += 1
+-                        done = True
+-                        break
++                    var outputs = _execute(s[], body, body_replay, in_buffers, in_shapes, temps)
+                     enqueued += 1
+                     _lap(s[], timers, "body")
+                     # The gate is known open right after a read; between
+                     # reads it is the device's, so shapes must hold.
+-                    _commit_state(s[], body, outputs, words, buffers, shapes, scratch, scratch_n, not known_open)
+-                    for k in range(len(shadow_live)):  # driver-loop: over declared state shadows
+-                        var sh = Args()
+-                        sh.p0 = shadow_live[k]
+-                        sh.p1 = shadow_copy[k]
+-                        sh.p2 = words
+-                        s[].ex.launch[OP_LOOP_SHADOW](sh, shadow_n[k])
++                    _commit_state(s[], body, outputs, words, buffers, shapes, scratch, scratch_n, j != every)
+                     if plan.history and maximum > 0:
+                         if shapes[0].count() != per_token:
+                             raise Error("ValueError: a token record needs a body that keeps state 0's shape")
+@@ -533,28 +446,6 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
+                     advance.p0 = words
+                     s[].ex.launch[OP_LOOP_ADVANCE](advance, 1)
+                     _lap(s[], timers, "commit")
+-                if probing and not done:
+-                    # The chunk rule's first iteration ran known open: keep
+-                    # its chunk only when the body kept every state shape.
+-                    probing = False
+-                    var kept = True
+-                    for k in range(n_state):  # driver-loop: over loop-carried state tensors (shape test)
+-                        kept = kept and shapes[k].same(first_shapes[k])
+-                    chunk = every if kept else 1
+-                    if chunk == 1 and len(shadow_live) > 0:
+-                        # no body runs past the stop now: no more shadow
+-                        # copies (the buffers go with `extras`)
+-                        shadow_live.clear()
+-                        shadow_copy.clear()
+-                        shadow_n.clear()
+-            if enqueued > iterations:
+-                # lane x1b: bodies ran after the stop. Their in-place state
+-                # writes were undone on the device, but a block step op's
+-                # resident entry advanced its host integers (positions,
+-                # chunk fill): drop it, so the next run rebuilds it from the
+-                # state words the stopping iteration left.
+-                for k in range(len(shadow_live)):  # driver-loop: over declared state shadows
+-                    s[].steps.forget(Int(shadow_live[k]))
+             if mirror[LOOP_BAD] != Float32(0.0):
+                 raise Error("control-flow condition must be finite")
+             stopped = mirror[LOOP_STOPPED] != Float32(0.0)
+@@ -585,8 +476,6 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
+         swap(held, s[].prog_tape)
+         for k in range(len(buffers)):  # driver-loop: over current state owners
+             s[].ex.free(buffers[k])
+-        for k in range(len(shadow_live)):  # driver-loop: over declared state shadows (resident entries rebuild)
+-            s[].steps.forget(Int(shadow_live[k]))
+         _free_loop_owners(s[], extras, scratch, scratch_n)
+         var message = String(err)
+         var context = "program control flow after " + String(iterations) + " iterations: "
+diff --git a/autograd/program_entries.mojo b/autograd/program_entries.mojo
+index b19059ba9c..ccf3f6e273 100644
+--- a/autograd/program_entries.mojo
++++ b/autograd/program_entries.mojo
+@@ -213,13 +213,10 @@ def program_fit_native[E: Exec & Movable & Deinitable, KIND: Int](
+     sid: Int, pid: Int, var owners: List[ProgramInput], var target_owners: List[ProgramInput],
+     kind: Int, delta: Float32, opt: Int, params: List[Int], count: Int, batch: Int, shuffle: Bool,
+     seed_word: UInt64, curve: FP, condition_id: Int, otherwise_id: Int,
+-    tol: Float32 = Float32(0.0), n_iter_no_change: Int = 0,
+-) raises -> Tuple[Int, Int, Int]:
++) raises -> Tuple[Int, Int]:
+     """Train program `pid` over the converted inputs (and targets, unless
+-    kind is 0, loss='output'); the loss curve goes to `curve`. With
+-    `n_iter_no_change` > 0 training stops early by scikit-learn SGD's rule
+-    (`tol`). Returns the branch counts of a conditional program and the
+-    epochs run."""
++    kind is 0, loss='output'); the loss curve goes to `curve`. Returns the
++    branch counts of a conditional program."""
+     var srcs = List[CastIn]()
+     var shapes = List[ShapeN]()
+     for k in range(len(owners)):  # driver-loop: over borrowed input descriptors
+@@ -231,7 +228,7 @@ def program_fit_native[E: Exec & Movable & Deinitable, KIND: Int](
+     var s = ops_session[E, KIND](sid)
+     var branches = train_program_control(s[], pid, srcs, shapes, target, kind, delta,
+                                         opt, params, count, batch, shuffle, seed_word, curve,
+-                                        condition_id, otherwise_id, tol, n_iter_no_change)
++                                        condition_id, otherwise_id)
+     _ = owners^
+     _ = target_owners^
+     return branches
+diff --git a/autograd/program_loop.mojo b/autograd/program_loop.mojo
+index dc8a83e560..37d4161a5d 100644
+--- a/autograd/program_loop.mojo
++++ b/autograd/program_loop.mojo
+@@ -28,14 +28,6 @@
+ #   [LOOP_BAD]        program loop: the condition was not finite
+ #   [LOOP_GATE]       program loop: nonzero when this iteration's state is
+ #                     committed (set by the tick, read by the commits)
+-#   [LOOP_FIT_BEST]   Program.fit: the best epoch loss so far (lane x1b)
+-#   [LOOP_FIT_STALL]  Program.fit: epochs since the loss last improved
+-#
+-# Lane x1b: every write an iteration makes is behind the gate, including
+-# the declared state a body writes in place (a block step op's state, kv and
+-# words): the loop shadows it (OP_LOOP_SHADOW), so a body needs no gate of
+-# its own and no body op changes. A step op of the device loop below takes
+-# the gate itself (core/step_gate.mojo).
+ #
+ # Per-op timers: `-D MOJOLEARN_EXECUTOR_TIMERS` (default off). Each loop
+ # drains the stream around every op it times (so the timing is relative and
+@@ -57,76 +49,20 @@ comptime LOOP_BAD = 4
+ comptime LOOP_GATE = 5
+ comptime LOOP_WORDS = 8
+ 
+-#: Program.fit's register block only (lane x1b): the best epoch loss so far
+-#: and the epochs since it last improved by `tol`. The step-op device loop's
+-#: Int32 block keeps STEP_FAIL in word 6 (core/step_gate.mojo); the two
+-#: blocks are never the same buffer.
+-comptime LOOP_FIT_BEST = 6
+-comptime LOOP_FIT_STALL = 7
+-
+ #: The largest bound the float32 register block counts exactly (2**24).
+ comptime LOOP_MAX_EXACT = 16777216
+ 
+ comptime EXECUTOR_TIMERS = is_defined["MOJOLEARN_EXECUTOR_TIMERS"]()
+ 
+-# ---------------------------------------------------------------- the chunk rule
+-# Lane x1b-executor-gated-state-chunked-loop (2026-11-08). A loop enqueues k
+-# iterations between two host reads of its register block. Every write an
+-# iteration makes is behind the gate (the commits; OP_LOOP_SHADOW for the
+-# declared state a body writes in place), so the result never depends on k;
+-# only the cost does:
+-#   - a read drains the stream: about one host round trip (~10 us on the
+-#     L40S / MI325X class, the launch latency of a few small kernels);
+-#   - an iteration enqueued past the stop is wasted (at most k - 1 of them,
+-#     once per loop);
+-#   - a body that writes declared state in place pays one bit copy of that
+-#     state per iteration (OP_LOOP_SHADOW) once k > 1.
+-# So: no condition (a decode of a fixed count) never runs past the stop and
+-# reads once at the bound; a body whose in-place state copy costs more than
+-# a drain (LOOP_DRAIN_FLOATS: 2**20 floats, 8 MiB moved, ~10 us at ~1 TB/s)
+-# reads every iteration; otherwise LOOP_AUTO_CHUNK iterations per read, the
+-# 8-16 the hand-written solver loops poll at (KMEANS_CONV_CHUNK 8, the async
+-# L-BFGS flags every 4 rounds). Program.fit reads once per
+-# FIT_STEPS_PER_READ optimizer steps (whole epochs), under the same copy
+-# bound. None of these is a board shape: they are latency and bandwidth
+-# ratios, and every shape below or above them takes the same rule.
+-comptime LOOP_CHECK_AUTO = 0
+-comptime LOOP_AUTO_CHUNK = 8
+-comptime LOOP_DRAIN_FLOATS = 1 << 20
+-comptime FIT_STEPS_PER_READ = 16
+-
+ 
+ def loop_check_every(check_every: Int, context: String) raises -> Int:
+     """The validated flag-read interval of a bounded loop: a positive count of
+-    iterations between two host reads of the register block, or
+-    LOOP_CHECK_AUTO (0): the loop chooses it (`loop_auto_chunk`)."""
+-    if check_every < 0:
++    iterations between two host reads of the register block."""
++    if check_every < 1:
+         raise Error("ValueError: " + context + " check_every must be a positive integer, got " + String(check_every))
+     return check_every
+ 
+ 
+-def loop_auto_chunk(maximum: Int, has_condition: Bool, shadow_floats: Int) -> Int:
+-    """The chunk rule above for a program loop: iterations enqueued between
+-    two reads, given the bound, whether a condition can stop the loop early
+-    and the floats of declared state its body writes in place."""
+-    if not has_condition:
+-        return max(1, maximum)
+-    if shadow_floats > LOOP_DRAIN_FLOATS:
+-        return 1
+-    return max(1, min(LOOP_AUTO_CHUNK, maximum))
+-
+-
+-def fit_epochs_per_read(n_batches: Int, epochs: Int, shadow_floats: Int) -> Int:
+-    """The chunk rule above for Program.fit with a stopping criterion: whole
+-    epochs between two reads, about FIT_STEPS_PER_READ optimizer steps, and
+-    one epoch when the per-epoch shadow of the trained parameters and their
+-    optimizer moments costs more than a drain."""
+-    if shadow_floats > LOOP_DRAIN_FLOATS:
+-        return 1
+-    var per = (FIT_STEPS_PER_READ + n_batches - 1) // max(1, n_batches)
+-    return max(1, min(per, epochs))
+-
+-
+ struct LoopTimers(Movable):
+     """Host nanoseconds per op of one bounded loop (`MOJOLEARN_EXECUTOR_TIMERS`).
+     The caller drains its stream before `lap` (see the module note); with the
+@@ -190,11 +126,6 @@ comptime OP_LOOP_ADVANCE = 1802
+ # iteration register as an int32 word.
+ comptime OP_LOOP_APPEND = 1803
+ comptime OP_LOOP_ITER_WORD = 1804
+-# lane x1b-executor-gated-state-chunked-loop: the gated shadow of state a
+-# body writes in place, and Program.fit's epoch gate and stopping criterion.
+-comptime OP_LOOP_SHADOW = 1805
+-comptime OP_LOOP_OPEN = 1806
+-comptime OP_LOOP_FIT_TICK = 1807
+ comptime OP_LOOP_FIRST = OP_LOOP_TICK
+ comptime OP_LOOP_LAST = 1809
+ 
+@@ -262,68 +193,6 @@ def op_loop_iter_word(t: Int, a: Args):
+     a.p1.unsafe_store(0, bitcast[DType.float32](r))
+ 
+ 
+-def op_loop_shadow(t: Int, a: Args):
+-    """The gated shadow of one declared state tensor a body writes in place
+-    (a block step op's state, kv or words). p0: the live tensor, p1: its
+-    shadow, p2: the register block. Launched after every body: when the
+-    iteration commits (gate open) the shadow takes the new value; when it
+-    does not (an iteration enqueued past the stop) the live tensor gets the
+-    committed value back. A bit copy either way (int32 words move word for
+-    word), so the state after the loop is the stopping iteration's for every
+-    chunk size."""
+-    if a.p2.unsafe_load(LOOP_GATE) != Float32(0.0):
+-        a.p1.unsafe_store(t, a.p0.unsafe_load(t))
+-    else:
+-        a.p0.unsafe_store(t, a.p1.unsafe_load(t))
+-
+-
+-def op_loop_open(t: Int, a: Args):
+-    """One element: Program.fit's epoch gate. p0: the register block; the
+-    gate opens while the loop runs (the done word is 0) and closes after the
+-    stop, so the epoch's commits, shadows and criterion do nothing."""
+-    var w = a.p0
+-    if w.unsafe_load(LOOP_DONE) == Float32(0.0):
+-        w.unsafe_store(LOOP_GATE, Float32(1.0))
+-    else:
+-        w.unsafe_store(LOOP_GATE, Float32(0.0))
+-
+-
+-def op_loop_fit_tick(t: Int, a: Args):
+-    """One element, after an epoch: p0 the register block, p1 the epoch's
+-    mean loss, f0 `tol`, i0 `n_iter_no_change` (0: no criterion). While the
+-    gate is open the iteration register counts the committed epoch; with a
+-    criterion, scikit-learn's SGD rule: an epoch whose loss is above the best
+-    so far minus `tol` adds one to the stall count (otherwise it is reset),
+-    the best is kept, and `n_iter_no_change` stalled epochs in a row stop the
+-    loop after this epoch (LOOP_STOPPED, LOOP_STOP_ITER, the done word). The
+-    first epoch compares against +inf. Float32 compares only: the same bit on
+-    every vendor and on the host."""
+-    var w = a.p0
+-    if w.unsafe_load(LOOP_GATE) == Float32(0.0):
+-        return
+-    var it = w.unsafe_load(LOOP_ITER) + Float32(1.0)
+-    w.unsafe_store(LOOP_ITER, it)
+-    if a.i0 <= 0:
+-        return
+-    var loss = a.p1.unsafe_load(0)
+-    var best = w.unsafe_load(LOOP_FIT_BEST)
+-    if it == Float32(1.0):
+-        best = bitcast[DType.float32](UInt32(0x7F800000))
+-    var stall = w.unsafe_load(LOOP_FIT_STALL)
+-    if loss > best - a.f0:
+-        stall = stall + Float32(1.0)
+-    else:
+-        stall = Float32(0.0)
+-    if loss < best:
+-        best = loss
+-    w.unsafe_store(LOOP_FIT_BEST, best)
+-    w.unsafe_store(LOOP_FIT_STALL, stall)
+-    if stall >= Float32(a.i0):
+-        w.unsafe_store(LOOP_STOPPED, Float32(1.0))
+-        w.unsafe_store(LOOP_STOP_ITER, it)
+-        w.unsafe_store(LOOP_DONE, Float32(1.0))
+-
+-
+ def apply_loop[OP: Int](t: Int, a: Args):
+     comptime if OP == OP_LOOP_TICK:
+         op_loop_tick(t, a)
+@@ -335,9 +204,3 @@ def apply_loop[OP: Int](t: Int, a: Args):
+         op_loop_append(t, a)
+     elif OP == OP_LOOP_ITER_WORD:
+         op_loop_iter_word(t, a)
+-    elif OP == OP_LOOP_SHADOW:
+-        op_loop_shadow(t, a)
+-    elif OP == OP_LOOP_OPEN:
+-        op_loop_open(t, a)
+-    elif OP == OP_LOOP_FIT_TICK:
+-        op_loop_fit_tick(t, a)
+diff --git a/autograd/program_runtime.mojo b/autograd/program_runtime.mojo
+index a88224faf4..9e85927ba2 100644
+--- a/autograd/program_runtime.mojo
++++ b/autograd/program_runtime.mojo
+@@ -13,11 +13,7 @@ from autograd.tape import Tape, Tensor
+ from autograd.cast_ops import upload_cast, upload_cast_i32
+ from core.cast_in import CastIn
+ from autograd.data import permutation, gather_rows
+-from autograd.optim import step_lr, optimizer_slots
+-from autograd.program_loop import (
+-    LOOP_DONE, LOOP_ITER, LOOP_WORDS, LOOP_MAX_EXACT, OP_LOOP_COMMIT, OP_LOOP_SHADOW, OP_LOOP_OPEN, OP_LOOP_FIT_TICK,
+-    fit_epochs_per_read,
+-)
++from autograd.optim import step_lr
+ from autograd.losses import mse, mae, huber, binary_cross_entropy_with_logits, cross_entropy
+ from autograd.import_api import ImportRules
+ from checks.numerics import identical_div
+@@ -140,81 +136,12 @@ def minibatch_rows(start: Int, n: Int, batch: Int) -> Int:
+     return min(batch, n - start)
+ 
+ 
+-struct _FitMark(Copyable, Movable):
+-    """The host scalars of Program.fit at the start of one epoch (lane x1b):
+-    the schedule's epoch, the branch counts, and each trained parameter's
+-    optimizer step count and running bias-correction products. An epoch
+-    enqueued past the stop advanced them; the loop puts the first such
+-    epoch's mark back."""
+-    var epoch: Int
+-    var true_batches: Int
+-    var false_batches: Int
+-    var t: List[Int]
+-    var pw1: List[Float32]
+-    var pw2: List[Float32]
+-    var mu_prod: List[Float32]
+-
+-    def __init__[E: Exec & Movable & Deinitable](
+-        out self, s: OpsSession[E], oi: Int, states: List[Int], true_batches: Int, false_batches: Int,
+-    ):
+-        self.epoch = s.opts[oi].epoch
+-        self.true_batches = true_batches
+-        self.false_batches = false_batches
+-        self.t = List[Int]()
+-        self.pw1 = List[Float32]()
+-        self.pw2 = List[Float32]()
+-        self.mu_prod = List[Float32]()
+-        for j in range(len(states)):  # driver-loop: over the fit's parameters (host optimizer scalars)
+-            var si = states[j]
+-            if si >= 0:
+-                self.t.append(s.opt_states[si].t)
+-                self.pw1.append(s.opt_states[si].pw1)
+-                self.pw2.append(s.opt_states[si].pw2)
+-                self.mu_prod.append(s.opt_states[si].mu_prod)
+-            else:
+-                self.t.append(0)
+-                self.pw1.append(Float32(0.0))
+-                self.pw2.append(Float32(0.0))
+-                self.mu_prod.append(Float32(0.0))
+-
+-    def restore[E: Exec & Movable & Deinitable](self, mut s: OpsSession[E], oi: Int, states: List[Int]):
+-        s.opts[oi].epoch = self.epoch
+-        for j in range(len(states)):  # driver-loop: over the fit's parameters (host optimizer scalars)
+-            var si = states[j]
+-            if si >= 0:
+-                s.opt_states[si].t = self.t[j]
+-                s.opt_states[si].pw1 = self.pw1[j]
+-                s.opt_states[si].pw2 = self.pw2[j]
+-                s.opt_states[si].mu_prod = self.mu_prod[j]
+-
+-
+-def _free_loop_owned[E: Exec](mut ex: E, owned: List[FP]) raises:
+-    for k in range(len(owned)):  # driver-loop: over the fit loop's register block and shadows
+-        ex.free(owned[k])
+-
+-
+ def train_program_control[E: Exec & Movable & Deinitable](
+     mut s: OpsSession[E], pid: Int, srcs: List[CastIn], shapes: List[ShapeN],
+     target: CastIn, loss_kind: Int, delta: Float32, optimizer: Int, parameters: List[Int],
+     epochs: Int, batch: Int, shuffle_rows: Bool, seed: UInt64, curve: FP,
+-    condition_id: Int, otherwise_id: Int, tol: Float32 = Float32(0.0), n_iter_no_change: Int = 0,
+-) raises -> Tuple[Int, Int, Int]:
+-    """Program.fit: `epochs` epochs of minibatch steps as the executor's
+-    bounded device loop (lane x1b-executor-gated-state-chunked-loop).
+-
+-    The epoch is the loop's iteration. Each one opens the register block's
+-    gate (OP_LOOP_OPEN), draws the row order on the device (`permutation`
+-    or iota), gathers every minibatch on the device and steps the optimizer;
+-    its mean loss goes to the curve behind the gate (OP_LOOP_COMMIT) and to
+-    the criterion (OP_LOOP_FIT_TICK), which counts the committed epoch in the
+-    iteration register. With `n_iter_no_change` > 0 the criterion is
+-    scikit-learn SGD's (`tol`, `n_iter_no_change`): the host reads the block
+-    once every `fit_epochs_per_read` epochs; epochs enqueued after the stop
+-    are undone on the device (the trained parameters and their optimizer
+-    moments are shadowed behind the gate, OP_LOOP_SHADOW) and on the host
+-    (the optimizer's step counts, bias-correction products and schedule
+-    epoch go back to the stopping epoch's). Without a criterion there is no
+-    read before the end. Returns (true batches, false batches, epochs run)."""
++    condition_id: Int, otherwise_id: Int,
++) raises -> Tuple[Int, Int]:
+     var p = s.program(pid)
+     var conditional = condition_id > 0 and otherwise_id > 0
+     if (condition_id > 0) != (otherwise_id > 0):
+@@ -227,10 +154,6 @@ def train_program_control[E: Exec & Movable & Deinitable](
+         raise Error("Program.fit uses a captured inference session")
+     if epochs < 1 or batch < 1 or len(srcs) != p.n_in or len(parameters) < 1 or len(p.outs) != 1:
+         raise Error("Program.fit needs inputs, trainable parameters, one output, and positive epochs/batch_size")
+-    if n_iter_no_change < 0:
+-        raise Error("ValueError: Program.fit n_iter_no_change must be a nonnegative integer")
+-    if epochs > LOOP_MAX_EXACT:
+-        raise Error("ValueError: Program.fit epochs must be at most " + String(LOOP_MAX_EXACT))
+     var oi = s._opt_index(optimizer)
+     var n = shapes[0].d[0]
+     var bs = min(n, batch)
+@@ -293,19 +216,6 @@ def train_program_control[E: Exec & Movable & Deinitable](
+         predicate_replay = PreparedProgramReplay(choice.condition)
+         otherwise_replay = PreparedProgramReplay(choice.otherwise)
+     var cfg = s.opts[oi].cfg
+-    # lane x1b: the loop's register block, the shadows of the trained
+-    # parameters and their optimizer moments, and the host scalars at the
+-    # start of every epoch of the current chunk (`marks`).
+-    var criterion = n_iter_no_change > 0
+-    var loop_owned = List[FP]()
+-    var shadow_live = List[FP]()
+-    var shadow_copy = List[FP]()
+-    var shadow_n = List[Int]()
+-    var marks = List[_FitMark]()
+-    var chunk_start = 0
+-    var enqueued = 0
+-    var committed = 0
+-    var mirror = List[Float32](length=LOOP_WORDS, fill=Float32(0))
+     try:
+         for k in range(len(srcs)):  # driver-loop: over program input arrays
+             var buf = s.ex.alloc(srcs[k].count())
+@@ -328,55 +238,11 @@ def train_program_control[E: Exec & Movable & Deinitable](
+         indices = s.ex.alloc(n)
+         batch_losses = s.ex.alloc(n_batches)
+         losses = s.ex.alloc(epochs)
+-        var words = s.ex.alloc(LOOP_WORDS)  # zero-filled: running, iteration 0
+-        loop_owned.append(words)
+-        # The chunk rule (autograd/program_loop.mojo): with no criterion
+-        # nothing can stop the loop early, so no read before the end and no
+-        # shadow; with one, whole epochs per read, and the shadow only when
+-        # an epoch can run past the stop (more than one epoch per read).
+-        var slots = optimizer_slots(cfg)
+-        var shadow_floats = 0
+-        for j in range(len(params)):  # driver-loop: over trained parameters (shadow sizes)
+-            if trainable[j]:
+-                var m = p.param_shapes[j].count()
+-                shadow_floats += m * (1 + (1 if slots[0] else 0) + (1 if slots[1] else 0) + (1 if slots[2] else 0))
+-        var chunk = epochs
+-        if criterion:
+-            chunk = fit_epochs_per_read(n_batches, epochs, shadow_floats)
+-        if criterion and chunk > 1:
+-            for j in range(len(params)):  # driver-loop: over trained parameters (shadow buffers)
+-                if not trainable[j]:
+-                    continue
+-                var m = p.param_shapes[j].count()
+-                var r = s.opt_states[states[j]]
+-                var live = List[FP]()
+-                live.append(params[j])
+-                if slots[0]:
+-                    live.append(r.s1)
+-                if slots[1]:
+-                    live.append(r.s2)
+-                if slots[2]:
+-                    live.append(r.s3)
+-                for q in range(len(live)):  # small-loop(live: a parameter and at most three moment buffers): shadow setup, no data
+-                    var copy = s.ex.alloc(m)
+-                    loop_owned.append(copy)
+-                    var c = Args()
+-                    c.p0 = live[q]
+-                    c.p1 = copy
+-                    s.ex.launch[OP_COPY](c, m)
+-                    shadow_live.append(live[q])
+-                    shadow_copy.append(copy)
+-                    shadow_n.append(m)
+         swap(held, s.prog_tape)
+         swap(held, s.tape)
+         swapped = True
+         s.tape.record()
+-        for e in range(epochs):  # driver-loop: over epochs, the bounded loop's iterations, read once per chunk
+-            if criterion:
+-                marks.append(_FitMark(s, oi, states, true_batches, false_batches))
+-            var gate = Args()
+-            gate.p0 = words
+-            s.ex.launch[OP_LOOP_OPEN](gate, 1)
++        for e in range(epochs):  # driver-loop: over epochs
+             var epoch = s.opts[oi].epoch
+             # Scheduler advancement occurs only at the end of this epoch.
+             var lr = s.learning_rate(optimizer)
+@@ -468,37 +334,9 @@ def train_program_control[E: Exec & Movable & Deinitable](
+             var a = Args()
+             a.p0 = s.tape.value(average)
+             a.p1 = losses.value() + e
+-            a.p2 = words
+-            s.ex.launch[OP_LOOP_COMMIT](a, 1)
+-            var tick = Args()
+-            tick.p0 = words
+-            tick.p1 = s.tape.value(average)
+-            tick.f0 = tol
+-            tick.i0 = n_iter_no_change
+-            s.ex.launch[OP_LOOP_FIT_TICK](tick, 1)
+-            for k in range(len(shadow_live)):  # driver-loop: over shadowed parameters and moments
+-                var sh = Args()
+-                sh.p0 = shadow_live[k]
+-                sh.p1 = shadow_copy[k]
+-                sh.p2 = words
+-                s.ex.launch[OP_LOOP_SHADOW](sh, shadow_n[k])
++            s.ex.launch[OP_COPY](a, 1)
+             s.scheduler_step(optimizer)
+-            enqueued = e + 1
+-            if criterion and (enqueued - chunk_start == chunk or enqueued == epochs):
+-                s.ex.download(FP(unsafe_from_address=Int(mirror.unsafe_ptr())), words, LOOP_WORDS)
+-                if mirror[LOOP_DONE] != Float32(0.0):
+-                    break
+-                chunk_start = enqueued
+-                marks.clear()
+         s.ex.sync()
+-        s.ex.download(FP(unsafe_from_address=Int(mirror.unsafe_ptr())), words, LOOP_WORDS)
+-        committed = Int(mirror[LOOP_ITER])
+-        if criterion and committed < enqueued:
+-            # Epochs past the stop: their device writes were undone behind
+-            # the gate; their host scalars go back to the first of them.
+-            marks[committed - chunk_start].restore(s, oi, states)
+-            true_batches = marks[committed - chunk_start].true_batches
+-            false_batches = marks[committed - chunk_start].false_batches
+         s.ex.download(curve, losses.value(), epochs)
+     except err:
+         if swapped:
+@@ -507,15 +345,13 @@ def train_program_control[E: Exec & Movable & Deinitable](
+             swap(held, s.tape)
+             swap(held, s.prog_tape)
+         release_training_buffers(s.ex, full, batches, ty, yb, indices, batch_losses, losses)
+-        _free_loop_owned(s.ex, loop_owned)
+         raise err
+     s._drop_temps(temps)
+     s.tape.no_grad()
+     swap(held, s.tape)
+     swap(held, s.prog_tape)
+     release_training_buffers(s.ex, full, batches, ty, yb, indices, batch_losses, losses)
+-    _free_loop_owned(s.ex, loop_owned)
+-    return (true_batches, false_batches, committed)
++    return (true_batches, false_batches)
+ 
+ 
+ # TOMBSTONE: the ops_* per-op session doors and lamb_step_py (dead native entries: reached only through their deleted exports) deleted 2026-10-26 by e4236afa3; code recoverable at a88745022.
+diff --git a/experiments/program_loop_reuse_20261028/compile.mojo b/experiments/program_loop_reuse_20261028/compile.mojo
+index 063a18284b..56b4861b84 100644
+--- a/experiments/program_loop_reuse_20261028/compile.mojo
++++ b/experiments/program_loop_reuse_20261028/compile.mojo
+@@ -9,6 +9,6 @@ from core.cast_in import CastIn
+ @export
+ def compile_training(mut s: OpsSession[HostExec], pid: Int, srcs: List[CastIn], shapes: List[ShapeN],
+     target: CastIn, loss: Int, delta: Float32, optimizer: Int, parameters: List[Int],
+-    epochs: Int, batch: Int, shuffle: Bool, seed: UInt64, curve: FP, condition: Int, otherwise: Int) raises -> Tuple[Int, Int, Int]:
++    epochs: Int, batch: Int, shuffle: Bool, seed: UInt64, curve: FP, condition: Int, otherwise: Int) raises -> Tuple[Int, Int]:
+     return train_program_control(s, pid, srcs, shapes, target, loss, delta, optimizer, parameters,
+                                 epochs, batch, shuffle, seed, curve, condition, otherwise)
+diff --git a/experiments/training_replay_metadata_20261028/compile.mojo b/experiments/training_replay_metadata_20261028/compile.mojo
+index 937b85cd33..c6f6892516 100644
+--- a/experiments/training_replay_metadata_20261028/compile.mojo
++++ b/experiments/training_replay_metadata_20261028/compile.mojo
+@@ -10,7 +10,7 @@ from core.cast_in import CastIn
+ @export
+ def compile_training(mut s: OpsSession[HostExec], pid: Int, srcs: List[CastIn], shapes: List[ShapeN],
+     target: CastIn, loss: Int, delta: Float32, optimizer: Int, parameters: List[Int],
+-    epochs: Int, batch: Int, shuffle: Bool, seed: UInt64, curve: FP, condition: Int, otherwise: Int) raises -> Tuple[Int, Int, Int]:
++    epochs: Int, batch: Int, shuffle: Bool, seed: UInt64, curve: FP, condition: Int, otherwise: Int) raises -> Tuple[Int, Int]:
+     return train_program_control(s, pid, srcs, shapes, target, loss, delta, optimizer, parameters,
+                                 epochs, batch, shuffle, seed, curve, condition, otherwise)
+ 
+diff --git a/providers/python/autograd_ops_frontend_pyapi.mojo b/providers/python/autograd_ops_frontend_pyapi.mojo
+index ebd23abf1e..11aa70708b 100644
+--- a/providers/python/autograd_ops_frontend_pyapi.mojo
++++ b/providers/python/autograd_ops_frontend_pyapi.mojo
+@@ -9,7 +9,7 @@ from providers.python.autograd_python_errors_pyapi import graph_int
+ from sequence.exec_trait import Exec
+ from sequence.ops import FP
+ from autograd.ops_api import ops_session, ops_session_registry_token
+-from providers.python.autograd_program_pyapi import program_input, _integer, ops_program_fit_native_py, ops_program_execute_py, fit_stop_options
++from providers.python.autograd_program_pyapi import program_input, _integer, ops_program_fit_native_py, ops_program_execute_py
+ from autograd.ops_frontend_impl import session_split, clip_low_unbounded, clip_high_unbounded
+ from providers.python.autograd_program_arrays_pyapi import output_array, is_integer_input, uint64_input, program_admit_value, program_numeric_scalar
+ from providers.python.autograd_pyapi import program_info, ops_profile_reset_py, ops_profile_report_py
+@@ -466,10 +466,9 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
+             condition = _int(args[1]._id, "condition", 1)
+             otherwise = _int(args[2]._id, "otherwise", 1)
+         var options = args[5]
+-        var stop = fit_stop_options(options)
+         var result = ops_program_fit_native_py[E, KIND](
+             sid, program._id, args[3], args[4], options[0], options[1], options[2], options[3],
+-            options[4], options[5], options[6], options[7], condition, otherwise, stop[0], stop[1])
++            options[4], options[5], options[6], options[7], condition, otherwise)
+         py_setattr(program, "loss_curve_", result[0])
+         py_setattr(program, "n_iter_", result[1])
+         if op == _SOP_FIT_IF:
+diff --git a/providers/python/autograd_program_public_dispatch_pyapi.mojo b/providers/python/autograd_program_public_dispatch_pyapi.mojo
+index 98574d6823..4238e9284c 100644
+--- a/providers/python/autograd_program_public_dispatch_pyapi.mojo
++++ b/providers/python/autograd_program_public_dispatch_pyapi.mojo
+@@ -9,7 +9,7 @@ from autograd.ops_api import ops_session
+ from autograd.control_checkpoint import control_save
+ from providers.python.autograd_program_owner_pyapi import program_owner_fields, program_native_sequence, program_release_fields
+ from providers.python.autograd_program_arrays_pyapi import program_numeric_scalar, program_admit_value, uint64_input
+-from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, fit_stop_options, _integer
++from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, _integer
+ from providers.python.autograd_program_control_pyapi import ops_program_control_py, ops_program_decode_py
+ from providers.python.autograd_program_control_grad_pyapi import ops_program_control_vjp_py
+ from providers.python.autograd_program_save_pyapi import ops_program_save_fields_py
+@@ -102,9 +102,8 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
+             return ops_program_control_vjp_py[E, KIND](sid, pid,
+                 Python.tuple(sid, condition, sid, other, args[5], args[6]), args[2], limit)
+         if name == "while_loop":
+-            # args[5]: check_every (None = 0: the loop's chunk rule, lane x1b),
+-            # args[6]: iteration (None = False)
+-            var every = 0
++            # args[5]: check_every (None = 1), args[6]: iteration (None = False)
++            var every = 1
+             if args[5] is not None:
+                 every = _integer(args[5], "check_every", 1)
+             var iteration = False
+@@ -119,8 +118,7 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
+         _arguments(args, 5)
+         program_native_sequence(args[0])
+         var n = PythonObject(_integer(args[1], "n", 0))
+-        # unroll None = 0: the loop's chunk rule (lane x1b)
+-        var unroll = 0 if args[2] is None else _integer(args[2], "unroll", 1)
++        var unroll = _integer(args[2], "unroll", 1)
+         _option(args[3])
+         if args[4] is not None and py_type(args[4]) is not py_type(Python.dict()):
+             raise Error("TypeError: decode state must be a dict of state handle -> array, or None")
+@@ -134,7 +132,7 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
+             otherwise = Int(py=_component(args[1], session))
+         program_native_sequence(args[2])
+         var options = args[4]
+-        _arguments(options, 10)
++        _arguments(options, 8)
+         program_admit_value(options)
+         if py_type(options[2]) is not py_type(PythonObject("")):
+             raise Error("TypeError: Program loss requires an exact native string")
+@@ -142,10 +140,9 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
+         _option(options[7])
+         var replaced = Python.tuple("loss_curve_", "n_iter_", "branch_counts_") if name == "fit_if" else Python.tuple("loss_curve_", "n_iter_")
+         program_release_fields(output_fields, replaced)
+-        var stop = fit_stop_options(options)
+         var result = ops_program_fit_native_py[E, KIND](sid, pid, args[2], args[3],
+             options[0], options[1], options[2], options[3], options[4], options[5], options[6], options[7],
+-            condition, otherwise, stop[0], stop[1])
++            condition, otherwise)
+         py_setitem(output_fields, "loss_curve_", result[0])
+         py_setitem(output_fields, "n_iter_", result[1])
+         if name == "fit_if":
+diff --git a/providers/python/autograd_program_pyapi.mojo b/providers/python/autograd_program_pyapi.mojo
+index 68f1fe012a..ecada5e375 100644
+--- a/providers/python/autograd_program_pyapi.mojo
++++ b/providers/python/autograd_program_pyapi.mojo
+@@ -403,22 +403,12 @@ def _integer(v: PythonObject, what: String, low: Int) raises -> Int:
+     return value
+ 
+ 
+-def fit_stop_options(options: PythonObject) raises -> Tuple[Float32, Int]:
+-    """Program.fit's stopping options (lane x1b), options[8] `tol` and
+-    options[9] `n_iter_no_change` when the tuple carries them: tol None is
+-    no criterion (n_iter_no_change 0, every epoch runs)."""
+-    if len(options) < 10 or options[8] is None:
+-        return (Float32(0.0), 0)
+-    return (Float32(py=options[8]), _integer(options[9], "n_iter_no_change", 1))
+-
+-
+ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
+     sid: PythonObject, pid: PythonObject, arrays: PythonObject, targets: PythonObject,
+     optimizer: PythonObject, parameters: PythonObject, loss: PythonObject,
+     epochs: PythonObject, batch_size: PythonObject, shuffle: PythonObject,
+     seed: PythonObject, delta: PythonObject,
+     condition_id: Int = 0, otherwise_id: Int = 0,
+-    tol: Float32 = Float32(0.0), n_iter_no_change: Int = 0,
+ ) raises -> PythonObject:
+     # One public binding call owns option parsing as well as the entire
+     # upload/shuffle/batch/backward/update path. Old packed ABI stays usable.
+@@ -468,19 +458,14 @@ def ops_program_fit_native_py[E: Exec & Movable & Deinitable, KIND: Int](
+     var branches = program_fit_native[E, KIND](
+         Int(py=sid), Int(py=pid), owners^, target_owners^, kind, Float32(py=delta), opt, params, count, batch,
+         Bool(py=shuffle), seed_word, FP(unsafe_from_address=Int(py=curve.__array_interface__["data"][0])),
+-        condition_id, otherwise_id, tol, n_iter_no_change,
++        condition_id, otherwise_id,
+     )
+     _ = arrays  # descriptors borrow external inputs through the whole native fit
+     _ = targets
+-    var ran = branches[2]
+-    var out = Python.list()
+-    if ran < count:
+-        # an early stop: the curve of the epochs that ran (a view, no copy)
+-        _ = py_call(out.append, py_call(curve.__getitem__, py_call(b.slice, PythonObject(0), PythonObject(ran))))
+-    else:
+-        _ = py_call(out.append, curve)
+     _ = curve
+-    _ = py_call(out.append, PythonObject(ran))
++    var out = Python.list()
++    _ = py_call(out.append, curve)
++    _ = py_call(out.append, PythonObject(count))
+     if condition_id > 0:
+         var counts = b.dict()
+         py_setitem(counts, "true", branches[0])
+diff --git a/python/mojolearn/ops.py b/python/mojolearn/ops.py
+index 5ea30b04c5..3bac013051 100644
+--- a/python/mojolearn/ops.py
++++ b/python/mojolearn/ops.py
+@@ -1403,7 +1403,7 @@ class Program:
+         """Differentiate the executed loop iterations against final output seeds."""
+         return _PROGRAM_CALL(self, "vjp_while", (condition, None, arrays, max_iterations, False, seeds, parameters))
+ 
+-    def while_loop(self, *arrays, condition, max_iterations, optimize=False, check_every=None, iteration=False):
++    def while_loop(self, *arrays, condition, max_iterations, optimize=False, check_every=1, iteration=False):
+         """Apply this state graph while the scalar condition holds, up to a limit.
+ 
+         The loop runs on the device: the state arrays are uploaded once and
+@@ -1422,14 +1422,12 @@ class Program:
+             The most body applications, at most 16777216.
+         optimize : bool
+             Optimize the component graphs before running.
+-        check_every : int or None
++        check_every : int
+             Iterations between two reads of the loop's status on the host.
+             Larger values wait less on the device; up to ``check_every - 1``
+             extra iterations may be computed after the stop and are
+-            discarded, including their writes to state tensors
+-            (:meth:`Session.state`), so the result is the same for every
+-            value. Above 1, the body must keep each state array's shape.
+-            None lets the loop choose from the body's cost.
++            discarded, so the result is the same for every value. Above 1,
++            the body must keep each state array's shape.
+         iteration : bool
+             When true, this graph and the condition take one more input, a
+             single value holding the number of iterations completed so far.
+@@ -1448,7 +1446,7 @@ class Program:
+         return _PROGRAM_CALL(self, "while_loop", (condition, None, arrays, max_iterations, optimize,
+                                                   check_every, iteration))
+ 
+-    def decode(self, *arrays, n, state=None, unroll=None, iteration=False):
++    def decode(self, *arrays, n, state=None, unroll=1, iteration=False):
+         """Generate ``n`` steps with this graph, on the device, in one call.
+ 
+         The graph maps the current tokens (its first input, an ids input)
+@@ -1468,10 +1466,9 @@ class Program:
+         state : dict or None
+             Values written into the session's state tensors before the first
+             step, as ``{handle: array}``; None keeps the state they hold.
+-        unroll : int or None
++        unroll : int
+             Steps enqueued between two reads of the loop's status on the
+-            host. The result is the same for every value. None lets the loop
+-            choose (a fixed step count reads almost only at the end).
++            host. The result is the same for every value.
+         iteration : bool
+             When true, this graph takes one more input, the number of steps
+             completed so far (an integer when that input is an ids input).
+@@ -1491,8 +1488,7 @@ class Program:
+         return _PROGRAM_CALL(self, "decode", (arrays, n, unroll, iteration, state))
+ 
+     def fit(self, *arrays, targets=None, optimizer, parameters=None, loss="mse",
+-            epochs=10, batch_size=32, shuffle=True, seed=0, huber_delta=1.0,
+-            tol=None, n_iter_no_change=5):
++            epochs=10, batch_size=32, shuffle=True, seed=0, huber_delta=1.0):
+         """Train this captured graph in one native call.
+ 
+         Parameters
+@@ -1520,20 +1516,12 @@ class Program:
+             Seed of the row order; reuse it when continuing training.
+         huber_delta : float
+             Transition point for the Huber loss.
+-        tol : float or None
+-            Stopping criterion. When not None, training stops once the
+-            epoch loss has not fallen below the best loss so far minus
+-            ``tol`` for ``n_iter_no_change`` epochs in a row. None runs
+-            every epoch.
+-        n_iter_no_change : int
+-            Epochs without improvement before stopping, used with ``tol``.
+ 
+         Returns
+         -------
+         Program
+             This model, with ``loss_curve_`` holding this call's epoch
+-            losses and ``n_iter_`` the epochs run. Parameters and optimizer
+-            state stay in the session.
++            losses. Parameters and optimizer state stay in the session.
+ 
+         Examples
+         --------
+@@ -1541,21 +1529,20 @@ class Program:
+         >>> model.fit(X, targets=y, optimizer=opt, epochs=20)
+         """
+         return _PROGRAM_CALL(self, "fit", (None, None, arrays, targets,
+-            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta, tol, n_iter_no_change)))
++            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta)))
+ 
+     def fit_if(self, condition, otherwise, *arrays, targets=None, optimizer,
+                parameters=None, loss="mse", epochs=10, batch_size=32,
+-               shuffle=True, seed=0, huber_delta=1.0, tol=None, n_iter_no_change=5):
++               shuffle=True, seed=0, huber_delta=1.0):
+         """Train the branch selected by a scalar predicate for each minibatch.
+ 
+         Components belong to one session and accept the same input ranks and
+         kinds. The predicate is discrete. Shared parameters have one optimizer
+         state; parameters absent from the selected branch are unchanged.
+         Returns this program with epoch losses and per-call branch counts.
+-        ``tol`` and ``n_iter_no_change`` stop training early as in :meth:`fit`.
+         """
+         return _PROGRAM_CALL(self, "fit_if", (condition, otherwise, arrays, targets,
+-            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta, tol, n_iter_no_change)))
++            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta)))
+ 
+     def partition(self, devices=(0,), *, stages=2, tensor_shards=1,
+                   microbatches=2, optimizer, parameters=(), seed=0):

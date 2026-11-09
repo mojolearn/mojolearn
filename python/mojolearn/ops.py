@@ -1403,7 +1403,7 @@ class Program:
         """Differentiate the executed loop iterations against final output seeds."""
         return _PROGRAM_CALL(self, "vjp_while", (condition, None, arrays, max_iterations, False, seeds, parameters))
 
-    def while_loop(self, *arrays, condition, max_iterations, optimize=False, check_every=1, iteration=False):
+    def while_loop(self, *arrays, condition, max_iterations, optimize=False, check_every=None, iteration=False):
         """Apply this state graph while the scalar condition holds, up to a limit.
 
         The loop runs on the device: the state arrays are uploaded once and
@@ -1422,12 +1422,14 @@ class Program:
             The most body applications, at most 16777216.
         optimize : bool
             Optimize the component graphs before running.
-        check_every : int
+        check_every : int or None
             Iterations between two reads of the loop's status on the host.
             Larger values wait less on the device; up to ``check_every - 1``
             extra iterations may be computed after the stop and are
-            discarded, so the result is the same for every value. Above 1,
-            the body must keep each state array's shape.
+            discarded, including their writes to state tensors
+            (:meth:`Session.state`), so the result is the same for every
+            value. Above 1, the body must keep each state array's shape.
+            None lets the loop choose from the body's cost.
         iteration : bool
             When true, this graph and the condition take one more input, a
             single value holding the number of iterations completed so far.
@@ -1446,7 +1448,7 @@ class Program:
         return _PROGRAM_CALL(self, "while_loop", (condition, None, arrays, max_iterations, optimize,
                                                   check_every, iteration))
 
-    def decode(self, *arrays, n, state=None, unroll=1, iteration=False):
+    def decode(self, *arrays, n, state=None, unroll=None, iteration=False):
         """Generate ``n`` steps with this graph, on the device, in one call.
 
         The graph maps the current tokens (its first input, an ids input)
@@ -1466,9 +1468,10 @@ class Program:
         state : dict or None
             Values written into the session's state tensors before the first
             step, as ``{handle: array}``; None keeps the state they hold.
-        unroll : int
+        unroll : int or None
             Steps enqueued between two reads of the loop's status on the
-            host. The result is the same for every value.
+            host. The result is the same for every value. None lets the loop
+            choose (a fixed step count reads almost only at the end).
         iteration : bool
             When true, this graph takes one more input, the number of steps
             completed so far (an integer when that input is an ids input).
@@ -1488,7 +1491,8 @@ class Program:
         return _PROGRAM_CALL(self, "decode", (arrays, n, unroll, iteration, state))
 
     def fit(self, *arrays, targets=None, optimizer, parameters=None, loss="mse",
-            epochs=10, batch_size=32, shuffle=True, seed=0, huber_delta=1.0):
+            epochs=10, batch_size=32, shuffle=True, seed=0, huber_delta=1.0,
+            tol=None, n_iter_no_change=5):
         """Train this captured graph in one native call.
 
         Parameters
@@ -1516,12 +1520,20 @@ class Program:
             Seed of the row order; reuse it when continuing training.
         huber_delta : float
             Transition point for the Huber loss.
+        tol : float or None
+            Stopping criterion. When not None, training stops once the
+            epoch loss has not fallen below the best loss so far minus
+            ``tol`` for ``n_iter_no_change`` epochs in a row. None runs
+            every epoch.
+        n_iter_no_change : int
+            Epochs without improvement before stopping, used with ``tol``.
 
         Returns
         -------
         Program
             This model, with ``loss_curve_`` holding this call's epoch
-            losses. Parameters and optimizer state stay in the session.
+            losses and ``n_iter_`` the epochs run. Parameters and optimizer
+            state stay in the session.
 
         Examples
         --------
@@ -1529,20 +1541,21 @@ class Program:
         >>> model.fit(X, targets=y, optimizer=opt, epochs=20)
         """
         return _PROGRAM_CALL(self, "fit", (None, None, arrays, targets,
-            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta)))
+            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta, tol, n_iter_no_change)))
 
     def fit_if(self, condition, otherwise, *arrays, targets=None, optimizer,
                parameters=None, loss="mse", epochs=10, batch_size=32,
-               shuffle=True, seed=0, huber_delta=1.0):
+               shuffle=True, seed=0, huber_delta=1.0, tol=None, n_iter_no_change=5):
         """Train the branch selected by a scalar predicate for each minibatch.
 
         Components belong to one session and accept the same input ranks and
         kinds. The predicate is discrete. Shared parameters have one optimizer
         state; parameters absent from the selected branch are unchanged.
         Returns this program with epoch losses and per-call branch counts.
+        ``tol`` and ``n_iter_no_change`` stop training early as in :meth:`fit`.
         """
         return _PROGRAM_CALL(self, "fit_if", (condition, otherwise, arrays, targets,
-            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta)))
+            (optimizer, parameters, loss, epochs, batch_size, shuffle, seed, huber_delta, tol, n_iter_no_change)))
 
     def partition(self, devices=(0,), *, stages=2, tensor_shards=1,
                   microbatches=2, optimizer, parameters=(), seed=0):
