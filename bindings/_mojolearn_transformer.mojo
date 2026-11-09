@@ -272,6 +272,7 @@ from transformer.transformer_binding_impl import (
     _session_open_run,
     _session_open_run_int15,
     _session_step_run,
+    _session_decode_run,
     _session_forward_run,
     _session_export_run,
     _session_load_run,
@@ -1076,6 +1077,41 @@ def transformer_decode_session_step_binding(
     return PythonObject(out_len)
 
 
+def transformer_decode_session_decode_binding(
+    session: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`N` decode tokens per row on an open session in one call (decode plan
+    D2): `addrs` = [x, y_out], both B * N * d_model float32 in (B, N, d_model)
+    order; `params` = [N, cached_tokens], the position refused on a mismatch
+    as the step refuses it. Bytes equal N `transformer_decode_session_step`
+    calls. Returns the post-call cached_tokens."""
+    var owner = session.downcast_value_ptr[TransformerDecodeSession]()
+    if len(addrs) != 2 or len(params) != 2:
+        raise Error("transformer_decode_session_decode: expected 2 addresses and 2 scalars")
+    var px = Int(py=addrs[0])
+    var py = Int(py=addrs[1])
+    if px == 0 or py == 0:
+        raise Error("transformer_decode_session_decode: null buffer address")
+    var n = Int(py=params[0])
+    var claimed = Int(py=params[1])
+    _require_session_open(owner[])
+    if owner[].kv.value().s != claimed:
+        raise Error(
+            String("transformer decode session: the caller believes cached_tokens = ") + String(claimed)
+            + " but the resident cache holds " + String(owner[].kv.value().s))
+    owner[].busy = True
+    var out_len = 0
+    try:
+        with GILReleased(Python()):
+            out_len = _session_decode_run(owner[], px, py, n)
+    except error:
+        owner[].busy = False
+        owner[].usable = False
+        raise error
+    owner[].busy = False
+    return PythonObject(out_len)
+
+
 def transformer_decode_session_forward_binding(
     session: PythonObject, addrs: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
@@ -1669,6 +1705,7 @@ def build__mojolearn_transformer() -> PythonObject:
         # lane/lowbit-default: the resident sessions under numeric_profile="fixed15_v1".
         m.def_function[transformer_decode_session_open_int15_binding]("transformer_decode_session_open_int15")
         m.def_function[transformer_decode_session_step_binding]("transformer_decode_session_step")
+        m.def_function[transformer_decode_session_decode_binding]("transformer_decode_session_decode")
         m.def_function[transformer_decode_session_forward_binding]("transformer_decode_session_forward")
         m.def_function[transformer_decode_session_export_state_binding]("transformer_decode_session_export_state")
         m.def_function[transformer_decode_session_load_state_binding]("transformer_decode_session_load_state")
