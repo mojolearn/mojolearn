@@ -87,23 +87,28 @@ struct DeviceQueryX(Movable):
             raise Error("device query X: rows and columns must be positive, got "
                         + String(rows) + " x " + String(cols))
         var n = rows * cols
-        self.rows = rows
-        self.cols = cols
-        self.x = ctx.enqueue_create_buffer[DType.float32](n)
-        self.status = ctx.enqueue_create_buffer[DType.int32](2)
-        enqueue_fill[DType.int32](ctx, self.status, Int32(0))
+        # Built in locals, then moved into the fields (no field is read
+        # before every field is set).
+        var x = ctx.enqueue_create_buffer[DType.float32](n)
+        var status = ctx.enqueue_create_buffer[DType.int32](2)
+        enqueue_fill[DType.int32](ctx, status, Int32(0))
         if fold.active():
-            msel_device_x_f32(ctx, fold.base_id, fold.base_rows, cols, fold.index_id, rows, self.x,
-                              self.status.unsafe_ptr(), 0)
+            msel_device_x_f32(ctx, fold.base_id, fold.base_rows, cols, fold.index_id, rows, x,
+                              status.unsafe_ptr(), 0)
         else:
             if x_addr == 0:
                 raise Error("device query X: the query has a null address")
-            ctx.enqueue_copy(dst_buf=self.x, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=x_addr))
-            enqueue_finite_status(ctx, self.x.unsafe_ptr(), n, self.status.unsafe_ptr(), 0)
+            ctx.enqueue_copy(dst_buf=x, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=x_addr))
+            enqueue_finite_status(ctx, x.unsafe_ptr(), n, status.unsafe_ptr(), 0)
         # Read back with the entry's result: valid after its next
         # synchronisation (the stream orders this copy before the kernels).
-        self.words = ctx.enqueue_create_host_buffer[DType.int32](2)
-        ctx.enqueue_copy(dst_ptr=self.words.unsafe_ptr(), src_buf=self.status)
+        var words = ctx.enqueue_create_host_buffer[DType.int32](2)
+        ctx.enqueue_copy(dst_ptr=words.unsafe_ptr(), src_buf=status)
+        self.x = x^
+        self.status = status^
+        self.words = words^
+        self.rows = rows
+        self.cols = cols
 
     def finite_word(self) -> Int32:
         """1 when X held a NaN or an infinity (after a synchronisation)."""
