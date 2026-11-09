@@ -427,6 +427,8 @@ in the tables after the sections.
 | [`MOJOLEARN_MCD_FAST_G1_GRAM`](#mojolearn_mcd_fast_g1_gram) | Decomp (+ MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT, MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM) | NEUTRAL | 2026-11-08 | [MOJOLEARN_MCD_FAST_G1_GRAM.patch](../experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch) |
 | [`MOJOLEARN_MCD_ORDERED_COV`](#mojolearn_mcd_ordered_cov) | Decomp (+ x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) | NEUTRAL | 2026-11-08 | [MOJOLEARN_MCD_ORDERED_COV.patch](../experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch) |
 | [`MOJOLEARN_EIGH_FAST_PANEL_DF`](#mojolearn_eigh_fast_panel_df) | Decomp (+ MOJOLEARN_EIGH_FAST_PANEL_DF_OFF) | DROPPED-slower | 2026-11-08 | [MOJOLEARN_EIGH_FAST_PANEL_DF.patch](../experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch) |
+| [`door_rows_host` (DeviceRows door)](#devicerows-fold-download-and-host-scan-removed-2026-11-08) | Model selection folds (CV, search, learning_curve) | removed (R13: device gather, download, host scan, re-upload; `admit_x` reads the fold) | 2026-11-08 | [A5_DOOR_ROWS_HOST.patch](../experiments/removed/A5_DOOR_ROWS_HOST.patch) |
+| [`door_x` (DeviceRows door)](#devicerows-fold-download-and-host-scan-removed-2026-11-08) | Model selection folds | removed (zero callers; wrapper of `door_rows_host`) | 2026-11-08 | [A5_DOOR_ROWS_HOST.patch](../experiments/removed/A5_DOOR_ROWS_HOST.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3981,3 +3983,26 @@ release (the door is on every path) and the classical/trees/family test suites.
   `byte_lm_parallel_*` entries and no longer applies), and earlier in this batch `tools/kernel_pca_gpu_trial.py`,
   `tools/mcd_g1_quality.py`, `tools/mcd_ordered_quality.py`, `tools/mcd_ordered_pair.py`, `tools/eigh_panel_df_pair.py`
   with the code they drove.
+
+
+## DeviceRows fold download and host scan removed (2026-11-08)
+
+Lane `a5-admit-core-followup` (A0 follow-up of `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 3.2 steps 3-4;
+`docs/plans/REGRESSIONS_0866_VS_0855.md` rows R1, R4, R13), branch `lane/a5-admit-core-followup` from
+`origin/integ/pre-0867` `f7d10d2b09`. Not experiment defines; no A/B define.
+
+- Deleted: `door_rows_host` and `door_x` (`bindings/device_rows_door.mojo`). A model-selection fold's X
+  (`_arena_io.DeviceRows`) reached a host-address kernel as a device gather out of the resident base, a DOWNLOAD of
+  the rows, a host finiteness scan of them and the kernel's re-upload. `admit_x` (`bindings/admitted_input.mojo`
+  `_admitted_rows`) now reads the fold itself: with `device_x=True` it returns the handle (base, indices) with no host
+  words, for an entry that gathers on the device; otherwise it gathers the rows on the host straight out of the host
+  base in row tasks across the cores, finite-tested in the copy (`core/admitted_rows_gather.mojo`). `admit_rows_host`
+  is the array-returning form for a door that still hands its owners an array.
+- Bits: none. The fold rows are copied word for word in the same order as the device gather, so the same float32 bytes
+  reach the kernel. Refusals keep their wording; an out-of-range index is now refused at the door (`IndexError`).
+- Kept beside it (not deleted): `DoorRows`, `door_is_device_rows`. The glue connection `door_rows_call` is unused by
+  this module now; it goes when the last `materialize` caller (`providers/python/family_public_lifecycle_pyapi.mojo`,
+  lane A2) moves to `admit_x`.
+- Measurement owed (RUN OWED): `cross_validate`, GridSearchCV and RandomizedSearchCV of ridge, logistic and k-means on
+  NVIDIA and AMD, before (`f7d10d2b09`) and after.
+- Recoverable at `f7d10d2b09`; restore with `git apply experiments/removed/A5_DOOR_ROWS_HOST.patch`.
