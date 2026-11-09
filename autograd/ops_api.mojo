@@ -957,12 +957,13 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
 
         ints = [kind (OPT_SGD, OPT_ADAM or OPT_ADAMW), nesterov, schedule
         (autograd/model.mojo SCHED_*), step size]; fs = [lr, momentum,
-        beta1, beta2, eps, weight_decay, gamma]. The configuration is packed
-        as Sequential.compile packs it (sgd: f1 momentum, f2 0; adam and
-        adamw: f1 beta1, f2 beta2; f7 0), so the update's arguments are
-        model_fit's words."""
-        if len(ints) != OPS_OPT_INTS or len(fs) != OPS_OPT_FLOATS:
-            raise Error("ops: optimizer takes 4 integers and 7 floats")
+        beta1, beta2, eps, weight_decay, gamma] and optionally an eighth,
+        SGD's dampening (torch.optim.SGD; 0 when absent). The configuration
+        is packed as Sequential.compile packs it (sgd: f1 momentum, f2 0,
+        f7 dampening; adam and adamw: f1 beta1, f2 beta2; f7 0), so the
+        update's arguments are model_fit's words."""
+        if len(ints) != OPS_OPT_INTS or (len(fs) != OPS_OPT_FLOATS and len(fs) != OPS_OPT_FLOATS + 1):
+            raise Error("ops: optimizer takes 4 integers and 7 floats (8 with SGD dampening)")
         var kind = ints[0]
         if kind != OPT_SGD and kind != OPT_ADAM and kind != OPT_ADAMW:
             raise Error("ops: the optimizer must be sgd, adam or adamw")
@@ -973,6 +974,8 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var eps = fs[4]
         var wd = fs[5]
         var gamma = fs[6]
+        # lane x8-cnn-on-executor: CNNClassifier's SGD dampening on the session optimizer
+        var dampening = fs[OPS_OPT_FLOATS] if len(fs) > OPS_OPT_FLOATS else Float32(0)
         if not (lr > Float32(0)):
             raise Error("ops: the learning rate must be positive")
         if not (momentum >= Float32(0) and momentum < Float32(1)):
@@ -986,6 +989,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var nesterov = ints[1] != 0
         if nesterov and (kind != OPT_SGD or not (momentum > Float32(0))):
             raise Error("ops: Nesterov momentum needs sgd with momentum > 0")
+        if not (dampening >= Float32(0) and dampening <= Float32(1)):
+            raise Error("ops: dampening must be in [0, 1]")
+        if dampening != Float32(0) and (kind != OPT_SGD or nesterov):
+            raise Error("ops: dampening applies to sgd without Nesterov momentum")
         var sched = ints[2]
         if sched < SCHED_CONSTANT or sched > SCHED_EXPONENTIAL:
             raise Error("ops: unknown learning-rate schedule code " + String(sched))
@@ -996,7 +1003,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         var f1 = momentum if kind == OPT_SGD else beta1
         var f2 = Float32(0) if kind == OPT_SGD else beta2
         var flags = 1 if nesterov else 0
-        var cfg = optimizer_config_packed(kind, flags, f1, f2, eps, wd, Float32(0), lr)
+        var cfg = optimizer_config_packed(kind, flags, f1, f2, eps, wd, dampening, lr)
         var sched_step = ints[3] if sched == SCHED_STEP else 1
         self.opts.append(_OpsOptimizer(cfg, sched, sched_step, gamma, 0))
         # Failed control-checkpoint restore pops opts before its caller retires
