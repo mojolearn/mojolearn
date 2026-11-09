@@ -54,6 +54,12 @@ int32 word (`OP_LOOP_ITER_WORD`), so `take`/`index` can select token t of an upl
   the block with its stage rule (`rules_mamba`, `rules_mamba3`, `rules_transformer`) as a `Tape.custom_nd`
   node over the stage buffers; the step op keeps its stages per call (Mamba-2/3, L > 1) or resident (L = 1,
   Mamba-1 and attention), in `BlockStepScratch` entries (`_M1Block.stages`, `_AttnBlock.stages`).
+- Training through `OPS_ATTN_STEP` (lane x7-byte-lm-on-executor, 2026-11-09): in a RECORDING replay (Program.fit) the op
+  is a zero-state prefill at position 0 with its stages kept in the (weights, state, words) entry, recorded as one custom
+  node over [x, weights] with tag `ATTN_STEP_TAG` (108); `StepOpRules` (`autograd/rules_step_ops.mojo`, ImportRules plus
+  that tag) runs the transformer stage rule over the kept stages and writes d_x and the packed weights' gradient.
+  Program.fit backpropagates with StepOpRules; `grads_out` copies the last minibatch's gradients out. The byte LM trainer
+  (`training/byte_lm_program.mojo`) is the first family on it. The Mamba step ops still refuse a recording session.
 - Adding an op: one row in `_info`, one `_run_*` and one arm in `_step_run`; codes stay contiguous
   (`OPS_STEP_FIRST..OPS_STEP_LAST`); raise `PROGRAM_MAX_CODE` and name the op in
   `autograd/program_tools.mojo program_op_name`. No new `elif` in `_op_run_tensors`.
