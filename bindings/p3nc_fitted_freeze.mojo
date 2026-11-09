@@ -77,3 +77,27 @@ def fitted_freeze_foreign(value: PythonObject) raises -> Bool:
     except:
         return False
     return not Bool(py=flags.writeable)
+
+
+def fitted_freeze_sole_owner(value: PythonObject) raises -> Bool:
+    """The read-only rule for a caller's training matrix that a fit keeps
+    in place instead of copying (lane fix-c3-c5-no-copies, 0.8.66 regression
+    C3: 0.8.55 kept such a matrix as is). True, with the buffer frozen as
+    `fitted_freeze_foreign` freezes it, only when `value` owns its memory:
+    an exact mojolearn Array with no `_base` and no `_pin` (not a view of
+    another Array or of a foreign buffer), or an exact `numpy.ndarray` whose
+    `base` is None. A view could still be written through its writable
+    owner, so it is never frozen: False, and the caller keeps its copy.
+    Same caveat as the module note: a view taken from `value` before the
+    freeze keeps its own writeable flag."""
+    var array_cls = _array_class()
+    if array_cls is not None and py_type(value) is array_cls:
+        if value._base is not None or value._pin is not None:
+            return False
+        return fitted_freeze_any(value)
+    var numpy = py_get(native_loaded_module("sys").modules, "numpy")
+    if numpy is None or py_type(value) is not numpy.ndarray:
+        return False
+    if value.base is not None:
+        return False
+    return fitted_freeze_foreign(value)
