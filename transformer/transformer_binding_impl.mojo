@@ -241,14 +241,9 @@ def _btick(on: Bool, mut t: Int, name: String):
 # ===========================================================================
 
 
-def transformer_lean_stages(hd: Int) -> Bool:
-    """Whether this call may skip the `[B, n_heads, L, S]` attention stage
-    allocations: the fused attention path will be attempted (FAST or
-    IDENTICAL build, supported head_dim, not forced eager) and the trace is off here
-    always. The eager fallback grows the buffers on demand."""
-    if not fused_forward_supported_head_dim(hd):
-        return False
-    return attention_path_choice(PLANT_AT_NONE) != ATTN_PATH_EAGER
+# transformer_lean_stages and _lean_for live in transformer/lean_stages.mojo
+# (lane x4: the attention step op imports them without a cycle).
+from transformer.lean_stages import transformer_lean_stages, _lean_for
 
 
 
@@ -367,17 +362,6 @@ def _check_base_addrs(a: List[Int], slots: List[Int], what: String) raises:
     for i in range(len(slots)):  # small-loop(slots: a handful of base address slots): null checks on addresses, not data
         if a[slots[i]] == 0:
             raise Error(what + ": null buffer address at slot " + String(slots[i]))
-
-
-
-def _lean_for(hd: Int, opts: BlockOptions) -> Bool:
-    """`transformer_lean_stages`, and never lean under a softcap, which
-    forces the eager kernels (DEVIATION 2947); the eager fallback would
-    grow a lean struct anyway, so this is a cost choice, not a correctness
-    one."""
-    if opts.has_softcap():
-        return False
-    return transformer_lean_stages(hd)
 
 
 

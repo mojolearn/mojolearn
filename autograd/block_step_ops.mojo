@@ -75,7 +75,7 @@ from transformer.impl.llama.modeling_llama import (
     LlamaDims, LlamaDeviceWeights, LlamaKVCache, LlamaRopeTable, LlamaDeviceStages, llama_decoder_layer_forward,
 )
 from transformer.block_options import BlockOptions, BLOCK_OPTION_PARAMS
-from transformer.transformer_binding_impl import _lean_for
+from transformer.lean_stages import _lean_for
 
 # Session operation codes (autograd/ops_api.mojo OPS_*; autograd/program.mojo
 # PROGRAM_MAX_CODE covers them, record version 3).

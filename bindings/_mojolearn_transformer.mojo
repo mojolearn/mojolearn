@@ -225,6 +225,7 @@ from transformer.impl.llama.afn_apple_fast import AFN_ATTN_ARENA, afn_flash_call
 from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
 from transformer.session_native_dispatch import TRANSFORMER_NATIVE_API, transformer_session_forward_native
 
+from transformer.lean_stages import transformer_lean_stages, _lean_for
 # Typed kernel side of this shell (thin-shell move, pure, no bit change).
 from transformer.transformer_binding_impl import (
     _session_forward_tape_run,
@@ -237,11 +238,9 @@ from transformer.transformer_binding_impl import (
     _upload_addr,
     _download_addr,
     _btick,
-    transformer_lean_stages,
     _load_transformer_weights,
     _tail_of,
     _check_base_addrs,
-    _lean_for,
     _lean_for_w,
     _workspace_key,
     TransformerWorkspace,
