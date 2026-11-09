@@ -345,11 +345,11 @@ struct MambaBlockProgram(Movable):
 
 def _host_copy(addrs: List[Int], sizes: List[Int]) raises -> List[Float32]:
     var total = 0
-    for i in range(len(sizes)):  # small-loop(the block's weight pieces): layout arithmetic, no data
+    for i in range(len(sizes)):  # driver-loop: over the block's weight pieces (model structure), layout arithmetic
         total += sizes[i]
     var out = List[Float32](length=total, fill=Float32(0))
     var off = 0
-    for i in range(len(sizes)):  # small-loop(the block's weight pieces): one memcpy each
+    for i in range(len(sizes)):  # driver-loop: over the block's weight pieces (model structure), one memcpy each
         if sizes[i] > 0:
             memcpy(dest=out.unsafe_ptr() + off, src=f32_ptr(addrs[i]), count=sizes[i])
         off += sizes[i]
@@ -360,12 +360,12 @@ def _same_bits(addrs: List[Int], sizes: List[Int], host: List[Float32]) raises -
     """Whether the caller's pieces hold exactly the bytes of `host` (their
     concatenation): a byte compare, so NaN payloads and signed zeros count."""
     var total = 0
-    for i in range(len(sizes)):  # small-loop(the block's weight pieces): layout arithmetic, no data
+    for i in range(len(sizes)):  # driver-loop: over the block's weight pieces (model structure), layout arithmetic
         total += sizes[i]
     if total != len(host):
         return False
     var off = 0
-    for i in range(len(sizes)):  # small-loop(the block's weight pieces): one memcmp each
+    for i in range(len(sizes)):  # driver-loop: over the block's weight pieces (model structure), one memcmp of the caller's host bytes each
         if sizes[i] > 0 and memcmp(f32_ptr(addrs[i]), host.unsafe_ptr() + off, sizes[i]) != 0:
             return False
         off += sizes[i]
