@@ -153,8 +153,10 @@ from gbdt.methods.leaves_estimation.device_walker import (
     WALK_FOLD_BLOCK,
     WalkBuffers,
     count_nonzero_u32_kernel,
+    LEAF_STATUS_HOST_TAIL,
     device_walk_begin,
     device_walk_ctl_step,
+    device_walk_enqueue_bounded,
     device_walk_ctl_updated,
     device_walk_enqueue_line_search,
     device_walk_enqueue_speculative,
@@ -171,7 +173,7 @@ from gbdt.methods.leaves_estimation.device_walker import (
 )
 from std.memory import bitcast, memcpy
 from std.gpu import block_dim, block_idx, thread_idx
-from checks.soft_f64 import sf64_div, sf64_from_f32, sf64_from_int, sf64_neg
+from checks.soft_f64 import sf64_div, sf64_from_f32, sf64_from_int, sf64_mul, sf64_neg, sf64_to_f32
 from gbdt.methods.kernel.two_level_leaves import (
     TL_BLOCK,
     TL_GRID,
@@ -267,6 +269,7 @@ from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     DeviceLeafPartitioner,
     LeafPartition,
     compute_bins_for_model,
+    enqueue_partition_words_u32,
     partition_from_bins,
 )
 from ensemble.instruments import StageTimes as HostStageTimes
@@ -1323,6 +1326,238 @@ def finish_deferred_estimation(
     trace.record_list_f32(tail.leaf_tag, leaf_values)
     _ = tail^  # past the drain (step-33 race class, device side)
     return True
+
+
+# ===========================================================================
+# Tree op TREE_OP_LEAF_ESTIMATE (lane t1b-tree-leaf-and-node-ops, 2026-11-09;
+# docs/plans/EXECUTOR_T1_TREE_OPS.md section 2 and 5): `_estimate_and_apply`'s
+# single-dimensional device walk for ONE (partition, cursor) as an
+# enqueue-only op. What it removes from the round, against the call above:
+#   - the host pack of `leaf_offsets` / `sizes` and the two uploads
+#     (`h_po` / `h_ps`): the partition op's scanned words become `d_p_off` /
+#     `d_p_sz` on the device (`enqueue_partition_words_u32`);
+#   - the walk's drain after its first `iterations` line-search evaluations
+#     and its host read of the control word: the steps and the accept/stop
+#     decisions run in `walker_accept_kernel`, the stop's outcome is a
+#     status word (`device_walk_enqueue_bounded`);
+#   - the leaves' copy home (`h_est`) and the task's tail drain: the leaves
+#     stay in `leaf_out` (the model's values) and `leaf_scaled` (times the
+#     learning rate, TREE_OP_APPLY's input).
+# The kernels, their order and their inputs are `_estimate_and_apply`'s
+# device walk with two differences, both bit-inert: the oracle is told every
+# leaf may hold all `n_rows` rows (its two grid bounds, `row_bound` of the
+# weight fold and the shift-add width, are occupancy only: the full grid
+# gives the same bits, `compute_partition_stats`' docstring), and the rows of
+# each leaf are the partition op's order (ascending row id, the order
+# `partition_from_bins` gives every Depthwise / Lossguide task already).
+# ===========================================================================
+
+
+def _leaf_out_gated_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    est: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    learning_rate: Float32,
+    out: MutPointer[Float32, MutAnyOrigin],
+    scaled: MutPointer[Float32, MutAnyOrigin],
+):
+    """While the gate is open, one thread per leaf: `out[i] = est[i]` (the
+    model's leaf) and `scaled[i] = est[i] * learning_rate` as the correctly
+    rounded float product (`scaled_copy_kernel`'s statement, the model's
+    rescale). Past the stop both stay as the stopping round left them."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    var v = est.unsafe_load(i)
+    out.unsafe_store(i, v)
+    scaled.unsafe_store(
+        i, sf64_to_f32(sf64_mul(sf64_from_f32(v), sf64_from_f32(learning_rate)))
+    )
+
+
+struct LeafEstimateOpState(Movable):
+    """The op's buffers for one fit, made once before the loop: the
+    estimation workspace (gathers, `d_p_off` / `d_p_sz`, the walk, the
+    oracle's pooled device scratch) and the oracle's host staging, sized for
+    `n_leaves` (pass `1 << max_depth`) leaves of a single-dimensional
+    cursor. `sm` is the multiprocessor count, read once here (one
+    `get_attribute` costs ~1.3 ms on Metal)."""
+
+    var est_ws: List[TEstimationWorkspace]
+    var host: List[OracleHostScratch]
+    var n_rows: Int
+    var n_leaves: Int
+    var sm: Int
+    #: False until the first op filled the pooled `d_leaves` with
+    #: `[0, n_leaves)` (`make_bin_optimized_oracle`'s `leaves_ready`)
+    var leaves_ready: Bool
+    #: every leaf's row bound handed to the oracle (all `n_rows`)
+    var size_bound: List[Int]
+
+    def __init__(out self, ctx: DeviceContext, n_rows: Int, n_leaves: Int, sm_count: Int = -1) raises:
+        if n_rows <= 0 or n_leaves <= 0:
+            raise Error("LeafEstimateOpState: n_rows and n_leaves must be positive")
+        self.n_rows = n_rows
+        self.n_leaves = n_leaves
+        var sm = sm_count
+        if sm < 0:
+            sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        self.sm = sm
+        self.est_ws = List[TEstimationWorkspace]()
+        self.est_ws.append(TEstimationWorkspace(ctx, n_rows, 1, n_leaves, 1))
+        var fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+        self.host = List[OracleHostScratch]()
+        self.host.append(
+            OracleHostScratch(
+                n_leaves, 1, 1, fv_blocks,
+                ctx.enqueue_create_host_buffer[DType.uint32](n_leaves),
+                ctx.enqueue_create_host_buffer[DType.float32](n_leaves),
+                ctx.enqueue_create_host_buffer[DType.float32](fv_blocks),
+                ctx.enqueue_create_host_buffer[DType.float32](2 * n_leaves),
+                ctx.enqueue_create_host_buffer[DType.float32](n_leaves),
+                ctx.enqueue_create_host_buffer[DType.float32](2 * n_leaves),
+            )
+        )
+        self.leaves_ready = False
+        self.size_bound = List[Int](length=n_leaves, fill=n_rows)
+
+
+def tree_op_leaf_estimate_supported(
+    objective: Int, leaf_estimation_method: Int, approx_dim: Int
+) -> Bool:
+    """The tasks TREE_OP_LEAF_ESTIMATE restates: a single-dimensional
+    pointwise loss (no QueryRMSE / PairLogit / YetiRank grouping, no
+    multiclass family) under Newton or Gradient, weighted or not, any
+    iteration count. Every other task keeps `_estimate_and_apply`."""
+    return (
+        approx_dim == 1
+        and sym_objective_is_pointwise(objective)
+        and (
+            leaf_estimation_method == LEAF_ESTIMATION_NEWTON
+            or leaf_estimation_method == LEAF_ESTIMATION_GRADIENT
+        )
+    )
+
+
+def tree_op_leaf_estimate(
+    ctx: DeviceContext,
+    mut gate: DeviceBuffer[DType.int32],
+    mut state: LeafEstimateOpState,
+    mut parts: DeviceLeafPartitioner,
+    mut targets: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool,
+    mut cursor: DeviceBuffer[DType.float32],
+    objective: Int,
+    alpha: Float32,
+    estimator_alpha: Float32,
+    logloss_border: Float32,
+    l2_leaf_reg: Float32,
+    leaf_estimation_method: Int,
+    num_classes: Int,
+    iters: Int,
+    learning_rate: Float32,
+    mut leaf_out: DeviceBuffer[DType.float32],
+    mut leaf_scaled: DeviceBuffer[DType.float32],
+    mut status: DeviceBuffer[DType.int32],
+) raises:
+    """Tree op TREE_OP_LEAF_ESTIMATE (gbdt/tree_ops.mojo): one tree's leaves
+    estimated on the device from the partition TREE_OP_PARTITION left in
+    `parts` (row order `parts.vals`, offsets / sizes in `parts.d_part`) at
+    `cursor`, the walk's Newton (or Gradient) steps and their stop included.
+    Enqueue only: nothing is read back and nothing drains.
+
+    Writes `leaf_out[0, n_leaves)` (the model's leaves) and
+    `leaf_scaled[0, n_leaves)` (times `learning_rate`, TREE_OP_APPLY's
+    `leaf_values`), both behind the gate; the walk's buffers are round-local.
+    `cursor` is only read (the oracle walks its own gathered copy): the
+    round's cursor add is TREE_OP_APPLY's.
+
+    The status. `status[0]` is LEAF_STATUS_HOST_TAIL when the first `iters`
+    line-search evaluations accepted nothing, the walker's never-accepted
+    tail (`descent_helpers.cpp:179`, up to 100 halvings, one drain each).
+    Join the loop with `step_fail_joins_loop(ctx, words, status, it)` right
+    after the op: TREE_OP_APPLY and every carried op after it are then
+    gated off, so the cursors, the loss history and the detector are as
+    round `it - 1` left them; the driver restores the bootstrap seeds from
+    TREE_OP_SEED_SNAPSHOT, runs round `it` on the host-driven path
+    (`_estimate_and_apply`, which owns the tail) and restarts the device
+    loop at `it + 1`. Same bits as the host-driven fit either way.
+
+    Refuses (on the host, before enqueueing) a task outside
+    `tree_op_leaf_estimate_supported` or larger than `state`."""
+    if not tree_op_leaf_estimate_supported(objective, leaf_estimation_method, 1):
+        raise Error(
+            "tree_op_leaf_estimate: objective " + String(objective) + " / method "
+            + String(leaf_estimation_method) + " is not a single-dimensional pointwise Newton or Gradient walk"
+        )
+    var n_rows = state.n_rows
+    var n_leaves = state.n_leaves
+    if parts.n_rows_cap < n_rows or parts.n_leaves_cap < n_leaves:
+        raise Error("tree_op_leaf_estimate: the partitioner is smaller than the op state")
+    if len(leaf_out) < n_leaves or len(leaf_scaled) < n_leaves:
+        raise Error("tree_op_leaf_estimate: leaf_out / leaf_scaled hold fewer than " + String(n_leaves) + " leaves")
+    if iters < 1:
+        raise Error("tree_op_leaf_estimate: leaf_estimation_iterations must be positive")
+    var sm = state.sm
+    var leaves_ready = state.leaves_ready
+    var size_bound = state.size_bound.copy()
+    var host_ws = Optional(state.host[0].handles())
+    var oracle_ws = state.est_ws[0].oracle_scratch.take(
+        ctx, n_rows, n_leaves, objective, num_classes, sm, 0,
+    )
+    ref ws = state.est_ws[0]
+    # the partition's offsets and sizes, on the device (the host pack and
+    # its two uploads in `_estimate_and_apply`)
+    enqueue_partition_words_u32(ctx, parts, n_leaves, ws.d_p_off, ws.d_p_sz)
+    # target, weights and cursor into the partition's row order
+    launch_gather_with_mask_f32(ctx, ws.g_target, targets, parts.vals, n_rows, UInt32(0xFFFFFFFF))
+    if has_weights:
+        launch_gather_with_mask_f32(ctx, ws.g_weights, weights, parts.vals, n_rows, UInt32(0xFFFFFFFF))
+    launch_gather_planes_with_mask_f32(ctx, ws.g_cursor, cursor, parts.vals, n_rows, UInt32(0xFFFFFFFF), 1, n_rows)
+    var oracle = make_bin_optimized_oracle(
+        ctx, n_rows, n_leaves, size_bound,
+        ws.g_target.copy(), ws.g_weights.copy(), ws.g_cursor.copy(),
+        ws.d_p_off.copy(), ws.d_p_sz.copy(),
+        has_weights,
+        objective,
+        alpha,
+        estimator_alpha,
+        logloss_border,
+        Float64(l2_leaf_reg),
+        sm,
+        leaf_estimation_method,
+        num_classes,
+        None,
+        None,
+        None,
+        UInt64(0),
+        oracle_ws^,
+        # the weighted fold stays in `d_part_stats` for the walk to stash
+        defer_weights=has_weights,
+        host_scratch=host_ws^,
+        leaves_ready=leaves_ready,
+        weights_on_device=has_weights,
+    )
+    if not device_walk_supported(oracle, BACKTRACKING_ANY_IMPROVEMENT, n_leaves, ws.walk.cap):
+        raise Error("tree_op_leaf_estimate: the oracle is not a single-dimensional device walk")
+    var walk = ws.walk.handles()
+    device_walk_enqueue_bounded(ctx, oracle, walk, iters, gate, status)
+    var est = walk.result()
+    var blocks = (n_leaves + 255) // 256
+    ctx.enqueue_function[_leaf_out_gated_kernel](
+        gate.unsafe_ptr(), est.unsafe_ptr(), Int32(n_leaves), learning_rate,
+        leaf_out.unsafe_ptr(), leaf_scaled.unsafe_ptr(),
+        grid_dim=(blocks, 1, 1), block_dim=(256, 1, 1),
+    )
+    # Every buffer the queued launches read is a handle onto the fit's pool
+    # (`state`), so the oracle and the walk handles may die here, before the
+    # launches run: the memory lives in `state` (DEVIATION 3041 / 1890).
+    _ = walk^
+    _ = oracle^
+    state.leaves_ready = True
 
 
 def _estimate_and_apply(
