@@ -3885,8 +3885,7 @@ def synthetic_images(n, n_classes=10, shape=(1, 28, 28), seed=SEED):
 # same order. The conductor now runs `ours-init` under OUR interpreter before the race: it builds
 # ours' estimator with the lane's parameters and runs the same steps its fit runs first (the
 # InitStream draws, then the schedule seed), writes those weights and every epoch's row order
-# (the Feistel permutation below, checked against ours' own `x_cnn_epoch_rows` entry when the
-# binding has it) to one npz, and every torch arm loads it. No export, no torch arm: the arm is
+# (the Feistel permutation below, sequence/mlp.mojo op_mlp_perm) to one npz, and every torch arm loads it. No export, no torch arm: the arm is
 # refused by name. Results raced before this change were wrong for this lane; apply extra
 # scrutiny.
 
@@ -4033,21 +4032,9 @@ def feistel_order(n, seed, epoch, shuffle=True):
     return x.astype(np.int64)
 
 
-def _ours_epoch_rows(n, seed, epoch):
-    """Ours' own epoch order (the x_cnn binding's host entry `x_cnn_epoch_rows`), or None
-    when this build has no such entry. Used only to check feistel_order."""
-    np = _np()
-    try:
-        from mojolearn import _expansion_cnn as xc
-        b = xc._Layer()._binding()
-        if not hasattr(b, "x_cnn_epoch_rows"):
-            return None
-        out = np.empty(int(n), dtype=np.int32)
-        b.x_cnn_epoch_rows(out.ctypes.data, [int(n), int(epoch), 1, int(seed) & 0xFFFFFFFF,
-                                             (int(seed) >> 32) & 0xFFFFFFFF])
-        return out.astype(np.int64)
-    except Exception:  # noqa: BLE001  (no binding on this interpreter: unchecked, said so)
-        return None
+# TOMBSTONE: _ours_epoch_rows (the check against the x_cnn_epoch_rows entry) deleted 2026-11-09 by lane/x8-cnn-on-executor
+# with that entry: CNNClassifier trains through Program.fit, whose order is OP_MLP_PERM, the same Feistel order
+# (sequence/mlp.mojo op_mlp_perm) feistel_order restates.
 
 
 def ours_initial_state(lane, D):
@@ -4094,14 +4081,7 @@ def ours_initial_state(lane, D):
         raise ValueError("ours-init: lane %s (kind %s) has no exported init" % (lane, s["kind"]))
     orders = np.stack([feistel_order(n, seed, e, shuffle) for e in range(epochs)]) if epochs else \
         np.zeros((0, n), np.int64)
-    check = "not shuffled" if not shuffle else "unchecked (no x_cnn_epoch_rows entry)"
-    if shuffle and epochs:
-        got = _ours_epoch_rows(n, seed, 0)
-        if got is not None:
-            if not np.array_equal(got, orders[0]):
-                raise RuntimeError("ours-init: feistel_order differs from ours' x_cnn_epoch_rows "
-                                   "(epoch 0); the torch twin cannot follow ours' batches")
-            check = "epoch 0 equal to ours' x_cnn_epoch_rows"
+    check = "not shuffled" if not shuffle else "unchecked (op_mlp_perm restated by feistel_order)"
     meta = {"lane": lane, "kind": s["kind"], "n_rows": n, "epochs": int(epochs),
             "shuffle": bool(shuffle), "order_seed": str(seed), "order_check": check,
             "estimator": what, "mojolearn": getattr(ml, "__version__", "?"),
