@@ -128,23 +128,27 @@ def _t_sse(t: Team, x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, 
     return t.bcast(acc)
 
 
-def bayes_eig_host(t: Team, fw: FP, d: Int):
+def bayes_eig_host(t: Team, fw: FP, d: Int) -> Int:
     """The executor eigh op's host twin on G (fw[d, d + d^2)):
     `eigh_op_dense_host` (the round-robin Jacobi the device's
-    `eigh_op_dense` runs, the same words), placed by `bayes_eig_place`. An
-    unconverged solve keeps the answer as it stands (as the device column
-    off Apple; the old team Jacobi did the same)."""
+    `eigh_op_dense` runs, the same words), placed by `bayes_eig_place`.
+    Returns the unconverged count (1 when the solve raised): the caller
+    refuses the fit with BAYES_EIGH_REFUSAL, as every device column does
+    (lane m3-linalg-and-housekeeping: this kept the unconverged answer)."""
     var w = List[Float32](length=max(d, 1), fill=Float32(0))
     var v = List[Float32](length=max(d * d, 1), fill=Float32(0))
     var pw = FP(unsafe_from_address=Int(w.unsafe_ptr()))
     var pv = FP(unsafe_from_address=Int(v.unsafe_ptr()))
+    var bad = 0
     try:
-        _ = eigh_op_dense_host(fw + d, pw, pv, 1, d)
+        bad = eigh_op_dense_host(fw + d, pw, pv, 1, d)
     except:
-        pass
-    bayes_eig_place(t, fw, pw, pv, d)
+        bad = 1
+    if bad == 0:
+        bayes_eig_place(t, fw, pw, pv, d)
     _ = w^
     _ = v^
+    return bad
 
 
 def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
@@ -158,7 +162,12 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
     var sw = ldi(ip, 2) != 0
     var xm = 0
     var st3 = bayes_prep(t, x, y, n, d, ip, fp, res, fw, iw)
-    bayes_eig_host(t, fw, d)
+    if bayes_eig_host(t, fw, d) != 0:
+        # iw[0] (unused by BayesianRidge otherwise): the host entry
+        # (x_linear/x_linear_host_impl.mojo) raises BAYES_EIGH_REFUSAL
+        if t.lead():
+            sti(iw, 0, 1)
+        return
     var al = bayes_eig_prep(t, fw, fp, d, st3[0])
     var alpha = al[0]
     var lam = al[1]

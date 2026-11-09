@@ -66,7 +66,7 @@ from x_linear.sgd import sgd_perc_avg_on, sgd_perc_avg_from
 from x_linear.sgd_avg import sgd_avg_acc_kernel, sgd_avg_fin_kernel
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
 from x_linear.bayes import bayes_wy_part, bayes_wx_part, bayes_wgram_part, bayes_wxty_part, bayes_wvar_part, bayes_coef_one
-from x_linear.bayes import bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_place, bayes_eig_prep, bayes_yvar_part, GRAM_SSE_TRUST
+from x_linear.bayes import bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_place, bayes_eig_prep, bayes_yvar_part, GRAM_SSE_TRUST, BAYES_EIGH_REFUSAL
 from x_decomp.eigh_ops import eigh_op_dense
 from core.step_gate import step_gate_open_word
 from x_linear.classical_fold_stats import fold_stat_words, kfold_mean_cell, kfold_gram_cell, kfold_combine_unit
@@ -412,6 +412,17 @@ def bayes_coef_kernel(fw: FP, res: FP, d: Int32, state: FP, wf: IP, woff: Int32,
     if j < Int(d) and ld(state, 5) == Float32(0):
         st(res, j, bayes_coef_one(fw, Int(d), j, fd(ld(state, 1), ld(state, 0))))
     witness_end(wf, woff, nonce)
+
+def _bayes_eig_refused(ctx: DeviceContext, deig: DeviceBuffer[DType.int32]) raises -> Bool:
+    """BayesianRidge's eigh status word (`eigh_op_dense`'s, nonzero when the
+    Jacobi did not converge or met a NaN), read home: one word, one wait."""
+    var h = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=h, src_buf=deig)
+    ctx.synchronize()
+    var bad = Int(h.unsafe_ptr().unsafe_load(0)) != 0
+    _ = h^
+    return bad
+
 
 def bayes_eig_kernel(fw: FP, fp: FP, res: FP, ip: IP, d: Int32, nb: Int32, yparts: FP, vparts: FP, tw: FP,
                      state: FP, ew: FP, ev: FP, est: IP, wf: IP, woff: Int32, nonce: Int32):
@@ -5744,12 +5755,16 @@ def fit_device(
     var dstate = ctx.enqueue_create_buffer[DType.float32](C1_BAYES_STATE)
     var dyparts = ctx.enqueue_create_buffer[DType.float32](max(ynb, 1) if bayes_grid else 1)
     var dvparts = ctx.enqueue_create_buffer[DType.float32](max(ynb, 1) if bayes_grid else 1)
+    # the eigh op's status word (BayesianRidge on the grid): read once after
+    # the setup, so an unconverged solve is refused on every vendor
+    var deig = ctx.enqueue_create_buffer[DType.int32](1)
     var setup_tries = 0
     while True:
         dout.enqueue_fill(Float32(0))
         dfw.enqueue_fill(Float32(0))
         diw.enqueue_fill(Int32(0))
         dtw.enqueue_fill(Float32(0))
+        deig.enqueue_fill(Int32(0))
         var good = True
         comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
             if fast_gram:
@@ -5934,19 +5949,17 @@ def fit_device(
                 ctx.enqueue_copy(dst_buf=dg, src_buf=dfw.create_sub_buffer[DType.float32](d, d * d))
                 var dew = ctx.enqueue_create_buffer[DType.float32](d)
                 var dev_v = ctx.enqueue_create_buffer[DType.float32](d * d)
-                var dest = ctx.enqueue_create_buffer[DType.int32](1)
                 var egate = step_gate_open_word(ctx)
-                eigh_op_dense(ctx, egate, dg, dew, dev_v, dest, 1, d)
+                eigh_op_dense(ctx, egate, dg, dew, dev_v, deig, 1, d)
                 ctx.enqueue_function[bayes_eig_kernel](
                     dfw.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dip.unsafe_ptr(), Int32(d), Int32(ynb),
                     dyparts.unsafe_ptr(), dvparts.unsafe_ptr(), dtw.unsafe_ptr(), dstate.unsafe_ptr(),
-                    dew.unsafe_ptr(), dev_v.unsafe_ptr(), dest.unsafe_ptr(),
+                    dew.unsafe_ptr(), dev_v.unsafe_ptr(), deig.unsafe_ptr(),
                     wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=LINEAR_TPB,
                 )
                 _ = dg^
                 _ = dew^
                 _ = dev_v^
-                _ = dest^
                 _ = egate^
                 units = wo + 1
             else:
@@ -5960,7 +5973,16 @@ def fit_device(
             break
         setup_tries += 1
         if setup_tries >= WITNESS_TRIES:
+            # Apple: an unconverged eigh withholds the witness on every try;
+            # refuse it with the text every column raises, not the abort
+            if bayes_grid and _bayes_eig_refused(ctx, deig):
+                raise Error(BAYES_EIGH_REFUSAL)
             wit.fail()
+    # lane m3-linalg-and-housekeeping (2026-11-09): NVIDIA and AMD (no
+    # witness) went on with an unconverged eigendecomposition; one word read
+    if bayes_grid and _bayes_eig_refused(ctx, deig):
+        raise Error(BAYES_EIGH_REFUSAL)
+    _ = deig^
     if bayes_grid:
         var drows = ctx.enqueue_create_buffer[DType.float32](n)
         var dparts = ctx.enqueue_create_buffer[DType.float32](max(fold_blocks(n), 1))

@@ -241,6 +241,18 @@ def bayes_yvar(y: FP, n: Int) -> Float32:
     return fd(acc, i2f(n))
 
 
+#: The one refusal of an unconverged eigendecomposition of BayesianRidge's
+#: centered Gram (the executor eigh op's status word, or its host twin's
+#: unconverged count). Lane m3-linalg-and-housekeeping (2026-11-09): Apple
+#: raised (its Metal witness was withheld, then the witness abort) while
+#: NVIDIA, AMD and the host column went on with the unconverged answer; now
+#: every column raises this text.
+comptime BAYES_EIGH_REFUSAL = (
+    "mojolearn BayesianRidge: the eigendecomposition of the centered Gram matrix did not converge (or met a NaN);"
+    " an unconverged fit is refused, not returned"
+)
+
+
 #: Null-direction floor (FAST lane/apple-fast-bayesq, then every vendor,
 #: every mode and the host column in lane/fix-bayes-null, 2026-10-03):
 #: `bayes_eig_prep` drops the eigen-directions of the centered Gram below the
