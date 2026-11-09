@@ -1,0 +1,152 @@
+diff --git a/sequence/checks/oracle.mojo b/sequence/checks/oracle.mojo
+index 04147b21db..fc3fae74d0 100644
+--- a/sequence/checks/oracle.mojo
++++ b/sequence/checks/oracle.mojo
+@@ -242,8 +242,9 @@ def o_bptt_dw(dgx: List[Float32], x: List[Float32], T: Int, B: Int, GH: Int, D:
+ 
+ # ---------------------------------------------------------------- 5505
+ def o_ce(logits: List[Float32], labels: List[Int], B: Int, C: Int, scale: Float32, alt: Bool) -> List[Float32]:
+-    """grad (B C) of softmax cross entropy, the max first (op_ce stores no row loss since lane m1-followups-misc)."""
++    """[grad (B C), loss (B)] of softmax cross entropy, the max first."""
+     var grad = List[Float32]()
++    var loss = List[Float32]()
+     for b in range(B):
+         var base = b * C
+         var mx = _z(logits[base])
+@@ -254,12 +255,16 @@ def o_ce(logits: List[Float32], labels: List[Int], B: Int, C: Int, scale: Float3
+         for cc in range(C):
+             var c = C - 1 - cc if alt else cc
+             s = _a(s, _z(identical_exp(_s(logits[base + c], mx))))
++        var ls = _z(identical_log(s))
+         var y = labels[b]
++        loss.append(_s(ls, _s(logits[base + y], mx)))
+         for c in range(C):
+             var p = _d(_z(identical_exp(_s(logits[base + c], mx))), s)
+             if c == y:
+                 p = _s(p, Float32(1.0))
+             grad.append(_m(p, scale))
++    for i in range(len(loss)):
++        grad.append(loss[i])
+     return grad^
+ 
+ 
+diff --git a/sequence/checks/seams_check.mojo b/sequence/checks/seams_check.mojo
+index e0929af3b6..349695e953 100644
+--- a/sequence/checks/seams_check.mojo
++++ b/sequence/checks/seams_check.mojo
+@@ -393,7 +393,7 @@ def main() raises:
+     var ce = _both[OP_CE](hx, dx, [logits.copy(), lab.copy(), List[Float32](length=B6 * C6, fill=Float32(0.0)),
+                                    List[Float32](length=B6, fill=Float32(0.0))], [0, C6], [scale6], B6)
+     _check("5505_ce_expsum", o_ce(logits, labels, B6, C6, scale6, False), o_ce(logits, labels, B6, C6, scale6, True),
+-           ce.dev[2].copy(), ce.host[2].copy(), tr, fails)
++           _cat(ce.dev[2], ce.dev[3]), _cat(ce.host[2], ce.host[3]), tr, fails)
+ 
+     # ---- 5506 Adam, 64 parameters, step 3, L2 weight decay.
+     var n7 = 64
+diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index 3762517889..4b4061a623 100644
+--- a/sequence/ops.mojo
++++ b/sequence/ops.mojo
+@@ -800,17 +800,15 @@ def op_gather_rows(t: Int, a: Args):
+ 
+ 
+ def op_mse(t: Int, a: Args):
+-    """grad = (yhat - y) * f0 (the squared-error seed; the loss value is
+-    autograd/losses.mojo loss_value_into's). Lane m1-followups-misc deleted
+-    its unread p3 store of (yhat - y)^2."""
++    """grad = (yhat - y) * f0, sq = (yhat - y)^2."""
+     var d = sub(ld(a.p0, t), ld(a.p1, t))
+     st(a.p2, t, mul(d, a.f0))
++    st(a.p3, t, mul(d, d))
+ 
+ 
+ def op_ce(t: Int, a: Args):
+     """Softmax cross-entropy of row t: p0 logits [B, C], p1 labels [B] (as
+-    float), p2 grad [B, C] = (softmax - onehot) * f0 (lane m1-followups-misc
+-    deleted the unread p3 row-loss store; the loss value is loss_value_into's).
++    float), p2 grad [B, C] = (softmax - onehot) * f0, p3 row loss [B].
+     The max is subtracted first, so no exp overflows and the log reads a sum
+     >= 1; the max is the value, so a tie does not matter."""
+     var C = a.i1
+@@ -824,10 +822,13 @@ def op_ce(t: Int, a: Args):
+     var s = Float32(0.0)
+     comptime if SEQ_SOFTMAX_ONE_EXP:
+         # each exp once: parked in the grad row, read back for the division
++        var zy = ld(a.p0, base + y)
+         for c in range(C):
+             var e = ftz(identical_exp(sub(ld(a.p0, base + c), m)))
+             st(a.p2, base + c, e)
+             s = add(s, e)
++        var ls = ftz(identical_log(s))
++        st(a.p3, t, sub(ls, sub(zy, m)))
+         for c in range(C):
+             var p = ftz(identical_div(ld(a.p2, base + c), s))
+             if c == y:
+@@ -836,6 +837,8 @@ def op_ce(t: Int, a: Args):
+         return
+     for c in range(C):
+         s = add(s, ftz(identical_exp(sub(ld(a.p0, base + c), m))))
++    var ls = ftz(identical_log(s))
++    st(a.p3, t, sub(ls, sub(ld(a.p0, base + y), m)))
+     for c in range(C):
+         var p = ftz(identical_div(ftz(identical_exp(sub(ld(a.p0, base + c), m))), s))
+         if c == y:
+diff --git a/sequence/recurrent.mojo b/sequence/recurrent.mojo
+index 3f0d4424a3..e1f8b20bff 100644
+--- a/sequence/recurrent.mojo
++++ b/sequence/recurrent.mojo
+@@ -60,7 +60,7 @@ from autograd.optim import OptimizerState, optimizer_config_packed, step_lr
+ # change between versions, never keep a serial fold for old bits): each step's reported loss (losses[k]) comes
+ # from autograd/losses.mojo (loss_value_into: the squared-error terms or op_ce's row losses, term for term, then
+ # the tape's blocked fold with factor 1 / count) instead of sum_into's one-thread ascending OP_SUM (deleted).
+-# The gradient seed w.dy still comes from OP_MSE / OP_CE (gradient only: their unread loss stores are deleted). NEW BITS in losses[] only (every column together:
++# The gradient seed w.dy still comes from OP_MSE / OP_CE. NEW BITS in losses[] only (every column together:
+ # host, Metal, NVIDIA, AMD run the same fold); parameters unchanged. A/B owed: arm A f7d10d2b09 (OP_SUM), arm B dbab55bea7.
+ from autograd.losses import LossScratch, loss_scratch, release_loss_scratch, loss_value_into, REDUCTION_MEAN
+ from autograd.loss_ops import LS_MSE, LS_CROSS_ENTROPY
+@@ -262,6 +262,7 @@ struct Work(Movable):
+     var yb: FP
+     var yhat: FP
+     var dy: FP
++    var sq: FP
+     var one: FP
+     var wsplit: FP
+ 
+@@ -291,18 +292,15 @@ struct Work(Movable):
+         self.yb = ex.alloc(B * net.O)
+         self.yhat = ex.alloc(B * net.O)
+         self.dy = ex.alloc(B * net.O)
+-        # TOMBSTONE: w.sq (the squared-error / row-loss words OP_MSE and OP_CE stored and nothing read; the reported loss is
+-        # loss_value_into's) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+-        # Restore: git apply experiments/removed/SEQ_LOSS_SEED_UNREAD_STORES.patch
++        self.sq = ex.alloc(B * net.O)
+         comptime if SEQ_WGRAD_BLOCKED:
+             # the bias sums as ones^T dG (one fma by 1.0 per term, exact)
+             self.one = ex.alloc(1)
+             fill(ex, self.one, 1, Float32(1.0))
+             self.wsplit = ex.alloc(WGRAD_IDN_SCRATCH if train else 1)
+         else:
+-            # unread placeholders (the unblocked weight gradient takes no ones or split scratch)
+-            self.one = ex.alloc(1)
+-            self.wsplit = self.one
++            self.one = self.sq
++            self.wsplit = self.sq
+ 
+ 
+ # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by 9a9a8e3148; code recoverable at c3b7dc42e6^.
+@@ -500,6 +498,7 @@ def rnn_fit[E: Exec, //, S: RnnStep](
+             a.p0 = w.yhat
+             a.p1 = w.yb
+             a.p2 = w.dy
++            a.p3 = w.sq
+             a.f0 = Float32(2.0) / Float32(B * net.O)
+             ex.launch[OP_MSE](a, B * net.O)
+             loss_value_into(ex, LS_MSE, w.yhat, w.yb, B, net.O, REDUCTION_MEAN, dloss + k, loss_ws)
+@@ -509,6 +508,7 @@ def rnn_fit[E: Exec, //, S: RnnStep](
+             a.p0 = w.yhat
+             a.p1 = w.yb
+             a.p2 = w.dy
++            a.p3 = w.sq
+             a.i0 = B
+             a.i1 = net.O
+             a.f0 = Float32(1.0) / Float32(B)
