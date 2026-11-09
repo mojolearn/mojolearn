@@ -104,6 +104,6 @@ def family_max_f32(src: MutPointer[Float32, MutUntrackedOrigin], count: Int) -> 
     return _family_extreme[False](src, count)
 
 
-def family_fill_i32(out_buf: MutPointer[Int32, MutUntrackedOrigin], n: Int, value: Int32):
-    for i in range(n):  # native output marshaling: one constant label per row
-        out_buf[i] = value
+# TOMBSTONE: family_fill_i32 (a serial constant-label fill) deleted 2026-11-09 by lane a6-device-x-family-classical; code recoverable at f59d913b0b.
+# Restore: experiments/removed/A6_FAMILY_FILL_I32.patch. core/admitted_weights.mojo
+# admitted_fill[DType.int32] fills in row tasks across the host's cores.

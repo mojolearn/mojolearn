@@ -15,7 +15,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from bindings.classical_arrays import (
     classical_address, classical_wrap_array, classical_c_bytes, classical_is_f32, classical_c_order,
 )
-from core.family_cast_impl import family_fill_i32
+from core.admitted_weights import admitted_fill
 from core.host_finite_scan import host_all_finite_f32
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_loaded_module import native_loaded_module, NativeModules
@@ -259,7 +259,7 @@ def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonOb
     var n_core = Int(py=components.shape[0])
     if n_core == 0:
         var labels = family_array(Python.tuple(nq), "<i4", context)
-        family_fill_i32(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, -1)
+        admitted_fill[DType.int32](FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, Int32(-1))
         _ = labels  # keep the Python object alive through the native call above
         return labels
     var metric_name = py_call(py_call(b.str, native_fitted_get(mods, model, "metric")).lower)
@@ -391,7 +391,7 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
             var labels = family_array(Python.tuple(Int(py=x.shape[0])), "<i4", context)
             var words = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels)))
             _ = labels  # keep the Python object alive through the native call above
-            family_fill_i32(words, Int(py=x.shape[0]), -1)
+            admitted_fill[DType.int32](words, Int(py=x.shape[0]), Int32(-1))
             _ = labels  # keep the Python object alive through the native call above
             return labels
         return _xc_nearest(model, binding, x, centers, context)

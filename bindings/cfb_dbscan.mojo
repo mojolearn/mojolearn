@@ -13,7 +13,7 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields
 from bindings.classical_arrays import classical_address, classical_wrap_array, classical_is_array
-from core.family_cast_impl import family_fill_i32
+from core.admitted_weights import admitted_fill
 from core.host_finite_scan import host_all_finite_f32
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_array, family_min, family_field,
@@ -234,7 +234,7 @@ def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonOb
     var n_core = Int(py=components.shape[0])
     if n_core == 0:
         var labels = family_array(Python.tuple(nq), "<i4", context)
-        family_fill_i32(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, -1)
+        admitted_fill[DType.int32](FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, Int32(-1))
         _ = labels  # keep the Python object alive through the native call above
         return labels
     var metric_name = py_call(py_call(b.str, family_raw_get(model, "metric")).lower)
