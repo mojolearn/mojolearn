@@ -2281,3 +2281,13 @@ Arms: A = define off (today's code), B = define on. Same bits required (scheduli
 | `MOJOLEARN_RSVD_FAST_DIRECT_IN` (+ `_OFF`) | randomized-svd / istella, taxi | lane/a3-admit-decomp-prep-metrics (code at f7d10d2b09) | M3 afc_ab_def e9d72edb5 (kept 2026-10-04) | 517.3 -> 501.3 (istella) | DELETED (superseded) | randomized_svd is one driver (x_decomp_randomized_svd) that reads M in place and uploads it once; no other input route is left. RUN OWED: randomized-svd NV/AMD. |
 | `MOJOLEARN_IDN_RSVD_DIRECT_IN` (+ `_OFF`) | randomized-svd / istella, taxi | lane/a3-admit-decomp-prep-metrics (code at f7d10d2b09) | g50ebe26a5 (_OFF arm 1.931x combined, kept) | - | DELETED (superseded) | as RSVD_FAST_DIRECT_IN: the one driver always takes the direct input. |
 | `MOJOLEARN_RSVD_FAST_DEVSCAN` (+ `_OFF`) | randomized-svd / istella, taxi | lane/a3-admit-decomp-prep-metrics (code at f7d10d2b09) | rab15-rsvdbundle (kept 2026-10-05) | 490.1 -> 435.1 (istella, with ORTH_WS) | DELETED (superseded) | it beat the serial host finiteness scan, which is gone: the one admission path scans in parallel on the host. RUN OWED: randomized-svd NV/AMD (and Apple FAST). |
+
+## SmallMLPTrainer on the executor (lane x2-small-mlp-on-executor, 2026-11-09)
+
+| define | algorithm / dataset | branch@sha | A/B tag | before -> after ms | verdict | reason |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_AFN_MLP_FUSED_STEP` | mlp-train-step (Apple FAST) | lane/x2-small-mlp-on-executor (code at f59d913b0b) | afn-mlp-fused | - | DELETED (superseded, unmeasured) | merged-unmeasured opt-in; the hand step it fused (mlp_train_step_host) is gone, SmallMLPTrainer runs as one captured program (plan row X2) |
+| `MOJOLEARN_AFN_MLP_RESIDENT` | mlp-train-step / mlp-predict (Apple FAST) | lane/x2-small-mlp-on-executor (code at f59d913b0b) | afn-mlp-resident | - | DELETED (superseded, unmeasured) | the program's session parameters are the resident copy; the second resident session goes |
+| `MOJOLEARN_AFN_MLP_MULTISTEP` | mlp-train-step (Apple FAST) | lane/x2-small-mlp-on-executor (code at f59d913b0b) | afn-mlp-multistep | - | DELETED (superseded, unmeasured) | train_steps now runs k program steps in one call on every vendor |
+| `MOJOLEARN_AFN_MLP_ALL` | mlp (Apple FAST) | lane/x2-small-mlp-on-executor (code at f59d913b0b) | afn-mlp-all | - | DELETED (superseded, unmeasured) | the umbrella of the three above |
+| `MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF` | mlp-train-step / gaussian | lane/x2-small-mlp-on-executor (code at f59d913b0b) | ge123e6f9 (leaf128 promoted for the MLP step) | NV 2.0 -> 1.7, AMD 3.5 -> 3.1 (old step) | DELETED (superseded) | its step is gone; the program's GEMMs are the tape linear's. RUN OWED: program vs 0.8.66 path on mlp-train-step and mlp-predict, NV and AMD |

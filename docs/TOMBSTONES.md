@@ -465,6 +465,12 @@ in the tables after the sections.
 | [`MOJOLEARN_RSVD_FAST_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, FAST + Apple) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_IDN_RSVD_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, IDENTICAL) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_RSVD_FAST_DEVSCAN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd finiteness scan, FAST + Apple) | removed (KEPT default, superseded: parallel host scan of the one admission path) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`MOJOLEARN_AFN_MLP_FUSED_STEP`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (Apple FAST small MLP fused step) | removed (superseded by the captured program; merged-unmeasured) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
+| [`MOJOLEARN_AFN_MLP_RESIDENT`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (Apple FAST small MLP resident session) | removed (superseded by the captured program; merged-unmeasured) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
+| [`MOJOLEARN_AFN_MLP_MULTISTEP`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (Apple FAST small MLP k-step session) | removed (superseded: train_steps on the program, every vendor) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
+| [`MOJOLEARN_AFN_MLP_ALL`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (Apple FAST small MLP umbrella) | removed (superseded) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
+| [`MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (small MLP step GEMM leaf) | removed (its step deleted; program A/B RUN OWED) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
+| [`mlp_train_step_host (hand step, tape rules, MOJOLEARN_MLP_FUSED=0 route)`](#smallmlptrainer-on-the-executor-2026-11-09) | Neural (SmallMLPTrainer) | removed (one path: the captured program, plan row X2) | 2026-11-09 | [MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch](../experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -4271,3 +4277,35 @@ lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Bits: none for any int32-range or
   lane/a3-admit-decomp-prep-metrics@0cb550c337.
 - `door_rows_call` (the `_arena_io._ROWS_CALL` connection in `_native_msel_dispatch.connect`): no reader after A5 deleted
   `door_rows_host`; removed from the glue and from tools/test_device_rows_door_cv.py.
+
+## SmallMLPTrainer on the executor (2026-11-09)
+
+Lane x2-small-mlp-on-executor, plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` row X2. `SmallMLPTrainer` now runs
+ONE path: a captured program on the executor (`autograd/small_mlp_program.mojo`, the x_sequence bindings' `small_mlp_program`
+entry): transpose, `OPS_LINEAR` (relu), transpose, `OPS_LINEAR`, then the mean cross-entropy, the tape backward and one AdamW
+`step_lr` per weight through the session optimizer; `predict_logits` is the same program with recording off. The four weights
+are the program's parameters (uploaded once, updated in place), so the session is the trainer's resident copy.
+
+What was deleted (all of it superseded by the program, none of it measured against it yet):
+
+- `training/mlp_ops.mojo::mlp_train_step_host`, its `_gemm` / `_MlpStepKernels` / `_max_ws` and the `MLP_GEMM_LEAF128` step
+  dispatch (`MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF`; grid ge123e6f9 had promoted leaf 128 for this step, NV 2.0 -> 1.7 ms, AMD
+  3.5 -> 3.1 ms, same bits), with `gemm/neural_dispatch.mojo::neural_model_leaf_into` (its only caller).
+- `autograd/rules_small_mlp.mojo` (the step's tape rules) and `training/checks/mlp_tape_step_check.mojo` + its digests
+  (`pixi run check-mlp-tape-step`, the `autograd-small-mlp-tape` smoke entry), `tools/mlp_step_check.py`.
+- `training/mlp_fast.mojo`: the Apple FAST fused step and resident session (`MOJOLEARN_AFN_MLP_FUSED_STEP`, `_RESIDENT`,
+  `_MULTISTEP`, `_ALL`; merged unmeasured, default off), the training binding's `mlp_train_step`, `mlp_resident_*` and
+  `mlp_sessions_resident` entries, and the `registry` argument of `nn_mlp_sessions_device`.
+- `training/small_mlp_dispatch.mojo` (the `small_mlp_api_v1` provider), the door's fused, per-operation
+  (`MOJOLEARN_MLP_FUSED=0`) and resident routes in `bindings/small_mlp_native.mojo`, and the parallel MLP worker's fused
+  gradient route (`bindings/parallel_mlp_native.mojo`; it takes the per-operation primitives, which stay).
+
+Bits: the small MLP's bits changed on every column together (one algorithm: the tape's linear, cross-entropy and OP_OPT
+bodies). Identity lane owed: `mlp` (and every lane that trains a SmallMLPTrainer: `par-mlp`; `neural-trainer-unfused`
+keeps its route). RUN OWED: mlp-train-step and mlp-predict, program vs the 0.8.66 path (0.971 ms on NV and AMD), one run
+per arm on NVIDIA and AMD.
+
+- Guard: `core/experiment_guards_neural.mojo` refuses the five defines; `mlp_gemm_leaf128` moved to `removed` in
+  `experiments/six_lane_integration/grid_controls/neural-gemm-attn-dedupe.json`; rows in `docs/apple-fast/EXPERIMENTS.md`.
+- Code recoverable at `f59d913b0b`; patch `experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch` (the reverse of the
+  lane's change to the code files; `git apply` restores the old routes and removes the program door).
