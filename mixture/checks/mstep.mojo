@@ -125,6 +125,7 @@ from cholesky.chol_ops import (
     chol_op_solve_lower,
 )
 from core.identity_trace import IdentityTrace
+from mixture.step_keep import GMM_KEEP_NK_LEVELS, GMM_KEEP_PAIR_DIFF, GMM_KEEP_PAIR_SCALED, GMM_KEEP_RESP_T, gmm_keep_buffer
 from core.gram_splitk import gemm_tn_splitk_into, gram_splitk_applies
 from std.math import log, sqrt
 from std.sys.compile import is_defined
@@ -2331,6 +2332,7 @@ def gmm_m_step(
     comp_tpb: Int = GMM_COMP_TPB,
     sabotage: Int = GMM_SAB_NONE,
     cov_lo_addr: Int = 0,
+    keep_addr: Int = 0,
 ) raises:
     """**THE M-STEP'S MOMENTS.** `_estimate_gaussian_parameters` plus the
     weight normalization, in scikit-learn's order.
@@ -2459,12 +2461,14 @@ def gmm_m_step(
         if nk_need <= n * d:
             gmm_nk_levels_launch(ctx, resp, nk, scaled, n, ncomp)
         else:
-            var nk_scratch = ctx.enqueue_create_buffer[DType.float32](nk_need)
+            # held by the EM loop's keep (mixture/step_keep.mojo): no drain
+            var nk_scratch = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_NK_LEVELS, nk_need)
             gmm_nk_levels_launch(ctx, resp, nk, nk_scratch, n, ncomp)
-            ctx.synchronize()
+            if keep_addr == 0:
+                ctx.synchronize()
             _ = nk_scratch^
     elif GMM_NK_T:
-        var resp_t = ctx.enqueue_create_buffer[DType.float32](n * ncomp)
+        var resp_t = gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_RESP_T, n * ncomp)
         ctx.enqueue_function[resp_transpose_kernel](
             resp.unsafe_ptr(), resp_t.unsafe_ptr(), Int32(n), Int32(ncomp),
             grid_dim=((n * ncomp + 255) // 256, 1, 1), block_dim=(256, 1, 1),
@@ -2475,7 +2479,8 @@ def gmm_m_step(
             grid_dim=(grid_comp, 1, 1),
             block_dim=(comp_tpb, 1, 1),
         )
-        ctx.synchronize()
+        if keep_addr == 0:
+            ctx.synchronize()
         _ = resp_t^
     else:
         ctx.enqueue_function[nk_kernel](
@@ -2606,8 +2611,8 @@ def gmm_m_step(
     comptime if GMM_CENTER_PAIR or C53_CENTER4:
         paired=sabotage==0 and not fast_gram and ncomp_loop>0 and n>0 and d>0 and n<=GMM_CENTER_CELLS//d
         if paired:
-            pair_buffers.append(ctx.enqueue_create_buffer[DType.float32](GMM_CENTER_GROUP*n*d))
-            pair_buffers.append(ctx.enqueue_create_buffer[DType.float32](GMM_CENTER_GROUP*n*d))
+            pair_buffers.append(gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_PAIR_DIFF, GMM_CENTER_GROUP*n*d))
+            pair_buffers.append(gmm_keep_buffer(ctx, keep_addr, GMM_KEEP_PAIR_SCALED, GMM_CENTER_GROUP*n*d))
     # Tried 2026-10-08 (MOJOLEARN_IDN_GMM_COV_SYM, run ge123e6f9): covariance as a two-GEMM cover of the upper triangle, mirrored;
     # NV/AMD gmm taxi 1.838/1.452, istella 0.966/0.978; taxi mean log-likelihood -0.78% -> slower and worse, deleted.
     # Code recoverable at main ad7ed2370; row in docs/apple-fast/EXPERIMENTS.md.
@@ -2694,8 +2699,8 @@ def gmm_m_step(
             grid_dim=(grid_dd, 1, 1),
             block_dim=(elem_tpb, 1, 1),
         )
-    if paired:
-        ctx.synchronize()  # pending pair scratch must outlive the last GEMM
+    if paired and keep_addr == 0:
+        ctx.synchronize()  # pending pair scratch must outlive the last GEMM (a keep holds it otherwise)
     _ = pair_buffers^
     trace.record_device(ctx, tag + ".covariances", cov, ncomp * d * d)
     if ph_on:
