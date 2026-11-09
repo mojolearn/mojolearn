@@ -23,6 +23,7 @@ from std.sys.compile import is_defined
 from checks.numerics import ftz, identical_div, identical_mul
 from x_cluster.minibatch_cells import mb_center_update, mb_wdraw_cell
 from x_cluster.optics_xi_cells import optics_xi_host
+from x_cluster.spectral_df64 import discretize_df64_host
 from cluster.host.host_cells import ftz_v, host_cells, mul_v
 from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
 
@@ -584,6 +585,12 @@ struct HostOps(ClusterOps):
             pdist_cell[X_CLUSTER_HOST_SABOTAGE](pa, na, pb, nb, d, metric, p, pd, t)
 
         host_cells(body, na * nb, 4 * d)
+
+    def spectral_discretize(
+        mut self, x: List[Float32], n: Int, k: Int, seed: UInt64, max_svd_restarts: Int, n_iter_max: Int,
+        mut n_iter: Int,
+    ) raises -> List[Int32]:
+        return discretize_df64_host(x, n, k, seed, max_svd_restarts, n_iter_max, n_iter)
 
     def fast_device(self) -> Bool:
         return False

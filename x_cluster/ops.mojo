@@ -163,6 +163,15 @@ trait ClusterOps(Movable):
         """dst (na x nb) = the metric's distances (`bodies.pdist_cell`)."""
         ...
 
+    def spectral_discretize(
+        mut self, x: List[Float32], n: Int, k: Int, seed: UInt64, max_svd_restarts: Int, n_iter_max: Int,
+        mut n_iter: Int,
+    ) raises -> List[Int32]:
+        """SpectralClustering's discretize labels of the n x k embedding x in
+        float-float (x_cluster/spectral_df64.mojo): the device driver on the
+        GPU binding, its host column on the host binding; n_iter set."""
+        ...
+
     def fast_device(self) -> Bool:
         """True on the one column that takes the FAST device-round paths
         (lane cluster-apple3): the GPU binding built FAST. The host column

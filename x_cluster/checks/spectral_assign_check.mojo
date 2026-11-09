@@ -20,7 +20,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.identity_trace import IdentityTrace
 from x_cluster.checks.oracles import oracle_jacobi_svd
 from x_cluster.checks.seam_util import require_equal, require_separates, seam_fixture
-from x_cluster.spectral_assign import cluster_qr_labels, discretize_labels, jacobi_svd
+from x_cluster.spectral_assign import cluster_qr_labels, jacobi_svd
+from x_cluster.spectral_df64 import discretize_df64_host
 
 
 def _diff64(a: List[Float64], b: List[Float64]) -> Int:
@@ -67,7 +68,7 @@ def main() raises:
         # the full routes run (the trace records their labels)
         tr.record_list_i32("x_cluster.spectral_assign.cluster_qr", cluster_qr_labels(x, n, k))
         var it = 0
-        tr.record_list_i32("x_cluster.spectral_assign.discretize", discretize_labels(x, n, k, UInt64(3), 30, 20, it))
+        tr.record_list_i32("x_cluster.spectral_assign.discretize", discretize_df64_host(x, n, k, UInt64(3), 30, 20, it))
     var sep = 0
     for f in range(len(fixtures)):
         var k = sizes[f]

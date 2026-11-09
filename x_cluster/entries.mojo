@@ -20,7 +20,7 @@ from x_cluster.out import ClusterOut
 from x_cluster.post_bodies import FM_VAL
 from checks.numerics import portable_log64
 from x_cluster.tree_cut import tree_labels
-from x_cluster.spectral_assign import ASSIGN_CLUSTER_QR, ASSIGN_DISCRETIZE, cluster_qr_labels, discretize_labels
+from x_cluster.spectral_assign import ASSIGN_CLUSTER_QR, ASSIGN_DISCRETIZE, cluster_qr_labels
 
 
 def nearest_entry[O: ClusterOps](mut ops: O, x: List[Float32], c: List[Float32], ip: List[Int]) raises -> ClusterOut:
@@ -553,7 +553,7 @@ def agglo_entry[O: ClusterOps](
     return out^
 
 
-def spectral_assign_entry(x: List[Float32], ip: List[Int]) raises -> ClusterOut:
+def spectral_assign_entry[O: ClusterOps](mut ops: O, x: List[Float32], ip: List[Int]) raises -> ClusterOut:
     """SpectralClustering assign_labels (x_cluster/spectral_assign.mojo): x =
     the n x k embedding; ip = [n, k, method (0 discretize, 1 cluster_qr),
     seed, max_svd_restarts, n_iter_max]. i = [labels], s = [n_iter]
@@ -568,7 +568,9 @@ def spectral_assign_entry(x: List[Float32], ip: List[Int]) raises -> ClusterOut:
         out.s.append(0)
     elif ip[2] == ASSIGN_DISCRETIZE:
         var it = 0
-        out.i.append(discretize_labels(x, n, k, UInt64(ip[3]), ip[4], ip[5], it))
+        # lane n9b-device-svd-qr: float-float on the binding's column (the
+        # device on the GPU binding), was the binary64 host algorithm
+        out.i.append(ops.spectral_discretize(x, n, k, UInt64(ip[3]), ip[4], ip[5], it))
         out.s.append(Float64(it))
     else:
         raise Error("x_cluster spectral_assign: unknown method " + String(ip[2]))
@@ -621,5 +623,5 @@ def run_entry[O: ClusterOps](
     if which == ENTRY_AGGLO:
         return agglo_entry(ops, x, a, ip, fp)
     if which == ENTRY_SPECTRAL_ASSIGN:
-        return spectral_assign_entry(x, ip)
+        return spectral_assign_entry(ops, x, ip)
     raise Error("x_cluster: unknown entry " + String(which))

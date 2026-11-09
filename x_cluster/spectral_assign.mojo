@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""SpectralClustering's assign_labels='discretize' and 'cluster_qr'
-(lane/algos-cluster, option parity). Reference: scikit-learn
+"""SpectralClustering's assign_labels='cluster_qr' (lane/algos-cluster,
+option parity); 'discretize' is x_cluster/spectral_df64.mojo (float-float on
+every column, lane n9b-device-svd-qr). Reference: scikit-learn
 `sklearn/cluster/_spectral.py::discretize` (Yu and Shi 2003) and
 `cluster_qr` (Damle, Minden and Ying 2019).
 
-Both run on the n x k spectral embedding the fit already produced. HOST
+It runs on the n x k spectral embedding the fit already produced. HOST
 CODE, one source compiled into both bindings, float64 throughout (the
 reference keeps a float32 embedding in float32 and hands it to LAPACK):
 
-- the k x k singular value decompositions scikit-learn takes from LAPACK
+- the k x k singular value decomposition scikit-learn takes from LAPACK
   are a one-sided (Hestenes) Jacobi SVD here, the pairs (p < q) in row
   order every sweep, until a sweep rotates nothing (cap 80 sweeps); every
   product that feeds a sum is `identical_mul64`, so no build fuses it.
@@ -17,15 +18,11 @@ reference keeps a float32 embedding in float32 and hands it to LAPACK):
 - cluster_qr's column-pivoted QR (LAPACK geqp3) is a Householder QR that
   RECOMPUTES every remaining column's norm each step (LAPACK downdates it),
   the largest norm first, the lowest column on a tie (idamax's rule).
-- discretize's `random_state.randint(n_samples)` is one draw from the
-  lane's splitmix64 stream seeded by random_state (None means 0), not
-  NumPy's Mersenne Twister; every argmax / argmin takes the lowest index
-  on a tie, as NumPy's.
+- every argmax takes the lowest index on a tie, as NumPy's.
 """
 from std.math import sqrt
 
 from checks.numerics import identical_mul64
-from x_cluster.bodies import SplitMix64
 
 comptime ASSIGN_DISCRETIZE = 0
 comptime ASSIGN_CLUSTER_QR = 1
@@ -209,101 +206,7 @@ def cluster_qr_labels(x: List[Float32], n: Int, k: Int) raises -> List[Int32]:
     return labels^
 
 
-def discretize_labels(
-    x: List[Float32], n: Int, k: Int, seed: UInt64, max_svd_restarts: Int, n_iter_max: Int, mut n_iter_out: Int
-) raises -> List[Int32]:
-    """scikit-learn `discretize`: columns scaled to norm sqrt(n) and signed so
-    the first row is not positive, rows scaled to unit length, a greedy
-    orthogonal start from one random row, then alternate the discrete
-    labels (argmax of vectors @ rotation) and the rotation V U^T of the SVD
-    of their k x k class sums, until the ncut value 2 (n - sum S) moves by
-    less than float64 eps or n_iter exceeds n_iter_max."""
-    var vec = List[Float64](length=n * k, fill=0)
-    for i in range(n * k):
-        vec[i] = Float64(x[i])
-    var norm_ones = sqrt(Float64(n))
-    for c in range(k):
-        var s = Float64(0)
-        for i in range(n):
-            s += identical_mul64(vec[i * k + c], vec[i * k + c])
-        var nc = sqrt(s)
-        if nc == 0:
-            raise Error("SpectralClustering discretize: an embedding column is all zeros")
-        for i in range(n):
-            vec[i * k + c] = identical_mul64(vec[i * k + c] / nc, norm_ones)
-        var f0 = vec[c]
-        if f0 != 0:
-            var sg = Float64(1) if f0 > 0 else Float64(-1)
-            for i in range(n):
-                vec[i * k + c] = identical_mul64(-vec[i * k + c], sg)
-    for i in range(n):
-        var s = Float64(0)
-        for c in range(k):
-            s += identical_mul64(vec[i * k + c], vec[i * k + c])
-        var rn = sqrt(s)
-        if rn == 0:
-            raise Error("SpectralClustering discretize: an embedding row is all zeros")
-        for c in range(k):
-            vec[i * k + c] = vec[i * k + c] / rn
-    comptime EPS = Float64(2.220446049250313e-16)
-    var rng = SplitMix64(state=seed)
-    var labels = List[Int32](length=n, fill=0)
-    var converged = False
-    var restarts = 0
-    n_iter_out = 0
-    while restarts < max_svd_restarts and not converged:
-        var rot = List[Float64](length=k * k, fill=0)  # row-major, columns are the start vectors
-        var r0 = rng.below(n)
-        for r in range(k):
-            rot[r * k + 0] = vec[r0 * k + r]
-        var cacc = List[Float64](length=n, fill=0)
-        for j in range(1, k):
-            var amin = 0
-            var vmin = Float64(0)
-            for i in range(n):
-                var s = Float64(0)
-                for r in range(k):
-                    s += identical_mul64(vec[i * k + r], rot[r * k + (j - 1)])
-                cacc[i] = cacc[i] + abs(s)
-                if i == 0 or cacc[i] < vmin:
-                    amin = i
-                    vmin = cacc[i]
-            for r in range(k):
-                rot[r * k + j] = vec[amin * k + r]
-        var last = Float64(0)
-        var n_iter = 0
-        while not converged:
-            n_iter += 1
-            var m = List[Float64](length=k * k, fill=0)
-            for i in range(n):
-                var best = 0
-                var bv = Float64(0)
-                for c in range(k):
-                    var s = Float64(0)
-                    for r in range(k):
-                        s += identical_mul64(vec[i * k + r], rot[r * k + c])
-                    if c == 0 or s > bv:
-                        best = c
-                        bv = s
-                labels[i] = Int32(best)
-                for r in range(k):
-                    m[best * k + r] = m[best * k + r] + vec[i * k + r]
-            var u = List[Float64]()
-            var sv = List[Float64]()
-            var v = List[Float64]()
-            jacobi_svd(m, k, u, sv, v)
-            var ssum = Float64(0)
-            for c in range(k):
-                ssum += sv[c]
-            var ncut = 2 * (Float64(n) - ssum)
-            if abs(ncut - last) < EPS or n_iter > n_iter_max:
-                converged = True
-                n_iter_out = n_iter
-            else:
-                last = ncut
-                # rotation = Vh^T U^T = v u^T
-                rot = _polar(v, u, k)
-        restarts += 1
-    if not converged:
-        raise Error("SpectralClustering discretize: SVD did not converge")
-    return labels^
+# TOMBSTONE: `discretize_labels` (assign_labels='discretize' in binary64 on the host: n x k loops, the fit's last host
+# step) deleted 2026-11-09 by lane n9b-device-svd-qr; code recoverable at 5b5490960d. The float-float form on every
+# column is x_cluster/spectral_df64.mojo (device driver x_cluster/spectral_df64_device.mojo).
+# Restore: git apply experiments/removed/N9B_SPECTRAL_DISCRETIZE.patch

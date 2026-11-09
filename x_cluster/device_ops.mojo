@@ -5,6 +5,7 @@ launch shape can move a bit. Only the GPU binding imports this file."""
 from experiments.classical_identical_ideas.stats_controls import C53_BGMM_STATS
 from mixture.checks.mstep import center_pair_kernel
 from core.em_loop_chunk import em_loop_check_every
+from x_cluster.spectral_df64_device import discretize_df64_device
 from experiments.classical_identical_ideas.graph_controls import XCLUSTER_ROW_ASSIGN, XCLUSTER_ROW_ASSIGN_ROWS
 #: Rows per thread of `_xc_nearest_group` (MOJOLEARN_XCLUSTER_ROW_ASSIGN=2|4).
 comptime XC_ASSIGN_ROWS = XCLUSTER_ROW_ASSIGN_ROWS if XCLUSTER_ROW_ASSIGN_ROWS > 0 else 2
@@ -2438,6 +2439,12 @@ struct DeviceOps(ClusterOps):
             grid_dim=_grid(na * nb), block_dim=TPB,
         )
         self._ph1("pdist")
+
+    def spectral_discretize(
+        mut self, x: List[Float32], n: Int, k: Int, seed: UInt64, max_svd_restarts: Int, n_iter_max: Int,
+        mut n_iter: Int,
+    ) raises -> List[Int32]:
+        return discretize_df64_device(self.ctx, x, n, k, seed, max_svd_restarts, n_iter_max, n_iter)
 
     def fast_device(self) -> Bool:
         return GLOBAL_NUMERIC_MODE == NUMERIC_FAST
