@@ -402,6 +402,7 @@ def causal_lm_parameters_binding(mut mods: NativeModules, model: PythonObject) r
     var model_fields = _standalone_record_fields(mods, model)
     causal_model_cache_set(mods, model, model_fields, "_parameters_exposed", True)
     causal_model_cache_set(mods, model, model_fields, "_resident_sessions", PythonObject(None))
+    causal_model_cache_set(mods, model, model_fields, "_decode_program", PythonObject(None))
     var p = model.plan
     var original_parameters = py_get(model_fields, "_causal_original_parameters", model_fields)
     py_setitem(result, p.embed_name, original_parameters["_embed"])
