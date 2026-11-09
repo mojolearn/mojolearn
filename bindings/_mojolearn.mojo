@@ -182,6 +182,9 @@ from bindings.msel_device import (
     msel_live_binding,
     msel_take_rows_binding,
     pca_transform_fold_binding,
+    kmeans_fit_fold_binding,
+    kmeans_predict_fold_binding,
+    kmeans_transform_fold_binding,
     msel_scatter_rows_binding,
     msel_proba_column_binding,
     msel_rebase_offsets_i32_binding,
@@ -2153,6 +2156,9 @@ def build__mojolearn() -> PythonObject:
         m.def_function[msel_live_binding]("msel_live")
         m.def_function[msel_take_rows_binding]("msel_take_rows")
         m.def_function[pca_transform_fold_binding]("pca_transform_fold")
+        m.def_function[kmeans_fit_fold_binding]("kmeans_fit_fold")
+        m.def_function[kmeans_predict_fold_binding]("kmeans_predict_fold")
+        m.def_function[kmeans_transform_fold_binding]("kmeans_transform_fold")
         m.def_function[msel_scatter_rows_binding]("msel_scatter_rows")
         m.def_function[msel_proba_column_binding]("msel_proba_column")
         m.def_function[msel_rebase_offsets_i32_binding]("msel_rebase_offsets_i32")
