@@ -1,0 +1,1105 @@
+diff --git a/bindings/admitted_family.mojo b/bindings/admitted_family.mojo
+deleted file mode 100644
+index 070b980485..0000000000
+--- a/bindings/admitted_family.mojo
++++ /dev/null
+@@ -1,421 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-# The family doors' face of THE ONE ADMISSION PATH (plan
+-# docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.3 row A2, lane
+-# a2-admit-family, 2026-11-08): clustering, neighbors, SVM, GP, mixture,
+-# kernel methods, manifold, model selection and parallel_shard admit their
+-# arrays here, on bindings/admitted_input.mojo's AdmittedX and the A0 core
+-# (core/admitted_input.mojo cast, core/host_finite_scan.mojo scan,
+-# core/admitted_weights.mojo weight status).
+-#
+-#   admit_family_meta(source, ndim, name, context, dense, finite, admitted)
+-#                     -> ArrayMetadata: metadata read once, the family
+-#                     refusals in `_buffer.as_f32_c`'s wording, then the
+-#                     float32 C-order words: the input itself when it already
+-#                     is one (borrowed), otherwise ONE parallel typed cast
+-#   admit_family(...) -> AdmittedX: the same as the AdmittedX contract
+-#   admit_family_f64(view, name, context) -> the float64 C-order words
+-#   admit_family_owned(x, context) -> an array the model may keep
+-#   admit_family_weights(source, n, allow_negative, context, wide)
+-#                     -> ArrayMetadata of the n weight words
+-#
+-# Replaces (deleted with this lane; TOMBSTONE in bindings/family_common.mojo
+-# and bindings/svc_common.mojo): family_f32, family_cast_f32,
+-# family_input_snapshot, family_snapshot_f32, family_f32_snapshot,
+-# family_as_f32, family_as_f32_dense, family_cast_view, family_cast_view_f64,
+-# family_owned, family_owned_snapshot, family_sample_weight,
+-# family_sample_weight_snapshot, _family_weight_scalar, _family_weight_buffer,
+-# svc_f32, svc_snapshot and core/family_weights_impl.mojo.
+-#
+-# What changed against those helpers (no output bit):
+-# - family_f32 read the metadata twice (family_view, then admit_x re-ran the
+-#   admission walk and the pandas/Torch tests on the view); it is read once.
+-# - `finite=True` takes the finiteness verdict from the cast itself (the cast
+-#   computed it and the snapshot path threw it away, so the door scanned the
+-#   copy a second time); a borrowed input is scanned once, in parallel.
+-# - The weight status (finite, sign, all-zero) is one parallel pass instead of
+-#   two serial ones, and a scalar weight is filled in parallel.
+-#
+-# A DeviceRows fold reaching a family door is handed to admit_x unchanged
+-# (admit_family_meta); the family side keeps no download or second scan.
+-#
+-# Numerics: none. The bytes reaching a kernel are the same float32 (or
+-# float64) C-order bytes, written by the same classical_f32_bits word cast;
+-# the finiteness and sign tests are predicates.
+-from std.python import Python, PythonObject
+-from bindings.native_loaded_module import native_loaded_module
+-from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_setattr
+-from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
+-from bindings.native_array_storage import native_scratch_bytes, native_scratch_address
+-from bindings.classical_arrays import (
+-    classical_address, classical_is_array, classical_cast_kind, classical_dtype_str, classical_c_order,
+-)
+-from bindings.admitted_input import AdmittedX, RESHAPE_HINT, classical_view, admit_x_unrecorded
+-from bindings.device_rows_door import door_is_device_rows
+-from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
+-from bindings.family_common import family_array, family_repr
+-from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+-from core.admitted_input import admitted_cast_f32, admitted_cast_f64
+-from core.admitted_weights import (
+-    admitted_fill, admitted_weight_status, WEIGHTS_NONFINITE, WEIGHTS_NEGATIVE, WEIGHTS_ALL_ZERO,
+-)
+-from core.host_finite_scan import host_all_finite_f32_strided
+-from core.host_parallel_copy import host_parallel_copy_bytes
+-from core.cast_in import CastIn, CAST_KIND_FLOAT, NPY_FLOAT, NPY_DOUBLE
+-
+-comptime _AF_F32P = MutPointer[Float32, MutUntrackedOrigin]
+-comptime _AF_F64P = MutPointer[Float64, MutUntrackedOrigin]
+-
+-comptime FAMILY_ZERO_WEIGHTS = "Sample weights must contain at least one non-zero number."
+-comptime FAMILY_NEGATIVE_WEIGHTS = "Negative values in data passed to `sample_weight`"
+-comptime FAMILY_NONFINITE_WEIGHTS = "Input sample_weight contains NaN or infinity."
+-
+-
+-def _shape_tuple(shape: List[Int]) raises -> PythonObject:
+-    """`tuple(shape)` of admitted native dimensions, for a refusal message."""
+-    var shape_words = Python.list()
+-    for word in shape:  # small-loop(admitted rank for an error message)
+-        _ = py_call(shape_words.append, word)
+-    return py_call(native_loaded_module("builtins").tuple, shape_words)
+-
+-
+-def admitted_array(shape: PythonObject, typestr: String, context: PythonObject) raises -> PythonObject:
+-    """A new C-order mojolearn Array of `shape` ("<f4" or "<f8") whose words
+-    are NOT initialised: the destination of a cast, a copy or a fill that
+-    writes every word before anything reads it. It is an ordinary owned
+-    Array that may be kept as a fitted field or returned: its store is an
+-    uninitialised bytearray (native_scratch_bytes, no fill pass) and its
+-    `_mv` the typed memoryview of that store, the layout every Array reader
+-    and the save path (bindings/native_array_snapshot.mojo) accept. An empty
+-    shape takes the zero-length family_array."""
+-    # Regression audit R6 / REGRESSIONS C3: family_array zero-filled every
+-    # destination (native_array_zeros) that the cast or copy then overwrote
+-    # in full, a second pass over X.
+-    var b = native_loaded_module("builtins")
+-    var rank = len(shape)
+-    var count = 1
+-    for k in range(rank):  # driver-loop: over array rank metadata
+-        count *= Int(py=shape[k])
+-    if count == 0:
+-        return family_array(shape, typestr, context)
+-    var item = 8 if typestr == "<f8" else 4
+-    var store = native_scratch_bytes(count * item)
+-    var view = py_call(native_buffer_view(store).cast, PythonObject("d" if item == 8 else "f"))
+-    var steps = List[Int](length=rank, fill=0)
+-    var step = item
+-    for k in range(rank):  # driver-loop: over array rank metadata
+-        steps[rank - 1 - k] = step
+-        step *= Int(py=shape[rank - 1 - k])
+-    var strides = Python.list()
+-    for k in range(rank):  # driver-loop: over array rank metadata
+-        _ = py_call(strides.append, steps[k])
+-    var array = native_storage_allocate(context["array_class"])
+-    py_setattr(array, "_store", store)
+-    py_setattr(array, "_base", PythonObject(None))
+-    py_setattr(array, "_pin", PythonObject(None))
+-    py_setattr(array, "_mv", view)
+-    py_setattr(array, "_addr", PythonObject(native_scratch_address(store)))
+-    py_setattr(array, "_readonly", PythonObject(False))
+-    py_setattr(array, "shape", py_call(b.tuple, shape))
+-    py_setattr(array, "dtype", PythonObject(typestr))
+-    py_setattr(array, "ndim", PythonObject(rank))
+-    py_setattr(array, "size", PythonObject(count))
+-    py_setattr(array, "nbytes", PythonObject(count * item))
+-    py_setattr(array, "itemsize", PythonObject(item))
+-    py_setattr(array, "strides", py_call(b.tuple, strides))
+-    py_setattr(array, "order", PythonObject("C"))
+-    return array
+-
+-
+-def admit_family_input(source: PythonObject, ndim: Int, name: String, context: PythonObject,
+-                       dense: Bool = False, admitted: Bool = False, empty: Bool = False) raises -> ArrayMetadata:
+-    """The exporter's metadata, read once, with `_buffer._as_typed`'s rank,
+-    emptiness and rank-above-2 refusals in their wording, before any cast
+-    (`admit_family_cast` is the second step); `ndim` < 0 accepts any rank up
+-    to 2. `dense`: a scipy.sparse input is densified exactly first (its
+-    implicit entries are zeros)."""
+-    var prepared = source
+-    var view_admitted = admitted
+-    if dense:
+-        var sparse = host_sparse_format(source)
+-        if sparse.byte_length() > 0:
+-            if not py_contains(context, PythonObject("output_context")):
+-                py_setitem(context, "output_context", context)
+-            prepared = host_sparse_dense(source, sparse, context)
+-            view_admitted = False
+-    var view = classical_view(prepared, context, name, view_admitted)
+-    var shape = array_shape_once(view, context)
+-    var nd = len(shape)
+-    var count = 1
+-    for word in shape:  # driver-loop: over captured native array rank metadata
+-        count *= word
+-    if ndim >= 0 and nd != ndim:
+-        var hint = String("")
+-        if ndim == 2 and nd < 2:
+-            hint = ". " + String(RESHAPE_HINT)
+-        raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(nd)
+-                    + "-D shape " + family_repr(_shape_tuple(shape)) + hint)
+-    if count == 0 and not empty:
+-        var what = String("sample(s)")
+-        if nd == 2 and shape[0] != 0:
+-            what = "feature(s)"
+-        var text = family_repr(_shape_tuple(shape))
+-        raise Error("mojolearn: " + name + " is empty, shape " + text + ": Found array with 0 " + what
+-                    + " (shape=" + text + ") while a minimum of 1 is required.")
+-    if nd > 2:
+-        raise Error("mojolearn: " + name + " must be at most 2-D, got " + String(nd) + "-D")
+-    var snapshot = array_metadata_once(view, shape^, name, context)
+-    _ = view^
+-    _ = prepared^
+-    return snapshot^
+-
+-
+-def _fold_rows(source: PythonObject, name: String, context: PythonObject, refusal: String) raises -> AdmittedX:
+-    """admit_x of a DeviceRows fold, its non-finite refusal in the door's
+-    wording."""
+-    try:
+-        return admit_x_unrecorded(source, name, context)
+-    except error:
+-        if String(error).find("contains NaN or infinity") >= 0:
+-            if refusal.byte_length() > 0:
+-                raise Error(refusal)
+-            raise Error("Input " + name + " contains NaN or infinity")
+-        raise error^
+-
+-
+-def admit_family_meta(source: PythonObject, ndim: Int, name: String, context: PythonObject,
+-                      dense: Bool = False, finite: Bool = False, admitted: Bool = False,
+-                      empty: Bool = False, refusal: String = "") raises -> ArrayMetadata:
+-    """The admitted float32 C-order words of a family door's array input, as
+-    its metadata record: `keep` is the input itself when it already is
+-    float32 in C order (borrowed, never written), otherwise one cast copy
+-    (`copied`). `finite` refuses a NaN or an infinity ("Input <name>
+-    contains NaN or infinity", which a caller may reword); without it the
+-    words are not tested (as `_buffer.as_f32_c`). `admitted`: `source` is a
+-    view classical_view returned in the same native call. `empty` admits a
+-    view with no words (the cast of an already checked view, which
+-    `_buffer.as_f32_c`'s cast step never refused). `refusal`, when given,
+-    is the door's own wording of the non-finite refusal."""
+-    if door_is_device_rows(source, context):
+-        # A model-selection fold (`_arena_io.DeviceRows`) goes to the one
+-        # admission path unchanged: admit_x resolves it and tests it finite
+-        # once; this door neither downloads it nor scans it again. Its rows
+-        # are float32 C-order, so the snapshot below borrows them.
+-        var fold = _fold_rows(source, name, context, refusal)
+-        var rows = admit_family_input(fold.array, ndim, name, context, False, True, empty)
+-        admit_family_cast(rows, name, context)
+-        return rows^
+-    var snapshot = admit_family_input(source, ndim, name, context, dense, admitted, empty)
+-    admit_family_cast(snapshot, name, context, finite, refusal)
+-    return snapshot^
+-
+-
+-def admit_family_cast(mut snapshot: ArrayMetadata, name: String, context: PythonObject, finite: Bool = False,
+-                      refusal: String = "") raises:
+-    """The second step of `admit_family_meta` on an `admit_family_input`
+-    record: borrow a float32 C-order input, else cast it once (row tasks
+-    across the host's cores) into an owned Array recorded on `snapshot`;
+-    `finite` refuses a NaN or an infinity, from the cast's own verdict (or
+-    one parallel scan of a borrowed input)."""
+-    var ok = True
+-    var src = snapshot.source
+-    if snapshot.f32_c():
+-        if finite:
+-            # parallel: one finiteness scan of a borrowed input across host cores
+-            ok = host_all_finite_f32_strided(src.addr, src.s0, src.s1, src.rows, src.cols)
+-    else:
+-        # The destination is an owned mojolearn Array (the type the family
+-        # outputs and fitted fields always had), uninitialised: the cast
+-        # writes every word.
+-        var result = admitted_array(snapshot.python_shape(), "<f4", context)
+-        var address = Int(py=classical_address(result))
+-        # parallel: one typed cast over row tasks, the finiteness verdict in the same pass
+-        ok = admitted_cast_f32(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind,
+-                               _AF_F32P(unsafe_from_address=address))
+-        snapshot.replace_f32(result, address)
+-    if finite and not ok:
+-        if refusal.byte_length() > 0:
+-            raise Error(refusal)
+-        raise Error("Input " + name + " contains NaN or infinity")
+-
+-
+-def admitted_family_x(snapshot: ArrayMetadata, source: PythonObject, finite: Bool) -> AdmittedX:
+-    """The AdmittedX of an admitted family snapshot."""
+-    var borrowed = not snapshot.copied
+-    var x = AdmittedX(snapshot.keep, source, snapshot.source.addr, snapshot.source.rows, snapshot.source.cols,
+-                      len(snapshot.shape), borrowed)
+-    x.finite = finite
+-    return x^
+-
+-
+-def admit_family(source: PythonObject, ndim: Int, name: String, context: PythonObject,
+-                 dense: Bool = False, finite: Bool = False, admitted: Bool = False,
+-                 empty: Bool = False, refusal: String = "") raises -> AdmittedX:
+-    """`admit_family_meta` as the AdmittedX contract: `.array` the float32
+-    C-order array the kernels read, `.borrowed` when it is the input's own
+-    storage."""
+-    var snapshot = admit_family_meta(source, ndim, name, context, dense, finite, admitted, empty, refusal)
+-    return admitted_family_x(snapshot, source, finite)
+-
+-
+-def admit_family_copied(snapshot: ArrayMetadata, source: PythonObject) raises -> Bool:
+-    """The `input_copied_` flag of a fitted SVM: the admission copied the
+-    words, or the input was a Python list, tuple or range (always built
+-    anew)."""
+-    var b = native_loaded_module("builtins")
+-    var cls = py_type(source)
+-    return snapshot.copied or cls is b.list or cls is b.tuple or cls is b.range
+-
+-
+-def admit_family_f64(view: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+-    """`_buffer.as_f64_c`'s cast of a checked view of rank 0, 1 or 2: the
+-    view itself when it is already float64 in C order, otherwise one
+-    parallel cast into a new mojolearn Array of its shape. No finiteness
+-    refusal (as_f64_c made none)."""
+-    var nd = Int(py=view.ndim)
+-    if nd > 2:
+-        raise Error("mojolearn: " + name + " must be at most 2-D, got " + String(nd) + "-D")
+-    if not classical_is_array(view, context) and not Bool(py=view.dtype.isnative):
+-        raise Error("TypeError: " + name + " must be in native byte order")
+-    if classical_dtype_str(view, context) == "<f8" and classical_c_order(view, context):
+-        return view
+-    var b = native_loaded_module("builtins")
+-    var shape = view.shape
+-    var rows = 1 if nd == 0 else Int(py=shape[0])
+-    var cols = 1 if nd < 2 else Int(py=shape[1])
+-    var item = Int(py=view.itemsize)
+-    var kind = classical_cast_kind(view, item, name, context)
+-    var strides = view.strides if nd > 0 else PythonObject(None)
+-    var s0 = 0 if nd == 0 else Int(py=strides[0])
+-    var s1 = 0 if nd < 2 else Int(py=strides[1])
+-    var result = admitted_array(py_call(b.tuple, shape), "<f8", context)
+-    admitted_cast_f64(Int(py=classical_address(view)), s0, s1, rows, cols, item, kind,
+-                      _AF_F64P(unsafe_from_address=Int(py=classical_address(result))))
+-    _ = result  # keep the Python object alive through the native call above
+-    return result
+-
+-
+-def admit_family_owned(value: ArrayMetadata, context: PythonObject) raises -> PythonObject:
+-    """An admitted float32 array the model may keep: the admitted array
+-    itself when this call owns it (the cast result, or an Array the exporter
+-    made and nobody else holds), else one parallel copy of the caller's
+-    words, so a caller editing its array after fit changes nothing."""
+-    if value.owned_writable:
+-        return value.keep
+-    var result = admitted_array(value.python_shape(), "<f4", context)
+-    # parallel: the owned float32 copy across host cores (0.8.66 regression C3).
+-    host_parallel_copy_bytes(Int(py=classical_address(result)), value.source.addr, value.count * 4)
+-    _ = result
+-    return result
+-
+-
+-def admit_family_owned(value: PythonObject, context: PythonObject) raises -> PythonObject:
+-    """`value` (a C-order float32 array) as an owned mojolearn Array: the
+-    array itself when it is one the owner made, else one parallel copy."""
+-    if classical_is_array(value, context) and value._base is None and not Bool(py=value._readonly):
+-        return value
+-    var b = native_loaded_module("builtins")
+-    var result = admitted_array(py_call(b.tuple, value.shape), "<f4", context)
+-    # parallel: the owned float32 copy across host cores (0.8.66 regression C3).
+-    host_parallel_copy_bytes(Int(py=classical_address(result)), Int(py=classical_address(value)),
+-                             Int(py=value.size) * 4)
+-    _ = result  # keep the Python object alive through the native call above
+-    _ = value
+-    return result
+-
+-
+-def _weight_scalar(value: Float64, n: Int, wide: Bool, context: PythonObject) raises -> ArrayMetadata:
+-    var item = 8 if wide else 4
+-    var weights = admitted_array(Python.tuple(n), "<f8" if wide else "<f4", context)
+-    var address = Int(py=classical_address(weights))
+-    if wide:
+-        admitted_fill[DType.float64](_AF_F64P(unsafe_from_address=address), n, value)
+-    else:
+-        admitted_fill[DType.float32](_AF_F32P(unsafe_from_address=address), n, Float32(value))
+-    var descriptor = CastIn(address, CAST_KIND_FLOAT, item, n, 1, item, 0)
+-    return ArrayMetadata(weights, List[Int]([n]), descriptor, n, NPY_DOUBLE if wide else NPY_FLOAT,
+-                         True, True, True, weights, True)
+-
+-
+-def _weight_buffer(source: PythonObject, n: Int, wide: Bool, context: PythonObject) raises -> ArrayMetadata:
+-    # Admit supported native storage before reading any user attributes. One
+-    # shape and dtype/stride snapshot is retained through validation and use.
+-    var view = classical_view(source, context, "sample_weight")
+-    var shape = array_shape_once(view, context)
+-    var count = 1
+-    for dimension in shape:  # small-loop(admitted sample-weight rank)
+-        count *= dimension
+-    if count == 0:
+-        raise Error("sample_weight.shape == (0,), expected (" + String(n) + ",)!")
+-    var nd = len(shape)
+-    if nd == 0:
+-        # A zero-dimensional buffer is a broadcast scalar, read with the
+-        # widening cast (never float(Array)).
+-        if py_type(source) is py_type(PythonObject(True)):
+-            raise Error("Sample weights must be 1D array or scalar")
+-        var scalar = array_metadata_once(view, shape^, "sample_weight", context, True)
+-        var one = family_array(Python.tuple(1), "<f8", context)
+-        var ptr = _AF_F64P(unsafe_from_address=Int(py=classical_address(one)))
+-        var raw = scalar.source
+-        var scalar_address = raw.addr
+-        var reversed = family_array(Python.tuple(raw.itemsize), "<u1", context)
+-        if not scalar.native_byte_order:
+-            # float(zero_dim_ndarray) accepted a byte-swapped scalar; keep
+-            # that scalar-only behavior before the unchanged cast.
+-            var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=raw.addr)
+-            var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(reversed)))
+-            for byte in range(raw.itemsize):  # small-loop(one admitted scalar word)
+-                dst[byte] = src[raw.itemsize - 1 - byte]
+-            scalar_address = Int(py=classical_address(reversed))
+-        admitted_cast_f64(scalar_address, 0, 0, 1, 1, raw.itemsize, raw.kind, ptr)
+-        var result = _weight_scalar(ptr[0], n, wide, context)
+-        _ = scalar
+-        _ = one
+-        _ = reversed
+-        return result^
+-    if nd != 1:
+-        raise Error("Sample weights must be 1D array or scalar")
+-    if shape[0] != n:
+-        raise Error("sample_weight.shape == " + family_repr(_shape_tuple(shape)) + ", expected (" + String(n) + ",)!")
+-    var snapshot = array_metadata_once(view, shape^, "sample_weight", context)
+-    var ready = snapshot.c_order and snapshot.dtype_number == (NPY_DOUBLE if wide else NPY_FLOAT)
+-    if not ready:
+-        var weights = admitted_array(Python.tuple(n), "<f8" if wide else "<f4", context)
+-        var address = Int(py=classical_address(weights))
+-        var raw = snapshot.source
+-        if wide:
+-            admitted_cast_f64(raw.addr, raw.s0, raw.s1, raw.rows, raw.cols, raw.itemsize, raw.kind,
+-                              _AF_F64P(unsafe_from_address=address))
+-            snapshot.replace_f64(weights, address)
+-        else:
+-            _ = admitted_cast_f32(raw.addr, raw.s0, raw.s1, raw.rows, raw.cols, raw.itemsize, raw.kind,
+-                                  _AF_F32P(unsafe_from_address=address))
+-            snapshot.replace_f32(weights, address)
+-    return snapshot^
+-
+-
+-def admit_family_weights(source: PythonObject, n: Int, allow_negative: Bool, context: PythonObject,
+-                         wide: Bool = False) raises -> ArrayMetadata:
+-    """sample_weight as `n` float32 (or, `wide`, float64) words: an int or a
+-    float fills every row; prepare_targets' refusals in their order (NaN or
+-    infinity, a negative weight unless `allow_negative`, all zero). `.keep`
+-    is the weight array the kernels read."""
+-    var b = native_loaded_module("builtins")
+-    var snapshot: ArrayMetadata
+-    if py_type(source) is b.int or py_type(source) is b.float:
+-        snapshot = _weight_scalar(Float64(py=source), n, wide, context)
+-    else:
+-        snapshot = _weight_buffer(source, n, wide, context)
+-    var address = snapshot.source.addr
+-    var status: Int
+-    if wide:
+-        status = admitted_weight_status[DType.float64](_AF_F64P(unsafe_from_address=address), n, allow_negative)
+-    else:
+-        status = admitted_weight_status[DType.float32](_AF_F32P(unsafe_from_address=address), n, allow_negative)
+-    if status == WEIGHTS_NONFINITE:
+-        raise Error(FAMILY_NONFINITE_WEIGHTS)
+-    if status == WEIGHTS_NEGATIVE:
+-        raise Error(FAMILY_NEGATIVE_WEIGHTS)
+-    if status == WEIGHTS_ALL_ZERO:
+-        raise Error(FAMILY_ZERO_WEIGHTS)
+-    return snapshot^
+diff --git a/bindings/classical_labels.mojo b/bindings/classical_labels.mojo
+index 14ac78bb96..75e8767685 100644
+--- a/bindings/classical_labels.mojo
++++ b/bindings/classical_labels.mojo
+@@ -921,7 +921,7 @@ def _numeric_label_view(y: PythonObject, context: PythonObject, mut bool_source:
+ 
+ 
+ def _encode_label_view(y: PythonObject, context: PythonObject, mut bool_source: Bool) raises -> Optional[LabelsView]:
+-    """The numeric label block `classical_encode_labels` encodes with one
++    """The numeric label block `labels_encode_labels` encodes with one
+     native `prepare_targets` call, or None for what only the label input
+     step reads. Admits `y` (`classical_admit_value`) exactly once, as
+     `_numeric_label_view` does.
+@@ -1162,18 +1162,10 @@ def _list_labels(y: PythonObject, context: PythonObject) raises -> Optional[Clas
+     return _native_labels(_view_of_array(array), False, context)
+ 
+ 
+-def classical_encode_labels(var y: PythonObject, context: PythonObject) raises -> ClassicalLabels:
+-    """`_labels.encode_labels(y)`: `classes` the Python class list and one
+-    int32 code per row (an Array). One native `prepare_targets` call for a
++def labels_encode_labels(var y: PythonObject, context: PythonObject) raises -> ClassicalLabels:
++    """`_labels.encode_labels(y)`: one native `prepare_targets` call for a
+     numeric label vector (a buffer or a flat list of exact ints or exact
+-    floats); the ORDER RULE over Python objects for str and object labels.
+-    THE one label encoder (lane a2-admit-family: labels_encode_labels and the
+-    SVM's svc_encode_1d were second names for it)."""
+-    # A context without the base binding's label helpers (an owner context
+-    # that connects none) takes the label input step only, as svc_encode_1d
+-    # did: the same sorted classes and codes.
+-    if py_get(context, "labels_helpers") is None:
+-        return _sorted_classes(_flatten_labels(y, context), context)
++    floats); the ORDER RULE over Python objects for str and object labels."""
+     var b = labels_builtins()
+     y = classifier_label_list(y, context)
+     var bool_source = False
+@@ -2142,9 +2134,10 @@ def _owned_f32(w: LabelsMatrix, context: PythonObject) raises -> PythonObject:
+ # The names the classical owners call.
+ 
+ 
+-# TOMBSTONE: labels_encode_labels (a second name of the one label encoder) deleted 2026-11-08 by lane a2-admit-family; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch. Its body is
+-# classical_encode_labels above.
++def classical_encode_labels(y: PythonObject, context: PythonObject) raises -> ClassicalLabels:
++    """`_labels.encode_labels(y)`: `classes` the Python class list and one
++    int32 code per row (an Array), the same classes, codes and refusals."""
++    return labels_encode_labels(y, context)
+ 
+ 
+ def classical_decode_labels(classes: PythonObject, codes: PythonObject, context: PythonObject) raises -> PythonObject:
+diff --git a/bindings/family_common.mojo b/bindings/family_common.mojo
+index aec3c16764..80ba35f050 100644
+--- a/bindings/family_common.mojo
++++ b/bindings/family_common.mojo
+@@ -7,23 +7,40 @@
+ # a CPU-only install's by-name refusal, a user callable's own exception) is
+ # stashed and restored unchanged at the door (`stash_python_error`), so the
+ # caller sees the class and message it saw before the migration.
+-from providers.python.array_metadata_pyapi import ArrayMetadata
++from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+ from bindings.native_array_storage import native_array_zeros
+ from bindings.native_loaded_module import native_loaded_module
++from std.memory import memcpy
+ from std.python import Python, PythonObject
+ from std.python._cpython import PyObjectPtr
+-from bindings.py_balanced import py_call, py_type, py_get, py_contains
+-from bindings.classical_arrays import classical_address, classical_wrap_array, _store_code
++from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
++from bindings.classical_arrays import (
++    classical_address, classical_wrap_array, _store_code, classical_is_array,
++    classical_cast_kind, classical_is_f32, classical_c_order, classical_dtype_str,
++)
++from bindings.admitted_input import admit_x
++from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
+ from core.family_cast_impl import family_min_f32
++from core.admitted_input import admitted_cast_f32, admitted_cast_f64
++from core.host_parallel_copy import host_parallel_copy_bytes
++from core.cast_in import CastIn, CAST_KIND_FLOAT, NPY_FLOAT, NPY_DOUBLE
+ from bindings.classical_validate import classical_view, RESHAPE_HINT
+ from bindings.optimizer_public_words import stash_python_error
+ from bindings.native_class_admission import static_builtin_type
++from core.family_weights_impl import (
++    family_fill_f32, family_fill_f64, family_weight_status, family_weight_status_f64,
++    FAMILY_WEIGHTS_NONFINITE, FAMILY_WEIGHTS_NEGATIVE,
++    FAMILY_WEIGHTS_ALL_ZERO,
++)
+ 
+ comptime FAMILY_F32P = MutPointer[Float32, MutUntrackedOrigin]
+ comptime FAMILY_F64P = MutPointer[Float64, MutUntrackedOrigin]
+ comptime FAMILY_I32P = MutPointer[Int32, MutUntrackedOrigin]
+ comptime FAMILY_I64P = MutPointer[Int64, MutUntrackedOrigin]
+ 
++comptime FAMILY_ZERO_WEIGHTS = "Sample weights must contain at least one non-zero number."
++comptime FAMILY_NEGATIVE_WEIGHTS = "Negative values in data passed to `sample_weight`"
++comptime FAMILY_NONFINITE_WEIGHTS = "Input sample_weight contains NaN or infinity."
+ 
+ 
+ def family_repr(value: PythonObject) raises -> String:
+@@ -180,16 +197,186 @@ def family_view(source: PythonObject, ndim: Int, name: String, context: PythonOb
+     return view
+ 
+ 
+-# TOMBSTONE: family_f32, family_cast_f32, family_input_snapshot, family_snapshot_f32, family_f32_snapshot, family_as_f32, family_as_f32_dense, family_cast_view, family_cast_view_f64, family_owned, family_owned_snapshot, family_sample_weight, family_sample_weight_snapshot, _family_weight_scalar, _family_weight_buffer (family admission helpers, moved onto the one admission path) deleted 2026-11-08 by lane a2-admit-family; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch. They are
+-# admit_family / admit_family_meta / admit_family_f64 / admit_family_owned /
+-# admit_family_weights in bindings/admitted_family.mojo.
++def family_cast_f32(view: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
++    """A checked view as C-ordered float32 (the input itself when it already
++    is one), the cast `_buffer.as_f32_c` makes. A NaN or an infinity raises
++    `Input <name> contains NaN or infinity`, which a caller may reword."""
++    return admit_x(view, Int(py=view.ndim), name, context)
++
++
++def family_f32(source: PythonObject, ndim: Int, name: String, context: PythonObject) raises -> PythonObject:
++    """`_buffer.as_f32_c(source, ndim=ndim, name=name)` with its refusals."""
++    var view = family_view(source, ndim, name, context)
++    var result = family_cast_f32(view, name, context)
++    _ = view^
++    return result
++
++
++def family_cast_view(view: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
++    """`_buffer.as_f32_c`'s cast of a checked view of rank 0, 1 or 2, with
++    no finiteness refusal (as_f32_c made none): the view itself when it is
++    already float32 in C order, otherwise a new mojolearn Array of its shape.
++    """
++    var nd = Int(py=view.ndim)
++    if nd > 2:
++        raise Error("mojolearn: " + name + " must be at most 2-D, got " + String(nd) + "-D")
++    if not classical_is_array(view, context) and not Bool(py=view.dtype.isnative):
++        raise Error("TypeError: " + name + " must be in native byte order")
++    if classical_is_f32(view, context) and classical_c_order(view, context):
++        return view
++    # Perf (lane perf2-cluster): the builtins connection only for a cast.
++    var b = native_loaded_module("builtins")
++    # Shape and strides read once each (they were read per dimension).
++    var shape = view.shape
++    var rows = 1 if nd == 0 else Int(py=shape[0])
++    var cols = 1 if nd < 2 else Int(py=shape[1])
++    var item = Int(py=view.itemsize)
++    var kind = classical_cast_kind(view, item, name, context)
++    var strides = view.strides if nd > 0 else PythonObject(None)
++    var s0 = 0 if nd == 0 else Int(py=strides[0])
++    var s1 = 0 if nd < 2 else Int(py=strides[1])
++    var result = family_array(py_call(b.tuple, shape), "<f4", context)
++    _ = admitted_cast_f32(Int(py=classical_address(view)), s0, s1, rows, cols, item, kind,
++                     FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))))
++    _ = result  # keep the Python object alive through the native call above
++    return result
++
++
++def family_cast_view_f64(view: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
++    """`_buffer.as_f64_c`'s cast of a checked view of rank 0, 1 or 2: the
++    view itself when it is already float64 in C order, otherwise a new
++    mojolearn Array of its shape."""
++    var nd = Int(py=view.ndim)
++    if nd > 2:
++        raise Error("mojolearn: " + name + " must be at most 2-D, got " + String(nd) + "-D")
++    if not classical_is_array(view, context) and not Bool(py=view.dtype.isnative):
++        raise Error("TypeError: " + name + " must be in native byte order")
++    if classical_dtype_str(view, context) == "<f8" and classical_c_order(view, context):
++        return view
++    var b = native_loaded_module("builtins")
++    var shape = view.shape
++    var rows = 1 if nd == 0 else Int(py=shape[0])
++    var cols = 1 if nd < 2 else Int(py=shape[1])
++    var item = Int(py=view.itemsize)
++    var kind = classical_cast_kind(view, item, name, context)
++    var strides = view.strides if nd > 0 else PythonObject(None)
++    var s0 = 0 if nd == 0 else Int(py=strides[0])
++    var s1 = 0 if nd < 2 else Int(py=strides[1])
++    var result = family_array(py_call(b.tuple, shape), "<f8", context)
++    admitted_cast_f64(Int(py=classical_address(view)), s0, s1, rows, cols, item, kind,
++                         FAMILY_F64P(unsafe_from_address=Int(py=classical_address(result))))
++    _ = result  # keep the Python object alive through the native call above
++    return result
++
++
++def _family_shape_tuple(shape: List[Int]) raises -> PythonObject:
++    """`tuple(shape)` of admitted native dimensions, for a refusal message."""
++    var shape_words = Python.list()
++    for word in shape:  # small-loop(admitted rank for an error message)
++        _ = py_call(shape_words.append, word)
++    return py_call(native_loaded_module("builtins").tuple, shape_words)
++
++
++def family_input_snapshot(source: PythonObject, ndim: Int, name: String,
++                        context: PythonObject, dense: Bool = False) raises -> ArrayMetadata:
++    # Common provider metadata admission for classical algorithms. Preserve
++    # family_view's rank/empty refusals before casting or numerical execution.
++    var prepared = source
++    if dense:
++        var sparse = host_sparse_format(source)
++        if sparse.byte_length() > 0:
++            if not py_contains(context, PythonObject("output_context")):
++                py_setitem(context, "output_context", context)
++            prepared = host_sparse_dense(source, sparse, context)
++    var view = classical_view(prepared, context, name)
++    var shape = array_shape_once(view, context)
++    var nd = len(shape)
++    var count = 1
++    for word in shape:  # driver-loop: over captured native array rank metadata
++        count *= word
++    # Perf (lane perf2-cluster): the Python shape tuple is built only for a
++    # refusal's message, not on every admitted input.
++    if ndim >= 0 and nd != ndim:
++        var hint = String("")
++        if ndim == 2 and nd < 2:
++            hint = ". " + String(RESHAPE_HINT)
++        raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(nd)
++                    + "-D shape " + family_repr(_family_shape_tuple(shape)) + hint)
++    if count == 0:
++        var what = String("sample(s)")
++        if nd == 2 and shape[0] != 0:
++            what = "feature(s)"
++        var text = family_repr(_family_shape_tuple(shape))
++        raise Error("mojolearn: " + name + " is empty, shape " + text + ": Found array with 0 " + what
++                    + " (shape=" + text + ") while a minimum of 1 is required.")
++    if nd > 2:
++        raise Error("mojolearn: " + name + " must be at most 2-D, got " + String(nd) + "-D")
++    var snapshot = array_metadata_once(view, shape^, name, context)
++    _ = view^
++    _ = prepared^
++    return snapshot^
++
++
++def family_snapshot_f32(mut snapshot: ArrayMetadata, context: PythonObject) raises:
++    # Pack from one retained snapshot. Rebuild shape only from its native words;
++    # never reread exporter shape/dtype/address after operation admission.
++    if not snapshot.f32_c():
++        var result = family_array(snapshot.python_shape(), "<f4", context)
++        var address = Int(py=classical_address(result))
++        var src = snapshot.source
++        _ = admitted_cast_f32(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind,
++                         FAMILY_F32P(unsafe_from_address=address))
++        snapshot.replace_f32(result, address)
++
++
++def family_f32_snapshot(source: PythonObject, ndim: Int, name: String,
++                        context: PythonObject, dense: Bool = False) raises -> ArrayMetadata:
++    var snapshot = family_input_snapshot(source, ndim, name, context, dense)
++    family_snapshot_f32(snapshot, context)
++    return snapshot^
++
++
++def family_as_f32(source: PythonObject, ndim: Int, name: String, context: PythonObject) raises -> PythonObject:
++    var snapshot = family_f32_snapshot(source, ndim, name, context)
++    return snapshot.keep
++
++
++def family_as_f32_dense(source: PythonObject, ndim: Int, name: String, context: PythonObject) raises -> PythonObject:
++    var snapshot = family_f32_snapshot(source, ndim, name, context, True)
++    return snapshot.keep
++
++
++def family_owned_snapshot(value: ArrayMetadata, context: PythonObject) raises -> PythonObject:
++    # Ownership is inspected once at the boundary; shape, count and address
++    # are already admitted and must not be fetched again during the copy.
++    if value.owned_writable:
++        return value.keep
++    var result = family_array(value.python_shape(), "<f4", context)
++    # parallel: the owned float32 copy across host cores (0.8.66 regression
++    # C3, knn fit 8.5x on istella: one serial memcpy of 176 MB).
++    host_parallel_copy_bytes(Int(py=classical_address(result)), value.source.addr, value.count * 4)
++    _ = result
++    return result
+ 
+ 
+ def family_snapshot_min(value: ArrayMetadata) raises -> Float32:
+     return family_min_f32(FAMILY_F32P(unsafe_from_address=value.source.addr), value.count)
+ 
+ 
++def family_owned(value: PythonObject, context: PythonObject) raises -> PythonObject:
++    """`value` (a C-order float32 array) as an owned mojolearn Array: the
++    array itself when it is one the owner made, else one copy."""
++    if classical_is_array(value, context) and value._base is None and not Bool(py=value._readonly):
++        return value
++    var b = native_loaded_module("builtins")
++    var result = family_array(py_call(b.tuple, value.shape), "<f4", context)
++    # parallel: the owned float32 copy across host cores (0.8.66 regression C3).
++    host_parallel_copy_bytes(Int(py=classical_address(result)), Int(py=classical_address(value)), Int(py=value.size) * 4)
++    _ = result  # keep the Python object alive through the native call above
++    _ = value
++    return result
++
++
+ def family_min(value: PythonObject) raises -> Float32:
+     """The minimum of a non-empty C-order float32 array."""
+     return family_min_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(value))), Int(py=value.size))
+@@ -200,6 +387,111 @@ def family_nonfinite(error: Error, name: String) -> Bool:
+     return String(error) == "Input " + name + " contains NaN or infinity"
+ 
+ 
++def family_sample_weight(source: PythonObject, n: Int, allow_negative: Bool, context: PythonObject,
++                         wide: Bool = False) raises -> PythonObject:
++    var snapshot = family_sample_weight_snapshot(source, n, allow_negative, context, wide)
++    return snapshot.keep
++
++
++def _family_weight_scalar(value: Float64, n: Int, wide: Bool,
++                          context: PythonObject) raises -> ArrayMetadata:
++    var item = 8 if wide else 4
++    var weights = family_array(Python.tuple(n), "<f8" if wide else "<f4", context)
++    var address = Int(py=classical_address(weights))
++    if wide:
++        family_fill_f64(FAMILY_F64P(unsafe_from_address=address), n, value)
++    else:
++        family_fill_f32(FAMILY_F32P(unsafe_from_address=address), n, Float32(value))
++    var descriptor = CastIn(address, CAST_KIND_FLOAT, item, n, 1, item, 0)
++    return ArrayMetadata(weights, List[Int]([n]), descriptor, n, NPY_DOUBLE if wide else NPY_FLOAT,
++                         True, True, True, weights, True)
++
++
++def _family_weight_buffer(source: PythonObject, n: Int, wide: Bool,
++                          context: PythonObject) raises -> ArrayMetadata:
++    # Admit supported native storage before reading any user attributes. One
++    # shape and dtype/stride snapshot is retained through validation and use.
++    var view = classical_view(source, context, "sample_weight")
++    var shape = array_shape_once(view, context)
++    var count = 1
++    for dimension in shape:  # small-loop(admitted sample-weight rank)
++        count *= dimension
++    if count == 0:
++        raise Error("sample_weight.shape == (0,), expected (" + String(n) + ",)!")
++    var nd = len(shape)
++    if nd == 0:
++        # Existing zero-dimensional buffer semantics are a broadcast scalar.
++        # Read it with the existing native widening cast; never float(Array).
++        if py_type(source) is py_type(PythonObject(True)):
++            raise Error("Sample weights must be 1D array or scalar")
++        var scalar = array_metadata_once(view, shape^, "sample_weight", context, True)
++        var one = family_array(Python.tuple(1), "<f8", context)
++        var ptr = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(one)))
++        var raw = scalar.source
++        var scalar_address = raw.addr
++        var reversed = family_array(Python.tuple(raw.itemsize), "<u1", context)
++        if not scalar.native_byte_order:
++            # float(zero_dim_ndarray) previously accepted swapped scalars.
++            # Preserve that scalar-only behavior before the unchanged cast.
++            var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=raw.addr)
++            var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(reversed)))
++            for byte in range(raw.itemsize):  # small-loop(one admitted scalar word)
++                dst[byte] = src[raw.itemsize - 1 - byte]
++            scalar_address = Int(py=classical_address(reversed))
++        admitted_cast_f64(scalar_address, 0, 0, 1, 1, raw.itemsize, raw.kind, ptr)
++        var result = _family_weight_scalar(ptr[0], n, wide, context)
++        _ = scalar
++        _ = one
++        _ = reversed
++        return result^
++    if nd != 1:
++        raise Error("Sample weights must be 1D array or scalar")
++    if shape[0] != n:
++        var words = Python.list()
++        for dimension in shape:  # small-loop(admitted rank for original error)
++            _ = py_call(words.append, dimension)
++        raise Error("sample_weight.shape == " + family_repr(py_call(py_type(Python.tuple()), words))
++                    + ", expected (" + String(n) + ",)!")
++    var snapshot = array_metadata_once(view, shape^, "sample_weight", context)
++    var ready = snapshot.c_order and snapshot.dtype_number == (NPY_DOUBLE if wide else NPY_FLOAT)
++    if not ready:
++        var weights = family_array(Python.tuple(n), "<f8" if wide else "<f4", context)
++        var address = Int(py=classical_address(weights))
++        var raw = snapshot.source
++        if wide:
++            admitted_cast_f64(raw.addr, raw.s0, raw.s1, raw.rows, raw.cols, raw.itemsize, raw.kind,
++                                 FAMILY_F64P(unsafe_from_address=address))
++            snapshot.replace_f64(weights, address)
++        else:
++            _ = admitted_cast_f32(raw.addr, raw.s0, raw.s1, raw.rows, raw.cols, raw.itemsize, raw.kind,
++                             FAMILY_F32P(unsafe_from_address=address))
++            snapshot.replace_f32(weights, address)
++    return snapshot^
++
++
++def family_sample_weight_snapshot(source: PythonObject, n: Int, allow_negative: Bool,
++                                  context: PythonObject, wide: Bool = False) raises -> ArrayMetadata:
++    var b = native_loaded_module("builtins")
++    var snapshot: ArrayMetadata
++    if py_type(source) is b.int or py_type(source) is b.float:
++        snapshot = _family_weight_scalar(Float64(py=source), n, wide, context)
++    else:
++        snapshot = _family_weight_buffer(source, n, wide, context)
++    var address = snapshot.source.addr
++    var status: Int
++    if wide:
++        status = family_weight_status_f64(FAMILY_F64P(unsafe_from_address=address), n, allow_negative)
++    else:
++        status = family_weight_status(FAMILY_F32P(unsafe_from_address=address), n, allow_negative)
++    if status == FAMILY_WEIGHTS_NONFINITE:
++        raise Error(FAMILY_NONFINITE_WEIGHTS)
++    if status == FAMILY_WEIGHTS_NEGATIVE:
++        raise Error(FAMILY_NEGATIVE_WEIGHTS)
++    if status == FAMILY_WEIGHTS_ALL_ZERO:
++        raise Error(FAMILY_ZERO_WEIGHTS)
++    return snapshot^
++
++
+ def family_field(fields: PythonObject, name: String) raises -> PythonObject:
+     """`fields[name]`, refused as the attribute lookup refused it."""
+     var value = py_get(fields, PythonObject(name), PythonObject(None))
+diff --git a/bindings/svc_common.mojo b/bindings/svc_common.mojo
+index 0919d141cf..8be37352e7 100644
+--- a/bindings/svc_common.mojo
++++ b/bindings/svc_common.mojo
+@@ -16,7 +16,6 @@
+ # codes are the ones `encode_labels` returned for a flat label list.
+ from std.memory import memcpy
+ from std.python import Python, PythonObject
+-from bindings.admitted_family import admit_family
+ from bindings.native_loaded_module import native_loaded_module
+ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
+ from bindings.py_attr import py_attr
+@@ -26,12 +25,12 @@ from providers.python.array_metadata_pyapi import ArrayMetadata
+ from bindings.classical_pandas import _pd_class
+ from bindings.classical_labels import _pandas_values, labels_type_name
+ from bindings.classical_labels import _flatten_labels, _sorted_classes, _classification_labels, labels_shape_of, labels_label_kind
+-from bindings.classical_labels import labels_accuracy, classical_score_from_codes
++from bindings.classical_labels import labels_encode_labels, labels_accuracy, classical_score_from_codes
+ from bindings.label_admission_native import classifier_label_list
+ from bindings.gp_svm_records import gpsvm_class_table, gpsvm_class_table_put
+ from bindings.family_common import (
+-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_isinstance, family_call, family_entry,
+-    family_array, family_view, family_shape_repr,
++    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_isinstance, family_call,
++    family_entry, family_array, family_view, family_cast_view, family_as_f32, family_shape_repr, family_f32_snapshot,
+ )
+ from bindings.metrics_reg_native import _Prog, _Reg, _reg_run, _arena_double, _arena_int, _RE_DIV
+ from core.host_finite_scan import host_all_finite_f32
+@@ -162,10 +161,22 @@ def svc_read_i32(array: PythonObject, index: Int) raises -> Int:
+     return Int(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(array)))[index])
+ 
+ 
+-# TOMBSTONE: svc_f32, svc_snapshot (the SVM family's copy of the family admission) deleted 2026-11-08 by lane a2-admit-family; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch. Doors call
+-# admit_family / admit_family_meta (bindings/admitted_family.mojo); the
+-# `input_copied_` flag is admit_family_copied.
++def svc_f32(source: PythonObject, ndim: Int, name: String, dense: Bool,
++            context: PythonObject) raises -> PythonObject:
++    """`_buffer.as_f32_c` (or `as_f32_dense_c` with `dense`): the rank and
++    emptiness refusals, the cast; returns (array, copied). A scipy.sparse
++    matrix is densified exactly first (its implicit entries are zeros)."""
++    var snapshot = svc_snapshot(source, ndim, name, dense, context)
++    return Python.tuple(snapshot.keep, PythonObject(snapshot.copied))
++
++
++def svc_snapshot(source: PythonObject, ndim: Int, name: String, dense: Bool,
++                 context: PythonObject) raises -> ArrayMetadata:
++    var b = svc_builtins()
++    var sequence = py_type(source) is b.list or py_type(source) is b.tuple or py_type(source) is b.range
++    var snapshot = family_f32_snapshot(source, ndim, name, context, dense)
++    snapshot.copied = snapshot.copied or sequence
++    return snapshot^
+ 
+ 
+ # ---------------------------------------------------------------- shapes and labels
+@@ -201,10 +212,25 @@ def svc_labels_1d(y: PythonObject, context: PythonObject) raises -> PythonObject
+     return Python.tuple(svc_flatten_labels(y, context), shape)
+ 
+ 
+-# TOMBSTONE: svc_encode_1d (the SVM's second label encoder) deleted 2026-11-08 by lane a2-admit-family; code recoverable at f7d10d2b09.
+-# Restore: experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch. Its callers
+-# test the 1-D shape (svc_shape_of) and call classical_encode_labels, which
+-# now carries the no-label-helpers branch it had.
++def svc_encode_1d(y: PythonObject, context: PythonObject) raises -> PythonObject:
++    """(classes, int32 codes, n) of a 1-D label vector, or (None, None, shape)
++    when y is not 1-D. A numeric label buffer is validated (NaN refusal
++    included) and encoded straight from its storage by the shared encoder's
++    one `prepare_targets` call; lists, str and object labels take the label
++    input step (flatten, then the ORDER RULE)."""
++    # Perf (lane perf-svm-and-msel): SVC/NuSVC/LinearSVC fit flattened y into
++    # Python objects (svc_labels_1d) and then sorted and dict-coded them
++    # (svc_sorted_classes): two Python passes per label. Numeric classes are
++    # the same sorted values and codes either way.
++    var shape = svc_shape_of(y, context)
++    if len(shape) != 1:
++        return Python.tuple(PythonObject(None), PythonObject(None), shape)
++    if py_get(context, "labels_helpers") is not None:
++        var encoded = labels_encode_labels(y, context)
++        return Python.tuple(encoded.classes, encoded.codes, PythonObject(encoded.n))
++    var labels = svc_flatten_labels(y, context)
++    var sorted = _sorted_classes(labels, context)
++    return Python.tuple(sorted.classes, sorted.codes, PythonObject(sorted.n))
+ 
+ 
+ comptime _NAN_LABEL = "mojolearn: y contains a NaN label; NaN is not a class"
+@@ -335,8 +361,8 @@ def svc_r2_sums(pred: PythonObject, y: PythonObject, context: PythonObject) rais
+     """`linear_model._r2_sums(pred, y)`: (SS_res, SS_tot) from the one
+     x_metrics program `_r2_sums_of` ran: the y mean (Float32 column), then
+     both sums of squares, binary64 out."""
+-    var t = admit_family(y, 1, "y", context).array
+-    var p = admit_family(pred, 1, "predictions", context).array
++    var t = family_as_f32(y, 1, "y", context)
++    var p = family_as_f32(pred, 1, "predictions", context)
+     var n = Int(py=t.size)
+     var m = Int(py=p.size)
+     if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(t))), n):
+diff --git a/core/admitted_weights.mojo b/core/admitted_weights.mojo
+deleted file mode 100644
+index 7633b4fc3e..0000000000
+--- a/core/admitted_weights.mojo
++++ /dev/null
+@@ -1,111 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""The weight status pass of admitted sample weights (no Python import).
+-
+-Plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2 step 5,
+-lane A2 admit-family (2026-11-08). `bindings/admitted_family.mojo`
+-`admit_family_weights` reaches these; they replace the serial walks of
+-core/family_weights_impl.mojo (deleted with this lane).
+-
+-    admitted_fill[dtype](dst, n, value)       a scalar weight into every row
+-    admitted_weight_status[dtype](w, n, allow_negative) -> Int
+-                                              WEIGHTS_OK or the first refusal
+-                                              in prepare_targets' order:
+-                                              non-finite, then negative (when
+-                                              not allowed), then all zero
+-
+-Both split the rows into contiguous tasks across the host's cores
+-(core/host_predict_threads.mojo, with its grain floor). The status is an
+-OR of per-task flags evaluated in the serial order (any non-finite word
+-first, then any negative, then "no positive and no negative"), so it is the
+-serial walk's verdict for any split: the serial walk's minimum and maximum
+-were only compared against zero. Numerics: none (a fill and predicates).
+-"""
+-from std.math import isfinite
+-from core.host_parallel import host_parallelize
+-from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+-
+-comptime WEIGHTS_OK = 0
+-comptime WEIGHTS_NONFINITE = -3
+-comptime WEIGHTS_NEGATIVE = -4
+-comptime WEIGHTS_ALL_ZERO = -5
+-
+-comptime _AW_U8P = MutPointer[UInt8, MutUntrackedOrigin]
+-
+-
+-def admitted_fill[dtype: DType](dst: MutPointer[Scalar[dtype], MutUntrackedOrigin], n: Int, value: Scalar[dtype]):
+-    """`value` into each of the `n` words at `dst`, row tasks across the
+-    host's cores."""
+-    # parallel: scalar weight fill over row tasks across host cores
+-    if n <= 0:
+-        return
+-    var tasks = host_predict_task_count_work(n, n)
+-    var chunk = host_predict_chunk(n, tasks)
+-
+-    def _fill(t: Int) {imm dst, imm n, imm value, imm chunk}:
+-        var lo = t * chunk
+-        var hi = min(lo + chunk, n)
+-        for i in range(lo, hi):  # native input marshaling: this task's weight rows
+-            dst.unsafe_store(i, value)
+-
+-    if tasks <= 1:
+-        _fill(0)
+-    else:
+-        host_parallelize(_fill, tasks)
+-
+-
+-def admitted_weight_status[dtype: DType](w: MutPointer[Scalar[dtype], MutUntrackedOrigin], n: Int,
+-                                         allow_negative: Bool) -> Int:
+-    """prepare_targets' weight status of the `n` words at `w`: WEIGHTS_OK,
+-    or WEIGHTS_NONFINITE, WEIGHTS_NEGATIVE (only when not `allow_negative`)
+-    or WEIGHTS_ALL_ZERO, in that order of precedence."""
+-    # parallel: weight finiteness / sign test over row tasks across host cores
+-    if n <= 0:
+-        return WEIGHTS_ALL_ZERO
+-    var tasks = host_predict_task_count_work(n, n)
+-    var chunk = host_predict_chunk(n, tasks)
+-    # Three flags per task: [3t] a non-finite word, [3t + 1] a negative one,
+-    # [3t + 2] a positive one.
+-    var flags = List[UInt8](length=3 * tasks, fill=UInt8(0))
+-    var flag_ptr = rebind[_AW_U8P](flags.unsafe_ptr())
+-
+-    def _scan(t: Int) {imm w, imm n, imm chunk, imm flag_ptr}:
+-        var lo = t * chunk
+-        var hi = min(lo + chunk, n)
+-        var nonfinite = False
+-        var negative = False
+-        var positive = False
+-        for i in range(lo, hi):  # native input marshaling: this task's weight rows
+-            var v = w.unsafe_load(i)
+-            if not isfinite(v):
+-                nonfinite = True
+-            elif v < 0:
+-                negative = True
+-            elif v > 0:
+-                positive = True
+-        if nonfinite:
+-            flag_ptr.unsafe_store(3 * t, UInt8(1))
+-        if negative:
+-            flag_ptr.unsafe_store(3 * t + 1, UInt8(1))
+-        if positive:
+-            flag_ptr.unsafe_store(3 * t + 2, UInt8(1))
+-
+-    if tasks <= 1:
+-        _scan(0)
+-    else:
+-        host_parallelize(_scan, tasks)
+-    var any_nonfinite = False
+-    var any_negative = False
+-    var any_positive = False
+-    for t in range(tasks):  # driver-loop: over the row tasks' flags (at most one per core)
+-        any_nonfinite = any_nonfinite or flags[3 * t] != UInt8(0)
+-        any_negative = any_negative or flags[3 * t + 1] != UInt8(0)
+-        any_positive = any_positive or flags[3 * t + 2] != UInt8(0)
+-    _ = flags^
+-    if any_nonfinite:
+-        return WEIGHTS_NONFINITE
+-    if any_negative and not allow_negative:
+-        return WEIGHTS_NEGATIVE
+-    if not (any_positive or any_negative):
+-        return WEIGHTS_ALL_ZERO
+-    return WEIGHTS_OK
+diff --git a/core/family_weights_impl.mojo b/core/family_weights_impl.mojo
+new file mode 100644
+index 0000000000..883671b78f
+--- /dev/null
++++ b/core/family_weights_impl.mojo
+@@ -0,0 +1,59 @@
++# SPDX-License-Identifier: Apache-2.0
++"""Sample-weight marshaling of the classical family owners
++(bindings/family_common.mojo `family_sample_weight`): the scalar fill and
++prepare_targets' weight checks (finiteness, then the minimum, then the
++maximum) over float32 words."""
++from std.math import isfinite
++
++comptime FAMILY_WEIGHTS_OK = 0
++comptime FAMILY_WEIGHTS_NONFINITE = -3
++comptime FAMILY_WEIGHTS_NEGATIVE = -4
++comptime FAMILY_WEIGHTS_ALL_ZERO = -5
++
++
++def family_fill_f32(out_buf: MutPointer[Float32, MutUntrackedOrigin], n: Int, value: Float32):
++    for i in range(n):  # native input marshaling: a scalar weight fills every row
++        out_buf[i] = value
++
++
++def family_weight_status(w: MutPointer[Float32, MutUntrackedOrigin], n: Int, allow_negative: Bool) -> Int:
++    """prepare_targets' weight status: FAMILY_WEIGHTS_OK or the first refusal."""
++    for i in range(n):  # native input marshaling: weight finiteness scan
++        if not isfinite(w[i]):
++            return FAMILY_WEIGHTS_NONFINITE
++    var lo = Float32(0)
++    var hi = Float32(0)
++    for i in range(n):  # native input marshaling: weight minimum and maximum
++        if i == 0 or w[i] < lo:
++            lo = w[i]
++        if i == 0 or w[i] > hi:
++            hi = w[i]
++    if not allow_negative and lo < 0:
++        return FAMILY_WEIGHTS_NEGATIVE
++    if not (hi > 0 or lo < 0):
++        return FAMILY_WEIGHTS_ALL_ZERO
++    return FAMILY_WEIGHTS_OK
++
++
++def family_weight_status_f64(w: MutPointer[Float64, MutUntrackedOrigin], n: Int, allow_negative: Bool) -> Int:
++    """`family_weight_status` over float64 words."""
++    for i in range(n):  # native input marshaling: weight finiteness scan
++        if not isfinite(w[i]):
++            return FAMILY_WEIGHTS_NONFINITE
++    var lo = Float64(0)
++    var hi = Float64(0)
++    for i in range(n):  # native input marshaling: weight minimum and maximum
++        if i == 0 or w[i] < lo:
++            lo = w[i]
++        if i == 0 or w[i] > hi:
++            hi = w[i]
++    if not allow_negative and lo < 0:
++        return FAMILY_WEIGHTS_NEGATIVE
++    if not (hi > 0 or lo < 0):
++        return FAMILY_WEIGHTS_ALL_ZERO
++    return FAMILY_WEIGHTS_OK
++
++
++def family_fill_f64(out_buf: MutPointer[Float64, MutUntrackedOrigin], n: Int, value: Float64):
++    for i in range(n):  # native input marshaling: a scalar weight fills every row
++        out_buf[i] = value

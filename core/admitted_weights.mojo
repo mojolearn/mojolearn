@@ -22,6 +22,10 @@ serial walk's verdict for any split: the serial walk's minimum and maximum
 were only compared against zero. Numerics: none (a fill and predicates).
 """
 from std.math import isfinite
+
+# TOMBSTONE: family_weight_status, family_weight_status_f64, family_fill_f32, family_fill_f64 (core/family_weights_impl.mojo, serial weight marshaling) deleted 2026-11-08 by lane a2-admit-family; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch. They are
+# admitted_weight_status and admitted_fill below, in row tasks.
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 
