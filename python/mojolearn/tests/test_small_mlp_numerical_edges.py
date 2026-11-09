@@ -43,71 +43,9 @@ def native():
     return binding
 
 
-def address(array):
-    assert array.dtype == np.float32 and array.flags.c_contiguous
-    return int(array.ctypes.data)
-
-
-def bits(values):
-    return np.asarray(values, dtype=np.uint32).view(np.float32)
-
-
-def test_bias_ftz_and_relu_signed_zero_closed_form(native):
-    # FTZ keeps the sign; adding -0 to -0 keeps -0. Smallest normal values
-    # remain normal. ReLU must canonicalize every nonpositive result to +0.
-    x = bits([0x80000000, 0, 1, 0x80000001, 0x00800000, 0x80800000]).reshape(1, 6)
-    bias = bits([0x80000000] * 6)
-    output = np.empty_like(x)
-    expected = np.asarray([0x80000000, 0, 0, 0x80000000, 0x00800000, 0x80800000], np.uint32)
-    before = x.tobytes(), bias.tobytes()
-    assert native.mlp_bias_activation(address(x), address(bias), address(output), [1, 6, 0]) == 6
-    np.testing.assert_array_equal(output.view(np.uint32).ravel(), expected)
-    assert native.mlp_bias_activation(address(x), address(bias), address(output), [1, 6, 1]) == 6
-    np.testing.assert_array_equal(output.view(np.uint32).ravel(), [0, 0, 0, 0, 0x00800000, 0])
-    assert before == (x.tobytes(), bias.tobytes())
-
-
-def test_relu_backward_zero_derivative_and_ftz_seam(native):
-    activation = bits([0, 0x80000000, 0xbf800000, 0x3f800000,
-                       0x3f800000, 0x3f800000, 0x3f800000]).reshape(1, 7)
-    incoming = bits([0x3f800000, 0xbf800000, 0x3f800000, 0x80000000,
-                     1, 0x80000001, 0xbf000000]).reshape(1, 7)
-    output = np.empty_like(activation)
-    before = activation.tobytes(), incoming.tobytes()
-    assert native.mlp_relu_backward(address(activation), address(incoming), address(output), [1, 7]) == 7
-    np.testing.assert_array_equal(output.view(np.uint32).ravel(),
-                                  [0, 0, 0, 0x80000000, 0, 0x80000000, 0xbf000000])
-    assert before == (activation.tobytes(), incoming.tobytes())
-
-
-def test_sum_rows_exercises_ordered_cancellation(native):
-    # Both columns have exact real sum 2. At 2**24, adding 1 ties and rounds
-    # back to 2**24 in FP32. Thus these ascending schedules yield 1 and 2.
-    # An exact/FP64 reduction or reordered device reduction fails column 0.
-    values = np.asarray([[2**24, 2**24], [1, -(2**24)], [-(2**24), 1], [1, 1]], np.float32)
-    output = np.empty(2, np.float32)
-    assert native.mlp_sum_rows(address(values), address(output), [4, 2]) == 2
-    np.testing.assert_array_equal(output.view(np.uint32), [0x3f800000, 0x40000000])
-    np.testing.assert_array_equal(values.astype(np.float64).sum(axis=0), [2., 2.])
-
-
-@pytest.mark.parametrize('operation', ['bias', 'sum'])
-def test_finite_inputs_with_overflow_are_refused(native, operation):
-    # Mojo Error crosses the native Python boundary as a plain Exception.
-    # Require the exact refusal so unrelated binding/device failures cannot pass.
-    refusal = '^small MLP operation has nonfinite input or output$'
-    maximum = np.finfo(np.float32).max
-    if operation == 'bias':
-        values = np.asarray([[maximum]], np.float32)
-        bias = np.asarray([maximum], np.float32)
-        output = np.empty_like(values)
-        with pytest.raises(Exception, match=refusal):
-            native.mlp_bias_activation(address(values), address(bias), address(output), [1, 1, 0])
-    else:
-        values = np.asarray([[maximum], [maximum]], np.float32)
-        output = np.empty(1, np.float32)
-        with pytest.raises(Exception, match=refusal):
-            native.mlp_sum_rows(address(values), address(output), [2, 1])
+# The per-operation primitive tests (mlp_bias_activation, mlp_relu_backward,
+# mlp_sum_rows) were deleted with the primitives (lane/m2-neural-leftovers,
+# 2026-11-09): every small-MLP caller runs the trainer's captured program.
 
 
 def flatten(weights, names):

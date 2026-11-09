@@ -1371,7 +1371,7 @@ NEW_LANE_PURPOSE = {
                             "`samba_decode_export`, `samba_decode_load`)",
     "training-chunked-lm-head": "training.chunked_lm_head_loss with and without gradients: "
                                 "`chunked_lm_head_v2_loss`, `chunked_lm_head_v2_train`",
-    "training-mlp-sessions": "training.mlp_inference_sessions: `mlp_sessions`",
+    "training-mlp-sessions": "training.mlp_inference_sessions: `small_mlp_program` (op SESSIONS)",
     "samba-optimizer-state": "SambaStack state_dict / load_state_dict on an open resident optimizer slot "
                              "(`optimizer_resident_download`, `optimizer_resident_upload`) and "
                              "optimizer.maximize (`optimizer_resident_step_io`)",
@@ -1414,8 +1414,8 @@ NEW_LANE_PURPOSE = {
     "multioutput-ridge": "MultiOutputRegressor over Ridge: `ridge_predict_multi`",
     "x-ridge-cv-kfold": "RidgeCV with an integer cv: `x_linear_best_alpha`",
     "svc-gamma-scale": "SVC and SVR with gamma='scale': `scale_gamma_limbs`",
-    "neural-trainer-unfused": "ParallelNeuralTrainer (its per-layer gradient route): `mlp_bias_activation`, "
-                              "`mlp_relu_backward`, `mlp_sum_rows`",
+    "neural-trainer-unfused": "ParallelNeuralTrainer (its shard gradients on the SmallMLPTrainer program): "
+                              "`small_mlp_program` (loss and gradients)",
 }
 
 

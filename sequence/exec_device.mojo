@@ -1631,3 +1631,6 @@ struct DeviceExec(Exec, Movable):
 
     def gen_alive(mut self, rows: FP, n_rows: Int, b: Int, dst: FP) raises:
         raise Error("ops: a device session runs lm_alive's device body")
+
+    def lm_head_v2_host(mut self, backward: Bool, bufs: List[FP], rows: Int, vocab: Int, width: Int) raises:
+        raise Error("ops: a device session launches the lm_head_v2 kernels itself")

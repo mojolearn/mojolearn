@@ -444,7 +444,7 @@ def _decode_state(payload):
 
 #: The compiled training entries the native owner calls, resolved once at import.
 _TRAINING_ENTRIES = (
-    'training_numeric_mode', 'mlp_sessions', 'mlp_sessions_rows', 'sha256_hex', 'neural_arithmetic_profile',
+    'training_numeric_mode', 'sha256_hex', 'neural_arithmetic_profile',
 )
 
 

@@ -1026,32 +1026,6 @@
    ],
    "note": "bits_change not re-assessed by L11 (unchanged switch)"
   },
-  "nn64_session_pack": {
-   "define": "MOJOLEARN_NN64_SESSION_PACK",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_NN64_SESSION_PACK=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "training/neural_ab_lifetime.mojo:22"
-   ],
-   "binding": "_mojolearn_training",
-   "bits_change": false,
-   "status": "kept",
-   "entries": [
-    "NN64"
-   ],
-   "board": "off-board (mlp-infer is a CPU lane)",
-   "tags": [
-    "off_board",
-    "peripheral"
-   ],
-   "note": "bits_change not re-assessed by L11 (unchanged switch)"
-  },
   "ni10_cnn_tape": {
    "define": "MOJOLEARN_NI10_BUDGETED_CNN_TAPE",
    "kind": "switch",
@@ -1661,6 +1635,10 @@
   {
    "define": "MOJOLEARN_IDN_LM_RESIDENT_TOKENS",
    "reason": "removed 2026-11-09 (lane x7b-step-ops-host-arm): arms 1 (NI32) and 2 (NN51) validated the hand byte LM training step's resident tokens; no reader after lane x7 moved the step onto the executor; never promoted (docs/TOMBSTONES.md BYTE_LM_X7_LEFTOVERS)"
+  },
+  {
+   "define": "MOJOLEARN_NN64_SESSION_PACK",
+   "reason": "removed 2026-11-09 (lane m2-neural-leftovers): chose per-session vs packed forwards of the training binding's mlp_sessions entry, which is deleted; the inference sessions run packed as one forward of the small-MLP program (docs/TOMBSTONES.md M2_SMALL_MLP_PRIMITIVES); never measured, never promoted"
   }
  ],
  "notes": {

@@ -36,14 +36,39 @@ Entry words (`small_mlp_program_open` / `small_mlp_program_run`):
               -> the handle
     STEP      addresses [x, y (int32), loss (k floats), logits, dw1, db1,
               dw2, db2, dx]; ints [rows, mode, want_dx, k] -> rows * 3.
-              mode 0 forward (y, loss, gradients unread), 1 loss and
-              gradients (weights read only), 2 the whole step. k > 1 (mode
+              mode 0 forward (y, loss, gradients unread; any rows >= 1),
+              1 loss and gradients (weights read only; the parallel
+              trainer's shard gradients), 2 the whole step (rows 1..256
+              for modes 1 and 2). k > 1 (mode
               2 only, want_dx 0): k consecutive minibatches of `rows` rows,
               one loss each; logits and gradients are the last step's.
     DOWNLOAD  addresses [w1, b1, w2, b2, m, v] -> 195
     APPLY     addresses [g (195 packed gradients)] -> 195
     CLOSE     -> 0
+    SESSIONS  (no handle; `small_mlp_sessions_forward`) addresses [y, x,
+              w1 (hidden x width), b1, w2 (out x hidden), b2], ints [rows,
+              width, hidden, out] -> rows * out: the same forward (two
+              transposes, linear + ReLU, linear) for any Linear-ReLU-Linear
+              shape on a session opened for the call. The public
+              `training.mlp_inference_sessions` runs its packed session rows
+              through it.
 """
+# Inline tombstones carried here verbatim from files and blocks lane/m2-neural-leftovers deleted
+# (training/mlp_ops.mojo, training/neural_session_mlp.mojo, bindings/parallel_mlp_native.mojo's old shard route):
+# TOMBSTONE: the fused-gradient route through mlp_train_step (the deleted hand small-MLP step, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b. The worker gradients take the per-operation primitives below.
+# Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
+# TOMBSTONE: mlp_train_step_host, its step GEMM dispatch (MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF), the tape rules autograd/rules_small_mlp.mojo and the Apple FAST fused step training/mlp_fast.mojo (superseded by SmallMLPTrainer's captured program, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
+# Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by 3cd0063d7; code recoverable at 3cd0063d7^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
+# TOMBSTONE (lane grid-act-5, 2026-10-08): neural_gemm_epilogue=mlp (NN06,
+# -D MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE bit 1: the forward's GEMM + bias (+
+# ReLU) as one thread-per-cell kernel, _mlp_gemm_epilogue_kernel /
+# _mlp_fused_projection) was DELETED as an IDENTICAL grid ge123e6f9 loser:
+# mlp-train-step NV 2.0 -> 3.8 ms / AMD 3.5 -> 3.4 ms (1.367x combined
+# SLOWER), same bits. Recoverable at main 8ed94710a; the guard refuses bit 1.
+# TOMBSTONE: the `registry` argument (sessions reading an open Apple FAST resident training session's weights; its only caller, mlp_sessions_resident, went with the session, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
+
 from std.math import isfinite
 from sequence.exec_trait import Exec
 from sequence.ops import FP, OPT_ADAMW, Args, OP_FILL, OP_MLP_NONFINITE
@@ -68,6 +93,7 @@ comptime SMALL_MLP_PROGRAM_STEP = 1
 comptime SMALL_MLP_PROGRAM_DOWNLOAD = 2
 comptime SMALL_MLP_PROGRAM_APPLY = 3
 comptime SMALL_MLP_PROGRAM_CLOSE = 4
+comptime SMALL_MLP_PROGRAM_SESSIONS = 5
 
 comptime SMALL_MLP_PROGRAM_FORWARD = 0
 comptime SMALL_MLP_PROGRAM_GRADS = 1
@@ -433,7 +459,10 @@ def small_mlp_program_run[E: Exec & Movable & Deinitable, KIND: Int](
     var mode = p[2]
     var want_dx = p[3] != 0
     var k = p[4]
-    if rows < 1 or rows > _MAX_ROWS:
+    # Training modes keep the trainer's 1..256 batch; the forward takes any
+    # positive row count (the inference sessions run their packed rows as one
+    # forward; _grow sizes the scratch, no node depends on the row count).
+    if rows < 1 or (rows > _MAX_ROWS and mode != SMALL_MLP_PROGRAM_FORWARD):
         raise Error("small MLP operations require rows 1..256")
     if mode < SMALL_MLP_PROGRAM_FORWARD or mode > SMALL_MLP_PROGRAM_TRAIN:
         raise Error("small MLP train step: mode must be 0 (forward), 1 (grads) or 2 (train)")
@@ -447,3 +476,73 @@ def small_mlp_program_run[E: Exec & Movable & Deinitable, KIND: Int](
                     CastIn(a[1], CAST_KIND_SIGNED, 4, k * rows, 1, 4, 4))
     _run_steps(s[], e, a, rows, mode, want_dx, k)
     return rows * _OUT
+
+
+def small_mlp_sessions_forward[E: Exec & Movable & Deinitable, KIND: Int](
+    var ex: E, a: List[Int], p: List[Int],
+) raises -> Int:
+    """SESSIONS: `y = linear(relu(linear(x, w1^T, b1)), w2^T, b2)` for any
+    (width, hidden, out), on an inference session opened for this call:
+    the trainer's forward ops (OPS_TRANSPOSE, OPS_LINEAR act 1 / act 0), so
+    an 8-16-3 model gives `predict_logits`' words. `x` is the sessions' rows
+    packed in order; each row's logits depend only on that row. Refuses a
+    non-finite input, weight or logit from device flags, one wait."""
+    if len(a) != 6 or len(p) != 4:
+        raise Error("neural MLP sessions: 6 addresses and [rows, width, hidden, out]")
+    var rows = p[0]
+    var width = p[1]
+    var hidden = p[2]
+    var out_w = p[3]
+    if rows < 1 or width < 1 or hidden < 1 or out_w < 1:
+        raise Error("neural MLP sessions: invalid metadata")
+    var limit = 2147483647
+    var widest = max(width, max(hidden, out_w))
+    if hidden > limit // width or out_w > limit // hidden or rows > limit // widest:
+        raise Error("neural MLP sessions: activation exceeds index range")
+    var sid = ops_session_open[E, KIND](ex^, False)
+    try:
+        var s = ops_session[E, KIND](sid)
+        var w0 = s[].upload(CastIn.f32_c(a[2], hidden, width), False)
+        var w1 = s[].upload(CastIn.f32_c(a[3], 1, hidden), False)
+        var w2 = s[].upload(CastIn.f32_c(a[4], out_w, hidden), False)
+        var w3 = s[].upload(CastIn.f32_c(a[5], 1, out_w), False)
+        var x = s[].upload(CastIn.f32_c(a[1], rows, width), False)
+        var dflag = s[].ex.alloc(2)
+        var fa = Args()
+        fa.p0 = dflag
+        fa.f0 = Float32(0)
+        s[].ex.launch[OP_FILL](fa, 2)
+        var bx = s[].buffer(x)
+        var b0 = s[].buffer(w0)
+        var b1 = s[].buffer(w1)
+        var b2 = s[].buffer(w2)
+        var b3 = s[].buffer(w3)
+        _flag(s[].ex, bx, rows * width, dflag, 0)
+        _flag(s[].ex, b0, hidden * width, dflag, 0)
+        _flag(s[].ex, b1, hidden, dflag, 0)
+        _flag(s[].ex, b2, out_w * hidden, dflag, 0)
+        _flag(s[].ex, b3, out_w, dflag, 0)
+        var none_i = List[Int]()
+        var none_f = List[Float32]()
+        var t1 = s[].op(OPS_TRANSPOSE, [w0], none_i, none_f)
+        var hid = s[].op(OPS_LINEAR, [x, t1, w1], [1], none_f)
+        var t2 = s[].op(OPS_TRANSPOSE, [w2], none_i, none_f)
+        var logits = s[].op(OPS_LINEAR, [hid, t2, w3], [0], none_f)
+        var lt = s[].tensor(logits)
+        var lv = s[].tape.value_of(s[].ex, lt)
+        _flag(s[].ex, lv, rows * out_w, dflag, 1)
+        var flags = List[Float32](length=2, fill=Float32(0))
+        s[].ex.download_async(FP(unsafe_from_address=a[0]), lv, rows * out_w)
+        s[].ex.download_async(FP(unsafe_from_address=Int(flags.unsafe_ptr())), dflag, 2)
+        s[].ex.sync()
+        s[].ex.free(dflag)
+        if flags[0] != 0:
+            raise Error("neural MLP sessions: nonfinite input or weights")
+        if flags[1] != 0:
+            raise Error("neural MLP sessions: nonfinite logits")
+        _ = flags^
+    except err:
+        ops_session_close[E, KIND](sid)
+        raise err
+    ops_session_close[E, KIND](sid)
+    return rows * out_w

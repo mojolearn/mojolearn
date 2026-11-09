@@ -23,8 +23,8 @@ from providers.python.autograd_owned_program_factory_pyapi import owned_program_
 from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py
 from autograd.session_lifetime import SessionLifetime
 from providers.python.autograd_session_lifetime_pyapi import ops_session_create_py
-from providers.python.small_mlp_program_pyapi import small_mlp_program_open_py, small_mlp_program_run_py
-from autograd.small_mlp_program import SMALL_MLP_PROGRAM_OPEN
+from providers.python.small_mlp_program_pyapi import small_mlp_program_open_py, small_mlp_program_run_py, small_mlp_sessions_py
+from autograd.small_mlp_program import SMALL_MLP_PROGRAM_OPEN, SMALL_MLP_PROGRAM_SESSIONS
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
@@ -320,6 +320,8 @@ def small_mlp_program_binding(op: PythonObject, addresses: PythonObject, ints: P
     var code = Int(py=op)
     if code == SMALL_MLP_PROGRAM_OPEN:
         return small_mlp_program_open_py[DeviceExec, OPS_DEVICE](DeviceExec(), addresses, ints, floats)
+    if code == SMALL_MLP_PROGRAM_SESSIONS:
+        return small_mlp_sessions_py[DeviceExec, OPS_DEVICE](DeviceExec(), addresses, ints)
     return small_mlp_program_run_py[DeviceExec, OPS_DEVICE](code, addresses, ints)
 
 

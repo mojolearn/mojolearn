@@ -216,10 +216,9 @@ from gemm.experiments.neural_switches import ROLE_HEAD
 from gemm.contract import OP_NT
 from transformer.impl.llama.modeling_llama import llama_rms_norm
 from std.math import isfinite
-# lane afn-attn (2026-10-03): MOJOLEARN_AFN_ATTN_ARENA, FAST + Apple only
-# (AFN_ATTN_ARENA is False on every other build, so these are never called).
-from core.device_arena import arena_begin, arena_end, arena_release
-from transformer.impl.llama.afn_apple_fast import AFN_ATTN_ARENA, afn_flash_call_count
+# TOMBSTONE: MOJOLEARN_AFN_ATTN_ARENA (removed: dead; no caller built TransformerWorkspace after lanes x45c and x6) with TransformerWorkspace and _workspace_key deleted 2026-11-09 by lane/m2-neural-leftovers; code recoverable at 0ce88411d3.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_ARENA.patch
+from transformer.impl.llama.afn_apple_fast import afn_flash_call_count
 
 from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
 from transformer.session_native_dispatch import TRANSFORMER_NATIVE_API, transformer_session_forward_native
@@ -239,8 +238,6 @@ from transformer.transformer_binding_impl import (
     _tail_of,
     _check_base_addrs,
     _lean_for_w,
-    _workspace_key,
-    TransformerWorkspace,
     TransformerSession,
     _session_retain_cap_bytes,
     _transformer_run_session,

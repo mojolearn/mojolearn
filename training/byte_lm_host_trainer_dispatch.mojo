@@ -126,7 +126,7 @@ def host_trainer_run(a: List[Int], cfg: ByteConfig, opt: List[Float64], complete
                 named.append(a[i])
             host_scatter(a[8], named, cfg)
     else:
-        loss = host_loss_bits(byte_host_loss_native([Int(p.unsafe_ptr()), a[4]], cfg))
+        loss = host_loss_bits(byte_host_loss_native([Int(p.unsafe_ptr()), a[4]], cfg, 1, 0))
         host_copy_f32(a[5], p)
         host_copy_f32(a[6], m)
         host_copy_f32(a[7], v)

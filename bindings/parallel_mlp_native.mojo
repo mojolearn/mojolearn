@@ -19,7 +19,9 @@ from bindings.cpython_table import cpython_table
 from bindings.parallel_byte_native import _parallel_array, _parallel_view, _parallel_int, _parallel_float, _parallel_schedule_check
 from bindings.native_transport import _transport_json
 from bindings.native_json import native_json_parse
-from bindings.small_mlp_native import small_mlp_call, small_mlp_from_state
+from bindings.small_mlp_native import (
+    small_mlp_call, small_mlp_from_state, small_mlp_grads_open, small_mlp_grads_close, small_mlp_grads_rows,
+)
 from core.shared_slot import SharedSlot
 
 
@@ -55,8 +57,7 @@ def mlp_initialize(model_cls: PythonObject, opt_cls: PythonObject, binding: Pyth
     b[].environ = environ
     b[].mode = mode
     b[].entries = b[].bi.dict()
-    for name in [String("neural_gemm"), String("mlp_bias_activation"), String("mlp_relu_backward"),  # small-loop(the fixed training entry names)
-                 String("mlp_sum_rows"), String("ce_loss"), String("accumulate"), String("optimizer_step"),
+    for name in [String("accumulate"), String("optimizer_step"),  # small-loop(the fixed training entry names)
                  String("training_numeric_mode"), String("training_vendor"),
                  String("optimizer_parallel_available"), String("accumulate_parallel_available"),
                  String("clip_parallel_available")]:
@@ -242,35 +243,34 @@ def mlp_targets(value: PythonObject, rows: Int) raises -> PythonObject:
     return output
 
 
-def _mlp_gemm(a: PythonObject, b: PythonObject, m: Int, n: Int, k: Int, transpose: Int) raises -> PythonObject:
-    var out = generation_array([m, n])
-    var written = py_call(PARALLEL_MLP_BOUNDARY.get_or_create_ptr()[].entries["neural_gemm"], a._addr, b._addr, out._addr, py_ints([m, n, k, transpose]))
-    if Int(py=written) != m * n:
-        raise Error("RuntimeError: SmallMLPTrainer neural GEMM returned incomplete output")
-    _mlp_finite(out, "GEMM")
-    return out
+# TOMBSTONE: the shard gradient's per-operation route (_mlp_gemm / _mlp_bias / _mlp_sum over the training binding's neural_gemm, mlp_bias_activation, ce_loss, mlp_relu_backward and mlp_sum_rows entries, one upload, launch and wait each) deleted 2026-11-09 by lane/m2-neural-leftovers; code recoverable at 0ce88411d3. A shard's gradient is the SmallMLPTrainer program's loss-and-gradients run (autograd/small_mlp_program.mojo, mode 1), so the parallel owner's gradients are the single trainer's.
+# Restore: git apply experiments/removed/M2_SMALL_MLP_PRIMITIVES.patch
 
 
-def _mlp_bias(values: PythonObject, bias: PythonObject, rows: Int, columns: Int, relu: Bool) raises -> PythonObject:
-    var out = generation_array([rows, columns])
-    var written = py_call(PARALLEL_MLP_BOUNDARY.get_or_create_ptr()[].entries["mlp_bias_activation"], values._addr, bias._addr, out._addr, py_ints([rows, columns, Int(relu)]))
-    if Int(py=written) != rows * columns:
-        raise Error("RuntimeError: SmallMLPTrainer bias returned incomplete output")
-    _mlp_finite(out, "bias/activation")
-    return out
+def mlp_gradients_open(checked: PythonObject) raises -> Int:
+    """A gradient slot over a state `mlp_validate_state` returned: the
+    trainer's program opens on the slot's first shard and stays resident."""
+    _mlp_mode()
+    return small_mlp_grads_open(checked, "identical")
 
 
-def _mlp_sum(values: PythonObject, rows: Int, columns: Int) raises -> PythonObject:
-    var out = generation_array([columns])
-    var written = py_call(PARALLEL_MLP_BOUNDARY.get_or_create_ptr()[].entries["mlp_sum_rows"], values._addr, out._addr, py_ints([rows, columns]))
-    if Int(py=written) != columns:
-        raise Error("RuntimeError: SmallMLPTrainer sum returned incomplete output")
-    _mlp_finite(out, "bias gradient")
-    return out
+def mlp_gradients_close(handle: Int) raises:
+    small_mlp_grads_close(handle)
 
 
-# TOMBSTONE: the fused-gradient route through mlp_train_step (the deleted hand small-MLP step, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b. The worker gradients take the per-operation primitives below.
-# Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
+def mlp_gradients_on(handle: Int, inputs: PythonObject, targets: PythonObject) raises -> PythonObject:
+    """(loss, [dweight1, dbias1, dweight2, dbias2]) of one shard on an open
+    gradient slot: ONE run of the program (forward, mean cross-entropy and
+    the tape backward; the weights are read only)."""
+    var x = mlp_batch(inputs)
+    var rows = Int(py=x.shape[0])
+    var y = mlp_targets(targets, rows)
+    var result = small_mlp_grads_rows(handle, Int(py=x._addr), Int(py=y._addr), rows)
+    # Integer addresses do not retain their owners across sibling native
+    # entries; keep the admitted copies alive through the consuming call.
+    _ = x^
+    _ = y^
+    return result
 
 
 def mlp_gradients_from_state(state: PythonObject, inputs: PythonObject, targets: PythonObject) raises -> PythonObject:
@@ -279,53 +279,17 @@ def mlp_gradients_from_state(state: PythonObject, inputs: PythonObject, targets:
 
 def mlp_gradients_from_checked(checked: PythonObject, inputs: PythonObject, targets: PythonObject) raises -> PythonObject:
     """`mlp_gradients_from_state` on a state `mlp_validate_state` already
-    returned (read only here). A worker validates its resident state once
-    per committed version, not once per shard request."""
-    var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
-    var x = mlp_batch(inputs)
-    var rows = Int(py=x.shape[0])
-    var y = mlp_targets(targets, rows)
-    var w = checked["weights"]
-    var hidden = _mlp_bias(_mlp_gemm(x, w["weight1"], rows, 16, 8, 1), w["bias1"], rows, 16, True)
-    var logits = _mlp_bias(_mlp_gemm(hidden, w["weight2"], rows, 3, 16, 1), w["bias2"], rows, 3, False)
-    var loss = generation_array([1])
-    var row_loss = generation_array([rows])
-    var dlogits = generation_array([rows, 3])
-    _ = py_call(b[].entries["ce_loss"], loss._addr, row_loss._addr, dlogits._addr, logits._addr, y._addr, py_ints([rows, 3, -100, 2, 0, 1, 0]))
-    _mlp_finite(loss, "loss")
-    _mlp_finite(dlogits, "logit gradient")
-    var dw2 = _mlp_gemm(dlogits, hidden, 3, 16, rows, 2)
-    var db2 = _mlp_sum(dlogits, rows, 3)
-    var incoming = _mlp_gemm(dlogits, w["weight2"], rows, 16, 3, 0)
-    var dhidden = generation_array([rows, 16])
-    var written = py_call(b[].entries["mlp_relu_backward"], hidden._addr, incoming._addr, dhidden._addr, py_ints([rows, 16]))
-    if Int(py=written) != rows * 16:
-        raise Error("RuntimeError: SmallMLPTrainer backward returned incomplete output")
-    _mlp_finite(dhidden, "ReLU gradient")
-    var dw1 = _mlp_gemm(dhidden, x, 16, 8, rows, 2)
-    var db1 = _mlp_sum(dhidden, rows, 16)
-    var grads = b[].bi.list()
-    _ = py_call(grads.append, dw1)
-    _ = py_call(grads.append, db1)
-    _ = py_call(grads.append, dw2)
-    _ = py_call(grads.append, db2)
-    var result = b[].bi.list()
-    var scalar = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=loss._addr))[0]
-    _ = py_call(result.append, Float64(scalar))
-    _ = py_call(result.append, grads)
-    # Integer addresses do not retain their owners across sibling native
-    # entries; keep every input/workspace alive through its consuming call.
-    _ = checked  # borrowed argument: the caller owns it (compile-fix-1)
-    _ = x^
-    _ = y^
-    _ = hidden^
-    _ = logits^
-    _ = loss^
-    _ = row_loss^
-    _ = dlogits^
-    _ = incoming^
-    _ = dhidden^
-    return py_call(b[].bi.tuple, result)
+    returned (read only here), on a slot opened for this one call. A worker
+    keeps its slot across shards instead (`mlp_gradients_on`)."""
+    var handle = mlp_gradients_open(checked)
+    var result = PythonObject(None)
+    try:
+        result = mlp_gradients_on(handle, inputs, targets)
+    except error:
+        mlp_gradients_close(handle)
+        raise error^
+    mlp_gradients_close(handle)
+    return result
 
 
 def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:

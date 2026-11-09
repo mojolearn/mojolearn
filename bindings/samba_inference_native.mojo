@@ -284,6 +284,38 @@ def samba_set_cursors(model: PythonObject, state: PythonObject, cursors: PythonO
             py_setitem(lslots, "pending", PythonObject(Int(py=cursors[2 * i + 1]) != 0))
 
 
+def _samba_program_reports(fields: PythonObject, config: PythonObject, b: Int, addresses: PythonObject) raises -> PythonObject:
+    """Fresh report arrays for every Mamba-3 layer (four each, the shapes
+    `_m3_state_call` gives them), their addresses appended to `addresses`
+    in layer order; returns them per layer (None for an attention layer)."""
+    var bi = native_loaded_module("builtins")
+    var blocks = fields["_blocks"]
+    var out = bi.list()
+    for i in range(len(config["layers"])):  # driver-loop: over the stack's layers (report owners)
+        if String(config["layers"][i]) != "mamba3":
+            _ = py_call(out.append, PythonObject(None))
+            continue
+        var h = Int(py=samba_fields(blocks[i])["nheads"])
+        var four = Python.list(generation_array([b, h, 64, 128]), generation_array([b, h, 128]),
+                               generation_array([b, h, 64]), generation_array([b, h, 32]))
+        for k in range(4):  # small-loop(the four Mamba-3 reports)
+            _ = py_call(addresses.append, four[k]._addr)
+        _ = py_call(out.append, four)
+    return out
+
+
+def _samba_publish_reports(fields: PythonObject, config: PythonObject, reports: PythonObject) raises:
+    """Assign each Mamba-3 block's four reports after the run wrote them."""
+    var blocks = fields["_blocks"]
+    var names = [String("h_last_"), String("k_last_"), String("v_last_"), String("theta_last_")]
+    for i in range(len(config["layers"])):  # driver-loop: over the stack's layers (report owners)
+        if reports[i] is None:
+            continue
+        var block_fields = samba_fields(blocks[i])
+        for k in range(4):  # small-loop(the four Mamba-3 reports)
+            py_setitem(block_fields, names[k], reports[i][k])
+
+
 def _samba_program_call(model: PythonObject, fields: PythonObject, config: PythonObject, entries: PythonObject,
                         ids: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
     """One per-call run on the stack's program: (B, L) ids -> (B, L, vocab)
@@ -310,10 +342,16 @@ def _samba_program_call(model: PythonObject, fields: PythonObject, config: Pytho
         py_setitem(fields, slot, program)
     var output = generation_array([b, l, Int(py=config["vocab"])])
     var addresses = Python.list(fields["flat"]._addr, ids._addr, output._addr)
+    # The Mamba-3 blocks' public reports (h_last_, k_last_, v_last_,
+    # theta_last_), as the host route's per-block calls assign them: the
+    # program's step ops keep the last run's reports, read back with the
+    # run's one wait (training/samba_program.mojo enqueue_reports).
+    var reports = _samba_program_reports(fields, config, b, addresses)
     if state is None:
         _ = py_call(_native_function(entries, "samba_program_forward"), program, addresses, py_ints([b, l]),
                     Python.list(), Python.list())
         _ = ids  # keep the Python object alive through the native call above
+        _samba_publish_reports(fields, config, reports)
         return output
     # The state was admitted at the public door (samba_admit).
     var keep = List[PythonObject]()
@@ -321,6 +359,7 @@ def _samba_program_call(model: PythonObject, fields: PythonObject, config: Pytho
     var words = samba_state_words(model, state, "SambaStack", keep, copies)
     var cursors = py_call(_native_function(entries, "samba_program_forward"), program, addresses, py_ints([b, l]),
                           py_ints(words[0]), py_ints(words[1]))
+    _samba_publish_reports(fields, config, reports)
     _writeback(copies)
     _ = keep^
     _ = ids  # keep the Python object alive through the native call above

@@ -43,6 +43,8 @@ from autograd.block_step_host import (
 )
 # Lane x56d: the generation ops' host arm.
 from autograd.generation_host import lm_pick_host, lm_alive_host
+
+from autograd.lm_head_v2_host import lm_head_v2_host_run
 from sequence.ops import (
     FP,
     Args,
@@ -504,3 +506,8 @@ struct HostExec(Exec, Movable):
 
     def gen_alive(mut self, rows: FP, n_rows: Int, b: Int, dst: FP) raises:
         lm_alive_host(rows, n_rows, b, dst)
+
+    # Lane m2-neural-leftovers: the chunked LM head op's host arm
+    # (autograd/lm_head_v2_host.mojo), reached through the Exec trait.
+    def lm_head_v2_host(mut self, backward: Bool, bufs: List[FP], rows: Int, vocab: Int, width: Int) raises:
+        lm_head_v2_host_run(backward, bufs, rows, vocab, width)

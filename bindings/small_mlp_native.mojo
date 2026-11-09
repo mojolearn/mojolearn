@@ -17,6 +17,7 @@ Python descriptors. Shared exact input admission precedes native buffer reads;
 balanced call helpers retain original owners without leaking references.
 """
 from std.math import isfinite
+from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -150,8 +151,8 @@ def small_mlp_initialize(context: PythonObject) raises:
 
 struct MlpOperationMetadata(Movable):
     # One admission per public operation: the selected mode's connected
-    # entries (the training binding's mode word and `mlp_sessions`, the
-    # x_sequence binding's `small_mlp_program`) and the mode's name.
+    # entries (the training binding's mode word, the x_sequence binding's
+    # `small_mlp_program`) and the mode's name.
     var legacy: PythonObject
     var mode: String
 
@@ -877,51 +878,82 @@ def _apply_gradients(handle: Int, gradients: PythonObject) raises -> PythonObjec
 
 def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
     """Logits of several independent batches with the current model,
-    concatenated in the order given (`mlp_sessions`)."""
-    var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
-    var bi = b[].bi
+    concatenated in the order given: the sessions' rows packed in order and
+    run as ONE forward of the trainer's program (each row's logits depend
+    only on that row and the weights)."""
+    # TOMBSTONE: the training binding's `mlp_sessions` / `mlp_sessions_rows` entries (nn_mlp_sessions_device, training/neural_session_mlp.mojo, its host twin training/neural_session_mlp_host.mojo, training/neural_session_shape.mojo and the NN64 per-session / packed switch MOJOLEARN_NN64_SESSION_PACK) deleted 2026-11-09 by lane/m2-neural-leftovers; code recoverable at 0ce88411d3.
+    # Restore: git apply experiments/removed/M2_SMALL_MLP_PRIMITIVES.patch
     var entries = _mode_entries()
     var index = mlp_store_index(handle)
-    _settle(index, False)
     var listed = _items(inputs, -1, "mojolearn.mlp_inference_sessions: inputs must be a list of arrays")
-    # Mojo-owned row-major copies, alive across the call.
-    var sessions = List[List[Float32]]()
-    var shapes = bi.list()
-    var addresses = bi.list()
+    if len(listed) == 0:
+        raise Error("MLP sessions require at least one (rows, width) input")
+    # Pass 1: shapes only (metadata, never row values) to size the packed copy.
+    var views = List[PythonObject]()
+    var shapes = List[PythonObject]()
+    var counts = List[Int]()
+    var total = 0
     for i in range(len(listed)):  # driver-loop: over the caller's session batches
         var value = listed[i]
         var view = _view(value, "mojolearn.mlp_inference_sessions: session input must be float32")
         if _base_format(view) != "f" or Int(py=view.itemsize) != 4:
             raise Error("TypeError: mojolearn.mlp_inference_sessions: session input must be float32")
         var shape = _shape(value, view)
-        var dims = List[Int]()
-        var n = 1
-        for axis in range(len(shape)):  # small-loop(session shape words)
-            dims.append(Int(py=shape[axis]))
-            n *= dims[axis]
-        var owned = List[Float32](length=max(n, 1), fill=Float32(0))
-        if n > 0:
-            _words_from_view(value, view, shape, dims, "session input", Int(owned.unsafe_ptr()))
-            _ = value  # keep the Python object alive through the native call above
-        _ = py_call(addresses.append, Int(owned.unsafe_ptr()))
-        _ = py_call(shapes.append, shape)
-        sessions.append(owned^)
-    var total: Int
-    try:
-        total = Int(py=py_call_typed(entries.legacy["mlp_sessions_rows"], shapes, 8))
-    except error:
-        raise Error(String(error))
-    var out = generation_array([total, 3])
-    var store = MLP_STORE.get_or_create_ptr()
-    ref s = store[].slots[index].state
-    var wrote = Int(py=py_call_typed(entries.legacy["mlp_sessions"],
-        Python.list(out._addr, s.params_addr(0), s.params_addr(1), s.params_addr(2), s.params_addr(3)),
-        addresses, shapes, py_ints([8, 16, 3])))
-    _ = out  # keep the Python object alive through the native call above
-    _ = sessions^
-    if wrote != Int(py=out.size):
-        raise Error("RuntimeError: MLP sessions returned an invalid output count")
-    return out
+        if len(shape) != 2 or Int(py=shape[1]) != 8 or Int(py=shape[0]) < 0:
+            raise Error("MLP sessions require at least one (rows, width) input")
+        var n = Int(py=shape[0])
+        if n > 2147483647 // 8 - total:
+            raise Error("neural MLP sessions: activation exceeds index range")
+        total += n
+        counts.append(n)
+        views.append(view)
+        shapes.append(shape)
+    if total == 0:
+        return generation_array([0, 3])
+    # Pass 2: one Mojo-owned row-major copy of every session, in order.
+    var x = List[Float32](length=total * 8, fill=Float32(0))
+    var base = 0
+    for i in range(len(listed)):  # driver-loop: over the caller's session batches
+        if counts[i] > 0:
+            _words_from_view(listed[i], views[i], shapes[i], [counts[i], 8], "session input",
+                             Int(x.unsafe_ptr()) + 4 * base * 8)
+        base += counts[i]
+    mlp_require_finite(Int(x.unsafe_ptr()), total * 8, "session input")
+    _ = views^
+    _ = shapes^
+    var zeros = List[Int32](length=total, fill=Int32(0))
+    return _program_steps(index, entries, x, zeros, total, 1, _FORWARD, False)[1]
+
+
+def small_mlp_grads_open(state: PythonObject, mode: String) raises -> Int:
+    """A trainer slot holding a validated copy of `state`, with no Python
+    trainer object: the parallel owner's gradient workers (bindings/
+    parallel_mlp_native.mojo) run their shards on its program."""
+    var typed = _state_from_dict(state, mode)
+    return mlp_store_create(typed^)
+
+
+def small_mlp_grads_close(handle: Int) raises:
+    small_mlp_close(PythonObject(handle))
+
+
+def small_mlp_grads_rows(handle: Int, x_addr: Int, y_addr: Int, rows: Int) raises -> PythonObject:
+    """`loss_and_grads` on rows the caller already admitted: `x_addr` is
+    rows x 8 row-major float32, `y_addr` rows int32 class codes 0..2.
+    Returns (loss, [dweight1, dbias1, dweight2, dbias2]); the weights and
+    moments are read only."""
+    if rows < 1 or rows > 256:
+        raise Error("SmallMLPTrainer batch must be in [1, 256]")
+    var x = List[Float32](length=rows * 8, fill=Float32(0))
+    var y = List[Int32](length=rows, fill=Int32(0))
+    memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(x.unsafe_ptr())),
+           src=Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=x_addr), count=rows * 8)
+    memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(y.unsafe_ptr())),
+           src=Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=y_addr), count=rows)
+    var entries = _mode_entries()
+    var index = mlp_store_index(handle)
+    var res = _program_steps(index, entries, x, y, rows, 1, _GRADS, False)
+    return Python.tuple(res[0][0], res[2])
 
 
 # ------------------------------------------------------------ checkpoint

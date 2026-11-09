@@ -115,3 +115,11 @@ trait Exec:
     def gen_alive(mut self, rows: FP, n_rows: Int, b: Int, dst: FP) raises:
         """OPS_LM_ALIVE on this executor's arm: the alive word into dst."""
         ...
+
+    # Lane m2-neural-leftovers (2026-11-09): the chunked LM head op's host arm
+    # (autograd/lm_head_v2_host.mojo). A device session launches the op's
+    # kernels itself (autograd/lm_head_v2_op.mojo), so DeviceExec refuses it.
+    def lm_head_v2_host(mut self, backward: Bool, bufs: List[FP], rows: Int, vocab: Int, width: Int) raises:
+        """OPS_LM_HEAD_V2's forward (or, `backward`, its VJP) on this
+        executor's host arm; buffer order in lm_head_v2_host_run."""
+        ...

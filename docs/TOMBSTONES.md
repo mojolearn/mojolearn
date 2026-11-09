@@ -598,6 +598,10 @@ in the tables after the sections.
 | [`X_LINEAR_JACOBI_EIG_SEAM_5003` (`x_linear/ops.mojo` `jacobi_eig`, seam check 5003, arm `seam_5003_jacobi_order.patch`)](#x_linear-jacobi_eig-and-seam-5003-2026-11-09) | Linear (BayesianRidge's former team eigensolver) | removed (dead: no product caller) | 2026-11-09 | [X_LINEAR_JACOBI_EIG_SEAM_5003.patch](../experiments/removed/X_LINEAR_JACOBI_EIG_SEAM_5003.patch) |
 | [`CLUSTER_QR_BINARY64_HOST` (`x_cluster/spectral_assign.mojo` `cluster_qr_labels`, `jacobi_svd`, `_polar`, `_dot_cols`; oracle `oracle_jacobi_svd`)](#cluster_qr-binary64-host-algorithm-2026-11-09) | Cluster (SpectralClustering assign_labels='cluster_qr') | removed (superseded: float-float on every column, device on the GPU binding) | 2026-11-09 | [CLUSTER_QR_BINARY64_HOST.patch](../experiments/removed/CLUSTER_QR_BINARY64_HOST.patch) |
 
+| [`MOJOLEARN_NN64_SESSION_PACK`](#m2-neural-leftovers-small-mlp-primitives-session-switch-dead-transformer-workspace-2026-11-09) | Neural (small-MLP inference sessions) | removed (its `mlp_sessions` entry deleted; sessions run packed as one forward of the small-MLP program; never measured) | 2026-11-09 | [M2_SMALL_MLP_PRIMITIVES.patch](../experiments/removed/M2_SMALL_MLP_PRIMITIVES.patch) |
+| [Small-MLP primitives `mlp_bias_activation` / `mlp_relu_backward` / `mlp_sum_rows` (`training/mlp_ops.mojo` `_mlp_kernel` + `*_host`, the CPU twins), `mlp_sessions` / `mlp_sessions_rows`, ParallelNeuralTrainer's per-operation shard gradient](#m2-neural-leftovers-small-mlp-primitives-session-switch-dead-transformer-workspace-2026-11-09) | Neural (SmallMLPTrainer callers) | removed (superseded: the small-MLP program, modes 0 / 1 and op SESSIONS) | 2026-11-09 | [M2_SMALL_MLP_PRIMITIVES.patch](../experiments/removed/M2_SMALL_MLP_PRIMITIVES.patch) |
+| [`MOJOLEARN_AFN_ATTN_ARENA` (with `TransformerWorkspace`, `_workspace_key`)](#m2-neural-leftovers-small-mlp-primitives-session-switch-dead-transformer-workspace-2026-11-09) | Neural (Apple FAST transformer session allocation) | removed (dead: nothing built the workspace after lanes x45c and x6; never measured) | 2026-11-09 | [MOJOLEARN_AFN_ATTN_ARENA.patch](../experiments/removed/MOJOLEARN_AFN_ATTN_ARENA.patch) |
+
 ## Retired by lane debt-block-per-n (2026-10-21)
 
 These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
@@ -5590,3 +5594,49 @@ the Mamba-3 prefill session's retained-stage backward (`_m3_prefill_backward_run
 - Bits: unchanged by construction (the same kernels on the same operands in the same order; the weights are views of
   the packed tensor instead of separate uploads).
 - Recoverable at 0ce88411d3; restore with `git apply experiments/removed/X56D_MAMBA_BACKWARD_RECOMPUTE.patch`.
+
+## m2-neural-leftovers: small-MLP primitives, session switch, dead transformer workspace (2026-11-09)
+
+Lane m2-neural-leftovers (from origin/main `0ce88411d3`), follow-ups of lanes x2, m1-followups-misc, x7b, x6 and integ-w4
+(docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md rows X2, X6, X7).
+
+What it tried and what replaced it:
+
+- **The small-MLP per-operation primitives.** `training/mlp_ops.mojo` (`_mlp_kernel`, `mlp_bias_activation_host`,
+  `mlp_relu_backward_host`, `mlp_sum_rows_host`, `mlp_validate_shape`), the training bindings' `mlp_bias_activation`,
+  `mlp_relu_backward`, `mlp_sum_rows` entries on both columns, their CPU twins (`training/host/mlp_oracle.mojo`
+  `host_mlp_relu_backward`, `host_mlp_sum_rows`; `core/mojolearn_training_host_impl.mojo` `*_host_into`). Their last caller,
+  ParallelNeuralTrainer's shard gradient (`bindings/parallel_mlp_native.mojo`, ten uploads, launches and waits per shard
+  through the training binding's entries), is now ONE loss-and-gradients run of the SmallMLPTrainer program
+  (`autograd/small_mlp_program.mojo` mode 1); a worker keeps one gradient slot (the program, weights uploaded once) per
+  resident state.
+- **`mlp_sessions` / `mlp_sessions_rows` and `MOJOLEARN_NN64_SESSION_PACK`.** `training/neural_session_mlp.mojo`,
+  `training/neural_session_mlp_host.mojo`, `training/neural_session_shape.mojo`, `nn_session_move_kernel` /
+  `nn_session_move_into` (`training/neural_ab_lifetime.mojo`). `SmallMLPTrainer.predict_logits_sessions` runs the sessions
+  packed as one forward of the trainer's program (mode 0 now takes any row count); `training.mlp_inference_sessions` runs
+  them packed through the program's new op SESSIONS (any Linear-ReLU-Linear shape, the same forward ops) on the x_sequence
+  binding. The NN64 switch (per-session vs packed) was never measured.
+- **`TransformerWorkspace`, `_workspace_key` and `MOJOLEARN_AFN_ATTN_ARENA` (A07).** Nothing assigned the session's
+  `workspace` after the fixed15 forward moved onto the attention step op (lane x45c) and the forward tape API went (lane x6);
+  the arena arm (Apple FAST, never measured) only allocated that workspace's buffers.
+- The sabotage arms `coverage-training-mlp_ops` and `coverage-core-mojolearn_training_host_impl` went with their targets
+  (patches `training/checks/sabotage/coverage_mlp_ops.patch`, `core/sabotage/coverage_mojolearn_training_host_impl.patch`).
+
+Restored in the same lane (accepted-but-ignored arguments, plan row X7): `chunked_lm_head_v2=True` is honoured again as one
+executor op (`OPS_LM_HEAD_V2`, `autograd/lm_head_v2_op.mojo`: the chunked head's row kernels and its VJP, device and host
+arms over the same bodies), and `LanguageModelInference.loss` / `loss_bits` honour `threaded` / `threads` (the host
+session's task cap). The byte LM host negative control (`MOJOLEARN_BYTE_LM_HOST_SABOTAGE`) reaches the training loss again,
+and the Samba stack program writes the Mamba-3 blocks' `h_last_` / `k_last_` / `v_last_` / `theta_last_` again.
+
+Verdict: removed (superseded or dead). No A/B ran (`NN64_SESSION_PACK` and `AFN_ATTN_ARENA` were never measured; the
+primitives had no measured route of their own after lane x2). Bits change on every column together for the lanes that
+reach the moved callers: `neural-trainer-unfused` / par-mlp (shard gradients now the program's), `training-mlp-sessions`
+(the program's forward ops), `byte-lm` with `chunked_lm_head_v2` (the op), `samba` unchanged (reports are outputs only).
+RUN OWED: mlp-infer sessions, par-mlp train and lm-train-step (chunked) ms on NVIDIA and AMD IDENTICAL vs 0.8.66.
+
+- Guards: `core/experiment_guards_neural.mojo` refuses `MOJOLEARN_NN64_SESSION_PACK` and `MOJOLEARN_AFN_ATTN_ARENA`;
+  `nn64_session_pack` moved to `removed` in `experiments/six_lane_integration/grid_controls/neural-seq-train-dedupe.json`
+  (`AFN_ATTN_ARENA` had no grid control); rows in `docs/apple-fast/EXPERIMENTS.md`.
+- Code recoverable at `0ce88411d3`; patches `experiments/removed/M2_SMALL_MLP_PRIMITIVES.patch` and
+  `experiments/removed/MOJOLEARN_AFN_ATTN_ARENA.patch` (the reverse of the lane's change to the code files; `git apply`
+  restores them).

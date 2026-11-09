@@ -16,6 +16,11 @@ is captured once, at open:
     logits = x @ transpose(lm_head)                         OPS_TRANSPOSE, OPS_MATMUL
     loss   = cross_entropy(logits, reshape(targets))        OPS_RESHAPE, OPS_CROSS_ENTROPY (mean)
 
+or, with `chunked_lm_head_v2`, the head and the loss as one op over
+vocabulary panels (no logits tensor; lane m2-neural-leftovers):
+
+    loss   = lm_head_v2(x, lm_head, reshape(targets))       OPS_RESHAPE, OPS_LM_HEAD_V2 (mean)
+
 with inputs (ids, targets) = (row[:length], row[1:]) of every (length + 1)
 token row. `train_step` / `train_steps` are Program.fit over it
 (autograd/program_runtime.mojo `train_program_control`): one epoch whose
@@ -49,6 +54,7 @@ certified optimizer step of the byte LM and the host column's composed
 oracle step (`byte_host_train_step`); the bits changed with them on every
 column together.
 """
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from sequence.ops import FP, Args, OP_COPY, OPT_ADAMW
 from sequence.exec_trait import Exec
@@ -56,8 +62,9 @@ from sequence.exec_device import DeviceExec
 from core.cast_in import CastIn, CAST_KIND_SIGNED, CAST_KIND_FLOAT
 from autograd.ops_api import (
     OpsSession, ops_session_open, ops_session, ops_session_close, OPS_DEVICE,
-    OPS_EMBEDDING, OPS_TRANSPOSE, OPS_MATMUL, OPS_RESHAPE, OPS_CROSS_ENTROPY,
+    OPS_EMBEDDING, OPS_TRANSPOSE, OPS_MATMUL, OPS_RESHAPE, OPS_CROSS_ENTROPY, OPS_SCALE,
 )
+from autograd.lm_head_v2_op import OPS_LM_HEAD_V2
 from autograd.block_step_ops import (
     OPS_ATTN_STEP, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS, block_weight_sizes, block_offsets,
     block_guard, block_part_floats, block_buffer_view,
@@ -74,6 +81,11 @@ from autograd.rules_step_ops import StepOpRules
 from autograd.small_mlp_program import _bias_powers
 from training.byte_lm_config import ByteConfig
 from training.checks.optimizer_contract import OptimizerConfig
+
+#: The CPU column's negative control (THE CPU COLUMN'S NEGATIVE CONTROL in
+#: byte_program_open_on): set only on byte LM host binding builds; it never
+#: reaches a device executor.
+comptime BYTE_LM_HOST_SABOTAGE = is_defined["MOJOLEARN_BYTE_LM_HOST_SABOTAGE"]()
 
 #: the parts of the state `_move` copies
 comptime BYTE_PART_PARAM = 0
@@ -233,12 +245,31 @@ def byte_program_open_on[E: Exec & Movable & Deinitable, KIND: Int](
     var x = s[].op(OPS_EMBEDDING, [e.emb, ids], pad, none_f)
     for l in range(config.n_layers):  # driver-loop: over decoder layers
         x = s[].op(OPS_ATTN_STEP, [x, e.blocks[l], e.kv[l], e.words[l]], ints, none_f)
-    var t = s[].op(OPS_TRANSPOSE, [e.head], none_i, none_f)
-    var logits = s[].op(OPS_MATMUL, [x, t], none_i, none_f)
     var shape: List[Int] = [b * length, 1]
     var codes = s[].op(OPS_RESHAPE, [tgt], shape, none_f)
-    var mean: List[Int] = [REDUCTION_MEAN]
-    var loss = s[].op(OPS_CROSS_ENTROPY, [logits, codes], mean, none_f)
+    var loss: Int
+    if config.chunked_lm_head_v2:
+        # `chunked_lm_head_v2=True`: the head and the mean loss as ONE op
+        # over vocabulary panels, no (rows, vocab) logits (OPS_LM_HEAD_V2,
+        # autograd/lm_head_v2_op.mojo; its VJP is StepOpRules').
+        comptime if BYTE_LM_HOST_SABOTAGE and not E.IS_DEVICE:
+            # the CPU column's negative control (below) on this head: the
+            # hidden rows scaled by 1 + 2^-20 move every logit the same way
+            var bump_h: List[Float32] = [Float32(1.00000095367431640625)]
+            x = s[].op(OPS_SCALE, [x], none_i, bump_h)
+        loss = s[].op(OPS_LM_HEAD_V2, [x, e.head, codes], none_i, none_f)
+    else:
+        var t = s[].op(OPS_TRANSPOSE, [e.head], none_i, none_f)
+        var logits = s[].op(OPS_MATMUL, [x, t], none_i, none_f)
+        comptime if BYTE_LM_HOST_SABOTAGE and not E.IS_DEVICE:
+            # THE CPU COLUMN'S NEGATIVE CONTROL (-D MOJOLEARN_BYTE_LM_HOST_SABOTAGE=1, byte LM host binding builds
+            # only): every logit of the training forward is scaled by 1 + 2^-20 (OPS_SCALE), so the loss, every
+            # gradient and every AdamW update after it move. Wrong on purpose: a build with it defined must fail
+            # the loss comparison, or the comparison is not reaching the training arithmetic.
+            var bump: List[Float32] = [Float32(1.00000095367431640625)]
+            logits = s[].op(OPS_SCALE, [logits], none_i, bump)
+        var mean: List[Int] = [REDUCTION_MEAN]
+        loss = s[].op(OPS_CROSS_ENTROPY, [logits, codes], mean, none_f)
     e.pid = s[].capture([ids, tgt], [loss])
     s[].free(ids)
     s[].free(tgt)

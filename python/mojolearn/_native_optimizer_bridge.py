@@ -29,10 +29,10 @@ def connect(training):
                "train_dev_free", "train_dev_alloc", "train_dev_put", "train_dev_get",
                "linear_forward", "linear_backward", "linear_forward_dev", "linear_backward_dev",
                "rms_norm_forward", "rms_norm_backward", "embedding_forward", "embedding_backward", "ce_loss", "ce_loss_dev", "accumulation_is_aligned", "optimizer_resident_download", "optimizer_resident_upload",
-               "chunked_lm_head_v2_loss", "chunked_lm_head_v2_train", "mlp_sessions_rows", "mlp_sessions",
+               "chunked_lm_head_v2_loss", "chunked_lm_head_v2_train",
                "residual_dropout", "residual_dropout_backward")
     optional_entries = ("linear_forward_dev", "linear_backward_dev", "ce_loss_dev", "chunked_lm_head_v2_loss",
-                        "chunked_lm_head_v2_train", "mlp_sessions_rows", "mlp_sessions", "residual_dropout",
+                        "chunked_lm_head_v2_train", "residual_dropout",
                         "residual_dropout_backward")
     for mode in ("identical", "fast"):  # glue: connect every supported numeric-mode ABI at import
         try:
@@ -58,6 +58,12 @@ def connect(training):
                     raise TypeError(f"optimizer requires compiled {name}")
                 cells[name] = entry
             cells["module"] = binding
+            try:  # glue: mlp_inference_sessions runs the x_sequence binding's small-MLP program (op SESSIONS)
+                program = getattr(_backend.binding("_mojolearn_x_sequence", mode), "small_mlp_program")
+                if isinstance(program, BuiltinFunctionType):
+                    cells["small_mlp_program"] = program
+            except (ImportError, AttributeError, ValueError, RuntimeError, NotImplementedError):
+                pass  # glue: refused by name at the call (training_extra_native._entry)
             bindings[mode] = cells
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
             bindings[mode] = type(error).__name__ + ": " + str(error)

@@ -1699,9 +1699,7 @@ def host_families_built():
 #:   _mojolearn_training -> _mojolearn_training_host (the mlp lane,
 #:     2026-09-14): optimizer_step and ce_loss over
 #:     training/checks/optimizer_oracle.mojo and loss_oracle.mojo (the
-#:     normative answers of the optimizer and loss profiles) and
-#:     mlp_bias_activation, mlp_relu_backward and mlp_sum_rows over
-#:     training/host/mlp_oracle.mojo, so SmallMLPTrainer trains on the CPU;
+#:     normative answers of the optimizer and loss profiles);
 #:     and (lane/cpu-training-misc, 2026-09-15) clip_grad_norm over the same
 #:     optimizer oracle, and accumulate, accumulation_is_aligned and the
 #:     embedding, RMSNorm and linear forward and backward over

@@ -99,6 +99,9 @@ struct FaultExec(Exec, Movable):
     def gen_alive(mut self, rows: FP, n_rows: Int, b: Int, dst: FP) raises:
         self.host.gen_alive(rows, n_rows, b, dst)
 
+    def lm_head_v2_host(mut self, backward: Bool, bufs: List[FP], rows: Int, vocab: Int, width: Int) raises:
+        self.host.lm_head_v2_host(backward, bufs, rows, vocab, width)
+
 
 def require(condition: Bool, message: String) raises:
     if not condition:
