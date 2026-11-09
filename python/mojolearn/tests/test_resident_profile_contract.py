@@ -14,6 +14,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture(autouse=True)
 def resident_route(monkeypatch):
     monkeypatch.setenv("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD", "1")
+    monkeypatch.delenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", raising=False)
 
 
 def test_default_profile_publishes_with_resident_state(tmp_path):

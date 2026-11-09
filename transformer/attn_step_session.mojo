@@ -43,6 +43,8 @@ from autograd.block_step_ops import (
     OPS_ATTN_STEP,
     AttnPrefill,
     BlockStepScratch,
+    TRANSFORMER_GENERIC_PREFILL,
+    attn_step_fresh_prefill,
     attn_step_adopt,
     attn_step_entry,
     attn_step_restart,
@@ -480,6 +482,19 @@ struct AttnStepArm(Movable):
         self._shape(ints)
         self.refresh_weights(a)
         var n = self.b * l * self.dm
+        comptime if not TRANSFORMER_GENERIC_PREFILL:
+            # Lane r1-restore-measured-winners (2026-11-09): the stateless
+            # prefill is the op's fresh prefill arm (0.8.66's block session
+            # prefill, autograd/block_step_ops.mojo attn_step_fresh_prefill):
+            # x straight into the L-shaped stages, y straight down, no
+            # resident x / y hop. -D MOJOLEARN_TRANSFORMER_GENERIC_PREFILL
+            # runs the generic op run below instead (the boxes' A/B).
+            if stateless:
+                if s0 != 0:
+                    raise Error("transformer: a discarded cache starts at cached_tokens 0")
+                self.cached = attn_step_fresh_prefill(self.ex, self.sc, self._operands(self.xio), self._counts(n),
+                                                      self.ints, a[0], a[12], l, self.pre)
+                return self.cached
         self._io(n)
         var ctx = self.ex.ctx.copy()
         if stateless:

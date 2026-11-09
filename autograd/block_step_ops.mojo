@@ -72,6 +72,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.ops import FP
 from sequence.exec_device import DeviceExec
 from core.identity_trace import IdentityTrace
+from core.hostptr import f32_ptr
 from mamba.checks.mamba_fixture import MambaDims
 from mamba.checks.mamba2_fixture import Mamba2Dims, M2_CHUNK_SIZE, M2_HEADDIM, M2_D_STATE
 from mamba.checks.mamba3_fixture import Mamba3Dims, M3_CHUNK_SIZE, M3_HEADDIM, M3_D_STATE, M3_NUM_ROPE_ANGLES
@@ -1189,6 +1190,80 @@ def attn_step_run_kept(
         raise Error("ops: attention_step takes four tensors (x, weights, kv, words)")
     try:
         _run_attn_on(ex, sc, bufs, counts, ints, y_out, pre, forward_only)
+    except err:
+        pre.clear()
+        for k in range(1, len(bufs)):  # small-loop(bufs: the op's four operands): entry eviction, no data
+            sc.forget(Int(bufs[k]))
+        raise err
+
+
+#: Lane r1-restore-measured-winners (2026-11-09): the attention step op's
+#: stateless FRESH PREFILL arm. Default: `attn_step_fresh_prefill` below, the
+#: launch sequence of 0.8.66's block session prefill
+#: (`_transformer_run_session[discard_cache=True]`, restored from git at
+#: 616dbdf75f^ / v0.8.66 transformer/transformer_binding_impl.mojo; the path
+#: `TransformerBlock.forward` with no state took on every GPU binding before
+#: lanes x4 / x4b). `-D MOJOLEARN_TRANSFORMER_GENERIC_PREFILL` is lane x4b's
+#: generic op run (`AttnStepArm.block_forward`: x up into the arm's resident
+#: buffer, `attn_step_run_kept`, the two device copies x -> stages input and
+#: residual2 -> y, y down), kept for the boxes' A/B. Both arms run the same
+#: `llama_decoder_layer_forward` (forward_only) on the same zero cache, so
+#: the bits are the same; the restore is a measured-winner rule (AGENTS.md
+#: 2026-11-09: no measurement showed the generic run at least as fast).
+comptime TRANSFORMER_GENERIC_PREFILL = is_defined["MOJOLEARN_TRANSFORMER_GENERIC_PREFILL"]()
+
+
+def attn_step_fresh_prefill(
+    mut ex: DeviceExec, mut sc: BlockStepScratch, bufs: List[FP], counts: List[Int], ints: List[Int],
+    px: Int, py: Int, l: Int, mut pre: AttnPrefill,
+) raises -> Int:
+    """The stateless prefill of `l` tokens per row on the op's resident entry
+    over (bufs[1] weights, bufs[2] kv, bufs[3] word): the caches zero-filled
+    on the device (the bytes a fresh `LlamaKVCache` holds, nothing of them
+    crosses the host), the caller's x (host `px`) straight into the L-shaped
+    stages' input, one forward (forward_only: no backward reads these
+    stages), residual2 straight down to the caller's y (host `py`), one wait.
+    Returns the cached token count (`l`). 0.8.66's
+    `_transformer_run_session[True]` body, with the entry's views in place of
+    the session workspace's buffers; its two waits (after the uploads, after
+    the download) are kept as they were. bufs[0] (x) is not read."""
+    _check_ints(OPS_ATTN_STEP, ints)
+    if len(bufs) != 4 or len(counts) != 4:
+        raise Error("ops: attention_step takes four tensors (x, weights, kv, words)")
+    if l < 1:
+        raise Error("transformer_forward_fresh: B and L must be positive")
+    try:
+        var ctx = ex.ctx.copy()
+        var b = ints[0]
+        var dm = ints[1]
+        var n = b * l * dm
+        var e = attn_step_entry(ex, sc, bufs, counts, ints)
+        ref blk = sc.attn[e]
+        var dims = _attn_dims(ints)
+        # The L-shaped stages (0.8.66: the session workspace's), reset to the
+        # constructor's zeros when reused, as `_stage_reset_on()` did by default.
+        pre.prepare(ctx, b, l, ints[6], dims, ints[7], blk.lean)
+        # The bytes a fresh `LlamaKVCache` holds, on the device, no upload.
+        # TOMBSTONE: MOJOLEARN_IDN_TF_SESSION_LEAN (loser: transformer-forward 1.350) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
+        # Restore: git apply experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch
+        blk.kv.k.enqueue_fill(Float32(0.0))
+        blk.kv.v.enqueue_fill(Float32(0.0))
+        ctx.enqueue_copy(dst_buf=pre.dx.value(), src_ptr=f32_ptr(px))
+        ctx.synchronize()
+        blk.kv.s = 0
+        var trace = IdentityTrace.disabled()
+        # forward_only: no backward reads this entry's stages.
+        llama_decoder_layer_forward(ctx, pre.stages.value(), blk.kv, blk.rope, blk.w, pre.dx.value(),
+                                    b, l, 0, trace, String("py"), forward_only=True)
+        pre.pos0 = 0
+        # One wait for the download (the fresh entry's pattern). The op's
+        # state word follows the entry's cache position (one queued word,
+        # so a later op run over this triple reads the right position).
+        ctx.enqueue_copy(dst_ptr=f32_ptr(py), src_buf=pre.stages.value().residual2.create_sub_buffer[DType.float32](0, n))
+        var words: List[Int] = [blk.kv.s]
+        _write_words(ex, bufs[3], words)
+        ctx.synchronize()
+        return blk.kv.s
     except err:
         pre.clear()
         for k in range(1, len(bufs)):  # small-loop(bufs: the op's four operands): entry eviction, no data

@@ -29,9 +29,9 @@ def _check_configuration() -> Bool:
     # registered sched_exp_block, which nothing called after the schedules went native; PURITY_3_OFF / PURITY_6_OFF only
     # changed the x_neighbors_purity_flags word, which nothing read. Recoverable at 485ba9cc1.
     comptime assert not (is_defined["MOJOLEARN_SCHED_FAST_TABLE"]() or is_defined["MOJOLEARN_SCHED_FAST_TABLE_OFF"]()), "removed: MOJOLEARN_SCHED_FAST_TABLE (sched_exp_block) had no caller; the schedules run lr_schedule_at / lr_schedule_series"
-    # Deleted 2026-11-09 (lane x4-transformer-on-executor): the device per-call fresh prefill entry and the public
-    # decode session's deferred-check window (docs/TOMBSTONES.md). Recoverable at f59d913b0b.
-    comptime assert not (is_defined["MOJOLEARN_TRANSFORMER_FRESH_PREFILL"]() or is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"]()), "removed: MOJOLEARN_TRANSFORMER_FRESH_PREFILL / MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (the GPU binding's per-call transformer_forward_fresh) superseded by the block session's fresh prefill; deleted 2026-11-09, recoverable at f59d913b0b; see docs/TOMBSTONES.md"
+    # Restored 2026-11-09 (lane r1-restore-measured-winners): MOJOLEARN_TRANSFORMER_FRESH_PREFILL /
+    # MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (the GPU binding's per-call transformer_forward_fresh export)
+    # are live again, with their pre-x4 meaning; lane x4's refusal (deleted at 256e5e0c16) is lifted.
     # Deleted 2026-11-09 (lane x7-byte-lm-on-executor): the byte LM trainer's hand step, whose arms these were
     # (the step is the trainer's captured program on Program.fit now). Never measured as defaults; docs/TOMBSTONES.md
     # "BYTE_LM_HAND_STEP". Recoverable at the deletion commit's parent on lane/x7-byte-lm-on-executor.
