@@ -38,6 +38,7 @@ from core.resident_generation_read import ResidentGreedyRead
 from core.resident_sampling_read import ResidentSamplingRead
 from core.generation_sampling_f32 import sampling_pick_f32
 from core.device_scan import device_first_nonfinite
+from core.decode_slab import decode_slab_check, decode_slab_put, decode_slab_take
 from core.device_nonfinite_pair import DeviceNonfinitePair
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
@@ -1758,6 +1759,38 @@ def _session_step_run_sync(mut s: TransformerDecodeSession, px: Int, py: Int) ra
         raise Error("transformer decode session: the L = 1 stages hold a different output length")
     ctx.enqueue_copy(dst_ptr=_f32_ptr(py), src_buf=s.stages.value().residual2)
     ctx.synchronize()
+    return s.kv.value().s
+
+
+
+def _session_decode_run(mut s: TransformerDecodeSession, px: Int, py: Int, n: Int) raises -> Int:
+    """N decode tokens per row on the resident structs (decode plan D2): the
+    caller's (B, N, d_model) x uploaded once, the body of
+    `_session_step_run_sync` once per token (L = 1 at the advancing position)
+    with token t moved on the device, and the (B, N, d_model) output in one
+    download behind one wait. Same kernels, same order, same bytes as N
+    `_session_step_run_sync` calls; the cache ends where they leave it."""
+    decode_slab_check(s.b, n, s.dm, "transformer decode session decode")
+    ref ctx = s.ctx.value()
+    var row = s.b * s.dm
+    if row != len(s.stages.value().residual2):
+        raise Error("transformer decode session: the L = 1 stages hold a different output length")
+    var xs = ctx.enqueue_create_buffer[DType.float32](row * n)
+    var ys = ctx.enqueue_create_buffer[DType.float32](row * n)
+    ctx.enqueue_copy(dst_buf=xs, src_ptr=_f32_ptr(px))
+    var trace = IdentityTrace.disabled()
+    for t in range(n):  # driver-loop: over decode tokens, the session's one-token step body each
+        decode_slab_take(ctx, s.dx.value(), xs, s.b, n, s.dm, t)
+        var pos0 = s.kv.value().s
+        llama_decoder_layer_forward(
+            ctx, s.stages.value(), s.kv.value(), s.rope.value(), s.w.value(), s.dx.value(),
+            s.b, 1, pos0, trace, String("py.session"))
+        decode_slab_put(ctx, ys, s.stages.value().residual2, s.b, n, s.dm, t)
+    ctx.enqueue_copy(dst_ptr=_f32_ptr(py), src_buf=ys)
+    ctx.synchronize()
+    # The caller's x and y stay borrowed until the wait above returns.
+    _ = xs^
+    _ = ys^
     return s.kv.value().s
 
 
