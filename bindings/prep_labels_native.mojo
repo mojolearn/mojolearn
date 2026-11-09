@@ -33,6 +33,7 @@ from bindings.str_labels_native import str_lookup
 from bindings.user_objects_native import _Env, _f32_exact, _indicator
 from bindings.cpython_table import cpython_table
 from bindings.p3_labels_metrics_native import p3_item, p3_type_word, p3_dict_codes
+from core.label_words_impl import label_codes_i32_to_f64
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -390,7 +391,11 @@ def _numeric_label_words(values: PythonObject, mut words: List[Float64], mut all
     var float_word = Int(float_type._obj_ptr)
     ref cpy = Python().cpython()
     var t = cpython_table()
-    for i in range(n):  # driver-loop: per LABEL (data-sized), one borrowed read and one C conversion each
+    # One pass over the caller's label objects (Python objects a kernel file
+    # cannot read): main's recorded input-step debt
+    # (tools/hooks/compute_in_shells_baseline.txt), its body made native
+    # for exact int / float labels by lane P2.
+    for i in range(n):  # cpu-route: Python label objects, the explicit label input step (one pass)
         var x: Float64
         var is_int: Bool
         if exact:
@@ -483,9 +488,8 @@ def _object_codes(mut p: EncProg, classes: PythonObject, values: PythonObject, c
     var n = len(listed)
     var words = List[Int32](unsafe_uninit_length=n)
     p3_dict_codes(index, listed, Int(words.unsafe_ptr()), -1)
-    var codes = List[Float64](unsafe_uninit_length=n)
-    for i in range(n):  # driver-loop: native widening of the n code words
-        codes[i] = Float64(words[i])
+    var codes = label_codes_i32_to_f64(Int(words.unsafe_ptr()), n)
+    _ = words^  # keep the code words alive through the widening above
     return p.put_floats(codes, context)
 
 
