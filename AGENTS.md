@@ -255,8 +255,8 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   violations. No other metadata protocol is exempt.
 - **Python fallbacks for a Mojo or Modular bug are a frozen list (Andrew, 2026-11-09).**
   `python/mojolearn/_runtime_fallbacks.py` is the COMPLETE list of authorized fallbacks (empty today).
-  Nothing is added without Andrew's explicit word. An agent that believes it has found a Mojo bug stops, writes the smallest reproducer and the ask for Modular, and reports; it does not
-  write Python. Each entry keeps its reproduction and upstream ask; a native fix removes the entry. A path that
+  Nothing is added without Andrew's explicit word. An agent that believes it has found a Mojo bug stops, writes
+  the smallest reproducer and the ask for Modular, and reports; it does not write Python. Each entry keeps its reproduction and upstream ask; a native fix removes the entry. A path that
   uses an entry is recorded in release evidence and is never called Python-free.
 - Python test and benchmark controllers, test data preparation and independent oracles are testing tools. Keep
   them distinct from product execution and honest about timing boundaries. Installing a Python package is not a
