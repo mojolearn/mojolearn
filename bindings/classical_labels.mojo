@@ -47,6 +47,10 @@ from bindings.str_labels_native import StrTable, _read, _sorted
 from bindings.cpython_table import cpython_table
 from bindings.perf3_label_doors_text import labels_all_exact_str
 from bindings.label_input_sources import LABELS_LIST_INT
+from core.admitted_cast_elements import admitted_cast_elements
+from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64
+from core.admitted_input import admitted_check_weights_f32
+from core.admitted_transpose import admitted_transpose_to_f32
 from bindings.p3_labels_metrics_native import (
     p3_call_object, p3_decode_list, p3_text_codes, p3_text_classes, p3_text_lookup, p3_dict_codes,
     p3_integral_list, p3_item, p3_type_word, P3_TEXT_OK, P3_TEXT_NOT_STR)
@@ -451,13 +455,17 @@ def _native_code(typestr: String) raises -> Int:
 
 def labels_cast(src: Int, source: String, dst: Int, target: String, count: Int, context: PythonObject) raises:
     """`Array.astype(target)` of a contiguous block (`_native_astype`): the
-    core helper `cast_elements`, one conversion per element in storage
-    order."""
+    core cast `cast_elements` in process, one conversion per element in
+    storage order, element tasks across the host's cores."""
+    # Lane A1 admit-trees-labels: this was a Python call into the base
+    # binding's `cast_elements` (one task, `_tasks = 1`); the same typed
+    # kernel now runs in process (core/admitted_cast_elements.mojo), split
+    # across cores. Same conversion per element: no bit change.
+    # TOMBSTONE: labels_cast / trees_cast py_call into the base binding's cast_elements deleted 2026-11-08 by lane a1-admit-trees-labels; code recoverable at f7d10d2b09.
+    # Restore: experiments/removed/A1_ADMIT_TREES_LABELS.patch.
     if count == 0:
         return
-    var refused = Int(py=py_call_typed(labels_helper(context, "cast_elements"), PythonObject(src),
-                                      PythonObject(_native_code(source)), PythonObject(dst),
-                                      PythonObject(_native_code(target)), PythonObject(count)))
+    var refused = admitted_cast_elements(src, _native_code(source), dst, _native_code(target), count)
     if refused != 0:
         raise Error("TypeError: mojolearn: an element does not fit " + target)
 
@@ -522,25 +530,28 @@ def labels_f32_view(var view: LabelsView, order: String, context: PythonObject,
     _ = out  # keep the Python object alive through the native call above
     var contiguous_c = view.c_order()
     var contiguous_f = view.f_order()
+    # Lane A1 admit-trees-labels: every conversion below runs in process,
+    # across the host's cores: the cast through core `cast_elements` (it was
+    # a Python call into the base binding, one task; float64 sources went
+    # through the base `cast_f64_to_f32`, a device round trip) and the
+    # transpose through core/admitted_transpose.mojo (it was the base
+    # `transpose_f32` / `cast_colmajor_f64_to_f32`, a device round trip).
+    # Each element gets the same single conversion: no bit change.
+    # TOMBSTONE: labels_f32_view py_call casts and transposes (base cast_f64_to_f32, transpose_f32, cast_colmajor_f64_to_f32) deleted 2026-11-08 by lane a1-admit-trees-labels; code recoverable at f7d10d2b09.
+    # Restore: experiments/removed/A1_ADMIT_TREES_LABELS.patch.
     if (view.typestr == "<f8" or view.typestr == "<f4") and (contiguous_c or contiguous_f):
         if two and not view.both_orders() and contiguous_f != want_f:
-            # `_native_to_f32`: the one fused cast-and-transpose (or the
-            # float32 transpose) over the source's [rows, cols] layout.
+            # The one fused cast-and-transpose (or the float32 transpose)
+            # over the source's [rows, cols] storage layout.
             var r = rows
             var c = cols
             if contiguous_f:
                 r = cols
                 c = rows
-            var fn_obj = labels_helper(context, "cast_colmajor_f64_to_f32" if view.typestr == "<f8" else "transpose_f32")
-            _ = py_call_typed(fn_obj, PythonObject(view.addr), PythonObject(dst), PythonObject(r), PythonObject(c))
-            _ = out  # keep the Python object alive through the native call above
-            _ = view  # keep the Python object alive through the native call above
-            return LabelsMatrix(out, dst, rows, cols, not want_f)
-        if view.typestr == "<f8":
-            # The flat cast keeps the source's storage order, which is the
-            # requested one here (or the two coincide).
-            _ = py_call_typed(labels_helper(context, "cast_f64_to_f32"), PythonObject(view.addr), PythonObject(dst),
-                              PythonObject(view.size()))
+            if view.typestr == "<f8":
+                admitted_transpose_to_f32[DType.float64](view.addr, dst, r, c)
+            else:
+                admitted_transpose_to_f32[DType.float32](view.addr, dst, r, c)
             _ = out  # keep the Python object alive through the native call above
             _ = view  # keep the Python object alive through the native call above
             return LabelsMatrix(out, dst, rows, cols, not want_f)
@@ -553,17 +564,15 @@ def labels_f32_view(var view: LabelsView, order: String, context: PythonObject,
         return LabelsMatrix(out, dst, rows, cols, not want_f)
     # The staging store is written in full by the cast and read only by the
     # transpose below; it never escapes, so it needs no fill either.
-    var staged = native_scratch_bytes(view.size() * 4) if scratch else labels_vector(view.size(), "<f4", context)
-    var staged_addr = native_scratch_address(staged) if scratch else labels_address(staged)
+    var staged = native_scratch_bytes(view.size() * 4)
+    var staged_addr = native_scratch_address(staged)
     labels_cast(view.addr, view.typestr, staged_addr, "<f4", view.size(), context)
-    _ = staged  # keep the Python object alive through the native call above
-    _ = view  # keep the Python object alive through the native call above
     var r = cols if contiguous_f else rows
     var c = rows if contiguous_f else cols
-    _ = py_call_typed(labels_helper(context, "transpose_f32"), PythonObject(staged_addr), PythonObject(dst),
-                      PythonObject(r), PythonObject(c))
+    admitted_transpose_to_f32[DType.float32](staged_addr, dst, r, c)
     _ = staged  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
+    _ = view  # keep the Python object alive through the native call above
     _ = staged^
     return LabelsMatrix(out, dst, rows, cols, not want_f)
 
@@ -582,11 +591,19 @@ def labels_forest_layout(source: PythonObject, name: String, context: PythonObje
 
 
 def labels_all_finite(addr: Int, count: Int, wide: Bool, context: PythonObject) raises -> Bool:
-    """`_buffer.all_finite`: the base binding's scan."""
-    if count == 0:
+    """`_buffer.all_finite`: the one host finiteness scan
+    (core/host_finite_scan.mojo), SIMD words in tasks across the host's
+    cores."""
+    # Lane A1 admit-trees-labels: this was a Python call into the base
+    # binding's `all_finite_f32/_f64`, which uploaded the words to the device
+    # to scan them there. A predicate: no bit changes.
+    # TOMBSTONE: labels_all_finite / trees_all_finite py_call into the base binding's device scan deleted 2026-11-08 by lane a1-admit-trees-labels; code recoverable at f7d10d2b09.
+    # Restore: experiments/removed/A1_ADMIT_TREES_LABELS.patch.
+    if count <= 0:
         return True
-    var fn_obj = labels_helper(context, "all_finite_f64" if wide else "all_finite_f32")
-    return Int(py=py_call_typed(fn_obj, PythonObject(addr), PythonObject(count))) == 1
+    if wide:
+        return host_all_finite_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr), count)
+    return host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr), count)
 
 
 # ---------------------------------------------------------------- weights
@@ -647,16 +664,22 @@ def labels_check_sample_weight(source: PythonObject, n: Int, context: PythonObje
 
 
 def labels_prepare_weights(addr: Int, n: Int, context: PythonObject) raises:
-    """`prepare_targets(None, w, n)` on float32 weights: the weight scan,
-    refused with scikit-learn's wording."""
-    var status = Int(py=py_call_typed(labels_helper(context, "prepare_targets"), PythonObject(0), PythonObject(0),
-                                     PythonObject(n), PythonObject(0), PythonObject(0), PythonObject(addr),
-                                     PythonObject(0), PythonObject(0)))
-    if status == -3:
+    """The finiteness, sign and all-zero tests of `n` float32 weights,
+    refused with scikit-learn's wording, in that order: the one weight
+    admitter's tests (core/admitted_input.mojo `admitted_check_weights_f32`
+    after the one host finiteness scan), tasks across the host's cores."""
+    # Lane A1 admit-trees-labels: this was a Python call into the base
+    # binding's `prepare_targets(None, w, n)` (one serial pass). Same
+    # verdicts in the same order (-3 non-finite, -4 negative, -5 all zero).
+    # TOMBSTONE: labels_prepare_weights / trees_prepare_weights py_call into the base binding's prepare_targets deleted 2026-11-08 by lane a1-admit-trees-labels; code recoverable at f7d10d2b09.
+    # Restore: experiments/removed/A1_ADMIT_TREES_LABELS.patch.
+    if n <= 0:
+        return
+    var w = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
+    if not host_all_finite_f32(w, n):
         raise Error("Input sample_weight contains NaN or infinity.")
-    if status == -4:
-        raise Error("Negative values in data passed to `sample_weight`")
-    if status == -5:
+    # A vector weight: `output` is not written.
+    if not admitted_check_weights_f32(w, w, n, False):
         raise Error("Sample weights must contain at least one non-zero number.")
 
 

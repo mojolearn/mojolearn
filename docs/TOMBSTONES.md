@@ -416,6 +416,12 @@ in the tables after the sections.
 | [`family_all_finite_f32` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Family admission (finiteness scan) | removed (second name of `host_all_finite_f32`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
 | [`p3nc_all_finite_f32` (admission helper)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Neighbor/cluster admission (finiteness scan) | removed (second name of `host_all_finite_f32`) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
 | [trees_public_inputs array helpers copy (`trees_view`, `trees_f32`, `TreesView`, `TreesMatrix`)](#admission-helpers-merged-into-the-one-path-2026-11-08) | Trees admission (TreesView/TreesMatrix copy of classical_labels) | removed (duplicate; the trees_* names import the one copy) | 2026-11-08 | [A0_ADMISSION_HELPERS.patch](../experiments/removed/A0_ADMISSION_HELPERS.patch) |
+| [`labels_cast` / `trees_cast` Python call into the base `cast_elements`](#tree-and-label-door-admission-in-process-2026-11-08) | Trees and label admission (cast) | removed (in process: `core/admitted_cast_elements.mojo`, element ranges across cores) | 2026-11-08 | [A1_ADMIT_TREES_LABELS.patch](../experiments/removed/A1_ADMIT_TREES_LABELS.patch) |
+| [`labels_f32_view` base `cast_f64_to_f32` / `transpose_f32` / `cast_colmajor_f64_to_f32` calls](#tree-and-label-door-admission-in-process-2026-11-08) | Trees and label admission (cast, F-order layout) | removed (in process: `cast_elements` ranges and `core/admitted_transpose.mojo`, no device round trip) | 2026-11-08 | [A1_ADMIT_TREES_LABELS.patch](../experiments/removed/A1_ADMIT_TREES_LABELS.patch) |
+| [`labels_all_finite` / `trees_all_finite` base device scan](#tree-and-label-door-admission-in-process-2026-11-08) | Trees and label admission (finite) | removed (in process: `core/host_finite_scan.mojo`; X was uploaded only to be scanned) | 2026-11-08 | [A1_ADMIT_TREES_LABELS.patch](../experiments/removed/A1_ADMIT_TREES_LABELS.patch) |
+| [`labels_prepare_weights` / `trees_prepare_weights` base `prepare_targets` call](#tree-and-label-door-admission-in-process-2026-11-08) | Trees and label admission (sample_weight) | removed (in process: `host_all_finite_f32` + `admitted_check_weights_f32`) | 2026-11-08 | [A1_ADMIT_TREES_LABELS.patch](../experiments/removed/A1_ADMIT_TREES_LABELS.patch) |
+| [IsolationForest fit zero-filled copy destination](#tree-and-label-door-admission-in-process-2026-11-08) | Trees (IsolationForest fit) | removed (uninitialised store; REGRESSIONS C3) | 2026-11-08 | [A1_ADMIT_TREES_LABELS.patch](../experiments/removed/A1_ADMIT_TREES_LABELS.patch) |
+| [forest door second `trees_f32` view of the admitted X](#tree-and-label-door-admission-in-process-2026-11-08) | Trees (forest predict) | removed (the `AdmittedX` words go to predict) | 2026-11-08 | [A1_ADMIT_TREES_LABELS.patch](../experiments/removed/A1_ADMIT_TREES_LABELS.patch) |
 | [`byte_lm_parallel_open` + 9 sibling entries (native entries)](#dead-native-entries-batch-3-2026-11) | Byte LM (the legacy per-entry parallel trainer: open, open_pooled, close, rollback, shard_gradient, apply_gradient, reduction_pool_available, fold_reset, shard_gradient_fold, fold_add) | removed (dead native entries: no live caller) | 2026-11-08 | [dead_entries_byte_lm_parallel.patch](../experiments/removed/dead_entries_byte_lm_parallel.patch) |
 | [`vocab_encode_public` + 4 sibling entries (native entries)](#dead-native-entries-batch-3-2026-11) | Tokenizer host (vocab_encode_public, vocab_decode_public, vocab_pretrained_public, vocab_pretokenize_public, vocab_pattern_name) | removed (dead native entries: no live caller) | 2026-11-08 | [dead_entries_tokenizer_vocab_public.patch](../experiments/removed/dead_entries_tokenizer_vocab_public.patch) |
 | [`classical_host_weights`, `pca_query_fields`, `prep_check_info`, `prep_scalar_dtype` (orphan functions)](#dead-native-entries-batch-3-2026-11) | Classical arrays, PCA and preprocessing providers | removed (orphan functions: no caller) | 2026-11-08 | [dead_entries_orphan_functions.patch](../experiments/removed/dead_entries_orphan_functions.patch) |
@@ -3872,6 +3878,37 @@ and why (no measurement separates copies that run the same cast; the kept one is
 Restore: `git apply -3 experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch` (the reverse of the lane's `.mojo` changes
 from `f7d10d2b09`; it restores every helper and its callers together). Run owed: the identity record of every family lane
 at the release and the classical family test suites; NVIDIA and AMD timing of kmeans fit/infer and knn fit (paper rows 10-12).
+## Tree and label door admission in process (2026-11-08)
+
+Lane `a1-admit-trees-labels` (A1 of `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` sections 3.3 and 4), branch
+`lane/a1-admit-trees-labels` from `integ/pre-0867` `f7d10d2b09`. Not experiment defines: the tree and label doors'
+admission steps that reached the base binding through Python calls (`labels_helper` / `trees_helper`), where they ran
+one task (`cast_elements`, `_tasks = 1`) or a device round trip (`cast_f64_to_f32`, `transpose_f32`,
+`cast_colmajor_f64_to_f32`, `all_finite_f32/_f64`: the whole X uploaded only to be cast or scanned, then uploaded again
+by the kernel), plus two copies on the forest and IsolationForest doors. No A/B: no measurement separates them; the
+in-process forms run the same single conversion per element, so no output bit changes, and every refusal keeps its
+wording.
+
+- `labels_cast` (`trees_cast`): `core/admitted_cast_elements.mojo`, the same `cast_elements` kernel over element ranges
+  across the host's cores. The base binding's own export keeps its one task (GPU-binding code; the host-route fence
+  refuses host threads there).
+- `labels_f32_view` (`trees_f32`, `trees_forest_layout`): same-order casts through the above; the F-order layout and the
+  C-order layout of an F source through `core/admitted_transpose.mojo` (row bands of 128 x 64 tiles across cores, the
+  tile of `tiled_transpose_to_f32`). The staging store of a cast-then-transpose is always uninitialised scratch.
+- `labels_all_finite` (`trees_all_finite`): `core/host_finite_scan.mojo` (the one host scan).
+- `labels_prepare_weights` (`trees_prepare_weights`): `host_all_finite_f32`, then `admitted_check_weights_f32`; the
+  refusals in `prepare_targets`' order (non-finite, negative, all zero).
+- IsolationForest fit (`trees_public_iforest.mojo` `_fit`): no second finiteness scan of the X its door admitted
+  (`trees_finite_known`, as the forest fit); the owned copy lands in an uninitialised byte store wrapped as the fitted
+  Array instead of a zero-filled `trees_empty`.
+- Forest door (`trees_public_lifecycle_native.mojo`): predict takes the `AdmittedX` words; the second `trees_f32` view
+  is gone.
+- Added, not removed: `bindings/admitted_held.mojo`, the hold scope of a meta-estimator operation (its finite X and the
+  stacking fold matrices admitted once for every member door that reads X through `admitted_held_x`).
+
+Restore: `git apply -3 experiments/removed/A1_ADMIT_TREES_LABELS.patch` (the reverse of the lane's `.mojo` changes from
+`f7d10d2b09`). Run owed: the trees rows of the board on NVIDIA and AMD (rf, iforest, gbdt fit and infer on istella and
+taxi), the meta-estimator rows, and the release's one identity record.
 
 ## Dead native entries, batch 3 (2026-11)
 

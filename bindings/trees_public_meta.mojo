@@ -27,10 +27,11 @@ from bindings.py_attr import py_attr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_wrap_array, _store_code
+from bindings.admitted_held import admitted_scope_begin, admitted_scope_end, admitted_scope_open, admitted_hold, admitted_is_held
 from bindings.trees_public_inputs import (
     TreesMatrix, TreesLabels, TreesView, _view_of_array, trees_builtins, trees_table, trees_entry, trees_helper, trees_empty,
     trees_vector, trees_reshape, trees_address, trees_f32, trees_view, trees_check_rank, trees_itemsize,
-    trees_check_sample_weight, trees_encode_labels, trees_decode_labels, trees_cast,
+    trees_check_sample_weight, trees_encode_labels, trees_decode_labels, trees_cast, trees_all_finite,
 )
 from bindings.trees_public_forest import (
     _check_mode, _repr, _str, _truthy, _is_bool, _is_integral, _refuse, forest_kind, _classifier,
@@ -130,9 +131,32 @@ def _f64_word(array: PythonObject, index: Int) raises -> Float64:
 
 
 def _x_array(X: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`as_f32_c(X, ndim=2, name="X")` as the Array the members read."""
+    """`as_f32_c(X, ndim=2, name="X")` as the Array the members read. Inside
+    the operation's hold scope (meta_admitted_operation) a finite matrix is
+    held once (bindings/admitted_held.mojo `admitted_hold`): every member
+    door then reads it as admitted, with no second view, check or scan."""
+    if admitted_is_held(X):
+        return X
     var m = _x_f32(X, context)
-    return _as_array(m, Python.tuple(m.rows, m.cols), context)
+    var Xa = _as_array(m, Python.tuple(m.rows, m.cols), context)
+    _hold_finite(Xa, context)
+    return Xa
+
+
+def _hold_finite(Xa: PythonObject, context: PythonObject) raises:
+    """Hold the float32 C-order Array `Xa` for the members when it is
+    finite (one scan for the whole call, instead of one per member door).
+    A non-finite matrix is not held: each member refuses or accepts it as
+    its own door does."""
+    if not admitted_scope_open() or admitted_is_held(Xa):
+        return
+    var rows = _rows(Xa)
+    var cols = _cols(Xa)
+    if rows < 1 or cols < 1:
+        return
+    var address = trees_address(Xa)
+    if trees_all_finite(address, rows * cols, False, context):
+        admitted_hold(Xa, address, rows, cols)
 
 
 def _rows(array: PythonObject) raises -> Int:
@@ -883,6 +907,11 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
         _ = Xa  # keep the Python object alive through the native call above
         var Xte = _gather_view(xt, x_view.addr, n, d, te_view, cols_view, context)
         _ = Xa  # keep the Python object alive through the native call above
+        if admitted_is_held(Xa):
+            # Rows of a held (finite) X are finite: the fold's members read
+            # the fold matrices as admitted too.
+            admitted_hold(Xtr, trees_address(Xtr), tr_view.shape[0], d)
+            admitted_hold(Xte, trees_address(Xte), te_view.shape[0], d)
         for i in range(len(active.ests)):  # driver-loop: over members
             var e = _clone(active.ests[i], context)
             _fit_member(e, Xtr, y_tr, w_tr, context)
@@ -2071,19 +2100,27 @@ def meta_admitted_operation(model: PythonObject, kind: String, operation: String
     to pay that admission twice, the second time inside meta_operation).
     A prediction (predict, predict_proba, transform, score) stages X once
     for its forest members (lane perf-sweep-trees, 2026-11-05)."""
-    if (operation == "trees_meta_predict" or operation == "trees_meta_predict_proba"
-            or operation == "trees_meta_transform" or operation == "trees_meta_score"):
-        var prepared = _staged_input(model, kind, args[0], context)
-        var call = Python.list(prepared[0])
-        for i in range(1, len(args)):  # small-loop(args): the call's remaining positional arguments
-            _ = py_call(call.append, args[i])
-        var result = PythonObject(None)
-        try:
-            result = _meta_dispatch(model, kind, operation, py_call(trees_builtins().tuple, call), context)
-        finally:
-            trees_unstage(prepared[1])
-        return result
-    return _meta_dispatch(model, kind, operation, args, context)
+    # X is admitted once for the whole operation (lane A1
+    # admit-trees-labels): the matrices the meta-estimator admits inside this
+    # scope are held for its members' doors and dropped when it ends.
+    var mark = admitted_scope_begin()
+    var result = PythonObject(None)
+    try:
+        if (operation == "trees_meta_predict" or operation == "trees_meta_predict_proba"
+                or operation == "trees_meta_transform" or operation == "trees_meta_score"):
+            var prepared = _staged_input(model, kind, args[0], context)
+            var call = Python.list(prepared[0])
+            for i in range(1, len(args)):  # small-loop(args): the call's remaining positional arguments
+                _ = py_call(call.append, args[i])
+            try:
+                result = _meta_dispatch(model, kind, operation, py_call(trees_builtins().tuple, call), context)
+            finally:
+                trees_unstage(prepared[1])
+        else:
+            result = _meta_dispatch(model, kind, operation, args, context)
+    finally:
+        admitted_scope_end(mark)
+    return result
 
 
 def _meta_dispatch(model: PythonObject, kind: String, operation: String, args: PythonObject,

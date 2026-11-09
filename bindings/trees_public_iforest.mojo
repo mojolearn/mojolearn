@@ -37,7 +37,9 @@ from bindings.trees_public_inputs import (
     trees_all_finite, trees_call,
 )
 from bindings.trees_lifetime import trees_resident_new
-from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop
+from bindings.trees_side_records import trees_side_get, trees_side_put, trees_side_drop, trees_finite_known
+from bindings.native_buffer_owner import native_buffer_view
+from bindings.native_array_storage import native_scratch_bytes, native_scratch_address
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.metrics_native_support import metric_is_integral, metric_is_bool
 
@@ -322,7 +324,10 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     var copied = _copied(x, X if copy_source is None else copy_source)
     py_setitem(fields, "input_copied_", PythonObject(copied))
     var device_scan = _device_scan(fields, context)
-    if not device_scan and not trees_all_finite(x.addr, x.rows * x.cols, False, context):
+    # The public door's admission (admit_x) already refused NaN and
+    # infinity in this X (trees_finite_known, as the forest fit): no second
+    # scan of it (lane A1 admit-trees-labels).
+    if not device_scan and not trees_finite_known(X) and not trees_all_finite(x.addr, x.rows * x.cols, False, context):
         raise Error(_NONFINITE)
     _ = x  # keep the Python object alive through the native calls above
     # Caller-aliased input (hazard A, p3-trees): a float32 C-order X arrives
@@ -338,14 +343,21 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     # keyed on `_x`), so X is used after fit returns. 0.8.66 regression C3
     # (iforest fit 39.6x on istella, with C1): the copy is now one parallel
     # copy across host cores instead of one serial memcpy.
+    # Lane A1 admit-trees-labels (REGRESSIONS C3: the zero fill of the
+    # 1.8 GB destination before the copy overwrote it): the copy lands in
+    # one uninitialised byte store, which `_as_array` wraps as the fitted
+    # Array (the shape `Array.from_buffer` gives a borrowed buffer). The
+    # same float32 bytes: no bit change.
+    # TOMBSTONE: iforest fit zero-filled trees_empty copy destination deleted 2026-11-08 by lane a1-admit-trees-labels; code recoverable at f7d10d2b09.
+    # Restore: experiments/removed/A1_ADMIT_TREES_LABELS.patch.
     if not copied:
         var count = x.rows * x.cols
-        var owned = trees_empty(Python.tuple(x.rows, x.cols), "<f4", context)
-        var dst = trees_address(owned)
+        var owned = native_scratch_bytes(count * 4)
+        var dst = native_scratch_address(owned)
         if count > 0:
             host_parallel_copy_bytes(dst, x.addr, count * 4)
         _ = x  # keep the caller's buffer alive through the copy above
-        x = TreesMatrix(owned, dst, x.rows, x.cols, True)
+        x = TreesMatrix(native_buffer_view(owned), dst, x.rows, x.cols, True)
     var had = Python.dict()
     var kept = Python.tuple("_x", "n_features_in_")
     for i in range(2):  # small-loop(kept): the two fitted field names restored on a refusal

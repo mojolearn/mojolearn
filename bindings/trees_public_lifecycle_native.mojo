@@ -8,7 +8,8 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_attributes import classical_check_layout
 from bindings.classical_arrays import classical_is_array
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_width, classical_estimator_name
+from bindings.classical_validate import classical_check_y, classical_check_width, classical_estimator_name
+from bindings.admitted_held import admitted_held_x
 from bindings.classical_labels import labels_shape_of, _flatten_labels
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.classifier_public_lifecycle import classifier_after_fit, _feature_names
@@ -18,7 +19,7 @@ from providers.python.estimator_lifecycle_pyapi import estimator_outside as _out
 from bindings.sequential_inputs import sequential_input
 from bindings.trees_public_forest import forest_fit, forest_public_predict, forest_kind, forest_get_params, forest_check_fit_device
 from bindings.trees_public_score import forest_score_public
-from bindings.trees_public_inputs import trees_empty, trees_address, trees_cast, trees_f32
+from bindings.trees_public_inputs import trees_empty, trees_address, trees_cast, TreesMatrix
 from bindings.trees_public_auxiliary import forest_auxiliary, forest_shape
 from bindings.trees_public_state import forest_restore_state, tree_is_fitted
 from bindings.trees_side_records import trees_admit_parameters, trees_finite_mark, trees_finite_clear
@@ -83,15 +84,21 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
         classical_require_fitted(model, False, "score" if operation.endswith("score") else "predict", context)
     # `args` (X among them) was admitted just above: the X check reuses that
     # admission instead of walking X again (perf3-nbr-msel-trees).
-    var x = classical_check_x(args[0], name, context, True)
+    # The one admission of X (bindings/admitted_input.mojo): refused with
+    # scikit-learn's wording and borrowed when it already is C-order float32
+    # (one parallel finiteness scan, no cast), otherwise one parallel cast;
+    # a matrix the running meta-estimator holds is taken as it is
+    # (bindings/admitted_held.mojo).
+    var admitted = admitted_held_x(args[0], name, context, True)
+    var x = admitted.array
     var kind = forest_kind(model, context)
     var classifier = kind.endswith("_classifier")
     var result = PythonObject(None)
     if not fitting:
-        # classical_check_x returned C-order float32 X: view it once here and
-        # hand that view to the predict (lane perf-trees-owed, 2026-11-06;
-        # the forest re-viewed X and re-checked the fitted state and width).
-        var matrix = trees_f32(x, 2, "C", "X", context)
+        # The admitted X is the predict's matrix as is (lane A1
+        # admit-trees-labels: it was viewed a second time through trees_f32;
+        # lane perf-trees-owed, 2026-11-06, had removed the third).
+        var matrix = TreesMatrix(admitted.array, admitted.address, admitted.rows, admitted.cols, True)
         classical_check_width(matrix.cols, Int(py=fields["n_features_in_"]), name)
         _feature_check(model, fields, args[0], context)
         if operation == "trees_public_forest_predict":
@@ -104,8 +111,7 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
             raise Error("unknown native public forest operation " + operation)
         _ = matrix^
         return _public_result(result, operation, classifier, context)
-    var shape = labels_shape_of(x, context)
-    var rows = shape[0]
+    var rows = admitted.rows
     if fitting:
         var y = args[1]
         if classifier:
@@ -120,7 +126,7 @@ def forest_public_operation(model: PythonObject, operation: String, args: Python
             raise Error("TypeError: native forest fit depth must be an exact integer")
         var depth = Int(py=depth_object)
         py_setitem(fields, "_mojolearn_fitting", PythonObject(depth + 1))
-        # classical_check_x refused NaN and infinity in x: the fit skips its
+        # admit_x refused NaN and infinity in x: the fit skips its
         # second scan of it (trees_side_records `trees_finite_known`).
         trees_finite_mark(x)
         try:
