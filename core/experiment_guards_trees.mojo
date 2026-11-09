@@ -61,6 +61,11 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_KSHAP_FAST_DEVICE_MODEL"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_KSHAP_FAST_DEVICE_MODEL, KernelExplainer's FAST tier on the IDENTICAL device-model route for a built-in forest, was OPEN (afr2-kshap-dm-rf never run) and will not be measured; the IDENTICAL MOJOLEARN_IDN_SHAP_DEVICE_MODEL stays; code at f59d913b0b; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_PSHAP_FAST_DEVICE_MODEL"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_PSHAP_FAST_DEVICE_MODEL, the PermutationExplainer twin of KSHAP_FAST_DEVICE_MODEL, was OPEN (afr2-pshap-dm-rf never run) and will not be measured; code at f59d913b0b; see docs/TOMBSTONES.md"
 
+    # Lane m1-followups-misc (2026-11-09): the escapes from the AdaBoost data session (a GPU tree member's rounds on the device).
+    # TOMBSTONE: MOJOLEARN_TE_ADA_SESSION_OFF / MOJOLEARN_IDN_ADA_SESSION_OFF (escapes) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch
+    comptime assert not is_defined["MOJOLEARN_TE_ADA_SESSION_OFF"](), "removed 2026-11-09 (lane/m1-followups-misc): MOJOLEARN_TE_ADA_SESSION_OFF, the FAST escape from the AdaBoost members' data session (it sent a GPU tree member back to the per-round host path; the session was the measured winner, adaboost-clf -9.0%, adaboost-reg -42% on the M3); every build opens the session; code at 5b5490960d; see docs/TOMBSTONES.md"
+    comptime assert not is_defined["MOJOLEARN_IDN_ADA_SESSION_OFF"](), "removed 2026-11-09 (lane/m1-followups-misc): MOJOLEARN_IDN_ADA_SESSION_OFF, the IDENTICAL escape from the AdaBoost members' data session (the session moves no bit); every build opens the session and a GPU binary runs every tree member's round on the device; code at 5b5490960d; see docs/TOMBSTONES.md"
     return True
 
 

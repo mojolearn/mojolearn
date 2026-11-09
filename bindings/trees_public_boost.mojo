@@ -498,31 +498,22 @@ struct Session(Copyable, Movable):
             _ = py_call_typed(trees_entry(self.native, "rf_data_session_close"), _P(handle))
 
 
-def _session_choice(default: String) raises -> String:
-    """`forest_data_session_choice(None, default)`: '' (none), 'exact' or
-    'share' (the forest owner's tier rule leaves 'share' to the caller)."""
-    var choice = trees_env("MOJOLEARN_FOREST_SESSION", default)
-    var clean = String(py_call(py_call(PythonObject(choice).strip).lower))
-    if clean == "" or clean == "0" or clean == "off" or clean == "no":
-        return ""
-    if clean == "1" or clean == "on" or clean == "exact":
-        return "exact"
-    if clean == "share":
-        return "share"
-    raise Error("MOJOLEARN_FOREST_SESSION must be 0, 1 (exact) or share")
+# TOMBSTONE: MOJOLEARN_TE_ADA_SESSION_OFF / MOJOLEARN_IDN_ADA_SESSION_OFF and the MOJOLEARN_FOREST_SESSION run-time
+# choice (escapes from the AdaBoost data session: off sent a GPU tree member back to the per-round host path) deleted
+# 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch
 
 
-def _member_session(member: PythonObject, x: AdmittedX, row_major: Bool, x_finite: Bool, default: String,
+def _member_session(member: PythonObject, x: AdmittedX, row_major: Bool, x_finite: Bool, choice: String,
                     context: PythonObject) raises -> Session:
     """`_trees_member_session`: the data session for the member fits of one
     ensemble on the forest binding a clone of `member` resolves (handle 0:
-    the choice is off, or the binary has no session entry). It stands in for
+    the binary has no session entry). It stands in for
     every member's finite scan of X, so X is scanned here unless the caller
-    already did."""
-    var choice = _session_choice(default)
+    already did. `choice` is 'exact' or 'share' (`_ada_session_choice`)."""
     var mode = _member_mode(member, context)
     var native = trees_table(context, mode, "_mojolearn_rf")
-    if choice == "" or trees_entry(native, "rf_data_session_open") is None:
+    if trees_entry(native, "rf_data_session_open") is None:
         return Session(native, 0)
     if not x_finite and not trees_finite_f32(x.address, x.rows * x.cols):
         raise Error(TREES_NONFINITE)
@@ -537,17 +528,15 @@ def _switches(xt: PythonObject) raises -> Int:
     return 0 if query is None else Int(py=py_call_typed(query))
 
 
-def _ada_session_default(fields: PythonObject, xt: PythonObject, context: PythonObject) raises -> String:
-    """`_trees_ada_session_default`."""
-    var fast = _mode(fields, context) == "fast"
-    var bits = _switches(xt)
-    if fast and (bits & 4) != 0:
+def _ada_session_choice(fields: PythonObject, xt: PythonObject, context: PythonObject) raises -> String:
+    """The AdaBoost members' forest data session: 'share' (later members
+    reuse the first member's quantile tables) in a FAST + Apple build with
+    MOJOLEARN_TE_ADA_SESSION_SHARE, else 'exact'. Every best-splitter tree
+    member fits through it, so a GPU binary runs every round on the device
+    and the CPU column keeps its per-round steps."""
+    if _mode(fields, context) == "fast" and (_switches(xt) & 4) != 0:
         return "share"
-    if fast and (bits & 2) != 0:
-        return "1"
-    if not fast and (bits & 128) != 0:
-        return "1"
-    return "0"
+    return "exact"
 
 
 def _member_store(member: PythonObject, result: PythonObject, cols: Int) raises:
@@ -1195,7 +1184,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             _ = cm  # keep the Python object alive through the native calls above
             if trees_env("MOJOLEARN_ADABOOST_REENCODE", "") != "1":
                 encoded = trees_encode_labels(codes, context)
-            session = _member_session(base, cm, False, True, _ada_session_default(fields, xt, context), context)
+            session = _member_session(base, cm, False, True, _ada_session_choice(fields, xt, context), context)
             xcm = cm^
         var is_dt = Bool(py=py_call(trees_builtins().isinstance, base, context["trees_dt_classifier"]))
         var template = forest_get_params(base, context) if m > 0 else Python.dict()
@@ -1294,15 +1283,14 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
     # of the SAME X staged on the device once (the member's rows gathered
     # there).
     var session = Session(PythonObject(None), 0)
-    var default = _ada_session_default(fields, xt, context)
-    if _session_choice(default) != "" and _is_class(base, "trees_dt_regressor", context):
+    if _is_class(base, "trees_dt_regressor", context):
         var bf = py_fields(base)
         var crit = bf["criterion"]
         if Bool(py=bf["splitter"] == PythonObject("best")) and (Bool(py=crit == PythonObject("squared_error"))
                                                                   or Bool(py=crit == PythonObject("mse"))):
             var native = trees_table(context, _member_mode(base, context), "_mojolearn_rf")
             if trees_entry(native, "rf_regressor_fit_session_rows_export") is not None:
-                session = _member_session(base, x, True, False, default, context)
+                session = _member_session(base, x, True, False, _ada_session_choice(fields, xt, context), context)
     var loss = Int(py=context["trees_ada_losses"][fields["loss"]])
     var is_dt = Bool(py=py_call(trees_builtins().isinstance, base, context["trees_dt_regressor"]))
     var y_array = _as_array(y32, Python.tuple(n), context)
@@ -1680,7 +1668,7 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedX, y32: Ad
         # scan is kept, on the tier a one-tree regressor would use.
         var probe_mode = _mode(fields, context)
         var native = trees_table(context, probe_mode, "_mojolearn_rf")
-        if _session_choice("1") != "" and trees_entry(native, "rf_data_session_open") is not None:
+        if trees_entry(native, "rf_data_session_open") is not None:
             if not trees_finite_f32(x.address, n * d):
                 raise Error(TREES_NONFINITE)
     # `_dart_device`: the round's entries and the leaf-value cap.

@@ -1266,26 +1266,17 @@ def column_f64_binding(src: PythonObject, dst: PythonObject, params: PythonObjec
 #: calibrated -9.6%, ovr -2.2%, multioutput-clf -5.9%; ada session taxi
 #: adaboost-clf -9.0%, adaboost-reg -42%; session share on top adaboost-clf
 #: -22%. `-D MOJOLEARN_TE_<NAME>_OFF` turns one off; the old `-D
-#: MOJOLEARN_TE_<NAME>` is harmless. SHARE needs ADA_SESSION, so
-#: MOJOLEARN_TE_ADA_SESSION_OFF turns both off.
+#: MOJOLEARN_TE_<NAME>` is harmless. The AdaBoost data session itself is no
+#: longer a switch (lane m1-followups-misc: every build opens it; bits 2 and
+#: 128 are always 0), only SHARE is.
 comptime _XT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime _XT_NATIVE_SPLITS = _XT_FAST_APPLE and not is_defined["MOJOLEARN_TE_NATIVE_SPLITS_OFF"]()
-comptime _XT_ADA_SESSION = _XT_FAST_APPLE and not is_defined["MOJOLEARN_TE_ADA_SESSION_OFF"]()
-comptime _XT_ADA_SESSION_SHARE = _XT_ADA_SESSION and not is_defined["MOJOLEARN_TE_ADA_SESSION_SHARE_OFF"]()
-#: fam-forests (2026-10-04), an IDENTICAL build's switch (bit 32, every
-#: vendor): the AdaBoost members fit ONE staged device copy of X through the
-#: EXACT forest data session (the session DART opens by default; never
-#: "share"), instead of every member scanning, transposing and uploading X
-#: (the classifier) or gathering its rows on the host and uploading them
-#: (the regressor). Each member still draws its own quantile sample, so its
-#: forest is the one its own fit returns: no bit moves. The host column
-#: takes the same session route under this switch (`_mojolearn_rf_host`
-#: exports `rf_data_session_open` / `rf_regressor_fit_session_rows_export`),
-#: so both columns follow ON, `_OFF` and ALL_OFF alike.
-#: `-D MOJOLEARN_IDN_ADA_SESSION_OFF` clears it.
-comptime _XT_IDN_ADA_SESSION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_ADA_SESSION_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+# TOMBSTONE: MOJOLEARN_TE_ADA_SESSION_OFF (escape from the AdaBoost data session) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch
+comptime _XT_ADA_SESSION_SHARE = _XT_FAST_APPLE and not is_defined["MOJOLEARN_TE_ADA_SESSION_SHARE_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_ADA_SESSION_OFF (`_XT_IDN_ADA_SESSION`, bit 128: the IDENTICAL escape from the AdaBoost data
+# session; the session moved no bit) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch
 #: fam2-forests (2026-10-04), an IDENTICAL GPU build's switch (bit 64, every
 #: vendor; never the host column): Kernel and Permutation SHAP over one of
 #: this library's flat forests evaluate the model on the device
@@ -1298,26 +1289,22 @@ comptime _XT_AGN_DEVICE_MODEL = XTREES_DEVICE_OPS and agn_dev.AGN_IDN_DEVICE_MOD
 # Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch
 comptime XTREES_FAST_SWITCHES = (
     (1 if _XT_NATIVE_SPLITS else 0)
-    + (2 if _XT_ADA_SESSION else 0)
     + (4 if _XT_ADA_SESSION_SHARE else 0)
     + (8 if agn_dev.KSHAP_FAST_BATCH else 0)
     + (16 if agn_dev.AGN_IDN_SYN_POOL else 0)
     + (32 if agn_dev.PSHAP_DELTA else 0)
     + (64 if _XT_AGN_DEVICE_MODEL else 0)
-    + (128 if _XT_IDN_ADA_SESSION else 0)
 )
 
 
 def fast_switches_binding() raises -> PythonObject:
-    """`XTREES_FAST_SWITCHES`: bit 1 MOJOLEARN_TE_NATIVE_SPLITS, bit 2
-    MOJOLEARN_TE_ADA_SESSION, bit 4 MOJOLEARN_TE_ADA_SESSION_SHARE, bit 8
+    """`XTREES_FAST_SWITCHES`: bit 1 MOJOLEARN_TE_NATIVE_SPLITS, bit 2 the
+    deleted MOJOLEARN_TE_ADA_SESSION (always 0), bit 4 MOJOLEARN_TE_ADA_SESSION_SHARE, bit 8
     MOJOLEARN_KSHAP_FAST_BATCH, bit 16 MOJOLEARN_AGN_IDN_SYN_POOL (an
     IDENTICAL build's switch; both in xtrees/agnostic_device.mojo), bit 32
     MOJOLEARN_PSHAP_DELTA (FAST + Apple; xtrees/agnostic_device.mojo), bit 64
     MOJOLEARN_IDN_SHAP_DEVICE_MODEL (an IDENTICAL GPU build's switch), bit
-    128 `_XT_IDN_ADA_SESSION` (an IDENTICAL build's switch; was bit 32 on
-    the IDENTICAL integration branch, renumbered at the 2026-10-05 merge
-    because main took 32 for PSHAP_DELTA), bit 256 the deleted
+    128 the deleted `_XT_IDN_ADA_SESSION` (always 0), bit 256 the deleted
     MOJOLEARN_KSHAP_FAST_OVERLAP (always 0), bit 512 the deleted MOJOLEARN_PSHAP_FAST_OVERLAP (always 0)
     (xtrees/agnostic_device.mojo; were 64 and 128 before the 2026-10-05 merge),
     bits 1024 and 2048 the deleted MOJOLEARN_KSHAP_FAST_DEVICE_MODEL and
