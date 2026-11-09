@@ -67,7 +67,10 @@ def case_while_loop(row, arm_cases):
         cond = s.capture(x, s.less(s.mean(x), s.full((1, 1), 2.0)))
         for case in arm_cases:
             every = None if case in ("None", "none", "") else int(case)
-            ms, why = timed(lambda: body.while_loop(x0, condition=cond, max_iterations=iters, check_every=every))
+            # check_every only when the case names one: the prior wheel (0.8.66) has no such keyword, and its
+            # arm runs the loop as that version does (lane candidate-build)
+            kw = {} if every is None else {"check_every": every}
+            ms, why = timed(lambda: body.while_loop(x0, condition=cond, max_iterations=iters, **kw))
             out.append(("check_every=%s" % case, ms, why))
     return out
 

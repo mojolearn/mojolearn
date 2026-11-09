@@ -1227,16 +1227,55 @@ def amd_xgboost_fallback(pins):
     return [r for r in (trees[1] if trees else []) if r.lower().startswith("xgboost==")]
 
 
-#: pandas for the ours-only venv (--ours-install-only): the pandas-input rows and the forecast drivers read it
-OURS_ONLY_PANDAS = "pandas==2.2.3"
+#: The ours-only venv's packages besides scikit-learn, at the versions the repo pins (pixi.lock; the `bench`
+#: environment every recorded timing was taken under first): pandas (the pandas-input rows, forest_speed_arm and
+#: the trees data helpers) and huggingface_hub (bench_board_neural.lm_checkpoint fetches the causal-lm-generate
+#: checkpoint in the arm's own python when the box lacks it). Read from the lock, never written here, so the pin
+#: cannot drift (lane candidate-build replaced measure-prep's literal pandas==2.2.3, which no file pinned).
+OURS_ONLY_LOCKED = ("pandas", "huggingface_hub")
+LOCK_ENV_ORDER = ("bench", "gbmbench", "default", "test")
 
 
-def ours_only_requirements(pins):
+def locked_version(name, lock=None, envs=LOCK_ENV_ORDER):
+    """NAME's version in pixi.lock (the linux-64 package of the first environment in ENVS that has it), or None.
+    pixi.lock lists each environment's packages by URL: conda `.../linux-64/<name>-<ver>-<build>.conda`, PyPI
+    `.../<name>-<ver>-py3-none-any.whl`."""
+    lock = lock or os.path.join(REPO, "pixi.lock")
+    try:
+        lines = open(lock).read().splitlines()
+    except OSError:
+        return None
+    found, env, platform = {}, None, None
+    want = re.compile(r"/" + re.escape(name) + r"-(\d+(?:\.\d+)*)-")
+    for line in lines:
+        if line == "packages:":
+            break
+        m = re.match(r"^  ([a-z][\w-]*):$", line)
+        if m:
+            env, platform = m.group(1), None
+            continue
+        m = re.match(r"^      ([a-z0-9-]+):$", line)
+        if m:
+            platform = m.group(1)
+            continue
+        m = want.search(line)
+        if m and env and platform == "linux-64":
+            found.setdefault(env, m.group(1))
+    return next((found[e] for e in envs if e in found), None)
+
+
+def ours_only_requirements(pins, lock=None):
     """The third-party packages an ours-only board venv installs beside our wheels: the scikit-learn pin of
-    the trees opponent set (the drivers' data helpers and metrics; it pulls scipy) and pandas."""
+    the trees opponent set (the drivers' data helpers and metrics; it pulls numpy, scipy, joblib and
+    threadpoolctl), then OURS_ONLY_LOCKED at their pixi.lock versions. Every other third-party import of the
+    drivers is an opponent arm's (lazy, inside that arm) or a download step's (pyarrow for parquet)."""
     trees = next((v for k, v in pins.items() if k.startswith("trees-")), None)
     sk = [r for r in (trees[1] if trees else []) if r.lower().startswith("scikit-learn==")]
-    return (sk or ["scikit-learn"]) + [OURS_ONLY_PANDAS]
+    out = sk or ["scikit-learn"]
+    for name in OURS_ONLY_LOCKED:
+        version = locked_version(name, lock)
+        out.append("%s==%s" % (name, version) if version else name)
+    return out
 
 
 def opponent_requirements(vendor, pins):

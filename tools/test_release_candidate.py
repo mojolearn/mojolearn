@@ -104,5 +104,16 @@ class Steps(unittest.TestCase):
         self.assertTrue(all("--defines" not in l.command and "--ref" not in l.command for l in plain))
 
 
+class OursOnlyVenv(unittest.TestCase):
+    def test_pins_come_from_the_lock(self):
+        import bench_board
+        reqs = bench_board.ours_only_requirements(bench_board.opponent_pins())
+        self.assertTrue(reqs[0].startswith("scikit-learn=="), reqs)
+        for name in bench_board.OURS_ONLY_LOCKED:
+            pin = [r for r in reqs if r.startswith(name + "==")]
+            self.assertEqual(len(pin), 1, reqs)
+            self.assertEqual(pin[0], "%s==%s" % (name, bench_board.locked_version(name)))
+
+
 if __name__ == "__main__":
     unittest.main()
