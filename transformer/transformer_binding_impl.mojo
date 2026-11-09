@@ -44,7 +44,6 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from training.neural_identical_experiments import IDN_SAMBA_FORWARD_TAPE
 from core.neural_context import neural_ctx
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime _NEURAL_CTX = "MojoNeuralTransformerContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTransformerContextFast"
@@ -475,32 +474,6 @@ struct TransformerWorkspace(Movable):
 
 
 
-struct TransformerBackwardWorkspace(Movable):
-    """The retained half of `transformer_session_backward`: the backward
-    stages for one shape and the device copy of grad_output. The forward
-    half is the session's `TransformerWorkspace` (stages, cache, rope, x)
-    at `smax = L`."""
-    var key: List[Int]
-    var bst: LlamaBackwardStages
-    var d_out: DeviceBuffer[DType.float32]
-
-    def __init__(out self, ctx: DeviceContext, dims: LlamaDims, b: Int, l: Int,
-                 window: Int, lean: Bool) raises:
-        self.key = [b, l, dims.d_model, dims.n_heads, dims.n_kv, dims.head_dim,
-                    dims.intermediate, window, Int(lean)]
-        self.bst = LlamaBackwardStages(ctx, b, l, l, dims, lean=lean)
-        self.d_out = ctx.enqueue_create_buffer[DType.float32](b * l * dims.d_model)
-
-    def matches(self, key: List[Int]) -> Bool:
-        if len(key) != len(self.key):
-            return False
-        for i in range(len(key)):  # small-loop(key: nine shape entries of the backward key): compares cache keys, not data
-            if key[i] != self.key[i]:
-                return False
-        return True
-
-
-from training.neural_attention_owner import BorrowedAttentionTape
 from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
 
 
@@ -516,30 +489,18 @@ struct TransformerSession(Movable, Writable):
     var workspace: Optional[TransformerWorkspace]
     var planes: Optional[LlamaInt15Weights]
     var planes_key: List[Int]
-    var weights: Optional[LlamaDeviceWeights]
-    """lane/neural-net-experiment (2026-09-30): the block's float32 weights
-    RETAINED on the device across calls. A Python address is still not a
-    version: `weights_host` keeps the exact bytes that were uploaded, and
-    every call compares the caller's arrays against them bit for bit
-    (`_weights_same_bits`) before reusing the device copy. Changed bytes are
-    copied into the SAME device buffers (no reallocation) and revalidated by
-    the constructor's own `_validate_finite`; a different shape or options
-    record rebuilds. Default-record blocks only: an options block (`extended`)
-    keeps the per-call upload."""
-    var weights_key: List[Int]
-    var weights_host: List[Float32]
-    var weight_uploads: Int
-    var weight_recopies: Int
-    var weight_reuses: Int
+    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+    # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+    # (the retained float32 `weights` with their byte-compare counters and
+    # the borrowed session `tape` with its generation served only the
+    # forward tape API.)
     var arm: Optional[AttnStepArm]
     """Lane x4b: the block's forward, step and backward on the attention
     step op (transformer/attn_step_session.mojo): its weights packed once
     into the op's weight buffer (byte-compared with the caller's arrays on
     every call), its cache in the op's state buffer, its L stages and the
-    backward stages kept by the arm. `workspace` and `weights` above serve
-    only the forward tape (`retain_tape`, lane X6 deletes it)."""
-    var tape: Optional[BorrowedAttentionTape]
-    var tape_generation: Int
+    backward stages kept by the arm. `workspace` above serves only the
+    fixed15_v1 forward (`_transformer_run_session_int15`)."""
     var busy: Bool
     var closed: Bool
     var contexts: Int
@@ -550,15 +511,7 @@ struct TransformerSession(Movable, Writable):
         self.workspace = Optional[TransformerWorkspace]()
         self.planes = Optional[LlamaInt15Weights]()
         self.planes_key = List[Int]()
-        self.weights = Optional[LlamaDeviceWeights]()
-        self.weights_key = List[Int]()
-        self.weights_host = List[Float32]()
-        self.weight_uploads = 0
-        self.weight_recopies = 0
-        self.weight_reuses = 0
         self.arm = Optional[AttnStepArm]()
-        self.tape = None
-        self.tape_generation = 1
         self.busy = False
         self.closed = False
         self.contexts = 0
@@ -573,11 +526,9 @@ struct TransformerSession(Movable, Writable):
     def __deinit__(deinit self):
         # Same teardown order as ByteLMSession (DEVIATION 2520): buffer
         # destruction enqueues frees, which must drain before context death.
-        _ = self.tape^
         _ = self.arm^
         _ = self.workspace^
         _ = self.planes^
-        _ = self.weights^
         if self.ctx:
             try:
                 self.ctx.value().synchronize()
@@ -585,132 +536,26 @@ struct TransformerSession(Movable, Writable):
                 pass
         _ = self.ctx^
 
-    def invalidate_tape(mut self) raises:
-        # Ordinary calls with no explicit tape retain their previous launch
-        # and synchronization schedule; only live tape owners need fences.
-        if self.tape:
-            if self.ctx:
-                self.ctx.value().synchronize()
-            self.tape = None
-            if self.ctx:
-                self.ctx.value().synchronize()
-        self.tape_generation += 1
-
     def clear(mut self) raises:
-        self.invalidate_tape()
         if self.ctx:
             self.ctx.value().synchronize()
         self.arm = None
         self.workspace = None
         self.planes = None
         self.planes_key = List[Int]()
-        self.weights = None
-        self.weights_key = List[Int]()
-        self.weights_host = List[Float32]()
         if self.ctx:
             self.ctx.value().synchronize()
 
 
 
-def _weights_key(dims: LlamaDims, opts: BlockOptions) -> List[Int]:
-    """The retained weights' identity: the shape and the options record."""
-    var key: List[Int] = [dims.d_model, dims.n_heads, dims.n_kv, dims.head_dim,
-                          dims.intermediate]
-    var tail = opts.to_params()
-    for i in range(len(tail)):  # small-loop(tail: the 17 block option params): builds a cache key, not data
-        key.append(tail[i])
-    return key^
-
-
-
-def _base_weight_lens(dims: LlamaDims) -> List[Int]:
-    """Element counts of the nine base weights in slot order 1..9."""
-    var dm = dims.d_model
-    var qw = dims.q_width()
-    var kw = dims.kv_width()
-    var it = dims.intermediate
-    var lens: List[Int] = [dm, dm, qw * dm, kw * dm, kw * dm, dm * qw,
-                           it * dm, it * dm, dm * it]
-    return lens^
-
-
-
-def _weights_same_bits(a: List[Int], host: List[Float32], lens: List[Int]) raises -> Bool:
-    """Whether the caller's nine base arrays hold exactly the bytes in
-    `host` (their concatenation in slot order): an integer compare of the
-    bit patterns, eight lanes at a time (`-0.0` and `+0.0` differ, NaN
-    payloads differ, as they must for a version check)."""
-    comptime W = 8
-    var off = 0
-    for s in range(9):
-        var n = lens[s]
-        var p = _f32_ptr(a[s + 1])
-        var hp = host.unsafe_ptr()
-        var i = 0
-        var body = n - n % W
-        while i < body:
-            var x = bitcast[DType.uint32, W](p.unsafe_load[width=W](i))
-            var y = bitcast[DType.uint32, W](hp.unsafe_load[width=W](off + i))
-            if (x ^ y).reduce_or() != UInt32(0):
-                return False
-            i += W
-        while i < n:
-            if bitcast[DType.uint32](p.unsafe_load(i)) != bitcast[DType.uint32](hp.unsafe_load(off + i)):
-                return False
-            i += 1
-        off += n
-    return True
-
-
-
-def _weights_host_copy(a: List[Int], lens: List[Int]) raises -> List[Float32]:
-    """The nine base arrays' bytes, concatenated in slot order."""
-    var total = 0
-    for s in range(9):
-        total += lens[s]
-    var out = List[Float32](length=total, fill=Float32(0))
-    var off = 0
-    for s in range(9):
-        var n = lens[s]
-        if n > 0:
-            memcpy(dest=out.unsafe_ptr() + off, src=_f32_ptr(a[s + 1]), count=n)
-        off += n
-    return out^
-
-
-
-def _weights_recopy(ctx: DeviceContext, mut w: LlamaDeviceWeights, a: List[Int], lens: List[Int]) raises:
-    """Changed caller bytes into the RETAINED device buffers, slot order,
-    one wait, then the constructor's own refusal of non-finite weights
-    (DEVIATION 1875's order and names)."""
-    ctx.enqueue_copy(dst_buf=w.norm1_w, src_ptr=_f32_ptr(a[1]))
-    ctx.enqueue_copy(dst_buf=w.norm2_w, src_ptr=_f32_ptr(a[2]))
-    ctx.enqueue_copy(dst_buf=w.w_q, src_ptr=_f32_ptr(a[3]))
-    ctx.enqueue_copy(dst_buf=w.w_k, src_ptr=_f32_ptr(a[4]))
-    ctx.enqueue_copy(dst_buf=w.w_v, src_ptr=_f32_ptr(a[5]))
-    ctx.enqueue_copy(dst_buf=w.w_o, src_ptr=_f32_ptr(a[6]))
-    ctx.enqueue_copy(dst_buf=w.w_gate, src_ptr=_f32_ptr(a[7]))
-    ctx.enqueue_copy(dst_buf=w.w_up, src_ptr=_f32_ptr(a[8]))
-    ctx.enqueue_copy(dst_buf=w.w_down, src_ptr=_f32_ptr(a[9]))
-    ctx.synchronize()
-    _ = lens
-    w._validate_finite(ctx)
-
-
-
 struct _TransformerSessionEnv(Defaultable, Movable):
-    """The session entries' environment switches, read once per process
+    """The session entries' environment switch, read once per process
     (lane ne3-c-blocks-embedding, row N159: every session forward built three
-    or four `String(getenv(...))` values). They are A/B and timing switches
-    set before the process starts; a change after the first session call is
-    not seen."""
-    var stage_reset: Bool
+    or four `String(getenv(...))` values). Set before the process starts; a
+    change after the first session call is not seen."""
     var retain_cap_bytes: Int
-    var retain_weights: Bool
-    var timing: Bool
 
     def __init__(out self):
-        self.stage_reset = String(getenv("MOJOLEARN_TRANSFORMER_STAGE_RESET")) != "0"
         var cap_mb = 512
         var s = String(getenv("MOJOLEARN_TRANSFORMER_RETAIN_MB"))
         if s != "":
@@ -721,21 +566,11 @@ struct _TransformerSessionEnv(Defaultable, Movable):
         if cap_mb < 0:
             cap_mb = 0
         self.retain_cap_bytes = cap_mb * 1024 * 1024
-        self.retain_weights = String(getenv("MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS")) != "0"
-        self.timing = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
 
 
 # Process-wide (one environment per process); bump the name with the layout.
 comptime _TRANSFORMER_SESSION_ENV = _Global[StorageType=_TransformerSessionEnv,
-    name="MojolearnTransformerSessionEnvV1", init_fn=_TransformerSessionEnv.__init__]
-
-
-def _stage_reset_on() raises -> Bool:
-    """`MOJOLEARN_TRANSFORMER_STAGE_RESET=0` skips the thirty zero-fills a
-    reused workspace gets before each call. Bit-safe only if every cell a
-    call reads it also wrote this call; the identity gate decides."""
-    return _TRANSFORMER_SESSION_ENV.get_or_create_ptr()[].stage_reset
-
+    name="MojolearnTransformerSessionEnvV2", init_fn=_TransformerSessionEnv.__init__]
 
 
 def _session_retain_cap_bytes() raises -> Int:
@@ -747,173 +582,30 @@ def _session_retain_cap_bytes() raises -> Int:
 
 
 
-def _session_weights(
-    mut session: TransformerSession, dims: LlamaDims,
-    a: List[Int], opts: BlockOptions, tail: List[Int],
-) raises:
-    """Leave `session.weights` holding this call's weights: the retained
-    device copy when the caller's bytes equal the ones uploaded, a recopy
-    into the retained buffers when they differ, a fresh upload otherwise.
-    Options blocks (a non-default record or any tail address) take the
-    per-call upload as before; nothing is retained for them."""
-    session.invalidate_tape()
-    ref ctx = session.ctx.value()
-    var extended = not opts.is_default()
-    for i in range(len(tail)):  # small-loop(tail: the 11 optional block addresses): checks address presence, not data
-        if tail[i] != 0:
-            extended = True
-    # MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS=0: the per-call upload for every
-    # block (the A/B against the byte compare; measured 0.3 ms per call on
-    # an L40S, where the upload it replaces was already cheap).
-    if not _TRANSFORMER_SESSION_ENV.get_or_create_ptr()[].retain_weights:
-        extended = True
-    if extended:
-        session.weights = None
-        session.weights_key = List[Int]()
-        session.weights_host = List[Float32]()
-        session.weights = _load_transformer_weights(ctx, dims, a, opts, tail)
-        session.weight_uploads += 1
-        return
-    var key = _weights_key(dims, opts)
-    var lens = _base_weight_lens(dims)
-    var same_key = False
-    if session.weights:
-        same_key = len(session.weights_key) == len(key)
-        if same_key:
-            for i in range(len(key)):  # small-loop(key: shape and option entries of the weights key): compares cache keys, not data
-                if key[i] != session.weights_key[i]:
-                    same_key = False
-    if same_key:
-        if _weights_same_bits(a, session.weights_host, lens):
-            session.weight_reuses += 1
-            return
-        # Bytes moved: copy them into the retained buffers. A refusal below
-        # leaves the session without weights (the next call uploads anew).
-        var fresh = _weights_host_copy(a, lens)
-        try:
-            ref retained = session.weights.value()
-            _weights_recopy(ctx, retained, a, lens)
-        except error:
-            session.weights = None
-            session.weights_key = List[Int]()
-            session.weights_host = List[Float32]()
-            raise error
-        session.weights_host = fresh^
-        session.weight_recopies += 1
-        return
-    session.weights = None
-    session.weights_key = List[Int]()
-    session.weights_host = List[Float32]()
-    var host = _weights_host_copy(a, lens)
-    session.weights = _load_transformer_weights(ctx, dims, a, opts, tail)
-    session.weights_key = key^
-    session.weights_host = host^
-    session.weight_uploads += 1
-
-
-
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_DEFER_REGIME (loser: transformer-forward 1.376) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch
 # TOMBSTONE: MOJOLEARN_IDN_TF_SESSION_LEAN (loser: transformer-forward 1.350) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch
-def _transformer_run_session[discard_cache: Bool = False, retain_tape: Bool = False](
+def _transformer_run_session[discard_cache: Bool = False](
     mut session: TransformerSession, a: List[Int], b: Int, l: Int,
     dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
     smax: Int, s0: Int, window: Int, opts: BlockOptions,
 ) raises -> Int:
     """`discard_cache` (lane/neural-net-experiment): the stateless prefill on
     the session -- the caller passes no cache (slots 10 and 11 are 0), the
-    retained cache buffers are zero-filled on the device (the bytes a fresh
-    `LlamaKVCache` holds), nothing is uploaded or downloaded for it, and
-    `s0` is 0. Same kernels, same launches, same order.
-
-    Lane x4b: every call that keeps no tape runs on the attention step op
-    (`_transformer_run_session_op`); the body below is the forward tape's
-    alone (`retain_tape`, `forward_with_tape`; lane X6 deletes it with the
-    tape API)."""
-    comptime if not retain_tape:
-        return _transformer_run_session_op[discard_cache](session, a, b, l, dm, nh, nkv, hd, it, smax, s0,
-                                                          window, opts)
-    var dims = LlamaDims(dm, nh, nkv, hd, it)
-    dims.validate()
-    opts.validate(hd)
-    if s0 < 0 or s0 > smax:
-        raise Error(String("transformer: cached_tokens must be in [0, ")
-            + String(smax) + "] (the cache capacity, max_tokens), got "
-            + String(s0) + "; the two sides of this boundary disagree about the state")
-    if window < 0:
-        raise Error("transformer: window must be >= 0 (0 = full causal)")
-    if not session.ctx:
-        session.ctx = neural_ctx[_NEURAL_CTX]()
-        session.contexts += 1
-    var ton = _TRANSFORMER_SESSION_ENV.get_or_create_ptr()[].timing
-    var tk = Int(perf_counter_ns())
-    var lean = _lean_for(hd, opts)
-    var key = _workspace_key(b, l, dims, smax, window, lean, opts)
-    var reused = False
-    if session.workspace:
-        reused = session.workspace.value().matches(key)
-    if not reused:
-        session.ctx.value().synchronize()
-        session.workspace = None
-        session.ctx.value().synchronize()
-    # Reread the caller's weights on EVERY call; a Python address is not a
-    # version. The device copy is reused only when the bytes are the same
-    # (`_session_weights`), recopied in place when they moved.
-    _session_weights(session, dims, a, opts, _tail_of(a, 13))
-    ref ctx = session.ctx.value()
-    ref w = session.weights.value()
-    _btick(ton, tk, "surface.weights_up")
-    if not reused:
-        session.workspace = TransformerWorkspace(ctx, dims, b, l, smax, window, lean, opts)
-        session.workspaces += 1
-    ref ws = session.workspace.value()
-    if reused and _stage_reset_on():
-        ws.stages.reset(ctx)
-    comptime if discard_cache:
-        if s0 != 0:
-            raise Error("transformer: a discarded cache starts at cached_tokens 0")
-        # The bytes a fresh `LlamaKVCache` holds, on the device, no upload.
-        # TOMBSTONE: MOJOLEARN_IDN_TF_SESSION_LEAN (loser: transformer-forward 1.350) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch
-        ws.kv.k.enqueue_fill(Float32(0.0))
-        ws.kv.v.enqueue_fill(Float32(0.0))
-    else:
-        # Host cache state is authoritative on EVERY call, including resets and
-        # same-address edits. Copy into retained allocations, never trust a pointer.
-        ctx.enqueue_copy(dst_buf=ws.kv.k, src_ptr=_f32_ptr(a[10]))
-        ctx.enqueue_copy(dst_buf=ws.kv.v, src_ptr=_f32_ptr(a[11]))
-    ctx.enqueue_copy(dst_buf=ws.x, src_ptr=_f32_ptr(a[0]))
-    comptime if not AFN_ATTN_ARENA:
-        ctx.synchronize()
-    # MOJOLEARN_AFN_ATTN_ARENA: no wait here. The uploads and the forward's
-    # launches are in order on the one stream, and the caller's host arrays
-    # outlive the call (the download wait below drains everything).
-    ws.kv.s = s0
-    _btick(ton, tk, "surface.cache_stages_x_up")
+    op's cache is zero-filled on the device, nothing is uploaded or
+    downloaded for it, and `s0` is 0. Every call runs on the attention step
+    op (`_transformer_run_session_op`, lane x4b)."""
+    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+    # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+    # (the `retain_tape` parameter and its workspace body, the forward tape's
+    # alone, went with the tape API.)
+    # TOMBSTONE: MOJOLEARN_IDN_TF_SESSION_LEAN (loser: transformer-forward 1.350) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
+    # Restore: git apply experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch
     # TOMBSTONE: MOJOLEARN_IDN_ATTN_DEFER_REGIME (loser: transformer-forward 1.376) deleted 2026-10-11 by 68d9654bb; code recoverable at 68d9654bb^.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch
-    var trace = IdentityTrace.disabled()
-    # forward_only: no backward reads this entry's stages.
-    llama_decoder_layer_forward(ctx, ws.stages, ws.kv, ws.rope, w, ws.x,
-                                b, l, s0, trace, String("py"), forward_only=not retain_tape)
-    _btick(ton, tk, "surface.forward")
-    # One wait for the downloads (the fresh entry's pattern): every owner
-    # stays alive through it.
-    _download_addr[False](ctx, ws.stages.residual2, b * l * dm, a[12])
-    comptime if not discard_cache:
-        _download_addr[False](ctx, ws.kv.k, len(ws.kv.k), a[10])
-        _download_addr[False](ctx, ws.kv.v, len(ws.kv.v), a[11])
-    ctx.synchronize()
-    _btick(ton, tk, "surface.outputs_down")
-    var result = ws.kv.s
-    # Bound retained device-buffer storage per model. Large legal calls still
-    # run, but release their workspace after completion rather than pinning it.
-    var retain = retain_tape or ws.retained_bytes() <= _session_retain_cap_bytes()
-    if not retain:
-        session.workspace = None
-        ctx.synchronize()
-    return result
+    return _transformer_run_session_op[discard_cache](session, a, b, l, dm, nh, nkv, hd, it, smax, s0,
+                                                      window, opts)
 
 
 
@@ -942,7 +634,6 @@ def _session_arm(
     if not session.ctx:
         session.ctx = neural_ctx[_NEURAL_CTX]()
         session.contexts += 1
-    session.invalidate_tape()
     if session.arm and attn_step_same_layout(session.arm.value().ints, ints):
         return
     session.arm = None
@@ -1001,72 +692,12 @@ def _transformer_run_session_op[discard_cache: Bool](
 
 
 
-struct TransformerForwardTape(Movable, Writable):
-    """NI36/48 single-use owner of input, weight snapshots and saved stages.
-
-    The session is private to this tape: no future model call can overwrite
-    it, so pointer equality is never used as a content-generation guarantee.
-    It is retained through backward or close, including calls over the normal
-    inference cache-retention budget. Peak tape memory belongs to the caller.
-    """
-    var session: TransformerSession
-    var shape: List[Int]
-    var consumed: Bool
-    var busy: Bool
-
-    def __init__(out self, shape: List[Int]):
-        self.session = TransformerSession()
-        self.shape = shape.copy()
-        self.consumed = False
-        self.busy = False
-
-    def write_to(self, mut writer: Some[Writer]):
-        writer.write("TransformerForwardTape")
-
-    def write_repr_to(self, mut writer: Some[Writer]):
-        writer.write("TransformerForwardTape")
-
-    def close(mut self) raises:
-        self.consumed = True
-        self.session.clear()
-        self.session.ctx = None
-
-
-
-def _transformer_saved_backward(mut tape: TransformerForwardTape, a: List[Int]) raises:
-    ref p = tape.shape
-    var b = p[0]
-    var l = p[1]
-    var dm = p[2]
-    var dims = LlamaDims(dm, p[3], p[4], p[5], p[6])
-    ref session = tape.session
-    if not session.ctx or not session.workspace or not session.weights:
-        raise Error("transformer forward tape: saved owner is unavailable")
-    ref ctx = session.ctx.value()
-    ref ws = session.workspace.value()
-    ref w = session.weights.value()
-    var bw = TransformerBackwardWorkspace(ctx, dims, b, l, p[7], transformer_lean_stages(p[5]))
-    ctx.enqueue_copy(dst_buf=bw.d_out, src_ptr=_f32_ptr(a[0]))
-    ctx.synchronize()
-    var off = IdentityTrace.disabled()
-    # Reuse the real saved forward; no weight upload or forward recompute.
-    # The stage order and fan-in sums are owned by the autograd tape
-    # (autograd/rules_transformer.mojo).
-    # TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
-    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
-    llama_decoder_layer_backward_autograd(ctx, bw.bst, ws.stages, w,
-        ws.rope.cos, ws.rope.sin, ws.x, bw.d_out, b, l, 0, off, String("saved"))
-    _download_addr[False](ctx, bw.bst.d_x, b * l * dm, a[1])
-    _download_addr[False](ctx, bw.bst.dw_norm1, dm, a[2])
-    _download_addr[False](ctx, bw.bst.dw_norm2, dm, a[3])
-    _download_addr[False](ctx, bw.bst.dw_q, dims.q_width() * dm, a[4])
-    _download_addr[False](ctx, bw.bst.dw_k, dims.kv_width() * dm, a[5])
-    _download_addr[False](ctx, bw.bst.dw_v, dims.kv_width() * dm, a[6])
-    _download_addr[False](ctx, bw.bst.dw_o, dm * dims.q_width(), a[7])
-    _download_addr[False](ctx, bw.bst.dw_gate, p[6] * dm, a[8])
-    _download_addr[False](ctx, bw.bst.dw_up, p[6] * dm, a[9])
-    _download_addr[False](ctx, bw.bst.dw_down, dm * p[6], a[10])
-    ctx.synchronize()
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (`TransformerForwardTape`, the standalone single-use forward owner, and
+# `_transformer_saved_backward`, its backward over the saved workspace.)
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_TRANSFORMER(_OFF) (PROMOTED, hand arm deleted) deleted 2026-10-19 by dd4194a23; code recoverable at dd4194a23^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_TRANSFORMER.patch
 
 
 
@@ -1194,7 +825,6 @@ def _transformer_run_session_int15(
     """`_transformer_run_session` under the profile: the same stages, cache
     handling and downloads, with the weights' seven projections as the
     session's retained planes."""
-    session.invalidate_tape()
     var dims = LlamaDims(dm, nh, nkv, hd, it)
     dims.validate()
     opts.validate(hd)
@@ -2636,54 +2266,7 @@ def _transformer_backward_run(
     _ = ctx^
 
 
-def _session_forward_tape_run(owner_addr: Int, a: List[Int], p: List[Int]) raises:
-    """`transformer_session_forward_tape`'s device half, GIL-free: build or
-    reuse the session weights, run the forward that keeps the borrowed
-    attention tape, copy y out and seal the tape. `owner_addr` is the session handle's address."""
-    var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=owner_addr)
-    var dims = LlamaDims(p[2],p[3],p[4],p[5],p[6])
-    dims.validate()
-    if not owner[].ctx:
-        owner[].ctx = neural_ctx[_NEURAL_CTX]()
-        owner[].contexts += 1
-    var opts = BlockOptions()
-    _session_weights(owner[],dims,a,opts,List[Int]())
-    ref ctx = owner[].ctx.value()
-    ref w = owner[].weights.value()
-    var input = _upload_addr(ctx,a[0],p[0]*p[1]*p[2])
-    owner[].tape = BorrowedAttentionTape(ctx,w,input^,p[0],p[1],p[7],owner[].tape_generation)
-    ref tape = owner[].tape.value()
-    _download_addr(ctx,tape.stages.value().residual2,p[0]*p[1]*p[2],a[10])
-    tape.seal(ctx,p[8],p[9])
-
-
-def _session_backward_tape_run(owner_addr: Int, a: List[Int], generation: Int) raises:
-    """`transformer_session_backward_tape`'s device half, GIL-free: replay
-    the sealed tape's backward and copy dx and the ten weight gradients out. `owner_addr` is the session handle's address."""
-    var owner = MutPointer[TransformerSession, MutUntrackedOrigin](unsafe_from_address=owner_addr)
-    ref ctx = owner[].ctx.value()
-    ref tape = owner[].tape.value()
-    var dims = tape.dims.copy()
-    var dm = dims.d_model
-    var qw = dims.q_width()
-    var kw = dims.kv_width()
-    var it = dims.intermediate
-    var m = tape.b*tape.l
-    var dy = _upload_addr(ctx,a[0],m*dm)
-    var bst = LlamaBackwardStages(ctx,tape.b,tape.l,tape.l,dims,lean=True)
-    tape.backward_into(ctx,owner[].weights.value(),bst,dy,generation,
-        owner[].tape_generation,owner[].tape_generation,owner[].tape_generation)
-    _download_addr[False](ctx,bst.d_x,m*dm,a[1])
-    _download_addr[False](ctx,bst.dw_norm1,dm,a[2])
-    _download_addr[False](ctx,bst.dw_norm2,dm,a[3])
-    _download_addr[False](ctx,bst.dw_q,qw*dm,a[4])
-    _download_addr[False](ctx,bst.dw_k,kw*dm,a[5])
-    _download_addr[False](ctx,bst.dw_v,kw*dm,a[6])
-    _download_addr[False](ctx,bst.dw_o,dm*qw,a[7])
-    _download_addr[False](ctx,bst.dw_gate,it*dm,a[8])
-    _download_addr[False](ctx,bst.dw_up,it*dm,a[9])
-    _download_addr[False](ctx,bst.dw_down,dm*it,a[10])
-    ctx.synchronize()
-    owner[].tape = None
-    owner[].tape_generation += 1
-    ctx.synchronize()
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by e49d0ee90d; code recoverable at 4f41e3d67d.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (`_session_forward_tape_run` / `_session_backward_tape_run`, the budget-aware
+# session tape over training/neural_attention_owner.mojo.)

@@ -1884,7 +1884,8 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
     # tree operations when host_routes followed HOST_IMPORT_ALIASES again;
     # neural_inference.py gained public-numeric-metadata, public-residual-dropout,
     # public-theta-variants (8188d769f), transformer-forward-tape (551a8cd42) and
-    # neural-trainer-unfused (87c170545).
+    # neural-trainer-unfused (87c170545); transformer-forward-tape left with the
+    # TransformerBlock tape API (lane x6-tape-retire, 2026-11-09).
     for rel in ("core/forest_inference.mojo", "python/mojolearn/neural_inference.py"):
         _assert_reviewed_membership(rev, rel)
     lanes = len(lane_select.all_lanes())

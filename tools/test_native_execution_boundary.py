@@ -24,9 +24,10 @@ def test_common_invocation_reads_only_admitted_native_state():
 def test_transformer_admin_and_carried_calls_reuse_original_numerical_owner():
     source = (ROOT/'transformer/native_block_dispatch.mojo').read_text()
     assert 'return transformer_session_forward_native(owner[], expanded, p, opts)' in source
-    assert 'owner[].invalidate_tape()' in source
     assert 'owner[].closed = True' in source
-    assert 'owner[].busy or (op == 12 and owner[].closed)' in source
+    # Op 12 (the session tape's invalidation) went with the tape API
+    # (TRANSFORMER_FORWARD_TAPE_API, docs/TOMBSTONES.md); 13 is the one admin op.
+    assert 'invalidate_tape' not in source.split('def transformer_block_v1')[0].replace('invalidate-tape', '')
     boundary = (ROOT/'bindings/neural_block_public.mojo').read_text()
     assert 'causal_transformer_admin(mods, fields["_session_binding"], fields["_native_session"], 13)' in boundary
-    assert 'causal_transformer_admin(mods, entries, fields["_native_session"], 12)' in boundary
+    assert 'causal_transformer_admin(mods, entries, fields["_native_session"], 12)' not in boundary

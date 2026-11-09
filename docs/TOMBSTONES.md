@@ -547,6 +547,7 @@ in the tables after the sections.
 | [`DKit.eigh` host words, `IpcaDev.eigh` resident host words, `pinv_mask_kernel`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | FastICA / FactorAnalysis / rotation / MinCovDet / IncrementalPCA / MDS-Isomap-KPCA dense eigh | REFACTORED (w and V stay on the device) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
 | [Lanczos projected T host assembly (`kpca_owner`, `mani_decomp_native`)](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | KernelPCA / Isomap | REFACTORED (`eigh_op_tridiag`; bits change) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
 | [`SAMBA_THREE_TIER_FORWARD`: `samba_resident_forward` (+ binding, descriptor op 16, `samba_resident_native_forward`), `SambaDecodeResident` (training/samba_decode_resident.mojo), the provider forward (`samba_provider_forward`, `AdmittedSambaExecution.forward`, `NativeSambaModel.forward`), the device per-layer walk of `samba_forward`, `samba_afn_norm_head_forward` (AFN_SAMBA_FUSE fused forward tail), the dead Python `SambaStack._forward*` / `_resident*` / `_afn*` routes](#samba-stack-on-one-executor-program-2026-11-09) | Neural (Samba inference) | SUPERSEDED (one executor program, `SambaStackProgram`; never A/B'd, RUN OWED) | 2026-11-09 | [SAMBA_THREE_TIER_FORWARD.patch](../experiments/removed/SAMBA_THREE_TIER_FORWARD.patch) |
+| [`TRANSFORMER_FORWARD_TAPE_API` (`TransformerBlock.forward_with_tape` / `backward_from_tape`, `TransformerForwardTape`, the session and standalone transformer tapes)](#transformer-forward-tape-api-retired-2026-11-09) | Neural (TransformerBlock training tape, Samba IDN_ACT_RETAIN=3 transformer half) | removed (superseded: the attention step op and the tape rule; `TransformerBlock.backward` is the training path) | 2026-11-09 | [TRANSFORMER_FORWARD_TAPE_API.patch](../experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch) |
 ## Retired by lane debt-block-per-n (2026-10-21)
 
 These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
@@ -5049,3 +5050,37 @@ origin/integ/pre-0867-w3 5b5490960d.
   resident forward ran `forward_only=True`). Identity lane `samba` may change; every vendor and the host column move
   together.
 - Recoverable at 5b5490960d; patch experiments/removed/SAMBA_THREE_TIER_FORWARD.patch.
+## Transformer forward tape API retired (2026-11-09)
+
+Lane x6-tape-retire (sub-lane of x6-samba-on-executor; plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X4,
+"the excluded tape API"; the leftovers lane x4b listed), branch `lane/x6-tape-retire` from `origin/integ/pre-0867-w3`
+4f41e3d67d. Deleted by e49d0ee90d (inline markers named at 745d04805e).
+
+- What it was: a training forward that kept its stages for a later backward, in two forms. The public one,
+  `TransformerBlock.forward_with_tape` / `backward_from_tape` and the `TransformerForwardTape` ticket (excluded from the
+  docs as "tape API not in the shipped binding; unverified"), ran a budget-aware session tape
+  (`BorrowedAttentionTape`, training/neural_attention_owner.mojo; the host twin `HostAttentionTape`,
+  transformer/host/attention_tape.mojo) through block-table ops 36..40, `transformer_session_{forward,backward,
+  discard,invalidate}_tape` and providers/python/transformer_session_tape_pyapi.mojo. The standalone one,
+  `transformer_forward_tape` / `_backward_tape` / `_close_tape` and `transformer_tape_{create,handle}_native_v1`
+  (ops 6..10 and 14, transformer/native_tape_dispatch.mojo), was the transformer half of
+  `MOJOLEARN_IDN_ACT_RETAIN=3` (`IDN_SAMBA_FORWARD_TAPE`) for the Samba training prefill.
+- Deleted with it: `_transformer_run_session`'s `retain_tape` parameter and workspace body,
+  `TransformerBackwardWorkspace`, `TransformerForwardTape`, `_transformer_saved_backward`, the session's retained
+  float32 `weights` and their byte-compare helpers (`_session_weights`, `_weights_same_bits`, `_weights_host_copy`,
+  `_weights_recopy`, `_weights_key`, `_base_weight_lens`), `_stage_reset_on` and the `MOJOLEARN_TRANSFORMER_STAGE_RESET`
+  / `MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS` reads (the env global is now `MojolearnTransformerSessionEnvV2`), the
+  session `tape` / `tape_generation` / `invalidate_tape` (GPU and host) and op 12, the public
+  `TransformerPublicTapeOwner` and its doors in bindings/transformer_public_native.mojo, the identity lane
+  `transformer-forward-tape` (tools/identity_lanes/coverage.py, its reference-table cells and admission,
+  lane_select_reviewed, verify_coverage_audit), the board operation `transformer_forward_vjp_tape`, tools
+  transformer_tape_arm_check.py + transformer_tape_arm_digests.json and test_transformer_session_tape_provider.py, the
+  api_exclude entries and the support-matrix lane lists.
+- Kept: `TransformerWorkspace` (and `_workspace_key`, `session.workspace`): the fixed15_v1 forward
+  `_transformer_run_session_int15` still runs on it (lane X45c moves that forward onto the op). The Mamba-3 tape
+  (`MOJOLEARN_IDN_ACT_RETAIN=3` for Mamba-3) is unchanged. `TransformerBlock.backward` (the step op plus
+  `llama_decoder_layer_backward_autograd`) needed nothing from the tape.
+- Verdict: superseded, never A/B'd (the tape's default arm was off: ACT_RETAIN defaults to 2). No bits change: the
+  default builds never reached the deleted bodies; the `transformer` lane covers the block backward.
+- Recoverable at 4f41e3d67d; restore with `git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch` (code files
+  outside tools/; the tools come back from 4f41e3d67d).
