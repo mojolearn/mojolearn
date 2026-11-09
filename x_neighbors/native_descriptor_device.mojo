@@ -45,7 +45,8 @@ def xn_native_sqdist(a_: List[Int], i_: List[Int], f_: List[Float64]) raises -> 
     var v_n = _n(i_, 0)
     var v_m = _n(i_, 1)
     var v_d = _n(i_, 2)
-    op_sqdist(v_x, v_y, v_res, v_n, v_m, v_d)
+    var v_status = _n(i_, 3) if len(i_) > 3 else 0
+    op_sqdist(v_x, v_y, v_res, v_n, v_m, v_d, v_status)
     return 0
 
 

@@ -77,7 +77,9 @@ def _i(addr: Int) -> IP:
     return IP(unsafe_from_address=addr)
 
 
-def op_sqdist(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int) raises:
+def op_sqdist(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, status: Int = 0) raises:
+    if not xn_host_status(x, n * d, status):
+        return
     var p_x = _f(x)
     var p_y = _f(y)
     var p_res = _f(res)

@@ -19,7 +19,7 @@ EXTRA = [('ocsvm_alpha_init',(2,1,1)),('unit_ff',(3,1,0)),('ocsvm_resident',(5,5
 # GPU flag, and the finite status address (lane a8b-device-x-neighbors-rest:
 # the host address of the int32 word that receives X's finite status, tested
 # behind its upload on the GPU, by one parallel scan on the CPU column).
-OPTIONAL_LAST = ('kernel', 'knn_sq', 'nc_std', 'nc_decision', 'nc_stats', 'knn_sq_tiled', 'nan_cells',
+OPTIONAL_LAST = ('sqdist', 'kernel', 'knn_sq', 'nc_std', 'nc_decision', 'nc_stats', 'knn_sq_tiled', 'nan_cells',
                  'nc_labels', 'nc_proba', 'lp_dense_proba')
 PATTERN = re.compile(r'^def (\w+)_binding\(a_: PythonObject, i_: PythonObject, f_: PythonObject\) raises -> PythonObject:\n(.*?)(?=^def |\Z)', re.M | re.S)
 

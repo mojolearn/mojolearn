@@ -122,9 +122,10 @@ def sqdist_kernel(x: FP, y: FP, res: FP, n_: Int64, m_: Int64, d_: Int64):
         sqdist_item(t, x, y, res, n, m, d)
 
 
-def op_sqdist(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int) raises:
+def op_sqdist(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, status: Int = 0) raises:
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d, True)
+    var d_s = xn_finite_behind(ctx, d_x, n * d, status)
     var d_y = _buf(ctx, y, m * d, True)
     var d_res = _buf(ctx, res, n * m, False)
     ctx.enqueue_function[sqdist_kernel](
@@ -133,6 +134,7 @@ def op_sqdist(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int) raises:
     )
     _down(ctx, d_res, res, n * m)
     ctx.synchronize()
+    _ = d_s^
     _ = d_x^
     _ = d_y^
     _ = d_res^

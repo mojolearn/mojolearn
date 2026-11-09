@@ -77,8 +77,9 @@ def sqdist_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises 
     var v_n = _n(i_, 0)
     var v_m = _n(i_, 1)
     var v_d = _n(i_, 2)
+    var v_status = _n(i_, 3) if len(i_) > 3 else 0
     with GILReleased(Python()):
-        op_sqdist(v_x, v_y, v_res, v_n, v_m, v_d)
+        op_sqdist(v_x, v_y, v_res, v_n, v_m, v_d, v_status)
     return PythonObject(None)
 
 

@@ -183,7 +183,7 @@ def xn_operation_id(name: String) raises -> Int:
 
 def xn_schema(op: Int) raises -> Tuple[Int, Int, Int]:
     if op == 0:
-        return (3, 3, 0)
+        return (3, 4, 0)
     if op == 1:
         return (3, 3, 0)
     if op == 2:
@@ -363,6 +363,6 @@ def xn_min_ints(op: Int) raises -> Int:
     # nan_cells has an optional third flag; host ignores it as before.
     # The finite status address (lane a8b-device-x-neighbors-rest) is an
     # optional last int of these operations.
-    if op == 67 or op == 2 or op == 8 or op == 18 or op == 21 or op == 57 or op == 63 or op == 84 or op == 85 or op == 86:
+    if op == 67 or op == 0 or op == 2 or op == 8 or op == 18 or op == 21 or op == 57 or op == 63 or op == 84 or op == 85 or op == 86:
         return xn_schema(op)[1] - 1
     return xn_schema(op)[1]
