@@ -16,20 +16,6 @@ host-module	host-import	p4-loops	owed-tags	python/mojolearn/_array.py	0	return _
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	_ARRAY_CONTEXT["helpers"].update(item for item in found if item[1] is not None) # glue: four fixed helper names
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	bits = [1 if x == other else 0 for x in mine] # cpu-route: the differential test's reference arm only
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	bits = [1 if x == y else 0 for x, y in zip(mine, theirs)] # cpu-route: the differential test reference arm only
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	for axis in range(len(key), a.ndim): # glue: one entry per remaining array axis
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	for axis, d in enumerate(dims): # glue: one entry per array axis
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	for axis, k in enumerate(key): # glue: one index entry per array axis
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	for i in range(1, len(values)): # cpu-route: the differential test's reference arm only
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	for later in range(axis + 1, n): # glue: one check per trailing array axis
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	for n in reversed(shape): # glue: one stride per array axis
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	for n in shape: # glue: one stride per array axis
@@ -38,23 +24,11 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	for s in
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	for s in shape: # glue: validates the shape argument
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	for v in values: # cpu-route: the differential test's reference arm only
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	hi, mid, low = (int(v) for v in parts) # glue: three words of a 128-bit sum
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	known = _prod(s for s in shape if s != -1) # glue: product of the known dimensions
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	return [_empty_nest(shape[1:]) for _ in range(shape[0])] # glue: list structure of an empty block, no elements
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	return sum(1 for s in self.shape if s != 1) <= 1 # glue: counts non-unit shape dimensions
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	shape = [int(s) for s in shape] # glue: validates the shape argument
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	shape = tuple(int(s) for s in shape) # glue: validates the shape argument
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	values = [int(v) for v in self._mv] # cpu-route: the refusal path and the test reference arm only
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	values = [int(v) for v in values] # cpu-route: the refusal path and the test reference arm only
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	flat = list(chain.from_iterable(nested))
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	if not set(map(type, flat)) <= _SCALAR_TYPES:
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	kinds = set(map(type, nested))
@@ -62,39 +36,15 @@ py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	return (
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	return list(struct.unpack("<%de" % n, mv.tobytes())) if n else []
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	widths = set(map(len, nested))
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	return max(self._reduce_values("max")) # cpu-route: the differential test's reference arm only
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	return min(self._reduce_values("min")) # cpu-route: the differential test's reference arm only
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	return sum(1 for s in self.shape if s != 1) <= 1 # glue: counts non-unit shape dimensions
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	return sum(values) # cpu-route: the differential test's reference arm only
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	acc *= n
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	1	acc *= n
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	acc += v
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	axis += 1
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	base_off += d * cs[axis]
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	base_off += d[0] * cs[axis]
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	dims.append(k % n if n else k)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	fill = array.array(_CODE[self.dtype], [v]) * self.size
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	for later in range(axis + 1, n): # glue: one check per trailing array axis
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	if known == 0 or self.size % known:
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	n *= s
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	off = i * step
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	offset += dims[axis] * cs[axis]
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	raw = a._mv[offset:offset + length].cast("B")
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	return (hi << 64) + (mid << 32) + low
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	return _to_py_values(a._mv[base_off:base_off + 1], a.dtype)[0]
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	return array.array(code, [0]) * size
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	return offset + start * cs[axis], count * cs[axis]
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	return self._n - self._i
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	sel_strides.append(d[1] * cs[axis])
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	self._i = i + 1
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	self.nbytes = self.size * self.itemsize
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	shape[shape.index(-1)] = self.size // known
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	v._addr = self._addr + off * self.itemsize
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	v._mv = self._mv[off:off + step]
-py-while-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_array.py	0	while axis < n and not isinstance(dims[axis], tuple):
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_bufcheck.py	0	for s in shape: # glue: product of shape dimensions
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -491,7 +441,6 @@ py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	6	n = A.r * A.c
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	7	n = A.r * A.c
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	0	n = M.r * M.c
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	1	n = M.r * M.c
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	0	n = nn + nrhs
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	0	n = self.r * self.c
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	1	n = self.r * self.c
@@ -506,7 +455,6 @@ py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	0	p = [_MV_TAKE_COLS, A.r * w, w, A.c, 0, 0, 0, A.r * A.c, A.r * w, w]
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	0	p = [_MV_TAKE_ROWS, count, A.c, radd, 0, ist, ioff, A.r * A.c, count, idx.r * idx.c]
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	0	piv = array.array("i", [0] * n)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	0	raw.x_decomp_dev_upload(sp.id, words.buffer_info()[0], 2 * d)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	0	return _M(array.array("f", X.s) + array.array("f", [0.0]) * c, r + 1, c)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	0	return _M(self.s[a * self.c:b * self.c], b - a, self.c)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	0	return _M._on_device(_DevBuf(self._raw(), r * c), r, c)
@@ -522,7 +470,6 @@ py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	0	s = _pool_take(r * c) if r * c >= _POOL_MIN else None
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	0	self.b.x_decomp_dev_rand(out._d.id, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF, kind])
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	0	self.b.x_decomp_rand(out.addr, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF, kind])
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	0	sp = _DevBuf(raw, 2 * d)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	0	stride = off + 1
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_decomp.py	0	tot = (r + 1) * c
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -532,245 +479,72 @@ py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_linear
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_linear.py	0	memcopy(o + 4 * j * (d + 1), ca + 4 * j * d, 4 * d)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_linear.py	0	out = empty((k * (d + 1),), "<f4")
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	-2, counts[t], numeric_mode) for t in range(problems)] # glue: one result handle per problem
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	cnt = [_counts(prog, off, L) for off, _ in groups] if w is None else None # glue: the three count slots
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	edge = [c for c in range(k) if fl[c] == 2] # glue: the classes whose AP takes the curve rule
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for b in (fps, tps) + ((thr,) if thresholds else ()) + ((keep,) if flagged else ()): # glue: declares each curve output range
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for b in range(3 if thresholds else 2): # glue: declares each curve output range
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for b in range(3)) # glue: wraps the three downloaded arrays
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for b in range(3): # glue: declares the three output arrays, each up to its length
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for c in edge: # glue: the curve rule's per-class scores
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for c in range(k): # glue: one warning per class without both labels
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for c in range(m): # glue: fold by class offsets for the device code stage (m-sized: class count)
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for c in range(m): # glue: one permutation stage per class
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for check in after: # glue: the program's flag checks
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for eo in eos: # glue: reads each staged epilogue's flags, scalars and values
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for f in range(k): # glue: fold by class offsets for the device code stage (k-sized: fold count)
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for f in range(k): # glue: wraps each fold's result views
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for kind, k, avg, zd, fmode, b2 in ([epi] if isinstance(epi, tuple) else (epi or [])): # glue: one cls_epi stage per requested average
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for lo, hi in self._skip: # glue: the program's input and scratch ranges
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for lo, hi, cn, mult in self._outs: # glue: the program's declared output ranges
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for n in sizes: # glue: one output slot per requested draw
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	1	for n in sizes: # glue: one output slot per requested draw
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for name, v in (("y_true", y_true), ("y_pred", y_pred)): # glue: validates the two named arguments
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for s in shape: # glue: the product of shape dims
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for t in range(m): # glue: stages each pair's mask and its two curve folds
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for t in range(problems): # glue: declares each problem's output ranges
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	1	for t in range(problems): # glue: declares each problem's output ranges
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for t in range(problems)] # glue: one result handle per problem
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for v in (self.seed & 0xFFFFFFFF, self.seed >> 32, self.draws & 0xFFFFFFFF, (self.draws >> 32) & 0xFFFFFFFF): # glue: four parameter words
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for v in prog.ints(FL, 2 * m): # glue: one warning per direction without both labels
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	groups = [_group(prog, k, n, L, weights=W) for k in (match, a, b)] # glue: the three count groupings
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	index = {c: i for i, c in enumerate(classes)} # glue: class index table
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	1	index = {c: i for i, c in enumerate(classes)} # glue: class index table
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	2	index = {c: i for i, c in enumerate(classes)} # glue: class index table
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	index = {c: i for i, c in enumerate(order)} # glue: class index table
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	pairs = [(a, b) for a in range(k) for b in range(a + 1, k)] # glue: the stage parameters of each pair
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return [_FoldCurve(prog, out + _CF_OUT * t, max_fpr, redo, t) for t in range(problems)] # glue: one result handle per problem
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return [prog.ints(o, n) for o, n in outs] # glue: reads each requested draw's words
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return [prog.words(w, 2 * n, "q") for w, n in outs] # glue: reads each requested draw's words
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return list(labels) + [v for v in present if v not in chosen] # glue: appends the present class labels
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	self._stages.append([_OPS[op], int(total)] + [int(v) for v in params] # glue: one stage's parameter words
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	self.tp, self.true, self.pred = (prog.floats(out, L) for _, out in groups[:3]) # glue: reads the weighted sums
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	self.tp, self.true, self.pred = (prog.ints(c, L) for c in cnt) # glue: reads the three count slots
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	vals = [float(v) for v in flatten_mo(multioutput)] # glue: converts the multioutput weights argument
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	bo = prog.put_i32(list(bw))
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return Array.from_list(list(codes), "<i4")
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return Array.from_list(list(prog.words(self.sc, 2 * k, "d")), "<f8")
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return Array.from_list(list(self.prog.words(out, 2 * self.D, "d")), "<f8")
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return _selected_labels(labels, kind, present) if labels is not None else list(present)
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return list(self.arena[off:off + n])
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return list(store)
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return prog.put_i32(list(bw))
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	sc = list(prog.words(self.sc, 2 * k, "d"))
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	classes = sorted(classes) # glue: sorts the distinct class labels
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	if classes != sorted(classes): # glue: checks the class labels are sorted
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return true, kind, sorted(_label_set(true)) # glue: sorts the distinct class labels
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	+ [0] * (_PARAMS - len(params)))
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	CF = prog.alloc(3 * N)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	CF = prog.scratch(2 * m * _CF_OUT)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	CF = prog.scratch(3 * N)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	CF = prog.scratch(3 * n)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	F, T = prog.words(LEN + 2, 4, "d")
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	FL = prog.want(prog.alloc(2 * m), 2 * m)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	N = n * problems
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	1	N = n * problems
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	N = self.n * self.D
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	OFF = prog.alloc(m + 1)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	OH = prog.scratch(n * k)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	OUT = prog.alloc(6 * (n + 1))
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	P = k * (k - 1) // 2
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	POS = prog.scratch(flags.n * flags.k)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	PS, PREV = prog.scratch(2 * m), prog.scratch(2 * m)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	PS, PREV = prog.want(prog.alloc(2 * m), 2 * m), prog.want(prog.alloc(2 * m), 2 * m)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	S = prog.scratch(2 * n)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	SC = prog.scratch(4 * m)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	SUP = p2.put_i32(prog.words(self.sup, 2 * k, "i"))
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	_fold_stages(prog, S + a, k, OH + a * n, W, n, 1, True, out=CF + 2 * t * _CF_OUT)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	_fold_stages(prog, S + b, k, OH + b * n, W, n, 1, True, out=CF + (2 * t + 1) * _CF_OUT)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	a, b = pairs[g0 + t]
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	acc += alloc[f][c]
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	allowed = ("raw_values", "uniform_average") + (("variance_weighted",) if variance_ok else ())
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	arrays = tuple(Array._owned(prog.words(OUT + 2 * b * (n + 1), 2 * lens[b], "d"), (lens[b],), "<f8", "C")
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	at += counts[c]
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	base = out + 2 * n * f
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	both = prog.ints(out, 2 * k)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	bw.frombytes(array.array("d", [1 + b2, b2]).tobytes())
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	cdf = prog.scratch(n * D)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	chunk = max(1, min(P, _OVO_WORDS // max(per_pair, 1)))
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	cur = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, fold="auc")[0]
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	cur.keep = bytes(_arena_view(p.arena).cast("B")[lo + (0 if _LITTLE else 3):lo + 4 * c:4])
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	dst = prog.alloc(2 * D)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	1	dst = prog.alloc(2 * D)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	eo = prog.alloc(8 + 6 * max(L, 1))
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for b in (fps, tps) + ((thr,) if thresholds else ()) + ((keep,) if flagged else ()): # glue: declares each curve output range
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	for v in prog.ints(FL, 2 * m): # glue: one warning per direction without both labels
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	g0 += m
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	hi - (1 << 32) if hi >= 1 << 31 else hi)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	hi = lo + max(0, min(hi - lo, mult * self.ints(cn, 1)[0]))
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	if labels is not None and set(present) - set(classes):
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	if lo <= off and off + n <= hi:
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	if m * width:
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	if n < 2 or k < 1 or 2 * n * k > _FOLD_ROWS_BOUND:
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	1	if n < 2 or k < 1 or 2 * n * k > _FOLD_ROWS_BOUND:
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	if o != PB + at:
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	if off < hi and lo < off + n:
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	if prog.ints(off + k, 1)[0] != n:
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	if set(present) - set(classes):
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	keep + t * n if flagged else _NONE, counts[t], numeric_mode)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	lens = (m, m, m - 1) if kind == _CO_PR else (m, m, m)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	lo = 4 * self.keep
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	lo = float(x) - hi
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	m = min(chunk, P - g0)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	min_area = 0.5 * max_fpr * max_fpr
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	mode, mh, ml = (1, 0, 0) if not auc else ((0, 0, 0) if max_fpr is None else (2,) + _f32_split(max_fpr))
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	n *= s
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	nb = max(1, -(-n // _WSUM_BLOCK))
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	off = prog.alloc(m + 1)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	off, out = _group(prog, key, n, k * k, weights=W)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	order = prog.scratch(n * D)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	out = prog.alloc(m * width)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	out = prog.scratch(flags.n * flags.k)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	out = prog.scratch(w.n * w.k)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	out = prog.want(prog.alloc(2 * k * k), 2 * k * k)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	out = prog.want(prog.alloc(2 * k), 2 * k)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	out = prog.want(prog.alloc(2 * n * k), 2 * n * k)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	out = prog.want(prog.alloc(_CF_OUT * problems), _CF_OUT * problems)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	out = self.prog.scratch(self.n * self.D)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	pairs = [(a, b) for a in range(k) for b in range(a + 1, k)] # glue: the stage parameters of each pair
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	part = s / (2.0 * F * T) + (max_fpr - x0) * (yi + y0) / 2.0
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	per_pair = 17 * n + 4 + 4 * _CF_OUT
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	prev_words.extend(prog.words(PREV, 2 * m, "i"))
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	prog.stage("approx_mode", k, k, C, out, n_test, out + k, used, used + 1, *words)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	prog.stage("cm_epi", -(-(nb - stride) // (2 * stride)), _CM_WSUM_FOLD, s, stride, nb)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	prog.stage("curve_fold", problems, n, CF, CF + N, CM, out, mode, mh, ml, _CF_CHUNK)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	prog.stage("group_sum", m * width, off, order, values, vstride, weights, out, width)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	prog.stage("onehot", flags.n * flags.k, C, POS, flags.n, flags.k, flags.layout)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	prog.stage("onehot", flags.n * flags.k, C, out, flags.n, flags.k, flags.layout)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	prog.stage("onehot", n * k, C, OH, n, k, 0)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	prog.stage("permute", 1, n, out, lo - (1 << 32) if lo >= 1 << 31 else lo,
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	prog.stage("rank_epi", 2 * m, _RANK_CURVE_SCORE, CF, 2 * m, 0, SC, FL, _NONE, 0, 0)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	prog.stage("rep_rows", w.n * w.k, W, out, w.k)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	prog.want(CF + b * N + t * n, n, count=CM + t)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	prog.want(OUT + 2 * b * (n + 1), 2 * (n + 1), count=LEN, mult=2)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	prog.want(b + t * n, n, count=cnt + t)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	prog.want(off + k, 1)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	ps_words.extend(prog.words(PS, 2 * m, "i"))
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	res.append((Array._owned(train, (n - c,), "<i8", "C"), Array._owned(test, (c,), "<i8", "C")))
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	res.append((head[0], head[1], prog.words(eo + 2, 6, "d"), prog.words(eo + 8, 6 * max(L, 1), "d")))
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return Array._owned(prog.words(out, 2 * k * k, "d"), (k, k), "<f8")
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return Array._owned(self.arena[off:off + n], shape, "<f4", "C")
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return Array.from_list(list(prog.words(self.sc, 2 * k, "d")), "<f8")
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return Array.from_list(list(self.prog.words(out, 2 * self.D, "d")), "<f8")
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return [_DevCurve(prog, CF + t * n, CF + N + t * n, CF + 2 * N + t * n if thresholds else _NONE,
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return [_DevCurve(prog, fps + t * n, tps + t * n, thr + t * n if thresholds else _NONE,
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return [_FoldCurve(prog, out + _CF_OUT * t, max_fpr, redo, t) for t in range(problems)] # glue: one result handle per problem
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return [prog.words(w, 2 * n, "q") for w, n in outs] # glue: reads each requested draw's words
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return f[0] + f[1], f[2], f[3], i[4], f[5], f[6], f[7], f[8], i[9]
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return float(0.5 * (1 + (part - min_area) / (max_fpr - min_area)))
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return float(max(0.0, s / T))
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return float(s / (2.0 * F * T))
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	1	return float(s / (2.0 * F * T))
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return list(labels) + [v for v in present if v not in chosen] # glue: appends the present class labels
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return list(self.arena[off:off + n])
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return p.floats(self.fps + self.c - 1, 1)[0], p.floats(self.tps + self.c - 1, 1)[0]
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return prog.want(vals, 2 * D)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	return v * v
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	s = prog.scratch(4 * nb)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	salt = _mix64(self.seed * 0x9E3779B97F4A7C15 + self.draws + 1)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	sc = list(prog.words(self.sc, 2 * k, "d"))
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	scores = prog.alloc(2 * D)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	self._outs.append((int(off), int(off) + int(n), -1 if count is None else int(count), int(mult)))
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	self._skip.append((off, off + arr.size))
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	self._skip.append((off, off + codes.size))
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	self._skip.append((off, off + int(n)))
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	self._stages.append([_OPS[op], int(total)] + [int(v) for v in params] # glue: one stage's parameter words
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	self.draws += 1
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	self.draws += drew[0] + drew[1]
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	self.prog.stage("reg_epi", self.n * self.D, _RE_SIGN, self.n * self.D, V, flags)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	self.prog.stage("reg_term", self.n * self.D, self.Y if V is None else V, self.P if P is None else P, out,
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	self.sc = prog.want(prog.alloc(2 * k), 2 * k)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	self.size += max(int(n), 0)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	self.sup = prog.want(prog.alloc(2 * k), 2 * k)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	src = (CF, CF + n, CF + 2 * n, CM) if roc_drop else (fps, tps, thr, cnt)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	store.frombytes(_arena_view(self.arena)[off:off + n].cast("B"))
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	store.frombytes(self.arena[off:off + n].tobytes())
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	stride *= 2
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	test = prog.words(base, 2 * c, "q")
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	train = prog.words(base + 2 * c, 2 * (n - c), "q")
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	w = prog.want(prog.alloc(2 * n), 2 * n)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	words = bytearray(4 * n)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	words.append(v - (1 << 32) if v >= 1 << 31 else v)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	x = ((x ^ (x >> 27)) * 0x94D049BB133111EB) & _M64
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	x = ((x ^ (x >> 30)) * 0xBF58476D1CE4E5B9) & _M64
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	x0, x1, y0, y1 = a / F, b / F, u / T, v / T
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	yi = y0 if x1 == x0 else y0 + (max_fpr - x0) * (y1 - y0) / (x1 - x0)
-py-while-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	while g0 < P: # glue: one program per chunk of pairs
-py-while-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_metrics.py	0	while stride < nb: # glue: one stage per fold level (log2 of the block count)
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_neighbors.py	0	for a, w in bufs] # glue: buffer addresses and binding params
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -783,9 +557,7 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_neighbors
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_neighbors.py	0	return decode_labels([float(v) for v in classes], codes) # glue: k class labels as floats
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_neighbors.py	0	return decode_labels([int(v) for v in classes], codes) # glue: the k class values
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_neighbors.py	0	all_ = kit.ew("scale", kit.rowsum(cols), s=1.0 / n) # K_fit_all_ (1 x 1)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_neighbors.py	0	cells = empty((1 if lean else max(n * d, 1),), "<i4")
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_neighbors.py	0	cols = kit.ew("scale", kit.colsum(K), s=1.0 / n) # K_fit_rows_ (1 x n)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_neighbors.py	0	lg = p.bit_length() - 1
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_neighbors.py	0	n_steps = lg * (lg + 1) // 2
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_neighbors.py	0	nq = indptr.shape[0] - 1
@@ -804,8 +576,6 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	1	counts = [int(v) for v in pr.values(co, d)] # glue: reads per-column category counts for slicing (d-sized: feature count)
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	flat = [float(v) for v in values] or [0.0] # glue: packs a caller parameter list into the program buffer
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	for (start, end), part in zip(ranges, parts): # glue: stages one copy per column block (parts-sized: column block parts)
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	for c in range(d): # glue: slices the per-column category outputs (d-sized: feature count)
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -844,9 +614,7 @@ py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.p
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	block[j * kmax:j * kmax + cats.size] = cats.tolist()
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	cap = min(n * d, _CAT_CAP)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	ch = max(_II_CH, -(-n // _II_CH), -(-n * per // 2 ** 24), 1)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	cnt, tot = pr.alloc(d * nch), pr.alloc(d)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	cnt, tot = pr.alloc(nch * K), pr.alloc(K)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	1	cnt, tot = pr.alloc(nch * K), pr.alloc(K)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	codes = pr.scratch(n * d) if device_only else pr.alloc(n * d)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	fl = pr.work(d * R)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	if _blocked() and _idn_fam(mode) & _IDN_STATS_BLOCKED and nb * K * d <= _CLS_BLOCK_WORDS:
@@ -865,13 +633,10 @@ py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.p
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	nw = arr.size * wpe
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	o += counts[c]
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	off = self._out_at + off.off
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	out = pr.output(n * d)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	1	out = pr.output(n * d)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	out.append(pr.get(pk + o, counts[c]))
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	out.frombytes(store[off:off + n].tobytes())
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	part = pr.work(5 * nb * d)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	part = store[off:off + n]
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("affine", n * d, xo, n * d, d, co, so, out)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("cat_pack", d * R, uo, R, d, co, cap, pk)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("cat_pack", n * d, uo, n, d, co, cap, pk)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("cat_present", n * d, xo, n, d, R, fl, bad)
@@ -879,7 +644,6 @@ py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.p
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, var, sums, *tail)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("colb_part", nb * d, xo, n, d, part, nb)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("colb_ss", nb * d, xo, n, d, out, ss, nb)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("colblock", n * w, pr.put(part), w, out, d, start)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("csb1_part", nb * d, xo, n, d, yo, K, ps, pc, nb, w, _NONE, _NONE)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("csb1_ss", nb * d, xo, n, d, yo, K, mean, cn, ps, nb, w)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("csb_fold", K * d, ps, pc, nb, K, d, cn, cnt, mean, sums, w)
@@ -888,8 +652,6 @@ py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.p
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("csb_var", K * d, ps, nb, K, d, cn, var)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	1	pr.stage("csb_var", K * d, ps, nb, K, d, cn, var)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("lookup", n * d, xo, n, d, uo, kmax, co, codes)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("p2m_sel_count", d * nch, xo, n, d, ch, nch, mode, cnt)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("p2m_sel_write", d * nch, xo, n, d, ch, nch, mode, cnt, dst)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("pres_count", nch, fl + c * R, R, ch, cnt)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("pres_write", nch, fl + c * R, R, ch, off, uo + c * R)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	pr.stage("uniq_count", nch, so + c * n, n, ch, cnt)
@@ -919,7 +681,6 @@ py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.p
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	uo = pr.alloc(n * d)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	uo = pr.work(d * R)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	uo = pr.work(n * d)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	w = end - start
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	words = pr.get_i32(out, 2 * n)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	words = self._read(off, (2 * rows * cols,), "i")
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_expansion_prep.py	0	y = (r + 1) // 2
@@ -1153,25 +914,9 @@ py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_ivf_impl.py	0	d[
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_ivf_impl.py	0	data = empty((n * dim,), "<f4")
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_ivf_impl.py	0	key = self._resident_key(partial) + (id(native),)
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	code = {c: i for i, c in enumerate(classes)} # glue: class index table (classes-sized: distinct classes)
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	else Array.from_list([float(c) for c in classes], "<f8")) # glue: packs the class table for the native decode (classes-sized: distinct classes)
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	if all(isinstance(c, numbers.Integral) and not is_bool(c) for c in classes): # glue: kind test of the class labels (classes-sized: distinct classes)
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	if all(isinstance(c, numbers.Real) and not is_bool(c) for c in classes): # glue: kind test of the class labels (classes-sized: distinct classes)
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	if all(isinstance(c, str) for c in classes): # glue: kind test of the class labels (classes-sized: distinct classes)
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	if kind == "int" or all(is_bool(c) for c in classes): # glue: kind test of the class labels (classes-sized: distinct classes)
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	kinds = {t: _kind_of_type(t) for t in set(map(type, labels))} # glue: over the distinct label types (types-sized)
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	refused = frozenset(t for t, kind in kinds.items() if kind is None) # glue: over the distinct label types (types-sized)
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	return Array.from_list([float(c) for c in classes], "<f8") # glue: packs the class table (classes-sized: distinct classes)
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	return Array.from_list([int(c) for c in classes], "<i8") # glue: packs the class table (classes-sized: distinct classes)
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	return [bool(v) for v in values] # glue: converts a classes_ member (values-sized: distinct classes)
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -1184,29 +929,9 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	return 
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	return [str(v) for v in flatten_labels(list(member))] # glue: converts a classes_ member of str labels
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	return [str(v) for v in values] # glue: converts a classes_ member (values-sized: distinct classes)
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	table = (Array.from_list([int(c) for c in classes], "<i8") if kind == "int" # glue: packs the class table for the native decode (classes-sized: distinct classes)
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	classes = sorted(dict.fromkeys(labels)) # cpu-route: Python label objects (str or Python numbers), the explicit label input step
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	items = list(chain.from_iterable(map(_level, items))) # cpu-route: Python label objects, the explicit label input step
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	kinds = set(map(type, labels))
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	kinds = set(map(type, y))
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	labels = list(labels)
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	return (ClassLabels, (list(self),))
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	return Array.from_list(list(map(float, values)), "<f8") # cpu-route: float classes past the native decode range, the explicit label output step
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	return Array.from_list(list(map(int, values)), "<i8") # cpu-route: int classes past the native decode range, the explicit label output step
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	return classes, list(map(code.__getitem__, labels)) # cpu-route: Python label objects, the explicit label input step
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	return decode_labels(list(self), codes)
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	return list(classes)
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	return list(y)
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	stop = _first_true(map(refused.__contains__, map(type, labels))) if refused else None
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	values = list(map(bool, values)) # glue: the k class values
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	values = list(map(classes.__getitem__, map(int, codes))) # cpu-route: codes the native decode does not take (not an int32/int64 Array, or out of range: Python's IndexError), the explicit label output step
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-map-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	if _first_true(map(operator.ne, head, head)) is not None: # cpu-route: NaN test of Python label objects, the explicit label input step
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-map-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	if any(map(operator.ne, labels, labels)): # cpu-route: NaN test of a plain Python label list, the explicit label input step
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	classes = sorted(dict.fromkeys(labels)) # cpu-route: Python label objects (str or Python numbers), the explicit label input step
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	if arr.size != max(arr.shape): # glue: largest axis of the shape
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -1214,7 +939,6 @@ py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	1	if arr.siz
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	buf = (_CTYPES[fmt] * n).from_address(addr_ro(arr, name="host view"))
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	ctypes.memmove(cut.buffer_info()[0], classes_store.buffer_info()[0], 8 * k)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	lo, hi = ends[0], ends[k - 1]
-py-while-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_labels.py	0	while any(map(_is_nested, items)): # glue: one pass per nesting level (depth-sized)
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_lazy_out.py	0	dims = tuple(int(v) for v in (shape if isinstance(shape, (tuple, list)) else (shape,))) # glue: validates the shape argument
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -1234,32 +958,9 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_linalg_impl.py	0	re
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_linalg_impl.py	0	Ug = k.ew("div", AV.take_cols(list(range(r))) if r < n else AV, S.take_cols(list(range(r))) if r < n else S)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_linalg_impl.py	0	eye = _array.array("f", bytes(4 * m * width))
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_linalg_impl.py	0	eye[0:nd * (width + 1):width + 1] = _array.array("f", [1.0]) * nd
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_linalg_impl.py	0	n = cols + extra
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_linalg_impl.py	0	print("svd stage %-28s %9.1f ms" % (name, (now - last[0]) * 1e3), file=sys.stderr)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_linalg_impl.py	0	sg = k.hstack([sg, k.const(1.0, 1, width - r)])
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_linalg_impl.py	0	sg = k.neg_signs(k.strided(h, r, r + 1, 0))
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_mamba_impl.py	0	+ [addr_ro(a, name="weight") for a in w] # glue: one address per weight tensor
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_mamba_impl.py	1	+ [addr_ro(a, name="weight") for a in w] # glue: one address per weight tensor
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_mamba_impl.py	2	+ [addr_ro(a, name="weight") for a in w] # glue: one address per weight tensor
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_mamba_impl.py	0	addrs += [addr(a, name="affine checkpoint") for a in affine] # glue: fixed state-buffer list
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_mamba_impl.py	0	addrs = ([_addr_ro(x)] + [_addr_ro(w) for w in self._w] # glue: one address per weight tensor
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_mamba_impl.py	0	extra = [n for n in weights if n not in names] # glue: checks weight dict names
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_mamba_impl.py	0	missing = [n for n in names if n not in weights] # glue: checks weight dict names
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_mamba_impl.py	0	return [weights[n] for n in names] # glue: orders weight tensors by name
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_mamba_impl.py	0	+ [_addr(y)] + report_addrs)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_mamba_impl.py	0	addrs += [addr(a, name="affine checkpoint") for a in affine] # glue: fixed state-buffer list
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_mamba_impl.py	0	addrs = ([_addr_ro(x)] + [_addr_ro(w) for w in self._w] # glue: one address per weight tensor
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_mamba_impl.py	0	if position < 0 or position > (1 << 62) - 32:
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_mamba_impl.py	0	self._prefill_session, [_addr_ro(x), _addr(y)] + report_addrs,
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_mamba_impl.py	0	state.absolute_position += l
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_merged.py	0	for directory in path: # glue: the package search directories
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -1364,7 +1065,7 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_mode.py	0	return [_
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_mode.py	0	return tuple(_ndarray(v, np) for v in value) # glue: converts the members of a result tuple
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_mode.py	0	params = list(sig.parameters.values())
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_mode.py	0	preserves_dtype=list(getattr(cls, "_sklearn_preserves_dtype", ())))
+py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_mode.py	0	preserves_dtype=list(getattr(cls, "_sklearn_preserves_dtype", ()) if preserves_dtype is None
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/_mode.py	0	return sorted(names) # glue: sklearn get_params parameter names
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_mode.py	0	depth = state.get("_mojolearn_fitting", 1) - 1
@@ -1387,7 +1088,7 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_arena_prog.p
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_arena_prog.py	0	if any(not isinstance(entry, BuiltinFunctionType) for entry in (call, gather, finite32, finite64)): # glue: fixed native ABI identity
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_arena_rows.py	0	entries = {name: _native(name) for name in ('msel_put', 'msel_free', 'msel_take_rows')} # glue: fixed model-selection snapshot entries, preserving the established identical base binding
+py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_arena_rows.py	0	entries = {name: _native(name) for name in ('msel_put', 'msel_free', 'msel_take_rows', 'msel_free_bytes')} # glue: fixed model-selection snapshot entries, preserving the established identical base binding
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_arena_rows.py	0	for basename in (markers[3], None)) # glue: the two fixed host/missing-family refusal templates
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -2573,7 +2274,7 @@ py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_sk_validate.py	0	pa
 py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/_sk_validate.py	0	if a.dtype not in ("<f4", "<f8") or a.size == 0 or a.size != max(a.shape): # glue: largest axis of the shape
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_sk_validate.py	0	args = args[:index] + (value,) + args[index + 1:]
 py-while-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_sk_validate.py	0	while isinstance(item, (list, tuple)): # glue: walks the nesting depth through first elements (rank-sized)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_spectral_impl.py	0	nnz = int(_native("nonzero_f32_count")(src, n_r * n_c)) if n_r * n_c else 0 # cpu-route: float32 host matrix read once by nonzero_f32_count on a CPU-only install
+py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_spectral_impl.py	0	nnz = int(_native("nonzero_f32_count")(src, n_r * n_c)) if n_r * n_c else 0 # glue: pack addresses for one native call; float32 host matrix read once by nonzero_f32_count on a CPU-only install
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_training_impl.py	0	% (where, ", ".join(k for k in named))) # glue: argument names for the message
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -2595,7 +2296,6 @@ py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_training_impl.py
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_training_impl.py	1	m = a.size // k
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_training_impl.py	0	n *= d
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_training_impl.py	0	return array.array("d", bytes(8 * n)), array.array("d", bytes(8 * n))
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_training_impl.py	0	st, v = _lr_native("lr_schedule_exact")(ip + [t], fp) # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_transformer_impl.py	0	extra = [n for n in weights if n not in names] # glue: checks weight dict names
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -2620,43 +2320,6 @@ py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_tsa_impl.py	0	fl
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_tsa_impl.py	0	num_rows = components_len // self.ts_num
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_tsa_impl.py	0	offset=self._LAZY_COMPONENTS.index(name) * cl)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_tsa_impl.py	0	return strided_rows(src, offset, steps * n_series, n_series, steps,
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	exp_names_in = [e.get("name") for e in exp_in] # glue: the expected report's input names
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	exp_names_out = [e.get("name") for e in (expect or {}).get("outputs") or []] # glue: the expected report's output names
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	for a in rep["inputs"]: # glue: one line per model input
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	for k, (a, e) in enumerate(zip(ins, eins)): # glue: one check per model input
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	for k, (name, a) in enumerate(zip(names_in, arrays)): # glue: one entry per model input
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	for k, shape in enumerate(shapes): # glue: one buffer per model input
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	for k, y in enumerate(outs): # glue: one verdict per model output
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	for name, y in zip(names_out, outs): # glue: one entry per model output
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	for note in notes: # glue: one line per note
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	for y in rep["outputs"]: # glue: one line per model output
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	ok = not notes and all(r["verdict"] == "MATCH" for r in rows) # glue: the per-output verdicts
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	return "x".join(str(d) for d in shape) # glue: format a shape
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	return [f"{stem}{k}" for k, _ in enumerate(items)] # glue: one label per model input or output
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	return [str(e) for e in entries] # glue: the model's input or output names
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	return list(order), [z[k] for k in order] # glue: one array per model input
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	verdicts = {} if result is None else {r["name"]: r for r in result[1]} # glue: index the verdict rows
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	files = list(z.files)
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	inputs.append({"name": name, "shape": list(a.shape), "dtype": str(a.dtype),
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	outputs.append({"name": name, "shape": list(y.shape), "digest": _digest(b, y, f"output {name!r}")})
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	line += f" {r['verdict']}" + ("" if r["verdict"] == "MATCH" else f" (expected {r['expected']})")
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_verify_model.py	0	return os.fspath(path) + SIDECAR_SUFFIX
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_x_sequence_model.py	0	array_fields = {name: vars(Array)[name].__get__ for name in ("_mv", "shape", "dtype", "order")} # glue: retain native slot descriptors once at package import
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -2686,7 +2349,6 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_x_sequence_rnn.py	0
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_x_sequence_rnn.py	0	hooks = tuple((base, name, row.get(name)) for base, row in zip(mro, rows) for name in names) # glue: fixed native storage identities
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_x_sequence_rnn.py	0	rows = tuple(vars(base) for base in mro) # glue: imported class metadata
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_x_sequence_sched.py	0	return _lr_native("lr_schedule_at")([ip[0] + _LR_EXACT_ONLY] + ip[1:], fp, t, self._LR_STYLE) # glue: the kind word with the exact-only flag
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/adapters/_shipped.py	0	fields.update({name: value for name, value in vars(cls).items() # glue: import-time native slot metadata only
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -2798,17 +2460,9 @@ py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/importers/_native
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/importers/_native_reader_bridge.py	0	scalars += scalar_types
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/language_model.py	0	return sorted(set(globals()) | set(__all__)) # glue: module attribute names for dir
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/linear_model.py	0	for field, value in (("max_iter", max_iter), # glue: three solver argument checks
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/linear_model.py	0	if saved_as not in (c.__name__ for c in cls.__mro__): # glue: walks the class hierarchy names
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/linear_model.py	0	cw = _class_weight_rows(class_weight, list(classes), codes32, xb)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/linear_model.py	0	X, _, _, _ = _tsqr_lstsq_core(k, x, y, rows, cols, 1, _F32_EPS * cols, equilibrate=True, Ra=Ra)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/linear_model.py	0	intercept = w[cols:cols + 1] if fit_intercept else zeros((1,), "<f4")
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/linear_model.py	0	n = cols + 1
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/linear_model.py	0	n_param = cols + (1 if fit_intercept else 0)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/linear_model.py	0	out = _helper_output(x.shape, rows * cols)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/linear_model.py	0	return 1.0 - ss_res / ss_tot if ss_tot else 0.0
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/linear_model.py	0	w = zeros((cols + (1 if est.fit_intercept else 0),), "<f4")
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/linear_model.py	0	wx = _helper_output(x.shape, rows * cols)
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
@@ -2855,10 +2509,6 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/models/causal_lm.py	
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/models/causal_lm.py	0	for opt, value in plan.block_options.items(): # glue: copies block keyword options
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/models/causal_lm.py	0	for p in sig.parameters.values(): # glue: walks the block constructor signature parameters
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/models/causal_lm.py	0	return [cls(w, **kwargs) for w in layers] # glue: builds one block per model layer
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/models/causal_lm.py	0	if self.max_positions is not None and have + l > self.max_positions:
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/models/causal_lm.py	0	if state is not None and state.positions + l > state.max_tokens:
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/models/causal_lm.py	0	memcopy(at + l * b * 4, new_addr, n_new * b * 4)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/models/causal_lm.py	0	move(new_addr, at + l * b * 4, b, n_new)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/models/causal_lm.py	0	total = l + n_new
@@ -2893,17 +2543,6 @@ py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/models/config.py	
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/models/config.py	0	q_rows, kv_rows = nh * hd, nkv * hd
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/models/config.py	0	want_rank = int(math.ceil(d_model / 16.0))
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/models/safetensors.py	0	for name in sorted(tensors): # cpu-route: verification oracle or fixture text, not a runtime route
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/models/safetensors.py	0	for raw in payload: # cpu-route: verification oracle or fixture text, not a runtime route
-py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/models/safetensors.py	0	header[name] = {"dtype": dtype, "shape": list(shape), "data_offsets": [offset, offset + len(raw)]}
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/models/safetensors.py	0	for name in sorted(tensors): # cpu-route: verification oracle or fixture text, not a runtime route
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/models/safetensors.py	0	encoded += b" " * pad
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/models/safetensors.py	0	header[name] = {"dtype": dtype, "shape": list(shape), "data_offsets": [offset, offset + len(raw)]}
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/models/safetensors.py	0	offset += len(raw)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/models/safetensors.py	0	pad = (8 - len(encoded) % 8) % 8
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/neighbors.py	0	"ball cover admits: " + ", ".join(sorted(_RBC_METRIC_TABLE)) # glue: metric names for the error message
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/neighbors.py	0	+ ", ".join(sorted(_METRIC_TABLE)) # glue: metric names for the error message
@@ -2919,12 +2558,6 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/ops.py	0	return [_in
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/ops.py	0	return [_int(d, name, low) for d in shape] # glue: at most eight dimension arguments
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/ops.py	0	if seed >= 2 ** 64:
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	if any(math.isinf(v) for v in lo + hi): # glue: raises on an infinite per-column statistic
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	if saved_as not in (c.__name__ for c in cls.__mro__): # glue: walks the class hierarchy names
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	return [float(v) for v in seen.tolist()] # glue: per-column sample counts of n_samples_seen_
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	return {name: getattr(self, name) for name in self._parameters} # glue: collects the estimator parameters
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	vals = [float(v) for v in counts] # glue: converts the device sample counts (counts-sized: per-column sample counts)
@@ -2934,36 +2567,14 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	v
 py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	if values.ndim != 2 or min(values.shape) == 0: # glue: smallest axis of the shape
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-reduce	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	unknown = sorted(set(params) - values.keys()) # glue: sorts unknown parameter names
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	ch = max(4096, -(-n // 4096))
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	ctypes.memmove(_addr(values), _addr_ro(output), 4 * output.size)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	if any(math.isinf(v) for v in lo + hi): # glue: raises on an infinite per-column statistic
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	lo, hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	nch = -(-n // ch)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	out = pr.alloc(2 * d)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	out = pr.alloc(3 * d)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	out = pr.alloc(n * d)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	1	out = pr.alloc(n * d)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	pr.stage("c2_isum", 1, nf, d, sums + 1)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	pr.stage("c2_isum", 1, npos, d, sums + 2)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	pr.stage("fill", n * d, xo, n, d, stat, out, keep, d)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	pr.stage("nan_keep", n * d, xo, d, to, cn, out)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	pr.stage("std_scale", d, out + 2 * d, sc)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	return [float(seen)] * d
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	return pr.get(out, d), pr.get(out + d, d), pr.get(out + 2 * d, d), pr.get(sc, d)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	st = pr.alloc(6 * d)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	1	st = pr.alloc(6 * d)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	stat = st + fill_row * d if fill_row is not None else pr.put_list([0.0] * d)
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/preprocessing.py	0	unknown = sorted(set(params) - values.keys()) # glue: sorts unknown parameter names
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/randomforest.py	0	return int(max_features) / n_features
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/randomforest.py	0	return math.log2(max(2, n_features)) / n_features
 py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/randomforest.py	0	return math.sqrt(n_features) / n_features
 host-module	host-import	p4-loops	owed-tags	python/mojolearn/tokenizer.py	0	return _Entries(_backend.load_host_module(_EXTENSION)) # cpu-route: tokenizer host binding module loaded once by load_host_module (text input step)
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/tokenizer.py	0	for b in range(256): # cpu-route: verification fixture text: the byte table the tests and identity tools compare, not a runtime route
-# why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/tokenizer.py	0	for name in _ABI: # glue: looks up the binding ABI entries
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/tokenizer.py	0	for name, kind in (("ValueError: ", ValueError), ("TypeError: ", TypeError)): # glue: maps two native error prefixes
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/tokenizer.py	0	return blob, array.array("q", map(len, parts))
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/tokenizer.py	0	return list(ids)
-py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/tokenizer.py	0	extra += 1
