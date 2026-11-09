@@ -59,6 +59,15 @@ from bindings.admitted_input import (
     admit_c_view, admitted_dtype, classical_view,
 )
 from bindings.classical_arrays import classical_is_f32, classical_c_order
+from core.host_finite_scan import host_all_finite_f32
+
+
+def trees_finite_f32(address: Int, count: Int) -> Bool:
+    """True when the `count` float32 words at `address` are all finite: the
+    one host scan (core/host_finite_scan.mojo), SIMD tasks across cores."""
+    if count <= 0:
+        return True
+    return host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address), count)
 
 
 def trees_forest_x(source: PythonObject, name: String, context: PythonObject) raises -> AdmittedX:
