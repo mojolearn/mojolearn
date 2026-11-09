@@ -177,6 +177,12 @@ from cholesky.estimator import (
 # TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
 # f59d913b0b (its reach counter gp_shared_sub_count, with MOJOLEARN_CHOL_FAST_SHARED_SUB).
 # Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
+# Restored 2026-11-09 by lane r1-restore-measured-winners: the reach counter alone, for MOJOLEARN_CHOL_FAST_SHARED_SUB
+# (cholesky/checks/fast_trsm.mojo); the LU define stays deleted.
+from experiments.apple_fast.gemm.scoped_dispatch import shared_sub_count
+
+def gp_shared_sub_count_py() raises -> PythonObject:
+    return PythonObject(shared_sub_count(True))
 
 
 def gp_numeric_mode_binding() raises -> PythonObject:
@@ -1460,6 +1466,7 @@ def build__mojolearn_gp() -> PythonObject:
     comptime assert KERNEL_GUARDS_OK, "invalid integrated experiment configuration (kernel guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn_gp")
+        m.def_function[gp_shared_sub_count_py]("gp_shared_sub_count")
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch
         m.def_function[device_plan_enter_binding]("device_plan_enter")

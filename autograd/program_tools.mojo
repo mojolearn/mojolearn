@@ -181,6 +181,14 @@ def program_op_name(code: Int) -> String:
         return "lm_alive"
     if code == 87:
         return "lm_head_v2"
+    if code == 88:
+        return "small_mlp"
+    if code == 90:
+        return "cnn_conv_block"
+    if code == 91:
+        return "cnn_linear"
+    if code == 93:
+        return "lm_embedding"
     return "op_" + String(code)
 
 

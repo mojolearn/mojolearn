@@ -10,8 +10,11 @@
 # global-norm gradient clip and host learning-rate schedules.
 #
 # Why it does not import sequence.recurrent: rnn_fit and mlp_fit update through
-# this module (the -D MOJOLEARN_AUTOGRAD_OPTIM arm, promoted 2026-11-08 by lane
-# x3-mlp-rnn-predict-on-tape), so sequence.recurrent imports it; this module
+# this module under -D MOJOLEARN_AUTOGRAD_OPTIM (promoted 2026-11-08 by lane
+# x3-mlp-rnn-predict-on-tape with no measurement; the hand opt_step / OP_OPT
+# launch is the default again since 2026-11-09, lane
+# r2-restore-unmeasured-defaults, and this is the A/B arm), so
+# sequence.recurrent imports it; this module
 # imports only sequence.ops, sequence.exec_trait, checks.numerics,
 # autograd.ops and autograd.composed_ops (sequence.ops and sequence.mlp). recurrent.mojo keeps its opt_scalars / opt_step for their
 # other callers (autograd/model.mojo, sequence/opt_resident.mojo, sequence/ops_impl.mojo).

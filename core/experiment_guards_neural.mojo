@@ -29,9 +29,9 @@ def _check_configuration() -> Bool:
     # registered sched_exp_block, which nothing called after the schedules went native; PURITY_3_OFF / PURITY_6_OFF only
     # changed the x_neighbors_purity_flags word, which nothing read. Recoverable at 485ba9cc1.
     comptime assert not (is_defined["MOJOLEARN_SCHED_FAST_TABLE"]() or is_defined["MOJOLEARN_SCHED_FAST_TABLE_OFF"]()), "removed: MOJOLEARN_SCHED_FAST_TABLE (sched_exp_block) had no caller; the schedules run lr_schedule_at / lr_schedule_series"
-    # Deleted 2026-11-09 (lane x4-transformer-on-executor): the device per-call fresh prefill entry and the public
-    # decode session's deferred-check window (docs/TOMBSTONES.md). Recoverable at f59d913b0b.
-    comptime assert not (is_defined["MOJOLEARN_TRANSFORMER_FRESH_PREFILL"]() or is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"]()), "removed: MOJOLEARN_TRANSFORMER_FRESH_PREFILL / MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (the GPU binding's per-call transformer_forward_fresh) superseded by the block session's fresh prefill; deleted 2026-11-09, recoverable at f59d913b0b; see docs/TOMBSTONES.md"
+    # Restored 2026-11-09 (lane r1-restore-measured-winners): MOJOLEARN_TRANSFORMER_FRESH_PREFILL /
+    # MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (the GPU binding's per-call transformer_forward_fresh export)
+    # are live again, with their pre-x4 meaning; lane x4's refusal (deleted at 256e5e0c16) is lifted.
     # Deleted 2026-11-09 (lane x7-byte-lm-on-executor): the byte LM trainer's hand step, whose arms these were
     # (the step is the trainer's captured program on Program.fit now). Never measured as defaults; docs/TOMBSTONES.md
     # "BYTE_LM_HAND_STEP". Recoverable at the deletion commit's parent on lane/x7-byte-lm-on-executor.
@@ -268,7 +268,7 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_AFN_MLP_FUSED_STEP / _RESIDENT / _MULTISTEP / _ALL, MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
     # Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
     comptime assert not (is_defined["MOJOLEARN_AFN_MLP_FUSED_STEP"]() or is_defined["MOJOLEARN_AFN_MLP_RESIDENT"]() or is_defined["MOJOLEARN_AFN_MLP_MULTISTEP"]() or is_defined["MOJOLEARN_AFN_MLP_ALL"]()), "removed 2026-11-09 (lane/x2-small-mlp-on-executor, plan row X2): SmallMLPTrainer runs as one captured program on the executor (autograd/small_mlp_program.mojo); the Apple FAST fused step and resident session (merged-unmeasured opt-ins) are deleted with the hand step; drop the define. Restore with experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch"
-    comptime assert not is_defined["MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF"](), "removed 2026-11-09 (lane/x2-small-mlp-on-executor, plan row X2): SmallMLPTrainer runs as one captured program on the executor (autograd/small_mlp_program.mojo); the hand step's GEMM leaf switch went with it; drop the define. Restore with experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch"
+    # TOMBSTONE restored 2026-11-09 by lane/r1-restore-measured-winners: MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF is live again (autograd/small_mlp_op.mojo SMALL_MLP_GEMM_LEAF128: the small_mlp op's GEMMs take the incumbent identical_gemm_into); no refusal. MOJOLEARN_SMALL_MLP_GENERIC_OPS (the generic-ops A/B arm) needs none either.
     # ---- end lane x2-small-mlp-on-executor
     # ---- lane x3-mlp-rnn-predict-on-tape (2026-11-08, docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md X3 and 5.6): one
     # path per decision in the MLP and recurrent trainers (docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md).
@@ -280,7 +280,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_LOSS"](), "removed 2026-11-08 (lane/x3-mlp-rnn-predict-on-tape, dbab55bea7): rnn_fit's reported loss always uses the blocked fold (loss_value_into; the serial OP_SUM is deleted); mlp_fit keeps its loss block (already blocked, the arm added launches). Drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch"
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_OPTIM (promoted: the executor optimizer is the trainers' one update; the hand arm deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch
-    comptime assert not is_defined["MOJOLEARN_AUTOGRAD_OPTIM"](), "removed 2026-11-08 (lane/x3-mlp-rnn-predict-on-tape, 75825f479c): mlp_fit and rnn_fit always update through autograd/optim.mojo (step_lr), the same OP_OPT words; the hand OP_OPT assembly is deleted. Drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch"
+    # Restored 2026-11-09 by lane/r2-restore-unmeasured-defaults: the hand OP_OPT launch is the default again and
+    # -D MOJOLEARN_AUTOGRAD_OPTIM is the A/B arm (the executor optimizer), so the define is live: no refusal.
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_DATA (promoted: autograd/data.mojo epoch_order is the one epoch order; the hand launches deleted) deleted 2026-11-08 by 75825f479c; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_DATA"](), "removed 2026-11-08 (lane/x3-mlp-rnn-predict-on-tape, 75825f479c): rnn_fit always takes its epoch order from autograd/data.mojo epoch_order (same launches, same key); the inline launches are deleted. Drop the define. Restore with experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch"

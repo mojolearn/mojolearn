@@ -102,6 +102,13 @@ struct FaultExec(Exec, Movable):
     def lm_head_v2_host(mut self, backward: Bool, bufs: List[FP], rows: Int, vocab: Int, width: Int) raises:
         self.host.lm_head_v2_host(backward, bufs, rows, vocab, width)
 
+    def small_mlp_host(mut self, backward: Bool, bufs: List[FP], dims: List[Int]) raises:
+        self.host.small_mlp_host(backward, bufs, dims)
+
+    def cnn_op_host(mut self, op: Int, bufs: List[FP], cprm: List[Int32], pprm: List[Int32],
+                    words: List[Int]) raises:
+        self.host.cnn_op_host(op, bufs, cprm, pprm, words)
+
 
 def require(condition: Bool, message: String) raises:
     if not condition:

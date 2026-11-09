@@ -151,10 +151,14 @@ def decomp_entries(mode_value: PythonObject, context: PythonObject) raises -> Py
     return entries
 
 
-def decomp_input(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+def decomp_input(source: PythonObject, name: String, context: PythonObject,
+                 defer_finite: Bool = False) raises -> PythonObject:
     """`_M.from_input`: a SciPy sparse X densified (exact), then a nonempty
     2-D input cast once to C-order float32 (the input itself when it is one),
-    non-finite values refused, in `_buffer.as_f32_c`'s and `_M`'s words."""
+    non-finite values refused, in `_buffer.as_f32_c`'s and `_M`'s words.
+    `defer_finite` (randomized_svd under RSVD_FAST_DEVSCAN, restored
+    2026-11-09): a borrowed input is not scanned here; the caller's native
+    call tests its device copy."""
     var value = source
     var format = host_sparse_format(source)
     if format.byte_length() > 0:
@@ -177,7 +181,7 @@ def decomp_input(source: PythonObject, name: String, context: PythonObject) rais
     if kind != "b" and kind != "i" and kind != "u" and kind != "f":
         raise Error("TypeError: mojolearn: " + name + " has a non-numeric dtype")
     try:
-        return admit_x(view, 2, name, context, admitted=True)
+        return admit_x(view, 2, name, context, admitted=True, defer_finite=defer_finite)
     except error:
         if String(error) == "Input " + name + " contains NaN or infinity":
             raise Error(name + ": input must be finite; NaN/inf are unsupported")

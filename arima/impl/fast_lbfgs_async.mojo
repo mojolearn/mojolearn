@@ -1,13 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The device's batched ARIMA L-BFGS (`batched_fit.mojo::batched_min_lbfgs`
-calls it on every vendor and in both modes; lane/apple-fast-gap-arima
-2026-10-03 wrote it as the FAST-on-Apple ARIMA_FAST_ASYNC, lane
-n10-dictl-arima-loops 2026-11-09 made it the only device arm and deleted the
-lock-step loop). ARIMA_FAST_LS_NOREAD was DROPPED-noise; its code is on
+"""The per-series batched ARIMA L-BFGS (`batched_fit.mojo::batched_min_lbfgs`
+takes it whenever the fit holds the stacked evaluation workspace: FAST on
+Apple, IDENTICAL on every vendor within `IDN_EVAL_WS_MAX_CELLS`; and
+everywhere under `-D MOJOLEARN_ARIMA_ASYNC_ALL`). lane/apple-fast-gap-arima
+2026-10-03 wrote it as the FAST-on-Apple ARIMA_FAST_ASYNC; lane
+n10-dictl-arima-loops 2026-11-09 let it take the sequential evaluation too and
+deleted the lock-step loop; lane r2-restore-unmeasured-defaults 2026-11-09
+restored the lock-step loop as the default on the routes that had it.
+ARIMA_FAST_LS_NOREAD was DROPPED-noise; its code is on
 lane/apple-fast-gap-arima @ d967c0121.
 
-The deleted lock-step solver
+The lock-step solver (`batched_fit.mojo::_lockstep_min_lbfgs`)
 moves every series through the same phase together: prelude, a shared line
 search that runs until the LAST series accepts, verdict, with three host
 waits per iteration. Here every series runs its own state machine in one
@@ -15,8 +19,8 @@ kernel (`async_step_kernel`): after each shared evaluation a series takes
 its Armijo test and, when its line search is over, runs its verdict, its
 history update, the next prelude and its next candidate in the same thread,
 so the next evaluation already carries its next point. The per-series
-statements are the lock-step kernels' (deleted; the host column
-`arima/host/arima_oracle.mojo::_batched_min_lbfgs` keeps that shape) in the
+statements are the lock-step kernels' (`lbfgs_device.mojo`; the host column
+`arima/host/arima_oracle.mojo::_batched_min_lbfgs` keeps that shape too) in the
 same order on the same operands (a series' evaluation reads only its own candidate: every Kalman
 member, the infeasible mark and the gradient are per series), so each
 series' iterates, `n_iter` and `retcode` are the lock-step solver's bit for
@@ -31,6 +35,7 @@ in `ist` (field-major, `ist[f * bs + b]`), the per-series floats in `fst`.
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isinf, isnan
+from std.sys.compile import is_defined
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.memory import memcpy
@@ -72,8 +77,19 @@ from glm.impl.qn.qn_util import (
 #: `retcode` the lock-step solver's bit for bit (module banner).
 # TOMBSTONE: MOJOLEARN_IDN_ARIMA_ASYNC_OFF, MOJOLEARN_ARIMA_FAST_ASYNC_OFF (superseded: the lock-step device solver they kept) deleted 2026-11-09 by lane/n10-dictl-arima-loops; code recoverable at the lane's base f59d913b0b.
 # Restore: git apply experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch
-# This is now the only device arm (batched_fit.mojo::batched_min_lbfgs), with
-# or without the held evaluation workspace (`eval_batch.mojo::arima_eval`).
+# Restored 2026-11-09 by lane/r2-restore-unmeasured-defaults: the lock-step
+# solver is back as the default on the routes that took it before the deletion
+# (no held evaluation workspace: FAST on NVIDIA / AMD, FAST on Apple with exog,
+# IDENTICAL above IDN_EVAL_WS_MAX_CELLS); the per-series solver there was never
+# measured. The `_OFF` defines stay removed (the per-series default where it
+# was measured is unchanged).
+#: A/B switch, default off (lane r2-restore-unmeasured-defaults, 2026-11-09):
+#: `-D MOJOLEARN_ARIMA_ASYNC_ALL=1` runs this solver on every route, the
+#: sequential evaluation included (`eval_batch.mojo::arima_eval`), in place
+#: of the lock-step solver where the fit holds no evaluation workspace. Same
+#: per-series bits by construction (module banner). RUN OWED: NVIDIA + AMD
+#: autoarima rows, FAST and IDENTICAL, B = this define.
+comptime ARIMA_ASYNC_ALL = is_defined["MOJOLEARN_ARIMA_ASYNC_ALL"]()
 #: evaluations between two reads of the "any series still running" word;
 #: the rounds after the last series stops propose current points and change
 #: nothing.
@@ -356,13 +372,13 @@ def async_min_lbfgs(
     h: Float32,
 ) raises -> AsyncLBFGSOut:
     """`batched_min_lbfgs` with every series on its own schedule (module
-    banner): the device's one ARIMA L-BFGS loop (lane n10-dictl-arima-loops,
-    2026-11-09: the lock-step loop, its three host waits per iteration and
-    its per-iteration card are deleted). The body per round is one batched
-    evaluation (`eval_batch.mojo::arima_eval`: the held stacked workspace
-    `ews` when the fit has one, else the sequential evaluation over `d_y_kf`
-    / `d_exog_kf`; same bits) and `async_step_kernel`; the host reads one
-    word every ASYNC_READ_EVERY rounds."""
+    banner). `batched_min_lbfgs` takes it when the fit holds the stacked
+    evaluation workspace, and on every route under ARIMA_ASYNC_ALL. The body
+    per round is one batched evaluation (`eval_batch.mojo::arima_eval`: the
+    held stacked workspace `ews` when the fit has one, else the sequential
+    evaluation over `d_y_kf` / `d_exog_kf`; same bits) and
+    `async_step_kernel`; the host reads one word every ASYNC_READ_EVERY
+    rounds."""
     var n = order_kf.complexity()
     var bs = batch_size
     var b_n = bs * n

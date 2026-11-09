@@ -87,6 +87,9 @@ from x_cnn.ops import idn2_flags, neural_tape_budget_bytes, neural_numerical_pro
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_CNN_OFF.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: autograd/rules_cnn.mojo and the device epoch imports (lane x8-cnn-on-executor) deleted 2026-11-09; code recoverable at f59d913b0b.
 # Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
+# Restored 2026-11-09 by lane/r1-restore-measured-winners as ops cnn_conv_block / cnn_linear: rules_cnn.mojo's block and head
+# VJPs (the same conv_block_backward_into / linear_backward_into calls) are autograd/rules_step_ops.mojo's
+# CNN_CONV_BLOCK_TAG / CNN_LINEAR_TAG (autograd/cnn_block_op.mojo); the device epoch stays deleted.
 from std.memory import memcpy
 # The typed bodies (lane thin-trees-metrics, 2026-10-21), moved word for word
 # out of this shell.

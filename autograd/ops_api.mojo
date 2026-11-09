@@ -120,6 +120,23 @@ from autograd.rules_step_ops import StepOpRules
 # Generation ops (lane x45c): the language model's token pick and the decode
 # loop's condition, session codes 85, 86 (autograd/generation_ops.mojo).
 from autograd.lm_head_v2_op import OPS_LM_HEAD_V2, LM_HEAD_V2_TAG, lm_head_v2_check, lm_head_v2_forward_device
+from autograd.small_mlp_op import (
+    OPS_SMALL_MLP, SMALL_MLP_TAG, small_mlp_check, small_mlp_workspace_floats, small_mlp_forward_device,
+)
+# CNNClassifier's tuned conv block and head (lane r1-restore-measured-winners):
+# session codes 90, 91 (autograd/cnn_block_op.mojo).
+from autograd.cnn_block_op import (
+    OPS_CNN_CONV_BLOCK, OPS_CNN_LINEAR, CNN_CONV_BLOCK_TAG, CNN_LINEAR_TAG, CNN_HOST_BLOCK_FORWARD,
+    CNN_HOST_LINEAR_FORWARD, cnn_block_words, cnn_block_out_dims, cnn_block_saved_sizes, cnn_block_keep,
+    cnn_block_forward_device, cnn_linear_forward_device,
+)
+# Lane r1-restore-measured-winners (2026-11-09): the byte LM trainer's
+# embedding backward as an op (autograd/lm_embedding_op.mojo), code 93.
+from autograd.lm_embedding_op import OPS_LM_EMBEDDING, LM_EMBEDDING_TAG, lm_embedding_scratch_words
+from autograd.embedding_ops import (
+    AG_EMB_PLAN_SORT, embedding_refuse_shape, embedding_check_words, embedding_refuse_ids, embedding_forward_into,
+    embedding_perm_words,
+)
 from autograd.generation_ops import (
     OPS_LM_PICK, OPS_LM_ALIVE, is_generation_op, generation_op_check, generation_op_name, lm_pick_run,
     lm_alive_run, LM_PICK_SAMPLE,
@@ -1428,6 +1445,20 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             # Lane m2-neural-leftovers: the chunked LM head (loss without
             # the logits), one custom node (autograd/lm_head_v2_op.mojo).
             return self._lm_head_v2(hs, ints, fs, x)
+        if code == OPS_SMALL_MLP:
+            # Lane r1-restore-measured-winners: the small MLP's tuned forward
+            # and hand backward, one custom node (autograd/small_mlp_op.mojo).
+            return self._small_mlp(hs, ints, fs, x)
+        if code == OPS_CNN_CONV_BLOCK:
+            # Lane r1-restore-measured-winners: CNNClassifier's hand-tuned
+            # conv block, one custom node (autograd/cnn_block_op.mojo).
+            return self._cnn_conv_block(hs, ints, fs, x)
+        if code == OPS_CNN_LINEAR:
+            return self._cnn_linear(hs, ints, fs, x)
+        if code == OPS_LM_EMBEDDING:
+            # Lane r1-restore-measured-winners: the byte LM trainer's tuned
+            # embedding backward, one custom node (autograd/lm_embedding_op.mojo).
+            return self._lm_embedding(hs, ints, fs, x)
         if code == OPS_RMS_NORM or code == OPS_ROTARY or code == OPS_TRANSFORMER_LINEAR or code == OPS_TRANSFORMER_SOFTMAX:
             # These primitive signatures have at most two handles. Their
             # arity validation below rejects any additional operands.
@@ -1900,6 +1931,253 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         rx.append(x[0])
         rx.append(x[1])
         var rt = self.tape.custom(self.ex, rx, loss, 1, 1, LM_HEAD_V2_TAG, saved)
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _small_mlp(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_SMALL_MLP: [x (rows x in, any rank), w1 (hid, in), b1 (hid
+        values), w2 (out, hid), b2 (out values)] -> the (rows, out) logits of
+        linear(relu(linear(x, w1^T, b1)), w2^T, b2). Recorded: one custom
+        node over the five operands (SMALL_MLP_TAG, VJP in StepOpRules); act,
+        the backward scratch and the workspace are tape storage until the
+        reset."""
+        _need("small_mlp", len(x), 5, 0, len(ints), 0, len(fs))
+        var slots = List[Int]()
+        for i in range(5):  # small-loop(five operands): handle lookup, no data
+            var sl = self._slot(hs[i])
+            if self.int_words[sl]:
+                raise Error("ValueError: ops: small_mlp takes floating-point operands")
+            slots.append(sl)
+        var s1 = self.shapes[slots[1]]
+        var s3 = self.shapes[slots[3]]
+        if s1.ndim != 2 or s3.ndim != 2:
+            raise Error("ValueError: ops: small_mlp: the weights must be (hidden, inputs) and (outputs, hidden)")
+        var hid = s1.d[0]
+        var n_in = s1.d[1]
+        var n_out = s3.d[0]
+        if s3.d[1] != hid:
+            raise Error("ValueError: ops: small_mlp: the second weight must take the hidden width")
+        if self.shapes[slots[2]].count() != hid or self.shapes[slots[4]].count() != n_out:
+            raise Error("ValueError: ops: small_mlp: each bias must hold one value per output of its layer")
+        var count = self.shapes[slots[0]].count()
+        if n_in < 1 or count % n_in != 0:
+            raise Error("ValueError: ops: small_mlp: the input rows must have the first weight's width")
+        var rows = count // n_in
+        small_mlp_check(rows, n_in, hid, n_out)
+        var recording = self.tape.is_recording()
+        var ws_n = small_mlp_workspace_floats(rows, n_in, hid, n_out, recording)
+        var vals = List[FP]()
+        for i in range(5):  # small-loop(five operands): value pointers, no data
+            vals.append(self.tape.value_of(self.ex, x[i]))
+        var pre1 = self.tape.reserve(self.ex, rows * hid)
+        var act = self.tape.reserve(self.ex, rows * hid)
+        var pre2 = self.tape.reserve(self.ex, rows * n_out)
+        var logits = self.tape.reserve(self.ex, rows * n_out)
+        var ws = self.tape.reserve(self.ex, ws_n)
+        var fb: List[FP] = [vals[0], vals[1], vals[2], vals[3], vals[4], pre1, act, pre2, logits, ws]
+        var fd: List[Int] = [rows, n_in, hid, n_out, ws_n]
+        comptime if Self.E.IS_DEVICE:
+            small_mlp_forward_device(rebind[DeviceExec](self.ex), fb, fd)
+        else:
+            # the host arm (autograd/small_mlp_host.mojo) through the executor
+            self.ex.small_mlp_host(False, fb, fd)
+        if not recording:
+            var t = self.tape.variable(self.ex, logits, rows, n_out, False)
+            return self._add(t, 0, False, 0)
+        var saved = Args()
+        saved.p0 = act
+        saved.p1 = self.tape.reserve(self.ex, rows * hid)
+        saved.p2 = self.tape.reserve(self.ex, rows * hid)
+        saved.p3 = ws
+        saved.i0 = rows
+        saved.i1 = n_in
+        saved.i2 = hid
+        saved.i3 = n_out
+        saved.i4 = ws_n
+        saved.i5 = 1 if self.tape.requires_grad(x[0]) else 0
+        var rx = List[Tensor]()
+        for i in range(5):  # small-loop(five operands): the node's parents
+            rx.append(x[i])
+        var rt = self.tape.custom(self.ex, rx, logits, rows, n_out, SMALL_MLP_TAG, saved)
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _cnn_conv_block(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_CNN_CONV_BLOCK: [x (N, C, H, W), w (OC, C, k, k), b (1, OC)],
+        ints [pad, pool (0 / 1), pool size] -> maxpool(relu(conv(x) + b))
+        (stride 1), or relu(conv(x) + b) without the pool. Recorded: one
+        custom node over [x, w, b] (CNN_CONV_BLOCK_TAG, VJP in StepOpRules);
+        the pool winners and the saved im2col / conv output are tape storage
+        until the reset (autograd/cnn_block_op.mojo)."""
+        _need("cnn_conv_block", len(x), 3, 3, len(ints), 0, len(fs))
+        var xslot = self._slot(hs[0])
+        var wslot = self._slot(hs[1])
+        var bslot = self._slot(hs[2])
+        if self.int_words[xslot] or self.int_words[wslot] or self.int_words[bslot]:
+            raise Error("ValueError: ops: cnn_conv_block takes floating-point inputs")
+        var xs = self.shapes[xslot]
+        var ws = self.shapes[wslot]
+        if xs.ndim != 4 or ws.ndim != 4:
+            raise Error("ValueError: ops: cnn_conv_block takes (N, C, H, W) images and an (OC, C, k, k) weight")
+        var n = xs.d[0]
+        var c = xs.d[1]
+        var oc = ws.d[0]
+        var ks = ws.d[2]
+        if ws.d[1] != c or ws.d[3] != ks:
+            raise Error("ValueError: ops: cnn_conv_block: the weight must be (OC, C, k, k) over the images' channels")
+        if self.shapes[bslot].count() != oc:
+            raise Error("ValueError: ops: cnn_conv_block takes one bias per output channel")
+        var pad = ints[0]
+        var pool = ints[1] != 0
+        var ps = ints[2]
+        if pad < 0 or (ints[1] != 0 and ints[1] != 1) or (pool and ps < 1):
+            raise Error("ValueError: ops: cnn_conv_block takes ints [pad >= 0, pool 0 or 1, pool size >= 1]")
+        var wd = cnn_block_words(n, c, xs.d[2], xs.d[3], oc, ks, pad, pool, ps)
+        var cprm = wd[0].copy()
+        var pprm = wd[1].copy()
+        var od = cnn_block_out_dims(cprm, pprm, pool)
+        var count = n * oc * od[0] * od[1]
+        var xp = self.tape.value_of(self.ex, x[0])
+        var wp = self.tape.value_of(self.ex, x[1])
+        var bp = self.tape.value_of(self.ex, x[2])
+        var dst = self.tape.reserve(self.ex, count)
+        # the pool winners (int32 words in float storage of the same width)
+        var idx = self.tape.reserve(self.ex, count if pool else 1)
+        var recording = self.tape.is_recording()
+        var keep = recording and cnn_block_keep(cprm)
+        var sz = cnn_block_saved_sizes(cprm)
+        var cols = FP(unsafe_from_address=0)
+        var yconv = FP(unsafe_from_address=0)
+        if keep:
+            cols = self.tape.reserve(self.ex, sz[0])
+            yconv = self.tape.reserve(self.ex, sz[1])
+        comptime if Self.E.IS_DEVICE:
+            cnn_block_forward_device(xp, wp, bp, cprm, pprm, pool, dst, idx, cols, yconv)
+        else:
+            # the host arm (autograd/cnn_block_host.mojo) through the executor
+            var hcols = cols if keep else dst
+            var hy = yconv if keep else dst
+            var hb: List[FP] = [xp, wp, bp, dst, idx, hcols, hy]
+            var hw: List[Int] = [1 if pool else 0, 1 if keep else 0]
+            self.ex.cnn_op_host(CNN_HOST_BLOCK_FORWARD, hb, cprm, pprm, hw)
+        var od_list: List[Int] = [n, oc, od[0], od[1]]
+        var osh = rn_shape(od_list, "ops: cnn_conv_block")
+        if not recording:
+            var t = self.tape.variable_nd(self.ex, dst, osh, False)
+            return self._add(t, 0, False, 0)
+        var saved = Args()
+        saved.p0 = idx
+        saved.p1 = cols
+        saved.p2 = yconv
+        saved.i0 = n
+        saved.i1 = c
+        saved.i2 = xs.d[2]
+        saved.i3 = xs.d[3]
+        saved.i4 = oc
+        saved.i5 = ks
+        saved.i6 = pad
+        saved.i7 = 1 if pool else 0
+        saved.i8 = ps
+        saved.i9 = 1 if self.tape.requires_grad(x[0]) else 0
+        saved.i10 = 1 if keep else 0
+        var rx = List[Tensor]()
+        rx.append(x[0])
+        rx.append(x[1])
+        rx.append(x[2])
+        var rt = self.tape.custom_nd(self.ex, rx, dst, osh, CNN_CONV_BLOCK_TAG, saved)
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _cnn_linear(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_CNN_LINEAR: [h (n, d_in), w (d_out, d_in), b (1, d_out)] ->
+        h w^T + b: CNNClassifier's head on the CNN's pinned GEMM plan
+        (autograd/cnn_block_op.mojo). Recorded: one custom node over
+        [h, w, b] (CNN_LINEAR_TAG, VJP in StepOpRules)."""
+        _need("cnn_linear", len(x), 3, 0, len(ints), 0, len(fs))
+        var hslot = self._slot(hs[0])
+        var wslot = self._slot(hs[1])
+        var bslot = self._slot(hs[2])
+        if self.int_words[hslot] or self.int_words[wslot] or self.int_words[bslot]:
+            raise Error("ValueError: ops: cnn_linear takes floating-point inputs")
+        var wsh = self.shapes[wslot]
+        if wsh.ndim != 2:
+            raise Error("ValueError: ops: cnn_linear: the weight must be (outputs, inputs)")
+        var d_out = wsh.d[0]
+        var d_in = wsh.d[1]
+        var count = self.shapes[hslot].count()
+        if d_in < 1 or count % d_in != 0:
+            raise Error("ValueError: ops: cnn_linear: the input rows must have the weight's width")
+        if self.shapes[bslot].count() != d_out:
+            raise Error("ValueError: ops: cnn_linear takes one bias per output")
+        var n = count // d_in
+        var hp = self.tape.value_of(self.ex, x[0])
+        var wp = self.tape.value_of(self.ex, x[1])
+        var bp = self.tape.value_of(self.ex, x[2])
+        var dst = self.tape.reserve(self.ex, n * d_out)
+        comptime if Self.E.IS_DEVICE:
+            cnn_linear_forward_device(hp, wp, bp, n, d_in, d_out, dst)
+        else:
+            var hb: List[FP] = [hp, wp, bp, dst]
+            var hw: List[Int] = [n, d_in, d_out]
+            self.ex.cnn_op_host(CNN_HOST_LINEAR_FORWARD, hb, List[Int32](), List[Int32](), hw)
+        if not self.tape.is_recording():
+            var t = self.tape.variable(self.ex, dst, n, d_out, False)
+            return self._add(t, 0, False, 0)
+        var saved = Args()
+        saved.i0 = n
+        saved.i1 = d_in
+        saved.i2 = d_out
+        var rx = List[Tensor]()
+        rx.append(x[0])
+        rx.append(x[1])
+        rx.append(x[2])
+        var rt = self.tape.custom(self.ex, rx, dst, n, d_out, CNN_LINEAR_TAG, saved)
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _lm_embedding(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_LM_EMBEDDING: [table (vocab, width), ids (n int32 words)],
+        ints [padding_idx] -> the (n, width) rows. OPS_EMBEDDING's refusals,
+        forward and words; recorded as one custom node over [table]
+        (LM_EMBEDDING_TAG, VJP in StepOpRules: the trainer's embedding
+        backward on a device session, the executor's on the host). The VJP's
+        run scratch is tape storage until the reset."""
+        _need("lm_embedding", len(x), 2, 1, len(ints), 0, len(fs))
+        var tslot = self._slot(hs[0])
+        var islot = self._slot(hs[1])
+        if self.int_words[tslot] or not self.int_words[islot]:
+            raise Error("ValueError: ops: lm_embedding takes a floating-point table and int32 ids")
+        var tshape = self.shapes[tslot]
+        if tshape.ndim != 2:
+            raise Error("ValueError: ops: lm_embedding: the table must be (vocab, width)")
+        var vocab = tshape.d[0]
+        var width = tshape.d[1]
+        var n = self.shapes[islot].count()
+        var pad = ints[0]
+        embedding_refuse_shape(n, vocab, width, pad)
+        var tp = self.tape.value_of(self.ex, x[0])
+        var ip = self.tape.value_of(self.ex, x[1])
+        var cw = embedding_check_words(n)
+        var scratch_a = self.tape.reserve(self.ex, cw)
+        var scratch_b = self.tape.reserve(self.ex, cw)
+        embedding_refuse_ids(self.ex, ip, n, vocab, scratch_a, scratch_b)
+        var y = self.tape.reserve(self.ex, n * width)
+        embedding_forward_into(self.ex, tp, ip, y, n, width)
+        if not self.tape.is_recording():
+            var t = self.tape.variable(self.ex, y, n, width, False)
+            return self._add(t, 0, False, 0)
+        # Run scratch for either arm: the device's counts | run_begin | perm,
+        # the host's run_begin | perm | keys (autograd/embedding_ops.mojo).
+        var words = lm_embedding_scratch_words(vocab, n)
+        var host_words = vocab + 1 + 2 * embedding_perm_words(AG_EMB_PLAN_SORT, n)
+        if host_words > words:
+            words = host_words
+        var saved = Args()
+        saved.p0 = ip
+        saved.p1 = self.tape.reserve(self.ex, words)
+        saved.i0 = n
+        saved.i1 = vocab
+        saved.i2 = width
+        saved.i3 = pad
+        var rx = List[Tensor]()
+        rx.append(x[0])
+        var rt = self.tape.custom(self.ex, rx, y, n, width, LM_EMBEDDING_TAG, saved)
         return self._add(rt, 0, self.tape.requires_grad(rt), 0)
 
     def _generation_op(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:

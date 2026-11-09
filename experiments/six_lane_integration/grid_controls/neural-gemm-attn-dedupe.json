@@ -160,6 +160,31 @@
    ],
    "note": "Scope arm: neural128/neural256 switch the neural callers to the NN03 profile body. The all256 contract-leaf arm (every GEMM, classical too) is split out as gemm_contract_leaf. Leaf 64 deleted (I04 loser). Bit version: ID check per arm. grid ge123e6f9 (lane grid-act-5, 2026-10-08): neural128 SPLIT, mlp-train-step FASTER NV 2.0->1.7 / AMD 3.5->3.1 ms (0.886x) but lm-forward 7.2x, lm-train-step 13.6x, mamba1/2/3-forward 3.0/3.8/5.2x, samba-train-step 1.73x, transformer-forward 7.6x SLOWER, same bits; the MLP step now takes leaf128 by default (mlp_gemm_leaf128), the build-wide default stays off. The arms stay for the grid; with neural128|neural256 the MLP follows the build-wide arm."
   },
+  "mlp_gemm_leaf128": {
+   "define": "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF",
+   "kind": "switch",
+   "arms": {
+    "on": [],
+    "off": [
+     "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF"
+    ]
+   },
+   "default": "on",
+   "source": [
+    "autograd/small_mlp_op.mojo",
+    "autograd/small_mlp_host.mojo",
+    "gemm/neural_dispatch.mojo"
+   ],
+   "binding": [
+    "_mojolearn_x_sequence",
+    "_mojolearn_x_sequence_host"
+   ],
+   "bits_change": false,
+   "status": "promoted:ge123e6f9 (split from gemm_leaf=neural128); restored 2026-11-09 (lane r1-restore-measured-winners): the op small_mlp (autograd/small_mlp_op.mojo) takes neural_model_leaf_into[128] again, -D MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF its incumbent arm",
+   "board": "mlp-train-step",
+   "tags": [],
+   "note": "lane grid-act-5 (2026-10-08): the MLP training step's GEMMs (training/mlp_ops.mojo _gemm) take the NN03 neural profile body at leaf 128 (gemm.neural_dispatch.neural_model_leaf_into), keyed on the model kind, never a dimension; grid ge123e6f9 mlp-train-step NV 2.0->1.7 / AMD 3.5->3.1 ms (0.886x), hashes equal to the incumbent on both vendors. Off arm = the incumbent dispatch. Inert (the build-wide dispatch decides) under any neural GEMM experiment arm; _OFF with gemm_leaf=neural128|neural256 is refused by the guard."
+  },
   "neural_gemm_chains": {
    "define": "MOJOLEARN_IDN_NEURAL_CHAINS",
    "kind": "int_sweep",
@@ -1046,10 +1071,6 @@
    "control": "attn_softmax",
    "arm": "online_tile32",
    "reason": "DELETED 2026-10-10 (lane grid-act-15, deletion c1bf9d832): slower. online_tile32/off ms ratio NV/AMD: lm-train-step 1.43/1.56 (35.43 -> 50.57 NV, 42.84 -> 66.68 AMD; avg 1.49 SLOWER), lm-forward 0.98/1.04 (48.55 -> 47.64 NV, 34.67 -> 36.04 AMD; avg 1.01 noise); mean_nll 9.018733 and train loss_last 8.418446 unchanged. main ca25d9321, byte-LM bytes profile, one run per arm, nv2 v1229/v1231/v1232, amd a1555/a1556/a1557 (default v1232/a1557); identity: every arm's NV hash == AMD hash. It was the last arm (summary_tree =1 deleted 2026-10-08), so the control and the define are gone: transformer/impl/llama/attention_v2*.mojo, transformer/checks/attention_v2_*.mojo, tools/attention_v2_*oracle.py (+tests), tools/attention_v2_exact_leg.sh, transformer/ATTENTION_V2_CONTRACT.md and experiments/performance_ideas/N06 deleted, with its forward sweep attn_v2_tq (attention-tiled-v2.json). Code recoverable at main ca25d9321; MOJOLEARN_IDN_ATTN_SOFTMAX refused in core/six_lane_experiment_guards.mojo; patch experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch."
-  },
-  {
-   "define": "MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF",
-   "reason": "plan row X2 (2026-11-09, lane/x2-small-mlp-on-executor): the small MLP step it routed (mlp_train_step_host) is deleted; SmallMLPTrainer runs as a captured program whose GEMMs are the tape linear's. Its A/B (0.886x, ge123e6f9) is superseded; program vs old path is RUN OWED on mlp-train-step. Recoverable at f59d913b0b."
   }
  ],
  "catalog_note": "experiments/six_lane_integration/catalog.json and build_plan.json still name the retired defines; they must be regenerated from these controls (tools/six_lane_ab.py now refuses retired defines). lane/neural-small 2026-10-07: neural:mamba-forward replaced by neural:mamba1/2/3-forward (neural-small.json); gemm_leaf all256 split to gemm_contract_leaf."
