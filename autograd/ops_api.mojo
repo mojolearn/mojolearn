@@ -120,6 +120,9 @@ from autograd.rules_step_ops import StepOpRules
 # Generation ops (lane x45c): the language model's token pick and the decode
 # loop's condition, session codes 85, 86 (autograd/generation_ops.mojo).
 from autograd.lm_head_v2_op import OPS_LM_HEAD_V2, LM_HEAD_V2_TAG, lm_head_v2_check, lm_head_v2_forward_device
+from autograd.small_mlp_op import (
+    OPS_SMALL_MLP, SMALL_MLP_TAG, small_mlp_check, small_mlp_workspace_floats, small_mlp_forward_device,
+)
 from autograd.generation_ops import (
     OPS_LM_PICK, OPS_LM_ALIVE, is_generation_op, generation_op_check, generation_op_name, lm_pick_run,
     lm_alive_run, LM_PICK_SAMPLE,
@@ -1428,6 +1431,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             # Lane m2-neural-leftovers: the chunked LM head (loss without
             # the logits), one custom node (autograd/lm_head_v2_op.mojo).
             return self._lm_head_v2(hs, ints, fs, x)
+        if code == OPS_SMALL_MLP:
+            # Lane r1-restore-measured-winners: the small MLP's tuned forward
+            # and hand backward, one custom node (autograd/small_mlp_op.mojo).
+            return self._small_mlp(hs, ints, fs, x)
         if code == OPS_RMS_NORM or code == OPS_ROTARY or code == OPS_TRANSFORMER_LINEAR or code == OPS_TRANSFORMER_SOFTMAX:
             # These primitive signatures have at most two handles. Their
             # arity validation below rejects any additional operands.
@@ -1900,6 +1907,73 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         rx.append(x[0])
         rx.append(x[1])
         var rt = self.tape.custom(self.ex, rx, loss, 1, 1, LM_HEAD_V2_TAG, saved)
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _small_mlp(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_SMALL_MLP: [x (rows x in, any rank), w1 (hid, in), b1 (hid
+        values), w2 (out, hid), b2 (out values)] -> the (rows, out) logits of
+        linear(relu(linear(x, w1^T, b1)), w2^T, b2). Recorded: one custom
+        node over the five operands (SMALL_MLP_TAG, VJP in StepOpRules); act,
+        the backward scratch and the workspace are tape storage until the
+        reset."""
+        _need("small_mlp", len(x), 5, 0, len(ints), 0, len(fs))
+        var slots = List[Int]()
+        for i in range(5):  # small-loop(five operands): handle lookup, no data
+            var sl = self._slot(hs[i])
+            if self.int_words[sl]:
+                raise Error("ValueError: ops: small_mlp takes floating-point operands")
+            slots.append(sl)
+        var s1 = self.shapes[slots[1]]
+        var s3 = self.shapes[slots[3]]
+        if s1.ndim != 2 or s3.ndim != 2:
+            raise Error("ValueError: ops: small_mlp: the weights must be (hidden, inputs) and (outputs, hidden)")
+        var hid = s1.d[0]
+        var n_in = s1.d[1]
+        var n_out = s3.d[0]
+        if s3.d[1] != hid:
+            raise Error("ValueError: ops: small_mlp: the second weight must take the hidden width")
+        if self.shapes[slots[2]].count() != hid or self.shapes[slots[4]].count() != n_out:
+            raise Error("ValueError: ops: small_mlp: each bias must hold one value per output of its layer")
+        var count = self.shapes[slots[0]].count()
+        if n_in < 1 or count % n_in != 0:
+            raise Error("ValueError: ops: small_mlp: the input rows must have the first weight's width")
+        var rows = count // n_in
+        small_mlp_check(rows, n_in, hid, n_out)
+        var recording = self.tape.is_recording()
+        var ws_n = small_mlp_workspace_floats(rows, n_in, hid, n_out, recording)
+        var vals = List[FP]()
+        for i in range(5):  # small-loop(five operands): value pointers, no data
+            vals.append(self.tape.value_of(self.ex, x[i]))
+        var pre1 = self.tape.reserve(self.ex, rows * hid)
+        var act = self.tape.reserve(self.ex, rows * hid)
+        var pre2 = self.tape.reserve(self.ex, rows * n_out)
+        var logits = self.tape.reserve(self.ex, rows * n_out)
+        var ws = self.tape.reserve(self.ex, ws_n)
+        var fb: List[FP] = [vals[0], vals[1], vals[2], vals[3], vals[4], pre1, act, pre2, logits, ws]
+        var fd: List[Int] = [rows, n_in, hid, n_out, ws_n]
+        comptime if Self.E.IS_DEVICE:
+            small_mlp_forward_device(rebind[DeviceExec](self.ex), fb, fd)
+        else:
+            # the host arm (autograd/small_mlp_host.mojo) through the executor
+            self.ex.small_mlp_host(False, fb, fd)
+        if not recording:
+            var t = self.tape.variable(self.ex, logits, rows, n_out, False)
+            return self._add(t, 0, False, 0)
+        var saved = Args()
+        saved.p0 = act
+        saved.p1 = self.tape.reserve(self.ex, rows * hid)
+        saved.p2 = self.tape.reserve(self.ex, rows * hid)
+        saved.p3 = ws
+        saved.i0 = rows
+        saved.i1 = n_in
+        saved.i2 = hid
+        saved.i3 = n_out
+        saved.i4 = ws_n
+        saved.i5 = 1 if self.tape.requires_grad(x[0]) else 0
+        var rx = List[Tensor]()
+        for i in range(5):  # small-loop(five operands): the node's parents
+            rx.append(x[i])
+        var rt = self.tape.custom(self.ex, rx, logits, rows, n_out, SMALL_MLP_TAG, saved)
         return self._add(rt, 0, self.tape.requires_grad(rt), 0)
 
     def _generation_op(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
