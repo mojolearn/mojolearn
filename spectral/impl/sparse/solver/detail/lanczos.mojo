@@ -1958,15 +1958,15 @@ def lanczos_solve_ritz(
     var first = lanczos_which_first(which, ncv, k)
     var evals = List[Float32](length=ncv, fill=Float32(0.0))
     var evecs = List[Float32](length=ncv * ncv, fill=Float32(0.0))
-    # lane n9-decomp-eigh-families (2026-11-09): the executor op's route
-    # (`DevExec._eigh_on` -> x_decomp/eigh_ops.mojo `eigh_op_sym`: the
-    # one-block Jacobi below TD_MIN_N, the same words as the per-round
-    # launches and per-sweep waits of `_eigh_par_on`, deleted) with one
-    # sync. The op does not report sweeps: 0, as the small route already
-    # reported for ncv <= 32.
-    DevExec._eigh_on(
+    # lane n9-decomp-eigh-families (2026-11-09): the executor op
+    # x_decomp/eigh_ops.mojo `eigh_op_dense` (`DevExec._eigh_jacobi_on`: the
+    # one-block Jacobi at every ncv, the same words as the per-round launches
+    # and per-sweep waits of `_eigh_par_on`, deleted, and as the host
+    # oracle's) with one sync. The op does not report sweeps: 0, as the
+    # small route already reported for ncv <= 32.
+    DevExec._eigh_jacobi_on(
         ctx, dt, F32Ptr(unsafe_from_address=Int(evals.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(evecs.unsafe_ptr())),
-        ncv, 0,
+        ncv,
     )
     var sweeps = 0
     _ = dt^
@@ -2080,15 +2080,15 @@ def lanczos_solve_ritz_device_t(
     var first = lanczos_which_first(which, ncv, k)
     var evals = List[Float32](length=ncv, fill=Float32(0.0))
     var evecs = List[Float32](length=ncv * ncv, fill=Float32(0.0))
-    # lane n9-decomp-eigh-families (2026-11-09): the executor op's route
-    # (`DevExec._eigh_on` -> x_decomp/eigh_ops.mojo `eigh_op_sym`: the
-    # one-block Jacobi below TD_MIN_N, the same words as the per-round
-    # launches and per-sweep waits of `_eigh_par_on`, deleted) with one
-    # sync. The op does not report sweeps: 0, as the small route already
-    # reported for ncv <= 32.
-    DevExec._eigh_on(
+    # lane n9-decomp-eigh-families (2026-11-09): the executor op
+    # x_decomp/eigh_ops.mojo `eigh_op_dense` (`DevExec._eigh_jacobi_on`: the
+    # one-block Jacobi at every ncv, the same words as the per-round launches
+    # and per-sweep waits of `_eigh_par_on`, deleted, and as the host
+    # oracle's) with one sync. The op does not report sweeps: 0, as the
+    # small route already reported for ncv <= 32.
+    DevExec._eigh_jacobi_on(
         ctx, d_t, F32Ptr(unsafe_from_address=Int(evals.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(evecs.unsafe_ptr())),
-        ncv, 0,
+        ncv,
     )
     var sweeps = 0
     eigenvalues_k.clear()

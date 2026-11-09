@@ -2893,6 +2893,29 @@ struct DevExec(Exec):
         return status^
 
     @staticmethod
+    def _eigh_jacobi_on(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int
+    ) raises:
+        """The round-robin Jacobi at EVERY n (`eigh_op_dense`, a batch of
+        one) on the device matrix in `da` (consumed), w and v out to host
+        memory with the status word at ONE sync. For the callers whose host
+        oracle is the Jacobi at every size (the spectral Lanczos projected
+        solve, x_decomp/rr_solve.mojo); `_eigh_on` takes the tridiagonal
+        route from TD_MIN_N."""
+        var dw = ctx.enqueue_create_buffer[DType.float32](n)
+        var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var status = DevExec._eigh_batch_enq(ctx, da, 1, n, dw, dv)
+        _down(ctx, dw, w, n)
+        _down(ctx, dv, v, n * n)
+        var hs = ctx.enqueue_create_host_buffer[DType.int32](1)
+        ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=status)
+        ctx.synchronize()
+        _ = dw^
+        _ = dv^
+        _ = status^
+        DevExec.eigh_status_check(hs, n)
+
+    @staticmethod
     def _eigh_batch_on(
         ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], batch: Int, n: Int,
         mut dw: DeviceBuffer[DType.float32], mut dvo: DeviceBuffer[DType.float32],
