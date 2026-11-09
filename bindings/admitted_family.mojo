@@ -170,11 +170,13 @@ def admit_family_input(source: PythonObject, ndim: Int, name: String, context: P
     return snapshot^
 
 
-def _fold_rows(source: PythonObject, name: String, context: PythonObject, refusal: String) raises -> AdmittedX:
+def _fold_rows(source: PythonObject, name: String, context: PythonObject, refusal: String,
+               finite: Bool = True) raises -> AdmittedX:
     """admit_x of a DeviceRows fold, its non-finite refusal in the door's
-    wording."""
+    wording. `finite=False` (lane a6): a door that does not test its X
+    (it accepts NaN) gets a NaN fold unrefused, as it gets a NaN array."""
     try:
-        return admit_x_unrecorded(source, name, context)
+        return admit_x_unrecorded(source, name, context, finite=finite)
     except error:
         if String(error).find("contains NaN or infinity") >= 0:
             if refusal.byte_length() > 0:
@@ -201,7 +203,7 @@ def admit_family_meta(source: PythonObject, ndim: Int, name: String, context: Py
         # admission path unchanged: admit_x resolves it and tests it finite
         # once; this door neither downloads it nor scans it again. Its rows
         # are float32 C-order, so the snapshot below borrows them.
-        var fold = _fold_rows(source, name, context, refusal)
+        var fold = _fold_rows(source, name, context, refusal, finite)
         var rows = admit_family_input(fold.array, ndim, name, context, False, True, empty)
         admit_family_cast(rows, name, context)
         return rows^
