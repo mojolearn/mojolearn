@@ -3198,7 +3198,7 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
 
 # ---------------------------------------------------------------- lp_iterate_knn
 #: LP_FAST_RESIDENT (lane/apple-fast-neighbors2, 2026-10-02; FAST + Apple
-#: default, `-D MOJOLEARN_LP_FAST_RESIDENT_OFF` off): LabelPropagation /
+#: default; every vendor and tier since 2026-11-09): LabelPropagation /
 #: LabelSpreading's fit loop over the compact kNN graph as ONE resident op.
 #: Cause: with kernel='knn' `_LabelPropagationBase.fit`
 #: (python/mojolearn/_expansion_neighbors.py) runs the loop in Python, three
@@ -3218,43 +3218,34 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
 comptime LPK_TPB = 256
 comptime LPK_BATCH = C33_CHUNK if C33_FROZEN_CHUNKS else 16
 comptime LPK_FAST_BUILD = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
-#: LP_FAST_RESIDENT: the default on FAST + Apple since the M3 A/B
-#: (n2-lp-res-taxi: label-propagation taxi 6,793 -> 2,086 ms, -69%, accuracy
-#: .7016 same). `-D MOJOLEARN_LP_FAST_RESIDENT_OFF` keeps the Python loop;
-#: the old `MOJOLEARN_LP_FAST_RESIDENT` env name is harmless (no longer
-#: read). The Python layer asks `x_neighbors_lp_fast_resident()`.
-comptime LP_FAST_RESIDENT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_LP_FAST_RESIDENT_OFF"]()
-)
-
-
-#: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor, default ON:
-#: the same loop resident in IDENTICAL. The Python loop paid three binding
-#: calls per iteration (absdiff_sum, lp_knn_product, lp_clamp / ls_clamp:
-#: the distributions up and down three times, a host finiteness walk over
-#: them, `lp_knn_finite`, and a scalar readback every iteration). Here the
-#: graph goes up once and every launch is the op's own item:
+#: The resident loop is the only kNN-graph path on every vendor and tier
+#: (lane n4-mds-labelprop-nmf-loops, 2026-11-09). It was the measured
+#: default: FAST + Apple since the M3 A/B n2-lp-res-taxi (label-propagation
+#: taxi 6,793 -> 2,086 ms, -69%, accuracy .7016 same), IDENTICAL on every
+#: vendor since lane/fam2-neighbors (2026-10-04, no bit change). The
+#: rollbacks `-D MOJOLEARN_LP_FAST_RESIDENT_OFF` and
+#: `-D MOJOLEARN_IDN_LP_RESIDENT_OFF` (and IDN_ALL_OFF's arm here) kept the
+#: binding's per-iteration loop alive, which allocated n x C per iteration;
+#: both are refused now (core/experiment_guards_cluster.mojo).
+# TOMBSTONE: MOJOLEARN_LP_FAST_RESIDENT_OFF (rollback of a measured winner) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+# Restore: git show f59d913b0b:x_neighbors/iter_device.mojo; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_IDN_LP_RESIDENT_OFF (rollback of a measured default) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+# Restore: git show f59d913b0b:x_neighbors/iter_device.mojo; record in docs/TOMBSTONES.md.
+#: lane/fam2-neighbors (2026-10-04), IDENTICAL on every vendor: the loop
+#: resident in IDENTICAL, every launch the op's own item:
 #: `absdiff_part_item` + `absdiff_fin_item` (the `absdiff_sum` op's bits),
 #: the stopping test against the float32 ceiling of tol (the same decision
 #: as Python's float64 compare of a float32 sum), the finiteness scan on the
 #: device, `lp_knn_product_item`, `lp_clamp_item` / `ls_clamp_item`. The
 #: stop flag gates the later launches of the batch; LPK_BATCH iterations per
-#: drain. No bit changes: the host column keeps the Python loop over the
-#: same items. -D MOJOLEARN_IDN_LP_RESIDENT_OFF (or MOJOLEARN_IDN_ALL_OFF)
-#: restores the Python loop.
-comptime LP_IDN_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not (
-    is_defined["MOJOLEARN_IDN_LP_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-)
+#: drain. The host column runs the same items (x_neighbors/iter_host.mojo).
+comptime LP_IDN_RESIDENT = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def lp_fast_resident() -> Int:
-    """1 when this binary takes the resident kNN-graph loop by default
-    (LP_FAST_RESIDENT on FAST + Apple, LP_IDN_RESIDENT on IDENTICAL)."""
-    comptime if LP_FAST_RESIDENT or LP_IDN_RESIDENT:
-        return 1
-    return 0
+    """1: this binary takes the resident kNN-graph loop (`lp_iterate_knn`),
+    on every vendor and tier."""
+    return 1
 
 
 def lpki_absdiff_part_kernel(a: FP, b: FP, part: FP, flag: IP, count_: Int64):
@@ -3473,13 +3464,10 @@ def op_lp_iterate_knn(
     out: the last. info (int32 x 2): n_iter_, converged. tol is Python's
     float64 bits."""
     comptime if not LPK_FAST_BUILD:
-        comptime if LP_IDN_RESIDENT:
-            _op_lp_iterate_knn_idn(
-                cols, vals, ld, ystatic, unlabeled, info, n, k, c, max_iter, variant,
-                bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo)), alpha,
-            )
-        else:
-            raise Error("lp_iterate_knn: the FAST tier only (LP_FAST_RESIDENT), or IDENTICAL without MOJOLEARN_IDN_LP_RESIDENT_OFF")
+        _op_lp_iterate_knn_idn(
+            cols, vals, ld, ystatic, unlabeled, info, n, k, c, max_iter, variant,
+            bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo)), alpha,
+        )
     else:
         var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
         var nc = n * c
