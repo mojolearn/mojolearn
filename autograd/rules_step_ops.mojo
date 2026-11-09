@@ -41,6 +41,11 @@ from autograd.cnn_block_op import (
     CNN_CONV_BLOCK_TAG, CNN_LINEAR_TAG, CNN_HOST_BLOCK_BACKWARD, CNN_HOST_LINEAR_BACKWARD, cnn_block_words,
     cnn_block_backward_device, cnn_linear_backward_device,
 )
+# Lane r1-restore-measured-winners: the byte LM trainer's embedding backward
+# (autograd/lm_embedding_op.mojo); the host arm is the executor's embedding
+# backward (the same words, contract 6 clause (d)).
+from autograd.lm_embedding_op import LM_EMBEDDING_TAG, lm_embedding_backward_device
+from autograd.embedding_ops import AG_EMB_PLAN_AUTO, embedding_plan, embedding_perm_words, embedding_backward_into
 
 comptime _ScratchRef = MutPointer[BlockStepScratch, MutUntrackedOrigin]
 
@@ -55,13 +60,14 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
     def supports(self, tag: Int) -> Bool:
         if step_tag_code(tag) != 0:
             return self.scratch != 0
-        if tag == LM_HEAD_V2_TAG or tag == SMALL_MLP_TAG or tag == CNN_CONV_BLOCK_TAG or tag == CNN_LINEAR_TAG:
+        if tag == LM_HEAD_V2_TAG or tag == SMALL_MLP_TAG or tag == CNN_CONV_BLOCK_TAG or tag == CNN_LINEAR_TAG or tag == LM_EMBEDDING_TAG:
             return True
         return ImportRules().supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
-        if tag == LM_HEAD_V2_TAG:
-            # the rule writes all of d_hidden and d_weight
+        if tag == LM_HEAD_V2_TAG or tag == LM_EMBEDDING_TAG:
+            # the rule writes all of d_hidden and d_weight (lm_embedding:
+            # every cell of d_table, seeded +0.0, the padding row +0.0)
             return False
         if tag == SMALL_MLP_TAG:
             # every launch overwrites its whole destination (dx only when
@@ -79,7 +85,7 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
         return ImportRules().zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
-        if tag == LM_HEAD_V2_TAG or tag == SMALL_MLP_TAG or tag == CNN_CONV_BLOCK_TAG or tag == CNN_LINEAR_TAG:
+        if tag == LM_HEAD_V2_TAG or tag == SMALL_MLP_TAG or tag == CNN_CONV_BLOCK_TAG or tag == CNN_LINEAR_TAG or tag == LM_EMBEDDING_TAG:
             return False
         if step_tag_code(tag) != 0:
             return False
@@ -181,5 +187,23 @@ struct StepOpRules(BackwardRules, ImplicitlyCopyable, Movable):
                 var hb: List[FP] = [inputs[0], inputs[1], upstream, gradients[0], gradients[1], gradients[2]]
                 var hw: List[Int] = [saved.i0, saved.i1, saved.i2]
                 ex.cnn_op_host(CNN_HOST_LINEAR_BACKWARD, hb, List[Int32](), List[Int32](), hw)
+            return
+        if tag == LM_EMBEDDING_TAG:
+            # saved: p0 the int32 ids, p1 the run scratch; i0 positions,
+            # i1 vocab, i2 width, i3 padding_idx (OpsSession._lm_embedding)
+            if len(gradients) != 1:
+                raise Error("ops: lm_embedding backward takes [table]")
+            if Int(gradients[0]) == 0:
+                return
+            comptime if E.IS_DEVICE:
+                lm_embedding_backward_device(rebind[DeviceExec](ex), saved.p0, upstream, gradients[0], saved.p1,
+                                             saved.i0, saved.i1, saved.i2, saved.i3)
+            else:
+                var plan = embedding_plan(AG_EMB_PLAN_AUTO, saved.i1, saved.i0)
+                var run_begin = saved.p1
+                var perm = run_begin + (saved.i1 + 1)
+                var keys = perm + embedding_perm_words(plan, saved.i0)
+                embedding_backward_into(ex, saved.p0, upstream, gradients[0], saved.i0, saved.i1, saved.i2, saved.i3,
+                                        False, plan, run_begin, perm, keys)
             return
         ImportRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)

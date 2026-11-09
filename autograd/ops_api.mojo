@@ -130,6 +130,13 @@ from autograd.cnn_block_op import (
     CNN_HOST_LINEAR_FORWARD, cnn_block_words, cnn_block_out_dims, cnn_block_saved_sizes, cnn_block_keep,
     cnn_block_forward_device, cnn_linear_forward_device,
 )
+# Lane r1-restore-measured-winners (2026-11-09): the byte LM trainer's
+# embedding backward as an op (autograd/lm_embedding_op.mojo), code 93.
+from autograd.lm_embedding_op import OPS_LM_EMBEDDING, LM_EMBEDDING_TAG, lm_embedding_scratch_words
+from autograd.embedding_ops import (
+    AG_EMB_PLAN_SORT, embedding_refuse_shape, embedding_check_words, embedding_refuse_ids, embedding_forward_into,
+    embedding_perm_words,
+)
 from autograd.generation_ops import (
     OPS_LM_PICK, OPS_LM_ALIVE, is_generation_op, generation_op_check, generation_op_name, lm_pick_run,
     lm_alive_run, LM_PICK_SAMPLE,
@@ -1448,6 +1455,10 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             return self._cnn_conv_block(hs, ints, fs, x)
         if code == OPS_CNN_LINEAR:
             return self._cnn_linear(hs, ints, fs, x)
+        if code == OPS_LM_EMBEDDING:
+            # Lane r1-restore-measured-winners: the byte LM trainer's tuned
+            # embedding backward, one custom node (autograd/lm_embedding_op.mojo).
+            return self._lm_embedding(hs, ints, fs, x)
         if code == OPS_RMS_NORM or code == OPS_ROTARY or code == OPS_TRANSFORMER_LINEAR or code == OPS_TRANSFORMER_SOFTMAX:
             # These primitive signatures have at most two handles. Their
             # arity validation below rejects any additional operands.
@@ -2118,6 +2129,55 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         rx.append(x[1])
         rx.append(x[2])
         var rt = self.tape.custom(self.ex, rx, dst, n, d_out, CNN_LINEAR_TAG, saved)
+        return self._add(rt, 0, self.tape.requires_grad(rt), 0)
+
+    def _lm_embedding(mut self, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
+        """OPS_LM_EMBEDDING: [table (vocab, width), ids (n int32 words)],
+        ints [padding_idx] -> the (n, width) rows. OPS_EMBEDDING's refusals,
+        forward and words; recorded as one custom node over [table]
+        (LM_EMBEDDING_TAG, VJP in StepOpRules: the trainer's embedding
+        backward on a device session, the executor's on the host). The VJP's
+        run scratch is tape storage until the reset."""
+        _need("lm_embedding", len(x), 2, 1, len(ints), 0, len(fs))
+        var tslot = self._slot(hs[0])
+        var islot = self._slot(hs[1])
+        if self.int_words[tslot] or not self.int_words[islot]:
+            raise Error("ValueError: ops: lm_embedding takes a floating-point table and int32 ids")
+        var tshape = self.shapes[tslot]
+        if tshape.ndim != 2:
+            raise Error("ValueError: ops: lm_embedding: the table must be (vocab, width)")
+        var vocab = tshape.d[0]
+        var width = tshape.d[1]
+        var n = self.shapes[islot].count()
+        var pad = ints[0]
+        embedding_refuse_shape(n, vocab, width, pad)
+        var tp = self.tape.value_of(self.ex, x[0])
+        var ip = self.tape.value_of(self.ex, x[1])
+        var cw = embedding_check_words(n)
+        var scratch_a = self.tape.reserve(self.ex, cw)
+        var scratch_b = self.tape.reserve(self.ex, cw)
+        embedding_refuse_ids(self.ex, ip, n, vocab, scratch_a, scratch_b)
+        var y = self.tape.reserve(self.ex, n * width)
+        embedding_forward_into(self.ex, tp, ip, y, n, width)
+        if not self.tape.is_recording():
+            var t = self.tape.variable(self.ex, y, n, width, False)
+            return self._add(t, 0, False, 0)
+        # Run scratch for either arm: the device's counts | run_begin | perm,
+        # the host's run_begin | perm | keys (autograd/embedding_ops.mojo).
+        var words = lm_embedding_scratch_words(vocab, n)
+        var host_words = vocab + 1 + 2 * embedding_perm_words(AG_EMB_PLAN_SORT, n)
+        if host_words > words:
+            words = host_words
+        var saved = Args()
+        saved.p0 = ip
+        saved.p1 = self.tape.reserve(self.ex, words)
+        saved.i0 = n
+        saved.i1 = vocab
+        saved.i2 = width
+        saved.i3 = pad
+        var rx = List[Tensor]()
+        rx.append(x[0])
+        var rt = self.tape.custom(self.ex, rx, y, n, width, LM_EMBEDDING_TAG, saved)
         return self._add(rt, 0, self.tape.requires_grad(rt), 0)
 
     def _generation_op(mut self, code: Int, hs: List[Int], ints: List[Int], fs: List[Float32], x: List[Tensor]) raises -> Int:
