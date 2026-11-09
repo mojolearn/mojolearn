@@ -105,6 +105,7 @@ struct ByteHostSession(Movable, Writable):
     var shadow_p: List[Float32]
     var shadow_m: List[Float32]
     var shadow_v: List[Float32]
+    var shadow_flags: List[Int32]
     var completed: Int
     var grad_step: Int
     var shadow_step: Int
@@ -127,6 +128,7 @@ struct ByteHostSession(Movable, Writable):
         self.shadow_p = List[Float32]()
         self.shadow_m = List[Float32]()
         self.shadow_v = List[Float32]()
+        self.shadow_flags = List[Int32]()
         self.completed = -1
         self.grad_step = -1
         self.shadow_step = -1
@@ -218,6 +220,7 @@ struct ByteHostSession(Movable, Writable):
         self.shadow_p = List[Float32]()
         self.shadow_m = List[Float32]()
         self.shadow_v = List[Float32]()
+        self.shadow_flags = List[Int32]()
 
     def _cfg(self) raises -> ByteConfig:
         if len(self.shape) != 10:
@@ -255,17 +258,15 @@ struct ByteHostSession(Movable, Writable):
         var m = List[Float32](length=n, fill=0)
         var v = List[Float32](length=n, fill=0)
         var grad = List[Float32](length=n, fill=0)
-        var mean = Float32(0)
+        # AdamW writes every tensor's moments: every momentum flag is set
+        var flags = List[Int32](length=len(self.flags), fill=Int32(1))
         try:
-            mean = byte_program_fit(self.program.value(), ids, n_steps, losses)
+            var mean = byte_program_fit(self.program.value(), ids, n_steps, losses)
             if not isfinite(mean):
                 raise Error("byte LM: nonfinite loss")
             byte_host_program_store(self.program.value(), Int(p.unsafe_ptr()), Int(m.unsafe_ptr()),
                                     Int(v.unsafe_ptr()), Int(grad.unsafe_ptr()))
-            # AdamW wrote every tensor's moments: every momentum flag is set
-            var flags = List[Int32](length=len(self.flags), fill=Int32(1))
             host_state_validate(p, m, v, flags, completed + n_steps)
-            self.flags = flags^
         except error:
             self.busy = False
             raise error
@@ -279,6 +280,9 @@ struct ByteHostSession(Movable, Writable):
         var old_v = self.v^
         self.v = v^
         self.shadow_v = old_v^
+        var old_flags = self.flags^
+        self.flags = flags^
+        self.shadow_flags = old_flags^
         self.shadow_step = completed
         self.grad = grad^
         self.completed = completed + n_steps
@@ -341,6 +345,8 @@ struct ByteHostSession(Movable, Writable):
             self.shadow_m = List[Float32]()
             self.v = self.shadow_v^
             self.shadow_v = List[Float32]()
+            self.flags = self.shadow_flags^
+            self.shadow_flags = List[Int32]()
             self.completed = self.shadow_step
             self.shadow_step = -1
             self.grad = List[Float32]()
