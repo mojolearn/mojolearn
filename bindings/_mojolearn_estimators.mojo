@@ -66,6 +66,8 @@ comptime RIDGE_FAST_RESIDENT = (
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
+from core.msel_device_x import msel_device_x_context
+from decomposition.pca_fold import pca_transform_fold
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
@@ -384,6 +386,37 @@ def pca_transform_binding(
         pca_transform_host(ctx, xp, mp, cp, op, nr, nf, nc)
         ctx.synchronize()
     return PythonObject(0)
+
+
+def pca_transform_fold_binding(
+    ids: PythonObject,
+    mean_addr: PythonObject,
+    components_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`pca_transform` over a model-selection fold resident on the device
+    (lane a6): `ids` is [base store id, base rows, index store id] in model
+    selection's store (bindings/device_rows_door.mojo door_rows_store),
+    `params` [rows, features, components]. Returns [finite word, range
+    word] (0, 0 when the fold was finite and in range; the door refuses
+    otherwise)."""
+    if len(ids) != 3 or len(params) != 3:
+        raise Error("pca_transform_fold: ids and params must hold 3 values each")
+    var base_id = Int(py=ids[0])
+    var base_rows = Int(py=ids[1])
+    var index_id = Int(py=ids[2])
+    var mp = _f32_ptr(Int(py=mean_addr))
+    var cp = _f32_ptr(Int(py=components_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var words: Tuple[Int32, Int32]
+    with GILReleased(Python()):
+        var ctx = msel_device_x_context()
+        words = pca_transform_fold(ctx, base_id, base_rows, index_id, mp, cp, op, nr, nf, nc)
+    return Python.list(Int(words[0]), Int(words[1]))
 
 
 def _pca_whiten_pointer(
@@ -1684,6 +1717,7 @@ def build__mojolearn_estimators() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_estimators.patch
         m.def_function[pca_fit_full_binding]("pca_fit_full")
         m.def_function[pca_transform_binding]("pca_transform")
+        m.def_function[pca_transform_fold_binding]("pca_transform_fold")
         m.def_function[pca_whiten_transform_binding]("pca_whiten_transform")
         m.def_function[pca_whiten_inverse_transform_binding]("pca_whiten_inverse_transform")
         m.def_function[tsvd_fit_binding]("tsvd_fit")
