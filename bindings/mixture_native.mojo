@@ -17,7 +17,8 @@
 # inputs, same order: the bits do not move.
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.admitted_family import admit_family
+from bindings.admitted_family import admit_family, admit_family_refuse_empty
+from bindings.admitted_input import classical_view
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_fields, py_setitem
 from bindings.native_loaded_module import native_loaded_module
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
@@ -27,7 +28,7 @@ from bindings.classical_arrays import (
 )
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, family_repr, family_str, family_call, family_array, family_view, family_nonfinite,
+    FAMILY_F32P, FAMILY_F64P, family_repr, family_str, family_call, family_array, family_nonfinite,
     family_is_int, family_is_real, family_is_str, family_type_name,
 )
 from core.admitted_input import admitted_cast_f32
@@ -152,7 +153,18 @@ def _any_f32_kept(source: PythonObject, name: String, context: PythonObject, mut
         # The input itself, as the view admission below returns it (its own
         # storage: `kept` stays as it is).
         return source
-    var view = family_view(source, -1, name, context)
+    # The one admission path: a rank 0-2 input goes through admit_family
+    # (its rank and emptiness refusals and its parallel cast); a higher rank
+    # (a stack of initial matrices) gets the same emptiness refusal and the
+    # slab casts below (family_view deleted).
+    var view = classical_view(source, context, name)
+    var shape = List[Int]()
+    var count = 1
+    for axis in range(Int(py=view.ndim)):  # small-loop(rank: the axes of one array)
+        shape.append(Int(py=view.shape[axis]))
+        count *= shape[axis]
+    if count == 0:
+        admit_family_refuse_empty(name, shape)
     var result = _any_f32_view(view, name, context)
     if kept:
         var cls = py_type(source)

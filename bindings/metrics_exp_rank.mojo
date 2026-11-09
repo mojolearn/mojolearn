@@ -13,7 +13,7 @@
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family
 from bindings.py_balanced import py_call, py_contains
-from bindings.family_common import FAMILY_F32P, family_array, family_str, family_view
+from bindings.family_common import FAMILY_F32P, family_array, family_str
 from bindings.classical_arrays import classical_address
 from core.host_finite_scan import host_all_finite_f32
 from bindings.metrics_exp_common import (
@@ -128,8 +128,8 @@ def _proba(y_true: PythonObject, y_proba: PythonObject, labels: PythonObject, po
         codes = mx_codes(true, classes, True, context)
     if rows != n:
         raise Error("y_true and y_proba have different numbers of rows")
-    var checked = family_view(view, -1, "y_proba", context)
-    var a = admit_family(checked, -1, "y_proba", context, admitted=True, empty=True).array
+    # the rank and emptiness refusals and the cast in one admission (family_view deleted)
+    var a = admit_family(view, -1, "y_proba", context).array
     return _Proba(codes, a, n, k, binary)
 
 
@@ -251,8 +251,8 @@ def _relevance(y_true: PythonObject, y_score: PythonObject, caller: String,
     var nd = Int(py=view.ndim)
     if nd != 2:
         raise Error("mojolearn " + caller + ": y_true must be a 2-D (n_samples, n_labels) array")
-    var checked = family_view(view, 2, "y_true", context)
-    var y = admit_family(checked, -1, "y_true", context, admitted=True, empty=True).array
+    # the rank and emptiness refusals and the cast in one admission (family_view deleted)
+    var y = admit_family(view, 2, "y_true", context).array
     var n = Int(py=view.shape[0])
     var c = Int(py=view.shape[1])
     if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(y))), n * c):

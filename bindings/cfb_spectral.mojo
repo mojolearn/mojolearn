@@ -13,13 +13,13 @@
 from std.math import isinf
 from std.python import Python, PythonObject
 from providers.python.host_estimator_binding_pyapi import host_estimator_binding
-from bindings.admitted_family import admit_family, admit_family_f64
+from bindings.admitted_family import admit_family, admit_family_f64, admit_family_input
+from bindings.admitted_input import admit_typed
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields, py_get
-from bindings.classical_arrays import classical_address, classical_dtype_str, classical_c_order
+from bindings.classical_arrays import classical_address
 from core.host_finite_scan import host_all_finite_f32
-from core.cfb_impl import cfb_f64_to_i32
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_repr, family_str, family_call, family_array, family_view,
+    FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_call, family_array,
     family_field, family_is_str, family_min,
 )
 from bindings.cluster_native import _reference_queries, _xc_array
@@ -93,20 +93,12 @@ def _square(shape: PythonObject) raises -> Bool:
 def _as_i32(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`_buffer.as_i32_c(source, ndim=1, name=name)`: the rank and emptiness
     refusals, then the vector itself when it is already C-order int32, else
-    one int32 copy."""
-    var view = family_view(source, 1, name, context)
-    if classical_dtype_str(view, context) == "<i4" and classical_c_order(view, context):
-        return view
-    var wide = admit_family_f64(view, name, context)
-    var n = Int(py=wide.size)
-    var out = family_array(Python.tuple(n), "<i4", context)
-    cfb_f64_to_i32(FAMILY_F64P(unsafe_from_address=Int(py=classical_address(wide))),
-                   FAMILY_I32P(unsafe_from_address=Int(py=classical_address(out))), n)
-    _ = wide  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = wide^
-    _ = view^
-    return out
+    one int32 conversion by Array.astype's rules (truncation toward zero, a
+    value outside int32 refused), split across the host's cores."""
+    # TOMBSTONE: the family_view + float64 widen + serial cfb_f64_to_i32 cast (core/cfb_impl.mojo) deleted 2026-11-09 by lane a6-device-x-family-classical; code recoverable at f59d913b0b.
+    # Restore: experiments/removed/A6_FAMILY_VIEW.patch. The multi-dtype
+    # admission (bindings/admitted_input.mojo admit_typed) casts once in parallel.
+    return admit_typed(source, "<i4", 1, name, context).keep
 
 
 def _tocoo(obj: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -173,9 +165,10 @@ def _coo_triples(source: PythonObject, who: String, base: PythonObject, context:
         raise Error("mojolearn " + who + ": with affinity='precomputed', X "
                     + "must be a square affinity matrix or a sparse matrix with "
                     + "`tocoo()`, got shape " + family_repr(shape))
-    var view = family_view(source, 2, "X", context)
-    var dense = admit_family_f64(view, "X", context)
-    _ = view^
+    # The metadata step of the one admission path (rank and emptiness
+    # refusals), then the float64 widen of the same view (family_view deleted).
+    var snapshot = admit_family_input(source, 2, "X", context)
+    var dense = admit_family_f64(snapshot.keep, "X", context)
     var n = _int(shape[0])
     var size = Int(py=dense.size)
     var nnz = 0

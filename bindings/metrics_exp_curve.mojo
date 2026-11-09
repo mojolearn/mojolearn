@@ -16,7 +16,7 @@ from bindings.admitted_family import admit_family_f64
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_contains, py_get, py_type, py_setitem
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_array, family_str, family_view,
+    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_array, family_str,
 )
 from bindings.classical_arrays import classical_address, classical_is_array, classical_dtype_str
 from bindings.classical_validate import classical_view

@@ -31,7 +31,7 @@ from bindings.label_admission_native import classifier_label_list
 from bindings.gp_svm_records import gpsvm_class_table, gpsvm_class_table_put
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_isinstance, family_call, family_entry,
-    family_array, family_view, family_shape_repr,
+    family_array, family_shape_repr,
 )
 from bindings.metrics_reg_native import _Prog, _Reg, _reg_run, _arena_double, _arena_int, _RE_DIV
 from core.host_finite_scan import host_all_finite_f32
