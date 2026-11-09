@@ -1912,8 +1912,10 @@ def _onehot_fit(model: PythonObject, values: PythonObject, capture: Bool, contex
 
 def _onehot_transform(model: PythonObject, values: PythonObject, inverse: PythonObject, context: PythonObject) raises -> PythonObject:
     """OneHotEncoder `_transform_encoded`: lookup (or the C08 fit's inverse),
-    the grouping remap with the unknown slots, and onehot."""
+    the grouping remap with the unknown slots, and onehot. An unknown-category
+    warning is left in `context["pending_warning"]` for the shell."""
     var b = native_loaded_module("builtins")
+    py_setitem(context, "pending_warning", PythonObject(None))
     var fields = py_fields(model)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
@@ -1964,9 +1966,13 @@ def _onehot_transform(model: PythonObject, values: PythonObject, inverse: Python
         var bad = _unknown_columns(ran, neg, d)
         if len(bad) > 0:
             var where = String("encoded as the infrequent category") if handle_text != "ignore" else String("encoded as all zeros")
-            var warnings = Python.import_module("warnings")
-            _ = py_call_typed(warnings.warn, PythonObject("Found unknown categories in columns " + _list_text(bad)
-                              + " during transform. These unknown categories will be " + where + "."), b.UserWarning)
+            # TOMBSTONE: P1_ONEHOT_WARN_IN_NATIVE (removed: warnings.warn through Python inside the native transform; filters and any showwarning hook ran in the operation) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+            # Restore: experiments/removed/P1_ONEHOT_WARN_IN_NATIVE.patch.
+            # The warning text is returned to the thin shell (the encode
+            # context's "pending_warning"), which issues it after this
+            # native call has returned (_expansion_prep._issue_pending_warning).
+            py_setitem(context, "pending_warning", PythonObject("Found unknown categories in columns " + _list_text(bad)
+                       + " during transform. These unknown categories will be " + where + "."))
     return _take2(ran, out, n, W, context)
 
 
