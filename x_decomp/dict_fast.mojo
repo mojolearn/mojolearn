@@ -23,9 +23,9 @@ two launches with no sync:
     (thread f alone reads and writes column f), and its block's sum of v^2;
   * `_dd_norm_kernel`: a thread per feature folds the block sums in block
     order, D[j, f] /= max(sqrt(sum), 1).
-The caller checks the diagonal of A first (one read of A) and keeps the
-loop for an unused atom (A[j, j] <= 1e-6, the Philox resample) and for
-positive_dict. FAST: the product's fold order and the norm's differ from
+An unused atom (A[j, j] <= 1e-6, the Philox resample) is resampled between
+the two launches by `x_decomp/dictl_resample.mojo` (gated on the device: no
+read of A); positive_dict keeps the kit loop. FAST: the product's fold order and the norm's differ from
 the elementwise chain's (quality, not bits).
 """
 from std.gpu import block_idx, thread_idx
@@ -38,6 +38,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_di
 from x_decomp.cells import F32Ptr
 from x_decomp.device import xd_ctx
 from x_decomp.resident import _ptr, pool_alloc, pool_free, X_DECOMP_POOL
+from x_decomp.dictl_resample import enqueue_dict_resample
 
 comptime DECOMP_FAST_DICT_DEV = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF"]()
@@ -91,9 +92,16 @@ def _dd_norm_kernel(dm: F32Ptr, m: Int32, j: Int32, part: F32Ptr, nblk: Int32):
         dm[J * M + f] = ftz(identical_div(dm[J * M + f], nrm))
 
 
-def dict_update_dev(isrc: Int, ia: Int, ib: Int, idst: Int, nc: Int, m: Int) raises -> Int:
+def dict_update_dev(
+    isrc: Int, ia: Int, ib: Int, idst: Int, nc: Int, m: Int, y: F32Ptr, ystd: F32Ptr, ny: Int, code: F32Ptr,
+    code_rows: Int, counter: F32Ptr, seed: Int,
+) raises -> Int:
     """dst (nc x m) = src updated atom by atom (see the module docstring);
-    p = [nc, m]. Every A[j, j] must be > 1e-6 (the caller checks)."""
+    p = [nc, m]. An unused atom (A[j, j] <= 1e-6) is resampled on the device
+    between its update and its norm (`x_decomp/dictl_resample.mojo`: a row
+    of y (ny x m, per-row std ystd), code column j zeroed, the counter word
+    advanced), so nothing is read home (lane n10-dictl-arima-loops: the
+    caller read the diagonal of A first and took the kit loop then)."""
     comptime if DECOMP_FAST_DICT_DEV:
         var cells = nc * m
         if cells <= 0:
@@ -114,6 +122,9 @@ def dict_update_dev(isrc: Int, ia: Int, ib: Int, idst: Int, nc: Int, m: Int) rai
         for j in range(nc):
             ctx.enqueue_function[_dd_update_kernel](
                 pd, pa, pb, Int32(nc), Int32(m), Int32(j), pp, grid_dim=nblk, block_dim=DD_TPB,
+            )
+            enqueue_dict_resample(
+                ctx, pd + j * m, pa + (j * nc + j), y, ystd, code, counter, ny, m, code_rows, nc, j, seed, pp, nblk,
             )
             ctx.enqueue_function[_dd_norm_kernel](
                 pd, Int32(m), Int32(j), pp, Int32(nblk), grid_dim=nblk, block_dim=DD_TPB,

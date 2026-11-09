@@ -1,0 +1,649 @@
+diff --git a/x_decomp/dict_fast.mojo b/x_decomp/dict_fast.mojo
+index 39e6a7d03d..041963f48c 100644
+--- a/x_decomp/dict_fast.mojo
++++ b/x_decomp/dict_fast.mojo
+@@ -23,9 +23,9 @@ two launches with no sync:
+     (thread f alone reads and writes column f), and its block's sum of v^2;
+   * `_dd_norm_kernel`: a thread per feature folds the block sums in block
+     order, D[j, f] /= max(sqrt(sum), 1).
+-An unused atom (A[j, j] <= 1e-6, the Philox resample) is resampled between
+-the two launches by `x_decomp/dictl_resample.mojo` (gated on the device: no
+-read of A); positive_dict keeps the kit loop. FAST: the product's fold order and the norm's differ from
++The caller checks the diagonal of A first (one read of A) and keeps the
++loop for an unused atom (A[j, j] <= 1e-6, the Philox resample) and for
++positive_dict. FAST: the product's fold order and the norm's differ from
+ the elementwise chain's (quality, not bits).
+ """
+ from std.gpu import block_idx, thread_idx
+@@ -38,7 +38,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_di
+ from x_decomp.cells import F32Ptr
+ from x_decomp.device import xd_ctx
+ from x_decomp.resident import _ptr, pool_alloc, pool_free, X_DECOMP_POOL
+-from x_decomp.dictl_resample import enqueue_dict_resample
+ 
+ comptime DECOMP_FAST_DICT_DEV = (
+     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined["MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF"]()
+@@ -92,16 +91,9 @@ def _dd_norm_kernel(dm: F32Ptr, m: Int32, j: Int32, part: F32Ptr, nblk: Int32):
+         dm[J * M + f] = ftz(identical_div(dm[J * M + f], nrm))
+ 
+ 
+-def dict_update_dev(
+-    isrc: Int, ia: Int, ib: Int, idst: Int, nc: Int, m: Int, y: F32Ptr, ystd: F32Ptr, ny: Int, code: F32Ptr,
+-    code_rows: Int, counter: F32Ptr, seed: Int,
+-) raises -> Int:
++def dict_update_dev(isrc: Int, ia: Int, ib: Int, idst: Int, nc: Int, m: Int) raises -> Int:
+     """dst (nc x m) = src updated atom by atom (see the module docstring);
+-    p = [nc, m]. An unused atom (A[j, j] <= 1e-6) is resampled on the device
+-    between its update and its norm (`x_decomp/dictl_resample.mojo`: a row
+-    of y (ny x m, per-row std ystd), code column j zeroed, the counter word
+-    advanced), so nothing is read home (lane n10-dictl-arima-loops: the
+-    caller read the diagonal of A first and took the kit loop then)."""
++    p = [nc, m]. Every A[j, j] must be > 1e-6 (the caller checks)."""
+     comptime if DECOMP_FAST_DICT_DEV:
+         var cells = nc * m
+         if cells <= 0:
+@@ -123,9 +115,6 @@ def dict_update_dev(
+             ctx.enqueue_function[_dd_update_kernel](
+                 pd, pa, pb, Int32(nc), Int32(m), Int32(j), pp, grid_dim=nblk, block_dim=DD_TPB,
+             )
+-            enqueue_dict_resample(
+-                ctx, pd + j * m, pa + (j * nc + j), y, ystd, code, counter, ny, m, code_rows, nc, j, seed, pp, nblk,
+-            )
+             ctx.enqueue_function[_dd_norm_kernel](
+                 pd, Int32(m), Int32(j), pp, Int32(nblk), grid_dim=nblk, block_dim=DD_TPB,
+             )
+diff --git a/x_decomp/dictl.mojo b/x_decomp/dictl.mojo
+index 3eb9ddefad..21e2deb60c 100644
+--- a/x_decomp/dictl.mojo
++++ b/x_decomp/dictl.mojo
+@@ -10,7 +10,7 @@ forgetting factor and convergence tests in the same order. So the IDENTICAL
+ words are the Python driver's; x_decomp/dictl_dev.mojo is the same driver
+ text on DKit (with the FAST fused atom update where Python took it)."""
+ from std.math import sqrt
+-from x_decomp.cells import F32Ptr, mul
++from x_decomp.cells import F32Ptr
+ from x_decomp.exec_trait import Exec
+ from x_decomp.kit import (
+     Kit, Mat, OP_ABS, OP_ADD, OP_DIV, OP_MAXS, OP_SCALE, OP_SOFT, OP_SQ, OP_SQDIFF, OP_SQRT, OP_SUB, mat_from,
+@@ -92,12 +92,7 @@ def resample_atom[E: Exec](mut k: Kit[E], Y: Mat, seed: Int, c: Int) raises -> M
+     var row = k.rows(Y, idx, idx + 1)
+     var mean = k.ew1(OP_SCALE, k.total(row), 1.0 / Float64(row.c))
+     var std = k.word(k.ew1(OP_SQRT, k.ew1(OP_SCALE, k.total(k.ew2(OP_SQDIFF, row, mean)), 1.0 / Float64(row.c)), 0.0))
+-    # lane n10-dictl-arima-loops (2026-11-09): the scale is ONE float32
+-    # product, mul(0.01f, std or 1), as the device's resample kernel takes it
+-    # (x_decomp/dictl_resample.mojo; no float64 on Apple GPUs); it was the
+-    # float64 product rounded to float32 (bits of a resampled atom only)
+-    var sel = Float32(std) if std != 0.0 else Float32(1.0)
+-    var noise = k.ew1(OP_SCALE, k.rand(1, row.c, seed, 41 + 2 * c, 1), Float64(mul(Float32(0.01), sel)))
++    var noise = k.ew1(OP_SCALE, k.rand(1, row.c, seed, 41 + 2 * c, 1), 0.01 * (std if std != 0.0 else 1.0))
+     return k.ew2(OP_ADD, row, noise)
+ 
+ 
+diff --git a/x_decomp/dictl_dev.mojo b/x_decomp/dictl_dev.mojo
+index 1924f6d55d..d17a67c579 100644
+--- a/x_decomp/dictl_dev.mojo
++++ b/x_decomp/dictl_dev.mojo
+@@ -4,17 +4,7 @@
+ matrices (lane py-runtime-b): the driver text of dictl.mojo on `DKit` (the
+ row solvers' kernels as DevExec launches them; the FAST fused atom update,
+ x_decomp/dict_fast.mojo, where Python's `_dict_dev` took it). GPU binding
+-only.
+-
+-Lane n10-dictl-arima-loops (2026-11-09): each loop is a device program read
+-once per DL_CHECK_EVERY iterations. The body is the encode (the lasso / LARS
+-/ OMP row solvers as kernels, no drain), the two gemms and the atom update
+-with the unused-atom resample as a kernel (x_decomp/dictl_resample.mojo),
+-its state written to a ring slot and its cost words to a device array; the
+-float64 stop tests run on the host over the chunk's words in order, so the
+-stopping iteration, the errors and every word are the per-iteration loop's
+-(the host column, dictl.mojo). It read 3 + 2 nc words per iteration before
+-(the used-atom count, A[j, j] per atom and its column move, two cost words)."""
++only."""
+ from std.math import sqrt
+ from x_decomp.cells import F32Ptr
+ from x_decomp.dictl import DlArgs, ENC_LARS, ENC_LASSO_CD, ENC_OMP, ENC_THRESHOLD, _enc_nnz
+@@ -22,7 +12,6 @@ from x_decomp.kit import (
+     Mat, OP_ABS, OP_ADD, OP_DIV, OP_MAXS, OP_SCALE, OP_SOFT, OP_SQ, OP_SQDIFF, OP_SQRT, OP_SUB, mat_from,
+ )
+ from x_decomp.kit_device import DKit, DMat
+-from x_decomp.dictl_resample import enqueue_dict_resample
+ 
+ 
+ def sparse_encode_dev(mut k: DKit, X: DMat, D: DMat, algo: Int, alpha: Float64, nnz: Int, init: DMat,
+@@ -47,65 +36,44 @@ def sparse_encode_dev(mut k: DKit, X: DMat, D: DMat, algo: Int, alpha: Float64,
+     return W^
+ 
+ 
+-# TOMBSTONE: resample_atom_dev, cost_dev and the per-iteration host reads of the dictionary loops (A[j, j] per atom, two
+-# draws per resample, the used-atom count, two cost words per iteration and a diff word per step) deleted 2026-11-09 by
+-# lane/n10-dictl-arima-loops; code recoverable at the lane's base f59d913b0b.
+-# Restore: git apply experiments/removed/DICTL_HOST_READS.patch
+-
+-#: iterations (steps) enqueued between two reads of the per-iteration cost
+-#: words: the loop keeps that many states in a ring and the host replays its
+-#: float64 stop tests over the chunk (the ARIMA solver's ASYNC_READ_EVERY
+-#: shape). The stop iteration and every word are the per-iteration loop's.
+-comptime DL_CHECK_EVERY = 4
+-#: floats of ring state the batch loop holds at most (1 GiB) before it takes
+-#: fewer slots: the ring is K copies of the code (n x nc) and the dictionary
+-comptime DL_RING_MAX_FLOATS = 1 << 28
+-
+-
+-def _row_view(A: DMat, i: Int) -> DMat:
+-    """Row i of A, in place (1 x A.c)."""
+-    return DMat(rows_of=A, row0=i, rows=1)
+-
++def resample_atom_dev(mut k: DKit, Y: DMat, seed: Int, c: Int) raises -> DMat:
++    """`_resample_atom`."""
++    var u = k.word(k.rand(1, 1, seed, 40 + 2 * c, 0))
++    var idx = min(Int(u * Float64(Y.r)), Y.r - 1)
++    var row = k.rows(Y, idx, idx + 1)
++    var mean = k.ew1(OP_SCALE, k.total(row), 1.0 / Float64(row.c))
++    var std = k.word(k.ew1(OP_SQRT, k.ew1(OP_SCALE, k.total(k.ew2(OP_SQDIFF, row, mean)), 1.0 / Float64(row.c)), 0.0))
++    var noise = k.ew1(OP_SCALE, k.rand(1, row.c, seed, 41 + 2 * c, 1), 0.01 * (std if std != 0.0 else 1.0))
++    return k.ew2(OP_ADD, row, noise)
+ 
+-def _elem_view(A: DMat, i: Int, j: Int) -> DMat:
+-    """A[i, j], in place (1 x 1)."""
+-    var v = DMat(rows_of=A, row0=i, rows=1)
+-    v.off += j
+-    v.c = 1
+-    return v^
+ 
+-
+-def row_std_dev(mut k: DKit, Y: DMat) raises -> DMat:
+-    """The std of every row of Y (Y.r x 1): `_resample_atom`'s cells
+-    (mean = total / m, std = sqrt(total((row - mean)^2) / m)) for all rows at
+-    once, the same per-row folds (`rowsum` folds each row alone)."""
+-    var inv = 1.0 / Float64(Y.c)
+-    var mean = k.ew1(OP_SCALE, k.rowsum(Y), inv)
+-    return k.ew1(OP_SQRT, k.ew1(OP_SCALE, k.rowsum(k.ew2(OP_SQDIFF, Y, mean)), inv), 0.0)
+-
+-
+-def update_dict_dev(mut k: DKit, D: DMat, Y: DMat, ystd: DMat, code: DMat, A: DMat, B: DMat, positive: Bool,
+-                    seed: Int, counter: DMat) raises -> DMat:
++def update_dict_dev(mut k: DKit, D: DMat, Y: DMat, code: DMat, A: DMat, B: DMat, positive: Bool, seed: Int,
++                         mut counter: Int, mut code_out: DMat, mut zeroed: Bool) raises -> DMat:
+     """`_update_dict(k, D, Y, code, A, B, positive, seed, counter)`: the new
+-    D returned. An unused atom (A[j, j] <= 1e-6) is resampled from a row of Y
+-    (`ystd` its rows' std) on the device (x_decomp/dictl_resample.mojo):
+-    code's column j is zeroed in place and the resample count word `counter`
+-    advanced. Nothing is read home."""
++    D returned; when an atom is resampled, code_out is code with its column
++    zeroed (zeroed set)."""
+     var nc = D.r
+-    var m = D.c
+-    if not positive and D.n() > 0:
++    var dg = k.diag(A)
++    var used = k.count_gt(dg, 1e-6)
++    zeroed = False
++    if not positive and D.r * D.c > 0 and used == nc:
+         var Dn = k.zeros(0, 0)
+-        if k.dict_fused(D, A, B, Y, ystd, code, counter, seed, Dn):
++        if k.dict_fused(D, A, B, Dn):
+             return Dn^
+     var Dm = k.copy(D)
+-    var Bt = k.t(B)
+     for j in range(nc):  # small-loop(nc: atoms): sklearn's atom order, each a chain of kit cells
+-        var ajj = _elem_view(A, j, j)
+-        var upd = k.ew2(OP_SUB, _row_view(Bt, j), k.mm(k.rows(A, j, j + 1), Dm, False, False))
+-        var row = k.ew2(OP_ADD, _row_view(Dm, j), k.ew2(OP_DIV, upd, ajj))
+-        enqueue_dict_resample(
+-            k.ctx, row.p(), ajj.p(), Y.p(), ystd.p(), code.p(), counter.p(), Y.r, m, code.r, nc, j, seed, row.p(), 0,
+-        )
++        var ajj = k.cols(dg, j, j + 1)
++        var row: DMat
++        if used == nc or k.word(ajj) > 1e-6:
++            var upd = k.ew2(OP_SUB, k.vec_t(k.cols(B, j, j + 1)), k.mm(k.rows(A, j, j + 1), Dm, False, False))
++            row = k.ew2(OP_ADD, k.rows(Dm, j, j + 1), k.ew2(OP_DIV, upd, ajj))
++        else:
++            row = resample_atom_dev(k, Y, seed, counter)
++            counter += 1
++            if not zeroed:
++                code_out = k.copy(code)
++                zeroed = True
++            k.fill0(code_out, j, code_out.c, code_out.r)
+         if positive:
+             row = k.ew1(OP_MAXS, row, 0.0)
+         var nrm = k.ew1(OP_SQRT, k.total(k.ew1(OP_SQ, row, 0.0)), 0.0)
+@@ -114,206 +82,97 @@ def update_dict_dev(mut k: DKit, D: DMat, Y: DMat, ystd: DMat, code: DMat, A: DM
+     return Dm^
+ 
+ 
+-def _cost_words(mut k: DKit, X: DMat, code: DMat, D: DMat, words: DMat, at: Int) raises:
+-    """`_cost`'s two float32 words (the residual's and code's L1 totals) into
+-    words[at], words[at + 1], on the device; the host forms
+-    0.5 r + alpha l1 in float64 after the chunk's read."""
+-    k.put(_row_view(words, at), k.total(k.ew2(OP_SQDIFF, X, k.mm(code, D, False, False))))
+-    k.put(_row_view(words, at + 1), k.total(k.ew1(OP_ABS, code, 0.0)))
+-
+-
+-def _dl_step(mut k: DKit, X: DMat, ystd: DMat, Cp: DMat, Dp: DMat, a: DlArgs, counter: DMat, Cs: DMat, Ds: DMat,
+-             words: DMat, s: Int) raises:
+-    """One `_dict_learning` iteration from (Cp, Dp) into the ring slot
+-    (Cs, Ds), its cost words into words[2 s], words[2 s + 1]. Enqueued only."""
+-    var c = sparse_encode_dev(k, X, Dp, a.algo, a.alpha, a.nnz, Cp, True, a.enc_iter, a.pos_code)
+-    var A = k.mm(c, c, True, False)
+-    var B = k.mm(X, c, True, False)
+-    var Dn = update_dict_dev(k, Dp, X, ystd, c, A, B, a.pos_dict, a.seed, counter)
+-    _cost_words(k, X, c, Dn, words, 2 * s)
+-    k.put(Cs, c)
+-    k.put(Ds, Dn)
++def cost_dev(mut k: DKit, X: DMat, code: DMat, D: DMat, alpha: Float64) raises -> Float64:
++    """`_cost`."""
++    var r = k.word(k.total(k.ew2(OP_SQDIFF, X, k.mm(code, D, False, False))))
++    var l1 = k.word(k.total(k.ew1(OP_ABS, code, 0.0)))
++    return 0.5 * r + alpha * l1
+ 
+ 
+ def dict_learning_loop_dev(mut k: DKit, X: DMat, mut code: DMat, mut D: DMat, a: DlArgs,
+                                 mut errors: List[Float64]) raises -> Int:
+-    """`_dict_learning`'s loop: code and D replaced, errors appended; returns
+-    ii. The iterations run on the device DL_CHECK_EVERY at a time (each into
+-    its ring slot), then one read of their cost words; the host forms each
+-    error and takes the convergence test in order, and the answer is the
+-    stopping iteration's slot. Same words, errors and ii as the
+-    per-iteration loop."""
+-    var n = X.r
+-    var nc = D.r
+-    var m = D.c
+-    if a.max_iter < 1:
+-        return 0
+-    var K = DL_CHECK_EVERY
+-    var per = max(1, n * nc + nc * m)
+-    if K * per > DL_RING_MAX_FLOATS:
+-        K = max(1, DL_RING_MAX_FLOATS // per)
+-    var ystd = row_std_dev(k, X)
+-    var counter = k.zeros(1, 1)
+-    var ringC = DMat(K * n, nc)
+-    var ringD = DMat(K * nc, m)
+-    var words = DMat(2 * K, 1)
++    """`_dict_learning`'s loop: code and D replaced, errors appended; returns ii."""
++    var counter = 0
+     var ii = 0
+-    var i = 1
+-    var stopped = False
+-    while i <= a.max_iter and not stopped:  # driver-loop: over flag-read chunks of the bounded iteration loop
+-        var last = min(i + K - 1, a.max_iter)
+-        for it in range(i, last + 1):  # driver-loop: over the iterations enqueued between two reads
+-            var s = (it - 1) % K
+-            var Cs = DMat(rows_of=ringC, row0=s * n, rows=n)
+-            var Ds = DMat(rows_of=ringD, row0=s * nc, rows=nc)
+-            if it == 1:
+-                _dl_step(k, X, ystd, code, D, a, counter, Cs, Ds, words, s)
+-            else:
+-                var p = (it - 2) % K
+-                var Cp = DMat(rows_of=ringC, row0=p * n, rows=n)
+-                var Dp = DMat(rows_of=ringD, row0=p * nc, rows=nc)
+-                _dl_step(k, X, ystd, Cp, Dp, a, counter, Cs, Ds, words, s)
+-        var hw = k.get(words)
+-        k.sync()
+-        for it in range(i, last + 1):  # driver-loop: over the chunk's iterations, the stop test in their order
+-            var s = (it - 1) % K
+-            ii = it
+-            errors.append(0.5 * Float64(hw.d[2 * s]) + a.alpha * Float64(hw.d[2 * s + 1]))
+-            var ne = len(errors)
+-            if ne > 1 and errors[ne - 2] - errors[ne - 1] < a.tol * errors[ne - 1]:
+-                stopped = True
+-                break
+-        i = last + 1
+-    var fs = (ii - 1) % K
+-    code = k.copy(DMat(rows_of=ringC, row0=fs * n, rows=n))
+-    D = k.copy(DMat(rows_of=ringD, row0=fs * nc, rows=nc))
++    for i in range(1, a.max_iter + 1):
++        ii = i
++        code = sparse_encode_dev(k, X, D, a.algo, a.alpha, a.nnz, code, True, a.enc_iter, a.pos_code)
++        var A = k.mm(code, code, True, False)
++        var B = k.mm(X, code, True, False)
++        var code2 = k.zeros(0, 0)
++        var zeroed = False
++        D = update_dict_dev(k, D, X, code, A, B, a.pos_dict, a.seed, counter, code2, zeroed)
++        if zeroed:
++            code = code2^
++        errors.append(cost_dev(k, X, code, D, a.alpha))
++        var ne = len(errors)
++        if ne > 1 and errors[ne - 2] - errors[ne - 1] < a.tol * errors[ne - 1]:
++            break
+     return ii
+ 
+ 
+-def _mb_lim(n: Int, b_n: Int) -> Float64:
+-    """The step after which MiniBatchDictionaryLearning's stop tests run."""
+-    var lim = Float64(n) / Float64(b_n)
+-    if not (lim < 100.0):
+-        lim = 100.0
+-    return lim
+-
+-
+-def _mb_rows(n: Int, bs: Int, st: Int) -> Int:
+-    """Batch `st`'s first row."""
+-    var nb = n // bs + (1 if n % bs != 0 else 0)
+-    return (st % nb) * bs
+-
+-
+ def minibatch_loop_dev(mut k: DKit, Xt: DMat, mut D: DMat, a: DlArgs, bs: Int, n_steps: Int) raises -> Int:
+     """MiniBatchDictionaryLearning.fit's step loop over Xt (the shuffled
+-    rows): D replaced. Returns the number of steps taken (step + 1). The
+-    steps run on the device DL_CHECK_EVERY at a time, (D, A, B) of each in a
+-    ring slot and its cost and dictionary-change words in `words`; the host
+-    then replays the float64 forgetting average and both stop tests over the
+-    chunk in order. Same words and step count as the per-step loop."""
++    rows): D replaced. Returns the number of steps taken (step + 1)."""
+     var n = Xt.r
+     var m = Xt.c
+     var nc = D.r
+-    if n_steps < 1:
+-        return 0
+-    var K = DL_CHECK_EVERY
+-    var ystd_all = row_std_dev(k, Xt)
+-    var counter = k.zeros(1, 1)
+-    var ringD = DMat(K * nc, m)
+-    var ringA = DMat(K * nc, nc)
+-    var ringB = DMat(K * m, nc)
+-    var words = DMat(3 * K, 1)
+-    var A0 = k.zeros(nc, nc)
+-    var B0 = k.zeros(m, nc)
++    var A = k.zeros(nc, nc)
++    var B = k.zeros(m, nc)
++    var nb = n // bs + (1 if n % bs != 0 else 0)
+     var ewa = 0.0
+     var have_ewa = False
+     var ewa_min = 0.0
+     var have_min = False
+     var no_imp = 0
++    var counter = 0
+     var step = -1
+-    var st0 = 0
+-    var stopped = False
+-    while st0 < n_steps and not stopped:  # driver-loop: over flag-read chunks of the bounded step loop
+-        var last = min(st0 + K, n_steps)
+-        for st in range(st0, last):  # driver-loop: over the steps enqueued between two reads
+-            var s = st % K
+-            var a0 = _mb_rows(n, bs, st)
+-            var b0 = min(a0 + bs, n)
+-            var b_n = b0 - a0
+-            var need = Float64(st + 1) > _mb_lim(n, b_n)
+-            var Ds = DMat(rows_of=ringD, row0=s * nc, rows=nc)
+-            var As = DMat(rows_of=ringA, row0=s * nc, rows=nc)
+-            var Bs = DMat(rows_of=ringB, row0=s * m, rows=m)
+-            if st == 0:
+-                _mb_step(k, Xt, ystd_all, D, A0, B0, a, a0, b0, st, need, counter, Ds, As, Bs, words, s)
+-            else:
+-                var p = (st - 1) % K
+-                var Dp = DMat(rows_of=ringD, row0=p * nc, rows=nc)
+-                var Ap = DMat(rows_of=ringA, row0=p * nc, rows=nc)
+-                var Bp = DMat(rows_of=ringB, row0=p * m, rows=m)
+-                _mb_step(k, Xt, ystd_all, Dp, Ap, Bp, a, a0, b0, st, need, counter, Ds, As, Bs, words, s)
+-        var hw = k.get(words)
+-        k.sync()
+-        for st in range(st0, last):  # driver-loop: over the chunk's steps, the stop tests in their order
+-            step = st
+-            var s = st % K
+-            var a0 = _mb_rows(n, bs, st)
+-            var b_n = min(a0 + bs, n) - a0
+-            if Float64(st + 1) <= _mb_lim(n, b_n):
+-                continue
+-            var c = (0.5 * Float64(hw.d[3 * s]) + a.alpha * Float64(hw.d[3 * s + 1])) / Float64(b_n)
+-            if not have_ewa:
+-                ewa = c
+-                have_ewa = True
+-            else:
+-                var al = Float64(b_n) / Float64(n + 1)
+-                if 1.0 < al:
+-                    al = 1.0
+-                ewa = ewa * (1 - al) + c * al
+-            var diff = sqrt(Float64(hw.d[3 * s + 2])) / Float64(nc)
+-            if a.tol > 0 and diff <= a.tol:
+-                stopped = True
+-                break
+-            if not have_min or ewa < ewa_min:
+-                no_imp = 0
+-                ewa_min = ewa
+-                have_min = True
+-            else:
+-                no_imp += 1
+-            if a.max_no_imp >= 0 and no_imp >= a.max_no_imp:
+-                stopped = True
+-                break
+-        st0 = last
+-    D = k.copy(DMat(rows_of=ringD, row0=(step % K) * nc, rows=nc))
++    for st in range(n_steps):
++        step = st
++        var bi = st % nb
++        var a0 = bi * bs
++        var b0 = min(a0 + bs, n)
++        var Xb = k.rows(Xt, a0, b0)
++        var b_n = Xb.r
++        var none = k.zeros(0, 0)
++        var code = sparse_encode_dev(k, Xb, D, a.algo, a.alpha, -1, none, False, a.enc_iter, a.pos_code)
++        var c = cost_dev(k, Xb, code, D, a.alpha) / Float64(b_n)
++        var theta = (st + 1) * b_n if st < b_n - 1 else b_n * b_n + st + 1 - b_n
++        var beta = Float64(theta + 1 - b_n) / Float64(theta + 1)
++        A = k.ew2(OP_ADD, k.ew1(OP_SCALE, A, beta), k.ew1(OP_SCALE, k.mm(code, code, True, False), 1.0 / Float64(b_n)))
++        B = k.ew2(OP_ADD, k.ew1(OP_SCALE, B, beta), k.ew1(OP_SCALE, k.mm(Xb, code, True, False), 1.0 / Float64(b_n)))
++        var old = k.copy(D)
++        var code2 = k.zeros(0, 0)
++        var zeroed = False
++        D = update_dict_dev(k, D, Xb, code, A, B, a.pos_dict, a.seed, counter, code2, zeroed)
++        var s1 = st + 1
++        var lim = Float64(n) / Float64(b_n)
++        if not (lim < 100.0):
++            lim = 100.0
++        if Float64(s1) <= lim:
++            continue
++        if not have_ewa:
++            ewa = c
++            have_ewa = True
++        else:
++            var al = Float64(b_n) / Float64(n + 1)
++            if 1.0 < al:
++                al = 1.0
++            ewa = ewa * (1 - al) + c * al
++        var diff = sqrt(k.word(k.total(k.ew2(OP_SQDIFF, D, old)))) / Float64(nc)
++        if a.tol > 0 and diff <= a.tol:
++            break
++        if not have_min or ewa < ewa_min:
++            no_imp = 0
++            ewa_min = ewa
++            have_min = True
++        else:
++            no_imp += 1
++        if a.max_no_imp >= 0 and no_imp >= a.max_no_imp:
++            break
+     return step + 1
+ 
+ 
+-def _mb_step(mut k: DKit, Xt: DMat, ystd_all: DMat, Dp: DMat, Ap: DMat, Bp: DMat, a: DlArgs, a0: Int, b0: Int,
+-             st: Int, need: Bool, counter: DMat, Ds: DMat, As: DMat, Bs: DMat, words: DMat, s: Int) raises:
+-    """MiniBatch step `st` on rows [a0, b0) of Xt from (Dp, Ap, Bp) into the
+-    ring slot (Ds, As, Bs). When the stop tests will read this step (`need`)
+-    its cost words (at the old D, as the loop takes them) go to
+-    words[3 s], words[3 s + 1] and the dictionary change's total to
+-    words[3 s + 2]. Enqueued only."""
+-    var Xb = k.rows(Xt, a0, b0)
+-    var b_n = Xb.r
+-    var ystd = DMat(rows_of=ystd_all, row0=a0, rows=b_n)
+-    var none = k.zeros(0, 0)
+-    var code = sparse_encode_dev(k, Xb, Dp, a.algo, a.alpha, -1, none, False, a.enc_iter, a.pos_code)
+-    if need:
+-        _cost_words(k, Xb, code, Dp, words, 3 * s)
+-    var theta = (st + 1) * b_n if st < b_n - 1 else b_n * b_n + st + 1 - b_n
+-    var beta = Float64(theta + 1 - b_n) / Float64(theta + 1)
+-    var An = k.ew2(OP_ADD, k.ew1(OP_SCALE, Ap, beta), k.ew1(OP_SCALE, k.mm(code, code, True, False), 1.0 / Float64(b_n)))
+-    var Bn = k.ew2(OP_ADD, k.ew1(OP_SCALE, Bp, beta), k.ew1(OP_SCALE, k.mm(Xb, code, True, False), 1.0 / Float64(b_n)))
+-    var Dn = update_dict_dev(k, Dp, Xb, ystd, code, An, Bn, a.pos_dict, a.seed, counter)
+-    if need:
+-        k.put(_row_view(words, 3 * s + 2), k.total(k.ew2(OP_SQDIFF, Dn, Dp)))
+-    k.put(Ds, Dn)
+-    k.put(As, An)
+-    k.put(Bs, Bn)
+-
+-
+ def dict_learning_dev_run(
+     px: F32Ptr, pc: F32Ptr, pd: F32Ptr, pe: MutPointer[Float64, MutUntrackedOrigin], n: Int, m: Int, nc: Int, a: DlArgs,
+     mut ne: Int,
+diff --git a/x_decomp/dictl_resample.mojo b/x_decomp/dictl_resample.mojo
+deleted file mode 100644
+index 4820811f69..0000000000
+--- a/x_decomp/dictl_resample.mojo
++++ /dev/null
+@@ -1,122 +0,0 @@
+-# SPDX-License-Identifier: Apache-2.0
+-# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""The dictionary update's unused-atom resample (sklearn `_update_dict` with
+-`_resample_atom`) as ONE kernel body on the device (lane
+-n10-dictl-arima-loops, 2026-11-09): atom j's row is replaced by a noisy copy
+-of a random row of Y when A[j, j] <= 1e-6, and code column j is zeroed. The
+-decision, the draw and the counter are read and written on the device, so
+-the update loop (`x_decomp/dictl_dev.mojo`) reads nothing home per atom
+-(it read A[j, j] and two draws per atom before).
+-
+-The words are the host column's (`x_decomp/dictl.mojo::resample_atom`):
+-
+-* the test: `A[j, j] > 1e-6` in Float64 of the float32 word equals
+-  `A[j, j] > Float32(1e-6)` (Float32(1e-6) is the float32 just below 1e-6,
+-  so no float32 lies between them); NaN resamples in both;
+-* the draw: u = `rand_cell(0, seed, 40 + 2 c, 0)` (u = k / 2^24 exactly)
+-  and row index min(floor(u * rows), rows - 1); `floor(k * rows / 2^24)` in
+-  integers is the host's Float64 product floored for every rows < 2^29;
+-* the row's std: `ystd[idx]`, the caller's per-row `rowsum` / `OP_SQDIFF` /
+-  `OP_SQRT` cells over Y, the same per-row folds as the host's
+-  `total(row)` chain;
+-* the noise: `rand_cell(f, seed, 41 + 2 c, 1)` scaled by
+-  `mul(0.01f, std or 1)` (one float32 product: the host column takes the
+-  same float32 scale), added with `ew_cell(OP_ADD)`;
+-* c, the number of resamples so far, is a float word on the device (exact
+-  below 2^24).
+-
+-`part`/`nblk`: when nblk > 0 (the FAST fused update, x_decomp/dict_fast.mojo)
+-a resampled row also writes its sum of squares into part[0] and zeros
+-part[1:nblk], so that update's norm kernel folds the resampled row.
+-"""
+-from std.gpu import block_dim, block_idx, thread_idx
+-from std.memory import stack_allocation
+-from max.gpu.host import DeviceContext
+-from max.gpu.memory import AddressSpace
+-from max.gpu.sync import barrier
+-
+-from x_decomp.cells import F32Ptr, OP_ADD, OP_SCALE, add, ew_cell, mul, rand_cell
+-
+-#: threads of the one block
+-comptime RS_TPB = 256
+-#: `A[j, j] > 1e-6` on float32 words (module docstring)
+-comptime RS_USED = Float32(1e-6)
+-#: 2^24: a kind-0 draw times this is its integer k exactly
+-comptime RS_GRID = Float32(16777216.0)
+-
+-
+-def dict_zero_code_kernel(code: F32Ptr, ajj: F32Ptr, code_rows: Int32, nc: Int32, j: Int32):
+-    """Code column j zeroed, a thread per row, when atom j is resampled (the
+-    same test as `dict_resample_kernel`)."""
+-    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+-    if r < Int(code_rows) and not (ajj[0] > RS_USED):
+-        code[r * Int(nc) + Int(j)] = Float32(0)
+-
+-
+-def dict_resample_kernel(
+-    row: F32Ptr, ajj: F32Ptr, y: F32Ptr, ystd: F32Ptr, counter: F32Ptr,
+-    ny: Int32, m: Int32, seed: UInt32, part: F32Ptr, nblk: Int32,
+-):
+-    """One block of RS_TPB threads (module docstring). Every thread reads the
+-    test and the counter before the barrier; thread 0 alone writes the
+-    counter after it."""
+-    var tid = Int(thread_idx.x)
+-    var red = stack_allocation[RS_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+-    var hit = not (ajj[0] > RS_USED)
+-    var c = Int(counter[0])
+-    barrier()
+-    var M = Int(m)
+-    var sq = Float32(0)
+-    if hit:
+-        var u = rand_cell(0, seed, UInt32((40 + 2 * c) & 0xFFFFFFFF), 0)
+-        var rows = Int(ny)
+-        var idx = (Int(mul(u, RS_GRID)) * rows) >> 24
+-        if idx > rows - 1:
+-            idx = rows - 1
+-        var sd = ystd[idx]
+-        var sel = sd if sd != Float32(0) else Float32(1)
+-        var s = mul(Float32(0.01), sel)
+-        var sn = UInt32((41 + 2 * c) & 0xFFFFFFFF)
+-        var f = tid
+-        while f < M:
+-            var noise = ew_cell(OP_SCALE, rand_cell(f, seed, sn, 1), Float32(0), Float32(0), s)
+-            var v = ew_cell(OP_ADD, y[idx * M + f], noise, Float32(0), Float32(0))
+-            row[f] = v
+-            sq = add(sq, mul(v, v))
+-            f += RS_TPB
+-    red[tid] = sq
+-    barrier()
+-    var off = RS_TPB // 2
+-    while off > 0:
+-        if tid < off:
+-            red[tid] = add(red[tid], red[tid + off])
+-        barrier()
+-        off //= 2
+-    if hit and tid == 0:
+-        counter[0] = Float32(c + 1)
+-        if Int(nblk) > 0:
+-            part[0] = red[0]
+-            for q in range(1, Int(nblk)):
+-                part[q] = Float32(0)
+-
+-
+-def enqueue_dict_resample(
+-    ctx: DeviceContext, row: F32Ptr, ajj: F32Ptr, y: F32Ptr, ystd: F32Ptr, code: F32Ptr, counter: F32Ptr,
+-    ny: Int, m: Int, code_rows: Int, nc: Int, j: Int, seed: Int, part: F32Ptr, nblk: Int,
+-) raises:
+-    """Enqueue `dict_resample_kernel` for atom j (no read, no wait). `row`
+-    (1 x m) is the atom's updated row, overwritten when A[j, j] (`ajj`) marks
+-    the atom unused; `y` (ny x m) and `ystd` (ny) the rows it draws from;
+-    `code` (code_rows x nc) gets column j zeroed then; `counter` is the
+-    resample count word."""
+-    if m <= 0 or ny <= 0:
+-        return
+-    ctx.enqueue_function[dict_resample_kernel](  # small-launch(m: features of one dictionary atom): one atom row per launch, RS_TPB threads stride its m features
+-        row, ajj, y, ystd, counter, Int32(ny), Int32(m), UInt32(seed & 0xFFFFFFFF), part, Int32(nblk),
+-        grid_dim=1, block_dim=RS_TPB,
+-    )
+-    if code_rows > 0:
+-        ctx.enqueue_function[dict_zero_code_kernel](
+-            code, ajj, Int32(code_rows), Int32(nc), Int32(j),
+-            grid_dim=(code_rows + RS_TPB - 1) // RS_TPB, block_dim=RS_TPB,
+-        )
+diff --git a/x_decomp/kit_device.mojo b/x_decomp/kit_device.mojo
+index bb8317cf1b..bdd202badb 100644
+--- a/x_decomp/kit_device.mojo
++++ b/x_decomp/kit_device.mojo
+@@ -722,9 +722,7 @@ struct DKit(Movable):
+                     G.p(), Q.p(), W.p(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k), Int32(a),
+                     grid_dim=_blocks(n), block_dim=TPB,
+                 )
+-        # lane n10-dictl-arima-loops: no drain; the scratch goes back in
+-        # stream order after the solve (as `DevExec._rr_batch_enq`'s), so a
+-        # caller's loop reads nothing home per encode
++        self.ctx.synchronize()
+         _ = dn^
+         _ = ds^
+ 
+@@ -742,18 +740,13 @@ struct DKit(Movable):
+         self._code_rows(2, G, Q, W, nnz, 0, 0.0, 0.0)
+         return W^
+ 
+-    def dict_fused(self, D: DMat, A: DMat, B: DMat, Y: DMat, ystd: DMat, code: DMat, counter: DMat, seed: Int,
+-                   mut Dn: DMat) raises -> Bool:
+-        """`_Kit._dict_dev`'s fused atom update (FAST builds), else False. An
+-        unused atom is resampled from Y's rows on the device (its per-row std
+-        `ystd`, `code`'s column zeroed, the resample count word `counter`)."""
++    def dict_fused(self, D: DMat, A: DMat, B: DMat, mut Dn: DMat) raises -> Bool:
++        """`_Kit._dict_dev`'s fused atom update (FAST builds), else False."""
+         comptime if DECOMP_FAST_DICT_DEV:
+             if D.n() == 0:
+                 return False
+             Dn = DMat(D.r, D.c)
+-            _ = dict_update_dev(
+-                D.id, A.id, B.id, Dn.id, D.r, D.c, Y.p(), ystd.p(), Y.r, code.p(), code.r, counter.p(), seed,
+-            )
++            _ = dict_update_dev(D.id, A.id, B.id, Dn.id, D.r, D.c)
+             return True
+         else:
+             return False

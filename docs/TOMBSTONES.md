@@ -512,6 +512,9 @@ in the tables after the sections.
 | [`MOJOLEARN_C33_FROZEN_CHUNKS` in `op_lp_iterate` (and the per-iteration stopping-sum read)](#mds-label-propagation-and-nmf-loops-on-the-bounded-device-loop-2026-11-09) | Neighbors (label propagation dense graph) | removed (superseded: one bounded device loop, `_LpDenseStep`; the define stays for DBSCAN and LPK_BATCH) | 2026-11-09 | [N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch](../experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch) |
 | [`MOJOLEARN_LP_FAST_RESIDENT_OFF`, `MOJOLEARN_IDN_LP_RESIDENT_OFF` (+ the compact-graph binding loop)](#mds-label-propagation-and-nmf-loops-on-the-bounded-device-loop-2026-11-09) | Neighbors (label propagation kNN graph) | removed (rollbacks of measured defaults; `lp_iterate_knn` on every vendor and tier) | 2026-11-09 | [N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch](../experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch) |
 | [`lbfgs_prophet_host` + `_prophet_fg_dev` (host driver)](#fast-prophet-host-l-bfgs-driver-2026-11-09) | Sequence (Prophet FAST, N >= 16384) | removed (superseded: the L-BFGS runs on the device) | 2026-11-09 | [PROPHET_FAST_HOST_LBFGS.patch](../experiments/removed/PROPHET_FAST_HOST_LBFGS.patch) |
+| [`MOJOLEARN_IDN_ARIMA_ASYNC_OFF`](#arima-lock-step-l-bfgs-superseded-by-the-per-series-solver-2026-11-09) | Time series (ARIMA fit, IDENTICAL) | removed (KEPT default's `_OFF`, superseded: the lock-step solver is deleted) | 2026-11-09 | [ARIMA_LOCKSTEP_LBFGS.patch](../experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch) |
+| [`MOJOLEARN_ARIMA_FAST_ASYNC_OFF`](#arima-lock-step-l-bfgs-superseded-by-the-per-series-solver-2026-11-09) | Time series (ARIMA fit, FAST) | removed (KEPT default's `_OFF`, superseded: the lock-step solver is deleted) | 2026-11-09 | [ARIMA_LOCKSTEP_LBFGS.patch](../experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch) |
+| [dictionary learning per-iteration host reads (`resample_atom_dev`, `cost_dev`, the used-atom count, A[j, j] per atom)](#dictionary-learning-loops-as-device-programs-2026-11-09) | Decomposition (DictionaryLearning, MiniBatchDictionaryLearning, GPU) | REFACTORED (device program, one read per DL_CHECK_EVERY iterations) | 2026-11-09 | [DICTL_HOST_READS.patch](../experiments/removed/DICTL_HOST_READS.patch) |
 
 | [`MOJOLEARN_IDN_EIGH_SMALL_OFF`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL) | removed (superseded: the one-launch Jacobi is the op's only route below TD_MIN_N) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`MOJOLEARN_IDN_EIGH_SMALL_N64`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (dense eigh, IDENTICAL candidate arm) | removed (superseded: no small-n cut left) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
@@ -4694,3 +4697,39 @@ Lane n5-prophet-adaboost-loops (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEA
 - Bits: none intended (FAST only; IDENTICAL never reached this path).
 - Code recoverable at `f59d913b0b` (= `b70c3eda7c^`); patch `experiments/removed/PROPHET_FAST_HOST_LBFGS.patch` (reverse of
   `b70c3eda7c`, `sequence/ops_impl.mojo` only; the new kernels in `sequence/prophet.mojo` are additions).
+## ARIMA lock-step L-BFGS superseded by the per-series solver (2026-11-09)
+
+Lane n10-dictl-arima-loops (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 4, row "ARIMA lock-step
+L-BFGS"). `arima/impl/batched_fit.mojo::batched_min_lbfgs` ran two device solvers: the per-series one
+(`arima/impl/fast_lbfgs_async.mojo::async_min_lbfgs`, ARIMA_FAST_ASYNC: FAST + Apple since lane/apple-fast-gap-arima,
+IDENTICAL on every vendor since lane/fam-timeseries, M3 A/B autoarima taxi-hourly 39,639 -> 24,563 ms and synthetic
+28,511 -> 14,918 ms, forecast_rmse identical) whenever the held evaluation workspace existed and the identity trace was off,
+and the lock-step one otherwise (prelude, a shared line search to the last series, verdict; one flag read per line-search
+step and per iteration, and the sequential evaluation drained the stream once per forward-difference point). The
+per-series solver now takes the sequential evaluation too (`arima/impl/eval_batch.mojo::arima_eval`, the held workspace
+when the fit has one), so it is the only device arm; the lock-step loop, `lbfgs_prelude_kernel`, `lbfgs_candidate_kernel`,
+`lbfgs_accept_kernel`, `lbfgs_verdict_kernel`, `_read_flag`, `_record_iter`, `_iter_tag`, `_download_i32`, the
+per-iteration identity card (`fit.init.*`, `fit.iterNNNN.*`; no reader) and the `ARIMA_FAST_ASYNC` switch with its two
+`_OFF` defines are deleted. Guards: `core/experiment_guards_series.mojo`. Bits: none (each series' iterates, `n_iter`
+and `retcode` are the lock-step solver's by construction; the sequential and held evaluations write the same bits).
+`n_eval` now counts rounds (up to `ASYNC_READ_EVERY - 1` no-op rounds past the last series), as the per-series arm always
+did. Run ids: gaparima-async-* (M3). RUN OWED: NVIDIA + AMD autoarima rows for the fits that used to take the lock-step arm.
+Recoverable at f59d913b0b; patch `experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch` (all code hunks of the deletion).
+
+## Dictionary learning loops as device programs (2026-11-09)
+
+Lane n10-dictl-arima-loops (plan section 4, row "Dictionary learning"). `x_decomp/dictl_dev.mojo`'s two loops read
+3 + 2 nc words home per iteration: the used-atom count (`count_gt` of A's diagonal), A[j, j] per atom (`cols` with a
+drain and `word`), the resample's draw and std (`resample_atom_dev`), the two cost words (`cost_dev`), and per
+MiniBatch step the dictionary change; every row solve (`DKit._code_rows`) also drained. Now each loop enqueues
+`DL_CHECK_EVERY` = 4 iterations (state in a ring of slots, cost words in a device array) and reads once; the host
+replays the float64 error, forgetting average and stop tests over the chunk in order and takes the stopping slot. The
+atom test, the Philox draw, the row pick, the noise and the code column's zeroing are `x_decomp/dictl_resample.mojo`
+(the FAST fused update, `x_decomp/dict_fast.mojo`, runs the same kernel between its two launches, so it no longer needs
+the used-atom count). Deleted: `resample_atom_dev`, `cost_dev`, the per-atom reads, `_code_rows`'s drain. Bits: none on
+an update without an unused atom (same cells, same order; the row std is the same per-row folds computed for every row
+at once). A resampled atom's noise scale is now one float32 product `mul(0.01f, std or 1)` on the device and in the host
+column (`x_decomp/dictl.mojo::resample_atom`), where it was the float64 product rounded to float32; that changes the bits
+of a resampled atom only, on every vendor and the host column together (identity lanes: dictionary-learning,
+minibatch-dictionary-learning, sparse-coder when an atom goes unused). Recoverable at f59d913b0b; patch
+`experiments/removed/DICTL_HOST_READS.patch` (all code hunks).

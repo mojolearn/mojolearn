@@ -816,7 +816,9 @@ struct DKit(Movable):
                     G.p(), Q.p(), W.p(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k), Int32(a),
                     grid_dim=_blocks(n), block_dim=TPB,
                 )
-        self.ctx.synchronize()
+        # lane n10-dictl-arima-loops: no drain; the scratch goes back in
+        # stream order after the solve (as `DevExec._rr_batch_enq`'s), so a
+        # caller's loop reads nothing home per encode
         _ = dn^
         _ = ds^
 
@@ -834,13 +836,18 @@ struct DKit(Movable):
         self._code_rows(2, G, Q, W, nnz, 0, 0.0, 0.0)
         return W^
 
-    def dict_fused(self, D: DMat, A: DMat, B: DMat, mut Dn: DMat) raises -> Bool:
-        """`_Kit._dict_dev`'s fused atom update (FAST builds), else False."""
+    def dict_fused(self, D: DMat, A: DMat, B: DMat, Y: DMat, ystd: DMat, code: DMat, counter: DMat, seed: Int,
+                   mut Dn: DMat) raises -> Bool:
+        """`_Kit._dict_dev`'s fused atom update (FAST builds), else False. An
+        unused atom is resampled from Y's rows on the device (its per-row std
+        `ystd`, `code`'s column zeroed, the resample count word `counter`)."""
         comptime if DECOMP_FAST_DICT_DEV:
             if D.n() == 0:
                 return False
             Dn = DMat(D.r, D.c)
-            _ = dict_update_dev(D.id, A.id, B.id, Dn.id, D.r, D.c)
+            _ = dict_update_dev(
+                D.id, A.id, B.id, Dn.id, D.r, D.c, Y.p(), ystd.p(), Y.r, code.p(), code.r, counter.p(), seed,
+            )
             return True
         else:
             return False

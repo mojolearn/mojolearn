@@ -2,9 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The batched ARIMA L-BFGS state machine ON THE DEVICE (cpu-gpu-cleanup
 n-seq, 2026-10-02): one GPU thread per series, every series' optimizer state
-resident between launches. `arima/impl/batched_fit.mojo::batched_min_lbfgs`
-drives it; the host only sequences the launches and reads one "any series
-still active / still searching" word per step.
+resident between launches. `arima/impl/fast_lbfgs_async.mojo` drives it
+(the per-series solver, the device's only one since lane
+n10-dictl-arima-loops, 2026-11-09); the host reads one "any series still
+running" word every few rounds.
 
 THE SAME ARITHMETIC AS THE HOST COLUMN, SERIES BY SERIES. Each function
 below is the device spelling of one in `arima/impl/lbfgs_host.mojo` (which
@@ -121,7 +122,7 @@ def d_check_convergence(
 
 
 # ---------------------------------------------------------------------------
-# the kernels, in the order `batched_min_lbfgs` launches them
+# the start kernel and the two-loop recursion the per-series solver takes
 # ---------------------------------------------------------------------------
 
 
@@ -168,95 +169,12 @@ def lbfgs_init_kernel(
     _raise_flag(any_active)
 
 
-def lbfgs_prelude_kernel(
-    x: FP, xp: FP, grad: FP, gradp: FP, drt: FP,
-    fx: FP, fxp: FP, fx_init: FP, dg_init: FP, dg_test: FP, step: FP,
-    active: IP, searching: IP, lsret: IP, ls_iters: IP, any_searching: IP,
-    batch_in: Int32, n_in: Int32, ftol: Float32,
-):
-    """`min_lbfgs:188-191` (save x, grad, fx) and `ls_backtrack:100-108`, the
-    part of the line search before its loop."""
-    var b = _series()
-    if b >= Int(batch_in):
-        return
-    searching[b] = 0
-    if active[b] == 0:
-        return
-    var n = Int(n_in)
-    for i in range(n):
-        xp[b * n + i] = x[b * n + i]
-        gradp[b * n + i] = grad[b * n + i]
-    fxp[b] = fx[b]
-    if step[b] <= Float32(0.0):
-        lsret[b] = Int32(LS_INVALID_STEP)
-        return
-    fx_init[b] = fx[b]
-    var dg = d_dot(grad, b * n, drt, b * n, n)
-    dg_init[b] = dg
-    if dg > Float32(0.0):
-        lsret[b] = Int32(LS_INVALID_DIR)
-        return
-    dg_test[b] = ftz(identical_mul(ftol, dg))
-    ls_iters[b] = 0
-    # the value `ls_backtrack` falls through to if the loop exhausts
-    lsret[b] = Int32(LS_MAX_ITERS_REACHED)
-    searching[b] = 1
-    _raise_flag(any_searching)
-
-
-def lbfgs_candidate_kernel(
-    cand: FP, x: FP, xp: FP, drt: FP, step: FP, searching: IP,
-    batch_in: Int32, n_in: Int32,
-):
-    """`axpy(x, step, drt, xp)`: `x = step * drt + xp`, one rounding, for a
-    searching series; a series that is not searching proposes its current
-    `x`, so the batch composition never depends on convergence."""
-    var b = _series()
-    if b >= Int(batch_in):
-        return
-    var n = Int(n_in)
-    if searching[b] != 0:
-        var s = step[b]
-        for i in range(n):
-            cand[b * n + i] = ftz(identical_mul_add(s, drt[b * n + i], xp[b * n + i]))
-    else:
-        for i in range(n):
-            cand[b * n + i] = x[b * n + i]
-
-
-def lbfgs_accept_kernel(
-    x: FP, grad: FP, fx: FP, cand: FP, gradc: FP, fxc: FP,
-    fx_init: FP, dg_test: FP, step: FP,
-    searching: IP, lsret: IP, ls_iters: IP, any_searching: IP,
-    batch_in: Int32, n_in: Int32,
-    min_step: Float32, max_step: Float32, ls_dec: Float32,
-):
-    """`ls_backtrack:109-121` after the shared evaluation: take the
-    candidate, then the Armijo test, or halve the step and keep searching."""
-    var b = _series()
-    if b >= Int(batch_in):
-        return
-    if searching[b] == 0:
-        return
-    var n = Int(n_in)
-    for i in range(n):
-        x[b * n + i] = cand[b * n + i]
-        grad[b * n + i] = gradc[b * n + i]
-    fx[b] = fxc[b]
-    ls_iters[b] = ls_iters[b] + 1
-    var s = step[b]
-    if d_armijo_ok(fx[b], fx_init[b], s, dg_test[b]):
-        lsret[b] = Int32(LS_SUCCESS)
-        searching[b] = 0
-    elif s < min_step:
-        lsret[b] = Int32(LS_INVALID_STEP_MIN)
-        searching[b] = 0
-    elif s > max_step:
-        lsret[b] = Int32(LS_INVALID_STEP_MAX)
-        searching[b] = 0
-    else:
-        step[b] = ftz(identical_mul(s, ls_dec))
-        _raise_flag(any_searching)
+# TOMBSTONE: MOJOLEARN_IDN_ARIMA_ASYNC_OFF, MOJOLEARN_ARIMA_FAST_ASYNC_OFF (superseded: the lock-step device solver they kept) deleted 2026-11-09 by lane/n10-dictl-arima-loops; code recoverable at the lane's base f59d913b0b.
+# Restore: git apply experiments/removed/ARIMA_LOCKSTEP_LBFGS.patch
+# (`lbfgs_prelude_kernel`, `lbfgs_candidate_kernel`, `lbfgs_accept_kernel`,
+# `lbfgs_verdict_kernel`: the lock-step solver's phases; the per-series
+# solver, `fast_lbfgs_async.mojo::async_step_kernel`, runs the same
+# statements in one kernel)
 
 
 def _search_dir(
@@ -294,79 +212,6 @@ def _search_dir(
             drt[gb + i] = ftz(identical_mul_add(c, S[(b * m + j) * n + i], drt[gb + i]))
         j = (j + 1) % m
     return end
-
-
-def lbfgs_verdict_kernel(
-    x: FP, xp: FP, grad: FP, gradp: FP, drt: FP, S: FP, Y: FP, yhist: FP,
-    alpha: FP, fx: FP, fxp: FP, fx_hist: FP, gnorm: FP, step: FP,
-    active: IP, endv: IP, n_vec: IP, lsret: IP, n_iter: IP, retcode: IP,
-    any_active: IP,
-    batch_in: Int32, n_in: Int32, m_in: Int32, past_in: Int32, k_in: Int32,
-    epsilon: Float32, delta: Float32, ftol: Float32,
-):
-    """`min_lbfgs:197-222`: the verdict (`update_and_check`, with the
-    restore), the history update and the new direction."""
-    var b = _series()
-    if b >= Int(batch_in):
-        return
-    if active[b] == 0:
-        return
-    var n = Int(n_in)
-    var m = Int(m_in)
-    var past = Int(past_in)
-    var k = Int(k_in)
-    var g = d_nrm_max(grad, b * n, n)
-    gnorm[b] = g
-    # `lbfgs_verdict`
-    var f = fx[b]
-    var fp = fxp[b]
-    var ls = Int(lsret[b])
-    var stop = False
-    var converged = False
-    var code = Int(retcode[b])
-    var is_ls_valid = (not isnan(f)) and (not isinf(f))
-    var is_ls_non_critical = ls == LS_INVALID_STEP_MIN or ls == LS_MAX_ITERS_REACHED
-    var is_ls_in_doubt = is_ls_valid and f <= fp + ftol and is_ls_non_critical
-    var is_ls_success = ls == LS_SUCCESS or is_ls_in_doubt
-    if is_ls_valid:
-        converged = d_check_convergence(k, f, g, fx_hist, b * past, past, epsilon, delta)
-    if (not is_ls_success) and (not converged):
-        code = OPT_LS_FAILED
-        stop = True
-    elif not is_ls_valid:
-        code = OPT_NUMERIC_ERROR
-        stop = True
-    elif converged:
-        code = OPT_SUCCESS
-        stop = True
-    elif is_ls_in_doubt and f + ftol >= fp:
-        code = OPT_LS_FAILED
-        stop = True
-    var restore = (not is_ls_success) or (not is_ls_valid)
-    retcode[b] = Int32(code)
-    if restore:
-        fx[b] = fp
-        for i in range(n):
-            x[b * n + i] = xp[b * n + i]
-            grad[b * n + i] = gradp[b * n + i]
-    n_iter[b] = Int32(k)
-    if stop:
-        active[b] = 0
-        return
-    var e = Int(endv[b])
-    for i in range(n):
-        # `axpy(S[end], -1, xp, x)` and `axpy(Y[end], -1, gradp, grad)`
-        S[(b * m + e) * n + i] = ftz(
-            identical_mul_add(Float32(-1.0), xp[b * n + i], x[b * n + i])
-        )
-        Y[(b * m + e) * n + i] = ftz(
-            identical_mul_add(Float32(-1.0), gradp[b * n + i], grad[b * n + i])
-        )
-    var nv = Int(n_vec[b])
-    endv[b] = Int32(_search_dir(m, nv, e, S, Y, grad, drt, yhist, alpha, b, n))
-    n_vec[b] = Int32(nv)
-    step[b] = Float32(1.0)
-    _raise_flag(any_active)
 
 
 # ---------------------------------------------------------------------------
