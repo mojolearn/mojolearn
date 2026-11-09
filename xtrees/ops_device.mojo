@@ -400,16 +400,37 @@ def weighted_sample_device(
     w: MutPointer[Float64, MutUntrackedOrigin], n: Int,
     res: MutPointer[Int32, MutUntrackedOrigin], n_draw: Int, seed: Int, stream: Int,
 ) raises:
-    """`ops.weighted_sample` on the device: the weights go up once, the cdf
-    is built by the chunk kernel, ceil(log2(chunks)) fixed-tree scan passes
-    and the offset kernel, one thread per draw searches it, the indices come
-    back once. The same refusals; nothing written to `res` on a refusal."""
+    """`ops.weighted_sample` on the device: the weights go up once, the
+    draws (`weighted_sample_on`) come back once. The same refusals; nothing
+    written to `res` on a refusal."""
     if n <= 0:
         raise Error("x_trees weighted_sample: weights must have a positive total")
     var ctx = _ctx()
-    var n_chunks = ceildiv(n, WS_CHUNK)
     var d_w = ctx.enqueue_create_buffer[DType.uint64](n)
     ctx.enqueue_copy(dst_buf=d_w, src_ptr=w.bitcast[UInt64]())
+    var d_res = ctx.enqueue_create_buffer[DType.int32](max(1, n_draw))
+    weighted_sample_on(ctx, d_w, n, d_res, n_draw, seed, stream)
+    if n_draw > 0:
+        ctx.enqueue_copy(dst_ptr=res, src_buf=d_res)
+        ctx.synchronize()
+    _ = d_w^
+    _ = d_res^
+
+
+def weighted_sample_on(
+    ctx: DeviceContext, d_w: DeviceBuffer[DType.uint64], n: Int, d_res: DeviceBuffer[DType.int32],
+    n_draw: Int, seed: Int, stream: Int,
+) raises:
+    """`ops.weighted_sample` over device-resident binary64 weight words into
+    the device `d_res` (n_draw int32 row ids), on `ctx`: the cdf is built by
+    the chunk kernel, ceil(log2(chunks)) fixed-tree scan passes and the
+    offset kernel, one thread per draw searches it. Two words come back (the
+    negative-weight flag and the total) for the refusals; `d_res` is not
+    written on a refusal. (AdaBoost.R2's device rounds call this on the
+    weights they keep resident; lane n5-prophet-adaboost-loops.)"""
+    if n <= 0:
+        raise Error("x_trees weighted_sample: weights must have a positive total")
+    var n_chunks = ceildiv(n, WS_CHUNK)
     var d_cdf = ctx.enqueue_create_buffer[DType.uint64](n)
     var d_a = ctx.enqueue_create_buffer[DType.uint64](n_chunks)
     var d_b = ctx.enqueue_create_buffer[DType.uint64](n_chunks)
@@ -421,7 +442,7 @@ def weighted_sample_device(
     )
     var src_is_a = True
     var s = 1
-    while s < n_chunks:
+    while s < n_chunks:  # driver-loop: over the fixed-tree scan passes (log2 chunks)
         if src_is_a:
             ctx.enqueue_function[ws_scan_step_kernel](
                 d_a.unsafe_ptr(), d_b.unsafe_ptr(), Int64(n_chunks), Int64(s),
@@ -450,16 +471,11 @@ def weighted_sample_device(
     if not sf64_gt(h_total.unsafe_ptr().unsafe_load(0), SF64_ZERO):
         raise Error("x_trees weighted_sample: weights must have a positive total")
     if n_draw > 0:
-        var d_res = ctx.enqueue_create_buffer[DType.int32](n_draw)
         ctx.enqueue_function[ws_draw_kernel](
             d_w.unsafe_ptr(), d_cdf.unsafe_ptr(), Int64(n), stream_base(seed, stream), Int64(n_draw),
             d_res.unsafe_ptr(),
             grid_dim=_blocks(n_draw), block_dim=OPS_TPB,
         )
-        ctx.enqueue_copy(dst_ptr=res, src_buf=d_res)
-        ctx.synchronize()
-        _ = d_res^
-    _ = d_w^
     _ = d_cdf^
     _ = d_a^
     _ = d_b^
