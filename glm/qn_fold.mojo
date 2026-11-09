@@ -19,7 +19,7 @@ kernels on the same words as the host-address path: no bit changes.
 from max.gpu.host import DeviceContext
 from core.device_zero import enqueue_fill
 from core.msel_device_x import msel_device_x_f32
-from glm.estimator import qn_fit_resident
+from glm.qn_resident import qn_check_loss_args, qn_fit_resident
 
 
 def qn_fit_fold(
@@ -54,6 +54,7 @@ def qn_fit_fold(
     range), both 0 when every gathered word is finite and every index in
     range; otherwise nothing is fitted (returns 0) and the door refuses.
     Returns num_iters."""
+    qn_check_loss_args(loss, n_classes, svr_eps)
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var status = ctx.enqueue_create_buffer[DType.int32](2)
     enqueue_fill[DType.int32](ctx, status, Int32(0))
