@@ -13,6 +13,7 @@ from std.sys.compile import is_defined, get_defined_int
 
 
 def _check_configuration() -> Bool:
+    comptime assert not (is_defined["MOJOLEARN_IDN_EIGH_SMALL_OFF"]() or is_defined["MOJOLEARN_IDN_EIGH_SMALL_N64"]() or is_defined["MOJOLEARN_IDN_EIGH_SMALL_N128"]()), "removed 2026-11-09 (lane n9-decomp-eigh-families): superseded, the one-launch batched Jacobi (x_decomp/rr_batch.mojo, the same words as the per-round launches) is THE dense eigh below TD_MIN_N inside the executor op x_decomp/eigh_ops.mojo eigh_op_sym, so the small-n cut and the per-round route are gone; patch experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch; see docs/TOMBSTONES.md"
     # Deleted 2026-10-08 (lane grid-losers-1): IDENTICAL grid ge123e6f9 losers (docs/apple-fast/EXPERIMENTS.md). Recoverable at main ad7ed2370.
     # C25_PROJECTION_REUSE: deleted 2026-10-08 above, restored 2026-10-10 (lane c25-restore-promote) from the tombstone patch after grid pass 2.
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO"](), "promoted 2026-10-10 (grid g50ebe26a5, lane/grid-act-6): the blocked TSQR orth in randomized_svd is the IDENTICAL default (randomized-svd istella NV 0.824x / AMD 0.611x, 0.710x combined; taxi NV 0.757x / AMD 0.538x, 0.638x; bits change on every column together); drop -D MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO, use -D MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF for the two-pass sliced Householder orth"
