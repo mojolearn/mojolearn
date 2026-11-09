@@ -237,7 +237,7 @@ def _dots(
 
 def qs_geqrf_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], dt: DeviceBuffer[DType.float32], m: Int, n: Int) raises:
     """geqrf in place on the device-resident row-major m x n `da`, tau into
-    `dt` (min(m, n) floats); the caller downloads and synchronizes."""
+    `dt` (min(m, n) floats), enqueued; the caller downloads and synchronizes."""
     var kk = m if m < n else n
     var nsmax = max(qs_slices(m - 1), 1)
     var ds = ctx.enqueue_create_buffer[DType.float32](2)
@@ -286,7 +286,9 @@ def qs_geqrf_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], dt: Dev
             )
             pace.add(ctx, rows * cols)
             r0 += rows
-    ctx.synchronize()
+    # lane n9b-device-svd-qr: enqueue only (the scratch below is released in
+    # stream order); the caller's own download waits. The Apple pacing
+    # (`_Pace`) still waits per QS_LAUNCH_CELLS, reading nothing.
     _ = ds^
     _ = dw^
     _ = dp^
@@ -298,7 +300,7 @@ def qs_orgqr_device(
     m: Int, n: Int, kk: Int, qc: Int,
 ) raises:
     """The first qc columns of Q = H_0 ... H_{kk-1} into the device-resident
-    m x qc `dq` from geqrf's (dh, dt); the caller downloads and synchronizes."""
+    m x qc `dq` from geqrf's (dh, dt), enqueued; the caller downloads and synchronizes."""
     if qc <= 0:
         return
     var nsmax = max(qs_slices(m - 1), 1)
@@ -323,6 +325,6 @@ def qs_orgqr_device(
             )
             pace.add(ctx, rows * qc)
             r0 += rows
-    ctx.synchronize()
+    # lane n9b-device-svd-qr: enqueue only, as `qs_geqrf_device`
     _ = dw^
     _ = dp^
