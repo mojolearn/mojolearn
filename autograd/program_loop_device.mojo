@@ -14,7 +14,7 @@
 from std.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from autograd.program_loop import (
-    LOOP_DONE, LOOP_STOP_ITER, LOOP_ITER, LOOP_WORDS, EXECUTOR_TIMERS, LoopTimers,
+    LOOP_DONE, LOOP_STOP_ITER, LOOP_ITER, LOOP_STOPPED, LOOP_BAD, LOOP_GATE, LOOP_WORDS, EXECUTOR_TIMERS, LoopTimers,
 )
 # lane n7-device-linalg-ops: the linear-algebra step ops gate on these words
 # under core's names (core/step_gate.mojo), so the classical packages need
@@ -52,6 +52,11 @@ struct LoopRegisters(Movable):
     def __init__(out self, ctx: DeviceContext) raises:
         comptime assert STEP_DONE == LOOP_DONE and STEP_STOP_ITER == LOOP_STOP_ITER and STEP_ITER == LOOP_ITER, "core/step_gate.mojo word indices differ from the loop's"
         comptime assert STEP_FAIL < LOOP_WORDS and STEP_FAIL != LOOP_DONE and STEP_FAIL != LOOP_STOP_ITER and STEP_FAIL != LOOP_ITER, "STEP_FAIL must be a free word of the register block"
+        # integ/pre-0867-w2: words 0-5 are the loop's (DONE 0, STOP_ITER 1,
+        # ITER 2, STOPPED 3, BAD 4, GATE 5; lane X1's OP_LOOP_APPEND /
+        # OP_LOOP_ITER_WORD read GATE and ITER), STEP_FAIL is word 6 (lane N7),
+        # word 7 is free.
+        comptime assert STEP_FAIL != LOOP_STOPPED and STEP_FAIL != LOOP_BAD and STEP_FAIL != LOOP_GATE, "STEP_FAIL collides with a loop register word"
         self.words = ctx.enqueue_create_buffer[DType.int32](LOOP_WORDS)
         self.host = ctx.enqueue_create_host_buffer[DType.int32](LOOP_WORDS)
 
