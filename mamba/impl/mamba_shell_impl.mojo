@@ -47,10 +47,12 @@ from mamba.impl.modeling.modeling_mamba import (
     MambaDeviceWeights,
 )
 from mamba.impl.modules.mamba_simple import mamba_step
-from core.decode_slab import decode_slab_check, decode_slab_put, decode_slab_take
-#: lane afn-mamba (2026-10-03): under FAST + Apple + `-D MOJOLEARN_AFN_MAMBA_ARENA`
-#: every block call's device buffers are views of ONE arena and the caller's
-#: arrays are copied in with no per-buffer wait (`_mamba{1,2,3}_run_arena`).
+from mamba.impl.mamba_block_program import MambaBlockProgram, mamba_block_call
+from autograd.block_step_ops import OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP
+#: lane afn-mamba (2026-10-03): MOJOLEARN_AFN_MAMBA_ARENA / IDN_MAMBA_ARENA make
+#: the block structs views of one arena; the per-call `_mamba{1,2,3}_run_arena`
+#: bodies that used it here are gone with the per-call bodies (lane x5: the
+#: block step op builds its structs over the program's tensors the same way).
 from mamba.impl.modules.afn_defines import AFN_MAMBA_ARENA, IDN_MAMBA_ALLOC_NOWAIT
 from mamba.impl.modules.afn_defines import IDN_MAMBA3_REPORTS_ON_REQUEST
 from mamba.impl.modules.afn_defines import IDN_M3_SESSION_STAGE_REUSE
@@ -192,121 +194,12 @@ def _m3_download_addr[wait: Bool = True](ctx: DeviceContext, mut buf: DeviceBuff
 
 
 
-def _mamba1_run(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool = False, absolute_start: Int = 0) raises:
-    """The GIL-free half of `mamba1_forward_binding`: everything after
-    the `PythonObject`s have been read. Builds the host weights, uploads
-    the caller's state, runs THE certified entry point once, and writes
-    the output and the post-call state back into the caller's buffers.
+# TOMBSTONE: _mamba1_run, _mamba1_run_arena (the per-call Mamba-1 body: ten weight and two state uploads per call) (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by X5SHA; code recoverable at 25e5650c14.
+# Restore: git apply experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch
+# The per-call Mamba-1 forward/step is `mamba_block_call(OPS_M1_STEP, ...)`
+# (mamba/impl/mamba_block_program.mojo): the step op's body on a cached
+# program whose weights stay on the device while their bytes are unchanged.
 
-    `[[mojo-buffer-freed-at-last-use]]`: every device buffer below is
-    still alive when `mamba_block_forward` returns because that function
-    synchronizes before it does, and the explicit transfers at the end
-    hold them past the last download anyway."""
-    comptime if AFN_MAMBA_ARENA:
-        _mamba1_run_arena(a, b, l, dm, decode)
-        return
-    var dims = MambaDims.of(dm)
-    var di = dims.d_inner
-    var r = dims.dt_rank
-    var xr = dims.x_proj_rows()
-
-    # Host weights, THROUGH the lane's own struct (its field table is the
-    # reference shape authority); values arrive as given bits, unjudged
-    # (the initializer rows of FEATURE_PARITY.md are REFUSED as bitwise
-    # claims; weights-in is what ships).
-    var w = MambaWeights(dims)
-    w.norm_w = _read_f32(a[1], dm)
-    w.w_in = _read_f32(a[2], 2 * di * dm)
-    w.conv_w = _read_f32(a[3], di * D_CONV)
-    w.conv_b = _read_f32(a[4], di)
-    w.w_x = _read_f32(a[5], xr * di)
-    w.w_dt = _read_f32(a[6], di * r)
-    w.b_dt = _read_f32(a[7], di)
-    w.a_log = _read_f32(a[8], di * D_STATE)
-    w.d_skip = _read_f32(a[9], di)
-    w.w_out = _read_f32(a[10], dm * di)
-
-    var ctx = neural_ctx[_NEURAL_CTX]()
-    var dw = MambaDeviceWeights(ctx, w)
-    # The caller's state, uploaded over the fresh zeros. Zeros in IS
-    # allocate_inference_cache; anything else is a carried sequence.
-    var dstate = MambaDeviceState(ctx, b, dims)
-    dstate.conv_win = mamba_upload(ctx, _read_f32(a[11], b * di * D_CONV))
-    dstate.h = mamba_upload(ctx, _read_f32(a[12], b * di * D_STATE))
-    var dstages = MambaDeviceStages(ctx, b, l, dims)
-    var dx = mamba_upload(ctx, _read_f32(a[0], b * l * dm))
-
-    var trace = IdentityTrace.disabled()
-    if decode:
-        mamba_step(ctx, dstages, dstate, dw, dx, b, trace, String("py"))
-    else:
-        mamba_block_forward(
-            ctx, dstages, dstate, dw, dx, b, l, trace, String("py")
-        )
-
-    # The block output is the residual stage (contract section 2's
-    # `hidden = residual + mixer(norm(residual))`), and the state buffers
-    # go back to their owners.
-    # Straight into the caller's arrays, one wait (lane/neural-apple,
-    # 2026-09-28; was a host List per piece, a wait and a second copy each).
-    _m3_download_addr[False](ctx, dstages.residual_out, b * l * dm, a[13])
-    _m3_download_addr[False](ctx, dstate.conv_win, b * di * D_CONV, a[11])
-    _m3_download_addr[False](ctx, dstate.h, b * di * D_STATE, a[12])
-    ctx.synchronize()
-    _ = dw^
-    _ = dstate^
-    _ = dstages^
-    _ = dx^
-    _ = ctx^
-
-
-def _mamba1_run_arena(a: List[Int], b: Int, l: Int, dm: Int, decode: Bool) raises:
-    """`_mamba1_run` under MOJOLEARN_AFN_MAMBA_ARENA (lane afn-mamba): one
-    arena allocation, every weight / state piece / stage / x a view of it,
-    the caller's arrays copied in directly (they outlive the call), ONE
-    wait at the end. The same certified entry point runs."""
-    var dims = MambaDims.of(dm)
-    var di = dims.d_inner
-    var r = dims.dt_rank
-    var xr = dims.x_proj_rows()
-    var ctx = neural_ctx[_NEURAL_CTX]()
-    var arena = MambaArena(ctx, mamba1_arena_floats(b, l, dims), MAMBA_GUARD)
-    var dw = MambaDeviceWeights(ctx, dims, arena)
-    mamba_copy_in(ctx, dw.norm_w, _f32_ptr(a[1]), dm)
-    mamba_copy_in(ctx, dw.w_in, _f32_ptr(a[2]), 2 * di * dm)
-    mamba_copy_in(ctx, dw.conv_w, _f32_ptr(a[3]), di * D_CONV)
-    mamba_copy_in(ctx, dw.conv_b, _f32_ptr(a[4]), di)
-    mamba_copy_in(ctx, dw.w_x, _f32_ptr(a[5]), xr * di)
-    mamba_copy_in(ctx, dw.w_dt, _f32_ptr(a[6]), di * r)
-    mamba_copy_in(ctx, dw.b_dt, _f32_ptr(a[7]), di)
-    mamba_copy_in(ctx, dw.a_log, _f32_ptr(a[8]), di * D_STATE)
-    mamba_copy_in(ctx, dw.d_skip, _f32_ptr(a[9]), di)
-    mamba_copy_in(ctx, dw.w_out, _f32_ptr(a[10]), dm * di)
-    var dstate = MambaDeviceState(ctx, b, dims, arena)
-    mamba_copy_in(ctx, dstate.conv_win, _f32_ptr(a[11]), b * di * D_CONV)
-    mamba_copy_in(ctx, dstate.h, _f32_ptr(a[12]), b * di * D_STATE)
-    var dstages = MambaDeviceStages(ctx, b, l, dims, arena)
-    var dx = arena.take(ctx, b * l * dm)
-    mamba_copy_in(ctx, dx, _f32_ptr(a[0]), b * l * dm)
-
-    var trace = IdentityTrace.disabled()
-    if decode:
-        mamba_step(ctx, dstages, dstate, dw, dx, b, trace, String("py"))
-    else:
-        mamba_block_forward(
-            ctx, dstages, dstate, dw, dx, b, l, trace, String("py")
-        )
-
-    _m3_download_addr[False](ctx, dstages.residual_out, b * l * dm, a[13])
-    _m3_download_addr[False](ctx, dstate.conv_win, b * di * D_CONV, a[11])
-    _m3_download_addr[False](ctx, dstate.h, b * di * D_STATE, a[12])
-    ctx.synchronize()
-    _ = dw^
-    _ = dstate^
-    _ = dstages^
-    _ = dx^
-    _ = arena^
-    _ = ctx^
 
 
 def _mamba1_backward_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
@@ -352,40 +245,34 @@ def _mamba1_backward_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
 
 # ===========================================================================
 # The Mamba-1 resident decode session (DEVIATION 2941, lane/infer-speed-
-# neural, 2026-09-17): device-owned weights, state and L = 1 stages that
-# live across decode steps. The transformer binding's DEVIATION 2940, the
-# same shape and the same reason it cannot move a bit: every step is
-# `mamba_step`, THE certified decode entry (the block at L = 1), on
-# `MambaDeviceWeights`, `MambaDeviceState` and `MambaDeviceStages` holding
-# the bytes the per-call entry uploads per token, built once instead. Stage
-# reuse across calls is the Mamba-1 stage struct's own contract (every stage
-# the block reads it writes first in the same call). Ownership: the session
-# COPIES the weights and the state at open; the caller's state arrays are
-# STALE until export_state or close; weights refresh is close and open.
+# neural, 2026-09-17; on the executor since lane x5-mamba-on-executor,
+# 2026-11-09): the weights and the state live on the device across decode
+# steps as one executor program, and every step is the block step op
+# (`OPS_M1_STEP`, autograd/block_step_ops.mojo), whose L = 1 body is
+# `mamba_step`, THE certified decode entry, on resident L = 1 stages (stage
+# reuse across calls is the Mamba-1 stage struct's own contract). Ownership:
+# the session COPIES the weights and the state at open; the caller's state
+# arrays are STALE until export_state or close; weights refresh is close and
+# open.
 # ===========================================================================
 
 
 struct Mamba1DecodeSession(Movable, Writable):
-    var ctx: Optional[DeviceContext]
-    var w: Optional[MambaDeviceWeights]
-    var state: Optional[MambaDeviceState]
-    var stages: Optional[MambaDeviceStages]
-    var dx: Optional[DeviceBuffer[DType.float32]]
+    """The resident Mamba-1 decode session: ONE executor program
+    (`MambaBlockProgram`, the weights a parameter and the state a declared
+    state tensor, both uploaded once at open) whose every token is the block
+    step op. The caller's state arrays are stale until export_state or
+    close; weights refresh is close and open."""
+    var prog: Optional[MambaBlockProgram]
     var b: Int
     var dm: Int
-    var di: Int
     var busy: Bool
     var usable: Bool
 
     def __init__(out self):
-        self.ctx = Optional[DeviceContext]()
-        self.w = Optional[MambaDeviceWeights]()
-        self.state = Optional[MambaDeviceState]()
-        self.stages = Optional[MambaDeviceStages]()
-        self.dx = Optional[DeviceBuffer[DType.float32]]()
+        self.prog = None
         self.b = 0
         self.dm = 0
-        self.di = 0
         self.busy = False
         self.usable = True
 
@@ -396,19 +283,15 @@ struct Mamba1DecodeSession(Movable, Writable):
         writer.write("Mamba1DecodeSession")
 
     def is_open(self) -> Bool:
-        return Bool(self.ctx) and Bool(self.state)
+        return Bool(self.prog)
 
     def release(mut self):
-        self.stages = None
-        self.dx = None
-        self.state = None
-        self.w = None
-        if self.ctx:
+        if self.prog:
             try:
-                self.ctx.value().synchronize()
+                self.prog.value().close()
             except:
                 pass
-        self.ctx = None
+        self.prog = None
 
     def __deinit__(deinit self):
         self.release()
@@ -430,92 +313,34 @@ def _m1_require_session_open(s: Mamba1DecodeSession) raises:
 
 
 def _m1_session_open_run(mut s: Mamba1DecodeSession, a: List[Int], b: Int, dm: Int, position: Int = 0) raises:
-    """The GIL-free half of `mamba1_session_open`: the host weight lists
-    through the lane's own struct, one context, the device weights, the
-    state over fresh zeros, the L = 1 stages and the resident x buffer."""
-    var dims = MambaDims.of(dm)
-    var di = dims.d_inner
-    var r = dims.dt_rank
-    var xr = dims.x_proj_rows()
-    var w = MambaWeights(dims)
-    w.norm_w = _read_f32(a[1], dm)
-    w.w_in = _read_f32(a[2], 2 * di * dm)
-    w.conv_w = _read_f32(a[3], di * D_CONV)
-    w.conv_b = _read_f32(a[4], di)
-    w.w_x = _read_f32(a[5], xr * di)
-    w.w_dt = _read_f32(a[6], di * r)
-    w.b_dt = _read_f32(a[7], di)
-    w.a_log = _read_f32(a[8], di * D_STATE)
-    w.d_skip = _read_f32(a[9], di)
-    w.w_out = _read_f32(a[10], dm * di)
-    s.ctx = neural_ctx[_NEURAL_CTX]()
-    s.w = MambaDeviceWeights(s.ctx.value(), w)
-    var dstate = MambaDeviceState(s.ctx.value(), b, dims)
-    dstate.conv_win = mamba_upload(s.ctx.value(), _read_f32(a[11], b * di * D_CONV))
-    dstate.h = mamba_upload(s.ctx.value(), _read_f32(a[12], b * di * D_STATE))
-    s.state = dstate^
-    s.stages = MambaDeviceStages(s.ctx.value(), b, 1, dims)
-    s.dx = mamba_zeros(s.ctx.value(), b * dm)
+    """`a` = [0, ten weights in `mamba1_forward`'s order, conv_window, h]:
+    the program over the weights, the caller's state written in."""
+    var weights = List[Int](capacity=10)
+    for i in range(1, 11):  # small-loop(the ten Mamba-1 weight addresses)
+        weights.append(a[i])
+    var prog = MambaBlockProgram(OPS_M1_STEP, b, dm, List[Float32](), weights, False)
+    prog.load_state([a[11], a[12]], List[Int]())
+    s.prog = prog^
     s.b = b
     s.dm = dm
-    s.di = di
 
 
 def _m1_session_step_run(mut s: Mamba1DecodeSession, px: Int, py: Int) raises:
-    """One decode token on the resident structs, one completion wait."""
-    ref ctx = s.ctx.value()
-    var n = s.b * s.dm
-    mamba_copy_in(ctx, s.dx.value(), f32_ptr(px), n)
-    var trace = IdentityTrace.disabled()
-    mamba_step(ctx, s.stages.value(), s.state.value(), s.w.value(), s.dx.value(), s.b, trace,
-               String("py.session"))
-    comptime if MAMBA_GUARD > 0:
-        var body = s.stages.value().residual_out.create_sub_buffer[DType.float32](0, n)
-        ctx.enqueue_copy(dst_ptr=f32_ptr(py), src_buf=body)
-        ctx.synchronize()
-        _ = body^
-    else:
-        if n != len(s.stages.value().residual_out):
-            raise Error("mamba1 session: the L = 1 stages hold a different output length")
-        ctx.enqueue_copy(dst_ptr=f32_ptr(py), src_buf=s.stages.value().residual_out)
-        ctx.synchronize()
+    """One decode token: the step op, one completion wait."""
+    _ = s.prog.value().step(px, py, List[Int]())
 
 
 def _m1_session_decode_run(mut s: Mamba1DecodeSession, px: Int, py: Int, steps: Int) raises:
-    """N decode tokens on the resident structs (decode plan D2): the caller's
-    (B, N, d_model) x is uploaded once, the step body of `_m1_session_step_run`
-    runs once per token with token t moved on the device, and the (B, N, d_model)
-    output comes back in one download behind one wait. Same kernels, same order
-    and same bytes as N `_m1_session_step_run` calls."""
-    decode_slab_check(s.b, steps, s.dm, "mamba1 session decode")
-    ref ctx = s.ctx.value()
-    var row = s.b * s.dm
-    var xs = mamba_device_alloc(ctx, row * steps)
-    var ys = mamba_device_alloc(ctx, row * steps)
-    mamba_copy_in(ctx, xs, f32_ptr(px), row * steps)
-    var trace = IdentityTrace.disabled()
-    for t in range(steps):  # driver-loop: over autoregressive decode steps (each reads the state the previous step left), the session's one-token step body each
-        decode_slab_take(ctx, s.dx.value(), xs, s.b, steps, s.dm, t)
-        mamba_step(ctx, s.stages.value(), s.state.value(), s.w.value(), s.dx.value(), s.b, trace,
-                   String("py.session"))
-        decode_slab_put(ctx, ys, s.stages.value().residual_out, s.b, steps, s.dm, t)
-    _m2_session_download_direct(ctx, ys, row * steps, py)
-    ctx.synchronize()
-    # The host x and y stay borrowed until the wait above returns.
-    _ = xs^
-    _ = ys^
+    """N decode tokens in one call (decode plan D2), the step op per token."""
+    _ = s.prog.value().decode(px, py, steps, List[Int]())
 
 
 def _m1_session_export_run(mut s: Mamba1DecodeSession, pw: Int, ph: Int) raises:
-    ref ctx = s.ctx.value()
-    _write_f32(pw, mamba_download(ctx, s.state.value().conv_win, s.b * s.di * D_CONV))
-    _write_f32(ph, mamba_download(ctx, s.state.value().h, s.b * s.di * D_STATE))
+    _ = s.prog.value().export_state([pw, ph])
 
 
 def _m1_session_load_run(mut s: Mamba1DecodeSession, pw: Int, ph: Int) raises:
-    ref ctx = s.ctx.value()
-    s.state.value().conv_win = mamba_upload(ctx, _read_f32(pw, s.b * s.di * D_CONV))
-    s.state.value().h = mamba_upload(ctx, _read_f32(ph, s.b * s.di * D_STATE))
+    s.prog.value().load_state([pw, ph], List[Int]())
 
 
 # ===========================================================================
@@ -523,434 +348,31 @@ def _m1_session_load_run(mut s: Mamba1DecodeSession, pw: Int, ph: Int) raises:
 # ===========================================================================
 
 
-def _mamba2_run(
-    a: List[Int],
-    b: Int,
-    l: Int,
-    dm: Int,
-    q0: Int,
-    dt_lo: Float32,
-    dt_hi: Float32,
-) raises -> Int:
-    """The GIL-free half of the two Mamba-2 entry points. Returns the
-    post-call `buf_len` (DEVIATION 792: the one integer piece of the
-    three-piece state)."""
-    comptime if AFN_MAMBA_ARENA:
-        return _mamba2_run_arena(a, b, l, dm, q0, dt_lo, dt_hi)
-    # Mamba2Dims.of REFUSES a d_model that is not a multiple of 32, by
-    # name, with the profile rule -- reached BEFORE any buffer size below
-    # is computed from it, which is why nothing here pre-judges dm.
-    var dims = Mamba2Dims.of(dm)
-    var di = dims.d_inner
-    var cd = dims.conv_dim()
-    var dip = dims.d_in_proj()
-    var nh = dims.nheads
-    if q0 < 0 or q0 >= M2_CHUNK_SIZE:
-        raise Error(
-            String("mamba2: buf_len must be in [0, ")
-            + String(M2_CHUNK_SIZE)
-            + "), got "
-            + String(q0)
-            + "; the open-chunk buffer holds at most CHUNK_SIZE - 1 rows"
-            " between calls (contract section 5), so the two sides of this"
-            " boundary disagree about the state"
-        )
-
-    var w = Mamba2Weights(dims)
-    w.norm_w = _read_f32(a[1], dm)
-    w.w_in = _read_f32(a[2], dip * dm)
-    w.conv_w = _read_f32(a[3], cd * M2_D_CONV)
-    w.conv_b = _read_f32(a[4], cd)
-    w.dt_bias = _read_f32(a[5], nh)
-    w.a_log = _read_f32(a[6], nh)
-    w.d_skip = _read_f32(a[7], nh)
-    w.gnorm_w = _read_f32(a[8], di)
-    w.w_out = _read_f32(a[9], dm * di)
-
-    var h_n = b * nh * M2_HEADDIM * M2_D_STATE
-
-    var ctx = neural_ctx[_NEURAL_CTX]()
-    var dw = Mamba2DeviceWeights(ctx, w)
-    # The caller's three-piece state over the fresh zeros. A nonzero h
-    # with q0 == 0 IS the initial_states path (module header, DEVIATION
-    # 792).
-    var dstate = Mamba2DeviceState(ctx, b, dims)
-    # Keep the constructor's state allocations. Replacing these fields
-    # triggers an AMD HIP memory fault on the B2/L4/DM32 Python path;
-    # copying the same incoming bytes into the retained buffers passes
-    # the forward, decode and carried-state gates without changing math.
-    var incoming_conv = mamba_upload(ctx, _read_f32(a[10], b * cd * M2_D_CONV))
-    var incoming_h = mamba_upload(ctx, _read_f32(a[11], h_n))
-    var incoming_xbc = mamba_upload(ctx, _read_f32(a[12], b * M2_CHUNK_SIZE * cd))
-    var incoming_dt = mamba_upload(ctx, _read_f32(a[13], b * M2_CHUNK_SIZE * nh))
-    ctx.enqueue_copy(dst_buf=dstate.conv_win, src_buf=incoming_conv)
-    ctx.enqueue_copy(dst_buf=dstate.h, src_buf=incoming_h)
-    ctx.enqueue_copy(dst_buf=dstate.buf_xbc, src_buf=incoming_xbc)
-    ctx.enqueue_copy(dst_buf=dstate.buf_dtraw, src_buf=incoming_dt)
-    ctx.synchronize()
-    _ = incoming_conv^
-    _ = incoming_h^
-    _ = incoming_xbc^
-    _ = incoming_dt^
-    dstate.buf_len = q0
-    var dstages = Mamba2DeviceStages(ctx, b, l, q0, dims)
-    var dx = mamba_upload(ctx, _read_f32(a[0], b * l * dm))
-
-    var trace = IdentityTrace.disabled()
-    mamba2_block_forward(
-        ctx, dstages, dstate, dw, dx, b, l, dt_lo, dt_hi, trace, String("py")
-    )
-
-    # Straight into the caller's arrays, one wait (lane/neural-apple,
-    # 2026-09-28; was a host List per piece, a wait and a second copy each).
-    _m3_download_addr[False](ctx, dstages.residual_out, b * l * dm, a[14])
-    # h_last: the REPORT stage (S17 after the final PADDED chunk), NOT
-    # the resumption state -- contract section 5's distinction, kept.
-    _m3_download_addr[False](ctx, dstages.h_last, h_n, a[15])
-    _m3_download_addr[False](ctx, dstate.conv_win, b * cd * M2_D_CONV, a[10])
-    _m3_download_addr[False](ctx, dstate.h, h_n, a[11])
-    _m3_download_addr[False](ctx, dstate.buf_xbc, b * M2_CHUNK_SIZE * cd, a[12])
-    _m3_download_addr[False](ctx, dstate.buf_dtraw, b * M2_CHUNK_SIZE * nh, a[13])
-    ctx.synchronize()
-    var out_len = dstate.buf_len
-    _ = dw^
-    _ = dstate^
-    _ = dstages^
-    _ = dx^
-    _ = ctx^
-    return out_len
+# TOMBSTONE: _mamba2_run, _mamba2_run_arena, _mamba2_arena_execute, _mamba2_arena_execute_prepared, Mamba2PublicWorkspace, _mamba2_workspace_step (the per-call Mamba-2 bodies and the public-step workspace), the Mamba-2 decode session body and its IDN_DECODE_RESIDENT_IO_M2 site, _m2_session_download_direct (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by X5SHA; code recoverable at 25e5650c14.
+# Restore: git apply experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch
+# The per-call Mamba-2 forward/step is `mamba_block_call(OPS_M2_STEP, ...)`;
+# the public step's workspace (storage kept across steps, every weight
+# re-uploaded per call) is the cached program. The session below returns y
+# and h_last straight into the caller's arrays behind one wait (the ON arm of
+# IDN_DECODE_RESIDENT_IO for Mamba-2 is the only arm now; the define stays for
+# the transformer session).
 
 
-struct Mamba2PublicWorkspace(Movable):
-    """Private public-step storage, never an immutable-weight decode session.
-
-    The provider pins its compiled image and this owner until dispatch returns.
-    The native descriptor loans storage exclusively; concurrent calls use their
-    own temporary workspace. All incoming bytes are refreshed on every call.
-    """
-    var ctx: Optional[DeviceContext]
-    var arena: Optional[MambaArena]
-    var arena_prefix: Int
-    var arena_prefix_views: Int
-    var weights: Optional[Mamba2DeviceWeights]
-    var state: Optional[Mamba2DeviceState]
-    var dx: Optional[DeviceBuffer[DType.float32]]
-    var b: Int
-    var dm: Int
-    var device: Int
-
-    def __init__(out self):
-        self.ctx = None
-        self.arena = None
-        self.arena_prefix = 0
-        self.arena_prefix_views = 0
-        self.weights = None
-        self.state = None
-        self.dx = None
-        self.b = 0
-        self.dm = 0
-        self.device = -1
-
-    def clear(mut self) raises:
-        # Drain all outstanding transfers before releasing their buffers. A
-        # failed call never makes partially refreshed storage available again.
-        try:
-            if self.ctx:
-                self.ctx.value().synchronize()
-        finally:
-            self.dx = None
-            self.state = None
-            self.weights = None
-            self.arena = None
-            self.arena_prefix = 0
-            self.arena_prefix_views = 0
-            try:
-                # Device frees may enqueue work too. Preserve the context
-                # until their completion, as the existing session release does.
-                if self.ctx:
-                    self.ctx.value().synchronize()
-            finally:
-                self.ctx = None
-                self.b = 0
-                self.dm = 0
-                self.device = -1
-
-
-def _mamba2_workspace_step(
-    mut workspace: Mamba2PublicWorkspace, a: List[Int], b: Int, dm: Int,
-    q0: Int, dt_lo: Float32, dt_hi: Float32,
-) raises -> Int:
-    """Reads the device plan once and runs the planned overload below."""
-    return _mamba2_workspace_step(
-        neural_device_plan(),
-        workspace,
-        a,
-        b,
-        dm,
-        q0,
-        dt_lo,
-        dt_hi,
-    )
-
-
-def _mamba2_workspace_step(
-    dplan: DevicePlan,
-    mut workspace: Mamba2PublicWorkspace, a: List[Int], b: Int, dm: Int,
-    q0: Int, dt_lo: Float32, dt_hi: Float32,
-) raises -> Int:
-    # Same first refusals as _mamba2_run; no pointer-identity weight cache.
-    var dims = Mamba2Dims.of(dm)
-    var di = dims.d_inner
-    var cd = dims.conv_dim()
-    var dip = dims.d_in_proj()
-    var nh = dims.nheads
-    if q0 < 0 or q0 >= M2_CHUNK_SIZE:
-        raise Error(
-            String("mamba2: buf_len must be in [0, ")
-            + String(M2_CHUNK_SIZE)
-            + "), got "
-            + String(q0)
-            + "; the open-chunk buffer holds at most CHUNK_SIZE - 1 rows"
-            " between calls (contract section 5), so the two sides of this"
-            " boundary disagree about the state"
-        )
-    var device = max(0, dplan.root)
-    comptime if AFN_MAMBA_ARENA:
-        # The default identical GPU route already groups all buffers into one
-        # arena. Retain that allocation without changing its logical views.
-        # q0 is bounded by the state contract; L=1, hence this capacity covers
-        # every legal next step, independent of any benchmark shape.
-        if not workspace.ctx or workspace.b != b or workspace.dm != dm or workspace.device != device:
-            workspace.clear()
-            workspace.ctx = neural_ctx[_NEURAL_CTX](dplan)
-            workspace.arena = MambaArena(workspace.ctx.value(),
-                mamba2_arena_floats(b, 1, M2_CHUNK_SIZE - 1, dims), MAMBA_GUARD)
-            workspace.b = b
-            workspace.dm = dm
-            workspace.device = device
-        comptime if MAMBA_POISON:
-            # Preserve diagnostic body-zero fills performed by every take;
-            # poison builds intentionally retain their per-call descriptors.
-            if workspace.arena.value().off != 0:
-                workspace.arena.value().reset(mamba2_arena_floats(b, 1, q0, dims))
-            return _mamba2_arena_execute(workspace.ctx.value(), workspace.arena.value(),
-                                        a, b, 1, dm, q0, dt_lo, dt_hi, dims)
-        else:
-            if not workspace.weights:
-                # Only layout descriptors persist. The full live weight/state
-                # bytes are uploaded below on every call, including this one.
-                workspace.weights = Mamba2DeviceWeights(workspace.ctx.value(), dims, workspace.arena.value())
-                workspace.state = Mamba2DeviceState(workspace.ctx.value(), b, dims, workspace.arena.value())
-                workspace.arena_prefix = workspace.arena.value().off
-                workspace.arena_prefix_views = workspace.arena.value().views
-            else:
-                var used = workspace.arena_prefix + mamba2_arena_work_floats(b, 1, q0, dims)
-                workspace.arena.value().reset(used, workspace.arena_prefix, workspace.arena_prefix_views)
-            return _mamba2_arena_execute_prepared(workspace.ctx.value(), workspace.arena.value(),
-                a, b, 1, dm, q0, dt_lo, dt_hi, dims, workspace.weights, workspace.state)
-    if not workspace.ctx or workspace.b != b or workspace.dm != dm or workspace.device != device:
-        workspace.clear()
-        workspace.ctx = neural_ctx[_NEURAL_CTX](dplan)
-        ref setup_ctx = workspace.ctx.value()
-        workspace.weights = Mamba2DeviceWeights(setup_ctx, dims)
-        # Constructor-owned state buffers are NEVER replaced individually:
-        # the original _mamba2_run records the AMD field-replacement fault.
-        workspace.state = Mamba2DeviceState(setup_ctx, b, dims)
-        workspace.dx = mamba_zeros(setup_ctx, b * dm)
-        workspace.b = b
-        workspace.dm = dm
-        workspace.device = device
-    ref ctx = workspace.ctx.value()
-    ref weights = workspace.weights.value()
-    ref state = workspace.state.value()
-    ref dx = workspace.dx.value()
-    weights.weights_checked = False
-    mamba_copy_in(ctx, weights.norm_w, f32_ptr(a[1]), dm)
-    mamba_copy_in(ctx, weights.w_in, f32_ptr(a[2]), dip * dm)
-    mamba_copy_in(ctx, weights.conv_w, f32_ptr(a[3]), cd * M2_D_CONV)
-    mamba_copy_in(ctx, weights.conv_b, f32_ptr(a[4]), cd)
-    mamba_copy_in(ctx, weights.dt_bias, f32_ptr(a[5]), nh)
-    mamba_copy_in(ctx, weights.a_log, f32_ptr(a[6]), nh)
-    mamba_copy_in(ctx, weights.d_skip, f32_ptr(a[7]), nh)
-    mamba_copy_in(ctx, weights.gnorm_w, f32_ptr(a[8]), di)
-    mamba_copy_in(ctx, weights.w_out, f32_ptr(a[9]), dm * di)
-    var h_n = b * nh * M2_HEADDIM * M2_D_STATE
-    mamba_copy_in(ctx, state.conv_win, f32_ptr(a[10]), b * cd * M2_D_CONV)
-    mamba_copy_in(ctx, state.h, f32_ptr(a[11]), h_n)
-    mamba_copy_in(ctx, state.buf_xbc, f32_ptr(a[12]), b * M2_CHUNK_SIZE * cd)
-    mamba_copy_in(ctx, state.buf_dtraw, f32_ptr(a[13]), b * M2_CHUNK_SIZE * nh)
-    mamba_copy_in(ctx, dx, f32_ptr(a[0]), b * dm)
-    ctx.synchronize()
-    state.buf_len = q0
-    # q0 changes each step; stages encode q0 + L and chunk counts. Keep their
-    # original fresh zero initialization until capacity/logical spans are split.
-    var stages = Mamba2DeviceStages(ctx, b, 1, q0, dims)
-    try:
-        var trace = IdentityTrace.disabled()
-        mamba2_block_forward(ctx, stages, state, weights, dx, b, 1,
-                            dt_lo, dt_hi, trace, String("py"))
-        _m3_download_addr[False](ctx, stages.residual_out, b * dm, a[14])
-        _m3_download_addr[False](ctx, stages.h_last, h_n, a[15])
-        _m3_download_addr[False](ctx, state.conv_win, b * cd * M2_D_CONV, a[10])
-        _m3_download_addr[False](ctx, state.h, h_n, a[11])
-        _m3_download_addr[False](ctx, state.buf_xbc, b * M2_CHUNK_SIZE * cd, a[12])
-        _m3_download_addr[False](ctx, state.buf_dtraw, b * M2_CHUNK_SIZE * nh, a[13])
-    except problem:
-        # Keep stages and borrowed host owners live while draining partial work;
-        # a second device cleanup failure must not replace the operation error.
-        try:
-            ctx.synchronize()
-        except:
-            pass
-        _ = stages
-        raise problem^
-    ctx.synchronize()
-    _ = stages
-    return state.buf_len
-
-
-def _mamba2_run_arena(
-    a: List[Int],
-    b: Int,
-    l: Int,
-    dm: Int,
-    q0: Int,
-    dt_lo: Float32,
-    dt_hi: Float32,
-) raises -> Int:
-    """`_mamba2_run` under MOJOLEARN_AFN_MAMBA_ARENA (lane afn-mamba): one
-    arena, views, direct copies in, ONE wait at the end."""
-    var dims = Mamba2Dims.of(dm)
-    var di = dims.d_inner
-    var cd = dims.conv_dim()
-    var dip = dims.d_in_proj()
-    var nh = dims.nheads
-    if q0 < 0 or q0 >= M2_CHUNK_SIZE:
-        raise Error(
-            String("mamba2: buf_len must be in [0, ")
-            + String(M2_CHUNK_SIZE)
-            + "), got "
-            + String(q0)
-            + "; the open-chunk buffer holds at most CHUNK_SIZE - 1 rows"
-            " between calls (contract section 5), so the two sides of this"
-            " boundary disagree about the state"
-        )
-    var h_n = b * nh * M2_HEADDIM * M2_D_STATE
-    var ctx = neural_ctx[_NEURAL_CTX]()
-    var arena = MambaArena(ctx, mamba2_arena_floats(b, l, q0, dims), MAMBA_GUARD)
-    return _mamba2_arena_execute(ctx, arena, a, b, l, dm, q0, dt_lo, dt_hi, dims)
-
-
-def _mamba2_arena_execute(
-    ctx: DeviceContext, mut arena: MambaArena, a: List[Int], b: Int, l: Int,
-    dm: Int, q0: Int, dt_lo: Float32, dt_hi: Float32, dims: Mamba2Dims,
-) raises -> Int:
-    var weights_owner = Optional[Mamba2DeviceWeights]()
-    var state_owner = Optional[Mamba2DeviceState]()
-    try:
-        return _mamba2_arena_execute_prepared(ctx, arena, a, b, l, dm, q0,
-            dt_lo, dt_hi, dims, weights_owner, state_owner)
-    finally:
-        _ = weights_owner
-        _ = state_owner
-
-
-def _mamba2_arena_execute_prepared(
-    ctx: DeviceContext, mut arena: MambaArena, a: List[Int], b: Int, l: Int,
-    dm: Int, q0: Int, dt_lo: Float32, dt_hi: Float32, dims: Mamba2Dims,
-    mut weights_owner: Optional[Mamba2DeviceWeights], mut state_owner: Optional[Mamba2DeviceState],
-) raises -> Int:
-    # Shared one-shot/retained storage orchestration. Same logical view order,
-    # full mutable byte uploads, arithmetic entry and downloads on both routes.
-    var di = dims.d_inner
-    var cd = dims.conv_dim()
-    var dip = dims.d_in_proj()
-    var nh = dims.nheads
-    var h_n = b * nh * M2_HEADDIM * M2_D_STATE
-    var stages_owner = Optional[Mamba2DeviceStages]()
-    var input_owner = Optional[DeviceBuffer[DType.float32]]()
-    try:
-        if not weights_owner:
-            weights_owner = Mamba2DeviceWeights(ctx, dims, arena)
-        ref dw = weights_owner.value()
-        dw.weights_checked = False
-        mamba_copy_in(ctx, dw.norm_w, _f32_ptr(a[1]), dm)
-        mamba_copy_in(ctx, dw.w_in, _f32_ptr(a[2]), dip * dm)
-        mamba_copy_in(ctx, dw.conv_w, _f32_ptr(a[3]), cd * M2_D_CONV)
-        mamba_copy_in(ctx, dw.conv_b, _f32_ptr(a[4]), cd)
-        mamba_copy_in(ctx, dw.dt_bias, _f32_ptr(a[5]), nh)
-        mamba_copy_in(ctx, dw.a_log, _f32_ptr(a[6]), nh)
-        mamba_copy_in(ctx, dw.d_skip, _f32_ptr(a[7]), nh)
-        mamba_copy_in(ctx, dw.gnorm_w, _f32_ptr(a[8]), di)
-        mamba_copy_in(ctx, dw.w_out, _f32_ptr(a[9]), dm * di)
-        if not state_owner:
-            state_owner = Mamba2DeviceState(ctx, b, dims, arena)
-        ref dstate = state_owner.value()
-        mamba_copy_in(ctx, dstate.conv_win, _f32_ptr(a[10]), b * cd * M2_D_CONV)
-        mamba_copy_in(ctx, dstate.h, _f32_ptr(a[11]), h_n)
-        mamba_copy_in(ctx, dstate.buf_xbc, _f32_ptr(a[12]), b * M2_CHUNK_SIZE * cd)
-        mamba_copy_in(ctx, dstate.buf_dtraw, _f32_ptr(a[13]), b * M2_CHUNK_SIZE * nh)
-        dstate.buf_len = q0
-        stages_owner = Mamba2DeviceStages(ctx, b, l, q0, dims, arena)
-        ref dstages = stages_owner.value()
-        input_owner = arena.take(ctx, b * l * dm)
-        ref dx = input_owner.value()
-        mamba_copy_in(ctx, dx, _f32_ptr(a[0]), b * l * dm)
-
-        var trace = IdentityTrace.disabled()
-        mamba2_block_forward(
-            ctx, dstages, dstate, dw, dx, b, l, dt_lo, dt_hi, trace, String("py")
-        )
-
-        _m3_download_addr[False](ctx, dstages.residual_out, b * l * dm, a[14])
-        _m3_download_addr[False](ctx, dstages.h_last, h_n, a[15])
-        _m3_download_addr[False](ctx, dstate.conv_win, b * cd * M2_D_CONV, a[10])
-        _m3_download_addr[False](ctx, dstate.h, h_n, a[11])
-        _m3_download_addr[False](ctx, dstate.buf_xbc, b * M2_CHUNK_SIZE * cd, a[12])
-        _m3_download_addr[False](ctx, dstate.buf_dtraw, b * M2_CHUNK_SIZE * nh, a[13])
-        ctx.synchronize()
-        var out_len = dstate.buf_len
-        return out_len
-    except problem:
-        # Partial upload, construction or kernel failure still drains while all
-        # successfully constructed views and the arena owner remain pinned.
-        try:
-            ctx.synchronize()
-        except:
-            pass
-        raise problem^
-    finally:
-        _ = input_owner
-        _ = stages_owner
-        _ = state_owner
-        _ = weights_owner
-
-
-# Resident Mamba-2 decode.  The arithmetic entry remains
-# `mamba2_block_forward(..., L=1)`.  Only the device context, immutable
-# weights, recurrent state, and input allocation survive between calls.
-# Stages are rebuilt because their working extents depend on buf_len.
 struct Mamba2DecodeSession(Movable, Writable):
-    var ctx: Optional[DeviceContext]
-    var w: Optional[Mamba2DeviceWeights]
-    var state: Optional[Mamba2DeviceState]
-    var dx: Optional[DeviceBuffer[DType.float32]]
+    """The resident Mamba-2 decode session: one executor program; every
+    token is the block step op at L = 1 (`mamba2_block_forward`, stages at
+    the carried buf_len). The state fields are views of the program's state
+    tensor and are never replaced (the AMD field-replacement fault)."""
+    var prog: Optional[MambaBlockProgram]
     var b: Int
     var dm: Int
-    var dt_lo: Float32
-    var dt_hi: Float32
     var busy: Bool
     var usable: Bool
 
     def __init__(out self):
-        self.ctx = None
-        self.w = None
-        self.state = None
-        self.dx = None
+        self.prog = None
         self.b = 0
         self.dm = 0
-        self.dt_lo = 0.0
-        self.dt_hi = 0.0
         self.busy = False
         self.usable = True
 
@@ -961,18 +383,15 @@ struct Mamba2DecodeSession(Movable, Writable):
         writer.write("Mamba2DecodeSession")
 
     def is_open(self) -> Bool:
-        return Bool(self.ctx) and Bool(self.state)
+        return Bool(self.prog)
 
     def release(mut self):
-        self.dx = None
-        self.state = None
-        self.w = None
-        if self.ctx:
+        if self.prog:
             try:
-                self.ctx.value().synchronize()
+                self.prog.value().close()
             except:
                 pass
-        self.ctx = None
+        self.prog = None
 
     def __deinit__(deinit self):
         self.release()
@@ -997,151 +416,36 @@ def _m2_session_open_run(
     mut s: Mamba2DecodeSession, a: List[Int], b: Int, dm: Int, q0: Int,
     dt_lo: Float32, dt_hi: Float32,
 ) raises:
-    var dims = Mamba2Dims.of(dm)
-    var di = dims.d_inner
-    var cd = dims.conv_dim()
-    var dip = dims.d_in_proj()
-    var nh = dims.nheads
-    if q0 < 0 or q0 >= M2_CHUNK_SIZE:
-        raise Error("mamba2_session_open: buf_len out of range")
-    var hw = Mamba2Weights(dims)
-    hw.norm_w = _read_f32(a[0], dm)
-    hw.w_in = _read_f32(a[1], dip * dm)
-    hw.conv_w = _read_f32(a[2], cd * M2_D_CONV)
-    hw.conv_b = _read_f32(a[3], cd)
-    hw.dt_bias = _read_f32(a[4], nh)
-    hw.a_log = _read_f32(a[5], nh)
-    hw.d_skip = _read_f32(a[6], nh)
-    hw.gnorm_w = _read_f32(a[7], di)
-    hw.w_out = _read_f32(a[8], dm * di)
-    s.ctx = neural_ctx[_NEURAL_CTX]()
-    ref ctx = s.ctx.value()
-    s.w = Mamba2DeviceWeights(ctx, hw)
-    s.state = Mamba2DeviceState(ctx, b, dims)
-    ref state = s.state.value()
-    mamba_copy_in(ctx, state.conv_win, f32_ptr(a[9]), b * cd * M2_D_CONV)
-    mamba_copy_in(ctx, state.h, f32_ptr(a[10]), b * nh * M2_HEADDIM * M2_D_STATE)
-    mamba_copy_in(ctx, state.buf_xbc, f32_ptr(a[11]), b * M2_CHUNK_SIZE * cd)
-    mamba_copy_in(ctx, state.buf_dtraw, f32_ptr(a[12]), b * M2_CHUNK_SIZE * nh)
-    ctx.synchronize()
-    state.buf_len = q0
-    s.dx = mamba_zeros(ctx, b * dm)
+    """`a` = [nine weights in `mamba2_forward`'s order, conv_window, h,
+    buffer_xbc, buffer_dtraw]."""
+    var weights = List[Int](capacity=9)
+    for i in range(9):  # small-loop(the nine Mamba-2 weight addresses)
+        weights.append(a[i])
+    var fs: List[Float32] = [dt_lo, dt_hi]
+    var prog = MambaBlockProgram(OPS_M2_STEP, b, dm, fs, weights, False)
+    prog.load_state([a[9], a[10], a[11], a[12]], [q0])
+    s.prog = prog^
     s.b = b
     s.dm = dm
-    s.dt_lo = dt_lo
-    s.dt_hi = dt_hi
-
-
-comptime IDN_DECODE_RESIDENT_IO_M2 = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined[
-    "MOJOLEARN_IDN_DECODE_RESIDENT_IO"
-]()
-"""`-D MOJOLEARN_IDN_DECODE_RESIDENT_IO` (lane decode-resident, 2026-10-28),
-default OFF, on the resident Mamba-2 session step: y and the h_last report
-go from the device straight into the caller's arrays (two enqueued copies,
-then ONE wait), where the shipped step downloads each into a host List with
-its own wait and copies the List into the caller's array. The same bytes
-land in the same arrays; the block call (and its refusal) is unchanged."""
-
-
-def _m2_session_download_direct(
-    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, addr: Int
-) raises:
-    """Enqueue `buf[0:n]` into the caller's array at `addr`; no wait."""
-    if n > len(buf):
-        raise Error("mamba2 session: download longer than its stage")
-    var dst = f32_ptr(addr)
-    if n == len(buf):
-        ctx.enqueue_copy(dst_ptr=dst, src_buf=buf)
-    else:
-        var view = buf.create_sub_buffer[DType.float32](0, n)
-        ctx.enqueue_copy(dst_ptr=dst, src_buf=view)
-        _ = view^
 
 
 def _m2_session_step_run(mut s: Mamba2DecodeSession, px: Int, py: Int, ph: Int) raises -> Int:
-    ref ctx = s.ctx.value()
-    ref state = s.state.value()
-    var dims = Mamba2Dims.of(s.dm)
-    var stages = Mamba2DeviceStages(ctx, s.b, 1, state.buf_len, dims)
-    mamba_copy_in(ctx, s.dx.value(), f32_ptr(px), s.b * s.dm)
-    var trace = IdentityTrace.disabled()
-    mamba2_block_forward(ctx, stages, state, s.w.value(), s.dx.value(), s.b, 1,
-                         s.dt_lo, s.dt_hi, trace, String("py.session"))
-    comptime if IDN_DECODE_RESIDENT_IO_M2:
-        _m2_session_download_direct(ctx, stages.residual_out, s.b * s.dm, py)
-        _m2_session_download_direct(ctx, stages.h_last,
-            s.b * dims.nheads * M2_HEADDIM * M2_D_STATE, ph)
-        ctx.synchronize()
-        _ = stages^
-        return state.buf_len
-    _write_f32(py, mamba_download(ctx, stages.residual_out, s.b * s.dm))
-    _write_f32(ph, mamba_download(ctx, stages.h_last,
-        s.b * dims.nheads * M2_HEADDIM * M2_D_STATE))
-    return state.buf_len
+    """One token: y and the h_last report into the caller's arrays, one
+    wait; returns the carried buf_len."""
+    return s.prog.value().step(px, py, [ph])[0]
 
 
 def _m2_session_decode_run(mut s: Mamba2DecodeSession, px: Int, py: Int, ph: Int, steps: Int) raises -> Int:
-    """N decode tokens on the resident Mamba-2 session (decode plan D2): one
-    (B, N, d_model) upload, the step body of `_m2_session_step_run` per token
-    (stages rebuilt per token at the carried buf_len, as the step does), one
-    output download and the LAST token's h_last report, behind one wait. Same
-    kernels, same order and same bytes as N `_m2_session_step_run` calls."""
-    decode_slab_check(s.b, steps, s.dm, "mamba2 session decode")
-    ref ctx = s.ctx.value()
-    ref state = s.state.value()
-    var dims = Mamba2Dims.of(s.dm)
-    var row = s.b * s.dm
-    var xs = mamba_device_alloc(ctx, row * steps)
-    var ys = mamba_device_alloc(ctx, row * steps)
-    mamba_copy_in(ctx, xs, f32_ptr(px), row * steps)
-    var trace = IdentityTrace.disabled()
-    var last = Optional[Mamba2DeviceStages]()
-    for t in range(steps):  # driver-loop: over autoregressive decode steps (each reads the state the previous step left), the session's one-token step body each
-        var stages = Mamba2DeviceStages(ctx, s.b, 1, state.buf_len, dims)
-        decode_slab_take(ctx, s.dx.value(), xs, s.b, steps, s.dm, t)
-        mamba2_block_forward(ctx, stages, state, s.w.value(), s.dx.value(), s.b, 1,
-                             s.dt_lo, s.dt_hi, trace, String("py.session"))
-        decode_slab_put(ctx, ys, stages.residual_out, s.b, steps, s.dm, t)
-        # The previous token's stages return to the stream-ordered pool.
-        last = stages^
-    _m2_session_download_direct(ctx, ys, row * steps, py)
-    _m2_session_download_direct(ctx, last.value().h_last,
-        s.b * dims.nheads * M2_HEADDIM * M2_D_STATE, ph)
-    ctx.synchronize()
-    _ = last^
-    _ = xs^
-    _ = ys^
-    return state.buf_len
+    """N tokens in one call (decode plan D2); the last token's h_last."""
+    return s.prog.value().decode(px, py, steps, [ph])[0]
 
 
 def _m2_session_export_run(mut s: Mamba2DecodeSession, a: List[Int]) raises -> Int:
-    ref ctx = s.ctx.value()
-    ref state = s.state.value()
-    var dims = Mamba2Dims.of(s.dm)
-    var cd = dims.conv_dim()
-    var nh = dims.nheads
-    _write_f32(a[0], mamba_download(ctx, state.conv_win, s.b * cd * M2_D_CONV))
-    _write_f32(a[1], mamba_download(ctx, state.h, s.b * nh * M2_HEADDIM * M2_D_STATE))
-    _write_f32(a[2], mamba_download(ctx, state.buf_xbc, s.b * M2_CHUNK_SIZE * cd))
-    _write_f32(a[3], mamba_download(ctx, state.buf_dtraw, s.b * M2_CHUNK_SIZE * nh))
-    return state.buf_len
+    return s.prog.value().export_state(a)[0]
 
 
 def _m2_session_load_run(mut s: Mamba2DecodeSession, a: List[Int], q0: Int) raises:
-    if q0 < 0 or q0 >= M2_CHUNK_SIZE:
-        raise Error("mamba2_session_load_state: buf_len out of range")
-    ref ctx = s.ctx.value()
-    ref state = s.state.value()
-    var dims = Mamba2Dims.of(s.dm)
-    var cd = dims.conv_dim()
-    var nh = dims.nheads
-    # Retain constructor-owned buffers; replacing them faults on AMD.
-    mamba_copy_in(ctx, state.conv_win, f32_ptr(a[0]), s.b * cd * M2_D_CONV)
-    mamba_copy_in(ctx, state.h, f32_ptr(a[1]), s.b * nh * M2_HEADDIM * M2_D_STATE)
-    mamba_copy_in(ctx, state.buf_xbc, f32_ptr(a[2]), s.b * M2_CHUNK_SIZE * cd)
-    mamba_copy_in(ctx, state.buf_dtraw, f32_ptr(a[3]), s.b * M2_CHUNK_SIZE * nh)
-    ctx.synchronize()
-    state.buf_len = q0
+    s.prog.value().load_state(a, [q0])
 
 
 # ===========================================================================
@@ -1179,323 +483,43 @@ def _m3_load_weights[wait: Bool = True](ctx: DeviceContext, a: List[Int], dims: 
         return Mamba3DeviceWeights(ctx, w)
 
 
-def _mamba3_run[discard_state: Bool = False](
-    a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
-) raises -> Int:
-    """The GIL-free half of the two Mamba-3 entry points. Returns the
-    post-call `buf_len` (DEVIATION 794: `pending` needs no return slot
-    because a shipped binding always consumes it)."""
-    comptime if AFN_MAMBA_ARENA:
-        return _mamba3_run_arena[discard_state](a, b, l, dm, q0, pend)
-    # Mamba3Dims.of REFUSES a d_model that is not a multiple of 32, by
-    # name -- reached BEFORE any buffer size below is computed from it.
-    var dims = Mamba3Dims.of(dm)
-    var di = dims.d_inner
-    var dip = dims.d_in_proj()
-    var nh = dims.nheads
-    if q0 < 0 or q0 > M3_CHUNK_SIZE:
-        raise Error(
-            String("mamba3: buf_len must be in [0, ")
-            + String(M3_CHUNK_SIZE)
-            + "] (INCLUSIVE -- the buffer never empties, DEVIATION"
-            " 832(i): r in [1, Q] after every call, 0 only before the"
-            " first token), got "
-            + String(q0)
-            + "; the two sides of this boundary disagree about the state"
-        )
-    if pend != 0 and pend != 1:
-        raise Error(
-            "mamba3: pending must be 0 or 1, got "
-            + String(pend)
-            + "; the two sides of this boundary disagree about the state"
-        )
-
-    var phase_tick = 0
-    comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
-        phase_tick = Int(perf_counter_ns())
-
-    var theta_n = b * nh * M3_NUM_ROPE_ANGLES
-    var h_n = b * nh * M3_HEADDIM * M3_D_STATE
-    var qrow_n = b * M3_CHUNK_SIZE * nh
-    var k_n = b * nh * M3_D_STATE
-    var v_n = b * nh * M3_HEADDIM
-
-    var ctx = neural_ctx[_NEURAL_CTX]()
-    m3_phase_tick(ctx, phase_tick, String("surface.weight_lists_and_context"))
-    var dw = _m3_load_weights[False](ctx, a, dims)
-    m3_phase_tick(ctx, phase_tick, String("surface.weight_upload"))
-    var out_len = _mamba3_run_on[discard_state](ctx, dw, a, b, l, dm, q0, pend, phase_tick)
-    _ = dw^
-    _ = ctx^
-    comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
-        print("M3_PHASE", "surface.context_destruction", Float64(Int(perf_counter_ns()) - phase_tick) / 1e6)
-    return out_len
+# TOMBSTONE: _mamba3_run, _mamba3_check_state_words, _mamba3_run_on, _mamba3_run_arena (the per-call Mamba-3 body: nine weight and ten state uploads, fifteen downloads per call) and the Mamba-3 decode session body (moved onto the block step op, lane x5-mamba-on-executor) deleted 2026-11-09 by X5SHA; code recoverable at 25e5650c14.
+# Restore: git apply experiments/removed/X5_MAMBA_PER_CALL_BODIES.patch
+# The per-call Mamba-3 forward/step is `mamba_block_call(OPS_M3_STEP, ...)`;
+# the discard-state prefill (`mamba3_forward_fresh`'s fallback) is the same
+# call with `fresh=True`.
 
 
-def _mamba3_check_state_words(q0: Int, pend: Int) raises:
-    if q0 < 0 or q0 > M3_CHUNK_SIZE:
-        raise Error(
-            String("mamba3: buf_len must be in [0, ")
-            + String(M3_CHUNK_SIZE)
-            + "] (INCLUSIVE -- the buffer never empties, DEVIATION"
-            " 832(i): r in [1, Q] after every call, 0 only before the"
-            " first token), got "
-            + String(q0)
-            + "; the two sides of this boundary disagree about the state"
-        )
-    if pend != 0 and pend != 1:
-        raise Error(
-            "mamba3: pending must be 0 or 1, got "
-            + String(pend)
-            + "; the two sides of this boundary disagree about the state"
-        )
-
-
-def _mamba3_run_owned(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int) raises -> Int:
-    """`_mamba3_run` (the carried-state forward or decode step) reading the
-    session's installed owned weights where they live on the device
-    (lane migrate-neural-2: the state and decode calls uploaded the host
-    weights again although the snapshot was resident). `a` is the 25-slot
-    list; its nine weight slots are not read. The same block on the same
-    weight bytes, so the same bits."""
-    var dims = Mamba3Dims.of(dm)
-    _mamba3_check_state_words(q0, pend)
-    comptime if not NN40_OWNED_WEIGHTS:
-        raise Error("mamba3 owned weights: NN40 arm is disabled")
-    if not s.owned_weights or not s.w or s.dm != dm:
-        raise Error("mamba3 owned weights: install a matching snapshot first")
-    if not s.ctx:
-        s.ctx = neural_ctx[_NEURAL_CTX]()
-    var phase_tick = 0
-    comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
-        phase_tick = Int(perf_counter_ns())
-    ref ctx = s.ctx.value()
-    return _mamba3_run_on[False](ctx, s.w.value(), a, b, l, dm, q0, pend, phase_tick)
-
-
-def _mamba3_run_on[discard_state: Bool = False](
-    ctx: DeviceContext, mut dw: Mamba3DeviceWeights, a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int,
-    var phase_tick: Int,
-) raises -> Int:
-    """`_mamba3_run` after its weights are on the device: the state upload,
-    the block, the downloads and the one wait."""
-    var dims = Mamba3Dims.of(dm)
-    var nh = dims.nheads
-    var theta_n = b * nh * M3_NUM_ROPE_ANGLES
-    var h_n = b * nh * M3_HEADDIM * M3_D_STATE
-    var qrow_n = b * M3_CHUNK_SIZE * nh
-    var k_n = b * nh * M3_D_STATE
-    var v_n = b * nh * M3_HEADDIM
-    # The caller's ten-piece state over the fresh zeros (DEVIATION 794).
-    var dstate = Mamba3DeviceState(ctx, b, dims)
-    comptime if not discard_state:
-        dstate.buf_qrot = _m3_upload_addr[False](ctx, a[12], qrow_n * M3_D_STATE)
-        dstate.buf_krot = _m3_upload_addr[False](ctx, a[13], qrow_n * M3_D_STATE)
-        dstate.buf_v = _m3_upload_addr[False](ctx, a[14], qrow_n * M3_HEADDIM)
-        dstate.buf_dt = _m3_upload_addr[False](ctx, a[15], qrow_n)
-        dstate.buf_sig = _m3_upload_addr[False](ctx, a[16], qrow_n)
-        dstate.buf_adt = _m3_upload_addr[False](ctx, a[17], qrow_n)
-        dstate.buf_len = q0
-        if pend == 1:
-            # THROUGH the lane's own helper, AFTER buf_len is set, so its
-            # fresh-state refusal (buf_len must be 0) fires from Python by
-            # the lane's own words (DEVIATION 794).
-            dstate.set_input_states(
-                ctx,
-                _m3_read_f32(a[10], theta_n),
-                _m3_read_f32(a[11], h_n),
-                _m3_read_f32(a[18], k_n),
-                _m3_read_f32(a[19], v_n),
-            )
-        else:
-            dstate.theta = _m3_upload_addr[False](ctx, a[10], theta_n)
-            dstate.h = _m3_upload_addr[False](ctx, a[11], h_n)
-            # Idle outside a pending continuation, uploaded anyway so the
-            # caller's bytes round-trip unchanged (DEVIATION 792's rule).
-            dstate.pend_k = _m3_upload_addr[False](ctx, a[18], k_n)
-            dstate.pend_v = _m3_upload_addr[False](ctx, a[19], v_n)
-    m3_phase_tick(ctx, phase_tick, String("surface.state_upload"))
-    var dstages = Mamba3DeviceStages(ctx, b, l, q0, dims)
-    m3_phase_tick(ctx, phase_tick, String("surface.stage_allocations"))
-    var dx = _m3_upload_addr[False](ctx, a[0], b * l * dm)
-
-    m3_phase_tick(ctx, phase_tick, String("surface.x_upload"))
-    var trace = IdentityTrace.disabled()
-    mamba3_block_forward(
-        ctx, dstages, dstate, dw, dx, b, l, trace, String("py")
-    )
-
-    m3_phase_tick(ctx, phase_tick, String("surface.block"))
-    _m3_download_addr[False](ctx, dstages.residual_out, b * l * dm, a[20])
-    # The FOUR reports (contract section 7's ssd.* stages), NOT the
-    # resumption state -- DEVIATION 794's last clause.
-    _m3_download_addr[False](ctx, dstages.h_last, h_n, a[21])
-    _m3_download_addr[False](ctx, dstages.k_last, k_n, a[22])
-    _m3_download_addr[False](ctx, dstages.v_last, v_n, a[23])
-    _m3_download_addr[False](ctx, dstages.theta_last, theta_n, a[24])
-    comptime if not discard_state:
-        _m3_download_addr[False](ctx, dstate.theta, theta_n, a[10])
-        _m3_download_addr[False](ctx, dstate.h, h_n, a[11])
-        _m3_download_addr[False](ctx, dstate.buf_qrot, qrow_n * M3_D_STATE, a[12])
-        _m3_download_addr[False](ctx, dstate.buf_krot, qrow_n * M3_D_STATE, a[13])
-        _m3_download_addr[False](ctx, dstate.buf_v, qrow_n * M3_HEADDIM, a[14])
-        _m3_download_addr[False](ctx, dstate.buf_dt, qrow_n, a[15])
-        _m3_download_addr[False](ctx, dstate.buf_sig, qrow_n, a[16])
-        _m3_download_addr[False](ctx, dstate.buf_adt, qrow_n, a[17])
-        _m3_download_addr[False](ctx, dstate.pend_k, k_n, a[18])
-        _m3_download_addr[False](ctx, dstate.pend_v, v_n, a[19])
-    # One wait for every download above (and anything still in flight).
-    ctx.synchronize()
-    m3_phase_tick(ctx, phase_tick, String("surface.downloads"))
-    var out_len = dstate.buf_len
-    _ = dstate^
-    _ = dstages^
-    _ = dx^
-    m3_phase_tick(ctx, phase_tick, String("surface.buffer_destruction"))
-    return out_len
-
-
-def _mamba3_run_arena[discard_state: Bool = False](
-    a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int
-) raises -> Int:
-    """`_mamba3_run` under MOJOLEARN_AFN_MAMBA_ARENA (lane afn-mamba): one
-    arena, views, direct copies in, ONE wait at the end."""
-    var dims = Mamba3Dims.of(dm)
-    var di = dims.d_inner
-    var dip = dims.d_in_proj()
-    var nh = dims.nheads
-    if q0 < 0 or q0 > M3_CHUNK_SIZE:
-        raise Error(
-            String("mamba3: buf_len must be in [0, ")
-            + String(M3_CHUNK_SIZE)
-            + "] (INCLUSIVE -- the buffer never empties, DEVIATION"
-            " 832(i): r in [1, Q] after every call, 0 only before the"
-            " first token), got "
-            + String(q0)
-            + "; the two sides of this boundary disagree about the state"
-        )
-    if pend != 0 and pend != 1:
-        raise Error(
-            "mamba3: pending must be 0 or 1, got "
-            + String(pend)
-            + "; the two sides of this boundary disagree about the state"
-        )
-    var theta_n = b * nh * M3_NUM_ROPE_ANGLES
-    var h_n = b * nh * M3_HEADDIM * M3_D_STATE
-    var qrow_n = b * M3_CHUNK_SIZE * nh
-    var k_n = b * nh * M3_D_STATE
-    var v_n = b * nh * M3_HEADDIM
-
-    var ctx = neural_ctx[_NEURAL_CTX]()
-    var arena = MambaArena(ctx, mamba3_arena_floats(b, l, q0, dims), MAMBA_GUARD)
-    var dw = Mamba3DeviceWeights(ctx, dims, arena)
-    mamba_copy_in(ctx, dw.norm_w, _f32_ptr(a[1]), dm)
-    mamba_copy_in(ctx, dw.w_in, _f32_ptr(a[2]), dip * dm)
-    mamba_copy_in(ctx, dw.dt_bias, _f32_ptr(a[3]), nh)
-    mamba_copy_in(ctx, dw.bnorm_w, _f32_ptr(a[4]), M3_D_STATE)
-    mamba_copy_in(ctx, dw.cnorm_w, _f32_ptr(a[5]), M3_D_STATE)
-    mamba_copy_in(ctx, dw.b_bias, _f32_ptr(a[6]), nh * M3_D_STATE)
-    mamba_copy_in(ctx, dw.c_bias, _f32_ptr(a[7]), nh * M3_D_STATE)
-    mamba_copy_in(ctx, dw.d_skip, _f32_ptr(a[8]), nh)
-    mamba_copy_in(ctx, dw.w_out, _f32_ptr(a[9]), dm * di)
-    var dstate = Mamba3DeviceState(ctx, b, dims, arena)
-    comptime if not discard_state:
-        mamba_copy_in(ctx, dstate.buf_qrot, _f32_ptr(a[12]), qrow_n * M3_D_STATE)
-        mamba_copy_in(ctx, dstate.buf_krot, _f32_ptr(a[13]), qrow_n * M3_D_STATE)
-        mamba_copy_in(ctx, dstate.buf_v, _f32_ptr(a[14]), qrow_n * M3_HEADDIM)
-        mamba_copy_in(ctx, dstate.buf_dt, _f32_ptr(a[15]), qrow_n)
-        mamba_copy_in(ctx, dstate.buf_sig, _f32_ptr(a[16]), qrow_n)
-        mamba_copy_in(ctx, dstate.buf_adt, _f32_ptr(a[17]), qrow_n)
-        dstate.buf_len = q0
-        if pend == 1:
-            # THROUGH the lane's own helper (its fresh-state refusal fires
-            # by the lane's own words); it copies into the views.
-            dstate.set_input_states(
-                ctx,
-                _m3_read_f32(a[10], theta_n),
-                _m3_read_f32(a[11], h_n),
-                _m3_read_f32(a[18], k_n),
-                _m3_read_f32(a[19], v_n),
-            )
-        else:
-            mamba_copy_in(ctx, dstate.theta, _f32_ptr(a[10]), theta_n)
-            mamba_copy_in(ctx, dstate.h, _f32_ptr(a[11]), h_n)
-            mamba_copy_in(ctx, dstate.pend_k, _f32_ptr(a[18]), k_n)
-            mamba_copy_in(ctx, dstate.pend_v, _f32_ptr(a[19]), v_n)
-    var dstages = Mamba3DeviceStages(ctx, b, l, q0, dims, arena)
-    var dx = arena.take(ctx, b * l * dm)
-    mamba_copy_in(ctx, dx, _f32_ptr(a[0]), b * l * dm)
-
-    var trace = IdentityTrace.disabled()
-    mamba3_block_forward(
-        ctx, dstages, dstate, dw, dx, b, l, trace, String("py")
-    )
-
-    _m3_download_addr[False](ctx, dstages.residual_out, b * l * dm, a[20])
-    _m3_download_addr[False](ctx, dstages.h_last, h_n, a[21])
-    _m3_download_addr[False](ctx, dstages.k_last, k_n, a[22])
-    _m3_download_addr[False](ctx, dstages.v_last, v_n, a[23])
-    _m3_download_addr[False](ctx, dstages.theta_last, theta_n, a[24])
-    comptime if not discard_state:
-        _m3_download_addr[False](ctx, dstate.theta, theta_n, a[10])
-        _m3_download_addr[False](ctx, dstate.h, h_n, a[11])
-        _m3_download_addr[False](ctx, dstate.buf_qrot, qrow_n * M3_D_STATE, a[12])
-        _m3_download_addr[False](ctx, dstate.buf_krot, qrow_n * M3_D_STATE, a[13])
-        _m3_download_addr[False](ctx, dstate.buf_v, qrow_n * M3_HEADDIM, a[14])
-        _m3_download_addr[False](ctx, dstate.buf_dt, qrow_n, a[15])
-        _m3_download_addr[False](ctx, dstate.buf_sig, qrow_n, a[16])
-        _m3_download_addr[False](ctx, dstate.buf_adt, qrow_n, a[17])
-        _m3_download_addr[False](ctx, dstate.pend_k, k_n, a[18])
-        _m3_download_addr[False](ctx, dstate.pend_v, v_n, a[19])
-    ctx.synchronize()
-    var out_len = dstate.buf_len
-    _ = dw^
-    _ = dstate^
-    _ = dstages^
-    _ = dx^
-    _ = arena^
-    _ = ctx^
-    return out_len
-
-
-# Resident Mamba-3 decode, parallel to Mamba-1/2.  Stages are rebuilt at
-# each step because their working dimensions include the carried buf_len;
-# context, weights, ten-piece state, and x allocation remain resident.
 struct Mamba3DecodeSession(Movable, Writable):
-    var ctx: Optional[DeviceContext]
-    var w: Optional[Mamba3DeviceWeights]
-    var state: Optional[Mamba3DeviceState]
-    var dx: Optional[DeviceBuffer[DType.float32]]
-    var decode_stages: Optional[Mamba3DeviceStages]
+    """The resident Mamba-3 decode session: one executor program; every
+    token is the block step op (stages at the carried buf_len, or the NI47
+    window reuse arm). `pending` mirrors the carried flag for export."""
+    var prog: Optional[MambaBlockProgram]
     var b: Int
     var dm: Int
+    var pending: Bool
     var busy: Bool
     var usable: Bool
 
     def __init__(out self):
-        self.ctx = None
-        self.w = None
-        self.state = None
-        self.dx = None
-        self.decode_stages = None
+        self.prog = None
         self.b = 0
         self.dm = 0
+        self.pending = False
         self.busy = False
         self.usable = True
 
     def write_to(self, mut writer: Some[Writer]): writer.write("Mamba3DecodeSession")
     def write_repr_to(self, mut writer: Some[Writer]): writer.write("Mamba3DecodeSession")
-    def is_open(self) -> Bool: return Bool(self.ctx) and Bool(self.state)
+    def is_open(self) -> Bool: return Bool(self.prog)
 
     def release(mut self):
-        self.decode_stages = None
-        self.dx = None
-        self.state = None
-        self.w = None
-        if self.ctx:
-            try: self.ctx.value().synchronize()
-            except: pass
-        self.ctx = None
+        if self.prog:
+            try:
+                self.prog.value().close()
+            except:
+                pass
+        self.prog = None
 
     def __deinit__(deinit self): self.release()
     def close(mut self) raises:
@@ -1511,166 +535,73 @@ def _m3_require_session_open(s: Mamba3DecodeSession) raises:
 
 
 def _m3_session_copy_in(mut s: Mamba3DecodeSession, a: List[Int], q0: Int, pend: Int) raises:
-    if q0 < 0 or q0 > M3_CHUNK_SIZE:
-        raise Error("mamba3 session: buf_len out of range")
-    if pend != 0 and pend != 1:
-        raise Error("mamba3 session: pending must be 0 or 1")
-    if pend == 1 and q0 != 0:
-        raise Error("mamba3 session: Input_States pending requires a fresh state")
-    ref ctx = s.ctx.value()
-    ref st = s.state.value()
-    var dims = Mamba3Dims.of(s.dm)
-    var nh = dims.nheads
-    var theta_n = s.b * nh * M3_NUM_ROPE_ANGLES
-    var h_n = s.b * nh * M3_HEADDIM * M3_D_STATE
-    var qrow_n = s.b * M3_CHUNK_SIZE * nh
-    var k_n = s.b * nh * M3_D_STATE
-    var v_n = s.b * nh * M3_HEADDIM
-    mamba_copy_in(ctx, st.theta, f32_ptr(a[0]), theta_n)
-    mamba_copy_in(ctx, st.h, f32_ptr(a[1]), h_n)
-    mamba_copy_in(ctx, st.buf_qrot, f32_ptr(a[2]), qrow_n * M3_D_STATE)
-    mamba_copy_in(ctx, st.buf_krot, f32_ptr(a[3]), qrow_n * M3_D_STATE)
-    mamba_copy_in(ctx, st.buf_v, f32_ptr(a[4]), qrow_n * M3_HEADDIM)
-    mamba_copy_in(ctx, st.buf_dt, f32_ptr(a[5]), qrow_n)
-    mamba_copy_in(ctx, st.buf_sig, f32_ptr(a[6]), qrow_n)
-    mamba_copy_in(ctx, st.buf_adt, f32_ptr(a[7]), qrow_n)
-    mamba_copy_in(ctx, st.pend_k, f32_ptr(a[8]), k_n)
-    mamba_copy_in(ctx, st.pend_v, f32_ptr(a[9]), v_n)
-    ctx.synchronize()
-    st.buf_len = q0
-    st.pending = pend == 1
+    """The caller's ten state pieces and [buf_len, pending] into the
+    program, in place (the step op's checks refuse a bad pair first)."""
+    s.prog.value().load_state(a, [q0, pend])
+    s.pending = pend == 1
 
 
 def _m3_session_open_run(mut s: Mamba3DecodeSession, a: List[Int], b: Int,
                          dm: Int, q0: Int, pend: Int) raises:
-    var dims = Mamba3Dims.of(dm)
-    s.ctx = neural_ctx[_NEURAL_CTX]()
-    var weight_addrs = List[Int]()
-    weight_addrs.append(0)
-    for i in range(9): weight_addrs.append(a[i])
-    s.w = _m3_load_weights(s.ctx.value(), weight_addrs, dims)
-    s.state = Mamba3DeviceState(s.ctx.value(), b, dims)
+    """`a` = [nine weights in `mamba3_forward`'s order, the ten state pieces]."""
+    var weights = List[Int](capacity=9)
+    for i in range(9):  # small-loop(the nine Mamba-3 weight addresses)
+        weights.append(a[i])
+    var pieces = List[Int](capacity=10)
+    for i in range(10):  # small-loop(the ten Mamba-3 state addresses)
+        pieces.append(a[9 + i])
+    var prog = MambaBlockProgram(OPS_M3_STEP, b, dm, List[Float32](), weights, False)
+    prog.load_state(pieces, [q0, pend])
+    s.prog = prog^
     s.b = b
     s.dm = dm
-    var state_addrs = List[Int]()
-    for i in range(10): state_addrs.append(a[9 + i])
-    _m3_session_copy_in(s, state_addrs, q0, pend)
-    s.dx = mamba_zeros(s.ctx.value(), b * dm)
-
-
-# NI47 same-graph boundary scheduling: retained capacity for one physical
-# open chunk plus a new token; extent comes from the model state contract,
-# never a board row. Default OFF. Cold allocation, repeated decode and maximum
-# zero-fill traffic must all be included in later A/B. Existing host state and
-# arithmetic remain the S counterpart. All validation/quality/timing NOT RUN.
-comptime IDN_M3_DECODE_WINDOW_REUSE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_IDN_M3_DECODE_WINDOW_REUSE"]()
-    and not is_defined["MOJOLEARN_IDN_ALL_OFF"]()
-    and MAMBA_GUARD == 0
-)
+    s.pending = pend == 1
 
 
 def _m3_session_step_run(mut s: Mamba3DecodeSession, a: List[Int]) raises -> Int:
-    ref ctx = s.ctx.value()
-    ref st = s.state.value()
-    var dims = Mamba3Dims.of(s.dm)
-    var stages: Mamba3DeviceStages
-    comptime if IDN_M3_DECODE_WINDOW_REUSE:
-        if s.decode_stages:
-            stages = s.decode_stages.take()
-        else:
-            stages = Mamba3DeviceStages(ctx, s.b, 1, M3_CHUNK_SIZE, dims)
-        stages.reuse_decode_window(st.buf_len)
-    else:
-        stages = Mamba3DeviceStages(ctx, s.b, 1, st.buf_len, dims)
-    mamba_copy_in(ctx, s.dx.value(), f32_ptr(a[0]), s.b * s.dm)
-    var trace = IdentityTrace.disabled()
-    mamba3_block_forward(ctx, stages, st, s.w.value(), s.dx.value(), s.b, 1,
-                         trace, String("py.session"))
-    var nh = dims.nheads
-    _write_f32(a[1], mamba_download(ctx, stages.residual_out, s.b * s.dm))
-    _write_f32(a[2], mamba_download(ctx, stages.h_last, s.b * nh * M3_HEADDIM * M3_D_STATE))
-    _write_f32(a[3], mamba_download(ctx, stages.k_last, s.b * nh * M3_D_STATE))
-    _write_f32(a[4], mamba_download(ctx, stages.v_last, s.b * nh * M3_HEADDIM))
-    _write_f32(a[5], mamba_download(ctx, stages.theta_last, s.b * nh * M3_NUM_ROPE_ANGLES))
-    comptime if IDN_M3_DECODE_WINDOW_REUSE:
-        # Every report download above completes before capacity is retained.
-        s.decode_stages = stages^
-    return st.buf_len
+    """`a` = [x, y, h_last, k_last, v_last, theta_last]: one token, one
+    wait; returns the carried buf_len."""
+    var words = s.prog.value().step(a[0], a[1], [a[2], a[3], a[4], a[5]])
+    s.pending = words[1] == 1
+    return words[0]
 
 
 def _m3_session_decode_run(mut s: Mamba3DecodeSession, a: List[Int], steps: Int) raises -> Int:
-    """N decode tokens on the resident Mamba-3 session (decode plan D2).
-
-    `a` = [x (B, N, d_model), y (B, N, d_model), h_last, k_last, v_last,
-    theta_last]: one input upload, the step body of `_m3_session_step_run` per
-    token, one output download and the LAST token's four reports, behind one
-    wait (the step downloads five buffers per token, each with its own wait).
-    Same kernels, same order and same bytes as N `_m3_session_step_run` calls."""
-    decode_slab_check(s.b, steps, s.dm, "mamba3 session decode")
-    ref ctx = s.ctx.value()
-    ref st = s.state.value()
-    var dims = Mamba3Dims.of(s.dm)
-    var nh = dims.nheads
-    var row = s.b * s.dm
-    var xs = mamba_device_alloc(ctx, row * steps)
-    var ys = mamba_device_alloc(ctx, row * steps)
-    mamba_copy_in(ctx, xs, f32_ptr(a[0]), row * steps)
-    var trace = IdentityTrace.disabled()
-    var last = Optional[Mamba3DeviceStages]()
-    for t in range(steps):  # driver-loop: over autoregressive decode steps (each reads the state the previous step left), the session's one-token step body each
-        var stages: Mamba3DeviceStages
-        comptime if IDN_M3_DECODE_WINDOW_REUSE:
-            if last:
-                stages = last.take()
-            elif s.decode_stages:
-                stages = s.decode_stages.take()
-            else:
-                stages = Mamba3DeviceStages(ctx, s.b, 1, M3_CHUNK_SIZE, dims)
-            stages.reuse_decode_window(st.buf_len)
-        else:
-            stages = Mamba3DeviceStages(ctx, s.b, 1, st.buf_len, dims)
-        decode_slab_take(ctx, s.dx.value(), xs, s.b, steps, s.dm, t)
-        mamba3_block_forward(ctx, stages, st, s.w.value(), s.dx.value(), s.b, 1,
-                             trace, String("py.session"))
-        decode_slab_put(ctx, ys, stages.residual_out, s.b, steps, s.dm, t)
-        # The previous token's stages return to the stream-ordered pool.
-        last = stages^
-    _m2_session_download_direct(ctx, ys, row * steps, a[1])
-    _m2_session_download_direct(ctx, last.value().h_last, s.b * nh * M3_HEADDIM * M3_D_STATE, a[2])
-    _m2_session_download_direct(ctx, last.value().k_last, s.b * nh * M3_D_STATE, a[3])
-    _m2_session_download_direct(ctx, last.value().v_last, s.b * nh * M3_HEADDIM, a[4])
-    _m2_session_download_direct(ctx, last.value().theta_last, s.b * nh * M3_NUM_ROPE_ANGLES, a[5])
-    ctx.synchronize()
-    comptime if IDN_M3_DECODE_WINDOW_REUSE:
-        # Every report download above completes before capacity is retained.
-        s.decode_stages = last.take()
-    _ = last^
-    _ = xs^
-    _ = ys^
-    return st.buf_len
+    """N tokens in one call (decode plan D2): `a` as the step's, x and y
+    (B, N, d_model), the last token's four reports."""
+    var words = s.prog.value().decode(a[0], a[1], steps, [a[2], a[3], a[4], a[5]])
+    s.pending = words[1] == 1
+    return words[0]
 
 
 def _m3_session_export_run(mut s: Mamba3DecodeSession, a: List[Int]) raises -> Int:
-    ref ctx = s.ctx.value()
-    ref st = s.state.value()
-    var dims = Mamba3Dims.of(s.dm)
-    var nh = dims.nheads
-    var theta_n = s.b * nh * M3_NUM_ROPE_ANGLES
-    var h_n = s.b * nh * M3_HEADDIM * M3_D_STATE
-    var qrow_n = s.b * M3_CHUNK_SIZE * nh
-    _write_f32(a[0], mamba_download(ctx, st.theta, theta_n))
-    _write_f32(a[1], mamba_download(ctx, st.h, h_n))
-    _write_f32(a[2], mamba_download(ctx, st.buf_qrot, qrow_n * M3_D_STATE))
-    _write_f32(a[3], mamba_download(ctx, st.buf_krot, qrow_n * M3_D_STATE))
-    _write_f32(a[4], mamba_download(ctx, st.buf_v, qrow_n * M3_HEADDIM))
-    _write_f32(a[5], mamba_download(ctx, st.buf_dt, qrow_n))
-    _write_f32(a[6], mamba_download(ctx, st.buf_sig, qrow_n))
-    _write_f32(a[7], mamba_download(ctx, st.buf_adt, qrow_n))
-    _write_f32(a[8], mamba_download(ctx, st.pend_k, s.b * nh * M3_D_STATE))
-    _write_f32(a[9], mamba_download(ctx, st.pend_v, s.b * nh * M3_HEADDIM))
-    return st.buf_len
+    var words = s.prog.value().export_state(a)
+    s.pending = words[1] == 1
+    return words[0]
+
+
+def _mamba3_run_owned(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int) raises -> Int:
+    """The carried-state forward or decode step on the session's installed
+    owned snapshot (NN40): `mamba_block_call` over the snapshot's host copy
+    (stable while it is installed, so the cached program keeps it on the
+    device and never compares a changed byte). `a` is the 25-slot list; its
+    nine weight slots are not read."""
+    comptime if not NN40_OWNED_WEIGHTS:
+        raise Error("mamba3 owned weights: NN40 arm is disabled")
+    if not s.owned_weights or not s.w or s.dm != dm:
+        raise Error("mamba3 owned weights: install a matching snapshot first")
+    var lens = _m3_weight_lens(Mamba3Dims.of(dm))
+    var weights = List[Int](capacity=9)
+    var off = 0
+    for i in range(9):  # small-loop(the nine Mamba-3 weight pieces of the snapshot copy)
+        weights.append(Int(s.w_host.unsafe_ptr()) + 4 * off)
+        off += lens[i]
+    var state = List[Int](capacity=10)
+    for i in range(10):  # small-loop(the ten Mamba-3 state addresses)
+        state.append(a[10 + i])
+    var words = mamba_block_call(OPS_M3_STEP, weights, state, [q0, pend], a[0], a[20],
+                                 [a[21], a[22], a[23], a[24]], b, l, dm, List[Float32](), False)
+    return words[0]
 
 
 # ===========================================================================
@@ -1906,7 +837,7 @@ def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3D
 
 
 def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int, use_owned: Bool = False, force_retain: Bool = False) raises -> Int:
-    """`_mamba3_run[True]` on the session: `a` is the fresh entry's 25-slot
+    """The discard-state prefill on the session: `a` is the fresh entry's 25-slot
     list (state slots zero, never read)."""
     var dims = Mamba3Dims.of(dm)
     var nh = dims.nheads
@@ -2139,7 +1070,9 @@ def _m3_install_weights_run(mut s: Mamba3PrefillSession, a: List[Int], dims: Mam
     # exposing the new generation, never reusing old-weight activations.
     s.drop_stages()
     s.w = fresh^
-    s.w_host = List[Float32]()
+    # The snapshot's host copy (lane x5): the owned carried-state calls run
+    # the cached block program over it (`_mamba3_run_owned`).
+    s.w_host = _m3_weights_host_copy(a, _m3_weight_lens(dims))
     s.dm = native_d_model
     s.owned_weights = True
     s.weight_generation += 1
