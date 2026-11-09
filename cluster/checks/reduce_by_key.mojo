@@ -1255,26 +1255,9 @@ def copy_f32_gated_kernel(
         dst.unsafe_store(i, src.unsafe_load(i))
 
 
-def kmeans_conv_step_kernel(
-    state: MutPointer[Int32, MutAnyOrigin],
-    shift: MutPointer[Float32, MutAnyOrigin],
-    thresh: Float32,
-    it: Int32,
-):
-    """fam2-cluster, `IDN_KMEANS_DEVICE_CONV`: the stopping rule on the
-    device. One thread. `state[0]` is the done flag, `state[1]` the iteration
-    that converged. `thresh` is the host's Float64 `tol` rounded UP to Float32
-    (`kmeans_shift_threshold`), so `shift < thresh` here is exactly the
-    host's `Float64(shift) < tol` for every Float32 `shift`, NaN included
-    (false both ways). One comparison of two Float32 values: the same bit on
-    every vendor."""
-    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
-        return
-    if state.unsafe_load(0) != Int32(0):
-        return
-    if shift.unsafe_load(0) < thresh:
-        state.unsafe_store(1, it)
-        state.unsafe_store(0, Int32(1))
+# TOMBSTONE: kmeans_conv_step_kernel (MERGED into the executor loop's criterion op) deleted 2026-11-08 by lane/fix-d3-executor-loops; code recoverable at the deletion commit^.
+# Its body is `loop_below_kernel` (autograd/program_loop_device.mojo), which also stores the iteration register.
+# Restore: git apply experiments/removed/KMEANS_LLOYD_CHUNK_DRIVER_LOOP.patch; record in docs/TOMBSTONES.md.
 
 
 def launch_accumulate_centroid_sums_blocked_gated[
