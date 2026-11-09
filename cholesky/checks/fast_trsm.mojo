@@ -30,7 +30,7 @@ from layout.tile_layout import row_major
 from linalg.matmul import matmul
 from std.utils.index import IndexList
 
-# TOMBSTONE: MOJOLEARN_CHOL_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by @K1SHA_SCOPED@; code recoverable
+# TOMBSTONE: MOJOLEARN_CHOL_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable
 # at f59d913b0b (F02: the lower-triangle subtract through scoped_kernel's SUBTRACT + LOWER epilogue; one-sample M3 fit B/A
 # 0.95, no verdict row). Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 

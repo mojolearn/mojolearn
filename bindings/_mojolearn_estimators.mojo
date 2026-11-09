@@ -14,7 +14,7 @@ from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAI
 # DEVIATION 2486: shared byte-preserving host copies.
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
 from std.os import abort
-# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by @K1SHA_SCOPED@; code recoverable at
+# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
 # f59d913b0b (its witnesses scoped_gemm_flags, scoped_gemm_count, scoped_gemm_metadata, and the MOJOLEARN_SOFTMAX_G2_AUDIT
 # witnesses softmax_g2_state / _count / _last / _reset with bindings/softmax_g2_observe.mojo).
 # Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
@@ -137,7 +137,7 @@ from core.estimators_impl import (
 )
 
 
-# TOMBSTONE: MOJOLEARN_PCA_FAST_COMPENSATED_COV (never measured, deleted) deleted 2026-11-09 by @K1SHA_PCA@; code
+# TOMBSTONE: MOJOLEARN_PCA_FAST_COMPENSATED_COV (never measured, deleted) deleted 2026-11-09 by e4e58162e9; code
 # recoverable at f59d913b0b (its reach counter export pca_compensated_cov_count).
 # Restore: git apply experiments/removed/MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch
 

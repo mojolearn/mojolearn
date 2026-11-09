@@ -173,7 +173,7 @@ from cholesky.estimator import (
 )
 
 
-# TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by @K1SHA_SCOPED@; code recoverable at
+# TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
 # f59d913b0b (its reach counter gp_shared_sub_count, with MOJOLEARN_CHOL_FAST_SHARED_SUB).
 # Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 

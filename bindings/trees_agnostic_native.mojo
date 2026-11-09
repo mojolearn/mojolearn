@@ -39,7 +39,7 @@ comptime _KSHAP_FAST_BATCH = 8
 comptime _AGN_IDN_SYN_POOL = 16
 comptime _PSHAP_DELTA = 32
 comptime _AGN_IDN_DEVICE_MODEL = 64
-# TOMBSTONE: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL (never measured, deleted) deleted 2026-11-09 by @K1SHA_KSHAP@; code
+# TOMBSTONE: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL (never measured, deleted) deleted 2026-11-09 by e2adeea367; code
 # recoverable at f59d913b0b. Same commit: its twin MOJOLEARN_PSHAP_FAST_DEVICE_MODEL (bits 1024 / 2048).
 # Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch
 

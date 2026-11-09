@@ -478,7 +478,7 @@ def build__mojolearn_ivf() -> PythonObject:
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")
         m.def_function[ivf_numeric_mode_binding]("ivf_numeric_mode")
-        # TOMBSTONE: MOJOLEARN_IVF_FAST_BALANCED_TASKS (never measured, deleted) deleted 2026-11-09 by @K1SHA_IVF@; code
+        # TOMBSTONE: MOJOLEARN_IVF_FAST_BALANCED_TASKS (never measured, deleted) deleted 2026-11-09 by 0c3399062b; code
         # recoverable at f59d913b0b (with its MOJOLEARN_IVF_FAST_BALANCED_AUDIT export ivf_fast_balanced_hits).
         # Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_BALANCED_TASKS.patch
         # TOMBSTONE: ivf_flat_build_and_search (dead native entry: the retired one-call door; IVFIndex fits and searches through ivf_flat_build / ivf_flat_search) deleted 2026-10-26 by e760c256b; code recoverable at a88745022.

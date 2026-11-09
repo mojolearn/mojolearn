@@ -82,7 +82,7 @@ from core.hostptr import f32_ptr, i32_ptr
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-# TOMBSTONE: MOJOLEARN_ARIMA_FAST_K3_DF_PROBE (never measured, deleted) deleted 2026-11-09 by @K1SHA_ARIMA@; code
+# TOMBSTONE: MOJOLEARN_ARIMA_FAST_K3_DF_PROBE (never measured, deleted) deleted 2026-11-09 by eff59d1b88; code
 # recoverable at f59d913b0b (the `_arima_k3_df_probe` export). Same commit: MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL and its
 # `arima_product_df_count` reach counter.
 # Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch

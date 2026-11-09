@@ -24,7 +24,7 @@ through f32 atomics (order free, as on main). A candidate whose gate word
 is 0 (inactive; for the weighted Gram, pinvh did not run) launches no work:
 main zeroed its operands and discarded its output (guarded publication).
 """
-# TOMBSTONE: MOJOLEARN_MCD_FAST_ACTIVE_COMPACT (never measured, deleted) deleted 2026-11-09 by @K1SHA_MCD@; code recoverable
+# TOMBSTONE: MOJOLEARN_MCD_FAST_ACTIVE_COMPACT (never measured, deleted) deleted 2026-11-09 by 45d8034353; code recoverable
 # at f59d913b0b. Same commit (F06): MOJOLEARN_MCD_FAST_COV_REUSE, MOJOLEARN_MCD_FAST_BOUND_BATCH, x_decomp/mcd_experiments.mojo
 # and the mcd_experiment_count / mcd_fast_batch_count exports. Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch
 

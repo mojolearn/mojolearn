@@ -255,7 +255,7 @@ comptime IVF_FAST_SCAN = (
 )
 """FAST on Apple: steps 3-5 for every query in one launch
 (`fast_ivf_scan.mojo`) instead of a host round trip per query."""
-# TOMBSTONE: MOJOLEARN_IVF_FAST_BALANCED_TASKS (never measured, deleted) deleted 2026-11-09 by @K1SHA_IVF@; code
+# TOMBSTONE: MOJOLEARN_IVF_FAST_BALANCED_TASKS (never measured, deleted) deleted 2026-11-09 by 0c3399062b; code
 # recoverable at f59d913b0b (F14: the Apple FAST arm into ivf_balanced_scan, its MOJOLEARN_IVF_FAST_BALANCED_AUDIT counter
 # and the ivf_fast_balanced_hits export). Restore: git apply experiments/removed/MOJOLEARN_IVF_FAST_BALANCED_TASKS.patch
 

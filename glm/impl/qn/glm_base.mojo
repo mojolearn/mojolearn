@@ -61,7 +61,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.column_stats import STATS_TPB, xty_kernel
 from core.gemm import gemm_nt, gemv_n
-# TOMBSTONE: MOJOLEARN_SOFTMAX_FAST_G2_NARROW (never measured, deleted) deleted 2026-11-09 by @K1SHA_SCOPED@; code
+# TOMBSTONE: MOJOLEARN_SOFTMAX_FAST_G2_NARROW (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code
 # recoverable at f59d913b0b (softmax_gemm_nt through scoped_kernel[32, 32], with MOJOLEARN_SOFTMAX_G2_AUDIT and
 # MOJOLEARN_LEGACY_NARROW_SOFTMAX_G2). Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 from core.pinned_reduce import pinned_block_max, pinned_block_sum

@@ -78,7 +78,7 @@ from x_decomp.kit import Mat
 from x_decomp.cells import FOLD_BLOCK
 from x_decomp.mcd_compat import mc_compact_kernel, mc_moment_kernel, mc_pinvh_kernel
 from x_decomp.mcd_bmma import launch_gemm_mma_batched
-# TOMBSTONE: MOJOLEARN_MCD_FAST_COV_REUSE (never measured, deleted) deleted 2026-11-09 by @K1SHA_MCD@; code recoverable at
+# TOMBSTONE: MOJOLEARN_MCD_FAST_COV_REUSE (never measured, deleted) deleted 2026-11-09 by 45d8034353; code recoverable at
 # f59d913b0b (with MOJOLEARN_MCD_FAST_ACTIVE_COMPACT: the phase's compact / reuse workspaces and their arms below).
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch
 from x_decomp.jacobi2 import dev_barrier

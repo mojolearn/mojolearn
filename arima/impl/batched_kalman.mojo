@@ -1331,9 +1331,9 @@ def fast_kalman_into(
     fast_kalman_init_into(ctx, params, order, batch_size, ws)
     var kl_done = False
     comptime if KALMAN_LL_ONLY:
-        # TOMBSTONE: MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL (never measured, deleted) deleted 2026-11-09 by @K1SHA_ARIMA@;
+        # TOMBSTONE: MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL (never measured, deleted) deleted 2026-11-09 by eff59d1b88;
         # code recoverable at f59d913b0b. Its `capture_stages` argument (store the innovations for the compensated tail) went
-        # with it. Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL.patch
+        # with it. Restore: git apply experiments/removed/MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch
         _launch_loop_ll_only(
             ctx, d_ys, params, ws, rd, nobs, batch_size, order.k, n_diff, kalman_tpb, has_exog, observation_batch
         )

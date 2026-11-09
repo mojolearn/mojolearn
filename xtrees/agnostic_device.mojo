@@ -73,7 +73,7 @@ comptime AGN_IDN_DEVICE_MODEL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not (is_defined["MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF"]() or is_defined["MOJOLEARN_IDN_ALL_OFF"]())
 )
-# TOMBSTONE: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL (never measured, deleted) deleted 2026-11-09 by @K1SHA_KSHAP@; code
+# TOMBSTONE: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL (never measured, deleted) deleted 2026-11-09 by e2adeea367; code
 # recoverable at f59d913b0b. Same commit: its twin MOJOLEARN_PSHAP_FAST_DEVICE_MODEL (bits 1024 / 2048).
 # Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch
 #: lane/neighbors-small-ports (2026-10-11, idea D5), IDENTICAL, DEFAULT OFF

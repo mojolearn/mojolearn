@@ -1292,7 +1292,7 @@ comptime _XT_IDN_ADA_SESSION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not 
 #: (xtrees/agnostic_device.mojo MOJOLEARN_IDN_SHAP_DEVICE_MODEL). Moves no
 #: bit. `-D MOJOLEARN_IDN_SHAP_DEVICE_MODEL_OFF` clears it.
 comptime _XT_AGN_DEVICE_MODEL = XTREES_DEVICE_OPS and agn_dev.AGN_IDN_DEVICE_MODEL
-# TOMBSTONE: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL (never measured, deleted) deleted 2026-11-09 by @K1SHA_KSHAP@; code
+# TOMBSTONE: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL (never measured, deleted) deleted 2026-11-09 by e2adeea367; code
 # recoverable at f59d913b0b. Same commit: its twin MOJOLEARN_PSHAP_FAST_DEVICE_MODEL (bits 1024 / 2048, always 0 now); the
 # model-route exports below compile under bit 64 alone.
 # Restore: git apply experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch

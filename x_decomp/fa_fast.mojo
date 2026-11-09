@@ -223,7 +223,7 @@ def fa_gram_tiles(d: Int) -> Int:
     return (d + FG_TILE - 1) // FG_TILE
 
 
-# TOMBSTONE: MOJOLEARN_FA_FAST_GRAM_SPREAD (never measured, deleted) deleted 2026-11-09 by @K1SHA_FA@; code recoverable
+# TOMBSTONE: MOJOLEARN_FA_FAST_GRAM_SPREAD (never measured, deleted) deleted 2026-11-09 by a831c2008d; code recoverable
 # at f59d913b0b (fa_gram_rows: rows per Gram partial shrunk with n, FG_MIN_PARTS / FG_MIN_ROWS). Every Gram pass uses FG_ROWS.
 # Restore: git apply experiments/removed/MOJOLEARN_FA_FAST_GRAM_SPREAD.patch
 

@@ -465,6 +465,31 @@ in the tables after the sections.
 | [`MOJOLEARN_RSVD_FAST_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, FAST + Apple) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_IDN_RSVD_DIRECT_IN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd input, IDENTICAL) | removed (KEPT default, superseded by the one driver) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
 | [`MOJOLEARN_RSVD_FAST_DEVSCAN`](#randomized_svd-route-switches-superseded-by-its-one-driver-2026-11-08) | Decomposition (randomized_svd finiteness scan, FAST + Apple) | removed (KEPT default, superseded: parallel host scan of the one admission path) | 2026-11-08 | [A3_ADMISSION_HELPERS.patch](../experiments/removed/A3_ADMISSION_HELPERS.patch) |
+| [`MOJOLEARN_ARIMA_FAST_K3_DF_PROBE`](#mojolearn_arima_fast_k3_df_probe) | Series (ARIMA) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch) |
+| [`MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL`](#mojolearn_arima_fast_k3_df_probe) | Series (ARIMA, F16) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch](../experiments/removed/MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch) |
+| [`MOJOLEARN_KSHAP_FAST_DEVICE_MODEL`](#mojolearn_kshap_fast_device_model) | Trees (KernelExplainer) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch](../experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch) |
+| [`MOJOLEARN_PSHAP_FAST_DEVICE_MODEL`](#mojolearn_kshap_fast_device_model) | Trees (PermutationExplainer) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch](../experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch) |
+| [`MOJOLEARN_FA_FAST_GRAM_SPREAD`](#mojolearn_fa_fast_gram_spread) | Decomp (FactorAnalysis) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_FA_FAST_GRAM_SPREAD.patch](../experiments/removed/MOJOLEARN_FA_FAST_GRAM_SPREAD.patch) |
+| [`MOJOLEARN_IVF_FAST_BALANCED_TASKS`](#mojolearn_ivf_fast_balanced_tasks) | Neighbors (IVF, F14) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_IVF_FAST_BALANCED_TASKS.patch](../experiments/removed/MOJOLEARN_IVF_FAST_BALANCED_TASKS.patch) |
+| [`MOJOLEARN_IVF_FAST_BALANCED_AUDIT`](#mojolearn_ivf_fast_balanced_tasks) | Neighbors (IVF, F14 reach counter) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_IVF_FAST_BALANCED_TASKS.patch](../experiments/removed/MOJOLEARN_IVF_FAST_BALANCED_TASKS.patch) |
+| [`MOJOLEARN_PCA_FAST_COMPENSATED_COV`](#mojolearn_pca_fast_compensated_cov) | Decomp (PCA, F11) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch](../experiments/removed/MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch) |
+| [`MOJOLEARN_AFCL_L07`](#mojolearn_pca_fast_compensated_cov) | Decomp (PCA, AFCL-L07) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch](../experiments/removed/MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch) |
+| [`MOJOLEARN_MCD_FAST_ACTIVE_COMPACT`](#mojolearn_mcd_fast_active_compact) | Decomp (MinCovDet, F06) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch](../experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch) |
+| [`MOJOLEARN_MCD_FAST_COV_REUSE`](#mojolearn_mcd_fast_active_compact) | Decomp (MinCovDet, F06) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch](../experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch) |
+| [`MOJOLEARN_MCD_FAST_BOUND_BATCH`](#mojolearn_mcd_fast_active_compact) | Decomp (MinCovDet, F06) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch](../experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch) |
+| [`MOJOLEARN_SCOPED_GEMM_AUDIT`](#mojolearn_scoped_gemm_audit) | GEMM (scoped G1/G2 adapter, F01/F02) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_SCOPED_GEMM_G1_TALL`](#mojolearn_scoped_gemm_audit) | GEMM (scoped adapter) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_SCOPED_GEMM_G1_DENSE`](#mojolearn_scoped_gemm_audit) | GEMM (scoped adapter) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_SCOPED_GEMM_G1_GRAM`](#mojolearn_scoped_gemm_audit) | GEMM (scoped adapter) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_SCOPED_GEMM_G2_NARROW`](#mojolearn_scoped_gemm_audit) | GEMM (scoped adapter) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_SCOPED_GEMM_SPLIT`](#mojolearn_scoped_gemm_audit) | GEMM (scoped adapter) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_SCOPED_GEMM_PCA`](#mojolearn_scoped_gemm_audit) | GEMM (scoped adapter on PCA) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_LEGACY_NARROW_SCOPED_GEMM`](#mojolearn_scoped_gemm_audit) | GEMM (scoped adapter windows) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_SOFTMAX_FAST_G2_NARROW`](#mojolearn_scoped_gemm_audit) | Linear (QN multiclass forward, F05) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_SOFTMAX_G2_AUDIT`](#mojolearn_scoped_gemm_audit) | Linear (F05 reach counter) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_LEGACY_NARROW_SOFTMAX_G2`](#mojolearn_scoped_gemm_audit) | Linear (F05 window) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_LU_FAST_SHARED_SUB`](#mojolearn_scoped_gemm_audit) | Decomp (LU, F02) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
+| [`MOJOLEARN_CHOL_FAST_SHARED_SUB`](#mojolearn_scoped_gemm_audit) | Linear (Cholesky, F02) | never measured, deleted (Apple FAST, no verdict) | 2026-11-09 | [MOJOLEARN_SCOPED_GEMM_AUDIT.patch](../experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3318,8 +3343,8 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_HDBSCAN2_ALL` | EXPERIMENTS.md:490 DROP (as a bundle) (lane/apple-fast-hdbscan2 @ 2fdb9114f) | `hdbscan/impl/detail/fast_apple.mojo:8` |
 | `MOJOLEARN_HDB_CORE_TILE` | EXPERIMENTS.md:491 DROP (lane/apple-fast-batchv @ c7ede6e47) | `hdbscan/impl/detail/core_tile.mojo:5` |
 | `MOJOLEARN_HDB_DEV_BORUVKA` | EXPERIMENTS.md:492 DROPPED-noise (lane/apple-fast-hdbscan2 @ 2fdb9114f) | `hdbscan/impl/cluster/detail/fast_mr_mst_device.mojo:4` |
-| `MOJOLEARN_HDB_ONE_SYNC` | EXPERIMENTS.md:494 DROP (lane/apple-fast-batchv @ c8251211d) | `hdbscan/impl/detail/fast_apple.mojo:71` |
-| `MOJOLEARN_HDB_SELECT_DEVICE` | EXPERIMENTS.md:495 DROPPED-noise (lane/apple-fast-hdbscan2 @ 2fdb9114f) | `hdbscan/impl/detail/fast_apple.mojo:95` |
+| `MOJOLEARN_HDB_ONE_SYNC` | EXPERIMENTS.md:494 DROP (lane/apple-fast-batchv @ c8251211d) | `hdbscan/impl/detail/fast_apple.mojo:71` **KEPT, owed row withdrawn**: see "Owed deletions reviewed and kept" below and the later EXPERIMENTS.md KEPT row (correction, lane k1-delete-unverdicted-fast, 2026-11-09) |
+| `MOJOLEARN_HDB_SELECT_DEVICE` | EXPERIMENTS.md:495 DROPPED-noise (lane/apple-fast-hdbscan2 @ 2fdb9114f) | `hdbscan/impl/detail/fast_apple.mojo:95` **KEPT, owed row withdrawn**: see "Owed deletions reviewed and kept" below and the later EXPERIMENTS.md KEPT row (correction, lane k1-delete-unverdicted-fast, 2026-11-09) |
 | `MOJOLEARN_IVF_COARSE_FAISS_INIT` | EXPERIMENTS.md:1219 DROPPED-quality (lane/apple-fast-q-misc @ ab9acf0e8) | `ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:183` |
 | `MOJOLEARN_IVF_COARSE_INIT_QOLD` | EXPERIMENTS.md:1219 DROPPED-quality (lane/apple-fast-q-misc @ ab9acf0e8) | `ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:186` |
 | `MOJOLEARN_IVF_REFINE_TEAM` | EXPERIMENTS.md:326 DROPPED-noise (lane/apple-fast-batch @ 3150d75c1) | `x_ann/vsearch_fast.mojo:69` |
@@ -3381,7 +3406,7 @@ non-comment reference at the time of writing.
 | `MOJOLEARN_SYM_PART_STATS_PAR` | EXPERIMENTS.md:191 DROPPED-noise (lane/apple-fast-sym-hist @ 3bb4db314) | `gbdt/methods/kernel/pointwise_scores.mojo:1954` |
 | `MOJOLEARN_SYM_REUSE_PARTITION` | EXPERIMENTS.md:193 DROPPED-noise (lane/apple-fast-sym-iter @ 4956a2234) | `gbdt/methods/sym_iter_fast.mojo:21` |
 | `MOJOLEARN_SYM_SCAN_SUB_FUSED` | EXPERIMENTS.md:194 DROPPED-noise (lane/apple-fast-sym-hist @ 3bb4db314) | `gbdt/methods/kernel/split_properties_helpers.mojo:483` |
-| `MOJOLEARN_TREES_T29` | EXPERIMENTS.md:1710 DROP (slower), code deleted (main @ 42d1e42c6 (deleted on lane/grid-act-2)) | `gbdt/trees_identical_switches.mojo:74` |
+| `MOJOLEARN_TREES_T29` | EXPERIMENTS.md:1710 DROP (slower), code deleted (main @ 42d1e42c6 (deleted on lane/grid-act-2)) | `gbdt/trees_identical_switches.mojo:74` **KEPT, owed row withdrawn**: see "Owed deletions reviewed and kept" below and the later EXPERIMENTS.md KEPT row (correction, lane k1-delete-unverdicted-fast, 2026-11-09) |
 | `MOJOLEARN_TSA2_KPSS` | EXPERIMENTS.md:544 DROPPED-noise (lane/apple-fast-gap-tsa @ e9da47064) | `tsa/impl/timeSeries/kpss_fused.mojo:7` |
 | `MOJOLEARN_YETI_TREE_SEARCH_SCORE_GRID` | EXPERIMENTS.md:150 DROPPED-noise (lane/apple-fast-yetirank @ c7b35fd7c) | `gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo:2945` |
 
@@ -4271,3 +4296,76 @@ lane/a4-admit-sequence-tsa-neural@be7d3f4fb2). Bits: none for any int32-range or
   lane/a3-admit-decomp-prep-metrics@0cb550c337.
 - `door_rows_call` (the `_arena_io._ROWS_CALL` connection in `_native_msel_dispatch.connect`): no reader after A5 deleted
   `door_rows_host`; removed from the glue and from tools/test_device_rows_door_cv.py.
+
+## Unverdicted FAST experiments deleted (lane K1, 2026-11-09)
+
+Lane k1-delete-unverdicted-fast (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 5.5, the "no verdict" row and the
+F16 / scoped-gemm probe rows K0 left for a decision), branch `lane/k1-delete-unverdicted-fast` from `origin/integ/pre-0867-w2`
+`f59d913b0b`. Apple FAST investment is stopped (AGENTS.md 2026-10-22), so these default-off FAST switches will never get an A/B;
+Andrew decided 2026-11-08: delete. Verdict for every define: **never measured, deleted**. Every define was default off and FAST +
+Apple only, so no default build changes and no identity bits move on any vendor or the host column. Each define now refuses in
+its family guard module (`core/experiment_guards_<family>.mojo`); a restore removes that refusal by hand.
+
+Patch order: the scoped commit touched files the earlier ones did, so restore with `git apply -3`, or apply
+`MOJOLEARN_SCOPED_GEMM_AUDIT.patch` first, then any other (checked: each applies after it).
+
+Kept, not deleted (plan 5.5 last row): `MOJOLEARN_HDB_ONE_SYNC`, `MOJOLEARN_HDB_SELECT_DEVICE`, `MOJOLEARN_TREES_T29` stay (later
+KEPT rows in EXPERIMENTS.md; see "Owed deletions reviewed and kept"); their rows in the owed table now say so. Not deleted either:
+the 19 `device_plan_log` registrations the plan listed as reader-less: tools/logical_shard_identity.py and
+tools/parallel_gram_check.py (the one-GPU multi-device gate) still read them.
+
+### MOJOLEARN_ARIMA_FAST_K3_DF_PROBE
+
+- Defines: MOJOLEARN_ARIMA_FAST_K3_DF_PROBE (+ MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL).
+- What it tried: the Apple FAST double-float ARIMA likelihood: the private K3 probe (`_arima_k3_df_probe`, arima/impl/fast_scalar_df.mojo, arima/k3_df_probe_impl.mojo, bindings/arima_k3_df_probe.mojo) and F16, the compensated Kalman likelihood and finite-difference tail on the production innovations (arima/impl/fast_eval_df.mojo, its arms in arima/impl/fast_eval_ws.mojo, the `capture_stages` argument of `fast_kalman_into`, arima/checks/product_df_quality_check.mojo, the `arima_product_df_count` counter).
+- Verdict: never measured, deleted. K3: private-kernel quality PASS only (arima-k3-df-gpu-q-v1), never a fit, forecast or timing. F16: no verdict row; the one-sample M3 search/forecast B/A 1.1328 / 1.0416 / 1.0132 (n 129 / 257 / 509, ab-20261006/repairs-54c1f35a5/F16) left it off.
+- Also removed: tools/arima_k3_df_gpu_quality.py, tools/arima_k3_df_reference.py (and their apple_fast_job_policy entries), the two coverage rows.
+- Deleted by `eff59d1b88`; code recoverable at `f59d913b0b` (= `eff59d1b88^` for this group). Patch `experiments/removed/MOJOLEARN_ARIMA_FAST_K3_DF_PROBE.patch` (code files only; the guard refusal is not in it). Records: guard refusal, EXPERIMENTS.md row, this section.
+
+### MOJOLEARN_KSHAP_FAST_DEVICE_MODEL
+
+- Defines: MOJOLEARN_KSHAP_FAST_DEVICE_MODEL (+ MOJOLEARN_PSHAP_FAST_DEVICE_MODEL).
+- What it tried: KernelExplainer / PermutationExplainer on the FAST tier taking the IDENTICAL device-model route for a built-in flat forest (xtrees/agnostic_device.mojo, x_trees switch bits 1024 / 2048 in providers/python/xtrees_api_pyapi.mojo, the FAST arm of `_device_forest` in bindings/trees_agnostic_native.mojo). `AGN_ANY_DEVICE_MODEL` went with them: the model-route exports compile under the IDENTICAL `MOJOLEARN_IDN_SHAP_DEVICE_MODEL` (bit 64) alone.
+- Verdict: never measured, deleted. OPEN (EXPERIMENTS.md, lane/apple-fast-round2 @ db19e2107); afr2-kshap-dm-rf / afr2-pshap-dm-rf never ran; the board rows explain a NumPy ridge closure, which never reached the switch.
+- Also removed: the grid controls (grid_controls/apple-fast-round2.json, grid-fast/controls/apple-fast-round2.json) moved to `removed`.
+- Deleted by `e2adeea367`; code recoverable at `f59d913b0b` (= `e2adeea367^` for this group). Patch `experiments/removed/MOJOLEARN_KSHAP_FAST_DEVICE_MODEL.patch` (code files only; the guard refusal is not in it). Records: guard refusal, EXPERIMENTS.md row, this section.
+
+### MOJOLEARN_FA_FAST_GRAM_SPREAD
+
+- Defines: MOJOLEARN_FA_FAST_GRAM_SPREAD.
+- What it tried: FactorAnalysis's FAST + Apple Gram pass with rows per partial shrunk with n (`fa_gram_rows`, `FG_MIN_PARTS`, `FG_MIN_ROWS`, x_decomp/fa_fast.mojo); every Gram pass keeps `FG_ROWS`.
+- Verdict: never measured, deleted. OPEN (EXPERIMENTS.md, lane/apple-slow-paths @ 1b5eb2a48); the M3 FAST A/B was never run.
+- Also removed: the grid control (grid_controls/apple-slow-paths.json) moved to `removed`.
+- Deleted by `a831c2008d`; code recoverable at `f59d913b0b` (= `a831c2008d^` for this group). Patch `experiments/removed/MOJOLEARN_FA_FAST_GRAM_SPREAD.patch` (code files only; the guard refusal is not in it). Records: guard refusal, EXPERIMENTS.md row, this section.
+
+### MOJOLEARN_IVF_FAST_BALANCED_TASKS
+
+- Defines: MOJOLEARN_IVF_FAST_BALANCED_TASKS (+ MOJOLEARN_IVF_FAST_BALANCED_AUDIT).
+- What it tried: F14: the Apple FAST IVF search through the bounded list tasks of `ivf_balanced_scan` (ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo) and its reach counter `ivf_fast_balanced_hits` (bindings/_mojolearn_ivf.mojo). `ivf_balanced_scan` stays for `C35_PACKED_LISTS` and the IDENTICAL `MOJOLEARN_IVF_BALANCED_TASKS` opt-in.
+- Verdict: never measured, deleted. never run ("NEVER RUN, PENDING MEASUREMENT"); no EXPERIMENTS.md row.
+- Also removed: the `device_only` entry in python/mojolearn/tests/test_cpu_training_embedding_ivf.py and the coverage row.
+- Deleted by `0c3399062b`; code recoverable at `f59d913b0b` (= `0c3399062b^` for this group). Patch `experiments/removed/MOJOLEARN_IVF_FAST_BALANCED_TASKS.patch` (code files only; the guard refusal is not in it). Records: guard refusal, EXPERIMENTS.md row, this section.
+
+### MOJOLEARN_PCA_FAST_COMPENSATED_COV
+
+- Defines: MOJOLEARN_PCA_FAST_COMPENSATED_COV (+ MOJOLEARN_AFCL_L07).
+- What it tried: F11: the Apple FAST compensated (Kahan) PCA covariance, one writer per cell (decomposition/impl/linalg/detail/pca.mojo `pca_compensated_cov_kernel`, the AFCL-L07 chunked part / finish kernels, `PcaCovAudit`, the `pca_compensated_cov_count` export).
+- Verdict: never measured, deleted. no EXPERIMENTS.md row; one-sample M3 runs were slower: component B/A 0.90-2.14, full istella PCA 716.5 -> 1955.9 ms (2.73x), full taxi 107.9 -> 1777.2 ms (16.48x) (experiments/performance_ideas/measurements/full_ab_20261006/pca-full-summary.json). AFCL-L07 never ran.
+- Also removed: tools/performance_full_pca.py (the full-PCA A/B arm reading this counter and the scoped GEMM counters), the coverage row.
+- Deleted by `e4e58162e9`; code recoverable at `f59d913b0b` (= `e4e58162e9^` for this group). Patch `experiments/removed/MOJOLEARN_PCA_FAST_COMPENSATED_COV.patch` (code files only; the guard refusal is not in it). Records: guard refusal, EXPERIMENTS.md row, this section.
+
+### MOJOLEARN_MCD_FAST_ACTIVE_COMPACT
+
+- Defines: MOJOLEARN_MCD_FAST_ACTIVE_COMPACT (+ MOJOLEARN_MCD_FAST_COV_REUSE, MOJOLEARN_MCD_FAST_BOUND_BATCH).
+- What it tried: F06, MinCovDet / EllipticEnvelope on the FAST + Apple batched C-steps: active-candidate compaction (a count read, then a reduced grid), phase-local covariance reuse for identical supports, and bounded 32-candidate launches. Deleted: x_decomp/mcd_experiments.mojo, the phase's compact / reuse workspaces in x_decomp/mcd_fast.mojo, `mcd_bmma_kernel`'s `COMPACT` parameter and `ids` argument and `launch_gemm_mma_batched`'s `compact` argument (x_decomp/mcd_bmma.mojo), the `mcd_experiment_count` / `mcd_fast_batch_count` exports, and experiments/performance_ideas/F06/native_check.mojo (in the scoped commit `0a1dfdf971`; it imported the deleted module).
+- Verdict: never measured, deleted. no EXPERIMENTS.md row; one-sample M3 task timings (ab-20261006/repairs-54c1f35a5/results/F06), quality equal: compaction B/A 0.98-1.23, reuse 1.01-1.12, bounded batches 0.99-1.18; mostly slower.
+- Also removed: two coverage rows.
+- Deleted by `45d8034353`; code recoverable at `f59d913b0b` (= `45d8034353^` for this group). Patch `experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch` (code files only; the guard refusal is not in it). Records: guard refusal, EXPERIMENTS.md row, this section.
+
+### MOJOLEARN_SCOPED_GEMM_AUDIT
+
+- Defines: MOJOLEARN_SCOPED_GEMM_AUDIT (+ the scoped adapter family, F02 shared subtract, F05 narrow softmax).
+- What it tried: the Apple FAST strided G1/G2 GEMM adapter (experiments/apple_fast/gemm/scoped_dispatch.mojo: `scoped_kernel`, `try_scoped_gemm`, the TALL / DENSE / GRAM / NARROW / SPLIT / PCA arms, the benchmark-tuned LEGACY windows and the AUDIT counters) with every caller arm (core/gemm.mojo `gemm_nt` / `gemm_nt_gram`, gemm/checks/gemm_identical.mojo `_fast_vendor_gemm`, x_decomp/device.mojo, the PCA covariance); F02, the LU and Cholesky trailing subtract through its SUBTRACT epilogue (x_decomp/lu_fast_mma.mojo, cholesky/checks/fast_trsm.mojo, `gp_shared_sub_count`, `x_decomp_shared_sub_count`); F05, the QN multiclass linear forward through its 32x32 kernel (experiments/apple_fast/gemm/softmax_narrow.mojo, glm/impl/qn/glm_base.mojo now calls `gemm_nt`, bindings/softmax_g2_observe.mojo and the `softmax_g2_*` witnesses); the quality probe binding `_mojolearn_scoped_gemm_probe` (bindings/_mojolearn_scoped_gemm_probe.mojo, its entry and build script; not in the release build) and the `scoped_gemm_*` witnesses.
+- Verdict: never measured, deleted. no EXPERIMENTS.md verdict row for any of the thirteen defines. Recorded one-sample M3 evidence (2026-10-06, kept in the deleted comments): F01 task B/A 0.48-1.21, full PCA istella 717.3 -> 710.4 ms, taxi 102.6 -> 97.1 ms; scoped PCA fit HOLD-quality (scoped-pca-fit-istella-q-v1); F02 LU factor B/A 0.62-0.96 (slower), Cholesky fit 0.95 / solve 0.98 with mixed controls; F05 0.89-1.12, quality equal. Mixed, never admitted, and will not be measured.
+- Also removed: tools/scoped_gemm_quality.py, scoped_gemm_preflight_spec.py, test_scoped_gemm_readiness.py, scoped_pca_fit.py, scoped_pca_fit_spec.py, scoped_pca_recover.py, test_scoped_pca_fit_contract.py, softmax_g2_quality.py, the probe binding row of tools/verify_coverage_audit.py, the apple_fast_job_policy entries and nine coverage rows. tools/test_release_no_hands.py keeps listing `identical/_mojolearn_scoped_gemm_probe.so` as a stale artifact to remove.
+- Deleted by `0a1dfdf971`; code recoverable at `f59d913b0b` (= `0a1dfdf971^` for this group). Patch `experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch` (code files only; the guard refusal is not in it). Records: guard refusal, EXPERIMENTS.md row, this section.

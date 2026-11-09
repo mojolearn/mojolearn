@@ -132,7 +132,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
-# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by @K1SHA_SCOPED@; code recoverable at
+# TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
 # f59d913b0b. Same commit: the whole scoped G1/G2 adapter family (MOJOLEARN_SCOPED_GEMM_G1_TALL, _G1_DENSE, _G1_GRAM,
 # _G2_NARROW, _SPLIT, _PCA, MOJOLEARN_LEGACY_NARROW_SCOPED_GEMM; experiments/apple_fast/gemm/scoped_dispatch.mojo) and the
 # try_scoped_gemm arms here. Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch

@@ -73,7 +73,7 @@ comptime LU_FAST_MMA = LU_FAST_STEP1 and AFN_GEMM_APPLE and not is_defined["MOJO
 #: The outer block (the big GEMM's k). A multiple of the 32-column panel.
 comptime LFM_NB = get_defined_int["MOJOLEARN_LU_FAST_MMA_NB", 256]()
 comptime LFM_PANEL = 32
-# TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by @K1SHA_SCOPED@; code recoverable
+# TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable
 # at f59d913b0b (F02: the trailing subtract through scoped_kernel's SUBTRACT epilogue, with its shared_sub_record counter).
 # Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 

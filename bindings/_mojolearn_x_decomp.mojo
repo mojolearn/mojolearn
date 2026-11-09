@@ -22,11 +22,11 @@ from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial
 from x_decomp.decomp_owner_dev import DevDecomp
 from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, kpca_eig_py, rp_fit_py, rp_project_py
 
-# TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by @K1SHA_SCOPED@; code recoverable at
+# TOMBSTONE: MOJOLEARN_LU_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
 # f59d913b0b (its reach counter x_decomp_shared_sub_count, with MOJOLEARN_CHOL_FAST_SHARED_SUB).
 # Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 
-# TOMBSTONE: MOJOLEARN_MCD_FAST_ACTIVE_COMPACT (never measured, deleted) deleted 2026-11-09 by @K1SHA_MCD@; code recoverable
+# TOMBSTONE: MOJOLEARN_MCD_FAST_ACTIVE_COMPACT (never measured, deleted) deleted 2026-11-09 by 45d8034353; code recoverable
 # at f59d913b0b (the F06 reach counters mcd_experiment_count and mcd_fast_batch_count).
 # Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_ACTIVE_COMPACT.patch
 
