@@ -41,8 +41,9 @@ from bindings.trees_public_gbdt import gbdt_table, gbdt_vendor, gbdt_has_ctr, _f
 from bindings.trees_boost_constructor_native import tree_constructor_storage
 from checks.numerics import portable_exp64, portable_log64, pinned_mul_f64
 from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT
-from bindings.p3_labels_metrics_native import p3_item, p3_text_codes, P3_TEXT_OK
-from bindings.cpython_table import cpython_table
+from bindings.p3_labels_metrics_native import p3_text_codes, P3_TEXT_OK
+from bindings.label_list_words import label_list_store, label_store_address
+from core.label_words_impl import id_words_coded, group_runs_scan, group_sizes_store_u32, label_codes_i32_to_int
 
 comptime _UNSET = -1.0
 comptime _F32_MAX = 3.4028234663852886e+38
@@ -447,23 +448,11 @@ def _id_code(typestr: String) -> Int:
     return 6
 
 
-@always_inline
-def _id_word_coded(addr: Int, code: Int, i: Int) -> Int:
-    """`_id_word` with the element kind decided once by `_id_code` (p3-trees:
-    up to seven String comparisons ran for every element)."""
-    if code == 0:
-        return Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)[i])
-    if code == 1:
-        return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)[i])
-    if code == 2:
-        return Int(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=addr)[i])
-    if code == 3:
-        return Int(MutPointer[Int16, MutUntrackedOrigin](unsafe_from_address=addr)[i])
-    if code == 4:
-        return Int(MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=addr)[i])
-    if code == 5:
-        return Int(MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=addr)[i])
-    return Int(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)[i])
+# Lane i3-move-data-loops (2026-11-09): the id word reads (`id_word_coded`,
+# moved word for word), the run scan and the run-length store run in
+# core/label_words_impl.mojo; an exact int list is unpacked by one
+# array.array('q') construction (bindings/label_list_words.mojo). This file
+# keeps the unpack, the refusal wording and the pack.
 
 
 def _group_sizes_native(group_id: PythonObject, n_rows: Int, context: PythonObject) raises -> PythonObject:
@@ -494,72 +483,51 @@ def _group_sizes_native(group_id: PythonObject, n_rows: Int, context: PythonObje
                     + "data=" + String(n_rows) + " are different.")
     if n_rows > 0xFFFFFFFF:
         raise Error("mojolearn: group_id needs at most 2**32 - 1 rows")
-    var code = _id_code(t)
-    var words = List[Int](capacity=n)
-    for i in range(n):  # driver-loop: group_id words read natively from the id buffer (no Python object)
-        words.append(_id_word_coded(view_address, code, i))
+    var words = id_words_coded(view_address, _id_code(t), n)
     _ = view  # keep the id buffer alive through the reads above
     return _group_runs(words, PythonObject(None), context)
 
 
 def _group_runs(words: List[Int], labels: PythonObject, context: PythonObject) raises -> PythonObject:
     """The uint32 run lengths of consecutive equal group words, a repeated
-    word (a split group) refused. `labels` is the exact list the words were
-    coded from (its item names a refused group), or None for numeric ids.
-    Serial by nature: each run continues the previous one."""
+    word (a split group) refused (`group_runs_scan`). `labels` is the exact
+    list the words were coded from (its item names a refused group), or None
+    for numeric ids."""
     var sizes = List[Int]()
-    var seen = Dict[Int, Int]()
-    var last = 0
-    for i in range(len(words)):  # driver-loop: over the n group words (native, no Python object)
-        var value = words[i]
-        if i > 0 and value == last:
-            sizes[len(sizes) - 1] += 1
-            continue
-        if value in seen:
-            var name = String(value) if labels is None else _repr(labels[i])
-            raise Error("mojolearn: group Ids are not consecutive: the rows of group "
-                        + name + " are split into more than one run (row " + String(i) + "); "
-                        + "CatBoost requires every group's rows to be contiguous")
-        seen[value] = i
-        sizes.append(1)
-        last = value
+    var split = group_runs_scan(words, sizes)
+    if split >= 0:
+        var name = String(words[split]) if labels is None else _repr(labels[split])
+        raise Error("mojolearn: group Ids are not consecutive: the rows of group "
+                    + name + " are split into more than one run (row " + String(split) + "); "
+                    + "CatBoost requires every group's rows to be contiguous")
     var out = admitted_vector(len(sizes), "<u4", context)
-    var p = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(out))
-    for i in range(len(sizes)):  # driver-loop: over the run lengths (native)
-        p[i] = UInt32(sizes[i])
+    group_sizes_store_u32(sizes, trees_address(out))
     _ = out  # keep the Python object alive through the writes above
     return out
 
 
 def _group_sizes_list(ids: PythonObject, n_rows: Int, context: PythonObject) raises -> PythonObject:
     """`_group_sizes` of an exact list or tuple of n_rows group ids that are
-    all exact ints (within int64) or all exact strs, read borrowed from the
-    container's C storage (strs coded by their UTF-8 bytes, p3_text_codes):
-    equal ids have equal words, so the runs and refusals are those of the
-    keyed object path. None for anything else (that path then decides)."""
+    all exact ints (within int64, unpacked by one array.array('q')) or all
+    exact strs (coded by their UTF-8 bytes, p3_text_codes): equal ids have
+    equal words, so the runs and refusals are those of the keyed object path.
+    None for anything else (that path then decides)."""
     var b = _b()
     if (py_type(ids) is not b.list and py_type(ids) is not b.tuple) or len(ids) != n_rows or n_rows == 0:
         return PythonObject(None)
     var listed = ids if py_type(ids) is b.list else py_call(b.list, ids)
     var kind = labels_list_scalar_kind(listed)
     if kind == LABELS_LIST_INT:
-        var t = cpython_table()
-        var words = List[Int](capacity=n_rows)
-        for i in range(n_rows):  # driver-loop: per ROW (data-sized), one borrowed read and one C conversion each
-            var v = t[].PyLong_AsLongLong(p3_item(listed, i, False))
-            if v == -1:
-                if t[].PyErr_Occurred():
-                    t[].PyErr_Clear()
-                    return PythonObject(None)  # an int outside int64: the keyed path keeps it
-            words.append(Int(v))
+        var store = label_list_store(listed, "q")
+        if store is None:
+            return PythonObject(None)  # an int outside int64: the keyed path keeps it
+        var words = id_words_coded(label_store_address(store), 0, n_rows)
+        _ = store  # keep the unpacked words alive through the reads above
         return _group_runs(words, listed, context)
     var text = p3_text_codes(listed, False)
     if text.status != P3_TEXT_OK:
         return PythonObject(None)
-    var codes = List[Int](capacity=n_rows)
-    for i in range(n_rows):  # driver-loop: native copy of the n_rows codes
-        codes.append(Int(text.codes[i]))
-    return _group_runs(codes, listed, context)
+    return _group_runs(label_codes_i32_to_int(text.codes), listed, context)
 
 
 def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) raises -> PythonObject:
@@ -600,7 +568,11 @@ def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) rai
     var int_t = b.int
     var str_t = b.str
     var bytes_t = b.bytes
-    for i in range(n_rows):  # cpu-route: group_id label objects other than exact int / str lists (bytes, mixed, subclasses) checked for contiguous runs [py-data-loop]
+    # The ids reaching this loop are label objects other than exact int /
+    # str lists (bytes, mixed, subclasses): main's recorded object-path
+    # debt (tools/hooks/compute_in_shells_baseline.txt), Python objects a
+    # kernel file cannot read.
+    for i in range(n_rows):  # cpu-route: group_id label objects (int/str/bytes) checked for contiguous runs [py-data-loop]
         var value = ids[i]
         if i > 0:
             var same = value is last_value
@@ -624,11 +596,8 @@ def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) rai
         sizes.append(1)
         last = key
     var out = admitted_vector(len(sizes), "<u4", context)
-    var p = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(out))
-    _ = out  # keep the Python object alive through the native call above
-    for i in range(len(sizes)):  # cpu-route: group_id run lengths published from the label input step
-        p[i] = UInt32(sizes[i])
-        _ = out  # keep the Python object alive through the native call above
+    group_sizes_store_u32(sizes, trees_address(out))
+    _ = out  # keep the Python object alive through the native writes above
     return out
 
 

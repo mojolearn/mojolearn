@@ -243,18 +243,20 @@ def _sequence_fill(c: PythonObject, level: Int, dims: List[Int], integer: Bool, 
     var n = len(c)
     if n != dims[level]:
         raise Error("ValueError: program input sequences must be rectangular")
-    if level + 1 < len(dims):
-        for k in range(n):  # cpu-route: the user's Python list input, one borrowed C read per nested container (Python objects never reach a device)
+    # The user's Python list input is read on the host once (Python objects
+    # never reach a device, and a kernel file cannot read them): one borrowed
+    # C read per nested container, and one borrowed C read and one C
+    # conversion per leaf, straight into the typed buffer. Main's recorded
+    # input-step debt (tools/hooks/compute_in_shells_baseline.txt).
+    var inner = level + 1 < len(dims)
+    for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
+        if inner:
             _sequence_fill(PythonObject(from_borrowed=p3_item(c, k, is_tuple)), level + 1, dims, integer, pos,
                            values, ids, words)
-        _ = c  # keep the container alive through the borrowed reads above
-        return
-    # The user's Python list input is read on the host once (Python objects
-    # never reach a device): one borrowed C read and one C conversion per
-    # element, straight into the typed buffer.
-    for k in range(n):  # unpack: one pass over the caller's list or tuple leaves, one C read each into the typed buffer
-        _leaf_into(p3_item(c, k, is_tuple), pos + k, integer, values, ids, words)
-    pos += n
+        else:
+            _leaf_into(p3_item(c, k, is_tuple), pos + k, integer, values, ids, words)
+    if not inner:
+        pos += n
     _ = c  # keep the container alive through the borrowed reads above
 
 

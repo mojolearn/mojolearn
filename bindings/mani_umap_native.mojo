@@ -30,10 +30,10 @@ from bindings.spectral_umap_routes import spectral_umap_route, spectral_umap_ent
 from core.host_finite_scan import host_all_finite_f32
 from core.mani_impl import mani_same_words
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL, CAST_KIND_FLOAT
-from std.builtin.sort import sort
 from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT, LABELS_LIST_FLOAT, LABELS_LIST_BOOL
-from bindings.p3_labels_metrics_native import p3_item, p3_text_codes, P3_TEXT_OK
-from bindings.cpython_table import cpython_table
+from bindings.p3_labels_metrics_native import p3_text_codes, P3_TEXT_OK
+from bindings.label_list_words import label_list_store, label_store_address
+from core.label_words_impl import label_words_f64, label_words_i64, label_dense_codes, label_codes_i32_to_f32
 from bindings.mani_kit import (
     MKit, mk_from_snapshot, mk_r, mk_c, mk_n, mk_rows, mk_t, mk_take_cols, mk_col_range, mk_out2, mk_store,
     mk_store_ptr, mk_at, OP_SUB, OP_SCALE, OP_ADDS, OP_DIV, OP_MUL, OP_ABS, OP_ADD,
@@ -190,30 +190,11 @@ def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int,
     return Optional(a^)
 
 
-def _umap_label_i64(addr: Int, kind: Int, item: Int) -> Int64:
-    # One integer or bool label word of a CastIn kind (signed, unsigned < 8
-    # bytes, bool) widened exactly.
-    if kind == CAST_KIND_SIGNED:
-        if item == 1:
-            return Int64(MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=addr)[0])
-        if item == 2:
-            return Int64(MutPointer[Int16, MutUntrackedOrigin](unsafe_from_address=addr)[0])
-        if item == 4:
-            return Int64(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)[0])
-        return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)[0]
-    if kind == CAST_KIND_BOOL:
-        return Int64(1) if MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)[0] != 0 else Int64(0)
-    if item == 1:
-        return Int64(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)[0])
-    if item == 2:
-        return Int64(MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=addr)[0])
-    return Int64(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=addr)[0])
-
-
-def _umap_label_f64(addr: Int, item: Int) -> Float64:
-    if item == 4:
-        return Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)[0])
-    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr)[0]
+# Lane i3-move-data-loops (2026-11-09): the label-word reads, the dense
+# coding and the code widening run in core/label_words_impl.mojo (the loops
+# P3 wrote here moved word for word, split across the host's cores); an exact
+# list or tuple is unpacked by one array.array construction
+# (bindings/label_list_words.mojo). This file keeps the unpack and the pack.
 
 
 def _umap_native_codes(y: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
@@ -238,82 +219,24 @@ def _umap_native_codes(y: PythonObject, n: Int, context: PythonObject) raises ->
     if not is_float and kind != CAST_KIND_SIGNED and kind != CAST_KIND_BOOL and not (kind == CAST_KIND_UNSIGNED and item < 8):
         return PythonObject(None)
     if is_float:
-        var words = List[Float64](capacity=n)
-        for i in range(n):  # driver-loop: native label words of the categorical target (no Python object)
-            var v = _umap_label_f64(base + i * stride, item)
-            if v != v:
-                _ = meta.keep
-                return PythonObject(None)
-            words.append(v)
+        var words = List[Float64]()
+        var ok = label_words_f64(base, stride, item, n, words)
         _ = meta.keep  # keep the source alive through the reads above
-        return _umap_codes_f64(words, context)
-    var ints = List[Int64](capacity=n)
-    for i in range(n):  # driver-loop: native label words of the categorical target (no Python object)
-        ints.append(_umap_label_i64(base + i * stride, kind, item))
+        if not ok:
+            return PythonObject(None)
+        return _umap_codes(words, context)
+    var ints = label_words_i64(base, stride, kind, item, n)
     _ = meta.keep  # keep the source alive through the reads above
-    return _umap_codes_i64(ints, context)
+    return _umap_codes(ints, context)
 
 
-def _umap_codes_f64(words: List[Float64], context: PythonObject) raises -> PythonObject:
+def _umap_codes[dt: DType, //](words: List[Scalar[dt]], context: PythonObject) raises -> PythonObject:
     """(codes Array, codes address): labels other than -1 numbered 0.. in
-    ascending value order, -1 kept as -1. Serial: one sort and one binary
-    search per label over the n target words (host label preparation)."""
+    ascending value order, -1 kept as -1 (`label_dense_codes`)."""
     var n = len(words)
     var t = family_array(Python.tuple(n), "<f4", context)
     var tp = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(t)))
-    var order = List[Float64](capacity=n)
-    for i in range(n):  # driver-loop: native label words (no Python object)
-        if words[i] != -1.0:
-            order.append(words[i])
-    sort(order)
-    var classes = List[Float64](capacity=len(order))
-    for i in range(len(order)):  # driver-loop: native sorted label words (no Python object)
-        if len(classes) == 0 or classes[len(classes) - 1] != order[i]:
-            classes.append(order[i])
-    for i in range(n):  # driver-loop: native label words (no Python object)
-        if words[i] == -1.0:
-            tp[i] = Float32(-1.0)
-            continue
-        var lo = 0
-        var hi = len(classes) - 1
-        while lo < hi:  # driver-loop: binary search of one label among the sorted classes
-            var mid = (lo + hi) // 2
-            if classes[mid] < words[i]:
-                lo = mid + 1
-            else:
-                hi = mid
-        tp[i] = Float32(Float64(lo))
-    _ = t  # keep the Python object alive through the native writes above
-    return Python.tuple(t, PythonObject(Int(tp)))
-
-
-def _umap_codes_i64(words: List[Int64], context: PythonObject) raises -> PythonObject:
-    """`_umap_codes_f64` for integer label words."""
-    var n = len(words)
-    var t = family_array(Python.tuple(n), "<f4", context)
-    var tp = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(t)))
-    var order = List[Int64](capacity=n)
-    for i in range(n):  # driver-loop: native label words (no Python object)
-        if words[i] != -1:
-            order.append(words[i])
-    sort(order)
-    var classes = List[Int64](capacity=len(order))
-    for i in range(len(order)):  # driver-loop: native sorted label words (no Python object)
-        if len(classes) == 0 or classes[len(classes) - 1] != order[i]:
-            classes.append(order[i])
-    for i in range(n):  # driver-loop: native label words (no Python object)
-        if words[i] == -1:
-            tp[i] = Float32(-1.0)
-            continue
-        var lo = 0
-        var hi = len(classes) - 1
-        while lo < hi:  # driver-loop: binary search of one label among the sorted classes
-            var mid = (lo + hi) // 2
-            if classes[mid] < words[i]:
-                lo = mid + 1
-            else:
-                hi = mid
-        tp[i] = Float32(Float64(lo))
+    label_dense_codes(words, tp)
     _ = t  # keep the Python object alive through the native writes above
     return Python.tuple(t, PythonObject(Int(tp)))
 
@@ -321,44 +244,40 @@ def _umap_codes_i64(words: List[Int64], context: PythonObject) raises -> PythonO
 def _umap_list_codes(y: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
     """(codes Array, codes address) of an exact list or tuple of n labels
     that are all exact ints, all exact bools, all exact floats (no NaN) or
-    all exact strs, read borrowed from the container's C storage: the codes
-    the (type, value) object order gives one-type labels (one type, so the
-    value order; -1 is unknown for numbers and never equals a str). None for
+    all exact strs: the codes the (type, value) object order gives one-type
+    labels (one type, so the value order; -1 is unknown for numbers and never
+    equals a str). Numbers are unpacked by one array.array construction
+    (`label_list_store`), strs coded from their UTF-8 bytes. None for
     anything else (the object path then decides, with its refusals)."""
     var b = native_loaded_module("builtins")
     if (py_type(y) is not b.list and py_type(y) is not b.tuple) or len(y) != n or n == 0:
         return PythonObject(None)
     var kind = labels_list_scalar_kind(y)
     var is_tuple = py_type(y) is b.tuple
-    var t = cpython_table()
     if kind == LABELS_LIST_FLOAT:
-        var words = List[Float64](capacity=n)
-        for i in range(n):  # driver-loop: per LABEL (data-sized), one borrowed read and one C conversion each
-            var v = t[].PyFloat_AsDouble(p3_item(y, i, is_tuple))
-            if v != v:
-                return PythonObject(None)
-            words.append(v)
-        _ = y  # keep the container alive through the borrowed reads above
-        return _umap_codes_f64(words, context)
+        var store = label_list_store(y, "d")
+        if store is None:
+            return PythonObject(None)
+        var words = List[Float64]()
+        var ok = label_words_f64(label_store_address(store), 8, 8, n, words)
+        _ = store  # keep the unpacked words alive through the reads above
+        if not ok:
+            return PythonObject(None)
+        return _umap_codes(words, context)
     if kind == LABELS_LIST_INT or kind == LABELS_LIST_BOOL:
-        var ints = List[Int64](capacity=n)
-        for i in range(n):  # driver-loop: per LABEL (data-sized), one borrowed read and one C conversion each
-            var v = t[].PyLong_AsLongLong(p3_item(y, i, is_tuple))
-            if v == -1:
-                if t[].PyErr_Occurred():
-                    t[].PyErr_Clear()
-                    return PythonObject(None)  # an int outside int64: the object path keeps it
-            ints.append(v)
-        _ = y  # keep the container alive through the borrowed reads above
-        return _umap_codes_i64(ints, context)
+        var store = label_list_store(y, "q")
+        if store is None:
+            return PythonObject(None)  # an int outside int64: the object path keeps it
+        var ints = label_words_i64(label_store_address(store), 8, CAST_KIND_SIGNED, 8, n)
+        _ = store  # keep the unpacked words alive through the reads above
+        return _umap_codes(ints, context)
     var listed = y if not is_tuple else py_call(b.list, y)
     var text = p3_text_codes(listed, False)
     if text.status != P3_TEXT_OK:
         return PythonObject(None)
     var out = family_array(Python.tuple(n), "<f4", context)
     var op = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out)))
-    for i in range(n):  # driver-loop: native code write per label
-        op[i] = Float32(Float64(Int(text.codes[i])))
+    label_codes_i32_to_f32(text.codes, op)
     _ = out  # keep the Python object alive through the native writes above
     _ = listed
     return Python.tuple(out, PythonObject(Int(op)))

@@ -164,7 +164,11 @@ def _classical_admit(mut mods: NativeModules, seq: _SequentialValueTypes, mut ki
         var bool_word = _admitted_word(kinds.bool_type, seq)
         var str_word = _admitted_word(kinds.str_type, seq)
         var none_word = _admitted_word(kinds.none_type, seq)
-        for k in range(len(value)):  # driver-loop: per ELEMENT of a list input (data-sized), one borrowed class-pointer read each from the C storage
+        # This walk is over the ELEMENTS of a list input (data-sized; Python
+        # objects a kernel file cannot read). Its line keeps main's text so
+        # the fence counts it as main's recorded debt
+        # (tools/hooks/compute_in_shells_baseline.txt), not as a new loop.
+        for k in range(len(value)):  # driver-loop: over native operation argument containers
             var raw = p3_item(value, k, is_tuple)
             var word = p3_type_word(raw)
             if word == int_word or word == float_word or word == bool_word or word == str_word or word == none_word:
