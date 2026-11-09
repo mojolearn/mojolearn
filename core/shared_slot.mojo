@@ -41,7 +41,26 @@ concurrently, and a loser's value is destroyed. Consequences:
   * anything a slot creates LAZILY after `get_or_create_ptr` (a context, a
     list's first entry) is ours to guard: take the slot's lock word
     (`shared_slot_lock` / `shared_slot_unlock`) around the test and the
-    store. core/neural_context.mojo `process_ctx` is the model.
+    store, and publish it with a flag so later reads take no lock.
+    core/neural_context.mojo `process_ctx` is the model.
+
+THE LINUX RUNTIME AGREES (lane s2, 2026-11-09, read-only). The Linux wheels
+bundle their own copy (mojolearn_core 0.8.66 manylinux_2_35_x86_64,
+`mojolearn/.libs/libKGENCompilerRTShared.so`, sha256 d8759513cd99a717...;
+excerpts in ~/mojolearn-evidence/s2/linux-rt/). `KGEN_CompilerRT_
+GetOrCreateGlobal` at 0x3f050 builds the table once under a C++ static
+guard (`__cxa_guard_acquire`, memset of 0x8009 bytes: 4096 pointer cells
+and a flag) and tail-calls the table method at 0xd0f60, the same algorithm
+as the mac build: a hash of the name, linear probing of cells (h + i) &
+0xfff for i < 12 with a length test and a `bcmp` per probe; on an empty cell
+the CALLER runs `init_fn` with no lock (0xd1010 `callq *-0x58(%rbp)`), builds
+a 0x38-byte entry {value, destroy_fn, name} and publishes it with one
+`lock cmpxchgq` into the probed cell (0xd10be / 0xd10f4); a loser calls
+`destroy_fn` on its own value (0xd110d `callq *%rsi`), frees its entry and
+re-reads the winner (same name: the winner's pointer; else probing goes
+on). So both runtimes publish one value per name, may run `init_fn` more
+than once concurrently, and destroy the losers: the rules above hold on
+Linux (NVIDIA and AMD wheels) and macOS alike.
 (The ask for Modular, recorded here: document `_Global` first-creation
 semantics, and whether `init_fn` running twice is a guaranteed contract.)
 """
