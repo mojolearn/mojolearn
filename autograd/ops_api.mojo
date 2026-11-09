@@ -551,7 +551,11 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
         if src.count() != self.rows[slot] * self.cols[slot]:
             raise Error("ops: load_weights: the source holds " + String(src.count())
                         + " values, the tensor " + String(self.rows[slot] * self.cols[slot]))
-        upload_cast(self.ex, FP(unsafe_from_address=self.owned[slot]), src)
+        if self.int_words[slot]:
+            # an int32-word tensor (ids, integer state) keeps int32 words
+            upload_cast_i32(self.ex, FP(unsafe_from_address=self.owned[slot]), src, "ops: load_weights")
+        else:
+            upload_cast(self.ex, FP(unsafe_from_address=self.owned[slot]), src)
         # a block step op's resident struct over this buffer is stale now
         self.steps.forget(self.owned[slot])
 

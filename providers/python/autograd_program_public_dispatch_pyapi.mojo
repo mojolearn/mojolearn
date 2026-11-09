@@ -10,7 +10,7 @@ from autograd.control_checkpoint import control_save
 from providers.python.autograd_program_owner_pyapi import program_owner_fields, program_native_sequence, program_release_fields
 from providers.python.autograd_program_arrays_pyapi import program_numeric_scalar, program_admit_value, uint64_input
 from providers.python.autograd_program_pyapi import ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py, _integer
-from providers.python.autograd_program_control_pyapi import ops_program_control_py
+from providers.python.autograd_program_control_pyapi import ops_program_control_py, ops_program_decode_py
 from providers.python.autograd_program_control_grad_pyapi import ops_program_control_vjp_py
 from providers.python.autograd_program_save_pyapi import ops_program_save_fields_py
 from providers.python.autograd_owned_program_public_pyapi import ops_owned_program_create_request_py
@@ -113,6 +113,16 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
             return ops_program_control_py[E, KIND](sid, pid, condition, other, sid, sid, args[2], limit, args[4],
                                                    every, iteration)
         return ops_program_control_py[E, KIND](sid, pid, condition, other, sid, sid, args[2], limit, args[4])
+    if name == "decode":
+        # lane x1: args (arrays, n, unroll, iteration, state)
+        _arguments(args, 5)
+        program_native_sequence(args[0])
+        var n = PythonObject(_integer(args[1], "n", 0))
+        var unroll = _integer(args[2], "unroll", 1)
+        _option(args[3])
+        if args[4] is not None and py_type(args[4]) is not py_type(Python.dict()):
+            raise Error("TypeError: decode state must be a dict of state handle -> array, or None")
+        return ops_program_decode_py[E, KIND](sid, pid, args[0], n, unroll, Bool(py=args[3]), args[4])
     if name == "fit" or name == "fit_if":
         _arguments(args, 5)
         var condition = 0
