@@ -777,16 +777,83 @@ def device_walk_enqueue_speculative(
     mut oracle: BinOptimizedOracle,
     mut w: WalkBuffers,
     evaluations: Int,
+    copy_home: Bool = True,
 ) raises:
     """GBDT_WALK_DEV_STEP: `evaluations` line-search evaluations, each at the
     control word's step (`walker_accept_kernel` formed it from the last
     flag), then the control word's copy home; no flag readback, no drain.
     The caller drains, then reads `device_walk_ctl_updated` /
-    `device_walk_ctl_step`."""
+    `device_walk_ctl_step`. `copy_home=False` (tree op TREE_OP_LEAF_ESTIMATE)
+    leaves the control word on the device: `walk_tail_status_kernel` reads
+    it there."""
     for _ in range(evaluations):  # driver-loop: over the walk's line-search evaluations
         _enqueue_move(ctx, oracle, w, Float64(0.0), True, step_from_dev=True)
         _enqueue_eval_and_decide(ctx, oracle, w, False, WALK_CTL_LINE)
-    ctx.enqueue_copy(dst_ptr=w.h_ctl.unsafe_ptr(), src_buf=w.d_ctl)
+    if copy_home:
+        ctx.enqueue_copy(dst_ptr=w.h_ctl.unsafe_ptr(), src_buf=w.d_ctl)
+
+
+#: Tree op TREE_OP_LEAF_ESTIMATE's status code (lane t1b-tree-leaf-and-node-ops,
+#: docs/plans/EXECUTOR_T1_TREE_OPS.md section 5): the walk's first
+#: `iterations` line-search evaluations accepted nothing, so the walker's
+#: never-accepted tail (`iteration < 100`, `descent_helpers.cpp:179`, one
+#: drain per evaluation) owns this round. A code of its own range, so it is
+#: never mistaken for the structure word's level codes or the partition's
+#: 1 / 2 in STEP_FAIL.
+comptime LEAF_STATUS_HOST_TAIL = Int32(1 << 20)
+
+
+def walk_tail_status_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    ctl: MutPointer[UInt64, MutAnyOrigin],
+    line_search: Int32,
+    status: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread, while the gate is open: `status[0]` =
+    LEAF_STATUS_HOST_TAIL when the walk ran a line search (`line_search`,
+    more than one iteration) and its control word says no evaluation was
+    taken (`ctl[1] == 0`, `walker_accept_kernel`), else 0. Integer only."""
+    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+        return
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    var code = Int32(0)
+    if line_search != Int32(0) and ctl.unsafe_load(1) == UInt64(0):
+        code = LEAF_STATUS_HOST_TAIL
+    status.unsafe_store(0, code)
+
+
+def device_walk_enqueue_bounded(
+    ctx: DeviceContext,
+    mut oracle: BinOptimizedOracle,
+    mut w: WalkBuffers,
+    iterations: Int,
+    mut gate: DeviceBuffer[DType.int32],
+    mut status: DeviceBuffer[DType.int32],
+) raises:
+    """The walk of tree op TREE_OP_LEAF_ESTIMATE, ENQUEUED, nothing read
+    back: `device_walk_begin`, then (more than one iteration) the first
+    `iterations` line-search evaluations at the control word's steps (the
+    GBDT_WALK_DEV_STEP form, whatever that define says: the host walker
+    always runs them, so their steps and their accept/stop decisions are
+    the device's), then `walk_tail_status_kernel`. When an evaluation was
+    taken the walk is over (`iteration == iterations` and updated, the
+    host walker's exit) and the estimate is `w.result()`; when none was,
+    `status[0]` is LEAF_STATUS_HOST_TAIL and the round belongs to the
+    host tail (`device_walk_estimate`), see the op's docstring. The one
+    data-dependent loop length left is that tail's: a device-side loop
+    whose trip count is a device word needs a conditional launch the
+    toolchain does not offer (recorded as an ask for Modular in
+    docs/plans/EXECUTOR_T1_TREE_OPS.md), so it is not emulated here with
+    up to 100 gated evaluations per round."""
+    var finished = device_walk_begin(ctx, oracle, w, iterations)
+    if not finished:
+        device_walk_enqueue_speculative(ctx, oracle, w, iterations, copy_home=False)
+    ctx.enqueue_function[walk_tail_status_kernel](  # small-launch(one word): the walk's stop status
+        gate.unsafe_ptr(), w.d_ctl.unsafe_ptr(),
+        Int32(0) if finished else Int32(1), status.unsafe_ptr(),
+        grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+    )
 
 
 def device_walk_ctl_updated(mut w: WalkBuffers) -> Bool:

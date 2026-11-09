@@ -309,6 +309,91 @@ def bootstrap_grid_blocks(n_rows: Int) -> Int:
     return blocks
 
 
+def bootstrap_gated_kernel[bootstrap_type: Int](
+    gate: MutPointer[Int32, MutAnyOrigin],
+    seeds: MutPointer[UInt64, MutAnyOrigin],
+    stats: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    param: Float32,
+    mags: MutPointer[Float32, MutAnyOrigin],
+    compute_mags_in: Int32,
+    stat_count_in: Int32,
+):
+    """`bootstrap_kernel` behind the executor gate (lane t1-tree-builder-ops,
+    docs/plans/EXECUTOR_T1_TREE_OPS.md): while word 0 of `gate` is 0 the
+    body runs unchanged (same draws, same seed write-back, same partials);
+    once the loop is done nothing is written, so the carried seeds stay as
+    the stopping round left them. Every thread reads the same word before
+    any barrier, so the early return is block-uniform."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    bootstrap_kernel[bootstrap_type](
+        seeds, stats, n_rows_in, param, mags, compute_mags_in, stat_count_in
+    )
+
+
+def _launch_bootstrap_arm[bootstrap_type: Int, GATED: Bool](
+    ctx: DeviceContext,
+    gate: MutPointer[Int32, MutAnyOrigin],
+    mut seeds: DeviceBuffer[DType.uint64],
+    mut stats: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    param: Float32,
+    mut mags: DeviceBuffer[DType.float32],
+    compute_mags: Bool,
+    stat_count: Int,
+) raises:
+    """One draw arm's launch, ungated (`launch_bootstrap`) or gated
+    (`tree_op_bootstrap`): the same grid, block and arguments."""
+    var blocks = bootstrap_grid_blocks(n_rows)
+    comptime if GATED:
+        ctx.enqueue_function[bootstrap_gated_kernel[bootstrap_type]](
+            gate, seeds.unsafe_ptr(), stats.unsafe_ptr(), Int32(n_rows), param,
+            mags.unsafe_ptr(), Int32(1) if compute_mags else Int32(0),
+            Int32(stat_count),
+            grid_dim=(blocks, 1, 1),
+            block_dim=(BOOTSTRAP_BLOCK_SIZE, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[bootstrap_kernel[bootstrap_type]](
+            seeds.unsafe_ptr(), stats.unsafe_ptr(), Int32(n_rows), param,
+            mags.unsafe_ptr(), Int32(1) if compute_mags else Int32(0),
+            Int32(stat_count),
+            grid_dim=(blocks, 1, 1),
+            block_dim=(BOOTSTRAP_BLOCK_SIZE, 1, 1),
+        )
+
+
+def _launch_bootstrap_impl[GATED: Bool](
+    ctx: DeviceContext,
+    gate: MutPointer[Int32, MutAnyOrigin],
+    bootstrap_type: Int,
+    mut seeds: DeviceBuffer[DType.uint64],
+    mut stats: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    param: Float32,
+    mut mags: DeviceBuffer[DType.float32],
+    compute_mags: Bool,
+    stat_count: Int,
+) raises:
+    if bootstrap_type == BOOTSTRAP_KERNEL_BAYESIAN:
+        _launch_bootstrap_arm[BOOTSTRAP_KERNEL_BAYESIAN, GATED](
+            ctx, gate, seeds, stats, n_rows, param, mags, compute_mags, stat_count
+        )
+    elif bootstrap_type == BOOTSTRAP_KERNEL_BERNOULLI:
+        _launch_bootstrap_arm[BOOTSTRAP_KERNEL_BERNOULLI, GATED](
+            ctx, gate, seeds, stats, n_rows, param, mags, compute_mags, stat_count
+        )
+    elif bootstrap_type == BOOTSTRAP_KERNEL_POISSON:
+        _launch_bootstrap_arm[BOOTSTRAP_KERNEL_POISSON, GATED](
+            ctx, gate, seeds, stats, n_rows, param, mags, compute_mags, stat_count
+        )
+    else:
+        raise Error(
+            "unknown bootstrap kernel type " + String(bootstrap_type)
+        )
+
+
 def launch_bootstrap(
     ctx: DeviceContext,
     bootstrap_type: Int,
@@ -329,38 +414,78 @@ def launch_bootstrap(
     them from three different option fields and hands each kernel one
     float, which is the shape kept here.
     """
-    var blocks = bootstrap_grid_blocks(n_rows)
-    if bootstrap_type == BOOTSTRAP_KERNEL_BAYESIAN:
-        ctx.enqueue_function[
-            bootstrap_kernel[BOOTSTRAP_KERNEL_BAYESIAN]
-        ](
-            seeds.unsafe_ptr(), stats.unsafe_ptr(), Int32(n_rows), param,
-            mags.unsafe_ptr(), Int32(1) if compute_mags else Int32(0),
-            Int32(stat_count),
-            grid_dim=(blocks, 1, 1),
-            block_dim=(BOOTSTRAP_BLOCK_SIZE, 1, 1),
-        )
-    elif bootstrap_type == BOOTSTRAP_KERNEL_BERNOULLI:
-        ctx.enqueue_function[
-            bootstrap_kernel[BOOTSTRAP_KERNEL_BERNOULLI]
-        ](
-            seeds.unsafe_ptr(), stats.unsafe_ptr(), Int32(n_rows), param,
-            mags.unsafe_ptr(), Int32(1) if compute_mags else Int32(0),
-            Int32(stat_count),
-            grid_dim=(blocks, 1, 1),
-            block_dim=(BOOTSTRAP_BLOCK_SIZE, 1, 1),
-        )
-    elif bootstrap_type == BOOTSTRAP_KERNEL_POISSON:
-        ctx.enqueue_function[
-            bootstrap_kernel[BOOTSTRAP_KERNEL_POISSON]
-        ](
-            seeds.unsafe_ptr(), stats.unsafe_ptr(), Int32(n_rows), param,
-            mags.unsafe_ptr(), Int32(1) if compute_mags else Int32(0),
-            Int32(stat_count),
-            grid_dim=(blocks, 1, 1),
-            block_dim=(BOOTSTRAP_BLOCK_SIZE, 1, 1),
-        )
-    else:
-        raise Error(
-            "unknown bootstrap kernel type " + String(bootstrap_type)
-        )
+    # the ungated arm never reads the gate; the seed pointer stands in
+    var no_gate = seeds.unsafe_ptr().bitcast[Int32]().unsafe_origin_cast[MutAnyOrigin]()
+    _launch_bootstrap_impl[False](
+        ctx, no_gate, bootstrap_type, seeds, stats, n_rows, param, mags,
+        compute_mags, stat_count,
+    )
+
+
+def tree_op_bootstrap(
+    ctx: DeviceContext,
+    mut gate: DeviceBuffer[DType.int32],
+    bootstrap_type: Int,
+    mut seeds: DeviceBuffer[DType.uint64],
+    mut stats: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    param: Float32,
+    mut mags: DeviceBuffer[DType.float32],
+    compute_mags: Bool,
+    stat_count: Int,
+) raises:
+    """Tree op TREE_OP_BOOTSTRAP (gbdt/tree_ops.mojo): `launch_bootstrap`
+    behind the executor gate (word 0 of `gate`: the loop's done word, or
+    `core.step_gate.step_gate_open_word`). The seeds are carried state, so
+    the draw is gated; the same kernel body, so the same words. Enqueue
+    only."""
+    _launch_bootstrap_impl[True](
+        ctx, gate.unsafe_ptr(), bootstrap_type, seeds, stats, n_rows, param,
+        mags, compute_mags, stat_count,
+    )
+
+
+def seed_snapshot_gated_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    seeds: MutPointer[UInt64, MutAnyOrigin],
+    n_in: Int32,
+    snapshot: MutPointer[UInt64, MutAnyOrigin],
+):
+    """While the gate is open: `snapshot[i] = seeds[i]`, grid-stride. Past
+    the stop nothing is written, so the snapshot holds the seeds as they
+    were before the stopping round's draw."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+    while i < n:
+        snapshot.unsafe_store(i, seeds.unsafe_load(i))
+        i += stride
+
+
+def tree_op_seed_snapshot(
+    ctx: DeviceContext,
+    mut gate: DeviceBuffer[DType.int32],
+    mut seeds: DeviceBuffer[DType.uint64],
+    mut snapshot: DeviceBuffer[DType.uint64],
+) raises:
+    """Tree op TREE_OP_SEED_SNAPSHOT (gbdt/tree_ops.mojo, lane
+    t1b-tree-leaf-and-node-ops): the bootstrap seeds copied into `snapshot`
+    behind the gate, enqueued right before TREE_OP_BOOTSTRAP. When a round
+    stops on TREE_OP_LEAF_ESTIMATE's LEAF_STATUS_HOST_TAIL, `snapshot` is
+    the seeds that round started from (the snapshot and the draw of every
+    later round are gated off), so the driver copies it back and reruns the
+    round on the host-driven path. Integer copy only. Enqueue only."""
+    var n = len(seeds)
+    if len(snapshot) < n:
+        raise Error("tree_op_seed_snapshot: the snapshot holds fewer than " + String(n) + " seeds")
+    var blocks = (n + 255) // 256
+    if blocks > 1024:
+        blocks = 1024
+    if blocks < 1:
+        blocks = 1
+    ctx.enqueue_function[seed_snapshot_gated_kernel](
+        gate.unsafe_ptr(), seeds.unsafe_ptr(), Int32(n), snapshot.unsafe_ptr(),
+        grid_dim=(blocks, 1, 1), block_dim=(256, 1, 1),
+    )

@@ -313,6 +313,76 @@ def leaf_sizes_scan_kernel(
         words.unsafe_store(2 * nl + 1, Int64(bounds.unsafe_load(2 * nl)))
 
 
+def partition_words_u32_kernel(
+    words: MutPointer[Int64, MutAnyOrigin],
+    n_leaves_in: Int32,
+    offsets: MutPointer[UInt32, MutAnyOrigin],
+    sizes: MutPointer[UInt32, MutAnyOrigin],
+):
+    """Tree op TREE_OP_LEAF_ESTIMATE's input (lane t1b-tree-leaf-and-node-ops):
+    `leaf_sizes_scan_kernel`'s offsets and sizes (`words[0, nl)`,
+    `words[nl, 2 nl)`) as the oracle's `d_p_off` / `d_p_sz` (UInt32), one
+    thread per leaf. The integers `_estimate_and_apply` packs on the host
+    from `LeafPartition.offsets` / `sizes` and uploads; here they never
+    leave the device."""
+    var nl = Int(n_leaves_in)
+    var leaf = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if leaf >= nl:
+        return
+    offsets.unsafe_store(leaf, UInt32(Int(words.unsafe_load(leaf))))
+    sizes.unsafe_store(leaf, UInt32(Int(words.unsafe_load(nl + leaf))))
+
+
+def enqueue_partition_words_u32(
+    ctx: DeviceContext,
+    mut parts: DeviceLeafPartitioner,
+    n_leaves: Int,
+    mut offsets: DeviceBuffer[DType.uint32],
+    mut sizes: DeviceBuffer[DType.uint32],
+) raises:
+    """`partition_words_u32_kernel` over the partitioner's scanned words
+    (after `partition_device` / `tree_op_partition`), enqueued."""
+    var blocks = (n_leaves + LEAF_SCAN_TPB - 1) // LEAF_SCAN_TPB
+    if blocks < 1:
+        blocks = 1
+    ctx.enqueue_function[partition_words_u32_kernel](  # small-launch(n_leaves: leaves): one thread per leaf, a model-structure size
+        parts.d_part.unsafe_ptr(), Int32(n_leaves), offsets.unsafe_ptr(),
+        sizes.unsafe_ptr(),
+        grid_dim=(blocks, 1, 1), block_dim=(LEAF_SCAN_TPB, 1, 1),
+    )
+
+
+#: `partition_status_kernel`'s codes (tree op TREE_OP_PARTITION's status
+#: word, a failure word in the sense of core/step_gate.mojo).
+comptime PARTITION_STATUS_OUT_OF_RANGE = 1
+comptime PARTITION_STATUS_SIZE_SUM = 2
+
+
+def partition_status_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    words: MutPointer[Int64, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_leaves_in: Int32,
+    status: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread, while the gate is open: the two refusals of
+    `_collect_scanned` as a device status word. 0 = the partition is whole;
+    PARTITION_STATUS_OUT_OF_RANGE = a row fell in a leaf at or above
+    n_leaves; PARTITION_STATUS_SIZE_SUM = the leaf sizes do not sum to the
+    row count. Integer compares only."""
+    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+        return
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    var nl = Int(n_leaves_in)
+    var code = Int32(0)
+    if words.unsafe_load(2 * nl + 1) != Int64(0):
+        code = Int32(PARTITION_STATUS_OUT_OF_RANGE)
+    elif words.unsafe_load(2 * nl) != Int64(Int(n_rows_in)):
+        code = Int32(PARTITION_STATUS_SIZE_SUM)
+    status.unsafe_store(0, code)
+
+
 struct DeviceLeafPartitioner(Movable):
     """DEVIATION 2551: `partition_from_bins` on the device, owned by the
     fit (pool of one, like `TEstimationWorkspace`). `bins` is the buffer the
@@ -333,7 +403,6 @@ struct DeviceLeafPartitioner(Movable):
     var offsets: DeviceBuffer[DType.int32]
     var bsums: DeviceBuffer[DType.int32]
     var d_bounds: DeviceBuffer[DType.uint32]
-    var h_bounds: HostBuffer[DType.uint32]
     #: `leaf_sizes_scan_kernel`'s words: offsets, sizes, total, flag
     var d_part: DeviceBuffer[DType.int64]
     var h_part: HostBuffer[DType.int64]
@@ -359,21 +428,13 @@ struct DeviceLeafPartitioner(Movable):
         self.d_bounds = ctx.enqueue_create_buffer[DType.uint32](
             2 * n_leaves + 1
         )
-        self.h_bounds = ctx.enqueue_create_host_buffer[DType.uint32](
-            2 * n_leaves + 1
-        )
         self.d_part = ctx.enqueue_create_buffer[DType.int64](2 * n_leaves + 2)
         self.h_part = ctx.enqueue_create_host_buffer[DType.int64](
             2 * n_leaves + 2
         )
         ctx.synchronize()
 
-    def partition(
-        mut self, ctx: DeviceContext, n_rows: Int, n_leaves: Int
-    ) raises -> LeafPartition:
-        """Group the first `n_rows` entries of `bins` by leaf. Same result
-        as `partition_from_bins(ctx, bins, n_rows, n_leaves)`, and the same
-        refusal of a leaf at or above `n_leaves`."""
+    def _check_caps(self, n_rows: Int, n_leaves: Int) raises:
         if n_rows <= 0 or n_rows > self.n_rows_cap:
             raise Error(
                 "DeviceLeafPartitioner: n_rows " + String(n_rows)
@@ -384,6 +445,19 @@ struct DeviceLeafPartitioner(Movable):
                 "DeviceLeafPartitioner: n_leaves " + String(n_leaves)
                 + " outside capacity " + String(self.n_leaves_cap)
             )
+
+    def partition_device(
+        mut self, ctx: DeviceContext, n_rows: Int, n_leaves: Int
+    ) raises:
+        """The partition on the device, ENQUEUED, nothing read back: copy
+        the bins to the keys, the identity row order, the stable radix sort
+        of (leaf, row), each leaf's bounds, then the scan into `d_part`
+        (offsets, sizes, total, out-of-range flag). The one launch sequence
+        `partition`, `partition_enqueue` and tree op TREE_OP_PARTITION
+        share. The bounds are zeroed on the device (lane
+        t1-tree-builder-ops: the host zero fill and its upload stood here;
+        the same zero words)."""
+        self._check_caps(n_rows, n_leaves)
         var copy_blocks = (n_rows + COPY_BLOCK - 1) // COPY_BLOCK
         ctx.enqueue_function[copy_u32_kernel](
             self.keys.unsafe_ptr(), self.bins.unsafe_ptr(), Int32(n_rows),
@@ -397,22 +471,26 @@ struct DeviceLeafPartitioner(Movable):
             ctx, n_rows, 0, bits, self.keys, self.vals, self.tkeys,
             self.tvals, self.offsets, self.bsums,
         )
-        var hb = self.h_bounds.unsafe_ptr()
-        for i in range(2 * n_leaves + 1):
-            hb.unsafe_store(i, UInt32(0))
-        ctx.enqueue_copy(dst_buf=self.d_bounds, src_ptr=hb)
+        ctx.enqueue_memset(self.d_bounds, UInt32(0))
         ctx.enqueue_function[leaf_bounds_kernel](
             self.keys.unsafe_ptr(), self.d_bounds.unsafe_ptr(),
             Int32(n_rows), Int32(n_leaves),
             grid_dim=copy_blocks, block_dim=COPY_BLOCK,
         )
-        # the leaf sizes, offsets, total and flag scanned on the device;
-        # one copy home (no host loop over the bounds)
+        # the leaf sizes, offsets, total and flag scanned on the device
         ctx.enqueue_function[leaf_sizes_scan_kernel](
             self.d_bounds.unsafe_ptr(), Int32(n_leaves),
             self.d_part.unsafe_ptr(),
             grid_dim=1, block_dim=LEAF_SCAN_TPB,
         )  # small-launch(n_leaves: leaves): one scan over the leaves, a model-structure size
+
+    def partition(
+        mut self, ctx: DeviceContext, n_rows: Int, n_leaves: Int
+    ) raises -> LeafPartition:
+        """Group the first `n_rows` entries of `bins` by leaf. Same result
+        as `partition_from_bins(ctx, bins, n_rows, n_leaves)`, and the same
+        refusal of a leaf at or above `n_leaves`."""
+        self.partition_device(ctx, n_rows, n_leaves)
         ctx.enqueue_copy(dst_ptr=self.h_part.unsafe_ptr(), src_buf=self.d_part)
         ctx.synchronize()
         return self._collect_scanned(n_rows, n_leaves)
@@ -452,50 +530,13 @@ struct DeviceLeafPartitioner(Movable):
         mut self, ctx: DeviceContext, n_rows: Int, n_leaves: Int
     ) raises:
         """`partition` up to its drain, ENQUEUED (lane/apple-fast-trees-depthwise,
-        CTR_PERM_BATCH): the same launches in the same order, the bounds
-        read-back enqueued and NOT settled. `partition_collect` is the rest,
-        after the caller's own `ctx.synchronize()`; so several partitioners
-        (one per permutation, each with its own `h_bounds`) share one drain.
-        Reached only from the FAST + Apple arm; IDENTICAL calls `partition`."""
-        if n_rows <= 0 or n_rows > self.n_rows_cap:
-            raise Error(
-                "DeviceLeafPartitioner: n_rows " + String(n_rows)
-                + " outside capacity " + String(self.n_rows_cap)
-            )
-        if n_leaves <= 0 or n_leaves > self.n_leaves_cap:
-            raise Error(
-                "DeviceLeafPartitioner: n_leaves " + String(n_leaves)
-                + " outside capacity " + String(self.n_leaves_cap)
-            )
-        var copy_blocks = (n_rows + COPY_BLOCK - 1) // COPY_BLOCK
-        ctx.enqueue_function[copy_u32_kernel](
-            self.keys.unsafe_ptr(), self.bins.unsafe_ptr(), Int32(n_rows),
-            grid_dim=copy_blocks, block_dim=COPY_BLOCK,
-        )
-        launch_make_sequence(ctx, UInt32(0), self.vals, n_rows)
-        var bits = 0
-        while (1 << bits) < n_leaves:
-            bits += 1
-        launch_radix_sort_bins(
-            ctx, n_rows, 0, bits, self.keys, self.vals, self.tkeys,
-            self.tvals, self.offsets, self.bsums,
-        )
-        var hb = self.h_bounds.unsafe_ptr()
-        for i in range(2 * n_leaves + 1):
-            hb.unsafe_store(i, UInt32(0))
-        ctx.enqueue_copy(dst_buf=self.d_bounds, src_ptr=hb)
-        ctx.enqueue_function[leaf_bounds_kernel](
-            self.keys.unsafe_ptr(), self.d_bounds.unsafe_ptr(),
-            Int32(n_rows), Int32(n_leaves),
-            grid_dim=copy_blocks, block_dim=COPY_BLOCK,
-        )
-        # the leaf sizes, offsets, total and flag scanned on the device;
-        # one copy home (no host loop over the bounds)
-        ctx.enqueue_function[leaf_sizes_scan_kernel](
-            self.d_bounds.unsafe_ptr(), Int32(n_leaves),
-            self.d_part.unsafe_ptr(),
-            grid_dim=1, block_dim=LEAF_SCAN_TPB,
-        )  # small-launch(n_leaves: leaves): one scan over the leaves, a model-structure size
+        CTR_PERM_BATCH): the same launches in the same order, the scanned
+        words' read-back enqueued and NOT settled. `partition_collect` is the
+        rest, after the caller's own `ctx.synchronize()`; so several
+        partitioners (one per permutation, each with its own `h_part`) share
+        one drain. Reached only from the FAST + Apple arm; IDENTICAL calls
+        `partition`."""
+        self.partition_device(ctx, n_rows, n_leaves)
         ctx.enqueue_copy(dst_ptr=self.h_part.unsafe_ptr(), src_buf=self.d_part)
 
     def partition_collect(
@@ -505,3 +546,29 @@ struct DeviceLeafPartitioner(Movable):
         drain: the same checks, the same `sizes` / `offsets` from the same
         bounds."""
         return self._collect_scanned(n_rows, n_leaves)
+
+
+def tree_op_partition(
+    ctx: DeviceContext,
+    mut gate: DeviceBuffer[DType.int32],
+    mut parts: DeviceLeafPartitioner,
+    n_rows: Int,
+    n_leaves: Int,
+    mut status: DeviceBuffer[DType.int32],
+) raises:
+    """Tree op TREE_OP_PARTITION (gbdt/tree_ops.mojo): the stable partition
+    of `parts.bins` by leaf with its bounds left on the device: the grouped
+    row order in `parts.vals`, offsets `parts.d_part[0, n_leaves)`, sizes
+    `[n_leaves, 2 n_leaves)`, and the refusals as `status[0]`
+    (`partition_status_kernel`; join a device loop with
+    `step_fail_joins_loop(ctx, words, status, it)`). Pass `n_leaves = 1 <<
+    max_depth` when the round's depth is a device word: the sort over more
+    bits gives the same stable order and the leaves past `1 << depth` are
+    empty. The partition's own buffers are round-local scratch; only the
+    status word is behind the gate. Enqueue only."""
+    parts.partition_device(ctx, n_rows, n_leaves)
+    ctx.enqueue_function[partition_status_kernel](  # small-launch(n_leaves: leaves): one thread reads two scanned words, no rows
+        gate.unsafe_ptr(), parts.d_part.unsafe_ptr(), Int32(n_rows),
+        Int32(n_leaves), status.unsafe_ptr(),
+        grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+    )

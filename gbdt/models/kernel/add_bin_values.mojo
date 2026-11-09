@@ -348,6 +348,63 @@ def compute_bins_kernel(
 # per-feature one; the deviation block below says what ours does instead.
 
 
+def compute_bins_gated_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    depth_word: MutPointer[Int32, MutAnyOrigin],
+    compressed_index: MutPointer[UInt32, MutAnyOrigin],
+    feature_offset: MutPointer[UInt32, MutAnyOrigin],
+    feature_shift: MutPointer[UInt32, MutAnyOrigin],
+    feature_mask: MutPointer[UInt32, MutAnyOrigin],
+    split_bin: MutPointer[UInt32, MutAnyOrigin],
+    take_equal: MutPointer[UInt8, MutAnyOrigin],
+    n_rows_in: Int32,
+    out_bins: MutPointer[UInt32, MutAnyOrigin],
+):
+    """Tree op TREE_OP_LEAF_BINS (lane t1-tree-builder-ops,
+    docs/plans/EXECUTOR_T1_TREE_OPS.md): `compute_bins_kernel` unchanged,
+    with the depth read from a device word (the gate walk's structure
+    record) and nothing written once word 0 of `gate` is set. Every thread
+    reads the same two words first, so the early return is block-uniform."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    compute_bins_kernel(
+        compressed_index, feature_offset, feature_shift, feature_mask,
+        split_bin, take_equal, depth_word.unsafe_load(0), n_rows_in, out_bins,
+    )
+
+
+def compute_bins_and_add_gated_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    depth_word: MutPointer[Int32, MutAnyOrigin],
+    compressed_index: MutPointer[UInt32, MutAnyOrigin],
+    feature_offset: MutPointer[UInt32, MutAnyOrigin],
+    feature_shift: MutPointer[UInt32, MutAnyOrigin],
+    feature_mask: MutPointer[UInt32, MutAnyOrigin],
+    split_bin: MutPointer[UInt32, MutAnyOrigin],
+    take_equal: MutPointer[UInt8, MutAnyOrigin],
+    leaf_values: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    cursor: MutPointer[Float32, MutAnyOrigin],
+    dim_count_in: Int32,
+    cursor_stride_in: Int32,
+):
+    """Tree op TREE_OP_APPLY: `compute_bins_and_add_kernel` unchanged (the
+    same leaf index, the same one add per row and dimension), depth from a
+    device word, behind the gate: the cursor is carried state. A depth-0
+    tree adds nothing, as the host apply skips it
+    (`_apply_last_tree_to_test`)."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    var depth = depth_word.unsafe_load(0)
+    if depth <= Int32(0):
+        return
+    compute_bins_and_add_kernel(
+        compressed_index, feature_offset, feature_shift, feature_mask,
+        split_bin, take_equal, depth, leaf_values, n_rows_in, cursor,
+        dim_count_in, cursor_stride_in,
+    )
+
+
 def compute_non_symmetric_decision_tree_bins_kernel(
     node_offset: MutPointer[UInt32, MutAnyOrigin],
     node_mask: MutPointer[UInt32, MutAnyOrigin],
