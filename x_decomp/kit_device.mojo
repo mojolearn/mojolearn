@@ -108,6 +108,15 @@ def gather_rows_kernel(src: F32Ptr, idx: I32Ptr, dst: F32Ptr, m: Int32, c: Int32
         dst.unsafe_store(t, src.unsafe_load(Int(idx.unsafe_load(a)) * Int(c) + j))
 
 
+def put_gated_kernel(gate: I32Ptr, dst: F32Ptr, src: F32Ptr, n: Int32):
+    """dst[i] = src[i] while the loop's done word gate[0] is 0 (`DKit.put_gated`)."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        dst.unsafe_store(i, src.unsafe_load(i))
+
+
 def diag_kernel(a: F32Ptr, dst: F32Ptr, n: Int32):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
@@ -790,7 +799,7 @@ struct DKit(Movable):
             res[i] = Int32(Int(h.d[i]))
         return res^
 
-    def order_small_dev(mut self, A: DMat) raises -> DMat:
+    def order_small_dev(self, A: DMat) raises -> DMat:
         """`order_small` kept on the device: the stable ascending order of A's
         words as int32 bits in a (n, 1) matrix, enqueued (no download)."""
         var n = A.n()
@@ -812,25 +821,43 @@ struct DKit(Movable):
         self.upload_into(out, words^)
         return out^
 
-    def cd_rows(mut self, W: DMat, HHt: DMat, XHt: DMat, perm: DMat) raises -> Float64:
-        """`_Kit.cd_rows` on device matrices (`cd_rows_kernel`): W swept in
-        place, the violation folded by `total` and read. `perm` is the
-        coordinate order's W.c int32 words, resident (`order_small_dev`,
-        `iota_i32`; lane consol-n0-readmission: the order came home and went
-        back up on every half sweep)."""
+    def cd_rows_enq(self, W: DMat, HHt: DMat, XHt: DMat, perm: DMat) raises -> DMat:
+        """`_Kit.cd_rows` on device matrices (`cd_rows_kernel`), enqueued: W
+        swept in place, the violation folded by `total` into a (1, 1) matrix
+        that stays on the device. `perm` is the coordinate order's W.c int32
+        words, resident (`order_small_dev`, `iota_i32`).
+        Lane n4-mds-labelprop-nmf-loops (2026-11-09): NMF's CD sweep runs as
+        the executor's bounded loop, so the violation is the loop's criterion
+        operand on the device; `cd_rows`, which read it home on every half
+        sweep, is gone."""
+        # TOMBSTONE: DKit.cd_rows (REFACTORED onto the bounded device loop) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+        # Restore: git show f59d913b0b:x_decomp/kit_device.mojo; record in docs/TOMBSTONES.md.
         var n = W.r
         var kc = W.c
+        if n * kc == 0:
+            return self.zeros(1, 1)
+        if perm.n() < kc:
+            raise Error("x_decomp: cd_rows needs a coordinate order of W's columns")
         var viol = DMat(n, 1)
-        if n * kc > 0:
-            if perm.n() < kc:
-                raise Error("x_decomp: cd_rows needs a coordinate order of W's columns")
-            self.ctx.enqueue_function[cd_rows_kernel](
-                W.p(), HHt.p(), XHt.p(), perm.p().bitcast[Int32](), viol.p(), Int32(n), Int32(kc),
-                grid_dim=_blocks(n), block_dim=TPB,
+        self.ctx.enqueue_function[cd_rows_kernel](
+            W.p(), HHt.p(), XHt.p(), perm.p().bitcast[Int32](), viol.p(), Int32(n), Int32(kc),
+            grid_dim=_blocks(n), block_dim=TPB,
+        )
+        return self.total(viol)
+
+    def put_gated(self, gate: I32Ptr, dst: DMat, src: DMat) raises:
+        """src's words into dst (same shape) while the bounded device loop
+        whose register block is `gate` runs (word 0, the done word, is 0);
+        nothing once it has stopped. The carried state of a loop body is
+        written only through this, so iterations enqueued past the stop leave
+        it as the stopping iteration left it."""
+        if dst.r != src.r or dst.c != src.c:
+            raise Error("x_decomp: put_gated needs equal shapes")
+        var n = src.n()
+        if n > 0:
+            self.ctx.enqueue_function[put_gated_kernel](
+                gate, dst.p(), src.p(), Int32(n), grid_dim=_blocks(n), block_dim=TPB
             )
-            var tv = self.total(viol)
-            return self.word(tv)
-        return 0.0
 
     def mm(self, A: DMat, B: DMat, ta: Bool, tb: Bool) raises -> DMat:
         var m = A.c if ta else A.r
