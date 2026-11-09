@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # The public operations of `mojolearn.Array` (python/mojolearn/_array.py) as
-# ONE native entry, `array_native_call(op, array, context, *args)`.
+# ONE native entry, `array_native_call(op, array, context, *args)` (or
+# `(op, context, array, *args)` from the property-bound methods).
 #
 # Each operation is the former Python method, statement for statement, with
 # the same CPython C calls it made (memoryview casts and tolist, array.array
@@ -234,16 +235,22 @@ def _owned_as(cls: PythonObject, store: PythonObject, shape: PythonObject, dtype
     return _init_owned(native_storage_allocate(cls), store, shape, dtype, order, context)
 
 
-def _view_of(other: PythonObject, shape: PythonObject, order: String, context: PythonObject) raises -> PythonObject:
-    """`Array._view_of`: another shape over the same memory, `other` kept alive."""
-    var view = native_storage_allocate(context["array_class"])
+def _view_into(view: PythonObject, other: PythonObject, shape: PythonObject, dtype: String, order: String,
+               context: PythonObject) raises:
+    """Fill the slots of `view` as another shape over `other`'s memory, `other` kept alive."""
     py_setattr(view, "_store", other._store)
     py_setattr(view, "_base", other)
     py_setattr(view, "_pin", other._pin)
     py_setattr(view, "_mv", other._mv)
     py_setattr(view, "_addr", other._addr)
     py_setattr(view, "_readonly", other._readonly)
-    _set_meta(view, shape, String(other.dtype), order, other._mv, context)
+    _set_meta(view, shape, dtype, order, other._mv, context)
+
+
+def _view_of(other: PythonObject, shape: PythonObject, order: String, context: PythonObject) raises -> PythonObject:
+    """`Array._view_of`: another shape over the same memory, `other` kept alive."""
+    var view = native_storage_allocate(context["array_class"])
+    _view_into(view, other, shape, String(other.dtype), order, context)
     return view
 
 
@@ -1105,9 +1112,37 @@ def _buffer_view(a: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def _reduce_protocol(a: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`__reduce__`: values and layout, never a borrowed pointer."""
-    return Python.tuple(context["restore"],
+    """`__reduce__`: values and layout, never a borrowed pointer.
+
+    `(copyreg.__newobj__, (cls,), state)`: pickle (protocol 2 and later) and
+    `copy` rebuild the instance with `cls.__new__` (C) and hand `state` to
+    `__setstate__`, which is this entry again (`_set_state`). No Python
+    reconstructor runs on load (the former `_array._restore_array` did, once
+    per Array field of every pickled estimator)."""
+    return Python.tuple(context["newobj"], Python.tuple(py_type(a)),
                         Python.tuple(_call(a._mv.tobytes), a.shape, a.dtype, a.order, a._readonly))
+
+
+def _set_state(a: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`__setstate__` of a pickled Array: `state` is `(bytes, shape, dtype,
+    order, readonly)` from `_reduce_protocol`. A writable Array gets its own
+    `array.array` store; a read-only one stays a read-only view of the bytes."""
+    var b = native_loaded_module("builtins")
+    if py_type(state) is not b.tuple or len(state) != 5:
+        raise Error("TypeError: mojolearn: an Array pickle state is (bytes, shape, dtype, order, readonly)")
+    if py_type(state[1]) is not b.tuple:
+        raise Error("TypeError: mojolearn: an Array pickle state carries its shape as a tuple")
+    var dtype = String(state[2])
+    var order = String(state[3])
+    var code = _code(dtype, context)
+    if _truth(state[4]):
+        var flat = array_from_buffer(context["array_class"], _call(_call(b.memoryview, state[0]).cast, code), context)
+        _view_into(a, flat, state[1], dtype, order, context)
+        return PythonObject(None)
+    var store = _call(context["array_type"], code)
+    _ = _call(store.frombytes, state[0])
+    _ = _init_owned(a, store, state[1], dtype, order, context)
+    return PythonObject(None)
 
 
 def _initialize(a: PythonObject, shape: PythonObject, requested: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1191,6 +1226,8 @@ def _dispatch(op: String, a: PythonObject, context: PythonObject, args: PythonOb
         return _buffer(a, context)
     if op == "reduce":
         return _reduce_protocol(a, context)
+    if op == "setstate":
+        return _set_state(a, args[3], context)
     raise Error("TypeError: unknown native Array operation " + op)
 
 
@@ -1202,7 +1239,18 @@ def array_native_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         var op = args[0]
         if py_type(op) is not py_type(PythonObject("")):
             raise Error("TypeError: native Array operation names are exact strings")
-        var result = _dispatch(String(op), args[1], args[2], args)
+        # Two layouts reach this entry. The methods and properties of
+        # `Array` in _array.py are `functools.partial(entry, op, context)`
+        # bound by a C `property` (no Python frame), so they arrive as
+        # (op, context, array, *args); the classmethods and the reference
+        # tests call (op, array, context, *args). The context is a dict and
+        # an Array (or the Array class) never is; the operation arguments
+        # sit at 3.. in both.
+        var first = args[1]
+        if py_type(first) is native_loaded_module("builtins").dict:
+            var bound = _dispatch(String(op), args[2], first, args)
+            return bound.steal_data()
+        var result = _dispatch(String(op), first, args[2], args)
         return result.steal_data()
     except error:
         return _raise_error(error)
