@@ -56,8 +56,23 @@ from bindings.classical_labels import (
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from bindings.admitted_input import (
     AdmittedX, admit_f32, admit_x_unrecorded, admit_weight_words, admitted_words, admitted_array, admitted_vector,
-    admit_c_view, admitted_dtype,
+    admit_c_view, admitted_dtype, classical_view,
 )
+from bindings.classical_arrays import classical_is_f32, classical_c_order
+
+
+def trees_forest_x(source: PythonObject, name: String, context: PythonObject) raises -> AdmittedX:
+    """`_buffer.as_f32_forest_layout` over the one admission: a 2-D float32
+    C-order input (more than one row and column) as it is (row-major, a
+    borrow); every other input one F-order float32 copy (admit_f32 order
+    "F": one parallel cast-and-transpose pass). `c_order` says which. No
+    finite test here: the forest doors test X themselves."""
+    var view = classical_view(source, context, name)
+    var row_major = (Int(py=view.ndim) == 2 and classical_is_f32(view, context) and classical_c_order(view, context)
+                     and Int(py=view.shape[0]) > 1 and Int(py=view.shape[1]) > 1)
+    var x = admit_f32(view, 2, name, context, order="C" if row_major else "F", allow_nonfinite=True, admitted=True)
+    _ = view^
+    return x^
 from bindings.label_input_sources import labels_storage_source
 from bindings.perf3_label_doors_text import labels_all_exact_str
 
