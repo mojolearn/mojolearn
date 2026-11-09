@@ -31,13 +31,8 @@ from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     DeviceLeafPartitioner,
     tree_op_partition,
 )
-from gbdt.overfitting_detector.overfitting_detector import (
-    OD_ITER,
-    OdDeviceState,
-    make_overfitting_detector,
-    od_op_init,
-    od_op_step,
-)
+from gbdt.overfitting_detector.overfitting_detector import OD_ITER, make_overfitting_detector
+from gbdt.overfitting_detector.od_device import OdDeviceState, od_op_init, od_op_step
 from gbdt.targets.kernel.pointwise_targets import OBJECTIVE_RMSE
 from gbdt.tree_ops import N_TREE_OPS, TREE_OP_FIRST, tree_op_name
 

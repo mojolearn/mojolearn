@@ -93,7 +93,7 @@ def _tree_info[CODE: Int]() -> TreeOpInfo:
         )
     else:
         return TreeOpInfo(
-            CODE, "tree_od_step", "gbdt.overfitting_detector.overfitting_detector.od_op_step", True, False, True,
+            CODE, "tree_od_step", "gbdt.overfitting_detector.od_device.od_op_step", True, False, True,
         )
 
 

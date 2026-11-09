@@ -528,7 +528,7 @@ def tree_op_partition(
     empty. The partition's own buffers are round-local scratch; only the
     status word is behind the gate. Enqueue only."""
     parts.partition_device(ctx, n_rows, n_leaves)
-    ctx.enqueue_function[partition_status_kernel](  # small-launch(one word): the partition's refusal word
+    ctx.enqueue_function[partition_status_kernel](  # small-launch(n_leaves: leaves): one thread reads two scanned words, no rows
         gate.unsafe_ptr(), parts.d_part.unsafe_ptr(), Int32(n_rows),
         Int32(n_leaves), status.unsafe_ptr(),
         grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
