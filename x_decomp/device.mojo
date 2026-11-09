@@ -135,6 +135,7 @@ from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch
 from x_decomp.rr_svd import RS_TPB
 from x_decomp.rr_svd_device import rs_norm_kernel, rs_round_kernel
+from x_decomp.svd_ops import svd_op_tall
 from x_decomp.lle_local import hessian_ncy
 from x_decomp.lle_device import (
     lle_apply_kernel,
@@ -210,6 +211,20 @@ comptime XD_NO_FLAG = Int32(2147483647)
 # `-D MOJOLEARN_IDN_XD_SVD_GROUP_OFF` restores one readback per sweep.
 comptime IDN_XD_SVD_GROUP = IDN_XD_SWEEP and not is_defined["MOJOLEARN_IDN_XD_SVD_GROUP_OFF"]()
 comptime XD_SVD_GROUP = 4 if IDN_XD_SVD_GROUP else 1
+
+#: Lane m3-linalg-and-housekeeping (2026-11-09): -D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK
+#: routes `DevExec._svd_on` (PCA / TruncatedSVD / randomized_svd /
+#: linalg.svd through `x_decomp_svd` and `x_decomp_dev_svd`) through the
+#: executor op `svd_op_tall` (x_decomp/svd_ops.mojo: the same QR, the
+#: Jacobi's rounds as ONE gated block with the sweep test on the device, the
+#: descending order on the device, one status read) instead of the round
+#: launches below (one launch per round, a wait every XD_SVD_GROUP sweeps).
+#: Default off: today's round launches. Two SVD paths exist; the A/B on
+#: pca / tsvd / randomized-svd (owed row svd-tall-vs-rounds, B arm
+#: svd-one-block) decides which one is deleted. Bits: the op's module note
+#: says the words are the rounds' (the same pairs, fold and tree); s and v
+#: come out already in the descending order every caller sorts into.
+comptime XD_FAST_SVD_ONE_BLOCK = is_defined["MOJOLEARN_XD_FAST_SVD_ONE_BLOCK"]()
 # TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by f4b8fa942; code recoverable at f4b8fa942^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVD_TALL_LEAN.patch
 
@@ -3157,6 +3172,9 @@ struct DevExec(Exec):
         QR): s (n) and v (n x n) out to host memory, every launch waited for.
         `svd_cells` and the resident entry (x_decomp/resident.mojo
         `dev_svd_py`, lane fam-decomp) both call it: one launch sequence."""
+        comptime if XD_FAST_SVD_ONE_BLOCK:
+            DevExec._svd_on_op(ctx, da, m, n, s, v)
+            return
         var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, n) * n * n)
         var r_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
         var rt = ctx.enqueue_create_buffer[DType.float32](n * n)
@@ -3238,6 +3256,41 @@ struct DevExec(Exec):
         _ = flags^
         _ = dfirst^
         _ = hfirst^
+
+    @staticmethod
+    def _svd_on_op(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, s: F32Ptr, v: F32Ptr
+    ) raises:
+        """`_svd_on` through the executor op `svd_op_tall` (the A/B arm of
+        -D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK): s (n, descending) and v (n x n,
+        column a the right singular vector of s[a], the layout `_svd_on`
+        writes) out to host memory, one wait. The op's status word carries
+        both refusals of `_svd_on` (no convergence in X_DECOMP_SVD_SWEEPS
+        sweeps, a NaN value)."""
+        var gate = step_gate_open_word(ctx)
+        var ds = ctx.enqueue_create_buffer[DType.float32](n)
+        var dvt = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var status = ctx.enqueue_create_buffer[DType.int32](1)
+        var hstatus = ctx.enqueue_create_host_buffer[DType.int32](1)
+        svd_op_tall(ctx, gate, da, ds, dvt, status, m, n)
+        ctx.enqueue_function[pj_transpose_kernel](_p(dvt), _p(dv), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
+        _down(ctx, ds, s, n)
+        _down(ctx, dv, v, n * n)
+        ctx.enqueue_copy(dst_buf=hstatus, src_buf=status)
+        ctx.synchronize()
+        if Int(hstatus.unsafe_ptr().unsafe_load(0)) != 0:
+            raise Error(
+                "x_decomp svd: the one-sided Jacobi did not converge in " + String(X_DECOMP_SVD_SWEEPS)
+                + " sweeps at n_cols = " + String(n) + ", or a singular value is NaN (a device launch cut short, or a"
+                " NaN input). An unconverged decomposition is not returned as if it were one; see DEVIATION 590."
+            )
+        _ = gate^
+        _ = ds^
+        _ = dvt^
+        _ = dv^
+        _ = status^
+        _ = hstatus^
 
     @staticmethod
     def lasso_rows(

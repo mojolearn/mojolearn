@@ -38,13 +38,14 @@ owed. Our arms only. Opponents are never rerun; the compare reuses the paper's s
    ```
    python3 tools/release.py candidate --commit <SHA40> --ref <pushed tooling branch>
    ```
-   Then the three B sets, all at once. Each is the same commit with `--defines`, which the workflow passes to
+   Then the four B sets, all at once. Each is the same commit with `--defines`, which the workflow passes to
    every compile as `MOJOLEARN_BUILD_DEFINES`. The label defaults to `d` plus 8 hex digits of the defines; the
    owed arm names below are clearer:
    ```
    python3 tools/release.py candidate --commit <SHA40> --ref <branch> --defines "-D MOJOLEARN_EM_LOOP_CHECK_EVERY=1" --label em1
    python3 tools/release.py candidate --commit <SHA40> --ref <branch> --defines "-D MOJOLEARN_EM_LOOP_CHECK_EVERY=8" --label em8
    python3 tools/release.py candidate --commit <SHA40> --ref <branch> --defines "-D MOJOLEARN_SGD_LOOP_CHECK_EVERY=1" --label sgd1
+   python3 tools/release.py candidate --commit <SHA40> --ref <branch> --defines "-D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK" --label svd1
    ```
    Add `-D MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF` as its own B set once a `.mojo` file of the candidate commit reads
    it; none does at measure-prep 3d67f6c437. The tool refuses any define that no `.mojo` or `bindings/` file of
@@ -68,7 +69,7 @@ owed. Our arms only. Opponents are never rerun; the compare reuses the paper's s
 3. **Datasets** on each box: `sh tools/dataset_store.sh stage "<ssh flags+target>" gbm-bench/taxi/taxi_speed.npz gbm-bench/istella/istella_speed.npz`.
 4. **B wheel sets** for the define A/Bs. Stage each with the A set: `--b-arm em-check-1=<B work dir>/<commit12>/linux/final@<SHA40>`
    (likewise `em-check-8`, `sgd-check-1`). The stage step reads each B set's own version from its `candidate.json`.
-   `svd-round-launches` has no switch in code yet (see the owed file). Rows without a staged set report
+   `svd-one-block` is `-D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK` (label `svd1`): B routes PCA / TSVD / randomized-svd through `svd_op_tall`. Rows without a staged set report
    `B-NOT-RUN`.
 5. **The ours-only venv** gets our wheels, `scikit-learn` (the trees opponent pin, 1.7.2), and `pandas` and
    `huggingface_hub` at their `pixi.lock` versions (3.0.5 and 1.33.0). The board's drivers import nothing else
