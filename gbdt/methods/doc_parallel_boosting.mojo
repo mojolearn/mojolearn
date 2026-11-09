@@ -615,32 +615,11 @@ def _test_loss(
     count, exactly as the learn loss is -- which is what makes the
     detector's comparison meaningful.
     """
+    # lane t1-tree-builder-ops: `_test_loss_enqueue`'s launches at slot 0
+    # (they were a verbatim copy here), then the one readback.
     var n = test.n_rows
-    var blocks = (n + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
-    if objective == OBJECTIVE_MULTICLASS:
-        blocks = multilogit_blocks(n)
-        launch_multilogit_value_and_der_search(
-            ctx, num_classes, n, test.targets, test.weights, False,
-            test.cursor, n, test.cindex, False,
-            test.fv_part, True, test.stats, n, test.mag_dummy, False,
-        )
-    elif objective == OBJECTIVE_MULTICLASS_OVA:
-        blocks = multilogit_blocks(n)
-        launch_one_vs_all_value_and_der[True](
-            ctx, num_classes, n, test.targets, test.weights, False,
-            test.cursor, n, test.cindex, False,
-            test.fv_part, True, test.stats, n, test.mag_dummy, False,
-        )
-    else:
-        launch_approximate[False](
-            ctx, objective, test.targets, test.weights, Int32(n),
-            test.cursor, Int32(0), alpha, logloss_border,
-            test.stats, test.fv_part, Int32(1),
-            test.mag_dummy, Int32(0), blocks,
-        )
-    ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
-        test.fv_part.unsafe_ptr(), Int32(blocks), test.fv.unsafe_ptr(),
-        grid_dim=1, block_dim=256,
+    _test_loss_enqueue(
+        ctx, test, objective, num_classes, alpha, logloss_border, approx_dim, 0,
     )
     ctx.enqueue_copy(dst_ptr=test.h_fv.unsafe_ptr(), src_buf=test.fv)
     ctx.synchronize()
@@ -750,6 +729,50 @@ def _test_loss_flush(
     # driver-loop: over the pending iterations (one held-out loss each)
     for j in range(pending):
         detector.add_error(test_losses[base + j])
+
+
+def _heldout_loss_bits_gated_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    fv: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    losses: MutPointer[UInt64, MutAnyOrigin],
+):
+    """`_test_loss_div_kernel` for one slot, behind the executor gate."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    _test_loss_div_kernel(fv, Int32(1), n_in, losses)
+
+
+def tree_op_heldout_loss(
+    ctx: DeviceContext,
+    mut gate: DeviceBuffer[DType.int32],
+    mut test: TestArm,
+    objective: Int,
+    num_classes: Int,
+    alpha: Float32,
+    logloss_border: Float32,
+    approx_dim: Int,
+    mut losses: DeviceBuffer[DType.uint64],
+    it: Int,
+) raises:
+    """Tree op TREE_OP_HELDOUT_LOSS (gbdt/tree_ops.mojo, lane
+    t1-tree-builder-ops): the held-out loss of round `it` (1-based) as a
+    program value. `_test_loss`'s launches (same target kernel, same fold
+    into `test.fv[0]`), then `-double(fv) / double(n)` in soft float64
+    (`_test_loss_div_kernel`: the bits of `_test_loss`'s host expression)
+    stored as `losses[it - 1]`, a binary64 bit pattern. The store is behind
+    the gate, so the history past the stopping round is never written;
+    `od_op_step` reads the word as the detector's input. Enqueue only."""
+    if it < 1 or it > len(losses):
+        raise Error("tree_op_heldout_loss: round " + String(it) + " outside the loss history")
+    _test_loss_enqueue(
+        ctx, test, objective, num_classes, alpha, logloss_border, approx_dim, 0,
+    )
+    ctx.enqueue_function[_heldout_loss_bits_gated_kernel](  # small-launch(one word): the round's loss
+        gate.unsafe_ptr(), test.fv.unsafe_ptr(), Int32(test.n_rows),
+        losses.unsafe_ptr() + (it - 1),
+        grid_dim=(1, 1, 1), block_dim=(64, 1, 1),
+    )
 
 
 @fieldwise_init
