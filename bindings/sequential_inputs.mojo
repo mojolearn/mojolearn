@@ -10,7 +10,7 @@ from bindings.native_buffer_owner import native_buffer_view
 from bindings.arena_buffer_copy import buffer_copy_to_array
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.py_balanced import py_call, py_type, py_get
-from bindings.p3_labels_metrics_native import p3_type_word, p3_item
+from bindings.cpython_borrowed import borrowed_type_word as p3_type_word, borrowed_item as p3_item
 from bindings.cpython_table import cpython_table
 from core.sequential_inputs_impl import sequence_widen_halves, sequence_narrow_halves
 from gemm.f16_widen import f16_bits_to_f32

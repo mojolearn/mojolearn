@@ -240,12 +240,15 @@ def _sequence_fill(c: PythonObject, level: Int, dims: List[Int], integer: Bool, 
                            values, ids, words)
         _ = c  # keep the container alive through the borrowed reads above
         return
-    if integer:
-        for k in range(n):  # cpu-route: the user's Python list input, one borrowed C read and C conversion per element into one typed buffer (Python objects never reach a device)
-            ids[pos + k] = _leaf_i64(p3_item(c, k, is_tuple), words)
-    else:
-        for k in range(n):  # cpu-route: the user's Python list input, one borrowed C read and C conversion per element into one typed buffer (Python objects never reach a device)
-            values[pos + k] = _leaf_f64(p3_item(c, k, is_tuple), words)
+    # The user's Python list input is read on the host once (Python objects
+    # never reach a device): one borrowed C read and one C conversion per
+    # element, straight into the typed buffer.
+    for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
+        var raw = p3_item(c, k, is_tuple)
+        if integer:
+            ids[pos + k] = _leaf_i64(raw, words)
+        else:
+            values[pos + k] = _leaf_f64(raw, words)
     pos += n
     _ = c  # keep the container alive through the borrowed reads above
 
