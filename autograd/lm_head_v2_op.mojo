@@ -33,7 +33,7 @@ from sequence.exec_device import DeviceExec
 from checks.numerics import ftz, identical_div, identical_mul
 from autograd.block_step_ops import block_buffer_view
 from training.chunked_lm_head_v2 import (
-    LM_HEAD_V2_TPB, LM_HEAD_V2_LOSS_LEAF,
+    LM_HEAD_V2_TPB,
     chunked_lm_head_v2_rows_kernel, chunked_lm_head_v2_dhidden_kernel, chunked_lm_head_v2_dweight_kernel,
     _enqueue_loss_total,
 )

@@ -48,13 +48,13 @@ def _host_loss_total(loss: _F, row_loss: _F, rows: Int):
     var width = leaves
     while width > 1:  # small-loop(tree levels): the fixed fold
         var out_width = (width + 1) // 2
-        var next = List[Float32](length=out_width, fill=Float32(0))
+        var nxt = List[Float32](length=out_width, fill=Float32(0))
         for q in range(out_width):  # small-loop(a tree level's nodes): the fixed fold
             if 2 * q + 1 < width:
-                next[q] = ftz(ftz(level[2 * q]) + ftz(level[2 * q + 1]))
+                nxt[q] = ftz(ftz(level[2 * q]) + ftz(level[2 * q + 1]))
             else:
-                next[q] = level[2 * q]
-        level = next^
+                nxt[q] = level[2 * q]
+        level = nxt^
         width = out_width
     loss.unsafe_store(0, ftz(identical_div(ftz(level[0]), Float32(rows))))
 
