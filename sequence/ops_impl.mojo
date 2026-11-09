@@ -1808,58 +1808,9 @@ def moe_forward_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises
     return moe_forward_run_impl(ex, addrs, T, D, F, En, k, ival(ip, 5), Wg, Gu, Dn)
 
 
-def moe_backward_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises -> Int:
-    """The MoE block's forward and backward on the tape (autograd/route_ops.mojo).
-    addrs = [x (T, D), router (E, D), gate_up (E, 2F, D), down (E, D, F),
-    dy (T, D), dx (T, D) out, drouter (E, D) out, dgate_up (E, 2F, D) out,
-    ddown (E, D, F) out, y (T, D) out, logits (T, E) out, selected (T, k)
-    out as floats, weights (T, k) out]; ip = [T, D, F, E, k, renormalise]."""
-    if len(addrs) != 13 or len(ip) != 6:
-        raise Error("moe_backward: requires 13 addresses and 6 integer parameters")
-    var T = ival(ip, 0)
-    var D = ival(ip, 1)
-    var F = ival(ip, 2)
-    var En = ival(ip, 3)
-    var k = ival(ip, 4)
-    if T < 1 or D < 1 or F < 1 or En < 1 or k < 1 or k > En:
-        raise Error("moe_backward: T, D, F, E >= 1 and 1 <= k <= E")
-    var Wg = ex.alloc(En * D)
-    ex.upload(Wg, fptr(addrs[1], "router"), En * D)
-    var Gu = ex.alloc(En * 2 * F * D)
-    ex.upload(Gu, fptr(addrs[2], "gate_up_proj"), En * 2 * F * D)
-    var Dn = ex.alloc(En * D * F)
-    ex.upload(Dn, fptr(addrs[3], "down_proj"), En * D * F)
-    return moe_backward_run_impl(ex, addrs, T, D, F, En, k, ival(ip, 5), Wg, Gu, Dn)
-
-
-def moe_backward_run_impl[E: Exec](
-    mut ex: E, addrs: List[Int], T: Int, D: Int, F: Int, En: Int, k: Int, renorm: Int, Wg: FP, Gu: FP, Dn: FP,
-) raises -> Int:
-    """`moe_backward_impl` with the weights already on `ex`'s side (the
-    executor's upload, or the GPU binding's resident copies)."""
-    var X = ex.alloc(T * D)
-    ex.upload(X, fptr(addrs[0], "x"), T * D)
-    var DY = ex.alloc(T * D)
-    ex.upload(DY, fptr(addrs[4], "dy"), T * D)
-    var DX = ex.alloc(T * D)
-    var DWg = ex.alloc(En * D)
-    var DGu = ex.alloc(En * 2 * F * D)
-    var DDn = ex.alloc(En * D * F)
-    var Y = ex.alloc(T * D)
-    var L = ex.alloc(T * En)
-    var Sel = ex.alloc(T * k)
-    var W = ex.alloc(T * k)
-    moe_tape_train_step(ex, X, Wg, Gu, Dn, DY, DX, DWg, DGu, DDn, Y, L, Sel, W, T, D, F, En, k, renorm)
-    ex.download(fptr(addrs[5], "dx"), DX, T * D)
-    ex.download(fptr(addrs[6], "drouter"), DWg, En * D)
-    ex.download(fptr(addrs[7], "dgate_up"), DGu, En * 2 * F * D)
-    ex.download(fptr(addrs[8], "ddown"), DDn, En * D * F)
-    ex.download(fptr(addrs[9], "y"), Y, T * D)
-    ex.download(fptr(addrs[10], "logits"), L, T * En)
-    ex.download(fptr(addrs[11], "selected"), Sel, T * k)
-    ex.download(fptr(addrs[12], "weights"), W, T * k)
-    return T * D
-
+# TOMBSTONE: moe_backward_impl / moe_backward_run_impl (superseded) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/MOE_BACKWARD_IMPL_CHAIN.patch
+# The public moe_backward is autograd/route_ops.mojo moe_backward_addrs (the tape step's one address entry).
 
 
 def _moe_devgroup_rest[E: Exec](

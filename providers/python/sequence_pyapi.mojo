@@ -28,8 +28,6 @@ from sequence.ops_impl import (
     layer_norm_impl,
     mlp_fit_impl,
     mlp_predict_impl,
-    moe_backward_impl,
-    moe_backward_run_impl,
     moe_forward_core,
     moe_forward_impl,
     moe_forward_run_impl,
@@ -46,6 +44,7 @@ from sequence.ops_impl import (
     var_fit_impl,
     var_forecast_impl,
 )
+from autograd.route_ops import moe_backward_addrs
 
 
 def fptr(addr: PythonObject, what: String) raises -> FP:
@@ -189,8 +188,8 @@ def moe_forward_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) ra
 
 
 def moe_backward_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    """The Python door of `moe_backward_impl` (sequence/ops_impl.mojo)."""
-    return PythonObject(moe_backward_impl(ex, py_ints(addrs), py_ints(ip)))
+    """The Python door of `moe_backward_addrs` (autograd/route_ops.mojo), weights uploaded from addrs[1..3]."""
+    return PythonObject(moe_backward_addrs(ex, py_ints(addrs), py_ints(ip), List[Int]()))
 
 
 def moe_forward_check(addrs: PythonObject, ip: PythonObject, n_ip: Int) raises -> Tuple[Int, Int, Int, Int, Int]:
@@ -214,8 +213,6 @@ def moe_forward_run[E: Exec](
     return PythonObject(moe_forward_run_impl(ex, py_ints(addrs), T, D, F, En, k, renorm, Wg, Gu, Dn))
 
 
-def moe_backward_run[E: Exec](
-    mut ex: E, addrs: PythonObject, T: Int, D: Int, F: Int, En: Int, k: Int, renorm: Int, Wg: FP, Gu: FP, Dn: FP,
-) raises -> PythonObject:
-    """The Python door of `moe_backward_run_impl` (sequence/ops_impl.mojo)."""
-    return PythonObject(moe_backward_run_impl(ex, py_ints(addrs), T, D, F, En, k, renorm, Wg, Gu, Dn))
+def moe_backward_resident[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, resident: List[Int]) raises -> PythonObject:
+    """The Python door of `moe_backward_addrs` (autograd/route_ops.mojo) with the weights' device copies at `resident`."""
+    return PythonObject(moe_backward_addrs(ex, py_ints(addrs), py_ints(ip), resident))
