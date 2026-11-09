@@ -86,7 +86,7 @@ def _pieces(addrs: List[Int], sizes: List[Int], what: String, allow_null: Bool) 
     if len(addrs) != len(sizes):
         raise Error(what + ": expected " + String(len(sizes)) + " arrays, got " + String(len(addrs)))
     var out = List[CastIn](capacity=len(sizes))
-    for i in range(len(sizes)):  # small-loop(the block's weight or state pieces): descriptors, no data
+    for i in range(len(sizes)):  # driver-loop: over the block's weight or state pieces (model structure)
         if addrs[i] == 0:
             if not allow_null:
                 raise Error(what + ": null buffer address at piece " + String(i))
@@ -133,11 +133,11 @@ struct MambaBlockProgram(Movable):
         # The certified zero state (allocate_inference_cache's semantics).
         var ssizes = block_state_sizes(code, ints)
         var most = 1
-        for i in range(len(ssizes)):  # small-loop(the block's state pieces): the largest piece
+        for i in range(len(ssizes)):  # driver-loop: over the block's state pieces (model structure)
             most = max(most, ssizes[i])
         var zero = List[Float32](length=most, fill=Float32(0))
         var zsrc = List[CastIn](capacity=len(ssizes))
-        for i in range(len(ssizes)):  # small-loop(the block's state pieces): descriptors, no data
+        for i in range(len(ssizes)):  # driver-loop: over the block's state pieces (model structure)
             zsrc.append(CastIn.f32_c(Int(zero.unsafe_ptr()), ssizes[i], 1))
         var st = s.upload_block(code, ints, BLOCK_PART_STATE, zsrc, List[Int]())
         _ = len(zero)  # keep-alive past the staging copies
