@@ -86,10 +86,14 @@ from sequence.ops import dummy_ptr
 # It was the hand-assembled backward (arm A above): per layer gemm_epi EPI_L2GRAD
 # (dW), OP_COLSUM_DIV (db), gemm_epi EPI_ACT_BWD (dX); the tape trains every MLP
 # with the same 48 check digests (autograd/checks/mlp_cases_digests.tsv).
-# -D MOJOLEARN_AUTOGRAD_PREDICT (lane ag-forward, default off, A/B owed):
-# mlp_predict_py predicts through the tape's forward in inference mode
-# (mlp_predict_autograd) instead of the fused hand forward (mlp_predict).
-comptime AUTOGRAD_PREDICT = is_defined["MOJOLEARN_AUTOGRAD_PREDICT"]()
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
+# Lane x3-mlp-rnn-predict-on-tape (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md X3): mlp_predict runs
+# mlp_forward_autograd on a tape in inference mode (what -D MOJOLEARN_AUTOGRAD_PREDICT selected); the hand
+# mlp_forward (gemm_epi EPI_BIAS_ACT a layer on the one-thread OP_GEMM_EPI, + OP_SOFTMAX) and the hand
+# mlp_predict over it are deleted. The fused tape node issues EPI_BIAS_ACT on the tiled GEMM, op_gemm's chain
+# term for term, so the expected digest is the hand forward's; the one pre-release identity run is the proof.
+# A/B owed: arm A X3SHA^ (hand), arm B X3SHA (tape), mlp-predict and sequential-predict, NVIDIA and AMD.
 # The fused tape node is the tape default (lane ag-pass3-impl, 2026-10-19,
 # PASS3_IDEAS idea 1; lane ag-fusion2 wrote it as the opt-in
 # MOJOLEARN_AUTOGRAD_MLP_FUSED). Each layer is one tape.linear_into node and
@@ -191,56 +195,16 @@ struct MLPNet(Copyable, Movable):
         return self.w_off(self.n_layers())
 
 
-def gemm_epi[E: Exec](
-    mut ex: E, A: FP, Bm: FP, C: FP, M: Int, N: Int, K: Int,
-    sam: Int, sak: Int, sbk: Int, sbn: Int, epi: Int, p3: FP, i10: Int, f0: Float32, f1: Float32,
-) raises:
-    """`gemm` (dense C, no accumulate) with its follower in the same launch
-    (mlp.mojo::op_gemm_epi)."""
-    var a = Args()
-    a.p0 = A
-    a.p1 = Bm
-    a.p2 = C
-    a.p3 = p3
-    a.i0 = M
-    a.i1 = N
-    a.i2 = K
-    a.i3 = sam
-    a.i4 = sak
-    a.i5 = sbk
-    a.i6 = sbn
-    a.i8 = N
-    a.i9 = epi
-    a.i10 = i10
-    a.f0 = f0
-    a.f1 = f1
-    ex.launch[OP_GEMM_EPI](a, M * N)
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
+# gemm_epi (one OP_GEMM_EPI launch) and _act_launch (OP_SOFTMAX / OP_ACT in place) had one caller, the hand
+# mlp_forward; both went with it. The tape issues the same kernels through linear_into.
 
 
-def _act_launch[E: Exec](mut ex: E, z: FP, rows: Int, cols: Int, act: Int) raises:
-    var a = Args()
-    a.p0 = z
-    a.p1 = z
-    a.i0 = act
-    a.i1 = cols
-    if act == ACT_SOFTMAX:
-        ex.launch[OP_SOFTMAX](a, rows)
-    elif act != 0:
-        ex.launch[OP_ACT](a, rows * cols)
-
-
-def mlp_forward[E: Exec](mut ex: E, net: MLPNet, P: FP, acts: List[FP], B: Int) raises:
-    """acts[0] holds the batch [B, D]; acts[i] <- act(acts[i-1] @ W_i + b_i)."""
-    var L = net.n_layers()
-    for i in range(L):
-        var fi = net.sizes[i]
-        var fo = net.sizes[i + 1]
-        # one launch: the GEMM, its bias and (not softmax) its activation
-        var act = net.out_act if i == L - 1 else net.act
-        gemm_epi(ex, acts[i], P + net.w_off(i), acts[i + 1], B, fo, fi, fi, 1, fo, 1,
-                 EPI_BIAS_ACT, P + net.b_off(i), 0 if act == ACT_SOFTMAX else act, Float32(0.0), Float32(0.0))
-        if act == ACT_SOFTMAX:
-            _act_launch(ex, acts[i + 1], B, fo, act)
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
+# mlp_forward (the hand forward, its one caller the hand mlp_predict) is gone: mlp_forward_autograd below is the
+# only MLP forward, for training and for prediction (inference mode).
 
 
 def _mlp_autograd_unary(act: Int) -> Int:
@@ -982,61 +946,23 @@ def mlp_fit[E: Exec](
     return n_iter
 
 
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
+# The hand mlp_predict (the same chunking, copies and proba2 over the hand mlp_forward) is gone; mlp_predict below
+# is the former mlp_predict_autograd under the public name.
+
+
 def mlp_predict[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP, chunk: Int,
                          proba2: Bool = False, resident: Bool = False) raises:
-    """`proba2` (cpu2-l11-neural): a one-output logistic net writes the
-    (N, 2) probability `[1 - p, p]` (`OP_PROBA2` on the executor).
-    `resident` (perf3-seq-neural): `Pin` is already this executor's memory
-    (the model's resident fitted block, sequence/perf3_seq_resident.mojo),
-    read in place: no per-call allocation and upload of the parameters."""
-    var L = net.n_layers()
-    var D = net.sizes[0]
-    var O = net.sizes[L]
-    var bs = chunk if chunk < N else N
-    var dX = ex.alloc(N * D)
-    ex.upload(dX, X, N * D)
-    var P: FP
-    if resident:
-        P = Pin
-    else:
-        P = ex.alloc(net.n_params())
-        ex.upload(P, Pin, net.n_params())
-    var acts = List[FP]()
-    for i in range(L + 1):
-        acts.append(ex.alloc(bs * net.sizes[i]))
-    var dout = ex.alloc(N * O)
-    var b0 = 0
-    while b0 < N:
-        var B = bs if b0 + bs <= N else N - b0
-        var c = Args()
-        c.p0 = dX + b0 * D
-        c.p1 = acts[0]
-        ex.launch[OP_COPY](c, B * D)
-        mlp_forward(ex, net, P, acts, B)
-        var d = Args()
-        d.p0 = acts[L]
-        d.p1 = dout + b0 * O
-        ex.launch[OP_COPY](d, B * O)
-        b0 += B
-    if proba2 and O == 1:
-        var two = ex.alloc(N * 2)
-        var q = Args()
-        q.p0 = dout
-        q.p1 = two
-        ex.launch[OP_PROBA2](q, N * 2)
-        ex.sync()
-        ex.download(dst, two, N * 2)
-        return
-    ex.sync()
-    ex.download(dst, dout, N * O)
-
-
-def mlp_predict_autograd[E: Exec](mut ex: E, net: MLPNet, X: FP, N: Int, Pin: FP, dst: FP, chunk: Int,
-                                  proba2: Bool = False, resident: Bool = False) raises:
-    """mlp_predict through the tape: each chunk runs mlp_forward_autograd on a
-    tape in inference mode (no graph, no gradient storage), so predictions
-    come from the same kernels, in the same order, as the training forward.
-    Chunking, the output copy and `proba2` are mlp_predict's."""
+    """Predict through the tape: each chunk of `chunk` rows runs
+    mlp_forward_autograd on a tape in inference mode (no graph, no gradient
+    storage), so predictions come from the same kernels, in the same order,
+    as the training forward. `proba2` (cpu2-l11-neural): a one-output
+    logistic net writes the (N, 2) probability `[1 - p, p]` (`OP_PROBA2` on
+    the executor). `resident` (perf3-seq-neural): `Pin` is already this
+    executor's memory (the model's resident fitted block,
+    sequence/perf3_seq_resident.mojo), read in place: no per-call allocation
+    and upload of the parameters."""
     var L = net.n_layers()
     var D = net.sizes[0]
     var O = net.sizes[L]

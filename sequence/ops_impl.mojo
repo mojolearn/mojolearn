@@ -17,7 +17,7 @@ from sequence.ops import OP_GEMM, SEQ_FAST_VAR_ONECOPY, SEQ_FAST_VAR_COOP, TSA2_
 from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LAMB_BLK, OP_LAMB_SEGFOLD, OP_LAMB_CLIP, OP_LAMB_TRUST, OP_LAMB_APPLY_ALL, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.layernorm_core import layer_norm_fwd_core, layer_norm_bwd_core
-from sequence.mlp_fit import AUTOGRAD_PREDICT, MLPNet, mlp_fit, mlp_predict, mlp_predict_autograd
+from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
 from autograd.rules_recurrent import AutogradRnnStep
 from autograd.route_ops import moe_tape_train_step
@@ -770,13 +770,11 @@ def mlp_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises
     # the (N, 2) probability [1 - p, p] into `out`.
     var n_ip = 7 + len(net.sizes) - 2
     var proba2 = len(ip) == n_ip + 1 and ival(ip, n_ip) == 1 and O == 1
-    comptime if AUTOGRAD_PREDICT:
-        # -D MOJOLEARN_AUTOGRAD_PREDICT: the tape's forward in inference mode
-        mlp_predict_autograd(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"),
-                             chunk, proba2, resident)
-    else:
-        mlp_predict(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"), chunk, proba2,
-                    resident)
+    # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+    # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
+    # mlp_predict is the tape's forward in inference mode (the former mlp_predict_autograd).
+    mlp_predict(ex, net, fptr(addrs[0], "X"), N, fptr(addrs[1], "params"), fptr(addrs[2], "out"), chunk, proba2,
+                resident)
     if proba2:
         return N * 2
     return N * O
