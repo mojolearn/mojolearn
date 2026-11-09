@@ -18,7 +18,7 @@ from std.python import Python, PythonObject
 from bindings.admitted_family import (
     admit_family, admit_family_weights, admit_family_input, admit_family_cast, admitted_family_x,
 )
-from bindings.admitted_input import AdmittedX, admit_x_unrecorded, admit_rows_host, admitted_finite_refuse
+from bindings.admitted_input import AdmittedX, admit_x_unrecorded, admitted_finite_refuse
 from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
@@ -27,7 +27,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.family_common import (
     FAMILY_F32P, family_repr, family_str, family_is_str, family_is_int, family_isinstance, family_type_name,
-    family_call, family_call_kw, family_entry, family_array, family_nonfinite, family_field,
+    family_call, family_entry, family_array, family_nonfinite, family_field,
 )
 from bindings.classical_arrays import classical_is_f32, classical_c_order
 from core.host_finite_scan import host_all_finite_f32
@@ -220,7 +220,7 @@ def _kmeans_x(source: PythonObject, context: PythonObject) raises -> AdmittedX:
 
 def _kmeans_host_x(source: PythonObject, x: AdmittedX, context: PythonObject) raises -> AdmittedX:
     """`x` with host words: a resident fold whose operation has no device-X
-    entry (sample weights, a callable init, the host binding) is gathered on
+    entry (sample weights, the host binding) is gathered on
     the host out of model selection's host base, tested in the gather."""
     if x.store.active():
         return admit_x_unrecorded(source, _KMEANS_EST, context)
@@ -240,25 +240,11 @@ def _kmeans_metric(fields: PythonObject, context: PythonObject) raises -> Int:
     return Int(py=family_call(native_loaded_module("builtins").int, metric))
 
 
-def _kmeans_callable_init(init: PythonObject, source: PythonObject, k: PythonObject,
-                          random_state: PythonObject) raises -> PythonObject:
-    """scikit-learn's callable `init` (`init(X, n_clusters,
-    random_state=random_state)`), called once with the fit's rows: a NumPy
-    array and a RandomState seeded by `random_state` when NumPy is
-    installed, the input and the int otherwise."""
-    var data = source
-    var state = random_state
-    var numpy = PythonObject(None)
-    try:
-        numpy = Python.import_module("numpy")
-    except:
-        numpy = PythonObject(None)
-    if numpy is not None:
-        data = family_call(numpy.asarray, source)
-        state = family_call(numpy.random.RandomState, random_state)
-    var keywords = Python.dict()
-    py_setitem(keywords, "random_state", state)
-    return family_call_kw(init, keywords, data, k)
+# P1 (audit A #2, audit B #3): _kmeans_callable_init removed; it imported
+# NumPy, built numpy.random.RandomState and called the user's init(X, k,
+# random_state=...) inside fit. A callable init is now refused before it is
+# called (as MiniBatchKMeans already does, bindings/cluster_fit_a_native.mojo
+# _init_array); the seeds of 'k-means++' and 'random' are drawn natively.
 
 
 def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
@@ -285,12 +271,11 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
                         + ", got " + family_repr(init))
         init_code = Int(py=inits[init])
     elif Bool(py=py_call(b.callable, init)):
-        init_code = _INIT_ARRAY
-        if door_is_device_rows(source, context):
-            # scikit-learn's callable receives the fit's rows: a fold's host
-            # rows (gathered once, tested; the fit then reads them).
-            source = admit_rows_host(source, _KMEANS_EST, context)
-        init_centroids = _kmeans_callable_init(init, source, k_obj, family_field(fields, "random_state"))
+        # Refused before it is called: a Python init would run Python code
+        # inside the fit. PyCallable_Check through builtins.callable runs no
+        # user code.
+        raise Error("TypeError: Python init callbacks are not accepted; pass explicit initial centers "
+                    + "(an array of shape (n_clusters, n_features)) or use 'k-means++' or 'random'")
     elif family_is_int(init):
         init_code = Int(py=family_call(b.int, init))
     else:
