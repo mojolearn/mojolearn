@@ -160,3 +160,67 @@ the same chunk because nothing depends on it.
   (builder.mojo, randomforest.mojo changed; ExtraTrees untouched). NVIDIA + AMD: the RandomForest and
   DecisionTree board rows (classifier and regressor) once against main: one drain fewer per finished tree,
   same bits expected; Apple identity unaffected. The leaf op has no caller until T2, so no GBDT row moves yet.
+
+## 7. Lane T2 (`t2-trees-on-executor`, 2026-11-09): what moved, what stays and why
+
+**Moved.** `gbdt/methods/doc_parallel_boosting.mojo`: `SymDeviceRounds` (a `LoopStep`) is section 3's round, and
+`fit_sym_rounds_on_device` runs it on `bounded_device_loop` with the host-tail rerun (seed snapshot back into the
+seeds, `run_host_tail_round` with `_estimate_and_apply`, restart at `s + 1`). `fit_with_test` routes every
+`sym_device_rounds_eligible` fit there and runs its host loop zero times. Chunk: 16 rounds with an active detector,
+128 without (cost rule in the comment). The fixed-point scale is a device word (`choose_scale_kernel` into the
+searcher's `std_scale_word`), so the per-round magnitudes drain goes too. The model, the learn and held-out loss
+histories and the detector's best iteration come home in one download after the loop.
+
+**Eligible:** pointwise searcher, SymmetricTree, one permutation, `feature_fraction == 1`, `random_strength == 0`,
+no identity trace, a single-device plan, and a loss TREE_OP_LEAF_ESTIMATE covers (single-dim pointwise, Newton or
+Gradient). **Refused (they stay on the host loop, each owed its own op):** QueryRMSE / PairLogit / YetiRank, the
+multiclass family and MultiRMSE, Exact / Simple, CTR estimation permutations, feature sampling (projection drains),
+`random_strength` (host std-dev reduction), traced fits, multi-device plans, the greedy searcher (the default
+SymmetricTree arm, `run_tree_layout`: no enqueue-only op), Depthwise / Lossguide, and FAST + Apple (no leaf-op arm,
+its `apple_fast_est` / SYM_ITER pool / fused eval stay, as briefed).
+
+**Bits.** The pointwise-searcher symmetric GBDT identity lanes move on every column together: leaf sums in the
+partition op's ascending-row order, and the learn cursor add is `cursor + round(leaf * rate)` (TREE_OP_APPLY)
+instead of `add_model_value_kernel`'s IDENTICAL `fma(leaf, rate, cursor)`. The fma note of section 4 was checked:
+the two are not the same float operation, so the change is taken everywhere. The stored model leaves stay
+`leaf * rate` on the host, as before. A/B define `-D MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF` (host loop), row in
+`docs/apple-fast/EXPERIMENTS.md`.
+
+**Section 5 deletions, status.** Nothing in section 5.1 to 5.3 has lost its last caller, so nothing was deleted
+there. Each one still serves a refused fit or another family:
+- the searcher's drain branch, `h_structure`, `d_gate_open`, `enqueue_only` (5.2): the host loop's pointwise arm
+  (the refused fits above), `ordered_boosting.mojo:3277`, `dynamic_boosting.mojo:389` and the checks still take
+  the split list;
+- `compute_bins_for_model` / `partition_from_bins` / `_apply_last_tree_to_test` / `_test_loss` / host
+  `detector.add_error` (5.1): the greedy SymmetricTree arm (default), Depthwise / Lossguide, every refused fit;
+- `_test_loss_flush` / `_EVAL_FV_SLOTS` (5.1): `GBDT_EVAL_FUSED` is Apple FAST, which keeps today's path;
+- `estimate_advance` / `PendingEstimation` / `walk_leaf_values` / `finish_deferred_estimation` (5.3): the CTR
+  permutation batch (`doc_parallel_boosting.mojo` `walk_leaf_values(perm_est_ws[...])`), ordered boosting
+  (`_estimate_complete`, `estimate_workspace`), and `IDN_GBDT_SYM_EST_DEFER_DRAIN` on the greedy arm.
+They go when the greedy searcher has an enqueue-only search op (then the default SymmetricTree fits move and
+5.1's host packers lose their last oblivious caller) and when ordered boosting takes the same round step. After the
+NVIDIA + AMD A/B, the `_OFF` arm is deleted (winner) or the device rounds block is (loser).
+
+**ExtraTrees (task 2).** The cycle already runs on the device (cpu4-forest): pop / stage / search / partition /
+push per batch, `ET_LOOP_K` batches per header read. Done here: `EtDeviceLoop.ensure` (the host-grown FIFO and node
+arena) no longer synchronizes; a growth enqueues its copies and header upload and retires the replaced buffers to
+the next header drain (three drains per growth deleted, same bits). The growth decision stays on the host: Mojo
+has no device-side allocation, and a worst-case arena (about 2 x rows nodes per tree for the whole group) is
+gigabytes at the group cap. The per-group finish (`download_trees`) stays: it is already one download and one
+drain per group, a default forest is one group, and deferring it past the next group's first drain would keep two
+groups' device arenas alive at once, which is the memory the grouping exists to bound.
+
+**RandomForest / DecisionTree (task 3): left as they are.** A `LoopStep` wrapper removes no drain: node append
+and bookkeeping are device words, the 16-word header read every `LOOP_K` batches is the loop's own chunk read, and
+T1b already took the finish's per-tree drain out (row 12). The slot scheduling (begin the next tree when one
+finishes) is a host driver loop over trees and needs the header to decide.
+
+**RUN OWED (T2).**
+- Compile once (orchestrator): the GBDT binding (`doc_parallel_boosting.mojo` now imports
+  `autograd/program_loop_device.mojo`, `core/step_gate.mojo`, `gbdt/methods/kernel/tree_gate_walk.mojo`,
+  `gbdt/overfitting_detector/od_device.mojo`), both with and without `-D MOJOLEARN_GBDT_DEVICE_ROUNDS_OFF`, NVIDIA,
+  AMD and Apple, IDENTICAL and FAST; `checks/executor_t1_tree_ops_compile.mojo`; the ExtraTrees binding
+  (`extratrees/impl/decisiontree/batched_levelalgo/builder.mojo`).
+- NVIDIA + AMD: the pointwise-searcher GBDT board rows (with and without held-out rows, with an `Iter` and an
+  `IncToDec` detector) A = device rounds vs B = `_OFF`; the ExtraTrees classifier and regressor rows vs main.
+- Identity (the one global verify): the pointwise-searcher symmetric GBDT lanes move on every column.
