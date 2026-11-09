@@ -455,7 +455,7 @@ struct _QueryX(Movable):
         self.store_ids = store_ids
         self.status = status
 
-    def fold(self) -> Bool:
+    def fold(self) raises -> Bool:
         return self.store_ids is not None
 
     def status_address(self) raises -> PythonObject:
