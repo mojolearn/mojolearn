@@ -602,6 +602,9 @@ in the tables after the sections.
 | [Small-MLP primitives `mlp_bias_activation` / `mlp_relu_backward` / `mlp_sum_rows` (`training/mlp_ops.mojo` `_mlp_kernel` + `*_host`, the CPU twins), `mlp_sessions` / `mlp_sessions_rows`, ParallelNeuralTrainer's per-operation shard gradient](#m2-neural-leftovers-small-mlp-primitives-session-switch-dead-transformer-workspace-2026-11-09) | Neural (SmallMLPTrainer callers) | removed (superseded: the small-MLP program, modes 0 / 1 and op SESSIONS) | 2026-11-09 | [M2_SMALL_MLP_PRIMITIVES.patch](../experiments/removed/M2_SMALL_MLP_PRIMITIVES.patch) |
 | [`MOJOLEARN_AFN_ATTN_ARENA` (with `TransformerWorkspace`, `_workspace_key`)](#m2-neural-leftovers-small-mlp-primitives-session-switch-dead-transformer-workspace-2026-11-09) | Neural (Apple FAST transformer session allocation) | removed (dead: nothing built the workspace after lanes x45c and x6; never measured) | 2026-11-09 | [MOJOLEARN_AFN_ATTN_ARENA.patch](../experiments/removed/MOJOLEARN_AFN_ATTN_ARENA.patch) |
 
+| [`x_decomp_dev_upload_finite` (lane a8c named entry, `dev_upload_finite_py`)](#integration-w5-duplicate-upload-finite-entry-and-mamba-backward-weight-reload-2026-11-09) | Decomp (PLS deferred X) | removed (duplicate of the kernel-call op `XD_DEV_UPLOAD_FINITE`; never reached main) | 2026-11-09 | lane only |
+| [`MambaBlockProgram.reload_weights` (lane x56d per-call weight rewrite in the backward door)](#integration-w5-duplicate-upload-finite-entry-and-mamba-backward-weight-reload-2026-11-09) | Neural (Mamba-1/2/3 backward) | removed (superseded: `refresh_weights` address + weight-epoch key; never reached main) | 2026-11-09 | lane only |
+
 ## Retired by lane debt-block-per-n (2026-10-21)
 
 These are rollback or gate arms, not measured losers: each selected a launch that the `block-per-n` / `one-block-n`
@@ -5640,3 +5643,25 @@ RUN OWED: mlp-infer sessions, par-mlp train and lm-train-step (chunked) ms on NV
 - Code recoverable at `0ce88411d3`; patches `experiments/removed/M2_SMALL_MLP_PRIMITIVES.patch` and
   `experiments/removed/MOJOLEARN_AFN_ATTN_ARENA.patch` (the reverse of the lane's change to the code files; `git apply`
   restores them).
+
+
+<a id="integration-w5-duplicate-upload-finite-entry-and-mamba-backward-weight-reload-2026-11-09"></a>
+
+## Integration w5: duplicate upload-finite entry and Mamba backward weight reload (2026-11-09)
+
+Integration branch `integ/pre-0867-w5` (wave-4 merge). Not experiments: duplicates two lanes wrote for one decision.
+
+- `x_decomp_dev_upload_finite`: lane a8c (`lane/a8c-device-x-linear-prep-rfe@2141a3451b`) added a named x_decomp entry
+  (`dev_upload_finite_py`, `bindings/_mojolearn_x_decomp.mojo`) that uploads a matrix and tests it on the device; lane a8d
+  (`lane/a8d-device-x-decomp-manifold@b6e4b310ae`) added the same thing as the kernel-call op `XD_DEV_UPLOAD_FINITE` (19, op
+  count 20). Both called one body, `x_decomp/resident.mojo` `dev_upload_finite_run`. Kept: the op. `DecompKit.input_tested`
+  (PLS with a deferred X) now calls it through `kit_call` (`DecompKit.xd`; the bridge retains the module as
+  `entries["x_decomp_module"]`). The named entry was also never in the bridge's optional list, so a8c's
+  `defers_finite()` was always False: the PLS host-scan removal starts working with this change. Bits: none.
+- `MambaBlockProgram.reload_weights`: lane x56d (`lane/x56d-mamba-samba-train-and-host@f046806502`) rewrote the weights into
+  the cached block program on every backward call because the backward door's addresses did not pass the weight-freezing
+  door. The door's Mamba weights now go through `generation_weight_address` (`bindings/neural_block_public.mojo`
+  `_neural_backward_prepared`), and `mamba_block_backward_call` uses `refresh_weights` (address + weight epoch,
+  `core/weight_epoch.mojo`): an unchanged weight is not uploaded again. Behaviour: a Mamba block's weight arrays become
+  read-only after a backward, as after a generation forward; in-place edits are refused by the array. Bits: none.
+- Never reached main: no patches; code recoverable at the lane shas above.
