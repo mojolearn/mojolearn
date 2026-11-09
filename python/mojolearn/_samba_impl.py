@@ -39,7 +39,7 @@ from . import _training_impl as T
 from ._mamba_impl import Mamba3Block
 from ._transformer_impl import TransformerBlock
 
-__all__ = ["SambaConfig", "SambaStack", "SambaState"]
+__all__ = ["SambaConfig", "SambaDecodeSession", "SambaStack", "SambaState"]
 
 PROFILE = "mojolearn.samba-stack.fp32.v1"
 _STATE_SCHEMA = "mojolearn.samba-stack-state.v1"
@@ -554,6 +554,39 @@ class SambaStack(object):
         return _native_samba_bridge.RUNTIME.samba_native_call(
             "step", (self, inputs, state), _native_samba_bridge.CONTEXT)
 
+    def decode_session(self, state):
+        """Open a `SambaDecodeSession` for fast token-by-token decoding.
+
+        On a GPU the session keeps the parameters, every layer's state and the
+        hidden state between layers on the device across steps; its `step` gives
+        the same bytes as `SambaStack.step`. The session copies the parameters and
+        the state when it opens:
+
+        - until `close()` or `sync_state()`, the state's arrays are stale, and
+          `forward`/`step` on this stack refuse that state;
+        - parameter changes after opening (training steps, `load_weights`) are not
+          seen; close and open a new session;
+        - edits to the state arrays are not seen until `load_state()`.
+
+        Parameters
+        ----------
+        state : SambaState
+            Decode state from `allocate_state`.
+
+        Returns
+        -------
+        SambaDecodeSession
+
+        Examples
+        --------
+        >>> state = stack.allocate_state(batch_size=2, max_tokens=64)
+        >>> with stack.decode_session(state) as session:
+        ...     for ids_t in tokens:
+        ...         logits = session.step(ids_t)
+        """
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "decode_session_open", (self, state), _native_samba_bridge.CONTEXT)
+
     def _forward_state(self, inputs, state, step):
         c = self.config
         what = "mojolearn.SambaStack.step" if step else "mojolearn.SambaStack.forward"
@@ -709,9 +742,104 @@ class SambaStack(object):
             "checkpoint_read", (path,), _native_samba_bridge.CONTEXT)
 
 
+class SambaDecodeSession(object):
+    """Token-by-token decoding on one `SambaStack` and one `SambaState`.
+
+    Made by `SambaStack.decode_session(state)`. Every output is byte for byte what
+    `SambaStack.step` gives on the same stack and state. On a GPU the parameters,
+    every layer's state and the hidden state between layers stay on the device
+    across steps, so a step uploads the token ids and downloads the logits only.
+    A session is not thread-safe. Use it as a context manager to close it
+    automatically.
+
+    Attributes
+    ----------
+    state : SambaState
+        The state this session decodes from.
+    is_open : bool
+        Whether the session is open.
+
+    Examples
+    --------
+    >>> with stack.decode_session(state) as session:
+    ...     for ids_t in tokens:
+    ...         logits = session.step(ids_t)
+    """
+
+    # Every method is one native call (bindings/samba_decode_native.mojo); the
+    # resident device session, the open flag and the row count live in the
+    # instance record the native door writes.
+    def __init__(self, stack, state):
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "decode_session_init", (self, stack, state), _native_samba_bridge.CONTEXT)
+
+    @property
+    def state(self):
+        """The `SambaState` this session decodes from."""
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "decode_session_state", (self,), _native_samba_bridge.CONTEXT)
+
+    @property
+    def is_open(self):
+        """Whether the session is open."""
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "decode_session_is_open", (self,), _native_samba_bridge.CONTEXT)
+
+    @property
+    def _native(self):
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "decode_session_device", (self,), _native_samba_bridge.CONTEXT)
+
+    def step(self, inputs):
+        """Decode one token per row.
+
+        Parameters
+        ----------
+        inputs : int array, shape (B,) or (B, 1)
+            Token ids; B must equal the session's batch size.
+
+        Returns
+        -------
+        logits : mojolearn.Array, shape (B, vocab)
+        """
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "decode_session_step", (self, inputs), _native_samba_bridge.CONTEXT)
+
+    def sync_state(self):
+        """Copy the session's current state into the `SambaState` arrays and return the state."""
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "decode_session_sync", (self,), _native_samba_bridge.CONTEXT)
+
+    def load_state(self):
+        """Reload the session from the `SambaState` arrays (after you edit them) and return the state."""
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "decode_session_load", (self,), _native_samba_bridge.CONTEXT)
+
+    def close(self):
+        """Copy the state back, release the session's buffers and close it. Closing twice is a no-op."""
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "decode_session_close", (self,), _native_samba_bridge.CONTEXT)
+
+    def __enter__(self):
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "decode_session_enter", (self,), _native_samba_bridge.CONTEXT)
+
+    def __exit__(self, *exc):
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "decode_session_exit", (self,), _native_samba_bridge.CONTEXT)
+
+    def __del__(self):
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "decode_session_drop", (self,), _native_samba_bridge.CONTEXT)
+
+    def __repr__(self):
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "decode_session_repr", (self,), _native_samba_bridge.CONTEXT)
+
+
 # Import-time native ABI connection; legacy public methods remain until their
 # complete supported operation has a native owner and whole-call audit.
 from . import _native_samba_bridge
 _native_samba_bridge.RUNTIME = _native_neural_bridge.RUNTIME
 _native_samba_bridge.CONTEXT = _native_samba_bridge.connect(
-    SambaConfig, SambaStack, T, _native_neural_bridge, SambaState)
+    SambaConfig, SambaStack, T, _native_neural_bridge, SambaState, SambaDecodeSession)
