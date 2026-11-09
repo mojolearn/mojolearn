@@ -37,11 +37,21 @@ class ClassifyLineTest(unittest.TestCase):
         self.assertEqual(classes('var np = Python.import_module("numpy")'), ["b"])
         self.assertEqual(classes('var m = native_loaded_module("mojolearn._mode")'), ["b"])
         self.assertEqual(classes('var x = native_loaded_module(name)'), ["b"])
-        self.assertEqual(classes('var a = py_call(context["ndarray"], shape)'), ["b"])
+        self.assertEqual(classes('var a = py_call(context["ndarray"], shape)'), ["a"])   # numpy C type
+        self.assertEqual(classes('var a = py_call(context["np"].unique, y)'), ["b"])
         self.assertEqual(classes('var c = py_call(init, x, k)'), ["b"])
         self.assertEqual(classes('var r = model.fit(x)', ("model",)), ["b"])
         self.assertEqual(classes('var r = model.append(x)', ("model",)), ["a"])   # C-type method: object layer
         self.assertIn("b", classes('var y = np.asarray(x)'))
+
+    def test_local_origins(self):
+        origins = {"list_type": ("a", "C builtin type"), "init": ("b", "py_call into init")}
+        self.assertEqual([c for c, _ in mds.classify_line("var l = py_call(list_type, x)", None, None, origins)], ["a"])
+        self.assertEqual([c for c, _ in mds.classify_line("var l = py_call(init, x)", None, None, origins)], ["b"])
+        text = ("def f(x: PythonObject) raises:\n    var list_type = py_type(Python.list())\n"
+                "    var l = py_call(list_type, x)\n    var g = py_call(user_init, x)\n")
+        funcs, _, _ = mds.scan_file("bindings/f.mojo", text, {})
+        self.assertEqual([c for _, c, _ in funcs[0].sites if c in ("a", "b")], ["a", "a", "b"])
 
     def test_table_entries(self):
         self.assertEqual(classes('var g = py_call(context["fields_get"], v)'), ["b-table"])

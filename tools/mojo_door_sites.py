@@ -62,6 +62,9 @@ C_MODULES = frozenset({
     "mmap", "_struct", "_codecs", "_json", "_io", "gc", "time", "errno", "_functools", "_collections",
     "zlib", "binascii", "_random", "_hashlib", "_sha256", "_bisect", "_heapq", "cmath", "marshal",
     "_weakref", "atexit", "_signal", "select", "fcntl", "_locale", "_string", "_abc", "_warnings",
+    # Python-coded, but it only holds C type objects (FunctionType, SimpleNamespace, ...): reading
+    # it runs no Python code (no_runtime_import_module.py still counts it as a module read)
+    "types",
 })
 # Methods of the C builtin types (list, dict, tuple, str, bytes, set, int, float, memoryview,
 # array.array, slice): calling them is object-layer traffic, not Python code. This is the one
@@ -113,6 +116,9 @@ INLINE = re.compile(r"\b(?:b|bi|builtins|trees_builtins\(\))\s*\.\s*(?:sorted|ma
 IMPORT_MODULE = re.compile(r"\bPython\s*\.\s*import_module\s*\(\s*\"(?P<m>[^\"]+)\"")
 LOADED_MODULE = re.compile(r"\bnative_loaded_module\s*\(\s*(?P<arg>\"[^\"]*\"|[^)]*)\)")
 PY_CALL = re.compile(r"\bpy_call\s*\(\s*")
+# numpy's C types: constructing or reading them runs no Python code (numpy functions do).
+NUMPY_C_TYPES = frozenset({"ndarray", "dtype", "generic", "number", "integer", "floating", "bool_", "str_",
+                           "float32", "float64", "int32", "int64", "uint8", "int8", "int16", "uint16", "uint32", "uint64"})
 DEF = re.compile(r"^(?P<indent>[ \t]*)(?:@\w+[^\n]*\n[ \t]*)*(?:def|fn)\s+(?P<name>\w+)")
 LOOP = re.compile(r"^(?P<indent>[ \t]*)(?P<kw>for|while)\b(?P<head>.*)$")
 IF_KEY = re.compile(r"^(?P<indent>[ \t]*)(?:el)?if\b(?P<cond>.*):\s*$")
@@ -242,8 +248,10 @@ class Names:
         return bool(r and r.search(code))
 
 
-def classify_line(code, names=None, python_tables=None):
-    """[(class, what)] for one door code line (comments stripped). Empty when it touches no Python."""
+def classify_line(code, names=None, python_tables=None, origins=None):
+    """[(class, what)] for one door code line (comments stripped). Empty when it touches no Python.
+    `origins` maps a local name to the (class, what) of the expression it was bound to, so a
+    call through a local (`var list_type = py_type(Python.list())`) is classed by its origin."""
     names = names if names is not None else Names()
     bare = STRING.sub('""', code)          # string contents never read as code
     sites = []
@@ -267,7 +275,11 @@ def classify_line(code, names=None, python_tables=None):
         sites.append(("c-inline", "inline Python iteration: " + m.group(0)[:40]))
     calls = [mm.end() for mm in PY_CALL.finditer(code)]
     for start in calls:
-        sites.append(_classify_target(_call_target(code, start), python_tables))
+        target = _call_target(code, start)
+        if origins and target in origins:
+            sites.append(origins[target])
+        else:
+            sites.append(_classify_target(target, python_tables))
     if names.names:
         for mm in re.finditer(r"(?<![\w.])(?P<recv>\w+)\s*\.\s*(?P<attr>\w+)\s*\(", bare):
             if (mm["recv"] in names.names and mm["attr"] not in C_METHODS
@@ -287,7 +299,7 @@ def _classify_target(target, python_tables=None):
     if pa:
         chain = pa["recv"] + "." + pa["attr"]
     head, dot, attr = chain.rpartition(".")
-    while dot and attr in BUILTIN_NAMES | C_METHODS:
+    while dot and (attr in BUILTIN_NAMES or attr in C_METHODS or re.fullmatch(r"__\w+__", attr)):
         if BUILTIN_RECEIVER.search(head.strip()):
             return ("a", "C builtin " + t[:40])
         head, dot, attr = head.rpartition(".")
@@ -297,9 +309,13 @@ def _classify_target(target, python_tables=None):
         return ("c-inline", "per-element Python iteration via " + t[:40])
     if COMPILED_ENTRY.match(t):
         return ("a-native", "compiled entry via CPython call: " + t[:40])
+    if re.match(r"^native_numpy_(?:type|dtype)\s*\(", t):
+        return ("a", "numpy C type " + t[:40])
     m = TABLE.match(t)
     if m:
-        if m["key"] in ("ndarray", "np", "numpy"):
+        if m["key"] in NUMPY_C_TYPES:
+            return ("a", f"numpy C type {m['table']}[\"{m['key']}\"]")
+        if m["key"] in ("np", "numpy"):
             return ("b", f"numpy callable: {m['table']}[\"{m['key']}\"]")
         if python_tables is not None and m["key"] in python_tables:
             return ("b", f"table entry {m['key']} filled with Python code ({python_tables[m['key']]})")
@@ -347,7 +363,7 @@ def scan_file(path, text, python_tables=None):
             alias = bits[2] if len(bits) == 3 and bits[1] == "as" else bits[0]
             imports[alias] = (mod, bits[0])
     funcs, stack = [], []   # stack of (indent, Func)
-    py_names_of = {}
+    py_names_of, origins_of = {}, {}
     for idx, (n, raw, code, comment) in enumerate(lines):
         if not code.strip():
             continue
@@ -360,6 +376,7 @@ def scan_file(path, text, python_tables=None):
             funcs.append(f)
             stack.append((ind, f))
             py_names_of[id(f)] = Names(TYPED_NAMES(code))
+            origins_of[id(f)] = {}
             continue
         if not stack:
             continue
@@ -368,14 +385,24 @@ def scan_file(path, text, python_tables=None):
             f.lines += 1
         f = stack[-1][1]
         names = py_names_of[id(f)]
+        origins = origins_of[id(f)]
         names.add(*TYPED_NAMES(code))
-        a = ASSIGNED.match(code)
+        a = ASSIGNED.match(code) or re.match(r"^\s*(?P<name>\w+)\s*=\s*(?P<rhs>[^=].*)$", code)
         if a:
             rhs = a["rhs"].strip()
+            if not rhs.startswith(("py_call(", "py_get(")) and not re.search(r"\)\s*$", rhs) or rhs.startswith(
+                    ("py_type(", "native_numpy_type(")):
+                origin = _classify_target(rhs, python_tables)
+                if origin[0] == "b" and origin[1].startswith("py_call into"):
+                    origins.pop(a["name"], None)
+                else:
+                    origins[a["name"]] = origin
+            else:
+                origins.pop(a["name"], None)
             head = re.match(r"(?P<recv>\w+)\s*[.\[]", rhs)
             if PY_RHS.match(rhs) or (head and head["recv"] in names.names and not re.match(r"\w+\s*\.\s*__\w+__", rhs)):
                 names.add(a["name"])
-        for cls, what in classify_line(code, names, python_tables):
+        for cls, what in classify_line(code, names, python_tables, origins):
             f.sites.append((n, cls, what))
         for c in CALLEE.finditer(code):
             name = c["name"]
@@ -552,7 +579,10 @@ class DoorIndex:
         r = Reach(entry, key)
         stack = [(f, None) for f in starts]
         if key and key in self.keys:
-            stack = [(f, (s, e)) for f, s, e in self.keys[key]] + stack
+            # the operation's own blocks, and the functions holding them walked with the key
+            # filter (their shared preamble); not the whole router chain from the entry, whose
+            # other operations would otherwise all count
+            stack = [(f, (s, e)) for f, s, e in self.keys[key]] + [(f, None) for f, _, _ in self.keys[key]]
         seen = set()
         while stack:
             f, window = stack.pop()
