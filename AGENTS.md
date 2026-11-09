@@ -19,6 +19,20 @@
   produced. Change every vendor column and the host column together, then
   record the new reference in the release's one verification round.
 
+## Fix everything before a release (Andrew, 2026-11-08)
+
+- We fix everything we can before a release. We do not release while there is
+  more work to incorporate: known regressions, planned refactors, owed fixes
+  and owed deletions all go in first.
+- No piecemeal releases. A release is never cut to ship part of a program
+  (for example a few regression fixes ahead of the executor consolidation)
+  while the rest is still open.
+- Measure before the release: time the candidate build on NVIDIA and AMD
+  against the last release and the paper baseline, fix every regression found,
+  and measure again. Only a candidate with no open regression is frozen.
+- Order: all code in, one compile, measure, fix, measure again until clean,
+  freeze, the one verification, publish.
+
 ## Verify once, before the release, at the very end (Andrew, 2026-11-05)
 
 - Verification happens before a release only, once: one global verify of
