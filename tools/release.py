@@ -4349,12 +4349,19 @@ class Release(release_identity_wheels.IdentityOnWheels):
         """(problems, rows): (a) every package set resolved through INDEX (our names from TestPyPI only) for each
         platform tag and Python version the wheels declare, against the expected set and the gated sha256;
         (b) each rehearsed file downloaded and hashed; (c) the macOS wheel installed into a fresh venv and
-        imported. LOCAL: platforms whose upload was skipped (their gated file is offered from out/local)."""
+        imported. LOCAL: platforms whose upload was skipped (their gated file is offered from out/local).
+        The two venvs are throwaways under a temp dir removed on return; OUT keeps logs and records only."""
+        import tempfile
+        scratch = Path(tempfile.mkdtemp(prefix="rehearsal-venvs-"))
+        try:
+            return self._rehearsal_checks(ready, wheels, local, out, index, scratch)
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+
+    def _rehearsal_checks(self, ready, wheels, local, out, index, scratch):
         import concurrent.futures
         import release_testpypi_rehearsal as TR
-        pip_venv = out / "pip-venv"
-        if pip_venv.exists():
-            shutil.rmtree(pip_venv)
+        pip_venv = scratch / "pip-venv"
         self.must([self.smoke_python(), "-m", "venv", pip_venv], what="the rehearsal's pip venv")
         pip_python = pip_venv / "bin" / "python"
         links = None
@@ -4426,9 +4433,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
         # (c) the macOS wheel from TestPyPI, pinned to the gated sha256, into a fresh venv; import only
         if "macos" in ready:
             wheel = wheels["macos"]
-            venv = out / "macos-venv"
-            if venv.exists():
-                shutil.rmtree(venv)
+            venv = scratch / "macos-venv"
             req = out / "macos-requirements.txt"
             req.write_text(TR.requirements_text(TR.wheel_project(wheel), self.version, sha256(wheel)))
             self.must([self.smoke_python(), "-m", "venv", venv], what="the rehearsal's macOS venv")
