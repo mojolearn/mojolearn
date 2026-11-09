@@ -247,7 +247,7 @@ def classify_line(code, names=None, python_tables=None):
     names = names if names is not None else Names()
     bare = STRING.sub('""', code)          # string contents never read as code
     sites = []
-    if not (PY_TOUCH.search(bare) or names.used(bare) or INLINE.search(code)):
+    if not (PY_TOUCH.search(bare) or names.used(bare) or INLINE.search(code) or NUMPY.search(bare)):
         return sites
     for m in IMPORT_MODULE.finditer(code):
         if m["m"] not in C_MODULES:
@@ -561,7 +561,7 @@ class DoorIndex:
                 continue
             seen.add(mark)
             if window is None:
-                excluded = [(s, e) for s, e, ks in f.blocks if (ks & known_keys) and not (key and key in ks)]
+                excluded = [(s, e) for s, e, ks in f.blocks if key and (ks & known_keys) and key not in ks]
                 inside = lambda n: not any(s <= n <= e for s, e in excluded)
             else:
                 inside = lambda n, w=window: w[0] <= n <= w[1]
