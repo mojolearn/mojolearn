@@ -65,16 +65,8 @@ def csr_checked(csr_address: Int, n: Int, F: Int, nnz: Int, mode: Int) raises ->
 # Restore: git apply experiments/removed/X8B_XCNN_RES_ARGMAX.patch
 
 
-def gather_rows_f32(
-    d: MutPointer[Float32, MutUntrackedOrigin],
-    s: MutPointer[Float32, MutUntrackedOrigin],
-    rp: MutPointer[Int32, MutUntrackedOrigin],
-    n: Int,
-    row: Int,
-):
-    """dst rows = src rows[rp[r]], `row` 4-byte words each."""
-    for r in range(n):
-        memcpy(dest=d + r * row, src=s + Int(rp[r]) * row, count=row)
+# TOMBSTONE: x_cnn_res_gather (gather_rows_f32, the CPU body; unused: no caller since lane x8, only python/mojolearn/tests/test_x_cnn_repeat.py) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/XCNN_RES_GATHER.patch
 
 
 # TOMBSTONE: the host fit epoch (epoch_rows_fill, adam_rows, widen_f32_into, widen_f32_list_into, sgd_hyper_rows, fit_epoch_r_into) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.

@@ -48,8 +48,6 @@ from x_cnn.device import (
     res_free,
     res_upload,
     res_download,
-    res_gather,
-    res_gather_pair,
     opt_many_resident,
     gemm_m,
     conv2d_forward_m,
@@ -714,28 +712,8 @@ def res_upload_binding(h: PythonObject, src_addr: PythonObject, n: PythonObject)
     return PythonObject(nn)
 
 
-def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """Resident dst rows = resident src rows[r] (int32 host indices); params = [n, row words].
-    lane/cnn-apple2: dst and src may be two-handle LISTS with params = [n,
-    row words, row2 words] (the batch and its labels in one entry)."""
-    var n = Int(py=params[0])
-    if _is_list(dst):
-        if Int(py=len(dst)) != 2 or Int(py=len(src)) != 2 or Int(py=len(params)) != 3:
-            raise Error("x_cnn res_gather: the pair form is [dst, dst2], [src, src2], [n, row, row2]")
-        var d0 = Int(py=dst[0]); var d1 = Int(py=dst[1])
-        var s0 = Int(py=src[0]); var s1 = Int(py=src[1])
-        var r0 = Int(py=params[1]); var r1 = Int(py=params[2])
-        var rq = _ip(rows_addr)
-        with GILReleased(Python()):
-            res_gather_pair(d0, s0, r0, d1, s1, r1, rq, n)
-        return PythonObject(n)
-    var row = Int(py=params[1])
-    var d = Int(py=dst)
-    var sr = Int(py=src)
-    var rp = _ip(rows_addr)
-    with GILReleased(Python()):
-        res_gather(d, sr, rp, n, row)
-    return PythonObject(n)
+# TOMBSTONE: x_cnn_res_gather (the GPU entry; unused: no caller since lane x8, only python/mojolearn/tests/test_x_cnn_repeat.py) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/XCNN_RES_GATHER.patch
 
 
 # TOMBSTONE: x_cnn_res_argmax (CNNClassifier.predict's device argmax; the classifier predicts on the x_sequence program executor since lane x8) deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
@@ -1277,7 +1255,6 @@ def build__mojolearn_x_cnn() -> PythonObject:
         # TOMBSTONE: x_cnn_res_argmax deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
         m.def_function[conv_block_forward_r_binding]("x_cnn_conv_block_forward_r")
         m.def_function[conv_block_backward_r_binding]("x_cnn_conv_block_backward_r")
-        m.def_function[res_gather_binding]("x_cnn_res_gather")
         m.def_function[linear_forward_binding[True]]("x_cnn_linear_forward_r")
         m.def_function[linear_backward_binding[True]]("x_cnn_linear_backward_r")
         m.def_function[softmax_xent_binding[True]]("x_cnn_softmax_xent_r")

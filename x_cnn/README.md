@@ -27,8 +27,7 @@ Dropout2d, BasicBlock, CNNClassifier, GCNConv, SAGEConv.
   and gradients in RESIDENT arrays (`x_cnn_res_*` and the `_r` entries: device
   addresses on the GPU binding, host allocations on the CPU twin, whose `_r`
   entries are its ordinary ones). The fit keeps the whole X (up to 1 GiB) and
-  its labels resident and gathers each batch on the binding's side
-  (`x_cnn_res_gather`, a 4-byte word copy), and each block's backward reads
+  its labels resident and gathers each batch on the device, and each block's backward reads
   the im2col matrix and conv output its forward saved instead of recomputing
   them (the same kernels on the same inputs made them). Plumbing and
   execution plans only: the same kernels on the same values in the same

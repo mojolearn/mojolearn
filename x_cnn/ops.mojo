@@ -333,14 +333,8 @@ def fill_one_at(i: Int, dst: FP, f1: FP, f2: FP, f3: FP, q: IP, p: IP):
     dst.unsafe_store(i, Float32(1))
 
 
-@always_inline
-def gather_rows_at(i: Int, src: FP, dst: FP, f2: FP, f3: FP, q: IP, p: IP):
-    """dst[i] = src[q[i // row] * row + i % row], row = p[0]: a 4-byte word
-    copy (no float arithmetic touches it), the batch rows of a resident X."""
-    var row = Int(p.unsafe_load(0))
-    var r = _ud(i, row)
-    var j = Int(q.unsafe_load(r)) * row + (i - r * row)
-    dst.bitcast[Int32]().unsafe_store(i, src.bitcast[Int32]().unsafe_load(j))
+# TOMBSTONE: x_cnn_res_gather (gather_rows_at, its element body; unused: no caller since lane x8, only python/mojolearn/tests/test_x_cnn_repeat.py) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/XCNN_RES_GATHER.patch
 
 
 # TOMBSTONE: x_cnn_res_argmax (CNNClassifier.predict's device argmax; the classifier predicts on the x_sequence program executor since lane x8) deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.

@@ -50,7 +50,6 @@ from x_cnn.host.binding_entries_impl import (
     pool_counts as _pool_counts,
     check_labels_below,
     csr_checked,
-    gather_rows_f32,
 )
 from x_cnn.ops import idn2_flags, neural_tape_budget_bytes, neural_numerical_profile
 
@@ -827,36 +826,8 @@ def _list_counts(a: PythonObject, b: PythonObject, c: PythonObject, params: Pyth
     return out^
 
 
-def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """dst rows = src rows[r] (int32 host indices), `row` 4-byte words each.
-    lane/cnn-apple2: the pair form [dst, dst2], [src, src2], [n, row, row2]."""
-    var n = Int(py=params[0])
-    if _is_list(dst):
-        if Int(py=len(dst)) != 2 or Int(py=len(src)) != 2 or Int(py=len(params)) != 3:
-            raise Error("x_cnn res_gather: the pair form is [dst, dst2], [src, src2], [n, row, row2]")
-        var rq = i32_ptr(Int(py=rows_addr))
-        var d0 = f32_ptr(Int(py=dst[0]))
-        var s0 = f32_ptr(Int(py=src[0]))
-        var d1 = f32_ptr(Int(py=dst[1]))
-        var s1 = f32_ptr(Int(py=src[1]))
-        var r0 = Int(py=params[1])
-        var r1 = Int(py=params[2])
-        # p3-cnn-sequence-tsa: the copies run with the GIL released
-        with GILReleased(Python()):
-            gather_rows_f32(d0, s0, rq, n, r0)
-            gather_rows_f32(d1, s1, rq, n, r1)
-        return PythonObject(n)
-    var row = Int(py=params[1])
-    var d = f32_ptr(Int(py=dst))
-    var sr = f32_ptr(Int(py=src))
-    var rp = i32_ptr(Int(py=rows_addr))
-    with GILReleased(Python()):
-        gather_rows_f32(d, sr, rp, n, row)
-    return PythonObject(n)
-
-
-# TOMBSTONE: the host x_cnn_fit_epoch_r / x_cnn_fit_epoch_d / x_cnn_fit_d / x_cnn_predict_r / x_cnn_epoch_rows / x_cnn_adam_hyper_d (CNNClassifier's hand epoch and resident predict; the classifier is a captured program on the executor, sequence/cnn_classifier_program.mojo, whose host column is the x_sequence host binding) deleted 2026-11-09 by lane/x8-cnn-on-executor; code recoverable at f59d913b0b.
-# Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
+# TOMBSTONE: x_cnn_res_gather (the CPU entry; unused: no caller since lane x8, only python/mojolearn/tests/test_x_cnn_repeat.py) deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/XCNN_RES_GATHER.patch
 
 
 def idn2_flags_binding() raises -> PythonObject:
@@ -929,7 +900,6 @@ def build__mojolearn_x_cnn_host() -> PythonObject:
         # TOMBSTONE: x_cnn_res_argmax deleted 2026-11-09 by lane/x8b-cnn-resident-predict; code recoverable at 7c9d9d5575.
         m.def_function[conv_block_forward_r_binding]("x_cnn_conv_block_forward_r")
         m.def_function[conv_block_backward_r_binding]("x_cnn_conv_block_backward_r")
-        m.def_function[res_gather_binding]("x_cnn_res_gather")
         m.def_function[linear_forward_binding]("x_cnn_linear_forward_r")
         m.def_function[linear_backward_binding]("x_cnn_linear_backward_r")
         m.def_function[softmax_xent_binding]("x_cnn_softmax_xent_r")

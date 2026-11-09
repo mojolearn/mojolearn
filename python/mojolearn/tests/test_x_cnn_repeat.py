@@ -120,9 +120,3 @@ def test_resident_entries_repeat_with_saved_arrays():
             else:
                 for k in ref:
                     _same(got[k], ref[k])
-        rows = np.array([5, 0, 3], np.int32)
-        with _Res(b) as R:
-            src, dst = R.new(x.size), R.new(3 * 192)
-            R.put(src, x)
-            b.x_cnn_res_gather(dst, src, rows.ctypes.data, [3, 192])
-            _same(R.get(dst, (3, 3, 8, 8)), x[rows])
