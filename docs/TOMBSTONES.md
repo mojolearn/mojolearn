@@ -454,6 +454,7 @@ in the tables after the sections.
 | [`MOJOLEARN_AUTOGRAD_LOSS`](#mojolearn_autograd_loss) | Neural (rnn_fit, mlp_fit reported loss) | rnn_fit promoted (blocked fold), mlp_fit opt-in arm removed | 2026-11-08 | [MOJOLEARN_AUTOGRAD_LOSS.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch) |
 | [`MOJOLEARN_AUTOGRAD_OPTIM`](#mojolearn_autograd_optim) | Neural (mlp_fit, rnn_fit update) | promoted (executor optimizer), hand arm removed | 2026-11-08 | [MOJOLEARN_AUTOGRAD_OPTIM.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_OPTIM.patch) |
 | [`MOJOLEARN_AUTOGRAD_DATA`](#mojolearn_autograd_data) | Neural (rnn_fit epoch order) | promoted (autograd/data.mojo), hand launches removed | 2026-11-08 | [MOJOLEARN_AUTOGRAD_DATA.patch](../experiments/removed/MOJOLEARN_AUTOGRAD_DATA.patch) |
+| [`_gather_cls` (RFE gather program per round)](#rfe-one-program-per-elimination-round-2026-11-09) | Prep (RFE fit rounds; + the host support list per round, the no-scope fallback) | removed (superseded: one program per round, `_stage_block` + `c2_rfe_keep`) | 2026-11-09 | [W1_RFE_GATHER_PROGRAM_PER_ROUND.patch](../experiments/removed/W1_RFE_GATHER_PROGRAM_PER_ROUND.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -4161,3 +4162,22 @@ Lane `a5-admit-core-followup` (A0 follow-up of `docs/plans/EXECUTOR_CONSOLIDATIO
 - Measurement owed (RUN OWED): `cross_validate`, GridSearchCV and RandomizedSearchCV of ridge, logistic and k-means on
   NVIDIA and AMD, before (`f7d10d2b09`) and after.
 - Recoverable at `f7d10d2b09`; restore with `git apply experiments/removed/A5_DOOR_ROWS_HOST.patch`.
+## RFE one program per elimination round (2026-11-09)
+
+Lane `w1-readmission-rfe` (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 4, row RFE), branch
+`lane/w1-readmission-rfe` from `origin/integ/pre-0867` `f7d10d2b09`; deletion commit `d6f2d5ed09`. Not an experiment
+define: a re-admission defect. `bindings/prep_select_native.mojo` ran two x_prep programs per elimination round (a
+gather program `_gather_cls` putting X and gathering the active columns, then the importance keys + `c2_rfe_step` +
+`c2_rfe_rank`), one more gather program for the final fit, rebuilt the active-column list and the support mask on the
+host every round, and fell back silently to putting X every round when the resident scope could not be entered.
+
+Now one program per round: the importance keys, `c2_rfe_step`, `c2_rfe_rank`, then `_stage_block` (the new x_prep op
+`c2_rfe_keep` 271, the supported columns compacted on the device, and `gather_cols` from the resident X) stages the next
+round's block in the same program; program 0 stages the first block. The resident scope is required (entering it only
+records the scope; the rows owner connects when the package imports `model_selection`). The support is read on the host
+once, after the last round. Programs per fit: 2R + 1 -> R + 1. No bit change: the same stages on the same words, and the
+gather is bit for bit. Deleted: `_gather_cls`, the per-round host `features` / `mask` lists, the no-scope fallback.
+
+Restore: `git apply -3 experiments/removed/W1_RFE_GATHER_PROGRAM_PER_ROUND.patch` (the reverse of `d6f2d5ed09` on
+`bindings/prep_select_native.mojo`; op 271 may stay). Run owed: RFE speed on NVIDIA and AMD (paper_compare / board RFE
+rows) against `f7d10d2b09`, and the RFE identity lane at the release.
