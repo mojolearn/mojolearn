@@ -1241,15 +1241,19 @@ struct DecompKit(Movable):
     def eigh(mut self, a: Int) raises -> Tuple[Int, Int]:
         # `_Kit.eigh(A)` (uplo 0): ascending values (1 x n), vectors in columns.
         var n = self.matrices[a].rows
+        var params = Python.list(n, 0)
+        if n >= 1 and self.matrices[a].cols == n and self.matrices[a].on_device and self.opt_dev("x_decomp_dev_eigh_to"):
+            # lane n9-decomp-eigh-families (2026-11-09): w and V stay on the
+            # device (`x_decomp_dev_eigh_to`, the executor op eigh_op_sym;
+            # one status wait). Was `x_decomp_dev_eigh` into host words that
+            # the next device op (MinCovDet's pinvh product) uploaded again.
+            var wd = self.device_output(1, n)
+            var vd = self.device_output(n, n)
+            _ = py_call(self.entries["x_decomp_dev_eigh_to"], self.matrices[a].device, self.matrices[wd].device,
+                        self.matrices[vd].device, params)
+            return (wd, vd)
         var w = self.zeros(1, n)
         var v = self.zeros(n, n)
-        var params = Python.list(n, 0)
-        if n >= 1 and self.matrices[a].cols == n and self.matrices[a].on_device and self.opt_dev("x_decomp_dev_eigh"):
-            var da = self.matrices[a].device
-            _ = py_call(self.entries["x_decomp_dev_eigh"], da, self.address(w), self.address(v), params)
-            _ = v  # keep the Python object alive through the native call above
-            _ = w  # keep the Python object alive through the native call above
-            return (w, v)
         var aa = self.address(a)
         _ = py_call(self.entries["x_decomp_eigh"], aa, self.address(w), self.address(v), params)
         _ = v  # keep the Python object alive through the native call above
