@@ -2,19 +2,23 @@ name: Public runtime
 
 # The measure of the public runtime migration (docs/plans/PUBLIC_RUNTIME_MIGRATION.md).
 # tools/public_runtime_inventory.py reads the Python call path of every public
-# operation method (fit, predict, transform, score, save, ...) down to its
-# native binding calls and labels it native, orchestrated or python. The job
-# fails when the count of non-native methods (or of python ones) grows past
-# tools/hooks/public_runtime_baseline.tsv, or when a method's verdict gets
-# worse; the per-family numbers go to the job summary. Static, python3 only:
-# nothing is built or imported.
+# endpoint (every public method, dunder, property and constructor) and follows
+# it THROUGH its native door into the Mojo it reaches (tools/mojo_door_sites.py):
+# native, glue-heavy (Python-object loops) or python-on-path (calls into Python
+# code). The job fails on any increase over tools/hooks/public_runtime_door_baseline.tsv
+# (debt may only go down) and on prohibited/unresolved endpoints. Static, python3
+# only: nothing is built or imported.
 on:
   push:
     paths:
       - "python/mojolearn/**"
       - "packaging/native_only/**"
       - "tools/public_runtime_inventory.py"
-      - "tools/hooks/public_runtime_baseline.tsv"
+      - "tools/hooks/public_runtime_door_baseline.tsv"
+      - "tools/mojo_door_sites.py"
+      - "tools/tests/test_mojo_door_sites.py"
+      - "bindings/**"
+      - "providers/python/**"
       - "tools/tests/test_public_runtime_inventory.py"
       - ".github/workflows/public-runtime.yml"
   workflow_dispatch:
@@ -44,6 +48,15 @@ jobs:
           cat check.log
           { echo '### public runtime (native / orchestrated / python per family)'; echo '```'; cat check.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           exit $state
+      - name: Door classifier tests
+        run: python3 -u tools/tests/test_mojo_door_sites.py > door-tests.log 2>&1 || { tail -n 40 door-tests.log; exit 1; }
+      - name: Debt through the native door does not grow
+        run: |
+          state=0
+          python3 tools/public_runtime_inventory.py --door-check > door-check.log 2>&1 || state=$?
+          tail -n 80 door-check.log
+          { echo '### public runtime through the native door'; echo '```'; tail -n 80 door-check.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $state
       - name: Public lifecycle and option inventory (static, unqualified)
         run: python3 tools/public_runtime_inventory.py --endpoints-json public-endpoints.json > endpoints.log 2>&1
       - name: Retain the inventory and full checker logs
@@ -56,3 +69,5 @@ jobs:
             endpoints.log
             tool-tests.log
             check.log
+            door-check.log
+            door-tests.log

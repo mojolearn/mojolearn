@@ -290,34 +290,33 @@ def test_module_level_entries():
     assert wrapped.verdict == "python" and wrapped.native_calls == 1 and wrapped.helpers == 1
 
 
-def test_baseline_and_check():
+def test_door_baseline_and_check():
     with tempfile.TemporaryDirectory() as tmp:
         root = build(Path(tmp))
-        baseline = root / "baseline.tsv"
+        baseline = root / "door.tsv"
         assert INV.main(["--root", str(root), "--baseline", "--baseline-file", str(baseline)]) == 0
-        assert INV.main(["--root", str(root), "--check", "--baseline-file", str(baseline)]) == 1
+        assert INV.main(["--root", str(root), "--door-check", "--baseline-file", str(baseline)]) == 0
         records = INV.read_tsv(baseline)
-        assert {r["verdict"] for r in records} == {"native", "orchestrated", "python"}
-        # a native method that starts allocating in Python fails the check
-        est = root / "python/mojolearn/est.py"
-        est.write_text(est.read_text().replace(
-            "        return _backend.binding(\"_mojolearn_x\").x_predict(self, X)",
-            "        out = empty((4,), \"<f4\")\n"
-            "        return _backend.binding(\"_mojolearn_x\").x_predict(self, X, out)"))
-        assert INV.main(["--root", str(root), "--check", "--baseline-file", str(baseline)]) == 1
-        problems, _ = INV.check(INV.records_of(INV.inventory_rows(root)), records)
-        assert any("regressed native -> orchestrated" in p for p in problems)
-        assert any("zero required regardless of baseline" in p for p in problems)
+        assert records and {r["door"] for r in records} <= {"native", "glue-heavy", "python-on-path", "unresolved",
+                                                            "allowed_tag_metadata", "refusal_only"}
+        # the fake package has no compiled door: a native-shaped call cannot be proved native
+        assert any(r["door"] == "python-on-path" and "does not resolve to a registered compiled entry" in r["worst"]
+                   for r in records)
 
 
-def test_existing_baseline_debt_cannot_authorize_product_execution():
-    row = {"class": "mojolearn.Estimator", "method": "fit", "module:line": "est.py:1"}
-    for verdict in ("python", "orchestrated", "unresolved"):
-        debt = dict(row, verdict=verdict)
-        problems, _ = INV.check([debt], [debt])
-        assert problems and any("zero required" in p for p in problems)
-    native = dict(row, verdict="native")
-    assert INV.check([native], [dict(row, verdict="python")])[0] == []
+def test_door_check_refuses_any_increase():
+    base = [dict(endpoint="m.A.fit", door="native", b="0", worst=""),
+            dict(endpoint="m.A.predict", door="glue-heavy", b="0", worst="")]
+    assert INV.door_check(base, base) == ([], [])
+    worse = [dict(base[0], door="glue-heavy"), base[1]]
+    problems, _ = INV.door_check(worse, base)
+    assert any("regressed native -> glue-heavy: m.A.fit" in p for p in problems)
+    assert any("glue-heavy endpoints grew 1 -> 2" in p for p in problems)
+    new = base + [dict(endpoint="m.B.fit", door="python-on-path", b="1", worst="x")]
+    assert any("new python-on-path: m.B.fit" in p for p in INV.door_check(new, base)[0])
+    better = [base[0], dict(base[1], door="native")]
+    problems, notes = INV.door_check(better, base)
+    assert problems == [] and any("shrank" in n for n in notes)
 
 
 def test_returned_framework_callable_is_audited_without_an_export():

@@ -11,7 +11,13 @@ analysis: nothing from the product is imported or executed) and fails when
     (known violations with their owner: debt to remove, never an exemption, AGENTS.md
     "No Python in the runtime");
   * the number of unresolved endpoints exceeds the pin in allowed_exceptions.tsv
-    (`# pin: unresolved_endpoints=N`).
+    (`# pin: unresolved_endpoints=N`);
+  * the walk THROUGH each endpoint's native door (tools/mojo_door_sites.py: the Mojo it
+    reaches calling Python code or iterating Python objects) shows any increase over
+    tools/hooks/public_runtime_door_baseline.tsv: more python-on-path or glue-heavy
+    endpoints, one endpoint's level getting worse, or a new endpoint that is not native.
+    Debt may only go down; refresh the baseline with
+    `python3 tools/public_runtime_inventory.py --baseline` after it shrinks.
 
 Rows that no longer match (fixed debt, a lower unresolved count) are reported; run with
 --prune to delete fixed debt rows and lower the pin. --prune never adds a row: new debt or a
@@ -35,6 +41,7 @@ TOOL = REPO / "tools/public_runtime_inventory.py"
 AUDIT = REPO / "experiments/python_audit_20261028"
 EXCEPTIONS = AUDIT / "allowed_exceptions.tsv"
 DEBT = AUDIT / "prohibited_debt.tsv"
+DOOR_BASELINE = REPO / "tools/hooks/public_runtime_door_baseline.tsv"
 PIN = re.compile(r"^#\s*pin:\s*unresolved_endpoints\s*=\s*(\d+)\s*$")
 SHOWN = 25
 
@@ -123,6 +130,22 @@ class NoPythonRuntime(unittest.TestCase):
         if len(unresolved) > pin:
             self.fail(f"{len(unresolved)} unresolved endpoints, above the pin {pin}:\n" + "\n".join(
                 f"  {e['endpoint']}  {e.get('declared_definition') or e.get('definition')}" for e in unresolved[:SHOWN]))
+
+
+class DoorNoIncrease(unittest.TestCase):
+    def test_door_debt_does_not_grow(self):
+        inv = _inventory()
+        rows = Ledger.get()["endpoints"]
+        current = inv.read_tsv_rows(inv.door_tsv(rows))
+        print("no-python-runtime: " + inv.door_headline(rows), file=sys.stderr)
+        if not DOOR_BASELINE.is_file():
+            self.fail(f"{DOOR_BASELINE.relative_to(REPO)} is missing; write it with "
+                      "python3 tools/public_runtime_inventory.py --baseline")
+        problems, notes = inv.door_check(current, inv.read_tsv(DOOR_BASELINE))
+        for note in notes:
+            print("no-python-runtime: door " + note, file=sys.stderr)
+        if problems:
+            self.fail("door debt grew (debt may only go down):\n" + "\n".join("  " + p for p in problems[:SHOWN]))
 
 
 def prune():

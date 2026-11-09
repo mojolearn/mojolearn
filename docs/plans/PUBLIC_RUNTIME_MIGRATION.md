@@ -109,12 +109,15 @@ These commands run the tool:
     python3 tools/public_runtime_inventory.py --check               # what CI runs
     python3 tools/public_runtime_inventory.py --baseline            # after a migration lands
 
-`.github/workflows/public-runtime.yml` runs `--check` on every push that touches `python/mojolearn/`
-and on manual dispatch. It uses a free runner and needs only python3. The check fails when:
+`.github/workflows/public-runtime.yml` runs `--check` and `--door-check` on every push that touches
+`python/mojolearn/`, `bindings/` or `providers/python/`, and on manual dispatch; the pre-push gate
+(`tools/tests/test_no_python_runtime.py`) runs the same door check. It uses a free runner and needs only
+python3. Since 2026-11-09 every public endpoint is followed THROUGH its native door into the Mojo it reaches
+(`tools/mojo_door_sites.py`) and gets a door level: native, glue-heavy or python-on-path. The check fails when:
 
-- the number of non-native methods grows past `tools/hooks/public_runtime_baseline.tsv`;
-- the number of python methods grows;
-- any method's verdict gets worse (native -> orchestrated -> python).
+- the number of python-on-path or glue-heavy endpoints grows past `tools/hooks/public_runtime_door_baseline.tsv`;
+- any endpoint's door level gets worse (native -> glue-heavy -> python-on-path);
+- a new endpoint is not native.
 
 When a migration lands, refresh the baseline in the same commit with `--baseline`. The baseline only
 shrinks.
