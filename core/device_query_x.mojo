@@ -39,7 +39,7 @@ of the same words in the same order); the tests are predicates on bits.
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.admitted_finite_status import enqueue_finite_status
 from core.device_zero import enqueue_fill
-from core.msel_device_x import msel_device_x_f32, msel_device_x_context
+from core.msel_device_x import msel_device_x_f32, msel_fold_entry_context
 
 
 struct QueryFold(ImplicitlyCopyable, Movable):
@@ -65,10 +65,12 @@ struct QueryFold(ImplicitlyCopyable, Movable):
 
 
 def query_context(fold: QueryFold, family: DeviceContext) raises -> DeviceContext:
-    """The context a query entry runs on: the fold store's context for a
-    fold (no buffer crosses contexts), else the family's own."""
+    """The context a query entry runs on: for a fold this build's own fold
+    entry context (the store's context in an identical build, the `fast`
+    context in a `fast` build; core/msel_device_x.mojo
+    `msel_fold_entry_context`), else the family's own."""
     if fold.active():
-        return msel_device_x_context()
+        return msel_fold_entry_context()
     return family.copy()
 
 

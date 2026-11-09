@@ -50,7 +50,7 @@ def qn_fit_fold(
 ) raises -> Int:
     """`qn_fit_host` over fold rows `index_id` of the resident base
     `base_id` (`base_rows` x `n_features`). `ctx` is
-    `msel_device_x_context()`. `status_ptr` receives two host words (finite,
+    `msel_fold_entry_context()`. `status_ptr` receives two host words (finite,
     range), both 0 when every gathered word is finite and every index in
     range; otherwise nothing is fitted (returns 0) and the door refuses.
     Returns num_iters."""

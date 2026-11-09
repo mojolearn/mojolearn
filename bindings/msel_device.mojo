@@ -33,7 +33,7 @@ from core.msel_device import (
     device_take_rows,
 )
 from core.neural_context import process_ctx
-from core.msel_device_x import msel_device_x_context, msel_store, MSEL_CONTEXT_SLOT
+from core.msel_device_x import msel_device_x_context, msel_fold_entry_context, msel_store, MSEL_CONTEXT_SLOT
 from decomposition.pca_fold import pca_transform_fold
 from glm.qn_fold import qn_fit_fold
 from cluster.kmeans_fold import kmeans_fit_fold, kmeans_query_fold
@@ -259,7 +259,8 @@ def _mdx_f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
 # this binding (the identical GPU base binding). The placement is a choice,
 # not a need: the fold store is one `_Global` per process by name, so an
 # entry in any extension module reaches it through `msel_fold_store()` and
-# runs on `msel_device_x_context()` (core/msel_device_x.mojo).
+# runs on `msel_fold_entry_context()` (core/msel_device_x.mojo; lane a8d: the
+# build's own context, so a `fast` build's entry runs on the `fast` context).
 def pca_transform_fold_binding(
     ids: PythonObject,
     mean_addr: PythonObject,
@@ -286,7 +287,7 @@ def pca_transform_fold_binding(
     var nc = Int(py=params[2])
     var words: Tuple[Int32, Int32]
     with GILReleased(Python()):
-        var ctx = msel_device_x_context()
+        var ctx = msel_fold_entry_context()
         words = pca_transform_fold(ctx, base_id, base_rows, index_id, mp, cp, op, nr, nf, nc)
     return Python.list(Int(words[0]), Int(words[1]))
 
@@ -338,7 +339,7 @@ def qn_fit_fold_binding(
     var wordp = words.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     var iters = 0
     with GILReleased(Python()):
-        var ctx = msel_device_x_context()
+        var ctx = msel_fold_entry_context()
         iters = qn_fit_fold(ctx, base_id, base_rows, index_id, yp, wp, ip, nr, nf, nc, l1, l2, grad_tol,
                             change_tol, max_iter, ls_max, mem, fit_intercept, normalized, has_sw, swp,
                             loss, svr_eps, wordp)
@@ -395,7 +396,7 @@ def kmeans_fit_fold_binding(
     var finite = Int32(0)
     var in_range = Int32(0)
     with GILReleased(Python()):
-        var ctx = msel_device_x_context()
+        var ctx = msel_fold_entry_context()
         var r = kmeans_fit_fold(ctx, base_id, base_rows, index_id, ns, nf, nc, cp, lp,
                                 mi, tl, sd, ninit, ii, mm, ovs)
         inertia = r.fit.inertia
@@ -424,7 +425,7 @@ def _kmeans_query_fold_call(ids: PythonObject, centroids_addr: PythonObject, out
     var mm = Int(py=params[3])
     var words: Tuple[Int32, Int32]
     with GILReleased(Python()):
-        var ctx = msel_device_x_context()
+        var ctx = msel_fold_entry_context()
         words = kmeans_query_fold(ctx, base_id, base_rows, index_id, ns, nf, nc, cp, out, mm, transform)
     return Python.list(Int(words[0]), Int(words[1]))
 

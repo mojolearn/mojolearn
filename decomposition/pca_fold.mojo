@@ -35,7 +35,7 @@ def pca_transform_fold(
 ) raises -> Tuple[Int32, Int32]:
     """The projection of fold rows `index_id` of the resident base
     `base_id` (`base_rows` x `n_features`) into `out_ptr` (n_rows x
-    n_components). `ctx` is `msel_device_x_context()`. Returns (finite word,
+    n_components). `ctx` is `msel_fold_entry_context()`. Returns (finite word,
     range word): both 0 when every gathered word is finite and every index
     in range; otherwise the door refuses and discards `out_ptr`'s rows."""
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
