@@ -1601,3 +1601,24 @@ struct DeviceExec(Exec, Movable):
         self.sync()
         self.execution_profile.enabled = False
         return self.execution_profile.copy()
+
+    # Lane x7b: the step ops' host-arm hooks (sequence/exec_trait.mojo). A
+    # device session runs the device table itself (autograd/block_step_ops.mojo).
+    def step_run(mut self, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int], fs: List[Float32],
+                 y_out: FP, record: Bool) raises:
+        raise Error("ops: a device session runs the block step ops' device table")
+
+    def step_backward(mut self, w: FP, s: FP, q: FP, d_out: FP, d_x: FP, d_w: FP) raises:
+        raise Error("ops: a device session runs the attention step's device backward")
+
+    def step_reports(mut self, code: Int, w_addr: Int, s_addr: Int, dsts: List[Int]) raises:
+        raise Error("ops: a device session reads its reports from the device table")
+
+    def step_forget(mut self, addr: Int):
+        pass
+
+    def step_weights_changed(mut self, addr: Int):
+        pass
+
+    def step_clear(mut self):
+        pass

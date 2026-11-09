@@ -34,6 +34,11 @@ from autograd.ops import OP_AGK_GEMM_EPI, OP_AGK_BIN_VJP_PART, OP_AG_REDUCE_PART
 from std.time import perf_counter_ns
 from sequence.host_gemm import host_gemm_pack, host_gemm_rows
 from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_split_on
+# Lane x7b: the block step ops' host arm (its imports reach the step-op
+# layouts of autograd/block_step_ops.mojo; no GPU binding imports this file).
+from autograd.block_step_host import (
+    HostStepScratch, host_step_run, host_attn_step_backward, host_block_step_reports,
+)
 from sequence.ops import (
     FP,
     Args,
@@ -217,8 +222,12 @@ struct HostExec(Exec, Movable):
     #: lane ag-pass2-kernels: MOJOLEARN_AG_PROFILE read once at construction
     #: (0 off, 1 count launches, 2 count and time them; sequence/launch_profile.mojo)
     var profile: Int
+    #: lane x7b: the block step ops' host-arm entries of the sessions on this
+    #: executor (autograd/block_step_host.mojo)
+    var steps: HostStepScratch
 
     def __init__(out self):
+        self.steps = HostStepScratch()
         self.bufs = List[FP]()
         self.buf_sizes = List[Int]()
         self.execution_profile = ExecutionProfile()
@@ -461,3 +470,25 @@ struct HostExec(Exec, Movable):
         self.sync()
         self.execution_profile.enabled = False
         return self.execution_profile.copy()
+
+    # Lane x7b-step-ops-host-arm: the block step ops' host arm
+    # (autograd/block_step_host.mojo), reached by generic session code
+    # through the Exec trait.
+    def step_run(mut self, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int], fs: List[Float32],
+                 y_out: FP, record: Bool) raises:
+        host_step_run(self.steps, code, bufs, counts, ints, fs, y_out, record)
+
+    def step_backward(mut self, w: FP, s: FP, q: FP, d_out: FP, d_x: FP, d_w: FP) raises:
+        host_attn_step_backward(self.steps, w, s, q, d_out, d_x, d_w)
+
+    def step_reports(mut self, code: Int, w_addr: Int, s_addr: Int, dsts: List[Int]) raises:
+        host_block_step_reports(self.steps, code, w_addr, s_addr, dsts)
+
+    def step_forget(mut self, addr: Int):
+        self.steps.forget(addr)
+
+    def step_weights_changed(mut self, addr: Int):
+        self.steps.weights_changed(addr)
+
+    def step_clear(mut self):
+        self.steps.clear()
