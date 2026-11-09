@@ -34,6 +34,7 @@ from x_linear.ops import (
     sti,
 )
 from x_linear.team import Team
+from x_decomp.eigh_ops_host import eigh_op_dense_host
 from std.sys.info import is_gpu
 from x_linear.bayes import (
     GRAM_SSE_TRUST,
@@ -47,6 +48,8 @@ from x_linear.bayes import (
     ard_layout,
     ard_update,
     bayes_coef,
+    bayes_eig_place,
+    bayes_eig_prep,
     bayes_finish,
     bayes_prep,
     bayes_step,
@@ -125,6 +128,25 @@ def _t_sse(t: Team, x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, 
     return t.bcast(acc)
 
 
+def bayes_eig_host(t: Team, fw: FP, d: Int):
+    """The executor eigh op's host twin on G (fw[d, d + d^2)):
+    `eigh_op_dense_host` (the round-robin Jacobi the device's
+    `eigh_op_dense` runs, the same words), placed by `bayes_eig_place`. An
+    unconverged solve keeps the answer as it stands (as the device column
+    off Apple; the old team Jacobi did the same)."""
+    var w = List[Float32](length=max(d, 1), fill=Float32(0))
+    var v = List[Float32](length=max(d * d, 1), fill=Float32(0))
+    var pw = FP(unsafe_from_address=Int(w.unsafe_ptr()))
+    var pv = FP(unsafe_from_address=Int(v.unsafe_ptr()))
+    try:
+        _ = eigh_op_dense_host(fw + d, pw, pv, 1, d)
+    except:
+        pass
+    bayes_eig_place(t, fw, pw, pv, d)
+    _ = w^
+    _ = v^
+
+
 def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """See `bayes_prep` (the statistics, the eigendecomposition, the
     starting alpha and lambda); then the iterations: the lead's
@@ -135,11 +157,13 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
     var fi = ldi(ip, 1) != 0
     var sw = ldi(ip, 2) != 0
     var xm = 0
-    var st4 = bayes_prep(t, x, y, n, d, ip, fp, res, fw, iw)
-    var alpha = st4[0]
-    var lam = st4[1]
-    var ym = st4[2]
-    var wsum = st4[3]
+    var st3 = bayes_prep(t, x, y, n, d, ip, fp, res, fw, iw)
+    bayes_eig_host(t, fw, d)
+    var al = bayes_eig_prep(t, fw, fp, d, st3[0])
+    var alpha = al[0]
+    var lam = al[1]
+    var ym = st3[1]
+    var wsum = st3[2]
     var gg = d
     var vty = gg + d * d + d + d * d
     var tmp = vty + 2 * d
