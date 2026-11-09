@@ -31,7 +31,7 @@
 # Numerics: none. The rows a DeviceRows names are the rows model selection's
 # host path gathers (the same device gather, the same order), so a fit or a
 # score through this door gets the same bytes as through a host Array.
-from std.python import PythonObject
+from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get
 
 
@@ -118,7 +118,7 @@ def door_rows_store(value: PythonObject, context: PythonObject) raises -> DoorRo
     var call = py_get(context, PythonObject("door_rows_call"))
     if call is None or not door_is_device_rows(value, context):
         return DoorRowsStore.none()
-    var ids = py_call(call, value, PythonObject("store_ids"), PythonObject(()), context["door_rows_context"])
+    var ids = py_call(call, value, PythonObject("store_ids"), Python.tuple(), context["door_rows_context"])
     var row_bytes = Int(py=ids[2])
     if row_bytes % 4 != 0:
         raise Error("TypeError: DeviceRows requires a float32 base")
