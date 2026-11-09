@@ -9,11 +9,16 @@ result words. One thread a weight (and one for the intercept): a grid, no
 host step. FAST only, and since 2026-10-04 (rab5-perc: accuracy 0.76219 ->
 0.74097, worse) only with the opt-in -D MOJOLEARN_SGD_PERC_AVG."""
 from std.gpu import block_idx, block_dim, thread_idx
-from x_linear.ops import FP, ld, st, fa, fm
+from x_linear.ops import FP, IP, ld, ldi, st, fa, fm
 
 
-def sgd_avg_acc_kernel(w: FP, bias: FP, acc: FP, d: Int32):
-    """acc[j] += w[j] (j < d), acc[d] += bias[0]."""
+def sgd_avg_acc_kernel(w: FP, bias: FP, acc: FP, d: Int32, gate: IP, failed: FP):
+    """acc[j] += w[j] (j < d), acc[d] += bias[0]; nothing once the epoch
+    loop is done (`gate[0]`) or when this epoch's end failed (`failed[0]`,
+    the epoch end's failed word): the host loop's epochs that entered the
+    mean."""
+    if ldi(gate, 0) != 0 or ld(failed, 0) != Float32(0):
+        return
     var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var dd = Int(d)
     if j < dd:
