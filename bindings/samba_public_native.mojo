@@ -15,6 +15,11 @@ from bindings.samba_inference_native import samba_forward, samba_allocate, samba
 from bindings.samba_checkpoint_native import samba_checkpoint_save, samba_checkpoint_load, samba_checkpoint_read
 from bindings.samba_cpu_inference import samba_inference_construct, samba_inference_parameters, samba_inference_checkpoint, samba_inference_repr
 from bindings.samba_admission import samba_admit
+from bindings.samba_decode_native import (
+    samba_decode_open, samba_decode_init, samba_decode_step, samba_decode_sync, samba_decode_load,
+    samba_decode_close, samba_decode_drop, samba_decode_is_open, samba_decode_state, samba_decode_device,
+    samba_decode_repr,
+)
 
 
 def _samba_public_items(value: PythonObject) raises -> PythonObject:
@@ -42,6 +47,12 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         var operation = String(args[0])
         var values = args[1]
         var context = args[2]
+        if operation == "decode_session_drop":
+            # Finalizer: best effort, never raised out of __del__.
+            try:
+                return samba_decode_drop(values[0]).steal_data()
+            except:
+                return PythonObject(None).steal_data()
         samba_admit(operation, values, context)
         var result = PythonObject(None)
         if operation == "model_train_step":
@@ -72,6 +83,30 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
             result = samba_forward(values[0], values[1], values[2], values[3], False, False, context)
         elif operation == "inference_step":
             result = samba_forward(values[0], values[1], values[2], PythonObject(None), True, False, context)
+        elif operation == "decode_session_open":
+            result = samba_decode_open(values[0], values[1], context)
+        elif operation == "decode_session_init":
+            result = samba_decode_init(values[0], values[1], values[2], context)
+        elif operation == "decode_session_step":
+            result = samba_decode_step(values[0], values[1], context)
+        elif operation == "decode_session_sync":
+            result = samba_decode_sync(values[0], context)
+        elif operation == "decode_session_load":
+            result = samba_decode_load(values[0], context)
+        elif operation == "decode_session_close" or operation == "decode_session_exit":
+            result = samba_decode_close(values[0], context)
+            if operation == "decode_session_exit":
+                result = PythonObject(False)
+        elif operation == "decode_session_enter":
+            result = values[0]
+        elif operation == "decode_session_state":
+            result = samba_decode_state(values[0])
+        elif operation == "decode_session_is_open":
+            result = samba_decode_is_open(values[0])
+        elif operation == "decode_session_device":
+            result = samba_decode_device(values[0])
+        elif operation == "decode_session_repr":
+            result = samba_decode_repr(values[0])
         elif operation == "inference_repr":
             result = samba_inference_repr(values[0])
         elif operation == "inference_refuse":

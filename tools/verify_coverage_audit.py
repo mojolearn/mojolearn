@@ -1340,7 +1340,9 @@ NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backwa
                        "public-validation-learning-curves", "scaler-fit-transform", "multioutput-ridge",
                        "x-ridge-cv-kfold", "neural-trainer-unfused", "svc-gamma-scale",
                        # lane coverage-gap-lanes-20261025
-                       "public-set-params"})
+                       "public-set-params",
+                       # lane fix-d1-decode-sessions (2026-11-08)
+                       "samba-decode-session"})
 
 #: What each new lane is for: the endpoints only it reaches.
 NEW_LANE_PURPOSE = {
@@ -1363,6 +1365,9 @@ NEW_LANE_PURPOSE = {
     "mamba3-decode-session": "Mamba3Block's resident decode session: step, sync_state and load_state "
                              "(`mamba3_session_open`, `mamba3_session_step`, `mamba3_session_export_state`, "
                              "`mamba3_session_load_state`)",
+    "samba-decode-session": "SambaStack.decode_session: step, sync_state and load_state "
+                            "(`samba_decode_open`, `samba_decode_step`, `samba_decode_export`, "
+                            "`samba_decode_load`)",
     "training-chunked-lm-head": "training.chunked_lm_head_loss with and without gradients: "
                                 "`chunked_lm_head_v2_loss`, `chunked_lm_head_v2_train`",
     "training-mlp-sessions": "training.mlp_inference_sessions: `mlp_sessions`",
@@ -1486,7 +1491,7 @@ _BYTE_SESSION = ("covered", ["byte-lm", "byte-lm-resident"],
 # lane verify-coverage-owed (2026-10-21): the rows the migration lanes left
 # owed, each checked in the source after they landed.
 _MAMBA_SESSION = ("bindings/mamba_public_native.mojo composes `<kind> + \"_session_<op>\"` and calls the "
-                  "binding entry from Mojo (Mamba2Block._decode_session / Mamba3Block._decode_session -> "
+                  "binding entry from Mojo (Mamba2Block.decode_session / Mamba3Block.decode_session -> "
                   "mamba_native_call 'session_open', 'session_step', 'session_sync', 'session_load')")
 _SAMBA_OWNER = ("the native Samba owner (bindings/samba_*_native.mojo) is handed the entry at import "
                 "(_native_samba_bridge.connect) and calls it by name")
@@ -1534,6 +1539,10 @@ ANNOTATIONS = {
     **{e: ("covered", ["mamba3-decode-session"], _MAMBA_SESSION)
        for e in ("mamba3_session_export_state", "mamba3_session_load_state", "mamba3_session_open",
                  "mamba3_session_step")},
+    **{e: ("covered", ["samba-decode-session"],
+           _SAMBA_OWNER + ": SambaStack.decode_session -> bindings/samba_decode_native.mojo "
+           "(open, step, sync_state, load_state)")
+       for e in ("samba_decode_open", "samba_decode_step", "samba_decode_export", "samba_decode_load")},
     "samba_head_loss": ("covered", ["samba-untied-dropout-accum"],
                         _SAMBA_OWNER + ": samba_gradients runs the fused head (`fused`) whenever the "
                         "resident Samba step does not take the step (dropout or accumulation) and the "

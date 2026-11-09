@@ -31,11 +31,11 @@ def test_all_mamba_state_constructors_are_one_native_operation():
 
 
 def test_decode_session_properties_lifecycle_and_outputs_are_native():
-    for cls in ("Mamba1DecodeSession", "_Mamba2DecodeSession", "_Mamba3DecodeSession"):
+    for cls in ("Mamba1DecodeSession", "Mamba2DecodeSession", "Mamba3DecodeSession"):
         for method, operation in (("state", "session_state"), ("__enter__", "session_enter"),
                                   ("__exit__", "session_exit"), ("__del__", "session_drop")):
             _single_native_call(cls, method, operation)
-    for cls in ("_Mamba2DecodeSession", "_Mamba3DecodeSession"):
+    for cls in ("Mamba2DecodeSession", "Mamba3DecodeSession"):
         _single_native_call(cls, "step", "session_step_public")
 
 

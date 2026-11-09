@@ -63,10 +63,8 @@ def weights(family, dm, source):
 
 
 def open_session(block, state):
-    """The resident session door: public `decode_session` on Mamba-1, the
-    private `_decode_session` on Mamba-2/3 until their lanes are recorded
-    (see `_RESIDENT_SESSION_NOTE` in python/mojolearn/_mamba_impl.py)."""
-    door = getattr(block, "decode_session", None) or block._decode_session
+    """The resident session door: the public `decode_session` of each block."""
+    door = block.decode_session
     return door(state)
 
 

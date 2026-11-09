@@ -168,6 +168,62 @@ comptime SAMBA_LAYER_ATTENTION = 1
 comptime SAMBA_BLOCK_TENSORS = 9
 
 
+def samba_registry_layout(
+    kinds: List[Int],
+    vocab: Int,
+    dm: Int,
+    ldims: LlamaDims,
+    it: Int,
+    tie: Bool,
+    mut offsets: List[Int],
+    mut slot: List[Int],
+) raises -> Int:
+    """`SambaConfig.registry`'s offsets (J + 1 entries) into `offsets` and,
+    per layer, its index among the layers of its kind into `slot`; returns
+    the registry's float count. embed.weight, nine tensors per layer
+    (Mamba3Block._W_NAMES or TransformerBlock._W_NAMES order), norm_f.weight,
+    then lm_head.weight when the embedding is untied. Bookkeeping over the
+    model's structure, not data."""
+    offsets.clear()
+    slot.clear()
+    offsets.append(0)
+    var n_m3 = 0
+    var n_t = 0
+    var running = vocab * dm
+    offsets.append(running)
+    for i in range(len(kinds)):  # small-loop(kinds: one code per layer): registry bookkeeping, not data
+        if kinds[i] == SAMBA_LAYER_MAMBA3:
+            var d3 = Mamba3Dims.of(dm)
+            var dip = d3.d_in_proj()
+            var sizes: List[Int] = [
+                dm, dip * dm, d3.nheads, M3_D_STATE, M3_D_STATE,
+                d3.nheads * M3_D_STATE, d3.nheads * M3_D_STATE, d3.nheads,
+                dm * d3.d_inner,
+            ]
+            for k in range(SAMBA_BLOCK_TENSORS):  # small-loop(nine tensors of one block): sizes, not data
+                running += sizes[k]
+                offsets.append(running)
+            slot.append(n_m3)
+            n_m3 += 1
+        else:
+            var qw = ldims.q_width()
+            var kw = ldims.kv_width()
+            var sizes: List[Int] = [
+                dm, dm, qw * dm, kw * dm, kw * dm, dm * qw, it * dm, it * dm, dm * it,
+            ]
+            for k in range(SAMBA_BLOCK_TENSORS):  # small-loop(nine tensors of one block): sizes, not data
+                running += sizes[k]
+                offsets.append(running)
+            slot.append(n_t)
+            n_t += 1
+    running += dm
+    offsets.append(running)
+    if not tie:
+        running += vocab * dm
+        offsets.append(running)
+    return running
+
+
 def _lean_stages(hd: Int) -> Bool:
     """`bindings/_mojolearn_transformer.mojo::transformer_lean_stages` for a
     default-options block: the attention stage buffers may be skipped when
@@ -415,44 +471,11 @@ struct SambaResidentSession(Movable, Writable):
             self.ldims = LlamaDims(dm, nh, nkv, hd, it)
             self.ldims.validate()
         self.lean = _lean_stages(hd) if self.has_attn else False
-        # ---- the registry offsets, SambaConfig.registry's order
+        # ---- the registry offsets, SambaConfig.registry's order (one helper,
+        # shared with the decode session: training/samba_decode_resident.mojo)
         self.offsets = List[Int]()
-        self.offsets.append(0)
         self.slot = List[Int]()
-        var n_m3 = 0
-        var n_t = 0
-        var running = vocab * dm
-        self.offsets.append(running)
-        for i in range(len(kinds)):  # small-loop(kinds: one code per layer): registry bookkeeping, not data
-            if kinds[i] == SAMBA_LAYER_MAMBA3:
-                var d3 = Mamba3Dims.of(dm)
-                var dip = d3.d_in_proj()
-                var sizes: List[Int] = [
-                    dm, dip * dm, d3.nheads, M3_D_STATE, M3_D_STATE,
-                    d3.nheads * M3_D_STATE, d3.nheads * M3_D_STATE, d3.nheads,
-                    dm * d3.d_inner,
-                ]
-                for k in range(SAMBA_BLOCK_TENSORS):  # small-loop(nine tensors of one block): sizes, not data
-                    running += sizes[k]
-                    self.offsets.append(running)
-                self.slot.append(n_m3)
-                n_m3 += 1
-            else:
-                var qw = self.ldims.q_width()
-                var kw = self.ldims.kv_width()
-                var sizes: List[Int] = [
-                    dm, dm, qw * dm, kw * dm, kw * dm, dm * qw, it * dm, it * dm, dm * it,
-                ]
-                for k in range(SAMBA_BLOCK_TENSORS):  # small-loop(nine tensors of one block): sizes, not data
-                    running += sizes[k]
-                    self.offsets.append(running)
-                self.slot.append(n_t)
-                n_t += 1
-        running += dm
-        self.offsets.append(running)
-        if not tie:
-            running += vocab * dm
-            self.offsets.append(running)
+        var running = samba_registry_layout(kinds, vocab, dm, self.ldims, it, tie, self.offsets, self.slot)
         self.n_total = running
         if n_total != running:
             raise Error(
