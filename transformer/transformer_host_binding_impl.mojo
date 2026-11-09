@@ -64,7 +64,6 @@ from transformer.block_options import (
     BLOCK_OPTION_PARAMS,
     BlockOptions,
 )
-from transformer.host.attention_tape import HostAttentionTape
 from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
 
 
@@ -194,14 +193,13 @@ def _run_forward(
 
 
 struct HostTransformerSession(Movable, Writable):
-    var tape: Optional[HostAttentionTape]
-    var generation: Int
+    # TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+    # Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+    # (the session's `tape` / `generation` and `invalidate_tape`.)
     var busy: Bool
     var closed: Bool
 
     def __init__(out self):
-        self.tape = None
-        self.generation = 1
         self.busy = False
         self.closed = False
 
@@ -210,10 +208,6 @@ struct HostTransformerSession(Movable, Writable):
 
     def write_repr_to(self,mut writer: Some[Writer]):
         writer.write("HostTransformerSession")
-
-    def invalidate_tape(mut self):
-        self.tape = None
-        self.generation += 1
 
 
 def _backward_run(
@@ -238,33 +232,6 @@ def _backward_run(
         _write(a[11 + i], grads[i])
 
 
-def _session_forward_tape_run(owner_addr: Int, a: List[Int], p: List[Int]) raises:
-    """`transformer_session_forward_tape`'s GIL-free half: build the host
-    weights, run the taped forward, write y and seal the tape. `owner_addr`
-    is the session handle's address."""
-    var owner = MutPointer[HostTransformerSession, MutUntrackedOrigin](unsafe_from_address=owner_addr)
-    owner[].invalidate_tape()
-    var dm=p[2]
-    var qw=p[3]*p[5]
-    var kw=p[4]*p[5]
-    var it=p[6]
-    var w = transformer_host_weights(dm,p[3],p[4],p[5],it,p[1],
-        read_f32(a[1],dm),read_f32(a[2],dm),read_f32(a[3],qw*dm),
-        read_f32(a[4],kw*dm),read_f32(a[5],kw*dm),read_f32(a[6],dm*qw),
-        read_f32(a[7],it*dm),read_f32(a[8],it*dm),read_f32(a[9],dm*it))
-    var x=read_f32(a[0],p[0]*p[1]*dm)
-    owner[].tape = HostAttentionTape(w^,x^,p[0],p[1],p[7],owner[].generation)
-    _write(a[10],owner[].tape.value().stages.value().residual2_out)
-    owner[].tape.value().seal(p[8],p[9])
-
-
-def _session_backward_tape_run(owner_addr: Int, a: List[Int], generation: Int) raises:
-    """`transformer_session_backward_tape`'s GIL-free half: replay the tape
-    and write the ten gradients. `owner_addr` is the session handle's address."""
-    var owner = MutPointer[HostTransformerSession, MutUntrackedOrigin](unsafe_from_address=owner_addr)
-    ref tape = owner[].tape.value()
-    var dy=read_f32(a[0],tape.b*tape.l*tape.weights.dims.d_model)
-    var gradients=tape.backward(dy,generation)
-    for i in range(10):
-        _write(a[i+1],gradients[i])
-    owner[].invalidate_tape()
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (`_session_forward_tape_run` / `_session_backward_tape_run` over HostAttentionTape.)

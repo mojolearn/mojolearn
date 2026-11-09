@@ -92,8 +92,6 @@ from transformer.block_options import (
 # Typed kernel side of this shell (thin-shell move, pure, no bit change).
 from transformer.transformer_host_binding_impl import (
     _backward_run,
-    _session_forward_tape_run,
-    _session_backward_tape_run,
     _write,
     _opt_read,
     _host_weights_from,
@@ -348,7 +346,6 @@ def transformer_backward_binding(
 
 
 
-from transformer.host.attention_tape import HostAttentionTape
 from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
 
 
@@ -367,88 +364,15 @@ def transformer_session_create_binding() raises -> PythonObject:
 def transformer_session_close_binding(session: PythonObject) raises -> PythonObject:
     var owner = session.downcast_value_ptr[HostTransformerSession]()
     if owner[].busy:
-        raise Error("transformer tape: session is busy")
-    owner[].invalidate_tape()
+        raise Error("transformer session: session is busy")
     owner[].closed = True
     return PythonObject(0)
 
 
-def transformer_session_discard_tape_binding(session: PythonObject,ticket: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[HostTransformerSession]()
-    if owner[].busy:
-        raise Error("transformer tape: session is busy")
-    if len(ticket) != 2:
-        raise Error("transformer tape: owner and epoch required")
-    var cookie = Int(py=ticket[0])
-    var epoch = Int(py=ticket[1])
-    if cookie != Int(owner):
-        raise Error("transformer tape: foreign session")
-    # Closing an older ticket cannot discard a newer forward in this session.
-    if not owner[].closed and epoch == owner[].generation:
-        owner[].invalidate_tape()
-    return PythonObject(0)
-
-
-def transformer_session_invalidate_tape_binding(session: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[HostTransformerSession]()
-    if owner[].busy or owner[].closed:
-        raise Error("transformer tape: session is busy or closed")
-    owner[].invalidate_tape()
-    return PythonObject(0)
-
-
-def transformer_session_forward_tape_binding(session: PythonObject,addrs: PythonObject,
-                                             params: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[HostTransformerSession]()
-    if owner[].busy or owner[].closed:
-        raise Error("transformer tape: session is busy or closed")
-    if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or len(params) != 10:
-        raise Error("transformer tape: IDENTICAL and ten scalars required")
-    var a = _addrs(addrs,11,String("transformer tape"))
-    var p = List[Int]()
-    for i in range(10):  # small-loop(params: fixed scalar list of this entry): argument words, not data
-        p.append(Int(py=params[i]))
-    if p[0] <= 0 or p[1] <= 0 or p[7] < 0 or p[8] < 0 or p[9] < 0:
-        raise Error("transformer tape: invalid shape/window/activation budget/cost")
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            _session_forward_tape_run(Int(owner), a, p)
-    except error:
-        owner[].invalidate_tape()
-        owner[].busy = False
-        raise error
-    owner[].busy = False
-    var ticket=Python.list()
-    ticket.append(PythonObject(Int(owner)))
-    ticket.append(PythonObject(owner[].generation))
-    ticket.append(PythonObject(Int(owner[].tape.value().retained)))
-    ticket.append(PythonObject(owner[].tape.value().retained_bytes))
-    return ticket
-
-
-def transformer_session_backward_tape_binding(session: PythonObject,addrs: PythonObject,
-                                              ticket: PythonObject) raises -> PythonObject:
-    var owner = session.downcast_value_ptr[HostTransformerSession]()
-    if owner[].busy or owner[].closed:
-        raise Error("transformer tape: session is busy or closed")
-    if len(ticket) != 2:
-        raise Error("transformer tape: owner and generation required")
-    var cookie=Int(py=ticket[0])
-    var generation=Int(py=ticket[1])
-    if cookie != Int(owner) or generation != owner[].generation or not owner[].tape:
-        raise Error("transformer tape: stale, foreign or already consumed ticket")
-    var a = _addrs(addrs,11,String("transformer tape backward"))
-    owner[].busy = True
-    try:
-        with GILReleased(Python()):
-            _session_backward_tape_run(Int(owner), a, generation)
-    except error:
-        owner[].invalidate_tape()
-        owner[].busy = False
-        raise error
-    owner[].busy = False
-    return PythonObject(0)
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (`transformer_session_discard_tape`, `transformer_session_invalidate_tape`,
+# `transformer_session_forward_tape`, `transformer_session_backward_tape`.)
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_transformer_host.mojo
@@ -476,10 +400,6 @@ def build__mojolearn_transformer_host() -> PythonObject:
         module.def_function[transformer_arithmetic_profile_binding]("transformer_arithmetic_profile")
         module.def_function[transformer_session_create_binding]("transformer_session_create")
         module.def_function[transformer_session_close_binding]("transformer_session_close")
-        module.def_function[transformer_session_discard_tape_binding]("transformer_session_discard_tape")
-        module.def_function[transformer_session_invalidate_tape_binding]("transformer_session_invalidate_tape")
-        module.def_function[transformer_session_forward_tape_binding]("transformer_session_forward_tape")
-        module.def_function[transformer_session_backward_tape_binding]("transformer_session_backward_tape")
         module.def_function[transformer_host_numeric_mode_binding]("transformer_host_numeric_mode")
         module.def_function[transformer_host_vendor_binding]("transformer_host_vendor")
         module.def_function[transformer_host_column_binding]("transformer_host_column")

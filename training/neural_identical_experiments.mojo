@@ -79,9 +79,12 @@ comptime IDN_TRAIN_BACKWARD_SCRATCH = _ENABLED and (IDN_TRAIN_SCRATCH_ARM == 1 o
 # NI34: the existing explicit config stays supported; this opt-in chooses it
 # for default-constructed byte configs and enables compatible Samba callers.
 comptime IDN_CHUNKED_LM_HEAD_V2 = _ENABLED and is_defined["MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"]()
-# NI36/NI48: immutable native forward tapes, consumed exactly once.
-# Arm 3 of MOJOLEARN_IDN_ACT_RETAIN (transformer/experiments/checkpoint_contract.mojo).
-comptime IDN_SAMBA_FORWARD_TAPE = _ENABLED and not is_defined["MOJOLEARN_IDN_ACT_RETAIN_OFF"]() and get_defined_int["MOJOLEARN_IDN_ACT_RETAIN", 2]() == 3
+# NI36/NI48: immutable native forward tapes, consumed exactly once. Arm 3 of
+# MOJOLEARN_IDN_ACT_RETAIN now reaches only the Mamba-3 tape
+# (mamba/impl/mamba_shell_impl.mojo reads the define itself).
+# TOMBSTONE: TRANSFORMER_FORWARD_TAPE_API (DELETED: superseded by the attention step op and the tape rule, lane x6) deleted 2026-11-09 by DELETION_SHA; code recoverable at DELETION_SHA^.
+# Restore: git apply experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch
+# (`IDN_SAMBA_FORWARD_TAPE`, the transformer half of arm 3.)
 
 # NI20 / MOJOLEARN_IDN_ATTN_SOFTMAX: both arms are gone and the define is refused
 # (arm 1, the NN20 summary tree, deleted 2026-10-08, grid ge123e6f9, recoverable at
