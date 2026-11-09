@@ -13,6 +13,7 @@ from autograd.program_loop import (
 from autograd.ops_api import OpsSession, ops_session
 from autograd.program import OpsProgram, PROGRAM_IN_IDS
 from autograd.program_optimize import program_optimize
+from autograd.block_step_ops import is_block_step
 from autograd.program_runtime import parameter_buffers, replay_values_prepared
 from autograd.control_replay_metadata import ControlReplay
 from autograd.cast_ops import upload_cast, upload_cast_i32
@@ -257,6 +258,15 @@ def control_prepare[E: Exec & Movable & Deinitable, KIND: Int](
     var every = 1
     if is_loop:
         every = loop_check_every(check_every, "while_loop")
+        # lane x1: a block step op writes the session's state in place, not
+        # behind the loop's gate, so no body may run past the stop: with a
+        # condition the loop reads its status before every body (the
+        # result is the same for every check_every); with none, control_run
+        # never enqueues more bodies than max_iterations.
+        if condition_id != 0:
+            for k in range(body.n_nodes()):  # driver-loop: over body nodes, for in-place state writers
+                if is_block_step(body.code[k]):
+                    every = 1
         if maximum > LOOP_MAX_EXACT:
             raise Error("ValueError: while_loop max_iterations must be at most " + String(LOOP_MAX_EXACT)
                         + ", got " + String(maximum))
@@ -381,6 +391,8 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
                 extras.append(record)
             var timers = LoopTimers("while_loop")
             var done = False
+            #: bodies enqueued so far; never more than the bound
+            var enqueued = 0
             while not done:  # driver-loop: over flag-read chunks of the bounded loop, bounded by max_iterations
                 var j = 0
                 while j < every:  # driver-loop: over loop iterations enqueued between two flag reads
@@ -406,7 +418,9 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
                     s[].ex.launch[OP_LOOP_TICK](tick, 1)
                     _lap(s[], timers, "condition")
                     j += 1
-                    if j == every:
+                    if j == every or enqueued >= maximum:
+                        # at the bound the tick has stopped the loop: read it
+                        # rather than enqueue a body past max_iterations
                         s[].ex.download(mirror_p, words, LOOP_WORDS)
                         iterations = Int(mirror[LOOP_ITER])
                         _lap(s[], timers, "read_flag")
@@ -414,6 +428,7 @@ def control_run[E: Exec & Movable & Deinitable, KIND: Int](
                             done = True
                             break
                     var outputs = _execute(s[], body, body_replay, in_buffers, in_shapes, temps)
+                    enqueued += 1
                     _lap(s[], timers, "body")
                     # The gate is known open right after a read; between
                     # reads it is the device's, so shapes must hold.
