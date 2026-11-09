@@ -31,8 +31,9 @@ without the backward.
 The trainer's flat buffers (training/byte_lm.mojo `ByteBuffers` on the
 device, `ByteHostSession`'s lists on the host column: param, m, v, grad in
 `ByteConfig.offsets` order) stay the COMMITTED state that export, logits
-and rollback read: `byte_program_load` / `byte_host_program_load` copy
-them into the session (once after open and after any outside write),
+and rollback read: `byte_program_load` (and, on the CPU column,
+training/byte_lm_host_program.mojo `byte_host_program_load`) copies them
+into the session (once after open and after any outside write),
 `byte_program_store` / `byte_host_program_store` copy a finished call
 back. Both are copies per tensor piece, no arithmetic.
 
@@ -48,15 +49,13 @@ certified optimizer step of the byte LM and the host column's composed
 oracle step (`byte_host_train_step`); the bits changed with them on every
 column together.
 """
-from std.memory import memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from sequence.ops import FP, Args, OP_COPY, OPT_ADAMW
 from sequence.exec_trait import Exec
-from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from core.cast_in import CastIn, CAST_KIND_SIGNED, CAST_KIND_FLOAT
 from autograd.ops_api import (
-    OpsSession, ops_session_open, ops_session, ops_session_close, OPS_DEVICE, OPS_HOST,
+    OpsSession, ops_session_open, ops_session, ops_session_close, OPS_DEVICE,
     OPS_EMBEDDING, OPS_TRANSPOSE, OPS_MATMUL, OPS_RESHAPE, OPS_CROSS_ENTROPY,
 )
 from autograd.block_step_ops import (
@@ -158,7 +157,6 @@ struct ByteLmProgram[E: Exec & Movable & Deinitable, KIND: Int](Movable):
 
 
 comptime ByteDeviceProgram = ByteLmProgram[DeviceExec, OPS_DEVICE]
-comptime ByteHostProgram = ByteLmProgram[HostExec, OPS_HOST]
 
 
 def _zeros[E: Exec & Movable & Deinitable](mut s: OpsSession[E], n: Int) raises -> FP:
@@ -174,7 +172,7 @@ def _zeros[E: Exec & Movable & Deinitable](mut s: OpsSession[E], n: Int) raises 
 def _blank[E: Exec & Movable & Deinitable](mut s: OpsSession[E], rows: Int, cols: Int) raises -> Int:
     """A zero (rows, cols) session tensor of the executor's own storage
     (`upload` without a host source: the trainer's committed state is
-    copied into it by `byte_program_load` / `byte_host_program_load`)."""
+    copied into it by the load)."""
     var buf = _zeros(s, rows * cols)
     var t = s.tape.variable(s.ex, buf, rows, cols, False)
     return s._add(t, Int(buf), False, 0)
@@ -182,16 +180,10 @@ def _blank[E: Exec & Movable & Deinitable](mut s: OpsSession[E], rows: Int, cols
 
 def byte_program_open(ctx: DeviceContext, config: ByteConfig, cfg: OptimizerConfig) raises -> ByteDeviceProgram:
     """The trainer's program on a GPU column (`ctx`)."""
-    return _program_open[DeviceExec, OPS_DEVICE](DeviceExec(ctx), config, cfg)
+    return byte_program_open_on[DeviceExec, OPS_DEVICE](DeviceExec(ctx), config, cfg)
 
 
-def byte_host_program_open(config: ByteConfig, cfg: OptimizerConfig) raises -> ByteHostProgram:
-    """The trainer's program on the CPU column (lane x7b): the same capture
-    on a host session."""
-    return _program_open[HostExec, OPS_HOST](HostExec(), config, cfg)
-
-
-def _program_open[E: Exec & Movable & Deinitable, KIND: Int](
+def byte_program_open_on[E: Exec & Movable & Deinitable, KIND: Int](
     var ex: E, config: ByteConfig, cfg: OptimizerConfig,
 ) raises -> ByteLmProgram[E, KIND]:
     """Open the trainer's session on `ex`: the model tensors (zero until
@@ -267,7 +259,7 @@ def _part_fp[E: Exec & Movable & Deinitable, KIND: Int](
     return s.opt_states[si].s1 if part == BYTE_PART_M else s.opt_states[si].s2
 
 
-def _piece_at[E: Exec & Movable & Deinitable, KIND: Int](
+def byte_program_piece[E: Exec & Movable & Deinitable, KIND: Int](
     mut s: OpsSession[E], e: ByteLmProgram[E, KIND], j: Int, part: Int,
 ) raises -> FP:
     """Where flat tensor j (`ByteConfig.offsets` order) of `part` lives in
@@ -294,7 +286,7 @@ def _move(mut s: OpsSession[DeviceExec], e: ByteDeviceProgram, flat: DeviceBuffe
     var ctx = s.ex.ctx.copy()
     for j in range(c.n_tensors()):  # driver-loop: over model parameter tensors
         var n = o[j + 1] - o[j]
-        var pv = block_buffer_view(s.ex, _piece_at(s, e, j, part), n)
+        var pv = block_buffer_view(s.ex, byte_program_piece(s, e, j, part), n)
         var fv = flat.create_sub_buffer[DType.float32](o[j], n)
         if into_program:
             ctx.enqueue_copy(dst_buf=pv, src_buf=fv)
@@ -302,23 +294,7 @@ def _move(mut s: OpsSession[DeviceExec], e: ByteDeviceProgram, flat: DeviceBuffe
             ctx.enqueue_copy(dst_buf=fv, src_buf=pv)
 
 
-def _move_host(mut s: OpsSession[HostExec], e: ByteHostProgram, flat: Int, part: Int, into_program: Bool) raises:
-    """`_move` on the CPU column: `flat` is the host address of the
-    session owner's flat list; one block copy per tensor piece."""
-    var c = e.config.copy()
-    var o = c.offsets()
-    for j in range(c.n_tensors()):  # driver-loop: over model parameter tensors
-        var n = o[j + 1] - o[j]
-        var p = _piece_at(s, e, j, part)
-        var f = FP(unsafe_from_address=flat) + o[j]
-        if n > 0:
-            if into_program:
-                memcpy(dest=p, src=f, count=n)
-            else:
-                memcpy(dest=f, src=p, count=n)
-
-
-def _loaded[E: Exec & Movable & Deinitable, KIND: Int](mut e: ByteLmProgram[E, KIND], completed: Int) raises:
+def byte_program_loaded[E: Exec & Movable & Deinitable, KIND: Int](mut e: ByteLmProgram[E, KIND], completed: Int) raises:
     """After a load: every trained tensor's step count `completed` with the
     running bias-correction products of an uninterrupted run, and the
     attention entries re-check their weights."""
@@ -346,35 +322,7 @@ def byte_program_load(mut e: ByteDeviceProgram, param: DeviceBuffer[DType.float3
     _move(s[], e, param, BYTE_PART_PARAM, True)
     _move(s[], e, m, BYTE_PART_M, True)
     _move(s[], e, v, BYTE_PART_V, True)
-    _loaded(e, completed)
-
-
-def byte_host_program_load(mut e: ByteHostProgram, param: Int, m: Int, v: Int, completed: Int) raises:
-    """`byte_program_load` on the CPU column: the session owner's flat
-    lists (host addresses) into the session."""
-    var s = ops_session[HostExec, OPS_HOST](e.sid)
-    _move_host(s[], e, param, BYTE_PART_PARAM, True)
-    _move_host(s[], e, m, BYTE_PART_M, True)
-    _move_host(s[], e, v, BYTE_PART_V, True)
-    _loaded(e, completed)
-
-
-def byte_host_program_load_params(mut e: ByteHostProgram, param: Int) raises:
-    """The owner's parameters alone into the session (a loss-only call)."""
-    var s = ops_session[HostExec, OPS_HOST](e.sid)
-    _move_host(s[], e, param, BYTE_PART_PARAM, True)
-    for l in range(len(e.blocks)):  # driver-loop: over decoder layers
-        s[].steps_weights_changed(Int(s[].buffer(e.blocks[l])))
-
-
-def byte_host_program_store(mut e: ByteHostProgram, param: Int, m: Int, v: Int, grad: Int) raises:
-    """`byte_program_store` on the CPU column: parameters, moments and the
-    last step's pre-update gradient into the owner's flat lists."""
-    var s = ops_session[HostExec, OPS_HOST](e.sid)
-    _move_host(s[], e, param, BYTE_PART_PARAM, False)
-    _move_host(s[], e, m, BYTE_PART_M, False)
-    _move_host(s[], e, v, BYTE_PART_V, False)
-    _move_host(s[], e, grad, BYTE_PART_GRAD, False)
+    byte_program_loaded(e, completed)
 
 
 def byte_program_load_params(mut e: ByteDeviceProgram, param: DeviceBuffer[DType.float32]) raises:

@@ -11,9 +11,9 @@ from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_io import byte_host_store_f32, byte_host_store_i32
 from training.byte_lm_host import byte_host_logits, byte_host_logits_threaded, byte_host_next_threaded
 from training.checks.optimizer_contract import OPT_ADAMW, OptimizerConfig
-from training.byte_lm_program import (
-    ByteHostProgram, byte_host_program_open, byte_host_program_load, byte_host_program_load_params,
-    byte_host_program_store, byte_program_fit, byte_program_eval,
+from training.byte_lm_program import byte_program_fit, byte_program_eval
+from training.byte_lm_host_program import (
+    byte_host_program_open, byte_host_program_load, byte_host_program_load_params, byte_host_program_store,
 )
 
 comptime BYTE_HOST_MAX_LOGITS = 268435456

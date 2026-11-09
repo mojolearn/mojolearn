@@ -12,9 +12,9 @@ from core.hostptr import read_f32, read_i32, f32_ptr, i32_ptr
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_io import all_finite_f32_scan
 from training.byte_lm_host_execution import byte_host_logits_native, byte_host_next_native, byte_host_optimizer
-from training.byte_lm_program import (
-    ByteHostProgram, byte_host_program_open, byte_host_program_load, byte_host_program_store, byte_program_fit,
-    byte_program_eval,
+from training.byte_lm_program import byte_program_fit, byte_program_eval
+from training.byte_lm_host_program import (
+    ByteHostProgram, byte_host_program_open, byte_host_program_load, byte_host_program_store,
 )
 from core.training_state_validation import training_admit_moments_and_flags
 from core.host_helpers_impl import argmax_rows_f32
