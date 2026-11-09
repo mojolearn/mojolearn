@@ -65,7 +65,7 @@ def _entries(module):
         # A CPU-only install: the family's compiled host binding stands
         # behind the proxy; its entries are read once here, not through the
         # proxy's Python lookup at call time.
-        module = _backend.load_host_module(module._HostBinding__basename)  # import-time: a CPU-only install connects its compiled host binding once
+        module = _backend.load_host_module(module._HostBinding__basename)  # cpu-route: a CPU-only install connects its compiled host binding once
     if type(module) is not ModuleType:
         # A missing tier or a refusing stub: touching it states the reason.
         try:

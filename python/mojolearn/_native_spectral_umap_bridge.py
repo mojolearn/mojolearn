@@ -69,7 +69,7 @@ def _host_owner(binding):
     from . import _backend
     if type(binding) is _backend._HostBinding and _backend._CPU_ONLY is not None:
         basename = vars(binding)["_HostBinding__basename"]
-        return _backend.load_host_module(basename)  # import-time: import connection of an explicitly selected CPU-only binding
+        return _backend.load_host_module(basename)  # cpu-route: import connection of an explicitly selected CPU-only binding
     return binding
 
 

@@ -22,7 +22,7 @@ def _connect_binding(name, required, optional=()):
     try:
         module = _backend.binding(name, "identical")
         if type(module) is _backend._HostBinding:
-            module = _backend.load_host_module(module._HostBinding__basename)  # import-time: import-time resolution of the existing CPU-only proxy
+            module = _backend.load_host_module(module._HostBinding__basename)  # cpu-route: import-time resolution of the existing CPU-only proxy
         if type(module) is not ModuleType:
             raise ImportError(f"parallel native binding requires the compiled {name} module")
         fields = vars(module)

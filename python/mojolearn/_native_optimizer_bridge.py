@@ -270,7 +270,7 @@ def connect_embedding(training, embedding_cls, archive_context):
     # glue: connect the optional host lookup ABI once, including host_model.
     # Unavailable installs retain a refusal string instead of a runtime loader.
     try:
-        host_module = _backend.load_host_module("_mojolearn_embedding_infer_host")  # import-time: import-time connection for explicitly selected CPU-only host_model lookup
+        host_module = _backend.load_host_module("_mojolearn_embedding_infer_host")  # cpu-route: import-time connection for explicitly selected CPU-only host_model lookup
         context["embedding_host_binding"] = {"module": host_module, **{
             name: getattr(host_module, name) for name in names  # glue: fixed host ABI connection at import
             if isinstance(getattr(host_module, name, None), BuiltinFunctionType)

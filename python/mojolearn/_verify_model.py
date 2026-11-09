@@ -56,7 +56,7 @@ def _digest(b, a, name):
     if not a.flags.c_contiguous:
         raise ValueError(f"{name} must be a C-contiguous array")
     # Mojo folds the array's bytes (FNV-1a64, the identity digest)
-    return str(b.verify_digest(a.ctypes.data, a.nbytes))  # verification: verification digest of a host array after the run
+    return str(b.verify_digest(a.ctypes.data, a.nbytes))  # cpu-route: verification digest of a host array after the run
 
 
 def _seeded(b, shapes, seed, kinds=None):
@@ -70,7 +70,7 @@ def _seeded(b, shapes, seed, kinds=None):
             continue
         a = np.empty(tuple(shape), dtype=np.float32)
         # Mojo writes the seeded values (input k is Philox stream k)
-        b.verify_fill(a.ctypes.data, a.size, int(seed), k)  # verification: verification inputs made before the run
+        b.verify_fill(a.ctypes.data, a.size, int(seed), k)  # cpu-route: verification inputs made before the run
         arrays.append(a)
     return arrays
 
@@ -97,8 +97,8 @@ def _install(numeric_mode):
 
 
 def _model_entry(b, path):
-    sha, size = b.verify_file_sha256(os.fspath(path))  # verification: model file hashed on the host
-    kind, desc = b.verify_model_info(os.fspath(path))  # verification: model file read on the host
+    sha, size = b.verify_file_sha256(os.fspath(path))  # cpu-route: model file hashed on the host
+    kind, desc = b.verify_model_info(os.fspath(path))  # cpu-route: model file read on the host
     return {"file": os.path.basename(os.fspath(path)), "kind": str(kind), "sha256": str(sha),
             "bytes": int(size), "description_hash": str(desc)}
 
@@ -119,7 +119,7 @@ def _report(b, path, numeric_mode, names_in, arrays, source, seed, names_out, ou
 
 
 def _write(rep, path):
-    with open(path, "w") as fh:  # verification: report file written on the host
+    with open(path, "w") as fh:  # cpu-route: report file written on the host
         json.dump(rep, fh, indent=2, sort_keys=True)
         fh.write("\n")
 
@@ -141,7 +141,7 @@ def _names(entries, items, stem):
 
 def _load_inputs(path, want_names, n):
     np = _np()
-    with np.load(os.fspath(path), allow_pickle=False) as z:  # verification: input file read on the host
+    with np.load(os.fspath(path), allow_pickle=False) as z:  # cpu-route: input file read on the host
         files = list(z.files)
         if len(files) != n:
             raise ValueError(f"{os.fspath(path)} holds {len(files)} arrays; the model takes {n} inputs")
@@ -160,7 +160,7 @@ def verify(path, *, inputs=None, expect=None, numeric_mode=None):
     from ._x_sequence_model import Sequential
     b = _binding(numeric_mode)
     try:
-        kind, _ = b.verify_model_info(os.fspath(path))  # verification: model file read on the host
+        kind, _ = b.verify_model_info(os.fspath(path))  # cpu-route: model file read on the host
     except Exception as exc:  # the binding's refusal names what is wrong with the file
         raise ValueError(f"{os.fspath(path)} is not a saved model: {exc}") from None
     kind = str(kind)
@@ -273,7 +273,7 @@ def cmd_verify_model(args):
     expect = None
     if expect_from is not None:
         try:
-            with open(expect_from) as fh:  # verification: report file read on the host
+            with open(expect_from) as fh:  # cpu-route: report file read on the host
                 expect = json.load(fh)
         except (OSError, ValueError) as exc:
             print(f"verify-model: cannot read the expected report {expect_from}: {exc}", file=sys.stderr)

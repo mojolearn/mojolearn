@@ -134,7 +134,7 @@ def _ro(buf, name):
 
 
 def _binding():
-    return _Entries(_backend.load_host_module(_EXTENSION))  # import-time: tokenizer host binding module loaded once by load_host_module (text input step)
+    return _Entries(_backend.load_host_module(_EXTENSION))  # cpu-route: tokenizer host binding module loaded once by load_host_module (text input step)
 
 
 #: The fast tier's Apple GPU tokenizer (`tokenizer/fast/`, built by

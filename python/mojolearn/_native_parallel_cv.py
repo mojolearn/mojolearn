@@ -31,7 +31,7 @@ def connect(context, package):
     try:
         binding = _backend.binding('_mojolearn_gbdt', 'identical')
         if type(binding) is _backend._HostBinding:
-            binding = _backend.load_host_module(binding._HostBinding__basename)  # import-time: import-only native owner connection
+            binding = _backend.load_host_module(binding._HostBinding__basename)  # cpu-route: import-only native owner connection
         if type(binding) is ModuleType:
             filename = binding.__file__
             binding_vendor = binding.gbdt_vendor
