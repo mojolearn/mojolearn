@@ -50,7 +50,7 @@ from bindings.native_array_storage import native_scratch_bytes, native_scratch_a
 from bindings.classical_arrays import (
     classical_address, classical_is_array, classical_cast_kind, classical_dtype_str, classical_c_order,
 )
-from bindings.admitted_input import AdmittedX, RESHAPE_HINT, classical_view, admit_x_unrecorded
+from bindings.admitted_input import AdmittedX, RESHAPE_HINT, classical_view, admit_x_unrecorded, admitted_finite_wording
 from bindings.device_rows_door import door_is_device_rows
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from bindings.family_common import family_array, family_repr
@@ -322,6 +322,33 @@ def admit_family_owned(value: ArrayMetadata, context: PythonObject) raises -> Py
     # parallel: the owned float32 copy across host cores (0.8.66 regression C3).
     host_parallel_copy_bytes(Int(py=classical_address(result)), value.source.addr, value.count * 4)
     _ = result
+    return result
+
+
+def admit_family_owned_finite(value: ArrayMetadata, est: String, context: PythonObject) raises -> PythonObject:
+    """`admit_family_owned` of a snapshot admitted with `finite=True,
+    defer_finite=True`, the finite test made ONCE, in the pass that makes
+    the owned copy (lane a8b-device-x-neighbors-rest: a fitted index that
+    every later query used to scan again). A cast copy was refused by its
+    cast; an owned writable input (no copy) is scanned once in parallel; a
+    borrowed input is copied by one parallel row-task cast, float32 to
+    float32 (the same bits), whose verdict refuses. The refusal is
+    `admitted_finite_wording(est)`."""
+    if value.copied:
+        return admit_family_owned(value, context)
+    var src = value.source
+    if value.owned_writable:
+        # parallel: one finiteness scan of the owned input across host cores
+        if not host_all_finite_f32_strided(src.addr, src.s0, src.s1, src.rows, src.cols):
+            raise Error(admitted_finite_wording(est, "X"))
+        return value.keep
+    var result = admitted_array(value.python_shape(), "<f4", context)
+    var address = Int(py=classical_address(result))
+    # parallel: the owned copy over row tasks, the finiteness verdict in the same pass
+    var ok = admitted_cast_f32(src.addr, src.s0, src.s1, src.rows, src.cols, src.itemsize, src.kind,
+                               _AF_F32P(unsafe_from_address=address))
+    if not ok:
+        raise Error(admitted_finite_wording(est, "X"))
     return result
 
 
