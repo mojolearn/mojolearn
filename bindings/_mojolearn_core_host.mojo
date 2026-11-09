@@ -170,6 +170,7 @@ from bindings.array_helpers import (
     shard_topk_merge_f32_host_binding,
 )
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
+from core.host_finite_scan import host_all_finite_f32
 from core.dense_coo import (
     nonzero_f32_count as dense_nonzero_f32_count,
     nonzero_f32_fill as dense_nonzero_f32_fill,
@@ -877,13 +878,17 @@ def kmeans_fit_binding(
     written; on `init == INIT_ARRAY` it is read first as the start.
     `out_labels_addr` is `n_samples` uint32 (the caller's int32 array is
     the same bytes), the assignment against the FINAL centroids. The shape
-    refusals are `kmeans_fit`'s, raised BEFORE any address is read."""
+    refusals are `kmeans_fit`'s, raised BEFORE any address is read.
+    `params[11]` (OPTIONAL, lane a7d-device-x-decomp-cluster): 1 asks for
+    X's finite status word (the parallel host scan before the fit; a
+    flagged X is not fit), returned as a fifth value, as the GPU binding."""
     # 10 or 11, as the GPU binding: workstream D (2026-09-14) appended
     # oversampling_factor as params[10] (cluster.py packs it on every fit),
     # and the 10-only check read REFUSED for every kmeans cell on the CPU gate.
-    if len(params) != 10 and len(params) != 11:
+    # 12 with lane a7d's finite flag.
+    if len(params) != 10 and len(params) != 11 and len(params) != 12:
         raise Error(
-            "kmeans_fit: params must hold 10 or 11 values, got "
+            "kmeans_fit: params must hold 10, 11 or 12 values, got "
             + String(len(params))
         )
     var x_address = _index(x_addr)
@@ -901,26 +906,34 @@ def kmeans_fit_binding(
     var ii = _index(params[8])
     var mm = _index(params[9])
     var ovs = Float64(2.0)
-    if len(params) == 11:
+    if len(params) >= 11:
         ovs = Float64(py=params[10])
+    var test = len(params) == 12 and Int(py=params[11]) != 0
+    var status = 0
     var inertia = Float64(0.0)
     var n_iter = 0
     var sum_scale = Float64(0.0)
     var weight_scale = Float64(0.0)
     with GILReleased(Python()):
-        var r = kmeans_fit_host(
-            x_address, centroids_address, lp, weights_address,
-            ns, nf, nc, nw, mi, tl, sd, ninit, ii, mm, ovs,
-        )
-        inertia = r[0]
-        n_iter = r[1]
-        sum_scale = r[2]
-        weight_scale = r[3]
+        if test and ns >= 1 and nf >= 1:
+            # parallel: the deferred finite test of X (SIMD scan across the host's cores)
+            status = 0 if host_all_finite_f32(f32_ptr(x_address), ns * nf) else 1
+        if status == 0:
+            var r = kmeans_fit_host(
+                x_address, centroids_address, lp, weights_address,
+                ns, nf, nc, nw, mi, tl, sd, ninit, ii, mm, ovs,
+            )
+            inertia = r[0]
+            n_iter = r[1]
+            sum_scale = r[2]
+            weight_scale = r[3]
     var out = Python.list()
     out.append(PythonObject(inertia))
     out.append(PythonObject(n_iter))
     out.append(PythonObject(sum_scale))
     out.append(PythonObject(weight_scale))
+    if test:
+        out.append(PythonObject(status))
     return out
 
 
@@ -935,10 +948,13 @@ def kmeans_predict_binding(
     Public INFERENCE: it
     reads a fitted model's centroids and trains nothing. The arithmetic is
     `host_kmeans_fit`'s final assignment (`host_kmeans_predict`). The shape
-    and metric refusals are raised BEFORE any address is read."""
-    if len(params) != 4:
+    and metric refusals are raised BEFORE any address is read. `params[4]`
+    (OPTIONAL, lane a7d): 1 asks for X's finite status word (the parallel
+    host scan; a flagged X is not read further), returned instead of
+    n_samples."""
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kmeans_predict: params must hold 4 values, got "
+            "kmeans_predict: params must hold 4 or 5 values, got "
             + String(len(params))
         )
     var x_address = _index(x_addr)
@@ -948,8 +964,16 @@ def kmeans_predict_binding(
     var nf = _index(params[1])
     var nc = _index(params[2])
     var mm = _index(params[3])
+    var test = len(params) == 5 and _index(params[4]) != 0
+    var status = 0
     with GILReleased(Python()):
-        kmeans_predict_host(x_address, centroids_address, lp, ns, nf, nc, mm)
+        if test and ns >= 1 and nf >= 1:
+            # parallel: the deferred finite test of X (SIMD scan across the host's cores)
+            status = 0 if host_all_finite_f32(f32_ptr(x_address), ns * nf) else 1
+        if status == 0:
+            kmeans_predict_host(x_address, centroids_address, lp, ns, nf, nc, mm)
+    if test:
+        return PythonObject(status)
     return PythonObject(ns)
 
 
@@ -964,10 +988,11 @@ def kmeans_transform_binding(
     2 n_clusters, 3 metric). Public INFERENCE: it reads a fitted model's
     centroids and trains nothing. The arithmetic is `host_kmeans_transform`,
     the GPU kernel's cell statement for statement. The shape and metric
-    refusals are raised BEFORE any address is read."""
-    if len(params) != 4:
+    refusals are raised BEFORE any address is read. `params[4]` (OPTIONAL,
+    lane a7d): as `kmeans_predict_binding`'s."""
+    if len(params) != 4 and len(params) != 5:
         raise Error(
-            "kmeans_transform: params must hold 4 values, got "
+            "kmeans_transform: params must hold 4 or 5 values, got "
             + String(len(params))
         )
     var x_address = _index(x_addr)
@@ -977,8 +1002,16 @@ def kmeans_transform_binding(
     var nf = _index(params[1])
     var nc = _index(params[2])
     var mm = _index(params[3])
+    var test = len(params) == 5 and _index(params[4]) != 0
+    var status = 0
     with GILReleased(Python()):
-        kmeans_transform_host(x_address, centroids_address, op, ns, nf, nc, mm)
+        if test and ns >= 1 and nf >= 1:
+            # parallel: the deferred finite test of X (SIMD scan across the host's cores)
+            status = 0 if host_all_finite_f32(f32_ptr(x_address), ns * nf) else 1
+        if status == 0:
+            kmeans_transform_host(x_address, centroids_address, op, ns, nf, nc, mm)
+    if test:
+        return PythonObject(status)
     return PythonObject(ns)
 
 
