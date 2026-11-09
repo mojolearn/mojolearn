@@ -11,26 +11,42 @@ and may only unpack PythonObject arguments into typed values, call one typed
 kernel entry and convert the typed result back. It must not loop over data or
 launch work. This checker reports, in every shell file:
 
-    loop     a line starting with `for` or `while`, unless the line itself or
-             the line directly above carries `# small-loop(<what>)` (a loop over
-             argument words of bounded, data-independent length) or
-             `# driver-loop: over <what>` (a driver loop over model structure)
+    loop     a line starting with `for` or `while` that carries no accepted tag.
+             The tag sits on the loop line itself or on a comment-only line
+             directly above it, and it is checked against the loop:
+               `# driver-loop: over <what>` holds only when the loop walks model
+               structure (the LOOP-TAG VOCABULARY below judges the iterable,
+               then the loop variables, then the tag text); a tag on a loop
+               over data is a `false-tag` hit;
+               `# small-loop(<bound>...)` holds only when <bound> is a literal
+               or a named constant (UPPER_CASE) that the loop line uses; any
+               other bound is a `small-bound` hit.
+             `# cpu-route:` and any other comment exempt nothing: a cpu-route
+             loop is debt to remove (AGENTS.md, "No Python in the runtime").
+    inline   Python iteration inside one expression (the audit's c-inline
+             class): `b.sorted`, `b.map`, `b.zip` (also through `bi.` and
+             `builtins.`), `.tolist`, `PyObject_GetIter`, `PyIter_Next`,
+             `itertools.repeat`, `itertools.chain`, `.fromkeys` (never taggable)
     launch   `enqueue_function`, `DeviceContext(`, `parallelize(`/`parallelize[`,
              `vectorize(`/`vectorize[`, anywhere in code (never taggable)
 
-Comment lines and triple-quoted docstrings are skipped. Hits that were on main
-2026-10-21 are listed in tools/hooks/compute_in_shells_baseline.txt as
-`path:line: code`; a hit is grandfathered by a row with the same path and the
-same code text (the line number is informational, so edits above a row do not
-break it). The thin-* lanes move the work into kernel files and the list only
-shrinks.
+Comment lines and triple-quoted docstrings are skipped. Hits that main carries
+are listed in tools/hooks/compute_in_shells_baseline.txt as `path:line: code`
+(written 2026-10-21, regenerated once on 2026-11-09 when the tags started to be
+checked); a hit is grandfathered by a row with the same path and the same code
+text (the line number is informational, so edits above a row do not break it).
+The thin-* lanes move the work into kernel files and the list only shrinks.
 
 Modes:
     no_compute_in_shells.py --tree [REF] [--branch] [--baseline FILE]
         Scan every shell .mojo file committed at REF (default HEAD). Fail (exit 1)
         on any hit not covered by the baseline. The baseline is REF's file,
-        restricted to the rows main's baseline also has, so a branch cannot grow
-        it. Prints hit counts per directory. Rows no hit matches are stale.
+        restricted to the rows main's baseline also has or, for a row main's
+        baseline lacks, a hit main's own tree carries under this checker (main's
+        debt that a stricter rule made visible), so a branch cannot grow it with
+        a hit of its own. Prints hit counts per kind and directory, and how many
+        driver-loop tags were judged structure or could not be judged. Rows no
+        hit matches are stale.
         --branch (the pre-push hook passes it for every ref except main): judge
         only the shell files REF adds or changes over merge-base(origin/main, REF);
         a hit that was already in that file at the merge-base is main's debt.
@@ -48,8 +64,129 @@ from collections import Counter
 BASELINE = "tools/hooks/compute_in_shells_baseline.txt"
 LOOP = re.compile(r"^\s*(for|while)\b")
 LAUNCH = re.compile(r"enqueue_function|\bDeviceContext\s*\(|\b(?:sync_)?parallelize\s*[\[(]|\bvectorize\s*[\[(]")
-TAG = re.compile(r"#\s*small-loop\(|#\s*driver-loop:|#\s*cpu-route:")
+# Python iteration inside one expression (audit A's c-inline class, 2026-11-08)
+INLINE = re.compile(r"\b(?:b|bi|builtins)\.(?:sorted|map|zip)\b|\.tolist\b|\bPyObject_GetIter\b|\bPyIter_Next\b"
+                    r"|\bitertools\.(?:repeat|chain)\b|\.fromkeys\b")
+DRIVER_TAG = re.compile(r"#\s*driver-loop:\s*(?:over\s+)?(?P<what>.*)$")
+SMALL_TAG = re.compile(r"#\s*small-loop\(\s*(?P<bound>[^:()]*?)\s*(?::[^()]*)?\)")
+CONST_BOUND = re.compile(r"[\d_]+|[A-Z][A-Z0-9_]*")
 ROW = re.compile(r"^(?P<path>[^:\s]+\.mojo):(?P<line>\d+):\s?(?P<code>.*)$")
+
+# ------------------------------------------------- loop-tag vocabulary ----
+# THE LOOP-TAG VOCABULARY (2026-11-09). A `# driver-loop: over <what>` tag
+# claims that a loop walks model structure, never data
+# (docs/plans/GPU_PATH_HOST_LOOPS.md). The checker judges the claim from the
+# loop: first its source (the `for x in <expr>` iterable, the `range(<expr>)`
+# bound, the `while` condition), then, when the source says nothing, its loop
+# variables, then the tag text. Every identifier is split into lower-case
+# words (on `_`, digits and case changes):
+#   DATA_PATTERNS   spellings that are data by themselves
+#   DATA_NAMES      whole identifiers, or first words, that name the data (X, y)
+#   DATA_WORDS      a word that names data: rows, samples, labels, values, ...
+#   VALUE_WORDS     a COUNT of these is structure (`range(n_classes)`), the
+#                   sequence itself is data (`for c in classes_`)
+#   STRUCTURE_WORDS a word that names model structure: layers, blocks, heads, ...
+#   COUNT_WORDS     a first word that makes the identifier a count of the rest
+# Before the words are read, a dict view (`.keys()`, `.values()`, `.items()`)
+# is judged by its receiver and an attribute chain by its last name.
+# A data word anywhere in the judged text makes it data; else a structure word
+# makes it structure; else the verdict is "unknown": the tag is kept, as
+# before, and counted as "could not judge". This table is the one place to
+# extend; tools/hooks/no_host_routes.py carries the same table (each hook is
+# installed as one self-contained file), keep the two in step.
+DATA_PATTERNS = re.compile(r"\.shape\s*\[\s*0\s*\]|\.tolist\b|\blen\(\s*[XxYy]\w*\s*\)|\bn_samples\b|\bnnz\b"
+                           r"|\bdownload\w*|\breadback\w*")
+DATA_NAMES = frozenset("x y".split())
+DATA_WORDS = frozenset("""
+row rows sample samples label labels value values val vals element elements elem elems token tokens
+tok toks record records nnz obs observation observations point points query queries pixel pixels
+datum data text texts document documents doc docs sentence sentences char chars byte bytes batch
+batches chunk chunks numel target targets instance instances example examples
+""".split())
+VALUE_WORDS = frozenset("class classes category categories unique uniques".split())
+STRUCTURE_WORDS = frozenset("""
+layer layers block blocks head heads estimator estimators member members fold folds split splits
+candidate candidates device devices gpu gpus rank ranks shard shards field fields param params
+parameter parameters stage stages tree trees feature features column columns col cols dim dims
+dimension dimensions axis axes ndim shape output outputs component components iteration iterations
+iter iters epoch epochs step steps level levels depth leaf leaves arg args argument arguments kwarg
+kwargs key keys name names option options config configs worker workers kernel kernels launch
+launches pass passes round rounds model models module modules child children attr attrs attribute
+attributes slot slots spec specs plan plans op ops phase phases kind kinds dtype dtypes metric
+metrics handle handles span spans bin bins expert experts context contexts stream streams
+""".split())
+COUNT_WORDS = frozenset("n num nb count total".split())
+
+
+def _words(ident):
+    """Lower-case words of one identifier: `n_samplesIn2` -> [n, samples, in]."""
+    out = []
+    for part in re.split(r"[_\d]+", ident):
+        out.extend(w.lower() for w in re.findall(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+", part))
+    return out
+
+
+def judge_text(text, tag_text=False):
+    """("data" | "structure" | "unknown", the deciding word) for one text.
+    tag_text: the words of a tag's <what>, where a value word (classes) is a
+    count, so structure."""
+    if not text or not text.strip():
+        return "unknown", ""
+    m = DATA_PATTERNS.search(text)
+    if m:
+        return "data", m.group(0)
+    # a dict view walks its receiver (`kwargs.items()` walks kwargs); an
+    # attribute chain is judged by its last name (`value.ndim` is a rank)
+    text = re.sub(r"\.(?:keys|values|items)\(\s*\)", "", text)
+    text = re.sub(r"(?<![\w.])(?:[A-Za-z_]\w*(?:\[\])?\.)+(?=[A-Za-z_])", "", text)
+    struct = ""
+    for ident in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", text):
+        words = _words(ident)
+        if not words:
+            continue
+        if ident == "n" or ident.lower() in DATA_NAMES or (words[0] in DATA_NAMES and ident[:1] in "XxYy"
+                                                             and len(words) > 1 and not tag_text):
+            return "data", ident
+        if words[0] in COUNT_WORDS and len(words) > 1:
+            rest = words[1:]
+            if any(w in DATA_WORDS for w in rest):
+                return "data", ident
+            if not struct and any(w in STRUCTURE_WORDS or w in VALUE_WORDS for w in rest):
+                struct = ident
+            continue
+        if any(w in DATA_WORDS for w in words) or (not tag_text and any(w in VALUE_WORDS for w in words)):
+            return "data", ident
+        if not struct and any(w in STRUCTURE_WORDS or (tag_text and w in VALUE_WORDS) for w in words):
+            struct = ident
+    return ("structure", struct) if struct else ("unknown", "")
+
+
+def judge_loop(source, targets="", what=""):
+    """The verdict on a tagged loop: its source, else its loop variables, else
+    the tag text decides (see the vocabulary above)."""
+    for text, tag in ((source, False), (targets, False), (what, True)):
+        v = judge_text(text, tag)
+        if v[0] != "unknown":
+            return v
+    return "unknown", ""
+
+
+def loop_parts(code):
+    """(source, loop variables) of a `for`/`while` line's code."""
+    m = re.match(r"\s*for\s+(.+?)\s+in\s+(.+?):?\s*$", code)
+    if m:
+        return m.group(2), m.group(1)
+    m = re.match(r"\s*while\b\s*(.*?):?\s*$", code)
+    if m:
+        return m.group(1), ""
+    return code, ""
+
+
+def small_bound_ok(bound, code):
+    """A `small-loop(<bound>)` note holds when the bound is a literal or a named
+    constant and the loop line uses it."""
+    bound = (bound or "").strip()
+    return bool(CONST_BOUND.fullmatch(bound)) and re.search(r"(?<!\w)" + re.escape(bound) + r"(?!\w)", code) is not None
 
 
 def is_shell(path):
@@ -78,8 +215,11 @@ def _code_part(line):
     return line
 
 
-def scan(text):
-    """[(line number, kind, code)] of the untagged loops and the launches in one shell file."""
+def scan(text, stats=None):
+    """[(line number, kind, code)] of the loop, inline and launch hits in one
+    shell file (kinds: loop, false-tag, small-bound, inline, launch). stats, a
+    Counter, receives the accepted tags: driver-structure, driver-unknown
+    (could not judge) and small-loop."""
     out = []
     lines = text.splitlines()
     in_doc = None
@@ -98,12 +238,39 @@ def scan(text):
         if not s or s.startswith("#"):
             continue
         code = _code_part(raw)
-        prev = lines[n - 2] if n >= 2 else ""
-        if LOOP.match(code) and not (TAG.search(raw) or TAG.search(prev)):
-            out.append((n, "loop", s))
-        elif LAUNCH.search(code):
+        if LOOP.match(code):
+            kind = _loop_kind(raw, code, lines[n - 2] if n >= 2 else "", stats)
+            if kind:
+                out.append((n, kind, s))
+        if LAUNCH.search(code):
             out.append((n, "launch", s))
+        elif INLINE.search(code):
+            out.append((n, "inline", s))
     return out
+
+
+def _loop_kind(raw, code, prev, stats=None):
+    """None for a loop whose tag holds, else the hit kind (see scan)."""
+    comment = raw[len(code):]
+    above = prev.strip() if prev.strip().startswith("#") else ""
+    for tag_text in (comment, above):
+        d = DRIVER_TAG.search(tag_text)
+        if d:
+            source, targets = loop_parts(code)
+            verdict, _word = judge_loop(source, targets, d.group("what"))
+            if verdict == "data":
+                return "false-tag"
+            if stats is not None:
+                stats["driver-" + verdict] += 1
+            return None
+        m = SMALL_TAG.search(tag_text)
+        if m:
+            if not small_bound_ok(m.group("bound"), code):
+                return "small-bound"
+            if stats is not None:
+                stats["small-loop"] += 1
+            return None
+    return "loop"
 
 
 def _git(*args, inp=None):
@@ -149,13 +316,41 @@ def _read(shas):
     return texts
 
 
-def hits_at(ref, paths=None):
-    """[(path, line, kind, code)] at ref, sorted by path and line (only `paths`, if given)."""
+def _scan_many(items):
+    """[(path, hits, stats)] for [(path, text)]: one worker's share."""
+    out = []
+    for p, t in items:
+        st = Counter()
+        out.append((p, scan(t, st), st))
+    return out
+
+
+def hits_at(ref, paths=None, stats=None):
+    """[(path, line, kind, code)] at ref, sorted by path and line (only `paths`,
+    if given). The files are split across every core (one worker per core);
+    stats, a Counter, receives the accepted tag counts."""
     blobs = _shell_blobs(ref)
     if paths is not None:
         blobs = {p: s for p, s in blobs.items() if p in paths}
     texts = _read(blobs.values())
-    return [(p, n, k, c) for p in sorted(blobs) for n, k, c in scan(texts[blobs[p]])]
+    items = [(p, texts[blobs[p]]) for p in sorted(blobs)]
+    workers = min(os.cpu_count() or 1, max(1, len(items) // 64))
+    if workers > 1:
+        import multiprocessing
+        chunks = [items[i::workers] for i in range(workers)]
+        try:
+            with multiprocessing.get_context("fork").Pool(workers) as pool:
+                parts = [r for part in pool.map(_scan_many, chunks) for r in part]
+        except (OSError, ValueError):
+            parts = _scan_many(items)
+    else:
+        parts = _scan_many(items)
+    res = []
+    for p, hs, st in sorted(parts, key=lambda r: r[0]):
+        if stats is not None:
+            stats.update(st)
+        res.extend((p, n, k, c) for n, k, c in hs)
+    return res
 
 
 def parse_baseline(text):
@@ -193,6 +388,19 @@ def _per_dir(hits):
     return ", ".join(f"{d} {n}" for d, n in sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))) or "none"
 
 
+_WHAT = {
+    "loop": "untagged loop in a shell file; move it into the kernel file (a tag holds only for a model-structure "
+            "driver loop `# driver-loop: over <what>` or a constant-bound `# small-loop(<CONST>)`; `# cpu-route:` "
+            "and other comments exempt nothing)",
+    "false-tag": "false driver-loop tag: the loop walks data, not model structure; move it into the kernel file",
+    "small-bound": "small-loop note without a constant bound (it needs a literal or an UPPER_CASE constant the "
+                   "loop uses); move the loop into the kernel file",
+    "inline": "Python iteration inside an expression in a shell file (b.sorted/b.map/b.zip/.tolist/"
+              "PyObject_GetIter/PyIter_Next/itertools/.fromkeys); move it into the kernel file",
+    "launch": "kernel launch in a shell file; move it into the kernel file",
+}
+
+
 def check_tree(ref, branch=False, baseline_file=None):
     sha = _resolve(ref)
     if not sha:
@@ -209,8 +417,16 @@ def check_tree(ref, branch=False, baseline_file=None):
     if main_rows is not None:
         main_base = _keys(main_rows)
         grown = base - main_base
+        if grown:
+            # a row main's baseline lacks holds only for a hit main's own tree
+            # carries (main's debt that a stricter rule made visible, as on the
+            # 2026-11-09 regeneration); a hit a branch adds is never grandfathered
+            on_main = _keys(hits_at(main)) if _resolve(main) != sha else Counter(grown)
+            main_base = main_base | (grown & on_main)
+            grown = base - main_base
         base = base & main_base  # the baseline only shrinks: rows main lacks are not grandfathered
-    hits = hits_at(sha)
+    stats = Counter()
+    hits = hits_at(sha, stats=stats)
     judged = hits
     allow = Counter(base)
     if branch and main:
@@ -230,8 +446,13 @@ def check_tree(ref, branch=False, baseline_file=None):
     stale = Counter() if branch else base - _keys(hits)
     kinds = Counter(h[2] for h in hits)
     print(f"no_compute_in_shells: {len(hits)} hits in {len({h[0] for h in hits})} of {len(_shell_blobs(sha))} shell .mojo files scanned at {sha[:9]} "
-          f"({kinds['loop']} untagged loops, {kinds['launch']} launches; baseline {sum(base.values())}); "
+          f"({kinds['loop']} untagged loops, {kinds['false-tag']} false driver-loop tags, "
+          f"{kinds['small-bound']} small-loop notes without a constant bound, {kinds['inline']} inline iterations, "
+          f"{kinds['launch']} launches; baseline {sum(base.values())}); "
           f"per directory: {_per_dir(hits)}", file=sys.stderr)
+    print(f"no_compute_in_shells: accepted tags: {stats['driver-structure']} driver-loop tags judged structure, "
+          f"{stats['driver-unknown']} driver-loop tags could not be judged (kept), "
+          f"{stats['small-loop']} small-loop notes with a constant bound", file=sys.stderr)
     for (p, c), n in sorted(grown.items()):
         print(f"no_compute_in_shells: baseline row {p}: {c} (x{n}) is not in main's baseline; "
               f"the baseline only shrinks", file=sys.stderr)
@@ -239,10 +460,7 @@ def check_tree(ref, branch=False, baseline_file=None):
         print(f"no_compute_in_shells: stale baseline row {p}: {c} (x{n}) matches no hit: "
               f"remove it with --prune-baseline", file=sys.stderr)
     for p, n, k, c in new:
-        what = ("untagged loop in a shell file; move it into the kernel file (or tag a bounded argument-word loop "
-                "`# small-loop(<what>)`, a model-structure driver loop `# driver-loop: over <what>`, or a Python-object input marshaling loop `# cpu-route: <reason>`)"
-                if k == "loop" else "kernel launch in a shell file; move it into the kernel file")
-        print(f"{p}:{n}: {what}: {c}", file=sys.stderr)
+        print(f"{p}:{n}: {_WHAT[k]}: {c}", file=sys.stderr)
     return 1 if new else 0
 
 
