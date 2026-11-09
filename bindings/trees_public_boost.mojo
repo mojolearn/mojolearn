@@ -122,7 +122,7 @@ def _i32_word(array: PythonObject, index: Int) raises -> Int:
 
 def _x_f32(source: PythonObject, context: PythonObject) raises -> AdmittedX:
     """`as_f32_c(X, ndim=2, name="X")`."""
-    return admit_f32(source, 2, "X", context, allow_nonfinite=True)
+    return admit_f32(source, 2, "X", context, finite=False)
 
 
 def _as_array(m: AdmittedX, shape: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -138,7 +138,7 @@ def _as_array(m: AdmittedX, shape: PythonObject, context: PythonObject) raises -
 
 def _f32_vector(value: PythonObject, context: PythonObject) raises -> AdmittedX:
     """`as_f32_c(value, ndim=1, ...)` of a member's output."""
-    return admit_f32(value, 1, "prediction", context, allow_nonfinite=True)
+    return admit_f32(value, 1, "prediction", context, finite=False)
 
 
 def _i32_codes(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -249,7 +249,7 @@ def _gather_vec(xt: PythonObject, v_addr: Int, n: Int, rows: PythonObject, conte
 
 def _acc_cols(xt: PythonObject, acc: PythonObject, x: PythonObject, cols: PythonObject, n: Int, k: Int,
               context: PythonObject) raises:
-    var xa = admit_f32(x, 2, "sub-estimator output", context, allow_nonfinite=True)
+    var xa = admit_f32(x, 2, "sub-estimator output", context, finite=False)
     _ = py_call_typed(_x(xt, "x_trees_accumulate_cols"), _A(acc), _P(xa.address), _P(trees_address(cols)),
                       Python.list(_P(n), _P(k), _P(Int(py=cols.shape[0])), _F(1.0)))
     _ = cols
@@ -258,7 +258,7 @@ def _acc_cols(xt: PythonObject, acc: PythonObject, x: PythonObject, cols: Python
 
 
 def _acc(xt: PythonObject, acc: PythonObject, x: PythonObject, n: Int, context: PythonObject) raises:
-    var xa = admit_f32(x, 1, "sub-estimator output", context, allow_nonfinite=True)
+    var xa = admit_f32(x, 1, "sub-estimator output", context, finite=False)
     _ = py_call_typed(_x(xt, "x_trees_accumulate"), _A(acc), _P(xa.address), Python.list(_P(n), _F(1.0)))
     _ = xa  # keep the Python object alive through the native call above
     _ = xa^
@@ -605,7 +605,7 @@ def _member_fit_session_rows(member: PythonObject, session: Session, rows: Pytho
     var kind = forest_kind(member, context)
     var fields = py_fields(member)
     var mode = String(fields["_fit_numeric_mode"])
-    var y = admit_f32(y32, 1, "y", context, allow_nonfinite=True)
+    var y = admit_f32(y32, 1, "y", context, finite=False)
     var code = fields["_cfg"]["criterion"]
     if Int(py=code) != Int(py=context["trees_rf_tables"]["reg_criteria"]["squared_error"]):
         raise Error("a forest data session fits squared_error members")
@@ -906,7 +906,7 @@ def bagging_fit(model: PythonObject, args: PythonObject, classifier: Bool, conte
             py_setitem(fields, "oob_score_", _F(Float64(hits) / Float64(n)))
             _ = pred  # keep the Python object alive through the native call above
         return model
-    var y32 = admit_f32(args[1], 1, "y", context, allow_nonfinite=True)
+    var y32 = admit_f32(args[1], 1, "y", context, finite=False)
     var y_array = _as_array(y32, Python.tuple(y32.rows), context)
     _bagging_fit_bags(model, fields, X, y_array, False, sample_weight, context)
     if _truthy(fields["oob_score"]):
@@ -1174,7 +1174,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
         _ = xa  # the staged rows stay alive until they are unstaged above
         py_setitem(fields, "n_features_in_", _P(d))
         return model
-    var y32 = admit_f32(args[1], 1, "y", context, allow_nonfinite=True)
+    var y32 = admit_f32(args[1], 1, "y", context, finite=False)
     _y_rows_check(y32.rows, n)
     var base = fields["estimator"]
     if base is None:
@@ -1674,7 +1674,7 @@ def dart_fit(model: PythonObject, args: PythonObject, classifier: Bool, context:
     trees_resident_forget(model_identity_key(model))
     var x = _x_f32(args[0], context)
     if not classifier:
-        var y32 = admit_f32(args[1], 1, "y", context, allow_nonfinite=True)
+        var y32 = admit_f32(args[1], 1, "y", context, finite=False)
         _y_rows_check(y32.rows, x.rows)
         return _dart_boost(model, fields, x, y32, 1, 0, context)
     var labels = trees_encode_labels(args[1], context)
@@ -1954,7 +1954,7 @@ def _rte_fit(model: PythonObject, fields: PythonObject, x: AdmittedX, context: P
     var u = admitted_vector(n, "<f8", context)
     _ = py_call_typed(_x(xt, "x_trees_uniform"), _A(u), Python.list(_P(n), _P(seed), _P(0)))
     _ = u  # keep the Python object alive through the native call above
-    var yr = admit_f32(u, 1, "y", context, allow_nonfinite=True)
+    var yr = admit_f32(u, 1, "y", context, finite=False)
     var settings = Python.dict()
     py_setitem(settings, "n_estimators", _int(fields["n_estimators"]))
     py_setitem(settings, "max_depth", fields["max_depth"])

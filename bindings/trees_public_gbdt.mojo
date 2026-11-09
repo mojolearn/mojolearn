@@ -198,7 +198,7 @@ def _fitted_x(fields: PythonObject, X: PythonObject, layout: Bool, before: Strin
     X in the entry's layout, the fitted width."""
     if fields["model_"] is None:
         raise Error("RuntimeError: mojolearn: " + before + " before fit()")
-    var x = trees_forest_x(X, "X", context) if layout else admit_f32(X, 2, "X", context, order="F", allow_nonfinite=True)
+    var x = trees_forest_x(X, "X", context) if layout else admit_f32(X, 2, "X", context, order="F", finite=False)
     var fitted = _int(fields["n_features_in_"])
     if x.cols != fitted:
         raise Error("mojolearn: model was fitted on " + String(fitted) + " features, got " + String(x.cols))
@@ -611,7 +611,7 @@ def _checked_weights(source: PythonObject, n: Int, wrap: Bool, context: PythonOb
     finite, non-negative, a positive sum."""
     var w: AdmittedX
     try:
-        w = admit_f32(source, 1, "sample_weight", context, allow_nonfinite=True)
+        w = admit_f32(source, 1, "sample_weight", context, finite=False)
     except error:
         if wrap and _type_or_value(error):
             raise Error("mojolearn: sample_weight must have one value per row")
@@ -641,7 +641,7 @@ def ordered_rmse_fit(model: PythonObject, args: PythonObject, context: PythonObj
     var b = trees_builtins()
     var fields = py_fields(model)
     _ordered_options(fields, model, context)
-    var x = admit_f32(args[0], 2, "X", context, order="F", allow_nonfinite=True)
+    var x = admit_f32(args[0], 2, "X", context, order="F", finite=False)
     var n = x.rows
     if n < 4 or n > 4294967295 or x.cols < 1:
         raise Error("mojolearn: ordered RMSE requires >=4 rows and >=1 feature")
@@ -650,7 +650,7 @@ def ordered_rmse_fit(model: PythonObject, args: PythonObject, context: PythonObj
     _ = x  # keep the Python object alive through the native calls above
     var y: AdmittedX
     try:
-        y = admit_f32(args[1], 1, "y", context, allow_nonfinite=True)
+        y = admit_f32(args[1], 1, "y", context, finite=False)
     except error:
         if _type_or_value(error):
             raise Error("mojolearn: y must be one-dimensional with one value per row")
@@ -756,7 +756,7 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
     """`ExperimentalTwoLevelFeatureFreq.fit(X, y, sample_weight=)`."""
     var b = trees_builtins()
     var fields = py_fields(model)
-    var x = admit_f32(args[0], 2, "X", context, order="F", allow_nonfinite=True)
+    var x = admit_f32(args[0], 2, "X", context, order="F", finite=False)
     var n = x.rows
     var d = x.cols
     if n == 0 or d < 2:
@@ -808,7 +808,7 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
             raise Error("mojolearn: experimental FeatureFreq numeric columns "
                         + "must vary; column " + String(f) + " is constant")
         _ = x  # keep the Python object alive through the native calls above
-    var y = admit_f32(args[1], 1, "y", context, allow_nonfinite=True)
+    var y = admit_f32(args[1], 1, "y", context, finite=False)
     if y.rows != n or not trees_finite_f32(y.address, n):
         raise Error("mojolearn: y must be finite with one value per row")
     _ = y  # keep the Python object alive through the native calls above

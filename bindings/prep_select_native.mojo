@@ -520,7 +520,7 @@ def prep_mutual_info_call(operation: String, args: PythonObject, context: Python
             fl.append(Float64(counts[i]))
         lc = p.put_floats(fl, context)
     else:
-        var t = admit_f32(y, 1, "y", context, allow_nonfinite=True)
+        var t = admit_f32(y, 1, "y", context, finite=False)
         if t.rows != n:
             raise Error("mojolearn: X and y have different numbers of rows")
         target = admitted_vector(n, "<f4", context)

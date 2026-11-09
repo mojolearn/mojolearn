@@ -27,6 +27,7 @@ from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family, admit_family_copied, admit_family_meta, admit_family_weights, admitted_array
 from core.admitted_input import admitted_cast_f32
 from core.cast_in import CAST_KIND_SIGNED
+from core.admitted_convert import admitted_convert_vector
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value
 from bindings.host_inference_scalars import host_inference_scalar
@@ -1042,8 +1043,11 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
         var n = Int(py=wide.size)
         var codes = family_array(Python.tuple(PythonObject(n)), "<i4", context)
         if n > 0:
-            _ = family_call(svc_base("cast_elements", context), classical_address(wide), PythonObject(3),
-                            classical_address(codes), PythonObject(2), PythonObject(n))
+            # The 0 / 1 codes narrowed int64 -> int32 by the typed parallel
+            # conversion (core/admitted_convert.mojo), not a py_call into the
+            # base binding.
+            _ = admitted_convert_vector(Int(py=classical_address(wide)), "<i8", Int(py=classical_address(codes)),
+                                        "<i4", n)
             _ = wide  # keep the Python object alive through the native call above
             _ = codes  # keep the Python object alive through the native call above
         _ = wide^

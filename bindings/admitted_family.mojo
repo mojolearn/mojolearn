@@ -127,6 +127,17 @@ def admitted_array(shape: PythonObject, typestr: String, context: PythonObject) 
     return array
 
 
+def admit_family_refuse_empty(name: String, shape: List[Int]) raises:
+    """`_buffer._as_typed`'s refusal of an input with no words, in its
+    wording (the shape as Python prints it)."""
+    var what = String("sample(s)")
+    if len(shape) == 2 and shape[0] != 0:
+        what = "feature(s)"
+    var text = family_repr(_shape_tuple(shape))
+    raise Error("mojolearn: " + name + " is empty, shape " + text + ": Found array with 0 " + what
+                + " (shape=" + text + ") while a minimum of 1 is required.")
+
+
 def admit_family_input(source: PythonObject, ndim: Int, name: String, context: PythonObject,
                        dense: Bool = False, admitted: Bool = False, empty: Bool = False) raises -> ArrayMetadata:
     """The exporter's metadata, read once, with `_buffer._as_typed`'s rank,
@@ -156,12 +167,7 @@ def admit_family_input(source: PythonObject, ndim: Int, name: String, context: P
         raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(nd)
                     + "-D shape " + family_repr(_shape_tuple(shape)) + hint)
     if count == 0 and not empty:
-        var what = String("sample(s)")
-        if nd == 2 and shape[0] != 0:
-            what = "feature(s)"
-        var text = family_repr(_shape_tuple(shape))
-        raise Error("mojolearn: " + name + " is empty, shape " + text + ": Found array with 0 " + what
-                    + " (shape=" + text + ") while a minimum of 1 is required.")
+        admit_family_refuse_empty(name, shape)
     if nd > 2:
         raise Error("mojolearn: " + name + " must be at most 2-D, got " + String(nd) + "-D")
     var snapshot = array_metadata_once(view, shape^, name, context)
@@ -170,11 +176,13 @@ def admit_family_input(source: PythonObject, ndim: Int, name: String, context: P
     return snapshot^
 
 
-def _fold_rows(source: PythonObject, name: String, context: PythonObject, refusal: String) raises -> AdmittedX:
+def _fold_rows(source: PythonObject, name: String, context: PythonObject, refusal: String,
+               finite: Bool = True) raises -> AdmittedX:
     """admit_x of a DeviceRows fold, its non-finite refusal in the door's
-    wording."""
+    wording. `finite=False` (lane a6): a door that does not test its X
+    (it accepts NaN) gets a NaN fold unrefused, as it gets a NaN array."""
     try:
-        return admit_x_unrecorded(source, name, context)
+        return admit_x_unrecorded(source, name, context, finite=finite)
     except error:
         if String(error).find("contains NaN or infinity") >= 0:
             if refusal.byte_length() > 0:
@@ -201,7 +209,7 @@ def admit_family_meta(source: PythonObject, ndim: Int, name: String, context: Py
         # admission path unchanged: admit_x resolves it and tests it finite
         # once; this door neither downloads it nor scans it again. Its rows
         # are float32 C-order, so the snapshot below borrows them.
-        var fold = _fold_rows(source, name, context, refusal)
+        var fold = _fold_rows(source, name, context, refusal, finite)
         var rows = admit_family_input(fold.array, ndim, name, context, False, True, empty)
         admit_family_cast(rows, name, context)
         return rows^

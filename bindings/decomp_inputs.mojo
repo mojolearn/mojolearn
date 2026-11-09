@@ -16,10 +16,15 @@ from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch. The flag is decomp_input_copied below.
 
 
-def decomp_admit(source: PythonObject, est: String, context: PythonObject) raises -> AdmittedX:
+def decomp_admit(source: PythonObject, est: String, context: PythonObject,
+                 device_x: Bool = False, defer_finite: Bool = False) raises -> AdmittedX:
     """X as C-order float32 (the caller's buffer when it already is one,
     `borrowed`); refusals name `est`. A SciPy sparse X is densified first
-    and admitted with the plain rank/empty/finite wording."""
+    and admitted with the plain rank/empty/finite wording. `device_x`
+    (lane a6): a model-selection fold keeps no host words when its store
+    ids resolve (`x.store.active()`): the door's device entry gathers it.
+    `defer_finite`: a borrowed X is not scanned here (`x.finite` False); the
+    door's kernel entry returns the finite status word."""
     var format = host_sparse_format(source)
     if format.byte_length() > 0:
         var dense = host_sparse_dense(source, format, context)
@@ -29,7 +34,7 @@ def decomp_admit(source: PythonObject, est: String, context: PythonObject) raise
         var x = AdmittedX(array, source, address, Int(py=array.shape[0]), Int(py=array.shape[1]), 2, borrowed)
         _ = dense^
         return x^
-    return admit_x_unrecorded(source, est, context)
+    return admit_x_unrecorded(source, est, context, defer_finite=defer_finite, device_x=device_x)
 
 
 def decomp_input(source: PythonObject, est: String, context: PythonObject) raises -> PythonObject:

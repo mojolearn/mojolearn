@@ -8,7 +8,7 @@ from bindings.native_error_class import error_without_class
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_owner_lifetime import native_release_admit, native_release_weakrefs
 from bindings.arena_array_metadata import arena_array_metadata
-from bindings.arena_resident_rows import arena_materialize
+from bindings.arena_resident_rows import arena_materialize, arena_rows_store_ids
 from bindings.arena_cache_stats import arena_cache_stats
 from bindings.arena_cache_get import arena_cache_get
 from bindings.arena_cache_upload import arena_cache_id_of
@@ -123,6 +123,9 @@ def arena_rows_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
             _rows_initialize(model,args,context)
         elif operation == "materialize":
             result = arena_materialize(_rows_metadata_fields(model,context),context)
+        elif operation == "store_ids":
+            # lane a6: the fold's resident store ids for a device kernel entry
+            result = arena_rows_store_ids(_rows_metadata_fields(model,context),context)
         elif operation == "len":
             var shape = _rows_metadata_fields(model,context)["shape"]
             var b = context["arena_native_types"]

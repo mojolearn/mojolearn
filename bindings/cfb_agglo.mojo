@@ -14,7 +14,7 @@ from core.host_finite_scan import host_all_finite_f32
 from core.cfb_impl import cfb_any_positive_i32
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_call, family_entry, family_array, family_field,
-    family_is_str, family_view,
+    family_is_str,
 )
 from bindings.mode_metadata_native import _fields
 from bindings.metrics_native_support import metric_warn

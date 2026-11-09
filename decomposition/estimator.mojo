@@ -52,6 +52,8 @@ from core.column_stats import (
 from core.identity_trace import IdentityTrace
 from core.device_scan import device_first_negative, device_first_nonfinite
 from core.xtdz_coalesced import column_mean_launch
+from core.admitted_finite_status import enqueue_finite_status
+from core.device_zero import enqueue_fill
 from core.gemm import gemm_nt
 from decomposition.impl.linalg.detail.pca import (
     PCA_FAST_GRAM_MMA,
@@ -283,18 +285,33 @@ def pca_transform_host(
     n_rows: Int,
     n_features: Int,
     n_components: Int,
-) raises:
+) raises -> Int32:
+    """Returns the finite status word of X (core/admitted_finite_status.mojo:
+    0 when every word is finite), tested on the device after the upload this
+    entry makes anyway and read back with the projection (lane a6: the door
+    admits a borrowed X with `defer_finite=True`, no host scan). A non-zero
+    word means the door refuses and discards `out_ptr`."""
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
     var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
     var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill[DType.int32](ctx, status, Int32(0))
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=mu, src_ptr=mean_ptr)
     ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
-    ctx.synchronize()
+    # The host words stay valid until the one synchronisation below; the
+    # stream orders the copies before the kernels (no sync in between).
+    enqueue_finite_status(ctx, x.unsafe_ptr(), n_rows * n_features, status.unsafe_ptr(), 0)
     pca_transform(ctx, x, mu, components, out, n_rows, n_features, n_components)
+    var word = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
     ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
     ctx.synchronize()
+    var result = word.unsafe_ptr()[0]
+    _ = word^
+    _ = status^
+    return result
 
 
 def tsvd_fit_host(

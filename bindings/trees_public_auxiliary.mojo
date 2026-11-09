@@ -152,7 +152,7 @@ def embedding_apply(model: PythonObject, args: PythonObject,
     if not py_contains(fields, "forest_"):
         raise Error("RuntimeError: this estimator is not fitted yet")
     classical_admit_value(args, context)
-    var x = admit_f32(args[0], 2, "X", context, allow_nonfinite=True)
+    var x = admit_f32(args[0], 2, "X", context, finite=False)
     var features = _dimension(fields, "n_features_in_", context)
     if x.cols != features:
         raise Error("X has " + String(x.cols) + " features, fit saw " + String(features))
@@ -190,7 +190,7 @@ def forest_auxiliary(model: PythonObject, operation: String, args: PythonObject,
     if not py_contains(fields, "_offsets"):
         raise Error("RuntimeError: this estimator is not fitted yet")
     classical_admit_value(args, context)
-    var x = admit_f32(args[0], 2, "X", context, allow_nonfinite=True)
+    var x = admit_f32(args[0], 2, "X", context, finite=False)
     var features = _dimension(fields, "n_features_in_", context)
     if x.cols != features:
         raise Error("X has " + String(x.cols) + " features, fit saw " + String(features))

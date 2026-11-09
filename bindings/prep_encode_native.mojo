@@ -2927,7 +2927,7 @@ def _pearson(mut p: EncProg, values: PythonObject, y: PythonObject, mode: Python
     blocked frb_* order). Returns (scores, p-values, correlations)."""
     var n = Int(py=values[3])
     var d = Int(py=values[4])
-    var target = admit_f32(y, 1, "y", context, allow_nonfinite=True)
+    var target = admit_f32(y, 1, "y", context, finite=False)
     if target.rows != n:
         raise Error("mojolearn: X and y have different numbers of rows")
     var yv = admitted_vector(n, "<f4", context)

@@ -682,8 +682,8 @@ def _score_values(model: PythonObject, prediction: PythonObject, y: PythonObject
         raise Error("score target and prediction lengths differ")
     var mode = PythonObject(forest_effective_mode(py_fields(model), context))
     # NaN is refused by trees_r2's own check, with the metrics wording.
-    var y32 = admit_f32(y, 1, "y", context, allow_nonfinite=True)
-    var p32 = admit_f32(prediction, 1, "prediction", context, allow_nonfinite=True)
+    var y32 = admit_f32(y, 1, "y", context, finite=False)
+    var p32 = admit_f32(prediction, 1, "prediction", context, finite=False)
     var result = trees_r2(_as_array(y32, context), _as_array(p32, context), sample_weight, mode, context)
     _ = y32^
     _ = p32^

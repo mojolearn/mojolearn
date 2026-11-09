@@ -695,13 +695,13 @@ def _eval_set(eval_set: PythonObject, fields: PythonObject, model: PythonObject,
         raise Error("mojolearn: eval_set must be (X_eval, y_eval)")
     if len(items) != 2:
         raise Error("mojolearn: eval_set must be (X_eval, y_eval)")
-    var xe = admit_f32(items[0], 2, "eval_set X", context, order="F", allow_nonfinite=True)
+    var xe = admit_f32(items[0], 2, "eval_set X", context, order="F", finite=False)
     if xe.cols != n_features:
         raise Error("mojolearn: eval_set X has " + String(xe.cols) + " features "
                     + "for a fit on " + String(n_features))
     if xe.rows == 0:
         raise Error("mojolearn: eval_set X has no rows")
-    var ye = admit_f32(items[1], 1, "eval_set y", context, allow_nonfinite=True)
+    var ye = admit_f32(items[1], 1, "eval_set y", context, finite=False)
     if ye.rows != xe.rows:
         raise Error("mojolearn: eval_set y has " + String(ye.rows) + " values for "
                     + String(xe.rows) + " rows")
@@ -820,7 +820,7 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         # 0.8.66 regression C3 (gbdt-rank-pairlogit fit 1.24x): this fit
         # reads only x's address during the call and drops x at its end, so
         # a converted (transposed) X goes into an uninitialized store.
-        x = admit_f32(X, 2, "X", context, order="F", allow_nonfinite=True)
+        x = admit_f32(X, 2, "X", context, order="F", finite=False)
     var n_rows = x.rows
     var n_features = x.cols
     if n_rows == 0 or n_features == 0:
@@ -829,7 +829,7 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var target_dim = 1
     var ya: AdmittedX
     if _in(loss, t["multi_regression_losses"]):
-        ya = admit_f32(y, 2, "y", context, order="F", allow_nonfinite=True)
+        ya = admit_f32(y, 2, "y", context, order="F", finite=False)
         target_dim = ya.cols
         if target_dim < 2:
             raise Error("mojolearn: " + _str(loss) + " needs y of shape (n_samples, "
@@ -854,7 +854,7 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                         + "per-dimension (optimal_const_for_loss.h:230-239) and "
                         + "this model's bias is one value (DEVIATION 5951)")
     else:
-        ya = admit_f32(y, 1, "y", context, allow_nonfinite=True)
+        ya = admit_f32(y, 1, "y", context, finite=False)
     if ya.rows != n_rows:
         raise Error("mojolearn: y has " + String(ya.rows) + " values for " + String(n_rows) + " rows")
     var multi_output = _in(loss, t["multi_output_losses"])
@@ -1652,7 +1652,7 @@ def _regression_target(source: PythonObject, name: String, context: PythonObject
     var view = classical_view(source, context, name)
     if Int(py=view.ndim) != 1 or Int(py=view.size) == 0:
         raise Error(name + " must be nonempty one-dimensional targets")
-    var target = admit_f32(view, 1, name, context, allow_nonfinite=True, admitted=True)
+    var target = admit_f32(view, 1, name, context, finite=False, admitted=True)
     _ = view^
     if not trees_finite_f32(target.address, target.rows):
         raise Error(name + " must be finite")

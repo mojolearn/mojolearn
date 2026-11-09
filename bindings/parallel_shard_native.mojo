@@ -28,7 +28,7 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.admitted_family import admit_family, admit_family_meta
+from bindings.admitted_family import admit_family, admit_family_meta, admit_family_input, admit_family_cast
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
 from bindings.py_attr import py_attr
@@ -38,7 +38,7 @@ from bindings.classifier_public_lifecycle import classifier_after_fit, classifie
 from bindings.scaler_lifecycle_native import _public_result
 from bindings.parallel_public_result import parallel_public_result
 from bindings.parallel_neighbor_worker import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
-from bindings.family_common import family_call, family_view
+from bindings.family_common import family_call
 from bindings.native_process_pool import (
     process_worker_connect, process_worker_next, process_send, process_pool_create, process_pool_map,
     process_pool_close,
@@ -176,16 +176,22 @@ def _scaler_input(source: PythonObject, context: PythonObject) raises -> PythonO
     """`_ScalerProtocol._input(X)`'s refusals (float32, nonempty 2-D, the
     Int32 bound), then the C-contiguous float32 Array. The finiteness scan
     is the plain owners' (each shard's fit or transform)."""
-    var view = family_view(source, -1, "input", context)
+    # The one admission path in its two steps: the metadata (read once, with
+    # the rank and emptiness refusals), the Scaler's own refusals on it, then
+    # the borrow or the cast of the same capture (family_view and the second
+    # admission of `source` deleted). A rank above 2 is now refused by the
+    # metadata step ("must be at most 2-D") before the dtype test.
+    var snapshot = admit_family_input(source, -1, "input", context)
     var b = shard_b()
     var listed = py_type(source) is b.list or py_type(source) is b.tuple
-    if not listed and shard_dtype(view) != "<f4":
+    if not listed and snapshot.dtype_name != "<f4":
         raise Error("TypeError: Scaler input must have dtype float32")
-    if Int(py=view.ndim) != 2 or Int(py=view.shape[0]) == 0 or Int(py=view.shape[1]) == 0:
+    if len(snapshot.shape) != 2 or snapshot.shape[0] == 0 or snapshot.shape[1] == 0:
         raise Error("ValueError: Scaler requires a nonempty two-dimensional input")
-    if Int(py=view.shape[0]) * Int(py=view.shape[1]) > 2147483647:
+    if snapshot.shape[0] * snapshot.shape[1] > 2147483647:
         raise Error("ValueError: Scaler exceeds the native Int32 indexing bound")
-    return admit_family(source, 2, "input", context).array
+    admit_family_cast(snapshot, "input", context)
+    return snapshot.keep
 
 
 def _columns(data: PythonObject, lo: Int, hi: Int, context: PythonObject) raises -> PythonObject:

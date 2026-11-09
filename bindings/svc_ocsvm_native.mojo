@@ -19,6 +19,7 @@ from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_isinstance, family_call, family_entry, family_array, family_min,
 )
 from core.admitted_weights import admitted_fill
+from core.admitted_convert import admitted_convert_vector
 from bindings.gp_svm_records import ocsvm_coef_reused, ocsvm_coef_remember
 from bindings.gp_svm_gp_state import gp_x_known
 from bindings.svc_common import (
@@ -416,8 +417,9 @@ def _ocsvm_predict(model: PythonObject, binding: PythonObject, source: PythonObj
             _ = dec  # keep the Python object alive through the native call above
     var out = family_array(Python.tuple(PythonObject(n)), "<i8", context)
     if n > 0:
-        _ = family_call(svc_base("cast_elements", context), _a(lab), PythonObject(2), _a(out), PythonObject(3),
-                        PythonObject(n))
+        # The labels widened int32 -> int64 by the typed parallel conversion
+        # (core/admitted_convert.mojo), not a py_call into the base binding.
+        _ = admitted_convert_vector(Int(py=classical_address(lab)), "<i4", Int(py=classical_address(out)), "<i8", n)
         _ = out  # keep the Python object alive through the native call above
         _ = lab  # keep the Python object alive through the native call above
     _ = dec^

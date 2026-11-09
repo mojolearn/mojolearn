@@ -48,8 +48,8 @@ def boost_score(model: PythonObject, args: PythonObject, context: PythonObject) 
     # `as_f32_c(y, ndim=None)` and `as_f32_c(prediction, ndim=None)`, then
     # `r2_score`'s 1-D path.
     # NaN is refused by trees_r2's own check, with the metrics wording.
-    var truth = admit_f32(y, -1, "y", context, allow_nonfinite=True)
-    var pred = admit_f32(prediction, -1, "prediction", context, allow_nonfinite=True)
+    var truth = admit_f32(y, -1, "y", context, finite=False)
+    var pred = admit_f32(prediction, -1, "prediction", context, finite=False)
     var result = trees_r2(truth.array, pred.array, sample_weight, mode, context)
     _ = truth^
     _ = pred^
@@ -174,7 +174,7 @@ def gbdt_adapter_score(model: PythonObject, args: PythonObject, context: PythonO
             _ = yp  # keep the Python object alive through the native call above
         return py_call(trees_builtins().float, result)
     # `as_f32_c(y, ndim=None)` then `_regression_target`.
-    var target = admit_f32(y, -1, "y", context, allow_nonfinite=True)
+    var target = admit_f32(y, -1, "y", context, finite=False)
     var shape = trees_shape_of(target.array, context)
     if len(shape) != 1 or target.rows * target.cols == 0:
         raise Error("y must be nonempty one-dimensional targets")

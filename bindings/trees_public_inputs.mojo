@@ -79,7 +79,7 @@ def trees_forest_x(source: PythonObject, name: String, context: PythonObject) ra
     var view = classical_view(source, context, name)
     var row_major = (Int(py=view.ndim) == 2 and classical_is_f32(view, context) and classical_c_order(view, context)
                      and Int(py=view.shape[0]) > 1 and Int(py=view.shape[1]) > 1)
-    var x = admit_f32(view, 2, name, context, order="C" if row_major else "F", allow_nonfinite=True, admitted=True)
+    var x = admit_f32(view, 2, name, context, order="C" if row_major else "F", finite=False, admitted=True)
     _ = view^
     return x^
 from bindings.label_input_sources import labels_storage_source

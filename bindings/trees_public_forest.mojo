@@ -784,7 +784,7 @@ def _y_rows_check(n: Int, rows: Int) raises:
 def _x_for(source: PythonObject, rowmajor: Bool, context: PythonObject) raises -> AdmittedX:
     """`_fit_arrays`' X: the forest layout when the fit has a row-major
     entry, else the column-major float32 copy."""
-    var x = trees_forest_x(source, "X", context) if rowmajor else admit_f32(source, 2, "X", context, order="F", allow_nonfinite=True)
+    var x = trees_forest_x(source, "X", context) if rowmajor else admit_f32(source, 2, "X", context, order="F", finite=False)
     # A float32 copy of an input the public door admitted finite is finite.
     if x.array is not source and trees_finite_known(source):
         trees_finite_mark(x.array)
@@ -993,7 +993,7 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
                       sample_weight: PythonObject, importances: Bool, tree_start: PythonObject, mode: String,
                       rf: PythonObject, context: PythonObject) raises -> PythonObject:
     var cfg = fields["_cfg"]
-    var y32 = admit_f32(y, 1, "y", context, allow_nonfinite=True)
+    var y32 = admit_f32(y, 1, "y", context, finite=False)
     var code = Int(py=cfg["criterion"])
     _check_regression_target(y32, code, fields["criterion"], "rf", context)
     var names = Python.tuple("oob_prediction_", "oob_score_", "feature_importances_")
@@ -1151,7 +1151,7 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
         _ = codes  # keep the Python object alive through the native call above
         _ = codes^
         return model
-    var y32 = admit_f32(y, 1, "y", context, allow_nonfinite=True)
+    var y32 = admit_f32(y, 1, "y", context, finite=False)
     _check_regression_target(y32, Int(py=fields["_criterion_code"]), fields["criterion"], "et", context)
     if sample_weight is not None:
         var weights = admit_weight_words(sample_weight, y32.rows, context)
@@ -1517,7 +1517,7 @@ def _predict_input(model: PythonObject, fields: PythonObject, kind: String, X: P
     float32, the fitted width."""
     if not py_contains(fields, "_offsets"):
         raise Error("RuntimeError: this estimator is not fitted yet")
-    var x = admit_f32(X, 2, "X", context, allow_nonfinite=True)
+    var x = admit_f32(X, 2, "X", context, finite=False)
     var fitted = Int(py=_int(fields["n_features_in_"]))
     if x.cols != fitted:
         raise Error("X has " + String(x.cols) + " features, fit saw " + String(fitted))

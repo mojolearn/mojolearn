@@ -194,9 +194,9 @@ def gbdt_adapter_public_operation(model: PythonObject, operation: String, args: 
     var name = classical_estimator_name(model)
     classical_refuse_sparse(args[0], name)
     # One admission of X (admit_f32). The tree conversion preserves NaN
-    # (allow_nonfinite): a finite-only cast would discard the adapter's
+    # (finite=False): a finite-only cast would discard the adapter's
     # documented nan_mode behavior.
-    var x = admit_f32(args[0], 2, "X", native, allow_nonfinite=True)
+    var x = admit_f32(args[0], 2, "X", native, finite=False)
     var classifier = String(kind) == "classifier"
     if fitting:
         var params = _read(model, False, native["trees_gbdt_parameter_metadata"], Python.list())

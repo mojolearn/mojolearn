@@ -3,7 +3,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_type, py_get
 from bindings.classical_arrays import classical_is_array
-from bindings.linalg_ops_buffers import LinAdmission, lin_admitted_c, lin_new, lin_tuple
+from bindings.admitted_input import AdmittedTyped, admitted_typed_c, admitted_zeros, admitted_shape_tuple
 from bindings.optimizer_public_door import base_format
 from bindings.family_common import family_repr, FAMILY_F32P, FAMILY_I32P, FAMILY_I64P
 from core.host_finite_scan import host_all_finite_f32
@@ -14,11 +14,11 @@ def metric_vector_exact(value: PythonObject, context: PythonObject) raises -> Bo
     return classical_is_array(value, context) or py_type(value) is py_get(context, "ndarray")
 
 
-def _metric_vector_shape(input: LinAdmission, name: String) raises -> Int:
+def _metric_vector_shape(input: AdmittedTyped, name: String) raises -> Int:
     ref shape = input.view.shape
     var rank = len(shape)
     if rank != 1 and not (rank == 2 and shape[1] == 1):
-        raise Error("mojolearn metrics: " + name + " must be 1-D, got shape " + family_repr(lin_tuple(shape)))
+        raise Error("mojolearn metrics: " + name + " must be 1-D, got shape " + family_repr(admitted_shape_tuple(shape)))
     if shape[0] == 0:
         raise Error("mojolearn metrics: " + name + " is empty")
     return shape[0]
@@ -32,7 +32,7 @@ def _metric_i32_range(name: String) raises:
 
 
 def metric_i32_vector(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    var input = LinAdmission(value, context)
+    var input = AdmittedTyped(value, context)
     var count = _metric_vector_shape(input, name)
     ref view = input.view
     var code = base_format(view.fmt)
@@ -47,7 +47,7 @@ def metric_i32_vector(value: PythonObject, name: String, context: PythonObject) 
                     + (view.dtype if view.is_array else view.fmt) + "; the ported kernels take int32 labels")
     # admit_ids: one parallel read narrowed to int32 in the same pass (it was
     # a serial int64 read into a zero-filled store, then a serial narrowing).
-    var output = lin_new([count], "<i4", context)
+    var output = admitted_zeros([count], "<i4", context)
     if not admitted_ids_i32(view.addr, view.strides[0], 0, count, 1, view.itemsize, signed, False,
                             FAMILY_I32P(unsafe_from_address=output.addr)):
         _metric_i32_range(name)
@@ -59,7 +59,7 @@ def metric_i32_vector(value: PythonObject, name: String, context: PythonObject) 
 
 def metric_f32_vector(value: PythonObject, name: String, require_finite: Bool,
                       regression: Bool, context: PythonObject) raises -> PythonObject:
-    var input = LinAdmission(value, context)
+    var input = AdmittedTyped(value, context)
     var count = _metric_vector_shape(input, name)
     var code = base_format(input.view.fmt)
     var f32 = input.view.dtype == "<f4" if input.view.is_array else code == "f"
@@ -74,7 +74,7 @@ def metric_f32_vector(value: PythonObject, name: String, require_finite: Bool,
                     + "precision you run at is the one you chose.")
     # The numerical owners consume an Array, so keep an operation-owned copy
     # independent of mutable source Array slots after this snapshot returns.
-    var output = lin_admitted_c(input^, "<f4", name, context, True)
+    var output = admitted_typed_c(input^, "<f4", name, context, True)
     if require_finite and not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=output.addr), count):
         raise Error("mojolearn metrics: " + name + " contains NaN or infinity; refused "
                     + "here (metrics/README.md HAND-OFF ask 3) rather than letting it "

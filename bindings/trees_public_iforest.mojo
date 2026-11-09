@@ -323,7 +323,7 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     var copied = not ((view is X or view is copy_source) and Int(py=view.ndim) == 2
                       and classical_is_f32(view, context) and classical_c_order(view, context))
     py_setitem(fields, "input_copied_", PythonObject(copied))
-    var x = admit_f32(view, 2, "X", context, allow_nonfinite=True, as_array=True, admitted=True)
+    var x = admit_f32(view, 2, "X", context, finite=False, as_array=True, admitted=True)
     _ = view^
     var device_scan = _device_scan(fields, context)
     # The public door's admission (admit_x) already refused NaN and
@@ -394,7 +394,7 @@ def _score(model: PythonObject, X: PythonObject, want: Int, context: PythonObjec
     var fields = py_fields(model)
     if not py_contains(fields, "_x"):
         raise Error(_PREFIX + "call fit() first")
-    var x = admit_f32(X, 2, "X", context, allow_nonfinite=True)
+    var x = admit_f32(X, 2, "X", context, finite=False)
     var fitted = Int(py=py_call(trees_builtins().int, fields["n_features_in_"]))
     if x.cols != fitted:
         raise Error(_PREFIX + "X has " + String(x.cols) + " features, fit saw " + String(fitted))

@@ -16,7 +16,7 @@
 from std.ffi import _Global
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.admitted_family import admit_family, admit_family_weights
+from bindings.admitted_family import admit_family, admit_family_weights, admit_family_input, admit_family_cast
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
@@ -24,7 +24,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.family_common import (
     FAMILY_F32P, family_repr, family_str, family_is_str, family_is_int, family_isinstance, family_type_name,
-    family_call, family_call_kw, family_entry, family_array, family_view, family_nonfinite, family_field,
+    family_call, family_call_kw, family_entry, family_array, family_nonfinite, family_field,
 )
 from bindings.classical_arrays import classical_is_f32, classical_c_order
 from core.host_finite_scan import host_all_finite_f32
@@ -285,13 +285,17 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     if init_code == _INIT_ARRAY:
         if init_centroids is None:
             raise Error("mojolearn: init='array' needs init_centroids")
-        var view = family_view(init_centroids, 2, "init_centroids", context)
-        if Int(py=view.shape[0]) != k or Int(py=view.shape[1]) != d:
+        # The one admission path in its two steps: the rank and emptiness
+        # refusals on the metadata, the shape refusal, then the cast (or the
+        # borrow) with the finiteness verdict (family_view deleted).
+        var snapshot = admit_family_input(init_centroids, 2, "init_centroids", context)
+        if snapshot.shape[0] != k or snapshot.shape[1] != d:
             raise Error("mojolearn: init_centroids must be (" + family_str(k_obj) + ", " + String(d)
-                        + "), got " + family_repr(py_call(b.tuple, view.shape)))
+                        + "), got " + family_repr(snapshot.python_shape()))
         var c0 = PythonObject(None)
         try:
-            c0 = admit_family(view, -1, "init_centroids", context, finite=True, admitted=True).array
+            admit_family_cast(snapshot, "init_centroids", context, True)
+            c0 = snapshot.keep
         except error:
             if family_nonfinite(error, "init_centroids"):
                 raise _kmeans_nonfinite("init_centroids", "fit")
@@ -303,7 +307,7 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         _ = centers  # keep the Python object alive through the native call above
         _ = c0  # keep the Python object alive through the native call above
         _ = c0^
-        _ = view^
+        _ = snapshot^
     # int32 cluster ids: the kernel writes uint32 ids below 2**31, the same
     # bytes, into the array the model keeps (DEVIATION 2672).
     var labels = family_array(Python.tuple(n), "<i4", context)

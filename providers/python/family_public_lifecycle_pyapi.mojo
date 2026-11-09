@@ -219,7 +219,9 @@ def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, oper
         # it, records it on this call and refuses NaN or infinity with the
         # same "(<name>)" wording); this door no longer downloads the fold or
         # scans it a second time. A fit keeps an owned copy, as below.
-        var x = admit_x(admitted, source, name, context, x_index)
+        # A door whose spec does not scan accepts NaN: the fold is not
+        # refused either (lane a6; admit_x's no-check mode).
+        var x = admit_x(admitted, source, name, context, x_index, finite=spec.scan)
         rows = x.rows
         columns = x.cols
         source = x.array

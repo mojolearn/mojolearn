@@ -18,7 +18,6 @@ this binding.
     msel_rebase_offsets_i32(raw_addr, n_raw, lens_addr, parts, n_out, dst_addr)
 """
 
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
@@ -34,6 +33,8 @@ from core.msel_device import (
     device_take_rows,
 )
 from core.neural_context import process_ctx
+from core.msel_device_x import msel_device_x_context
+from decomposition.pca_fold import pca_transform_fold
 
 #: The base binding's process-lifetime context slot
 #: (`bindings/_mojolearn.mojo::_DEVCTX_SLOT`): the same name, so the same
@@ -41,10 +42,10 @@ from core.neural_context import process_ctx
 comptime _MSEL_SLOT = (
     "MojoCoreContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoCoreContextFast"
 )
-comptime _MSEL_STORE_NAME = (
-    "MojoMselStoreIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoMselStoreFast"
-)
-comptime MSEL_STORE = _Global[StorageType=MselStore, name=_MSEL_STORE_NAME, init_fn=MselStore.__init__]
+# The store's one definition is core/msel_device_x.mojo (lane a6): a kernel
+# entry in any binding that gathers a fold on the device names the same
+# process-wide `_Global`.
+from core.msel_device_x import MSEL_STORE
 
 
 def msel_put_binding(addr: PythonObject, nbytes: PythonObject) raises -> PythonObject:
@@ -249,3 +250,44 @@ def msel_group_fold_perm_i32_binding(
     if not ok:
         raise Error("group_fold_assign_i32: a permuted group is out of range")
     return PythonObject(0)
+
+
+def _mdx_f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
+    if addr <= 0 or addr % 4 != 0:
+        raise Error("pca_transform_fold: pointers must be positive and float32-aligned")
+    return MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
+
+
+# Lane a6: the device-X entries of family and classical estimators live in
+# THIS binding (the identical GPU base binding), the extension module whose
+# `_Global` holds the fold store model selection connects, so no store is
+# read across extension modules.
+def pca_transform_fold_binding(
+    ids: PythonObject,
+    mean_addr: PythonObject,
+    components_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`pca_transform` over a model-selection fold resident on the device
+    (lane a6): `ids` is [base store id, base rows, index store id] in model
+    selection's store (bindings/device_rows_door.mojo door_rows_store),
+    `params` [rows, features, components]. Returns [finite word, range
+    word] (0, 0 when the fold was finite and in range; the door refuses
+    otherwise)."""
+    if len(ids) != 3 or len(params) != 3:
+        raise Error("pca_transform_fold: ids and params must hold 3 values each")
+    var base_id = Int(py=ids[0])
+    var base_rows = Int(py=ids[1])
+    var index_id = Int(py=ids[2])
+    var mp = _mdx_f32_ptr(Int(py=mean_addr))
+    var cp = _mdx_f32_ptr(Int(py=components_addr))
+    var op = _mdx_f32_ptr(Int(py=out_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var words: Tuple[Int32, Int32]
+    with GILReleased(Python()):
+        var ctx = msel_device_x_context()
+        words = pca_transform_fold(ctx, base_id, base_rows, index_id, mp, cp, op, nr, nf, nc)
+    return Python.list(Int(words[0]), Int(words[1]))

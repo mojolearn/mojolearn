@@ -147,7 +147,8 @@ def pca_project_owned(
             n_rows, n_features, n_components, n_rows, device_checks=True,
         )
     elif n_components > 0:
-        pca_transform_host(ctx, x_ptr, mean_ptr, components_ptr, out_ptr, n_rows, n_features, n_components)
+        # fit_transform: X was admitted (and tested finite) by the fit.
+        _ = pca_transform_host(ctx, x_ptr, mean_ptr, components_ptr, out_ptr, n_rows, n_features, n_components)
     ctx.synchronize()
 
 

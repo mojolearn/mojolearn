@@ -342,7 +342,7 @@ def _xl_words(value: PythonObject, name: String, context: PythonObject) raises -
     if py_type(value) is _b().float or py_type(value) is _b().int:
         var one = labels_full_f32(1, _float(value), context)
         return admitted_words(one, labels_address(one), 1, 1)
-    return admit_f32(value, -1, name, context, allow_nonfinite=True)
+    return admit_f32(value, -1, name, context, finite=False)
 
 
 def _xl_block(coef: PythonObject, intercept: PythonObject, context: PythonObject) raises -> Tuple[PythonObject, Int]:
@@ -1549,12 +1549,12 @@ def xl_cd_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     # A float32 C-order design is read as it is (the device transposes it);
     # any other input is one F-order float32 copy (admit_x order "F": one
     # parallel cast-and-transpose pass). cd_fit has no finite test: the
-    # words are admitted as they are, as before (allow_nonfinite).
+    # words are admitted as they are, as before (finite=False).
     var view = classical_view(source, context, "X")
     var row_major = (Int(py=view.ndim) == 2 and classical_is_f32(view, context) and classical_c_order(view, context)
                      and Int(py=view.shape[0]) > 1 and Int(py=view.shape[1]) > 1)
     var x = admit_x_unrecorded(view, _name(model), context, admitted=True, order="C" if row_major else "F",
-                               allow_nonfinite=True)
+                               finite=False)
     _ = view^
     var copied = listed or not x.borrowed
     py_setitem(fields, "input_copied_", PythonObject(copied))
@@ -1566,7 +1566,7 @@ def xl_cd_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
                     + String(n_cols) + ")) while a minimum of 2 is required.")
     if len(labels_shape_of(args[1], context)) != 1:
         raise Error("mojolearn ElasticNet currently requires one target")
-    var target = admit_f32(args[1], 1, "y", context, allow_nonfinite=True)
+    var target = admit_f32(args[1], 1, "y", context, finite=False)
     if target.rows != n_rows:
         raise Error("mojolearn ElasticNet X and y lengths differ")
     var sw_keep = PythonObject(None)
@@ -1611,7 +1611,7 @@ def xl_cd_predict(model: PythonObject, source: PythonObject, context: PythonObje
     var fields = py_fields(model)
     if not py_contains(fields, "coef_"):
         raise Error("mojolearn ElasticNet: call fit before predict")
-    var x = admit_x_unrecorded(source, "ElasticNet", context, order="F", allow_nonfinite=True)
+    var x = admit_x_unrecorded(source, "ElasticNet", context, order="F", finite=False)
     if x.cols != _int(fields["n_features_in_"]):
         raise Error("mojolearn ElasticNet feature count differs from fit")
     var entries = _xl_cd_entries(context)
@@ -1636,7 +1636,7 @@ def xl_cd_score(model: PythonObject, args: PythonObject, context: PythonObject) 
     if _xl_host_only(model):
         var host = context["cd_host_predict"]
         var published = py_call_typed(host[0], model, PythonObject("host_infer_predict"), Python.tuple(args[0]), host[1])
-        var cast = admit_f32(published, 1, "predictions", context, allow_nonfinite=True)
+        var cast = admit_f32(published, 1, "predictions", context, finite=False)
         prediction = _xl_join(cast.address, cast.rows, 0, 0, context)
         _ = cast  # keep the Python object alive through the native call above
         _ = cast^

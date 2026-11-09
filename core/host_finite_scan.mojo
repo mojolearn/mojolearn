@@ -157,3 +157,11 @@ def host_all_finite_f32_strided(addr: Int, s0: Int, s1: Int, rows: Int, cols: In
             finite = False
     _ = flags^
     return finite
+
+
+def host_finite_status(address: Int, n: Int) -> Int32:
+    """The finite status word of the `n` float32 words at host `address`
+    (core/admitted_finite_status.mojo contract): 0 when all are finite, 1
+    otherwise (the parallel SIMD scan; the CPU column of a deferred finite
+    test). Moved here from core/admitted_finite_status.mojo (lane a6)."""
+    return Int32(0) if host_all_finite_f32(_HFS_F32P(unsafe_from_address=address), n) else Int32(1)

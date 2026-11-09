@@ -16,10 +16,11 @@ the finiteness test moves into the kernel entry that reads X anyway.
               downloads. Word `slot` of the status buffer is 1 when any
               word is NaN or infinite, else it stays at the 0 the entry
               filled it with (`enqueue_fill`).
-  host entry  the CPU column tests X with core/host_finite_scan.mojo
-              `host_all_finite_f32` before it reads X (this module stays
-              device-only: GPU code imports it, and the host-route fence
-              refuses host threads reached from GPU code).
+  host entry  the CPU column tests X before it reads it, with
+              core/host_finite_scan.mojo `host_all_finite_f32` or its status
+              word form `host_finite_status(address, n)` (the parallel SIMD
+              scan; this module stays device-only: GPU code imports it, and
+              the host-route fence refuses host threads reached from GPU code).
 
 The entry returns the status word(s) to its door, which refuses through
 `admitted_finite_refuse` (scikit-learn's wording, unchanged). A door that
@@ -81,3 +82,9 @@ def enqueue_finite_status(ctx: DeviceContext, d_words: _AFS_F32, n: Int, d_statu
 
 
 # TOMBSTONE: host_finite_status (the host status word, a wrapper of core/host_finite_scan host_all_finite_f32) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear: no caller, and its host-thread import made this device module unreachable from GPU code; the CPU column calls host_all_finite_f32 directly (bindings/_mojolearn_x_linear_host.mojo `_x_status`). Never reached main: recoverable at f59d913b0b.
+# host_finite_status (the CPU column's status word) moved to
+# core/host_finite_scan.mojo by lane a6: this module is imported by GPU
+# kernel entries, and a host scan in it made every such entry reach host
+# threads (the no-host-routes fence).
+# integ-w3: the merge keeps lane a6's move: host_finite_status lives in core/host_finite_scan.mojo
+# (caller bindings/_mojolearn_estimators_host.mojo); only the copy in this module is gone.

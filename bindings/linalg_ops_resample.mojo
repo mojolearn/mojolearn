@@ -29,7 +29,8 @@ from bindings.native_buffer_owner import native_storage_allocate
 from bindings.family_common import (
     FAMILY_F64P, FAMILY_I32P, family_call, family_repr, family_type_name, family_isinstance, family_is_str,
 )
-from bindings.linalg_ops_buffers import LinBuf, LinAdmission, lin_admitted_c, lin_truth, lin_new, lin_tuple
+from bindings.linalg_ops_buffers import lin_truth
+from bindings.admitted_input import AdmittedBuf, AdmittedTyped, admitted_typed_c, admitted_zeros, admitted_shape_tuple
 
 
 
@@ -105,7 +106,7 @@ def _rs_nonneg(value: PythonObject) raises -> Int:
 
 
 def _rs_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
-              context: PythonObject) raises -> LinBuf:
+              context: PythonObject) raises -> AdmittedBuf:
     # Capture ordinary input-buffer metadata once. Lists, pandas and Torch
     # use their existing native materialization before capturing the new owner.
     # perf2-msel: no second classical_admit_value here. Every caller passes a
@@ -115,16 +116,16 @@ def _rs_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
     var value = source
     if not classical_is_array(value, context) and py_type(value) is not py_get(context, "ndarray"):
         value = classical_view(value, context, name)
-    var admitted = LinAdmission(value, context)
+    var admitted = AdmittedTyped(value, context)
     var rank = len(admitted.view.shape)
     # p3-cnn-sequence-tsa: the shape text is built only on a refusal
     if (ndim >= 0 and rank != ndim) or admitted.view.count() == 0:
         _rs_refuse_shape(admitted, rank, ndim, name)
-    return lin_admitted_c(admitted^, typestr, name, context)
+    return admitted_typed_c(admitted^, typestr, name, context)
 
 
-def _rs_refuse_shape(admitted: LinAdmission, rank: Int, ndim: Int, name: String) raises:
-    var shape = family_repr(lin_tuple(admitted.view.shape))
+def _rs_refuse_shape(admitted: AdmittedTyped, rank: Int, ndim: Int, name: String) raises:
+    var shape = family_repr(admitted_shape_tuple(admitted.view.shape))
     if ndim >= 0 and rank != ndim:
         raise Error("mojolearn: " + name + " must be " + String(ndim) + "-D, got " + String(rank) + "-D shape " + shape)
     if admitted.view.count() == 0:
@@ -135,7 +136,7 @@ def _rs_refuse_shape(admitted: LinAdmission, rank: Int, ndim: Int, name: String)
                     + " (shape=" + shape + ") while a minimum of 1 is required.")
 
 
-def _rs_word(scalars: LinBuf, i: Int) -> Float64:
+def _rs_word(scalars: AdmittedBuf, i: Int) -> Float64:
     return FAMILY_F64P(unsafe_from_address=scalars.addr)[i]
 
 
@@ -145,7 +146,7 @@ def _rs_object(cls: PythonObject) raises -> PythonObject:
     return native_storage_allocate(cls)
 
 
-def _rs_bootstrap_result(dist: LinBuf, sdist: LinBuf, scalars: LinBuf, context: PythonObject) raises -> PythonObject:
+def _rs_bootstrap_result(dist: AdmittedBuf, sdist: AdmittedBuf, scalars: AdmittedBuf, context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     var result = _rs_object(resample_result_layout(0, context))
     py_setitem(_fields(result), "point_estimate", PythonObject(_rs_word(scalars, 0)))
@@ -160,7 +161,7 @@ def _rs_bootstrap_result(dist: LinBuf, sdist: LinBuf, scalars: LinBuf, context: 
     return result
 
 
-def _rs_permutation_result(null: LinBuf, scalars: LinBuf, context: PythonObject) raises -> PythonObject:
+def _rs_permutation_result(null: AdmittedBuf, scalars: AdmittedBuf, context: PythonObject) raises -> PythonObject:
     var result = _rs_object(resample_result_layout(1, context))
     py_setitem(_fields(result), "statistic", PythonObject(_rs_word(scalars, 0)))
     py_setitem(_fields(result), "null_distribution", null.keep)
@@ -170,7 +171,7 @@ def _rs_permutation_result(null: LinBuf, scalars: LinBuf, context: PythonObject)
     return result
 
 
-def _rs_addr(buf: LinBuf) -> PythonObject:
+def _rs_addr(buf: AdmittedBuf) -> PythonObject:
     return PythonObject(buf.addr)
 
 
@@ -199,9 +200,9 @@ def _rs_bootstrap_unpaired(args: PythonObject, context: PythonObject) raises -> 
     var meth = _rs_method(args[5], where, context)
     var alt = rs_code("ALTERNATIVES", args[6], "alternative", where, context)
     var r = rs_int(args[3], "n_resamples", where)
-    var dist = lin_new([_rs_nonneg(r)], "<f4", context)
-    var sdist = lin_new([_rs_nonneg(r)], "<f4", context)
-    var scalars = lin_new([6], "<f8", context)
+    var dist = admitted_zeros([_rs_nonneg(r)], "<f4", context)
+    var sdist = admitted_zeros([_rs_nonneg(r)], "<f4", context)
+    var scalars = admitted_zeros([6], "<f8", context)
     var fn_obj = rs_entry(rs_extension(args[0], args[10], context), "bootstrap_unpaired")
     # ORDER MATCHES bindings/_mojolearn_resample.mojo::bootstrap_unpaired_binding:
     # n_x, n_y, n_resamples, seed, method, confidence_level, alternative, r_first
@@ -252,9 +253,9 @@ def _rs_bootstrap(args: PythonObject, context: PythonObject) raises -> PythonObj
     var seed = rs_int(args[7], "random_state", where)
     var cl = rs_real(args[4], "confidence_level", where)
     var qp = rs_real(args[8], "q_or_prop", where)
-    var dist = lin_new([_rs_nonneg(r)], "<f4", context)
-    var sdist = lin_new([_rs_nonneg(r)], "<f4", context)
-    var scalars = lin_new([6], "<f8", context)
+    var dist = admitted_zeros([_rs_nonneg(r)], "<f4", context)
+    var sdist = admitted_zeros([_rs_nonneg(r)], "<f4", context)
+    var scalars = admitted_zeros([6], "<f8", context)
     var fn_obj = rs_entry(rs_extension(args[0], args[10], context), "bootstrap")
     # ORDER MATCHES bindings/_mojolearn_resample.mojo::bootstrap_binding.
     # x (the C-order sample, flat), distribution_out, sorted_out, scalars_out;
@@ -291,16 +292,16 @@ def _rs_permutation_samples(args: PythonObject, context: PythonObject) raises ->
         raise Error("mojolearn " + where + ": statistic " + family_repr(statistic) + " is refused by name; the implemented arm for "
                     + arm + " is " + family_repr(PythonObject(want)))
     var ny = 0
-    var yy: LinBuf
+    var yy: AdmittedBuf
     if y is None:
-        yy = LinBuf(xx.keep, xx.addr, xx.shape.copy())
+        yy = AdmittedBuf(xx.keep, xx.addr, xx.shape.copy())
         _ = xx  # keep the Python object alive through the native call above
     else:
         yy = _rs_typed(y, "<f4", 1, "y", context)
         ny = yy.dim(0)
     var r = rs_int(args[4], "n_resamples", where)
-    var null = lin_new([_rs_nonneg(r)], "<f4", context)
-    var scalars = lin_new([4], "<f8", context)
+    var null = admitted_zeros([_rs_nonneg(r)], "<f4", context)
+    var scalars = admitted_zeros([4], "<f8", context)
     var fn_obj = rs_entry(rs_extension(args[0], args[8], context), "permutation_samples")
     # ORDER MATCHES bindings/_mojolearn_resample.mojo::permutation_samples_binding:
     # n, n_y, n_resamples, seed, alternative, r_first
@@ -348,8 +349,8 @@ def _rs_permutation_test(args: PythonObject, context: PythonObject) raises -> Py
     var r = rs_int(args[4], "n_resamples", where)
     var rf = rs_int(args[7], "r_first", where)
     var seed = rs_int(args[6], "random_state", where)
-    var null = lin_new([_rs_nonneg(r)], "<f4", context)
-    var scalars = lin_new([4], "<f8", context)
+    var null = admitted_zeros([_rs_nonneg(r)], "<f4", context)
+    var scalars = admitted_zeros([4], "<f8", context)
     var fn_obj = rs_entry(rs_extension(args[0], args[8], context), "permutation_test")
     # ORDER MATCHES bindings/_mojolearn_resample.mojo::permutation_test_binding:
     # x, y, null_out, scalars_out; n_x, n_y, statistic, n_resamples, seed,
@@ -375,12 +376,12 @@ def _rs_permutation_test(args: PythonObject, context: PythonObject) raises -> Py
 #                       i_first, numeric_mode)
 
 
-def _rs_corner(values: PythonObject, name: String, where: String, context: PythonObject) raises -> LinBuf:
+def _rs_corner(values: PythonObject, name: String, where: String, context: PythonObject) raises -> AdmittedBuf:
     """`Array.from_list([_real(v, name, where) for v in values], "<f4")`."""
     var b = native_loaded_module("builtins")
     var items = Python.list()
     if classical_is_array(values, context):
-        var admitted = LinAdmission(values, context)
+        var admitted = AdmittedTyped(values, context)
         ref view = admitted.view
         if len(view.shape) != 1:
             raise Error("TypeError: mojolearn " + where + ": " + name + " must be a one-dimensional native sequence")
@@ -412,7 +413,7 @@ def _rs_corner(values: PythonObject, name: String, where: String, context: Pytho
     var words = List[Float64]()
     for i in range(count):  # driver-loop: over the corner's coordinates (the box's dimensions)
         words.append(Float64(py=rs_real(items[i], name, where)))
-    var out = lin_new([count], "<f4", context)
+    var out = admitted_zeros([count], "<f4", context)
     var p = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out.addr)
     _ = out  # keep the Python object alive through the native call above
     for i in range(count):  # driver-loop: over the corner's coordinates (the box's dimensions)
@@ -431,7 +432,7 @@ def _rs_monte_carlo(args: PythonObject, context: PythonObject) raises -> PythonO
     if lo.dim(0) != 2 or hi.dim(0) != 2:
         raise Error("mojolearn " + where + ": lower and upper must each hold 2 values "
                     + "(MC_DIMS), got " + String(lo.dim(0)) + " and " + String(hi.dim(0)))
-    var scalars = lin_new([4], "<f8", context)
+    var scalars = admitted_zeros([4], "<f8", context)
     var fn_obj = rs_entry(rs_extension(args[0], args[7], context), "monte_carlo_integrate")
     # ORDER MATCHES bindings/_mojolearn_resample.mojo::monte_carlo_integrate_binding:
     # lower, upper, scalars_out; f_id, n_samples, seed, i_first
@@ -460,11 +461,11 @@ def _rs_monte_carlo(args: PythonObject, context: PythonObject) raises -> PythonO
 
 
 def rs_indices(binding: PythonObject, n_obj: PythonObject, n_samples: PythonObject, replace: PythonObject,
-               random_state: PythonObject, numeric_mode: PythonObject, context: PythonObject) raises -> LinBuf:
+               random_state: PythonObject, numeric_mode: PythonObject, context: PythonObject) raises -> AdmittedBuf:
     var where = String("resample")
     var n = rs_int(n_obj, "n", where)
     var count = n if n_samples is None else rs_int(n_samples, "n_samples", where)
-    var idx = lin_new([_rs_nonneg(count)], "<i4", context)
+    var idx = admitted_zeros([_rs_nonneg(count)], "<i4", context)
     var fn_obj = rs_entry(rs_extension(binding, numeric_mode, context), "resample_indices")
     # ORDER MATCHES bindings/_mojolearn_resample.mojo::resample_indices_binding.
     var params = Python.list(n, count, PythonObject(1 if lin_truth(replace) else 0),

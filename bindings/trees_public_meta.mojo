@@ -190,7 +190,7 @@ def _i32_vec(value: PythonObject, name: String, context: PythonObject) raises ->
 
 def _f32_array(value: PythonObject, ndim: Int, name: String, context: PythonObject) raises -> PythonObject:
     """`as_f32_c(value, ndim=ndim, name=name)` as an Array."""
-    var m = admit_f32(value, ndim, name, context, allow_nonfinite=True)
+    var m = admit_f32(value, ndim, name, context, finite=False)
     var shape = Python.tuple(m.rows, m.cols) if ndim == 2 else Python.tuple(m.rows)
     return _as_array(m, shape, context)
 
@@ -200,8 +200,8 @@ def _out2d(x: PythonObject, n: Int, context: PythonObject) raises -> AdmittedX:
     (a 1-D output is c = 1)."""
     var shape = _attr(x, "shape", Python.tuple())
     if len(shape) == 2:
-        return admit_f32(x, 2, "output", context, allow_nonfinite=True)
-    var v = admit_f32(x, 1, "output", context, allow_nonfinite=True)
+        return admit_f32(x, 2, "output", context, finite=False)
+    var v = admit_f32(x, 1, "output", context, finite=False)
     if v.rows != n:
         raise Error("cannot reshape Array of size " + String(v.rows) + " into shape (" + String(n) + ", 1)")
     var _keep_ret_v = admitted_words(v.array, v.address, n, 1)
@@ -286,7 +286,7 @@ def _one_col(xt: PythonObject, p: AdmittedX, j: Int, context: PythonObject) rais
 
 def _acc_cols_w(xt: PythonObject, acc: PythonObject, x: PythonObject, cols: PythonObject, n: Int, k: Int,
                 weight: Float64, context: PythonObject) raises:
-    var xa = admit_f32(x, 2, "sub-estimator output", context, allow_nonfinite=True)
+    var xa = admit_f32(x, 2, "sub-estimator output", context, finite=False)
     _ = py_call_typed(_x(xt, "x_trees_accumulate_cols"), _A(acc), _P(xa.address), _P(trees_address(cols)),
                       Python.list(_P(n), _P(k), _P(Int(py=cols.shape[0])), _F(weight)))
     _ = cols
@@ -296,7 +296,7 @@ def _acc_cols_w(xt: PythonObject, acc: PythonObject, x: PythonObject, cols: Pyth
 
 def _acc_w(xt: PythonObject, acc: PythonObject, x: PythonObject, n: Int, weight: Float64,
            context: PythonObject) raises:
-    var xa = admit_f32(x, 1, "sub-estimator output", context, allow_nonfinite=True)
+    var xa = admit_f32(x, 1, "sub-estimator output", context, finite=False)
     _ = py_call_typed(_x(xt, "x_trees_accumulate"), _A(acc), _P(xa.address), Python.list(_P(n), _F(weight)))
     _ = xa  # keep the Python object alive through the native call above
     _ = xa^
@@ -688,7 +688,7 @@ def _voting_soft(model: PythonObject, xt: PythonObject, Xa: PythonObject, contex
         for i in range(len(members)):  # driver-loop: over members
             var e = members[i]
             var xa = admit_f32(prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), 2,
-                               "sub-estimator output", context, allow_nonfinite=True)
+                               "sub-estimator output", context, finite=False)
             var cols = _sub_cols(e, context)
             var cols_view = cols
             _ = py_call(keep.append, xa.array)
@@ -756,7 +756,7 @@ def _voting_transform(model: PythonObject, X: PythonObject, classifier: Bool, co
         if soft:
             var p = _zeros(n * k, context)
             _acc_cols_w(xt, p, prep_estimator_call(e, "predict_proba", Python.tuple(Xa), context), _sub_cols(e, context), n, k, 1.0, context)
-            var blk = admit_f32(trees_reshape(p, Python.tuple(n, k), context), 2, "p", context, allow_nonfinite=True)
+            var blk = admit_f32(trees_reshape(p, Python.tuple(n, k), context), 2, "p", context, finite=False)
             _ = _place(xt, out, n, width, blk, rows, j * k)
             _ = blk^
         else:
@@ -1849,7 +1849,7 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
             _ = Xa  # keep the Python object alive through the native call above
             var Xte = _gather(xt, trees_address(Xa), n, d, te, cols, context)
             _ = Xa  # keep the Python object alive through the native call above
-            var blk = admit_f32(_cal_scores(model, xt, e, Xte, context), 2, "scores", context, allow_nonfinite=True)
+            var blk = admit_f32(_cal_scores(model, xt, e, Xte, context), 2, "scores", context, finite=False)
             _ = Xa  # keep the Python object alive through the native call above
             _ = _place(xt, S, n, c, blk, te, 0)
             _ = blk^
@@ -1952,8 +1952,8 @@ def _regressor_score(model: PythonObject, prediction: PythonObject, y: PythonObj
                      context: PythonObject) raises -> PythonObject:
     """`RegressorScoreMixin.score`: the float32 R^2 of the prediction."""
     var mode = py_get(py_fields(model), "numeric_mode")
-    var truth = admit_f32(y, -1, "y", context, allow_nonfinite=True)
-    var pred = admit_f32(prediction, -1, "prediction", context, allow_nonfinite=True)
+    var truth = admit_f32(y, -1, "y", context, finite=False)
+    var pred = admit_f32(prediction, -1, "prediction", context, finite=False)
     if len(_attr(pred.array, "shape", Python.tuple(0))) == 2 or len(_attr(truth.array, "shape", Python.tuple(0))) == 2:
         # 2-D targets: the metrics family's public r2_score (its multioutput
         # program), on the same float32 blocks.

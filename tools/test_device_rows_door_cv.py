@@ -32,6 +32,7 @@ def _estimators():
     from mojolearn import _gp_impl as gp
     from mojolearn import kernel_methods as km
     from mojolearn import _gbdt_adapters as boosting
+    from mojolearn import _svm_impl as svm_impl, neighbors
     return [
         ("classical-ols", lambda: linear_model.LinearRegression(), "reg"),
         ("classical-ridge", lambda: linear_model.Ridge(alpha=1.0), "reg"),
@@ -44,6 +45,13 @@ def _estimators():
         ("linear-svc", lambda: svm.LinearSVC(max_iter=200), "clf"),
         ("gp", lambda: gp.GaussianProcessRegressor(), "reg"),
         ("kernel-ridge", lambda: km.KernelRidge(alpha=1.0), "reg"),
+        # lane a6: the family / classical opt-ins
+        ("svc", lambda: svm_impl.SVC(), "clf"),
+        ("svr", lambda: svm_impl.SVR(), "reg"),
+        ("linear-svr", lambda: svm.LinearSVR(max_iter=200), "reg"),
+        ("knn-clf", lambda: neighbors.KNeighborsClassifier(n_neighbors=3), "clf"),
+        ("knn-reg", lambda: neighbors.KNeighborsRegressor(n_neighbors=3), "reg"),
+        ("qn", lambda: linear_model.QNRegressor(), "reg"),
     ]
 
 
@@ -128,3 +136,24 @@ def test_split_plan_reports_a_count_that_disagrees():
     buf = np.zeros(5, dtype="i8")
     addrs = np.array([buf.ctypes.data, buf.ctypes.data], dtype="i8")
     assert plan(fold.ctypes.data, 5, 2, sizes.ctypes.data, addrs.ctypes.data, addrs.ctypes.data) == 0
+
+
+def test_family_and_classical_estimators_opt_in():
+    # Lane a6: model selection hands these classes DeviceRows folds.
+    from mojolearn import decomposition, kernel_methods as km, neighbors, linear_model
+    from mojolearn import _svm_impl as svm_impl, svm, _gp_impl as gp
+    for cls in (decomposition.PCA, svm_impl.SVC, svm_impl.SVR, svm.LinearSVC, svm.LinearSVR,
+                gp.GaussianProcessRegressor, km.KernelRidge, neighbors.KNeighborsClassifier,
+                neighbors.KNeighborsRegressor, linear_model.LogisticRegression, linear_model.QNRegressor):
+        assert _plan(cls)["device_rows"] is True, cls.__name__
+
+
+def test_nan_fold_reaches_a_nan_accepting_door():
+    # Lane a6: a door that accepts NaN in X (its spec does not scan) gets a
+    # NaN fold unrefused; a scanning door refuses it with admit_x's wording.
+    from mojolearn import linear_model
+    x, y = _data("reg")
+    x = x.copy()
+    x[4, 1] = np.nan
+    with pytest.raises(ValueError, match="NaN"):
+        model_selection.cross_val_score(linear_model.Ridge(alpha=1.0), x, y, cv=3, error_score="raise")
