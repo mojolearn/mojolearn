@@ -6,10 +6,8 @@
 # the CPython GIL per call. Its migration is not established by this module's
 # import closure or a native-only fixture's unresolved-symbol inventory.
 from std.memory import memset_zero
-from core.generation_policy_impl import GenerationSamplingScratch
 from core.native_execution import NativeExecutionEndpoint
 from core.borrowed_buffer import BorrowedBufferLayout
-from transformer.causal_lm_public_impl import causal_lm_pick_step, causal_lm_rows_done
 
 
 def _generation_zero_workspace(mut storage: List[Float32], count: Int) -> Int:
@@ -242,48 +240,6 @@ struct NativeGenerationModel(Movable):
             raise problem
 
 
-struct NativeGenerationProgress(Movable):
-    var current: List[Int32]
-    var next: List[Int32]
-    var logits: List[Float32]
-    var sampling: GenerationSamplingScratch
-    var length: Int
-    var produced: Int
-    var wrote: Int
-    var tokens: List[Int32]
-
-    def __init__(out self, address: Int, batch: Int, length: Int, produced: Int, capacity: Int):
-        self.current = List[Int32]()
-        self.next = List[Int32]()
-        self.logits = List[Float32]()
-        self.sampling = GenerationSamplingScratch()
-        var input = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)
-        for i in range(batch * length):  # driver-loop: copy admitted current-token storage once
-            self.current.append(input[i])
-        self.length = length
-        self.produced = produced
-        self.wrote = 0
-        self.tokens = List[Int32](capacity=batch * capacity)
-
-
-def native_generation_read(
-    mut model: NativeGenerationModel, mut progress: NativeGenerationProgress,
-    count: Int, maximum: Int, mut finished: List[Bool], mut lengths: List[Int], eos: List[Int],
-    pad: Int, greedy: Bool, temperature: Float32, top_k: Int, top_p: Float64, seed: UInt64,
-) raises:
-    # The entire token/layer loop owns native state. Sampling is the exact
-    # existing native policy; partial counters remain in progress on failure.
-    while progress.wrote < count and progress.produced < maximum and not causal_lm_rows_done(finished):  # driver-loop: native autoregressive tokens
-        model.forward_into(Int(progress.current.unsafe_ptr()), progress.length, progress.logits)
-        progress.next.resize(model.batch, 0)
-        causal_lm_pick_step(
-            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(progress.logits.unsafe_ptr())),
-            MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(progress.next.unsafe_ptr())),
-            model.batch, progress.length, model.vocab, finished, lengths, eos, pad, greedy,
-            temperature, top_k, top_p, seed, progress.produced, progress.tokens, progress.sampling)
-        # Failed selection leaves current intact for partial-progress publication.
-        # Both owners survive every pointer use; next is private until success.
-        swap(progress.current, progress.next)
-        progress.length = 1
-        progress.produced += 1
-        progress.wrote += 1
+# TOMBSTONE: NativeGenerationProgress / native_generation_read (REFACTORED: the engine's token x layer loop; CausalLM reads run as the decode program, transformer/causal_lm_program.mojo) deleted 2026-11-09 by lane/x45c-causal-generate-program-decode; code recoverable at 5b5490960d.
+# The engine keeps CausalLM.forward's one-pass layer walk (NativeGenerationModel.forward_to).
+# Restore: git apply experiments/removed/CAUSAL_GENERATE_RESIDENT_READS.patch; record in docs/TOMBSTONES.md.
