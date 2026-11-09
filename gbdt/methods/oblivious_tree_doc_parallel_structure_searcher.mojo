@@ -444,6 +444,12 @@ def fit_oblivious_tree_structure_traced(
     device_plan: DevicePlan = plan_for_single(),
     # TOMBSTONE: MOJOLEARN_SYM_REUSE_PARTITION (DROPPED-noise) deleted 2026-10-09 on lane/owed-deletions-D1 (the
     # `sym_parts_out` argument); code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_SYM_REUSE_PARTITION.patch.
+    # Lane t1-tree-builder-ops: tree op TREE_OP_SEARCH (gbdt/tree_ops.mojo).
+    # True enqueues the level loop and the gate walk behind `gate` and
+    # returns an empty list: the structure record stays in
+    # `pool[0].d_structure` for the round's later ops, no drain.
+    enqueue_only: Bool = False,
+    gate: Optional[DeviceBuffer[DType.int32]] = None,
 ) raises -> List[TBinarySplit]:
     """`TDocParallelObliviousTreeSearcher::FitImpl` (`:12-160`), the
     structure half.
@@ -1205,6 +1211,17 @@ def fit_oblivious_tree_structure_traced(
     # TAKE_BIN for a one-hot feature (word 3 of `d_feat_table`, the same
     # `one_hot[fid]` guard) and TAKE_GREATER otherwise.
     times.begin(ctx)
+    if enqueue_only:
+        # TREE_OP_SEARCH: the walk behind the loop's gate, nothing drained.
+        # The level launches above are round-local (subsets, histograms,
+        # winner slots); the structure record is the round's output.
+        var g = gate.value().copy() if gate else pool[0].d_gate_open.copy()
+        tree_op_gate_walk(
+            ctx, g, pool[0].d_winners_ids,
+            pool[0].d_feat_table, max_depth, pool[0].d_structure,
+        )
+        times.end(ctx, "pw.walk")
+        return structure^
     tree_op_gate_walk(
         ctx, pool[0].d_gate_open, pool[0].d_winners_ids,
         pool[0].d_feat_table, max_depth, pool[0].d_structure,
