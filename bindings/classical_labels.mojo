@@ -1039,6 +1039,8 @@ def labels_decode_labels(var classes: PythonObject, codes: PythonObject, context
             _ = out  # keep the Python object alive through the native call above
             _ = wide_codes  # keep the Python object alive through the native call above
             return out
+    # TOMBSTONE: labels_decode_labels per-row Python append loop (removed: one native list fill) deleted 2026-11-09 by lane p2-labels-lists-arrays; code recoverable at e68654a757.
+    # Restore: git apply experiments/removed/P2_LABELS_LISTS_ARRAYS.patch
     # Classes the gathers cannot carry (str / bool / object, or ints outside
     # int64): ONE presized list filled in C from the int64 code words
     # (p3_decode_list). Lane p2-labels-lists-arrays: the per-row Python

@@ -13,6 +13,8 @@ the other Array protocol methods are now C properties over the native entry
 (`_array._bound`), so len(Array) from any caller enters no Python frame.
 """
 
+# TOMBSTONE: array-length-metadata (removed: len(Array) enters no Python frame) deleted 2026-11-09 by lane p2-labels-lists-arrays; code recoverable at e68654a757.
+# Restore: git apply experiments/removed/P2_LABELS_LISTS_ARRAYS.patch
 FALLBACKS = {}
 
 
