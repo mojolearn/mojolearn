@@ -17,6 +17,7 @@ Python descriptors. Shared exact input admission precedes native buffer reads;
 balanced call helpers retain original owners without leaking references.
 """
 from std.math import isfinite
+from std.sys import is_defined
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -62,6 +63,10 @@ from training.parallel_byte_impl import parallel_copy_words
 from core.shared_slot import SharedSlot
 
 # The program's STEP modes (autograd/small_mlp_program.mojo).
+#: A/B arm (default off): `predict_sessions` packs the sessions into ONE
+#: forward of the trainer's program (lane m2-neural-leftovers) instead of the
+#: restored default, the training binding's `mlp_sessions`. RUN OWED.
+comptime _MLP_SESSIONS_PACKED = is_defined["MOJOLEARN_MLP_SESSIONS_PACKED"]()
 comptime _FORWARD = 0
 comptime _GRADS = 1
 comptime _TRAIN = 2
@@ -878,11 +883,67 @@ def _apply_gradients(handle: Int, gradients: PythonObject) raises -> PythonObjec
 
 def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
     """Logits of several independent batches with the current model,
+    concatenated in the order given (`mlp_sessions`)."""
+    # DEFAULT restored 2026-11-09 by integration lane i2-integrate-seven from
+    # 0ce88411d3: the training binding's `mlp_sessions` (one forward per
+    # session, training/neural_session_mlp.mojo); lane m2-neural-leftovers
+    # had replaced it with one packed forward of the trainer's program with
+    # no measurement against it. A/B: -D MOJOLEARN_MLP_SESSIONS_PACKED.
+    # RUN OWED: mlp-infer sessions on NVIDIA and AMD.
+    comptime if _MLP_SESSIONS_PACKED:
+        return _predict_sessions_packed(handle, inputs)
+    var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
+    var bi = b[].bi
+    var entries = _mode_entries()
+    var index = mlp_store_index(handle)
+    _settle(index, False)
+    var listed = _items(inputs, -1, "mojolearn.mlp_inference_sessions: inputs must be a list of arrays")
+    # Mojo-owned row-major copies, alive across the call.
+    var sessions = List[List[Float32]]()
+    var shapes = bi.list()
+    var addresses = bi.list()
+    for i in range(len(listed)):  # driver-loop: over the caller's session batches
+        var value = listed[i]
+        var view = _view(value, "mojolearn.mlp_inference_sessions: session input must be float32")
+        if _base_format(view) != "f" or Int(py=view.itemsize) != 4:
+            raise Error("TypeError: mojolearn.mlp_inference_sessions: session input must be float32")
+        var shape = _shape(value, view)
+        var dims = List[Int]()
+        var n = 1
+        for axis in range(len(shape)):  # small-loop(session shape words)
+            dims.append(Int(py=shape[axis]))
+            n *= dims[axis]
+        var owned = List[Float32](length=max(n, 1), fill=Float32(0))
+        if n > 0:
+            _words_from_view(value, view, shape, dims, "session input", Int(owned.unsafe_ptr()))
+            _ = value  # keep the Python object alive through the native call above
+        _ = py_call(addresses.append, Int(owned.unsafe_ptr()))
+        _ = py_call(shapes.append, shape)
+        sessions.append(owned^)
+    var total: Int
+    try:
+        total = Int(py=py_call_typed(entries.legacy["mlp_sessions_rows"], shapes, 8))
+    except error:
+        raise Error(String(error))
+    var out = generation_array([total, 3])
+    var store = MLP_STORE.get_or_create_ptr()
+    ref s = store[].slots[index].state
+    var wrote = Int(py=py_call_typed(entries.legacy["mlp_sessions"],
+        Python.list(out._addr, s.params_addr(0), s.params_addr(1), s.params_addr(2), s.params_addr(3)),
+        addresses, shapes, py_ints([8, 16, 3])))
+    _ = out  # keep the Python object alive through the native call above
+    _ = sessions^
+    if wrote != Int(py=out.size):
+        raise Error("RuntimeError: MLP sessions returned an invalid output count")
+    return out
+
+
+def _predict_sessions_packed(handle: Int, inputs: PythonObject) raises -> PythonObject:
+    """Logits of several independent batches with the current model,
     concatenated in the order given: the sessions' rows packed in order and
     run as ONE forward of the trainer's program (each row's logits depend
-    only on that row and the weights)."""
-    # TOMBSTONE: the training binding's `mlp_sessions` / `mlp_sessions_rows` entries (nn_mlp_sessions_device, training/neural_session_mlp.mojo, its host twin training/neural_session_mlp_host.mojo, training/neural_session_shape.mojo and the NN64 per-session / packed switch MOJOLEARN_NN64_SESSION_PACK) deleted 2026-11-09 by lane/m2-neural-leftovers; code recoverable at 0ce88411d3.
-    # Restore: git apply experiments/removed/M2_SMALL_MLP_PRIMITIVES.patch
+    only on that row and the weights). The A/B arm
+    -D MOJOLEARN_MLP_SESSIONS_PACKED (lane m2-neural-leftovers)."""
     var entries = _mode_entries()
     var index = mlp_store_index(handle)
     var listed = _items(inputs, -1, "mojolearn.mlp_inference_sessions: inputs must be a list of arrays")
