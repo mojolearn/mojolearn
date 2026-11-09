@@ -1634,3 +1634,6 @@ struct DeviceExec(Exec, Movable):
 
     def lm_head_v2_host(mut self, backward: Bool, bufs: List[FP], rows: Int, vocab: Int, width: Int) raises:
         raise Error("ops: a device session launches the lm_head_v2 kernels itself")
+
+    def small_mlp_host(mut self, backward: Bool, bufs: List[FP], dims: List[Int]) raises:
+        raise Error("ops: a device session launches the small_mlp kernels itself")

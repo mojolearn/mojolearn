@@ -6,7 +6,14 @@ A trainer opens one inference session (`OpsSession`) and uploads its four
 weights into it once: they are the program's parameters, read in place at
 every run and updated in place by the AdamW step, so the session IS the
 trainer's resident copy (no per-call upload, no second resident session).
-The forward is captured once, at open:
+The forward is captured once, at open, as ONE op, the small MLP's tuned
+forward and hand backward (autograd/small_mlp_op.mojo; the leaf-128 GEMMs,
+`_mlp_kernel` launches and backward chain of the 0.8.66 step):
+
+    logits = small_mlp(x, weight1, bias1, weight2, bias2)  OPS_SMALL_MLP
+
+or, under the A/B define -D MOJOLEARN_SMALL_MLP_GENERIC_OPS, the generic
+form lane x2 introduced:
 
     t1     = transpose(weight1)                       OPS_TRANSPOSE
     hidden = linear(x, t1, bias1, relu)               OPS_LINEAR (act 1)
@@ -15,16 +22,16 @@ The forward is captured once, at open:
 
 `train_step` replays it with recording on (the weights trainable leaves over
 their session buffers), takes the mean cross-entropy against the class
-codes, runs the tape backward (`backward_scalar_with_rules`, the rules
-every program uses) and applies one AdamW update per weight through the
+codes, runs the tape backward (`backward_scalar_with_rules` with
+StepOpRules, which carry the small_mlp VJP) and applies one AdamW update per weight through the
 session's optimizer (`step_lr`, one OP_OPT launch each). `predict_logits`
 is the same program with recording off. One wait per step: the loss, the
 logits and the gradients come down together, the loss is refused when it is
 not finite BEFORE the update is queued, so a refused step publishes nothing.
 
-Bits: one algorithm on every executor (the tape's linear, cross-entropy and
-OP_OPT bodies, which are the same on NVIDIA, AMD, Apple and the host
-column). This replaced the hand chain of training/mlp_ops.mojo
+Bits: one algorithm on every executor (the small_mlp op's GEMM cells and
+`_mlp_kernel` body, then the tape's cross-entropy and OP_OPT bodies, the
+same on NVIDIA, AMD, Apple and the host column). This replaced the hand chain of training/mlp_ops.mojo
 (`mlp_train_step_host`, its tape rules autograd/rules_small_mlp.mojo and
 the Apple FAST fused/resident sessions of training/mlp_fast.mojo); the
 small MLP's bits changed with it on every column together.
@@ -47,8 +54,8 @@ Entry words (`small_mlp_program_open` / `small_mlp_program_run`):
     CLOSE     -> 0
     SESSIONS  (no handle; `small_mlp_sessions_forward`) addresses [y, x,
               w1 (hidden x width), b1, w2 (out x hidden), b2], ints [rows,
-              width, hidden, out] -> rows * out: the same forward (two
-              transposes, linear + ReLU, linear) for any Linear-ReLU-Linear
+              width, hidden, out] -> rows * out: the same forward (OPS_SMALL_MLP,
+              or the generic ops under the A/B define) for any Linear-ReLU-Linear
               shape on a session opened for the call. The public
               `training.mlp_inference_sessions` runs its packed session rows
               through it.
@@ -59,6 +66,7 @@ Entry words (`small_mlp_program_open` / `small_mlp_program_run`):
 # Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
 # TOMBSTONE: mlp_train_step_host, its step GEMM dispatch (MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF), the tape rules autograd/rules_small_mlp.mojo and the Apple FAST fused step training/mlp_fast.mojo (superseded by SmallMLPTrainer's captured program, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b.
 # Restore: git apply experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch
+# TOMBSTONE restored 2026-11-09 by lane/r1-restore-measured-winners as op small_mlp (OPS_SMALL_MLP, autograd/small_mlp_op.mojo + small_mlp_host.mojo): the step's leaf-128 GEMM dispatch (MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF honoured again), its `_mlp_kernel` launches and the rules_small_mlp backward chain, from f59d913b0b; the program captures it by default (A/B -D MOJOLEARN_SMALL_MLP_GENERIC_OPS). The per-call upload, host scans and the Apple FAST fused/resident sessions stay deleted (plumbing).
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF (removed: hand glue superseded by the tape) deleted 2026-10-19 by 3cd0063d7; code recoverable at 3cd0063d7^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_SMALL_MLP_OFF.patch
 # TOMBSTONE (lane grid-act-5, 2026-10-08): neural_gemm_epilogue=mlp (NN06,
@@ -84,9 +92,20 @@ from autograd.program_replay_metadata import PreparedProgramReplay
 from autograd.rankn import ShapeN
 from autograd.cast_ops import upload_cast
 from autograd.losses import cross_entropy
-from autograd.import_api import ImportRules
+from autograd.rules_step_ops import StepOpRules
+from autograd.small_mlp_op import OPS_SMALL_MLP
+from std.sys.compile import is_defined
 from autograd.optim import step_lr
 from core.shared_slot import SharedSlot
+
+#: Lane r1-restore-measured-winners (2026-11-09): the program captures the
+#: small MLP's tuned op (OPS_SMALL_MLP, autograd/small_mlp_op.mojo: the
+#: leaf-128 GEMMs, the `_mlp_kernel` launches and the hand backward chain
+#: of the 0.8.66 step, which lane x2 had replaced by the generic ops below).
+#: A/B: -D MOJOLEARN_SMALL_MLP_GENERIC_OPS captures lane x2's transpose +
+#: OPS_LINEAR form instead. Run owed: mlp-train-step and mlp-predict, tuned
+#: op vs generic ops, one run per arm on NVIDIA and AMD.
+comptime SMALL_MLP_GENERIC_OPS = is_defined["MOJOLEARN_SMALL_MLP_GENERIC_OPS"]()
 
 comptime SMALL_MLP_PROGRAM_OPEN = 0
 comptime SMALL_MLP_PROGRAM_STEP = 1
@@ -210,10 +229,14 @@ def small_mlp_program_open[E: Exec & Movable & Deinitable, KIND: Int](
         var x = s[].upload(CastIn.f32_c(Int(probe.unsafe_ptr()), 1, _IN), False)
         var none_i = List[Int]()
         var none_f = List[Float32]()
-        var t1 = s[].op(OPS_TRANSPOSE, [w0], none_i, none_f)
-        var hidden = s[].op(OPS_LINEAR, [x, t1, w1], [1], none_f)
-        var t2 = s[].op(OPS_TRANSPOSE, [w2], none_i, none_f)
-        var logits = s[].op(OPS_LINEAR, [hidden, t2, w3], [0], none_f)
+        var logits: Int
+        comptime if SMALL_MLP_GENERIC_OPS:
+            var t1 = s[].op(OPS_TRANSPOSE, [w0], none_i, none_f)
+            var hidden = s[].op(OPS_LINEAR, [x, t1, w1], [1], none_f)
+            var t2 = s[].op(OPS_TRANSPOSE, [w2], none_i, none_f)
+            logits = s[].op(OPS_LINEAR, [hidden, t2, w3], [0], none_f)
+        else:
+            logits = s[].op(OPS_SMALL_MLP, [x, w0, w1, w2, w3], none_i, none_f)
         var pid = s[].capture([x], [logits])
         s[].free(x)
         s[].reset()
@@ -352,7 +375,9 @@ def _run_steps[E: Exec & Movable & Deinitable](
                 continue
             var codes = s.tape.variable(s.ex, y_dev + step * rows, rows, 1, False)
             var loss = cross_entropy(s.tape, s.ex, out, codes)
-            s.tape.backward_scalar_with_rules(s.ex, loss, ImportRules())
+            # StepOpRules: ImportRules plus the small_mlp op's VJP (no step
+            # entries, so no scratch)
+            s.tape.backward_scalar_with_rules(s.ex, loss, StepOpRules(0))
             var loss_dst = a[2] + 4 * step
             s.ex.download_async(FP(unsafe_from_address=loss_dst), s.tape.value(loss), 1)
             var grads = List[FP](length=4, fill=bufs[0])
@@ -483,7 +508,8 @@ def small_mlp_sessions_forward[E: Exec & Movable & Deinitable, KIND: Int](
 ) raises -> Int:
     """SESSIONS: `y = linear(relu(linear(x, w1^T, b1)), w2^T, b2)` for any
     (width, hidden, out), on an inference session opened for this call:
-    the trainer's forward ops (OPS_TRANSPOSE, OPS_LINEAR act 1 / act 0), so
+    the trainer's forward op (OPS_SMALL_MLP; the A/B define: OPS_TRANSPOSE,
+    OPS_LINEAR act 1 / act 0), so
     an 8-16-3 model gives `predict_logits`' words. `x` is the sessions' rows
     packed in order; each row's logits depend only on that row. Refuses a
     non-finite input, weight or logit from device flags, one wait."""
@@ -524,10 +550,16 @@ def small_mlp_sessions_forward[E: Exec & Movable & Deinitable, KIND: Int](
         _flag(s[].ex, b3, out_w, dflag, 0)
         var none_i = List[Int]()
         var none_f = List[Float32]()
-        var t1 = s[].op(OPS_TRANSPOSE, [w0], none_i, none_f)
-        var hid = s[].op(OPS_LINEAR, [x, t1, w1], [1], none_f)
-        var t2 = s[].op(OPS_TRANSPOSE, [w2], none_i, none_f)
-        var logits = s[].op(OPS_LINEAR, [hid, t2, w3], [0], none_f)
+        # the trainer's forward op (OPS_SMALL_MLP, or lane x2's generic ops
+        # under the A/B define), so an 8-16-3 model gives predict_logits' words
+        var logits: Int
+        comptime if SMALL_MLP_GENERIC_OPS:
+            var t1 = s[].op(OPS_TRANSPOSE, [w0], none_i, none_f)
+            var hid = s[].op(OPS_LINEAR, [x, t1, w1], [1], none_f)
+            var t2 = s[].op(OPS_TRANSPOSE, [w2], none_i, none_f)
+            logits = s[].op(OPS_LINEAR, [hid, t2, w3], [0], none_f)
+        else:
+            logits = s[].op(OPS_SMALL_MLP, [x, w0, w1, w2, w3], none_i, none_f)
         var lt = s[].tensor(logits)
         var lv = s[].tape.value_of(s[].ex, lt)
         _flag(s[].ex, lv, rows * out_w, dflag, 1)
