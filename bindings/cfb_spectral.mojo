@@ -252,10 +252,11 @@ def _x_decomp_input(source: PythonObject, context: PythonObject) raises -> Pytho
             and Bool(py=family_call(b.hasattr, x, PythonObject("nnz")))
             and Bool(py=family_call(b.hasattr, x, PythonObject("format")))):
         x = family_call(py_call(b.getattr, x, PythonObject("toarray")))
-    var a = admit_family(x, 2, "X", context, dense=True).array
-    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a))), Int(py=a.size)):
-        raise Error("X: input must be finite; NaN/inf are unsupported")
-    _ = a  # keep the Python object alive through the native calls above
+    # Lane a8d: the finiteness refusal is the admission's own (tested in the
+    # cast pass, or one parallel scan of a borrowed X, or in a fold's
+    # gather), not a second scan after it; the same sentence.
+    var a = admit_family(x, 2, "X", context, dense=True, finite=True,
+                         refusal="X: input must be finite; NaN/inf are unsupported").array
     return a
 
 
@@ -732,13 +733,12 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
             _ = coo.cols
             _ = coo.vals
     else:
-        var x = admit_family(source, 2, "X", context).array
+        # Lane a8d: the admission's finite test (see `_x_decomp_input`).
+        var x = admit_family(source, 2, "X", context, finite=True,
+                             refusal="mojolearn SpectralClustering: X contains NaN or "
+                             + "infinity (the implemented path refuses it by name before any "
+                             + "recorded stage)").array
         py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
-        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
-            raise Error("mojolearn SpectralClustering: X contains NaN or "
-                        + "infinity (the implemented path refuses it by name before any "
-                        + "recorded stage)")
-        _ = x  # keep the Python object alive through the native calls above
         n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
         _sc_check_shape(fields, n, k)
@@ -888,13 +888,12 @@ def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject
                         + "'precomputed', X must be the affinity between the new rows "
                         + "and the " + String(n_train) + " training rows, shape (n_new, " + String(n_train) + "); "
                         + "got shape " + family_repr(shape))
-        q = admit_family(a, 2, "X", context).array
+        # Lane a8d: the admission's finite test (see `_x_decomp_input`).
+        q = admit_family(a, 2, "X", context, finite=True,
+                         refusal="mojolearn SpectralClustering.predict: the affinity has a "
+                         + "non-finite entry; refused by name").array
         if Int(py=q.shape[0]) < 1:
             raise Error("mojolearn SpectralClustering.predict: X has no rows; refused by name")
-        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(q))), Int(py=q.size)):
-            raise Error("mojolearn SpectralClustering.predict: the affinity has a "
-                        + "non-finite entry; refused by name")
-        _ = q  # keep the Python object alive through the native calls above
         if family_min(q) < 0:
             raise Error("mojolearn SpectralClustering.predict: the affinity has a "
                         + "negative entry; refused by name, as the fit refuses one")
@@ -1090,11 +1089,10 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
         _ = coo.cols
         _ = coo.vals
     else:
-        var x = admit_family(source, 2, "X", context).array
+        # Lane a8d: the admission's finite test (see `_x_decomp_input`).
+        var x = admit_family(source, 2, "X", context, finite=True,
+                             refusal="mojolearn SpectralEmbedding: X contains NaN or infinity").array
         py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
-        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
-            raise Error("mojolearn SpectralEmbedding: X contains NaN or infinity")
-        _ = x  # keep the Python object alive through the native calls above
         var n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
         _se_check_shape(fields, n, n_lanczos)
