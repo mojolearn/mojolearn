@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native validation of the optional target that Normalizer accepts but ignores.
 # Keep original target owners until its fit/fit_transform operation finishes.
+from bindings.admitted_finite_wording import admitted_finite_wording
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get
@@ -34,7 +35,7 @@ def _finite(snapshot: ArrayMetadata, name: String) raises:
         raise Error("TypeError: target floating dtype has inconsistent itemsize")
     if not prep_float_finite(snapshot.source, snapshot.shape, snapshot.strides,
                             snapshot.count, snapshot.native_byte_order, snapshot.dtype_number):
-        raise Error("Input y contains NaN or infinity (" + name + ").")
+        raise Error(admitted_finite_wording(name, "y"))
 
 
 def _complex(code: Int) -> Bool:
@@ -157,7 +158,7 @@ def _pandas_target(source: PythonObject, rows: Int, multi: Bool, name: String,
         for k in range(len(snapshots)):  # driver-loop: original target float words; never narrowed
             if categorical[k]:
                 if not category_finite[k]:
-                    raise Error("Input y contains NaN or infinity (" + name + ").")
+                    raise Error(admitted_finite_wording(name, "y"))
             else:
                 _finite(snapshots[k], name)
     _length(rows, count)

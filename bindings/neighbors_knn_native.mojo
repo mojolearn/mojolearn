@@ -57,7 +57,8 @@ from bindings.classical_labels import (
     classical_encode_labels, labels_shape_of, labels_reshape, classical_decode_labels, classical_accuracy,
     classical_encode_words,
 )
-from bindings.admitted_input import admit_c_view, admitted_dtype, admitted_finite_refuse, admitted_finite_wording
+from bindings.admitted_input import admit_c_view, admitted_dtype, admitted_finite_refuse
+from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.device_rows_door import door_is_device_rows
 from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64, host_finite_status
 from bindings.mcls_common import mc_is_integer_labels, mc_dtype_name

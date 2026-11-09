@@ -5,7 +5,7 @@
 from std.math import isfinite, floor
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_meta, admit_family_owned
-from bindings.admitted_input import admitted_finite_wording
+from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native import _fields, _fitted
@@ -123,7 +123,7 @@ def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, req
     if stored is not None:
         var refusal = labels_float_storage(stored, context, classifier)
         if refusal == LABELS_FLOAT_NONFINITE:
-            raise Error("Input y contains NaN or infinity (" + name + ").")
+            raise Error(admitted_finite_wording(name, "y"))
         if refusal == LABELS_FLOAT_CONTINUOUS:
             raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
         if refusal == LABELS_FLOAT_OK:
@@ -133,7 +133,7 @@ def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, req
     # walk's verdicts; the walk returns such a list unchanged.
     var verdict = p3nc_float_list_verdict(source, classifier)
     if verdict == P3NC_REAL_NONFINITE:
-        raise Error("Input y contains NaN or infinity (" + name + ").")
+        raise Error(admitted_finite_wording(name, "y"))
     if verdict == P3NC_REAL_CONTINUOUS:
         raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
     if verdict == P3NC_REAL_OK:
@@ -147,7 +147,7 @@ def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, req
         if metric_is_real(flat[i], context) and not metric_is_integral(flat[i], context):
             var number = metric_float(flat[i], context)
             if not isfinite(number):
-                raise Error("Input y contains NaN or infinity (" + name + ").")
+                raise Error(admitted_finite_wording(name, "y"))
             if classifier and floor(number) != number:
                 raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
     if (not multioutput and len(shape) == 2 and shape[1] == 1 and py_type(source) is not b.list
