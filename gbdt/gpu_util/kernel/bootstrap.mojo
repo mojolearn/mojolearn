@@ -443,3 +443,49 @@ def tree_op_bootstrap(
         ctx, gate.unsafe_ptr(), bootstrap_type, seeds, stats, n_rows, param,
         mags, compute_mags, stat_count,
     )
+
+
+def seed_snapshot_gated_kernel(
+    gate: MutPointer[Int32, MutAnyOrigin],
+    seeds: MutPointer[UInt64, MutAnyOrigin],
+    n_in: Int32,
+    snapshot: MutPointer[UInt64, MutAnyOrigin],
+):
+    """While the gate is open: `snapshot[i] = seeds[i]`, grid-stride. Past
+    the stop nothing is written, so the snapshot holds the seeds as they
+    were before the stopping round's draw."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+    while i < n:
+        snapshot.unsafe_store(i, seeds.unsafe_load(i))
+        i += stride
+
+
+def tree_op_seed_snapshot(
+    ctx: DeviceContext,
+    mut gate: DeviceBuffer[DType.int32],
+    mut seeds: DeviceBuffer[DType.uint64],
+    mut snapshot: DeviceBuffer[DType.uint64],
+) raises:
+    """Tree op TREE_OP_SEED_SNAPSHOT (gbdt/tree_ops.mojo, lane
+    t1b-tree-leaf-and-node-ops): the bootstrap seeds copied into `snapshot`
+    behind the gate, enqueued right before TREE_OP_BOOTSTRAP. When a round
+    stops on TREE_OP_LEAF_ESTIMATE's LEAF_STATUS_HOST_TAIL, `snapshot` is
+    the seeds that round started from (the snapshot and the draw of every
+    later round are gated off), so the driver copies it back and reruns the
+    round on the host-driven path. Integer copy only. Enqueue only."""
+    var n = len(seeds)
+    if len(snapshot) < n:
+        raise Error("tree_op_seed_snapshot: the snapshot holds fewer than " + String(n) + " seeds")
+    var blocks = (n + 255) // 256
+    if blocks > 1024:
+        blocks = 1024
+    if blocks < 1:
+        blocks = 1
+    ctx.enqueue_function[seed_snapshot_gated_kernel](
+        gate.unsafe_ptr(), seeds.unsafe_ptr(), Int32(n), snapshot.unsafe_ptr(),
+        grid_dim=(blocks, 1, 1), block_dim=(256, 1, 1),
+    )
