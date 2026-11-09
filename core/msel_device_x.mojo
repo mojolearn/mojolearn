@@ -20,7 +20,7 @@ C order), with the finite test in the same pass (word `slot` of `d_status`
 is set to 1 for a NaN or an infinity, word `slot + 1` for an index out of
 range). Nothing is synchronised here: the entry reads `d_status` back with
 the result it downloads anyway (core/admitted_finite_status.mojo contract),
-and refuses through `admitted_finite_refuse` / an IndexError.
+and refuses through `door_rows_refuse` (bindings/device_rows_door.mojo).
 
 THE CONTEXT. The store's buffers belong to the base binding's process
 context (slot `MSEL_CONTEXT_SLOT`, `process_ctx`): an entry that gathers a
@@ -131,12 +131,3 @@ def msel_device_x_f32(
         grid_dim=_mdx_grid(rows * cols), block_dim=MSEL_TPB,
     )
 
-
-def msel_device_x_refuse(finite_word: Int32, range_word: Int32, est: String, base_rows: Int) raises:
-    """The door's refusal of a gathered fold: an index out of range (a model
-    selection bug: IndexError) or a NaN / infinity (scikit-learn's wording,
-    as admit_x)."""
-    if range_word != MDX_FINITE:
-        raise Error("IndexError: DeviceRows row index out of range for a base of " + String(base_rows) + " rows")
-    if finite_word != MDX_FINITE:
-        raise Error("Input X contains NaN or infinity (" + est + ").")

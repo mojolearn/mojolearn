@@ -32,7 +32,8 @@ def connect(pca_class):
     # Additive exports: a build without one refuses the option that needs it
     # by name (bindings/pca_exact.mojo), not at import.
     optional = ("pca_fit_owned", "pca_fit_randomized", "pca_fit_full",
-                "pca_whiten_transform", "pca_whiten_inverse_transform")
+                "pca_whiten_transform", "pca_whiten_inverse_transform",
+                "pca_transform_fold")  # lane a6: GPU bindings only (a resident CV fold)
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: fixed numeric-mode ABI connection
         try:
             binding = _backend.binding("_mojolearn_estimators", mode)

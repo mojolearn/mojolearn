@@ -123,3 +123,13 @@ def door_rows_store(value: PythonObject, context: PythonObject) raises -> DoorRo
     if row_bytes % 4 != 0:
         raise Error("TypeError: DeviceRows requires a float32 base")
     return DoorRowsStore(Int(py=ids[0]), Int(py=ids[1]), row_bytes // 4, Int(py=ids[3]), Int(py=ids[4]))
+
+
+def door_rows_refuse(finite_word: Int, range_word: Int, est: String, base_rows: Int) raises:
+    """The refusal of a fold a device entry gathered (core/msel_device_x.mojo
+    status words, 0 = clear): an index out of range (IndexError) or a NaN /
+    infinity, in admit_x's wording."""
+    if range_word != 0:
+        raise Error("IndexError: DeviceRows row index out of range for a base of " + String(base_rows) + " rows")
+    if finite_word != 0:
+        raise Error("Input X contains NaN or infinity (" + est + ").")
