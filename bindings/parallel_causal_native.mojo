@@ -998,7 +998,7 @@ def parallel_causal_call(mut mods: NativeModules, operation: String, args: Pytho
         var created = _parallel_causal_block(mods, args[1], _parallel_word(args[2]), args[3])
         _ = py_call(destination.update, _parallel_block_fields(mods, created))
     # TOMBSTONE: operation "make_blocks" (dead code: its one caller, ParallelCausalLM._make_blocks, had no
-    # caller) deleted 2026-11-09 by __SHA__; code recoverable at __SHA__^.
+    # caller) deleted 2026-11-09 by 57b86ba5ac; code recoverable at 57b86ba5ac^.
     # Restore: git apply experiments/removed/dead_code_p5_20261109.patch
     elif operation == "state_init":
         _parallel_causal_attach(mods, args[0], args[1], args[2])

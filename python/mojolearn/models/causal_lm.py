@@ -239,8 +239,8 @@ class CausalLM:
                                         _NATIVE_CONTEXT)
 
     # TOMBSTONE: CausalLM._make_blocks, _ids, _check_positions (dead code: no caller; the native
-    # owner builds blocks and admits ids and positions) deleted 2026-11-09 by __SHA__; code
-    # recoverable at __SHA__^.
+    # owner builds blocks and admits ids and positions) deleted 2026-11-09 by 57b86ba5ac; code
+    # recoverable at 57b86ba5ac^.
     # Restore: git apply experiments/removed/dead_code_p5_20261109.patch
 
     # ------------------------------------------------------------ loading

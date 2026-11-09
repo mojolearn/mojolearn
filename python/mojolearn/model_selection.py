@@ -480,7 +480,7 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
 # Restore: git apply experiments/removed/dead_python_loops.patch
 
 
-# TOMBSTONE: _cv_fast_defines (dead code: its only reader was the unread context entry family_msel_fast_defines) deleted 2026-11-09 by __SHA__; code recoverable at __SHA__^.
+# TOMBSTONE: _cv_fast_defines (dead code: its only reader was the unread context entry family_msel_fast_defines) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.
 # Restore: git apply experiments/removed/dead_code_p5_20261109.patch
 
 
@@ -488,7 +488,7 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
 # Restore: git apply experiments/removed/dead_python_loops.patch
 
 
-# TOMBSTONE: _fit_score_fold (dead code: no caller; bindings/msel_cv.mojo fits and scores each fold natively) deleted 2026-11-09 by __SHA__; code recoverable at __SHA__^.
+# TOMBSTONE: _fit_score_fold (dead code: no caller; bindings/msel_cv.mojo fits and scores each fold natively) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.
 # Restore: git apply experiments/removed/dead_code_p5_20261109.patch
 
 
@@ -1412,7 +1412,7 @@ class _Scorer:
 _BINARY_PROBA = {'roc_auc', 'average_precision', 'neg_brier_score', 'neg_log_loss', 'top_k_accuracy'}
 
 
-# TOMBSTONE: _proba_column1 (dead code: no caller; the native scorer reads column 1 itself) deleted 2026-11-09 by __SHA__; code recoverable at __SHA__^.
+# TOMBSTONE: _proba_column1 (dead code: no caller; the native scorer reads column 1 itself) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.
 # Restore: git apply experiments/removed/dead_code_p5_20261109.patch
 
 
