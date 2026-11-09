@@ -38,8 +38,10 @@
 #            (tools/measure_owed.py units.tsv: neighbouring --rows groups, the prior arm, the B arms), then the
 #            driver rows (tools/measure_owed_driver.py per arm interpreter)
 #   compare  paper_compare compare (COMPARE/compare/SUMMARY-<vendor>) and measure_owed report (OWED*-<vendor>)
-# PC_PARTS (default all: plan,install,smoke,board,owed,drivers,compare) runs a subset, so a job over the 240-minute
-# nvidia_central.sh cap is split into two submits on the same results dir (the boards resume from board.json).
+# PC_PARTS (default all: plan,install,smoke,board,owed,drivers,compare) runs a subset and PC_OWED_ARMS (comma list,
+# default all) the owed units of some arms, so a job over the 240-minute nvidia_central.sh cap is split into
+# submits on the same results dir (the boards resume from board.json; a later submit reruns install, which only
+# re-checks an existing venv).
 #
 # It runs under tools/box_persist_run.sh (results to R2 from the box), launched by the supported wrappers
 # (tools/ops/measure_candidate.py prints the exact lines; docs/plans/PRE_0867_MEASUREMENT.md):
@@ -354,7 +356,8 @@ if [ "$OWED" = 1 ] && part owed && [ -s "$RES/plan-owed/units.tsv" ]; then
     phase owed
     rc=0
     while IFS=$'\t' read -r arm rows ids; do
-        [ "$arm" = candidate ] && [ "$rows" = full ] && continue   # timed with the paper races above
+        [ "$arm" = candidate ] && [ "$rows" = full ] && continue   # timed with the paper races (part board)
+        [ -n "${PC_OWED_ARMS:-}" ] && [[ ",$PC_OWED_ARMS," != *",$arm,"* ]] && continue   # a split submit
         if [ "$rows" = full ]; then
             # full rows: only the races whose smoke passed (the gate keys on family/lane/dataset, any venv)
             grep -Fx -f "$PASS_IDS" "$ids" > "$ids.pass" 2> /dev/null || true
