@@ -1,197 +1,41 @@
-# Working rules for Claude sessions and subagents
+@AGENTS.md
 
-Every Claude session and subagent in this repo reads this file. Lane briefs add to it; they don't repeat it.
+# Claude sessions in this repo
 
-## The name is Mojolearn, with a capital M (Andrew, 2026-11-02)
+The project rules are in [AGENTS.md](AGENTS.md), the one rule file for every agent. The first line of this file
+imports it, so Claude Code loads it with this file. An agent whose harness does not expand `@` imports must read
+`AGENTS.md` in full before doing anything else. This file holds only what is specific to Claude sessions and their
+subagents; a rule that also binds Codex belongs in `AGENTS.md`, never here.
 
-- In prose (docs, docstrings, README, site, paper, emails, release notes, commit
-  messages and replies) write **Mojolearn**: capital M, the rest lower case.
-  Never "mojolearn", "MojoLearn" or "MOJOLEARN" as the name.
-- Code stays lower case: the package, module and command names (`pip install
-  mojolearn`, `import mojolearn`, `python -m mojolearn verify`), paths, URLs and
-  domains (mojolearn.org). Put them in backticks when they appear in prose.
+## Who does what
 
-## Logs and output
-
-- These context rules also apply to Codex and all delegated lanes; see `AGENTS.md`.
-- Include the log/context reminder from `AGENTS.md` in every lane brief, spawn prompt and resumed assignment, and propagate it to nested subagents.
-- Prefer targeted `rg` searches with bounded context and line lengths (`-m 20 -C 3 --max-columns 240 --max-columns-preview`); use `grep` when `rg` is unavailable. Narrow to relevant files first, and parse large JSON reports for selected fields instead of dumping them.
-- Never print a whole log, race output or build output. Use `tail -n 20`, `grep -m 20`, or `grep -E 'error|FAIL|DISAGREE|status='`.
-- For a build, read only its exit code and the first error: `... > build.log 2>&1; echo rc=$?; grep -m 5 -B 2 -A 8 'error' build.log`.
-- For a race directory, read the one-line summary (`ALGOS lane=... status=... median_ms=...`), not the race log.
-- Never read a subagent transcript or a `tasks/*.output` file.
-- Put long results in a file under `~/mojolearn-evidence/` and report the path plus a few lines.
-- Keep the original exit status and expected coverage. Filtered output is not proof of success; report failures, skipped/incomplete work, and expand the relevant diagnostic block when necessary.
-
-## Lane subagents
-
-- **Code, then queue.** A lane subagent writes code, commits and pushes, then queues its own GPU runs with `~/mojolearn-ops/lq` (run it with no arguments for usage). It never runs tests, timing, identity runs or Metal jobs on the laptop, and never ssh-es to, rents, extends or releases a box. `lq` is the only way a lane reaches a box:
-  - `lq add nv|amd RACE <branch> <lane[,lane]> <ds[,ds]> [ARMS=..] [BUILDS=..] [ENV=V]`: one build covers every lane x dataset, so batch them.
-  - Apple (the M2 Pro) is for same-bits ID checks only: no Apple timing for IDENTICAL. The M3 Ultra belongs to the Apple FAST peer (lane/apple-fast only). One lane and one dataset per line. Never RACE with `MOJOLEARN_VENDOR=cpu`: our CPU is never raced or timed; the host digest comes from the ID check.
-  - **Same-bits checks use `lq add <box> ID <branch> <lane[,lane]> <ds[,ds]>`, never full board races.** It races the lane once on the device and once on the host column, over a 50k-row copy of the board data (identical on every box). It prints `IDCHECK <lane> <ds> <device>=<d> host=<d> MATCH|DIFFER`. Queue it on nv and amd; identity is the nv device digest equal to the amd device digest (the host digest is a convenience, not a requirement). Apple ID checks are optional. `lq` refuses it when the branch changes no `.mojo` or `bindings/` file: then the kernels are main's and no check is needed.
-  - Full-size RACE lines are for speed and quality only: NVIDIA and AMD timing and opponent comparisons. IDENTICAL speed work targets NVIDIA and AMD.
-  - `lq add <box> CMD <branch> <tag> '<command>'`: runs in the branch tree. Scripts it calls must be committed in the branch.
-  - `lq results <box> [pattern]` and `lq log <box> <id|tag> [pattern]`: grep-sized output only.
-  - **Box jobs persist from the box (Andrew, 2026-10-26).** Outside `lq`, a job on a rented RunPod or DigitalOcean box starts only through `tools/nvidia_central.sh submit`, `tools/do_amd_steward.sh run` or `tools/dev_pod.sh run`; each wraps it in `tools/box_persist_run.sh`, which uploads its results dir to R2 from the box every few minutes, on any exit and before the box self-destructs, so nothing depends on the Mac staying connected. `--no-persist` is refused unless `MOJOLEARN_ALLOW_UNPERSISTED=1`; read results with `tools/box_persist.py fetch --tag <tag>`.
-
-  Boxes: nv is the RunPod L40S, amd the DO MI325X, and apple is the M2 Pro (the M3 Ultra is the Apple FAST peer's). Each runs one job at a time. The orchestrator watches the queues and sends results back. After queuing, the lane ends with a reply listing what it queued (box, id), so the orchestrator can match the results.
-- **Lanes never compile (Andrew, 2026-10-07).** No `mojo build`, binding build or compile check in a lane, on the laptop or
-  through `lq`. Per-lane compiles rebuilt the same bindings many times over on one loaded Mac. The orchestrator merges the
-  finished lanes into one integration branch, compiles it ONCE (every switch on and every switch off, NVIDIA and AMD
-  targets, on the cheap fast-CPU build boxes), fixes what breaks, then merges to main. A lane makes its code easy to
-  compile instead: read the call path and Mojo syntax carefully, keep each switch's code self-contained, and list in its
-  final reply every binding the orchestrator must build.
-- **Orchestrator compiles go through the slot semaphore:** `bash tools/compile_slot.sh <command>` (versioned in the repo; `~/mojolearn-evidence/compile_slot.sh` is a shim that execs the main checkout's copy). It allows 4 compiles machine-wide at `nice -n 19`. Use `-j 1` and `MOJOLEARN_COMPILE_JOBS=1`.
-- **Never `git push --no-verify`.** The pre-push host-route fence judges a branch push only on what the branch adds over
-  its merge-base with main (`--branch` mode); main's own findings are main's to fix and never block a lane. A push to main
-  is judged on the whole tree. If main itself is red, fix main first (Andrew, 2026-10-07).
-- **One worktree per lane:** `~/mojolearn-wt/<lane>` on branch `lane/<lane>`. Commit after every edit and push often, because a crash or reboot loses anything uncommitted. Never `git stash`, rebase, `reset --hard` or `checkout --` someone else's edits.
-  - A lane that doesn't read old evidence can use `tools/lean_worktree.sh ~/mojolearn-wt/<lane> lane/<lane>`: a sparse worktree without `bench/results/` except the canonical board dir.
-- **Nothing in `/private/tmp`.** It's wiped on reboot. Keep briefs, notes and scripts in the worktree or `~/mojolearn-evidence/`.
-- **Use bash, not zsh, for loops and variable expansion.** zsh doesn't word-split `$FLAGS`, so defines get dropped silently.
-- **Final reply format, short:**
-  - branch and head;
-  - one line per change, with the cause as `file:line`;
-  - bit changes, if any;
-  - the A/B define, if any;
-  - what it queued (box and id), plus any RUN OWED that `lq` can't express.
-
-  No narrative, no pasted diffs.
-
-## Experiments (Apple FAST and every speed lane)
-
-- Every experiment is a `-D MOJOLEARN_<AREA>_FAST_<NAME>` define, default off, measured by an A/B on the box.
-- A winner (faster, quality equal) becomes the FAST default with a `_OFF` define and a code comment citing the A/B numbers.
-- A loser (slower, noise, quality or semantics change) never reaches main: delete its code from the lane before merging. It stays recoverable at the lane's recorded sha.
-- Every experiment, kept or dropped, gets one row in `docs/apple-fast/EXPERIMENTS.md` (define, algorithm/dataset, branch@sha, A/B tag, before -> after ms, verdict, reason). Search it before writing a new experiment.
-
-### Deleting an experiment
-
-**PERMANENT RECORD (Andrew, 2026-10-28): `docs/TOMBSTONES.md` entries, their patches under experiments/removed/ and the inline TOMBSTONE markers are never deleted, rewritten or squashed; deletions of experiments are only ever ADDED to `docs/TOMBSTONES.md`.**
-
-Andrew, 2026-10-10: a deleted experiment is documented both inline and centrally. The deletion commit (or its lane) leaves all four:
-
-1. **Inline tombstone** at every deletion site: `# TOMBSTONE: MOJOLEARN_<DEFINE> (<verdict>) deleted <date> by <sha>; code recoverable at <sha>^.` plus a `# Restore:` line naming the patch.
-2. **`docs/TOMBSTONES.md` entry**: an index row and a section with what it tried, the files, the verdict with NV/AMD ratios per dataset and the quality change, run ids, the recoverable sha and the patch path.
-3. **`experiments/removed/<DEFINE>.patch`**: the reverse of the deletion restricted to code files (`git diff <sha> <sha>^ -- <files>`), so `git apply` restores the code. Code that never reached main gets no patch; record the lane branch@sha instead.
-4. **Refusal and records**: a `removed` refusal in the define's family module `core/experiment_guards_<family>.mojo` (`core/six_lane_experiment_guards.mojo` only for guards shared across families; see `docs/build/HOT_GROUPS.md`), the entry moved to `removed` in its `grid_controls/*.json`, and the `docs/apple-fast/EXPERIMENTS.md` row.
-
-- Measurements run ONE run per arm (Andrew, Oct 3). tools/aft_ab.sh, afc_ab.sh and afc_ab_def.sh force it; AB_MULTI_RUN=1 is the only override. Queue A/B lines with reps 1, rounds 1, pairs 1.
+- The orchestrator session (Fable) reads the logs with grep and short tails, judges, plans, merges and decides. It
+  does not hand its judgment to a lane.
+- Implementation lanes are Opus subagents: one lane, one worktree, one brief. They write code and push; they do not
+  compile, test, measure or rent (AGENTS.md "Lanes").
+- Fable subagents are for work that is judgment: ideas-only and design lanes, audits, and any change to the rule
+  files themselves. Andrew asks for a Fable implementation lane by name when he wants one.
+- One integration lane at a time may compile, on the integration branch only, when its brief says so.
 
 ## Briefs
 
-The orchestrator saves every lane brief as `~/mojolearn-evidence/briefs-<date>/<lane>.md` before launching the lane. After a crash, a lane is relaunched from that file plus `git status` and `git log origin/main..HEAD` in its worktree.
+- The orchestrator saves every lane brief as `~/mojolearn-evidence/briefs-<date>/<lane>.md` before launching the
+  lane, with one shared `_common.md` the lane reads first.
+- After a crash, a lane is relaunched from that file plus `git status` and `git log origin/main..HEAD` in its
+  worktree. A lane that goes silent is checked in its worktree (last commit, untracked files) and relaunched in the
+  same worktree, never duplicated in a second one.
+- Each finished lane's result and leftovers go into a follow-ups file beside the briefs, so every leftover gets an
+  owner before a freeze.
 
-## GPU rules (summary; the plans in docs/plans/ have the details)
+## Subagents and context
 
-- The GPU path is GPU only and parallel. No host steps inside a GPU fit, transform or predict, and no serial one-thread, one-block or per-sample default.
-- (IDENTICAL) Same bits on Apple, NVIDIA and AMD, within one version (Andrew, 2026-10-13: Apple IDENTICAL works and must match NVIDIA and AMD; this replaces the 2026-10-07 two-vendor rule). Identity is decided by the output hash each measurement run already stores: equal on Apple, NVIDIA and AMD means identical. Host digests are recorded, not required. Bits may change between versions: when a parallel kernel needs a different fold order, change the order on every vendor and in the host column together. Never keep a serial chain to preserve old bits.
-- **FAST mode needs no identical anything.** Not the same bits across vendors, not the same bits as arm A, not the same digests run to run, not an exact match with IDENTICAL. FAST is judged on two things only: speed, and quality that does not go down. The board's quality metric (AUC, recall, error, trustworthiness, inertia, p-value, ...) must show no material drop against FAST main (arm A), and must be at least as good as the best opponent's. A FAST candidate is never held for a noise-level metric change, a different fold order or different bits. It is held for any real quality loss against FAST main or the opponent. The same-bits rules above apply to IDENTICAL only.
-- **NO PYTHON COMPUTE IN THE RUNTIME, EVER.** Python is only the public API surface: argument checks, routing, and calling compiled Mojo. No arithmetic on data, no loops or comprehensions over values, no NumPy math, no per-element work in Python at runtime, not even for a handful of values. Every computed number (including small ones like criteria, penalties and statistics) comes from Mojo, on the GPU for GPU paths. If a value is missing, add it to the Mojo kernel; never patch it in Python. The no-host-routes push hook enforces this.
-- Host loops on the GPU path: only driver loops over model structure, tagged `# driver-loop: over <what>`; never over rows, elements or a downloaded buffer. The rule is `docs/plans/GPU_PATH_HOST_LOOPS.md` (Andrew, 2026-10-17).
-- Never time a CPU or host route. The CPU is for verification digests, CPU-only installs and inference.
-- Never add, rent, extend or release an Apple machine.
-- Race and measure tools default to our GPU arm only; opponents are scored once, stored, and run only by an explicit opponent job.
+- Never read a subagent transcript or a `tasks/*.output` file. A lane's final reply and its pushed branch are the
+  record.
+- Do not poll a running subagent. Check the artifact it is producing (a build log's counts, a branch head).
+- Check `ListAgents` for live sessions before resuming a handoff; the author may still be running.
 
-## Wait for Mojo and Modular
+## Memory
 
-If Mojo or Modular does not support something yet, do not build a workaround for it; wait for their support.
-Examples: an AMD portable kernel path needs Mojo to keep kernel IR (or bitcode) and to accept generic gfx targets;
-until Modular ships that, we do not pursue it (decided 2026-10-04; the parked prototype is on `lane/amd-portable`,
-with the evidence in `docs/AMD_PORTABLE_PATH.md` on that branch). Do not hand-rewrite compiler output, patch
-toolchain internals, or ship unsupported build modes. Record the ask for Modular instead and move on.
-
-## No dimension targeting, in any mode
-
-No dispatch, tile, threshold, cap or route rule may key on an exact benchmark dimension, a size chosen to sit just above or
-below a board row (rows, features, classes, k, vocabulary), or a board dataset name. This applies to FAST and to IDENTICAL on
-every vendor. A rule must come from size, hardware or cost reasoning that covers neighboring shapes, stated in a comment.
-In IDENTICAL, removing such a rule may change bits: that is allowed, because bits only have to match across NVIDIA and
-AMD within one version, never across versions. Change all columns together. Each removal gets an
-A/B with the old rule as the B arm, timed on neighboring shapes and one non-board dataset.
-
-## Measurement process (owner, 2026-10-05)
-
-1. Freeze one commit per A/B round. Compile it once on cheap boxes (Apple on the M2; NVIDIA/AMD on cheap fast-CPU boxes).
-   Only a green frozen build goes to the timing GPUs. New code waits for the next freeze.
-2. IDENTICAL switches are decided by NVIDIA and AMD together: the verdict is the AVERAGE of the two vendors' ratios against the
-   average noise floor (Andrew, 2026-10-08: "the average of the two must be better"); a vendor pulling the other way is flagged
-   on the cell (vendor split) but does not block the average. Apple never votes on IDENTICAL switches and IDENTICAL is never
-   tuned for Apple; Apple IDENTICAL digests must still match NVIDIA and AMD (correctness, not a vote; 2026-10-13).
-3. Measure IDENTICAL on NVIDIA, AMD and Apple and update every board (main board included) as results land, through the
-   board tools only. A full-board run is IDENTICAL on the three; FAST is not rerun.
-4. Standing order: when a problem is found, fix it. Do not just comment on it or defer it.
-5. Read logs with grep and short tails; never paste whole logs. Tell every subagent the same.
-6. OPPONENT CLOCKS (Andrew, 2026-10-07/08; audit tools/board_clock_audit.py): every stored opponent cell carries a comparability span (input_home, inside_clock, upload_ms_untimed). Our board fit clock includes the host-to-device copy of X. The neural torch twins move inputs inside their clock too (whole/whole, comparable as is). The classical torch-gpu columns and the algos torch/cupy/gpytorch GPU arms time with inputs already on the device (kernel-only); cuML/cuVS/cuGraph record their copy separately. The board shows both clocks per cell where derivable (whole = kernel + copy): torch-GPU ratios kernel/kernel, every other opponent whole/whole, never an invented copy time. NO opponent re-score. Our arm records its copy separately (upload_ms_separate; classical since freeze-20261007; algos driver owes the probe), then only OUR cells on the MIXED lanes are re-raced.
-
-## No Python in the runtime
-
-Follow the current owner contract in [AGENTS.md](AGENTS.md#no-python-in-the-runtime).
-Public runtime methods hand buffers to one compiled Mojo/native call, which owns input validation and preparation,
-binding selection, computation, training loops, batching, backward, optimizers, workers and output processing.
-Native product operations must not call back into Python. Python remains available for the thin binding connection,
-packaging/distribution and testing; checker baseline entries are debt, not exemptions.
-
-Owner clarification (2026-10-24): `__sklearn_tags__` and helpers used solely to construct and return scikit-learn tag
-metadata may run in Python in the compatibility layer, including loading the optional tag classes. Preserve the tag
-contract; there is no requirement to move this metadata into Mojo. This is a narrow exception, not permission for
-Python in the runtime work listed above or in other metadata protocols. Native operations must not call back into
-Python tag handling. Audit allowed tag metadata separately from computational runtime violations, while retaining
-protocol-correctness checks and the no-callback requirement.
-
-## Release cost rules (Andrew, 2026-10-10)
-
-- Identity records and checks run ONCE (`REPEATS=1`); a mismatch is a bug to fix, never a reason to rerun.
-- Re-record only the lanes whose bits can have changed. This is the default of `tools/record_identity_column.sh` (2026-10-31); every other table row is kept.
-- One identity check per release: the table admit. No release step re-fits or re-diffs identity after it.
-- No re-verification of green work, ever (Andrew, 2026-11-02). The gates install the exact wheel bytes and run the
-  records on NVIDIA, AMD and Apple; nothing reinstalls those bytes from PyPI to run the verifier again, and a ledger
-  waiver never triggers a rerun. A verdict is reused automatically for the same bytes (gate adoption, build reuse);
-  only a changed input reruns, and only the units it reaches.
-
-## Verification is pre-release only (Andrew, 2026-11-05)
-
-- The identity reference tables are run and checked BEFORE the release, once: freeze the source first, run identity
-  once, see the columns match across the GPUs and the CPU, publish. Nothing verifies after a release by default: no
-  step after the first publish runs a lane on any device.
-- Never plan a second identity run for one release. If a plan would run identity twice, say so up front and fix the
-  order or the tool instead.
-- No same-bits checks during development (Andrew, 2026-11-05): no `lq add ... ID` per lane, per fix or per merge.
-  Fix everything in code first; ONE global verify of every lane on every device at the very end is the only
-  same-bits check. This supersedes the "Same-bits checks use `lq add <box> ID`" instruction in the lane section.
-- Bits may change between versions; identity is only across GPU vendors within one version (see `AGENTS.md`).
-- Every release runs everything; reuse of old runs is an opt-in bonus, not the default
-  (`docs/plans/PERFORMANCE_THEN_ONE_VERIFICATION.md`).
-
-## Reuse good old runs, automatically (Andrew, 2026-10-31)
-
-- Reuse is the default in code. `tools/record_identity_column.sh` with no lane
-  options records only the lanes whose closure changed since the newest good
-  evidence of the column's device class. That evidence is the table, the
-  committed and retained records, the output dir and `MOJOLEARN_IDENTITY_REUSE_RECORDS`.
-  It prints `REUSED n / RECORD m` or `NOTHING-CHANGED`.
-- `FULL=1` is the only way to re-record unchanged lanes. Ledger launches rerun
-  only with `--redo --rerun-reason`.
-- Admission accepts reused older records next to new ones when each older lane
-  is superseded or its closure is unchanged. See `AGENTS.md` for the details.
-
-## Public docs and docstrings (Andrew, 2026-10-12)
-
-- Docstrings of public names are user documentation: they render on docs.mojolearn.org. Write them for users:
-  what it does, parameters, returns, a short example. No status notes, no internal file paths, no dates, no
-  lane or run names, no all-caps asides, no "NO NVIDIA LEG HAS RUN", "NOT CERTIFIED YET", "NO REAL CHECKPOINT
-  HAS BEEN LOADED" or anything like them. Engineering notes belong in `#` comments next to the code.
-- If something is broken, unverified or unfinished, it is NOT documented: leave it out of docs-site and list it in
-  `docs-site/api_exclude.txt` (name and reason) so the API reference skips it. Never document a caveat in its place.
-- `fast` is Apple only. Docs never offer `fast` on NVIDIA, AMD or the CPU.
-- The 162M two-route model is research and marketing material (mlsys paper, mojolearn.org), not library
-  documentation: it never appears in docs-site or the library docs.
-
-Additions (Andrew, 2026-10-13):
-- Public docs state the contract in one sentence, verbatim: "In `identical` mode, Mojolearn returns the same bits on Apple,
-  NVIDIA and AMD GPUs." Every `numeric_mode` doc that lists `'fast'` says Apple only.
-- Omit, never caveat: no "Known defect" or other status notes, no all-caps IDENTICAL/FAST asides (write `identical`/`fast`),
-  no "NOT IMPLEMENTED" in docstrings. Excluded or unverified names (`docs-site/api_exclude.txt`) and unverified features
-  never appear in public docs, the README or the site.
-- We are alpha: no enterprise-grade checks. The docs, mojolearn.org and the measurements are generated from the latest
-  origin/main by one publish command, run only when Andrew says so. Old URLs may break; no redirects.
+- The file memory under `~/.claude/projects/.../memory/` is Claude's. Save there only what changes behavior in
+  future sessions and is not already in `AGENTS.md`, the repo or git history.
+- A standing rule Andrew gives belongs in `AGENTS.md` (so Codex has it too), with a one-line memory pointer at most.
