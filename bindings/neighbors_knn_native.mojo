@@ -417,12 +417,17 @@ def knn_with_status(dist: PythonObject, status: List[Int32]) raises -> PythonObj
     return Python.list(dist[0], dist[1], dist[2], PythonObject(Int(status.unsafe_ptr())))
 
 
-def _resident_handle(model: PythonObject, binding: PythonObject, idx: PythonObject) raises -> PythonObject:
+def _resident_handle(model: PythonObject, binding: PythonObject, idx: PythonObject,
+                     test: Bool = False) raises -> PythonObject:
     """`NearestNeighbors._resident_index_handle(binding, idx)`: the handle of
     the device-resident copy of `idx`, prepared on the first call and reused
     while the index keeps its address and shape; None where the binding has
-    no `knn_index_prepare`. The prepare tests the index behind its upload
-    (lane a7b): a non-finite index is refused and nothing is held."""
+    no `knn_index_prepare`. `test` (the fit of a borrowed X, lane a7b): the
+    prepare tests the index behind its upload, a non-finite index is refused
+    and nothing is held. A query's prepare does not test it again: every
+    `_index` was tested once, at fit or at archive load (lane
+    a8b-device-x-neighbors-rest; host_archive_native.mojo
+    host_archive_neighbors)."""
     var b = _b()
     var prepare = knn_door(binding, "knn_index_prepare")
     if prepare is None:
@@ -451,10 +456,10 @@ def _resident_handle(model: PythonObject, binding: PythonObject, idx: PythonObje
     if cached is not None:
         knn_release(model)
     var status = List[Int32](length=1, fill=Int32(0))
-    var handle = family_call(b.int, family_call(prepare, key[0],
-                                                Python.list(family_call(b.int, idx.shape[0]),
-                                                            family_call(b.int, idx.shape[1]),
-                                                            PythonObject(Int(status.unsafe_ptr())))))
+    var prepare_params = Python.list(family_call(b.int, idx.shape[0]), family_call(b.int, idx.shape[1]))
+    if test:
+        _ = py_call(prepare_params.append, PythonObject(Int(status.unsafe_ptr())))
+    var handle = family_call(b.int, family_call(prepare, key[0], prepare_params))
     _ = idx  # keep the Python object alive through the native call above
     admitted_finite_refuse(Int(status[0]), _class_name(model))
     _ = status^
@@ -707,7 +712,7 @@ def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject,
         # tested behind that upload; the CPU column and RBC scan on the host.
         var search = binding if binding is not None else estimator_binding(model, "_mojolearn", context)
         if not rbc and knn_device_tests(search):
-            _ = _resident_handle(model, search, idx)
+            _ = _resident_handle(model, search, idx, True)
         else:
             knn_host_finite(model, input)
     if not rbc:
