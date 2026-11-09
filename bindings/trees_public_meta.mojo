@@ -62,6 +62,8 @@ from bindings.native_unit_threads import (
     native_unit_threads_run, native_unit_gil_enter, native_unit_gil_leave, native_unit_jobs, NativeUnitFailure,
 )
 from core.host_parallel import host_fp_env, host_fp_env_set
+from std.python._cpython import GILReleased
+from std.ffi import c_int, external_call
 from bindings.native_array_storage import native_array_from_values
 from bindings.msel_inputs import msel_admit, msel_input_count
 from bindings.trees_meta_admission import meta_admit_configuration
@@ -1829,6 +1831,10 @@ struct _CalUnits(Movable):
     var results: PythonObject
     var failure: NativeUnitFailure
     var fp_env: UInt64
+    # The x_trees gathers, scores and calibrators of a unit run one unit at
+    # a time (they share the owner's `xt` program state and can release the
+    # GIL inside); only the member fits overlap.
+    var gate: Bool
 
     def __init__(out self, model: PythonObject, xt: PythonObject, base: PythonObject, Xa: PythonObject,
                  splits: PythonObject, codes: PythonObject, cols: PythonObject, n: Int, d: Int, ensemble: Bool,
@@ -1852,21 +1858,39 @@ struct _CalUnits(Movable):
             _ = py_call(self.results.append, PythonObject(None))
         self.failure = NativeUnitFailure()
         self.fp_env = host_fp_env()
+        self.gate = False
+
+    def _enter(mut self):
+        while self.gate:  # driver-loop: wait for another unit's gather or score (GIL released while waiting)
+            with GILReleased(Python()):
+                _ = external_call["sched_yield", c_int]()
+        self.gate = True
 
     def unit(mut self, f: Int) raises:
         var tr = self.splits[f][0]
         var te = self.splits[f][1]
         var e = _clone(self.base, self.context)
-        _fit_member(e, _gather(self.xt, trees_address(self.Xa), self.n, self.d, tr, self.cols, self.context),
-                    _gather_codes(self.xt, self.codes, tr, self.context), PythonObject(None), self.context)
-        var Xte = _gather(self.xt, trees_address(self.Xa), self.n, self.d, te, self.cols, self.context)
-        var scores = _cal_scores(self.model, self.xt, e, Xte, self.context)
-        if self.ensemble:
-            var cals = _fit_calibrators(self.model, self.xt, scores, _gather_codes(self.xt, self.codes, te, self.context),
-                                        self.context)
-            py_setitem(self.results, PythonObject(f), Python.tuple(e, cals))
-        else:
-            py_setitem(self.results, PythonObject(f), scores)
+        self._enter()
+        var xtr = PythonObject(None)
+        var ytr = PythonObject(None)
+        try:
+            xtr = _gather(self.xt, trees_address(self.Xa), self.n, self.d, tr, self.cols, self.context)
+            ytr = _gather_codes(self.xt, self.codes, tr, self.context)
+        finally:
+            self.gate = False
+        _fit_member(e, xtr, ytr, PythonObject(None), self.context)
+        self._enter()
+        try:
+            var Xte = _gather(self.xt, trees_address(self.Xa), self.n, self.d, te, self.cols, self.context)
+            var scores = _cal_scores(self.model, self.xt, e, Xte, self.context)
+            if self.ensemble:
+                var cals = _fit_calibrators(self.model, self.xt, scores,
+                                            _gather_codes(self.xt, self.codes, te, self.context), self.context)
+                py_setitem(self.results, PythonObject(f), Python.tuple(e, cals))
+            else:
+                py_setitem(self.results, PythonObject(f), scores)
+        finally:
+            self.gate = False
         _ = self.Xa  # keep the Python object alive through the native calls above
 
     def drain(mut self):
