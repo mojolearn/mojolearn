@@ -953,53 +953,65 @@ class Mamba2Block(_MambaBase, _native_constructor=True):
         return _native_neural_bridge.RUNTIME.neural_block_forward(
             self, x, state, True, None, _native_neural_bridge.CONTEXT)
 
-    def _decode_session(self, state):
-        """Keep Mamba-2 weights and recurrent state resident for repeated
-        single-token decode.  The session runs the same L=1 block entry as
-        :meth:`step`; close or sync it before using ``state`` elsewhere.
+    def decode_session(self, state):
+        """Open a `Mamba2DecodeSession` for fast token-by-token decoding.
 
-        PRIVATE UNTIL ITS LANE IS RECORDED; see `_RESIDENT_SESSION_NOTE`."""
+        On a GPU the session keeps the weights and the state on the device across
+        steps; its `step` gives the same bytes as `Mamba2Block.step`. The session copies
+        the weights and the state when it opens:
+
+        - until `close()` or `sync_state()`, the state's arrays are stale, and
+          `forward`/`step` on this block refuse that state by name;
+        - weight edits after opening are not seen; close and open a new session;
+        - edits to the state arrays are not seen until `load_state()`.
+
+        Parameters
+        ----------
+        state : Mamba2State
+            State to decode from.
+
+        Returns
+        -------
+        Mamba2DecodeSession
+        """
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_open", (self, state), _native_neural_bridge.CONTEXT)
 
     __call__ = forward
 
 
-#: WHY THE MAMBA-2 AND MAMBA-3 RESIDENT SESSIONS ARE PRIVATE (2026-09-22,
-#: fix/mamba-decode-surface-sep22). 769936f70 made `Mamba2DecodeSession` and
-#: `Mamba3DecodeSession` public with no identity lane, and
-#: tools/lane_accounting.py refused both by name: a public algorithm with no
-#: lane cannot be missing a cell, so no census sees it. They could not borrow
-#: the `mamba2`/`mamba3` lanes' coverage. Those lanes' recorded `stepfull`
-#: cells hash the per-call `step`, and no recorded column ever ran a session:
-#: the device arm is its own entry (`mamba2_session_step` /
-#: `mamba3_session_step` over resident device buffers) and the AMD and NVIDIA
-#: columns have never executed it. Code reading says it calls the same
-#: `mamba2_block_forward(..., L=1)`; a reading is not a witness. So they stay
-#: underscore-private, reached only through `Mamba2Block._decode_session` and
-#: `Mamba3Block._decode_session`, and are NOT exported from `mojolearn.mamba`.
-#: python/mojolearn/tests/test_mamba23_decode_sessions.py holds each to the
-#: per-call step byte for byte on whatever arm the box has.
-#:
-#: WHAT MAKES THEM PUBLIC. Two lanes in tools/identity_break.py,
-#: `mamba2-decode-session` and `mamba3-decode-session`, built exactly as
-#: `mamba1-decode-session` is: the `mamba2`/`mamba3` lanes' weights and slab,
-#: `_decode_session_probe` holding `step` and `sync_state` to the per-call
-#: `block.step` IN THE CELL (Mamba-2's state adds `buffer_xbc`,
-#: `buffer_dtraw` and `buffered_tokens`; Mamba-3's is the ten
-#: `_STATE_NAMES` pieces, so `_decode_state_arrays` needs those names),
-#: `flags` for the refusals, a `_stepfull_session_spec()` declaration, the
-#: batch/batchscale n/a with the Mamba-1 reason, and the mamba family's
-#: `-D MOJOLEARN_HOST_SABOTAGE=1` arm seen to move. Then cells for both lanes
-#: in the shipped verify reference table on CPU, Apple, NVIDIA and AMD. After
-#: that, rename the classes and the `_decode_session` doors back, re-export
-#: them from `mojolearn.mamba`, and add both lanes to host_surface's
-#: descriptions beside `mamba1-decode-session`.
-_RESIDENT_SESSION_NOTE = "see the comment above"
+# The Mamba-2 and Mamba-3 resident sessions were underscore-private from
+# 2026-09-22 (fix/mamba-decode-surface-sep22) until their identity lanes
+# existed; `mamba2-decode-session` and `mamba3-decode-session`
+# (tools/identity_lanes/coverage.py) hold steps, sync_state and load_state to
+# the per-call step in the cell, and the one pre-release verify records them
+# (lane fix-d1-decode-sessions, 2026-11-08: decode on the session is the
+# public and board path; mamba3-decode was 2.17x on the per-call door).
 
 
-class _Mamba2DecodeSession:
-    """Resident repeated decode for one ``Mamba2Block`` and state."""
+class Mamba2DecodeSession:
+    """Token-by-token decoding on one `Mamba2Block` and one `Mamba2State`.
+
+    Made by `Mamba2Block.decode_session(state)`. Every output is byte for byte what
+    `Mamba2Block.step` gives on the same block and state, and the step sets the
+    block's report attributes as `step` does. On a GPU the weights, the state and the
+    decode buffers stay on the device across steps; on a CPU-only install the session
+    holds its own copies and steps on the host. A session is not thread-safe. Use it
+    as a context manager to close it automatically.
+
+    Attributes
+    ----------
+    state : Mamba2State
+        The state this session decodes from.
+    is_open : bool
+        Whether the session is open.
+
+    Examples
+    --------
+    >>> with block.decode_session(state) as session:
+    ...     for x_t in tokens:
+    ...         y_t = session.step(x_t)
+    """
 
     # One native call per method; the native boundary retains the step's
     # finished report buffers on the block before returning the output.
@@ -1009,11 +1021,13 @@ class _Mamba2DecodeSession:
 
     @property
     def state(self):
+        """The `Mamba2State` this session decodes from."""
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_state", (self,), _native_neural_bridge.CONTEXT)
 
     @property
     def is_open(self):
+        """Whether the session is open."""
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_is_open", (self,), _native_neural_bridge.CONTEXT)
 
@@ -1023,18 +1037,32 @@ class _Mamba2DecodeSession:
             "session_device", (self,), _native_neural_bridge.CONTEXT)
 
     def step(self, x):
+        """Decode one token per row.
+
+        Parameters
+        ----------
+        x : float32 buffer, shape (B, 1, d_model) or (B, d_model)
+            B must equal the session's batch size.
+
+        Returns
+        -------
+        y : mojolearn.Array, shape (B, 1, d_model)
+        """
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_step_public", (self, x), _native_neural_bridge.CONTEXT)
 
     def sync_state(self):
+        """Copy the session's current state into the `Mamba2State` arrays and return the state."""
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_sync", (self,), _native_neural_bridge.CONTEXT)
 
     def load_state(self):
+        """Reload the session from the `Mamba2State` arrays (after you edit them) and return the state."""
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_load", (self,), _native_neural_bridge.CONTEXT)
 
     def close(self):
+        """Copy the state back, release the session's buffers and close it. Closing twice is a no-op."""
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_close", (self,), _native_neural_bridge.CONTEXT)
 
@@ -1474,19 +1502,56 @@ class Mamba3Block(_MambaBase, _native_constructor=True):
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "step_public", (self, x, state), _native_neural_bridge.CONTEXT)
 
-    def _decode_session(self, state):
-        """Keep Mamba-3 weights and recurrent state resident for repeated
-        single-token decode while executing the existing L=1 block entry.
+    def decode_session(self, state):
+        """Open a `Mamba3DecodeSession` for fast token-by-token decoding.
 
-        PRIVATE UNTIL ITS LANE IS RECORDED; see `_RESIDENT_SESSION_NOTE`."""
+        On a GPU the session keeps the weights and the state on the device across
+        steps; its `step` gives the same bytes as `Mamba3Block.step`. The session copies
+        the weights and the state when it opens:
+
+        - until `close()` or `sync_state()`, the state's arrays are stale, and
+          `forward`/`step` on this block refuse that state by name;
+        - weight edits after opening are not seen; close and open a new session;
+        - edits to the state arrays are not seen until `load_state()`.
+
+        Parameters
+        ----------
+        state : Mamba3State
+            State to decode from.
+
+        Returns
+        -------
+        Mamba3DecodeSession
+        """
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_open", (self, state), _native_neural_bridge.CONTEXT)
 
     __call__ = forward
 
 
-class _Mamba3DecodeSession:
-    """Resident repeated decode for one ``Mamba3Block`` and state."""
+class Mamba3DecodeSession:
+    """Token-by-token decoding on one `Mamba3Block` and one `Mamba3State`.
+
+    Made by `Mamba3Block.decode_session(state)`. Every output is byte for byte what
+    `Mamba3Block.step` gives on the same block and state, and the step sets the
+    block's report attributes as `step` does. On a GPU the weights, the state and the
+    decode buffers stay on the device across steps; on a CPU-only install the session
+    holds its own copies and steps on the host. A session is not thread-safe. Use it
+    as a context manager to close it automatically.
+
+    Attributes
+    ----------
+    state : Mamba3State
+        The state this session decodes from.
+    is_open : bool
+        Whether the session is open.
+
+    Examples
+    --------
+    >>> with block.decode_session(state) as session:
+    ...     for x_t in tokens:
+    ...         y_t = session.step(x_t)
+    """
 
     _STATE_NAMES = (
         "theta", "h", "buffer_qrot", "buffer_krot", "buffer_v",
@@ -1501,11 +1566,13 @@ class _Mamba3DecodeSession:
 
     @property
     def state(self):
+        """The `Mamba3State` this session decodes from."""
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_state", (self,), _native_neural_bridge.CONTEXT)
 
     @property
     def is_open(self):
+        """Whether the session is open."""
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_is_open", (self,), _native_neural_bridge.CONTEXT)
 
@@ -1515,18 +1582,32 @@ class _Mamba3DecodeSession:
             "session_device", (self,), _native_neural_bridge.CONTEXT)
 
     def step(self, x):
+        """Decode one token per row.
+
+        Parameters
+        ----------
+        x : float32 buffer, shape (B, 1, d_model) or (B, d_model)
+            B must equal the session's batch size.
+
+        Returns
+        -------
+        y : mojolearn.Array, shape (B, 1, d_model)
+        """
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_step_public", (self, x), _native_neural_bridge.CONTEXT)
 
     def sync_state(self):
+        """Copy the session's current state into the `Mamba3State` arrays and return the state."""
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_sync", (self,), _native_neural_bridge.CONTEXT)
 
     def load_state(self):
+        """Reload the session from the `Mamba3State` arrays (after you edit them) and return the state."""
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_load", (self,), _native_neural_bridge.CONTEXT)
 
     def close(self):
+        """Copy the state back, release the session's buffers and close it. Closing twice is a no-op."""
         return _native_neural_bridge.RUNTIME.mamba_native_call(
             "session_close", (self,), _native_neural_bridge.CONTEXT)
 

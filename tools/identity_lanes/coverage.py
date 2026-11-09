@@ -520,7 +520,7 @@ def _coverage_state_pieces(st):
 
 
 def _coverage_decode_session(ml, blk, X, dm):
-    """`blk._decode_session(state)` (bindings/mamba_public_native.mojo, the
+    """`blk.decode_session(state)` (bindings/mamba_public_native.mojo, the
     binding's `<kind>_session_open/step/export_state/load_state`) on two rows
     of the fixture slab: four steps, `sync_state`, four steps the reload
     discards, `load_state` (the session rewinds to the synced four-token
@@ -536,7 +536,11 @@ def _coverage_decode_session(ml, blk, X, dm):
         return np.ascontiguousarray(x[:, t:t + 1])
 
     st = blk.allocate_state(2)
-    with blk._decode_session(st) as sess:
+    with blk.decode_session(st) as sess:
+        # The door returns the documented class (mojolearn.mamba
+        # Mamba2DecodeSession / Mamba3DecodeSession), which is also what
+        # attributes this lane to it in tools/verification_matrix.py.
+        assert type(sess) is getattr(ml.mamba, type(blk).__name__.replace("Block", "DecodeSession")), type(sess)
         first = np.concatenate([np.asarray(sess.step(tok(t))) for t in range(4)], axis=1)  # glue: four steps
         sess.sync_state()
         synced = _coverage_state_pieces(st)
@@ -592,6 +596,68 @@ def _(ml, X, yc, yr, Xh=None):
         "D": (nh,), "out_proj.weight": (dm, di)},
         ones=("block_norm.weight",), near_one=("B_norm.weight", "C_norm.weight"))
     return _coverage_decode_session(ml, ml.Mamba3Block(w), X, dm)
+
+
+# ---------------------------------------------------------------- SambaStack.decode_session (lane fix-d1-decode-sessions, 2026-11-08)
+
+@lane("samba-decode-session")
+def _(ml, X, yc, yr, Xh=None):
+    """SambaStack.decode_session(state) -> SambaDecodeSession on the `samba`
+    lane's stack (one Mamba-3 and one attention layer, d_model 32, vocab 256,
+    weights from Generator(1)): two rows, four steps, `sync_state`, four steps
+    the reload discards, `load_state`, four more steps and a final
+    `sync_state` (`samba_decode_open`, `samba_decode_step`,
+    `samba_decode_export`, `samba_decode_load` on a binding with the resident
+    decode; the per-call step on the caller's state otherwise). Each output and
+    both synced states are held byte for byte IN THE CELL to the per-call
+    `SambaStack.step` on a second state that stepped the first four tokens and
+    then the same last four. Parts: the first and last logits, the final state
+    (every layer's float pieces in stack order) and its cursors."""
+    d = _coverage_digester(ml)
+    cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
+    m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
+    ids = _ids(X, 2, 12)
+
+    def tok(t):
+        return np.ascontiguousarray(ids[:, t:t + 1])
+
+    def pieces(st):
+        flat, words = [], []
+        for layer in st.layers:  # glue: the stack state's layer states
+            if hasattr(layer, "k_cache"):
+                flat += [np.asarray(layer.k_cache, dtype=np.float32).reshape(-1),
+                         np.asarray(layer.v_cache, dtype=np.float32).reshape(-1)]  # glue: two cache pieces
+                words += [int(layer.cached_tokens), 0]
+            else:
+                f, w = _coverage_state_pieces(layer)
+                flat.append(f)
+                words += [int(v) for v in w]  # glue: the layer's cursors
+        return np.concatenate(flat), np.asarray(words, dtype=np.int64)
+
+    st = m.allocate_state(2, 16)
+    with m.decode_session(st) as sess:
+        assert type(sess).__name__ == "SambaDecodeSession", type(sess)
+        first = np.stack([np.asarray(sess.step(tok(t))) for t in range(4)], axis=1)  # glue: four steps
+        sess.sync_state()
+        synced = pieces(st)
+        for t in range(4, 8):  # glue: four steps the reload discards
+            sess.step(tok(t))
+        sess.load_state()
+        after = np.stack([np.asarray(sess.step(tok(t))) for t in range(8, 12)], axis=1)  # glue: four steps
+        sess.sync_state()
+        resident = pieces(st)
+    plain = m.allocate_state(2, 16)
+    want_first = np.stack([np.asarray(m.step(tok(t), plain)) for t in range(4)], axis=1)  # glue: four steps
+    plain_synced = pieces(plain)
+    want = np.stack([np.asarray(m.step(tok(t), plain)) for t in range(8, 12)], axis=1)  # glue: four steps
+    plain_final = pieces(plain)
+    _same_bytes("session steps", first, "per-call SambaStack.step", want_first)
+    _same_bytes("session sync_state", synced[0], "per-call state", plain_synced[0])
+    _same_bytes("session sync_state cursors", synced[1], "per-call state cursors", plain_synced[1])
+    _same_bytes("steps after load_state", after, "per-call steps after the same four tokens", want)
+    _same_bytes("final sync_state", resident[0], "per-call final state", plain_final[0])
+    _same_bytes("final sync_state cursors", resident[1], "per-call final cursors", plain_final[1])
+    return _fit(dict(first=d(first), after=d(after), state=d(resident[0]), cursors=d(resident[1])))
 
 
 # ---------------------------------------------------------------- training.chunked_lm_head_loss

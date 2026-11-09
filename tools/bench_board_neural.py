@@ -41,10 +41,11 @@ are never raced, so GPU decode work had no row before these):
                        state (load_state) per round.
   mamba1-decode        Mamba1Block(weights).decode_session(state).step(x_t).
   mamba2-decode / mamba3-decode
-                       Mamba{2,3}Block(weights).step(x_t, state) (their
-                       resident sessions are private, so the public
-                       per-call step), fresh allocate_state per round.
-  samba-decode         SambaStack(config, weights).step(ids_t, state).
+                       Mamba{2,3}Block(weights).decode_session(state).step(x_t)
+                       (public since 2026-11-08; until then the per-call
+                       step with a fresh allocate_state per round).
+  samba-decode         SambaStack(config, weights).decode_session(state).step(ids_t)
+                       (2026-11-08; until then SambaStack.step(ids_t, state)).
                        Peers (2026-10-22): transformer-decode transformers'
                        DynamicCache loop; mamba1/2-decode mamba_ssm's own
                        Mamba/Mamba2 step over InferenceParams (MambaSsmArm);
@@ -972,15 +973,16 @@ LANE_TEXT = {
                       "mamba-ssm-*: mamba_ssm Block(Mamba, layer_idx 0) over InferenceParams, one token "
                       "per call (Mamba.step: causal_conv1d_update + selective_state_update), states "
                       "zeroed per round; x uploaded once, outputs .cpu() once"),
-    "mamba2-decode": ("mojolearn.Mamba2Block(weights): state = allocate_state(B); "
-                      "step(x[:, t:t+1], state) for t < L",
+    "mamba2-decode": ("mojolearn.Mamba2Block(weights).decode_session(state): load_state(); "
+                      "step(x[:, t:t+1]) for t < L (resident GPU decode)",
                       "mamba-ssm-*: mamba_ssm Block(Mamba2, layer_idx 0) over InferenceParams, one "
                       "token per call (Mamba2.step: causal_conv1d_update + selective_state_update, "
                       "gated RMSNorm), states zeroed per round; x uploaded once, outputs .cpu() once"),
-    "mamba3-decode": ("mojolearn.Mamba3Block(weights): state = allocate_state(B); "
-                      "step(x[:, t:t+1], state) for t < L", "none (ours alone)"),
-    "samba-decode": ("mojolearn.SambaStack(config, weights): state = allocate_state(B, L); "
-                     "step(ids[:, t], state) for t < L -> logits (B, L, vocab)", "none (ours alone)"),
+    "mamba3-decode": ("mojolearn.Mamba3Block(weights).decode_session(state): load_state(); "
+                      "step(x[:, t:t+1]) for t < L (resident GPU decode)", "none (ours alone)"),
+    "samba-decode": ("mojolearn.SambaStack(config, weights).decode_session(allocate_state(B, L)): "
+                     "load_state(); step(ids[:, t]) for t < L -> logits (B, L, vocab) (resident GPU decode)",
+                     "none (ours alone)"),
     "mlp-predict": ("mojolearn.SmallMLPTrainer(w1, b1, w2, b2).predict_logits(X) (GPU)",
                     "F.linear, ReLU, F.linear on the GPU; .cpu()"),
     # 2026-10-19 (lane ag-bench): whole fits through the tape
@@ -2391,7 +2393,10 @@ class OursBlock(Ours):
             self.decode_tokens = [np.ascontiguousarray(self.x[:, t:t + 1, :]) for t in range(length)]
             if model == "transformer":
                 self.decode_state = self.block.allocate_state(batch, length)
-            elif model == "mamba1":
+            elif model in ("mamba1", "mamba2", "mamba3"):
+                # lane fix-d1-decode-sessions (2026-11-08): Mamba-2/3 open the
+                # public resident session too (0.8.66 mamba3-decode 2.17x on the
+                # per-call step); the same bytes as the per-call step.
                 self.decode_state = self.block.allocate_state(batch)
             if self.decode_state is not None:
                 # The public resident session: weights uploaded once, here,
@@ -2538,6 +2543,14 @@ class OursSamba(Ours):
         # samba-decode: the per-token ids, made before the clock
         self.decode_ids = ([np.ascontiguousarray(self.ids[:, t]) for t in range(self.ids.shape[1])]
                            if lane == "samba-decode" else None)
+        # lane fix-d1-decode-sessions (2026-11-08): the public resident
+        # session, opened before the clock as transformer/mamba decode do
+        # (parameters uploaded once). The state's host arrays stay zero
+        # (never synced), so load_state() is the per-round zero reset.
+        self.decode_session = None
+        if self.decode_ids is not None:
+            self.decode_session = self.model.decode_session(
+                self.model.allocate_state(int(self.ids.shape[0]), int(self.ids.shape[1])))
 
     def call(self):
         np = self.np
@@ -2547,9 +2560,9 @@ class OursSamba(Ours):
             self.losses.append(float(res["loss"]))
             self.k += 1
         elif self.decode_ids is not None:
-            state = self.model.allocate_state(int(self.ids.shape[0]), int(self.ids.shape[1]))
-            step = self.model.step
-            self.out = [step(t, state) for t in self.decode_ids]
+            self.decode_session.load_state()
+            step = self.decode_session.step
+            self.out = [step(t) for t in self.decode_ids]
         else:
             self.out = self.model.forward(self.ids)
         self.neural_ab_runtime["public_calls_completed"] += 1

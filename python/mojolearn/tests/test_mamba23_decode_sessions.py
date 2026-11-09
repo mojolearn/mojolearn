@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The PRIVATE Mamba-2 and Mamba-3 resident decode sessions against the
-per-call step, byte for byte.
+"""The Mamba-2 and Mamba-3 resident decode sessions against the per-call
+step, byte for byte.
 
-They are private (`Mamba2Block._decode_session`, `Mamba3Block._decode_session`)
-because no identity lane records them on any column yet; the reason and what
-the lanes need are in `_RESIDENT_SESSION_NOTE` in python/mojolearn/_mamba_impl.py.
-This file is what keeps the private code honest in the meantime: every output
+`Mamba2Block.decode_session` and `Mamba3Block.decode_session` are public
+(lane fix-d1-decode-sessions, 2026-11-08); the identity lanes
+`mamba2-decode-session` and `mamba3-decode-session` record them. Every output
 and every carried state piece the session hands back must be the bytes the
 per-call `block.step` produces on a second fresh state, on whichever arm this
 box has (the device session where the binding exports one, the host arm where
@@ -77,12 +76,13 @@ def _state_bytes(which, state):
     return parts, (int(state.buffered_tokens), getattr(state, "pending", None))
 
 
-def test_the_sessions_are_not_public():
-    """Until the lanes are recorded; see `_RESIDENT_SESSION_NOTE`."""
+def test_the_sessions_are_public():
     for name in ("Mamba2DecodeSession", "Mamba3DecodeSession"):
-        assert name not in mamba.__all__ and not hasattr(mamba, name), name
-    assert not hasattr(ml.Mamba2Block, "decode_session")
-    assert not hasattr(ml.Mamba3Block, "decode_session")
+        assert name in mamba.__all__ and hasattr(mamba, name), name
+    assert callable(ml.Mamba2Block.decode_session)
+    assert callable(ml.Mamba3Block.decode_session)
+    assert not hasattr(ml.Mamba2Block, "_decode_session")
+    assert not hasattr(ml.Mamba3Block, "_decode_session")
 
 
 @pytest.mark.parametrize("which", ["mamba2", "mamba3"])
@@ -92,9 +92,10 @@ def test_session_step_is_byte_for_byte_the_per_call_step(which):
     x = _tokens(rows, length, dm)
     owned = block.allocate_state(rows)
     try:
-        session = block._decode_session(owned)
+        session = block.decode_session(owned)
     except (ImportError, NotImplementedError) as exc:
         pytest.skip(f"no decode session on this install: {exc}")
+    assert type(session) is getattr(mamba, "Mamba2DecodeSession" if which == "mamba2" else "Mamba3DecodeSession")
     route = "host" if session._native is None else "device"
     out = []
     with session as sess:

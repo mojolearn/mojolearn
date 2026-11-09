@@ -922,6 +922,7 @@ TRAINING_LANE_NAMES = {
     "public-set-params": "native constructor, parameter reset and refit across estimator families",
     "neural-trainer-unfused": "the parallel neural trainer's unfused MLP gradient route",
     "samba-optimizer-state": "the Samba stack's optimizer state resumed, and maximize",
+    "samba-decode-session": "the resident Samba stack decode session",
     "optim-adam-clip": "Adam and AdamW with the gradient clip and accumulation",
     # lane/neural (2026-09-27): maximize= on SGD, Adam and AdamW
     # (DEVIATION 6200, training/maximize.mojo) through the same host binding;
@@ -2972,6 +2973,9 @@ FAMILIES = (
                         # lane verify-coverage-owed (2026-10-21): chunked_lm_head_loss,
                         # mlp_inference_sessions, the Samba optimizer's resident state
                         "training-chunked-lm-head", "training-mlp-sessions", "samba-optimizer-state",
+                        # lane fix-d1-decode-sessions (2026-11-08): SambaStack.decode_session;
+                        # on the host its steps are the per-call SambaStack.step
+                        "samba-decode-session",
                         # lane verify-coverage-20261024: residual_dropout and its backward,
                         # vendor_used and the numeric helpers the 2026-10-23 audit found
                         # no lane for (tools/identity_lanes/public_gap_methods.py)
@@ -4396,6 +4400,7 @@ PUBLIC_PENDING_LANES = {
     "training-chunked-lm-head": "unwatched",
     "training-mlp-sessions": "unwatched",
     "samba-optimizer-state": "unwatched",
+    "samba-decode-session": "unwatched",
     # lane verify-coverage-20261024: the public-gap lanes of the training
     # family; no release record yet.
     "public-residual-dropout": "unwatched",
