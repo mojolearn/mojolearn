@@ -407,6 +407,7 @@ in the tables after the sections.
 | [`byte_lm_parallel_open` + 9 sibling entries (native entries)](#dead-native-entries-batch-3-2026-11) | Byte LM (the legacy per-entry parallel trainer: open, open_pooled, close, rollback, shard_gradient, apply_gradient, reduction_pool_available, fold_reset, shard_gradient_fold, fold_add) | removed (dead native entries: no live caller) | 2026-11-08 | [dead_entries_byte_lm_parallel.patch](../experiments/removed/dead_entries_byte_lm_parallel.patch) |
 | [`vocab_encode_public` + 4 sibling entries (native entries)](#dead-native-entries-batch-3-2026-11) | Tokenizer host (vocab_encode_public, vocab_decode_public, vocab_pretrained_public, vocab_pretokenize_public, vocab_pattern_name) | removed (dead native entries: no live caller) | 2026-11-08 | [dead_entries_tokenizer_vocab_public.patch](../experiments/removed/dead_entries_tokenizer_vocab_public.patch) |
 | [`classical_host_weights`, `pca_query_fields`, `prep_check_info`, `prep_scalar_dtype` (orphan functions)](#dead-native-entries-batch-3-2026-11) | Classical arrays, PCA and preprocessing providers | removed (orphan functions: no caller) | 2026-11-08 | [dead_entries_orphan_functions.patch](../experiments/removed/dead_entries_orphan_functions.patch) |
+| [`_rsvd_core`, `_randomized_decompose`, `_lanczos_top`, `_prepare_folds` (dead Python loops)](#dead-native-entries-batch-3-2026-11) | Decomposition and model selection (Python glue the native owners replaced) | removed (dead Python: no caller) | 2026-11-08 | [dead_python_loops.patch](../experiments/removed/dead_python_loops.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3786,3 +3787,11 @@ public runtime qualification; this entry is not release or performance evidence.
 | `prep_check_info`, `prep_scalar_dtype` | `providers/python/prep_metadata_pyapi.mojo` (+ its now-unused `sequence_dtype_native` import) | `@K0SHA_ORPHAN@` | no caller anywhere | same patch |
 
 - Left (plan 5.2): `rankn_mean` / `rankn_softmax` (`autograd/rankn_fold.mojo`) are called by `autograd/checks/rankn_fold_cases.mojo`, which `tools/autograd_smoke.py` runs; deleting them edits a live check, and routing `OPS_MEAN_N` / `OPS_SOFTMAX_N` to them is executor work. The ALS `flags` buffer and the two bare `synchronize()` calls in `x_decomp/als_dev.mojo` belong to lane N0 `readmission-defects` (plan section 8), which owns that file.
+
+### Dead Python loops
+
+| symbols | where | deleted by | why they were dead | restore |
+|---|---|---|---|---|
+| `_rsvd_core` (the `range(n_iter)` power iteration over `k.mm` / `k.orth`), `_randomized_decompose`, and their helpers `_seed_of`, `_orthonormal_cols`, `_flip_u` | `python/mojolearn/_expansion_decomp.py` | `@K0SHA_PY@` | public `randomized_svd` routes to the native linalg door; PCA / TruncatedSVD `algorithm='randomized'` run in `x_decomp/pca_randomized.mojo` / `x_decomp/tsvd_owner.mojo`; no caller was left. `test_pca_exact_native_owner.py` no longer patches the two names (it still forbids `_Kit`) | `experiments/removed/dead_python_loops.patch` |
+| `_lanczos_top`, `_lanczos_batch`, `_kdot`, `_LANCZOS_TOL`, `_LANCZOS_MAX_M`, `_LANCZOS_DEV_MAX_FLOATS` | `python/mojolearn/_expansion_decomp.py` | `@K0SHA_PY@` | the top-eigenpair route runs in `bindings/mani_decomp_native.mojo` and `x_decomp/kpca_owner.mojo`; the only caller was the one-off `tools/kernel_pca_gpu_trial.py`, deleted with it (`bench/decomp_fast_quality.py` uses the public estimators and stays) | same patch |
+| `_prepare_folds` and its helpers `_cv_fast_on`, `_native_default_cv`, `_CV_TRUST_FOLDS_BIT` | `python/mojolearn/model_selection.py` | `@K0SHA_PY@` | `cross_val_score` runs `family_msel_cross_val_score`; `bindings/msel_cv.mojo` (`msel_fast_on`, `msel_native_default_cv`) does the fold validation. `_cv_fast_defines` stays (the native context reads it) | same patch |
