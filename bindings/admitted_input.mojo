@@ -300,6 +300,13 @@ def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject
     # same native call (an ndarray, or an Array without NumPy). It was
     # admitted and its pandas/Torch storage read there, so the admission walk
     # and the two storage tests are not repeated for the same value.
+    # A matrix the running meta-estimator already admitted (held in
+    # bindings/admitted_registry.mojo) is the array its members read as it
+    # is: no view, no check, no scan, in this form too (lane a1b: the
+    # array-form doors, classical_host_f32's callers among them, skipped
+    # the registry and re-checked every member's X).
+    if ndim == 2 and order == "C" and not as_array and admitted_held_index(source) >= 0:
+        return source
     var b = native_loaded_module("builtins")
     var prepared = source
     if not admitted:
