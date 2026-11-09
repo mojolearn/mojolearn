@@ -55,17 +55,10 @@ from training.byte_lm_host import (
     byte_host_logits,
     byte_host_logits_threaded,
     byte_host_next_threaded,
-    byte_host_loss,
     byte_host_sabotage_compiled,
 )
-# DEVIATION 2680. The CPU training step. This import is what puts the host
-# backward pass inside the certified CPU inference artifact, so the loss gate's
-# 33 of 33 and the DEVIATION 2612 sabotage catch must both be unmoved
-# afterwards; either one shifting is a stop, not something to reconcile.
-from training.byte_lm_host_backward import (
-    byte_host_adamw,
-    byte_host_train_step,
-)
+# DEVIATION 2680. The CPU training step and loss: since lane x7b the trainer's
+# captured program on a host session (training/byte_lm_host_execution.mojo).
 
 
 comptime BYTE_HOST_MAX_LOGITS = 268435456
@@ -229,11 +222,9 @@ def byte_lm_host_train_step_binding(addresses: PythonObject, shape: PythonObject
     Returns the loss's IEEE-754 bits, as `byte_lm_host_loss` does, because a
     loss compared as a float is a loss compared with a tolerance.
 
-    NO THREADED PATH. The threaded forward (DEVIATION 2640) has no backward
-    twin and must not grow one by accident: a weight gradient sums over every
-    row of the batch, so unlike the forward it crosses every thread boundary
-    and needs a fixed cross-thread fold rather than threads accumulating as
-    they finish.
+    The step is the trainer's captured program on a host session (the GPU
+    columns' algorithm); its folds are the executor's and the block body's
+    fixed ones on every core.
     """
     var cfg = _host_config(shape)
     if len(addresses) != 8:
@@ -254,17 +245,21 @@ def byte_lm_host_train_step_binding(addresses: PythonObject, shape: PythonObject
 
 def byte_lm_host_loss_binding(addresses: PythonObject, shape: PythonObject,
                               threaded: PythonObject, threads: PythonObject) raises -> PythonObject:
-    """Loss for addresses [params f32 (n_total), ids i32 (batch * (length + 1))].
-    `threaded` and `threads` as for logits. Returns the mean loss's IEEE-754 bits."""
+    """Loss for addresses [params f32 (n_total), ids i32 (batch * (length + 1))]:
+    the trainer's training forward on the host. Returns the mean loss's
+    IEEE-754 bits."""
+    # lane x7b: the loss is the trainer's program on a host session (the
+    # GPU columns' algorithm); `threaded` / `threads` are still checked for
+    # the callers' signature and choose nothing here.
     var cfg = _host_config(shape)
     if len(addresses) != 2:
         raise Error("byte LM host: expected 2 addresses")
     var use_threads = _index(threaded)
     if use_threads != 0 and use_threads != 1:
         raise Error("byte LM host: threaded must be 0 or 1")
-    var thread_count = _thread_count(threads)
+    _ = _thread_count(threads)
     var addresses_native: List[Int] = [_index(addresses[0]), _index(addresses[1])]
-    return PythonObject(byte_host_loss_native(addresses_native, cfg, use_threads, thread_count))
+    return PythonObject(byte_host_loss_native(addresses_native, cfg))
 
 
 # ===========================================================================
