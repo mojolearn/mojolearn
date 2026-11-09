@@ -13,7 +13,8 @@ name whose struct changed layout without a rename corrupts memory the moment
 two modules built from different sources meet in one process (a stale .so in
 a dev tree, a core and a vendor wheel of different versions).
 
-THE RULE for every cross-module slot of ours:
+THE RULE for every cross-module slot of ours (`SharedSlot` below applies
+it for a slot: prefer it to a hand-written `_Global`):
   * the name is `Mojolearn<What>V<n>` (tier suffix only when the contents
     differ by tier); bump `n` on any field change;
   * the struct's FIRST field is `layout: Int`, set by `init_fn` to
@@ -46,6 +47,8 @@ semantics, and whether `init_fn` running twice is a guaranteed contract.)
 """
 
 from std.atomic import Atomic, Ordering
+from std.ffi import _Global
+from std.os import abort
 from std.sys.info import size_of
 
 #: 'MJLN' in the high half: a word an older layout's first field (a pointer,
@@ -83,3 +86,43 @@ def shared_slot_lock(word: MutPointer[Int64, MutUntrackedOrigin]):
 def shared_slot_unlock(word: MutPointer[Int64, MutUntrackedOrigin]):
     """Release a lock word taken by `shared_slot_lock`."""
     Atomic.store[ordering=Ordering.RELEASE](word, Int64(0))
+
+
+struct _SlotBox[T: Defaultable & Movable & Deinitable, version: Int](Defaultable, Movable):
+    """What a `SharedSlot` stores in the runtime table: the layout word first,
+    then the slot's own value."""
+
+    var layout: Int
+    var value: Self.T
+
+    def __init__(out self):
+        # side-effect free besides building the value (first creation, above)
+        self.layout = shared_slot_word[Self.T](Self.version)
+        self.value = Self.T()
+
+
+struct SharedSlot[T: Defaultable & Movable & Deinitable, name: StaticString, version: Int = 1]:
+    """A process-wide named slot that carries the layout word for its users
+    (lane s2, 2026-11-09). A drop-in for
+    `_Global[StorageType=T, name=name, init_fn=T.__init__]`: the same
+    `get_or_create_ptr()` call returns a pointer to the `T`, after the layout
+    word was checked, so no accessor can forget the check. A mismatch (a
+    module built from another layout met this name in the process) stops the
+    process with `mojolearn: mixed binary versions (<name>)`: the accessor is
+    not raising, as `_Global`'s is not, and reading on would corrupt memory.
+
+    Names follow the rule above (`Mojolearn<What>V<n>`); `version` is the
+    layout version folded into the word. Bump the name's `V<n>` and
+    `version` together on any field change of `T`."""
+
+    comptime _BOX = _SlotBox[Self.T, Self.version]
+    comptime _SLOT = _Global[StorageType=Self._BOX, name=Self.name, init_fn=Self._BOX.__init__]
+
+    @staticmethod
+    @always_inline
+    def get_or_create_ptr() -> UnsafePointer[Self.T, MutUntrackedOrigin]:
+        """The slot's value, created on first use and kept for the process."""
+        var box = Self._SLOT.get_or_create_ptr()
+        if box[].layout != shared_slot_word[Self.T](Self.version):
+            abort(String("mojolearn: mixed binary versions (", Self.name, ")"))
+        return UnsafePointer(to=box[].value).unsafe_origin_cast[MutUntrackedOrigin]()
