@@ -18,8 +18,8 @@ from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP
 from sequence.recurrent import gemm
 from sequence.layernorm_core import layer_norm_fwd_core, layer_norm_bwd_core
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
-from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
-from autograd.rules_recurrent import AutogradRnnStep
+from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit
+from autograd.rules_recurrent import AutogradRnnStep, rnn_predict
 from autograd.route_ops import moe_tape_train_step
 from autograd.profile import ag_profile_on, ag_profile_report, ag_profile_reset
 from autograd.profile import ag_profile_fit_begin, ag_profile_fit_end

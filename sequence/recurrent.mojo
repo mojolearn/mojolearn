@@ -21,12 +21,10 @@ from sequence.ops import (
     FP,
     Args,
     OP_BIAS,
-    NN42_INPUT_BIAS_FUSED,
     OP_CE,
     OP_CELL_BWD,
     OP_CELL_FWD,
     OP_CELL_BWD_H,
-    OP_CELL_FWD_H,
     OP_COLSUM,
     OP_FILL,
     OP_GATHER_ROWS,
@@ -35,10 +33,8 @@ from sequence.ops import (
     OP_GEMM_SPLITK,
     OP_MSE,
     OP_OPT,
-    OP_SEQ_OUT,
     OP_SEQ_IOTA,
     OP_MLP_PERM,
-    OP_SOFTMAX,
     OP_SUM,
     OPT_ADAGRAD,
     OPT_ADAM,
@@ -49,7 +45,6 @@ from sequence.ops import (
 )
 from sequence.mlp import mlp_epoch_key, mlp_perm_args
 from autograd.data import epoch_order as ag_epoch_order
-from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, scan_routes
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div, identical_mul, identical_pow64, identical_sqrt, ftz
 
 from std.sys.compile import is_defined, get_defined_int
@@ -321,80 +316,11 @@ struct Work(Movable):
             self.wsplit = self.sq
 
 
-def forward[E: Exec](mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work) raises -> FP:
-    """Every layer over the time-major input x [T, B, D]; returns h_T of the
-    top layer [B, H]. Hall[l] holds h_0 = 0 then h_1..h_T."""
-    var H = net.H
-    var GH = net.G() * H
-    var inp = x
-    for l in range(net.L):
-        var din = net.din(l)
-        gemm(ex, inp, P + net.w_ih(l), w.gx[l], T * B, GH, din, din, 1, 1, din, False, GH)
-        # Scan has separate wide/shared bodies; this arm is deliberately
-        # confined to the per-step path until those callers share the seam.
-        comptime if not NN42_INPUT_BIAS_FUSED or SEQ_LSTM_SCAN:
-            bias_rows(ex, w.gx[l], P + net.b_ih(l), w.gx[l], T * B, GH)
-        comptime if SEQ_LSTM_SCAN:
-            if scan_routes(H, net.G()):
-                # the whole recurrence, one block per row (h_0 = c_0 = 0
-                # inside): sequence/recurrent_scan.mojo. The IDENTICAL
-                # default (-D MOJOLEARN_SEQ_RNN_SCAN_OFF keeps the per-step
-                # chain below); the same bits as that chain.
-                var sa = Args()
-                sa.p0 = w.gx[l]
-                sa.p1 = w.gh[l]
-                sa.p2 = w.act[l]
-                sa.p3 = w.hall[l]
-                sa.p4 = w.call[l]
-                sa.p5 = w.hall[l] + B * H
-                sa.p6 = w.call[l] + B * H
-                sa.p7 = P + net.w_hh(l)
-                sa.p8 = P + net.b_hh(l)
-                # p9..p11 are never read by the forward cell (NN42 is off on
-                # this route); bound to live storage, not dummy_ptr, so every
-                # kernel pointer argument is a real buffer (the Metal rule).
-                sa.p9 = P + net.b_ih(l)
-                sa.p10 = w.gx[l]
-                sa.p11 = P + net.w_hh(l)
-                sa.i0 = net.cell
-                sa.i1 = B
-                sa.i2 = H
-                sa.i3 = T
-                ex.launch[OP_CELL_FWD_SCAN](sa, B)
-                inp = w.hall[l] + B * H
-                continue
-        fill(ex, w.hall[l], B * H, Float32(0.0))
-        fill(ex, w.call[l], B * H, Float32(0.0))
-        for s in range(T):
-            var hprev = w.hall[l] + s * B * H
-            var ghs = w.gh[l] + s * B * GH
-            # one launch: h_prev @ W_hh^T + b_hh into GH, then the cell
-            # (ops.mojo::op_cell_fwd_h; the same bits as the three launches)
-            var a = Args()
-            a.p0 = w.gx[l] + s * B * GH
-            a.p1 = ghs
-            a.p2 = w.act[l] + s * B * GH
-            a.p3 = hprev
-            a.p4 = w.call[l] + s * B * H
-            a.p5 = w.hall[l] + (s + 1) * B * H
-            a.p6 = w.call[l] + (s + 1) * B * H
-            a.p7 = P + net.w_hh(l)
-            a.p8 = P + net.b_hh(l)
-            a.p9 = P + net.b_ih(l)
-            a.i5 = 1 if NN42_INPUT_BIAS_FUSED and not SEQ_LSTM_SCAN else 0
-            a.i0 = net.cell
-            a.i1 = B
-            a.i2 = H
-            ex.launch[OP_CELL_FWD_H](a, B * H)
-        inp = w.hall[l] + B * H
-    return w.hall[net.L - 1] + T * B * H
-
-
-def head[E: Exec](mut ex: E, net: Net, P: FP, hT: FP, B: Int, yhat: FP) raises:
-    var H = net.H
-    var O = net.O
-    gemm(ex, hT, P + net.head(), yhat, B, O, H, H, 1, 1, H, False, O)
-    bias_rows(ex, yhat, P + net.head() + O * H, yhat, B, O)
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
+# The hand forward (every layer over the time-major input: input projection, scan or per-step OP_CELL_FWD_H
+# chain) and head (h_T @ W_o^T + b_o) are gone with their one caller, the hand rnn_predict: prediction records
+# the trainer's forward (autograd/rules_recurrent.mojo rnn_forward_autograd) in inference mode, the same launches.
 
 
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_RNN_OFF (hand glue, superseded by the tape) deleted 2026-10-19 by e88ae4e38; code recoverable at e88ae4e38^.
@@ -637,60 +563,6 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     ex.download(losses, dloss, n_steps)
 
 
-def rnn_predict[E: Exec](
-    mut ex: E, net: Net, task: Int, X: FP, N: Int, T: Int, Pin: FP,
-    dst: FP, seq: FP, want_seq: Bool, chunk: Int, resident: Bool = False,
-) raises:
-    """dst [N, O]: the head's output (task MSE) or its softmax (task CE);
-    with want_seq, seq [N, T, H] is the top layer's h_1..h_T batch-first.
-    `resident` (perf3-seq-neural): `Pin` is already this executor's memory
-    (the model's resident fitted block, sequence/perf3_seq_resident.mojo),
-    read in place: no per-call allocation and upload of the parameters."""
-    var np_ = net.n_params()
-    var H = net.H
-    var bmax = chunk if chunk < N else N
-    var dX = ex.alloc(N * T * net.D)
-    ex.upload(dX, X, N * T * net.D)
-    # perf3-seq-neural: the identity row order is built on the executor
-    # (OP_SEQ_IOTA, the fit's unshuffled order: p0[t] = t, exact below 2^24,
-    # N < 2^24 is admitted by rnn_predict_impl), not by a host loop over the
-    # rows and an upload. The same float32 words.
-    var didx = ex.alloc(N)
-    var ia = Args()
-    ia.p0 = didx
-    ex.launch[OP_SEQ_IOTA](ia, N)
-    var P: FP
-    if resident:
-        P = Pin
-    else:
-        P = ex.alloc(np_)
-        ex.upload(P, Pin, np_)
-    var dout = ex.alloc(N * net.O)
-    var dseq = ex.alloc(N * T * H if want_seq else 1)
-    var w = Work(ex, net, T, bmax, False)
-    var b0 = 0
-    while b0 < N:
-        var B = bmax if b0 + bmax <= N else N - b0
-        gather_seq(ex, dX, didx, w.xb, T, B, net.D, b0)
-        var hT = forward(ex, net, P, w.xb, T, B, w)
-        head(ex, net, P, hT, B, dout + b0 * net.O)
-        if task == TASK_CE:
-            var a = Args()
-            a.p0 = dout + b0 * net.O
-            a.p1 = dout + b0 * net.O
-            a.i1 = net.O
-            ex.launch[OP_SOFTMAX](a, B)
-        if want_seq:
-            var a = Args()
-            a.p0 = w.hall[net.L - 1] + B * H
-            a.p1 = dseq
-            a.i0 = T
-            a.i1 = B
-            a.i2 = H
-            a.i3 = b0
-            ex.launch[OP_SEQ_OUT](a, B * T * H)
-        b0 += B
-    ex.sync()
-    ex.download(dst, dout, N * net.O)
-    if want_seq:
-        ex.download(seq, dseq, N * T * H)
+# TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by X3SHA; code recoverable at X3SHA^.
+# Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
+# rnn_predict moved to autograd/rules_recurrent.mojo (it runs the tape forward, and that module imports this one).
