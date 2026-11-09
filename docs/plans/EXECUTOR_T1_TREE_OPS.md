@@ -42,6 +42,10 @@ The N7 contract (docs/plans/EXECUTOR_N7_OPS.md) with one refinement for tree rou
 | 6 `TREE_OP_APPLY` | tree_apply | `tree_op_apply(ctx, gate, structure, records, cindex, leaf_values, n_rows, cursor, approx_dim, cursor_stride)` | yes (cursor) | no | the tree gather: `compute_bins_and_add_kernel`, depth from the structure word; depth 0 adds nothing (as `_apply_last_tree_to_test`) |
 | 7 `TREE_OP_HELDOUT_LOSS` | tree_heldout_loss | `doc_parallel_boosting.mojo tree_op_heldout_loss(ctx, gate, test, objective, num_classes, alpha, logloss_border, approx_dim, losses, it)` | yes (history) | no | `_test_loss_enqueue` at slot 0, then `-double(fv) / double(n)` in soft binary64 into `losses[it - 1]` (UInt64 bit pattern): the held-out loss as a program value |
 | 8 `TREE_OP_OD_STEP` | tree_od_step | `gbdt/overfitting_detector/od_device.mojo od_op_step(ctx, words, state, losses, it)` (+ `OdDeviceState(ctx)`, `od_op_init(ctx, state, detector)` once) | yes | criterion | `add_error` + `is_need_stop` on the device; sets `STEP_DONE`, `STEP_STOP_ITER = it` (the round's tree is kept, as the host `break` keeps it) |
+| 9 `TREE_OP_LEAF_ESTIMATE` | tree_leaf_estimate | `doc_parallel_boosting.mojo tree_op_leaf_estimate(ctx, gate, state, parts, targets, weights, has_weights, cursor, objective, alpha, estimator_alpha, logloss_border, l2_leaf_reg, method, num_classes, iters, learning_rate, leaf_out, leaf_scaled, status)` (+ `LeafEstimateOpState(ctx, n_rows, 1 << max_depth, sm)` once; `tree_op_leaf_estimate_supported`) | no (outputs and status gated) | yes (`LEAF_STATUS_HOST_TAIL`) | lane T1b: `_estimate_and_apply`'s single-dimensional device walk from TREE_OP_PARTITION's device words: offsets / sizes to `d_p_off` / `d_p_sz` (`partition_words_u32_kernel`), the three gathers by `parts.vals`, the oracle enqueue-only (pooled device + host scratch, weights folded on the device), `device_walk_enqueue_bounded` (begin + the first `iters` line-search evaluations, steps and accept decisions in `walker_accept_kernel`'s control word), then `leaf_out` = the model's leaves and `leaf_scaled` = leaves x learning rate (correctly rounded, `scaled_copy_kernel`'s product) for TREE_OP_APPLY. Pointwise single-dim losses, Newton or Gradient, weighted or not, any `iters`; QueryRMSE / PairLogit / YetiRank / multiclass keep `_estimate_and_apply` |
+| 10 `TREE_OP_SEED_SNAPSHOT` | tree_seed_snapshot | `gbdt/gpu_util/kernel/bootstrap.mojo tree_op_seed_snapshot(ctx, gate, seeds, snapshot)` | yes | no | the bootstrap seeds copied before TREE_OP_BOOTSTRAP draws, so a round stopped by `LEAF_STATUS_HOST_TAIL` can be rerun from the seeds it started with |
+| 11 `TREE_OP_FOREST_BATCHES` | forest_batches | `ensemble/decisiontree/batched_levelalgo/builder.mojo Builder._enqueue_loop_batches` (RandomForest, DecisionTree); ExtraTrees `_et_run_depthwise`'s cycle body | queue (inert once empty) | overflow header word | lane T1b, registration only: the node append (`launch_loop_push`; ET `enqueue_push`) and the in-flight tree's bookkeeping (queue head / tail, node count, depth, overflow) were already device words (cpu4-forest); `LOOP_K` (ET `ET_LOOP_K`) batches between two 16-word header reads, which are the loop's chunk read; queue-empty is the criterion |
+| 12 `TREE_OP_FOREST_FINISH` | forest_finish | `Builder._finish_tree_device` + `Builder.collect_finished` (+ randomforest `_take_finished`) | no | no | lane T1b: the finished tree's node table to `SparseTreeNode`s, the leaf pass and the two bulk downloads ENQUEUED; the host model is assembled after the caller's next drain (the forest cycle's one drain). The finish's own drain per tree is deleted |
 
 Structure record (`tree_structure_words(max_depth)` Int32): word 0 status (level + 1 of a sentinel level),
 word 1 kept depth, then (feature id, bin, split type) per split. Feature table: 4 words per feature
@@ -53,20 +57,28 @@ for the learn index; T2 builds one more for the held-out index (`layout_for_test
 ```
 enqueue_step(ctx, registers, it, timers):
     gradients / weak target            (existing launches; round-local stats; the learn loss into its slot)
+    TREE_OP_SEED_SNAPSHOT              (when bootstrap is on: seeds -> seed_snapshot)
     TREE_OP_BOOTSTRAP                  (when bootstrap is on)
     TREE_OP_SEARCH                     -> pool.d_structure;  step_fail_joins_loop(structure)
     TREE_OP_TREE_RECORDS (learn table) -> records_learn
     TREE_OP_LEAF_BINS                  -> parts.bins
     TREE_OP_PARTITION                  -> parts.vals / d_part;  step_fail_joins_loop(p_status)
-    leaf estimation                    (NOT an op yet: section 5, item 3)
-    TREE_OP_APPLY (learn cursor, leaf values x learning rate)
+    TREE_OP_LEAF_ESTIMATE              -> leaf_out (into the round's slab) / leaf_scaled;  step_fail_joins_loop(l_status)
+    TREE_OP_APPLY (learn cursor, leaf_scaled)
     TREE_OP_TREE_RECORDS (test table)  -> records_test
     TREE_OP_APPLY (test cursor)
     TREE_OP_HELDOUT_LOSS               -> losses[it - 1]
     TREE_OP_OD_STEP                    (criterion, last)
 ```
 
-After the loop: read `registers.failure()` first. A structure failure raises the searcher's message ("best split
+After the loop: read `registers.failure()` first. `LEAF_STATUS_HOST_TAIL` (1 << 20, never a structure or
+partition code) is not an error: the walk of round `it = STEP_STOP_ITER` accepted none of its first `iters`
+line-search evaluations, so the walker's never-accepted tail (`iteration < 100`, one drain per evaluation)
+owns that round. Every carried op of round `it` after the leaf op, and every op of later rounds, was gated off,
+so the cursors, the loss history and the detector are round `it - 1`'s; copy `seed_snapshot` back into the
+bootstrap seeds, run round `it` on the host-driven path (`_estimate_and_apply`, `device_walk_estimate` owns the
+tail), then restart `bounded_device_loop` at `it + 1`. Same bits as the host-driven fit. A structure failure
+raises the searcher's message ("best split
 is undefined at depth k: every candidate scored non-finite"), with k from the structure word read once; a
 partition failure raises `DeviceLeafPartitioner`'s two messages. Then download, once, the structure records and
 leaf values of every committed round (keep one structure + leaf slab per round in a `max_rounds`-deep device
@@ -76,6 +88,20 @@ the same chunk because nothing depends on it.
 
 ## 4. Bits
 
+- TREE_OP_LEAF_ESTIMATE: the walk's kernels, order and inputs are `_estimate_and_apply`'s device walk. Two
+  differences, both bit-inert: the oracle is told every leaf may hold all `n_rows` rows (it sizes two grids from
+  the widest leaf, the weight fold's `row_bound` and the shift-add width; the full grid gives the same bits,
+  `compute_partition_stats`' docstring), and the walk runs over `1 << max_depth` leaves when the round's depth is
+  a device word (the leaves past `1 << depth` are empty and come out 0; no fold crosses leaves). What does move
+  bits is the PARTITION the walk sums in: TREE_OP_PARTITION orders each leaf's rows by ascending row id, the
+  order `partition_from_bins` gives every Depthwise / Lossguide task already; the symmetric learn permutation
+  sums in the searcher's partition order today, so when T2 feeds the learn task through TREE_OP_PARTITION the
+  symmetric GBDT identity lanes move (every column together: the host column's symmetric task must then take the
+  ascending order too). The learn cursor add moves from `add_model_value_kernel` (partition order, `est * lr`
+  in the kernel) to TREE_OP_APPLY (bins order, the correctly rounded `est * lr`): T2 checks the two adds are
+  the same float operation or takes the change on every column.
+- TREE_OP_FOREST_FINISH: no change (the same launches and copies; the host assembly is the same statements
+  after a later drain).
 - No change for ops 0-7 (same kernels, same launches; integer walks). The searcher change (gate walk on the
   device) keeps every structure: identical walk, integer only.
 - Detector: the host `OverfittingDetector._update_p_value` now takes `sf64_exp` (`portable_exp64`) instead of
@@ -96,18 +122,28 @@ the same chunk because nothing depends on it.
 2. `fit_oblivious_tree_structure_traced`'s drain branch once every caller (doc_parallel, ordered, dynamic
    boosting, the checks) takes `enqueue_only=True`; then `h_structure`, `d_gate_open` and the `enqueue_only` flag
    itself go.
-3. Owed, not in this lane: **leaf estimation as an op**. `_estimate_and_apply` / the walker
-   (`walk_leaf_values`, `estimate_advance`) reads `h_est` on the host per Newton step (doc_parallel_boosting
-   `:1652, :1771, :1864`). The plain-Newton arm with `leaf_estimation_iterations = 1` is a device reduce plus a
-   divide per leaf and fits as an op over `parts.d_part`; the line-search and multi-step arms need the step
-   loop as an inner `bounded_device_loop`. Until that op exists the round cannot leave the host, so T2 starts
-   with it (or the orchestrator gives it its own lane, T1b).
-4. RandomForest / ExtraTrees: no op here. Their per-tree RNG is already a stateless hash of (seed, tree id) and
-   the rows / labels gather (`launch_bootstrap_rows_labels`) is round-local, so neither needs a gate; what keeps
-   the cycle on the host is `advance_tree` building the sparse tree from the drained split records
-   (`ensemble/randomforest.mojo` `flush_splits_downloads` + `ctx.synchronize()` per cycle). The plan rates the
-   gain "little" (one drain per cycle shared by the in-flight trees); the next step is a device node-append op
-   over the split records, sized like the gate walk. Listed as owed.
+3. Done in lane T1b: **leaf estimation is TREE_OP_LEAF_ESTIMATE**. When T2 moves the round onto it, delete
+   from the op path: the host pack of `leaf_offsets` / `sizes` and the `h_po` / `h_ps` uploads, the walk's drain
+   and `h_ctl` read (`device_walk_estimate`'s GBDT_WALK_DEV_STEP arm), the `h_est` copy and the task's tail drain,
+   `walk_leaf_values`, `estimate_advance` / `PendingEstimation` and `finish_deferred_estimation` for the tasks
+   the op covers. `_estimate_and_apply` stays for the tasks the op refuses (grouped and multiclass losses, Exact)
+   and as the host tail's round (section 3); when those tasks get their ops it goes too.
+   The never-accepted tail stays host-driven on purpose: a loop whose trip count is a device word (up to 100
+   evaluations, each ~7 launches) needs a device-side conditional launch, which Mojo / MAX does not expose
+   (CUDA graph conditional nodes, HIP has none). **Ask for Modular:** a device-side conditional or while node
+   in `DeviceContext` graphs (or an equivalent "launch if word" primitive) on NVIDIA, AMD and Apple. Emulating
+   it with 93-99 gated evaluations per round (~650 empty launches) would cost more than the drain it removes,
+   and capping the tail would change the walk, so neither is done.
+4. RandomForest / DecisionTree / ExtraTrees: the premise above was wrong. On every fit the node append
+   (`launch_loop_push`; ET `enqueue_push`) and the in-flight tree's bookkeeping (queue, node count, depth,
+   overflow) already run on the device (cpu4-forest's device level loop); `advance_tree` builds a tree from
+   drained split records only on the host-queue replay (check sabotage instantiations, identity traces). The
+   host's part per cycle is the 16-word header read every `LOOP_K` batches, which is the loop's own chunk read
+   (row 11). Lane T1b removed what was left: the finish's own drain per finished tree (row 12; the forest
+   cycle's one drain settles it, `Builder.train` collects after its own). Owed for T2: the ExtraTrees cycle's
+   host-grown FIFO (`lp.ensure`, a host bound per cycle) and its per-group finish are the same shape and were
+   not touched here; the forest's slot scheduling (begin the next tree when one finishes) stays a host
+   driver loop over trees.
 
 ## 6. RUN OWED
 
@@ -118,3 +154,9 @@ the same chunk because nothing depends on it.
   instead of the 4 depth winner words, and the partition zeroes its bounds with a memset instead of a host fill
   and an upload; expected equal or faster, same bits.
 - Identity: the GBDT lanes, in the one global verify; only IncToDec early-stopping fits can move (section 4).
+- Lane T1b: compile `checks/executor_t1_tree_ops_compile.mojo` (now instantiates TREE_OP_SEED_SNAPSHOT and
+  TREE_OP_LEAF_ESTIMATE) on NVIDIA, AMD and Apple, IDENTICAL and FAST; the GBDT binding (doc_parallel_boosting,
+  device_walker, doc_parallel_leaves_estimator, bootstrap changed) and the RandomForest / DecisionTree bindings
+  (builder.mojo, randomforest.mojo changed; ExtraTrees untouched). NVIDIA + AMD: the RandomForest and
+  DecisionTree board rows (classifier and regressor) once against main: one drain fewer per finished tree,
+  same bits expected; Apple identity unaffected. The leaf op has no caller until T2, so no GBDT row moves yet.
