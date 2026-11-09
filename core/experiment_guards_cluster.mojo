@@ -13,6 +13,9 @@ from std.sys.compile import is_defined, get_defined_int
 
 
 def _check_configuration() -> Bool:
+    # Deleted 2026-11-09 (lane n4-mds-labelprop-nmf-loops): the resident kNN-graph label-propagation loop is the only path
+    # on every vendor and tier; the rollbacks kept the binding's per-iteration loop. Recoverable at f59d913b0b.
+    comptime assert not (is_defined["MOJOLEARN_LP_FAST_RESIDENT_OFF"]() or is_defined["MOJOLEARN_IDN_LP_RESIDENT_OFF"]()), "removed 2026-11-09 (lane/n4-mds-labelprop-nmf-loops): the resident kNN-graph loop (lp_iterate_knn) is LabelPropagation / LabelSpreading's only path on every vendor and tier (FAST + Apple A/B n2-lp-res-taxi 6,793 -> 2,086 ms, accuracy same; IDENTICAL default since 2026-10-04, same bits); the per-iteration binding loop is gone"
     # Deleted 2026-10-08 (lane gap-graph, plan 5.3): the batched CC rounds + device relabel are the only path on every vendor; the C33 CC chunking (never compiled) went with it. Recoverable at origin/main 02f7aed95.
     comptime assert not (is_defined["MOJOLEARN_CC_FAST_OFF"]() or is_defined["MOJOLEARN_CC_FAST"]()), "removed: connected_components' batched rounds with the device relabel are the only path (lane gap-graph 2026-10-08); the per-round-wait path is gone"
     # Deleted 2026-10-07 (lane serial-cleanup): forbidden serial shape; incumbent kNN selectors are parallel. Recoverable at origin/integration/switches-20261007 608a7cf4a.

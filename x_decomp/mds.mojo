@@ -4,18 +4,52 @@
 MDS._single` (metric and non-metric, the latter's disparities through
 x_decomp/mds_iso.mojo's setup and isotonic step, `_nm_native`'s host form)
 and `fit_transform`'s restart pick (the first strictly smaller stress),
-statement for statement on `Kit[E]`: the same cells and float32 scalars and
-Python's float64 stress tests in the same order, so the IDENTICAL words are
-the Python driver's. x_decomp/mds_dev.mojo runs the same on resident
-matrices with x_decomp/mds_iso_dev.mojo's kernels."""
+statement for statement on `Kit[E]`: the same cells and float32 scalars.
+x_decomp/mds_dev.mojo runs the same on resident matrices with
+x_decomp/mds_iso_dev.mojo's kernels, as the executor's bounded device loop.
+Lane n4-mds-labelprop-nmf-loops (2026-11-09): the per-iteration stop test
+(`mds_stop_f32`) and the non-metric disparity scale (`mds_disp_scale_f32`)
+are float32 cells (x_decomp/cells.mojo), the functions the GPU loop's
+criterion kernel and ew cells compute, so every column stops at the same
+iteration; they were Python's float64 tests, which a Metal kernel cannot
+run. The final normalized stress stays float64 (read once per start)."""
 from std.math import sqrt
-from x_decomp.cells import F32Ptr, I32Ptr
+from x_decomp.cells import F32Ptr, I32Ptr, div0, mul, sqrt0, sub
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
     Kit, Mat, OP_ADD, OP_DIV, OP_FMA, OP_SCALE, OP_SELECT, OP_SQ, OP_SQDIFF, OP_SQRT, mat_const, mat_eye,
     mat_from, mat_rows, mat_t,
 )
 from x_decomp.mds_iso import mds_disp_host, mds_setup_host
+
+
+@always_inline
+def mds_half_f32(w: Float32) -> Float32:
+    """A summed word halved (the stress, `sum (d - disp)^2 / 2`)."""
+    return mul(w, Float32(0.5))
+
+
+@always_inline
+def mds_stop_f32(old: Float32, stress: Float32, ssd: Float32, eps: Float32) -> Bool:
+    """`(old - stress) / (ssd / 2) < eps` in float32 cells. A zero ssd keeps
+    IEEE's quotient sign: a negative numerator stops, any other does not."""
+    var num = sub(old, stress)
+    var half = mds_half_f32(ssd)
+    if half == Float32(0):
+        return num < Float32(0)
+    return div0(num, half) < eps
+
+
+@always_inline
+def mds_disp_scale_f32(half_pairs: Float32, ss: Float32) -> Float32:
+    """The non-metric disparities' scale `sqrt((n (n - 1) / 2) / ss)` as the
+    ew cells compute it (OP_DIV then OP_SQRT: 0 for a zero ss)."""
+    return sqrt0(div0(half_pairs, ss))
+
+
+def mds_half_pairs(n: Int) -> Float32:
+    """n (n - 1) / 2 rounded once to float32."""
+    return Float32(Float64(n * (n - 1)) / 2)
 
 
 struct MdsArgs(Copyable, Movable):
@@ -86,19 +120,22 @@ def mds_single[E: Exec](k: Kit[E], Dis: Mat, var Y: Mat, a: MdsArgs, mut stress:
     var nm = _NmHost(Dis) if native else _NmHost(Mat(1, 1))
     var disp = Dis.copy()
     var d = _dist(k, Y)
-    var old = 0.0
+    var old = Float32(0)
     var have_old = False
     var it = 0
     var eye = mat_eye(n)
     var floor = mat_const(1e-5, 1, 1)
+    var eps32 = Float32(a.eps)
+    var half_pairs = mds_half_pairs(n)
+    var stress32 = Float32(0)
     stress = 0.0
     for i in range(1, a.max_iter + 1):
         it = i
         if native:
             var P = Mat(n, n)
             mds_disp_host(d.p(), P.p(), nm.addrs(), n, nm.m, nm.G, i == 1)
-            var ss = k.word(k.total(k.ew1(OP_SQ, P, 0.0)))
-            P = k.ew1(OP_SCALE, P, sqrt((Float64(n * (n - 1)) / 2) / ss))
+            var ss = Float32(k.word(k.total(k.ew1(OP_SQ, P, 0.0))))
+            P = k.ew1(OP_SCALE, P, Float64(mds_disp_scale_f32(half_pairs, ss)))
             disp = k.ew2(OP_ADD, P, mat_t(P))
         var dz = k.ew3(OP_SELECT, d, d, floor, 0.0)
         var ratio = k.ew2(OP_DIV, disp, dz)
@@ -107,13 +144,14 @@ def mds_single[E: Exec](k: Kit[E], Dis: Mat, var Y: Mat, a: MdsArgs, mut stress:
         B = k.ew3(OP_FMA, eye, rs, B, 0.0)
         Y = k.ew1(OP_SCALE, k.mm(B, Y, False, False), 1.0 / Float64(n))
         d = _dist(k, Y)
-        stress = k.word(k.total(k.ew2(OP_SQDIFF, d, disp))) / 2
+        stress32 = mds_half_f32(Float32(k.word(k.total(k.ew2(OP_SQDIFF, d, disp)))))
         if have_old:
-            var ssd = k.word(k.total(k.ew1(OP_SQ, d, 0.0)))
-            if (old - stress) / (ssd / 2) < a.eps:
+            var ssd = Float32(k.word(k.total(k.ew1(OP_SQ, d, 0.0))))
+            if mds_stop_f32(old, stress32, ssd, eps32):
                 break
-        old = stress
+        old = stress32
         have_old = True
+    stress = Float64(stress32)
     if a.norm:
         var ssd = k.word(k.total(k.ew1(OP_SQ, d, 0.0)))
         stress = sqrt(stress / (ssd / 2)) if ssd != 0.0 else 0.0

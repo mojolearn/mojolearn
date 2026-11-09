@@ -8,6 +8,7 @@ because acc starts at +0.0 and an fma returns -0.0 only from (-0) + (-0),
 so acc is never -0.0: exact against the dense product while x is finite,
 which `lp_nonfinite_kernel` tests every iteration."""
 from std.atomic import Atomic, Ordering
+from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
@@ -64,11 +65,14 @@ def lp_nonfinite_kernel(x: FP, count_: Int64, flag: IP):
 
 
 def lp_prod_kernel(
-    flag: IP, cnt: IP, cols: IP, vals: FP, maxk_: Int64, g: FP, x: FP, res: FP, n_: Int64, c_: Int64,
+    gate: IP, flag: IP, cnt: IP, cols: IP, vals: FP, maxk_: Int64, g: FP, x: FP, res: FP, n_: Int64, c_: Int64,
 ):
     """G x: over G's nonzeros (the sparse fma chain, exact when x is
     finite), or `matmul_item` over every column when flag[0] says x holds
-    an Inf or NaN. The same bits as the dense product either way."""
+    an Inf or NaN. The same bits as the dense product either way. Nothing
+    once the bounded loop's done word gate[0] is set."""
+    if gate.unsafe_load(0) != Int32(0):
+        return
     var n = Int(n_)
     var c = Int(c_)
     var maxk = Int(maxk_)
@@ -85,3 +89,25 @@ def lp_prod_kernel(
         var q = i * maxk + e
         acc = ftz(identical_mul_add(ftz(vals.unsafe_load(q)), ftz(x.unsafe_load(Int(cols.unsafe_load(q)) * c + j)), acc))
     res.unsafe_store(t, acc)
+
+
+def lp_ell_spmm_enqueue(
+    ctx: DeviceContext, gate: IP, mut flag: DeviceBuffer[DType.int32], cnt: IP, cols: IP, vals: FP, maxk: Int,
+    g: FP, x: FP, res: FP, n: Int, c: Int, block: Int,
+) raises:
+    """The ELL SpMM op of label propagation's bounded loop (lane
+    n4-mds-labelprop-nmf-loops, 2026-11-09): res = G x over the row-padded
+    nonzeros (`lp_ell_fill_kernel`), with x's finiteness tested on the device
+    first, so the product is the dense one's bits. `gate` is the loop's
+    register block (word 0 the done word); the product writes nothing once
+    the loop has stopped. Enqueue only, no read."""
+    var nc = n * c
+    var grid = (nc + block - 1) // block if nc > 0 else 1
+    ctx.enqueue_memset(flag, Int32(0))
+    ctx.enqueue_function[lp_nonfinite_kernel](
+        x, Int64(nc), flag.unsafe_ptr(), grid_dim=grid, block_dim=(block if nc > 1 else 1),
+    )
+    ctx.enqueue_function[lp_prod_kernel](
+        gate, flag.unsafe_ptr(), cnt, cols, vals, Int64(maxk), g, x, res, Int64(n), Int64(c),
+        grid_dim=grid, block_dim=(block if nc > 1 else 1),
+    )

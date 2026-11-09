@@ -212,8 +212,7 @@ def _classical_graph_normalization(est):
 
 def _lp_fast_resident(est):
     """Whether the bound binary takes the resident kNN-graph loop
-    (x_neighbors/iter_device.mojo LP_FAST_RESIDENT: FAST + Apple, off with
-    `-D MOJOLEARN_LP_FAST_RESIDENT_OFF`). 0 on IDENTICAL and the host column."""
+    (`lp_iterate_knn`): 1 on every binary since 2026-11-09."""
     fn = getattr(est._bind(), "x_neighbors_lp_fast_resident", None)
     return fn is not None and int(fn()) != 0
 

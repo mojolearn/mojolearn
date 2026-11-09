@@ -5,15 +5,19 @@
 `_expansion_decomp.NMF`, statement for statement on `Kit[E]`
 (x_decomp/kit.mojo): the same cells with the same operands, broadcast modes
 and float32 scalars (each Python double rounded once, as the binding
-boundary rounded it), and Python's float64 scalar tail (the error, the
-convergence ratios, the violation sums) in Float64 in the same order. So the
-IDENTICAL words are the Python driver's on every column. The GPU binding
-runs x_decomp/nmf_dev.mojo, the same statements on resident matrices.
+boundary rounded it). The scalar tail (the error, the convergence ratios,
+the violation sums) is float32 cells (`nmf_err_f32`, `nmf_mu_stop_f32`,
+`nmf_cd_stop_f32`, x_decomp/cells.mojo arithmetic), the functions the GPU
+loop's criterion kernels call, so every column stops at the same iteration
+(lane n4-mds-labelprop-nmf-loops, 2026-11-09: the GPU loop decides on the
+device; this was Python's float64 tail, which a Metal kernel cannot run).
+The GPU binding runs x_decomp/nmf_dev.mojo, the same statements on resident
+matrices.
 
 A zero first error (`err0`) made Python's convergence ratio raise
 ZeroDivisionError; the drivers return NMF_ZERO_ERR0 and the caller raises it."""
 from experiments.classical_identical_ideas.linear_controls import C26_PRODUCTS, C26_UPDATE_FUSED
-from x_decomp.cells import F32Ptr, OP_CLASSICAL_MU_IS
+from x_decomp.cells import F32Ptr, OP_CLASSICAL_MU_IS, add, div0, mul, sqrt0, sub
 from std.math import sqrt
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
@@ -28,6 +32,51 @@ comptime NMF_F32_EPS: Float64 = 1.1920928955078125e-07
 comptime NMF_LOG_FLOOR: Float64 = 1.1754943508222875e-38
 #: the driver's return when err0 is 0 (Python's ZeroDivisionError)
 comptime NMF_ZERO_ERR0 = -1
+#: `_err`'s three forms: beta 2 (Frobenius), 1 (KL), 0 (IS)
+comptime NMF_ERR_FRO = 0
+comptime NMF_ERR_KL = 1
+comptime NMF_ERR_IS = 2
+
+
+def nmf_err_kind(beta: Float64) -> Int:
+    """The `_err` form of beta (2, 1, else 0)."""
+    if beta == 2.0:
+        return NMF_ERR_FRO
+    if beta == 1.0:
+        return NMF_ERR_KL
+    return NMF_ERR_IS
+
+
+@always_inline
+def nmf_err_f32(kind: Int, a: Float32, b: Float32, c: Float32, mc: Float32) -> Float32:
+    """`_err` from its summed words, in float32 cells (host and device alike).
+    FRO: a is already sqrt(sum (X - WH)^2). KL: a = sum X log(X / WH),
+    b = sum WH, c = sum X, res = (a + b) - c. IS: a = sum X / WH,
+    b = sum log(X / WH), res = (a - mc) - b with mc the element count.
+    The error is sqrt(2 res), 0 when res <= 0."""
+    if kind == NMF_ERR_FRO:
+        return a
+    var res: Float32
+    if kind == NMF_ERR_KL:
+        res = sub(add(a, b), c)
+    else:
+        res = sub(sub(a, mc), b)
+    return sqrt0(mul(Float32(2), res))
+
+
+@always_inline
+def nmf_mu_stop_f32(prev: Float32, err: Float32, err0: Float32, tol: Float32) -> Bool:
+    """`(prev - err) / err0 < tol` in float32 cells (err0 != 0)."""
+    return div0(sub(prev, err), err0) < tol
+
+
+@always_inline
+def nmf_cd_stop_f32(viol: Float32, v_init: Float32, tol: Float32) -> Bool:
+    """`_cd`'s stop: a zero first violation, or `viol / v_init <= tol`, in
+    float32 cells."""
+    if v_init == Float32(0):
+        return True
+    return div0(viol, v_init) <= tol
 
 
 struct NmfArgs(Copyable, Movable):
@@ -58,24 +107,24 @@ struct NmfArgs(Copyable, Movable):
         self.seed = seed
 
 
-def nmf_err[E: Exec](k: Kit[E], M: Mat, W: Mat, H: Mat, beta: Float64) raises -> Float64:
-    """`NMF._err`: sklearn `_beta_divergence(..., square_root=True)`."""
-    if beta == 2.0:
-        return k.word(k.ew1(OP_SQRT, k.total(k.ew2(OP_SQDIFF, M, k.mm(W, H, False, False))), 0.0))
+def nmf_err[E: Exec](k: Kit[E], M: Mat, W: Mat, H: Mat, beta: Float64) raises -> Float32:
+    """`NMF._err`: sklearn `_beta_divergence(..., square_root=True)`, the
+    summed words combined by `nmf_err_f32`."""
+    var kind = nmf_err_kind(beta)
+    if kind == NMF_ERR_FRO:
+        var e = Float32(k.word(k.ew1(OP_SQRT, k.total(k.ew2(OP_SQDIFF, M, k.mm(W, H, False, False))), 0.0)))
+        return nmf_err_f32(kind, e, Float32(0), Float32(0), Float32(0))
     var WH = k.ew1(OP_MAXS, k.mm(W, H, False, False), NMF_F32_EPS)
     var keep = k.ew1(OP_GTS, M, NMF_F32_EPS)
     var div = k.ew2(OP_DIV, M, WH)
-    var res: Float64
-    if beta == 1.0:
-        var sum_wh = k.word(k.mm(k.colsum(W), k.rowsum(H), False, False))
-        var xlog = k.word(k.total(k.ew2(OP_MUL, k.ew2(OP_MUL, M, k.ew1(OP_LOGS, div, NMF_LOG_FLOOR)), keep)))
-        var xs = k.word(k.total(k.ew2(OP_MUL, M, keep)))
-        res = xlog + sum_wh - xs
-    else:
-        var dsum = k.word(k.total(k.ew2(OP_MUL, div, keep)))
-        var lsum = k.word(k.total(k.ew2(OP_MUL, k.ew1(OP_LOGS, div, NMF_LOG_FLOOR), keep)))
-        res = dsum - Float64(M.r * M.c) - lsum
-    return sqrt(2 * res) if res > 0 else 0.0
+    if kind == NMF_ERR_KL:
+        var sum_wh = Float32(k.word(k.mm(k.colsum(W), k.rowsum(H), False, False)))
+        var xlog = Float32(k.word(k.total(k.ew2(OP_MUL, k.ew2(OP_MUL, M, k.ew1(OP_LOGS, div, NMF_LOG_FLOOR)), keep))))
+        var xs = Float32(k.word(k.total(k.ew2(OP_MUL, M, keep))))
+        return nmf_err_f32(kind, xlog, sum_wh, xs, Float32(0))
+    var dsum = Float32(k.word(k.total(k.ew2(OP_MUL, div, keep))))
+    var lsum = Float32(k.word(k.total(k.ew2(OP_MUL, k.ew1(OP_LOGS, div, NMF_LOG_FLOOR), keep))))
+    return nmf_err_f32(kind, dsum, lsum, Float32(0), Float32(M.r * M.c))
 
 
 def _mu_ratio[E: Exec](k: Kit[E], M: Mat, W: Mat, H: Mat, beta: Float64, mut P: Mat) raises -> Mat:
@@ -172,9 +221,9 @@ def nmf_mu[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
                     H = k.ew2(OP_MUL, H, delta)
         if a.tol > 0 and i % 10 == 0:
             var err = nmf_err(k, M, W, H, beta)
-            if err0 == 0.0:
+            if err0 == Float32(0):
                 return NMF_ZERO_ERR0
-            if (prev - err) / err0 < a.tol:
+            if nmf_mu_stop_f32(prev, err, err0, Float32(a.tol)):
                 break
             prev = err
     return it
@@ -208,7 +257,7 @@ def nmf_cd[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
     var k = Kit[E]()
     var draws = 0
     var Ht = mat_t(H)
-    var v_init = 0.0
+    var v_init = Float32(0)
     var have_init = False
     var it = 0
     var fixed_gram = Mat(0, 0)
@@ -224,19 +273,17 @@ def nmf_cd[E: Exec](M: Mat, mut W: Mat, mut H: Mat, a: NmfArgs) raises -> Int:
     for i in range(1, a.max_iter + 1):
         it = i
         var perm = _perm(k, W.c, a, draws)
-        var viol = 0.0
+        var viol = Float32(0)
         if C26_PRODUCTS and not a.update_h:
-            viol = k.cd_rows(W, fixed_gram, fixed_cross, perm)
+            viol = Float32(k.cd_rows(W, fixed_gram, fixed_cross, perm))
         else:
-            viol = _cd_side(k, M, W, Ht, a.l1w, a.l2w, perm, False)
+            viol = Float32(_cd_side(k, M, W, Ht, a.l1w, a.l2w, perm, False))
         if a.update_h:
-            viol += _cd_side(k, M, Ht, W, a.l1h, a.l2h, _perm(k, W.c, a, draws), True)
+            viol = add(viol, Float32(_cd_side(k, M, Ht, W, a.l1h, a.l2h, _perm(k, W.c, a, draws), True)))
         if not have_init:
             v_init = viol
             have_init = True
-        if v_init == 0:
-            break
-        if viol / v_init <= a.tol:
+        if nmf_cd_stop_f32(viol, v_init, Float32(a.tol)):
             break
     if a.update_h:
         H = mat_t(Ht)
