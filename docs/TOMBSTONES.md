@@ -405,6 +405,7 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_MAMBA1_CHUNKED_SCAN`](#mojolearn_idn_mamba1_chunked_scan) | Neural | REJECTED (breaks decode==prefill) | 2026-10-28 | none (recoverable at lane/mamba-folds@db803a1337) |
 | [`MOJOLEARN_PAR_VERIFY`](#mojolearn_par_verify) | Verification (multi-GPU: par-* identity lanes, `verify --par`, multi-gpu release rows) | retired (owner decision) | 2026-10-31 | [MOJOLEARN_PAR_VERIFY.patch](../experiments/removed/MOJOLEARN_PAR_VERIFY.patch) |
 | [`byte_lm_parallel_open` + 9 sibling entries (native entries)](#dead-native-entries-batch-3-2026-11) | Byte LM (the legacy per-entry parallel trainer: open, open_pooled, close, rollback, shard_gradient, apply_gradient, reduction_pool_available, fold_reset, shard_gradient_fold, fold_add) | removed (dead native entries: no live caller) | 2026-11-08 | [dead_entries_byte_lm_parallel.patch](../experiments/removed/dead_entries_byte_lm_parallel.patch) |
+| [`vocab_encode_public` + 4 sibling entries (native entries)](#dead-native-entries-batch-3-2026-11) | Tokenizer host (vocab_encode_public, vocab_decode_public, vocab_pretrained_public, vocab_pretokenize_public, vocab_pattern_name) | removed (dead native entries: no live caller) | 2026-11-08 | [dead_entries_tokenizer_vocab_public.patch](../experiments/removed/dead_entries_tokenizer_vocab_public.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3768,3 +3769,9 @@ public runtime qualification; this entry is not release or performance evidence.
 | entries | where | deleted by | why they were dead | restore |
 |---|---|---|---|---|
 | `byte_lm_parallel_open`, `_open_pooled`, `_close`, `_rollback`, `_shard_gradient`, `_apply_gradient`, `_reduction_pool_available`, `_fold_reset`, `_shard_gradient_fold`, `_fold_add` | `bindings/_mojolearn_byte_lm.mojo` (wrappers + registrations) | `@K0SHA_BYTELM@` | no Python, tool, test or Mojo string caller: `parallel_training.py` reaches the trainer through `parallel_shard_call` (`bindings/_mojolearn_runtime_parallel_host.mojo`); the only other mention was the stale September A/B patch `tools/byte_lm_export_fast/change.patch`. `ByteParallelTrainer` and its methods stay (the runtime parallel host and `training/checks/*` use them); `_create`, `_step`, `_export`, `_set_lr`, `_ownership`, `_fold_export` keep their tool callers | `experiments/removed/dead_entries_byte_lm_parallel.patch` |
+
+### Tokenizer host vocab exports
+
+| entries | where | deleted by | why they were dead | restore |
+|---|---|---|---|---|
+| `vocab_encode_public`, `vocab_decode_public`, `vocab_pretrained_public`, `vocab_pretokenize_public`, `vocab_pattern_name` | `bindings/_mojolearn_tokenizer_host.mojo` (wrappers, the `_vocab_public_c` arms 3, 4, 5, 6 and 8, registrations) + the orphan `tokenizer_vocab_pretokenize` wrapper in `bindings/tokenizer_public_native.mojo` | `@K0SHA_VOCAB@` | `Tokenizer` reaches every operation through `tokenizer_public_call` (`vocab_encode`, `vocab_decode`, `vocab_pretrained`, `vocab_pretokenize`, `vocab_pattern`); no Python, tool, test or Mojo string caller named the five exports (the 2026-10-27 inventories under `experiments/` are records). The tokenizer host group is the largest compile, so every deletion there helps. `vocab_init_public`, `_spelled_public`, `_json_public`, `vocab_pretokenize_pattern` and `native_json_parse` keep their arms and indices | `experiments/removed/dead_entries_tokenizer_vocab_public.patch` |

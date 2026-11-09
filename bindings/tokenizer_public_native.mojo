@@ -1191,8 +1191,8 @@ def tokenizer_vocab_decode(tokenizer: PythonObject, ids: PythonObject, bytes_onl
     return _vocab_decode(tokenizer, ids, _bool(bytes_only, "bytes_only"), errors, _vocab_context())
 
 
-def tokenizer_vocab_pretokenize(tokenizer: PythonObject, data: PythonObject) raises -> PythonObject:
-    return _vocab_pretokenize(tokenizer, data, _vocab_context())
+# TOMBSTONE: tokenizer_vocab_pretokenize (orphan wrapper of the deleted vocab_pretokenize_public) deleted 2026-11-08 by @K0SHA_VOCAB@; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/dead_entries_tokenizer_vocab_public.patch
 
 
 def tokenizer_vocab_fingerprint(tokenizer: PythonObject) raises -> PythonObject:
@@ -1232,8 +1232,6 @@ def tokenizer_vocab_fingerprint(tokenizer: PythonObject) raises -> PythonObject:
     var result = PythonObject(vocab_fingerprint_hex(owner[].tok.value(), tail))
     _ = handle
     return result
-
-
 
 
 def _vocab_config_pattern(pre: PythonObject, patterns: PythonObject) raises -> PythonObject:
