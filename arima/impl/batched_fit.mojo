@@ -451,7 +451,7 @@ def _lockstep_min_lbfgs(
     )
 
     var k = 1
-    while k <= param.max_iterations:
+    while k <= param.max_iterations:  # driver-loop: over the L-BFGS iterations (one flag word read each)
         if not _read_flag(ctx, any_active, flag_host):
             break
 
@@ -468,7 +468,7 @@ def _lockstep_min_lbfgs(
         )
 
         # THE SHARED LINE SEARCH (`ls_backtrack:109-121`, B at a time)
-        for _t in range(param.max_linesearch):
+        for _t in range(param.max_linesearch):  # driver-loop: over the shared line-search steps (one flag word read each)
             if not _read_flag(ctx, any_searching, flag_host):
                 break
             ctx.enqueue_memset(any_searching, Int32(0))
