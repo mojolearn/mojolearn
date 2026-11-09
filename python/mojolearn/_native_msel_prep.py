@@ -352,6 +352,7 @@ def _connect_device_rows(registry):
     # Lane a7a: GaussianProcessClassifier opts in (its door admits X through
     # admit_x; predict / predict_proba gather a fold on the device).
     from . import cluster, mixture, _expansion_cluster as xcluster, _expansion_decomp as xdecomp
+    from . import _spectral_impl as spectral
     for cls in (linear_model.LinearRegression, linear_model.Ridge, prep.MaxAbsScaler, prep.RobustScaler,  # glue: fixed ABI metadata connected once during package import
                 decomposition.PCA, svm.SVC, svm.SVR, linear_svm.LinearSVC, linear_svm.LinearSVR,
                 gp.GaussianProcessRegressor, gpc.GaussianProcessClassifier, km.KernelRidge,
@@ -360,7 +361,12 @@ def _connect_device_rows(registry):
                 cluster.KMeans, xcluster.MiniBatchKMeans, xcluster.BisectingKMeans, xcluster.MeanShift,
                 xcluster.AffinityPropagation, xcluster.BayesianGaussianMixture, mixture.GaussianMixture,
                 decomposition.TruncatedSVD, xdecomp.IncrementalPCA, xdecomp.FactorAnalysis,
-                xdecomp.LatentDirichletAllocation, xdecomp.FastICA) + xl:
+                xdecomp.LatentDirichletAllocation, xdecomp.FastICA,
+                # Lane a8d: through their admissions (decomp_admit,
+                # admit_family / admit_family_meta), which gather a fold's
+                # rows out of the host base and test them in the gather.
+                xdecomp.NMF, xdecomp.SparsePCA, xcluster.OPTICS, xdecomp.Isomap,
+                xdecomp.LocallyLinearEmbedding, xdecomp.MDS, spectral.SpectralEmbedding) + xl:
         if cls in registry:
             registry[cls]['device_rows'] = True
 
