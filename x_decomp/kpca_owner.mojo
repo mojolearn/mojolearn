@@ -15,6 +15,7 @@ from std.math import sqrt
 from std.memory import memcpy
 
 from x_decomp.cells import F32Ptr
+from x_decomp.moves import MOVE_REV_COLS
 from x_decomp.exec_trait import Exec
 from x_decomp.select_ops import reduce_run
 from x_decomp.pca_randomized import RDev, RKit
@@ -35,24 +36,19 @@ comptime _SEL_MAXABS = 0
 
 
 def _cols_desc[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int, high: Int, count: Int) raises -> Int:
-    """`A.take_cols(range(high, high - count, -1))`: the device gather for a
-    resident matrix, else a host copy (data movement)."""
+    """`A.take_cols(range(high, high - count, -1))`: the REV_COLS move
+    (x_decomp/moves.mojo), on the device for a resident matrix, else on
+    the host, with no index list (lane n9b-device-svd-qr: the index was
+    built on the host and uploaded every call). Copies only."""
     var rows = kit.r(a)
     var cols = kit.c(a)
-    if kit.mats[a].dev >= 0 and count:
-        var idx = kit.zeros(count, 1)
-        var pi = kit.ptr(idx)
-        for t in range(count):  # driver-loop: over the kept components (model structure)
-            pi[t] = Float32(high - t)
-        return kit.move(a, idx, rows, count, 4, rows * count, count, cols, 0, 0, 0, rows * cols, rows * count, count,
-                        True)
-    var out = kit.zeros(rows, count)
-    var src = kit.ptr(a)
-    var dst = kit.ptr(out)
-    for t in range(count):  # driver-loop: over the kept components (model structure)
-        for i in range(rows):  # small-loop(rows of an eigen factor): one word each
-            dst[i * count + t] = src[i * cols + high - t]
-    return out
+    if count <= 0:
+        return kit.zeros(rows, 0)
+    if high - count + 1 < 0 or high >= cols:
+        raise Error("x_decomp: KernelPCA descending columns out of range")
+    var one = kit.unused_operand()
+    return kit.move(a, one, rows, count, MOVE_REV_COLS, rows * count, count, cols, 0, 0, high, rows * cols,
+                    rows * count, 1, kit.mats[a].dev >= 0)
 
 
 def _reduce_word[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int, op: Int) raises -> Float64:
