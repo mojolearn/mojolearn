@@ -103,7 +103,7 @@ struct DoorRowsStore(ImplicitlyCopyable, Movable):
         self.rows = rows
 
     @staticmethod
-    def none() -> DoorRowsStore:
+    def none() -> Self:
         return DoorRowsStore(-1, 0, 0, -1, 0)
 
     def active(self) -> Bool:
