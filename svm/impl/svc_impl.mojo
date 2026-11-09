@@ -232,9 +232,10 @@ def svc_fit_borrowed(
     # TOMBSTONE: check_finite_device on the fit X (synchronising first-non-finite scan, DEVIATION 636 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
     var qx = svm_fit_device_x(ctx, x_addr, fold, n_rows, n_cols, kp, scale_gamma)
     var model = _svc_label_model(labels_host, n_rows, n_cols, param, kp, card)
+    var status_addr = Int(qx.words.unsafe_ptr())
     var fitted = _svc_fit_staged(
         ctx, plan, qx.x, labels_host, n_rows, n_cols, param, kp, model^, card, trace,
-        1 << 30, 0, False, 0, Float32(0.0), c_rows, Int(qx.words.unsafe_ptr()),
+        1 << 30, 0, False, 0, Float32(0.0), c_rows, status_addr,
     )
     status = [qx.finite_word(), qx.range_word()]
     _ = qx^
