@@ -3,6 +3,7 @@
 # entries remain internal operations for CV/parallel owners; only the public
 # door replaces the former _mode validation/output decorators.
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family_f64
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native import _class_fields
@@ -14,7 +15,6 @@ from bindings.classical_validate import classical_check_x, classical_check_width
 from bindings.classical_labels import labels_shape_of
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.host_inference_scalars import host_inference_scalar
-from bindings.family_common import family_cast_view_f64
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.trees_public_iforest import iforest_operation_with_source
 from bindings.trees_public_state import _release_tree_values
@@ -149,7 +149,7 @@ def iforest_public_operation(model: PythonObject, operation: String, args: Pytho
         # Preserve internal Float32 arrays; public outlier scores widen
         # even when the optional NumPy output view is unavailable.
         if outside and (method == "score_samples" or method == "decision_function"):
-            result = family_cast_view_f64(result, "scores", context)
+            result = admit_family_f64(result, "scores", context)
         if outside and py_get(context, "ndarray") is not None:
             return native_array_ndarray_view(result, context)
     return result

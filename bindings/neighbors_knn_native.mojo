@@ -34,6 +34,7 @@ from std.math import isfinite
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.admitted_family import admit_family, admit_family_meta, admit_family_owned
 from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _fields
@@ -49,8 +50,7 @@ from providers.python.array_metadata_pyapi import ArrayMetadata
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute
 from bindings.family_common import (
     FAMILY_F32P, family_repr, family_str, family_is_str, family_isinstance, family_call, family_array,
-    family_as_f32, family_as_f32_dense, family_owned, family_field,
-    family_f32_snapshot, family_owned_snapshot, family_snapshot_min,
+    family_field, family_snapshot_min,
 )
 from bindings.classical_labels import (
     LabelsView, labels_view, labels_check_rank, labels_cast, labels_all_finite, labels_helper,
@@ -611,7 +611,7 @@ def _check_metric_input(cls_name: String, value: Int, x: PythonObject, context: 
     # public operation snapshot. Keep that internal ABI while their owner
     # migrates; plain operations above consume the retained snapshot directly.
     if value == _DIST_JS:
-        var snapshot = family_f32_snapshot(x, 2, "X", context)
+        var snapshot = admit_family_meta(x, 2, "X", context)
         _check_metric_input(cls_name, value, snapshot)
 
 
@@ -634,12 +634,12 @@ def _nn_fit(model: PythonObject, x_source: PythonObject, context: PythonObject) 
     # 0.8.66 regression C3 (knn fit 8.5x on istella): 0.8.55 and
     # scikit-learn's brute NearestNeighbors keep the caller's block; the
     # zero-filled copy is gone.
-    var input = family_f32_snapshot(x_source, 2, "X", context, True)
+    var input = admit_family_meta(x_source, 2, "X", context, True)
     var idx: PythonObject
     if input.f32_c() and not input.copied:
         idx = input.keep
     else:
-        idx = family_owned_snapshot(input, context)
+        idx = admit_family_owned(input, context)
     if not _eq(family_field(fields, "algorithm"), PythonObject("rbc")):
         var resolved = knn_resolve_metric(cls_name, family_field(fields, "metric"), family_field(fields, "p"), context)
         _check_metric_input(cls_name, Int(py=resolved[0]), input)
@@ -837,7 +837,7 @@ def _reg_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var xn = args[0]
     _nn_fit(model, args[1], context)
     var fields = py_fields(model)
-    var target = family_f32_snapshot(args[2], -1, "y", context)
+    var target = admit_family_meta(args[2], -1, "y", context)
     var shape = target.shape.copy()
     if len(shape) != 1 and len(shape) != 2:
         raise Error("mojolearn: y must be 1-D or 2-D, got " + String(len(shape)) + "-D")
@@ -849,7 +849,7 @@ def _reg_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var n_out = 1 if len(shape) == 1 else shape[1]
     if n_out == 1:
         # One column IS one contiguous row of the transposed layout.
-        py_setitem(fields, "_y_cols", labels_reshape(family_owned_snapshot(target, context), Python.tuple(1, n), context))
+        py_setitem(fields, "_y_cols", labels_reshape(admit_family_owned(target, context), Python.tuple(1, n), context))
     else:
         # The transpose on the device (`xn_p2m_transpose`; the host binding's
         # same op on a CPU-only install).
@@ -876,7 +876,7 @@ def _queries(model: PythonObject, x_source: PythonObject, mut dist: PythonObject
     if (py_get(fields, PythonObject("_index"), PythonObject(None)) is None
             or py_get(fields, PythonObject("_y_cols"), PythonObject(None)) is None):
         raise Error("mojolearn: call fit before predict")
-    var q = family_f32_snapshot(x_source, 2, "X", context, True)
+    var q = admit_family_meta(x_source, 2, "X", context, True)
     dist = _dist_params(model, context)
     _check_metric_input(_class_name(model), Int(py=dist[0]), q)
     var features = family_field(fields, "n_features_in_")
@@ -1095,8 +1095,8 @@ def _reg_score(model: PythonObject, args: PythonObject, context: PythonObject) r
     (`as_f32_c(y, ndim=None)`), the prediction as float32, then
     `metrics.r2_score(..., numeric_mode=...)` through the metrics owner;
     args[4] is the metrics binding `_get_binding` resolved."""
-    var truth = family_as_f32(args[2], -1, "y", context)
-    var prediction = family_as_f32(_reg_predict(model, args[0], args[1], context), -1, "prediction", context)
+    var truth = admit_family(args[2], -1, "y", context).array
+    var prediction = admit_family(_reg_predict(model, args[0], args[1], context), -1, "prediction", context).array
     var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
     var metrics = args[4] if args[4] is not None else estimator_binding(model, "_mojolearn_metrics", context)
     return mcls_cluster_operation("family_mcls_r2", Python.tuple(metrics, truth, prediction, args[3],

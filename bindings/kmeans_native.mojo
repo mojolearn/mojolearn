@@ -16,15 +16,15 @@
 from std.ffi import _Global
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family, admit_family_weights
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.family_common import (
-    FAMILY_F32P, family_repr, family_str, family_is_str, family_is_int, family_isinstance,
-    family_type_name, family_call, family_call_kw, family_entry, family_array, family_view,
-    family_cast_f32, family_f32, family_nonfinite, family_sample_weight, family_field,
+    FAMILY_F32P, family_repr, family_str, family_is_str, family_is_int, family_isinstance, family_type_name,
+    family_call, family_call_kw, family_entry, family_array, family_view, family_nonfinite, family_field,
 )
 from bindings.classical_arrays import classical_is_f32, classical_c_order
 from core.host_finite_scan import host_all_finite_f32
@@ -198,7 +198,7 @@ def _kmeans_nonfinite(name: String, where: String) -> Error:
 def _kmeans_f32(source: PythonObject, name: String, where: String, context: PythonObject) raises -> PythonObject:
     """`as_f32_c(source, ndim=2)` then the by-name non-finite refusal."""
     try:
-        return family_f32(source, 2, name, context)
+        return admit_family(source, 2, name, context, finite=True).array
     except error:
         if family_nonfinite(error, name):
             raise _kmeans_nonfinite(name, where)
@@ -291,7 +291,7 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
                         + "), got " + family_repr(py_call(b.tuple, view.shape)))
         var c0 = PythonObject(None)
         try:
-            c0 = family_cast_f32(view, "init_centroids", context)
+            c0 = admit_family(view, -1, "init_centroids", context, finite=True, admitted=True).array
         except error:
             if family_nonfinite(error, "init_centroids"):
                 raise _kmeans_nonfinite("init_centroids", "fit")
@@ -310,7 +310,7 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var n_weights = 0
     var weights = x
     if sample_weight is not None:
-        weights = family_sample_weight(sample_weight, n, True, context)
+        weights = admit_family_weights(sample_weight, n, True, context).keep
         n_weights = n
     # ORDER MATCHES bindings/_mojolearn.mojo::kmeans_fit_binding: n_samples,
     # n_features, n_clusters, n_weights, max_iter, tol, seed, n_init, init,
@@ -442,7 +442,7 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
             resolved = True
         _ = centers  # keep the Python object alive through the native passes above
     if not resolved:
-        c = family_f32(centers, 2, "cluster_centers_", context)
+        c = admit_family(centers, 2, "cluster_centers_", context, finite=True).array
         k = Int(py=c.shape[0])
         handle = _kmeans_resident(model, binding, centers, c, k, d, context)
     # ORDER MATCHES bindings/_mojolearn.mojo::kmeans_predict_binding and

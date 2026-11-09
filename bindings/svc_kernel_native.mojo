@@ -24,6 +24,7 @@
 # no resident entry for them.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family, admit_family_meta, admit_family_weights
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value
 from bindings.host_inference_scalars import host_inference_scalar
@@ -41,15 +42,15 @@ from bindings.classical_labels import labels_cast, labels_real_type
 from bindings.native_array_view import native_array_ndarray_view
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance,
-    family_call, family_entry, family_array, family_sample_weight_snapshot,
+    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance, family_call,
+    family_entry, family_array,
 )
 from core.scale_gamma_exact import scale_gamma_from_limbs
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_isfinite,
-    svc_round_f32, svc_base, svc_mode, svc_zero_division, svc_prefix, svc_scalar_array, svc_read_f64,
-    svc_read_f32, svc_read_i32, svc_f32, svc_snapshot, svc_shape_of, svc_labels_1d, svc_sorted_classes, svc_encode_1d, svc_decode,
-    svc_threshold_codes, svc_argmax_rows, svc_r2_sums, svc_accuracy, svc_accuracy_codes,
+    svc_round_f32, svc_base, svc_mode, svc_zero_division, svc_prefix, svc_scalar_array, svc_read_f64, svc_read_f32,
+    svc_read_i32, svc_shape_of, svc_labels_1d, svc_sorted_classes, svc_encode_1d, svc_decode, svc_threshold_codes,
+    svc_argmax_rows, svc_r2_sums, svc_accuracy, svc_accuracy_codes,
 )
 
 # `svc_pair_epilogue` modes (svm/impl/svc_rows.mojo), `_svm_impl._EPI_*` and `_GLUE_*`.
@@ -378,7 +379,7 @@ def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight:
     var sw_owner = PythonObject(None)
     var sw_address = 0
     if sample_weight is not None:
-        var weights = family_sample_weight_snapshot(sample_weight, n_rows, False, context, True)
+        var weights = admit_family_weights(sample_weight, n_rows, False, context, True)
         sw = weights.keep
         sw_owner = Python.tuple(weights.keep, weights.owner)
         sw_address = weights.source.addr
@@ -645,7 +646,7 @@ def _as_labels(y: PythonObject, context: PythonObject) raises -> PythonObject:
             _ = f  # keep the Python object alive through the native call above
         _ = codes^
         return Python.tuple(f, classes, Python.tuple(PythonObject(0.0), PythonObject(1.0)))
-    var f = svc_f32(y, 1, "y", False, context)[0]
+    var f = admit_family(y, 1, "y", context, False).array
     var n = Int(py=f.size)
     var finite = True
     if n > 0:
@@ -979,7 +980,7 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var binding = args[0]
     var fields = py_fields(model)
     _svm_validate(model, fields, True, context)
-    var x_meta = svc_snapshot(args[1], 2, "X", True, context)
+    var x_meta = admit_family_meta(args[1], 2, "X", context, True)
     py_setitem(fields, PythonObject("input_copied_"), PythonObject(x_meta.copied))
     var x = x_meta.keep
     var y = args[2]
@@ -1057,7 +1058,7 @@ def _query(fields: PythonObject, source: PythonObject, context: PythonObject) ra
     """`SVC._query`."""
     if not svc_has(fields, "dual_coef_"):
         raise Error("mojolearn SVC: call fit() first")
-    var q = svc_snapshot(source, 2, "X", True, context)
+    var q = admit_family_meta(source, 2, "X", context, True)
     var d = svc_int(svc_field(fields, "n_features_in_"))
     if q.shape[1] != d:
         raise Error("mojolearn SVC: X has " + String(q.shape[1]) + " features, fit saw " + String(d))
@@ -1296,7 +1297,7 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var binding = args[0]
     var fields = py_fields(model)
     _svm_validate(model, fields, False, context)
-    var x_meta = svc_snapshot(args[1], 2, "X", True, context)
+    var x_meta = admit_family_meta(args[1], 2, "X", context, True)
     py_setitem(fields, PythonObject("input_copied_"), PythonObject(x_meta.copied))
     var x = x_meta.keep
     var n_rows = x_meta.shape[0]
@@ -1305,7 +1306,7 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var shape = svc_shape_of(args[2], context)
     if len(shape) != 1:
         raise Error("mojolearn SVR: y must be 1-D, got " + String(len(shape)) + "-D shape " + family_repr(shape))
-    var targets = svc_f32(args[2], 1, "y", False, context)[0]
+    var targets = admit_family(args[2], 1, "y", context, False).array
     if Int(py=targets.shape[0]) != n_rows:
         raise Error("mojolearn SVR: y has " + String(Int(py=targets.shape[0])) + " entries, X has " + String(n_rows) + " rows")
     if String(svc_field(fields, "_hp_kernel")) == "precomputed" and n_cols != n_rows:
@@ -1384,7 +1385,7 @@ def _svr_predict(model: PythonObject, fields: PythonObject, binding: PythonObjec
     """`SVR.predict`."""
     if not svc_has(fields, "dual_coef_"):
         raise Error("mojolearn SVR: call fit() first")
-    var q_meta = svc_snapshot(source, 2, "X", True, context)
+    var q_meta = admit_family_meta(source, 2, "X", context, True)
     var q = q_meta.keep
     var d = svc_int(svc_field(fields, "n_features_in_"))
     if q_meta.shape[1] != d:

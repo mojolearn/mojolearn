@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Shared native tabular target admission and public fit error translation.
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_type
 from bindings.classical_validate import classical_view
 from bindings.classical_arrays import classical_kind
 from bindings.classical_labels import labels_shape_of
 from bindings.classical_warnings import classical_warn_column
-from bindings.family_common import family_f32
 from bindings.cluster_fit_a_native import _pending, _pending_text, _drop_pending
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING
 
@@ -28,7 +28,7 @@ def _target(source: PythonObject, rows: Int, name: String, context: PythonObject
     if kind == "f":
         # The native cast owns the finite-value scan; y is accepted/ignored by
         # these unsupervised algorithms, exactly as their public signatures say.
-        _ = family_f32(source, -1, "y", context)
+        _ = admit_family(source, -1, "y", context, finite=True).array
 
 
 def _refusal(error: Error, fitting: Bool, nested: Bool, rows: Int, columns: Int, name: String) raises -> Error:

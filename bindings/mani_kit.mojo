@@ -14,6 +14,7 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.ffi import c_int
+from bindings.admitted_family import admit_family_meta
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.cpython_table import cpython_table
 from bindings.manifold_storage_native import (
@@ -24,7 +25,7 @@ from bindings.manifold_storage_native import (
 )
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.classical_arrays import classical_address
-from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family_array, family_f32_snapshot
+from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family_array
 from core.host_finite_scan import host_all_finite_f32
 from bindings.native_loaded_module import native_loaded_module
 from bindings.spectral_umap_routes import spectral_umap_entry, spectral_umap_optional_entry
@@ -1665,7 +1666,7 @@ def mk_from_snapshot(value: ArrayMetadata, name: String, ctx: PythonObject) rais
 
 def mk_from_input(source: PythonObject, name: String, ctx: PythonObject) raises -> PythonObject:
     """Capture dense/sparse input once and copy its admitted float32 words."""
-    var snapshot = family_f32_snapshot(source, 2, name, ctx, True)
+    var snapshot = admit_family_meta(source, 2, name, ctx, True)
     var result = mk_from_snapshot(snapshot, name, ctx)
     _ = snapshot
     _ = source

@@ -5,12 +5,13 @@ from std.ffi import _Global
 from std.math import isfinite
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family, admit_family_meta
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_labels import labels_cast, labels_reshape, labels_view, labels_check_rank, classical_decode_labels
-from bindings.family_common import family_call, family_entry, family_array, family_as_f32_dense, family_f32_snapshot
+from bindings.family_common import family_call, family_entry, family_array
 from bindings.parallel_shard_common import shard_model, shard_rows, shard_dtype, shard_item, shard_array
 from bindings.host_archive_native import host_archive_rbc_metric_object
 from bindings.neighbors_knn_native import (
@@ -84,7 +85,7 @@ def neighbor_kneighbors(model: PythonObject, source: PythonObject, k_arg: Python
     # dispatch address. In particular Jensen-Shannon must not recapture the
     # same converted Array merely to read its minimum. No metadata is cached
     # across public calls or shard requests; mutable/released inputs re-admit.
-    var query = family_f32_snapshot(source, 2, "X", context, True)
+    var query = admit_family_meta(source, 2, "X", context, True)
     var rbc = String(fields["algorithm"]) == "rbc"
     var params = PythonObject(None)
     if not rbc:
@@ -153,7 +154,7 @@ def _radius(model: PythonObject, source: PythonObject, kwargs: PythonObject,
     var sort = _flag(py_get(kwargs, "sort_results", False), "sort_results", context)
     if sort and not distances:
         raise Error("ValueError: sort_results=True requires return_distance=True")
-    var q = index if source is None else family_as_f32_dense(source, 2, "X", context)
+    var q = index if source is None else admit_family(source, 2, "X", context, dense=True).array
     if Int(py=q.shape[1]) != Int(py=index.shape[1]):
         raise Error("ValueError: input feature count differs from fit")
     var nq = Int(py=q.shape[0])
@@ -316,7 +317,7 @@ def _release(token: PythonObject, tables: PythonObject, context: PythonObject) r
 
 def _ivf_partial(model: PythonObject, source: PythonObject, tables: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
-    var q = family_as_f32_dense(source, 2, "queries", context)
+    var q = admit_family(source, 2, "queries", context, dense=True).array
     if Int(py=q.shape[1]) != Int(py=fields["n_features_in_"]):
         raise Error("ValueError: query features differ from index")
     var m = Int(py=q.shape[0])

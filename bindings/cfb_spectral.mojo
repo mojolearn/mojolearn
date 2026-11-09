@@ -13,13 +13,14 @@
 from std.math import isinf
 from std.python import Python, PythonObject
 from providers.python.host_estimator_binding_pyapi import host_estimator_binding
+from bindings.admitted_family import admit_family, admit_family_f64
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_fields, py_get
 from bindings.classical_arrays import classical_address, classical_dtype_str, classical_c_order
 from core.host_finite_scan import host_all_finite_f32
 from core.cfb_impl import cfb_f64_to_i32
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_repr, family_str, family_call,
-    family_array, family_as_f32, family_as_f32_dense, family_view, family_cast_view_f64, family_field, family_is_str, family_min,
+    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_repr, family_str, family_call, family_array, family_view,
+    family_field, family_is_str, family_min,
 )
 from bindings.cluster_native import _reference_queries, _xc_array
 from bindings.cluster_resident_table import CRES_SPECTRAL, cres_lookup, cres_store, cres_forget
@@ -96,7 +97,7 @@ def _as_i32(source: PythonObject, name: String, context: PythonObject) raises ->
     var view = family_view(source, 1, name, context)
     if classical_dtype_str(view, context) == "<i4" and classical_c_order(view, context):
         return view
-    var wide = family_cast_view_f64(view, name, context)
+    var wide = admit_family_f64(view, name, context)
     var n = Int(py=wide.size)
     var out = family_array(Python.tuple(n), "<i4", context)
     cfb_f64_to_i32(FAMILY_F64P(unsafe_from_address=Int(py=classical_address(wide))),
@@ -140,7 +141,7 @@ def _coo_of_triples(rows: PythonObject, cols: PythonObject, vals: PythonObject, 
                     + "must be square, got shape " + family_repr(shape))
     var r = _as_i32(rows, "rows", context)
     var c = _as_i32(cols, "cols", context)
-    var v = family_as_f32(vals, 1, "vals", context)
+    var v = admit_family(vals, 1, "vals", context).array
     return _Coo(r, c, v, _int(shape[0]))
 
 
@@ -173,7 +174,7 @@ def _coo_triples(source: PythonObject, who: String, base: PythonObject, context:
                     + "must be a square affinity matrix or a sparse matrix with "
                     + "`tocoo()`, got shape " + family_repr(shape))
     var view = family_view(source, 2, "X", context)
-    var dense = family_cast_view_f64(view, "X", context)
+    var dense = admit_family_f64(view, "X", context)
     _ = view^
     var n = _int(shape[0])
     var size = Int(py=dense.size)
@@ -258,7 +259,7 @@ def _x_decomp_input(source: PythonObject, context: PythonObject) raises -> Pytho
             and Bool(py=family_call(b.hasattr, x, PythonObject("nnz")))
             and Bool(py=family_call(b.hasattr, x, PythonObject("format")))):
         x = family_call(py_call(b.getattr, x, PythonObject("toarray")))
-    var a = family_as_f32_dense(x, 2, "X", context)
+    var a = admit_family(x, 2, "X", context, dense=True).array
     if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a))), Int(py=a.size)):
         raise Error("X: input must be finite; NaN/inf are unsupported")
     _ = a  # keep the Python object alive through the native calls above
@@ -380,12 +381,12 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
             raise Error("mojolearn SpectralEmbedding: the precomputed distance graph must be square")
         rows = _as_i32(triples[0], "rows", context)
         cols = _as_i32(triples[1], "cols", context)
-        vals = family_as_f32(triples[2], 1, "data", context)
+        vals = admit_family(triples[2], 1, "data", context).array
         if not (Int(py=rows.shape[0]) == Int(py=cols.shape[0]) and Int(py=cols.shape[0]) == Int(py=vals.shape[0])):
             raise Error("mojolearn SpectralEmbedding: the precomputed graph's row, col and data differ in length")
         nnz = Int(py=vals.shape[0])
     else:
-        dense = family_as_f32(source, 2, "X", context)
+        dense = admit_family(source, 2, "X", context).array
         n = Int(py=dense.shape[0])
         if Int(py=dense.shape[1]) != n:
             raise Error("mojolearn SpectralEmbedding: the precomputed distance matrix must be square")
@@ -642,7 +643,7 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
                 raise Error("mojolearn SpectralClustering: with affinity='precomputed', X "
                             + "must be a square affinity matrix or a sparse matrix with "
                             + "`tocoo()`, got shape " + family_repr(shape))
-            dense = family_as_f32(source, 2, "X", context)
+            dense = admit_family(source, 2, "X", context).array
     elif affinity == "rbf":
         var x = _x_decomp_input(source, context)
         var aff = _rbf_affinity(x, Float64(py=family_field(fields, "_gamma")), args[1], context)
@@ -738,7 +739,7 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
             _ = coo.cols
             _ = coo.vals
     else:
-        var x = family_as_f32(source, 2, "X", context)
+        var x = admit_family(source, 2, "X", context).array
         py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
         if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
             raise Error("mojolearn SpectralClustering: X contains NaN or "
@@ -894,7 +895,7 @@ def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject
                         + "'precomputed', X must be the affinity between the new rows "
                         + "and the " + String(n_train) + " training rows, shape (n_new, " + String(n_train) + "); "
                         + "got shape " + family_repr(shape))
-        q = family_as_f32(a, 2, "X", context)
+        q = admit_family(a, 2, "X", context).array
         if Int(py=q.shape[0]) < 1:
             raise Error("mojolearn SpectralClustering.predict: X has no rows; refused by name")
         if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(q))), Int(py=q.size)):
@@ -1025,7 +1026,7 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
             raise Error("mojolearn SpectralEmbedding: with affinity='precomputed', X "
                         + "must be a square affinity matrix or a sparse matrix with "
                         + "`tocoo()`, got shape " + family_repr(shape))
-        dense = family_as_f32(source, 2, "X", context)
+        dense = admit_family(source, 2, "X", context).array
     if affinity == "rbf":
         var x = _x_decomp_input(source, context)
         var d = Int(py=x.shape[1])
@@ -1096,7 +1097,7 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
         _ = coo.cols
         _ = coo.vals
     else:
-        var x = family_as_f32(source, 2, "X", context)
+        var x = admit_family(source, 2, "X", context).array
         py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
         if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
             raise Error("mojolearn SpectralEmbedding: X contains NaN or infinity")

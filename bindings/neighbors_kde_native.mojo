@@ -27,6 +27,7 @@ from providers.python.estimator_binding_pyapi import estimator_arguments
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family, admit_family_weights
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop, prepared_key_add, prepared_key_same
 from bindings.mode_metadata_native import _fields
@@ -36,8 +37,7 @@ from bindings.classical_attributes import classical_connect_numpy, classical_che
 from bindings.classical_pandas import classical_admit_value
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.family_common import (
-    FAMILY_F32P, family_repr, family_str, family_call, family_array, family_as_f32, family_sample_weight,
-    family_field, family_is_str,
+    FAMILY_F32P, family_repr, family_str, family_call, family_array, family_field, family_is_str,
 )
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense, _sparse_fields
 from bindings.native_buffer_owner import native_buffer_view
@@ -136,9 +136,9 @@ def _kde_dense(source: PythonObject, context: PythonObject) raises -> PythonObje
     if sparse.byte_length() > 0:
         if not py_contains(context, PythonObject("output_context")):
             py_setitem(context, "output_context", context)
-        var dense = family_as_f32(host_sparse_dense(source, sparse, context), 2, "X", context)
+        var dense = admit_family(host_sparse_dense(source, sparse, context), 2, "X", context).array
         return Python.tuple(dense, PythonObject(not _kde_sparse_f32(source, sparse)))
-    var x = family_as_f32(source, 2, "X", context)
+    var x = admit_family(source, 2, "X", context).array
     var copied = not _kde_borrowed(source, x, context)
     return Python.tuple(x, PythonObject(copied))
 
@@ -367,7 +367,7 @@ def _kde_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     if sample_weight is not None:
         # scikit-learn's _check_sample_weight (shape, finite, >= 0, not all
         # zero, its wording) by the base binding's reductions
-        var w = family_sample_weight(sample_weight, Int(py=x.shape[0]), False, context)
+        var w = admit_family_weights(sample_weight, Int(py=x.shape[0]), False, context).keep
         # Always an owned snapshot (the resident key holds its address).
         w = _kde_copy(w, context)
         _ = fitted_freeze(w, context)

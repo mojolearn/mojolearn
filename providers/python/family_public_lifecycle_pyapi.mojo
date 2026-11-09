@@ -13,6 +13,7 @@
 # owners are unchanged; this provider imports none of them.
 from std.math import isfinite
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family_meta, admit_family_owned
 from bindings.native_loaded_module import native_loaded_module
 from bindings.admitted_call import AdmittedCall, admitted_input_dense, admitted_input_shape, ADMITTED_ITEM_F32, ADMITTED_SPARSE_OTHER, ADMITTED_GRAPH_TUPLE
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -22,7 +23,7 @@ from bindings.classical_validate import classical_estimator_name, classical_chec
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields
-from bindings.family_common import FAMILY_F32P, family_f32_snapshot, family_owned_snapshot
+from bindings.family_common import FAMILY_F32P
 from core.host_finite_scan import host_all_finite_f32
 from bindings.cluster_side_records import cluster_refuse_fit_callbacks
 from providers.python.estimator_lifecycle_pyapi import (
@@ -228,7 +229,7 @@ def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, oper
         columns = Int(py=shape[1])
         _ = admitted.add_input(admitted_input_shape(x_index, source, source, shape, ADMITTED_SPARSE_OTHER))
     elif not (spec.graph and py_type(source) is b.tuple):
-        var snapshot = family_f32_snapshot(source, 2, "X", context, True)
+        var snapshot = admit_family_meta(source, 2, "X", context, True)
         rows = snapshot.shape[0]
         columns = snapshot.shape[1]
         # The snapshot's buffer and owner, recorded before any refusal below
@@ -250,7 +251,7 @@ def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, oper
             # handed over without a per-call copy; a fit retains X and keeps
             # the owned copy.
             var borrow = not fitting and not snapshot.readonly and snapshot.f32_c()
-            py_setitem(values, PythonObject(x_index), snapshot.keep if borrow else family_owned_snapshot(snapshot, context))
+            py_setitem(values, PythonObject(x_index), snapshot.keep if borrow else admit_family_owned(snapshot, context))
     if not fitting and Int(py=depth) == 0 and columns >= 0 and not spec.graph and not _precomputed(fields, b):
         var width = py_get(fields, "n_features_in_")
         if py_type(width) is b.int:

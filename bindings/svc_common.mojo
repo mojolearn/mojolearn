@@ -16,6 +16,7 @@
 # codes are the ones `encode_labels` returned for a flat label list.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.py_attr import py_attr
@@ -29,8 +30,8 @@ from bindings.classical_labels import labels_encode_labels, labels_accuracy, cla
 from bindings.label_admission_native import classifier_label_list
 from bindings.gp_svm_records import gpsvm_class_table, gpsvm_class_table_put
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_isinstance, family_call,
-    family_entry, family_array, family_view, family_cast_view, family_as_f32, family_shape_repr, family_f32_snapshot,
+    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_isinstance, family_call, family_entry,
+    family_array, family_view, family_shape_repr,
 )
 from bindings.metrics_reg_native import _Prog, _Reg, _reg_run, _arena_double, _arena_int, _RE_DIV
 from core.host_finite_scan import host_all_finite_f32
@@ -161,22 +162,10 @@ def svc_read_i32(array: PythonObject, index: Int) raises -> Int:
     return Int(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(array)))[index])
 
 
-def svc_f32(source: PythonObject, ndim: Int, name: String, dense: Bool,
-            context: PythonObject) raises -> PythonObject:
-    """`_buffer.as_f32_c` (or `as_f32_dense_c` with `dense`): the rank and
-    emptiness refusals, the cast; returns (array, copied). A scipy.sparse
-    matrix is densified exactly first (its implicit entries are zeros)."""
-    var snapshot = svc_snapshot(source, ndim, name, dense, context)
-    return Python.tuple(snapshot.keep, PythonObject(snapshot.copied))
-
-
-def svc_snapshot(source: PythonObject, ndim: Int, name: String, dense: Bool,
-                 context: PythonObject) raises -> ArrayMetadata:
-    var b = svc_builtins()
-    var sequence = py_type(source) is b.list or py_type(source) is b.tuple or py_type(source) is b.range
-    var snapshot = family_f32_snapshot(source, ndim, name, context, dense)
-    snapshot.copied = snapshot.copied or sequence
-    return snapshot^
+# TOMBSTONE: svc_f32, svc_snapshot (the SVM family's copy of the family admission) deleted 2026-11-08 by lane a2-admit-family; code recoverable at f7d10d2b09.
+# Restore: experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch. Doors call
+# admit_family / admit_family_meta (bindings/admitted_family.mojo); the
+# `input_copied_` flag is admit_family_copied.
 
 
 # ---------------------------------------------------------------- shapes and labels
@@ -361,8 +350,8 @@ def svc_r2_sums(pred: PythonObject, y: PythonObject, context: PythonObject) rais
     """`linear_model._r2_sums(pred, y)`: (SS_res, SS_tot) from the one
     x_metrics program `_r2_sums_of` ran: the y mean (Float32 column), then
     both sums of squares, binary64 out."""
-    var t = family_as_f32(y, 1, "y", context)
-    var p = family_as_f32(pred, 1, "predictions", context)
+    var t = admit_family(y, 1, "y", context).array
+    var p = admit_family(pred, 1, "predictions", context).array
     var n = Int(py=t.size)
     var m = Int(py=p.size)
     if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(t))), n):

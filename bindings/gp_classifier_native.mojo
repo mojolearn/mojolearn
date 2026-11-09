@@ -11,6 +11,7 @@
 # gpc_ovr_combine), and stores the fit as `_set_fitted` did. The same entries on
 # the same inputs in the same order: the bits do not move.
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
@@ -18,8 +19,7 @@ from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
-    family_repr, family_is_str, family_isinstance, family_call, family_array, family_as_f32,
-    family_owned, family_field, FAMILY_F64P,
+    family_repr, family_is_str, family_isinstance, family_call, family_array, family_field, FAMILY_F64P,
 )
 from core.hotpath_impl import reduce_stat, cast_elements, HP_F64, HP_SUM, HP_I32, HP_I64
 from bindings.gp_common_native import gp_extension, gp_caps, gp_entry, gp_kernel_arrays, gp_f32, gp_fit_owned
@@ -253,7 +253,7 @@ def _gpc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     classical_connect_numpy(context)
     gpc_validate(model, context)
     var fields = py_fields(model)
-    var source = family_as_f32(args[2], 2, "X", context)
+    var source = admit_family(args[2], 2, "X", context).array
     py_setitem(fields, "input_copied_", PythonObject(not (source is args[2])))
     var x = gp_fit_owned(source, args[2], context)
     _ = source^
@@ -295,7 +295,7 @@ def _gpc_query(fields: PythonObject, source: PythonObject, context: PythonObject
         raise Error(String(_NAME) + ": call fit() or load() first")
     # The public door already admitted this X as C-order float32 and
     # registered it (bindings/gp_svm_records.mojo): no second snapshot.
-    var q = source if gp_x_known(source, context) else family_as_f32(source, 2, "X", context)
+    var q = source if gp_x_known(source, context) else admit_family(source, 2, "X", context).array
     var d = Int(py=q.shape[1])
     var fitted = Int(py=fields["n_features_in_"])
     if d != fitted:

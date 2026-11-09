@@ -4,6 +4,7 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.admitted_family import admit_family_meta
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop, prepared_key_add, prepared_key_same
 from bindings.native_error_class import error_without_class
@@ -17,8 +18,7 @@ from bindings.classical_pandas import classical_admit_value, native_pandas_exact
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_inputs import sequential_input, sequential_sequence
-from bindings.family_common import family_array, family_as_f32, family_entry, family_call, family_call_kw
-from bindings.family_common import family_f32_snapshot
+from bindings.family_common import family_array, family_entry, family_call, family_call_kw
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
 from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED
 from bindings.neighbors_knn_native import knn_door, knn_state_values, knn_state_unchanged
@@ -279,7 +279,7 @@ def _ivf_search(model: PythonObject, kind: PythonObject, args: PythonObject, adm
     var fields = py_fields(model)
     if not py_contains(fields, "list_data_") and not py_contains(fields, "_device_list_data"):
         raise Error("ValueError: call fit or load before search")
-    var q = family_f32_snapshot(args[0], 2, "queries", context)
+    var q = admit_family_meta(args[0], 2, "queries", context)
     var fitted = List[Int]([Int(py=fields["n_rows_"]), Int(py=fields["n_features_in_"]),
                            Int(py=fields["n_lists_"]), Int(py=fields["metric_code_"])])
     var dim = fitted[1]
@@ -504,7 +504,7 @@ def _ivf_extend(model: PythonObject, kind: PythonObject, args: PythonObject, con
     var b = native_loaded_module("builtins")
     if not py_contains(fields, "list_data_") and not py_contains(fields, "_device_list_data"):
         raise Error("ValueError: mojolearn IVFIndex: call fit (or load) before extend")
-    var x = family_f32_snapshot(args[0], 2, "X", context)
+    var x = admit_family_meta(args[0], 2, "X", context)
     var names = Python.tuple("n_rows_", "n_features_in_", "n_lists_", "metric_code_")
     for i in range(len(names)):  # small-loop(four fitted integer parameters)
         if py_type(fields[names[i]]) is not b.int:

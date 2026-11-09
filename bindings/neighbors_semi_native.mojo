@@ -22,13 +22,14 @@ from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from std.memory import bitcast
 from std.ffi import _Global
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_I32P, family_repr, family_is_int, family_is_str, family_isinstance, family_call,
-    family_call_kw, family_entry, family_array, family_as_f32_dense, family_field, family_min,
+    family_call_kw, family_entry, family_array, family_field, family_min,
 )
 from providers.python.estimator_binding_pyapi import estimator_arguments
 from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_accuracy
@@ -83,7 +84,7 @@ def _semi_out(shape: PythonObject, typestr: String, context: PythonObject) raise
 def _semi_x(source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_f32(X)`: a scipy.sparse matrix densified, then
     `as_f32_c(ndim=2, name="X")`."""
-    return family_as_f32_dense(source, 2, "X", context)
+    return admit_family(source, 2, "X", context, dense=True).array
 
 
 def _semi_addr(value: PythonObject) raises -> PythonObject:

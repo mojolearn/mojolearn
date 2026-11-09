@@ -4,11 +4,12 @@
 # separate: summing them while densifying could erase opposite-sign edges.
 from std.memory import bitcast
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family_meta
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_arrays import classical_address
 from bindings.classical_pandas import _pd_type_fields
-from bindings.family_common import FAMILY_F32P, family_array, family_f32_snapshot
+from bindings.family_common import FAMILY_F32P, family_array
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields, _sparse_aliases, _sparse_scalar_word, _sparse_coordinate
 from core.classical_pandas_impl import pd_raw_at
 from core.cast_in import cast_f32_bits, cast_in_kind
@@ -101,7 +102,7 @@ def hierarchy_connectivity(source: PythonObject, n: Int, context: PythonObject) 
     var b = native_loaded_module("builtins")
     var format = host_sparse_format(source)
     if format.byte_length() == 0:
-        var snapshot = family_f32_snapshot(source, 2, "connectivity", context)
+        var snapshot = admit_family_meta(source, 2, "connectivity", context)
         if snapshot.shape[0] != n or snapshot.shape[1] != n:
             raise Error("Wrong shape for connectivity matrix when X has " + String(n) + " samples")
         return HierarchyConnectivity(Python.tuple(source, snapshot.owner), snapshot.keep, snapshot.source.addr, snapshot.count, snapshot.count, 1)

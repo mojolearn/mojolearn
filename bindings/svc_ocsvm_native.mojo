@@ -10,6 +10,7 @@
 # binding's `gather_i32` and `cast_elements`: the bits do not move.
 from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn_execute, xn_module, xn_is_module, xn_capabilities
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.classical_arrays import classical_address, classical_wrap_array
@@ -22,7 +23,7 @@ from bindings.gp_svm_records import ocsvm_coef_reused, ocsvm_coef_remember
 from bindings.gp_svm_gp_state import gp_x_known
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_has, svc_float, svc_int, svc_truthy, svc_base, svc_prefix, svc_scalar_array,
-    svc_read_f32, svc_read_i32, svc_f32,
+    svc_read_f32, svc_read_i32,
 )
 
 # `_expansion_neighbors._U_IDENTITY`
@@ -151,7 +152,7 @@ def _ocsvm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
     # (2-D, non-empty, finite, C-order float32; registered for the operation
     # by bindings/svm_mixture_native.mojo) is used as is, without a second
     # metadata snapshot. Any other caller's X is converted as before.
-    var x = source if gp_x_known(source, context) else svc_f32(source, 2, "X", True, context)[0]
+    var x = source if gp_x_known(source, context) else admit_family(source, 2, "X", context, True).array
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     var name = String(kernel)
@@ -165,7 +166,7 @@ def _ocsvm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
         cv = family_array(Python.tuple(PythonObject(n)), "<f4", context)
         family_fill_f32(FAMILY_F32P(unsafe_from_address=Int(py=_a(cv))), n, Float32(1.0))
     else:
-        var wv = svc_f32(sample_weight, 1, "sample_weight", False, context)[0]
+        var wv = admit_family(sample_weight, 1, "sample_weight", context, False).array
         if Int(py=wv.shape[0]) != n:
             raise Error("sample_weight and X have different numbers of samples")
         if n > 0 and family_min(wv) < 0:
@@ -308,7 +309,7 @@ def _ocsvm_run(model: PythonObject, binding: PythonObject, source: PythonObject,
     finishes the int64 cast), the scores otherwise."""
     var fields = py_fields(model)
     # The door's admitted X is used as is (see _ocsvm_fit).
-    var q = source if gp_x_known(source, context) else svc_f32(source, 2, "X", True, context)[0]
+    var q = source if gp_x_known(source, context) else admit_family(source, 2, "X", context, True).array
     var dual = svc_field(fields, "dual_coef_")
     var n_sv = Int(py=dual.shape[1])
     # the (n_sv, 1) column of the C-order float32 coefficients. The fitted
@@ -318,7 +319,7 @@ def _ocsvm_run(model: PythonObject, binding: PythonObject, source: PythonObject,
     if ocsvm_coef_reused(model, dual):
         coef = dual
     else:
-        coef = svc_f32(dual, 2, "dual_coef_", False, context)[0]
+        coef = admit_family(dual, 2, "dual_coef_", context, False).array
         ocsvm_coef_remember(model, dual, coef)
     var kernel = svc_field(fields, "kernel")
     var precomputed = String(kernel) == "precomputed"

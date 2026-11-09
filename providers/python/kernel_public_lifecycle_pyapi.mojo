@@ -3,6 +3,7 @@
 # numerical owner retains operation-local input descriptors through completion.
 from std.python import Python, PythonObject
 from std.math import isfinite
+from bindings.admitted_family import admit_family_meta
 from bindings.native_loaded_module import NativeModules, native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.mode_metadata_native import _fields, _fitted
@@ -24,7 +25,7 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields
 from bindings.native_array_view import native_array_ndarray_view
-from bindings.family_common import family_f32_snapshot, family_array
+from bindings.family_common import family_array
 from core.admitted_input import admitted_cast_f64
 from core.host_finite_scan import host_all_finite_f32
 from core.cast_in import CAST_KIND_FLOAT
@@ -326,7 +327,7 @@ def kernel_public_result(result: PythonObject, prediction: Bool, outside: Bool,
                              MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(widened))))
         _ = result
         return native_array_ndarray_view(widened, context)
-    var value = family_f32_snapshot(result, -1, "prediction", context)
+    var value = admit_family_meta(result, -1, "prediction", context)
     var wide = family_array(value.python_shape(), "<f8", context)
     var source = value.source
     admitted_cast_f64(source.addr, source.s0, source.s1, source.rows, source.cols,

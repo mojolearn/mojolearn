@@ -15,6 +15,7 @@
 # Python `words(out, 2, "d")` read them. Same program, same kernels: the
 # bits do not move.
 from std.memory import memcpy, bitcast
+from bindings.admitted_family import admit_family, admit_family_f64
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from providers.python.metrics_vector_input_pyapi import metric_vector_exact
@@ -32,7 +33,7 @@ from bindings.metrics_plan_admission import MetricPlanOpcodes
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.family_common import (
     FAMILY_F32P, FAMILY_F64P, family_repr, family_str, family_isinstance, family_call, family_call_kw,
-    family_array, family_shape_repr, family_cast_view, family_cast_view_f64, family_min,
+    family_array, family_shape_repr, family_min,
 )
 from core.family_cast_impl import family_max_f32
 from core.host_finite_scan import host_all_finite_f32
@@ -324,7 +325,7 @@ def _reg_target(source: PythonObject, name: String, caller: String, context: Pyt
             except:
                 buffered = False
         if listed or not buffered:
-            view = family_cast_view(view, name, context)
+            view = admit_family(view, -1, name, context, admitted=True, empty=True).array
             typestr = "<f4"
             cast = True
     if typestr != "<f4":
@@ -339,7 +340,7 @@ def _reg_target(source: PythonObject, name: String, caller: String, context: Pyt
     # (n,) reads as (n, 1): the same C-ordered words.
     # p3-labels-metrics: a list already cast above is the fresh C-order
     # float32 array this cast would return; it is not cast twice.
-    var flat = view if cast else family_cast_view(view, name, context)
+    var flat = view if cast else admit_family(view, -1, name, context, admitted=True, empty=True).array
     if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(flat))), rows * cols):
         raise Error("mojolearn " + caller + ": " + name + " contains NaN or infinity")
     _ = flat  # keep the Python object alive through the native calls above
@@ -370,7 +371,7 @@ def _reg_weights(source: PythonObject, n: Int, caller: String, context: PythonOb
     var count = Int(py=view.shape[0])
     if count != n:
         raise Error("mojolearn " + caller + ": sample_weight has " + String(count) + " entries for " + String(n) + " samples")
-    var w = family_cast_view(view, "sample_weight", context)
+    var w = admit_family(view, -1, "sample_weight", context, admitted=True, empty=True).array
     var words = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(w)))
     _ = w  # keep the Python object alive through the native call above
     if not host_all_finite_f32(words, n) or family_min(w) < 0:
@@ -409,7 +410,7 @@ def _reg_new(args: PythonObject, multioutput: PythonObject, caller: String, vari
     elif multioutput is not None:
         # `[float(v) for v in flatten_mo(multioutput)]`, as binary64.
         var view = classical_view(multioutput, context, "multioutput")
-        var values = family_cast_view_f64(view, "multioutput", context)
+        var values = admit_family_f64(view, "multioutput", context)
         var count = Int(py=values.size)
         if d == 1:
             raise Error("Custom weights are useful only in multi-output cases.")

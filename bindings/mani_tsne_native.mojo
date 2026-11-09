@@ -21,9 +21,8 @@ from bindings.manifold_lifecycle_native import _cast
 from bindings.spectral_umap_routes import spectral_umap_entry as family_entry, spectral_umap_optional_entry
 from core.host_finite_scan import host_all_finite_f32
 from bindings.family_common import (
-    family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call,
-    family_array, family_f32_snapshot, family_field, family_view, family_cast_view, family_shape_repr,
-    FAMILY_F32P,
+    family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call, family_array,
+    family_field, family_view, family_shape_repr, FAMILY_F32P,
 )
 
 comptime _TSNE_EXPLORATION_MAX_ITER = 250

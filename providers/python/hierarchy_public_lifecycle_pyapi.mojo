@@ -2,6 +2,7 @@
 # AgglomerativeClustering's public lifecycle, setting admission and captured X.
 # Numerical backend extension dispatch remains explicit migration debt in the
 # dedicated owner; moving this envelope does not make those calls descriptor ABI.
+from bindings.admitted_family import admit_family_meta
 from bindings.native_class_admission import class_record, class_admit
 from bindings.cpython_table import cpython_table
 from core.p3nc_scan import P3NC_REAL_OK, P3NC_REAL_NONFINITE, P3NC_REAL_CONTINUOUS
@@ -24,7 +25,7 @@ from core.label_storage_impl import LABELS_FLOAT_OK, LABELS_FLOAT_NONFINITE, LAB
 from bindings.classical_warnings import classical_warn_column
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_array_view import native_array_ndarray_view
-from bindings.family_common import FAMILY_F32P, family_f32_snapshot
+from bindings.family_common import FAMILY_F32P
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields
 from bindings.cluster_fit_a_native import _pending, _pending_text, _drop_pending
@@ -215,7 +216,7 @@ def hierarchy_public_begin(model: PythonObject, operation: String, args: PythonO
     var source = args[1]
     if host_sparse_format(source).byte_length() > 0:
         raise Error("NotImplementedError: mojolearn AgglomerativeClustering: sparse X is refused; pass a dense matrix")
-    var x = family_f32_snapshot(source, 2, "X", context)
+    var x = admit_family_meta(source, 2, "X", context)
     # p3-neighbors-cluster: one eight-lane exponent-bit pass (core/p3nc_scan.mojo).
     if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=x.source.addr), x.count):
         raise Error("Input X contains NaN or infinity (AgglomerativeClustering).")

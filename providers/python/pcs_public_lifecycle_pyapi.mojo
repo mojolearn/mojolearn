@@ -11,7 +11,8 @@ from bindings.native_class_admission import class_record, class_admit
 from bindings.classical_validate import classical_estimator_name, classical_check_width
 from bindings.public_attributes_native import _plan, _lookup
 from bindings.host_inference_scalars import host_inference_scalar, host_inference_primitive_number
-from bindings.family_common import family_input_snapshot, family_snapshot_f32
+from bindings.admitted_family import admit_family_input, admit_family_cast
+from core.host_finite_scan import host_all_finite_f32_strided
 from bindings.native_numpy_metadata import native_numpy_dtype
 from core.native_scalar_decode import native_scalar_real
 from core.cast_in import CAST_KIND_FLOAT
@@ -80,7 +81,14 @@ def _pcs_check_finite(source: PythonObject, snapshot: ArrayMetadata,
     # as f8 and was scanned. Preserve that distinction before the f32 cast.
     if policy == 1 and data.itemsize == 2:
         return
-    if snapshot.native_byte_order and (data.itemsize == 4 or data.itemsize == 8):
+    if snapshot.native_byte_order and data.itemsize == 4:
+        # parallel: float32 in native order, one SIMD finiteness scan across
+        # host cores over the captured strides (lane a2-admit-family; the
+        # typed exponent test below ran serially per word). Same refusal.
+        if not host_all_finite_f32_strided(data.addr, data.s0, data.s1, data.rows, data.cols):
+            raise Error("Input X contains NaN or infinity (PolynomialCountSketch).")
+        return
+    if snapshot.native_byte_order and data.itemsize == 8:
         # float32 / float64 in native order: one typed exponent test per
         # word over the captured strides (the generic scalar decoder with a
         # String type code ran per element; p3 rank 100). Same refusal.
@@ -156,9 +164,9 @@ def pcs_public_begin(model: PythonObject, operation: String, args: PythonObject,
         var learned = Python.tuple("indexHash_", "bitHash_", "n_features_in_")
         for i in range(len(learned)):  # small-loop(three fitted sketch input owners)
             py_setitem(settings, learned[i], _lookup(model, learned[i], fields, plan, attributes))
-    var x = family_input_snapshot(args[1], 2, "X", context, True)
+    var x = admit_family_input(args[1], 2, "X", context, True)
     _pcs_check_finite(args[1], x, context)
-    family_snapshot_f32(x, context)
+    admit_family_cast(x, "X", context)
     var target = PythonObject(None)
     if Int(py=depth) == 0:
         if fitting:

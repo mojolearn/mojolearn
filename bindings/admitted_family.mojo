@@ -73,12 +73,13 @@ def _shape_tuple(shape: List[Int]) raises -> PythonObject:
     return py_call(native_loaded_module("builtins").tuple, shape_words)
 
 
-def _family_metadata(source: PythonObject, ndim: Int, name: String, context: PythonObject,
-                     dense: Bool, admitted: Bool, empty: Bool) raises -> ArrayMetadata:
-    # The exporter's metadata, read once, with `_buffer._as_typed`'s rank,
-    # emptiness and rank-above-2 refusals in their wording; `ndim` < 0
-    # accepts any rank up to 2. `dense`: a scipy.sparse input is densified
-    # exactly first (its implicit entries are zeros).
+def admit_family_input(source: PythonObject, ndim: Int, name: String, context: PythonObject,
+                       dense: Bool = False, admitted: Bool = False, empty: Bool = False) raises -> ArrayMetadata:
+    """The exporter's metadata, read once, with `_buffer._as_typed`'s rank,
+    emptiness and rank-above-2 refusals in their wording, before any cast
+    (`admit_family_cast` is the second step); `ndim` < 0 accepts any rank up
+    to 2. `dense`: a scipy.sparse input is densified exactly first (its
+    implicit entries are zeros)."""
     var prepared = source
     var view_admitted = admitted
     if dense:
@@ -127,7 +128,17 @@ def admit_family_meta(source: PythonObject, ndim: Int, name: String, context: Py
     view classical_view returned in the same native call. `empty` admits a
     view with no words (the cast of an already checked view, which
     `_buffer.as_f32_c`'s cast step never refused)."""
-    var snapshot = _family_metadata(source, ndim, name, context, dense, admitted, empty)
+    var snapshot = admit_family_input(source, ndim, name, context, dense, admitted, empty)
+    admit_family_cast(snapshot, name, context, finite)
+    return snapshot^
+
+
+def admit_family_cast(mut snapshot: ArrayMetadata, name: String, context: PythonObject, finite: Bool = False) raises:
+    """The second step of `admit_family_meta` on an `admit_family_input`
+    record: borrow a float32 C-order input, else cast it once (row tasks
+    across the host's cores) into an owned Array recorded on `snapshot`;
+    `finite` refuses a NaN or an infinity, from the cast's own verdict (or
+    one parallel scan of a borrowed input)."""
     var ok = True
     var src = snapshot.source
     if snapshot.f32_c():
@@ -145,7 +156,6 @@ def admit_family_meta(source: PythonObject, ndim: Int, name: String, context: Py
         snapshot.replace_f32(result, address)
     if finite and not ok:
         raise Error("Input " + name + " contains NaN or infinity")
-    return snapshot^
 
 
 def admitted_family_x(snapshot: ArrayMetadata, source: PythonObject, finite: Bool) -> AdmittedX:
