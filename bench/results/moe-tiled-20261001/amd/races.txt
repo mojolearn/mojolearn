@@ -1,3 +1,0 @@
-moe before  ms=1271.366 digest=393fefe91af8350f  
-moe after  ms=168.722 digest=393fefe91af8350f  
-moe restore  ms=1257.162 digest=393fefe91af8350f  
