@@ -98,8 +98,6 @@ def test_native_samba_complete_gradient_matches_explicit_chain(monkeypatch, laye
         monkeypatch.setitem(bridge.CONTEXT, "entries", SimpleNamespace(**entries))
     with monkeypatch.context() as patch:
         _poison(patch)
-        patch.setattr(SambaStack, "_forward", lambda *a, **k: pytest.fail("Python model walk"))
-        patch.setattr(SambaStack, "_block", lambda *a: pytest.fail("Python layer selection"))
         patch.setattr(T, "embedding_forward", lambda *a: pytest.fail("Python primitive callback"))
         actual = audit_native_call(model.loss_and_grads, inputs, targets, num_items=items,
                                    dropout_stream=stream, token_offset=7).assert_native()

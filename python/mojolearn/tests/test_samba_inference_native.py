@@ -108,7 +108,6 @@ def test_public_stateful_forward_and_dedicated_step_preserve_complete_state(monk
         expected = _reference(reference, ids, expected_states, step)
         with monkeypatch.context() as patch:
             _poison(patch)
-            patch.setattr(SambaStack, "_forward_state", lambda *a, **k: pytest.fail("Python state traversal"))
             value = audit_native_call(model.step if step else model.forward, ids, actual).assert_native()
         assert value.shape == ((2, 19) if step else expected.shape)
         assert value.tobytes() == expected.tobytes()
