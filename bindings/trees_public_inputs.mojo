@@ -27,6 +27,7 @@ from bindings.py_typed_call import py_call_typed, typed_python_error
 from bindings.cpython_table import cpython_table
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.classical_arrays import classical_wrap_array, _store_code, _buffer_typestr
+from bindings.native_array_storage import native_array_zeros, native_scratch_bytes, native_scratch_address
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, _pd_fields, _pd_get
 from bindings.sequential_admission import _ordinary_torch, _one_of
 from bindings.native_torch_admission import native_torch_numpy
@@ -146,8 +147,10 @@ def trees_empty(shape: PythonObject, typestr: String, context: PythonObject, ord
     # zero-filled bytes object of the full size was allocated first and then
     # copied into the array, two allocations and two passes).
     _ = trees_itemsize(typestr)  # refuses a non-Array dtype as before
-    var seed = py_call(context["array_type"], PythonObject(_store_code(typestr)), Python.list(PythonObject(0)))
-    var store = py_call(py_attr(seed, "__mul__"), PythonObject(count))
+    # 0.8.66 regression C3: the shared native zero store (one allocation;
+    # a bulk fill on every supported CPython, where `seed * count` ran one
+    # memcpy per element before 3.12). The same zero bytes as before.
+    var store = native_array_zeros(_store_code(typestr), count)
     return classical_wrap_array(store, shape, typestr, order, context)
 
 
@@ -422,17 +425,24 @@ struct TreesMatrix(Copyable, Movable):
         self.row_major = row_major
 
 
-def trees_f32(source: PythonObject, ndim: Int, order: String, name: String, context: PythonObject) raises -> TreesMatrix:
+def trees_f32(source: PythonObject, ndim: Int, order: String, name: String, context: PythonObject,
+              scratch: Bool = False) raises -> TreesMatrix:
     """`_buffer._as_typed(source, '<f4', order, ndim, name)`: the input
     itself when it is already float32 in `order` (no copy), otherwise one
     converted copy through the base binding's casts (a float64 or float32
-    source) or the classical element cast (integers and float16)."""
+    source) or the classical element cast (integers and float16).
+
+    `scratch`: the caller only reads the result's address during this
+    operation and never keeps or returns its owner (a fit's transient X).
+    A converted copy is then written into an uninitialized private store
+    (`native_scratch_bytes`) instead of a zero-filled Array."""
     var view = trees_view(source, name, context)
     trees_check_rank(view, ndim, name)
-    return trees_f32_view(view^, order, context)
+    return trees_f32_view(view^, order, context, scratch)
 
 
-def trees_f32_view(var view: TreesView, order: String, context: PythonObject) raises -> TreesMatrix:
+def trees_f32_view(var view: TreesView, order: String, context: PythonObject,
+                   scratch: Bool = False) raises -> TreesMatrix:
     var rows = view.shape[0]
     var cols = view.shape[1] if view.ndim() == 2 else 1
     var two = view.ndim() == 2
@@ -443,8 +453,18 @@ def trees_f32_view(var view: TreesView, order: String, context: PythonObject) ra
         _ = view  # keep the Python object alive through the native call above
         return _keep_ret_view^
     var shape = Python.tuple(rows, cols) if two else Python.tuple(rows)
-    var out = trees_empty(shape, "<f4", context, "F" if want_f and two else "C")
-    var dst = trees_address(out)
+    # 0.8.66 regression C3 (gbdt-rank-pairlogit fit 1.24x, +405 ms on
+    # istella: the 1.8 GB transpose destination was zero-filled first).
+    # Every branch below writes all rows * cols words of `dst` before it
+    # returns, so a transient caller's destination needs no fill.
+    var out: PythonObject
+    var dst: Int
+    if scratch:
+        out = native_scratch_bytes(view.size() * 4)
+        dst = native_scratch_address(out)
+    else:
+        out = trees_empty(shape, "<f4", context, "F" if want_f and two else "C")
+        dst = trees_address(out)
     _ = out  # keep the Python object alive through the native call above
     var contiguous_c = view.c_order()
     var contiguous_f = view.f_order()
@@ -477,13 +497,16 @@ def trees_f32_view(var view: TreesView, order: String, context: PythonObject) ra
         _ = out  # keep the Python object alive through the native call above
         _ = view  # keep the Python object alive through the native call above
         return TreesMatrix(out, dst, rows, cols, not want_f)
-    var staged = trees_vector(view.size(), "<f4", context)
-    trees_cast(view.addr, view.typestr, trees_address(staged), "<f4", view.size(), context)
+    # The staging store is written in full by the cast and read only by the
+    # transpose below; it never escapes, so it needs no fill either.
+    var staged = native_scratch_bytes(view.size() * 4) if scratch else trees_vector(view.size(), "<f4", context)
+    var staged_addr = native_scratch_address(staged) if scratch else trees_address(staged)
+    trees_cast(view.addr, view.typestr, staged_addr, "<f4", view.size(), context)
     _ = staged  # keep the Python object alive through the native call above
     _ = view  # keep the Python object alive through the native call above
     var r = cols if contiguous_f else rows
     var c = rows if contiguous_f else cols
-    _ = py_call_typed(trees_helper(context, "transpose_f32"), PythonObject(trees_address(staged)), PythonObject(dst),
+    _ = py_call_typed(trees_helper(context, "transpose_f32"), PythonObject(staged_addr), PythonObject(dst),
                       PythonObject(r), PythonObject(c))
     _ = staged  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above

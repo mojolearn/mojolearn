@@ -39,6 +39,20 @@ def _storage_type(metadata: PythonObject) raises -> PythonObject:
     return cls
 
 
+#: Items in the zero block a large pre-3.12 store is repeated from: 4096
+#: items is 4-32 KB, one memcpy each at streaming speed (cost reasoning:
+#: the per-call overhead of a memcpy is amortized over a block, whatever
+#: the array's shape).
+comptime _ZERO_BLOCK_ITEMS = 4096
+
+
+def _repeat_copies_per_item() raises -> Bool:
+    # CPython 3.10 and 3.11 array_repeat: one memcpy per repeated copy;
+    # 3.12 moved it to a bulk repeat. Read from the running interpreter.
+    var info = native_loaded_module("sys").version_info
+    return Int(py=info[0]) == 3 and Int(py=info[1]) < 12
+
+
 def native_array_zeros(code: String, count: Int) raises -> PythonObject:
     if count < 0:
         raise Error("ValueError: native array element count must be nonnegative")
@@ -60,11 +74,64 @@ def native_array_zeros(code: String, count: Int) raises -> PythonObject:
         if bytes[i] != 0:
             raise Error("TypeError: native array storage seed changed")
     ref cpy = Python().cpython()
+    if count >= 2 * _ZERO_BLOCK_ITEMS and _repeat_copies_per_item():
+        # 0.8.66 regression C3 (knn fit 8.5x, iforest fit 39.6x, gbdt-rank
+        # 1.24x): before CPython 3.12, array_repeat runs one memcpy per
+        # repeated copy, so a one-item seed costs one call per element. A
+        # zero block of _ZERO_BLOCK_ITEMS items is built first and repeated
+        # whole (one memcpy per block), then the remainder (fewer than
+        # _ZERO_BLOCK_ITEMS items) is appended. Every byte is still zero;
+        # 3.12 and later already repeat in bulk and keep the one call below.
+        var block_raw = cpython_table()[].PySequence_Repeat(seed._obj_ptr, _ZERO_BLOCK_ITEMS)
+        if not block_raw:
+            raise cpy.unsafe_get_error()
+        var block = PythonObject(from_owned=block_raw)
+        var whole_raw = cpython_table()[].PySequence_Repeat(block._obj_ptr, count // _ZERO_BLOCK_ITEMS)
+        _ = block  # retain the block owner through the native repeat operation
+        if not whole_raw:
+            raise cpy.unsafe_get_error()
+        var whole = PythonObject(from_owned=whole_raw)
+        var rest = count % _ZERO_BLOCK_ITEMS
+        if rest > 0:
+            var tail_raw = cpython_table()[].PySequence_Repeat(seed._obj_ptr, rest)
+            if not tail_raw:
+                raise cpy.unsafe_get_error()
+            var tail = PythonObject(from_owned=tail_raw)
+            _ = py_call(whole.extend, tail)
+        _ = seed  # retain the original owner through the native repeat operations
+        return whole
     var result = cpython_table()[].PySequence_Repeat(seed._obj_ptr, count)
     _ = seed  # retain the original owner through the native repeat operation
     if not result:
         raise cpy.unsafe_get_error()
     return PythonObject(from_owned=result)
+
+
+def native_scratch_bytes(nbytes: Int) raises -> PythonObject:
+    # 0.8.66 regression C3 (gbdt-rank-pairlogit fit 1.24x, +405 ms on
+    # istella): an UNINITIALIZED private byte store (a bytearray made by
+    # PyByteArray_FromStringAndSize with a NULL source; no fill pass), for a
+    # destination that one native call writes in full before anything reads
+    # it and that never escapes the operation (never a fitted field, never a
+    # returned Array). 0.8.55 used an uninitialized PyMem_RawMalloc store for
+    # the same destinations. The data is CPython's allocation (16-byte
+    # aligned), never resized, and alive while the returned object is.
+    if nbytes < 0:
+        raise Error("ValueError: native scratch byte count must be nonnegative")
+    ref cpy = Python().cpython()
+    var raw = cpython_table()[].PyByteArray_FromStringAndSize(0, nbytes if nbytes > 0 else 1)
+    if not raw:
+        raise cpy.unsafe_get_error()
+    return PythonObject(from_owned=raw)
+
+
+def native_scratch_address(scratch: PythonObject) raises -> Int:
+    """The data address of a `native_scratch_bytes` store."""
+    var address = cpython_table()[].PyByteArray_AsString(scratch._obj_ptr)
+    if address == 0:
+        ref cpy = Python().cpython()
+        raise cpy.unsafe_get_error()
+    return address
 
 
 def native_array_empty(code: String) raises -> PythonObject:

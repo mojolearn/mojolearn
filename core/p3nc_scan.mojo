@@ -8,10 +8,14 @@ results to float64, one scalar at a time. These do the same eight lanes at a
 time (the `core/staged_download.mojo::_first_nonfinite` and
 `core/host_helpers_impl.mojo::cast_f64_to_f32` forms), with the scalar tail.
 The finite test reads only exponent bits and the widening is exact, so no
-result or refusal changes. No host threads: the GPU bindings import these.
+result or refusal changes. The finiteness scan is the shared
+`core/host_finite_scan.mojo` one (SIMD, split across the host's cores; lane
+fix-c1-c2-parallel-finite, 0.8.66 regression C2): it runs on the host before
+the upload, so its threads are host threads and touch no device state.
 """
 from std.math import floor
 from std.memory import bitcast
+from core.host_finite_scan import host_all_finite_f32
 
 comptime _P3NC_F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _P3NC_F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -20,20 +24,8 @@ comptime _P3NC_F64P = MutPointer[Float64, MutUntrackedOrigin]
 def p3nc_all_finite_f32(p: _P3NC_F32P, n: Int) -> Bool:
     """True when none of the `n` float32 words at `p` is a NaN or an
     infinity (exponent bits all ones)."""
-    comptime W = 8
-    var exp = SIMD[DType.uint32, W](0x7F800000)
-    var i = 0
-    var body = n - n % W
-    while i < body:
-        var bits = bitcast[DType.uint32, W](p.unsafe_load[width=W](i)) & exp
-        if bits.eq(exp).reduce_or():
-            return False
-        i += W
-    while i < n:
-        if (bitcast[DType.uint32](p.unsafe_load(i)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            return False
-        i += 1
-    return True
+    # parallel: finiteness scan across host cores (0.8.66 regression C2, one-thread scan)
+    return host_all_finite_f32(p, n)
 
 
 def p3nc_widen_f32_f64(sp: _P3NC_F32P, dp: _P3NC_F64P, n: Int):

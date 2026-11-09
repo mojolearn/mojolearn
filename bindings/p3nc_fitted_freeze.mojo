@@ -77,3 +77,4 @@ def fitted_freeze_foreign(value: PythonObject) raises -> Bool:
     except:
         return False
     return not Bool(py=flags.writeable)
+

@@ -8,7 +8,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from bindings.neural_block_admission import (
-    neural_block_fields, neural_block_f32, neural_record_fields, neural_string_keys,
+    neural_block_fields, neural_block_f32, neural_block_f32_input, neural_record_fields, neural_string_keys,
     neural_plain_value, neural_array_snapshot, neural_array_slots, neural_admit_weights,
     neural_native_scalar, neural_model_weights, neural_block_snapshot, neural_block_weight_names, neural_metadata_snapshot,
 )
@@ -465,7 +465,9 @@ def neural_block_allocate_binding(block: PythonObject, batch: PythonObject, capa
 
 
 def _neural_input(mut mods: NativeModules, value: PythonObject, d_model: Int, step: Bool, context: PythonObject) raises -> PythonObject:
-    var x = neural_block_f32(mods, value, "x", context)
+    # 0.8.66 regression C5: x is only read; a C-contiguous float32 export is
+    # read in place (neural_block_f32_input), not copied per call.
+    var x = neural_block_f32_input(mods, value, "x", context)
     var bi = mods.module("builtins")
     if step and len(x.shape) == 2:
         var shaped = py_call(bi.object.__new__, context["array_class"])

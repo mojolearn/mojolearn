@@ -3,6 +3,7 @@
 from core.cast_in import CastIn, cast_w64_bits
 from std.memory import bitcast
 from core.classical_pandas_impl import pd_raw_at, _pd_double
+from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64
 
 
 def prep_float_finite(source: CastIn, shape: List[Int], strides: List[Int],
@@ -11,6 +12,21 @@ def prep_float_finite(source: CastIn, shape: List[Int], strides: List[Int],
     if dtype != 11 and dtype != 12:
         return True
     var width = source.itemsize
+    # parallel: a native-order C-contiguous block is one SIMD finiteness scan
+    # across host cores (0.8.66 regression C1 class, serial byte-wise walk).
+    # The verdict is the same Bool over the same words; only the walk differs.
+    if native and (width == 4 or width == 8):
+        var contiguous = True
+        var expected = width
+        for k in range(len(shape)):  # driver-loop: over the array's rank metadata
+            var axis = len(shape) - 1 - k
+            if shape[axis] != 1 and strides[axis] != expected:
+                contiguous = False
+            expected *= shape[axis]
+        if contiguous:
+            if width == 4:
+                return host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=source.addr), count)
+            return host_all_finite_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=source.addr), count)
     var pointer = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source.addr)
     var mask = UInt64(0x7F800000) if width == 4 else UInt64(0x7FF0000000000000)
     for linear in range(count):  # native input marshaling: public finiteness check on original float words

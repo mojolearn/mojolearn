@@ -413,3 +413,61 @@ def neural_block_f32(mut mods: NativeModules, value: PythonObject, name: String,
     layout.copy_to(Int(py=result._addr))
     _ = pin^
     return result
+
+
+def neural_block_f32_input(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    # The float32 input `x` of a block forward, step or backward: READ ONLY
+    # by every kernel it reaches (never an output, a state or a workspace).
+    # 0.8.66 regression C5 (samba-forward 1.55x, mamba1-forward 1.51x,
+    # mamba3-forward 1.35x, mamba2-forward 1.27x): `neural_block_f32` put a
+    # foreign `x` (1x2048x384 float32, 3.1 MB) into a fresh zero-filled
+    # Array and copied it on every call; 0.8.55 read it in place. A
+    # C-contiguous, four-byte-aligned float32 export is now read in place
+    # through an Array view that holds one export of it for the call (its
+    # `_store` memoryview) and is marked read-only. Anything else (strided,
+    # empty or misaligned) keeps the copy, from the same admitted export.
+    # An exact Array already takes its captured snapshot without a copy.
+    if py_type(value) is context["array_class"]:
+        return neural_block_f32(mods, value, name, context)
+    admit_native_buffer_exporter(value)
+    var b = mods.module("builtins")
+    # One export of the caller's buffer; every word below is read from it.
+    var store = py_call(b.memoryview, value)
+    var pin = AdmittedBorrowedBuffer(store)
+    if pin.format != "f" and pin.format != "<f" and pin.format != "=f" and pin.format != "@f":
+        raise Error(_neural_dtype_refusal(name, pin.format))
+    var layout = pin.layout.value().copy()
+    if layout.itemsize != 4:
+        raise Error("TypeError: neural float32 input requires four-byte elements")
+    var slots = neural_array_slots(mods, context)
+    if not layout.contiguous() or layout.count == 0 or layout.address % 4 != 0:
+        var copied = generation_array(layout.shape)
+        layout.copy_to(Int(py=copied._addr))
+        _ = pin^
+        _ = store^
+        return copied
+    var cls = context["array_class"]
+    var result = py_call(b.object.__new__, cls)
+    var steps = List[Int](length=len(layout.shape), fill=0)
+    var step = 4
+    for i in range(len(layout.shape)):  # small-loop(array shape dimension words)
+        var axis = len(layout.shape) - i - 1
+        steps[axis] = step
+        step *= layout.shape[axis]
+    var typed = py_call(py_call(store.cast, "B").cast, "f")
+    py_call(slots["_store"].__set__, result, store)
+    py_call(slots["_base"].__set__, result, PythonObject(None))
+    py_call(slots["_pin"].__set__, result, PythonObject(None))
+    py_call(slots["_mv"].__set__, result, typed)
+    py_call(slots["_addr"].__set__, result, PythonObject(layout.address))
+    py_call(slots["_readonly"].__set__, result, PythonObject(True))
+    py_call(slots["shape"].__set__, result, py_call(b.tuple, py_ints(layout.shape)))
+    py_call(slots["dtype"].__set__, result, PythonObject("<f4"))
+    py_call(slots["ndim"].__set__, result, PythonObject(len(layout.shape)))
+    py_call(slots["size"].__set__, result, PythonObject(layout.count))
+    py_call(slots["nbytes"].__set__, result, PythonObject(layout.count * 4))
+    py_call(slots["itemsize"].__set__, result, PythonObject(4))
+    py_call(slots["strides"].__set__, result, py_call(b.tuple, py_ints(steps)))
+    py_call(slots["order"].__set__, result, PythonObject("C"))
+    _ = pin^
+    return result

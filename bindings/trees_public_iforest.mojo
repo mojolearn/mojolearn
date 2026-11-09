@@ -30,6 +30,7 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
 from bindings.py_typed_call import py_call_typed
+from core.host_parallel_copy import host_parallel_copy_bytes
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.trees_public_inputs import (
     TreesMatrix, trees_builtins, trees_table, trees_entry, trees_vector, trees_empty, trees_address, trees_f32,
@@ -331,13 +332,18 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     # save() and pickle. The fit now owns its training matrix: one native
     # copy of the same float32 bytes (the forest and the scores keep their
     # bits). `input_copied_` still reports whether the conversion copied.
+    # The copy stays: every later score_samples / decision_function /
+    # predict reads the training matrix again (`_score` -> `_run(...,
+    # fields["_x"])` -> `iforest_run`, and the resident forest token is
+    # keyed on `_x`), so X is used after fit returns. 0.8.66 regression C3
+    # (iforest fit 39.6x on istella, with C1): the copy is now one parallel
+    # copy across host cores instead of one serial memcpy.
     if not copied:
         var count = x.rows * x.cols
         var owned = trees_empty(Python.tuple(x.rows, x.cols), "<f4", context)
         var dst = trees_address(owned)
         if count > 0:
-            memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst),
-                   src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x.addr), count=count)
+            host_parallel_copy_bytes(dst, x.addr, count * 4)
         _ = x  # keep the caller's buffer alive through the copy above
         x = TreesMatrix(owned, dst, x.rows, x.cols, True)
     var had = Python.dict()
