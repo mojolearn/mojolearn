@@ -10,6 +10,8 @@ from bindings.native_buffer_owner import native_buffer_view
 from bindings.arena_buffer_copy import buffer_copy_to_array
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.py_balanced import py_call, py_type, py_get
+from bindings.p3_labels_metrics_native import p3_type_word, p3_item
+from bindings.cpython_table import cpython_table
 from core.sequential_inputs_impl import sequence_widen_halves, sequence_narrow_halves
 from gemm.f16_widen import f16_bits_to_f32
 
@@ -189,9 +191,44 @@ def _nested_values(mut mods: NativeModules, value: PythonObject, depth: Int, mut
         dims.append(n)
     elif dims[depth] != n:
         raise Error("input sequences must be rectangular")
-    # cpu-route: nested Python sequences are Python objects; walking them is the Python door's input step.
-    for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
-        _sequence_values(mods, value[k], depth + 1, dims, values, kind, size, leaf_depth, context, float_target)
+    var b = mods.module("builtins")
+    var cls = py_type(value)
+    if cls is not b.list and cls is not b.tuple:
+        # A range or a list / tuple subclass: the element protocol as before.
+        for k in range(n):  # driver-loop: per ELEMENT of a range or sequence subclass input (data-sized)
+            _sequence_values(mods, value[k], depth + 1, dims, values, kind, size, leaf_depth, context, float_target)
+        return
+    # Lane p2-labels-lists-arrays: an exact list or tuple is read borrowed
+    # from its C storage. An exact float or bool leaf (and an exact int when
+    # the target is float) is admitted by one class-pointer compare and
+    # appended by PyList_Append: no boxed index, subscript, recursion or
+    # Python append call per element. Every other element takes the general
+    # admission below, unchanged.
+    var is_tuple = cls is b.tuple
+    var float_word = Int(b.float._obj_ptr)
+    var bool_word = Int(b.bool._obj_ptr)
+    var int_word = Int(b.int._obj_ptr) if float_target else 0
+    ref cpy = Python().cpython()
+    var t = cpython_table()
+    for k in range(n):  # driver-loop: per ELEMENT of a list input (data-sized), one borrowed read each from the C storage
+        var raw = p3_item(value, k, is_tuple)
+        var word = p3_type_word(raw)
+        if word == float_word or word == bool_word or word == int_word:
+            if depth + 1 > 8:
+                raise Error("input sequences must have rank at most eight")
+            if leaf_depth >= 0 and leaf_depth != depth + 1:
+                raise Error("input sequences must be rectangular")
+            leaf_depth = depth + 1
+            if word == bool_word:
+                _promote(kind, size, "b", 1)
+            else:
+                _promote(kind, size, "f", 8)
+            if Int(t[].PyList_Append(values._obj_ptr, raw)) != 0:
+                raise cpy.unsafe_get_error()
+        else:
+            _sequence_values(mods, PythonObject(from_borrowed=raw), depth + 1, dims, values, kind, size, leaf_depth,
+                             context, float_target)
+    _ = value  # keep the container alive through the borrowed reads above
 
 
 def _fits_int64(value: PythonObject) -> Bool:
