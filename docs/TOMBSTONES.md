@@ -545,6 +545,16 @@ in the tables after the sections.
 | [`MOJOLEARN_IDN_EIGH_BLOCK_ON` device arm (`DevExec._eigh_block_on`, `rr_block_device.mojo`)](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (quarantined block Jacobi) | removed (DROPPED candidate; the op refuses the define at run time) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`DevExec._eigh_par_on`, `_eigh_td_try`, `_eigh_par_test`, `_rr_batch_enq` / `_rr_batch_on` / `_rr_batch_check`, `xd_first_where2_enq`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | Decomposition (host-driven dense eigh drivers) | REFACTORED (every dense eigh on `eigh_op_sym` / `eigh_op_dense`) | 2026-11-09 | [MOJOLEARN_IDN_EIGH_SMALL.patch](../experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch) |
 | [`DKit.eigh` host words, `IpcaDev.eigh` resident host words, `pinv_mask_kernel`](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | FastICA / FactorAnalysis / rotation / MinCovDet / IncrementalPCA / MDS-Isomap-KPCA dense eigh | REFACTORED (w and V stay on the device) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
+| [`moe_backward_impl` / `moe_backward_run_impl`, `moe_backward_run` (Python door)](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Neural (MoE backward entry) | removed (superseded: `autograd/route_ops.mojo` `moe_backward_addrs`, the tape step) | 2026-11-09 | [MOE_BACKWARD_IMPL_CHAIN.patch](../experiments/removed/MOE_BACKWARD_IMPL_CHAIN.patch) |
+| [GCNConv / SAGEConv host-form backward hand chains (`_gcn_backward` / `_sage_backward` host branches)](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Neural (graph layers, CPU binding, SAGE project=True, non-resident FAST) | removed (superseded: the tape entries `x_cnn_gcn_backward_t` / `x_cnn_sage_backward_t`) | 2026-11-09 | [XCNN_GRAPH_HOST_HAND_BACKWARD.patch](../experiments/removed/XCNN_GRAPH_HOST_HAND_BACKWARD.patch) |
+| [`MOJOLEARN_IVF_BALANCED_TASKS` (+ run-time `MOJOLEARN_IVF_BALANCED_TASKS_OFF`)](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Neighbors (IVF search, IDENTICAL opt-in) | removed (loser: I16 NV 1.20x-4.17x, AMD 3.25x-16.5x slower) | 2026-11-09 | [MOJOLEARN_IVF_BALANCED_TASKS.patch](../experiments/removed/MOJOLEARN_IVF_BALANCED_TASKS.patch) |
+| [`x_cnn_res_gather` (`res_gather`, `res_gather_pair`, `gather_rows_at`, `gather_rows_f32`)](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Neural (CNN resident batch gather) | removed (dead: no caller since lane x8) | 2026-11-09 | [XCNN_RES_GATHER.patch](../experiments/removed/XCNN_RES_GATHER.patch) |
+| [`LS_LOG_PROB` / `LS_BINARY_LOG_PROB` loss kinds](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Autograd losses | removed (dead: reached only from autograd/checks/losses.mojo) | 2026-11-09 | [AUTOGRAD_LOSS_LOG_PROB_KINDS.patch](../experiments/removed/AUTOGRAD_LOSS_LOG_PROB_KINDS.patch) |
+| [`OP_MSE` / `OP_CE` p3 loss stores and the RNN workspace `w.sq`](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Sequence (rnn_fit loss seed) | removed (dead stores: the reported loss is `loss_value_into`) | 2026-11-09 | [SEQ_LOSS_SEED_UNREAD_STORES.patch](../experiments/removed/SEQ_LOSS_SEED_UNREAD_STORES.patch) |
+| [`MOJOLEARN_TE_ADA_SESSION_OFF` / `MOJOLEARN_IDN_ADA_SESSION_OFF`, the `MOJOLEARN_FOREST_SESSION` AdaBoost choice](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Trees (AdaBoost members data session) | removed (escapes from the measured-winner session) | 2026-11-09 | [MOJOLEARN_IDN_ADA_SESSION_OFF.patch](../experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch) |
+| [`tsa_buffer` (TSA owners own admission)](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | TSA admission (kpss, select_d, Holt-Winters, scalar settings) | removed (superseded: `admit_view`, the one admission) | 2026-11-09 | [TSA_BUFFER_ADMISSION.patch](../experiments/removed/TSA_BUFFER_ADMISSION.patch) |
+| [neural label `_numeric` own capture (`sequential_input` + borrowed buffer)](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Neural labels (`neural_encode_labels`) | removed (superseded: `admit_view`) | 2026-11-09 | [NEURAL_LABELS_OWN_ADMISSION.patch](../experiments/removed/NEURAL_LABELS_OWN_ADMISSION.patch) |
+| [SmallMLPTrainer host scans of logits / gradients / input gradient (no define)](#m1-followups-misc-leftovers-of-the-executor-lanes-2026-11-09) | Neural (SmallMLPTrainer step) | REFACTORED (device OP_MLP_NONFINITE flags) | 2026-11-09 | none (in place) |
 | [Lanczos projected T host assembly (`kpca_owner`, `mani_decomp_native`)](#n9-every-dense-eigh-on-the-executor-ops-2026-11-09) | KernelPCA / Isomap | REFACTORED (`eigh_op_tridiag`; bits change) | 2026-11-09 | [N9_RESIDENT_EIGH.patch](../experiments/removed/N9_RESIDENT_EIGH.patch) |
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5014,3 +5024,62 @@ origin/lane/x4-transformer-on-executor c0b21c971c.
 - Recoverable at c0b21c971c; restore with `git apply experiments/removed/TRANSFORMER_DECODE_SESSION_STRUCTS.patch`
   (transformer/transformer_binding_impl.mojo, bindings/_mojolearn_transformer.mojo,
   transformer/native_lm_resident_dispatch.mojo).
+
+## m1-followups-misc: leftovers of the executor lanes (2026-11-09)
+
+Lane m1-followups-misc (brief `briefs-20261108/m1-followups-misc.md`), on `origin/integ/pre-0867-w3` 5b5490960d. Every
+item below is recoverable at 5b5490960d; each patch is the reverse of its deletion commit restricted to code files.
+
+- **MoE backward (X9 leftover).** `sequence/ops_impl.mojo` `moe_backward_impl` / `moe_backward_run_impl` (upload, the tape
+  step, download; their own shape checks) and the Python door `moe_backward_run` are deleted. Every binding (CPU and GPU,
+  with or without a `moe_weights_put` handle) calls `autograd/route_ops.mojo` `moe_backward_addrs`, the tape step's one
+  address entry; the shape check is `moe_backward_shape_check`, shared with `moe_tape_train_step`. The hand VJP chain was
+  already gone (X9). Same uploads, launches and downloads: no bit moves. Deleted by d4b19c12a0. Patch
+  `experiments/removed/MOE_BACKWARD_IMPL_CHAIN.patch`.
+- **Graph layers' host-form backward (X9 leftover).** `bindings/xcnn_graph_native.mojo` `_gcn_backward` / `_sage_backward`
+  host branches (up to ten `x_cnn_*` entry crossings: gemm, spmm, graph_op, linear_backward, relu_backward, add) are
+  deleted. The host form (the CPU binding, SAGE `project=True`, a forward kept on the host in FAST) runs the same tape as
+  the resident form: the recording moved to `autograd/graph_tape.mojo` (with the projection as `GRAPH_PROJ`), the GPU
+  binding's rules (`autograd/rules_graph.mojo`) run with device masks 0 over host arrays, the CPU binding has host rules
+  (`autograd/rules_graph_host.mojo`, the same host bodies and output seam `out_f32`) and the tape entries
+  `x_cnn_gcn_backward_t` / `x_cnn_sage_backward_t`. Bits: the CPU column runs the same host bodies on the same arguments;
+  the GPU host form runs `_m` entries (gemm_m, spmm_m, graph_op_m, linear_backward_m, map2_m) where the hand chain ran
+  the `x_cnn_*` entries (gemm_into = gemm_m mask 0; `x_cnn_linear_backward` was `linear_backward_into`, now
+  `linear_backward_m`): the GPU host-form words may move on every GPU together. Identity lanes x-cnn-gcn, x-cnn-sage
+  (host form). RUN OWED: GCN / SAGE backward ms on NVIDIA and AMD, host form, vs 5b5490960d. Deleted by ba9adf41e1. Patch
+  `experiments/removed/XCNN_GRAPH_HOST_HAND_BACKWARD.patch`.
+- **`MOJOLEARN_IVF_BALANCED_TASKS` (K1 owed).** The IDENTICAL opt-in IVF search through `ivf_balanced_scan`'s bounded list
+  tasks and its run-time `MOJOLEARN_IVF_BALANCED_TASKS_OFF` getenv. Verdict LOSER (I16, 2026-10-06): NVIDIA L40S
+  balanced / baseline 1.20x-4.17x time, AMD MI325X 3.25x-16.5x (rows 100000, 128 queries, features 7/33/65, three
+  occupancy cases); default off, so no bit moves. `ivf_balanced_scan` stays for `C35_PACKED_LISTS`. Guard refusal in
+  `core/experiment_guards_cluster.mojo`. Deleted by 293c788be4. Patch `experiments/removed/MOJOLEARN_IVF_BALANCED_TASKS.patch`.
+- **`x_cnn_res_gather` (X8b leftover).** Dead since lane x8 (the classifier gathers on the executor): `res_gather`,
+  `res_gather_pair`, `gather_rows_at`, the CPU `gather_rows_f32`, both entries, the bridge / surface names and the
+  test block in `python/mojolearn/tests/test_x_cnn_repeat.py`. Deleted by 5f8eaad629. Patch `experiments/removed/XCNN_RES_GATHER.patch`.
+- **Dead loss words (X3 leftover).** `LS_LOG_PROB` / `LS_BINARY_LOG_PROB` (codes 5 and 6 left unused) and their check;
+  `op_mse` / `op_ce`'s p3 stores (the squared error, the row loss) and the RNN workspace `w.sq` nobody read (the
+  reported loss is `loss_value_into`'s). The gradient seeds are unchanged: no bit moves. The seams check's CE oracle
+  compares the gradient only. Deleted by ab4f415ff8. Patches `experiments/removed/AUTOGRAD_LOSS_LOG_PROB_KINDS.patch`,
+  `experiments/removed/SEQ_LOSS_SEED_UNREAD_STORES.patch`.
+- **AdaBoost session escapes (N5 leftover).** `MOJOLEARN_TE_ADA_SESSION_OFF` (switch bit 2), `MOJOLEARN_IDN_ADA_SESSION_OFF`
+  (bit 128) and the `MOJOLEARN_FOREST_SESSION` run-time choice are deleted: every build opens the members' data session
+  (`_ada_session_choice`: 'share' only in FAST + Apple with `MOJOLEARN_TE_ADA_SESSION_SHARE`), so a GPU binary runs every
+  best-splitter tree member's round on the device (`rf_*_fit_ada_round_export`); the CPU column (no `rf_ada_open`) and
+  non-tree bases keep the per-round steps. The session was the measured winner (M3: adaboost-clf -9.0%, adaboost-reg -42%)
+  and moves no bit in IDENTICAL. Guard refusals in `core/experiment_guards_trees.mojo`. Deleted by 4876d88164. Patch
+  `experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch`.
+- **`tsa_buffer` and the neural label capture onto the one admission (A1b / A4 leftover).** `bindings/admitted_input.mojo`
+  gained `admit_view` (the capture `admit_typed` reads, at the source dtype; a ctypes-backed Array is read from its slots
+  with its storage owners retained) and `admitted_view_kind`. `tsa_buffer` (classical_view, a hand repack of ctypes-backed
+  Arrays, arena `_prepare`, a second pinned view) is deleted; the TSA scalar settings, flags, component indices, the
+  kpss / select_d series, the Holt-Winters endog, packed fits and archive statistics read the captured view.
+  `neural_encode_labels`' numeric path reads `admit_view` instead of `sequential_input`. Deleted by 251a3b3b11. Patches
+  `experiments/removed/TSA_BUFFER_ADMISSION.patch`, `experiments/removed/NEURAL_LABELS_OWN_ADMISSION.patch`.
+- **SmallMLPTrainer non-finite refusal (X2 leftover, no define).** The binding's host scans of the downloaded logits,
+  gradients and input gradient are replaced by `OP_MLP_NONFINITE` flag words on the device, read with the step's one
+  wait (`autograd/small_mlp_program.mojo`). No bit moves.
+- **Tools (item 8).** `tools/identical_gmm_power_bit_diagnostic.py` names the fit's precision enqueue
+  (`gmm_precision_enqueue`, N1). `tools/removed_defines.py` reads the guard modules' refusals; the grid prebuild and the
+  lq renderer skip / refuse an old plan's pack that names a refused define (the plans under
+  `experiments/six_lane_integration/grid/` stay as history).
+
