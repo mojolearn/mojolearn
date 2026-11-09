@@ -653,6 +653,77 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
             self.buffer_kind[Int(buf)] = OPS_BUFFER_STATE
         return h
 
+    def load_block(mut self, h: Int, code: Int, ints: List[Int], part: Int, srcs: List[CastIn],
+                   words: List[Int]) raises:
+        """Overwrite `part` of block tensor h (made with `upload_block` for the
+        same code and ints) IN PLACE, piece by piece (lane x5-mamba-on-executor):
+        a source of zero values leaves its piece as it is. The resident step
+        struct over the buffer is kept where it stays valid: new float state
+        is read in place (nothing to drop), new state words update the
+        entry's host integers (`BlockStepScratch.set_words`), new weights
+        re-arm the block's refusal of non-finite weights."""
+        var slot = self._slot(h)
+        var addr = self.owned[slot]
+        if addr == 0:
+            raise Error("ValueError: ops: load_block writes a tensor made with upload_block")
+        var buf = FP(unsafe_from_address=addr)
+        var have = self.rows[slot] * self.cols[slot]
+        if part == BLOCK_PART_WORDS:
+            var k = block_int_words(code)
+            if k < 1 or len(words) != k or have != k:
+                raise Error("ValueError: ops: load_block: this block carries " + String(k) + " state words")
+            var host = List[Float32](length=k, fill=Float32(0))
+            for i in range(k):  # small-loop(k: at most two state words): word encode, no data
+                var w = words[i]
+                if w < -(1 << 31) or w >= (1 << 31):
+                    raise Error("ValueError: ops: load_block: a state word does not fit in 32 bits")
+                host[i] = bitcast[DType.float32](Int32(w))
+            self.steps.set_words(addr, words)
+            self.ex.upload(buf, FP(unsafe_from_address=Int(host.unsafe_ptr())), k)
+            _ = len(host)  # keep-alive past the staging copy
+            return
+        if part != BLOCK_PART_WEIGHTS and part != BLOCK_PART_STATE:
+            raise Error("ValueError: ops: load_block: part must be weights, state or words")
+        var sizes = block_weight_sizes(code, ints) if part == BLOCK_PART_WEIGHTS else block_state_sizes(code, ints)
+        if len(srcs) != len(sizes):
+            raise Error("ValueError: ops: load_block: this block has " + String(len(sizes)) + " pieces, got "
+                        + String(len(srcs)))
+        var offs = block_offsets(sizes, block_guard(code))
+        if offs[len(offs) - 1] != have:
+            raise Error("ValueError: ops: load_block: the tensor does not hold this block's layout")
+        for i in range(len(sizes)):  # driver-loop: over the block's weight or state pieces
+            if sizes[i] == 0 or srcs[i].count() == 0:
+                continue
+            srcs[i].check("ops: load_block")
+            if srcs[i].count() != sizes[i]:
+                raise Error("ValueError: ops: load_block: piece " + String(i) + " holds "
+                            + String(srcs[i].count()) + " values, the block " + String(sizes[i]))
+            upload_cast(self.ex, buf + offs[i], srcs[i])
+        if part == BLOCK_PART_WEIGHTS:
+            self.steps.weights_changed(addr)
+
+    def download_block(mut self, h: Int, code: Int, ints: List[Int], part: Int, dsts: List[Int]) raises:
+        """`part` (weights or float state) of block tensor h into the caller's
+        host arrays, one float32 array per piece in `block_*_sizes` order (a
+        0 address skips that piece), behind one wait."""
+        var slot = self._slot(h)
+        var addr = self.owned[slot]
+        if addr == 0:
+            raise Error("ValueError: ops: download_block reads a tensor made with upload_block")
+        if part != BLOCK_PART_WEIGHTS and part != BLOCK_PART_STATE:
+            raise Error("ValueError: ops: download_block: part must be weights or state")
+        var sizes = block_weight_sizes(code, ints) if part == BLOCK_PART_WEIGHTS else block_state_sizes(code, ints)
+        if len(dsts) != len(sizes):
+            raise Error("ValueError: ops: download_block: this block has " + String(len(sizes)) + " pieces, got "
+                        + String(len(dsts)))
+        var offs = block_offsets(sizes, block_guard(code))
+        var buf = FP(unsafe_from_address=addr)
+        for i in range(len(sizes)):  # driver-loop: over the block's weight or state pieces
+            if sizes[i] == 0 or dsts[i] == 0:
+                continue
+            self.ex.download_async(FP(unsafe_from_address=dsts[i]), buf + offs[i], sizes[i])
+        self.ex.sync()
+
     def download(mut self, h: Int, dst: FP) raises:
         """The tensor's rows x cols floats (row-major) into the caller's memory."""
         var slot = self._slot(h)
