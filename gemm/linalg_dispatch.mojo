@@ -100,4 +100,4 @@ struct LinalgNativeTable(Defaultable, Movable):
 
 
 comptime LINALG_NATIVE_TABLE = _Global[StorageType=LinalgNativeTable,
-    name="MojoLinalgNativeTableV1", init_fn=LinalgNativeTable.__init__]
+    name=("MojolearnLinalgNativeTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLinalgNativeTableFastV2"), init_fn=LinalgNativeTable.__init__]

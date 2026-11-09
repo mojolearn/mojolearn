@@ -52,4 +52,4 @@ struct HierarchySolverHostAPI(Defaultable, Movable):
 
 # PyCapsule borrows both table and name: the module image owns them for life.
 comptime HIERARCHY_SOLVER_HOST_API = _Global[StorageType=HierarchySolverHostAPI,
-    name="MojoHierarchySolverHostAPIv1", init_fn=HierarchySolverHostAPI.__init__]
+    name=("MojolearnHierarchySolverHostAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnHierarchySolverHostAPIFastV2"), init_fn=HierarchySolverHostAPI.__init__]

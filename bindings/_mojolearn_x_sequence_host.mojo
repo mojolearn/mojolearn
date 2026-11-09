@@ -146,7 +146,7 @@ def mlp_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonO
 
 
 comptime SESSION_PUBLIC_API = _Global[StorageType=NativeSessionPublicAPI[HostExec, OPS_HOST],
-    name="MojoSessionPublicOPS_HOSTAPIv1", init_fn=NativeSessionPublicAPI[HostExec, OPS_HOST].__init__]
+    name=("MojolearnSessionPublicOPS_HOSTAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnSessionPublicOPS_HOSTAPIFastV2"), init_fn=NativeSessionPublicAPI[HostExec, OPS_HOST].__init__]
 
 
 def session_public_api_binding() raises -> PythonObject:
@@ -359,7 +359,7 @@ def ops_distributed_close_binding(id: PythonObject) raises -> PythonObject:
 
 
 comptime OWNED_PROGRAM_PUBLIC_API = _Global[StorageType=NativeOwnedProgramPublicAPI,
-    name="MojoOwnedProgramPublicOPS_HOSTAPIv1", init_fn=NativeOwnedProgramPublicAPI.__init__]
+    name=("MojolearnOwnedProgramPublicOPS_HOSTAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnOwnedProgramPublicOPS_HOSTAPIFastV2"), init_fn=NativeOwnedProgramPublicAPI.__init__]
 
 
 def owned_program_public_native_binding(

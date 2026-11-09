@@ -176,4 +176,4 @@ struct ByteLmNativeTable(Defaultable, Movable):
 
 
 comptime BYTE_LM_NATIVE_TABLE = _Global[StorageType=ByteLmNativeTable,
-    name="MojoByteLmNativeTableV1", init_fn=ByteLmNativeTable.__init__]
+    name=("MojolearnByteLmNativeTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnByteLmNativeTableFastV2"), init_fn=ByteLmNativeTable.__init__]

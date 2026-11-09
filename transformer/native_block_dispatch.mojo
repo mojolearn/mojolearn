@@ -2,6 +2,7 @@
 # Private sibling ABI for the existing fresh/backward Transformer operations.
 # Common descriptor transport; no Python/provider imports or changed kernels.
 from std.ffi import _Global
+from checks.numerics import GLOBAL_NUMERIC_MODE
 from transformer.native_lm_resident_dispatch import transformer_lm_resident_operation
 from transformer.native_decode_dispatch import transformer_decode_operation
 from transformer.native_tape_dispatch import transformer_tape_operation
@@ -183,4 +184,4 @@ struct NativeTransformerBlockAPI(Defaultable, Movable):
 
 
 comptime NATIVE_TRANSFORMER_BLOCK_API = _Global[StorageType=NativeTransformerBlockAPI,
-    name="MojoTransformerBlockNativeAPIv1", init_fn=NativeTransformerBlockAPI.__init__]
+    name=("MojolearnTransformerBlockNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnTransformerBlockNativeAPIFastV2"), init_fn=NativeTransformerBlockAPI.__init__]

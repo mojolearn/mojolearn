@@ -112,4 +112,4 @@ struct NativePrimitiveAPI(Defaultable, Movable):
 
 
 comptime NATIVE_PRIMITIVE_API = _Global[StorageType=NativePrimitiveAPI,
-    name="MojoNeuralPrimitiveNativeAPIv1", init_fn=NativePrimitiveAPI.__init__]
+    name=("MojolearnNeuralPrimitiveNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNeuralPrimitiveNativeAPIFastV2"), init_fn=NativePrimitiveAPI.__init__]

@@ -49,4 +49,4 @@ struct HierarchyClusterDeviceAPI(Defaultable, Movable):
 
 # The extension image owns the table and name borrowed by PyCapsule.
 comptime HIERARCHY_CLUSTER_DEVICE_API = _Global[StorageType=HierarchyClusterDeviceAPI,
-    name="MojoHierarchyClusterDeviceAPIv1", init_fn=HierarchyClusterDeviceAPI.__init__]
+    name=("MojolearnHierarchyClusterDeviceAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnHierarchyClusterDeviceAPIFastV2"), init_fn=HierarchyClusterDeviceAPI.__init__]

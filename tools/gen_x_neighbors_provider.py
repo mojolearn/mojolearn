@@ -133,7 +133,7 @@ struct XNeighborsNativeAPI(Defaultable, Movable):
         self.entries.append(xn_native_v1)
 
 '''
-    out += f'comptime XN_NATIVE_API = _Global[StorageType=XNeighborsNativeAPI,\n    name="MojoXNeighborsNative{target.title()}APIv1", init_fn=XNeighborsNativeAPI.__init__]\n'
+    out += f'comptime XN_NATIVE_API = _Global[StorageType=XNeighborsNativeAPI,\n    name=("MojolearnXNeighborsNative{target.title()}APIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnXNeighborsNative{target.title()}APIFastV2"), init_fn=XNeighborsNativeAPI.__init__]\n'
     return out
 
 
