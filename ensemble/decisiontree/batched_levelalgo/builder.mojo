@@ -3457,8 +3457,8 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # TREE_OP_FOREST_FINISH: enqueued only; the depth word gets its own
         # host word (the next tree's header download rewrites `loop_h_hdr`),
         # and the host model is `collect_finished`'s after the caller's next
-        # drain. The views ride along until then. TOMBSTONE (lane
-        # t1b-tree-leaf-and-node-ops, 2026-11-09): this finish's own
+        # drain. The views ride along until then. Deleted by lane
+        # t1b-tree-leaf-and-node-ops (2026-11-09, no define): this finish's own
         # `ctx.synchronize()` and its in-place host assembly into `ts.tree`
         # (one drain per finished tree) are deleted; the assembly is
         # `collect_finished`'s, statement for statement.

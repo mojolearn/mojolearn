@@ -1508,19 +1508,27 @@ def tree_op_leaf_estimate(
     var oracle_ws = state.est_ws[0].oracle_scratch.take(
         ctx, n_rows, n_leaves, objective, num_classes, sm, 0,
     )
-    ref ws = state.est_ws[0]
+    # handle views onto the workspace (the same device memory; the pool keeps
+    # it alive past this call), so no call takes two `mut` fields of one value
+    var g_target = state.est_ws[0].g_target.copy()
+    var g_weights = state.est_ws[0].g_weights.copy()
+    var g_cursor = state.est_ws[0].g_cursor.copy()
+    var d_p_off = state.est_ws[0].d_p_off.copy()
+    var d_p_sz = state.est_ws[0].d_p_sz.copy()
+    var walk = state.est_ws[0].walk.handles()
+    var row_order = parts.vals.copy()
     # the partition's offsets and sizes, on the device (the host pack and
     # its two uploads in `_estimate_and_apply`)
-    enqueue_partition_words_u32(ctx, parts, n_leaves, ws.d_p_off, ws.d_p_sz)
+    enqueue_partition_words_u32(ctx, parts, n_leaves, d_p_off, d_p_sz)
     # target, weights and cursor into the partition's row order
-    launch_gather_with_mask_f32(ctx, ws.g_target, targets, parts.vals, n_rows, UInt32(0xFFFFFFFF))
+    launch_gather_with_mask_f32(ctx, g_target, targets, row_order, n_rows, UInt32(0xFFFFFFFF))
     if has_weights:
-        launch_gather_with_mask_f32(ctx, ws.g_weights, weights, parts.vals, n_rows, UInt32(0xFFFFFFFF))
-    launch_gather_planes_with_mask_f32(ctx, ws.g_cursor, cursor, parts.vals, n_rows, UInt32(0xFFFFFFFF), 1, n_rows)
+        launch_gather_with_mask_f32(ctx, g_weights, weights, row_order, n_rows, UInt32(0xFFFFFFFF))
+    launch_gather_planes_with_mask_f32(ctx, g_cursor, cursor, row_order, n_rows, UInt32(0xFFFFFFFF), 1, n_rows)
     var oracle = make_bin_optimized_oracle(
         ctx, n_rows, n_leaves, size_bound,
-        ws.g_target.copy(), ws.g_weights.copy(), ws.g_cursor.copy(),
-        ws.d_p_off.copy(), ws.d_p_sz.copy(),
+        g_target.copy(), g_weights.copy(), g_cursor.copy(),
+        d_p_off.copy(), d_p_sz.copy(),
         has_weights,
         objective,
         alpha,
@@ -1541,9 +1549,8 @@ def tree_op_leaf_estimate(
         leaves_ready=leaves_ready,
         weights_on_device=has_weights,
     )
-    if not device_walk_supported(oracle, BACKTRACKING_ANY_IMPROVEMENT, n_leaves, ws.walk.cap):
+    if not device_walk_supported(oracle, BACKTRACKING_ANY_IMPROVEMENT, n_leaves, walk.cap):
         raise Error("tree_op_leaf_estimate: the oracle is not a single-dimensional device walk")
-    var walk = ws.walk.handles()
     device_walk_enqueue_bounded(ctx, oracle, walk, iters, gate, status)
     var est = walk.result()
     var blocks = (n_leaves + 255) // 256
