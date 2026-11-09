@@ -172,6 +172,12 @@ trait ClusterOps(Movable):
         GPU binding, its host column on the host binding; n_iter set."""
         ...
 
+    def spectral_cluster_qr(mut self, x: List[Float32], n: Int, k: Int) raises -> List[Int32]:
+        """SpectralClustering's cluster_qr labels of the n x k embedding x in
+        float-float (x_cluster/spectral_df64.mojo): the device driver on the
+        GPU binding, its host column on the host binding."""
+        ...
+
     def fast_device(self) -> Bool:
         """True on the one column that takes the FAST device-round paths
         (lane cluster-apple3): the GPU binding built FAST. The host column

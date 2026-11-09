@@ -585,6 +585,7 @@ in the tables after the sections.
 | [`SAMBA_THREE_TIER_FORWARD`: `samba_resident_forward` (+ binding, descriptor op 16, `samba_resident_native_forward`), `SambaDecodeResident` (training/samba_decode_resident.mojo), the provider forward (`samba_provider_forward`, `AdmittedSambaExecution.forward`, `NativeSambaModel.forward`), the device per-layer walk of `samba_forward`, `samba_afn_norm_head_forward` (AFN_SAMBA_FUSE fused forward tail), the dead Python `SambaStack._forward*` / `_resident*` / `_afn*` routes](#samba-stack-on-one-executor-program-2026-11-09) | Neural (Samba inference) | SUPERSEDED (one executor program, `SambaStackProgram`; never A/B'd, RUN OWED) | 2026-11-09 | [SAMBA_THREE_TIER_FORWARD.patch](../experiments/removed/SAMBA_THREE_TIER_FORWARD.patch) |
 | [`TRANSFORMER_FORWARD_TAPE_API` (`TransformerBlock.forward_with_tape` / `backward_from_tape`, `TransformerForwardTape`, the session and standalone transformer tapes)](#transformer-forward-tape-api-retired-2026-11-09) | Neural (TransformerBlock training tape, Samba IDN_ACT_RETAIN=3 transformer half) | removed (superseded: the attention step op and the tape rule; `TransformerBlock.backward` is the training path) | 2026-11-09 | [TRANSFORMER_FORWARD_TAPE_API.patch](../experiments/removed/TRANSFORMER_FORWARD_TAPE_API.patch) |
 | [`X_LINEAR_JACOBI_EIG_SEAM_5003` (`x_linear/ops.mojo` `jacobi_eig`, seam check 5003, arm `seam_5003_jacobi_order.patch`)](#x_linear-jacobi_eig-and-seam-5003-2026-11-09) | Linear (BayesianRidge's former team eigensolver) | removed (dead: no product caller) | 2026-11-09 | [X_LINEAR_JACOBI_EIG_SEAM_5003.patch](../experiments/removed/X_LINEAR_JACOBI_EIG_SEAM_5003.patch) |
+| [`CLUSTER_QR_BINARY64_HOST` (`x_cluster/spectral_assign.mojo` `cluster_qr_labels`, `jacobi_svd`, `_polar`, `_dot_cols`; oracle `oracle_jacobi_svd`)](#cluster_qr-binary64-host-algorithm-2026-11-09) | Cluster (SpectralClustering assign_labels='cluster_qr') | removed (superseded: float-float on every column, device on the GPU binding) | 2026-11-09 | [CLUSTER_QR_BINARY64_HOST.patch](../experiments/removed/CLUSTER_QR_BINARY64_HOST.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -5448,3 +5449,24 @@ Lane m3-linalg-and-housekeeping (follow-up of lane n9b-device-svd-qr c486f3eb49)
   (`x_linear.seam5003.jacobi`); the remaining seams print "9 seams".
 - Recoverable at 0ce88411d3; restore with `git apply experiments/removed/X_LINEAR_JACOBI_EIG_SEAM_5003.patch` (the
   code files, the arm and the checks row).
+
+## cluster_qr binary64 host algorithm (2026-11-09)
+
+Lane m3-linalg-and-housekeeping (follow-up of lane n9b-device-svd-qr c486f3eb49: "cluster_qr binary64 jacobi_svd still
+on the host"), branch `lane/m3-linalg-and-housekeeping` from origin/main 0ce88411d3.
+
+- What it was: SpectralClustering assign_labels='cluster_qr' as binary64 HOST code compiled into both bindings
+  (`x_cluster/spectral_assign.mojo` `cluster_qr_labels`: the column-pivoted Householder QR of the embedding's
+  transpose over all n rows, `jacobi_svd` of the k x k pivot block, `_polar`, each row's argmax), so the GPU fit
+  brought the embedding home for its last step; the seam check compared `jacobi_svd` with the binary64 oracle
+  `oracle_jacobi_svd` (x_cluster/checks/oracles.mojo) and arm 5119 reversed `_dot_cols`.
+- What replaced it: the same statements in float-float on every column (x_cluster/spectral_df64.mojo `cq_*` bodies and
+  `sd_label_abs_row`; device driver `cluster_qr_df64_device`, one upload and one read; host column
+  `cluster_qr_df64_host`, parallel over the host pool), reached through `ClusterOps.spectral_cluster_qr`. The k x k SVD is
+  the discretize SVD (the one-block `_sdk_svd_block` shared by both device kernels; host `_sd_svd_host`). The seam check
+  now compares `_sd_svd_host` with the float-float oracle `oracle_df64_svd`; arm 5119 now reverses `sd_dot_cols`.
+- Verdict: superseded (GPU path is GPU only; one algorithm, every column), never A/B'd. BITS CHANGE: cluster_qr labels
+  can move where two rows' |row . Q| tie to within float-float rounding, on every column together (the
+  spectral-clustering identity lanes with assign_labels='cluster_qr').
+- Recoverable at 0ce88411d3; restore with `git apply experiments/removed/CLUSTER_QR_BINARY64_HOST.patch` (the module,
+  the oracle, the check, the arm and the entry call).

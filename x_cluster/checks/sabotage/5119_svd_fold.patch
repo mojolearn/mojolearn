@@ -1,12 +1,13 @@
-diff --git a/x_cluster/spectral_assign.mojo b/x_cluster/spectral_assign.mojo
---- a/x_cluster/spectral_assign.mojo
-+++ b/x_cluster/spectral_assign.mojo
-@@ -40,6 +40,6 @@
-     rows in order."""
-     var s = Float64(0)
--    for r in range(m):
--        s += identical_mul64(w[r * m + p], w[r * m + q])
-+    for rr in range(m):
-+        s += identical_mul64(w[(m - 1 - rr) * m + p], w[(m - 1 - rr) * m + q])
+diff --git a/x_cluster/spectral_df64.mojo b/x_cluster/spectral_df64.mojo
+--- a/x_cluster/spectral_df64.mojo
++++ b/x_cluster/spectral_df64.mojo
+@@ -253,7 +253,8 @@
+ def sd_dot_cols(wh: FP, wl: FP, k: Int, p: Int, q: Int) -> FF:
+     """sum_r w[r, p] w[r, q], rows ascending."""
+     var s = sd_zero()
+-    for r in range(k):
++    for rr in range(k):
++        var r = k - 1 - rr  # SABOTAGE 5119: rows descending
+         s = ff_add(s, ff_mul(sd_ld(wh, wl, r * k + p), sd_ld(wh, wl, r * k + q)))
      return s
  

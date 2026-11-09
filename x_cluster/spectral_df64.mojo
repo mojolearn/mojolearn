@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""SpectralClustering assign_labels='discretize' in FLOAT-FLOAT (df64)
+"""SpectralClustering assign_labels='discretize' (and, below, 'cluster_qr') in FLOAT-FLOAT (df64)
 arithmetic, one algorithm on every column (lane n9b-device-svd-qr,
 2026-11-09). The device driver is x_cluster/spectral_df64_device.mojo; the
 host column is x_cluster/host/spectral_df64_host.mojo `discretize_df64_host`. Both run the per-index bodies
@@ -369,6 +369,145 @@ def sd_ncut_step(svh: FP, svl: FP, k: Int, n: Int, lasth: FP, lastl: FP, state: 
         return True
     sd_st(lasth, lastl, 0, ncut)
     return False
+
+
+# ---------------------------------------------------------------- cluster_qr
+# Lane m3-linalg-and-housekeeping (2026-11-09): assign_labels='cluster_qr'
+# in float-float on every column (was binary64 on the host, the n x k
+# pivoted QR and the k x k Jacobi SVD serial in x_cluster/spectral_assign.mojo).
+# scikit-learn: `_, _, piv = qr(V.T, pivoting=True)`, `ut, _, v =
+# svd(V[piv[:k]].T)`, labels = argmax |V (ut v)|. The QR here is a
+# Householder QR of A = V^T (column c = row c of the embedding) that
+# RECOMPUTES every remaining column's norm each step (LAPACK geqp3
+# downdates it), the largest norm first and the lowest column on a tie
+# (idamax's rule); only the pivots are used. The SVD is the discretize SVD
+# above on M = V[piv[:k]] (row c = embedding row piv[c]), so with M = U S
+# V^T the rotation V U^T (`sd_polar_cell`) is B's U_B Vh_B for B = M^T,
+# scikit-learn's ut v. Each row's label is the first argmax of |row . Q|.
+
+
+@always_inline
+def sd_better_max(v: FF, i: Int, bv: FF, bi: Int) -> Bool:
+    """(v, i) before (bv, bi): the larger value, the lower index on a tie
+    (bi < 0: nothing yet). The order of the comparisons does not matter."""
+    if bi < 0:
+        return True
+    if sd_lt(bv, v):
+        return True
+    return not sd_lt(v, bv) and i < bi
+
+
+@always_inline
+def cq_colnorm_cell(ah: FP, al: FP, used: IP, k: Int, j: Int, c: Int, nh: FP, nl: FP):
+    """nrm[c] = sum_{r >= j} a[c, r]^2 (r ascending) for a column not yet a
+    pivot; a pivot's word is left (the max skips it)."""
+    if Int(used.unsafe_load(c)) != 0:
+        return
+    var s = sd_zero()
+    for r in range(j, k):
+        var v = sd_ld(ah, al, c * k + r)
+        s = ff_add(s, ff_mul(v, v))
+    sd_st(nh, nl, c, s)
+
+
+@always_inline
+def cq_chunk_max(nh: FP, nl: FP, used: IP, n: Int, ch: Int, bmh: FP, bml: FP, bmi: IP):
+    """Chunk ch's (value, index) maximum over the columns not yet a pivot,
+    columns ascending; index -1 when every column of the chunk is one."""
+    var bi = -1
+    var bv = sd_zero()
+    for c in range(ch * SD_ROWS, min(ch * SD_ROWS + SD_ROWS, n)):
+        if Int(used.unsafe_load(c)) != 0:
+            continue
+        var v = sd_ld(nh, nl, c)
+        if sd_better_max(v, c, bv, bi):
+            bv = v
+            bi = c
+    sd_st(bmh, bml, ch, bv)
+    bmi.unsafe_store(ch, Int32(bi))
+
+
+def cq_pivot_step(
+    ah: FP, al: FP, used: IP, piv: IP, k: Int, j: Int, bmh: FP, bml: FP, bmi: IP, nch: Int, hvh: FP, hvl: FP,
+    hbh: FP, hbl: FP,
+) -> Int:
+    """Step j's pivot: the chunk maxima folded (exact compares, the lowest
+    column on a tie), marked used, piv[j] set; then the Householder vector
+    hv (rows j..k-1) zeroing a[best, j+1:] and hb = hv . hv. Returns 1 when
+    the reflector applies (j < k - 1, a nonzero norm and hb != 0), else 0.
+    k work, one thread."""
+    var bi = -1
+    var bv = sd_zero()
+    for ch in range(nch):
+        var vi = Int(bmi.unsafe_load(ch))
+        if vi < 0:
+            continue
+        var v = sd_ld(bmh, bml, ch)
+        if sd_better_max(v, vi, bv, bi):
+            bv = v
+            bi = vi
+    used.unsafe_store(bi, Int32(1))
+    piv.unsafe_store(j, Int32(bi))
+    if j == k - 1 or bv.hi == Float32(0):
+        return 0
+    var nrm = sd_sqrt0(bv)
+    var x0 = sd_ld(ah, al, bi * k + j)
+    var alpha = ff_neg(nrm) if x0.hi >= Float32(0) else nrm
+    for r in range(k):
+        var v = sd_zero()
+        if r == j:
+            v = ff_sub(x0, alpha)
+        elif r > j:
+            v = sd_ld(ah, al, bi * k + r)
+        sd_st(hvh, hvl, r, v)
+    var hb = sd_zero()
+    for r in range(j, k):
+        var v = sd_ld(hvh, hvl, r)
+        hb = ff_add(hb, ff_mul(v, v))
+    sd_st(hbh, hbl, 0, hb)
+    return 0 if hb.hi == Float32(0) else 1
+
+
+@always_inline
+def cq_apply_col(ah: FP, al: FP, used: IP, k: Int, j: Int, hvh: FP, hvl: FP, hb: FF, c: Int):
+    """Column c (not a pivot) -= (2 (hv . a_c) / hb) hv, rows j..k-1
+    ascending. A pivot column is never read again, so it is left."""
+    if Int(used.unsafe_load(c)) != 0:
+        return
+    var d = sd_zero()
+    for r in range(j, k):
+        d = ff_add(d, ff_mul(sd_ld(hvh, hvl, r), sd_ld(ah, al, c * k + r)))
+    var f = ff_div(ff_mul(FF(Float32(2), Float32(0)), d), hb)
+    for r in range(j, k):
+        sd_st(ah, al, c * k + r, ff_sub(sd_ld(ah, al, c * k + r), ff_mul(f, sd_ld(hvh, hvl, r))))
+
+
+@always_inline
+def cq_gather_cell(vh: FP, vl: FP, piv: IP, k: Int, t: Int, mh: FP, ml: FP):
+    """M[c, r] = embedding[piv[c], r]."""
+    var c = t // k
+    var r = t - c * k
+    sd_st(mh, ml, t, sd_ld(vh, vl, Int(piv.unsafe_load(c)) * k + r))
+
+
+@always_inline
+def sd_label_abs_row(vh: FP, vl: FP, k: Int, roth: FP, rotl: FP, i: Int) -> Int32:
+    """The first argmax over c of |vec_i . rot[:, c]| (cluster_qr)."""
+    var best = 0
+    var bv = sd_zero()
+    for c in range(k):
+        var s = sd_abs(sd_row_dot_rot(vh, vl, k, roth, rotl, i, c))
+        if c == 0 or sd_lt(bv, s):
+            best = c
+            bv = s
+    return Int32(best)
+
+
+def cq_raise_status(code: Int) raises:
+    if code == SD_BAD_BASIS:
+        raise Error("SpectralClustering cluster_qr: SVD did not converge (no basis vector completes U)")
+    if code != 0:
+        raise Error("SpectralClustering cluster_qr: status " + String(code))
 
 
 def sd_raise_status(code: Int) raises:

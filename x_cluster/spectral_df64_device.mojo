@@ -24,7 +24,8 @@ from x_cluster.spectral_df64 import (
     sd_apply_row, sd_better_min, sd_cacc_row, sd_chunks, sd_class_fold, sd_class_part, sd_colnorm, sd_colscale_cell,
     sd_colsign_cell, sd_colsq_part, sd_complete_u, sd_dot_cols, sd_ld, sd_label_row, sd_load_cell, sd_ncut_step,
     sd_norm_col, sd_of_int, sd_polar_cell, sd_raise_status, sd_rotation, sd_rownorm_row, sd_st, sd_take_row_cell,
-    sd_zero,
+    sd_zero, sd_label_abs_row, cq_apply_col, cq_chunk_max, cq_colnorm_cell, cq_gather_cell, cq_pivot_step,
+    cq_raise_status,
 )
 from x_decomp.jacobi2 import dev_barrier
 from x_linear.ff import FF, ff_sqrt
@@ -183,30 +184,25 @@ def sdk_class_fold_kernel(ph: FP, pl: FP, nch: Int32, kk_in: Int32, mh: FP, ml: 
     sd_class_fold(ph, pl, Int(nch), Int(kk_in), t, mh, ml)
 
 
-def sdk_step_kernel(
-    mh: FP, ml: FP, vvh: FP, vvl: FP, uh: FP, ul: FP, svh: FP, svl: FP, filled: IP, ch: FP, cl: FP,
-    lasth: FP, roth: FP, rotl: FP, state: IP, k_in: Int32, n_in: Int32, n_iter_max: Int32,
+@always_inline
+def _sdk_svd_block(
+    mh: FP, ml: FP, vvh: FP, vvl: FP, uh: FP, ul: FP, svh: FP, svl: FP, filled: IP, k: Int, tid: Int
 ):
-    """ONE block: n_iter + 1, the one-sided Jacobi SVD of the class sums m
-    (k x k, rotated in place; v = I rotated) in `_sd_svd_host`'s order (the
-    pair's three sums on threads 0..2, each its rows ascending; the rows of
-    the rotation across the block), sv and U, the completion on thread 0,
-    the ncut stop test on thread 0, then the next rotation V U^T across the
-    block. Returns at once once the fit is done."""
-    if _done(state):
-        return
-    var k = Int(k_in)
+    """The one-block one-sided Jacobi SVD of m (k x k, rotated in place; v =
+    I rotated) in `_sd_svd_host`'s order (the pair's three sums on threads
+    0..2, each its rows ascending; the rows of the rotation across the
+    block), then sv and U's filled columns; every thread past the last
+    barrier. Shared by `sdk_step_kernel` (discretize) and
+    `cqk_svd_kernel` (cluster_qr): a launched kernel is never called from
+    another kernel."""
     var kk = k * k
-    var tid = Int(thread_idx.x)
     var sh = stack_allocation[8, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var flag = stack_allocation[2, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var flag = stack_allocation[1, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
     var t = tid
     while t < kk:
         var i = t // k
         sd_st(vvh, vvl, t, FF(Float32(1) if i * k + i == t else Float32(0), Float32(0)))
         t += SD_TPB
-    if tid == 0:
-        state.unsafe_store(SD_ITER, state.unsafe_load(SD_ITER) + 1)
     dev_barrier()
     for _sweep in range(SD_SVD_SWEEPS):
         if tid == 0:
@@ -239,6 +235,27 @@ def sdk_step_kernel(
         sd_norm_col(mh, ml, uh, ul, svh, svl, filled, k, j)
         j += SD_TPB
     dev_barrier()
+
+
+def sdk_step_kernel(
+    mh: FP, ml: FP, vvh: FP, vvl: FP, uh: FP, ul: FP, svh: FP, svl: FP, filled: IP, ch: FP, cl: FP,
+    lasth: FP, roth: FP, rotl: FP, state: IP, k_in: Int32, n_in: Int32, n_iter_max: Int32,
+):
+    """ONE block: n_iter + 1, the one-sided Jacobi SVD of the class sums m
+    (k x k, rotated in place; v = I rotated) in `_sd_svd_host`'s order (the
+    pair's three sums on threads 0..2, each its rows ascending; the rows of
+    the rotation across the block), sv and U, the completion on thread 0,
+    the ncut stop test on thread 0, then the next rotation V U^T across the
+    block. Returns at once once the fit is done."""
+    if _done(state):
+        return
+    var k = Int(k_in)
+    var kk = k * k
+    var tid = Int(thread_idx.x)
+    var flag = stack_allocation[2, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    if tid == 0:
+        state.unsafe_store(SD_ITER, state.unsafe_load(SD_ITER) + 1)
+    _sdk_svd_block(mh, ml, vvh, vvl, uh, ul, svh, svl, filled, k, tid)
     if tid == 0:
         var stop = False
         if not sd_complete_u(uh, ul, filled, ch, cl, k):
@@ -415,4 +432,207 @@ def discretize_df64_device(
     _ = ccl^
     _ = filled^
     _ = last^
+    return labels^
+
+
+# ---------------------------------------------------------------- cluster_qr
+# Lane m3-linalg-and-housekeeping (2026-11-09): assign_labels='cluster_qr'
+# on the device in float-float (x_cluster/spectral_df64.mojo's cq_* bodies;
+# host column `cluster_qr_df64_host`). Was binary64 on the host
+# (x_cluster/spectral_assign.mojo): the fit's last host step after the
+# embedding came home.
+
+
+def cqk_load_kernel(x: FP, vh: FP, vl: FP, ah: FP, al: FP, count: Int32):
+    var t = _g()
+    if t < Int(count):
+        sd_load_cell(x, vh, vl, t)
+        sd_load_cell(x, ah, al, t)
+
+
+def cqk_colnorm_kernel(ah: FP, al: FP, used: IP, k_in: Int32, j_in: Int32, nh: FP, nl: FP, n_in: Int32):
+    var c = _g()
+    if c < Int(n_in):
+        cq_colnorm_cell(ah, al, used, Int(k_in), Int(j_in), c, nh, nl)
+
+
+def cqk_chunk_max_kernel(nh: FP, nl: FP, used: IP, n_in: Int32, nch: Int32, bmh: FP, bml: FP, bmi: IP):
+    var ch = _g()
+    if ch < Int(nch):
+        cq_chunk_max(nh, nl, used, Int(n_in), ch, bmh, bml, bmi)
+
+
+def cqk_pivot_kernel(
+    ah: FP, al: FP, used: IP, piv: IP, k_in: Int32, j_in: Int32, bmh: FP, bml: FP, bmi: IP, nch: Int32, hvh: FP,
+    hvl: FP, hb: FP, state: IP,
+):
+    """One thread: step j's pivot and Householder vector; state[SD_AMIN] =
+    1 when the reflector applies, else 0 (the apply kernel reads it)."""
+    if _g() != 0:
+        return
+    var go = cq_pivot_step(ah, al, used, piv, Int(k_in), Int(j_in), bmh, bml, bmi, Int(nch), hvh, hvl, hb, hb + 1)
+    state.unsafe_store(SD_AMIN, Int32(go))
+
+
+def cqk_apply_kernel(ah: FP, al: FP, used: IP, k_in: Int32, j_in: Int32, hvh: FP, hvl: FP, hb: FP, state: IP, n_in: Int32):
+    var c = _g()
+    if c >= Int(n_in) or state.unsafe_load(SD_AMIN) == Int32(0):
+        return
+    cq_apply_col(ah, al, used, Int(k_in), Int(j_in), hvh, hvl, sd_ld(hb, hb + 1, 0), c)
+
+
+def cqk_gather_kernel(vh: FP, vl: FP, piv: IP, k_in: Int32, mh: FP, ml: FP, count: Int32):
+    var t = _g()
+    if t < Int(count):
+        cq_gather_cell(vh, vl, piv, Int(k_in), t, mh, ml)
+
+
+def cqk_svd_kernel(
+    mh: FP, ml: FP, vvh: FP, vvl: FP, uh: FP, ul: FP, svh: FP, svl: FP, filled: IP, ch: FP, cl: FP, roth: FP,
+    rotl: FP, state: IP, k_in: Int32,
+):
+    """ONE block: the SVD of M = V[piv] (`_sdk_svd_block`), the completion
+    on thread 0 (SD_BAD_BASIS in the status word when it fails), then Q = V
+    U^T across the block."""
+    var k = Int(k_in)
+    var kk = k * k
+    var tid = Int(thread_idx.x)
+    var flag = stack_allocation[1, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    _sdk_svd_block(mh, ml, vvh, vvl, uh, ul, svh, svl, filled, k, tid)
+    if tid == 0:
+        var ok = sd_complete_u(uh, ul, filled, ch, cl, k)
+        if not ok:
+            state.unsafe_store(SD_STATUS, Int32(SD_BAD_BASIS))
+        flag[0] = Int32(1) if ok else Int32(0)
+    dev_barrier()
+    if flag[0] == Int32(0):
+        return
+    var c = tid
+    while c < kk:
+        sd_polar_cell(vvh, vvl, uh, ul, k, c, roth, rotl)
+        c += SD_TPB
+
+
+def cqk_label_kernel(vh: FP, vl: FP, k_in: Int32, roth: FP, rotl: FP, lab: IP, n_in: Int32):
+    var i = _g()
+    if i < Int(n_in):
+        lab.unsafe_store(i, sd_label_abs_row(vh, vl, Int(k_in), roth, rotl, i))
+
+
+def cluster_qr_df64_device(ctx: DeviceContext, x: List[Float32], n: Int, k: Int) raises -> List[Int32]:
+    """SpectralClustering assign_labels='cluster_qr' on the device in
+    float-float: labels (n). One upload of the embedding, the k pivot steps
+    enqueued with no read (each a grid over the n columns plus one thread for
+    the pivot), then the k x k SVD in one block, the labels across the rows;
+    ONE read (the status word and the labels) at the end."""
+    if n < 1 or k < 1 or k > n or len(x) != n * k:
+        raise Error("SpectralClustering cluster_qr: the embedding is not n x k with k <= n")
+    if n >= 1 << 31 or n * k >= 1 << 31:
+        raise Error("SpectralClustering cluster_qr: the embedding exceeds the device's int32 indices")
+    var nk = n * k
+    var kk = k * k
+    var nch = sd_chunks(n)
+    var xl = x.copy()
+    var dx = ctx.enqueue_create_buffer[DType.float32](nk)
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=FP(unsafe_from_address=Int(xl.unsafe_ptr())))
+    var vh = ctx.enqueue_create_buffer[DType.float32](nk)
+    var vl = ctx.enqueue_create_buffer[DType.float32](nk)
+    var ah = ctx.enqueue_create_buffer[DType.float32](nk)
+    var al = ctx.enqueue_create_buffer[DType.float32](nk)
+    var nh = ctx.enqueue_create_buffer[DType.float32](n)
+    var nl = ctx.enqueue_create_buffer[DType.float32](n)
+    var used = ctx.enqueue_create_buffer[DType.int32](n)
+    var piv = ctx.enqueue_create_buffer[DType.int32](k)
+    var bmh = ctx.enqueue_create_buffer[DType.float32](nch)
+    var bml = ctx.enqueue_create_buffer[DType.float32](nch)
+    var bmi = ctx.enqueue_create_buffer[DType.int32](nch)
+    var hvh = ctx.enqueue_create_buffer[DType.float32](k)
+    var hvl = ctx.enqueue_create_buffer[DType.float32](k)
+    var hb = ctx.enqueue_create_buffer[DType.float32](2)
+    var state = ctx.enqueue_create_buffer[DType.int32](SD_STATE_WORDS)
+    enqueue_fill(ctx, used, Int32(0))
+    enqueue_fill(ctx, nh, Float32(0))
+    enqueue_fill(ctx, nl, Float32(0))
+    enqueue_fill(ctx, state, Int32(0))
+    ctx.enqueue_function[cqk_load_kernel](
+        _fp(dx), _fp(vh), _fp(vl), _fp(ah), _fp(al), Int32(nk), grid_dim=_blocks(nk), block_dim=SD_TPB
+    )
+    for j in range(k):  # driver-loop: over the QR's k pivot steps (model structure)
+        ctx.enqueue_function[cqk_colnorm_kernel](
+            _fp(ah), _fp(al), _ip(used), Int32(k), Int32(j), _fp(nh), _fp(nl), Int32(n), grid_dim=_blocks(n),
+            block_dim=SD_TPB,
+        )
+        ctx.enqueue_function[cqk_chunk_max_kernel](
+            _fp(nh), _fp(nl), _ip(used), Int32(n), Int32(nch), _fp(bmh), _fp(bml), _ip(bmi), grid_dim=_blocks(nch),
+            block_dim=SD_TPB,
+        )
+        ctx.enqueue_function[cqk_pivot_kernel](  # small-launch(nch: row chunks, then k: the reflector): the step's pivot
+            _fp(ah), _fp(al), _ip(used), _ip(piv), Int32(k), Int32(j), _fp(bmh), _fp(bml), _ip(bmi), Int32(nch),
+            _fp(hvh), _fp(hvl), _fp(hb), _ip(state), grid_dim=1, block_dim=1,
+        )
+        ctx.enqueue_function[cqk_apply_kernel](
+            _fp(ah), _fp(al), _ip(used), Int32(k), Int32(j), _fp(hvh), _fp(hvl), _fp(hb), _ip(state), Int32(n),
+            grid_dim=_blocks(n), block_dim=SD_TPB,
+        )
+    var mh = ctx.enqueue_create_buffer[DType.float32](kk)
+    var ml = ctx.enqueue_create_buffer[DType.float32](kk)
+    var vvh = ctx.enqueue_create_buffer[DType.float32](kk)
+    var vvl = ctx.enqueue_create_buffer[DType.float32](kk)
+    var uh = ctx.enqueue_create_buffer[DType.float32](kk)
+    var ul = ctx.enqueue_create_buffer[DType.float32](kk)
+    var svh = ctx.enqueue_create_buffer[DType.float32](k)
+    var svl = ctx.enqueue_create_buffer[DType.float32](k)
+    var cch = ctx.enqueue_create_buffer[DType.float32](k)
+    var ccl = ctx.enqueue_create_buffer[DType.float32](k)
+    var filled = ctx.enqueue_create_buffer[DType.int32](k)
+    var roth = ctx.enqueue_create_buffer[DType.float32](kk)
+    var rotl = ctx.enqueue_create_buffer[DType.float32](kk)
+    var lab = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_function[cqk_gather_kernel](
+        _fp(vh), _fp(vl), _ip(piv), Int32(k), _fp(mh), _fp(ml), Int32(kk), grid_dim=_blocks(kk), block_dim=SD_TPB
+    )
+    ctx.enqueue_function[cqk_svd_kernel](  # small-launch(k: clusters): the k x k SVD's cyclic rotations, rows across the block
+        _fp(mh), _fp(ml), _fp(vvh), _fp(vvl), _fp(uh), _fp(ul), _fp(svh), _fp(svl), _ip(filled), _fp(cch), _fp(ccl),
+        _fp(roth), _fp(rotl), _ip(state), Int32(k), grid_dim=1, block_dim=SD_TPB,
+    )
+    ctx.enqueue_function[cqk_label_kernel](
+        _fp(vh), _fp(vl), Int32(k), _fp(roth), _fp(rotl), _ip(lab), Int32(n), grid_dim=_blocks(n), block_dim=SD_TPB
+    )
+    var hs = List[Int32](length=SD_STATE_WORDS, fill=Int32(0))
+    var labels = List[Int32](length=n, fill=Int32(0))
+    ctx.enqueue_copy(dst_ptr=IP(unsafe_from_address=Int(hs.unsafe_ptr())), src_buf=state)
+    ctx.enqueue_copy(dst_ptr=IP(unsafe_from_address=Int(labels.unsafe_ptr())), src_buf=lab)
+    ctx.synchronize()
+    cq_raise_status(Int(hs[SD_STATUS]))
+    _ = xl^
+    _ = dx^
+    _ = vh^
+    _ = vl^
+    _ = ah^
+    _ = al^
+    _ = nh^
+    _ = nl^
+    _ = used^
+    _ = piv^
+    _ = bmh^
+    _ = bml^
+    _ = bmi^
+    _ = hvh^
+    _ = hvl^
+    _ = hb^
+    _ = state^
+    _ = mh^
+    _ = ml^
+    _ = vvh^
+    _ = vvl^
+    _ = uh^
+    _ = ul^
+    _ = svh^
+    _ = svl^
+    _ = cch^
+    _ = ccl^
+    _ = filled^
+    _ = roth^
+    _ = rotl^
+    _ = lab^
     return labels^
