@@ -102,9 +102,12 @@ def test_host_trainer_public_frontdoors_and_shared_metadata():
     assert not expected
     for name in ('bindings/byte_lm_host_trainer_native.mojo', 'bindings/byte_lm_trainer_native.mojo'):
         assert 'from providers.python.byte_lm_metadata_pyapi import _Shape, _shape_of' in (ROOT / name).read_text()
-    shared = (ROOT / 'providers/python/training_buffer_pyapi.mojo').read_text().split('def training_f32_cast_owned(')[1]
+    # The cast-owned training buffer is the one admission path's
+    # admit_nd_owned_f32 (lane A4): metadata read once, one parallel cast
+    # whose finite flag is the refusal.
+    shared = (ROOT / 'bindings/admitted_sequence.mojo').read_text().split('def admit_nd_owned_f32(')[1]
     assert shared.count('value.shape') == 1 and shared.count('value.strides') == 1
-    assert 'native_strides, item, kind, True, pointer)' in shared
+    assert 'native_strides, item, kind, pointer)' in shared
 
 
 def test_host_inference_operations_are_one_native_call():

@@ -20,7 +20,9 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
-from core.xseq_marshal import xseq_cast_nd, tsa_flags_u8
+from core.xseq_marshal import tsa_flags_u8
+from core.admitted_input_nd import admitted_cast_nd_f32
+from bindings.native_array_storage import native_scratch_bytes, native_scratch_address
 from bindings.tsa_hw_native import tsa_array, hw_fit, hw_predict, hw_score, hw_initialize, hw_forecast, hw_component, hw_save
 from bindings.tsa_admission import tsa_buffer, tsa_scalar, tsa_truth
 from bindings.native_loaded_module import native_loaded_module
@@ -54,7 +56,11 @@ def _entries(context: PythonObject) raises -> PythonObject:
 
 
 def _series_major(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    """`_series_major(y, name)`: (series-major float32 Array, n_obs, batch)."""
+    """`_series_major(y, name)`: (series-major float32 scratch store, n_obs,
+    batch). The store is the kernel's read-only input for this call only
+    (never returned or kept), written in full by the one parallel cast, so it
+    is uninitialised (`native_scratch_bytes`; REGRESSIONS F3/C3, was a
+    zero-filled Array); read its address with `native_scratch_address`."""
     var value = tsa_buffer(source, name + " y", context)
     var rank = len(value.shape)
     if rank != 1 and rank != 2:
@@ -63,7 +69,7 @@ def _series_major(source: PythonObject, name: String, context: PythonObject) rai
     var cols = 1 if rank == 1 else value.shape[1]
     if rows * cols == 0:
         raise Error("mojolearn " + name + ": y is empty")
-    var out = _array("f", "<f4", rows * cols, 4, context)
+    var out = native_scratch_bytes(rows * cols * 4)
     var dims = List[Int]()
     var steps = List[Int]()
     if rank == 2:
@@ -71,8 +77,8 @@ def _series_major(source: PythonObject, name: String, context: PythonObject) rai
         steps.append(value.strides[1])
     dims.append(rows)
     steps.append(value.strides[0])
-    xseq_cast_nd(value.source.addr, dims, steps, value.source.itemsize, value.source.kind, True,
-                 _F32P(unsafe_from_address=Int(py=classical_address(out))))
+    _ = admitted_cast_nd_f32(value.source.addr, dims, steps, value.source.itemsize, value.source.kind,
+                 _F32P(unsafe_from_address=native_scratch_address(out)))
     _ = value
     _ = out
     return Python.tuple(out, rows, cols)
@@ -87,7 +93,7 @@ def tsa_kpss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var batch = Int(py=prepared[2])
     var flags = _array("i", "<i4", batch, 4, context)
     var stat = _array("f", "<f4", batch, 4, context)
-    _ = py_call_typed(_entries(context)["kpss_test"], classical_address(flat), classical_address(flags), classical_address(stat),
+    _ = py_call_typed(_entries(context)["kpss_test"], PythonObject(native_scratch_address(flat)), classical_address(flags), classical_address(stat),
                       Python.list(batch, n_obs, py_call_typed(b.int, tsa_scalar(args[1], context, True)), py_call_typed(b.int, tsa_scalar(args[2], context, True)),
                                   py_call_typed(b.int, tsa_scalar(args[3], context, True)), py_call_typed(b.float, tsa_scalar(args[4], context))))
     _ = stat  # keep the Python object alive through the native call above
@@ -122,7 +128,7 @@ def tsa_select_d(args: PythonObject, context: PythonObject) raises -> PythonObje
             raise Error("select_d: d_max must satisfy 0 <= d_max <= 2 - D (d_max=" + String(limit) + ", D="
                         + String(seasonal) + "), refused by name")
     var out = _array("i", "<i4", batch, 4, context)
-    _ = py_call_typed(_entries(context)["select_d"], classical_address(flat), classical_address(out),
+    _ = py_call_typed(_entries(context)["select_d"], PythonObject(native_scratch_address(flat)), classical_address(out),
                       Python.list(batch, n_obs, seasonal, py_call_typed(b.int, tsa_scalar(args[2], context, True)), py_call_typed(b.int, limit_value),
                                   py_call_typed(b.float, tsa_scalar(args[4], context))))
     _ = out  # keep the Python object alive through the native call above

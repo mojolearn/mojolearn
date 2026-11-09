@@ -18,7 +18,6 @@ from bindings.xcnn_common import (
     xcnn_dev, xcnn_dev_get, xcnn_dev_upload, xcnn_dev_has, xcnn_dev_handle, xcnn_download, xcnn_slice_f32, xcnn_put_f32,
     xcnn_shape_text,
 )
-from bindings.xseq_native_common import xseq_f32
 from bindings.mode_metadata_native import _fields
 from bindings.neural_block_admission import neural_plain_value
 from bindings.native_loaded_module import NativeModules

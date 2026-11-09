@@ -32,10 +32,11 @@ from bindings.sequential_arrays import sequential_array, sequential_address, seq
 from bindings.optimizer_admission import opt_schedule
 from bindings.optimizer_schedule_native import schedule_operation
 from bindings.xseq_native_common import (
-    XF32P, XI32P, xseq_entries, xseq_base, xseq_input, xseq_is_f64, xseq_f32, xseq_refuse_f64, xseq_zeros,
+    XF32P, XI32P, xseq_entries, xseq_base, xseq_input, xseq_is_f64, xseq_refuse_f64, xseq_zeros,
     xseq_addr, xseq_f32p, xseq_reshape, xseq_curve_list, xseq_int, xseq_float, xseq_truth, xseq_is_int,
     XseqStream, xseq_neural_provider, xseq_output_provider,
 )
+from bindings.admitted_sequence import admit_nd_f32
 from providers.python.xseq_public_lifecycle_pyapi import xseq_public_labels, xseq_private_input
 from core.xseq_marshal import xseq_fill_f32, xseq_codes_f32, xseq_take_native
 from sequence.perf3_seq_resident_words import seq_resident_token
@@ -87,7 +88,7 @@ def xseq_as_f32_c(source: PythonObject, ndim: Int, name: String, context: Python
         var what = String("feature(s)") if rank == 2 and Int(py=a.shape[0]) != 0 else String("sample(s)")
         raise Error("mojolearn: " + name + " is empty, shape " + _shape_text(a) + ": Found array with 0 " + what
                     + " (shape=" + _shape_text(a) + ") while a minimum of 1 is required.")
-    return xseq_f32(a, name, False, context, True)
+    return admit_nd_f32(a, name, False, context)
 
 
 def xseq_labels(source: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -389,7 +390,7 @@ def _rnn_x(source: PythonObject, fields: PythonObject, fitting: Bool, context: P
     """`_RecurrentBase._check_X`: a C-ordered float32 (n, T, F) array."""
     var a = xseq_input(source, context)
     xseq_refuse_f64(a, "X: float64 is refused; pass float32 (no float64 on the device)")
-    var x = xseq_f32(a, "X", False, context)
+    var x = admit_nd_f32(a, "X", False, context)
     if Int(py=x.ndim) != 3:
         raise Error("X must be 3-D: (n_samples, n_timesteps, n_features)")
     if fitting:
@@ -497,7 +498,7 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
         params = record[1]
         token = Int(py=record[2])
     else:
-        params = xseq_f32(xseq_private_input(source_params, context, "params_"), "params_", False, context)
+        params = admit_nd_f32(xseq_private_input(source_params, context, "params_"), "params_", False, context)
         var stamp = _xseq_params_frozen(source_params, PythonObject(None), True, context)
         token = _record_put_token(mods, _RNN_PARAMS_SLOT, model, source_params, PythonObject(None), Python.tuple(params), stamp)
     var ip = _rnn_ints(model, fields)
@@ -534,7 +535,7 @@ def xseq_rnn(model: PythonObject, operation: String, args: PythonObject, context
         if task == 0:
             var y = xseq_input(args[1], context)
             xseq_refuse_f64(y, "y: float64 is refused; pass float32 (no float64 on the device)")
-            y = xseq_f32(y, "y", False, context)
+            y = admit_nd_f32(y, "y", False, context)
             py_setitem(fields, "_y_1d", Int(py=y.ndim) == 1)
             var rows = Int(py=y.shape[0])
             var target = xseq_reshape(y, Python.tuple(rows, -1))
@@ -768,8 +769,8 @@ def _mlp_pack(coefs: PythonObject, intercepts: PythonObject, columns: Int,
     var total = 0
     var input_width = columns
     for l in range(layers):  # driver-loop: capture each admitted fitted weight and its shape once
-        var weights = xseq_f32(xseq_private_input(coefs[l], context, "coefs_"), "coefs_", False, context)
-        var bias = xseq_f32(xseq_private_input(intercepts[l], context, "intercepts_"), "intercepts_", False, context)
+        var weights = admit_nd_f32(xseq_private_input(coefs[l], context, "coefs_"), "coefs_", False, context)
+        var bias = admit_nd_f32(xseq_private_input(intercepts[l], context, "intercepts_"), "intercepts_", False, context)
         var weight_shape = weights.shape
         var bias_shape = bias.shape
         if len(weight_shape) != 2 or len(bias_shape) != 1:

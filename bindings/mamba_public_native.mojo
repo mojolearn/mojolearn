@@ -32,7 +32,7 @@ from bindings.generation_buffers import (
 from bindings.causal_lm_public import _native_function, _native_entry_fields, _native_has_entry, _mutable, _writeback
 from bindings.causal_lm_construct import _model_bindings, _model_block
 from bindings.neural_block_public import neural_training_entries, _neural_input, _neural_lengths, _neural_int_words, neural_block_snapshot_prepared
-from bindings.neural_block_admission import neural_block_fields, neural_block_snapshot, neural_block_f32, neural_array_snapshot, neural_native_scalar
+from bindings.neural_block_admission import neural_block_fields, neural_block_snapshot, admit_block_f32, BLOCK_OPERATION, neural_array_snapshot, neural_native_scalar
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter
@@ -594,7 +594,7 @@ def mamba3_set_input_states(mut mods: NativeModules,
     var targets = [String("theta"), String("h"), String("pending_k"), String("pending_v")]
     var sources = Python.list(theta, h, k, v)
     for i in range(4):  # driver-loop: over the four named continuation pieces
-        var source = neural_block_f32(sources[i], names[i], context)
+        var source = admit_block_f32(sources[i], names[i], context, BLOCK_OPERATION)
         var target = slots[targets[i]]
         var want = _shape_of(target)
         if not Bool(py=source.shape == want):

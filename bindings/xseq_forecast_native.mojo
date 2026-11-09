@@ -30,11 +30,13 @@ from providers.python.forecast_owner_pyapi import forecast_commit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.xseq_native_common import (
-    XF32P, XI64P, xseq_entries, xseq_base, xseq_input, xseq_f32, xseq_refuse_f64, xseq_zeros, xseq_addr, xseq_f32p,
+    XF32P, XI64P, xseq_entries, xseq_base, xseq_input, xseq_refuse_f64, xseq_zeros, xseq_addr, xseq_f32p,
     xseq_reshape, xseq_copy, xseq_item, xseq_first, xseq_column_f32, xseq_column_i64, xseq_mean_dict, xseq_int,
     xseq_float, xseq_truth, xseq_mode,
 )
-from core.xseq_marshal import xseq_var_blocks, xseq_cast_nd
+from core.xseq_marshal import xseq_var_blocks
+from core.admitted_input_nd import admitted_cast_nd_f32
+from bindings.admitted_sequence import admitted_ndarray_f32
 from bindings.native_loaded_module import NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put
 
@@ -80,13 +82,14 @@ def _series(source: PythonObject, label: String, copy: Bool, context: PythonObje
         if one:
             arr = xseq_reshape(y, Python.tuple(1, cols))
     else:
-        arr = xseq_zeros(Python.tuple(rows, cols), context)
+        # One parallel cast into uninitialised storage (REGRESSIONS F3/C3).
+        arr = admitted_ndarray_f32(Python.tuple(rows, cols), rows * cols, context)
         var strides = List[Int]()
         strides.append(metadata.source.s0)
         if not one:
             strides.append(metadata.source.s1)
-        xseq_cast_nd(metadata.source.addr, metadata.shape, strides, metadata.source.itemsize,
-                     metadata.source.kind, False, xseq_f32p(arr))
+        _ = admitted_cast_nd_f32(metadata.source.addr, metadata.shape, strides, metadata.source.itemsize,
+                     metadata.source.kind, xseq_f32p(arr))
         address = Int(py=xseq_addr(arr))
     _ = metadata
     return Python.tuple(one, arr, rows, cols, address)
