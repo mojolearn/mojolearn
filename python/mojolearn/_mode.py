@@ -216,6 +216,10 @@ def _needs_fit(method, name, require_fit=True):
 
 
 def _loader(method):
+    # P1 (audit B #2): RBFSampler, Nystroem and KernelRidge.load are marked
+    # `native_method` (kernel_methods.py), so they take the first branch and
+    # no Python post-load wrapper runs; the wrapper below remains only for
+    # loaders whose native owner does not publish the fitted state.
     if getattr(method, "_mojolearn_tracks_fit", False):
         # The native archive owner publishes fitted state and admits any
         # after-fit hook before returning; no Python post-load callback.
