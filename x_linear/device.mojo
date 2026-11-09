@@ -740,8 +740,11 @@ def _sgd_mb_rows_kernel_body(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d:
 
 def sgd_mb_rows_kernel(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d: Int32, w: FP, bias: FP, loss: Int32,
                        eps: Float32, swp: FP, has_sw: Int32, wpos: Float32, wneg: Float32, has_cw: Int32,
-                       dlv: FP, lv: FP, lr: Int32, eta0: Float32, dblk: Int32, ocm: Int32, wf: IP, woff: Int32,
+                       dlv: FP, lv: FP, lr: Int32, eta0: Float32, dblk: Int32, ocm: Int32, gate: IP, wf: IP, woff: Int32,
                        nonce: Int32):
+    if ldi(gate, 0) != 0:
+        witness_end(wf, woff, nonce)
+        return
     _sgd_mb_rows_kernel_body(x, ys, idx, start, bs, d, w, bias, loss, eps, swp, has_sw, wpos, wneg, has_cw, dlv, lv, lr, eta0,
                              dblk, ocm)
     witness_end(wf, woff, nonce)
@@ -803,12 +806,15 @@ def sgd_mb_oc_team(dlv: FP, lv: FP, bs: Int, eta: Float32, alpha: Float32, bsum:
 
 
 def sgd_mb_oc_kernel(dlv: FP, lv: FP, bs: Int32, eta: Float32, alpha: Float32, bsum: Int32, cnt: IP, dlt: FP,
-                     etp: FP, dev_eta: Int32, wf: IP, woff: Int32, nonce: Int32):
+                     etp: FP, dev_eta: Int32, gate: IP, wf: IP, woff: Int32, nonce: Int32):
     """The one-class implicit intercept step of a batch (`sgd_mb_oc_team`,
     one block between the rows and the partials launches; the counts are
     bisection probes over bs rows): the step to dlt[0] for the step
     kernel. dev_eta: the rate is the device's epoch-end word etp[0], as in
     `sgd_mb_step_kernel`."""
+    if ldi(gate, 0) != 0:
+        witness_end(wf, woff, nonce)
+        return
     var tid = Int(thread_idx.x)
     var e = ld(etp, 0) if dev_eta != 0 else eta
     var d0 = sgd_mb_oc_team(dlv, lv, Int(bs), e, alpha, bsum != 0, cnt, tid, Int(block_dim.x))
@@ -829,7 +835,10 @@ def _sgd_mb_parts_kernel_body(x: FP, d: Int32, idx: IP, start: Int32, dlv: FP, l
 
 
 def sgd_mb_parts_kernel(x: FP, d: Int32, idx: IP, start: Int32, dlv: FP, lv: FP, bs: Int32, nsub: Int32, parts: FP,
-                        sub: Int32, wf: IP, woff: Int32, nonce: Int32):
+                        sub: Int32, gate: IP, wf: IP, woff: Int32, nonce: Int32):
+    if ldi(gate, 0) != 0:
+        witness_end(wf, woff, nonce)
+        return
     _sgd_mb_parts_kernel_body(x, d, idx, start, dlv, lv, bs, nsub, parts, sub)
     witness_end(wf, woff, nonce)
 
@@ -862,12 +871,15 @@ def _sgd_mb_step_kernel_body(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP,
 
 def sgd_mb_step_kernel(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP, bias: FP, obj: FP, eta: Float32,
                        alpha: Float32, l1r: Float32, penalty: Int32, fi: Int32, need_obj: Int32, one_class: Int32,
-                       bsum: Int32, sub: Int32, etp: FP, dev_eta: Int32, ocm: Int32, dlt: FP, wf: IP, woff: Int32,
+                       bsum: Int32, sub: Int32, etp: FP, dev_eta: Int32, ocm: Int32, dlt: FP, gate: IP, wf: IP, woff: Int32,
                        nonce: Int32):
     """dev_eta: the constant / adaptive rate is the device's epoch-end state
     (etp[0], x_linear/sgd_end.mojo); the others are the schedule's `eta`.
     ocm / dlt: the one-class intercept (SGD_OC_MB_IMPLICIT; dlt[0] the
     implicit step of `sgd_mb_oc_kernel` when ocm == 2)."""
+    if ldi(gate, 0) != 0:
+        witness_end(wf, woff, nonce)
+        return
     var e = ld(etp, 0) if dev_eta != 0 else eta
     _sgd_mb_step_kernel_body(parts, nsub, bs, d, w, bias, obj, e, alpha, l1r, penalty, fi, need_obj, one_class, bsum, sub,
                              ocm, dlt)
@@ -920,12 +932,15 @@ comptime SGD_IDN_MB_FUSE = (
 def sgd_mb_steprows_kernel(
     parts: FP, w0: FP, b0: FP, w1: FP, b1: FP, obj: FP, x: FP, ys: FP, idx: IP, swp: FP, dlv: FP, lv: FP,
     ci: IP, cf: FP, etp: FP, dlt: FP, start: Int32, bs_prev: Int32, bs: Int32, eta: Float32, dev_eta: Int32,
-    wf: IP, woff: Int32, nonce: Int32,
+    gate: IP, wf: IP, woff: Int32, nonce: Int32,
 ):
     """ci / cf: `_sgd_mb_chunk_kernel_body`'s. The step of the batch of
     bs_prev rows (`sgd_mb_step_kernel`'s statements, w0 -> w1), then the rows
     [start, start + bs) of the next batch (`sgd_mb_rows_kernel`'s) on w1;
     bs == 0 is the step alone."""
+    if ldi(gate, 0) != 0:
+        witness_end(wf, woff, nonce)
+        return
     var dd = ldi(ci, 2)
     var loss = ldi(ci, 3)
     var has_sw = ldi(ci, 4) != 0
@@ -1018,7 +1033,7 @@ comptime SGD_FAST_EPOCH_RESIDENT = (
 def sgd_mb_fast_batch_kernel(
     parts_prev: FP, parts_cur: FP, w0: FP, b0: FP, w1: FP, b1: FP, obj: FP, x: FP, ys: FP, idx: IP, swp: FP,
     dlv: FP, lv: FP, ci: IP, cf: FP, etp: FP, start: Int32, bs_prev: Int32, bs: Int32, eta: Float32,
-    dev_eta: Int32, wf: IP, woff: Int32, nonce: Int32,
+    dev_eta: Int32, gate: IP, wf: IP, woff: Int32, nonce: Int32,
 ):
     """SGD_FAST_EPOCH_RESIDENT, one launch per minibatch (ocm == 0 only; the
     host gates it). ci / cf: `_sgd_mb_chunk_kernel_body`'s. bs_prev > 0: the
@@ -1026,6 +1041,9 @@ def sgd_mb_fast_batch_kernel(
     [start, start + bs) on the stepped weights (w1, or w0 when bs_prev == 0)
     and this block's sub-block partials into parts_cur. bs == 0 is the step
     alone (one block; w1 may equal w0, each thread owning its words)."""
+    if ldi(gate, 0) != 0:
+        witness_end(wf, woff, nonce)
+        return
     var dd = ldi(ci, 2)
     var loss = ldi(ci, 3)
     var has_sw = ldi(ci, 4) != 0
@@ -1293,8 +1311,11 @@ def _sgd_mb_chunk_kernel_body(
 @__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(SGD_CHUNK_TPB)))
 def sgd_mb_chunk_kernel(
     x: FP, ys: FP, idx: IP, w: FP, bias: FP, swp: FP, dlv: FP, lv: FP, parts: FP, obj: FP, ci: IP, cf: FP,
-    dotp: FP, sqp: FP, cnt: IP, start0: Int32, nbat: Int32, t0: Int32, wf: IP, woff: Int32, nonce: Int32,
+    dotp: FP, sqp: FP, cnt: IP, start0: Int32, nbat: Int32, t0: Int32, gate: IP, wf: IP, woff: Int32, nonce: Int32,
 ):
+    if ldi(gate, 0) != 0:
+        witness_end(wf, woff, nonce)
+        return
     _sgd_mb_chunk_kernel_body(x, ys, idx, w, bias, swp, dlv, lv, parts, obj, ci, cf, dotp, sqp, cnt, ldi(ci, 16), start0,
                               nbat, t0)
     witness_end(wf, woff, nonce)
