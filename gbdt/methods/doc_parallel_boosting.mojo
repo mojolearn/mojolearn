@@ -1358,10 +1358,10 @@ def _leaf_out_gated_kernel(
     est: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
     learning_rate: Float32,
-    out: MutPointer[Float32, MutAnyOrigin],
+    leaf_out: MutPointer[Float32, MutAnyOrigin],
     scaled: MutPointer[Float32, MutAnyOrigin],
 ):
-    """While the gate is open, one thread per leaf: `out[i] = est[i]` (the
+    """While the gate is open, one thread per leaf: `leaf_out[i] = est[i]` (the
     model's leaf) and `scaled[i] = est[i] * learning_rate` as the correctly
     rounded float product (`scaled_copy_kernel`'s statement, the model's
     rescale). Past the stop both stay as the stopping round left them."""
@@ -1371,7 +1371,7 @@ def _leaf_out_gated_kernel(
     if i >= Int(n_in):
         return
     var v = est.unsafe_load(i)
-    out.unsafe_store(i, v)
+    leaf_out.unsafe_store(i, v)
     scaled.unsafe_store(
         i, sf64_to_f32(sf64_mul(sf64_from_f32(v), sf64_from_f32(learning_rate)))
     )
