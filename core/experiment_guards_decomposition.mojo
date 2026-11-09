@@ -59,6 +59,8 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_LLE_FAST_DEV_LU"](), "removed 2026-11-08 (lane consol-k0-dead-code): MOJOLEARN_LLE_FAST_DEV_LU, LocallyLinearEmbedding's shift-invert LU on the device (x_decomp/w4_fast.mojo), was HOLD-quality: lle taxi 1783.8 -> 1039.0 ms but trustworthiness_k15 0.8662 -> 0.8410; with NULL_CANON istella 0.8851 -> 0.8615 (-2.7%, Andrew 2026-10-05: stays off); code at 41ffcec665; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch
     comptime assert not (is_defined["MOJOLEARN_MCD_FAST_G1_GRAM"]() or is_defined["MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"]() or is_defined["MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM"]()), "removed 2026-11-08 (lane consol-k0-dead-code): MOJOLEARN_MCD_FAST_G1_GRAM, the MinCovDet batched TN self-Gram through scoped_kernel (x_decomp/mcd_bmma.mojo), was NEUTRAL: rab3-mcdg1 istella +0.1%, taxi -1.2% (Verdicts batch 4); its reach audit MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT and the benchmark-window MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM went with it; code at 41ffcec665; see docs/TOMBSTONES.md"
+    # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
+    comptime assert not is_defined["MOJOLEARN_MCD_ORDERED_COV"](), "removed 2026-11-08 (lane consol-k0-dead-code): MOJOLEARN_MCD_ORDERED_COV, MinCovDet / EllipticEnvelope's split-K covariance with ordered Neumaier fold (x_decomp/mcd_bmma.mojo), was NEUTRAL: rab3-mcdord EE istella -0.3%, MCD istella +0.4%, taxi -2.3% (Verdicts batch 4), quality HOLD (mcd-ordered-direct-q-r3); its reach probe, test seam and x_decomp_dev_mcd_cov went with it; code at 41ffcec665; see docs/TOMBSTONES.md"
     return True
 
 

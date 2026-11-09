@@ -20,7 +20,6 @@ from x_decomp.ipca_owner_dev import DevIpcaDev
 from providers.python.x_decomp_ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
 from x_decomp.decomp_owner_dev import DevDecomp
 from providers.python.x_decomp_decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py, lda_py, kpca_eig_py, rp_fit_py, rp_project_py
-from std.sys.info import has_apple_gpu_accelerator
 from x_decomp.mcd_experiments import mcd_experiment_count
 from x_decomp.mcd_bmma import mcd_fast_batch_count
 
@@ -54,10 +53,10 @@ from providers.python.x_decomp_select_dev_pyapi import (
 from providers.python.x_decomp_graph_device_pyapi import (
     dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_radius_geo_py, dev_graph_lle_iw_py, dev_graph_components_py, dev_graph_join_py, dev_graph_dijkstra_py,
 )
-from x_decomp.mcd_bmma import MCD_ORDERED_COV
-from providers.python.x_decomp_mcd_bmma_pyapi import mcd_cov_reach_py
+# TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+# Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
 from providers.python.x_decomp_resident_pyapi import (
-    mcd_cov_probe_py, dev_mcd_cov_py, dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_live_py, dev_gemm_py, dev_rand_py, dev_trisolve_py, dev_rowsum_py, dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_move_py,
+    dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_live_py, dev_gemm_py, dev_rand_py, dev_trisolve_py, dev_rowsum_py, dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_move_py,
 )
 from x_decomp.resident import GRP_CLS2_ANY
 from providers.python.x_decomp_resident_pyapi import grp_cls2_py
@@ -232,13 +231,8 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[dev_download_py]("x_decomp_dev_download")
         m.def_function[dev_ew_py]("x_decomp_dev_ew")
         m.def_function[dev_gemm_py]("x_decomp_dev_gemm")
-        m.def_function[mcd_cov_reach_py]("x_decomp_mcd_cov_reach")
-        # Apple simdgroup MMA probe (tools/mcd_ordered_quality.py): NVIDIA/AMD
-        # cannot link air.simdgroup_* (box-run-2 compile fix)
-        comptime if has_apple_gpu_accelerator():
-            m.def_function[mcd_cov_probe_py]("x_decomp_mcd_cov_probe")
-        comptime if MCD_ORDERED_COV:
-            m.def_function[dev_mcd_cov_py]("x_decomp_dev_mcd_cov")
+        # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) deleted 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+        # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
         m.def_function[dev_lanczos_py]("x_decomp_dev_lanczos")
         # TOMBSTONE: the dead x_decomp exports (registrations only where the body stays live in the decomp owners; see docs/TOMBSTONES.md) deleted 2026-10-26 by 25b5daca2; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_x_decomp.patch

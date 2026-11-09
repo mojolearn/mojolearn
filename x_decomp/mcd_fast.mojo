@@ -77,7 +77,7 @@ from x_decomp.mcd_mma import mc_center_kernel, mc_publish_matrix_kernel, mc_maha
 from x_decomp.kit import Mat
 from x_decomp.cells import FOLD_BLOCK
 from x_decomp.mcd_compat import mc_compact_kernel, mc_moment_kernel, mc_pinvh_kernel
-from x_decomp.mcd_bmma import launch_gemm_mma_batched, MCD_ORDERED_COV, ordered_cov_scratch, launch_mcd_cov_ordered, note_cov_route
+from x_decomp.mcd_bmma import launch_gemm_mma_batched
 from x_decomp.mcd_experiments import MCD_FAST_ACTIVE_COMPACT, MCD_FAST_COV_REUSE, MCD_EXPERIMENT_CANDIDATES, McdCompactWorkspace, McdCovReuseWorkspace, reuse_covariance_kernel, mcd_experiment_hit
 from x_decomp.jacobi2 import dev_barrier
 
@@ -998,10 +998,8 @@ struct MfPhase(Movable):
             if d > MF_DMAX:
                 pw = d  # the MMA route folds column sums only (npair = 24,310 at d = 220)
         var part_words = max(nc * self.tiles * pw, 1)
-        comptime if MCD_ORDERED_COV and MCD_BMMA:
-            # Column moments have been consumed before covariance launches;
-            # reuse this phase-owned buffer without changing its lifetime.
-            part_words = max(part_words, ordered_cov_scratch(nc, h, d))
+        # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (its partials in this buffer) deleted 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+        # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
         self.part = ctx.enqueue_create_buffer[DType.float32](part_words)
         self.active = ctx.enqueue_create_buffer[DType.int32](max(nc, 1))
         self.needp = ctx.enqueue_create_buffer[DType.int32](max(nc, 1))
@@ -1063,17 +1061,14 @@ def _mma_covariance(ctx: DeviceContext, ph: MfPhase, dx: DeviceBuffer[DType.floa
         )
         var out = _f(ph.mm_out) + c0*d*d
         comptime if MCD_BMMA:
-            comptime if MCD_ORDERED_COV:
-                note_cov_route(True, ph.h, d)
-                launch_mcd_cov_ordered(ctx, _f(ph.mm_x), out, _f(ph.part),
-                    ph.h, d, cn, ph.r*d, d*d, gate + c0, False)
+            # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (the ordered raw covariance arm) deleted 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+            # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
+            if one:
+                launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
+                                        cn, ph.r*d, ph.r*d, d*d, gate, False, ph.compact)
             else:
-                if one:
-                    launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
-                                            cn, ph.r*d, ph.r*d, d*d, gate, False, ph.compact)
-                else:
-                    launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
-                                            cn, ph.r*d, ph.r*d, d*d, gate + c0, False)
+                launch_gemm_mma_batched(ctx, _f(ph.mm_x), _f(ph.mm_x), out, d, ph.h, d, True, False,
+                                        cn, ph.r*d, ph.r*d, d*d, gate + c0, False)
         else:
             for c in range(cn):
                 var x = _f(ph.mm_x)+c*ph.r*d

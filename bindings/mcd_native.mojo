@@ -137,13 +137,9 @@ def _masked_cov(mut kit: DecompKit, m: Int, mask: Int, assume_centered: Bool) ra
         centered = kit.ew(XD_MUL, shifted, mask)
     var rows = kit.nrows(centered)
     var cols = kit.ncols(centered)
-    var gram: Int
-    if kit.has("x_decomp_dev_mcd_cov") and kit.use(centered) and rows > 0 and cols > 0:
-        gram = kit.device_output(cols, cols)
-        var dc = kit.device(centered)
-        _ = py_call(kit.entries["x_decomp_dev_mcd_cov"], dc, kit.matrices[gram].device, Python.list(rows, cols))
-    else:
-        gram = kit.mm(centered, centered, ta=True)
+    # TOMBSTONE: MOJOLEARN_MCD_ORDERED_COV (the x_decomp_dev_mcd_cov final covariance arm) deleted 2026-11-08 by @K0SHA_MCDORD@; code recoverable at 41ffcec665.
+    # Restore: git apply experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch
+    var gram = kit.mm(centered, centered, ta=True)
     return (loc, kit.ew(XD_SCALE, gram, scalar=1.0 / count))
 
 

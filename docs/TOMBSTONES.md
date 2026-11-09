@@ -413,6 +413,7 @@ in the tables after the sections.
 | [`MOJOLEARN_CHOL_FAST_NB512`](#mojolearn_chol_fast_nb512) | Linear (Cholesky) | HOLD-speed | 2026-11-08 | [MOJOLEARN_CHOL_FAST_NB512.patch](../experiments/removed/MOJOLEARN_CHOL_FAST_NB512.patch) |
 | [`MOJOLEARN_LLE_FAST_DEV_LU`](#mojolearn_lle_fast_dev_lu) | Decomp | HOLD-quality | 2026-11-08 | [MOJOLEARN_LLE_FAST_DEV_LU.patch](../experiments/removed/MOJOLEARN_LLE_FAST_DEV_LU.patch) |
 | [`MOJOLEARN_MCD_FAST_G1_GRAM`](#mojolearn_mcd_fast_g1_gram) | Decomp (+ MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT, MOJOLEARN_LEGACY_NARROW_MCD_G1_GRAM) | NEUTRAL | 2026-11-08 | [MOJOLEARN_MCD_FAST_G1_GRAM.patch](../experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch) |
+| [`MOJOLEARN_MCD_ORDERED_COV`](#mojolearn_mcd_ordered_cov) | Decomp (+ x_decomp_mcd_cov_reach, x_decomp_mcd_cov_probe, x_decomp_dev_mcd_cov) | NEUTRAL | 2026-11-08 | [MOJOLEARN_MCD_ORDERED_COV.patch](../experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3860,3 +3861,20 @@ public runtime qualification; this entry is not release or performance evidence.
 - Deleted by `@K0SHA_G1@`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_MCD_FAST_G1_GRAM.patch`
   (x_decomp/mcd_bmma.mojo, bindings/_mojolearn_x_decomp.mojo). Refusal in `core/experiment_guards_decomposition.mojo`; no
   `grid_controls` entry existed. The F02 manifests under `experiments/performance_ideas/F02/` are records and still name it.
+
+### MOJOLEARN_MCD_ORDERED_COV
+
+- What it tried: MinCovDet / EllipticEnvelope's raw C-step batched Gram and final masked covariance as split-K partials in
+  disjoint storage, folded per cell in split order with Neumaier compensation (`launch_mcd_cov_ordered`,
+  `mcd_cov_fold_kernel`, the `ORDERED` parameter of `mcd_bmma_kernel`, x_decomp/mcd_bmma.mojo), FAST + Apple.
+- Verdict: NEUTRAL, EXPERIMENTS.md (lane/apple-fast-mcd-ordered-quality-r3 @ f35a57bd4; rab3-mcdord, Verdicts batch 4): EE
+  istella -0.3%, MCD istella +0.4%, taxi -2.3%; quality HOLD (mcd-ordered-direct-q-r3). Batch 1 of the dead native entries
+  above kept its reach probe "until its experiment goes".
+- Deleted: the define and its kernels and helpers, `mcd_bmma_kernel`'s `ORDERED` parameter (the compact launches now pass
+  `[SPLIT, True]`), the reach counters and `x_decomp_mcd_cov_reach` (with `providers/python/x_decomp_mcd_bmma_pyapi.mojo`),
+  the Apple-only test seam `x_decomp_mcd_cov_probe`, `x_decomp_dev_mcd_cov` and its arm in `bindings/mcd_native.mojo`, the
+  `dev_mcd_cov` kit-bridge name, the three `coverage_declared.tsv` rows that named them, the `SABOTAGE_NA_ENTRIES` row,
+  `tools/mcd_ordered_quality.py` and `tools/mcd_ordered_pair.py`.
+- Deleted by `@K0SHA_MCDORD@`; code recoverable at `41ffcec665`. Patch `experiments/removed/MOJOLEARN_MCD_ORDERED_COV.patch`
+  (eight code files, the deleted pyapi file included). Refusal in `core/experiment_guards_decomposition.mojo`; no
+  `grid_controls` entry existed.
