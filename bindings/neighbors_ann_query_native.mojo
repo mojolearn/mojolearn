@@ -7,6 +7,7 @@
 # Python wrapper but is NOT completion of the x_ann provider migration.
 from std.memory import MutPointer
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family_meta
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
@@ -16,7 +17,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_is_array
 from bindings.classical_pandas import classical_admit_value
 from bindings.classical_validate import classical_view
-from bindings.family_common import family_array, family_f32_snapshot, family_call_kw
+from bindings.family_common import family_array, family_call_kw
 from bindings.parallel_public_result import parallel_public_result
 from providers.python.array_metadata_pyapi import (
     array_shape_once, array_slot_once, array_owner_once, array_metadata_once,
@@ -378,7 +379,7 @@ def neighbors_ann_search(model: PythonObject, kind: Int, args: PythonObject,
     var k = _int(fields, "n_neighbors", owner)
     if n < 1 or dim < 1 or k < 1:
         raise Error("ValueError: ANN rows, features and n_neighbors must be positive")
-    var q = family_f32_snapshot(args[1], 2, "queries", context)
+    var q = admit_family_meta(args[1], 2, "queries", context)
     var m = q.shape[0]
     if q.shape[1] != dim:
         raise Error("ValueError: mojolearn " + owner + ": queries have " + String(q.shape[1]) + " features, the index has " + String(dim))

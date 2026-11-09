@@ -9,11 +9,12 @@
 # itself (`_mean_error`, `_r2_options`), as `regression_error_options` and
 # `r2_score_options` did. Same kernels, same operands: the bits do not move.
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays import classical_address
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_array, family_as_f32, family_min,
+    FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_array, family_min,
 )
 from bindings.metrics_reg_native import _mean_error, _r2_options
 from bindings.metrics_native_inputs import metric_shape
@@ -171,7 +172,7 @@ def _silhouette(args: PythonObject, caller: String, context: PythonObject) raise
                     + "silhouette_score.pyx dispatches by default). 'cityblock', "
                     + "'cosine', 'l1', 'manhattan' and 'sqeuclidean' are other "
                     + "distance kernels and are not in metrics/ (NOT_IMPLEMENTED.tsv)")
-    var x = family_as_f32(args[1], 2, "X", context)
+    var x = admit_family(args[1], 2, "X", context).array
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
     if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), rows * cols):
@@ -227,8 +228,8 @@ def _trustworthiness(args: PythonObject, context: PythonObject) raises -> Python
         raise Error("NotImplementedError: mojolearn trustworthiness: metric=" + family_repr(metric)
                     + " is refused; only 'euclidean' is implemented, and cuML's trustworthiness.pyx:86 "
                     + "refuses every other name too")
-    var x = family_as_f32(args[1], 2, "X", context)
-    var emb = family_as_f32(args[2], 2, "X_embedded", context)
+    var x = admit_family(args[1], 2, "X", context).array
+    var emb = admit_family(args[2], 2, "X_embedded", context).array
     var rows = Int(py=x.shape[0])
     if rows != Int(py=emb.shape[0]):
         raise Error("mojolearn trustworthiness: X has " + String(rows) + " rows and X_embedded has "

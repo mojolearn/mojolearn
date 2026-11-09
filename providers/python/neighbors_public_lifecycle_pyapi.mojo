@@ -4,6 +4,7 @@
 # migration debt, not evidence of descriptor-only execution.
 from std.math import isfinite, floor
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family_meta, admit_family_owned
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native import _fields, _fitted
@@ -23,7 +24,7 @@ from bindings.native_array_view import native_array_ndarray_view
 from core.p3nc_scan import p3nc_widen_f32_f64, P3NC_REAL_OK, P3NC_REAL_NONFINITE, P3NC_REAL_CONTINUOUS
 from core.host_finite_scan import host_all_finite_f32
 from bindings.p3nc_label_lists import p3nc_float_list_verdict
-from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_f32_snapshot, family_owned_snapshot, family_array
+from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_array
 from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields
 from bindings.cluster_fit_a_native import _pending, _pending_text, _drop_pending
@@ -179,16 +180,15 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
     var first = 0 if operation == "family_xn_knn_nn_fit" else 1
     var source = args[first]
     var name = classical_estimator_name(model)
-    var snapshot = family_f32_snapshot(source, 2, "X", context, True)
-    var rows = snapshot.shape[0]
-    var columns = snapshot.shape[1]
     # KNNImputer accepts NaNs. The other local/nearest estimators had a public
     # finite scan; KDE keeps its existing fit/score scan and copy reporting.
-    if not operation.startswith("family_xn_loc_imp_") and not operation.startswith("family_xn_kde_"):
-        # p3-neighbors-cluster: one eight-lane exponent-bit pass over the
-        # admitted words (core/p3nc_scan.mojo), not a scalar isfinite loop.
-        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=snapshot.source.addr), snapshot.count):
-            raise Error("Input X contains NaN or infinity (" + name + ").")
+    # The test rides in the admission (the cast's own verdict, or one
+    # parallel scan of a borrowed X): no second pass over X.
+    var scan = not operation.startswith("family_xn_loc_imp_") and not operation.startswith("family_xn_kde_")
+    var snapshot = admit_family_meta(source, 2, "X", context, True, finite=scan,
+                                     refusal="Input X contains NaN or infinity (" + name + ").")
+    var rows = snapshot.shape[0]
+    var columns = snapshot.shape[1]
     if not fitting and Int(py=depth) == 0:
         var width = py_get(fields, "n_features_in_")
         if width is not None:
@@ -220,12 +220,12 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
         if (fitting and not borrow and operation.startswith("family_xn_knn_") and snapshot.f32_c()
                 and not snapshot.copied):
             borrow = True
-        py_setitem(values, PythonObject(first), snapshot.keep if borrow else family_owned_snapshot(snapshot, context))
+        py_setitem(values, PythonObject(first), snapshot.keep if borrow else admit_family_owned(snapshot, context))
     elif not fitting and host_sparse_format(source).byte_length() == 0:
         # Perf (perf2-neighbors): a dense KDE query (score_samples/score) only
         # reads X and never reports `input_copied_`, so it takes this float32
         # C-order snapshot as `_kde_scores` would have rebuilt it
-        # (`family_as_f32` is this same snapshot's `keep`). A KDE fit keeps
+        # (`admit_family(...).array` is this same snapshot's `keep`). A KDE fit keeps
         # its own capture and copy report; a sparse query keeps its exact
         # densification (bindings/neighbors_kde_native.mojo `_kde_dense`).
         py_setitem(values, PythonObject(first), snapshot.keep)

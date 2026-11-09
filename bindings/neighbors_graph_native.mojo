@@ -21,13 +21,13 @@ from providers.python.x_neighbors_descriptor_pyapi import xn_admit_arguments, xn
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_I32P, family_call, family_isinstance, family_str, family_array, family_as_f32,
-    family_as_f32_dense,
+    FAMILY_F32P, FAMILY_I32P, family_call, family_isinstance, family_str, family_array,
 )
 from bindings.cfb_spectral import _as_i32
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields
@@ -173,7 +173,7 @@ def _p2m_relabel(binding: PythonObject, lab: PythonObject, context: PythonObject
 def _adjacency(source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_expansion_neighbors._adjacency`: float32 (`_f32(A, "adjacency")`),
     then the square refusal."""
-    var a = family_as_f32_dense(source, 2, "adjacency", context)
+    var a = admit_family(source, 2, "adjacency", context, dense=True).array
     if Int(py=a.shape[0]) != Int(py=a.shape[1]):
         raise Error("the adjacency matrix must be square")
     return a
@@ -228,7 +228,7 @@ def _csr_lists(source: PythonObject, graph: Bool, context: PythonObject) raises 
             indices = fields["indices"]
             n = Int(py=_int(stored_shape[0]))
             if graph:
-                vals = family_as_f32(fields["data"], 1, "data", context)
+                vals = admit_family(fields["data"], 1, "data", context).array
     if stored_csr:
         pass
     elif family_isinstance(source, b.tuple) and Int(py=family_call(b.len, source)) == 3:
@@ -245,7 +245,7 @@ def _csr_lists(source: PythonObject, graph: Bool, context: PythonObject) raises 
         indices = family_call(b.getattr, m, PythonObject("indices"))
         n = Int(py=_int(family_call(b.getattr, m, PythonObject("shape"))[0]))
         if graph:
-            vals = family_as_f32(family_call(b.getattr, m, PythonObject("data")), 1, "data", context)
+            vals = admit_family(family_call(b.getattr, m, PythonObject("data")), 1, "data", context).array
     else:
         return _Csr(False, PythonObject(None), PythonObject(None), PythonObject(None), 0)
     var ip = _as_i32(indptr, "indptr", context)
@@ -281,7 +281,7 @@ def _unit(binding: PythonObject, v: PythonObject, n: Int, what: String,
     if not available:
         raise Error("NotImplementedError: mojolearn PageRank " + what + ": this binary lacks x_neighbors_unit_ff "
                     + "(rebuild without -D MOJOLEARN_IDN_XN_UNIT_DEV_OFF)")
-    var wv = family_as_f32(v, 1, what, context)
+    var wv = admit_family(v, 1, what, context).array
     if Int(py=wv.shape[0]) != n:
         raise Error(what + " must be n non-negative values, not all zero")
     var out = family_array(Python.tuple(n), "<f4", context)
@@ -548,16 +548,16 @@ def _svgp_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     var b = _b()
     var binding = args[0]
     var fields = py_fields(model)
-    var x = family_as_f32_dense(args[1], 2, "X", context)
+    var x = admit_family(args[1], 2, "X", context, dense=True).array
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
-    var yv = family_as_f32(args[2], 1, "y", context)
+    var yv = admit_family(args[2], 1, "y", context).array
     if Int(py=yv.shape[0]) != n:
         raise Error("X and y have different numbers of rows")
     var inducing = _attr(model, "inducing_points")
     var z: PythonObject
     if inducing is not None:
-        z = ann_keep_array(inducing, family_as_f32_dense(inducing, 2, "inducing_points", context), context)
+        z = ann_keep_array(inducing, admit_family(inducing, 2, "inducing_points", context, dense=True).array, context)
     else:
         var m_obj = family_call(b.min, _int(_attr(model, "n_inducing")), PythonObject(n))
         if _truth(family_call(native_loaded_module("operator").le, m_obj, PythonObject(0))):
@@ -633,7 +633,7 @@ def _svgp_predict_f(model: PythonObject, args: PythonObject, context: PythonObje
     """`SVGP.predict_f(X)`: (mean, var) of the latent function."""
     classical_connect_numpy(context)
     var binding = args[0]
-    var q = family_as_f32_dense(args[1], 2, "X", context)
+    var q = admit_family(args[1], 2, "X", context, dense=True).array
     var z = _attr(model, "Z_")
     var m = Int(py=z.shape[0])
     var nq = Int(py=q.shape[0])
@@ -697,7 +697,7 @@ def _svgp_score(model: PythonObject, args: PythonObject, context: PythonObject) 
     metrics binding]). Without a metrics binding the model's numeric_mode
     selects the import-connected one here, as `_get_binding` selected it."""
     classical_connect_numpy(context)
-    var truth = family_as_f32(args[2], -1, "y", context)
+    var truth = admit_family(args[2], -1, "y", context).array
     var prediction = _svgp_predict(model, args, context)
     var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
     var metrics = args[4] if len(args) > 4 and args[4] is not None else estimator_binding(

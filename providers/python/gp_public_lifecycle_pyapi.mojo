@@ -4,6 +4,7 @@
 # parallel and model-selection callers that already prepare their arguments.
 from std.math import isfinite, floor
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family_f64
 from bindings.native_loaded_module import native_loaded_module
 from bindings.admitted_call import AdmittedCall
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
@@ -19,7 +20,6 @@ from bindings.classical_warnings import classical_warn_column
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.host_inference_scalars import host_inference_scalar, host_inference_primitive_number
-from bindings.family_common import family_cast_view_f64
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
@@ -332,6 +332,6 @@ def gp_public_operation(model: PythonObject, operation: String, args: PythonObje
         # Existing semantics widen only a standalone regressor prediction.
         # A (mean, std/cov) tuple keeps each kernel's float32 output dtype.
         if not classifier and method == "predict" and py_type(result) is context["array_class"]:
-            result = family_cast_view_f64(result, "prediction", context)
+            result = admit_family_f64(result, "prediction", context)
         return _gp_finished(result, context)
     return result

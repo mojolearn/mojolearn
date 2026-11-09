@@ -24,6 +24,7 @@ from std.math import floor, isinf
 from std.memory import memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_get, prepared_put, prepared_drop, prepared_key_add, prepared_key_same
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
@@ -36,8 +37,8 @@ from bindings.host_sparse_native import host_sparse_format
 from bindings.host_inference_scalars import host_inference_scalar
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_call, family_entry,
-    family_as_f32_dense, family_field, family_isinstance,
+    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_call, family_entry, family_field,
+    family_isinstance,
 )
 from bindings.classical_labels import (
     labels_empty, labels_vector, labels_cast, labels_view, labels_check_rank, labels_helper, classical_encode_labels,
@@ -175,7 +176,7 @@ def _size(a: PythonObject) raises -> Int:
 
 def _f32(source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_f32(X)`: `as_f32_c(_dense(X), ndim=2, name="X")`."""
-    return family_as_f32_dense(source, 2, "X", context)
+    return admit_family(source, 2, "X", context, dense=True).array
 
 
 def _out(shape: PythonObject, typestr: String, context: PythonObject) raises -> PythonObject:

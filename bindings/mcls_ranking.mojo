@@ -17,12 +17,12 @@
 # `pinned_mul_f64`: Python never fuses). Same kernels: the bits do not move.
 from std.memory import bitcast
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.metrics_plan_admission import MetricArenaOwner
 from bindings.py_balanced import py_call, py_type, py_contains
 from bindings.classical_arrays import classical_address, classical_dtype_str
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_call, family_array, family_as_f32,
-    family_shape_repr,
+    FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_call, family_array, family_shape_repr,
 )
 from bindings.mcls_common import (
     MC_NONE, MC_INT32_MAX, McLabels, McProg, mc_b, mc_len, mc_bool, mc_eq, mc_ne, mc_in, mc_is_str,
@@ -68,7 +68,7 @@ def _scores(y_score: PythonObject, n: Int, caller: String, ndim: Int, context: P
     var rows = Int(py=a.shape[0])
     if rows != n:
         raise Error("mojolearn " + caller + ": " + name + " has " + String(rows) + " rows for " + String(n) + " samples")
-    var out = family_as_f32(a, nd, name, context)
+    var out = admit_family(a, nd, name, context).array
     if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))), Int(py=out.size)):
         raise Error("mojolearn " + caller + ": " + name + " must be finite")
     _ = out  # keep the Python object alive through the native calls above
@@ -82,7 +82,7 @@ def _binary_scores(y_score: PythonObject, n: Int, context: PythonObject) raises 
         raise Error("TypeError: binary ranking scores must have dtype float32")
     if Int(py=scores.ndim) != 1 or Int(py=scores.shape[0]) != n:
         raise Error("binary ranking scores must be one-dimensional with the same length as y_true")
-    var out = family_as_f32(scores, 1, "scores", context)
+    var out = admit_family(scores, 1, "scores", context).array
     if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))), n):
         raise Error("binary ranking scores must be finite")
     _ = out  # keep the Python object alive through the native calls above

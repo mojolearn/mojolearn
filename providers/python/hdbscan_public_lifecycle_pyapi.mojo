@@ -2,6 +2,7 @@
 # HDBSCAN's complete public boundary: metadata admission, current-provider
 # selection, fit tracking, output publication and soft-membership batching.
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_attributes import classical_connect_numpy
@@ -16,7 +17,7 @@ from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or
-from bindings.family_common import family_f32, family_array, family_call
+from bindings.family_common import family_array, family_call
 from bindings.cluster_fit_a_native import cluster_fit_a_operation, _hdbscan_mode
 from bindings.metrics_native_support import metric_warn
 from providers.python.estimator_binding_pyapi import estimator_binding
@@ -227,7 +228,7 @@ def _inference(model: PythonObject, method: String, args: PythonObject, fields: 
         rows = Int(py=raw.shape[0])
         if rows < 2:
             raise Error("ValueError: HDBSCAN training storage requires at least two rows")
-    var queries = raw if all_points else family_f32(args[0], 2, "points_to_predict", context)
+    var queries = raw if all_points else admit_family(args[0], 2, "points_to_predict", context, finite=True).array
     var nq = Int(py=queries.shape[0])
     var d = Int(py=queries.shape[1])
     if d != columns:

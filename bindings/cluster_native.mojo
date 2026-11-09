@@ -10,6 +10,7 @@
 # Arrays' stores (no second copy). Same entry, same inputs: the bits do not
 # move. The fits of these classes are bindings/cluster_fit_a_native.mojo's.
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
 from bindings.classical_arrays import (
     classical_address, classical_wrap_array, classical_c_bytes, classical_is_f32, classical_c_order,
@@ -22,7 +23,7 @@ from bindings.perf2_shared_fitted_field import native_fitted_get
 from bindings.p3nc_fitted_freeze import fitted_is_freezable, fitted_freeze
 from bindings.cluster_resident_table import CRES_X_CLUSTER, cres_lookup, cres_store
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_entry, family_array, family_f32, family_as_f32, family_nonfinite,
+    FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_entry, family_array, family_nonfinite,
     family_shape_repr,
 )
 
@@ -74,7 +75,7 @@ def _xc_input(mut mods: NativeModules, model: PythonObject, source: PythonObject
         x = source
     else:
         try:
-            x = family_f32(source, 2, "X", context)
+            x = admit_family(source, 2, "X", context, finite=True).array
         except error:
             if family_nonfinite(error, "X"):
                 raise Error("mojolearn: X contains NaN or infinity")
@@ -193,7 +194,7 @@ def _xc_nearest(model: PythonObject, binding: PythonObject, x: PythonObject, cen
         var labels = family_array(Python.tuple(n), "<i4", context)
         _ = _xc_resident_run(held, _XC_RES_PREDICT, x, k_res, labels)
         return labels
-    var centers = family_as_f32(centers_field, 2, "cluster_centers_", context)
+    var centers = admit_family(centers_field, 2, "cluster_centers_", context).array
     var result = _xc_call(binding, _E_NEAREST, x, centers,
                           Python.list(PythonObject(n), PythonObject(Int(py=centers.shape[0])), PythonObject(d)), context)
     _ = centers^
@@ -203,7 +204,7 @@ def _xc_nearest(model: PythonObject, binding: PythonObject, x: PythonObject, cen
 def _reference_queries(source: PythonObject, n_features: Int, where: String, context: PythonObject) raises -> PythonObject:
     """`density._check_queries`: float32 C order, the fitted feature count,
     at least one row, every value finite."""
-    var q = family_as_f32(source, 2, "X", context)
+    var q = admit_family(source, 2, "X", context).array
     var d = Int(py=q.shape[1])
     if d != n_features:
         raise Error("mojolearn " + where + ": X has " + String(d) + " features, the fit saw " + String(n_features))
@@ -345,7 +346,7 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
             var dist = family_array(Python.tuple(n, k_res), "<f4", context)
             _ = _xc_resident_run(held, _XC_RES_TRANSFORM, x, k_res, dist)
             return dist
-        var centers = family_as_f32(centers_field, 2, "cluster_centers_", context)
+        var centers = admit_family(centers_field, 2, "cluster_centers_", context).array
         var k = Int(py=centers.shape[0])
         var result = _xc_call(binding, _E_DISTANCES, x, centers,
                               Python.list(PythonObject(n), PythonObject(k), PythonObject(d)), context)
@@ -360,7 +361,7 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
         if held is not None:
             var total = _xc_resident_run(held, _XC_RES_SCORE, x, Int(py=centers_field.shape[0]), PythonObject(None))
             return family_call(native_loaded_module("operator").neg, total)
-        var centers = family_as_f32(centers_field, 2, "cluster_centers_", context)
+        var centers = admit_family(centers_field, 2, "cluster_centers_", context).array
         # the float-float fold of the distances, in the binding
         var result = _xc_call(binding, _E_NEAREST, x, centers,
                               Python.list(PythonObject(n), PythonObject(Int(py=centers.shape[0])), PythonObject(d),

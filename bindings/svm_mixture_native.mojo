@@ -6,6 +6,7 @@
 # `qn_decision_function` / `gmm_sample` with the argument lists their
 # bindings document. Same entries, same inputs: the bits do not move.
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.native_loaded_module import native_loaded_module
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
@@ -13,7 +14,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
-    family_repr, family_is_int, family_isinstance, family_call, family_entry, family_array, family_as_f32,
+    family_repr, family_is_int, family_isinstance, family_call, family_entry, family_array,
 )
 from providers.python.family_public_lifecycle_pyapi import family_lifecycle_spec, family_lifecycle_begin, family_lifecycle_finish
 from providers.python.neighbors_public_lifecycle_pyapi import neighbors_public_end, neighbors_public_refusal
@@ -24,7 +25,7 @@ def _qn_scores(model: PythonObject, binding: PythonObject, source: PythonObject,
     """`linear_model._qn_scores`: `qn_decision_function` on the fitted block,
     (n,) for one target, (n, n_targets) for the one-vs-rest block."""
     var b = native_loaded_module("builtins")
-    var x = family_as_f32(source, 2, "X", context)
+    var x = admit_family(source, 2, "X", context).array
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     # Generic attribute reads (lane p3-svm-gp-kernel, row 347): no Python

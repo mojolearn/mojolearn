@@ -15,12 +15,13 @@
 # shared runner. Same kernels, same programs: the bits do not move.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.metrics_plan_admission import MetricArenaOwner
 from bindings.py_balanced import py_call, py_type, py_contains
 from bindings.classical_arrays import classical_address, classical_dtype_str
 from bindings.classical_pandas import classical_admit_value
 from bindings.family_common import (
-    FAMILY_F32P, family_repr, family_str, family_call, family_array, family_as_f32,
+    FAMILY_F32P, family_repr, family_str, family_call, family_array,
 )
 from bindings.mcls_common import (
     MC_NONE, MC_INT32_MAX, McLabels, McProg, mc_b, mc_len, mc_bool, mc_eq, mc_in, mc_is_str, mc_is_bool,
@@ -638,7 +639,7 @@ def _log_loss_options(args: PythonObject, context: PythonObject) raises -> Pytho
     if rows != n:
         raise Error("y_true and y_proba have different numbers of rows")
     # `as_f32_c(a, ndim=a.ndim)`: an (n, 1) column is the words of the (n,) vector
-    var proba = family_as_f32(a, nd, "y_proba", context)
+    var proba = admit_family(a, nd, "y_proba", context).array
     var w = PythonObject(None)
     if args[3] is not None:
         w = mc_weights(args[3], n, caller, context)
@@ -690,7 +691,7 @@ def _log_loss(args: PythonObject, context: PythonObject) raises -> PythonObject:
         raise Error("probability columns must match the label count (at least two)")
     if n > MC_INT32_MAX or Int(py=probabilities.size) > MC_INT32_MAX or (binary and 2 * n > MC_INT32_MAX):
         raise Error("log_loss exceeds the native Int32 indexing bound")
-    var proba = family_as_f32(probabilities, nd, "probabilities", context)
+    var proba = admit_family(probabilities, nd, "probabilities", context).array
     var encoded = mc_map_order(true, selected, context)
     var prog = McProg(context)
     var put = mc_put_proba(prog, proba, n, k, binary)

@@ -17,6 +17,7 @@
 # inputs, same order: the bits do not move.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_fields, py_setitem
 from bindings.native_loaded_module import native_loaded_module
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
@@ -26,9 +27,8 @@ from bindings.classical_arrays import (
 )
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, family_repr, family_str, family_call, family_array, family_f32,
-    family_as_f32, family_view, family_cast_view, family_nonfinite, family_is_int, family_is_real, family_is_str,
-    family_type_name,
+    FAMILY_F32P, FAMILY_F64P, family_repr, family_str, family_call, family_array, family_view, family_nonfinite,
+    family_is_int, family_is_real, family_is_str, family_type_name,
 )
 from core.admitted_input import admitted_cast_f32
 from core.host_finite_scan import host_all_finite_f32
@@ -129,7 +129,7 @@ def _x_finite(source: PythonObject, name: String, context: PythonObject) raises 
         return source
     var x = PythonObject(None)
     try:
-        x = family_f32(source, 2, name, context)
+        x = admit_family(source, 2, name, context, finite=True).array
     except error:
         if family_nonfinite(error, name):
             raise Error("mojolearn: " + name + " contains NaN or infinity")
@@ -164,7 +164,7 @@ def _any_f32_kept(source: PythonObject, name: String, context: PythonObject, mut
 def _any_f32_view(view: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     var nd = Int(py=view.ndim)
     if nd <= 2:
-        return family_cast_view(view, name, context)
+        return admit_family(view, -1, name, context, admitted=True, empty=True).array
     if not classical_is_array(view, context) and not Bool(py=view.dtype.isnative):
         raise Error("TypeError: " + name + " must be in native byte order")
     if classical_is_f32(view, context) and classical_c_order(view, context):
@@ -350,7 +350,7 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
         raise Error(_GMM + "weights_init" + _REFUSE_INIT_TAIL)
     if _get(model, "precisions_init") is not None:
         raise Error(_GMM + "precisions_init" + _REFUSE_INIT_TAIL)
-    var x = family_as_f32(source, 2, "X", context)
+    var x = admit_family(source, 2, "X", context).array
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     var n_components = _get(model, "n_components")
@@ -688,7 +688,7 @@ def _gmm_bic_aic(model: PythonObject, binding: PythonObject, source: PythonObjec
         result.append(fit_term + Float64(2 * p))
         _ = x^
         return result^
-    var x = source if admitted else family_as_f32(source, 2, "X", context)
+    var x = source if admitted else admit_family(source, 2, "X", context).array
     var out = family_array(Python.tuple(3), "<f8", context)
     _gmm_score_call(model, binding, x, "gmm_score_bic_aic", "score", out, context, key)
     var words = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(out)))
@@ -713,7 +713,7 @@ def _gmm_infer(model: PythonObject, binding: PythonObject, source: PythonObject,
     if ext is not None:
         var xe = source if admitted else _x_finite(source, "X", context)
         return _gmm_ext_labels(model, xe, which, context)
-    var x = source if admitted else family_as_f32(source, 2, "X", context)
+    var x = source if admitted else admit_family(source, 2, "X", context).array
     return _gmm_default_infer(model, binding, x, which, context, key)
 
 

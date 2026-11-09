@@ -8,13 +8,13 @@
 # with the argument lists bindings/_mojolearn_gp.mojo documents, and stores
 # the factor. The same kernel on the same inputs: the bits do not move.
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family
 from bindings.py_balanced import py_call, py_get, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_model_records import records_stamped_get, records_stamped_put, records_stampable, ContentRecord, RECORDS_PREPARED
 from bindings.family_common import (
-    FAMILY_F64P, family_repr, family_call, family_entry, family_array, family_as_f32, family_field,
-    family_shape_repr,
+    FAMILY_F64P, family_repr, family_call, family_entry, family_array, family_field, family_shape_repr,
 )
 from bindings.py_balanced import py_contains, py_type
 from bindings.parallel_plan_door import plan_devices, plan_enter, plan_exit, plan_require_identical
@@ -132,7 +132,7 @@ def _chol_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     for name in ["n_", "L_", "info_", "nb_", "_logdet", "jitter_", "_mojolearn_fitted"]:  # driver-loop: admit replaced fit owners before numerical work or publication
         if py_contains(fields, name):
             native_release_admit(fields[name], context)
-    var a = family_as_f32(args[1], 2, "A", context)
+    var a = admit_family(args[1], 2, "A", context).array
     var n = Int(py=a.shape[0])
     var m = Int(py=a.shape[1])
     if n != m:
@@ -179,7 +179,7 @@ def _chol_solve(model: PythonObject, args: PythonObject, context: PythonObject) 
     var fields = py_fields(model)
     if not py_contains(fields, PythonObject("L_")):
         raise Error("ValueError: mojolearn Cholesky: call fit before solve")
-    var b = family_as_f32(args[1], -1, "B", context)
+    var b = admit_family(args[1], -1, "B", context).array
     var rank = Int(py=b.ndim)
     var rows: Int
     var nrhs: Int
@@ -197,7 +197,7 @@ def _chol_solve(model: PythonObject, args: PythonObject, context: PythonObject) 
                     + String(n) + " x " + String(n))
     if nrhs < 1:
         raise Error("ValueError: mojolearn Cholesky: B must have at least one column")
-    var l = family_as_f32(family_field(fields, "L_"), 2, "L_", context)
+    var l = admit_family(family_field(fields, "L_"), 2, "L_", context).array
     if Int(py=l.size) != n * n:
         raise Error("ValueError: mojolearn Cholesky: L_ size differs from its fitted matrix dimensions")
     var x_out = family_array(Python.tuple(n) if rank == 1 else Python.tuple(n, nrhs), "<f4", context)

@@ -3,6 +3,7 @@
 # the separately owned neighbor_query provider; fit only stores the admitted X.
 from std.math import isfinite
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family_meta, admit_family_owned
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _fields, _class_fields
@@ -18,7 +19,6 @@ from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_admission import _ordinary_torch
-from bindings.family_common import family_f32_snapshot, family_owned_snapshot
 from providers.python.array_metadata_pyapi import array_slot_once, array_owner_once
 from providers.python.neighbors_public_lifecycle_pyapi import NeighborPublicCall, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_fit_begin
@@ -278,13 +278,13 @@ def radius_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
         raise Error("TypeError: native radius fit depth requires an exact integer")
     if host_sparse_format(args[0]).byte_length() > 0:
         raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (RadiusNeighbors takes dense X only.)")
-    var x = family_f32_snapshot(args[0], 2, "X", context)
+    var x = admit_family_meta(args[0], 2, "X", context)
     var target = radius_target(args[1] if len(args) > 1 else PythonObject(None), x.shape[0], context,
                                False, PythonObject(None)) if Int(py=depth) == 0 else PythonObject(None)
     var call = NeighborPublicCall(args, fields, args[0], "fit", True, estimator_outside(), estimator_fit_begin(fields), x.shape[0], x.shape[1])
     try:
         _radius_refusals(fields, settings, context)
-        py_setitem(fields, "_index", family_owned_snapshot(x, context))
+        py_setitem(fields, "_index", admit_family_owned(x, context))
         py_setitem(fields, "n_samples_fit_", PythonObject(x.shape[0]))
         py_setitem(fields, "n_features_in_", PythonObject(x.shape[1]))
     except error:

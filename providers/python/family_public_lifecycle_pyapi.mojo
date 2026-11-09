@@ -13,6 +13,7 @@
 # owners are unchanged; this provider imports none of them.
 from std.math import isfinite
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family_meta, admit_family_owned
 from bindings.native_loaded_module import native_loaded_module
 from bindings.admitted_call import AdmittedCall, admitted_input_dense, admitted_input_shape, ADMITTED_ITEM_F32, ADMITTED_SPARSE_OTHER, ADMITTED_GRAPH_TUPLE
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -22,14 +23,15 @@ from bindings.classical_validate import classical_estimator_name, classical_chec
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.host_sparse_native import host_sparse_format, _sparse_fields
-from bindings.family_common import FAMILY_F32P, family_f32_snapshot, family_owned_snapshot
+from bindings.family_common import FAMILY_F32P
 from core.host_finite_scan import host_all_finite_f32
 from bindings.cluster_side_records import cluster_refuse_fit_callbacks
 from providers.python.estimator_lifecycle_pyapi import (
     estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_complete,
 )
 from providers.python.neighbors_public_lifecycle_pyapi import NeighborPublicCall, _target, _public_result
-from bindings.device_rows_door import door_is_device_rows, door_rows_host
+from bindings.device_rows_door import door_is_device_rows
+from bindings.admitted_input import admit_x
 
 
 struct FamilyLifecycle(Copyable, Movable):
@@ -209,16 +211,20 @@ def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, oper
     var values = Python.list()
     for i in range(len(args)):  # small-loop(fixed operation argument envelope)
         _ = py_call(values.append, args[i])
-    if door_is_device_rows(source, context):
-        # The DeviceRows door (lane ne1-b-door, workstream B): a
-        # model-selection fold's X resolves to its rows through its own
-        # native materializer (the device gather out of the resident base);
-        # these owners read host addresses. Same rows, same order.
-        source = door_rows_host(source, context)
-        py_setitem(values, PythonObject(x_index), source)
     var rows = -1
     var columns = -1
-    if host_sparse_format(source).byte_length() > 0:
+    if door_is_device_rows(source, context):
+        # A model-selection fold's X (`_arena_io.DeviceRows`) goes to the one
+        # admission path unchanged (lane a2-admit-family; admit_x resolves
+        # it, records it on this call and refuses NaN or infinity with the
+        # same "(<name>)" wording); this door no longer downloads the fold or
+        # scans it a second time. A fit keeps an owned copy, as below.
+        var x = admit_x(admitted, source, name, context, x_index)
+        rows = x.rows
+        columns = x.cols
+        source = x.array
+        py_setitem(values, PythonObject(x_index), admit_family_owned(x.array, context) if spec.replace and fitting else x.array)
+    elif host_sparse_format(source).byte_length() > 0:
         # Sparse X keeps its own owner path (densified there, or a sparse
         # result); only its declared shape is read here.
         var shape = _sparse_fields(source)["_shape"]
@@ -228,7 +234,10 @@ def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, oper
         columns = Int(py=shape[1])
         _ = admitted.add_input(admitted_input_shape(x_index, source, source, shape, ADMITTED_SPARSE_OTHER))
     elif not (spec.graph and py_type(source) is b.tuple):
-        var snapshot = family_f32_snapshot(source, 2, "X", context, True)
+        # The finiteness test rides in the admission (the cast's own verdict,
+        # or one parallel scan of a borrowed X): no second pass over X.
+        var snapshot = admit_family_meta(source, 2, "X", context, True, finite=spec.scan,
+                                         refusal="Input X contains NaN or infinity (" + name + ").")
         rows = snapshot.shape[0]
         columns = snapshot.shape[1]
         # The snapshot's buffer and owner, recorded before any refusal below
@@ -239,18 +248,13 @@ def family_lifecycle_begin(mut admitted: AdmittedCall, model: PythonObject, oper
             raise Error("Found array with 0 sample(s) (shape=(0, " + String(columns) + ")) while a minimum of 1 is required by " + name + ".")
         if columns == 0 and not spec.graph:
             raise Error("Found array with 0 feature(s) (shape=(" + String(rows) + ", 0)) while a minimum of 1 is required by " + name + ".")
-        if spec.scan:
-            # The shared exponent-mask scan (decomp_input_pyapi uses it too):
-            # no per-element isfinite branch with a raise in the loop body.
-            if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=snapshot.source.addr), snapshot.count):
-                raise Error("Input X contains NaN or infinity (" + name + ").")
         if spec.replace:
             # Perf: a query only reads X (its owners write separate outputs),
             # so an admitted C-order float32 X that is not a readonly view is
             # handed over without a per-call copy; a fit retains X and keeps
             # the owned copy.
             var borrow = not fitting and not snapshot.readonly and snapshot.f32_c()
-            py_setitem(values, PythonObject(x_index), snapshot.keep if borrow else family_owned_snapshot(snapshot, context))
+            py_setitem(values, PythonObject(x_index), snapshot.keep if borrow else admit_family_owned(snapshot, context))
     if not fitting and Int(py=depth) == 0 and columns >= 0 and not spec.graph and not _precomputed(fields, b):
         var width = py_get(fields, "n_features_in_")
         if py_type(width) is b.int:

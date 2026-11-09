@@ -24,6 +24,9 @@
 # no resident entry for them.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family, admit_family_copied, admit_family_meta, admit_family_weights, admitted_array
+from core.admitted_input import admitted_cast_f32
+from core.cast_in import CAST_KIND_SIGNED
 from bindings.native_loaded_module import native_loaded_module
 from bindings.classical_pandas import classical_admit_value
 from bindings.host_inference_scalars import host_inference_scalar
@@ -37,19 +40,19 @@ from bindings.mode_metadata_native import _class_fields
 from bindings.gp_svm_records import gpsvm_no_fit_callbacks
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.classical_arrays import classical_typed
-from bindings.classical_labels import labels_cast, labels_real_type
+from bindings.classical_labels import labels_cast, labels_real_type, classical_encode_labels
 from bindings.native_array_view import native_array_ndarray_view
 from providers.python.estimator_lifecycle_pyapi import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance,
-    family_call, family_entry, family_array, family_sample_weight_snapshot,
+    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance, family_call,
+    family_entry, family_array,
 )
 from core.scale_gamma_exact import scale_gamma_from_limbs
 from bindings.svc_common import (
     svc_builtins, svc_field, svc_attr, svc_has, svc_name, svc_float, svc_int, svc_truthy, svc_isfinite,
-    svc_round_f32, svc_base, svc_mode, svc_zero_division, svc_prefix, svc_scalar_array, svc_read_f64,
-    svc_read_f32, svc_read_i32, svc_f32, svc_snapshot, svc_shape_of, svc_labels_1d, svc_sorted_classes, svc_encode_1d, svc_decode,
-    svc_threshold_codes, svc_argmax_rows, svc_r2_sums, svc_accuracy, svc_accuracy_codes,
+    svc_round_f32, svc_base, svc_mode, svc_zero_division, svc_prefix, svc_scalar_array, svc_read_f64, svc_read_f32,
+    svc_read_i32, svc_shape_of, svc_labels_1d, svc_sorted_classes, svc_decode, svc_threshold_codes,
+    svc_argmax_rows, svc_r2_sums, svc_accuracy, svc_accuracy_codes,
 )
 
 # `svc_pair_epilogue` modes (svm/impl/svc_rows.mojo), `_svm_impl._EPI_*` and `_GLUE_*`.
@@ -378,7 +381,7 @@ def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight:
     var sw_owner = PythonObject(None)
     var sw_address = 0
     if sample_weight is not None:
-        var weights = family_sample_weight_snapshot(sample_weight, n_rows, False, context, True)
+        var weights = admit_family_weights(sample_weight, n_rows, False, context, True)
         sw = weights.keep
         sw_owner = Python.tuple(weights.keep, weights.owner)
         sw_address = weights.source.addr
@@ -386,11 +389,11 @@ def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight:
     var cwa = PythonObject(None)
     var n_classes = 0
     if class_weight is not None:
-        var encoded = svc_encode_1d(y, context)
-        if encoded[0] is None:
+        if len(svc_shape_of(y, context)) != 1:
             raise Error("mojolearn " + who + ": y must be 1-D")
-        var classes = encoded[0]
-        codes = encoded[1]
+        var encoded = classical_encode_labels(y, context)
+        var classes = encoded.classes
+        codes = encoded.codes
         n_classes = len(classes)
         if Int(py=codes.shape[0]) != n_rows:
             raise Error("mojolearn " + who + ": y has " + String(Int(py=codes.shape[0])) + " entries, X has "
@@ -614,18 +617,23 @@ def _as_labels(y: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_svm_impl._as_labels`: (float32 labels or None, classes, the label
     pair or the int32 codes when more than two classes)."""
     var b = svc_builtins()
-    var encoded = PythonObject(None)
+    # The one label encoder (classical_encode_labels; lane a2-admit-family
+    # deleted the SVM's svc_encode_1d), after the 1-D test it made first.
+    var shape = PythonObject(None)
+    var classes = PythonObject(None)
+    var codes = PythonObject(None)
     try:
-        encoded = svc_encode_1d(y, context)
+        shape = svc_shape_of(y, context)
+        if len(shape) == 1:
+            var encoded = classical_encode_labels(y, context)
+            classes = encoded.classes
+            codes = encoded.codes
     except error:
         if String(error).find("NaN label") < 0:
             raise error
         raise Error(_DEV636_Y)
-    if encoded[0] is None:
-        var shape = encoded[2]
+    if len(shape) != 1:
         raise Error("mojolearn SVC: y must be 1-D, got " + String(len(shape)) + "-D shape " + family_repr(shape))
-    var classes = encoded[0]
-    var codes = encoded[1]
     if len(classes) < 2:
         raise Error("mojolearn SVC: y has " + String(len(classes)) + " class; at least two are needed")
     if len(classes) > 2:
@@ -637,22 +645,21 @@ def _as_labels(y: PythonObject, context: PythonObject) raises -> PythonObject:
     if not real:
         # non-numeric labels: the solver sees each row's code, 0.0 or 1.0
         var n = Int(py=codes.size)
-        var f = family_array(Python.tuple(PythonObject(n)), "<f4", context)
+        # The int32 codes (0 or 1) as float32, one cast in row tasks into an
+        # uninitialised Array (lane a2-admit-family: was a call into the base
+        # binding's cast_elements over a zero-filled Array; codes 0 and 1
+        # convert exactly either way).
+        var f = admitted_array(Python.tuple(PythonObject(n)), "<f4", context)
         if n > 0:
-            _ = family_call(svc_base("cast_elements", context), classical_address(codes), PythonObject(2),
-                            classical_address(f), PythonObject(0), PythonObject(n))
+            _ = admitted_cast_f32(Int(py=classical_address(codes)), 4, 0, n, 1, 4, CAST_KIND_SIGNED,
+                                  FAMILY_F32P(unsafe_from_address=Int(py=classical_address(f))))
             _ = codes  # keep the Python object alive through the native call above
             _ = f  # keep the Python object alive through the native call above
         _ = codes^
         return Python.tuple(f, classes, Python.tuple(PythonObject(0.0), PythonObject(1.0)))
-    var f = svc_f32(y, 1, "y", False, context)[0]
-    var n = Int(py=f.size)
-    var finite = True
-    if n > 0:
-        finite = Int(py=family_call(svc_base("all_finite_f32", context), classical_address(f), PythonObject(n))) == 1
-        _ = f  # keep the Python object alive through the native call above
-    if not finite:
-        raise Error(_DEV636_Y)
+    # The finiteness test rides in the admission (lane a2-admit-family: was a
+    # second pass through the base binding's all_finite_f32).
+    var f = admit_family(y, 1, "y", context, False, finite=True, refusal=_DEV636_Y).array
     return Python.tuple(f, classes, Python.tuple(classes[0], classes[1]))
 
 
@@ -979,8 +986,8 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var binding = args[0]
     var fields = py_fields(model)
     _svm_validate(model, fields, True, context)
-    var x_meta = svc_snapshot(args[1], 2, "X", True, context)
-    py_setitem(fields, PythonObject("input_copied_"), PythonObject(x_meta.copied))
+    var x_meta = admit_family_meta(args[1], 2, "X", context, True)
+    py_setitem(fields, PythonObject("input_copied_"), PythonObject(admit_family_copied(x_meta, args[1])))
     var x = x_meta.keep
     var y = args[2]
     var parsed = _as_labels(y, context)
@@ -1057,7 +1064,7 @@ def _query(fields: PythonObject, source: PythonObject, context: PythonObject) ra
     """`SVC._query`."""
     if not svc_has(fields, "dual_coef_"):
         raise Error("mojolearn SVC: call fit() first")
-    var q = svc_snapshot(source, 2, "X", True, context)
+    var q = admit_family_meta(source, 2, "X", context, True)
     var d = svc_int(svc_field(fields, "n_features_in_"))
     if q.shape[1] != d:
         raise Error("mojolearn SVC: X has " + String(q.shape[1]) + " features, fit saw " + String(d))
@@ -1296,8 +1303,8 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var binding = args[0]
     var fields = py_fields(model)
     _svm_validate(model, fields, False, context)
-    var x_meta = svc_snapshot(args[1], 2, "X", True, context)
-    py_setitem(fields, PythonObject("input_copied_"), PythonObject(x_meta.copied))
+    var x_meta = admit_family_meta(args[1], 2, "X", context, True)
+    py_setitem(fields, PythonObject("input_copied_"), PythonObject(admit_family_copied(x_meta, args[1])))
     var x = x_meta.keep
     var n_rows = x_meta.shape[0]
     var n_cols = x_meta.shape[1]
@@ -1305,7 +1312,7 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var shape = svc_shape_of(args[2], context)
     if len(shape) != 1:
         raise Error("mojolearn SVR: y must be 1-D, got " + String(len(shape)) + "-D shape " + family_repr(shape))
-    var targets = svc_f32(args[2], 1, "y", False, context)[0]
+    var targets = admit_family(args[2], 1, "y", context, False).array
     if Int(py=targets.shape[0]) != n_rows:
         raise Error("mojolearn SVR: y has " + String(Int(py=targets.shape[0])) + " entries, X has " + String(n_rows) + " rows")
     if String(svc_field(fields, "_hp_kernel")) == "precomputed" and n_cols != n_rows:
@@ -1384,7 +1391,7 @@ def _svr_predict(model: PythonObject, fields: PythonObject, binding: PythonObjec
     """`SVR.predict`."""
     if not svc_has(fields, "dual_coef_"):
         raise Error("mojolearn SVR: call fit() first")
-    var q_meta = svc_snapshot(source, 2, "X", True, context)
+    var q_meta = admit_family_meta(source, 2, "X", context, True)
     var q = q_meta.keep
     var d = svc_int(svc_field(fields, "n_features_in_"))
     if q_meta.shape[1] != d:

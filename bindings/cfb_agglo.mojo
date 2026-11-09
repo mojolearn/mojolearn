@@ -6,14 +6,15 @@
 from std.memory import memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family_meta
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_validate import classical_view
 from core.host_finite_scan import host_all_finite_f32
 from core.cfb_impl import cfb_any_positive_i32
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_call, family_entry, family_array, family_as_f32,
-    family_field, family_is_str, family_f32_snapshot, family_view,
+    FAMILY_F32P, FAMILY_I32P, family_repr, family_str, family_call, family_entry, family_array, family_field,
+    family_is_str, family_view,
 )
 from bindings.mode_metadata_native import _fields
 from bindings.metrics_native_support import metric_warn
@@ -338,7 +339,7 @@ def _agglo_predict(fields: PythonObject, settings: PythonObject, binding: Python
     var refs_source = py_get(fields, "_fit_X")
     if refs_source is None:
         raise Error("mojolearn AgglomerativeClustering.predict: prediction data was not stored. Fit with AgglomerativeClustering(prediction_data=True)")
-    var refs = family_f32_snapshot(refs_source, 2, "fitted reference rows", context)
+    var refs = admit_family_meta(refs_source, 2, "fitted reference rows", context)
     if refs.shape[1] != query.shape[1]:
         raise Error("mojolearn AgglomerativeClustering.predict: fitted reference width differs from X")
     var labels = classical_view(fields["labels_"], context, "labels_")

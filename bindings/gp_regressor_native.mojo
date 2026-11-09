@@ -13,6 +13,7 @@
 # The same entries on the same inputs: the bits do not move.
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family, admit_family_f64, admit_family_owned
 from bindings.native_loaded_module import native_loaded_module
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.metrics_native_support import metric_warn, metric_is_integral, metric_is_bool
@@ -25,8 +26,8 @@ from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_view
 from bindings.family_common import (
-    family_repr, family_is_str, family_isinstance, family_call, family_array, family_as_f32,
-    family_shape_repr, family_owned, family_field, family_is_real, family_cast_view_f64, FAMILY_F32P, FAMILY_F64P,
+    family_repr, family_is_str, family_isinstance, family_call, family_array, family_shape_repr, family_field,
+    family_is_real, FAMILY_F32P, FAMILY_F64P,
 )
 from bindings.archive_schema_native import _schema_label_store
 from bindings.scaler_native import scaler_fit
@@ -304,7 +305,7 @@ def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var b = native_loaded_module("builtins")
     _gpr_validate(model, context)
     var fields = py_fields(model)
-    var source = family_as_f32(args[1], 2, "X", context)
+    var source = admit_family(args[1], 2, "X", context).array
     py_setitem(fields, "input_copied_", PythonObject(not (source is args[1])))
     var x = gp_fit_owned(source, args[1], context)
     _ = source^
@@ -319,7 +320,7 @@ def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                     + "boundary)")
     # The admitted view goes on to the float32 cast (lane p3-svm-gp-kernel,
     # row 878): y is not viewed and converted a second time.
-    var targets = family_owned(family_as_f32(view, 1, "y", context), context)
+    var targets = admit_family_owned(admit_family(view, 1, "y", context).array, context)
     _ = view^
     if Int(py=targets.shape[0]) != n_rows:
         raise Error(String(_GPR) + ": y has " + String(Int(py=targets.shape[0]))
@@ -405,7 +406,7 @@ def _gpr_query(fields: PythonObject, source: PythonObject, context: PythonObject
     """`as_f32_c(X, ndim=2, name="X")` with the fitted feature count."""
     # The public door already admitted this X as C-order float32 and
     # registered it (bindings/gp_svm_records.mojo): no second snapshot.
-    var q = source if gp_x_known(source, context) else family_as_f32(source, 2, "X", context)
+    var q = source if gp_x_known(source, context) else admit_family(source, 2, "X", context).array
     var d = Int(py=q.shape[1])
     var fitted = Int(py=fields["n_features_in_"])
     if d != fitted:
@@ -631,7 +632,7 @@ def _gpr_theta(theta: PythonObject, context: PythonObject) raises -> PythonObjec
         host_inference_scalar(theta, context)
         _ = py_call(out.append, family_call(b.float, theta))
         return out
-    var wide = family_cast_view_f64(view, "theta", context)
+    var wide = admit_family_f64(view, "theta", context)
     var count = Int(py=wide.size)
     var wp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(wide)))
     _ = wide  # keep the Python object alive through the native call above
@@ -717,7 +718,7 @@ def _gpr_score(model: PythonObject, args: PythonObject, context: PythonObject) r
         raise Error("ImportError: mojolearn GaussianProcessRegressor.score needs the metrics owner (mojolearn._expansion_metrics)")
     # The admitted view goes on to the float32 cast (lane p3-svm-gp-kernel,
     # row 629): y is not viewed and converted a second time.
-    var t = family_as_f32(view, 1, "y", context)
+    var t = admit_family(view, 1, "y", context).array
     _ = view^
     var r = _reg_new(Python.tuple(t, pred, PythonObject(None)), PythonObject("uniform_average"), "score", True, context)
     var sq = Int(py=context["family_metrics_terms"]["sq"])

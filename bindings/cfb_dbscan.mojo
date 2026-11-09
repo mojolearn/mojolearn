@@ -7,6 +7,7 @@
 # Python stored. With `prediction_data=True` the core rows become resident
 # on the device at fit (bindings/cfb_resident.mojo), so `predict` uploads
 # only its queries. Same entries, same inputs: the bits do not move.
+from bindings.admitted_family import admit_family, admit_family_weights
 from bindings.p3nc_fitted_freeze import fitted_freeze
 from std.memory import memcpy
 from std.python import Python, PythonObject
@@ -15,8 +16,7 @@ from bindings.classical_arrays import classical_address, classical_wrap_array, c
 from core.family_cast_impl import family_fill_i32
 from core.host_finite_scan import host_all_finite_f32
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_array, family_as_f32,
-    family_sample_weight, family_min, family_field,
+    FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_array, family_min, family_field,
 )
 from bindings.cluster_native import _reference_queries
 from bindings.cfb_resident import cfb_fresh_holder, cfb_mint, cfb_reference_labels
@@ -124,7 +124,7 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     # perf2-cluster row 24: one extra full pass + one admission per fit).
     # Any other caller keeps the full admission below.
     var admitted = len(args) > 3 and Bool(py=args[3])
-    var x = source if admitted else family_as_f32(source, 2, "X", context)
+    var x = source if admitted else admit_family(source, 2, "X", context).array
     py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
@@ -152,7 +152,7 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     var w = PythonObject(None)
     var weight_addr = PythonObject(0)
     if weights_source is not None:
-        w = family_sample_weight(weights_source, n, True, context)
+        w = admit_family_weights(weights_source, n, True, context).keep
         weight_addr = classical_address(w)
         _ = w  # keep the Python object alive through the native call above
     # ORDER MATCHES bindings/_mojolearn_estimators.mojo::dbscan_fit_binding:

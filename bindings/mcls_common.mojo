@@ -20,6 +20,7 @@
 #   back from the arena as `prog.ints` / `prog.words` read them.
 from std.memory import memcpy, bitcast
 from core.metrics_program_plan import MetricProgramPlan
+from bindings.admitted_family import admit_family
 from bindings.metrics_plan_admission import MetricPlanOpcodes, MetricArenaOwner
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from bindings.metrics_native_support import metric_is_real, metric_float, metric_integer, metric_is_integral_type, metric_warn, metric_undefined
@@ -35,8 +36,8 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_view
 from bindings.arena_prog_native import _metrics_run_plan
 from bindings.family_common import (
-    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance,
-    family_call, family_call_kw, family_array, family_cast_view, family_as_f32,
+    FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, FAMILY_I64P, family_repr, family_str, family_isinstance, family_call,
+    family_call_kw, family_array,
 )
 from core.host_finite_scan import host_all_finite_f32
 from core.mcls_impl import mcls_read_i64, mcls_narrow_i32
@@ -651,7 +652,7 @@ def mc_f32_1d(x: PythonObject, name: String, require_finite: Bool, context: Pyth
                     + "r2_score, kl_divergence and silhouette_score are NOT implemented "
                     + "(no float64 on this GPU). Cast to float32 yourself so the "
                     + "precision you run at is the one you chose.")
-    var out = family_as_f32(x, mc_rank(vs[0]), name, context)
+    var out = admit_family(x, mc_rank(vs[0]), name, context).array
     if require_finite and not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))),
                                                     Int(py=out.size)):
         raise Error("mojolearn metrics: " + name + " contains NaN or infinity; refused "
@@ -677,7 +678,7 @@ def mc_f32_lists(source: PythonObject, name: String, context: PythonObject) rais
             except:
                 buffered = False
         if listed or not buffered:
-            view = family_cast_view(view, name, context)
+            view = admit_family(view, -1, name, context, admitted=True, empty=True).array
     return view
 
 

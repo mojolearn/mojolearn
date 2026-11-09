@@ -21,6 +21,7 @@
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.admitted_family import admit_family, admit_family_meta, admit_family_weights
 from bindings.native_caller_frame import native_frame_globals
 from bindings.native_loaded_module import native_loaded_module
 from bindings.trees_side_records import trees_side_get, trees_side_put
@@ -48,9 +49,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.mode_metadata_native import _fields
 from bindings.public_attributes_native import _string_keys
 from bindings.family_common import (
-    family_repr, family_call,
-    family_entry, family_array,
-    family_owned_snapshot, family_f32_snapshot, family_snapshot_min, family_sample_weight_snapshot, family_field, family_f32,
+    family_repr, family_call, family_entry, family_array, family_snapshot_min, family_field,
 )
 
 comptime _KM_MODE_SLOT = "p3_km_binding_mode_checked_v1"
@@ -245,7 +244,7 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
     var d = x_meta.source.cols
     if args[2] is None:
         raise Error("ValueError: KernelRidge requires y to be passed, but the target y is None.")
-    var target = family_f32_snapshot(args[2], -1, "y", context)
+    var target = admit_family_meta(args[2], -1, "y", context)
     kernel_public_finite(target, "y")
     var rank = len(target.shape)
     var t = 1
@@ -274,7 +273,7 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject, x_m
     var weights_owner = PythonObject(None)
     var weights_address = 0
     if args[3] is not None:
-        var snapshot = family_sample_weight_snapshot(args[3], n, False, context, wide=True)
+        var snapshot = admit_family_weights(args[3], n, False, context, wide=True)
         weights = snapshot.keep
         weights_owner = snapshot.owner
         weights_address = snapshot.source.addr
@@ -380,10 +379,10 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject,
             _ = xq  # keep the Python object alive through the native call above
             _ = xq_meta
             return hit_out
-    var x_fit_meta = family_f32_snapshot(x_fit_obj, 2, "X_fit_", context)
+    var x_fit_meta = admit_family_meta(x_fit_obj, 2, "X_fit_", context)
     var x_fit = x_fit_meta.keep
     var n = x_fit_meta.source.rows
-    var dual_meta = family_f32_snapshot(dual_obj, -1, "dual_coef_", context)
+    var dual_meta = admit_family_meta(dual_obj, -1, "dual_coef_", context)
     var dual = dual_meta.keep
     if t < 1 or x_fit_meta.source.cols != d or dual_meta.count != n * t:
         raise Error("ValueError: KernelRidge fitted arrays do not match the fitted dimensions")
@@ -565,7 +564,7 @@ def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     var fitted = _km_int(family_field(fields, "n_features_in_"), "n_features_in_")
     if d != fitted:
         raise Error("mojolearn " + where + ": X has " + String(d) + " features, the fit had " + String(fitted))
-    var components_meta = family_f32_snapshot(family_field(fields, "components_"), 2, "components_", context)
+    var components_meta = admit_family_meta(family_field(fields, "components_"), 2, "components_", context)
     var components = components_meta.keep
     var q = components_meta.source.rows
     var kp = _km_params(fields, False, context)
@@ -573,11 +572,11 @@ def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     var out = family_array(Python.tuple(m, q), "<f4", context)
     var indices_meta = _km_i32_snapshot(family_field(fields, "component_indices_"), q, context)
     var indices = indices_meta.keep
-    var normalization_meta = family_f32_snapshot(family_field(fields, "normalization_"), 2, "normalization_", context)
+    var normalization_meta = admit_family_meta(family_field(fields, "normalization_"), 2, "normalization_", context)
     var normalization = normalization_meta.keep
-    var eigenvalues_meta = family_f32_snapshot(family_field(fields, "eigenvalues_"), 1, "eigenvalues_", context)
+    var eigenvalues_meta = admit_family_meta(family_field(fields, "eigenvalues_"), 1, "eigenvalues_", context)
     var eigenvalues = eigenvalues_meta.keep
-    var eigenvectors_meta = family_f32_snapshot(family_field(fields, "eigenvectors_"), 2, "eigenvectors_", context)
+    var eigenvectors_meta = admit_family_meta(family_field(fields, "eigenvectors_"), 2, "eigenvectors_", context)
     var eigenvectors = eigenvectors_meta.keep
     if (components_meta.source.cols != d or normalization_meta.source.rows != q or normalization_meta.source.cols != q
             or eigenvalues_meta.count != q or eigenvectors_meta.source.rows != q or eigenvectors_meta.source.cols != q):
@@ -643,12 +642,12 @@ def _rbf_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     var fitted = _km_int(family_field(fields, "n_features_in_"), "n_features_in_")
     if d != fitted:
         raise Error("mojolearn " + where + ": X has " + String(d) + " features, the fit had " + String(fitted))
-    var weights_meta = family_f32_snapshot(family_field(fields, "random_weights_"), 2, "random_weights_", context)
+    var weights_meta = admit_family_meta(family_field(fields, "random_weights_"), 2, "random_weights_", context)
     var weights = weights_meta.keep
     var q = weights_meta.source.cols
     var params_in = _km_tuple(family_field(fields, "_params"), 2, "_params")
     var params = Python.tuple(_km_number(params_in[0], "gamma", context), _km_int(params_in[1], "random_state"))
-    var offset_meta = family_f32_snapshot(family_field(fields, "random_offset_"), 1, "random_offset_", context)
+    var offset_meta = admit_family_meta(family_field(fields, "random_offset_"), 1, "random_offset_", context)
     var offset = offset_meta.keep
     if weights_meta.source.rows != d or offset_meta.count != q:
         raise Error("ValueError: RBFSampler fitted arrays do not match the fitted dimensions")
@@ -1005,7 +1004,7 @@ def _km_par_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
         raise Error("ValueError: KernelRidge fit requires y")
     var devices = plan_devices(args[3], "km_fit", True, context)
     var binding = args[0]
-    var x = family_f32_snapshot(args[1], 2, "X", context, True)
+    var x = admit_family_meta(args[1], 2, "X", context, True)
     plan_enter(binding, devices, _KM_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)
     try:
         if ridge:
@@ -1025,7 +1024,7 @@ def _km_par_apply(model: PythonObject, args: PythonObject, context: PythonObject
     var ridge = _km_par_admit(model, context)
     var devices = plan_devices(args[2], "km_apply", True, context)
     var binding = args[0]
-    var x = family_f32_snapshot(args[1], 2, "X", context, True)
+    var x = admit_family_meta(args[1], 2, "X", context, True)
     var out = PythonObject(None)
     plan_enter(binding, devices, _KM_REBUILD, DEVICE_PLAN_WORKER | DEVICE_PLAN_CHOLESKY)
     try:
@@ -1074,7 +1073,7 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
     elif operation.endswith("score"):
         method = "score"
     var fields = kernel_public_admit(model, method, fitting, args[1], context)
-    var x = family_f32_snapshot(args[1], 2, "X", context, True)
+    var x = admit_family_meta(args[1], 2, "X", context, True)
     if operation.startswith("family_km_rbf_"):
         kernel_public_finite(x, "X")
     if fitting and not operation.startswith("family_km_krr_"):
@@ -1107,7 +1106,7 @@ def _kernel_methods_operation(model: PythonObject, operation: String, args: Pyth
     if operation == "family_km_krr_predict":
         return _krr_predict(model, args, context, x)
     if operation == "family_km_krr_score":
-        var truth = family_f32(args[2], -1, "y", context)
+        var truth = admit_family(args[2], -1, "y", context, finite=True).array
         var prediction = _krr_predict(model, args, context, x)
         var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
         var metrics = estimator_binding(model, "_mojolearn_metrics", context)

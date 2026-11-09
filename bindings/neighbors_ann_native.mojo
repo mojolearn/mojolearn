@@ -8,6 +8,7 @@
 # or vendor identity lane is introduced by these boundary repairs.
 from std.memory import memcpy, MutPointer
 from std.python import Python, PythonObject
+from bindings.admitted_family import admit_family_meta
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_prepared_owner import prepared_drop
 from bindings.native_buffer_owner import native_storage_allocate, native_buffer_view
@@ -21,7 +22,7 @@ from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_onc
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 from bindings.family_common import (
     FAMILY_I32P, family_repr, family_str, family_is_str, family_isinstance, family_call, family_array,
-    family_as_f32, family_f32_snapshot, family_field, family_type_name,
+    family_field, family_type_name,
 )
 from core.neighbors_ann_impl import ann_candidates_i32
 from bindings.parallel_public_result import parallel_public_result
@@ -668,8 +669,8 @@ def _refine(args: PythonObject, context: PythonObject) raises -> PythonObject:
     if not py_contains(Python.tuple("sqeuclidean", "euclidean"), metric):
         raise Error("mojolearn refine: metric must be 'sqeuclidean' or 'euclidean' "
                     + "(inner product is not implemented), got " + family_repr(metric))
-    var x = family_f32_snapshot(args[1], 2, "dataset", context)
-    var q = family_f32_snapshot(args[2], 2, "queries", context)
+    var x = admit_family_meta(args[1], 2, "dataset", context)
+    var q = admit_family_meta(args[2], 2, "queries", context)
     var n = x.shape[0]
     var d = x.shape[1]
     var m = q.shape[0]
@@ -761,7 +762,7 @@ def neighbors_ann_operation(model: PythonObject, operation: String, var args: Py
     var fields = _fields(model)
     var name = classical_estimator_name(model)
     classical_refuse_sparse(args[1], name)
-    var snapshot = family_f32_snapshot(args[1], 2, "X", context)
+    var snapshot = admit_family_meta(args[1], 2, "X", context)
     var rows = snapshot.shape[0]
     var columns = snapshot.shape[1]
     if len(args) > 2:

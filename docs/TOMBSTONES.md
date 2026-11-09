@@ -429,6 +429,12 @@ in the tables after the sections.
 | [`MOJOLEARN_EIGH_FAST_PANEL_DF`](#mojolearn_eigh_fast_panel_df) | Decomp (+ MOJOLEARN_EIGH_FAST_PANEL_DF_OFF) | DROPPED-slower | 2026-11-08 | [MOJOLEARN_EIGH_FAST_PANEL_DF.patch](../experiments/removed/MOJOLEARN_EIGH_FAST_PANEL_DF.patch) |
 | [`door_rows_host` (DeviceRows door)](#devicerows-fold-download-and-host-scan-removed-2026-11-08) | Model selection folds (CV, search, learning_curve) | removed (R13: device gather, download, host scan, re-upload; `admit_x` reads the fold) | 2026-11-08 | [A5_DOOR_ROWS_HOST.patch](../experiments/removed/A5_DOOR_ROWS_HOST.patch) |
 | [`door_x` (DeviceRows door)](#devicerows-fold-download-and-host-scan-removed-2026-11-08) | Model selection folds | removed (zero callers; wrapper of `door_rows_host`) | 2026-11-08 | [A5_DOOR_ROWS_HOST.patch](../experiments/removed/A5_DOOR_ROWS_HOST.patch) |
+| [`family_f32_snapshot` + `family_f32`, `family_cast_f32`, `family_input_snapshot`, `family_snapshot_f32`, `family_as_f32`, `family_as_f32_dense` (admission helpers)](#family-admission-helpers-moved-onto-the-one-path-2026-11-08) | Family admission (X cast) | removed (merged: `admit_family_meta` / `admit_family`) | 2026-11-08 | [A2_FAMILY_ADMISSION_HELPERS.patch](../experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch) |
+| [`family_cast_view` + `family_cast_view_f64` (admission helpers)](#family-admission-helpers-moved-onto-the-one-path-2026-11-08) | Family admission (view cast) | removed (merged: `admit_family` / `admit_family_f64`) | 2026-11-08 | [A2_FAMILY_ADMISSION_HELPERS.patch](../experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch) |
+| [`family_owned_snapshot` + `family_owned` (admission helpers)](#family-admission-helpers-moved-onto-the-one-path-2026-11-08) | Family admission (fitted copy) | removed (merged: `admit_family_owned`, uninitialised destination) | 2026-11-08 | [A2_FAMILY_ADMISSION_HELPERS.patch](../experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch) |
+| [`family_sample_weight` + `family_sample_weight_snapshot`, `_family_weight_buffer`, `_family_weight_scalar`, `family_weight_status`, `family_fill_f32` (`core/family_weights_impl.mojo`)](#family-admission-helpers-moved-onto-the-one-path-2026-11-08) | Family admission (sample_weight) | removed (merged: `admit_family_weights`, `core/admitted_weights.mojo` in row tasks) | 2026-11-08 | [A2_FAMILY_ADMISSION_HELPERS.patch](../experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch) |
+| [`svc_snapshot` + `svc_f32` (admission helpers)](#family-admission-helpers-moved-onto-the-one-path-2026-11-08) | SVM admission (X cast) | removed (second copy of the family admission) | 2026-11-08 | [A2_FAMILY_ADMISSION_HELPERS.patch](../experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch) |
+| [`labels_encode_labels` + `svc_encode_1d` (label encoders)](#family-admission-helpers-moved-onto-the-one-path-2026-11-08) | Labels (encode) | removed (second names of `classical_encode_labels`) | 2026-11-08 | [A2_FAMILY_ADMISSION_HELPERS.patch](../experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch) |
 
 ## Retired by lane debt-block-per-n (2026-10-21)
 
@@ -3841,6 +3847,32 @@ wording. Kept, and why (no measurement separates copies that run the same code; 
 Restore: `git apply -3 experiments/removed/A0_ADMISSION_HELPERS.patch` (the reverse of the lane's `.mojo` changes from
 `ef4bce3a7e`; it restores every helper and its callers together). Run owed: one identity record of every lane at the
 release (the door is on every path) and the classical/trees/family test suites.
+## Family admission helpers moved onto the one path (2026-11-08)
+
+Lane `a2-admit-family` (A2 of `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 3.3), branch
+`lane/a2-admit-family` from `origin/integ/pre-0867` `f7d10d2b09`. Not experiment defines: the family doors' own copy of
+the admission (clustering, neighbors, SVM, GP, mixture, kernel methods, manifold, model selection, parallel_shard). No A/B
+and no bit change: the same classical_f32_bits words reach the same kernels, and every refusal keeps its wording. Kept,
+and why (no measurement separates copies that run the same cast; the kept one is A0's bits-defining core):
+
+- `bindings/admitted_family.mojo`: `admit_family_input` (the metadata read once, the family rank / empty / rank-above-2
+  refusals), `admit_family_cast` (borrow a float32 C-order input, else one `admitted_cast_f32` in row tasks into an
+  uninitialised owned Array, `admitted_array`), `admit_family_meta` / `admit_family` (both steps; `finite=True` takes the
+  verdict from the cast instead of a second scan; a DeviceRows fold goes to `admit_x` unchanged), `admit_family_f64`,
+  `admit_family_owned` (the borrow rule of a fitted copy), `admit_family_weights` (one parallel status pass).
+  `family_f32` used to read the metadata twice (`family_view`, then `admit_x` re-ran the admission walk); the lifecycle
+  doors (family, neighbors, hierarchy) scanned X again after the snapshot; `family_array` zero-filled every destination
+  the cast or copy then overwrote (regression audit R6). All three are gone.
+- `core/admitted_weights.mojo`: `admitted_weight_status` / `admitted_fill`, the serial `core/family_weights_impl.mojo`
+  walks in row tasks with the same verdicts in the same precedence.
+- `bindings/classical_labels.mojo` `classical_encode_labels`: the body of `labels_encode_labels` (it was the wrapper's
+  only body) plus `svc_encode_1d`'s branch for a context without label helpers; the SVM doors test the 1-D shape first,
+  as `svc_encode_1d` did.
+
+Restore: `git apply -3 experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch` (the reverse of the lane's `.mojo` changes
+from `f7d10d2b09`; it restores every helper and its callers together). Run owed: the identity record of every family lane
+at the release and the classical family test suites; NVIDIA and AMD timing of kmeans fit/infer and knn fit (paper rows 10-12).
+
 ## Dead native entries, batch 3 (2026-11)
 
 - Lane consol-k0-dead-code (plan `docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md` section 5) re-checked each
