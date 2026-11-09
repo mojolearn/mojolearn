@@ -21,6 +21,8 @@ from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit
 from providers.python.neural_descriptor_pyapi import neural_descriptor_execute
 from sequence.neural_model_dispatch import MODEL_LABELS
 from core.cast_in import cast_in_kind
+from bindings.admitted_input import AdmittedTyped, admit_view, admitted_view_kind
+from bindings.tensor_view import base_format
 
 
 
@@ -34,28 +36,37 @@ def _item(layout: BorrowedBufferLayout, i: Int) -> Int:
     return layout.item_address([i])
 
 
-def _numeric(source: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    admit_native_buffer_exporter(source)
-    var borrowed = AdmittedBorrowedBuffer(source)
-    var layout = borrowed.layout.value().copy()
-    var rank = len(layout.shape)
-    if rank > 2 or (rank == 2 and layout.shape[1] != 1):
+# TOMBSTONE: _numeric's own capture (sequential_input + AdmittedBorrowedBuffer of the materialized array; superseded by
+# the one admission, bindings/admitted_input.mojo admit_view) deleted 2026-11-09 by lane/m1-followups-misc; code
+# recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/NEURAL_LABELS_OWN_ADMISSION.patch
+def _numeric(var captured: AdmittedTyped, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The sorted distinct classes and the int32 codes of a numeric label
+    vector the one admission captured (any numeric dtype, its own strides)."""
+    ref v = captured.view
+    var rank = len(v.shape)
+    if rank > 2 or (rank == 2 and v.shape[1] != 1):
         raise Error("ValueError: y must be a label vector")
-    var n = layout.count
+    var n = v.count()
     if n < 1:
         raise Error("ValueError: y is empty")
-    var dtype = source.dtype
+    var t = admitted_view_kind(v, "y")
+    # the classes keep the labels' own dtype: an ndarray's dtype, an Array's dtype string, or the buffer format
+    var dtype = PythonObject(None)
+    if py_type(captured.keep) is context["ndarray"]:
+        dtype = captured.keep.dtype
+    else:
+        dtype = py_call(native_numpy_dtype(context), v.dtype if v.is_array else base_format(v.fmt))
     if not Bool(py=dtype.isnative):
         raise Error("TypeError: y must use native byte order")
     var classes = sequential_array(Python.tuple(n), dtype, context)
     var codes = sequential_array(Python.tuple(n), context["int32"], context)
-    var kind = cast_in_kind(Int(py=dtype.num), layout.itemsize, "y")
-    var stride = layout.strides[0] if rank > 0 else layout.itemsize
+    var stride = v.strides[0] if rank > 0 else t[1]
     var addresses: List[Int] = [native_buffer_address(classes), native_buffer_address(codes)]
-    var words: List[Int] = [layout.address, kind, layout.itemsize, n, 1, stride, layout.itemsize]
+    var words: List[Int] = [v.addr, t[0], t[1], n, 1, stride, t[1]]
     var count = neural_descriptor_execute(xseq_neural_provider(entries), MODEL_LABELS, addresses, words, List[Float64]())
     var selected = py_call(context["ndarray"], Python.tuple(count), dtype=dtype, buffer=classes)
-    _ = source
+    _ = captured^
     return Python.tuple(selected, codes)
 
 
@@ -136,15 +147,20 @@ def _object_store(address: Int, value: PythonObject) raises:
 
 def neural_encode_labels(source: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     sequential_admit_value(source, context)
-    var array = PythonObject(None)
+    # Numeric labels go through the one admission (admit_view: an Array, a
+    # native buffer exporter, or a list / frame it materializes); text and
+    # object labels are decoded below. No foreign protocol is admitted.
+    var numeric = False
+    var captured = Optional[AdmittedTyped]()
     try:
-        array = sequential_input(source, context)
+        var c = admit_view(source, "y", context)
+        _ = admitted_view_kind(c.view, "y")  # raises for a text or object buffer
+        numeric = True
+        captured = c^
     except:
-        pass  # native text sequences are decoded below; no foreign protocols admitted
-    if array is not None:
-        var kind = String(array.dtype.kind)
-        if kind == "b" or kind == "i" or kind == "u" or kind == "f":
-            return _numeric(array, entries, context)
+        pass
+    if numeric and captured:
+        return _numeric(captured.take(), entries, context)
     var labels = _flat(source, context)
     var count = len(labels)
     if count == 0:
@@ -160,7 +176,7 @@ def neural_encode_labels(source: PythonObject, entries: PythonObject, context: P
         all_text = all_text and (flags & UInt64(1 << 28)) != 0
         all_bytes = all_bytes and (flags & UInt64(1 << 27)) != 0
     if not all_text and not all_bytes:
-        return _numeric(sequential_input(labels, context), entries, context)
+        return _numeric(admit_view(labels, "y", context), entries, context)
     # Text labels are read as they are; only bytes need the Latin-1 key.
     var normalized = labels if all_text else Python.list()
     for i in range(0 if all_text else count):  # driver-loop: lossless native bytes-to-codepoint key normalization

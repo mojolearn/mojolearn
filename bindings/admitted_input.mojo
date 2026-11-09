@@ -1253,6 +1253,37 @@ def admit_typed(source: PythonObject, typestr: String, ndim: Int, name: String,
     return admitted_typed_c(input^, typestr, name, context)
 
 
+def admit_view(source: PythonObject, name: String, context: PythonObject, admitted: Bool = False) raises -> AdmittedTyped:
+    """One argument's capture at its own dtype, no conversion: the metadata
+    (address, shape, byte strides, item size, format) and the pinned owners
+    `admit_typed` reads, for a caller that casts the words itself
+    (`admitted_view_kind` + core/admitted_input_nd.mojo). An Array whose
+    storage is the library's native ctypes output store (an astype or
+    converter result, a fitted field) is read from its slots with its
+    storage owners retained (`array_owner_once`): the ctypes-backed Array
+    support the TSA owners' tsa_buffer used to repack by hand (lane
+    m1-followups-misc)."""
+    if not admitted:
+        classical_admit_value(source, context)
+    var prepared = source
+    if not classical_is_array(source, context):
+        try:
+            admitted_typed_exporter(source, context)
+        except:
+            prepared = classical_view(source, context, name, True)
+    return AdmittedTyped(prepared, context, prepared is source)
+
+
+def admitted_view_kind(v: TensorView, name: String) raises -> Tuple[Int, Int]:
+    """(CastIn element kind, item size) of a captured view; refused for a
+    format no numeric Array dtype holds."""
+    var item = 0
+    var kind = _typed_kind(v, item)
+    if kind < 0:
+        raise Error("TypeError: mojolearn: " + name + " has buffer format '" + v.fmt + "', which is not a numeric array")
+    return (kind, item)
+
+
 def admitted_dtype_admit(dtype: PythonObject, context: PythonObject) raises:
     """Refuse a NumPy dtype whose storage cannot be copied as raw bytes
     without callbacks; NumPy's StringDType is admitted with its owners."""

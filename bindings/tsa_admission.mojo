@@ -17,7 +17,9 @@ from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.arena_array_metadata import arena_array_metadata
 from gemm.f16_widen import f16_bits_to_f32
 from bindings.sequential_admission import _one_of, _ctypes_array_owner
-from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
+from bindings.admitted_input import admit_view, admitted_view_kind
+from bindings.tensor_view import TensorView
+from core.cast_in import CAST_KIND_BOOL, CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED
 
 
 def tsa_scalar(value: PythonObject, context: PythonObject, integer: Bool = False) raises -> PythonObject:
@@ -39,56 +41,61 @@ def tsa_scalar(value: PythonObject, context: PythonObject, integer: Bool = False
             return native_scalar_buffer(value).to_python_number(integer or kind == "i" or kind == "u" or kind == "b")
     # Native one-element numeric buffers retain the original int/float
     # conversion interface. Arbitrary __int__/__float__/__bool__ never run.
-    var one = tsa_buffer(value, "scalar setting", context)
-    if one.count != 1:
+    # The one admission captures the value (bindings/admitted_input.mojo
+    # admit_view, which also reads a ctypes-backed Array from its slots); its
+    # one word is decoded here from the captured address.
+    var one = admit_view(value, "scalar setting", context)
+    if one.view.count() != 1:
         raise Error("TypeError: TSA scalar settings require one native numeric value")
-    # ndarray's scalar conversion is C-owned. Array has a Python protocol,
-    # so read its independently captured buffer instead.
-    var view = one.owner[1]
-    var flat = py_call(view.cast, "B")
-    var code = String(view.format)
-    if code == "e" or (one.is_array and one.dtype_number == 23):
-        var bits = MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=one.source.addr)[0]
-        return PythonObject(Float64(f16_bits_to_f32(bits)))
-    return py_call(flat.cast, code)[0]
+    var result = tsa_word(one.view, "scalar setting")
+    _ = one^
+    return result
 
 
-def tsa_buffer(value: PythonObject, name: String, context: PythonObject) raises -> ArrayMetadata:
-    _array_layout(context)
-    var b = native_loaded_module("builtins")
-    var mapping = py_call(b.type.__dict__["__dict__"].__get__, context["array_class"])
-    if py_get(mapping, "__setattr__") is not None:
-        raise Error("TypeError: TSA native preparation cannot invoke Array attribute hooks")
-    var prepared = value
-    if py_type(value) is not context["array_class"]:
-        prepared = classical_view(value, context, name)
-    else:
-        # Library output stores can be native ctypes arrays. The shared
-        # materializer does not admit those exporters; pack their C buffer
-        # after exact native owner admission, retaining the supported Array
-        # input rather than invoking its Python conversion methods.
-        var slots = context["owner_array_slots"]
-        var view = py_call(slots["_mv"].__get__, value, context["array_class"])
-        if py_type(view) is not b.memoryview:
-            raise Error("TypeError: TSA Array backing view must be a native memoryview")
-        if _ctypes_array_owner(py_type(view.obj), context):
-            var metadata = arena_array_metadata(value, context)
-            var order = py_call(slots["order"].__get__, value, context["array_class"])
-            if py_type(order) is not b.str or (String(order) != "C" and String(order) != "F"):
-                raise Error("TypeError: TSA Array order must be C or F")
-            var dtype = String(metadata["dtype"])
-            var store = native_array_from_bytes(_store_code(dtype), py_call(view.tobytes, "C"))
-            prepared = classical_wrap_array(store, metadata["shape"], dtype, String(order), context)
-    # Native preparation validates exact metadata and pins an independent
-    # buffer before any kernel can release the GIL. Never keep just mutable
-    # caller Array slots as the ownership contract.
-    if py_get(context, "ndarray") is not None:
-        _ = native_numpy_dtype(context)
-    var snapshot = _prepare(prepared, context, True)
-    var result = array_metadata_once(snapshot, array_shape_once(snapshot, context), name, context)
-    var pinned = native_buffer_view(py_call(context["array_fields"]["_mv"], snapshot, context["array_class"]))
-    result.owner = Python.tuple(result.owner, pinned, value)
-    return result^
+def tsa_word(v: TensorView, name: String) raises -> PythonObject:
+    """The first element of a captured numeric view as a Python bool, int or
+    float (bool, signed / unsigned integers of 1, 2, 4 or 8 bytes, float16 /
+    32 / 64): the number the buffer's own format reads back as."""
+    var t = admitted_view_kind(v, name)
+    var kind = t[0]
+    var item = t[1]
+    if kind == CAST_KIND_BOOL:
+        return PythonObject(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=v.addr)[0] != 0)
+    if kind == CAST_KIND_FLOAT:
+        if item == 2:
+            return PythonObject(Float64(f16_bits_to_f32(MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=v.addr)[0])))
+        if item == 4:
+            return PythonObject(Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]))
+        if item == 8:
+            return PythonObject(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=v.addr)[0])
+    if kind == CAST_KIND_SIGNED:
+        if item == 1:
+            return PythonObject(Int(MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]))
+        if item == 2:
+            return PythonObject(Int(MutPointer[Int16, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]))
+        if item == 4:
+            return PythonObject(Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]))
+        if item == 8:
+            return PythonObject(Int(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]))
+    if kind == CAST_KIND_UNSIGNED:
+        if item == 1:
+            return PythonObject(Int(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]))
+        if item == 2:
+            return PythonObject(Int(MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]))
+        if item == 4:
+            return PythonObject(Int(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]))
+        if item == 8:
+            var w = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=v.addr)[0]
+            if w >= UInt64(1) << 63:
+                raise Error("ValueError: TSA " + name + " is beyond the signed 64-bit range")
+            return PythonObject(Int(w))
+    raise Error("TypeError: TSA " + name + " requires one native numeric value")
+
+
+# TOMBSTONE: tsa_buffer (the TSA owners' own admission: classical_view, a by-hand repack of ctypes-backed Arrays,
+# arena _prepare, a second pinned view; superseded by bindings/admitted_input.mojo admit_view, the one admission)
+# deleted 2026-11-09 by lane/m1-followups-misc; code recoverable at 5b5490960d.
+# Restore: git apply experiments/removed/TSA_BUFFER_ADMISSION.patch
 
 
 def tsa_hw_class(model: PythonObject, context: PythonObject) raises -> Bool:
@@ -177,10 +184,10 @@ def tsa_truth(value: PythonObject, context: PythonObject) raises -> Bool:
     if cls is b.list or cls is b.tuple or cls is b.dict or cls is b.set or cls is b.frozenset or cls is b.str or cls is b.bytes or cls is b.bytearray:
         return len(value) != 0
     if cls is context["array_class"]:
-        var snapshot = tsa_buffer(value, "flag", context)
-        if len(snapshot.shape) == 0:
+        var snapshot = admit_view(value, "flag", context)
+        if len(snapshot.view.shape) == 0:
             raise Error("TypeError: len() of unsized object")
-        return snapshot.shape[0] != 0
+        return snapshot.view.shape[0] != 0
     if cls is py_get(context, "ndarray") and _primitive_dtype(value, context):
         var count = Int(py=value.size)
         if count == 0:
@@ -199,8 +206,8 @@ def tsa_component_index(value: PythonObject, context: PythonObject) raises -> Py
     if py_type(value) is b.bool or _one_of(py_type(value), context["integer_types"]):
         return py_call(b.int, value)
     if py_type(value) is py_get(context, "ndarray"):
-        var snapshot = tsa_buffer(value, "component index", context)
-        if len(snapshot.shape) == 0 and snapshot.source.kind != 2:
+        var snapshot = admit_view(value, "component index", context)
+        if len(snapshot.view.shape) == 0 and admitted_view_kind(snapshot.view, "component index")[0] != CAST_KIND_FLOAT:
             return py_call(b.int, tsa_scalar(value, context))
     raise Error("TypeError: Holt-Winters component indices require native integers")
 
