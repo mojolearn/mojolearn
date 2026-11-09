@@ -1023,15 +1023,20 @@ struct MKit(Movable):
     def eigh(mut self, a: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
         """Ascending eigenvalues (1 x n) and eigenvectors in COLUMNS (n x n)."""
         var n = mk_r(a)
-        var w = mk_zeros(1, n, self.ctx)
-        var v = mk_zeros(n, n, self.ctx)
         var params = mk_ints([n, 0])
         var d = matrix_device(a)
-        if n >= 1 and mk_c(a) == n and not (d is None) and device_binding(d) is self.raw and self.opt_dev("x_decomp_dev_eigh"):
-            _ = family_call(self.fn("x_decomp_dev_eigh"), device_identifier(d), mk_addr(w, self.ctx), mk_addr(v, self.ctx), params)
-            _ = v  # keep the Python object alive through the native call above
-            _ = w  # keep the Python object alive through the native call above
-            return (w, v)
+        if n >= 1 and mk_c(a) == n and not (d is None) and device_binding(d) is self.raw and self.opt_dev("x_decomp_dev_eigh_to"):
+            # lane n9-decomp-eigh-families (2026-11-09): w and V stay on the
+            # device (`x_decomp_dev_eigh_to`, eigh_op_sym, one status wait);
+            # the descending take and the sign flip after it are device moves.
+            # Was `x_decomp_dev_eigh` into host words.
+            var wd = self.dout(1, n)
+            var vd = self.dout(n, n)
+            _ = family_call(self.fn("x_decomp_dev_eigh_to"), device_identifier(d), device_identifier(matrix_device(wd)),
+                            device_identifier(matrix_device(vd)), params)
+            return (wd, vd)
+        var w = mk_zeros(1, n, self.ctx)
+        var v = mk_zeros(n, n, self.ctx)
         var pa = mk_addr(a, self.ctx)
         _ = family_call(self.fn("x_decomp_eigh"), pa, mk_addr(w, self.ctx), mk_addr(v, self.ctx), params)
         _ = v  # keep the Python object alive through the native call above
