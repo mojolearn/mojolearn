@@ -29,10 +29,22 @@ from layout import TileTensor
 from layout.tile_layout import row_major
 from linalg.matmul import matmul
 from std.utils.index import IndexList
+from std.sys.compile import is_defined
+from gemm.afn_apple_fast import AFN_GEMM_APPLE
+from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel, shared_sub_record
 
 # TOMBSTONE: MOJOLEARN_CHOL_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable
 # at f59d913b0b (F02: the lower-triangle subtract through scoped_kernel's SUBTRACT + LOWER epilogue; one-sample M3 fit B/A
 # 0.95, no verdict row). Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
+# Restored 2026-11-09 by lane r1-restore-measured-winners (Apple FAST work is paused, not deleted; the one sample on
+# record is a 0.95x fit): the define, its route below and its reach counter, verbatim from f59d913b0b. Default OFF as
+# before; A/B: -D MOJOLEARN_CHOL_FAST_SHARED_SUB (scoped subtract) vs none (the vendor GEMM epilogue).
+# F02/cholesky M3 2026-10-06 repaired admitted shape2309 reached shared
+# subtract; fit B/A0.9514, solve0.9839, quality equal. Fallback controls301/
+# 1027 gave fit0.1728/1.0274, solve0.7310/1.0019 and do not establish route gain.
+# One warmup+score, small admitted gain; default OFF. Original failure retained.
+# Evidence ab-20261006/repairs-54c1f35a5/results/F02/cholesky.
+comptime CHOL_SHARED_SUB = AFN_GEMM_APPLE and is_defined["MOJOLEARN_CHOL_FAST_SHARED_SUB"]()
 
 comptime FTS_BLOCK = 512
 comptime FTS_TPB = 256
@@ -301,6 +313,17 @@ def fast_gemm_nt_sub_lower(
     subtraction rides the vendor GEMM's epilogue, so the product is never
     stored and read back. `shape` only gives the output tensor its extent
     (`m * cols` floats; nothing is written to it)."""
+
+    comptime if CHOL_SHARED_SUB:
+        shared_sub_record(True)
+        ctx.enqueue_function[scoped_kernel[64, 64, False, True, True]](
+            a.unsafe_offset((base + off) * n + base + off),
+            x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            Int32(m), Int32(cols), Int32(k), Int32(k), Int32(1), Int32(1), Int32(k), Int32(k), Int32(n),
+            grid_dim=(((m + 63) // 64) * ((cols + 63) // 64), 1, 1), block_dim=(128, 1, 1),
+        )
+        return
 
     @parameter
     @always_inline

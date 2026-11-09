@@ -86,7 +86,8 @@ def _check_configuration() -> Bool:
     # Lane k1-delete-unverdicted-fast (2026-11-09): Apple FAST experiments with no verdict, never to be measured.
     # Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
     comptime assert not is_defined["MOJOLEARN_LU_FAST_SHARED_SUB"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_LU_FAST_SHARED_SUB, F02, the FAST LU trailing subtract through the scoped kernel's SUBTRACT epilogue (x_decomp/lu_fast_mma.mojo, gp/x_decomp_shared_sub_count), no verdict row (one-sample M3 factor B/A 0.62-0.96 slower) and will not be measured; code at f59d913b0b; see docs/TOMBSTONES.md"
-    comptime assert not is_defined["MOJOLEARN_CHOL_FAST_SHARED_SUB"](), "removed 2026-11-09 (lane k1-delete-unverdicted-fast): MOJOLEARN_CHOL_FAST_SHARED_SUB, F02, the FAST Cholesky lower-triangle subtract through the scoped kernel (cholesky/checks/fast_trsm.mojo), no verdict row (one-sample M3 fit B/A 0.95, controls mixed) and will not be measured; code at f59d913b0b; see docs/TOMBSTONES.md"
+    # MOJOLEARN_CHOL_FAST_SHARED_SUB: no longer refused. Restored 2026-11-09 by lane r1-restore-measured-winners
+    # (Apple FAST work is paused, not deleted; one M3 sample fit B/A 0.95): cholesky/checks/fast_trsm.mojo, default OFF.
     return True
 
 
