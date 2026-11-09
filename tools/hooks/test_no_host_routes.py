@@ -281,6 +281,11 @@ BLOCKED = [
     ("a Mojo while loop over a data size",
      {DEV: "def _p31(p: UnsafePointer[Float32], n_rows: Int) raises:\n    var i = 0\n"
            "    while i < n_rows:\n        p[i] = 0.0\n        i += 1"}, "while i < n_rows:"),
+    ("download, then a host fold over a variable small k (a small-loop note no longer exempts it)",
+     {DEV: "def _q3(ctx: DeviceContext, d: DeviceBuffer[DType.float32], n_features: Int) raises -> Float32:\n"
+           "    var h = download_f32(ctx, d, n_features)\n    var t = Float32(0.0)\n"
+           "    for j in range(n_features):  # small-loop(n_features: feature count): one sum per feature, read once\n"
+           "        t = t + h[j]\n    return t"}, "for j in range(n_features):"),
     ("a Mojo small-loop note on a runtime bound",
      {DEV: "def _p32(p: UnsafePointer[Float32], n_classes: Int) raises:\n"
            "    for c in range(n_classes):  # small-loop(n_classes: class count): one prior per class, set once\n"
@@ -312,11 +317,6 @@ PASSES = [
      {DEV: "def _q2(ctx: DeviceContext, mut trace: IdentityTrace, d: DeviceBuffer[DType.float32], n: Int) raises:\n"
            "    var h = download_f32(ctx, d, n)\n    if trace.enabled:\n        var t = Float32(0.0)\n"
            "        for i in range(n):\n            t = t + h[i]"}),
-    ("download, then a loop over a small k",
-     {DEV: "def _q3(ctx: DeviceContext, d: DeviceBuffer[DType.float32], n_features: Int) raises -> Float32:\n"
-           "    var h = download_f32(ctx, d, n_features)\n    var t = Float32(0.0)\n"
-           "    for j in range(n_features):  # small-loop(n_features: feature count): one sum per feature, read once\n"
-           "        t = t + h[j]\n    return t"}),
     ("a reviewed small-launch note on a one-block launch over d-sized data",
      {DEV: "def _q4(ctx: DeviceContext, x: UnsafePointer[Float32], n: Int) raises:\n"
            "    ctx.enqueue_function[_fold_kernel](  # small-launch(n: parameter count): an L-BFGS vector phase, never rows\n"
@@ -432,6 +432,17 @@ def test_removed_route_leaves_a_stale_row_until_pruned():
     baseline += "\t".join(["host-exec", "hostexec", "test-fixture", "debt", DEV, "0", route]) + "\n"
     debt = scratch({DEV: "def _audit_debt() raises:\n    " + route,
                     nhr.BASELINE: ("=", baseline)})
+    # the fixture plays main: its debt row is main's own (rows main lacks are
+    # refused, see test_rows_main_lacks_are_refused_...)
+    real_main = nhr._main_sha
+    nhr._main_sha = lambda: debt
+    try:
+        _removed_route_body(debt, route)
+    finally:
+        nhr._main_sha = real_main
+
+
+def _removed_route_body(debt, route):
     rc, err = run_tree(debt)
     assert rc == 0, err
     tip = scratch({DEV: ("-", route)}, base=debt)

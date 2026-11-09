@@ -2256,7 +2256,7 @@ _REGEN_ANCHOR = "e68654a7579a3abeef7a97c63ca1a001a7de8a8f"
 
 def _restrict_to_main(debt_keys, ref, quiet=False):
     """(debt keys that hold, keys refused): the baseline only shrinks. A row
-    main's baseline lacks holds only for a finding main's own tree carries
+    main's baseline (and the ref's baseline where it left main) lacks holds only for a finding main's own tree carries
     under this checker, or the regeneration anchor's tree when ref contains
     the anchor (debt that a stricter rule made visible); a finding a branch
     adds never does."""
@@ -2267,6 +2267,14 @@ def _restrict_to_main(debt_keys, ref, quiet=False):
     if r.returncode != 0:
         return debt_keys, collections.Counter()
     main_keys = collections.Counter(_key(x) for x in load_baseline(r.stdout) if x["state"] in _DEBT_STATES)
+    # rows the ref already had where it left main (an old tree judged later,
+    # after main fixed them) are its own history, not growth
+    mb = _git("merge-base", main, ref)
+    if mb.returncode == 0 and mb.stdout.strip() and mb.stdout.strip() != main:
+        r2 = _git("show", f"{mb.stdout.strip()}:{BASELINE}")
+        if r2.returncode == 0:
+            main_keys |= collections.Counter(_key(x) for x in load_baseline(r2.stdout)
+                                             if x["state"] in _DEBT_STATES)
     grown = debt_keys - main_keys
     if not grown:
         return debt_keys, collections.Counter()
