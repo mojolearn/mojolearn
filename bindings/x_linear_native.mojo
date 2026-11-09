@@ -46,7 +46,7 @@ from bindings.prep_native_estimator import prep_native_context, prep_native_spli
 from bindings.msel_inputs import msel_admit
 from bindings.admitted_input import (
     AdmittedX, admit_x_unrecorded, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
-    classical_view, admit_ids, admitted_finite_refuse,
+    classical_view, admit_ids, admitted_finite_refuse, admitted_finite_entry_refuse,
 )
 from bindings.classical_arrays import classical_dtype_str, classical_c_order, classical_is_f32
 from bindings.classical_labels import (
@@ -2642,9 +2642,16 @@ def _xl_public_operation(model: PythonObject, operation: String, args: PythonObj
     var result = PythonObject(None)
     try:
         result = _xl_dispatch(model, operation, args, context)
-    finally:
+    except error:
         if fitting:
             estimator_fit_end(model, initial_depth)
+        # The fit entries test the X and y they upload (defer_finite in
+        # _xl_matrix / _xl_vector) and refuse in their own words: the one
+        # scikit-learn wording replaces them (lane a7c).
+        admitted_finite_entry_refuse(error, _name(model))
+        raise error^
+    if fitting:
+        estimator_fit_end(model, initial_depth)
     if fitting:
         var classifier = (operation == "fit_sgd_classifier" or operation == "fit_perceptron"
                           or operation == "fit_pa_classifier" or operation == "fit_ridge_classifier"
