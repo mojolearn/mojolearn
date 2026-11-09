@@ -152,6 +152,34 @@ def pca_project_owned(
     ctx.synchronize()
 
 
+def pca_keep_finish(
+    ctx: DeviceContext,
+    explained_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ratio_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_components: Int,
+    keep_mode: Int,
+    frac: Float64,
+    mut noise: Float64,
+) raises -> Int:
+    """The kept count after an exact fit wrote its five arrays (for a float
+    or "mle" `n_components`, with `noise` the dropped tail's variance); the
+    fitted count otherwise. Shared by `pca_fit_owned` and the device fold
+    fit (decomposition/pca_fold.mojo, lane a8d)."""
+    if keep_mode != PCA_KEEP_COUNT and keep_mode != PCA_KEEP_FRACTION and keep_mode != PCA_KEEP_MLE:
+        raise Error("pca_fit_owned: unknown n_components mode")
+    var keep = n_components
+    if keep_mode != PCA_KEEP_COUNT:
+        var keep_in = -1
+        if keep_mode == PCA_KEEP_MLE:
+            keep_in = pca_mle_rank_device(ctx, explained_ptr, n_components, n_rows)
+        noise = 0.0
+        keep = 0
+        if n_components > 0:
+            keep = pca_rank_finish(ratio_ptr, explained_ptr, n_components, keep_in, frac, noise)
+    return keep
+
+
 def pca_fit_owned(
     ctx: DeviceContext,
     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -195,15 +223,7 @@ def pca_fit_owned(
     ctx.synchronize()
     if finite_word != 0 and MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] != 0:
         return (0, 0.0)
-    var keep = n_components
-    if keep_mode != PCA_KEEP_COUNT:
-        var keep_in = -1
-        if keep_mode == PCA_KEEP_MLE:
-            keep_in = pca_mle_rank_device(ctx, explained_ptr, n_components, n_rows)
-        noise = 0.0
-        keep = 0
-        if n_components > 0:
-            keep = pca_rank_finish(ratio_ptr, explained_ptr, n_components, keep_in, frac, noise)
+    var keep = pca_keep_finish(ctx, explained_ptr, ratio_ptr, n_rows, n_components, keep_mode, frac, noise)
     if project:
         pca_project_owned(
             ctx, x_ptr, mean_ptr, components_ptr, singular_ptr, out_ptr, n_rows, n_features, keep, whiten

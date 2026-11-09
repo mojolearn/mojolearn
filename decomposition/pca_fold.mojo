@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""PCA.transform over a model-selection fold resident on the device (lane
-a6-device-x-family-classical, 2026-11-09).
+"""PCA.transform (lane a6-device-x-family-classical) and PCA's exact fit
+(lane a8d-device-x-decomp-manifold) over a model-selection fold resident on
+the device (2026-11-09).
 
 `pca_transform_host` (decomposition/estimator.mojo) uploads X from host
 words. Under cross-validation the fold's rows are already resident in model
@@ -19,6 +20,84 @@ from max.gpu.host import DeviceContext
 from core.device_zero import enqueue_fill
 from core.msel_device_x import msel_device_x_f32
 from decomposition.impl.linalg.detail.pca import pca_transform
+from decomposition.impl.linalg.detail.svd_full import pca_full_validate
+from decomposition.estimator import pca_fit_cov_device_x, pca_fit_full_device_x
+from decomposition.impl.pca_owner import pca_keep_finish
+
+
+struct PCAFoldFit(Copyable, Movable):
+    """The fold fit's kept count, noise variance and its two status words
+    (finite, range)."""
+    var keep: Int
+    var noise: Float64
+    var finite: Int32
+    var in_range: Int32
+
+    def __init__(out self, keep: Int, noise: Float64, finite: Int32, in_range: Int32):
+        self.keep = keep
+        self.noise = noise
+        self.finite = finite
+        self.in_range = in_range
+
+
+def pca_fit_fold(
+    ctx: DeviceContext,
+    base_id: Int,
+    base_rows: Int,
+    index_id: Int,
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    explained_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ratio_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+    dense: Bool,
+    keep_mode: Int,
+    frac: Float64,
+) raises -> PCAFoldFit:
+    """PCA's exact fit (`pca_fit_owned` without a projection; lane
+    a8d-device-x-decomp-manifold) of fold rows `index_id` of the resident
+    base `base_id` (`base_rows` x `n_features`): the rows are gathered on the
+    device straight into the fit's X buffer with the finite and range tests
+    in the same pass (no host gather, no upload), the status words are read
+    at the gather's synchronisation (the fit synchronises there anyway), and
+    a flagged fold is not fit (the door refuses). Otherwise the same body as
+    the host-address entry (`pca_fit_cov_device_x` / `pca_fit_full_device_x`,
+    then `pca_keep_finish`): the same rows in the same order, no bit change.
+    `ctx` is `msel_fold_entry_context()`."""
+    if dense:
+        pca_full_validate(n_rows, n_features, n_components)
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    var status = ctx.enqueue_create_buffer[DType.int32](2)
+    enqueue_fill[DType.int32](ctx, status, Int32(0))
+    msel_device_x_f32(ctx, base_id, base_rows, n_features, index_id, n_rows, x, status.unsafe_ptr(), 0)
+    var flags = ctx.enqueue_create_host_buffer[DType.int32](2)
+    ctx.enqueue_copy(dst_ptr=flags.unsafe_ptr(), src_buf=status)
+    ctx.synchronize()
+    var finite = flags.unsafe_ptr()[0]
+    var in_range = flags.unsafe_ptr()[1]
+    _ = flags^
+    _ = status^
+    if finite != 0 or in_range != 0:
+        _ = x^
+        return PCAFoldFit(0, 0.0, finite, in_range)
+    var noise: Float64
+    if dense:
+        noise = pca_fit_full_device_x(
+            ctx, x, components_ptr, mean_ptr, explained_ptr, ratio_ptr, singular_ptr,
+            n_rows, n_features, n_components,
+        )
+    else:
+        noise = pca_fit_cov_device_x(
+            ctx, x, components_ptr, mean_ptr, explained_ptr, ratio_ptr, singular_ptr,
+            n_rows, n_features, n_components, False,
+        )
+    ctx.synchronize()
+    _ = x^
+    var keep = pca_keep_finish(ctx, explained_ptr, ratio_ptr, n_rows, n_components, keep_mode, frac, noise)
+    return PCAFoldFit(keep, noise, finite, in_range)
 
 
 def pca_transform_fold(

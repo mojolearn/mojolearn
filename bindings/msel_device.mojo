@@ -34,7 +34,7 @@ from core.msel_device import (
 )
 from core.neural_context import process_ctx
 from core.msel_device_x import msel_device_x_context, msel_fold_entry_context, msel_store, MSEL_CONTEXT_SLOT
-from decomposition.pca_fold import pca_transform_fold
+from decomposition.pca_fold import pca_transform_fold, pca_fit_fold
 from glm.qn_fold import qn_fit_fold
 from cluster.kmeans_fold import kmeans_fit_fold, kmeans_query_fold
 
@@ -446,3 +446,47 @@ def kmeans_transform_fold_binding(
     (lane a7d): as `kmeans_predict_fold_binding`, `out_addr` n_samples x
     n_clusters float32."""
     return _kmeans_query_fold_call(ids, centroids_addr, out_addr, params, True)
+
+
+def pca_fit_fold_binding(
+    ids: PythonObject,
+    out_addrs: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """PCA's exact fit (`pca_fit_owned` without a projection) over a
+    model-selection fold resident on the device (lane
+    a8d-device-x-decomp-manifold; decomposition/pca_fold.mojo): `ids` is
+    [base store id, base rows, index store id] (bindings/device_rows_door.mojo
+    door_rows_store), `out_addrs` [components, mean, explained variance,
+    ratio, singular values], `params` [n_rows, n_features, n_components,
+    dense, keep mode, fraction]. Returns [kept count, noise variance, finite
+    word, range word]; a nonzero word means the fold was not fit and the
+    door refuses."""
+    if len(ids) != 3 or len(out_addrs) != 5 or len(params) != 6:
+        raise Error("pca_fit_fold: ids, out_addrs and params must hold 3, 5 and 6 values")
+    var base_id = Int(py=ids[0])
+    var base_rows = Int(py=ids[1])
+    var index_id = Int(py=ids[2])
+    var cp = _mdx_f32_ptr(Int(py=out_addrs[0]))
+    var mp = _mdx_f32_ptr(Int(py=out_addrs[1]))
+    var ep = _mdx_f32_ptr(Int(py=out_addrs[2]))
+    var rp = _mdx_f32_ptr(Int(py=out_addrs[3]))
+    var sp = _mdx_f32_ptr(Int(py=out_addrs[4]))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var dense = Int(py=params[3]) != 0
+    var keep_mode = Int(py=params[4])
+    var frac = Float64(py=params[5])
+    var keep = 0
+    var noise = Float64(0.0)
+    var finite = Int32(0)
+    var in_range = Int32(0)
+    with GILReleased(Python()):
+        var ctx = msel_fold_entry_context()
+        var r = pca_fit_fold(ctx, base_id, base_rows, index_id, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, frac)
+        keep = r.keep
+        noise = r.noise
+        finite = r.finite
+        in_range = r.in_range
+    return Python.list(PythonObject(keep), PythonObject(noise), PythonObject(Int(finite)), PythonObject(Int(in_range)))
