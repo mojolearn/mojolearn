@@ -437,6 +437,62 @@ adamw; a saved and loaded optimizer state continues bit for bit; zero_grad
 then an accumulating backward equals a plain backward; refusals). Its
 `OPS_OPT_DIGEST` lines must be equal on CPU, Metal, NVIDIA and AMD.
 
+### Bounded loops
+
+A bounded loop repeats a body until a criterion holds or an iteration bound
+is reached, with the whole loop on the device. It has four parts, shared by
+the program loop and by compiled step ops (`autograd/program_loop.mojo`,
+`autograd/program_loop_device.mojo`):
+
+- **Carried state in place.** The state lives in fixed buffers, uploaded
+  once and updated in place by the loop's own ops. Nothing is allocated,
+  copied to a fresh buffer or synchronized per iteration; the final state is
+  downloaded once.
+- **An iteration register.** A device value that counts the iterations
+  committed so far. A body can read it as an input.
+- **The criterion as a device value.** The device compares, records the
+  stop in a small register block, and freezes the state. The host reads the
+  block once every `check_every` iterations. Iterations enqueued after the
+  stop change nothing, so the result does not depend on `check_every`.
+- **Step ops.** A body is a fixed list of ops enqueued on the device stream.
+  A compiled step op enqueues its own kernels, in its own order, each gated
+  on the register block's done word.
+
+From Python, `Program.while_loop` runs a captured body as a bounded loop:
+
+```python
+with ops.Session() as s:
+    x = s.tensor(a)
+    i = s.tensor(np.zeros((1, 1), np.float32))
+    cond = s.capture([x, i], s.less(i, s.full((1, 1), 10)))
+    body = s.capture([x, i], s.add(x, i))
+    out = body.while_loop(a, condition=cond, max_iterations=100,
+                          check_every=8, iteration=True)
+    out["outputs"], out["iterations"], out["stopped"]
+```
+
+- `check_every` (default 1): iterations between two status reads. With 1,
+  no body runs after the stop. Above 1, up to `check_every - 1` extra
+  iterations are computed and discarded, and the body must keep each state
+  array's shape.
+- `iteration=True`: the body and the condition take one more input, the
+  iteration register (one value). Pass only the state arrays.
+- `max_iterations` is at most 16777216.
+
+From Mojo, a family registers its iteration as a `LoopStep`
+(`enqueue_step(ctx, registers, it, timers)`): its kernels, each gated on
+`registers.words`, followed by a criterion op such as
+`loop_criterion_below(ctx, registers, value, threshold, it)`. Then
+`bounded_device_loop(ctx, step, registers, first, last, check_every, timers)`
+runs it and returns whether the criterion held and at which iteration.
+KMeans' Lloyd iterations (`LloydStep`, `cluster/impl/detail/kmeans.mojo`)
+are the first step op.
+
+Per-op timers: build with `-D MOJOLEARN_EXECUTOR_TIMERS` to print one line
+per op of every bounded loop,
+`EXECUTOR_TIMER loop=<label> op=<name> calls=<n> total_ms=<ms> mean_us=<us>`.
+Each timed op drains the stream, so the numbers are relative.
+
 ## Program form (design note, not implemented)
 
 The session runs one Mojo call per op and a Python branch costs one
@@ -458,6 +514,8 @@ over the `OPS_*` codes above, plus three control words evaluated in Mojo:
 - `LOOP count, body_end`: repeat a body a fixed number of times (epochs,
   batches, refinement steps) with an iteration register the body can read
   (dropout counter, permutation epoch).
+  (Implemented for `while_loop` as the bounded loop above: the iteration
+  register, in-place carried state and device criterion.)
 - `ROUTE gate, k`: top-k routing of rows to experts, producing per-expert
   row index lists and weights on the device (sequence/moe.mojo already
   routes this way for MoEBlock), followed by per-expert `gather_rows`, the

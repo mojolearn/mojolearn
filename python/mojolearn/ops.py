@@ -1383,9 +1383,48 @@ class Program:
         """Differentiate the executed loop iterations against final output seeds."""
         return _PROGRAM_CALL(self, "vjp_while", (condition, None, arrays, max_iterations, False, seeds, parameters))
 
-    def while_loop(self, *arrays, condition, max_iterations, optimize=False):
-        """Apply this state graph while the scalar condition holds, up to a limit."""
-        return _PROGRAM_CALL(self, "while_loop", (condition, None, arrays, max_iterations, optimize, None, None))
+    def while_loop(self, *arrays, condition, max_iterations, optimize=False, check_every=1, iteration=False):
+        """Apply this state graph while the scalar condition holds, up to a limit.
+
+        The loop runs on the device: the state arrays are uploaded once and
+        updated in place, the condition is tested on the device, and the
+        final state is downloaded once.
+
+        Parameters
+        ----------
+        arrays : ndarray
+            The initial state, one array per input of this graph (without
+            the iteration input when ``iteration=True``).
+        condition : Program
+            A graph over the same inputs that returns one value; the loop
+            continues while it is nonzero.
+        max_iterations : int
+            The most body applications, at most 16777216.
+        optimize : bool
+            Optimize the component graphs before running.
+        check_every : int
+            Iterations between two reads of the loop's status on the host.
+            Larger values wait less on the device; up to ``check_every - 1``
+            extra iterations may be computed after the stop and are
+            discarded, so the result is the same for every value. Above 1,
+            the body must keep each state array's shape.
+        iteration : bool
+            When true, this graph and the condition take one more input, a
+            single value holding the number of iterations completed so far.
+
+        Returns
+        -------
+        dict
+            ``outputs`` (the final state), ``iterations`` (body applications)
+            and ``stopped`` (whether the condition ended the loop).
+
+        Examples
+        --------
+        >>> out = body.while_loop(x, condition=cond, max_iterations=100, check_every=8)
+        >>> out["iterations"]
+        """
+        return _PROGRAM_CALL(self, "while_loop", (condition, None, arrays, max_iterations, optimize,
+                                                  check_every, iteration))
 
     def fit(self, *arrays, targets=None, optimizer, parameters=None, loss="mse",
             epochs=10, batch_size=32, shuffle=True, seed=0, huber_delta=1.0):

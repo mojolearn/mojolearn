@@ -315,7 +315,8 @@ def fused_distance_nn_gated_kernel[
     of every block returns before touching memory, so `out_key` / `out_value`
     keep the converged assignment and a launch enqueued past convergence costs
     a launch and nothing else. The flag is written only by
-    `kmeans_conv_step_kernel`, a separate launch, so every thread of one launch
+    the loop's criterion op (`loop_below_kernel`, autograd/program_loop_device.mojo),
+    a separate launch, so every thread of one launch
     reads the same value (no barrier is skipped by part of a block)."""
     if gate.unsafe_load(0) != Int32(0):
         return

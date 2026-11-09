@@ -101,6 +101,17 @@ def ops_program_public_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
             program_admit_value(args[6])
             return ops_program_control_vjp_py[E, KIND](sid, pid,
                 Python.tuple(sid, condition, sid, other, args[5], args[6]), args[2], limit)
+        if name == "while_loop":
+            # args[5]: check_every (None = 1), args[6]: iteration (None = False)
+            var every = 1
+            if args[5] is not None:
+                every = _integer(args[5], "check_every", 1)
+            var iteration = False
+            if args[6] is not None:
+                _option(args[6])
+                iteration = Bool(py=args[6])
+            return ops_program_control_py[E, KIND](sid, pid, condition, other, sid, sid, args[2], limit, args[4],
+                                                   every, iteration)
         return ops_program_control_py[E, KIND](sid, pid, condition, other, sid, sid, args[2], limit, args[4])
     if name == "fit" or name == "fit_if":
         _arguments(args, 5)
