@@ -25,6 +25,8 @@ from core.logistic_native_api import (
 from core.logistic_config import LogisticPromotion
 from core.logistic_model_state import LogisticFitLayout, logistic_target_count, logistic_fit_target_count
 from bindings.logistic_state_boundary import LogisticQueryOwners, logistic_parameters_pack
+from bindings.logistic_query_boundary import logistic_query_width_check
+from core.logistic_query_state import logistic_query_integer_width
 from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_MULTIPLY
 from bindings.label_weights_boundary import label_weights_run
 from core.linear_metadata import linear_mode_name
@@ -433,8 +435,7 @@ def logistic_decision(model: PythonObject, state: LogisticQueryOwners, mut entri
     var q = _query_x(model, state, source, context)
     var rows = q.rows
     var cols = q.cols
-    if Bool(py=PythonObject(cols) != state.features()):
-        raise Error("mojolearn LogisticRegression feature count differs from fit")
+    logistic_query_width_check(cols, state.features(), context)
     var n_targets = _n_targets(model, state)
     if entries is None:
         entries = _entries_value(model, state.mode_owner, context)
@@ -466,8 +467,7 @@ def logistic_predict(model: PythonObject, state: LogisticQueryOwners, source: Py
         var q = _query_x(model, state, source, context)
         var rows = q.rows
         var cols = q.cols
-        if cols != Int(py=state.features()):
-            raise Error("mojolearn LogisticRegression feature count differs from fit")
+        logistic_query_integer_width(cols, Int(py=state.features()))
         var codes = admitted_vector(rows, "<i8", context)
         var entries = _entries_value(model, state.mode_owner, context)
         var w = _fitted_w(model, state)
@@ -489,8 +489,7 @@ def logistic_predict(model: PythonObject, state: LogisticQueryOwners, source: Py
         var q = _query_x(model, state, source, context)
         var rows = q.rows
         var cols = q.cols
-        if Bool(py=PythonObject(cols) != state.features()):
-            raise Error("mojolearn LogisticRegression feature count differs from fit")
+        logistic_query_width_check(cols, state.features(), context)
         var codes = admitted_vector(rows, "<i8", context)
         if q.fold():
             _infer_fold(model, state, q, codes, _FOLD_CODES, n_targets, False, context)
@@ -526,8 +525,7 @@ def _logistic_proba_fused(model: PythonObject, state: LogisticQueryOwners, mut e
     var q = _query_x(model, state, source, context)
     var rows = q.rows
     var cols = q.cols
-    if Bool(py=PythonObject(cols) != state.features()):
-        raise Error("mojolearn LogisticRegression feature count differs from fit")
+    logistic_query_width_check(cols, state.features(), context)
     var intercept = 1 if Bool(py=state.intercept_owner) else 0
     var out = admitted_array(Python.tuple(rows, 2 if n_targets == 1 else n_targets), "<f8", context)
     if q.fold():

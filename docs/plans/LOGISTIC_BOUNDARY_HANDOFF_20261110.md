@@ -141,6 +141,36 @@ claim its class/union containers are native. Root owes public host Logistic
 score/refusal/output-format tests and regression coverage for the other host
 families that reuse the extracted class-kind admission.
 
+Query feature equality now uses `core.logistic_query_state.LogisticQueryWidth`.
+Ordinary fitted integers use a direct integer comparison; primitive scalar
+metadata uses the existing exact native scalar decoder. The plan preserves
+the separate Int-conversion contract of binary prediction and explicit host
+inference. Exact native Array fields retain exact representability; NumPy
+primitive fields retain weak floating conversion when that policy is active.
+Single-element arrays are unpacked without a comparison result array. Object
+array metadata uses bounded exact-type unboxing before any scalar conversion;
+unknown equality hooks are refused. The original feature-mismatch messages
+remain in the pure native checks.
+
+`native_scalar_buffer_bytes` extracts the pre-existing fixed 32-byte public
+buffer UNPACK for reuse by numeric and temporal metadata. No scalar decoder
+algorithm changes. `native_torch_scalar` retains native TensorBase item/numel
+descriptors in the existing admission cache (slot V2) and applies the same
+thread-local mode refusals before scalar extraction. It avoids the former
+comparison tensor allocation, with any existing device-scalar synchronization
+confined to UNPACK. The query plan receives only native values. All original
+model/QN/fused kernels and their data buffers are unchanged.
+
+Removed: the three public-field Python inequality operations and the duplicate
+binary/host width-error branches; no legacy comparison fallback remains.
+Root owes native query-plan fixtures and public rebound-field coverage:
+NumPy legacy/weak scalar and single-element array promotion, empty-array
+warning/error versions, complex and temporal fields, native Array values,
+object-array callback refusal, and Torch primitive scalar dtype/ambiguity/mode
+behavior. Exotic dtype refusal and older NumPy weak-integer promotion remain
+specific compatibility qualification points; source inspection is not runtime
+evidence. There is no timing or identity result for this batch.
+
 Root owes the affected estimator GPU/host, base GPU and classical/tokenizer owner
 closures, all dependent groups selected by the development controller, direct
 native requests plus public LogisticRegression/host/DeviceRows tests, and later

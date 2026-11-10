@@ -31,7 +31,7 @@ def connect():
     warning.update(warning_filename=__file__, warning_lineno=1,
                    warning_module=__name__, warning_source_line="")
     context.update(sequence_array_warnings=warning,
-                   module_type=context["native_module_type"])
+                   module_type=context["native_module_type"], lr_complex_type=complex)
     estimators = {}
     x_trees = {}
     selected = _backend.default_mode()
