@@ -35,7 +35,10 @@ from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, _p
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_inputs import sequential_sequence
-from bindings.arena_prog_native import _metrics_run
+from bindings.arena_prog_native import _metrics_run_plan
+from bindings.metrics_plan_admission import MetricArenaOwner
+from core.metrics_program_plan import MetricProgramPlan
+from core.labels_accuracy_plan import label_accuracy_plan
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.label_admission_native import labels_primitive_kind, labels_admit_primitive, classifier_label_list, LabelTypeKinds, labels_refusal
 from bindings.label_snapshot_native import label_array_list
@@ -1055,17 +1058,6 @@ def labels_class_rows_only(class_weight: PythonObject, labels: ClassicalLabels, 
 
 
 # x_metrics stage ops (`_expansion_metrics._OPS`) and cm_epi kinds.
-comptime _OP_GROUP_SORT = 0
-comptime _OP_GROUP_SUM = 1
-comptime _OP_PAIR_KEY = 2
-comptime _OP_OFF_DIFF = 56
-comptime _OP_CM_EPI = 59
-comptime _CM_COUNT = 2
-comptime _CM_WSUM_LEAF = 7
-comptime _CM_WSUM_FOLD = 8
-comptime _WSUM_BLOCK = 256
-comptime _NONE = -1
-comptime _PARAMS = 14
 comptime _INT32_MAX = 2147483647
 
 
@@ -1431,70 +1423,10 @@ def _refuse_multilabel(y: PythonObject, name: String, caller: String, context: P
                     + "IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv), only binary and multiclass 1-D labels")
 
 
-struct _Program(Movable):
-    """The fields of an `_expansion_metrics._Prog` the native runner reads:
-    its size, input records, stage records and skipped ranges."""
-    var size: Int
-    var inputs: PythonObject
-    var stages: PythonObject
-    var skip: PythonObject
-
-    def __init__(out self) raises:
-        self.size = 0
-        self.inputs = Python.list()
-        self.stages = Python.list()
-        self.skip = Python.list()
-
-    def alloc(mut self, n: Int) raises -> Int:
-        var off = self.size
-        self.size += max(n, 0)
-        if self.size > _INT32_MAX:
-            raise Error("mojolearn metrics: the problem exceeds the Int32 arena bound")
-        return off
-
-    def put(mut self, array: PythonObject, count: Int) raises -> Int:
-        """`put` / `put_i32` of a C-order float32 or int32 Array."""
-        var off = self.alloc(count)
-        _ = py_call(self.inputs.append, Python.tuple(PythonObject(off), array))
-        _ = py_call(self.skip.append, Python.tuple(PythonObject(off), PythonObject(off + count)))
-        return off
-
-    def scratch(mut self, n: Int) raises -> Int:
-        var off = self.alloc(n)
-        if n > 0:
-            _ = py_call(self.skip.append, Python.tuple(PythonObject(off), PythonObject(off + n)))
-        return off
-
-    def stage(mut self, op: Int, total: Int, params: List[Int]) raises:
-        if len(params) > _PARAMS:
-            raise Error("x_metrics: too many stage parameters")
-        var record = Python.list(PythonObject(op), PythonObject(total))
-        for i in range(_PARAMS):  # small-loop(params): the fourteen fixed parameter words of one stage
-            _ = py_call(record.append, PythonObject(params[i] if i < len(params) else 0))
-        _ = py_call(self.stages.append, record)
-
-    def group(mut self, key: Int, n: Int, m: Int, weights: Int) raises -> Tuple[Int, Int]:
-        """`_expansion_metrics._group` (values=_NONE, vstride=1, width=1)."""
-        var off = self.alloc(m + 1)
-        var order = self.scratch(n)
-        var out = self.alloc(m)
-        self.stage(_OP_GROUP_SORT, 1, [key, n, m, off, order])
-        if m:
-            self.stage(_OP_GROUP_SUM, m, [off, order, _NONE, 1, weights, out, 1])
-        return (off, out)
-
-    def counts(mut self, off: Int, m: Int) raises -> Int:
-        """`_expansion_metrics._counts`."""
-        var out = self.alloc(m)
-        if m:
-            self.stage(_OP_OFF_DIFF, m, [off, m, out])
-        return out
-
-
-def _run(var program: _Program, mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_run(prog, numeric_mode)`: the shared native program runner over a
-    program object holding these fields. Returns the arena store."""
-    var b = labels_builtins()
+def _accuracy_run(plan: MetricProgramPlan, inputs: List[PythonObject], mode: PythonObject,
+                  context: PythonObject) raises -> MetricArenaOwner:
+    # UNPACK the connected runner context once. All stage/offset state is
+    # already native; the existing runner retains resident/range behavior.
     var sys = native_loaded_module("sys")
     var module = py_get(sys.modules, "mojolearn._expansion_metrics")
     if module is None:
@@ -1502,20 +1434,7 @@ def _run(var program: _Program, mode: PythonObject, context: PythonObject) raise
     var prog_context = py_get(py_fields(module), "_PROG_CONTEXT")
     if prog_context is None:
         raise Error("ImportError: mojolearn: the metrics programs are not connected")
-    var prog = py_call(context["labels_namespace"])
-    var fields = py_fields(prog)
-    py_setitem(fields, "size", PythonObject(program.size))
-    py_setitem(fields, "_inputs", program.inputs)
-    py_setitem(fields, "_stages", program.stages)
-    py_setitem(fields, "_skip", program.skip)
-    py_setitem(fields, "_outs", PythonObject(None))
-    py_setitem(fields, "arena", PythonObject(None))
-    _ = _metrics_run(prog, mode, prog_context)
-    return fields["arena"]
-
-
-def _arena_address(arena: PythonObject) raises -> Int:
-    return Int(py=py_call(arena.buffer_info)[0])
+    return _metrics_run_plan(plan, inputs, mode, prog_context)
 
 
 def labels_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weight: PythonObject, mode: PythonObject,
@@ -1558,56 +1477,24 @@ def _accuracy_codes(yt: PythonObject, yp: PythonObject, n: Int, L: Int, var w: O
     var weighted = False
     if w:
         weighted = True
-    # `_Sums(true, pred, w, present, mode, tail=_cm_stage(..., COUNT, 11))`.
-    var prog = _Program()
-    var a = prog.put(yt, n)
-    var bb = prog.put(yp, n)
-    var matched = prog.scratch(n)
-    prog.stage(_OP_PAIR_KEY, n, [a, bb, matched, L, 1])
-    var W = _NONE
+    var plan = label_accuracy_plan(n, L, weighted)
+    # Only lifetime pins cross the runner's existing boundary. No Python
+    # stage records, input tuples, skip pairs or private program instance.
+    var inputs: List[PythonObject] = [yt, yp]
     var w_array = PythonObject(None)
     if weighted:
         w_array = w.value().array if py_type(w.value().array) is context["array_class"] else _owned_f32(w.value(), context)
-        W = prog.put(w_array, n)
-    var g0 = prog.group(matched, n, L, W)
-    var g1 = prog.group(a, n, L, W)
-    var g2 = prog.group(bb, n, L, W)
-    if weighted:
-        # every row in group 0: the total weight grouping
-        var zero = prog.scratch(n)
-        prog.stage(_OP_PAIR_KEY, n, [a, a, zero, 1, 2])
-        _ = prog.group(zero, n, 1, W)
-    if not weighted:
-        _ = prog.counts(g0[0], L)
-        _ = prog.counts(g1[0], L)
-        _ = prog.counts(g2[0], L)
-    # `_cm_stage(prog, groups, w, n, L, _CM_COUNT, 11)`.
-    var out = prog.alloc(11)
-    var tp = g0[1] if weighted else g0[0]
-    var tot = n
-    if weighted:
-        # `_wsum_sf64(prog, L)`: the soft binary64 hit and weight total.
-        var nb = max(1, (n + _WSUM_BLOCK - 1) // _WSUM_BLOCK)
-        var s = prog.scratch(4 * nb)
-        prog.stage(_OP_CM_EPI, nb, [_CM_WSUM_LEAF, matched, W, n, s, L])
-        var stride = 1
-        while stride < nb:  # driver-loop: over the fold levels (log2 of the block count)
-            prog.stage(_OP_CM_EPI, (nb - stride + 2 * stride - 1) // (2 * stride), [_CM_WSUM_FOLD, s, stride, nb])
-            stride *= 2
-        tot = s
-    prog.stage(_OP_CM_EPI, 1, [_CM_COUNT, tp, L, 1 if weighted else 0, tot, out])
-    var arena = _run(prog^, mode, context)
-    var base = _arena_address(arena)
-    _ = arena  # keep the Python object alive through the native call above
-    _ = yt  # the code vectors stay alive through the program run above
+        inputs.append(w_array)
+    var arena = _accuracy_run(plan.program, inputs, mode, context)
+    var base = arena.base
+    var result_at = plan.result_offset
+    _ = yt
     _ = yp
     _ = w^
     _ = w_array^
-    if weighted and Int(_I32P(unsafe_from_address=base + 4 * out)[0]) != 0:
+    if weighted and Int(_I32P(unsafe_from_address=base + 4 * result_at)[0]) != 0:
         raise Error("ZeroDivisionError: float division by zero")
-    _ = arena  # keep the Python object alive through the native calls above
-    var fraction = _F64P(unsafe_from_address=base + 4 * (out + 8))[0]
-    _ = arena  # keep the Python object alive through the native call above
+    var fraction = _F64P(unsafe_from_address=base + 4 * (result_at + 8))[0]
     _ = arena^
     return fraction
 
