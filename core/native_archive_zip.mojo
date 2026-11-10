@@ -216,7 +216,8 @@ def native_zip_directory(raw: ArchiveSpan) raises -> NativeZipDirectory:
             insertion.append(name)
         final_entry[name] = i
         positions.append(NativeZipPosition(result.entries[i].offset, name))
-    sort[cmp_fn=_zip_position_less](Span(unsafe_ptr=positions.unsafe_ptr(), length=len(positions)))
+    var ordered = Span(unsafe_ptr=positions.unsafe_ptr(), length=len(positions))
+    sort[NativeZipPosition, cmp_fn=_zip_position_less](ordered)
     var limit = central_start
     for i in range(count - 1, -1, -1):
         var selected = final_entry[positions[i].name]
