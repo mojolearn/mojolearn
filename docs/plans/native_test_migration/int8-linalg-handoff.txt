@@ -1,0 +1,52 @@
+Mojolearn native INT8 linalg checks, 2026-11-10
+
+Scope and coverage per executor
+  Five original (m,n,k) cases: (1,32,32), (2,96,127), (7,33,129),
+  (16,64,1000), (1,1024,512). Native deterministic input generation keeps
+  the old 13-bit-significand/eight-binade distribution and seed labels;
+  it does not reproduce NumPy RNG's exact matrices.
+  Both operands' quantizer codes and row exponents are checked against an
+  independent Float64 quotient/remainder ties-to-even oracle (stronger than
+  the previous A-only host/GPU product-helper comparison).
+  Every INT8 GEMM cell is compared to a scalar Int64 dot product, then the
+  same explicit Int64-to-float32 and power-of-two scaling seams as the
+  former NumPy oracle. Every dequantized B word is checked independently.
+  No product rounding, quantization, power or GEMM helper supplies expected
+  values. No hashes, tolerance changes, production code or kernel changes.
+
+Execution
+  CPU calls typed decomposition.linalg_host_impl entries and checks return
+  counts. Independent fixtures, generator/oracle rows and GEMM oracle cells
+  run through host_parallelize. Owning lists survive borrowed pointers.
+  GPU calls the existing quantize_rows_int8_device, identical_gemm_int8_into
+  and dequantize_rows_int8_device. Existing pinned-buffer upload/download
+  helpers are reused; one owned context submits shapes in order. Host
+  preparation and oracle rows/cells run in parallel. The existing quantizer
+  has one GPU thread per row; this test does not change or claim to improve
+  its parallelism for one-row fixtures. No new loader or test runner.
+
+Python removal and retained boundaries
+  Removed five-case NumPy integer matmul/power/scaling/dequantization oracle
+  and duplicate full host/GPU quantizer comparisons from test_linalg_lowbit.
+  Keeps a 2 x 2 / 3 x 2 case for ndarray and (codes,exponents) admission,
+  matching result packing, dtype/shape, raw binding counts and sentinels.
+  Earlier BF16 conversion test remains unchanged. BF16 GEMM numerical cases
+  and all public refusal tests remain; this file is still partially migrated.
+  Inventory review corrected density-hash tests to retain-python-boundary:
+  physical/logical buffers, protocols, exception semantics and lifetimes
+  need the Python boundary. Their hashlib oracle is test-only.
+
+Orchestrator commands (lane does not compile or run)
+  bash tools/compile_slot.sh pixi run check-native-int8-linalg-cpu
+  bash tools/compile_slot.sh pixi run check-native-int8-linalg-gpu
+  Compile-only:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/int8_linalg_cpu.mojo -o "$HOME/mojolearn-evidence/native-int8-linalg-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/int8_linalg_gpu.mojo -o "$HOME/mojolearn-evidence/native-int8-linalg-gpu"
+  Use standard target flags for NVIDIA/AMD builds. Direct unit correctness
+  checks are not an identity campaign or a performance measurement.
+  Retained Python bindings: _mojolearn_linalg/_mojolearn_linalg_host.
+  python3 -m pytest mojolearn/tests/test_linalg_lowbit.py -k int8_input_forms
+
+Status
+  Source-reviewed/diff checked only; CPU/GPU compile/run are RUN OWED to root.
+  No box job queued. Product bits/performance unchanged. A/B define: none.
