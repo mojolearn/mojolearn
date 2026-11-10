@@ -52,13 +52,11 @@ from bindings.label_input_sources import (
     LABELS_LIST_OTHER, LABELS_LIST_BOOL, LABELS_LIST_FLOAT)
 from bindings.str_labels_native import StrTable, _read, _sorted
 from bindings.cpython_table import cpython_table
-from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_COUNTS, LABEL_WEIGHTS_ROWS
-from bindings.label_weights_boundary import label_weights_run
-from bindings.class_weight_boundary import class_weight_admit_dictionary, class_weight_dictionary_values
-from core.class_weight_plan import ClassWeightInputs, ClassWeightPlan, class_weight_all_one, class_weight_plan
+from bindings.class_weight_boundary import class_weight_admit_dictionary
+from bindings.class_weight_rows_boundary import class_weight_rows_admitted
 from bindings.labels_descriptor_boundary import (
     labels_prepare_targets, labels_reduce_stat, labels_argmax_rows as labels_argmax_run,
-    labels_gather, labels_class_ratio_f64, labels_fsum_f64,
+    labels_gather, labels_fsum_f64,
 )
 from bindings.label_input_sources import LABELS_LIST_INT
 from core.admitted_cast_elements import admitted_cast_elements
@@ -952,40 +950,9 @@ def labels_class_weight_rows(class_weight: PythonObject, labels: ClassicalLabels
     _ = labels_label_kind(classes, context)
     var k = len(classes)
     var n = labels.n
-    var inputs = ClassWeightInputs()
-    if kind is b.str:
-        # The same counts -> cast -> binary64 ratio kernels and request order;
-        # all three scratch owners are native instead of boxed Array objects.
-        var counts = List[Int32](unsafe_uninit_length=k)
-        _ = label_weights_run(xtrees, LABEL_WEIGHTS_COUNTS,
-            LabelWeightsRequest(labels_address(labels.codes) if n else 0, Int(counts.unsafe_ptr()), 0, n, k))
-        var wide = List[Int64](unsafe_uninit_length=k)
-        labels_cast(Int(counts.unsafe_ptr()), "<i4", Int(wide.unsafe_ptr()), "<i8", k, context)
-        inputs.values = List[Float64](unsafe_uninit_length=k)
-        if k and labels_class_ratio_f64(context, Int(wide.unsafe_ptr()), k, n, 0,
-                                       Int(inputs.values.unsafe_ptr())) != 0:
-            raise Error("ZeroDivisionError: division by zero")
-        _ = counts^
-        _ = wide^
-    else:
-        inputs = class_weight_dictionary_values(class_weight, classes, context)
-    var plan = ClassWeightPlan(True, List[Float32]())
-    var balanced = kind is b.str
-    with GILReleased(Python()):
-        if balanced:
-            inputs.all_one = class_weight_all_one(inputs.values)
-        plan = class_weight_plan(inputs.values, inputs.all_one)
-    _ = inputs^
-    if plan.all_one:
-        return PythonObject(None)
-    var output = admitted_vector(n, "<f4", context)
-    if n:
-        _ = label_weights_run(xtrees, LABEL_WEIGHTS_ROWS,
-            LabelWeightsRequest(labels_address(labels.codes), Int(plan.words.unsafe_ptr()),
-                                labels_address(output), n, k))
-    _ = plan^
-    _ = labels
-    return output
+    return class_weight_rows_admitted(class_weight, classes, labels.codes, n, k,
+                                      kind is b.str, xtrees, context)
+
 
 
 # x_metrics stage ops (`_expansion_metrics._OPS`) and cm_epi kinds.

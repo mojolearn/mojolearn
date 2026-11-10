@@ -6,10 +6,15 @@ from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
 from bindings.cpython_borrowed import borrowed_item
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_call, py_type
-from bindings.label_admission_native import labels_admit_primitive
+from bindings.py_balanced import py_call, py_type, py_get
+from bindings.label_admission_native import labels_admit_primitive, labels_primitive_kind
+from bindings.sequential_admission import _one_of
 from bindings.native_scalar_decode import native_scalar_buffer_dtype
 from core.class_weight_plan import ClassWeightInputs, class_weight_kind, class_weight_value
+
+comptime CLASS_WEIGHT_CLASSICAL = 0
+comptime CLASS_WEIGHT_SVC = 1
+comptime CLASS_WEIGHT_TREES = 2
 
 
 def class_weight_admit_dictionary(value: PythonObject, context: PythonObject) raises:
@@ -27,14 +32,22 @@ def class_weight_admit_dictionary(value: PythonObject, context: PythonObject) ra
     _ = value
 
 
-def class_weight_dictionary_values(value: PythonObject, classes: PythonObject,
+def class_weight_dictionary_values[Profile: Int = CLASS_WEIGHT_CLASSICAL](value: PythonObject, classes: PythonObject,
                                    context: PythonObject) raises -> ClassWeightInputs:
     # This is exact input-dictionary admission, before RUN. Keep the existing
     # set-difference semantics for every supported native numeric key, including
     # NumPy extended/weak comparisons and arbitrary-size integers. No private
     # Python container carries numerical weight state into RUN.
     var b = native_loaded_module("builtins")
-    var keys = py_call(b.list, value)
+    var keys = value
+    @parameter
+    if Profile != CLASS_WEIGHT_TREES:
+        keys = py_call(b.list, value)
+    @parameter
+    if Profile == CLASS_WEIGHT_SVC:
+        for i in range(len(keys)):  # exact dictionary key UNPACK, before hashing
+            if labels_primitive_kind(py_type(keys[i]), context) == 0:
+                raise Error("TypeError: class_weight keys must be native numbers or strings")
     var unknown = py_call(py_call(b.set, keys).difference, classes)
     if len(unknown) > 0:
         raise Error("class_weight contains labels absent from y")
@@ -51,9 +64,19 @@ def class_weight_dictionary_values(value: PythonObject, classes: PythonObject,
             result.append(1.0, True)
             continue
         var item = PythonObject(from_borrowed=raw)
-        var kind = labels_admit_primitive(item, context)
-        class_weight_kind(kind)
         var cls = py_type(item)
+        @parameter
+        if Profile == CLASS_WEIGHT_CLASSICAL:
+            class_weight_kind(labels_admit_primitive(item, context))
+        elif Profile == CLASS_WEIGHT_TREES:
+            # Keep the tree family's existing exact scalar membership rather
+            # than silently widening it to every label scalar alias.
+            var bool_types = py_get(context, "bool_types")
+            var is_bool = cls is b.bool or (bool_types is not None and _one_of(cls, bool_types))
+            if is_bool or not (cls is b.int or cls is b.float or _one_of(cls, context["scalar_types"])):
+                raise Error("class weights must be finite nonnegative real numbers")
+        else:
+            class_weight_kind(labels_primitive_kind(cls, context))
         var number = Float64(0)
         var exact_one = False
         if cls is b.float or cls is b.int:

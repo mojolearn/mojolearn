@@ -15,7 +15,6 @@
 # entry points connected at import (python/mojolearn/_native_trees_bridge.py)
 # and C builtins.
 from std.ffi import c_int
-from std.math import isfinite
 from std.memory import bitcast
 from std.os import getenv
 from std.python import Python, PythonObject
@@ -33,8 +32,12 @@ from bindings.sequential_admission import _ordinary_torch, _one_of
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_inputs import sequential_sequence
 from bindings.classifier_public_lifecycle import classifier_label_list
-from bindings.metrics_native_support import metric_is_bool, metric_is_integral, metric_is_real, metric_float
+from bindings.metrics_native_support import metric_is_bool, metric_is_integral, metric_is_real
 from bindings.classical_labels import ClassicalLabels, classical_encode_labels
+from bindings.class_weight_boundary import CLASS_WEIGHT_TREES
+from bindings.class_weight_rows_boundary import class_weight_rows_admitted
+from bindings.label_weights_boundary import label_weights_run
+from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_MULTIPLY
 # The array admission helpers (lane consol-a0-admission, 2026-11-08): this
 # file kept a near-verbatim copy of bindings/classical_labels.mojo's block;
 # the one merged copy lives there and is imported here under the trees_*
@@ -421,82 +424,17 @@ def trees_argmax_rows(scores: PythonObject, rows: Int, cols: Int, wide: Bool, co
 
 def trees_class_weight_rows(class_weight: PythonObject, labels: TreesLabels, xtrees: PythonObject,
                             context: PythonObject) raises -> PythonObject:
-    """`_class_weights._class_weight_rows(class_weight, classes, codes,
-    xbind)` with int32 codes on the x_trees binding: per-row float32
-    weights from a dict or 'balanced', or None when every class weight is
-    1. The counts and the per-row gather are the binding's kernels; only
-    the k class weights are read here."""
-    var b = trees_builtins()
+    """Tree scalar admission over the shared native class-weight plan."""
     if class_weight is None:
         return PythonObject(None)
     var classes = labels.classes
     var k = len(classes)
     var n = labels.n
-    var objects = Python.list()
-    if Bool(py=py_call(b.isinstance, class_weight, b.str)):
-        var counts = admitted_vector(k, "<i4", context)
-        var count_entry = trees_need(xtrees, "x_trees_code_counts", "the x_trees binding has no x_trees_code_counts",
-                                     "ImportError")
-        _ = py_call_typed(count_entry, PythonObject(trees_address(labels.codes) if n else 0),
-                          PythonObject(trees_address(counts)), Python.list(n, k))
-        _ = counts  # keep the Python object alive through the native call above
-        var wide = admitted_vector(k, "<i8", context)
-        trees_cast(trees_address(counts), "<i4", trees_address(wide), "<i8", k, context)
-        _ = wide  # keep the Python object alive through the native call above
-        _ = counts  # keep the Python object alive through the native call above
-        var w64 = admitted_vector(k, "<f8", context)
-        if k and Int(py=py_call_typed(trees_helper(context, "class_ratio_f64"), PythonObject(trees_address(wide)),
-                                      PythonObject(k), PythonObject(n), PythonObject(0), PythonObject(trees_address(w64)))):
-            raise Error("ZeroDivisionError: division by zero")
-        _ = wide  # keep the Python object alive through the native calls above
-        _ = w64  # keep the Python object alive through the native calls above
-        var p = _F64P(unsafe_from_address=trees_address(w64))
-        _ = w64  # keep the Python object alive through the native call above
-        for i in range(k):  # driver-loop: over the k class weights for the argument checks below
-            _ = py_call(objects.append, PythonObject(p[i]))
-            _ = w64  # keep the Python object alive through the native call above
-    else:
-        var unknown = py_call(py_call(b.set, class_weight).difference, classes)
-        if len(unknown) > 0:
-            raise Error("class_weight contains labels absent from y")
-        for i in range(k):  # driver-loop: over user class_weight dict per class
-            _ = py_call(objects.append, py_call(class_weight.get, classes[i], PythonObject(1.0)))
-    var values = List[Float64]()
-    var all_one = True
-    for i in range(k):  # driver-loop: over class weight argument checks
-        var v = objects[i]
-        if metric_is_bool(v, context) or not metric_is_real(v, context):
-            raise Error("class weights must be finite nonnegative real numbers")
-        var f = metric_float(v, context)
-        if not isfinite(f) or f < 0:
-            raise Error("class weights must be finite nonnegative real numbers")
-        values.append(f)
-        all_one = all_one and Bool(py=v == PythonObject(1))
-    if all_one:
-        return PythonObject(None)
-    var narrowed = admitted_vector(k, "<f4", context)
-    var q = _F32P(unsafe_from_address=trees_address(narrowed))
-    _ = narrowed  # keep the Python object alive through the native call above
-    var top = Float32(0)
-    for i in range(k):  # driver-loop: over the k class weights narrowed to float32
-        var f32 = Float32(values[i])
-        if not isfinite(f32) or (values[i] > 0 and f32 == 0):
-            raise Error("class weights must remain finite and nonzero when positive in Float32")
-        q[i] = f32
-        _ = narrowed  # keep the Python object alive through the native call above
-        if i == 0 or f32 > top:
-            top = f32
-    if top <= 0:
-        raise Error("class weights must have positive total")
-    var out = admitted_vector(n, "<f4", context)
-    if n:
-        var rows_entry = trees_need(xtrees, "x_trees_class_rows", "the x_trees binding has no x_trees_class_rows",
-                                    "ImportError")
-        _ = py_call_typed(rows_entry, PythonObject(trees_address(labels.codes)), PythonObject(trees_address(narrowed)),
-                          PythonObject(trees_address(out)), Python.list(n, k))
-        _ = narrowed  # keep the Python object alive through the native call above
-        _ = out  # keep the Python object alive through the native call above
-    return out
+    # The public lifecycle has admitted exact constructor values before this
+    # call. Preserve the tree family's direct set(dict) key semantics.
+    var balanced = py_type(class_weight) is trees_builtins().str
+    return class_weight_rows_admitted[CLASS_WEIGHT_TREES](class_weight, classes, labels.codes,
+                                                         n, k, balanced, xtrees, context)
 
 
 def trees_weighted_rows(sample_weight: PythonObject, class_weight: PythonObject, labels: TreesLabels,
@@ -511,14 +449,12 @@ def trees_weighted_rows(sample_weight: PythonObject, class_weight: PythonObject,
     var rows = trees_class_weight_rows(class_weight, labels, xtrees, context)
     if rows is None:
         return sw^
-    var out = admitted_vector(labels.n, "<f4", context)
-    var mul = trees_need(xtrees, "x_trees_mul_f32", "the x_trees binding has no x_trees_mul_f32", "ImportError")
-    _ = py_call_typed(mul, PythonObject(sw.address), PythonObject(trees_address(rows)), PythonObject(trees_address(out)),
-                      Python.list(labels.n))
-    _ = out  # keep the Python object alive through the native call above
-    _ = rows  # keep the Python object alive through the native call above
+    var output = admitted_vector(labels.n, "<f4", context)
+    _ = label_weights_run(xtrees, LABEL_WEIGHTS_MULTIPLY,
+        LabelWeightsRequest(sw.address, trees_address(rows), trees_address(output), labels.n, 0))
+    _ = rows
     _ = sw^
-    return admitted_words(out, trees_address(out), labels.n, 1)
+    return admitted_words(output, trees_address(output), labels.n, 1)
 
 
 def trees_class_rows_only(class_weight: PythonObject, labels: TreesLabels, xtrees: PythonObject,
