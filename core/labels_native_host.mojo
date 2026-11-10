@@ -9,6 +9,9 @@ from core.host_helpers_impl import (
 from core.label_encode import host_unique_inverse
 from core.array_helpers_impl import class_ratio_f64, fsum_f64
 from core.labels_prepare import LabelsPreparationKernels, labels_prepare_targets
+from core.labels_admission import (
+    labels_unique_shape, labels_argmax_shape, labels_gather_shape, labels_ratio_shape,
+)
 from core.labels_native_api import (
     LabelsNativeKernels, LabelsPrepareRequest, LabelsReduceRequest,
     LabelsArgmaxRequest, LabelsGatherRequest, LabelsRatioRequest,
@@ -58,10 +61,7 @@ struct LabelsHostKernels(LabelsNativeKernels, LabelsPreparationKernels):
 
     @staticmethod
     def unique(source: Int, count: Int, kind: Int, classes: Int, codes: Int) raises -> Int:
-        if count < 1:
-            raise Error("unique_inverse: n must be positive, got " + String(count))
-        if kind != 0 and kind != 1:
-            raise Error("unique_inverse: kind must be 0 (float64) or 1 (int64)")
+        labels_unique_shape(count, kind)
         if source == 0 or classes == 0 or codes == 0:
             raise Error("unique_inverse: null buffer address")
         var result = host_unique_inverse(
@@ -98,8 +98,7 @@ struct LabelsHostKernels(LabelsNativeKernels, LabelsPreparationKernels):
     @staticmethod
     def argmax(wide: Bool, r: LabelsArgmaxRequest) raises:
         var name = String("argmax_rows_f64") if wide else String("argmax_rows_f32")
-        if r.rows < 0 or r.cols < 1:
-            raise Error(name + ": n_rows must be non-negative and n_cols positive")
+        labels_argmax_shape(name, r.rows, r.cols)
         if r.rows == 0:
             return
         # Source refusal precedes destination refusal, as in the old wrappers.
@@ -122,8 +121,7 @@ struct LabelsHostKernels(LabelsNativeKernels, LabelsPreparationKernels):
             _ = gather_i32(r.table, r.classes, r.codes, r.count, r.dst)
             return
         var name = String("gather_i64") if kind == 1 else String("gather_f64")
-        if r.count < 0 or r.classes < 1:
-            raise Error(name + ": n must be non-negative and the table non-empty")
+        labels_gather_shape(name, r.count, r.classes)
         if r.count == 0:
             return
         if r.table == 0 or r.codes == 0 or r.dst == 0:
@@ -142,10 +140,7 @@ struct LabelsHostKernels(LabelsNativeKernels, LabelsPreparationKernels):
     def ratio(r: LabelsRatioRequest) raises -> Int:
         if r.classes <= 0:
             return 0
-        if r.mode != 0 and r.mode != 1:
-            raise Error("class_ratio_f64: mode is 0 (balanced) or 1 (prior)")
-        if r.mode == 1 and r.count == 0:
-            raise Error("class_ratio_f64: the prior of zero rows")
+        labels_ratio_shape(r.classes, r.count, r.mode)
         if r.counts == 0 or r.dst == 0:
             raise Error("mojolearn: null buffer address")
         return class_ratio_f64(MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=r.counts),
