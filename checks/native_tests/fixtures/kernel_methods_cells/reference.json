@@ -2,7 +2,7 @@
   "schema": 1,
   "numpy": "2.5.3",
   "scikit_learn": "1.9.1",
-  "generator_sha256": "2fb4e9207dad37dbae9fbbb4451284ad0844409e1fb8f109f19b9e136ad0a61a",
+  "generator_sha256": "16930f7268ad1dea111e33bba4909ea2fa8e000a76abb5e858671105b3a6faec",
   "pairwise_source_sha256": "5dea05d1237d57d62f5235af78a3dec1b4f27c239c0adc3c2088a7eaf409600e",
   "origin": "test_km_kernels._data80x6 seed4; first80input rows byte-identical",
   "oracle": "sklearn pairwise float64 on recorded float32 inputs; no Mojolearn execution",
