@@ -59,7 +59,8 @@ struct KMeansResidentOwner(Movable, Writable):
 
 
 def kmeans_owner_matching(value: PythonObject, model: PythonObject,
-    centers: PythonObject, binding: PythonObject, clusters: Int, features: Int) raises -> Bool:
+    centers: PythonObject, binding: PythonObject, connection: Int,
+    clusters: Int, features: Int) raises -> Bool:
     if value is None:
         return False
     # Legacy dictionaries and manually replaced private values are not a
@@ -67,7 +68,7 @@ def kmeans_owner_matching(value: PythonObject, model: PythonObject,
     try:
         var record = value.downcast_value_ptr[KMeansResidentOwner]()
         return record[].state.matches(Int(model._obj_ptr), Int(centers._obj_ptr),
-            Int(binding._obj_ptr), clusters, features)
+            Int(binding._obj_ptr), connection, clusters, features)
     except:
         return False
 
@@ -86,7 +87,7 @@ def kmeans_owner_prepare(model: PythonObject, centers: PythonObject, binding: Py
         with GILReleased(Python()):
             handle = driver.prepare(address, clusters, features)
         var state = KMeansResidentState(Int(model._obj_ptr), Int(centers._obj_ptr),
-            Int(binding._obj_ptr), clusters, features, handle, driver.copy())
+            Int(binding._obj_ptr), connection, clusters, features, handle, driver.copy())
         # Allocation transfers cleanup ownership only after it succeeds.
         var owner = KMeansResidentOwner(state^, provider, centers)
         handle = -1

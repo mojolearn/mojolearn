@@ -67,9 +67,9 @@ def _kmeans_centers_ready(centers: PythonObject, context: PythonObject) raises -
 
 
 def _kmeans_held(model: PythonObject, fields: PythonObject, binding: PythonObject,
-                 centers: PythonObject, k: Int, d: Int) raises -> PythonObject:
+                 centers: PythonObject, k: Int, d: Int, connection: Int) raises -> PythonObject:
     var owner = py_get(fields, _HOLDER, PythonObject(None))
-    return owner if kmeans_owner_matching(owner, model, centers, binding, k, d) else PythonObject(None)
+    return owner if kmeans_owner_matching(owner, model, centers, binding, connection, k, d) else PythonObject(None)
 
 
 def _kmeans_resident(model: PythonObject, binding: PythonObject, centers: PythonObject,
@@ -77,7 +77,7 @@ def _kmeans_resident(model: PythonObject, binding: PythonObject, centers: Python
     if (kmeans_capabilities(connection) & KMEANS_CAP_RESIDENT) == 0:
         return PythonObject(None)
     var fields = py_fields(model)
-    var held = _kmeans_held(model, fields, binding, centers, k, d)
+    var held = _kmeans_held(model, fields, binding, centers, k, d, connection)
     if held is not None:
         return held
     # Writable/rebound caller arrays still use per-query uploads. Only the
@@ -348,7 +348,7 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
         # needs the same object, binding and shape; records are held only
         # for a read-only Array (p3-neighbors-cluster, replacing the per-query
         # SHA-256), so an in-place edit raises instead of serving stale words.
-        var held = _kmeans_held(model, fields, binding, centers, k, d)
+        var held = _kmeans_held(model, fields, binding, centers, k, d, connection)
         if held is not None:
             # Minted only for this read-only Array (`_kmeans_resident`).
             resident = held

@@ -28,7 +28,9 @@ probing and its process-global Python record list are removed; typed provider
 capabilities decide the same available routes.
 
 `_resident_holder` now contains a native owner or `None`. Its Mojo state stores
-the model/centroid/provider identities, shape, native handle and driver. Only
+the model/centroid/binding identities, admitted native connection, shape, native
+handle and driver. A replaced provider factory therefore cannot reuse a handle
+minted by another admitted driver, even on the same binding module. Only
 freezable Arrays cache their centers, as before. Writable caller ndarrays keep
 the per-query upload so in-place changes remain visible. Each query retains its
 owner through RUN; replacing/refitting the model retires the old owner, whose
