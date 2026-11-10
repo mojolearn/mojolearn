@@ -1,0 +1,37 @@
+Mojolearn native optimizer checkpoint input checks, 2026-11-10
+
+35 direct core.optimizer_state_impl.optimizer_state_cast fixtures
+  13 initialized-flag conversions: truncation toward zero, both signed-int32
+  endpoints and admissible adjacent fractions, overflow and NaN/infinity
+  refusals. Expected words and named refusal categories are literal.
+  11 moment conversions: signed zero, two f32 tie parities, just-above tie,
+  subnormal ties, largest finite f32, overflow/NaN/negative infinity words.
+  9 typed spans: signed/unsigned/boolean/half inputs, forward/reversed/zero
+  stride, big-endian signed values and int64/uint64 double-rounding boundaries.
+  One middle-of-span refusal checks the permitted private scratch prefix and
+  untouched failing/tail cells; this is not public publication atomicity.
+  One zero-length no-op, with no storage required.
+  Input words and output guards checked; native owners retained after the
+  final raw-address use. No Python objects, imports, callbacks or arithmetic.
+
+Parallelism and scope
+  Uses training/checks and the existing pixi/check convention. Independent
+  fixtures run through host_parallelize; each small ordered conversion span
+  retains its existing prefix/refusal behavior. Product code is unchanged.
+  This is supplementary typed-state coverage, not a claimed deletion of the
+  real Python checkpoint dict/error-class/owner-pin/publication assertions.
+  Native OpsSession optimizer math/checkpoint migration is a separate batch.
+
+Orchestrator commands (lane has not compiled/run)
+  bash tools/compile_slot.sh pixi run check-native-optimizer-state-input
+  Compile-only:
+  bash tools/compile_slot.sh pixi run mojo build -I . training/checks/optimizer_state_input_check.mojo -o "$HOME/mojolearn-evidence/native-optimizer-state-input"
+  Run the exact binary. Host conversion helper; no GPU kernel path.
+  Public binding family remains _mojolearn_training and optimizer public door.
+  Keep test_optimizer_public_native.py checkpoint flag error-class cases,
+  test_optimizer_native_array_ownership.py and native-step/lifecycle boundaries.
+
+Status
+  Source/diff review only; compile/run owed to root. No product/kernel edits,
+  box jobs, timing or identity. A/B: none. Nothing deleted in this batch;
+  Python boundary assertions still exercise behavior unavailable to raw spans.
