@@ -168,7 +168,7 @@ def metadata_and_scratch(driver: OptimizerNativeDriver) raises:
     var expected = String("native optimizer: unknown operation or missing result storage")
     var refused = False
     try:
-        _ = native_descriptor_call_spans(driver.entry, 11, 0, 0, 0, 0, 0, 0, outputs[0])
+        _ = native_descriptor_call_spans(driver.entry, OPT_NATIVE_COUNT, 0, 0, 0, 0, 0, 0, outputs[0])
     except error:
         refused = True
         require(String(error) == expected, "wrapper changed descriptor refusal text")

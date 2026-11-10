@@ -212,6 +212,15 @@ def _statistic_refusal(unit: Int) raises:
     _expect(members, ancestry, expected)
 
 
+def _raw_word(span: ArchiveSpan, at: Int, width: Int) raises -> UInt64:
+    # These are payload bits, including negative Int64 words. ArchiveSpan.uint
+    # parses sizes/addresses and deliberately rejects words above Int.max.
+    var value = UInt64(0)
+    for index in range(width):
+        value |= UInt64(span.byte(at + index)) << UInt64(index * 8)
+    return value
+
+
 def _saved(unit: Int) raises:
     if unit < 3:
         var values: List[Float64] = [16777217.0, bitcast[DType.float64](UInt64(0x8000000000000000)), 0.125]
@@ -219,7 +228,7 @@ def _saved(unit: Int) raises:
         var member = native_standard_scalar_count(values[unit])
         var raw = ArchiveSpan(member.source, member.size)
         _require(member.dtype == "<f4" and member.shape[0] == 1 and member.size == 4, "scalar count storage contract")
-        _require(UInt64(raw.uint(0, 4)) == expected[unit], "independent scalar count IEEE words")
+        _require(_raw_word(raw, 0, 4) == expected[unit], "independent scalar count IEEE words")
         _ = member
         return
     var admitted = List[NativeArchiveMember]()
@@ -240,8 +249,8 @@ def _saved(unit: Int) raises:
         _require(members[i].name == expected_names[i], "lexical saved member order")
     var raw = ArchiveSpan(members[meta].source, members[meta].size)
     _require(raw.size == 32 and raw.uint(0, 8) == 2, "owned feature word")
-    _require(UInt64(raw.uint(8, 8)) == (UInt64(0xFFFFFFFFFFFFFFFF) if unit == 3 else UInt64(17)), "owned count word")
-    _require(UInt64(raw.uint(16, 8)) == UInt64(unit == 3) and raw.uint(24, 8) == 0, "owned option words")
+    _require(_raw_word(raw, 8, 8) == (UInt64(0xFFFFFFFFFFFFFFFF) if unit == 3 else UInt64(17)), "owned count word")
+    _require(_raw_word(raw, 16, 8) == UInt64(unit == 3) and raw.uint(24, 8) == 0, "owned option words")
     _ = members
 
 
@@ -253,7 +262,7 @@ def _view(unit: Int) raises:
     _require(not view.layout.fortran and view.layout.shape[0] == 2, "final C-order vector metadata")
     _require(len(view.owned) == 0 and view.layout.payload.address == members[index].layout.payload.address, "no intermediate payload copy")
     _require(view.layout.width == (8 if unit == 2 else 4), "statistics/count dtype width")
-    _require(UInt64(view.layout.payload.uint(0, view.layout.width)) == (UInt64(0xFFFFFFFFFFFFFFFF) if unit == 2 else UInt64(0x80000000)), "borrowed negative count/signed-zero bytes")
+    _require(_raw_word(view.layout.payload, 0, view.layout.width) == (UInt64(0xFFFFFFFFFFFFFFFF) if unit == 2 else UInt64(0x80000000)), "borrowed negative count/signed-zero bytes")
     _ = members
 
 
