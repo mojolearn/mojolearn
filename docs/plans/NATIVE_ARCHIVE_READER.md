@@ -3,9 +3,10 @@
 Writer/hash execution and the generic archive reader now use native format
 implementations in this source branch. Public loading still requires the
 orchestrator's affected-group compile/runtime qualification and codec wheel
-dependency qualification. Linear model schema construction below the reader
-still has Python object state to migrate; generic reader migration is not a
-claim that every public load operation is Python-free.
+dependency qualification. Ridge/OLS schema checks and loaded scalar state now
+use `core/native_archive_linear.mojo`; other saved-model families still have
+their own schema work, so this is not a claim that every public load operation
+is Python-free.
 
 `core/native_archive_codec.mojo` uses public C APIs and owns each decoder's state
 and result bytes. A single compressed stream is dependent; independent members
@@ -68,8 +69,20 @@ metadata without calling warning hooks. PACK emits those events through the
 existing admitted native warning boundary in member order, including warnings
 that precede a later dtype/payload refusal.
 
-Remaining work is typed linear schema/state construction, codec wheel dependency
-qualification, and affected public boundary tests. Existing API/protocol/
-exception and file ownership tests remain in place. The old Python-object ZIP,
+Direct Ridge/OLS loads bypass the intermediate Python result dictionary. Their
+native plan retains saved mode, ancestry checks, exact dtype/shape refusals,
+intercept/alpha bits and constructor defaults; PACK creates the public model
+and publishes its native fitted-state record. No mean array is invented for
+loaded models. The shared generic host-archive map has a compatibility UNPACK
+adapter into the same native plan and retains the existing coefficient owner.
+Historical numeric/bytes metadata spelling is native too, including NumPy's
+legacy print configuration. Thirty-seven parallel native fixtures cover these
+schema/refusal/formatting contracts. Scalar spelling follows the published
+[NumPy scalar formatting source](https://github.com/numpy/numpy/blob/v2.3.0/numpy/_core/src/multiarray/scalartypes.c.src)
+and reuses Mojolearn's existing binary32 formatter.
+
+Remaining work is codec wheel dependency qualification and affected public
+boundary tests. Existing API/protocol/exception and file ownership tests remain
+in place. The old Python-object ZIP,
 NPY and Unicode parser/codec helpers and their import-time codec dependencies
 are removed with the native reader connection; no callback fallback remains.

@@ -53,6 +53,7 @@ check-native-archive-writer = "mojo run -I . checks/native_tests/archive_writer.
 check-native-archive-codec = "mojo run -I . checks/native_tests/archive_codec.mojo"
 check-native-archive-parser = "python3 tools/gen_archive_unicode.py && mojo run -I . checks/native_tests/archive_parser.mojo"
 check-native-archive-reader = "python3 tools/gen_archive_unicode.py && mojo run -I . checks/native_tests/archive_reader.mojo"
+check-native-archive-linear = "python3 tools/gen_archive_unicode.py && mojo run -I . checks/native_tests/archive_linear.mojo"
 check-native-archive-unicode = "python3 tools/gen_archive_unicode.py && mojo run -I . checks/native_tests/archive_unicode_names.mojo"
 # Queued split-GEMM workspace growth/reuse, oracle bits and no-wait budget.
 check-gemm-workspace = "mojo run -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -I . gemm/checks/gemm_workspace_check.mojo"

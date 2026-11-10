@@ -8,11 +8,12 @@ from std.python._cpython import PyObjectPtr
 from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.classical_archive import _archive_methods, _archive_path, _archive_file_call
-from bindings.native_buffer_owner import native_storage_allocate
 from bindings.optimizer_public_words import stash_python_error
-from bindings.classical_arrays import classical_numpy, classical_is_array, classical_dtype_str, classical_i64, classical_f64
-from bindings.classical_archive_input import archive_input_unpack
-from bindings.classical_archive_output import archive_members_pack
+from bindings.classical_arrays import classical_numpy, classical_is_array, classical_dtype_str
+from bindings.classical_archive_input import ArchiveReadInput, archive_input_unpack
+from bindings.classical_archive_output import archive_members_pack, archive_events_pack
+from bindings.classical_archive_linear import archive_class_names_unpack, archive_print_mode_unpack, archive_linear_pack, archive_linear_fields_unpack
+from core.native_archive_linear import native_archive_string, native_linear_archive_plan
 from core.native_archive_read import native_archive_read_status
 
 
@@ -285,9 +286,7 @@ def _archive_read_repr(value: PythonObject, context: PythonObject) raises -> Str
     return _archive_builtin_repr(value)
 
 
-def classical_archive_read(path: PythonObject, context: PythonObject) raises -> PythonObject:
-    # UNPACK exact path/file metadata and pin its native buffer owner. All
-    # ZIP/NPY/codec decisions execute with typed Mojo state before PACK.
+def _archive_read_input(path: PythonObject, context: PythonObject) raises -> ArchiveReadInput:
     var file = path
     var close = True
     var types = context["archive_file_types"]
@@ -296,7 +295,12 @@ def classical_archive_read(path: PythonObject, context: PythonObject) raises -> 
             close = False
     if close:
         file = _archive_file_call(context["archive_open"], _archive_read_path(path, context), "rb")
-    var admitted = archive_input_unpack(file, close, context)
+    return archive_input_unpack(file, close, context)
+
+
+def classical_archive_read(path: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Generic format boundary used by the remaining saved-model families.
+    var admitted = _archive_read_input(path, context)
     var minor = Int(py=context["archive_python_minor"])
     var micro = Int(py=context["archive_python_micro"])
     try:
@@ -363,68 +367,64 @@ def _archive_string(arrays: PythonObject, name: String, context: PythonObject) r
 
 
 def classical_archive_load(cls: PythonObject, path: PythonObject, ridge: Bool, context: PythonObject) raises -> PythonObject:
-    var arrays = classical_archive_read(path, context)
-    return classical_archive_build(cls, arrays, path, ridge, context)
+    var admitted = _archive_read_input(path, context)
+    var minor = Int(py=context["archive_python_minor"])
+    var micro = Int(py=context["archive_python_micro"])
+    try:
+        var members = native_archive_read_status(admitted.span, minor, micro)
+        archive_events_pack(members, context)
+        var ancestry = archive_class_names_unpack(cls)
+        var print_mode = archive_print_mode_unpack(members, context)
+        var plan = native_linear_archive_plan(members, ancestry, ridge, classical_numpy(context), print_mode)
+        if plan.class_mismatch:
+            raise Error("mojolearn: " + _archive_read_repr(path, context) + " was saved by "
+                        + plan.saved_as + ", not " + ancestry[0])
+        return archive_linear_pack(cls, plan, members, ridge, context, PythonObject(None))
+    finally:
+        admitted.close()
 
 
 def classical_host_model(path: PythonObject, context: PythonObject) raises -> PythonObject:
-    """host_model(path) for a saved LinearRegression or Ridge: the explicit
-    host class named by the file's estimator, loaded from one archive read."""
-    var arrays = classical_archive_read(path, context)
-    var estimator = _archive_string(arrays, "estimator", context)
-    var cls = py_get(context["classical_host_estimators"], estimator)
-    if cls is None:
-        raise Error("mojolearn: " + _archive_read_repr(path, context) + " was saved by "
-                    + String(estimator) + ", which mojolearn-linear-1 does not hold")
-    var model = classical_archive_build(cls, arrays, path, Bool(py=context["classical_kinds"][cls]), context)
-    py_setitem(_archive_model_fields(model), "estimator", estimator)
-    return model
+    """Load an explicit host linear model from one native archive execution."""
+    var admitted = _archive_read_input(path, context)
+    var minor = Int(py=context["archive_python_minor"])
+    var micro = Int(py=context["archive_python_micro"])
+    try:
+        var members = native_archive_read_status(admitted.span, minor, micro)
+        archive_events_pack(members, context)
+        var print_mode = archive_print_mode_unpack(members, context)
+        var numpy = classical_numpy(context)
+        var saved_as = native_archive_string(members, "estimator", numpy, print_mode)
+        var cls = py_get(context["classical_host_estimators"], PythonObject(saved_as))
+        if cls is None:
+            raise Error("mojolearn: " + _archive_read_repr(path, context) + " was saved by "
+                        + saved_as + ", which mojolearn-linear-1 does not hold")
+        var ridge = Bool(py=context["classical_kinds"][cls])
+        var ancestry = archive_class_names_unpack(cls)
+        var plan = native_linear_archive_plan(members, ancestry, ridge, numpy, print_mode)
+        if plan.class_mismatch:
+            raise Error("mojolearn: " + _archive_read_repr(path, context) + " was saved by "
+                        + plan.saved_as + ", not " + ancestry[0])
+        var model = archive_linear_pack(cls, plan, members, ridge, context, PythonObject(None))
+        py_setitem(_archive_model_fields(model), "estimator", PythonObject(saved_as))
+        return model
+    finally:
+        admitted.close()
 
 
 def classical_archive_build(cls: PythonObject, arrays: PythonObject, path: PythonObject, ridge: Bool,
                             context: PythonObject) raises -> PythonObject:
-    if String(_archive_string(arrays, "format", context)) != "mojolearn-linear-1":
-        raise Error("model archive format does not match mojolearn-linear-1")
-    var saved_as = _archive_string(arrays, "estimator", context)
-    # The file's estimator must be cls or one of its bases, so an explicit
-    # host class or subclass loads the plain class's file.
-    var ancestry = py_call(py_type(py_type(PythonObject(""))).__dict__["__mro__"].__get__, cls)
-    var known = False
-    for k in range(len(ancestry)):  # driver-loop: over the loading class's ancestry names
-        known = known or Bool(py=ancestry[k].__name__ == saved_as)
-    if not known:
+    # Compatibility boundary for the generic host-archive owner. All schema
+    # decisions share the typed plan; retain the existing coefficient owner.
+    var pins = List[PythonObject]()
+    var members = archive_linear_fields_unpack(arrays, context, pins)
+    var ancestry = archive_class_names_unpack(cls)
+    var print_mode = archive_print_mode_unpack(members, context)
+    var plan = native_linear_archive_plan(members, ancestry, ridge, classical_numpy(context), print_mode)
+    if plan.class_mismatch:
         raise Error("mojolearn: " + _archive_read_repr(path, context) + " was saved by "
-                    + String(saved_as) + ", not " + String(cls.__name__))
-    var meta = _archive_exact(arrays, "meta", "<i8", context)
-    if Int(py=meta.size) != 2:
-        raise Error("model meta must hold two fields")
-    var mode = _archive_string(arrays, "numeric_mode", context)
-    if String(mode) != "identical" and String(mode) != "fast":
-        raise Error("invalid saved numeric_mode")
-    var coef = _archive_exact(arrays, "coef", "<f4", context)
-    var features = classical_i64(meta, 0)
-    if Int(py=coef.ndim) != 1 or Int(py=coef.size) != features:
-        raise Error("model coef does not match n_features_in_")
-    var intercept = _archive_exact(arrays, "intercept", "<f8", context)
-    if Int(py=intercept.size) != 1:
-        raise Error("model intercept must hold one value")
-    var alpha = PythonObject(None)
-    if ridge:
-        alpha = _archive_exact(arrays, "alpha", "<f8", context)
-        if Int(py=alpha.size) != 1:
-            raise Error("model alpha must hold one value")
-    var model = native_storage_allocate(cls)
-    var fields = _archive_model_fields(model)
-    py_setitem(fields, "fit_intercept", classical_i64(meta, 1) != 0)
-    py_setitem(fields, "numeric_mode", mode)
-    py_setitem(fields, "coef_", coef)
-    py_setitem(fields, "intercept_", classical_f64(intercept, 0))
-    py_setitem(fields, "n_features_in_", features)
-    if ridge:
-        py_setitem(fields, "alpha", classical_f64(alpha, 0))
-        # load preserves the constructor's default solver parameter; only the
-        # fitted solver_ metadata records the eig implementation used by Ridge.
-        py_setitem(fields, "solver", "auto")
-        py_setitem(fields, "normalize", False)
-        py_setitem(fields, "solver_", "eig")
+                    + plan.saved_as + ", not " + ancestry[0])
+    var model = archive_linear_pack(cls, plan, members, ridge, context, arrays["coef"])
+    _ = pins
+    _ = arrays
     return model
