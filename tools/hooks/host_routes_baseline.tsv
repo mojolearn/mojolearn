@@ -2556,3 +2556,5 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/tokenizer.py	0	for n
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/tokenizer.py	0	for name, kind in (("ValueError: ", ValueError), ("TypeError: ", TypeError)): # glue: maps two native error prefixes
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/tokenizer.py	0	return blob, array.array("q", map(len, parts))
 py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/tokenizer.py	0	return list(ids)
+py-iter-call	py-compute	p4-loops	owed-tags	python/mojolearn/_mode.py	0	preserves_dtype=list(getattr(cls, "_sklearn_preserves_dtype", ())))
+py-scalar-arith	py-compute	p4-loops	owed-tags	python/mojolearn/_spectral_impl.py	0	nnz = int(_native("nonzero_f32_count")(src, n_r * n_c)) if n_r * n_c else 0 # cpu-route: float32 host matrix read once by nonzero_f32_count on a CPU-only install
