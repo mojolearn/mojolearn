@@ -4,15 +4,15 @@
   "files": 616,
   "test_definitions": 4126,
   "file_decisions": {
-    "needs-semantic-review": 572,
-    "retain-python-boundary": 22,
-    "split-partial": 2,
-    "split-migrated": 12,
+    "needs-semantic-review": 567,
+    "retain-python-boundary": 23,
+    "split-partial": 1,
+    "split-migrated": 14,
+    "split-needed": 8,
     "review-module-gate": 1,
-    "retain-tooling": 2,
-    "split-needed": 5
+    "retain-tooling": 2
   },
-  "reviewed_files": 44,
+  "reviewed_files": 49,
   "not_a_gate": true,
   "limitations": [
     "Definitions are source functions, not parametrized execution cases.",
@@ -358,6 +358,18 @@
       "producer_dependency": "7ded28ac82",
       "source_review_only": true,
       "runtime_status": "Root consolidated compile/run owed; see optimizer-owner-handoff.txt."
+    },
+    {
+      "paths": [
+        "python/mojolearn/tests/test_samba_construct_native.py",
+        "python/mojolearn/tests/test_samba_step_native.py"
+      ],
+      "decision": "split-needed",
+      "change": "Real Samba integration assertions follow typed optimizer owner state. No numerical fixture removed or reduced; recipe migration remains pending.",
+      "test_definitions": 9,
+      "parametrized_cases": 24,
+      "source_review_only": true,
+      "runtime_status": "Root installed Python execution owed after producer Samba owner repair; see samba-owner-consumer-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [
