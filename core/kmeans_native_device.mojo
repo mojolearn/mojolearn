@@ -84,7 +84,7 @@ struct KMeansDeviceKernels(KMeansNativeKernels):
                 r.rows, r.features, r.clusters, centers, r.dst, r.metric, r.transform)
             return KMeansQueryResult(Int(words[0]), Int(words[1]))
         var source = _f32(r.source)
-        var centers = MutPointer[Float32, MutUntrackedOrigin]()
+        var centers = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=0)
         if r.handle < 0:
             centers = _f32(r.centers)
         var destination = _u32(r.dst)

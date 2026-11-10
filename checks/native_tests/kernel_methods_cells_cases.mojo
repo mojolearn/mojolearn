@@ -136,7 +136,7 @@ def nystroem_fixture[Calls: KernelMethodsCellCalls](index: Int) raises:
     var embedded = result[1].copy()
     require(len(indices) == 12 and len(embedded) == 144, "Nystroem basis output extent changed")
     for i in range(12):  # Fixed model metadata, checked before reference indexing.
-        require(0 <= indices[i] and indices[i] < 80, "Nystroem basis index outside original input")
+        require(indices[i] >= 0 and indices[i] < 80, "Nystroem basis index outside original input")
         for j in range(i):
             require(indices[i] != indices[j], "Nystroem basis index repeated")
     var failures = List[Int](length=144, fill=0)

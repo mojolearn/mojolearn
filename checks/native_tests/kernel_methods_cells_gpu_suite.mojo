@@ -66,9 +66,9 @@ struct DeviceKernelCells(KernelMethodsCellCalls):
         var model = nystroem_fit_host(x, 80, 6, parameters, 12, UInt64(1), trace)
         require(len(model.component_indices) == 12, "Nystroem device basis index extent")
         for i in range(12):
-            require(0 <= model.component_indices[i] and model.component_indices[i] < 80, "Nystroem device basis index outside input")
+            require(model.component_indices[i] >= 0 and model.component_indices[i] < 80, "Nystroem device basis index outside input")
         var basis = List[Float32](length=72, fill=Float32(0))
-        var ip = model.component_indices.unsafe_ptr()
+        var ip = Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=Int(model.component_indices.unsafe_ptr()))
         var xp = x.unsafe_ptr()
         var bp = basis.unsafe_ptr()
         def gather(at: Int) {imm ip, imm xp, imm bp}:
