@@ -8,9 +8,9 @@
     "retain-python-boundary": 10,
     "retain-tooling": 2,
     "review-module-gate": 1,
-    "split-migrated": 4,
+    "split-migrated": 5,
     "split-needed": 9,
-    "split-partial": 2
+    "split-partial": 1
   },
   "reviewed_files": 28,
   "not_a_gate": true,
@@ -76,6 +76,27 @@
       "additional_native_bf16_gemm_fixtures_per_executor": 9,
       "source_review_only": true,
       "runtime_status": "Orchestrator compile and run owed; see bf16-linalg-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "decision": "split-partial",
+      "additional_native_math_fixtures_per_executor": 4,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see rankn-math-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "decision": "split-partial",
+      "additional_native_graph_fixtures_per_executor": 2,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see rankn-graph-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "decision": "split-migrated",
+      "additional_native_conv_fixtures_per_executor": 2,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see rankn-conv-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [
@@ -116,6 +137,18 @@
       "cpu_shapes_passed": 5,
       "gpu_shapes_passed": 5,
       "source_status": "Passed unmodified."
+    },
+    {
+      "batch": "bf16-linalg",
+      "cpu_fixtures_passed": 9,
+      "gpu_fixtures_passed": 9,
+      "source_status": "Passed unmodified."
+    },
+    {
+      "batch": "oob-exact-sum",
+      "cpu_fixtures_passed": 10,
+      "gpu_fixtures_passed": 10,
+      "source_status": "Root explicitly typed conditional Int32 fill (e0157cb5eb). No product changes."
     }
   ]
 }

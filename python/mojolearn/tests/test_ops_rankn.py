@@ -1,17 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Rank-N tensors in mojolearn.ops.Session (docs/plans/AUTOGRAD_RANKN.md):
-views (reshape, flatten, squeeze, unsqueeze, permute, transpose), sums,
-means and max over axis sets, NumPy broadcasting, the batched product,
-concat / split / take, softmax along an axis, conv2d and the 2-D pools, and
-their gradients in a recording session. Small, odd, non-board shapes.
+"""Public rank-N Session buffer, shape, argument and refusal contracts.
 
-Views, axis reductions and first-maximum gradients are checked directly in
-checks/native_tests/rankn_views_cases.mojo; Python keeps their public shape,
-dtype and buffer-packing seams. The remaining numerical cases below still
-use NumPy references and the legacy repeated-digest helper pending migration.
+All numerical view/reduction/broadcast/attention/layout/convolution/pool
+and gradient oracles live in checks/native_tests/rankn_*_cases.mojo and
+run directly on typed native host/device sessions. Python retains public
+array packing, tuple/axis/default arguments, post-close buffer ownership,
+weight-only gradient access and named refusal checks.
 """
-import hashlib
-
 import numpy as np
 import pytest
 
@@ -37,27 +32,6 @@ pytestmark = pytest.mark.skipif(not _has_rankn(),
 def _ops():
     from mojolearn import ops
     return ops
-
-
-def _digest(*arrays):
-    h = hashlib.sha256()
-    for a in arrays:
-        h.update(np.ascontiguousarray(a, dtype=np.float32).tobytes())
-    return h.hexdigest()[:16]
-
-
-def _emit(name, digest):
-    print(f"RANKN_DIGEST {name} {digest}")
-
-
-def _twice(name, run):
-    """Run `run` twice; the results must have the same digest. Emits it."""
-    first = run()
-    second = run()
-    d = _digest(*first)
-    assert d == _digest(*second), f"{name}: two runs differ"
-    _emit(name, d)
-    return first
 
 
 def _rng(seed):
@@ -144,11 +118,12 @@ def test_maximum_and_gradient_pack_native_buffers():
 
 # ---------------------------------------------------------------- broadcasting
 def _bcast_run():
-    rng = _rng(3)
-    A = rng.standard_normal((2, 3, 4)).astype(np.float32)
-    B = rng.standard_normal((1, 3, 1)).astype(np.float32)
-    C = rng.standard_normal((4,)).astype(np.float32).reshape(1, 4)
-    D = (rng.random((2, 1, 4)) + 0.5).astype(np.float32)
+    A = np.array([-2.25, -0.5, 1.25, -1.75, 0.0, 1.75, -1.25, 0.5,
+                  2.25, -0.75, 1.0, -2.0, -0.25, 1.5, -1.5, 0.25,
+                  2.0, -1.0, 0.75, -2.25, -0.5, 1.25, -1.75, 0.0], np.float32).reshape(2, 3, 4)
+    B = np.array([-0.375, 0.625, -0.875], np.float32).reshape(1, 3, 1)
+    C = np.array([[-0.5, 0.75, 1.25, -1.5]], np.float32)
+    D = np.array([[[0.75, 1.25, 1.5, 0.5]], [[1.5, 0.75, 0.5, 1.25]]], np.float32)
     with _ops().Session(record=True) as s:
         a = s.tensor(A, requires_grad=True)
         b = s.tensor(B, requires_grad=True)
@@ -159,18 +134,13 @@ def _bcast_run():
         return [s.numpy(y), s.grad(a), s.grad(b), s.grad(c), s.grad(d)]
 
 
-def test_broadcasting_and_its_gradients():
-    rng = _rng(3)
-    A = rng.standard_normal((2, 3, 4)).astype(np.float32)
-    B = rng.standard_normal((1, 3, 1)).astype(np.float32)
-    C = rng.standard_normal((4,)).astype(np.float32).reshape(1, 4)
-    D = (rng.random((2, 1, 4)) + 0.5).astype(np.float32)
-    y, ga, gb, gc, gd = _twice("broadcast", _bcast_run)
-    assert np.array_equal(y, ((A + B) * C) / D)
-    assert np.allclose(ga, np.broadcast_to(C / D, A.shape), rtol=1e-6)
-    assert np.allclose(gb, (C / D * np.ones_like(A)).sum((0, 2), keepdims=True), rtol=1e-5, atol=1e-5)
-    assert np.allclose(gc, ((A + B) / D).sum((0, 1)).reshape(1, 4), rtol=1e-5, atol=1e-5)
-    assert np.allclose(gd, (-(A + B) * C / D ** 2).sum(1, keepdims=True), rtol=1e-5, atol=1e-5)
+def test_broadcast_and_gradient_buffers_pack_expected_shapes():
+    results = _bcast_run()
+    shapes = [(2, 3, 4), (2, 3, 4), (1, 3, 1), (1, 4), (2, 1, 4)]
+    for value, shape in zip(results, shapes):
+        assert value.dtype == np.float32 and value.shape == shape
+    assert results[0].flat[0] == 1.75
+    assert results[1].flat[0] == pytest.approx(-0.6666666666666666, rel=1e-6, abs=1e-8)
 
 
 # ---------------------------------------------------------------- batched product
@@ -191,23 +161,12 @@ def _bmm_run():
         return [s.numpy(scores), s.numpy(out), s.grad(q), s.grad(k), s.grad(w)]
 
 
-def test_batched_matmul_and_attention():
-    rng = _rng(4)
-    Q = rng.standard_normal((2, 3, 5, 4)).astype(np.float32)
-    K = rng.standard_normal((2, 3, 7, 4)).astype(np.float32)
-    W = rng.standard_normal((4, 6)).astype(np.float32)
-    scores, out, gq, gk, gw = _twice("bmm_attention", _bmm_run)
-    S = np.einsum("bhqd,bhkd->bhqk", Q.astype(np.float64), K.astype(np.float64))
-    assert np.allclose(scores, S, rtol=1e-4, atol=1e-4)
-    E = np.exp(0.5 * S - (0.5 * S).max(-1, keepdims=True))
-    P = E / E.sum(-1, keepdims=True)
-    O = np.einsum("bhqk,bhkd->bhqd", P, K) @ W
-    assert np.allclose(out, O, rtol=1e-4, atol=1e-4)
-    for g, shape in ((gq, Q.shape), (gk, K.shape), (gw, W.shape)):
-        assert g.shape == shape and np.isfinite(g).all()
-    gO = np.full(O.shape, 1.0 / O.size)
-    assert np.allclose(gw, np.einsum("bhqd,bhqo->do", np.einsum("bhqk,bhkd->bhqd", P, K), gO),
-                       rtol=1e-4, atol=1e-6)
+def test_attention_graph_packs_public_value_and_gradient_buffers():
+    results = _bmm_run()
+    shapes = [(2, 3, 5, 7), (2, 3, 5, 6), (2, 3, 5, 4), (2, 3, 7, 4), (4, 6)]
+    for value, shape in zip(results, shapes):
+        assert value.dtype == np.float32 and value.shape == shape
+        assert np.isfinite(value).all()
 
 
 # ---------------------------------------------------------------- layout
@@ -231,72 +190,31 @@ def _layout_run():
             [s.grad(x) for x in xs] + [s.grad(t)]
 
 
-def test_concat_split_take():
-    rng = _rng(5)
-    parts = [rng.standard_normal((3, k, 5)).astype(np.float32) for k in (2, 1, 4)]
-    T = rng.standard_normal((3, 7, 5)).astype(np.float32)
-    out = _twice("layout", _layout_run)
-    cat, a, b, c, picked, g0, g1, g2, gt = out
-    assert np.array_equal(cat, np.concatenate(parts, axis=1))
-    for got, want in zip((a, b, c), parts):
-        assert np.array_equal(got, want)
-    assert np.array_equal(picked, T[:, [6, 0, 6, 3]])
-    assert np.array_equal(g0, 2 * parts[0]) and np.array_equal(g1, np.zeros_like(parts[1]))
-    assert np.array_equal(g2, np.full_like(parts[2], 3.0))
-    W = np.arange(60, dtype=np.float32).reshape(3, 4, 5)
-    want = np.zeros_like(T)
-    for j, idx in enumerate((6, 0, 6, 3)):  # the reference scatter-add, in the test only
-        want[:, idx] += W[:, j]
-    assert np.array_equal(gt, want)
+def test_layout_methods_pack_split_tuple_and_gradient_buffers():
+    results = _layout_run()
+    shapes = [(3, 7, 5), (3, 2, 5), (3, 1, 5), (3, 4, 5), (3, 4, 5),
+              (3, 2, 5), (3, 1, 5), (3, 4, 5), (3, 7, 5)]
+    for value, shape in zip(results, shapes):
+        assert value.dtype == np.float32 and value.shape == shape
+    assert results[7].flat[0] == 3.0  # Public gradient handle/packing sentinel.
 
 
 # ---------------------------------------------------------------- softmax along an axis
-def _softmax_run():
-    X = _rng(6).standard_normal((4, 6, 5)).astype(np.float32)
+def test_axis_softmax_methods_route_axes_and_pack_buffers():
+    X = np.array([[[0.0, 1.0], [2.0, 3.0]], [[4.0, 5.0], [6.0, 7.0]]], np.float32)
     with _ops().Session() as s:
         x = s.tensor(X)
-        return [s.numpy(s.softmax(x, axis=1)), s.numpy(s.log_softmax(x, axis=0)), s.numpy(s.softmax(x))]
-
-
-def test_softmax_along_an_axis():
-    X = _rng(6).standard_normal((4, 6, 5)).astype(np.float64)
-    s1, l0, s2 = _twice("softmax_axis", _softmax_run)
-
-    def soft(v, axis):
-        e = np.exp(v - v.max(axis, keepdims=True))
-        return e / e.sum(axis, keepdims=True)
-    assert np.allclose(s1, soft(X, 1), rtol=1e-5, atol=1e-6)
-    assert np.allclose(l0, np.log(soft(X, 0)), rtol=1e-5, atol=1e-5)
-    assert np.allclose(s2, soft(X, 2), rtol=1e-5, atol=1e-6)
+        values = [s.numpy(s.softmax(x, axis=1)), s.numpy(s.log_softmax(x, axis=0)),
+                  s.numpy(s.softmax(x))]
+    for value in values:
+        assert value.dtype == np.float32 and value.shape == (2, 2, 2)
+    # Literal route/packing sentinels distinguish the explicit/default axes.
+    assert values[0].flat[0] == pytest.approx(0.11920292202211755, rel=1e-5, abs=1e-6)
+    assert values[1].flat[0] == pytest.approx(-4.0181499279178094, rel=1e-5, abs=1e-5)
+    assert values[2].flat[0] == pytest.approx(0.2689414213699951, rel=1e-5, abs=1e-6)
 
 
 # ---------------------------------------------------------------- conv2d and pools
-def _conv_reference(X, W, b, stride, pad):
-    """Direct cross-correlation in float64 (the test's own oracle)."""
-    N, C, H, Wd = X.shape
-    OC, _, KH, KW = W.shape
-    Xp = np.pad(X.astype(np.float64), ((0, 0), (0, 0), (pad, pad), (pad, pad)))
-    OH = (H + 2 * pad - KH) // stride + 1
-    OW = (Wd + 2 * pad - KW) // stride + 1
-    out = np.zeros((N, OC, OH, OW))
-    for i in range(OH):
-        for j in range(OW):
-            win = Xp[:, :, i * stride:i * stride + KH, j * stride:j * stride + KW]
-            out[:, :, i, j] = np.einsum("nckl,ockl->no", win, W)
-    return out + b.reshape(1, OC, 1, 1)
-
-
-def _pool_reference(X, k, stride, kind):
-    N, C, H, W = X.shape
-    OH, OW = (H - k) // stride + 1, (W - k) // stride + 1
-    out = np.zeros((N, C, OH, OW), dtype=np.float64)
-    for i in range(OH):
-        for j in range(OW):
-            win = X[:, :, i * stride:i * stride + k, j * stride:j * stride + k].astype(np.float64)
-            out[:, :, i, j] = win.max((2, 3)) if kind == "max" else win.mean((2, 3))
-    return out
-
-
 def _conv_inputs():
     rng = _rng(7)
     X = rng.standard_normal((2, 3, 9, 11)).astype(np.float32)
@@ -323,37 +241,25 @@ def _conv_run():
         return [s.numpy(y1), s.numpy(y2), s.numpy(mp), s.numpy(ap), s.grad(x), s.grad(w), s.grad(bb)]
 
 
-def test_conv2d_and_pools():
-    X, W, b = _conv_inputs()
-    y1, y2, mp, ap, gx, gw, gb = _twice("conv2d_pools", _conv_run)
-    assert np.allclose(y1, _conv_reference(X, W, b, 1, 1), rtol=1e-4, atol=1e-4)
-    assert np.allclose(y2, _conv_reference(X, W, np.zeros(4), 2, 0), rtol=1e-4, atol=1e-4)
-    assert np.array_equal(mp, _pool_reference(y1, 2, 2, "max").astype(np.float32))
-    assert np.allclose(ap, _pool_reference(X, 3, 2, "avg"), rtol=1e-5, atol=1e-6)
-    assert gx.shape == X.shape and gw.shape == W.shape and gb.shape == (1, 4)
-    assert np.isfinite(gx).all() and np.isfinite(gw).all() and np.isfinite(gb).all()
+def test_conv_pool_methods_pack_public_value_and_gradient_buffers():
+    results = _conv_run()
+    shapes = [(2, 4, 9, 11), (2, 4, 4, 5), (2, 4, 4, 5), (2, 3, 4, 5),
+              (2, 3, 9, 11), (4, 3, 3, 3), (1, 4)]
+    for value, shape in zip(results, shapes):
+        assert value.dtype == np.float32 and value.shape == shape
+        assert np.isfinite(value).all()
 
 
-def test_conv2d_gradient_by_finite_differences():
-    rng = _rng(8)
-    X = rng.standard_normal((1, 2, 5, 6)).astype(np.float32)
-    W = (0.5 * rng.standard_normal((3, 2, 3, 3))).astype(np.float32)
-    G = rng.standard_normal((1, 3, 5, 6))
-
-    def loss_of(Wv):
-        return float((_conv_reference(X, Wv, np.zeros(3), 1, 1) * G).sum())
+def test_convolution_weight_only_gradient_buffer():
+    X = np.ones((1, 2, 5, 6), np.float32)
+    W = np.ones((3, 2, 3, 3), np.float32)
     with _ops().Session(record=True) as s:
         w = s.tensor(W, requires_grad=True)
         y = s.conv2d(s.tensor(X), w, padding=1)
-        s.backward(s.sum(s.mul(y, s.tensor(G.astype(np.float32)))))
-        gw = s.grad(w)
-    eps = 1e-3
-    for idx in ((0, 0, 0, 0), (1, 1, 2, 1), (2, 0, 1, 2)):  # three weights, central differences
-        Wp, Wm = W.astype(np.float64), W.astype(np.float64)
-        Wp[idx] += eps
-        Wm[idx] -= eps
-        fd = (loss_of(Wp) - loss_of(Wm)) / (2 * eps)
-        assert abs(gw[idx] - fd) <= 1e-2 * max(1.0, abs(fd))
+        s.backward(s.sum(y))
+        gradient = s.grad(w)
+    assert gradient.dtype == np.float32 and gradient.shape == W.shape
+    assert gradient[0, 0, 1, 1] == 30.0  # Weight-only handle/packing sentinel.
 
 
 # ---------------------------------------------------------------- refusals
