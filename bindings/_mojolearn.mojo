@@ -201,7 +201,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from core.labels_native_api import LABELS_NATIVE_ABI_NAME, LabelsPrepareRequest, LabelsArgmaxRequest, LabelsGatherRequest, LabelsRatioRequest
-from core.labels_native_device import LabelsDeviceKernels, labels_device_native_v1 as labels_native_v1
+from core.labels_native_device import LabelsDeviceKernels, labels_device_native_v2 as labels_native_entry
 
 from checks.vendor import COMPILED_VENDOR
 
@@ -1948,10 +1948,6 @@ def unique_inverse_binding(src_addr: PythonObject, n: PythonObject, kind: Python
 # ===========================================================================
 
 
-
-
-
-
 def prepare_targets_binding(y_addr: PythonObject, y_code: PythonObject, n: PythonObject,
     classes_addr: PythonObject, codes_addr: PythonObject, w_addr: PythonObject,
     w_code: PythonObject, w_flags: PythonObject) raises -> PythonObject:
@@ -1964,7 +1960,7 @@ def prepare_targets_binding(y_addr: PythonObject, y_code: PythonObject, n: Pytho
 
 
 # ===========================================================================
-# labels_native_api_v1 (lane s1, S3; core/labels_native_api.mojo): the
+# labels_native_api_v2 (native-only execution; core/labels_native_api.mojo): the
 # label path's base-binding steps over THIS binding's device helpers, on the
 # kit_call descriptor ABI. Each operation calls the same entry the Python
 # callable table called (same validation, same kernels, same order), so no
@@ -1973,31 +1969,30 @@ def prepare_targets_binding(y_addr: PythonObject, y_code: PythonObject, n: Pytho
 # ===========================================================================
 
 
-
-
-
-
-
-
-
-
-
-struct LabelsNativeTable(Defaultable, Movable):
+struct LabelsNativeTable[ABI: StaticString](Defaultable, Movable):
     var name: String
     var entries: List[NativeDescriptorCall]
 
     def __init__(out self):
-        self.name = String(LABELS_NATIVE_ABI_NAME)
+        self.name = String(ABI)
         self.entries = List[NativeDescriptorCall]()
-        self.entries.append(labels_native_v1)
+        self.entries.append(labels_native_entry)
 
 
 # The slot holds THIS module's dispatch pointer: tier-keyed so a FAST and an
 # IDENTICAL build never hand out each other's code (core/shared_slot.mojo).
-comptime LABELS_NATIVE_TABLE = SharedSlot[LabelsNativeTable, ("MojolearnLabelsNativeTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV2")]
+comptime LABELS_LEGACY_NATIVE_TABLE = SharedSlot[LabelsNativeTable["mojolearn.labels.v1"], ("MojolearnLabelsNativeTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV2")]
+comptime LABELS_NATIVE_TABLE = SharedSlot[LabelsNativeTable[LABELS_NATIVE_ABI_NAME], ("MojolearnLabelsNativeTableIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV3")]
 
 
 def labels_native_api_v1_binding() raises -> PythonObject:
+    # Existing consumers keep the GIL. Retain their factory/name while sharing
+    # the same native operations; new callers require v2 before releasing it.
+    var table = LABELS_LEGACY_NATIVE_TABLE.get_or_create_ptr()
+    return neural_descriptor_capsule(table[].name, table[].entries)
+
+
+def labels_native_api_v2_binding() raises -> PythonObject:
     var table = LABELS_NATIVE_TABLE.get_or_create_ptr()
     return neural_descriptor_capsule(table[].name, table[].entries)
 
@@ -2011,6 +2006,7 @@ def build__mojolearn() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn")
         m.def_function[mojolearn_vendor_binding]("mojolearn_vendor")
         m.def_function[labels_native_api_v1_binding]("labels_native_api_v1")
+        m.def_function[labels_native_api_v2_binding]("labels_native_api_v2")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[device_plan_log_binding]("device_plan_log")

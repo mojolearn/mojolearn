@@ -3,7 +3,7 @@
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.hotpath_impl import HpStat
 from core.hostptr import f32_ptr, f64_ptr
-from core.host_helpers_impl import all_finite_f32, all_finite_f64
+from core.mojolearn_shell_impl import all_finite_host_f32, all_finite_host_f64
 from core.hotpath_device import HPD_MAX_N, device_encode_labels, device_gather_u64, device_class_ratio_f64
 from core.label_encode_device import device_unique_inverse
 from core.label_rows_device import LRD_MAX_N, device_argmax_rows
@@ -69,12 +69,12 @@ struct LabelsDeviceKernels(LabelsNativeKernels, LabelsPreparationKernels):
             if count < 0:
                 raise Error("all_finite_f64: n must be non-negative, got " + String(count))
             var device = labels_device_try_finite(source, count, True)
-            return device if device >= 0 else all_finite_f64(pointer, count)
+            return device if device >= 0 else all_finite_host_f64(pointer, count)
         var pointer = f32_ptr(source)
         if count < 0:
             raise Error("all_finite_f32: n must be non-negative, got " + String(count))
         var device = labels_device_try_finite(source, count, False)
-        return device if device >= 0 else all_finite_f32(pointer, count)
+        return device if device >= 0 else all_finite_host_f32(pointer, count)
 
     @staticmethod
     def reduce_words(source: Int, code: Int, count: Int, operation: Int) raises -> HpStat:
@@ -136,6 +136,6 @@ struct LabelsDeviceKernels(LabelsNativeKernels, LabelsPreparationKernels):
         return device_class_ratio_f64(ctx, r.counts, r.classes, r.count, r.mode, r.dst)
 
 
-def labels_device_native_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
+def labels_device_native_v2(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
     result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     return labels_native_dispatch[LabelsDeviceKernels](operation, aa, na, pp, np, ff, nf, result, context, sink)
