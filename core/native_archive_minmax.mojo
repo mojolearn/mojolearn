@@ -39,34 +39,57 @@ def native_minmax_statistic_names() -> List[String]:
     return ["data_min", "data_max", "data_range", "scale", "min"]
 
 
-def native_minmax_archive_plan(members: List[NativeArchiveDecoded], cls: NativeMinMaxArchiveClass,
-                               numpy: Bool, print_mode: Int = 2147483647) raises -> NativeMinMaxArchivePlan:
-    if native_archive_string(members, "format", numpy, print_mode) != "mojolearn-scaler-1":
-        raise Error("model archive format does not match mojolearn-scaler-1")
+def _minmax_archive_class_check(members: List[NativeArchiveDecoded], cls: NativeMinMaxArchiveClass,
+                               numpy: Bool, print_mode: Int, generic: Bool) raises:
     if cls.layout_error == 1:
-        raise Error("TypeError: native scaler archives require an ordinary native class layout")
+        raise Error("TypeError: native archive classes require an ordinary native class layout" if generic
+                    else "TypeError: native scaler archives require an ordinary native class layout")
     var saved = native_archive_string(members, "estimator", numpy, print_mode)
-    if cls.layout_error == 2:
-        raise Error("TypeError: Python finalizer hooks cannot execute while loading a native scaler")
-    if cls.layout_error == 3:
-        raise Error("TypeError: native scaler archives require a native instance dictionary")
-    if cls.layout_error == 4:
-        raise Error("TypeError: native scaler archives require an instance dictionary")
     var known = False
     for name in cls.names:
         known = known or name == saved
+    # The generic loader checked the saved name before allocating the object;
+    # the direct scaler loader admitted its layout before checking the name.
+    if generic and not known:
+        raise Error("model archive estimator does not match its connected class")
+    if cls.layout_error == 2:
+        raise Error("TypeError: Python finalizer hooks are not accepted by native archive loading" if generic
+                    else "TypeError: Python finalizer hooks cannot execute while loading a native scaler")
+    if cls.layout_error == 3:
+        raise Error("TypeError: Python dictionary descriptors are not accepted by native archive loading" if generic
+                    else "TypeError: native scaler archives require a native instance dictionary")
+    if cls.layout_error == 4:
+        raise Error("TypeError: native archive loading requires a native instance dictionary" if generic
+                    else "TypeError: native scaler archives require an instance dictionary")
     if not known:
         raise Error("model estimator does not match loading class")
+
+
+def native_minmax_archive_plan(members: List[NativeArchiveDecoded], cls: NativeMinMaxArchiveClass,
+                               numpy: Bool, print_mode: Int = 2147483647,
+                               generic: Bool = False) raises -> NativeMinMaxArchivePlan:
+    # Generic dispatch already selected this schema. It historically read the
+    # metadata and mode before admitting the class; keep that refusal order.
+    if not generic:
+        if native_archive_string(members, "format", numpy, print_mode) != "mojolearn-scaler-1":
+            raise Error("model archive format does not match mojolearn-scaler-1")
+        _minmax_archive_class_check(members, cls, numpy, print_mode, False)
     var meta = native_archive_exact(members, "meta", "<i8", numpy)
-    if members[meta].layout.count != 3 or len(members[meta].layout.shape) != 1:
-        raise Error("MinMaxScaler meta must hold three fields")
+    if members[meta].layout.count != 3:
+        raise Error("model meta must hold 3 fields" if generic else "MinMaxScaler meta must hold three fields")
+    if len(members[meta].layout.shape) != 1:
+        raise Error("model meta must be a one-dimensional field vector" if generic else "MinMaxScaler meta must hold three fields")
     var bounds = native_archive_exact(members, "feature_range", "<f8", numpy)
-    if members[bounds].layout.count != 2 or len(members[bounds].layout.shape) != 1:
-        raise Error("MinMaxScaler feature_range must hold two values")
+    if members[bounds].layout.count != 2:
+        raise Error("model feature_range must hold 2 fields" if generic else "MinMaxScaler feature_range must hold two values")
+    if len(members[bounds].layout.shape) != 1:
+        raise Error("model feature_range must be a one-dimensional field vector" if generic else "MinMaxScaler feature_range must hold two values")
     var result = NativeMinMaxArchivePlan()
     result.mode = native_archive_string(members, "numeric_mode", numpy, print_mode)
     if result.mode != "identical" and result.mode != "fast":
         raise Error("invalid saved numeric_mode")
+    if generic:
+        _minmax_archive_class_check(members, cls, numpy, print_mode, True)
     result.features = Int(bitcast[DType.int64](archive_data_word(members[meta].layout.payload, 0, 8)))
     result.samples = bitcast[DType.int64](archive_data_word(members[meta].layout.payload, 8, 8))
     result.clip = archive_data_word(members[meta].layout.payload, 16, 8) != 0
@@ -76,7 +99,8 @@ def native_minmax_archive_plan(members: List[NativeArchiveDecoded], cls: NativeM
     for name in names:  # ordered refusal precedence across the five schema fields
         var index = native_archive_exact(members, name, "<f4", numpy)
         if len(members[index].layout.shape) != 1 or members[index].layout.count != result.features:
-            raise Error("MinMaxScaler saved statistic does not match n_features_in_")
+            raise Error("model " + name + " shape does not match saved metadata" if generic
+                        else "MinMaxScaler saved statistic does not match n_features_in_")
         result.statistics.append(index)
     return result^
 
