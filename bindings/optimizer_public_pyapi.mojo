@@ -11,74 +11,18 @@ caller's tensors, calls ONE kernel entry here and assigns the result."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased, PyObjectPtr
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
 from training.optimizer_public import (
     public_accumulate, public_clip, public_io, public_step, resident_close,
     resident_download, resident_get, resident_open, resident_put, resident_step, resident_step_io,
     resident_upload,
 )
-from training.optimizer_public_common import F32P, I32P, PublicStep, PublicStepOut
+from training.optimizer_public_common import F32P, I32P
+from training.optimizer_kernels_gpu import GpuOptKernels, _NEURAL_CTX
 from bindings.optimizer_public_door import (
-    OptKernels, entry_accumulate, entry_clip, entry_io, entry_load_state, entry_state, entry_state_set,
+    entry_accumulate, entry_clip, entry_io, entry_load_state, entry_state, entry_state_set,
     entry_step,
 )
-
-comptime _NEURAL_CTX = "MojolearnNeuralTrainingContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTrainingContextFastV3"
-
-
-struct GpuOptKernels(OptKernels):
-    """The GPU binding's kernel entries, each with the GIL released."""
-
-    @staticmethod
-    def step(req: PublicStep) raises -> PublicStepOut:
-        var out = PublicStepOut(0, -1, False, False, Float32(0.0), Float32(0.0), Float32(0.0), -1, False)
-        with GILReleased(Python()):
-            var ctx = neural_ctx[_NEURAL_CTX]()
-            out = public_step(ctx, req)
-        return out
-
-    @staticmethod
-    def io(req: PublicStep, op_code: Int, tensor: Int) raises -> Tuple[Int, Int]:
-        var r = (-1, 0)
-        with GILReleased(Python()):
-            var ctx = neural_ctx[_NEURAL_CTX]()
-            r = public_io(ctx, req, op_code, tensor)
-        return r
-
-    @staticmethod
-    def clip(addrs: List[Int], nbytes: List[Int], max_norm: Float32) raises -> Tuple[Float32, Float32]:
-        var r = (Float32(0.0), Float32(0.0))
-        with GILReleased(Python()):
-            var ctx = neural_ctx[_NEURAL_CTX]()
-            r = public_clip(ctx, addrs, nbytes, max_norm)
-        return r
-
-    @staticmethod
-    def accumulate(
-        in_addrs: List[Int], nbytes: List[Int], out_addrs: List[Int], a_count: Int, tokens: Int
-    ) raises -> Int:
-        var n = 0
-        with GILReleased(Python()):
-            var ctx = neural_ctx[_NEURAL_CTX]()
-            n = public_accumulate(ctx, in_addrs, nbytes, out_addrs, a_count, tokens)
-        return n
-
-    @staticmethod
-    def download(handle: Int, m_addr: Int, v_addr: Int, n: Int) raises -> Int:
-        var r = 0
-        with GILReleased(Python()):
-            var ctx = neural_ctx[_NEURAL_CTX]()
-            r = resident_download(ctx, handle, m_addr, v_addr, n)
-        return r
-
-    @staticmethod
-    def upload(handle: Int, m_addr: Int, v_addr: Int, n: Int) raises -> Int:
-        var r = 0
-        with GILReleased(Python()):
-            var ctx = neural_ctx[_NEURAL_CTX]()
-            r = resident_upload(ctx, handle, m_addr, v_addr, n)
-        return r
 
 
 def optimizer_door_step_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:

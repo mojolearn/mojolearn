@@ -45,3 +45,25 @@ fixtures and Python public admission, state mapping, mutation and lifetime
 checks are owed. The native tests lane retains existing list/tuple API tests
 and can add direct typed request/snapshot checks. End-to-end GPU performance
 measurement is still owed; no development identity run is requested.
+
+## Native public-optimizer operation interface
+
+The `OptKernels` interface and its GPU/host implementations now live in
+`training/optimizer_kernels.mojo`, `training/optimizer_kernels_gpu.mojo`, and
+`training/host/optimizer_kernels.mojo`. These modules carry only typed native
+requests/results and import no Python support. They call the same existing
+public optimizer operations. The Python entry files retain only their legacy
+boundary exports and import these typed implementations.
+
+GIL management moved to `optimizer_public_door.mojo`, immediately around the
+six typed RUN calls. Every release/retention scope remains the same: host state
+upload/download and host IO query keep their former GIL discipline; step,
+clip, accumulation and GPU transfers release it. The accumulated microbatch
+count is captured before release, so no Python container is read during RUN.
+This removes the old Python-aware kernel adapters and their duplicate context
+key declaration. It does not yet remove the outer router's compiled Python
+entry calls or its persistent Python config/state fields. Those are next.
+
+Additional direct build roots are `_mojolearn_training` and its host peer.
+Compilation and focused public optimizer/state/ownership checks remain owed to
+root. No native optimizer update function or measured kernel was edited.

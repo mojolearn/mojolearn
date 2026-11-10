@@ -5,62 +5,18 @@
 optimizers-thin-glue): the GPU door's entries (bindings/optimizer_public_pyapi.mojo)
 over training/host/optimizer_public_host.mojo, through the shared door
 bindings/optimizer_public_door.mojo (`HostOptKernels`)."""
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased, PyObjectPtr
+from std.python import PythonObject
+from std.python._cpython import PyObjectPtr
 
 from bindings.optimizer_public_door import (
-    OptKernels, entry_accumulate, entry_clip, entry_io, entry_load_state, entry_state, entry_state_set,
+    entry_accumulate, entry_clip, entry_io, entry_load_state, entry_state, entry_state_set,
     entry_step,
 )
 from training.host.optimizer_public_host import (
-    host_close, host_download, host_open, host_upload, public_accumulate_host, public_clip_host,
-    public_step_host,
+    host_close, host_download, host_open, host_upload,
 )
-from training.optimizer_public_common import PublicStep, PublicStepOut
+from training.host.optimizer_kernels import HostOptKernels
 
-
-struct HostOptKernels(OptKernels):
-    """The CPU binding's kernel entries, each with the GIL released. A CPU
-    install has no device: the io query answers 0 and every transfer is
-    refused."""
-
-    @staticmethod
-    def step(req: PublicStep) raises -> PublicStepOut:
-        var out = PublicStepOut(0, -1, False, False, Float32(0.0), Float32(0.0), Float32(0.0), -1, False)
-        with GILReleased(Python()):
-            out = public_step_host(req)
-        return out
-
-    @staticmethod
-    def io(req: PublicStep, op_code: Int, tensor: Int) raises -> Tuple[Int, Int]:
-        if op_code != 0:
-            raise Error("RuntimeError: mojolearn optimizer: this build has no device-resident parameter "
-                        "entries (a CPU-only install)")
-        return (req.handle, 0)
-
-    @staticmethod
-    def clip(addrs: List[Int], nbytes: List[Int], max_norm: Float32) raises -> Tuple[Float32, Float32]:
-        var r = (Float32(0.0), Float32(0.0))
-        with GILReleased(Python()):
-            r = public_clip_host(addrs, nbytes, max_norm)
-        return r
-
-    @staticmethod
-    def accumulate(
-        in_addrs: List[Int], nbytes: List[Int], out_addrs: List[Int], a_count: Int, tokens: Int
-    ) raises -> Int:
-        var n = 0
-        with GILReleased(Python()):
-            n = public_accumulate_host(in_addrs, nbytes, out_addrs, a_count, tokens)
-        return n
-
-    @staticmethod
-    def download(handle: Int, m_addr: Int, v_addr: Int, n: Int) raises -> Int:
-        return host_download(handle, m_addr, v_addr, n)
-
-    @staticmethod
-    def upload(handle: Int, m_addr: Int, v_addr: Int, n: Int) raises -> Int:
-        return host_upload(handle, m_addr, v_addr, n)
 
 
 def optimizer_door_step_host_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPtr:

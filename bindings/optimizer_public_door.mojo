@@ -32,7 +32,7 @@ from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.cpython_table import cpython_table
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import GILReleased, PyObjectPtr
 from bindings.native_buffer_owner import native_storage_allocate
 
 from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
@@ -47,6 +47,7 @@ from training.optimizer_public_common import (
     registry_offsets, zero_tensors,
 )
 from core.shared_slot import SharedSlot
+from training.optimizer_kernels import OptKernels
 
 comptime IP = MutPointer[Int, MutUntrackedOrigin]
 comptime BP = MutPointer[UInt8, MutUntrackedOrigin]
@@ -67,36 +68,6 @@ comptime _SRC = " (python/mojolearn/_training_impl.py)"
 
 # ---------------------------------------------------------------------------
 # the kernels a binding provides
-
-
-trait OptKernels:
-    """The typed kernel entries behind the door, one binding's set."""
-
-    @staticmethod
-    def step(req: PublicStep) raises -> PublicStepOut:
-        ...
-
-    @staticmethod
-    def io(req: PublicStep, op_code: Int, tensor: Int) raises -> Tuple[Int, Int]:
-        ...
-
-    @staticmethod
-    def clip(addrs: List[Int], nbytes: List[Int], max_norm: Float32) raises -> Tuple[Float32, Float32]:
-        ...
-
-    @staticmethod
-    def accumulate(
-        in_addrs: List[Int], nbytes: List[Int], out_addrs: List[Int], a_count: Int, tokens: Int
-    ) raises -> Int:
-        ...
-
-    @staticmethod
-    def download(handle: Int, m_addr: Int, v_addr: Int, n: Int) raises -> Int:
-        ...
-
-    @staticmethod
-    def upload(handle: Int, m_addr: Int, v_addr: Int, n: Int) raises -> Int:
-        ...
 
 
 # ---------------------------------------------------------------------------
@@ -921,7 +892,9 @@ def door_step[K: OptKernels](
     req.p_dev = p_dev
     req.g_dev = truth(getattr_or(opt, "_g_dev", PythonObject(False)))
     req.device_op = op == OP_STEP_DEVICE
-    var out = K.step(req)
+    var out = PublicStepOut(0, -1, False, False, Float32(0), Float32(0), Float32(0), -1, False)
+    with GILReleased(Python()):
+        out = K.step(req)
     _ = keep^
     # the assignments of the native result
     set_field(opt, "t", PythonObject(out.t))
@@ -973,7 +946,12 @@ def door_io[K: OptKernels](
     req.n_total = n_total
     req.offsets = read_addr(fields["offsets"], "offsets")
     _state_into(opt, req)
-    var r = K.io(req, op_code, tensor)
+    var r = (-1, 0)
+    if K.is_host():
+        r = K.io(req, op_code, tensor)
+    else:
+        with GILReleased(Python()):
+            r = K.io(req, op_code, tensor)
     try:
         keep_slot(opt, r[0], module, False)
         # A device allocation's handle stays an integer through publication.
@@ -1025,7 +1003,11 @@ def _sync_host[K: OptKernels](module: PythonObject, opt: PythonObject) raises:
     var n = Int(py=py_fields(opt)["n_total"])
     var owner = py_fields(opt)["_res_binding"]
     if owner is module:
-        _ = K.download(h, m, v, n)
+        if K.is_host():
+            _ = K.download(h, m, v, n)
+        else:
+            with GILReleased(Python()):
+                _ = K.download(h, m, v, n)
     else:
         _ = py_call(resident_entry(owner, "optimizer_resident_download"), PythonObject(h), PythonObject(m), PythonObject(v), PythonObject(n))
     set_field(opt, "_host_fresh", PythonObject(True))
@@ -1039,7 +1021,11 @@ def _upload[K: OptKernels](module: PythonObject, opt: PythonObject, m: Int, v: I
     var n = Int(py=py_fields(opt)["n_total"])
     var owner = py_fields(opt)["_res_binding"]
     if owner is module:
-        _ = K.upload(h, m, v, n)
+        if K.is_host():
+            _ = K.upload(h, m, v, n)
+        else:
+            with GILReleased(Python()):
+                _ = K.upload(h, m, v, n)
     else:
         _ = py_call(resident_entry(owner, "optimizer_resident_upload"), PythonObject(h), PythonObject(m), PythonObject(v), PythonObject(n))
 
@@ -1167,7 +1153,9 @@ def door_clip[K: OptKernels](
     var addrs = List[Int]()
     var nbytes = List[Int]()
     _addrs_of(views, addrs, nbytes)
-    var r = K.clip(addrs, nbytes, Float32(mn))
+    var r = (Float32(0), Float32(0))
+    with GILReleased(Python()):
+        r = K.clip(addrs, nbytes, Float32(mn))
     return PythonObject(Float64(r[0]))
 
 
@@ -1221,7 +1209,9 @@ def door_accumulate[K: OptKernels](microbatch_grads: PythonObject, tokens: Pytho
         _ = py_call(result.append, a)
         out_addrs.append(Int(py=a._addr))
         nbytes.append(probes[0][k].nbytes)
-    _ = K.accumulate(in_addrs, nbytes, out_addrs, len(parts), t_tokens)
+    var a_count = len(parts)
+    with GILReleased(Python()):
+        _ = K.accumulate(in_addrs, nbytes, out_addrs, a_count, t_tokens)
     _ = keep^
     if single:
         return result[0]
