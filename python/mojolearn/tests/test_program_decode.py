@@ -5,7 +5,10 @@ every step are recorded on the device and returned together, and the result
 is the same for every ``unroll``; integer state is carried word for word by
 while_loop; an ids iteration input is an int32 position; Session.state makes
 a state tensor that decode can reset. Tiny data. Written unrun (the lane
-does not run tests); the orchestrator runs it once after the compile."""
+does not run tests); the orchestrator runs it once after the compile.
+The ids are one-dimensional: `Session.embedding` returns one row per id
+(flattened), so a state tensor keeps its rank only when the ids have one
+axis."""
 import numpy as np
 import pytest
 
@@ -44,11 +47,11 @@ def _reference(first, n, vocab):
 def test_decode_records_every_step(unroll):
     from mojolearn import ops
     vocab = 7
-    first = np.array([[2], [5]])
+    first = np.array([2, 5])
     with ops.Session() as s:
         table = s.tensor(_next_token_table(vocab))
         ids = s.ids(first)
-        logits = s.embedding(table, ids)                      # (2, 1, vocab)
+        logits = s.embedding(table, ids)                      # (2, vocab): one row per id
         nxt = s.argmax(logits, axis=-1, keepdims=False, int32=True)
         step = s.capture([ids], [nxt])
         out = step.decode(first, n=10, unroll=unroll)
@@ -74,11 +77,11 @@ def test_while_loop_carries_integer_state(every):
     vocab = 5
     with ops.Session() as s:
         table = s.tensor(_next_token_table(vocab))
-        ids = s.ids(np.array([[0]]))
+        ids = s.ids(np.array([0]))
         nxt = s.argmax(s.embedding(table, ids), axis=-1, int32=True)
         body = s.capture([ids], [nxt])
         cond = s.capture([ids], [s.full((1, 1), 1)])
-        out = body.while_loop(np.array([[0]]), condition=cond, max_iterations=3, check_every=every)
+        out = body.while_loop(np.array([0]), condition=cond, max_iterations=3, check_every=every)
         assert out["iterations"] == 3
         assert out["outputs"][0].dtype == np.int32 and int(out["outputs"][0].reshape(-1)[0]) == 3
 
@@ -89,9 +92,9 @@ def test_state_tensor_is_reset_by_decode():
         pos = s.state(np.array([[4]]), ids=True)
         assert s.numpy(pos).view(np.int32).reshape(-1)[0] == 4
         table = s.tensor(_next_token_table(3))
-        ids = s.ids(np.array([[0]]))
+        ids = s.ids(np.array([0]))
         step = s.capture([ids], [s.argmax(s.embedding(table, ids), axis=-1, int32=True)])
-        step.decode(np.array([[0]]), n=1, state={pos: np.array([[0]])})
+        step.decode(np.array([0]), n=1, state={pos: np.array([[0]])})
         assert s.numpy(pos).view(np.int32).reshape(-1)[0] == 0
 
 

@@ -537,6 +537,29 @@ class SambaDecodeSession(object):
         return _native_samba_bridge.RUNTIME.samba_native_call(
             "decode_session_step", (self, inputs), _native_samba_bridge.CONTEXT)
 
+    def decode(self, inputs):
+        """Decode `N` tokens per row in one call.
+
+        The logits are byte for byte what `N` calls to `step` give, token by
+        token, and the state ends where they leave it.
+
+        Parameters
+        ----------
+        inputs : int array, shape (B, N)
+            Token ids; B must equal the session's batch size.
+
+        Returns
+        -------
+        logits : mojolearn.Array, shape (B, N, vocab)
+
+        Examples
+        --------
+        >>> with stack.decode_session(state) as session:
+        ...     logits = session.decode(ids)
+        """
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "decode_session_decode", (self, inputs), _native_samba_bridge.CONTEXT)
+
     def sync_state(self):
         """Copy the session's current state into the `SambaState` arrays and return the state."""
         return _native_samba_bridge.RUNTIME.samba_native_call(
