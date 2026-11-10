@@ -133,13 +133,15 @@ PTX_WITNESSES = {"proof": "build/build-provenance.json",
                  "stage": "build/sets/cuda/sm_80/manifest.json"}
 #: The leg that builds when only a host binding or the runtime needs one.
 HOST_LEG = ("cuda", "sm_89")
-LINUX_BUILDERS = ("packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py",
+LINUX_BUILDERS = ("packaging/native_library_sources.py", "packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py",
                   "tools/release061_remote_build.sh", "tools/linux_surface_qualification.sh",
                   "packaging/linux/binding_timeout.sh", "packaging/linux/ptx_contract.py",
                   "packaging/linux/cubin_contract.py", "tools/release_modes.py")
-MACOS_BUILDERS = ("packaging/macos/build_release_wheel.sh", "packaging/macos/stage_dylibs.py",
+MACOS_BUILDERS = ("packaging/native_library_sources.py", "packaging/macos/build_release_wheel.sh", "packaging/macos/stage_dylibs.py",
                   "python/setup.py", "tools/release_modes.py")
 PORTABLE_MATH = "packaging/portable_math"
+# Absent only in historical source trees; current staging imports this helper.
+OPTIONAL_BUILD_HELPERS = ("packaging/native_library_sources.py",)
 GENERATORS = "tokenizer/tools"
 NVIDIA_IMAGE_RE = re.compile(r'LEG_IMAGE_NVIDIA="\$\{MOJOLEARN_GEMM_LEG_IMAGE_NVIDIA:-([^}]+)\}"')
 AMD_IMAGE_RE = re.compile(r"^IMAGE=(\S+)", re.M)
@@ -457,7 +459,8 @@ def linux_phase_builders(tree, identities):
     if any(Path(name).name.encode() in compile_bytes for name in CUDA_PHASE_HELPERS):
         raise ValueError('CUDA helper now executes outside its post-compilation boundary')
     data = {name: (compile_bytes if name == rel else (tree / name).read_bytes())
-            for name in LINUX_BUILDERS if name not in CUDA_PHASE_HELPERS}
+            for name in LINUX_BUILDERS if name not in CUDA_PHASE_HELPERS
+            and (name not in OPTIONAL_BUILD_HELPERS or (tree / name).is_file())}
     def view(members):
         return {name: builder_view(name, content, members) for name, content in data.items()}
     return dict(schema='mojolearn.linux.builder-phases.v1',
@@ -686,7 +689,8 @@ def builder_digests(facts, rels, view):
     None for a builder the tree does not have or a view it has no entry for
     (unreadable() then builds)."""
     views = facts.get("builder_views") or {}
-    return {rel: (views.get(rel) or {}).get(view) for rel in rels}
+    return {rel: (views.get(rel) or {}).get(view) for rel in rels
+            if rel not in OPTIONAL_BUILD_HELPERS or facts.get("builders", {}).get(rel) is not None}
 
 
 def identity(b, facts, host_toolchain=None, schema=SCHEMA):
@@ -699,7 +703,8 @@ def identity(b, facts, host_toolchain=None, schema=SCHEMA):
         return None
     builders = LINUX_BUILDERS if b.target == LINUX else MACOS_BUILDERS
     if schema == SCHEMA_V1:
-        builder_ids = {rel: facts["builders"].get(rel) for rel in builders}
+        builder_ids = {rel: facts["builders"].get(rel) for rel in builders
+                       if rel not in OPTIONAL_BUILD_HELPERS or facts["builders"].get(rel) is not None}
     else:
         builder_ids = builder_digests(facts, builders, b.name)
     ident = dict(schema=schema, target=b.target, vendor=b.vendor, arch=b.arch, tier=b.tier, name=b.name,
@@ -733,7 +738,8 @@ def runtime_identity(facts, schema=SCHEMA):
     ident = dict(schema=schema, target=LINUX, what="runtime", toolchain=facts["toolchain"][LINUX],
                  image=dict(facts["image"]), portable_math=facts["portable_math"])
     if schema == SCHEMA_V1:
-        ident["builders"] = {rel: facts["builders"].get(rel) for rel in LINUX_BUILDERS}
+        ident["builders"] = {rel: facts["builders"].get(rel) for rel in LINUX_BUILDERS
+                             if rel not in OPTIONAL_BUILD_HELPERS or facts["builders"].get(rel) is not None}
     else:
         ident["builders"] = builder_digests(facts, LINUX_BUILDERS, RUNTIME_VIEW)
         ident["builder_rule"] = BUILDER_RULE

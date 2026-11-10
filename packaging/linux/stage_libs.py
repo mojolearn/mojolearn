@@ -92,6 +92,9 @@ import struct
 import subprocess
 import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from native_library_sources import library_source
+
 DT_NULL, DT_NEEDED, DT_STRTAB, DT_RPATH, DT_RUNPATH = 0, 1, 5, 15, 29
 
 # Native ZIP codecs are opened by SONAME through dlopen, so DT_NEEDED alone
@@ -210,21 +213,22 @@ def classify(name, env_lib):
     return "unresolved"
 
 
-def closure(exts, env_lib, dynamic=()):
+def closure(exts, env_lib, dynamic=(), codec_lib=None, sources=None):
     """Declared dlopen roots plus the full transitive DT_NEEDED closure.
 
     Dependencies form ordered graph frontiers; inspect independent files in
     each frontier concurrently, then retain deterministic discovery order.
     """
+    codec_lib = env_lib if codec_lib is None else codec_lib
+    selected = {} if sources is None else sources
     order, seen, edges, driver, unresolved = [], set(), [], set(), []
     queue = list(exts)
     for dep in dynamic:
-        if not (env_lib / dep).is_file():
-            raise SystemExit(f"stage_libs: native archive codec {dep} is missing from {env_lib}")
+        source = library_source(dep, env_lib, env_lib, codec_lib, selected, "native archive codec")
         if dep not in seen:
             seen.add(dep)
             order.append(dep)
-            queue.append(env_lib / dep)
+            queue.append(source)
             edges.append({"from": "native archive dlopen", "needs": dep, "class": "staged"})
     while queue:
         frontier, queue = queue, []
@@ -233,6 +237,12 @@ def closure(exts, env_lib, dynamic=()):
         for cur, (needed, _, _) in zip(frontier, results):
             for dep in needed:
                 cls = classify(dep, env_lib)
+                if cls == "unresolved" and (codec_lib / dep).is_file():
+                    cls = "staged"
+                source = None
+                if cls == "staged":
+                    preferred = codec_lib if pathlib.Path(cur).parent == codec_lib else env_lib
+                    source = library_source(dep, preferred, env_lib, codec_lib, selected)
                 edges.append({"from": os.path.basename(str(cur)), "needs": dep, "class": cls})
                 if cls == "driver":
                     driver.add(dep)
@@ -241,7 +251,7 @@ def closure(exts, env_lib, dynamic=()):
                 elif cls == "staged" and dep not in seen:
                     seen.add(dep)
                     order.append(dep)
-                    queue.append(env_lib / dep)
+                    queue.append(source)
     if unresolved:
         print("ERROR: dependencies that are neither system, driver nor in " + str(env_lib), file=sys.stderr)
         for item in unresolved:
@@ -274,11 +284,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--set", required=True)
     ap.add_argument("--env-lib", required=True)
+    ap.add_argument("--codec-lib", help="pinned packaging environment library directory")
     ap.add_argument("--manifest", required=True)
     ap.add_argument("--patchelf", default=shutil.which("patchelf"))
     a = ap.parse_args()
     root = pathlib.Path(a.set).resolve()
     env_lib = pathlib.Path(a.env_lib).resolve()
+    codec_lib = pathlib.Path(a.codec_lib).resolve() if a.codec_lib else env_lib
     if not a.patchelf:
         raise SystemExit("stage_libs: patchelf not found; build_sets.sh installs one")
 
@@ -311,9 +323,10 @@ def main():
         shutil.rmtree(libs)
     libs.mkdir()
     # the adapter library's MAX runtime closure is staged with the bindings'
-    needed, edges, driver = closure(exts + adapter_native, env_lib, ARCHIVE_CODEC_LIBRARIES)
+    library_sources = {}
+    needed, edges, driver = closure(exts + adapter_native, env_lib, ARCHIVE_CODEC_LIBRARIES, codec_lib, library_sources)
     def stage_library(name):
-        src = env_lib / name
+        src = library_sources[name]
         # Follow symlinks but retain the SONAME used by native dlopen.
         shutil.copy2(src.resolve(), libs / name)
         set_runpath(a.patchelf, libs / name, "$ORIGIN")
@@ -391,7 +404,7 @@ def main():
     total_ext = sum(r["bytes"] for r in ext_records)
     total_libs = sum(r["bytes"] for r in staged)
     manifest = {
-        "set": str(root), "env_lib": str(env_lib),
+        "set": str(root), "env_lib": str(env_lib), "codec_lib": str(codec_lib),
         "dynamically_loaded_libraries": list(ARCHIVE_CODEC_LIBRARIES),
         "extensions": ext_records, "staged_libs": staged,
         "merged_indexes": merged_indexes,
