@@ -8,12 +8,13 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.classical_arrays import classical_array, classical_address
 from bindings.classical_metadata import classical_fit_replacements_admit
-from bindings.classical_ridge import classical_ridge_parameters
+from providers.python.linear_parameter_boundary import classical_ridge_parameters
 from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_weights_input, classical_estimator_name
 from bindings.py_balanced import py_setitem
 from bindings.sequential_description import sequential_fields
 from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT, RIDGE_FIT_ABI, LinearFitRequest, LinearFitResult
 from core.linear_fit_run import linear_ridge_run
+from providers.python.linear_state_boundary import linear_state_publish
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 
 
@@ -60,4 +61,5 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject,
     py_setitem(fields, "solver_", "eig")
     py_setitem(fields, "input_copied_", not (x is args[0]))
     py_setitem(fields, "_mojolearn_fitted", True)
+    linear_state_publish(model, coef, mean, cols, result.intercept, result.ymean, not (x is args[0]))
     return model

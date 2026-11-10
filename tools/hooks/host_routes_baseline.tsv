@@ -1140,7 +1140,6 @@ py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_br
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_bridge.py	0	for name in ("read", "write", "seek", "tell", "flush", "close"): # glue: validate native descriptor origin once
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
-py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_bridge.py	0	for name in metric_names: # glue: cache raw metric program entries once at package connection
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove
 py-data-loop	py-compute	p4-loops	owed-tags	python/mojolearn/_native_classical_bridge.py	0	for name in names + optional: # glue: retain verified compiled CPU symbols at connection
 # why: baselined 2026-11-09 when the loop-tag rules stopped trusting glue/cpu-route/small-loop notes; debt to remove

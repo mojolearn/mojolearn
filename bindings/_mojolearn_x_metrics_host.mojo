@@ -4,6 +4,8 @@
 device, run in a loop on the caller's arena (x_metrics/host/program.mojo), with
 the GPU binding's export names and address contract."""
 from core.experiment_guards_base import BASE_GUARDS_OK
+from x_metrics.descriptor_host import METRICS_PROGRAM_HOST_API
+from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -17,6 +19,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_metrics.common import X_METRICS_HOST_SABOTAGE, IP
 from x_metrics.host.program import run_program_host
 from x_metrics.host.out_ranges_impl import check_out_ranges
+
+
+def metrics_program_native_api_v1_binding() raises -> PythonObject:
+    var api = METRICS_PROGRAM_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -103,6 +110,7 @@ def build__mojolearn_x_metrics_host() -> PythonObject:
         m.def_function[x_metrics_host_column_binding]("x_metrics_host_column")
         m.def_function[x_metrics_host_sabotage_binding]("x_metrics_host_sabotage")
         m.def_function[run_binding]("x_metrics_run")
+        m.def_function[metrics_program_native_api_v1_binding]("metrics_program_native_api_v1")
         m.def_function[run_out_binding]("x_metrics_run_out")
         m.def_function[first_rows_binding]("x_metrics_first_rows")
         m.def_function[x_metrics_numeric_mode_binding]("x_metrics_numeric_mode")

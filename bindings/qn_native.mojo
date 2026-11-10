@@ -31,7 +31,7 @@ from bindings.classical_arrays import classical_address, classical_typed, classi
 from bindings.admitted_input import admit_x, admit_x_unrecorded, admitted_finite_refuse, admitted_vector
 from bindings.device_rows_door import door_is_device_rows, door_rows_refuse
 from bindings.classical_validate import classical_view, classical_check_weights_input, classical_check_x, classical_check_y, classical_check_width, classical_estimator_name
-from bindings.classical_score import classical_r2_score
+from providers.python.linear_score_boundary import classical_r2_score
 from bindings.native_class_admission import dict_keys_admitted, dict_keys_admit, class_record, class_admit
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
