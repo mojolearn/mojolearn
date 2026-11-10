@@ -1,16 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 """Direct native checkpoint conversion contracts, independent literal words.
 
-Small conversion spans are one ordered prefix/refusal operation. Independent
-formats/bounds/strides run across the existing host pool. The public Python
+Conversion chunks may complete independently in private scratch. The earliest
+invalid input index determines the refusal; source and destination bounds stay
+protected. Independent formats/bounds/strides run across the existing host pool. The public Python
 checkpoint and error-class tests remain distinct from these raw typed spans.
 """
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL
 from core.optimizer_state_impl import optimizer_state_cast
 
-comptime STATE_INPUT_FIXTURES = 35
+comptime STATE_INPUT_FIXTURES = 39
 
 
 def require(ok: Bool, message: String) raises:
@@ -145,9 +147,68 @@ def _prefix_refusal() raises:
         refused = String(error).find("cannot convert float NaN to integer") >= 0
     # This converter writes private scratch. Public checkpoint publication
     # atomicity is tested at the Python seam; scratch-prefix writes are allowed.
-    require(refused and dst[1] == 1 and dst[2] == 0xAABBCCDD and dst[3] == 0xAABBCCDD, "state scratch refusal prefix")
+    require(refused and dst[1] == 1 and dst[2] == 0xAABBCCDD, "state scratch refusal prefix")
+    require(dst[3] == 0xAABBCCDD or dst[3] == 3, "later private scratch is either unwritten or correctly converted")
     require(dst[0] == 0xAABBCCDD and dst[4] == 0xAABBCCDD, "state scratch guard")
     require(source[0] == 1.75 and bitcast[DType.uint64](source[1]) == 0x7FF8000000000001 and source[2] == 3, "state scratch source mutated")
+
+
+def _parallel_earliest_refusal(fixture_id: Int) raises:
+    # Large enough to cross the native worker-policy threshold. The test does
+    # not prescribe a worker count or completion order; on a one-worker host
+    # it still checks the same earliest-input contract.
+    comptime COUNT = 262147
+    comptime FIRST = 4097
+    comptime SECOND = COUNT - 4097
+    var reverse = fixture_id >= 2
+    var nan_first = fixture_id % 2 == 0
+    var source = List[Float64](length=COUNT, fill=1.75)
+    var sp = source.unsafe_ptr()
+    var first_word = UInt64(0x7FF8000000000001) if nan_first else UInt64(0x7FF0000000000000)
+    var second_word = UInt64(0x7FF0000000000000) if nan_first else UInt64(0x7FF8000000000001)
+    sp[COUNT - 1 - FIRST if reverse else FIRST] = bitcast[DType.float64](first_word)
+    sp[COUNT - 1 - SECOND if reverse else SECOND] = bitcast[DType.float64](second_word)
+    var dst = List[UInt32](length=COUNT + 2, fill=0xAABBCCDD)
+    var output = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(dst.unsafe_ptr()) + 4)
+    var address = Int(source.unsafe_ptr()) + (8 * (COUNT - 1) if reverse else 0)
+    var refused = False
+    try:
+        optimizer_state_cast(address, -8 if reverse else 8, COUNT, 8, CAST_KIND_FLOAT, True, output, True)
+    except error:
+        var expected = String("ValueError: cannot convert float NaN to integer" if nan_first else
+            "OverflowError: buf_initialized value does not fit int32")
+        require(String(error) == expected, "parallel checkpoint selected a later input's refusal kind")
+        refused = True
+    require(refused, "parallel checkpoint accepted invalid integer input")
+    require(dst[0] == 0xAABBCCDD and dst[COUNT + 1] == 0xAABBCCDD, "parallel checkpoint scratch guard")
+    require(dst[1] == 1, "valid prefix before earliest refusal was not converted")
+    require(dst[FIRST + 1] == 0xAABBCCDD and dst[SECOND + 1] == 0xAABBCCDD,
+        "invalid cells must not be published into private scratch")
+    var tasks = host_predict_task_count_work(COUNT, COUNT * 8)
+    var chunk = host_predict_chunk(COUNT, tasks)
+    var failures = List[Int](length=tasks, fill=0)
+    var fp = failures.unsafe_ptr()
+    var src = Pointer[Float64, ImmUntrackedOrigin](unsafe_from_address=Int(source.unsafe_ptr()))
+    var result = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(dst.unsafe_ptr()) + 4)
+    def inspect(unit: Int) {imm fp, imm src, imm result, imm reverse, imm first_word, imm second_word, imm chunk}:
+        var bad = 0
+        for index in range(unit * chunk, min(COUNT, (unit + 1) * chunk)):
+            var original_index = COUNT - 1 - index if reverse else index
+            var expected_word = first_word if index == FIRST else (second_word if index == SECOND else UInt64(0x3FFC000000000000))
+            if bitcast[DType.uint64](src[original_index]) != expected_word:
+                bad = 1
+            # Other independent workers may finish after the first bad input.
+            # Their private output must be correct if written, never arbitrary.
+            if index != FIRST and index != SECOND and result[index] != 0xAABBCCDD and result[index] != 1:
+                bad = 1
+        fp.unsafe_store(unit, bad)
+    host_parallelize(inspect, tasks)
+    var failed = 0
+    for value in failures:
+        failed += value
+    require(failed == 0, "parallel checkpoint changed source or wrote incorrect scratch values")
+    _ = source
+    _ = dst
 
 
 def run_fixture(fixture_id: Int) raises:
@@ -159,13 +220,16 @@ def run_fixture(fixture_id: Int) raises:
         _span(fixture_id - 24)
     elif fixture_id == 33:
         _prefix_refusal()
-    else:
+    elif fixture_id == 34:
         # An empty input needs no backing storage. The output API is a
         # non-nullable pointer, so prove its guarded destination is untouched.
         var guard = List[UInt32](length=1, fill=0xAABBCCDD)
         var output = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(guard.unsafe_ptr()))
         optimizer_state_cast(0, 0, 0, 8, CAST_KIND_FLOAT, True, output, True)
         require(guard[0] == 0xAABBCCDD, "empty state cast wrote output")
+
+    else:
+        _parallel_earliest_refusal(fixture_id - 35)
 
 
 def main() raises:

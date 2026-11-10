@@ -268,6 +268,15 @@
       "removed_python_numerical_work": "Fresh duplicate public Theta fit, NumPy full-fit/tail word comparisons; retained actual cached object/publication ownership seam.",
       "source_review_only": true,
       "runtime_status": "Orchestrator compile and run owed; see theta-state-handoff.txt."
+    },
+    {
+      "path": "training/checks/optimizer_state_input_check.mojo",
+      "decision": "native-parallel-refusal-contract",
+      "native_fixtures": 39,
+      "added_fixtures": 4,
+      "production_dependency": "bee32a8a30",
+      "source_review_only": true,
+      "runtime_status": "Root compile/run owed; permits correct later private scratch writes without weakening public publication checks."
     }
   ],
   "additional_semantic_reviews": [
