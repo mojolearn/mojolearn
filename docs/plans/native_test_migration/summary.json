@@ -5,12 +5,12 @@
   "test_definitions": 4126,
   "file_decisions": {
     "needs-semantic-review": 587,
-    "retain-python-boundary": 11,
+    "retain-python-boundary": 12,
     "split-partial": 1,
-    "split-needed": 9,
     "review-module-gate": 1,
-    "split-migrated": 5,
-    "retain-tooling": 2
+    "split-migrated": 6,
+    "retain-tooling": 2,
+    "split-needed": 7
   },
   "reviewed_files": 29,
   "not_a_gate": true,
@@ -115,6 +115,17 @@
       ],
       "handoff": "docs/plans/native_test_migration/native-array-layout-handoff.txt",
       "source_review_only": true
+    },
+    {
+      "path": "python/mojolearn/tests/test_lowbit_weights.py",
+      "change": "Move four numerical conversion oracles to direct native host/device fixtures; remove unused Python special-row helper and activate its rows natively. Retain six public boundary definitions.",
+      "native_checks": [
+        "checks/native_tests/lowbit_weights_cpu.mojo",
+        "checks/native_tests/lowbit_weights_gpu.mojo"
+      ],
+      "native_fixtures_per_implementation": 3,
+      "handoff": "docs/plans/native_test_migration/lowbit-weights-handoff.txt",
+      "source_review_only": true
     }
   ],
   "additional_semantic_reviews": [
@@ -122,7 +133,12 @@
     "test_ops_rankn.py",
     "test_sequence_dtype_alias_native.py",
     "test_sequence_scalar_cast_status.py",
-    "test_sequence_temporal_cast_contract.py"
+    "test_sequence_temporal_cast_contract.py",
+    {
+      "path": "python/mojolearn/tests/test_cpu_kernel_variants.py",
+      "decision": "retain-python-boundary",
+      "reason": "All four definitions exercise Python registry, package, saved model and degree transport/refusal contracts. No raw GPU kernel test hidden by the filename."
+    }
   ],
   "integration_reported_results": [
     {

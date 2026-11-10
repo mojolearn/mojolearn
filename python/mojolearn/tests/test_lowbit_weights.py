@@ -1,12 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Low-bit WEIGHT STORAGE for the inference classes (mojolearn.lowbit),
-gated BITWISE: a block built from packed weights computes what the fp32
-block computes from the exactly materialized weights, and the three
-materialization spellings (GPU kernels, host binding, NumPy) agree.
-Lane lane/identical-lowbit-inference, 2026-09-17.
+"""Packed-weight public containers, repacking and model input boundaries.
 
-Needs the identical GPU builds of the transformer, mamba, training and
-linalg bindings; each test skips by name otherwise.
+Conversion correctness now lives in the direct Mojo lowbit_weights CPU/GPU
+checks with independent native expectations. These tests retain public
+container identity, dtype/ownership, host binding ABI and model routing.
 """
 import os
 
@@ -30,59 +27,6 @@ def _need(*modules):
         pytest.skip(f"identical linalg extension not loaded: {e}")
 
 
-# ---------------------------------------------------------------------------
-# THE NUMPY ORACLE SPELLINGS. They lived in `mojolearn/lowbit.py` until the
-# NumPy-free rewrite (lane/model-loader, 2026-09-17), and these four stay
-# here as the vectorized oracle the kernels and the host binding are held to
-# (the pure-Python third spelling left the package on 2026-10-03: Python is
-# glue only). `_quantize_int8_numpy` propagates a NaN through the row
-# absmax where `row_absmax` ignores it, so the oracle is compared on finite
-# data only.
-# ---------------------------------------------------------------------------
-
-
-def _to_bf16_numpy(x):
-    x = np.ascontiguousarray(x, dtype=np.float32)
-    u = x.view(np.uint32)
-    sub = ((u & 0x7F800000) == 0) & ((u & 0x007FFFFF) != 0)
-    u = np.where(sub, u & 0x80000000, u).astype(np.uint32)
-    nan = ((u & 0x7F800000) == 0x7F800000) & ((u & 0x007FFFFF) != 0)
-    rne = ((u + np.uint32(0x7FFF) + ((u >> 16) & 1)) >> 16).astype(np.uint16)
-    quiet = ((u >> 16) | 0x0040).astype(np.uint16)
-    return np.where(nan, quiet, rne).astype(np.uint16)
-
-
-def _from_bf16_numpy(bits):
-    return (np.ascontiguousarray(bits, dtype=np.uint16).astype(np.uint32) << 16).view(np.float32)
-
-
-def _quantize_int8_numpy(x):
-    x = np.ascontiguousarray(x, dtype=np.float32)
-    u = x.view(np.uint32)
-    sub = ((u & 0x7F800000) == 0) & ((u & 0x007FFFFF) != 0)
-    xf = np.where(sub, (u & 0x80000000).astype(np.uint32), u).view(np.float32)
-    absmax = np.max(np.abs(xf), axis=1)
-    ub = absmax.view(np.uint32)
-    exp = (((ub >> 23) & 0xFF).astype(np.int32) - 127) - 6
-    exp = np.where(absmax == 0, np.int32(0), exp).astype(np.int32)
-    scaled = (xf * np.ldexp(np.float32(1.0), -exp)[:, None].astype(np.float32)).astype(np.float32)
-    us = scaled.view(np.uint32)
-    sub2 = ((us & 0x7F800000) == 0) & ((us & 0x007FFFFF) != 0)
-    scaled = np.where(sub2, (us & 0x80000000).astype(np.uint32), us).view(np.float32)
-    magic = np.float32(12582912.0)
-    r = np.where(scaled >= 0, (scaled + magic) - magic, (scaled - magic) + magic).astype(np.float32)
-    r = np.where(np.isnan(scaled), np.float32(0.0), r)
-    r = np.clip(r, -127.0, 127.0)
-    return r.astype(np.int8), exp
-
-
-def _dequantize_int8_numpy(codes, exponents):
-    y = (codes.astype(np.float32) * np.ldexp(np.float32(1.0), exponents)[:, None].astype(np.float32)).astype(np.float32)
-    u = y.view(np.uint32)
-    sub = ((u & 0x7F800000) == 0) & ((u & 0x007FFFFF) != 0)
-    return np.where(sub, (u & 0x80000000).astype(np.uint32), u).view(np.float32)
-
-
 def _hw(shape, seed, lo=-0.125, hi=0.125):
     rng = np.random.default_rng(seed)
     return (lo + (hi - lo) * rng.random(shape)).astype(np.float32)
@@ -97,7 +41,7 @@ def _same(a, b):
 
 
 @pytest.mark.parametrize("fmt", ["bfloat16", "int8"])
-def test_pack_unpack_are_exact_and_the_three_spellings_agree(fmt):
+def test_pack_unpack_preserves_containers_repacking_and_host_abi(fmt):
     _need()
     w = {"a": _hw((40, 32), 1), "n": _hw((32,), 2), "b": _hw((32, 24), 3)}
     packed = lowbit.pack(w, fmt)
@@ -113,14 +57,8 @@ def test_pack_unpack_are_exact_and_the_three_spellings_agree(fmt):
         else:
             assert np.array_equal(again[k].codes, packed[k].codes)
             assert np.array_equal(again[k].exponents, packed[k].exponents)
-    # the NumPy spelling of both conversions equals the GPU kernels' bits
-    if fmt == "bfloat16":
-        assert np.array_equal(_to_bf16_numpy(w["a"]), np.asarray(packed["a"].bits))
-        assert _same(_from_bf16_numpy(np.asarray(packed["a"].bits)), f32["a"])
-    else:
-        q, e = _quantize_int8_numpy(w["a"])
-        assert np.array_equal(q, np.asarray(packed["a"].codes)) and np.array_equal(e, np.asarray(packed["a"].exponents))
-        assert _same(_dequantize_int8_numpy(q, e), f32["a"])
+    # Arithmetic conversion expectations are in direct native checks;
+    # this optional host call retains the raw-address binding ABI comparison.
     # the host binding, when built, agrees too
     try:
         h = _backend.load_host_module("_mojolearn_linalg_host")
@@ -155,20 +93,6 @@ def test_repack_same_format_copies_packed_bytes_without_materializing(monkeypatc
         assert np.array_equal(copied.exponents, original.exponents)
         assert copied.codes._addr != original.codes._addr
         assert copied.exponents._addr != original.exponents._addr
-def _special_rows():
-    """Finite float32 rows that reach every branch of the seams: zeros, a
-    subnormal (flushed), negatives, exact halves (ties to even), a tiny row,
-    a large row and one plain row."""
-    rows = [
-        [0.0, -0.0, 0.0, 0.0],
-        [1e-40, -1e-40, 1.0, -1.0],
-        [0.5, 1.5, 2.5, -2.5],
-        [1e-30, 2e-30, -3e-30, 4e-30],
-        [3e38, -1e38, 1.0, 2.0],
-        [0.1, -0.2, 0.3, -0.4],
-        [65504.0, 0.000030517578125, -0.000030517578125, 100.0],
-    ]
-    return np.array(rows, dtype=np.float32)
 
 
 def test_packed_containers_are_arrays():
