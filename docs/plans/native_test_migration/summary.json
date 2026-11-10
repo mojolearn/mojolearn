@@ -312,6 +312,27 @@
       "remaining_numerical_family": "Prophet",
       "source_review_only": true,
       "runtime_status": "Root combined compile/run owed; see arima-state-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_tsa_resident_state.py",
+      "decision": "prophet-numerical-and-state-migration",
+      "native_fixtures_per_target": 6,
+      "full_default_fit_cases": 1,
+      "independent_closed_form_states": 5,
+      "full_fit_settings": {
+        "n": 120,
+        "first_predict": 130,
+        "max_iter": 2000,
+        "changepoints": 25,
+        "changepoint_range": 0.8,
+        "weekly_order": 3,
+        "seasonality_prior": 10,
+        "changepoint_prior": 0.05
+      },
+      "remaining_python_tests": 5,
+      "remaining_numerical_family": null,
+      "source_review_only": true,
+      "runtime_status": "Root combined compile/run owed; see prophet-state-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [
