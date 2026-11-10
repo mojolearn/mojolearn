@@ -36,11 +36,11 @@ def main():
         [1,2,4,8], [1e-12,2e-12,0,0]], dtype=np.float32)
     negative = np.array([[1,0],[-1,0],[0,1],[0,-1]],dtype=np.float32)
     inputs = {"original":original,"edges":edges,"negative":negative}
-    records = []
-    for name, data in inputs.items():
+    def input_record(item):
+        name,data=item
         path=HERE/(name+"-input.f32")
         path.write_bytes(data.astype("<f4").tobytes())
-        records.append({"path":path.name,"sha256":digest(path),"shape":list(data.shape),"dtype":"<f4"})
+        return {"path":path.name,"sha256":digest(path),"shape":list(data.shape),"dtype":"<f4"}
     jobs=[(name,kernel,gamma) for name in ("original","edges")
           for kernel,gamma in (("cosine",1.),("chi2",1.),("chi2-g03",.3),("additive-chi2",1.))]
     jobs.append(("negative","cosine",1.))
@@ -56,7 +56,11 @@ def main():
         return {"path":path.name,"sha256":digest(path),"shape":list(result.shape),"dtype":"<f8", "gamma":gamma}
 
     with ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
-        records.extend(pool.map(reference,jobs))
+        # Input dumps and independent reference matrices share the same pool;
+        # neither stage serializes independent files or waits on the other.
+        input_jobs=[pool.submit(input_record,item) for item in inputs.items()]
+        reference_jobs=[pool.submit(reference,job) for job in jobs]
+        records=[job.result() for job in input_jobs+reference_jobs]
     metadata={"schema":1,"numpy":np.__version__,"scikit_learn":sklearn.__version__,
       "generator_sha256":digest(Path(__file__)),"pairwise_source_sha256":digest(Path(pairwise.__file__)),
       "origin":"test_km_kernels._data80x6 seed4; first80input rows byte-identical",
