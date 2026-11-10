@@ -552,6 +552,11 @@
       "path": "python/mojolearn/tests/test_native_cv_logistic.py",
       "decision": "retain-python-boundary",
       "reason": "Reviewed six definitions: public constructor/get_params/set_params, actual native-call audit, mutable fitted weights, wrong-width exception, CV/search estimator reconstruction, user callback/metaclass hash refusal and explicit host binding choice. These are Python/model-selection integration boundaries, not pure QN kernel tests; retain them while independent fit/query math moves to native suites."
+    },
+    {
+      "path": "python/mojolearn/tests/test_km_kernels.py",
+      "decision": "split-native-numerics-and-python-boundary",
+      "reason": "Original misnamed kernel-matrix test is Nystroem basis reconstruction:both80x6/12components/seed1/cosine+chi2 numerical cases moved to actual Mojo fit/transform with independent sklearn Float64 matrices and unchanged5e-3/1e-7 tolerance. Direct cell matrix/neighbor/Float32/empty/minimum fixtures added in native suites. Retain public negative-input wrappers,all4whole KernelRidge sklearn comparisons,and Nystroem public basis/shape/owner seams. Delete repeated same-bits fits/transforms from development checks; no kernel/algorithm changes. Compilation/execution pending orchestrator."
     }
   ],
   "integration_reported_results": [

@@ -4,7 +4,7 @@
   "native_entry": "checks/native_tests/label_score_keys_stress.mojo",
   "fixture_count": 16,
   "parallelism": "Fixtures, row preparation and code validation use host_parallelize; bounded alphabet metadata and summaries remain local.",
-  "product_dependency": "core/labels_score_keys.mojo from the finite-tests score container migration; freeze SHA supplied in handoff",
+  "product_dependency": "89c19001a00a05200b24ee0873e56fbcce0a709a:core/labels_score_keys.mojo",
   "coverage": [
     {"fixtures": 4, "kind": "overlapping UTF8/UCS4 unions", "rows": [31, 257, 65537, 262271], "oracle": "Literal code-point alphabet: empty, NUL, prefix, combining/composed forms, lone surrogate, U+10000 and two astral symbols; fixed inverse-code permutation."},
     {"fixtures": 4, "kind": "forced linear-probe collision chains", "rows": [64, 128, 256, 448], "oracle": "65 ascending Int64 literals selected for hash collisions; numeric sorted order and first/last representative positions are independent of the hash implementation.64 present classes plus one missing colliding key."},
