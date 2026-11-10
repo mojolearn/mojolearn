@@ -333,6 +333,19 @@
       "remaining_numerical_family": null,
       "source_review_only": true,
       "runtime_status": "Root combined compile/run owed; see prophet-state-handoff.txt."
+    },
+    {
+      "path": "checks/native_tests/optimizer_device_cases.mojo",
+      "decision": "typed-device-descriptor-storage-ownership-contracts",
+      "native_cpu_fixtures": 52,
+      "native_gpu_fixtures": 57,
+      "producer_dependencies": [
+        "679a558c69",
+        "c3bea14b71"
+      ],
+      "python_tests_removed": 0,
+      "source_review_only": true,
+      "runtime_status": "Root consolidated compile/run owed; see optimizer-device-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [
