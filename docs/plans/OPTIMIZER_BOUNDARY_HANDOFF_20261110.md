@@ -257,3 +257,13 @@ coverage. Empty conversion remains valid; nonempty null/out-of-range spans refus
 Root owes the existing 35 native conversion fixtures, parallel/error cases,
 public checkpoint admission/ownership/rollback tests and compile. No update
 kernel changed and no performance/identity claim is made.
+
+## Import-time owner declaration
+
+Removing the door's runtime import exposes its sole package-owner dependency:
+`mojolearn._training_impl._OPT_CONTEXT`. That completed context is now declared
+through the existing import-time connect_module mechanism after the optimizer
+bridge returns. The connection checker records exactly this export. This fixes
+the normal push refusal without a guard exemption, runtime import or new loader.
+Root owes the existing connection-tooling and fresh-import/public-constructor
+checks; product/native logic is unchanged from the prior freeze.
