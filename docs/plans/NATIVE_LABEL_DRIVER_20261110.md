@@ -3,8 +3,12 @@
 The numerical label path used by Logistic and other classical estimators now
 passes typed Mojo requests and results. The old v1 descriptor unpacked native
 Lists and rebuilt Python arguments before calling the compiled Python wrappers;
-those envelopes and calls are removed. The public factory, v1 operation IDs,
-metadata slots, three-word reduction result and scalar refusal text remain.
+those envelopes and calls are removed. The v1 operation IDs, metadata slots,
+three-word reduction result and scalar refusal text remain. New callers require
+`labels_native_api_v2` / `mojolearn.labels.v2`: an old v1 image may still construct
+Python values and cannot safely be called with the GIL released. The existing
+v1 factory/name remains a compatibility export over the same native entry for
+its GIL-held consumers; there is no duplicate numerical implementation.
 
 `core/labels_native_api.mojo` contains the request values, `LabelsNativeDriver`,
 native span dispatch and reduction wire packing. The driver uses the previously
@@ -46,10 +50,49 @@ algorithms are not removed by this numerical-driver batch. Their actual API and
 lifetime tests remain. No speedup, runtime success or identity result is claimed.
 No intended arithmetic/bit changes; no A/B define or box job.
 
-Root owns compilation and runtime. Native host fixtures, v1 protocol/refusal
-checks, GPU/host public label/weighted-fit/score seams and affected development
-group compilation are required. Build closure and fixture inventory will be
-recorded with the next test batch before the combined freeze.
+Root owns compilation and runtime. `checks/native_tests/labels_driver_suite.mojo`
+contains 100 parallel native fixtures: all six numeric label dtypes, independent
+class/inverse-code expectations, label/weight refusal order, reduction signed
+zero/NaN/triple words, gather refusal before writes, first-max argmax, known ratio
+and exact-sum results, both widened and already-wide uncapped fallback, raw ABI
+refusals, and 32 independent concurrent encode/reduce units. The two uncapped
+fixtures initialize and verify their own disjoint slices with the existing host
+pool; source/destination owners remain live through every join.
+
+Native command: `bash tools/compile_slot.sh pixi run check-native-label-driver`.
+The suite exposes importable `run_checks` for the existing combined native CPU
+runner. No native fixture has been compiled or executed by this lane.
+
+`test_labels_provider_version.py` adds two thin installed-provider seams in fresh
+processes: the v2 factory replaced by the extension's real compiled v1 factory
+must fail capsule-version admission, and a missing v2 factory must fail entry
+admission. Both also inspect the retained v1 and new v2 capsule identities. They
+perform no numerical kernel call on success. CPU-only installs have no GPU base
+provider and explicitly skip these two seams; that is pending provider coverage,
+not a pass. Existing public label/weighted-fit/score/lifetime tests remain intact.
+
+Static closure analysis uses the existing `compile_closures`/binary-cache source
+walker, with ten independent workers: 89 distinct roots scanned, 13 affected,
+zero source-walk errors. Both Darwin and Linux need identical
+`_mojolearn_dev_core` and these host groups:
+
+- `_mojolearn_dev_core_host`
+- `_mojolearn_dev_runtime_byte_trainer_host`
+- `_mojolearn_dev_runtime_classical_host`
+- `_mojolearn_dev_runtime_decomp_host`
+- `_mojolearn_dev_runtime_family_host`
+- `_mojolearn_dev_runtime_linear_host`
+- `_mojolearn_dev_runtime_manifold_host`
+- `_mojolearn_dev_runtime_model_selection_host`
+- `_mojolearn_dev_runtime_parallel_host`
+- `_mojolearn_dev_runtime_prep_host`
+- `_mojolearn_dev_runtime_trees_host`
+- `_mojolearn_dev_runtime_xseq_host`
+
+The source maps are in `closure.json`; root resolves the combined freeze through
+the normal controller because other lanes may add edges. Source reachability is
+not compilation or runtime evidence. GPU/host public label, weighted-fit, score,
+provider and ownership seams remain owed against the rebuilt installed code.
 
 Complete before-source snapshots, hashes and implementation diff are retained
 in `~/mojolearn-evidence/python-mojo-migration-20261110/native-label-driver/`.
