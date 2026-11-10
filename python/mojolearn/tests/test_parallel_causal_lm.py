@@ -23,6 +23,7 @@ from mojolearn._verify_causal_lm import state_digest
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.models import CausalLM
 from mojolearn.models import parallel_causal_lm as mod
+from mojolearn.tests import _mamba_block_reference
 
 
 AUDIT_FIELDS = ('python_frames', 'forbidden_native_calls', 'wrapper_work',

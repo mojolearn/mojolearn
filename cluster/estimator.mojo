@@ -408,7 +408,24 @@ def kmeans_fit(
     # The scale from the design on the device (`plan_sum_scale`, one
     # fixed-order fold on every vendor and in the host column).
     if sum_scale <= 0.0:
-        sum_scale = plan_sum_scale(ctx, x, n_samples, n_features)
+        if finite_word != 0:
+            # A non-finite X makes a column sum non-finite, and the scale
+            # plan refuses it in its own words before the status word above
+            # is read: a flagged X is the admission's refusal (lane a7d's one
+            # wording), so read the word first and keep the plan's error only
+            # for a finite X.
+            try:
+                sum_scale = plan_sum_scale(ctx, x, n_samples, n_features)
+            except e:
+                ctx.synchronize()
+                var flagged_x = word.unsafe_ptr()[0]
+                _ = status^
+                if flagged_x == 0:
+                    raise e^
+                MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = flagged_x
+                return KMeansFitResult(0.0, 0, sum_scale, weight_scale)
+        else:
+            sum_scale = plan_sum_scale(ctx, x, n_samples, n_features)
     if finite_word != 0:
         # plan_sum_scale synchronised already (this is then a no-op); a
         # requested scale skipped it.

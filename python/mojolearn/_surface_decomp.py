@@ -59,6 +59,8 @@ FAMILIES = (
             "x_decomp_fa_fit", "x_decomp_fa_query", "x_decomp_lda_owner", "x_decomp_kpca_eig", "x_decomp_rp_fit", "x_decomp_rp_project",
             # manifest sync (ne-fix-tests-b, 2026-11-07): the native API version marker
             "x_decomp_native_api_v1",
+            # lanes n9 (2026-11-09, the Lanczos T solve) and m3 (2026-11-09, the public randomized_svd as one driver)
+            "x_decomp_eigh_tridiag", "x_decomp_randomized_svd",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the decomp expansion lane's CPU route (lane/algos-decomp).",

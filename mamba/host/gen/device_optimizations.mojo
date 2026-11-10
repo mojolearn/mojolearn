@@ -294,6 +294,9 @@ struct MambaArena(Movable):
     var guard: Int
     var views: Int
     var reset_view: Optional[DeviceBuffer[DType.float32]]
+    #: False for an arena laid over storage that already holds its values
+    #: (`over`): neither the constructor nor `take` fills anything.
+    var fills: Bool
 
     @staticmethod
     def slot(n: Int, guard: Int) -> Int:
@@ -306,6 +309,10 @@ struct MambaArena(Movable):
 
 
     def __init__(out self, ctx: DeviceContext, total: Int, guard: Int) raises:
+        abort("mamba host: device-only MambaArena.__init__ is disabled")
+
+
+    def __init__(out self, *, var over: DeviceBuffer[DType.float32], cap: Int, guard: Int) raises:
         abort("mamba host: device-only MambaArena.__init__ is disabled")
 
 

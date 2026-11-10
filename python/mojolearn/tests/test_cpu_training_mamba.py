@@ -80,6 +80,8 @@ def test_host_binding_registers_every_gpu_entry():
     # Mamba-2 live-refresh workspace, 0fdba90777, is gone: the per-call step
     # runs the cached block program, lane x5-mamba-on-executor.)
     resident |= {f"mamba{v}_decode_native_handle_v1" for v in (1, 2, 3)}
+    # N tokens per call on those same resident sessions (684d36dc1a, D2).
+    resident |= {f"mamba{v}_session_decode" for v in (1, 2, 3)}
     assert resident <= gpu and not resident & host
     # Device-retained Mamba-3 entries with a declared host absence: the tape
     # (NI48, `mamba3_forward_tape_enabled` reads False on the host binding, so
@@ -91,7 +93,10 @@ def test_host_binding_registers_every_gpu_entry():
                    "mamba3_prefill_session_forward", "mamba3_prefill_session_backward",
                    # the tape's native provider handles (e1741fb6a1); the
                    # training bridge connects them only where present
-                   "mamba3_tape_create_native_v1", "mamba3_tape_handle_native_v1"}
+                   "mamba3_tape_create_native_v1", "mamba3_tape_handle_native_v1",
+                   # the resident decode program's read door (X45c): CausalLM
+                   # connects it only on a GPU request (bindings/causal_lm_public.mojo)
+                   "causal_lm_program_read_v1"}
     assert device_only <= gpu and not device_only & host
     assert "mamba3_forward_tape_enabled" in host
     resident |= device_only

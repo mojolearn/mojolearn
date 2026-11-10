@@ -479,7 +479,7 @@ def test_encode_labels_float_list_takes_the_helper():
     for name in ("floats", "zeros a", "zeros b"):
         y = _label_lists()[name]
         ref = _same(lambda: _labels.encode_labels(y), (), group="labels")  # one native call (N413)
-        assert ref[0] == "ok"
+        assert ref[0][0] == "ok"
     classes, _ = _labels.encode_labels(_label_lists()["zeros b"])
     assert math.copysign(1.0, classes[0]) == -1.0  # the first-seen zero is kept
 
@@ -541,7 +541,7 @@ def test_classification_labels_match(name):
     ref = _same(lambda: M._classification_encoded(y, "y_true"), expect, group="metrics")
     if name in _NATIVE_LABELS and not _EXPECT_SABOTAGE:
         assert isinstance(M._classification_encoded(y, "y_true")[0], M._EncodedLabels), name
-        assert ref[0] == "ok"
+        assert ref[0][0] == "ok"
 
     other = _RNG.integers(-4, 5, 3000)[:len(y)]
 
@@ -944,9 +944,9 @@ def test_block_copy_is_pinned():
     a = _arr(_RNG.integers(0, 99, (700, 6)).astype(np.int64))
     # The block copy is native now (bindings/array_native.mojo _getitem); its
     # Python definition, the oracle above, keeps its pinned run rule.
-    _pinned(_array, "_block_store", lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 650)), answers=True)
-    _pinned(_array, "_block_store", lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 650, 2)), answers=False)
-    _pinned(_array, "_block_store", lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 20)), answers=False)  # a short run
+    _pinned(_array_reference, "_block_store", lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 650)), answers=True)
+    _pinned(_array_reference, "_block_store", lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 650, 2)), answers=False)
+    _pinned(_array_reference, "_block_store", lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 20)), answers=False)  # a short run
     block = _RNG.integers(0, 99, (4000, 3)).astype(np.int64)
     _pinned(_buffer, "_same_dtype_store", lambda: _buffer.as_i64_c(block[::2], ndim=2, name="X"),
             answers=True)

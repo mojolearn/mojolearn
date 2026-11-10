@@ -552,6 +552,10 @@ def causal_program_read(mut prog: CausalLMProgram, a: List[Int], p: List[Int], f
             # The body is captured at the first one-token step.
             var next = List[Int32]()
             alive = prog.step(Int(ids.unsafe_ptr()), 1, next)
+            # Mojo frees a local at its last named use: without this use the
+            # old ids list died at unsafe_ptr() (before `ids = next^`) and the
+            # step read freed memory as token ids ("embedding: id <address>").
+            _ = len(ids)
             result.forwards += 1
             result.wrote += 1
             for r in range(b):  # driver-loop: over batch rows (id words, no data)

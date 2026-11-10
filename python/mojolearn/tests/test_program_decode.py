@@ -5,7 +5,10 @@ every step are recorded on the device and returned together, and the result
 is the same for every ``unroll``; integer state is carried word for word by
 while_loop; an ids iteration input is an int32 position; Session.state makes
 a state tensor that decode can reset. Tiny data. Written unrun (the lane
-does not run tests); the orchestrator runs it once after the compile."""
+does not run tests); the orchestrator runs it once after the compile.
+`Session.embedding` returns one row per id (flattened) and `Session.ids`
+keeps a (B, 1) array two-dimensional, so the next-token argmax keeps its
+axis (keepdims=True) for the state to keep its rank."""
 import numpy as np
 import pytest
 
@@ -48,8 +51,8 @@ def test_decode_records_every_step(unroll):
     with ops.Session() as s:
         table = s.tensor(_next_token_table(vocab))
         ids = s.ids(first)
-        logits = s.embedding(table, ids)                      # (2, 1, vocab)
-        nxt = s.argmax(logits, axis=-1, keepdims=False, int32=True)
+        logits = s.embedding(table, ids)                      # (2, vocab): one row per id
+        nxt = s.argmax(logits, axis=-1, keepdims=True, int32=True)
         step = s.capture([ids], [nxt])
         out = step.decode(first, n=10, unroll=unroll)
         assert out["iterations"] == 10
@@ -63,7 +66,7 @@ def test_decode_zero_steps():
     with ops.Session() as s:
         table = s.tensor(_next_token_table(4))
         ids = s.ids(np.array([[1]]))
-        step = s.capture([ids], [s.argmax(s.embedding(table, ids), axis=-1, int32=True)])
+        step = s.capture([ids], [s.argmax(s.embedding(table, ids), axis=-1, keepdims=True, int32=True)])
         out = step.decode(np.array([[1]]), n=0)
         assert out["iterations"] == 0 and out["tokens"].shape == (0, 1)
 
@@ -75,7 +78,7 @@ def test_while_loop_carries_integer_state(every):
     with ops.Session() as s:
         table = s.tensor(_next_token_table(vocab))
         ids = s.ids(np.array([[0]]))
-        nxt = s.argmax(s.embedding(table, ids), axis=-1, int32=True)
+        nxt = s.argmax(s.embedding(table, ids), axis=-1, keepdims=True, int32=True)
         body = s.capture([ids], [nxt])
         cond = s.capture([ids], [s.full((1, 1), 1)])
         out = body.while_loop(np.array([[0]]), condition=cond, max_iterations=3, check_every=every)
@@ -90,7 +93,7 @@ def test_state_tensor_is_reset_by_decode():
         assert s.numpy(pos).view(np.int32).reshape(-1)[0] == 4
         table = s.tensor(_next_token_table(3))
         ids = s.ids(np.array([[0]]))
-        step = s.capture([ids], [s.argmax(s.embedding(table, ids), axis=-1, int32=True)])
+        step = s.capture([ids], [s.argmax(s.embedding(table, ids), axis=-1, keepdims=True, int32=True)])
         step.decode(np.array([[0]]), n=1, state={pos: np.array([[0]])})
         assert s.numpy(pos).view(np.int32).reshape(-1)[0] == 0
 
@@ -101,6 +104,6 @@ def test_decode_refuses_a_non_state_handle():
         w = s.tensor(np.zeros((1, 1), np.float32))
         table = s.tensor(_next_token_table(3))
         ids = s.ids(np.array([[0]]))
-        step = s.capture([ids], [s.argmax(s.embedding(table, ids), axis=-1, int32=True)])
+        step = s.capture([ids], [s.argmax(s.embedding(table, ids), axis=-1, keepdims=True, int32=True)])
         with pytest.raises(ValueError):
             step.decode(np.array([[0]]), n=1, state={w: np.zeros((1, 1), np.float32)})

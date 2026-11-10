@@ -101,7 +101,7 @@ import os
 import sys
 
 try:  # as a package module
-    from . import _tokenizer_synthetic as _syn
+    from mojolearn import _tokenizer_synthetic as _syn
 except (ImportError, AttributeError):  # run by path, as the Mojo gate runs it
     import importlib.util
 

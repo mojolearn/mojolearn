@@ -1994,6 +1994,8 @@ FAMILIES = (
             # fold-row gather, prediction scatter, proba column and forest
             # offset merge (bindings/msel_host.mojo, the host column)
             "msel_put", "msel_alloc", "msel_read", "msel_free", "msel_live",
+            # lane p3 (2026-11-09): the fold store's free bytes (host column: -1)
+            "msel_free_bytes",
             "msel_take_rows", "msel_scatter_rows", "msel_proba_column",
             "msel_rebase_offsets_i32", "msel_split_table_i32", "msel_group_fold_perm_i32",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
@@ -4396,7 +4398,7 @@ PUBLIC_PENDING_LANES = {
     "training-chunked-lm-head": "unwatched",
     "training-mlp-sessions": "unwatched",
     "samba-optimizer-state": "unwatched",
-    "samba-decode-session": "unwatched",
+    "samba-decode-session": "no reference",
     # lane verify-coverage-20261024: the public-gap lanes of the training
     # family; no release record yet.
     "public-residual-dropout": "unwatched",

@@ -49,7 +49,7 @@ def test_native_block_construct_forward_step_ragged(tmp_path, monkeypatch, famil
                                              Array.from_buffer(x), None, [2, 4], "<f4", "test")
     with monkeypatch.context() as patch:
         _poison(patch)
-        patch.setattr(cls, "_call", lambda *a, **k: pytest.fail("legacy driver executed"))
+        patch.setattr(cls, "_call", lambda *a, **k: pytest.fail("legacy driver executed"), raising=False)
         actual = audit_native_call(instance.forward, x).assert_native()
         ragged = audit_native_call(instance.forward, x, lengths=[2, 4]).assert_native()
         state = audit_native_call(instance.allocate_state, 2, 8).assert_native() if family not in ("mamba", "mamba2") else audit_native_call(instance.allocate_state, 2).assert_native()
