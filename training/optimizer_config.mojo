@@ -3,6 +3,19 @@
 
 
 @fieldwise_init
+struct OptimizerConstructorStart(Copyable, ImplicitlyCopyable, Movable):
+    var kind: Int
+    var accumulation: Int
+    var beta1: Float64
+    var beta2: Float64
+    var nesterov: Bool
+    var maximize: Bool
+
+    def name(self) -> String:
+        return String("SGD") if self.kind == 0 else (String("Adam") if self.kind == 1 else String("AdamW"))
+
+
+@fieldwise_init
 struct OptimizerConstructorConfig(Copyable, ImplicitlyCopyable, Movable):
     var kind: Int
     var accumulation: Int

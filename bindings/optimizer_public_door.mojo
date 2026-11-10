@@ -36,7 +36,7 @@ from bindings.admitted_input import admitted_storage_native
 from training.optimizer_config import optimizer_keyword_refusal
 from training.optimizer_state_plan import (
     OptimizerStateSnapshot, optimizer_state_span, optimizer_checkpoint_spans,
-    optimizer_state_download_needed, optimizer_host_moment_plan,
+    optimizer_state_download_needed, optimizer_host_moment_plan, OptimizerRegistryPlan, optimizer_registry_plan,
 )
 
 from bindings.optimizer_public_words import optimizer_python_error
@@ -47,8 +47,7 @@ from bindings.tensor_view import (
 from bindings.optimizer_admission import opt_guards, opt_owner, opt_value, opt_scalar, opt_schedule
 from sequence.lr_table import LrSpec
 from training.optimizer_public_common import (
-    GRADS_DEVICE, GRADS_HOST, GRADS_RESIDENT, I32P, OptHyper, PublicStep, PublicStepOut, eager_moments,
-    registry_offsets, zero_tensors,
+    GRADS_DEVICE, GRADS_HOST, GRADS_RESIDENT, OptHyper, PublicStep, PublicStepOut, zero_tensors,
 )
 from core.shared_slot import SharedSlot
 from bindings.optimizer_descriptor_boundary import optimizer_provider, optimizer_driver
@@ -522,37 +521,56 @@ def schedule_spec_admitted(schedule: PythonObject) raises -> LrSpec:
 # the public methods
 
 
-def door_init(opt: PythonObject, params: PythonObject) raises -> PythonObject:
-    """The registry half of `_Optimizer.__init__`: `params` as the tensor
-    list, its offsets (filled natively), `n_total`, the eager mirrors under
-    MOJOLEARN_OPT_LAZY_MOMENTS=0 and SGD's `buf_initialized`. Returns
-    n_total."""
-    door_ready()
-    var buffer_pins = OptimizerInputOwners()
-    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
-    var where = String(py=py_fields(opt)["_where"])
+@fieldwise_init
+struct OptimizerRegistryPrepared(Movable):
+    # PACK owners for the one prepared registry; algorithm metadata is native.
+    var params: PythonObject
+    var offsets: PythonObject
+    var initialized: PythonObject
+    var first: PythonObject
+    var second: PythonObject
+    var plan: OptimizerRegistryPlan
+
+
+def optimizer_prepare_registry(params: PythonObject, where: String) raises -> OptimizerRegistryPrepared:
+    var pins = OptimizerInputOwners()
     var views = List[TensorView]()
-    var seq = as_seq_views(params, "params", where, views, buffer_pins)
-    set_field(opt, "params", optimizer_pack_list(seq))
+    var owners = as_seq_views(params, "params", where, views, pins)
+    var published = optimizer_pack_list(owners)
     check_views(views, "params", where, True)
-    var j = len(seq)
     var nbytes = List[Int]()
-    for k in range(j):  # driver-loop: over parameter buffers
+    for k in range(len(views)):  # driver-loop: native parameter registry descriptors
         nbytes.append(views[k].nbytes)
-    var offsets = new_array([j + 1], "<i4")
-    var n_total = registry_offsets(nbytes, I32P(unsafe_from_address=Int(py=offsets._addr)))
-    set_field(opt, "offsets", offsets)
-    set_field(opt, "n_total", PythonObject(n_total))
-    set_field(opt, "_m", PythonObject(None))
-    set_field(opt, "_v", PythonObject(None))
-    set_field(opt, "_pristine", PythonObject(True))
-    if eager_moments():
-        # MOJOLEARN_OPT_LAZY_MOMENTS=0: the eager pair (the A/B)
-        host_moments(opt)
-        set_field(opt, "_pristine", PythonObject(False))
-    set_field(opt, "buf_initialized", new_array([j], "<i4"))
-    _ = buffer_pins
-    return PythonObject(n_total)
+    var offsets = new_array([len(views) + 1], "<i4")
+    var plan = optimizer_registry_plan(nbytes, Int(py=offsets._addr))
+    var first = PythonObject(None)
+    var second = PythonObject(None)
+    if plan.eager:
+        first = new_array([plan.count], "<f4")
+        second = new_array([plan.count], "<f4")
+    var initialized = new_array([plan.parameters], "<i4")
+    _ = pins
+    return OptimizerRegistryPrepared(published, offsets, initialized, first, second, plan)
+
+
+def optimizer_publish_registry(owner: PythonObject, registry: OptimizerRegistryPrepared) raises:
+    var fields = py_fields(owner)
+    py_setitem(fields, "params", registry.params)
+    py_setitem(fields, "offsets", registry.offsets)
+    py_setitem(fields, "n_total", PythonObject(registry.plan.count))
+    py_setitem(fields, "_m", registry.first)
+    py_setitem(fields, "_v", registry.second)
+    py_setitem(fields, "_pristine", PythonObject(not registry.plan.eager))
+    py_setitem(fields, "buf_initialized", registry.initialized)
+
+
+def door_init(opt: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Legacy registry export using the same native preparation and publication."""
+    door_ready()
+    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
+    var registry = optimizer_prepare_registry(params, String(py=py_fields(opt)["_where"]))
+    optimizer_publish_registry(opt, registry)
+    return PythonObject(registry.plan.count)
 
 
 def door_step(
