@@ -109,6 +109,8 @@ FAMILIES = (
             "verify_digest", "verify_file_sha256", "verify_model_info", "verify_fill",
             # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
             "onnx_native_api_v1", "ops_graph_record",
+            # lane x2-small-mlp-on-executor (2026-11-09): the trainer's captured program
+            "small_mlp_program",
         ),
         gate="tools/algos_lane_check.sh (pass 1: CPU == GPU bitwise)",
         wheel_note=(
