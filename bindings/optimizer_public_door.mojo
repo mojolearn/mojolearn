@@ -27,6 +27,7 @@ names the entries a binding provides. Ownership (docs/MODULAR_ASKS.md):
 every Python call and attribute or item assignment goes through
 bindings/py_balanced.mojo, so no caller object is retained."""
 from std.memory import memcpy
+from std.ffi import c_int
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.cpython_table import cpython_table
@@ -87,12 +88,18 @@ comptime _SRC = " (python/mojolearn/_training_impl.py)"
 
 comptime _OptimizerRepr = ExternalFunction[
     "PyObject_Repr", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
+comptime _OptimizerDictClear = ExternalFunction[
+    "PyDict_Clear", def(PyObjectPtr) thin abi("C") -> NoneType]
+comptime _OptimizerDictUpdate = ExternalFunction[
+    "PyDict_Update", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> c_int]
 
 
 struct OptDoor(Defaultable, Movable):
     var context: PythonObject
     var ready: Bool
     var scalar_repr: _OptimizerRepr.type
+    var dict_clear: _OptimizerDictClear.type
+    var dict_update: _OptimizerDictUpdate.type
     var array_cls: PythonObject
     var dev_cls: PythonObject
 
@@ -103,11 +110,15 @@ struct OptDoor(Defaultable, Movable):
         # connection; it never consults the mutable builtins.repr binding.
         ref cpy = Python().cpython()
         self.scalar_repr = _OptimizerRepr.load(cpy.lib.borrow())
+        # Publication and rollback operate only on admitted exact dictionaries.
+        # Their pointers belong to this owner, not the process-wide API table.
+        self.dict_clear = _OptimizerDictClear.load(cpy.lib.borrow())
+        self.dict_update = _OptimizerDictUpdate.load(cpy.lib.borrow())
         self.array_cls = PythonObject(None)
         self.dev_cls = PythonObject(None)
 
 
-comptime OPT_DOOR = SharedSlot[OptDoor, "MojolearnOptimizerPublicDoorV2"]
+comptime OPT_DOOR = SharedSlot[OptDoor, "MojolearnOptimizerPublicDoorV3"]
 
 
 def door_ready() raises:

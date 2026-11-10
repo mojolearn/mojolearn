@@ -130,13 +130,12 @@ def test_every_entry_samba_reaches_is_on_the_host():
                 # the session's fresh forward and backward, each taken only
                 # behind an `_exports` check
                 | {"transformer_session_forward_fresh", "transformer_session_backward"},
-            # The device-resident optimizer pair (`_resident_enabled` takes it
-            # only when the binding exports `_RESIDENT_ENTRIES`; every other
-            # `optimizer_resident_*` call runs on an open pair) and the
-            # training device arrays (`_dev_binding` refuses by name without
-            # `_DEV_ENTRIES`, "IDENTICAL GPU builds only").
+            # Native device capability refuses these GPU-only exports on a
+            # CPU build. Expected names belong to this test, independently of
+            # any product-side Python table or retired binding selector.
             "training": {name for name in gpu if name.startswith("optimizer_resident_")}
-                | set(__import__("mojolearn._training_impl", fromlist=["_DEV_ENTRIES"])._DEV_ENTRIES),
+                | {"train_dev_alloc", "train_dev_free", "train_dev_put", "train_dev_get",
+                   "linear_forward_dev", "linear_backward_dev", "ce_loss_dev"},
         }.get(fam, set())
         missing = [m for m in missing if not m.endswith("_available") and m not in resident]
         assert not missing, f"{fam}: SambaStack's modules call {missing}, absent from the host binding"

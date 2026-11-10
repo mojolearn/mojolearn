@@ -116,7 +116,7 @@ from ._arrays import _addr, _addr_ro
 
 from . import _backend
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, memory_at, zeros
+from ._buffer import as_f32_c, as_i32_c, memory_at
 from ._bufcheck import (
     is_integer, is_native_f32, probe,
 )
@@ -271,7 +271,6 @@ class _Optimizer(NumericModeMixin):
     _mojolearn_native_public = True
     __getattribute__ = object.__getattribute__
     _BINDING = _EXT_NAME
-    _KIND = None
 
 
     def __getstate__(self):
@@ -502,7 +501,6 @@ class SGD(_Optimizer):
     >>> norm = opt.step([g], max_norm=1.0)
     """
 
-    _KIND = _KIND_SGD
 
     def __init__(self, params, lr=1e-3, momentum=0.0, dampening=0.0,
                  weight_decay=0.0, nesterov=False, lr_schedule=None,
@@ -589,7 +587,6 @@ class Adam(_Optimizer):
     >>> opt.step([np.ones_like(w)])
     """
 
-    _KIND = _KIND_ADAM
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
                  weight_decay=0.0, lr_schedule=None, accumulation_steps=1,
@@ -619,7 +616,6 @@ class AdamW(Adam):
     >>> opt.step([np.ones_like(w)])
     """
 
-    _KIND = _KIND_ADAMW
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
                  weight_decay=0.01, lr_schedule=None, accumulation_steps=1,
@@ -1404,17 +1400,6 @@ def rms_norm_backward(dy, x, weight, eps, numeric_mode=None):
 # calls are the host entries' own, on the same values: the same bits.
 # IDENTICAL GPU builds only (training/dev_tensors.mojo); elsewhere
 # `train_to_device` refuses by name. No arithmetic here.
-_DEV_ENTRIES = ("train_dev_alloc", "train_dev_free", "train_dev_put", "train_dev_get",
-                "linear_forward_dev", "linear_backward_dev", "ce_loss_dev")
-
-
-def _dev_binding(numeric_mode, where):
-    binding = _load(numeric_mode)
-    if not all(callable(getattr(binding, n, None)) for n in _DEV_ENTRIES):  # glue: checks binding entry names
-        raise RuntimeError(
-            "mojolearn.%s: this build has no training device arrays (IDENTICAL "
-            "GPU builds only; MOJOLEARN_IDN_TRAIN_DEV_TENSORS_OFF turns them off)" % where)
-    return binding
 
 
 class TrainDeviceArray(object):
@@ -1435,81 +1420,10 @@ class TrainDeviceArray(object):
         """The array as a host `mojolearn.Array` (one download)."""
         return _OPT_NATIVE("device_host", self, (), None, _OPT_CONTEXT)
 
-def _is_dev(x):
-    return isinstance(x, TrainDeviceArray)
-
 
 def train_to_device(a, numeric_mode=None):
     """float32 array `a` as a `TrainDeviceArray` (uploaded once, here)."""
     return _OPT_NATIVE("device_upload", None, (a,), numeric_mode, _OPT_CONTEXT)
-
-
-def _all_dev(where, **named):
-    if not all(_is_dev(v) for v in named.values()):  # glue: checks argument kinds
-        raise TypeError(
-            "mojolearn.%s: device and host arrays are mixed (%s); pass every "
-            "array through train_to_device, or none"
-            % (where, ", ".join(k for k in named)))  # glue: argument names for the message
-
-
-def _linear_forward_dev(a, w, numeric_mode):
-    _all_dev("linear_forward", a=a, weight=w)
-    binding = _dev_binding(numeric_mode, "linear_forward")
-    if len(w.shape) != 2 or len(a.shape) < 1 or a.shape[-1] != w.shape[1]:
-        raise ValueError("mojolearn.linear_forward: a has K=%r, weight has shape %r" % (a.shape[-1:], w.shape))
-    n, k = w.shape
-    m = a.size // k
-    c = TrainDeviceArray._new(binding, a.shape[:-1] + (n,))
-    binding.linear_forward_dev([c.h, a.h, w.h], [int(m), int(n), int(k)])
-    return c
-
-
-def _linear_backward_dev(dc, a, w, numeric_mode):
-    _all_dev("linear_backward", dc=dc, a=a, weight=w)
-    binding = _dev_binding(numeric_mode, "linear_backward")
-    if len(w.shape) != 2 or len(a.shape) < 1 or a.shape[-1] != w.shape[1]:
-        raise ValueError("mojolearn.linear_backward: a has K=%r, weight has shape %r" % (a.shape[-1:], w.shape))
-    n, k = w.shape
-    m = a.size // k
-    if dc.size != m * n or dc.shape[-1] != n:
-        raise ValueError("mojolearn.linear_backward: dc must be (M, N)")
-    da = TrainDeviceArray._new(binding, a.shape)
-    dw = TrainDeviceArray._new(binding, (n, k))
-    binding.linear_backward_dev([da.h, dw.h, dc.h, a.h, w.h], [int(m), int(n), int(k)])
-    return da, dw
-
-
-def _cross_entropy_dev(logits, targets, ignore_index, red, num_items, return_grad, label_smoothing,
-                       numeric_mode):
-    """`cross_entropy` on a `TrainDeviceArray` of logits: the gradient, when
-    asked for, is returned as a device array; the loss and row losses are
-    host values as before."""
-    binding = _dev_binding(numeric_mode, "cross_entropy")
-    if len(logits.shape) != 2:
-        raise ValueError("mojolearn.cross_entropy: logits must be 2-D (N, V), got shape %r" % (logits.shape,))
-    n_rows, vocab = logits.shape
-    if not _is_buffer(targets):
-        targets = Array.from_list(targets, "<i8")
-    yp = probe(targets)
-    if yp.ndim != 1 or not is_integer(yp.format):
-        raise TypeError("mojolearn.cross_entropy: targets must be a 1-D integer array of class indices")
-    y, _ = as_i32_c(targets, ndim=1, name="targets")
-    if y.shape[0] != n_rows:
-        raise ValueError("mojolearn.cross_entropy: logits has %d rows and targets has %d" % (n_rows, y.shape[0]))
-    loss_out = zeros((1,), "<f4")
-    row_out = empty((n_rows,), "<f4")
-    grad = TrainDeviceArray._new(binding, logits.shape) if return_grad else None
-    # `ce_loss`'s params list, word for word (see `cross_entropy`)
-    plist = [int(n_rows), int(vocab), int(ignore_index), int(red),
-             int(0 if num_items is None else num_items), int(1 if return_grad else 0),
-             float(label_smoothing)]
-    binding.ce_loss_dev(addr(loss_out, name="loss"), addr(row_out, name="row_loss"),
-                        addr_ro(y, name="targets"),
-                        [grad.h if grad is not None else logits.h, logits.h], plist)
-    value = row_out if red == _REDUCTION_NONE else float(loss_out[0])
-    if return_grad:
-        return value, grad
-    return value
 
 
 # Through the certified GEMM at OP_NT.
