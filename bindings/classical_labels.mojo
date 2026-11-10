@@ -54,6 +54,8 @@ from bindings.str_labels_native import StrTable, _read, _sorted
 from bindings.cpython_table import cpython_table
 from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_COUNTS, LABEL_WEIGHTS_ROWS
 from bindings.label_weights_boundary import label_weights_run
+from bindings.class_weight_boundary import class_weight_admit_dictionary, class_weight_dictionary_values
+from core.class_weight_plan import ClassWeightInputs, ClassWeightPlan, class_weight_all_one, class_weight_plan
 from bindings.labels_descriptor_boundary import (
     labels_prepare_targets, labels_reduce_stat, labels_argmax_rows as labels_argmax_run,
     labels_gather, labels_class_ratio_f64, labels_fsum_f64,
@@ -935,141 +937,55 @@ def labels_argmax_rows(scores: PythonObject, rows: Int, cols: Int, wide: Bool, c
 # ---------------------------------------------------------- class weights
 
 
-def labels_class_weight_rows[NativeWeights: Bool = False](class_weight: PythonObject, labels: ClassicalLabels, xtrees: PythonObject,
+def labels_class_weight_rows(class_weight: PythonObject, labels: ClassicalLabels, xtrees: PythonObject,
                             context: PythonObject) raises -> PythonObject:
-    """`_class_weights._class_weight_rows(class_weight, classes, codes,
-    xbind)` with int32 codes on the x_trees binding: per-row float32
-    weights from a dict or 'balanced', or None when every class weight is
-    1. The counts and the per-row gather are the binding's kernels; only
-    the k class weights are read here."""
+    """Per-row Float32 weights through the existing native class-weight ops."""
     var b = labels_builtins()
     if class_weight is None:
         return PythonObject(None)
-    if py_type(class_weight) is not b.str and py_type(class_weight) is not b.dict:
+    var kind = py_type(class_weight)
+    if kind is not b.str and kind is not b.dict:
         raise Error("TypeError: class_weight requires an exact native string or dictionary")
-    if py_type(class_weight) is b.dict:
-        var items = py_call(b.list, class_weight.items())
-        for i in range(len(items)):  # driver-loop: admit keys before native hashing and values before numeric conversion
-            _ = labels_admit_primitive(items[i][0], context)
-            _ = labels_admit_primitive(items[i][1], context)
+    if kind is b.dict:
+        class_weight_admit_dictionary(class_weight, context)
     var classes = classifier_label_list(labels.classes, context)
     _ = labels_label_kind(classes, context)
     var k = len(classes)
     var n = labels.n
-    var objects = Python.list()
-    if py_type(class_weight) is b.str:
-        var counts = admitted_vector(k, "<i4", context)
-        comptime if NativeWeights:
-            _ = label_weights_run(xtrees, LABEL_WEIGHTS_COUNTS,
-                LabelWeightsRequest(labels_address(labels.codes) if n else 0, labels_address(counts), 0, n, k))
-        else:
-            # Other unmigrated classifier owners still connect these public
-            # legacy entries. Logistic's specialization has no Python call.
-            var count_entry = labels_need(xtrees, "x_trees_code_counts", "the x_trees binding has no x_trees_code_counts",
-                                         "ImportError")
-            _ = py_call_typed(count_entry, PythonObject(labels_address(labels.codes) if n else 0),
-                              PythonObject(labels_address(counts)), Python.list(n, k))
-        _ = counts  # keep the Python object alive through the native call above
-        var wide = admitted_vector(k, "<i8", context)
-        labels_cast(labels_address(counts), "<i4", labels_address(wide), "<i8", k, context)
-        _ = wide  # keep the Python object alive through the native call above
-        _ = counts  # keep the Python object alive through the native call above
-        var w64 = admitted_vector(k, "<f8", context)
-        if k and labels_class_ratio_f64(context, labels_address(wide), k, n, 0, labels_address(w64)) != 0:
+    var inputs = ClassWeightInputs()
+    if kind is b.str:
+        # The same counts -> cast -> binary64 ratio kernels and request order;
+        # all three scratch owners are native instead of boxed Array objects.
+        var counts = List[Int32](unsafe_uninit_length=k)
+        _ = label_weights_run(xtrees, LABEL_WEIGHTS_COUNTS,
+            LabelWeightsRequest(labels_address(labels.codes) if n else 0, Int(counts.unsafe_ptr()), 0, n, k))
+        var wide = List[Int64](unsafe_uninit_length=k)
+        labels_cast(Int(counts.unsafe_ptr()), "<i4", Int(wide.unsafe_ptr()), "<i8", k, context)
+        inputs.values = List[Float64](unsafe_uninit_length=k)
+        if k and labels_class_ratio_f64(context, Int(wide.unsafe_ptr()), k, n, 0,
+                                       Int(inputs.values.unsafe_ptr())) != 0:
             raise Error("ZeroDivisionError: division by zero")
-        _ = wide  # keep the Python object alive through the native calls above
-        _ = w64  # keep the Python object alive through the native calls above
-        var p = _F64P(unsafe_from_address=labels_address(w64))
-        _ = w64  # keep the Python object alive through the native call above
-        for i in range(k):  # driver-loop: over the k class weights for the argument checks below
-            _ = py_call(objects.append, PythonObject(p[i]))
-            _ = w64  # keep the Python object alive through the native call above
+        _ = counts^
+        _ = wide^
     else:
-        if py_type(class_weight) is not b.dict:
-            raise Error("TypeError: class_weight must be 'balanced', None or a dict")
-        var keys = py_call(b.list, class_weight)
-        for i in range(len(keys)):  # driver-loop: over user class_weight keys, admitted before hashing/comparison
-            var kt = py_type(keys[i])
-            if not labels_text_type(kt, context) and not labels_real_type(kt, context):
-                raise Error("TypeError: class_weight keys must be native numbers or strings")
-        var unknown = py_call(py_call(b.set, keys).difference, classes)
-        if len(unknown) > 0:
-            raise Error("class_weight contains labels absent from y")
-        for i in range(k):  # driver-loop: over user class_weight dict per class
-            _ = py_call(objects.append, py_call(class_weight.get, classes[i], PythonObject(1.0)))
-    var values = List[Float64]()
-    var all_one = True
-    for i in range(k):  # driver-loop: over class weight argument checks
-        var v = objects[i]
-        var t = py_type(v)
-        var kind = labels_admit_primitive(v, context)
-        if kind != 3 and kind != 4:
-            raise Error("class weights must be finite nonnegative real numbers")
-        var f = Float64(py=py_call(b.float, v))
-        if not isfinite(f) or f < 0:
-            raise Error("class weights must be finite nonnegative real numbers")
-        values.append(f)
-        all_one = all_one and Bool(py=v == PythonObject(1))
-    if all_one:
+        inputs = class_weight_dictionary_values(class_weight, classes, context)
+    var plan = ClassWeightPlan(True, List[Float32]())
+    var balanced = kind is b.str
+    with GILReleased(Python()):
+        if balanced:
+            inputs.all_one = class_weight_all_one(inputs.values)
+        plan = class_weight_plan(inputs.values, inputs.all_one)
+    _ = inputs^
+    if plan.all_one:
         return PythonObject(None)
-    var narrowed = admitted_vector(k, "<f4", context)
-    var q = _F32P(unsafe_from_address=labels_address(narrowed))
-    _ = narrowed  # keep the Python object alive through the native call above
-    var top = Float32(0)
-    for i in range(k):  # driver-loop: over the k class weights narrowed to float32
-        var f32 = Float32(values[i])
-        if not isfinite(f32) or (values[i] > 0 and f32 == 0):
-            raise Error("class weights must remain finite and nonzero when positive in Float32")
-        q[i] = f32
-        _ = narrowed  # keep the Python object alive through the native call above
-        if i == 0 or f32 > top:
-            top = f32
-    if top <= 0:
-        raise Error("class weights must have positive total")
-    var out = admitted_vector(n, "<f4", context)
+    var output = admitted_vector(n, "<f4", context)
     if n:
-        comptime if NativeWeights:
-            _ = label_weights_run(xtrees, LABEL_WEIGHTS_ROWS,
-                LabelWeightsRequest(labels_address(labels.codes), labels_address(narrowed), labels_address(out), n, k))
-        else:
-            var rows_entry = labels_need(xtrees, "x_trees_class_rows", "the x_trees binding has no x_trees_class_rows",
-                                        "ImportError")
-            _ = py_call_typed(rows_entry, PythonObject(labels_address(labels.codes)), PythonObject(labels_address(narrowed)),
-                              PythonObject(labels_address(out)), Python.list(n, k))
-        _ = narrowed  # keep the Python object alive through the native call above
-        _ = out  # keep the Python object alive through the native call above
-    return out
-
-
-def labels_weighted_rows(sample_weight: PythonObject, class_weight: PythonObject, labels: ClassicalLabels,
-                        xtrees: PythonObject, context: PythonObject) raises -> AdmittedX:
-    """`_expansion_trees._trees_weighted_rows`: the checked sample weights
-    times the class_weight row weights, one correctly rounded float32
-    product per row (`x_trees_mul_f32`); the sample weights alone when no
-    class weight differs from 1."""
-    var sw = admit_weight_words(sample_weight, labels.n, context)
-    if class_weight is None:
-        return sw^
-    var rows = labels_class_weight_rows(class_weight, labels, xtrees, context)
-    if rows is None:
-        return sw^
-    var out = admitted_vector(labels.n, "<f4", context)
-    var mul = labels_need(xtrees, "x_trees_mul_f32", "the x_trees binding has no x_trees_mul_f32", "ImportError")
-    _ = py_call_typed(mul, PythonObject(sw.address), PythonObject(labels_address(rows)), PythonObject(labels_address(out)),
-                      Python.list(labels.n))
-    _ = out  # keep the Python object alive through the native call above
-    _ = rows  # keep the Python object alive through the native call above
-    _ = sw^
-    return admitted_words(out, labels_address(out), labels.n, 1)
-
-
-def labels_class_rows_only(class_weight: PythonObject, labels: ClassicalLabels, xtrees: PythonObject,
-                          context: PythonObject) raises -> Optional[AdmittedX]:
-    """The class_weight row weights without sample weights, or None."""
-    var rows = labels_class_weight_rows(class_weight, labels, xtrees, context)
-    if rows is None:
-        return None
-    return admitted_words(rows, labels_address(rows), labels.n, 1)
+        _ = label_weights_run(xtrees, LABEL_WEIGHTS_ROWS,
+            LabelWeightsRequest(labels_address(labels.codes), Int(plan.words.unsafe_ptr()),
+                                labels_address(output), n, k))
+    _ = plan^
+    _ = labels
+    return output
 
 
 # x_metrics stage ops (`_expansion_metrics._OPS`) and cm_epi kinds.
