@@ -1,0 +1,113 @@
+[
+  {
+    "target": "host",
+    "group": "tokenizer",
+    "members": [
+      "_mojolearn_tokenizer_host"
+    ],
+    "changed_sources": [
+      "bindings/embedding_layer_native.mojo",
+      "bindings/linalg_ops_lowbit.mojo",
+      "bindings/samba_head_native.mojo",
+      "bindings/sequence_device_native.mojo",
+      "bindings/sequence_layers_native.mojo",
+      "bindings/sequence_moe_native.mojo",
+      "bindings/sequence_optimizer_native.mojo",
+      "bindings/training_cross_entropy_native.mojo",
+      "bindings/training_embedding_native.mojo",
+      "bindings/training_extra_native.mojo",
+      "bindings/training_linear_native.mojo",
+      "bindings/training_rms_native.mojo",
+      "providers/python/sequence_layer_buffer_pyapi.mojo"
+    ]
+  },
+  {
+    "target": "host",
+    "group": "runtime_model_selection",
+    "members": [
+      "_mojolearn_runtime_model_selection_host"
+    ],
+    "changed_sources": [
+      "providers/python/metrics_matrix_input_pyapi.mojo",
+      "providers/python/metrics_vector_input_pyapi.mojo"
+    ]
+  },
+  {
+    "target": "host",
+    "group": "runtime_trees",
+    "members": [
+      "_mojolearn_runtime_trees_host"
+    ],
+    "changed_sources": [
+      "providers/python/metrics_matrix_input_pyapi.mojo",
+      "providers/python/metrics_vector_input_pyapi.mojo"
+    ]
+  },
+  {
+    "target": "host",
+    "group": "runtime_family",
+    "members": [
+      "_mojolearn_runtime_family_host"
+    ],
+    "changed_sources": [
+      "bindings/linalg_ops_lowbit.mojo",
+      "providers/python/lowbit_weight_pyapi.mojo",
+      "providers/python/metrics_matrix_input_pyapi.mojo",
+      "providers/python/metrics_vector_input_pyapi.mojo"
+    ]
+  },
+  {
+    "target": "host",
+    "group": "runtime_decomp",
+    "members": [
+      "_mojolearn_runtime_decomp_host"
+    ],
+    "changed_sources": [
+      "providers/python/metrics_matrix_input_pyapi.mojo",
+      "providers/python/metrics_vector_input_pyapi.mojo"
+    ]
+  },
+  {
+    "target": "host",
+    "group": "runtime_catalog",
+    "members": [
+      "_mojolearn_runtime_catalog_host"
+    ],
+    "changed_sources": [
+      "bindings/linalg_ops_lowbit.mojo"
+    ]
+  },
+  {
+    "target": "host",
+    "group": "runtime_byte_trainer",
+    "members": [
+      "_mojolearn_runtime_byte_trainer_host"
+    ],
+    "changed_sources": [
+      "bindings/linalg_ops_lowbit.mojo"
+    ]
+  },
+  {
+    "target": "host",
+    "group": "runtime_parallel",
+    "members": [
+      "_mojolearn_runtime_parallel_host"
+    ],
+    "changed_sources": [
+      "bindings/linalg_ops_lowbit.mojo",
+      "providers/python/lowbit_weight_pyapi.mojo",
+      "providers/python/metrics_matrix_input_pyapi.mojo",
+      "providers/python/metrics_vector_input_pyapi.mojo"
+    ]
+  },
+  {
+    "target": "host",
+    "group": "runtime_neural",
+    "members": [
+      "_mojolearn_runtime_neural_host"
+    ],
+    "changed_sources": [
+      "bindings/linalg_ops_lowbit.mojo"
+    ]
+  }
+]
