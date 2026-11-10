@@ -93,17 +93,28 @@ def test_holtwinters_resident_public_outputs_and_lifetime():
     assert count() == before
 
 
-def test_theta_new_horizon_runs_the_forecast_tail():
+def test_theta_changed_horizon_publication_and_cache_owners():
     y = (np.arange(3 * 60, dtype=np.float32).reshape(3, 60) % 7 + 10.0).astype(np.float32)
     model = ml.AutoTheta(season_length=7).fit(y)
-    model.predict(7)
-    long = model.predict(14)  # same fit, new horizon: the forecast-only tail
-    other = ml.AutoTheta(season_length=7).fit(y)
-    fresh = other.predict(14)  # the whole fit at h=14
-    for key in fresh:
-        np.testing.assert_array_equal(np.asarray(long[key]).view(np.uint32), np.asarray(fresh[key]).view(np.uint32))
-    np.testing.assert_array_equal(np.asarray(model.info_).view(np.uint32), np.asarray(other.info_).view(np.uint32))
-    assert list(model.model_) == list(other.model_)
+    first = model.predict(7)
+    first_info = model.info_
+    first_info_bytes = np.asarray(first_info).tobytes()
+    first_names = tuple(model.model_)
+    long = model.predict(14)
+    cached = model.predict(14)
+    # Fit/tail numerical comparisons and independent closed forms now live in
+    # checks/native_tests/theta_state_*.mojo. Keep real Python dict/Array/list
+    # publication and owner isolation across changed/cached horizons here.
+    for result, horizon in ((first, 7), (long, 14), (cached, 14)):
+        assert set(result) == {"mean"}
+        values = np.asarray(result["mean"])
+        assert values.shape == (3, horizon) and values.dtype == np.float32
+    assert long is not cached and long["mean"] is not cached["mean"]
+    assert not np.shares_memory(np.asarray(long["mean"]), np.asarray(cached["mean"]))
+    assert model.info_ is not first_info
+    assert np.asarray(first_info).tobytes() == first_info_bytes
+    assert np.asarray(model.info_).shape == (3, 8)
+    assert isinstance(model.model_, list) and tuple(model.model_) == first_names
 
 
 def test_prophet_predict_repeats_bits():
