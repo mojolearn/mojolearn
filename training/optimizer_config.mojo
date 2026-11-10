@@ -95,3 +95,8 @@ def optimizer_keyword_refusal(key: String, where: String) raises:
         + "the parameters in its WHAT IS HONORED table; an unknown keyword is refused rather than "
         + "ignored, because a keyword that is accepted and does nothing is a caller who believes "
         + "something about their run that is not true (python/mojolearn/_training_impl.py)")
+
+
+def optimizer_beta_shape(rank: Int, count: Int) raises:
+    if rank != 1 or count != 2:
+        raise Error("ValueError: betas must be a pair (beta1, beta2)")

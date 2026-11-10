@@ -69,3 +69,8 @@ def optimizer_host_moment_plan(count: Int, first_present: Bool, second_present: 
     if count < 0 or count > 9223372036854775807 // 4:
         raise Error("ValueError: optimizer state size is out of range")
     return (not first_present, not second_present)
+
+
+def optimizer_checkpoint_input(rank: Int, count: Int) raises:
+    if rank != 1 or count < 1:
+        raise Error("ValueError: optimizer checkpoint arrays must be nonempty one-dimensional buffers")

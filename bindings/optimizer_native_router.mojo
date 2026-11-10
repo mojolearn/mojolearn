@@ -4,7 +4,7 @@ from bindings.embedding_layer_native import emblayer_operation
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import GILReleased, PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.sequence_layers_native import sequence_layers_operation
 from bindings.training_extra_native import training_chunked_lm_head, training_mlp_sessions, training_residual_dropout
@@ -20,11 +20,13 @@ from bindings.optimizer_public_door import (
 from bindings.optimizer_descriptor_boundary import optimizer_provider_entries, optimizer_native_mode, optimizer_close_slot
 from core.linear_metadata import linear_mode_name
 from training.checks.optimizer_contract import microbatch_split_is_identical
-from training.optimizer_config import OptimizerConstructorConfig, optimizer_parameter_names, optimizer_parameter_update, optimizer_profile_available
+from training.optimizer_config import OptimizerConstructorConfig, optimizer_parameter_names, optimizer_parameter_update, optimizer_profile_available, optimizer_beta_shape
 from bindings.cpython_table import cpython_table
+from bindings.optimizer_container_boundary import OptimizerInputOwners
+from training.optimizer_state_plan import optimizer_checkpoint_input, optimizer_state_count
 from bindings.optimizer_scalar_boundary import optimizer_float, optimizer_integer, optimizer_truth
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_cast_kind
+from bindings.classical_arrays import classical_input, classical_cast_kind
 from core.optimizer_state_impl import optimizer_state_cast
 from core.classical_pandas_impl import pd_raw_at, _pd_double
 from bindings.sequence_device_native import sequence_device_operation, sequence_device_finalize
@@ -69,19 +71,18 @@ def optimizer_betas(source: PythonObject, context: PythonObject) raises -> Tuple
     var input = context["input_context"]
     classical_connect_numpy(input)
     var value = classical_input(source, input)
-    if Int(py=value.ndim) != 1 or Int(py=value.size) != 2:
-        raise Error("ValueError: betas must be a pair (beta1, beta2)")
-    var item = Int(py=value.itemsize)
-    var kind = classical_cast_kind(value, item, "betas", input)
-    var native = classical_is_array(value, input) or Bool(py=value.dtype.isnative)
-    var addr = Int(py=classical_address(value))
-    _ = value  # keep the Python object alive through the native call above
-    var stride = Int(py=value.strides[0])
-    var first = _pd_double(pd_raw_at(addr, 0, item, native), kind, item)
-    _ = value  # keep the Python object alive through the native call above
-    var second = _pd_double(pd_raw_at(addr, stride, item, native), kind, item)
-    _ = value  # keep the Python object alive through the native call above
-    _ = value^
+    var pins = OptimizerInputOwners()
+    var view = TensorView()
+    if not tensor_view(value, view, pins):
+        raise Error("TypeError: betas require native numeric storage")
+    optimizer_beta_shape(len(view.shape), optimizer_state_count(view))
+    var kind = classical_cast_kind(value, view.itemsize, "betas", input)
+    var native = not view.fmt.startswith(">") and not view.fmt.startswith("!")
+    var stride = view.strides[0] if view.has_strides else view.itemsize
+    var first = _pd_double(pd_raw_at(view.addr, 0, view.itemsize, native), kind, view.itemsize)
+    var second = _pd_double(pd_raw_at(view.addr, stride, view.itemsize, native), kind, view.itemsize)
+    _ = pins
+    _ = value
     return (first, second)
 
 
@@ -172,18 +173,24 @@ def optimizer_state_array(source: PythonObject, integer: Bool, context: PythonOb
     var input = context["input_context"]
     classical_connect_numpy(input)
     var value = classical_input(source, input)
-    if Int(py=value.ndim) != 1 or Int(py=value.size) < 1:
-        raise Error("ValueError: optimizer checkpoint arrays must be nonempty one-dimensional buffers")
-    var n = Int(py=value.size)
-    var result = new_array([n], "<i4" if integer else "<f4")
-    var item = Int(py=value.itemsize)
-    var kind = classical_cast_kind(value, item, "optimizer checkpoint", input)
-    optimizer_state_cast(Int(py=classical_address(value)), Int(py=value.strides[0]), n, item, kind,
-                         classical_is_array(value, input) or Bool(py=value.dtype.isnative),
-                         MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=result._addr)), integer)
-    _ = value  # keep the Python object alive through the native call above
-    _ = result  # keep the Python object alive through the native call above
-    _ = value^
+    var pins = OptimizerInputOwners()
+    var view = TensorView()
+    if not tensor_view(value, view, pins):
+        raise Error("TypeError: optimizer checkpoint requires native numeric storage")
+    var count = optimizer_state_count(view)
+    optimizer_checkpoint_input(len(view.shape), count)
+    var kind = classical_cast_kind(value, view.itemsize, "optimizer checkpoint", input)
+    var native = not view.fmt.startswith(">") and not view.fmt.startswith("!")
+    var stride = view.strides[0] if view.has_strides else view.itemsize
+    var result = new_array([count], "<i4" if integer else "<f4")
+    var destination = TensorView()
+    if not tensor_view(result, destination, pins):
+        raise Error("TypeError: optimizer checkpoint output lacks native storage")
+    with GILReleased(Python()):
+        optimizer_state_cast(view.addr, stride, count, view.itemsize, kind, native,
+            MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=destination.addr), integer)
+    _ = pins
+    _ = value
     return result
 
 
