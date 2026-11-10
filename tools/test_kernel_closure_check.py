@@ -76,3 +76,30 @@ class PlanTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_generated_archive_is_verified_before_entering_stripped_tree(tmp_path):
+    import generated_sources as gs
+    from test_generated_sources import archive_fixture, write_sources
+    table, inputs = archive_fixture()
+    repo = tmp_path / 'repo'
+    write_sources(repo, dict(inputs, **{gs.ARCHIVE_TABLE: table}))
+    texts = {gs.ARCHIVE_PIN: inputs[gs.ARCHIVE_PIN].decode()}
+    _, _, notes = kcc.write_tree(tmp_path / 'tree', texts, repo, set())
+    assert notes[0]['verified'] and notes[0]['sha256'] == gs.sha256(table)
+    assert (tmp_path / 'tree' / gs.ARCHIVE_TABLE).read_bytes() == table
+    assert (tmp_path / 'generated-sources/generated' / gs.ARCHIVE_TABLE).read_bytes() == table
+
+
+def test_missing_generated_output_records_failure_instead_of_emitted_success(tmp_path, monkeypatch):
+    import generated_sources as gs
+    from test_generated_sources import archive_fixture, write_sources
+    _, inputs = archive_fixture()
+    repo = tmp_path / 'repo'
+    write_sources(repo, inputs)
+    def refused(*_):
+        raise gs.GeneratedSourceError('generator returned without output')
+    monkeypatch.setattr(gs, 'prepare_sources', refused)
+    _, _, notes = kcc.write_tree(tmp_path / 'tree', {gs.ARCHIVE_PIN: inputs[gs.ARCHIVE_PIN].decode()}, repo, set())
+    assert notes[0]['verified'] is False and 'without output' in notes[0]['error']
+    assert not (tmp_path / 'tree' / gs.ARCHIVE_TABLE).exists()

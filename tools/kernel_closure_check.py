@@ -60,6 +60,8 @@ import sys
 import time
 from pathlib import Path
 
+import generated_sources as gs
+
 PY_LINE = re.compile(r"^\s*from (std\.)?python|^\s*import (std\.)?python")
 PY_LINE_M = re.compile(PY_LINE.pattern, re.M)
 PY_CALL = re.compile(r'external_call\["Py')
@@ -70,7 +72,7 @@ PYTHON_SYMBOL = re.compile(r"\b_?(?:Py[A-Z_][A-Za-z0-9_]*|_Py[A-Za-z0-9_]+)\b")
 FROM_IMPORT = re.compile(r"^\s*from\s+(\.*[A-Za-z0-9_.]*)\s+import\s+(.*)$")
 PLAIN_IMPORT = re.compile(r"^\s*import\s+(.*)$")
 PROGRAM_REL = "checks/kernel_closure_main.mojo"
-GENERATED = {"tokenizer/impl/unicode_table_generated.mojo": ["sh", "tokenizer/tools/gen_unicode_table.sh"]}
+GENERATED = gs.COMMANDS
 FLAGS = ["-D", "MOJOLEARN_NUMERIC_IDENTICAL=1"]
 
 
@@ -249,7 +251,7 @@ def program_text(sha, modules):
     return "\n".join(lines)
 
 
-def write_tree(root, texts, repo, reach):
+def write_tree(root, texts, repo, reach, revision=None):
     """Write the stripped tree; returns (stripped files, deleted shells, generated-file notes)."""
     if root.exists():
         shutil.rmtree(root)
@@ -265,18 +267,29 @@ def write_tree(root, texts, repo, reach):
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(body, encoding="utf-8")
     notes = []
-    for rel, cmd in GENERATED.items():
-        src = repo / rel
-        if not src.exists() and (repo / cmd[-1]).exists():
-            r = subprocess.run(cmd, cwd=repo, capture_output=True, text=True)
-            notes.append({"file": rel, "command": " ".join(cmd), "exit_code": r.returncode,
-                          "stderr_tail": r.stderr[-400:]})
-        if src.exists():
-            body, n = strip_python(src.read_text(encoding="utf-8"))
+    selected = [rel for rel in GENERATED if gs.GENERATED[rel][1] in texts]
+    evidence = root.parent / "generated-sources"
+    try:
+        prepared = gs.prepare_sources(repo, evidence, selected)
+        for rel in selected:
+            inputs = {}
+            for name in gs.GENERATED[rel]:
+                if revision is None:
+                    inputs[name] = (repo / name).read_bytes()
+                else:
+                    captured = git("show", revision + ":" + name, cwd=repo)
+                    gs.require(captured.returncode == 0, "cannot read committed generator input " + name)
+                    inputs[name] = captured.stdout
+            src = repo / rel
+            digest = gs.verify(rel, src.read_bytes(), inputs)
+            body, _ = strip_python(src.read_text(encoding="utf-8"))
             (root / rel).parent.mkdir(parents=True, exist_ok=True)
             (root / rel).write_text(body, encoding="utf-8")
-        else:
-            notes.append({"file": rel, "missing": True, "make_it_with": " ".join(cmd)})
+            notes.append({"file": rel, "state": prepared[rel]["state"], "sha256": digest,
+                          "verified": True, "evidence": str(evidence / "generated-sources.json")})
+    except (gs.GeneratedSourceError, OSError) as problem:
+        notes.append({"verified": False, "error": str(problem),
+                      "evidence": str(evidence / "generated-sources.json")})
     return stripped, deleted, notes
 
 
@@ -334,7 +347,7 @@ def main(argv):
     pl = plan(texts)
     program = program_text(sha, pl["modules"])
     tree = out / "tree"
-    stripped, deleted, notes = write_tree(tree, texts, repo, pl["reach"])
+    stripped, deleted, notes = write_tree(tree, texts, repo, pl["reach"], sha)
     (tree / PROGRAM_REL).parent.mkdir(parents=True, exist_ok=True)
     (tree / PROGRAM_REL).write_text(program, encoding="utf-8")
     (out / "kernel_closure_main.mojo").write_text(program, encoding="utf-8")
@@ -362,6 +375,10 @@ def main(argv):
         print(f"  {p}: external_call[\"Py...\"] (cannot be stripped)", file=sys.stderr)
     for n in notes:
         print(f"  generated file {n}", file=sys.stderr)
+    if any(not row.get("verified") for row in notes):
+        summary.update(status="fail", errors=["generated source preparation or committed-byte verification failed"])
+        (out / "summary.json").write_text(json.dumps(summary, indent=1))
+        return 1
     if args.emit_only:
         summary["status"] = "emitted"
         (out / "summary.json").write_text(json.dumps(summary, indent=1))
