@@ -24,7 +24,7 @@ from std.sys.compile import is_defined
 from experiments.classical_identical_ideas.linear_controls import C15_FACTOR_SOLVE
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fsqrt, ld, st, ldi, sti, i2f, fill, copy,
-    cholesky, chol_solve, jacobi_eig, centered_gram, centered_xty, mean_of,
+    cholesky, chol_solve, centered_gram, centered_xty, mean_of,
     add_acc, axpy_acc, axpy_centered,
 )
 from std.sys.info import is_gpu, has_apple_gpu_accelerator
@@ -239,6 +239,18 @@ def bayes_yvar(y: FP, n: Int) -> Float32:
         acc = fa(acc, bayes_yvar_part(y, m, lo, min(FOLD_BLOCK, n - lo)))
         lo += FOLD_BLOCK
     return fd(acc, i2f(n))
+
+
+#: The one refusal of an unconverged eigendecomposition of BayesianRidge's
+#: centered Gram (the executor eigh op's status word, or its host twin's
+#: unconverged count). Lane m3-linalg-and-housekeeping (2026-11-09): Apple
+#: raised (its Metal witness was withheld, then the witness abort) while
+#: NVIDIA, AMD and the host column went on with the unconverged answer; now
+#: every column raises this text.
+comptime BAYES_EIGH_REFUSAL = (
+    "mojolearn BayesianRidge: the eigendecomposition of the centered Gram matrix did not converge (or met a NaN);"
+    " an unconverged fit is refused, not returned"
+)
 
 
 #: Null-direction floor (FAST lane/apple-fast-bayesq, then every vendor,

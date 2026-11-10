@@ -33,7 +33,6 @@ between calls; the binding may not, and DEVIATION 874 at that entry says
 what that costs.
 """
 
-from std.ffi import _Global
 from std.math import fma
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
@@ -42,7 +41,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnSvmContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnSvmContextOtherV2"
+comptime _DEVCTX_SLOT = "MojolearnSvmContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnSvmContextOtherV3"
 
 
 from core.identity_trace import IdentityTrace
@@ -61,6 +60,7 @@ from isolation_forest.impl.isolation_forest import (
     score_samples_into as if_score_samples_into,
     contamination_offset as if_contamination_offset,
 )
+from core.shared_slot import SharedSlot
 
 
 def percentile_linear_host(values: List[Float32], q: Float64) -> Float64:
@@ -532,7 +532,7 @@ def iforest_run_host(
 #: refits on its next scoring call).
 comptime IF_RESIDENT_CAP = 8
 
-comptime _IF_RESIDENT_SLOT = "MojoIForestResidentIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoIForestResidentOther"
+comptime _IF_RESIDENT_SLOT = "MojolearnIForestResidentIdenticalV1" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnIForestResidentOtherV1"
 
 
 @fieldwise_init
@@ -615,9 +615,7 @@ struct _IFResidentStore(Defaultable, Movable):
         self.nonce = 0
 
 
-comptime IF_RESIDENT_STORE = _Global[
-    StorageType=_IFResidentStore, name=_IF_RESIDENT_SLOT, init_fn=_IFResidentStore.__init__
-]
+comptime IF_RESIDENT_STORE = SharedSlot[_IFResidentStore, _IF_RESIDENT_SLOT]
 
 
 def if_resident_new_token() raises -> Int:

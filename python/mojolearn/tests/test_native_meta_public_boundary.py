@@ -57,15 +57,12 @@ def test_public_fit_predict_score_have_no_python_lifecycle_frames(name, record_p
     output = prediction.assert_compatible()
     scored = audit_compatible_call(model.score, x, y)
     score = scored.assert_compatible()
-    # Preserve every observed Python frame and the named exception in the
-    # retained JUnit evidence. Native-only qualification remains false when
-    # Array.__len__ ran; no other Python helper or callback is admitted.
+    # Preserve every observed Python frame in the retained JUnit evidence.
+    # len(Array) is a C property over the native entry, so no fallback runs.
     reports = [audit.report() for audit in (fit, prediction, scored)]
     record_property('runtime_qualification', json.dumps(reports))
     for report in reports:
-        if report['approved_python_fallbacks']:
-            assert report['passed'] is False
-            assert {r['id'] for r in report['approved_python_fallbacks']} == {'array-length-metadata'}
+        assert not report['approved_python_fallbacks'] and report['passed'] is True, report
     assert isinstance(output, np.ndarray)
     assert output.shape == y.shape and np.isfinite(float(score))
     with pytest.raises(ValueError, match='features'):

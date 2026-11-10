@@ -11,7 +11,8 @@ from x_cluster.spectral_df64 import (
     sd_apply_row, sd_better_min, sd_cacc_row, sd_chunks, sd_class_fold, sd_class_part, sd_colnorm, sd_colscale_cell,
     sd_colsign_cell, sd_colsq_part, sd_complete_u, sd_dot_cols, sd_ld, sd_label_row, sd_load_cell, sd_ncut_step,
     sd_norm_col, sd_of_int, sd_polar_cell, sd_raise_status, sd_rotation, sd_rownorm_row, sd_st, sd_take_row_cell,
-    sd_zero,
+    sd_zero, sd_label_abs_row, cq_apply_col, cq_chunk_max, cq_colnorm_cell, cq_gather_cell, cq_pivot_step,
+    cq_raise_status,
 )
 from x_linear.ff import FF, ff_sqrt
 from x_linear.ops import FP, IP
@@ -252,3 +253,143 @@ def _sd_svd_host(
         sd_norm_col(mh, ml, uh, ul, svh, svl, filled, k, j)
     if not sd_complete_u(uh, ul, filled, ch, cl, k):
         state.unsafe_store(SD_STATUS, Int32(SD_BAD_BASIS))
+
+
+def cluster_qr_df64_host(x: List[Float32], n: Int, k: Int) raises -> List[Int32]:
+    """The host column of `cluster_qr_df64_device` (x_cluster/spectral_df64_device.mojo):
+    SpectralClustering assign_labels='cluster_qr' in float-float
+    (x_cluster/spectral_df64.mojo, lane m3-linalg-and-housekeeping), the
+    same bodies in the same order; the column and row steps in parallel over
+    the host pool (each index writes only its own words), the k pivot steps
+    and the k x k SVD serial (each reads the previous one's words)."""
+    if n < 1 or k < 1 or k > n or len(x) != n * k:
+        raise Error("SpectralClustering cluster_qr: the embedding is not n x k with k <= n")
+    var nk = n * k
+    var kk = k * k
+    var nch = sd_chunks(n)
+    var xl = x.copy()
+    var vhl = List[Float32](length=nk, fill=Float32(0))
+    var vll = List[Float32](length=nk, fill=Float32(0))
+    var ahl = List[Float32](length=nk, fill=Float32(0))
+    var all_ = List[Float32](length=nk, fill=Float32(0))
+    var nhl = List[Float32](length=n, fill=Float32(0))
+    var nll = List[Float32](length=n, fill=Float32(0))
+    var usedl = List[Int32](length=n, fill=Int32(0))
+    var pivl = List[Int32](length=k, fill=Int32(0))
+    var bmhl = List[Float32](length=nch, fill=Float32(0))
+    var bmll = List[Float32](length=nch, fill=Float32(0))
+    var bmil = List[Int32](length=nch, fill=Int32(0))
+    var hvhl = List[Float32](length=k, fill=Float32(0))
+    var hvll = List[Float32](length=k, fill=Float32(0))
+    var hbl = List[Float32](length=2, fill=Float32(0))
+    var px = _lp(xl)
+    var vh = _lp(vhl)
+    var vl = _lp(vll)
+    var ah = _lp(ahl)
+    var al = _lp(all_)
+    var nh = _lp(nhl)
+    var nl = _lp(nll)
+    var used = _li(usedl)
+    var piv = _li(pivl)
+    var bmh = _lp(bmhl)
+    var bml = _lp(bmll)
+    var bmi = _li(bmil)
+    var hvh = _lp(hvhl)
+    var hvl = _lp(hvll)
+    var hbh = _lp(hbl)
+
+    def load(t: Int) {imm px, imm vh, imm vl, imm ah, imm al}:
+        sd_load_cell(px, vh, vl, t)
+        sd_load_cell(px, ah, al, t)
+
+    host_cells(load, nk, 4)
+    for j in range(k):  # driver-loop: over the QR's k pivot steps (model structure)
+
+        def cnorm(c: Int) {imm ah, imm al, imm used, imm k, imm j, imm nh, imm nl}:
+            cq_colnorm_cell(ah, al, used, k, j, c, nh, nl)
+
+        host_cells(cnorm, n, 20 * k)
+
+        def cmax(ch: Int) {imm nh, imm nl, imm used, imm n, imm bmh, imm bml, imm bmi}:
+            cq_chunk_max(nh, nl, used, n, ch, bmh, bml, bmi)
+
+        host_cells(cmax, nch, 4 * SD_ROWS)
+        if cq_pivot_step(ah, al, used, piv, k, j, bmh, bml, bmi, nch, hvh, hvl, hbh, hbh + 1) != 0:
+            var hb = sd_ld(hbh, hbh + 1, 0)
+
+            def apply(c: Int) {imm ah, imm al, imm used, imm k, imm j, imm hvh, imm hvl, imm hb}:
+                cq_apply_col(ah, al, used, k, j, hvh, hvl, hb, c)
+
+            host_cells(apply, n, 40 * k)
+    # the k x k SVD of M = V[piv] and the rotation Q = V U^T
+    var mhl = List[Float32](length=kk, fill=Float32(0))
+    var mll = List[Float32](length=kk, fill=Float32(0))
+    var vvhl = List[Float32](length=kk, fill=Float32(0))
+    var vvll = List[Float32](length=kk, fill=Float32(0))
+    var uhl = List[Float32](length=kk, fill=Float32(0))
+    var ull = List[Float32](length=kk, fill=Float32(0))
+    var svhl = List[Float32](length=k, fill=Float32(0))
+    var svll = List[Float32](length=k, fill=Float32(0))
+    var chl = List[Float32](length=k, fill=Float32(0))
+    var cll = List[Float32](length=k, fill=Float32(0))
+    var fil = List[Int32](length=k, fill=Int32(0))
+    var rothl = List[Float32](length=kk, fill=Float32(0))
+    var rotll = List[Float32](length=kk, fill=Float32(0))
+    var stl = List[Int32](length=SD_STATE_WORDS, fill=Int32(0))
+    var mh = _lp(mhl)
+    var ml = _lp(mll)
+    var roth = _lp(rothl)
+    var rotl = _lp(rotll)
+    for t in range(kk):  # small-loop(k * k: the pivot rows' cells)
+        cq_gather_cell(vh, vl, piv, k, t, mh, ml)
+    _sd_svd_host(
+        mh, ml, _lp(vvhl), _lp(vvll), _lp(uhl), _lp(ull), _lp(svhl), _lp(svll), _li(fil), _lp(chl), _lp(cll), k,
+        _li(stl),
+    )
+    cq_raise_status(Int(stl[SD_STATUS]))
+    var vvh = _lp(vvhl)
+    var vvl = _lp(vvll)
+    var uh = _lp(uhl)
+    var ul = _lp(ull)
+
+    def polar(t: Int) {imm vvh, imm vvl, imm uh, imm ul, imm k, imm roth, imm rotl}:
+        sd_polar_cell(vvh, vvl, uh, ul, k, t, roth, rotl)
+
+    host_cells(polar, kk, 20 * k)
+    var labl = List[Int32](length=n, fill=Int32(0))
+    var lab = _li(labl)
+
+    def label(i: Int) {imm vh, imm vl, imm k, imm roth, imm rotl, imm lab}:
+        lab.unsafe_store(i, sd_label_abs_row(vh, vl, k, roth, rotl, i))
+
+    host_cells(label, n, 20 * k * k)
+    _ = xl^
+    _ = vhl^
+    _ = vll^
+    _ = ahl^
+    _ = all_^
+    _ = nhl^
+    _ = nll^
+    _ = usedl^
+    _ = pivl^
+    _ = bmhl^
+    _ = bmll^
+    _ = bmil^
+    _ = hvhl^
+    _ = hvll^
+    _ = hbl^
+    _ = mhl^
+    _ = mll^
+    _ = vvhl^
+    _ = vvll^
+    _ = uhl^
+    _ = ull^
+    _ = svhl^
+    _ = svll^
+    _ = chl^
+    _ = cll^
+    _ = fil^
+    _ = rothl^
+    _ = rotll^
+    _ = stl^
+    return labl^

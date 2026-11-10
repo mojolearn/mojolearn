@@ -2,7 +2,6 @@
 # Typed ByteLM engine table over the common native descriptor provider.
 # Session handles are minted only by its compiled boundary and retain their
 # exact ByteLMSession owner there; no CPython object layout enters this file.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -18,6 +17,7 @@ from training.byte_lm_afn import BYTE_LM_FAST_APPLE
 from training.checks.optimizer_contract import OptimizerConfig
 from training.byte_lm import byte_validate_optimizer
 from training.byte_lm_logits import BYTE_LOGITS_MAX_BATCH, BYTE_LOGITS_MAX_CELLS
+from core.shared_slot import SharedSlot
 
 comptime BYTE_LM_NATIVE_ABI_NAME = "mojolearn.training.byte_lm.v1"
 # Operation 12 (2026-11-07, plan section 2C): `n_steps` training steps on an
@@ -175,5 +175,4 @@ struct ByteLmNativeTable(Defaultable, Movable):
         self.entries.append(byte_lm_native_v1)
 
 
-comptime BYTE_LM_NATIVE_TABLE = _Global[StorageType=ByteLmNativeTable,
-    name=("MojolearnByteLmNativeTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnByteLmNativeTableFastV2"), init_fn=ByteLmNativeTable.__init__]
+comptime BYTE_LM_NATIVE_TABLE = SharedSlot[ByteLmNativeTable, ("MojolearnByteLmNativeTableIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnByteLmNativeTableFastV3")]

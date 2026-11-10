@@ -319,8 +319,8 @@ def _require_device_finite(ctx: DeviceContext, mut scan: DeviceScanScratch,
 # The process context the byte-LM bindings run on (`neural_ctx` caches it per
 # name, so this is the binding's own context, created once, not a new one).
 comptime _BYTE_VALIDATE_CTX = (
-    "MojolearnNeuralByteLMContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    else "MojolearnNeuralByteLMContextFastV2")
+    "MojolearnNeuralByteLMContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    else "MojolearnNeuralByteLMContextFastV3")
 
 
 def _device_copy_f32(ctx: DeviceContext, values: List[Float32]) raises -> DeviceBuffer[DType.float32]:
@@ -1438,6 +1438,7 @@ def byte_rollback(ctx: DeviceContext, mut tr: ByteTrainer) raises -> Bool:
 # leaves them as they were.
 # TOMBSTONE: the byte LM's hand step (the per-layer forward `_byte_forward_loss` / `_byte_layer_forward_deferred` with its eight llama_decoder_layer_forward sites, the tape backward wrapper `_byte_backward_tape` over autograd/rules_lm.mojo byte_backward_autograd, the IDN_TRAIN_ONE_WAIT and AFN_LM_NOSYNC step variants, the step-glue update arms `_byte_glue_update` / `_byte_live_status_*`, the eager-scratch release helpers and the certified optimizer step of the trainer) deleted 2026-11-09 by lane x7-byte-lm-on-executor; code recoverable at the deletion commit's parent (docs/TOMBSTONES.md "BYTE_LM_HAND_STEP").
 # Restore: git apply experiments/removed/BYTE_LM_HAND_STEP.patch
+# Restored 2026-11-09 by lane r1-restore-measured-winners as ops: the hand step's embedding backward (radix / scan plan pick) as OPS_LM_EMBEDDING (autograd/lm_embedding_op.mojo), its residual2 -> next norm1 fusion as the attention step op's ATTN_STEP_NEXT_NORM arm (autograd/block_step_ops.mojo); A/B -D MOJOLEARN_BYTE_LM_GENERIC_OPS.
 
 
 def _byte_program_ready(ctx: DeviceContext, mut tr: ByteTrainer) raises:

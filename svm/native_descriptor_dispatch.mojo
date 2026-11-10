@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Common private descriptor ABI over existing SVC solver/predict owners.
 # No estimator-specific provider, Python dependency or new numerical route.
-from std.ffi import _Global
 from std.memory import memcpy
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -13,6 +12,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from svm.native_auxiliary_dispatch import svc_native_auxiliary
 from svm.native_svr_dispatch import native_svr_fit, native_svr_predict
 from svm.estimator import svc_fit_host_borrowed, svc_predict_host
+from core.shared_slot import SharedSlot
+from core.device_query_x import QueryFold
 
 
 def svc_binary_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -46,8 +47,12 @@ def svc_binary_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) 
         var bounds = List[Float32]()
         if a[6] != 0:
             bounds = read_f32(a[6], n)
-        var result = svc_fit_host_borrowed(xp, y, n, d,
-            p[2], f[0], f[1], f[2], p[3], p[4], p[5], f[3], bounds)
+        # The descriptor door tests X on the host before this call
+        # (bindings/svc_kernel_native.mojo, lane a8a); no fold reaches it.
+        var result = svc_fit_host_borrowed(Int(xp), QueryFold.none(), y, n, d,
+            p[2], f[0], f[1], f[2], p[3], p[4], p[5], f[3], bounds, False)
+        if result.finite_word != 0:
+            raise Error("Input X contains NaN or infinity (SVC).")
         copy_f32(result.dual_coefs.unsafe_ptr(), dp, result.n_support)
         memcpy(dest=sip, src=result.support_idx.unsafe_ptr(), count=result.n_support)
         copy_f32(result.support_matrix.unsafe_ptr(), smp, result.n_support * d)
@@ -110,5 +115,4 @@ struct SvcNativeAPI(Defaultable, Movable):
         self.entries.append(svc_binary_v1)
 
 
-comptime SVC_NATIVE_API = _Global[StorageType=SvcNativeAPI,
-    name=("MojolearnSvcNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnSvcNativeAPIFastV2"), init_fn=SvcNativeAPI.__init__]
+comptime SVC_NATIVE_API = SharedSlot[SvcNativeAPI, ("MojolearnSvcNativeAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnSvcNativeAPIFastV3")]

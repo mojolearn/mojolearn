@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native owner and local workers for existing parallel MLP/Samba training."""
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from core.parallel_neural_native_impl import samba_ids_into
 from std.python._cpython import PyObjectPtr
@@ -9,7 +8,8 @@ from bindings.native_error_class import error_without_class
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_copy
 from bindings.parallel_byte_native import _parallel_int, _parallel_view
 from bindings.parallel_mlp_native import (
-    mlp_snapshot, mlp_from_state, mlp_publish, mlp_gradients_from_state, mlp_gradients_from_checked, mlp_validate_state,
+    mlp_snapshot, mlp_from_state, mlp_publish, mlp_gradients_from_state, mlp_validate_state,
+    mlp_gradients_open, mlp_gradients_close, mlp_gradients_on,
     mlp_apply_from_state, mlp_batch, mlp_targets, neural_ordered_sum,
     neural_cooperative_admit,
 )
@@ -23,6 +23,7 @@ from bindings.parallel_neural_admission import neural_admit
 from core.sha256 import Sha256
 from bindings.cpython_table import cpython_table
 from bindings.sha256_door import sha256_update, sha256_update_text
+from core.shared_slot import SharedSlot
 
 
 struct ParallelNeuralBoundary(Defaultable, Movable):
@@ -50,10 +51,7 @@ struct ParallelNeuralBoundary(Defaultable, Movable):
         self.cache = PythonObject(None)
 
 
-comptime PARALLEL_NEURAL_BOUNDARY = _Global[
-    StorageType=ParallelNeuralBoundary, name="MojoParallelNeuralOwner",
-    init_fn=ParallelNeuralBoundary.__init__,
-]
+comptime PARALLEL_NEURAL_BOUNDARY = SharedSlot[ParallelNeuralBoundary, "MojolearnParallelNeuralOwnerV1"]
 
 
 def parallel_neural_initialize(args: PythonObject) raises:
@@ -502,15 +500,20 @@ def neural_worker_dispatch(request: PythonObject) raises -> PythonObject:
     if operation == "mlp_gradient_cached":
         # The worker's resident state is replaced (never edited in place) when
         # a full state or a committed delta arrives: validate each resident
-        # state object once and reuse the checked copy for every shard.
+        # state object once and open ONE gradient slot over it (the
+        # SmallMLPTrainer program, weights uploaded once) for every shard.
         var cache = _worker_model(state, False)
         var resident = cache["state"]
-        var checked = py_get(cache, "checked")
-        if checked is None or py_get(cache, "checked_of") is not resident:
-            checked = mlp_validate_state(resident)
-            py_setitem(cache, "checked", checked)
+        var slot = py_get(cache, "mlp_slot")
+        if slot is None or py_get(cache, "checked_of") is not resident:
+            if slot is not None:
+                py_setitem(cache, "mlp_slot", PythonObject(None))
+                mlp_gradients_close(Int(py=slot))
+            var opened = mlp_gradients_open(mlp_validate_state(resident))
+            slot = PythonObject(opened)
+            py_setitem(cache, "mlp_slot", slot)
             py_setitem(cache, "checked_of", resident)
-        return mlp_gradients_from_checked(checked, args[0], args[1])
+        return mlp_gradients_on(Int(py=slot), args[0], args[1])
     if operation == "samba_gradient_cached":
         var cache = _worker_model(state, True)
         var values = _neural_values(cache["model"])

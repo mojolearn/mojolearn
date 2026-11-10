@@ -23,13 +23,13 @@ List before the walk: `DecisionTree.predict_one` reads a `List[Float32]` row
 store (a borrowed-pointer walk changes ensemble/decisiontree, not this file;
 the copy is one memcpy, the rebuild it replaces was per node).
 """
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.hostptr import f32_ptr, i32_ptr, read_f32
 from core.forest_host_predict import rf_host_predict, rf_host_trees, et_host_predict, et_host_trees
 from ensemble.decisiontree.decisiontree import TreeMetaDataNode as RfTree
 from extratrees.impl.decisiontree.flatnode import TreeMetaDataNode as EtTree
+from core.shared_slot import SharedSlot
 
 
 struct HostStrictForest(Movable):
@@ -57,12 +57,8 @@ struct HostStrictRegistry(Defaultable, Movable):
         self.next_id = 1
 
 
-comptime RF_STRICT_REGISTRY = _Global[
-    StorageType=HostStrictRegistry, name="MojoRFStrictForestHostV1", init_fn=HostStrictRegistry.__init__,
-]
-comptime ET_STRICT_REGISTRY = _Global[
-    StorageType=HostStrictRegistry, name="MojoETStrictForestHostV1", init_fn=HostStrictRegistry.__init__,
-]
+comptime RF_STRICT_REGISTRY = SharedSlot[HostStrictRegistry, "MojolearnRFStrictForestHostV2"]
+comptime ET_STRICT_REGISTRY = SharedSlot[HostStrictRegistry, "MojolearnETStrictForestHostV2"]
 
 
 def forest_strict_prepare_host_binding[RF_INPUT: Bool](

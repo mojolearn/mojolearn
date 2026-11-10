@@ -155,7 +155,7 @@ def connect(config_cls, model_cls, training, neural, state_cls, session_cls=None
             generator_bindings[key] = symbols
     from . import _portable_math
     try:
-        # cpu-route: connect the existing portable binary64 scalar sqrt ABI;
+        # import-time: connect the existing portable binary64 scalar sqrt ABI;
         # native initializer preparation calls this C function directly.
         generator_sqrt = _portable_math._load().mojolearn_sqrt
         generator_sqrt_type = type(generator_sqrt)

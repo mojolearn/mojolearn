@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # CPU training entry table: same provider transport, original host numerical
 # owners. Inference-only and training-host implementations remain distinct.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, TRANSFORMER_BLOCK_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from transformer.block_options import BLOCK_OPTION_ADDRS, BLOCK_OPTION_PARAMS, BlockOptions
 from transformer.transformer_host_binding_impl import _run_forward, _backward_run, HostTransformerSession
+from core.shared_slot import SharedSlot
 
 
 def transformer_host_block_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -94,5 +94,4 @@ struct TransformerHostBlockAPI(Defaultable, Movable):
         self.entries.append(transformer_host_block_v1)
 
 
-comptime NATIVE_TRANSFORMER_HOST_BLOCK_API = _Global[StorageType=TransformerHostBlockAPI,
-    name=("MojolearnTransformerHostBlockAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnTransformerHostBlockAPIFastV2"), init_fn=TransformerHostBlockAPI.__init__]
+comptime NATIVE_TRANSFORMER_HOST_BLOCK_API = SharedSlot[TransformerHostBlockAPI, ("MojolearnTransformerHostBlockAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnTransformerHostBlockAPIFastV3")]

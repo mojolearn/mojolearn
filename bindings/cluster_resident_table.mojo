@@ -33,11 +33,11 @@ Rules (plan section 2A):
   addresses taken, so a new model at the same address can never be served
   the old copy.
 - Nothing here computes on data: the device copy is the same bytes."""
-from std.ffi import _Global
 from std.python import Python, PythonObject
 # Imports: std and the records module's contract only (the records module
 # never reaches this table: this table polls its dead-key ring).
 from bindings.native_model_records import model_identity_key, model_generation, records_dead_keys_since
+from core.shared_slot import SharedSlot
 
 comptime CRES_X_CLUSTER = 1
 """Family code: x_cluster `cluster_centers_` (MiniBatchKMeans, BisectingKMeans,
@@ -94,7 +94,7 @@ struct CresTable(Defaultable, Movable):
         self.seen = 0
 
 
-comptime _CRES = _Global[StorageType=CresTable, name="MojolearnClusterResidentHeldV3", init_fn=CresTable.__init__]
+comptime _CRES = SharedSlot[CresTable, "MojolearnClusterResidentHeldV4"]
 
 
 def _table() raises -> UnsafePointer[CresTable, MutAnyOrigin]:

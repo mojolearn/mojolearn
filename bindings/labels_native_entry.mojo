@@ -13,6 +13,8 @@
 #   LABELS_OP_DECODE           (classes, codes)           -> labels
 #   LABELS_OP_CLASS_WEIGHT_ROWS (class_weight, classes, int32 codes, x_trees entries)
 #                                                         -> float32 row weights or None
+#   LABELS_OP_FLATTEN          (y,)                       -> flat list of the label objects
+#   LABELS_OP_SORTED           (labels,)                  -> (classes, int32 codes)
 #
 # `kind` of ENCODE is LABELS_KIND_ORDER_RULE (0): the classes under the ORDER
 # RULE of python/mojolearn/_labels.py (Python label objects, sorted) and one
@@ -34,13 +36,15 @@ from bindings.classical_error_boundary import classical_python_error
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_labels import (
     classical_encode_labels, classical_decode_labels, classical_union_encode, classical_score_from_codes,
-    labels_class_weight_rows, ClassicalLabels)
+    labels_class_weight_rows, ClassicalLabels, _flatten_labels, _sorted_classes)
 
 comptime LABELS_OP_ENCODE = 0
 comptime LABELS_OP_UNION_ENCODE = 1
 comptime LABELS_OP_SCORE_FROM_CODES = 2
 comptime LABELS_OP_DECODE = 3
 comptime LABELS_OP_CLASS_WEIGHT_ROWS = 4
+comptime LABELS_OP_FLATTEN = 5
+comptime LABELS_OP_SORTED = 6
 
 comptime LABELS_KIND_ORDER_RULE = 0
 
@@ -63,6 +67,14 @@ def _labels_operation(op: Int, args: PythonObject, context: PythonObject) raises
         # (the twin LogisticRegression's owner already calls).
         var codes = args[2]
         return labels_class_weight_rows(args[0], ClassicalLabels(args[1], codes, Int(py=codes.size)), args[3], context)
+    if op == LABELS_OP_FLATTEN:
+        # `_labels.flatten_labels`: the label input step's flatten (exact
+        # containers read by pointer, depth first; lane p2-labels-lists-arrays).
+        return _flatten_labels(args[0], context)
+    if op == LABELS_OP_SORTED:
+        # `_labels.sorted_classes`: the ORDER RULE over a list of label objects.
+        var ordered = _sorted_classes(args[0], context)
+        return Python.tuple(ordered.classes, ordered.codes)
     raise Error("TypeError: mojolearn: unknown label operation")
 
 

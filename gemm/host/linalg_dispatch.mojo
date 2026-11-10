@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Linalg engine operations carried by the shared native descriptor transport.
-from std.ffi import _Global
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from gemm.contract import GEMM_NUMERICAL_PROFILE_VERSION, LOWBIT_PROFILE_VERSION, INT15_PROFILE_VERSION
 from gemm.host.linalg_native import gemm_native, gemm_bf16_native, gemm_int8_native, quantize_int8_native, dequantize_int8_native, gemm_int15_native, quantize_int15_native, dequantize_int15_native, to_bf16_native, from_bf16_native, from_f16_native
+from core.shared_slot import SharedSlot
 
 comptime LINALG_NATIVE_ABI_NAME = "mojolearn.linalg.v1"
 comptime LINALG_NATIVE_OPERATION_COUNT = 15
@@ -99,5 +99,4 @@ struct LinalgNativeTable(Defaultable, Movable):
         self.entries.append(linalg_native_v1)
 
 
-comptime LINALG_NATIVE_TABLE = _Global[StorageType=LinalgNativeTable,
-    name=("MojolearnLinalgHostNativeTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLinalgHostNativeTableFastV2"), init_fn=LinalgNativeTable.__init__]
+comptime LINALG_NATIVE_TABLE = SharedSlot[LinalgNativeTable, ("MojolearnLinalgHostNativeTableIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLinalgHostNativeTableFastV3")]

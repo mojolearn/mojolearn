@@ -21,7 +21,6 @@ instead of silently routing to the identical product when unavailable.
 No numerical source or dispatch of the identical tier changes here.
 """
 
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type
@@ -36,6 +35,7 @@ from gemm.afn_apple_fast import (
 from gemm.checks.gemm_lowbit import bf16_narrow, bf16_widen
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from max.gpu.host import DeviceContext
+from core.shared_slot import SharedSlot
 
 
 struct _Boundary(Defaultable, Movable):
@@ -49,10 +49,7 @@ struct _Boundary(Defaultable, Movable):
         self.array_class = PythonObject(None)
 
 
-comptime _BOUNDARY = _Global[
-    StorageType=_Boundary, name="MojoAppleFastBf16Boundary",
-    init_fn=_Boundary.__init__,
-]
+comptime _BOUNDARY = SharedSlot[_Boundary, "MojolearnAppleFastBf16BoundaryV1"]
 
 
 def initialize_fast_bf16_boundary() raises:
@@ -172,7 +169,7 @@ def fast_to_bf16_binding(value: PythonObject) raises -> PythonObject:
     var result = _new_array(source.shape, True)
     var dst_address = Int(py=result._addr)
     with GILReleased(Python()):
-        var ctx = process_ctx["MojolearnAppleFastBf16PublicContextV2"]()
+        var ctx = process_ctx["MojolearnAppleFastBf16PublicContextV3"]()
         var src = ctx.enqueue_create_buffer[DType.float32](source.count)
         var dst = ctx.enqueue_create_buffer[DType.uint16](source.count)
         ctx.enqueue_copy(dst_buf=src, src_ptr=f32_ptr(source.address))
@@ -194,7 +191,7 @@ def fast_from_bf16_binding(value: PythonObject) raises -> PythonObject:
     var result = _new_array(source.shape, False)
     var dst_address = Int(py=result._addr)
     with GILReleased(Python()):
-        var ctx = process_ctx["MojolearnAppleFastBf16PublicContextV2"]()
+        var ctx = process_ctx["MojolearnAppleFastBf16PublicContextV3"]()
         var src = ctx.enqueue_create_buffer[DType.uint16](source.count)
         var dst = ctx.enqueue_create_buffer[DType.float32](source.count)
         ctx.enqueue_copy(dst_buf=src, src_ptr=u16_ptr(source.address))
@@ -337,7 +334,7 @@ def fast_matmul_bf16_binding(
     var result = out if direct else _new_array(shape, False)
     var dst_address = Int(py=result._addr)
     with GILReleased(Python()):
-        var ctx = process_ctx["MojolearnAppleFastBf16PublicContextV2"]()
+        var ctx = process_ctx["MojolearnAppleFastBf16PublicContextV3"]()
         var db = ctx.enqueue_create_buffer[DType.uint16](right.count)
         var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
         ctx.enqueue_copy(dst_buf=db, src_ptr=u16_ptr(right.address))

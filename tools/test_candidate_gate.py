@@ -4,6 +4,7 @@ import csv
 import hashlib
 import io
 import json
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 import zipfile
@@ -157,15 +158,21 @@ def test_candidate_install_passes_local_files_and_checks_interpreter_tags(tmp_pa
     assert len(calls) == 2
 
 
-def test_gate_job_stages_candidate_wheels_and_builds_the_eight_binaries_in_the_job(tmp_path):
+def _binaries(vendor='nvidia'):
+    """The retained autograd binaries the gate builds (gate_autograd_artifacts.expected): the count follows the
+    source entries, so a deleted harness never leaves a stale constant here."""
+    return len(A.expected(vendor))
+
+
+def test_gate_job_stages_candidate_wheels_and_builds_the_autograd_binaries_in_the_job(tmp_path):
     paths, directory = wheels(tmp_path), artifacts(tmp_path)
     plan = RG.Plan('nvidia', VERSION, COMMIT, tmp_path, tmp_path/'out', paths, 'rel-test',
                    prior=directory, prior_files=RG.prior_files(directory, 'nvidia'))
     uploads = plan.uploads()
     # two wheels (the NVIDIA wheel carries its PTX set), the job script, the retained set
-    # (eight binaries + receipt), gate.env and the measurement smoke's data plan (the one job runs it last)
-    assert len(uploads) == 2+1+8+1+1+1
-    assert len([r for _, r, _ in uploads if '/autograd-prior/' in r]) == 9
+    # (the binaries + receipt), gate.env and the measurement smoke's data plan (the one job runs it last)
+    assert len(uploads) == 2+1+_binaries()+1+1+1
+    assert len([r for _, r, _ in uploads if '/autograd-prior/' in r]) == _binaries()+1
     assert all(x for _, r, x in uploads if '/autograd-prior/' in r and not r.endswith('.json'))
     assert plan.gate.count('--candidate-wheel') == 2
     assert plan.gate[plan.gate.index('--source-commit')+1] == COMMIT
@@ -216,16 +223,16 @@ def test_autograd_resume_reuses_verified_completed_bytes_without_compiling(tmp_p
     monkeypatch.setattr(A.subprocess, 'run', compile_fixture)
     args = SimpleNamespace(out=str(tmp_path/'outputs'), source_commit=COMMIT, vendor='nvidia',
                            target='sm_89', mojo=str(compiler), compile_jobs=2, resume=False)
-    assert A.build(args) == 0 and len(calls) == 8
+    assert A.build(args) == 0 and len(calls) == _binaries()
     manifest = json.loads((Path(args.out)/'build-manifest.json').read_text())
     assert manifest['target_cpu'] == 'x86-64-v3'
     assert all(command[command.index('--target-cpu')+1] == 'x86-64-v3' for command in calls)
     args.resume = True
-    assert A.build(args) == 0 and len(calls) == 8
+    assert A.build(args) == 0 and len(calls) == _binaries()
     args.compile_jobs = 3
     with pytest.raises(RuntimeError, match='completed autograd artifact changed'):
         A.build(args)
-    assert len(calls) == 8
+    assert len(calls) == _binaries()
 
 
 @pytest.mark.parametrize('change', ['missing-receipt-target', 'host-native-command', 'missing-command-flag'])
@@ -271,6 +278,7 @@ def test_gate_receipt_cannot_reuse_published_or_other_candidate_hashes(tmp_path)
 
 def test_direct_publisher_call_refuses_before_any_external_action_without_both_gates():
     runner = object.__new__(release.Release)
+    runner._tl = threading.local()  # __init__ is skipped: the per-thread publish target it would make
     runner.args = SimpleNamespace(publish='pypi')
     runner.dry = False
     runner.gate_ok = lambda vendor: (vendor == 'nvidia', 'not qualified')

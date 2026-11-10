@@ -13,7 +13,7 @@
 # value changes; every route `_Kit` chose by residency reads `on_device`,
 # which follows the Python `_M` exactly; an operation that writes a matrix
 # in place drops the copy that went stale (`wrote_device` / `wrote_host`).
-from std.ffi import _Global, external_call, c_size_t
+from std.ffi import external_call, c_size_t
 from std.python import Python, PythonObject
 from bindings.cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
@@ -26,7 +26,9 @@ from std.memory import memcpy
 from providers.python.array_metadata_pyapi import ArrayMetadata
 from bindings.py_balanced import py_call, py_get, py_type, py_contains, py_setitem, py_setattr
 from bindings.classical_arrays import classical_array, classical_typed, classical_address, classical_kind
-from bindings.admitted_input import admit_x
+from bindings.admitted_input import admit_x, admitted_finite_refuse
+from bindings.kit_call import kit_connect, kit_provider, kit_call
+from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES, XD_DEV_UPLOAD_FINITE
 from bindings.classical_validate import classical_view
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from core.classical_tsqr_impl import tsqr_fill_constant, tsqr_fill_indices, tsqr_copy_columns, tsqr_fill_eye
@@ -149,10 +151,14 @@ def decomp_entries(mode_value: PythonObject, context: PythonObject) raises -> Py
     return entries
 
 
-def decomp_input(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+def decomp_input(source: PythonObject, name: String, context: PythonObject,
+                 defer_finite: Bool = False) raises -> PythonObject:
     """`_M.from_input`: a SciPy sparse X densified (exact), then a nonempty
     2-D input cast once to C-order float32 (the input itself when it is one),
-    non-finite values refused, in `_buffer.as_f32_c`'s and `_M`'s words."""
+    non-finite values refused, in `_buffer.as_f32_c`'s and `_M`'s words.
+    `defer_finite` (randomized_svd under RSVD_FAST_DEVSCAN, restored
+    2026-11-09): a borrowed input is not scanned here; the caller's native
+    call tests its device copy."""
     var value = source
     var format = host_sparse_format(source)
     if format.byte_length() > 0:
@@ -175,7 +181,7 @@ def decomp_input(source: PythonObject, name: String, context: PythonObject) rais
     if kind != "b" and kind != "i" and kind != "u" and kind != "f":
         raise Error("TypeError: mojolearn: " + name + " has a non-numeric dtype")
     try:
-        return admit_x(view, 2, name, context, admitted=True)
+        return admit_x(view, 2, name, context, admitted=True, defer_finite=defer_finite)
     except error:
         if String(error) == "Input " + name + " contains NaN or infinity":
             raise Error(name + ": input must be finite; NaN/inf are unsupported")
@@ -284,10 +290,14 @@ struct DecompKit(Movable):
     # compile-time constants (p3 rank 414: 3 to 6 binding calls per call).
     var flag_names: List[String]
     var flag_words: List[Int]
+    # The binding's x_decomp_native_api_v1 kernel-call provider, connected on
+    # first use (`xd`), None until then.
+    var table: PythonObject
 
     def __init__(out self, entries: PythonObject, context: PythonObject) raises:
         self.entries = entries
         self.context = context
+        self.table = PythonObject(None)
         self.owner = PythonObject(None)
         self.flag_names = List[String]()
         self.flag_words = List[Int]()
@@ -370,6 +380,47 @@ struct DecompKit(Movable):
         self.input_owners.append(snapshot.owner)
         var index = self.add(snapshot.keep, rows, cols)
         self.matrices[index].host_address = snapshot.source.addr
+        return index
+
+    def xd(mut self) raises -> PythonObject:
+        """The binding's kernel-call provider (x_decomp/descriptor_schema.mojo),
+        connected once per kit through the module the bridge retained beside
+        the entries (`x_decomp_module`), as the manifold and linalg kits do."""
+        if self.table is None:
+            var snapshot = kit_connect(self.entries["x_decomp_module"], "x_decomp_native_api_v1", String(XD_ABI_NAME),
+                                       XD_OPERATION_COUNT, XD_MODE, XD_CAPABILITIES)
+            self.table = kit_provider(snapshot)
+        return self.table
+
+    def defers_finite(self) raises -> Bool:
+        """Whether this kit's binding tests an input on its upload (the
+        kernel-call op XD_DEV_UPLOAD_FINITE, compiled into every resident GPU
+        binding with the other XD_DEV_* ops): a door may then admit a
+        borrowed X with `defer_finite` and add it through `input_tested`."""
+        return self.resident and self.has("x_decomp_module")
+
+    def input_tested(mut self, snapshot: ArrayMetadata, rows: Int, cols: Int, est: String) raises -> Int:
+        """`input_snapshot` of an X the door admitted with `defer_finite`
+        (no host pass over a borrowed X; lane a8c-device-x-linear-prep-rfe):
+        the words go up now through the op XD_DEV_UPLOAD_FINITE, which
+        tests them on the device in the upload's own wait, and a NaN or an
+        infinity is refused with admit_x's wording. The upload is the one
+        the matrix's first device op would make (`device`); the matrix
+        still starts as a host matrix (`on_device` False), so every route
+        is the one `input_snapshot` gave and no bit moves. Only for a kit
+        where `defers_finite()` holds."""
+        var index = self.input_snapshot(snapshot, rows, cols)
+        var n = rows * cols
+        if n < 1:
+            return index
+        var handle = Int(py=py_call(self._entry(_DK_DEV_ALLOC, "x_decomp_dev_alloc"), n))
+        self.allocations.append(handle)
+        # Integration (integ/pre-0867-w5): lane a8c's named entry
+        # x_decomp_dev_upload_finite duplicated lane a8d's op; the one op serves both kits.
+        var word = kit_call(self.xd(), XD_DEV_UPLOAD_FINITE, [Int(py=self.address(index))], [handle, n], List[Float64](), True)
+        self.matrices[index].device = handle
+        self.matrices[index].on_device = False
+        admitted_finite_refuse(word, est)
         return index
 
     def resident_input(mut self, source: PythonObject, name: String, host: PythonObject, address: Int,

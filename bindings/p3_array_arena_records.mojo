@@ -28,13 +28,13 @@ rebuild on every call:
 Everything here runs with the GIL held; the records are native and never
 call back into Python on a hit.
 """
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.native_class_admission import _class_arm, _class_epoch, class_watch_ready
 from bindings.native_loaded_module import shared_dict_watcher, shared_dict_epoch, shared_dict_watch
 from bindings.cpython_table import cpython_table
 from bindings.native_model_records import records_live, records_open, records_slot_array_arena
+from core.shared_slot import SharedSlot
 
 
 # Admission kinds: one per distinct check, so one class can carry several.
@@ -110,10 +110,7 @@ struct P3NumpyClasses(Defaultable, Movable):
         self.dtypes = List[Int]()
 
 
-comptime P3_NUMPY_CLASSES = _Global[
-    StorageType=P3NumpyClasses, name="MojolearnP3ArrayArenaNumpyClassesV1",
-    init_fn=P3NumpyClasses.__init__,
-]
+comptime P3_NUMPY_CLASSES = SharedSlot[P3NumpyClasses, "MojolearnP3ArrayArenaNumpyClassesV2"]
 
 
 def _p3_numpy_fill(factory: PythonObject) raises:
@@ -191,10 +188,7 @@ struct P3DictRecords(Defaultable, Movable):
         self.epochs = Dict[Int, Int]()
 
 
-comptime P3_DICT_RECORDS = _Global[
-    StorageType=P3DictRecords, name="MojolearnP3ArrayArenaDictsV1",
-    init_fn=P3DictRecords.__init__,
-]
+comptime P3_DICT_RECORDS = SharedSlot[P3DictRecords, "MojolearnP3ArrayArenaDictsV2"]
 
 
 def p3_dict_admitted(kind: Int, fields: PythonObject) raises -> Bool:

@@ -20,6 +20,8 @@ from max.gpu.host import DeviceContext
 from core.device_zero import enqueue_fill
 from core.msel_device_x import msel_device_x_f32
 from glm.qn_resident import qn_check_loss_args, qn_fit_resident
+from glm.qn_infer import qn_scores_resident, qn_codes_resident
+from core.estimators_impl import qn_link_from_device
 
 
 def qn_fit_fold(
@@ -50,7 +52,7 @@ def qn_fit_fold(
 ) raises -> Int:
     """`qn_fit_host` over fold rows `index_id` of the resident base
     `base_id` (`base_rows` x `n_features`). `ctx` is
-    `msel_device_x_context()`. `status_ptr` receives two host words (finite,
+    `msel_fold_entry_context()`. `status_ptr` receives two host words (finite,
     range), both 0 when every gathered word is finite and every index in
     range; otherwise nothing is fitted (returns 0) and the door refuses.
     Returns num_iters."""
@@ -68,3 +70,76 @@ def qn_fit_fold(
     )
     _ = status^
     return iters
+
+
+#: `qn_infer_fold` modes: the scores (float32, `qn_decision_function`'s
+#: layout), the int64 class codes (`qn_predict_binary` / `_multiclass`), or
+#: the binary64 probabilities (`qn_proba`, optionally their log).
+comptime QN_FOLD_DECISION = 0
+comptime QN_FOLD_CODES = 1
+comptime QN_FOLD_PROBA = 2
+
+
+def qn_infer_fold(
+    ctx: DeviceContext,
+    base_id: Int,
+    base_rows: Int,
+    index_id: Int,
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_addr: Int,
+    n_rows: Int,
+    n_features: Int,
+    fit_intercept: Bool,
+    n_classes: Int,
+    mode: Int,
+    log_out: Bool,
+) raises -> Tuple[Int32, Int32]:
+    """LogisticRegression's decision_function / predict / predict_proba over
+    fold rows `index_id` of the resident base `base_id` (`base_rows` x
+    `n_features`), lane a8c-device-x-linear-prep-rfe: the rows are gathered
+    on the device straight into the decision's X buffer (no host gather, no
+    upload of X), the finite and range tests in the same pass, then the
+    same kernels as the host-address entries (glm/qn_infer.mojo). `ctx` is
+    `msel_fold_entry_context()`. `out_addr` is the host output (`mode`
+    QN_FOLD_DECISION: n_rows * n_targets float32; QN_FOLD_CODES: n_rows
+    int64; QN_FOLD_PROBA: n_rows * max(n_targets, 2) float64). Returns the
+    (finite, range) words, both 0 when the fold was finite and in range
+    (the door refuses otherwise; the output is then not read)."""
+    if mode != QN_FOLD_DECISION and mode != QN_FOLD_CODES and mode != QN_FOLD_PROBA:
+        raise Error("qn_infer_fold: mode must be decision (0), codes (1) or proba (2)")
+    if out_addr <= 0:
+        raise Error("qn_infer_fold: null output address")
+    var n_targets = n_classes if n_classes > 2 else 1
+    var x = ctx.enqueue_create_buffer[DType.float32](max(n_rows * n_features, 1))
+    var status = ctx.enqueue_create_buffer[DType.int32](2)
+    enqueue_fill[DType.int32](ctx, status, Int32(0))
+    msel_device_x_f32(ctx, base_id, base_rows, n_features, index_id, n_rows, x, status.unsafe_ptr(), 0)
+    var words = ctx.enqueue_create_host_buffer[DType.int32](2)
+    # the words come back under the mode's one synchronize below
+    ctx.enqueue_copy(dst_buf=words, src_buf=status)
+    if mode == QN_FOLD_CODES:
+        qn_codes_resident(ctx, x, coef_ptr, MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=out_addr),
+                          n_rows, n_features, fit_intercept, n_classes)
+        ctx.synchronize()
+    else:
+        var scores = ctx.enqueue_create_buffer[DType.float32](max(n_rows * n_targets, 1))
+        var w = qn_scores_resident(ctx, x, coef_ptr, scores, n_rows, n_features, fit_intercept, n_targets)
+        if mode == QN_FOLD_DECISION:
+            if n_rows > 0:
+                ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_addr),
+                                 src_buf=scores.create_sub_buffer[DType.float32](0, n_rows * n_targets))
+            ctx.synchronize()
+        else:
+            # qn_link_from_device synchronizes after its download (and
+            # returns before any work when there are no rows)
+            qn_link_from_device(ctx, scores, MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=out_addr),
+                                n_rows, n_targets, log_out)
+            ctx.synchronize()
+        _ = w^
+        _ = scores^
+    var finite = words.unsafe_ptr().unsafe_load(0)
+    var in_range = words.unsafe_ptr().unsafe_load(1)
+    _ = words^
+    _ = status^
+    _ = x^
+    return (finite, in_range)

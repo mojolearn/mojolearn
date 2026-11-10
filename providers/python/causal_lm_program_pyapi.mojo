@@ -5,6 +5,9 @@
 # No arithmetic; the GPU bindings (_mojolearn_transformer, _mojolearn_mamba)
 # register it as `causal_lm_program_read_v1`.
 from std.python import Python, PythonObject
+from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
+from std.reflection import reflect
+from bindings.py_type_registry import py_type_absent, py_type_attach
 from transformer.causal_lm_program import (
     CausalLMProgram, causal_program_open, causal_program_matches, causal_program_read,
 )
@@ -59,3 +62,20 @@ def causal_lm_program_read_py(owner: PythonObject, a: PythonObject, p: PythonObj
     for i in range(len(ret)):  # driver-loop: over result words (no data)
         out.append(ret[i])
     return Python.tuple(own, out)
+
+
+def causal_program_owner_type(mut module: PythonModuleBuilder) raises:
+    """Register `_CausalProgramOwner` on `module`. Mojo's Python type registry
+    is per interpreter, and the transformer and Mamba bindings both export the
+    decode program reader: the first module to load builds the type, every
+    later one attaches that same class (the bindings/native_identity_type.mojo
+    pattern). Module setup only, with the GIL held."""
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[CausalProgramOwner]()
+    except error:
+        if not py_type_absent(error, String(reflect[CausalProgramOwner].name())):
+            raise error
+        _ = module.add_type[CausalProgramOwner]("_CausalProgramOwner")
+        return
+    py_type_attach(module.module, "_CausalProgramOwner", existing)

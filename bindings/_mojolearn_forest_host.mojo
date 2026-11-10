@@ -62,7 +62,6 @@ so a handle is never released under a running prediction.
 `forest_host_groves_sabotage` reads back DEVIATION 2961's define.
 """
 from core.experiment_guards_trees import TREES_GUARDS_OK
-from std.ffi import _Global
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
@@ -106,25 +105,18 @@ from core.mojolearn_forest_host_impl import (
     forest_host_gbdt_sigmoid_pair_into,
     forest_host_vote_into,
 )
+from core.shared_slot import SharedSlot
 
 
 comptime FAMILY_RF = 0
 comptime FAMILY_ET = 1
 
 # The host grove registries of THIS binding, named apart from the rf and
-# trees host families' ("MojoRFResidentForestHost",
-# "MojoETResidentForestHost" in bindings/forest_host_groves_binding.mojo),
+# trees host families' ("MojolearnRFResidentForestHostV1",
+# "MojolearnETResidentForestHostV1" in bindings/forest_host_groves_binding.mojo),
 # so two host bindings loaded into one process never share a handle space.
-comptime RF_GROVES = _Global[
-    StorageType=HostGroveRegistry,
-    name="MojoForestHostRFGroves",
-    init_fn=HostGroveRegistry.__init__,
-]
-comptime ET_GROVES = _Global[
-    StorageType=HostGroveRegistry,
-    name="MojoForestHostETGroves",
-    init_fn=HostGroveRegistry.__init__,
-]
+comptime RF_GROVES = SharedSlot[HostGroveRegistry, "MojolearnForestHostRFGrovesV1"]
+comptime ET_GROVES = SharedSlot[HostGroveRegistry, "MojolearnForestHostETGrovesV1"]
 #: Rows per call, so `n_rows * n_cols` stays far from any Int edge.
 comptime FOREST_HOST_MAX_ROWS = 1073741824
 

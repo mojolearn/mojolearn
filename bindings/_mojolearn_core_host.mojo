@@ -86,6 +86,7 @@ from bindings.msel_host import (
     msel_free_binding,
     msel_live_binding,
     msel_take_rows_binding,
+    msel_free_bytes_binding,
     msel_scatter_rows_binding,
     msel_proba_column_binding,
     msel_rebase_offsets_i32_binding,
@@ -94,7 +95,6 @@ from bindings.msel_host import (
 )
 from std.os import abort
 from bindings.native_loaded_module import native_loaded_module
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call as _balanced_call
 from std.python._cpython import GILReleased
@@ -205,6 +205,7 @@ from core.core_host_impl import (
     rbc_knn_search_host,
     transpose_to_f32,
 )
+from core.shared_slot import SharedSlot
 
 
 #: Reported by `core_host_sabotage()`. The helpers move bytes and fold
@@ -222,10 +223,7 @@ struct _CoreHostIntType(Defaultable, Movable):
         self.address = 0
 
 
-comptime _CORE_HOST_INT_TYPE = _Global[
-    StorageType=_CoreHostIntType, name="MojolearnCoreHostIntTypeV1",
-    init_fn=_CoreHostIntType.__init__,
-]
+comptime _CORE_HOST_INT_TYPE = SharedSlot[_CoreHostIntType, "MojolearnCoreHostIntTypeV2"]
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -1140,6 +1138,7 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[msel_free_binding]("msel_free")
         module.def_function[msel_live_binding]("msel_live")
         module.def_function[msel_take_rows_binding]("msel_take_rows")
+        module.def_function[msel_free_bytes_binding]("msel_free_bytes")
         module.def_function[msel_scatter_rows_binding]("msel_scatter_rows")
         module.def_function[msel_proba_column_binding]("msel_proba_column")
         module.def_function[msel_rebase_offsets_i32_binding]("msel_rebase_offsets_i32")

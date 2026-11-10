@@ -225,6 +225,7 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[dev_free_py]("x_decomp_dev_free")
         m.def_function[dev_live_py]("x_decomp_dev_live")
         m.def_function[dev_upload_py]("x_decomp_dev_upload")
+        # TOMBSTONE: x_decomp_dev_upload_finite (lane a8c duplicate of op XD_DEV_UPLOAD_FINITE) folded into the op 2026-11-09 at integration; never reached main (lane/a8c-device-x-linear-prep-rfe@2141a3451b).
         m.def_function[dev_download_py]("x_decomp_dev_download")
         m.def_function[dev_ew_py]("x_decomp_dev_ew")
         m.def_function[dev_gemm_py]("x_decomp_dev_gemm")

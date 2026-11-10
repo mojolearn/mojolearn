@@ -5,6 +5,9 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_setitem, py_type, py_contains
+from bindings.cpython_borrowed import borrowed_type_word as p3_type_word, borrowed_item as p3_item
+from bindings.cpython_table import cpython_table
+from std.python._cpython import PyObjectPtr
 from std.memory import memcpy
 from std.time import perf_counter_ns
 from sequence.exec_trait import Exec
@@ -164,43 +167,137 @@ def array_input(a: PythonObject, what: String) raises -> Tuple[CastIn, ShapeN]:
     return (src, sh)
 
 
+@fieldwise_init
+struct _SequenceWords(ImplicitlyCopyable, Movable):
+    """The exact builtin class words a list input is read against."""
+    var list_word: Int
+    var tuple_word: Int
+    var int_word: Int
+    var float_word: Int
+    var bool_word: Int
+
+
+def _sequence_words() raises -> _SequenceWords:
+    var b = native_loaded_module("builtins")
+    return _SequenceWords(Int(b.list._obj_ptr), Int(b.tuple._obj_ptr), Int(b.int._obj_ptr),
+                          Int(b.float._obj_ptr), Int(b.bool._obj_ptr))
+
+
+def _leaf_f64(raw: PyObjectPtr, words: _SequenceWords) raises -> Float64:
+    """One leaf as float64: an exact int, float or bool by its C slot
+    (PyFloat_AsDouble), any other admitted scalar as before."""
+    var word = p3_type_word(raw)
+    if word == words.float_word or word == words.int_word or word == words.bool_word:
+        var v = cpython_table()[].PyFloat_AsDouble(raw)
+        if v == -1.0:
+            if cpython_table()[].PyErr_Occurred():
+                ref cpy = Python().cpython()
+                raise cpy.unsafe_get_error()
+        return v
+    if word == words.list_word or word == words.tuple_word:
+        raise Error("ValueError: program input sequences must be rectangular")
+    var a = PythonObject(from_borrowed=raw)
+    if not program_numeric_scalar(a):
+        raise Error("TypeError: program inputs require native numeric scalars without conversion hooks")
+    return Float64(py=a)
+
+
+def _leaf_i64(raw: PyObjectPtr, words: _SequenceWords) raises -> Int64:
+    """One leaf as an int64 id: an exact int by its C slot
+    (PyLong_AsLongLong), any other admitted integer scalar as before."""
+    var word = p3_type_word(raw)
+    if word == words.int_word:
+        var v = cpython_table()[].PyLong_AsLongLong(raw)
+        if v == -1:
+            if cpython_table()[].PyErr_Occurred():
+                ref cpy = Python().cpython()
+                raise cpy.unsafe_get_error()
+        return v
+    if word == words.list_word or word == words.tuple_word:
+        raise Error("ValueError: program input sequences must be rectangular")
+    var a = PythonObject(from_borrowed=raw)
+    if not program_numeric_scalar(a):
+        raise Error("TypeError: program inputs require native numeric scalars without conversion hooks")
+    if not is_integer_input(a):
+        raise Error("TypeError: program ids must be integers")
+    return Int64(py=a)
+
+
+def _leaf_into(raw: PyObjectPtr, slot: Int, integer: Bool, mut values: List[Float64], mut ids: List[Int64],
+               words: _SequenceWords) raises:
+    """One leaf into its slot of the typed buffer."""
+    if integer:
+        ids[slot] = _leaf_i64(raw, words)
+    else:
+        values[slot] = _leaf_f64(raw, words)
+
+
+def _sequence_fill(c: PythonObject, level: Int, dims: List[Int], integer: Bool, mut pos: Int,
+                   mut values: List[Float64], mut ids: List[Int64], words: _SequenceWords) raises:
+    """Fill the leaves under the container `c` at `level`, in C order, into
+    their slots from `pos`."""
+    var word = p3_type_word(c._obj_ptr)
+    if word != words.list_word and word != words.tuple_word:
+        raise Error("ValueError: program input sequences must be rectangular")
+    var is_tuple = word == words.tuple_word
+    var n = len(c)
+    if n != dims[level]:
+        raise Error("ValueError: program input sequences must be rectangular")
+    # The user's Python list input is read on the host once (Python objects
+    # never reach a device, and a kernel file cannot read them): one borrowed
+    # C read per nested container, and one borrowed C read and one C
+    # conversion per leaf, straight into the typed buffer. Main's recorded
+    # input-step debt (tools/hooks/compute_in_shells_baseline.txt).
+    var inner = level + 1 < len(dims)
+    for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
+        if inner:
+            _sequence_fill(PythonObject(from_borrowed=p3_item(c, k, is_tuple)), level + 1, dims, integer, pos,
+                           values, ids, words)
+        else:
+            _leaf_into(p3_item(c, k, is_tuple), pos + k, integer, values, ids, words)
+    if not inner:
+        pos += n
+    _ = c  # keep the container alive through the borrowed reads above
+
+
 def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
                      mut values: List[Float64], mut ids: List[Int64], integer: Bool, mut leaf_depth: Int) raises:
-    var b = native_loaded_module("builtins")
-    _sequence_values(a, depth, dims, values, ids, integer, leaf_depth, b.list, b.tuple)
-
-
-def _sequence_values(a: PythonObject, depth: Int, mut dims: List[Int],
-                     mut values: List[Float64], mut ids: List[Int64], integer: Bool, mut leaf_depth: Int,
-                     list_type: PythonObject, tuple_type: PythonObject) raises:
-    # The value already passed the exact-type admission walk
-    # (program_admit_value: lists and tuples are admitted only as their exact
-    # builtin types), so a type identity compare decides the container case
-    # without two isinstance calls and two module reads per element.
-    var cls = py_type(a)
-    if cls is list_type or cls is tuple_type:
-        var n = len(a)
-        if depth >= 8 or n == 0:
+    """A nested list / tuple of Python scalars (or one scalar) as ONE typed
+    flat buffer: the shape is read down the first element of each level, the
+    float64 or int64 output is sized once (uninitialised), and every leaf is
+    read borrowed from the exact containers' C storage and converted by its C
+    slot straight into its slot (lane p2-labels-lists-arrays; the former walk
+    recursed once per element through a boxed subscript and grew its list by
+    append). Serial by nature: each read is a CPython C call made under the
+    GIL; the data then moves as one buffer."""
+    if depth != 0 or len(dims) != 0:
+        raise Error("ValueError: program input sequences are read from the top level")
+    var words = _sequence_words()
+    var total = 1
+    var probe = a
+    while True:  # driver-loop: down the first element of each level (the input's rank, at most eight)
+        var word = p3_type_word(probe._obj_ptr)
+        if word != words.list_word and word != words.tuple_word:
+            break
+        var n = len(probe)
+        if len(dims) >= 8 or n == 0:
             raise Error("ValueError: program input sequences must be nonempty and have rank at most eight")
-        if depth == len(dims):
-            dims.append(n)
-        elif dims[depth] != n:
-            raise Error("ValueError: program input sequences must be rectangular")
-        for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
-            _sequence_values(a[k], depth + 1, dims, values, ids, integer, leaf_depth, list_type, tuple_type)
+        dims.append(n)
+        total *= n
+        probe = PythonObject(from_borrowed=p3_item(probe, 0, word == words.tuple_word))
+    leaf_depth = len(dims)
+    if integer:
+        ids = List[Int64](unsafe_uninit_length=total)
     else:
-        if not program_numeric_scalar(a):
-            raise Error("TypeError: program inputs require native numeric scalars without conversion hooks")
-        if leaf_depth < 0:
-            leaf_depth = depth
-        if depth != len(dims) or depth != leaf_depth:
-            raise Error("ValueError: program input sequences must be rectangular")
+        values = List[Float64](unsafe_uninit_length=total)
+    if len(dims) == 0:
         if integer:
-            if not is_integer_input(a):
-                raise Error("TypeError: program ids must be integers")
-            ids.append(Int64(py=a))
+            ids[0] = _leaf_i64(a._obj_ptr, words)
         else:
-            values.append(Float64(py=a))
+            values[0] = _leaf_f64(a._obj_ptr, words)
+        return
+    var pos = 0
+    _sequence_fill(a, 0, dims, integer, pos, values, ids, words)
 
 
 def program_input(value: PythonObject, integer: Bool) raises -> ProgramInput:

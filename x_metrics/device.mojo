@@ -4,7 +4,6 @@
 program is one launch of one thread per unit on the same stream (so stage s
 sees every write of stage s-1), and the arena comes back once."""
 from std.gpu import block_idx, block_dim, thread_idx
-from std.ffi import _Global
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.memory import bitcast
@@ -16,6 +15,7 @@ from x_metrics.plan import Plan, plan_program, is_user_op, OP_SORT_MERGE
 from x_metrics.par import sort_merge_path_unit, merge_path_chunks
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.device_store import DeviceStore
+from core.shared_slot import SharedSlot
 
 comptime BLOCK = 128
 
@@ -31,8 +31,8 @@ struct _MetricsContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojolearnXMetricsContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXMetricsContextFastV2"
-comptime X_METRICS_CONTEXT = _Global[StorageType=_MetricsContext, name=_CTX_NAME, init_fn=_MetricsContext.__init__]
+comptime _CTX_NAME = "MojolearnXMetricsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXMetricsContextFastV3"
+comptime X_METRICS_CONTEXT = SharedSlot[_MetricsContext, _CTX_NAME]
 
 
 def metrics_ctx() raises -> DeviceContext:
@@ -45,8 +45,8 @@ def metrics_ctx() raises -> DeviceContext:
 #: The binding's resident input store (core/device_store.mojo; lane
 #: py-shared): `x_metrics_dev_put` / `_free` / `_live`, one per tier like
 #: the context whose buffers it holds.
-comptime _STORE_NAME = "MojoXMetricsStoreIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXMetricsStoreFast"
-comptime X_METRICS_STORE = _Global[StorageType=DeviceStore, name=_STORE_NAME, init_fn=DeviceStore.__init__]
+comptime _STORE_NAME = "MojolearnXMetricsStoreIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXMetricsStoreFastV1"
+comptime X_METRICS_STORE = SharedSlot[DeviceStore, _STORE_NAME]
 
 
 def run_program_device_ranges(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int,

@@ -31,7 +31,7 @@ from bindings.spectral_umap_routes import (
 )
 from bindings.cfb_dbscan import cfb_borrow_copy
 from bindings.cfb_sparse_read import cfb_sparse_triples
-from bindings.host_sparse_native import host_sparse_format
+from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from bindings.native_loaded_module import native_loaded_module
 from bindings.family_raw_attr import family_raw_get, family_raw_get_or, family_raw_has
 from bindings.classical_attributes import classical_connect_numpy
@@ -101,15 +101,30 @@ def _as_i32(source: PythonObject, name: String, context: PythonObject) raises ->
     return admit_typed(source, "<i4", 1, name, context).keep
 
 
-def _tocoo(obj: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`getattr(obj, "tocoo", None)` when it is callable, else None."""
-    var b = _builtins()
-    if py_type(obj) is context["array_class"] or py_type(obj) is py_get(context, "ndarray"):
-        return PythonObject(None)
-    var tocoo = py_call(b.getattr, obj, PythonObject("tocoo"), PythonObject(None))
-    if tocoo is None or not Bool(py=family_call(b.callable, tocoo)):
-        return PythonObject(None)
-    return tocoo
+# TOMBSTONE: P1_SPECTRAL_TOCOO (removed: the caller's own tocoo() / toarray() inside spectral fit and predict) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+# Restore: experiments/removed/P1_SPECTRAL_TOCOO.patch.
+# P1 (audit A #4): _tocoo removed. It looked up and called the caller's
+# own `tocoo()` (SciPy's Python conversion, or any object's method) inside
+# fit. A sparse input is now an exact SciPy container read natively from its
+# stored buffers (_is_sparse, _sparse_triples, _densified); any other object
+# takes the dense admission, which refuses what it cannot read.
+
+
+def _is_sparse(obj: PythonObject) raises -> Bool:
+    """Whether `obj` is an exact SciPy sparse container of any format (a
+    type identity check; no attribute of the object is read)."""
+    return host_sparse_format(obj).byte_length() > 0
+
+
+def _densified(source: PythonObject, context: PythonObject) raises -> PythonObject:
+    """An exact SciPy container whose stored coordinates were not taken
+    (BSR, DIA, DOK, LIL, or a COO/CSR/CSC whose storage was not read)
+    densified natively to float32 from its stored buffers, duplicates
+    summed (`host_sparse_dense`); any other input unchanged."""
+    var format = host_sparse_format(source)
+    if format.byte_length() == 0:
+        return source
+    return host_sparse_dense(source, format, context)
 
 
 struct _Coo(Movable):
@@ -138,36 +153,31 @@ def _coo_of_triples(rows: PythonObject, cols: PythonObject, vals: PythonObject, 
 
 
 def _sparse_triples(source: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`(row, col, data, shape)` of a sparse input as its `tocoo()` gives
-    them: an exact SciPy COO/CSR/CSC read from its stored buffers
-    (bindings/cfb_sparse_read.mojo), any other sparse input through its
-    own `tocoo()`; None for a dense input."""
-    var triples = cfb_sparse_triples(source, context)
-    if triples is not None:
-        return triples
-    var tocoo = _tocoo(source, context)
-    if tocoo is None:
-        return PythonObject(None)
-    var coo = family_call(tocoo)
-    return Python.tuple(coo.row, coo.col, coo.data, family_call(_builtins().tuple, coo.shape))
+    """`(row, col, data, shape)` of an exact SciPy COO/CSR/CSC input read
+    from its stored buffers (bindings/cfb_sparse_read.mojo); None for any
+    other input (the caller densifies another SciPy format natively with
+    `_densified`). No method of the input is called."""
+    return cfb_sparse_triples(source, context)
 
 
 def _coo_triples(source: PythonObject, who: String, base: PythonObject, context: PythonObject) raises -> _Coo:
-    """`_coo_triples(A, who)`: a sparse input's `tocoo()` triples (read
-    natively for an exact SciPy COO/CSR/CSC), a dense one through the base
+    """`_coo_triples(A, who)`: an exact SciPy COO/CSR/CSC input's stored
+    triples (read natively), another SciPy format densified natively, a
+    dense one through the base
     binding's float64 nonzero scan (exact zeros dropped, as
     `sp.coo_matrix(dense)` drops them)."""
     var triples = _sparse_triples(source, context)
     if triples is not None:
         return _coo_of_triples(triples[0], triples[1], triples[2], triples[3], who, context)
-    var shape = _shape_of(source)
+    var dense_source = _densified(source, context)
+    var shape = _shape_of(dense_source)
     if not _square(shape):
         raise Error("mojolearn " + who + ": with affinity='precomputed', X "
-                    + "must be a square affinity matrix or a sparse matrix with "
-                    + "`tocoo()`, got shape " + family_repr(shape))
+                    + "must be a square affinity matrix or a SciPy sparse matrix, "
+                    + "got shape " + family_repr(shape))
     # The metadata step of the one admission path (rank and emptiness
     # refusals), then the float64 widen of the same view (family_view deleted).
-    var snapshot = admit_family_input(source, 2, "X", context)
+    var snapshot = admit_family_input(dense_source, 2, "X", context)
     var dense = admit_family_f64(snapshot.keep, "X", context)
     var n = _int(shape[0])
     var size = Int(py=dense.size)
@@ -237,25 +247,20 @@ def _dense_coo(m: PythonObject, who: String, base: PythonObject, context: Python
 
 def _x_decomp_input(source: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_M.from_input(X)`: a scipy.sparse matrix densified, `as_f32_c`, and
-    the finiteness refusal. An exact nonempty SciPy container is densified
-    natively from its stored buffers straight to float32 (duplicates summed,
-    as `toarray()` sums them; `host_sparse_dense`); an empty one, or another
-    sparse-like input, through its own `toarray()` (the empty refusal names
-    its shape)."""
-    var b = _builtins()
-    var x = source
-    var exact = host_sparse_format(x).byte_length() > 0
-    if exact:
-        var shape = x.shape
-        exact = Int(py=shape[0]) > 0 and Int(py=shape[1]) > 0
-    if (not exact and Bool(py=family_call(b.hasattr, x, PythonObject("toarray")))
-            and Bool(py=family_call(b.hasattr, x, PythonObject("nnz")))
-            and Bool(py=family_call(b.hasattr, x, PythonObject("format")))):
-        x = family_call(py_call(b.getattr, x, PythonObject("toarray")))
-    var a = admit_family(x, 2, "X", context, dense=True).array
-    if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a))), Int(py=a.size)):
-        raise Error("X: input must be finite; NaN/inf are unsupported")
-    _ = a  # keep the Python object alive through the native calls above
+    the finiteness refusal. An exact SciPy container is densified natively
+    from its stored buffers straight to float32 (duplicates summed, as
+    `toarray()` sums them; `host_sparse_dense`, which refuses an empty
+    matrix). No method of the input is called (P1, audit A #4: the
+    `toarray()` call on other sparse-like inputs is removed; such an object
+    takes the dense admission)."""
+    var x = _densified(source, context)
+    # TOMBSTONE: cfb_spectral.mojo second host scans after admission (four sites) deleted 2026-11-09 by lane a8d-device-x-decomp-manifold; code recoverable at 0ce88411d3.
+    # Restore: experiments/removed/A8D_DECOMP_MANIFOLD_HOST_FINITE.patch.
+    # Lane a8d: the finiteness refusal is the admission's own (tested in the
+    # cast pass, or one parallel scan of a borrowed X, or in a fold's
+    # gather), not a second scan after it; the same sentence.
+    var a = admit_family(x, 2, "X", context, dense=True, finite=True,
+                         refusal="X: input must be finite; NaN/inf are unsupported").array
     return a
 
 
@@ -379,7 +384,7 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
             raise Error("mojolearn SpectralEmbedding: the precomputed graph's row, col and data differ in length")
         nnz = Int(py=vals.shape[0])
     else:
-        dense = admit_family(source, 2, "X", context).array
+        dense = admit_family(_densified(source, context), 2, "X", context).array
         n = Int(py=dense.shape[0])
         if Int(py=dense.shape[1]) != n:
             raise Error("mojolearn SpectralEmbedding: the precomputed distance matrix must be square")
@@ -630,12 +635,12 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     var coo_source = source
     if affinity == "precomputed":
         py_setitem(fields, "affinity_matrix_", source)
-        if dense_fn is not None and _tocoo(source, context) is None:
+        if dense_fn is not None and not _is_sparse(source):
             var shape = _shape_of(source)
             if not _square(shape):
                 raise Error("mojolearn SpectralClustering: with affinity='precomputed', X "
-                            + "must be a square affinity matrix or a sparse matrix with "
-                            + "`tocoo()`, got shape " + family_repr(shape))
+                            + "must be a square affinity matrix or a SciPy sparse matrix, "
+                            + "got shape " + family_repr(shape))
             dense = admit_family(source, 2, "X", context).array
     elif affinity == "rbf":
         var x = _x_decomp_input(source, context)
@@ -732,13 +737,12 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
             _ = coo.cols
             _ = coo.vals
     else:
-        var x = admit_family(source, 2, "X", context).array
+        # Lane a8d: the admission's finite test (see `_x_decomp_input`).
+        var x = admit_family(source, 2, "X", context, finite=True,
+                             refusal="mojolearn SpectralClustering: X contains NaN or "
+                             + "infinity (the implemented path refuses it by name before any "
+                             + "recorded stage)").array
         py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
-        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
-            raise Error("mojolearn SpectralClustering: X contains NaN or "
-                        + "infinity (the implemented path refuses it by name before any "
-                        + "recorded stage)")
-        _ = x  # keep the Python object alive through the native calls above
         n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
         _sc_check_shape(fields, n, k)
@@ -877,10 +881,9 @@ def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject
     var n_features = 0
     var code = 0
     if String(py=affinity) == "precomputed":
-        var a = source
-        var toarray = py_call(b.getattr, source, PythonObject("toarray"), PythonObject(None))
-        if toarray is not None and Bool(py=family_call(b.callable, toarray)):
-            a = family_call(toarray)
+        # P1 (audit A #4): an exact SciPy container is densified natively;
+        # the caller's `toarray()` is never called.
+        var a = _densified(source, context)
         var shape = _shape_of(a)
         if len(shape) != 2 or not Bool(py=family_call(b.bool, family_call(native_loaded_module("operator").eq,
                                                                            shape[1], PythonObject(n_train)))):
@@ -888,13 +891,12 @@ def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject
                         + "'precomputed', X must be the affinity between the new rows "
                         + "and the " + String(n_train) + " training rows, shape (n_new, " + String(n_train) + "); "
                         + "got shape " + family_repr(shape))
-        q = admit_family(a, 2, "X", context).array
+        # Lane a8d: the admission's finite test (see `_x_decomp_input`).
+        q = admit_family(a, 2, "X", context, finite=True,
+                         refusal="mojolearn SpectralClustering.predict: the affinity has a "
+                         + "non-finite entry; refused by name").array
         if Int(py=q.shape[0]) < 1:
             raise Error("mojolearn SpectralClustering.predict: X has no rows; refused by name")
-        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(q))), Int(py=q.size)):
-            raise Error("mojolearn SpectralClustering.predict: the affinity has a "
-                        + "non-finite entry; refused by name")
-        _ = q  # keep the Python object alive through the native calls above
         if family_min(q) < 0:
             raise Error("mojolearn SpectralClustering.predict: the affinity has a "
                         + "negative entry; refused by name, as the fit refuses one")
@@ -1013,12 +1015,12 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
     if affinity == "precomputed_nearest_neighbors":
         dense = _knn_affinity(fields, source, False, args[2], context)
         from_matrix = True
-    if affinity == "precomputed" and dense_fn is not None and _tocoo(source, context) is None:
+    if affinity == "precomputed" and dense_fn is not None and not _is_sparse(source):
         var shape = _shape_of(source)
         if not _square(shape):
             raise Error("mojolearn SpectralEmbedding: with affinity='precomputed', X "
-                        + "must be a square affinity matrix or a sparse matrix with "
-                        + "`tocoo()`, got shape " + family_repr(shape))
+                        + "must be a square affinity matrix or a SciPy sparse matrix, "
+                        + "got shape " + family_repr(shape))
         dense = admit_family(source, 2, "X", context).array
     if affinity == "rbf":
         var x = _x_decomp_input(source, context)
@@ -1090,11 +1092,10 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
         _ = coo.cols
         _ = coo.vals
     else:
-        var x = admit_family(source, 2, "X", context).array
+        # Lane a8d: the admission's finite test (see `_x_decomp_input`).
+        var x = admit_family(source, 2, "X", context, finite=True,
+                             refusal="mojolearn SpectralEmbedding: X contains NaN or infinity").array
         py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
-        if not host_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
-            raise Error("mojolearn SpectralEmbedding: X contains NaN or infinity")
-        _ = x  # keep the Python object alive through the native calls above
         var n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
         _se_check_shape(fields, n, n_lanczos)

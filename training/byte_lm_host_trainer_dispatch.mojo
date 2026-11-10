@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # CPU implementation of the same ByteLM descriptor table as GPU trainers.
 # Only the session/host execution owner differs; metadata transport is shared.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from std.memory import memcpy, memcmp
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
@@ -11,6 +10,7 @@ from training.byte_lm_host_io import all_finite_f32_scan
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_session import ByteHostSession, host_optimizer, host_state_validate, host_state_finite, host_tokens, host_loss_bits, host_copy_f32, host_copy_i32, host_scatter
 from training.byte_lm_host_execution import byte_host_train_native, byte_host_loss_native, byte_host_logits_native
+from core.shared_slot import SharedSlot
 
 comptime BYTE_HOST_TRAINER_ABI = "mojolearn.training.byte_lm.v1"
 # Operation 12: the multi-step entry (the host column of the device table's
@@ -126,7 +126,7 @@ def host_trainer_run(a: List[Int], cfg: ByteConfig, opt: List[Float64], complete
                 named.append(a[i])
             host_scatter(a[8], named, cfg)
     else:
-        loss = host_loss_bits(byte_host_loss_native([Int(p.unsafe_ptr()), a[4]], cfg))
+        loss = host_loss_bits(byte_host_loss_native([Int(p.unsafe_ptr()), a[4]], cfg, 1, 0))
         host_copy_f32(a[5], p)
         host_copy_f32(a[6], m)
         host_copy_f32(a[7], v)
@@ -271,5 +271,4 @@ struct ByteHostTrainerTable(Defaultable, Movable):
         self.entries.append(host_trainer_native_v1)
 
 
-comptime BYTE_HOST_TRAINER_TABLE = _Global[StorageType=ByteHostTrainerTable,
-    name=("MojolearnByteHostTrainerTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnByteHostTrainerTableFastV2"), init_fn=ByteHostTrainerTable.__init__]
+comptime BYTE_HOST_TRAINER_TABLE = SharedSlot[ByteHostTrainerTable, ("MojolearnByteHostTrainerTableIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnByteHostTrainerTableFastV3")]

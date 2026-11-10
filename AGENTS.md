@@ -120,7 +120,7 @@ retired with a reason within two weeks. Applies to hardware, firmware and softwa
 
 - We fix everything we can before a release. We do not release while there is more work to incorporate: known
   regressions, planned refactors, owed fixes and owed deletions all go in first. No piecemeal releases.
-- Measure before the release: time the candidate build on NVIDIA and AMD against the last release and the paper
+- Measure before the release: time the measurement build on NVIDIA and AMD against the last release and the paper
   baseline, fix every regression found, and measure again. Only a candidate with no open regression is frozen.
 - Order: all code in, one compile, measure, fix, measure again until clean, freeze, the one verification, publish.
 - A "measurement build" (`tools/release.py candidate`) is wheels built from a commit to measure them. It is NOT a
@@ -274,10 +274,9 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   may run in Python. Native operations must not call back into tag handling. Audit it separately from runtime
   violations. No other metadata protocol is exempt.
 - **Python fallbacks for a Mojo or Modular bug are a frozen list (Andrew, 2026-11-09).**
-  `python/mojolearn/_runtime_fallbacks.py` is the COMPLETE list of authorized fallbacks (one entry today:
-  `len(Array)` on certain native owners). Nothing is added without Andrew's explicit word. An agent that believes
-  it has found a Mojo bug stops, writes the smallest reproducer and the ask for Modular, and reports; it does not
-  write Python. Each entry keeps its reproduction and upstream ask; a native fix removes the entry. A path that
+  `python/mojolearn/_runtime_fallbacks.py` is the COMPLETE list of authorized fallbacks (empty today).
+  Nothing is added without Andrew's explicit word. An agent that believes it has found a Mojo bug stops, writes
+  the smallest reproducer and the ask for Modular, and reports; it does not write Python. Each entry keeps its reproduction and upstream ask; a native fix removes the entry. A path that
   uses an entry is recorded in release evidence and is never called Python-free.
 - Python test and benchmark controllers, test data preparation and independent oracles are testing tools. Keep
   them distinct from product execution and honest about timing boundaries. Installing a Python package is not a

@@ -9,7 +9,6 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.memory import memcpy
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
@@ -135,6 +134,7 @@ from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_EIGH_SMALL.patch
 from x_decomp.rr_svd import RS_TPB
 from x_decomp.rr_svd_device import rs_norm_kernel, rs_round_kernel
+from x_decomp.svd_ops import svd_op_tall
 from x_decomp.lle_local import hessian_ncy
 from x_decomp.lle_device import (
     lle_apply_kernel,
@@ -159,11 +159,8 @@ from x_decomp.tsqr_device import (
 from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
 from x_decomp.tsqr_multi_gpu import ts_factor_dispatch, tsqr_plan_current
 from glm.impl.center_device import col_means_buf, col_sums_buf, col_sums_pair_buf
-from cholesky.checks.potrf import (
-    CHOL_ELEM_TPB, CHOL_NB_PINNED, add_jitter, chol_logdet, chol_nb_for, chol_workspace_floats, potrf_lower,
-)
-from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
-from core.identity_trace import IdentityTrace
+from cholesky.checks.potrf import CHOL_ELEM_TPB, add_jitter
+from cholesky.chol_ops import chol_op_factor, chol_op_logdet, chol_op_logdet_scratch_floats, chol_op_solve_lower
 from x_decomp.jacobi_par import (
     PJ_TPB,
     pj_identity_kernel,
@@ -175,6 +172,7 @@ from x_decomp.eigh_ops import eigh_op_dense, eigh_op_sym
 from core.step_gate import step_gate_open_word
 from x_decomp.eigh_tridiag_cells import TD_MIN_N
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_scale_rect, enqueue_es_unscale
+from core.shared_slot import SharedSlot
 
 
 #: rounds enqueued between two synchronize() calls
@@ -210,6 +208,20 @@ comptime XD_NO_FLAG = Int32(2147483647)
 # `-D MOJOLEARN_IDN_XD_SVD_GROUP_OFF` restores one readback per sweep.
 comptime IDN_XD_SVD_GROUP = IDN_XD_SWEEP and not is_defined["MOJOLEARN_IDN_XD_SVD_GROUP_OFF"]()
 comptime XD_SVD_GROUP = 4 if IDN_XD_SVD_GROUP else 1
+
+#: Lane m3-linalg-and-housekeeping (2026-11-09): -D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK
+#: routes `DevExec._svd_on` (PCA / TruncatedSVD / randomized_svd /
+#: linalg.svd through `x_decomp_svd` and `x_decomp_dev_svd`) through the
+#: executor op `svd_op_tall` (x_decomp/svd_ops.mojo: the same QR, the
+#: Jacobi's rounds as ONE gated block with the sweep test on the device, the
+#: descending order on the device, one status read) instead of the round
+#: launches below (one launch per round, a wait every XD_SVD_GROUP sweeps).
+#: Default off: today's round launches. Two SVD paths exist; the A/B on
+#: pca / tsvd / randomized-svd (owed row svd-tall-vs-rounds, B arm
+#: svd-one-block) decides which one is deleted. Bits: the op's module note
+#: says the words are the rounds' (the same pairs, fold and tree); s and v
+#: come out already in the descending order every caller sorts into.
+comptime XD_FAST_SVD_ONE_BLOCK = is_defined["MOJOLEARN_XD_FAST_SVD_ONE_BLOCK"]()
 # TOMBSTONE: MOJOLEARN_IDN_SVD_TALL_LEAN (noise) deleted 2026-10-11 by f4b8fa942; code recoverable at f4b8fa942^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVD_TALL_LEAN.patch
 
@@ -297,7 +309,7 @@ struct _XdContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime X_DECOMP_CONTEXT = _Global[StorageType=_XdContext, name="MojolearnXDecompContextIdenticalV2", init_fn=_XdContext.__init__]
+comptime X_DECOMP_CONTEXT = SharedSlot[_XdContext, "MojolearnXDecompContextIdenticalV3"]
 
 
 def xd_ctx() raises -> DeviceContext:
@@ -1672,7 +1684,7 @@ struct _XdStage(Defaultable, Movable):
         self.buf = Optional[HostBuffer[DType.float32]]()
 
 
-comptime X_DECOMP_STAGE = _Global[StorageType=_XdStage, name="MojoXDecompStageIdentical", init_fn=_XdStage.__init__]
+comptime X_DECOMP_STAGE = SharedSlot[_XdStage, "MojolearnXDecompStageIdenticalV1"]
 
 
 def _xd_staged(n: Int) -> Bool:
@@ -2725,33 +2737,47 @@ struct DevExec(Exec):
 
     @staticmethod
     def chol_inv(a: F32Ptr, li: F32Ptr, st: F32Ptr, n: Int) raises:
-        """`Exec.chol_inv` (lane apple-holes, MinCovDet's IDN_MCD_CHOL):
-        `potrf_lower` at +0.0 ridge, `chol_logdet`, L^{-1} by `trsm_lower`
-        against I. The resident kit's `DMcd.chol` (x_decomp/kit_device.mojo)
-        runs the same calls on its pooled matrices."""
+        """`Exec.chol_inv` (lane apple-holes, MinCovDet's IDN_MCD_CHOL): the
+        executor's Cholesky ops (cholesky/chol_ops.mojo) at +0.0 ridge: the
+        factor, log det and L^{-1} = `chol_op_solve_lower(L, I)` enqueued
+        read-free (each skipped on the device when the factor fails), then
+        ONE read of info and log det. The resident kit's `DMcd.chol`
+        (x_decomp/kit_device.mojo) runs the same ops on its pooled matrices.
+        Lane m3-linalg-and-housekeeping (2026-11-09): was `potrf_lower`'s
+        per-panel route (an info read per panel, a wait in `chol_logdet`);
+        the ops are its arithmetic at the pinned width (the same words)."""
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * n)
-        var nb = chol_nb_for(n, CHOL_NB_PINNED)
-        var ws = ctx.enqueue_create_buffer[DType.float32](max(chol_workspace_floats(n, nb), 1))
-        var trace = IdentityTrace()
+        var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
+        var dscr = ctx.enqueue_create_buffer[DType.float32](chol_op_logdet_scratch_floats(n))
+        var dld = ctx.enqueue_create_buffer[DType.float32](1)
+        var db = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var hst = ctx.enqueue_create_host_buffer[DType.int32](1)
+        var hld = ctx.enqueue_create_host_buffer[DType.float32](1)
+        enqueue_fill(ctx, dinfo, Int32(0))
+        enqueue_fill(ctx, dld, Float32(0.0))
         add_jitter(ctx, da, n, Float32(0.0), CHOL_ELEM_TPB)
-        var run = potrf_lower(ctx, da, ws, n, trace)
-        st.unsafe_store(0, Float32(run.info))
-        st.unsafe_store(1, Float32(0.0))
-        if run.info == 0:
-            var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
-            st.unsafe_store(1, chol_logdet(ctx, da, dwork, n, trace, CHOL_ELEM_TPB))
-            var db = ctx.enqueue_create_buffer[DType.float32](n * n)
-            ctx.enqueue_function[pj_identity_kernel](
-                db.unsafe_ptr(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
-            )
-            trsm_lower(ctx, da, db, n, n, trace, "mcd.linv", CHOL_SOLVE_TPB)
+        chol_op_factor(ctx, da, dinfo, n)
+        chol_op_logdet(ctx, da, dinfo, dscr, dld, n)
+        ctx.enqueue_function[pj_identity_kernel](
+            db.unsafe_ptr(), Int32(n), grid_dim=_blocks(n * n), block_dim=TPB
+        )
+        chol_op_solve_lower(ctx, da, db, dinfo, n, n)
+        ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dinfo)
+        ctx.enqueue_copy(dst_ptr=hld.unsafe_ptr(), src_buf=dld)
+        ctx.synchronize()
+        var info = Int(hst.unsafe_ptr().unsafe_load(0))
+        st.unsafe_store(0, Float32(info))
+        st.unsafe_store(1, hld.unsafe_ptr().unsafe_load(0) if info == 0 else Float32(0.0))
+        if info == 0:
             _down(ctx, db, li, n * n)
             ctx.synchronize()
-            _ = db^
-            _ = dwork^
-        ctx.synchronize()
-        _ = ws^
+        _ = db^
+        _ = dscr^
+        _ = dld^
+        _ = dinfo^
+        _ = hst^
+        _ = hld^
         _ = da^
         _ = ctx^
 
@@ -3157,6 +3183,9 @@ struct DevExec(Exec):
         QR): s (n) and v (n x n) out to host memory, every launch waited for.
         `svd_cells` and the resident entry (x_decomp/resident.mojo
         `dev_svd_py`, lane fam-decomp) both call it: one launch sequence."""
+        comptime if XD_FAST_SVD_ONE_BLOCK:
+            DevExec._svd_on_op(ctx, da, m, n, s, v)
+            return
         var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, n) * n * n)
         var r_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
         var rt = ctx.enqueue_create_buffer[DType.float32](n * n)
@@ -3238,6 +3267,41 @@ struct DevExec(Exec):
         _ = flags^
         _ = dfirst^
         _ = hfirst^
+
+    @staticmethod
+    def _svd_on_op(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, s: F32Ptr, v: F32Ptr
+    ) raises:
+        """`_svd_on` through the executor op `svd_op_tall` (the A/B arm of
+        -D MOJOLEARN_XD_FAST_SVD_ONE_BLOCK): s (n, descending) and v (n x n,
+        column a the right singular vector of s[a], the layout `_svd_on`
+        writes) out to host memory, one wait. The op's status word carries
+        both refusals of `_svd_on` (no convergence in X_DECOMP_SVD_SWEEPS
+        sweeps, a NaN value)."""
+        var gate = step_gate_open_word(ctx)
+        var ds = ctx.enqueue_create_buffer[DType.float32](n)
+        var dvt = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var status = ctx.enqueue_create_buffer[DType.int32](1)
+        var hstatus = ctx.enqueue_create_host_buffer[DType.int32](1)
+        svd_op_tall(ctx, gate, da, ds, dvt, status, m, n)
+        ctx.enqueue_function[pj_transpose_kernel](_p(dvt), _p(dv), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
+        _down(ctx, ds, s, n)
+        _down(ctx, dv, v, n * n)
+        ctx.enqueue_copy(dst_buf=hstatus, src_buf=status)
+        ctx.synchronize()
+        if Int(hstatus.unsafe_ptr().unsafe_load(0)) != 0:
+            raise Error(
+                "x_decomp svd: the one-sided Jacobi did not converge in " + String(X_DECOMP_SVD_SWEEPS)
+                + " sweeps at n_cols = " + String(n) + ", or a singular value is NaN (a device launch cut short, or a"
+                " NaN input). An unconverged decomposition is not returned as if it were one; see DEVIATION 590."
+            )
+        _ = gate^
+        _ = ds^
+        _ = dvt^
+        _ = dv^
+        _ = status^
+        _ = hstatus^
 
     @staticmethod
     def lasso_rows(

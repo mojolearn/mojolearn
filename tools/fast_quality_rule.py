@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The FAST quality rule (CLAUDE.md, Andrew 2026-10-04), shared by the FAST
+"""The FAST quality rule (AGENTS.md, Andrew 2026-10-04), shared by the FAST
 quality tools (eigh_w4_quality; mcd_g1_quality, mcd_ordered_quality and
 eigh_panel_df_pair went with their defines, 2026-11-08; softmax_g2_quality, 2026-11-09).
 

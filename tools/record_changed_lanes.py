@@ -30,7 +30,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
-#: the held lq boxes (CLAUDE.md: nv is the RunPod L40S, amd the DigitalOcean MI325X) and their record labels
+#: the held lq boxes (AGENTS.md "Boxes": nv is the RunPod L40S, amd the DigitalOcean AMD droplet, the MI300X by default) and their record labels
 BOXES = (("nv", "cuda", "nvidia-l40s-sm_89"), ("amd", "hip", "amd-mi325x-gfx942"))
 LQ = os.path.expanduser("~/mojolearn-evidence/lq/lq")
 

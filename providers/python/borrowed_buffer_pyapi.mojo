@@ -6,10 +6,10 @@
 # words on supported 64-bit little-endian targets (same as optimizer tensor_view).
 from std.python import Python, PythonObject
 from bindings.cpython_table import cpython_table
-from std.ffi import _Global
 from core.borrowed_buffer import BorrowedBufferLayout
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_type, py_get, py_fields, py_call, py_contains
+from core.shared_slot import SharedSlot
 
 
 struct NativeMmapExporterConnection(Defaultable, Movable):
@@ -19,8 +19,7 @@ struct NativeMmapExporterConnection(Defaultable, Movable):
         self.cls = PythonObject(None)
 
 
-comptime NATIVE_MMAP_EXPORTER = _Global[StorageType=NativeMmapExporterConnection,
-    name="MojoNativeMmapExporter", init_fn=NativeMmapExporterConnection.__init__]
+comptime NATIVE_MMAP_EXPORTER = SharedSlot[NativeMmapExporterConnection, "MojolearnNativeMmapExporterV1"]
 
 
 def connect_native_mmap_exporter(cls: PythonObject) raises:
@@ -47,8 +46,7 @@ struct NativeNdarrayExporter(Defaultable, Movable):
         self.cls = PythonObject(None)
 
 
-comptime NATIVE_NDARRAY_EXPORTER = _Global[StorageType=NativeNdarrayExporter,
-    name="MojolearnNativeNdarrayExporterV1", init_fn=NativeNdarrayExporter.__init__]
+comptime NATIVE_NDARRAY_EXPORTER = SharedSlot[NativeNdarrayExporter, "MojolearnNativeNdarrayExporterV2"]
 
 
 def admit_native_buffer_exporter(value: PythonObject, depth: Int = 0) raises:

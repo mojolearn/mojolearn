@@ -6,7 +6,6 @@
 # typed entries of x_decomp/resident.mojo that the `dev_*_py` doors of
 # providers/python/x_decomp_resident_pyapi.mojo call, with the same checks.
 # No numeric change: the same kernels, the same operands, the same order.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -14,16 +13,17 @@ from x_decomp.cells import F32Ptr
 from x_decomp.device import DevExec
 from x_decomp.resident import (
     pool_alloc, pool_free, dev_upload_run, dev_download_run, dev_ew_run, dev_gemm_run,
-    dev_colsum_run, dev_rowsum_run, dev_sqdist_run, dev_move_run,
+    dev_colsum_run, dev_rowsum_run, dev_sqdist_run, dev_move_run, dev_upload_finite_run,
 )
 from x_decomp.descriptor_ops import xd_address_op, xd_is_address_op, xd_f32, xd_float
 from x_decomp.descriptor_schema import (
     XD_ABI_NAME, XD_MODE, XD_CAPABILITIES, XD_CAP_HOST, XD_CAP_RESIDENT,
     XD_DEV_ALLOC, XD_DEV_FREE, XD_DEV_UPLOAD, XD_DEV_DOWNLOAD, XD_DEV_EW, XD_DEV_GEMM,
-    XD_DEV_COLSUM, XD_DEV_ROWSUM, XD_DEV_SQDIST, XD_DEV_MOVE, XD_DEV_ISO_GATHER_MIN,
+    XD_DEV_COLSUM, XD_DEV_ROWSUM, XD_DEV_SQDIST, XD_DEV_MOVE, XD_DEV_ISO_GATHER_MIN, XD_DEV_UPLOAD_FINITE,
     XD_CELL_ADD, XD_CELL_MIN, XD_MV_TAKE_ROWS, XD_MV_TAKE_COLS,
     xd_validate_call, xd_dim,
 )
+from core.shared_slot import SharedSlot
 
 
 def xd_iso_gather_min(d: Int, im: Int, sq: Int, q: Int, dc: Int, nn: Int, one: Int,
@@ -75,6 +75,8 @@ def xd_resident_op(op: Int, p: List[Int], floats: Int, a: List[Int]) raises -> I
         return 0
     if op == XD_DEV_UPLOAD:
         return dev_upload_run(p[0], xd_f32(a[0]), p[1])
+    if op == XD_DEV_UPLOAD_FINITE:
+        return dev_upload_finite_run(p[0], xd_f32(a[0]), p[1])
     if op == XD_DEV_DOWNLOAD:
         return dev_download_run(p[0], xd_f32(a[0]), p[1])
     if op == XD_DEV_EW:
@@ -136,6 +138,5 @@ struct XDecompDeviceAPI(Defaultable, Movable):
 # global is process-wide, so the name carries the image's numeric mode (as
 # x_neighbors/device_ops.mojo names its context): the identical and fast
 # images loaded together must each export their own dispatch function.
-comptime _X_DECOMP_DEVICE_API_NAME = "MojoXDecompDeviceAPIIdenticalv1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXDecompDeviceAPIFastv1"
-comptime X_DECOMP_DEVICE_API = _Global[StorageType=XDecompDeviceAPI,
-    name=_X_DECOMP_DEVICE_API_NAME, init_fn=XDecompDeviceAPI.__init__]
+comptime _X_DECOMP_DEVICE_API_NAME = "MojolearnXDecompDeviceAPIIdenticalv1V1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXDecompDeviceAPIFastv1V1"
+comptime X_DECOMP_DEVICE_API = SharedSlot[XDecompDeviceAPI, _X_DECOMP_DEVICE_API_NAME]

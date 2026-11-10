@@ -49,13 +49,16 @@ explicit ``--published-smoke <vendor>`` with a stated reason (recorded in the re
 its report (schema v1) is never published-<vendor> ledger evidence.
 """
 import argparse
+import atexit
 import glob
 import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -253,12 +256,20 @@ def pip_download_command(python, index_url, distribution, version, tags, dest):
     return cmd + ["%s==%s" % (distribution, version)]
 
 
+def scratch_dir(prefix):
+    """A temp dir removed when this process exits: throwaway venvs live here, never under OUT (the evidence folder
+    holds logs and records only; 2026-11-09, published-apple/adapter-smoke/venv held PyTorch)."""
+    path = Path(tempfile.mkdtemp(prefix=prefix))
+    atexit.register(shutil.rmtree, str(path), True)
+    return path
+
+
 def pip_python(python, out, log):
-    """An interpreter that has pip: PYTHON itself, else a venv of it under OUT (ensurepip, offline)."""
+    """An interpreter that has pip: PYTHON itself, else a throwaway venv of it (ensurepip, offline)."""
     probe = subprocess.run([python, "-m", "pip", "--version"], capture_output=True, text=True)
     if probe.returncode == 0:
         return python
-    venv = Path(out) / "pip-venv"
+    venv = scratch_dir("published-pip-venv-") / "venv"
     with Path(log).open("ab") as stream:
         code = subprocess.run([python, "-m", "venv", str(venv)], stdout=stream, stderr=subprocess.STDOUT).returncode
     require(code == 0, "no pip in %s and no venv could be made for it (%s)" % (python, log))
@@ -656,7 +667,7 @@ def run(args):
     candidates = {Path(w).name: sha256(w) for w in args.candidate_wheel}
     request = dict(vendor=args.vendor, version=args.version, candidates=candidates, controller_sha256=sha256(__file__))
     env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "PYTHONHOME")}
-    venv = out / "venv"
+    venv = scratch_dir("published-venv-") / "venv"
     python = str(venv / "bin/python")
     log = out / "install.log"
     with log.open("ab") as stream:
@@ -685,8 +696,8 @@ def run(args):
                  "--scope", "expanded", "--output", str(out / "correctness")],
                 stdout=stream, stderr=subprocess.STDOUT, env=env, timeout=args.timeout).returncode
         if args.vendor == "amd":
-            env["LD_LIBRARY_PATH"] = ":".join(glob.glob(str(out / "adapter-smoke/venv/lib/python*/site-packages/*/lib64"))
-                                              + ["/opt/rocm-7.2.3/lib", "/opt/rocm-6.4.0/lib"])
+            # the adapter smoke's venv is adapter_gate's scratch venv, made inside run (none exists yet to glob)
+            env["LD_LIBRARY_PATH"] = ":".join(["/opt/rocm-7.2.3/lib", "/opt/rocm-6.4.0/lib"])
         record = adapter_gate.run(args.vendor, sys.executable, out / "adapter-smoke",
                                   [row["path"] for row in manifest["files"]], env=env)
         request["adapters"] = {k: record.get(k) for k in ("status", "ok", "rc", "why")}

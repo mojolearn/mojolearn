@@ -48,7 +48,7 @@ import sys
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 _spec = importlib.util.spec_from_file_location(
-    "_bpe_trainer", os.path.join(HERE, "python", "mojolearn", "_bpe_trainer.py"))
+    "_bpe_trainer", os.path.join(HERE, "python", "mojolearn", "tests", "_bpe_trainer.py"))
 TR = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(TR)
 

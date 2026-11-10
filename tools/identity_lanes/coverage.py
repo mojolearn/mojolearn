@@ -699,7 +699,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("training-mlp-sessions")
 def _(ml, X, yc, yr, Xh=None):
-    """training.mlp_inference_sessions (`mlp_sessions_rows`, `mlp_sessions`):
+    """training.mlp_inference_sessions (the small-MLP program's SESSIONS forward):
     a seeded 8 -> 24 relu -> 3 model over three sessions of 5, 1 and 64
     fixture rows in one call, and over the held-out rows. The one call is
     held byte for byte in the cell to each session run alone and
@@ -965,7 +965,8 @@ def _coverage_text_tokenizers(ml):
     tk = ml.models.tokenizer
     rest = bytes(b for b in range(256) if b not in _COVERAGE_TEXT_ALPHABET)  # glue: the 192 other bytes
     tokens = [bytes([c]) for c in _COVERAGE_TEXT_ALPHABET + rest]  # glue: the 256 one-byte tokens
-    spelled = ml.tokenizer._byte_to_char()
+    from mojolearn._tokenizer_synthetic import byte_to_char
+    spelled = byte_to_char()
     vocab = {spelled[t[0]]: i for i, t in enumerate(tokens)}  # glue: GPT-2 spelling of each token
     data = dict(version="1.0", truncation=None, padding=None, added_tokens=[], normalizer=None,
                 pre_tokenizer={"type": "ByteLevel", "add_prefix_space": False, "trim_offsets": True,
@@ -1413,12 +1414,12 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("neural-trainer-unfused")
 def _(ml, X, yc, yr, Xh=None):
-    """ParallelNeuralTrainer over the mlp lane's trainer: the per-layer
-    gradient route (bindings/parallel_mlp_native.mojo
-    mlp_gradients_from_state: the training binding's mlp_bias_activation,
-    ce_loss, mlp_relu_backward and mlp_sum_rows), its only route since the
-    fused step was deleted (plan row X2, 2026-11-09). Parts: the weights
-    after three steps and the logits."""
+    """ParallelNeuralTrainer over the mlp lane's trainer: the shard
+    gradients (bindings/parallel_mlp_native.mojo mlp_gradients_on: the
+    SmallMLPTrainer program's loss-and-gradients run,
+    autograd/small_mlp_program.mojo mode 1; lane m2-neural-leftovers,
+    2026-11-09) and the ordered update. Parts: the weights after three
+    steps and the logits."""
     from mojolearn.parallel_training import ParallelNeuralTrainer
     d = _coverage_digester(ml)
     w = [((np.arange(int(np.prod(s)), dtype=np.float32) % 7 - 3) / 32).reshape(s).astype(np.float32)

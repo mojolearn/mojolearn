@@ -66,6 +66,8 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch
     comptime assert not is_defined["MOJOLEARN_TE_ADA_SESSION_OFF"](), "removed 2026-11-09 (lane/m1-followups-misc): MOJOLEARN_TE_ADA_SESSION_OFF, the FAST escape from the AdaBoost members' data session (it sent a GPU tree member back to the per-round host path; the session was the measured winner, adaboost-clf -9.0%, adaboost-reg -42% on the M3); every build opens the session; code at 5b5490960d; see docs/TOMBSTONES.md"
     comptime assert not is_defined["MOJOLEARN_IDN_ADA_SESSION_OFF"](), "removed 2026-11-09 (lane/m1-followups-misc): MOJOLEARN_IDN_ADA_SESSION_OFF, the IDENTICAL escape from the AdaBoost members' data session (the session moves no bit); every build opens the session and a GPU binary runs every tree member's round on the device; code at 5b5490960d; see docs/TOMBSTONES.md"
+    # integ-w6 (2026-11-09): a retired model-selection define; CalibratedClassifierCV (bindings/trees_public_meta.mojo) is in this family.
+    comptime assert not is_defined["MOJOLEARN_MSEL_UNITS_SERIAL"](), "removed 2026-11-09 (integ-w6, integ/pre-0867-w3; code at lane/p3-msel-parallel-and-process-pool@9d7f5a2af9): MSEL_UNITS_SERIAL (every CV unit on the calling thread) is redundant: units whose member fits run on a GPU run one at a time by default (bindings/native_unit_threads.mojo native_unit_device_workers); -D MOJOLEARN_MSEL_UNITS_GPU_PARALLEL is the parallel-GPU arm (docs/TOMBSTONES.md)"
     return True
 
 

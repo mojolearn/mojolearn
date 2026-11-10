@@ -15,7 +15,6 @@ process still holds ONE pool per numeric tier. Copies only: no bit moves.
 """
 from std.memory import bitcast, memcpy
 from std.os import getenv
-from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.step_phase import (
@@ -23,6 +22,7 @@ from core.step_phase import (
     step_count_host_alloc,
     step_count_sync,
 )
+from core.shared_slot import SharedSlot
 
 
 def download_f32_into[pool: StaticString = _STAGE_NAME](
@@ -196,14 +196,14 @@ struct _StagePool(Defaultable, Movable):
         self.n = 0
 
 
-comptime _STAGE_NAME = "MojoDownloadStagesIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDownloadStagesFast"
-comptime DOWNLOAD_STAGES = _Global[StorageType=_StagePool, name=_STAGE_NAME, init_fn=_StagePool.__init__]
+comptime _STAGE_NAME = "MojolearnDownloadStagesIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnDownloadStagesFastV1"
+comptime DOWNLOAD_STAGES = SharedSlot[_StagePool, _STAGE_NAME]
 
 
 def _stage_take[name: StaticString](ctx: DeviceContext, chunk: Int) raises -> HostBuffer[DType.float32]:
     """A pooled pinned stage of at least `chunk` floats, else a new one (a
     larger chunk retires the smaller stages)."""
-    comptime SLOT = _Global[StorageType=_StagePool, name=name, init_fn=_StagePool.__init__]
+    comptime SLOT = SharedSlot[_StagePool, name]
     var pool = SLOT.get_or_create_ptr()
     if pool[].n < chunk:
         pool[].bufs.clear()
@@ -215,7 +215,7 @@ def _stage_take[name: StaticString](ctx: DeviceContext, chunk: Int) raises -> Ho
 
 
 def _stage_give[name: StaticString](var stage: HostBuffer[DType.float32]) raises:
-    comptime SLOT = _Global[StorageType=_StagePool, name=name, init_fn=_StagePool.__init__]
+    comptime SLOT = SharedSlot[_StagePool, name]
     var pool = SLOT.get_or_create_ptr()
     if len(stage) == pool[].n and len(pool[].bufs) < DOWNLOAD_STAGE_KEEP:
         pool[].bufs.append(stage^)

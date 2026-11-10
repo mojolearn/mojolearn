@@ -9,8 +9,8 @@ released since. Host-only, standard library only: no Python and no bindings
 import, so kernel modules can poll the ring without reaching the binding
 shell (the kernel-closure rule: bindings import kernels, never the reverse).
 """
-from std.ffi import _Global
 from std.atomic import Atomic, Ordering
+from core.shared_slot import SharedSlot
 
 
 # Moved out of bindings/native_model_records.mojo (2026-11-07, lane
@@ -47,10 +47,7 @@ struct RecordsDeathRing(Defaultable, Movable):
 
 
 # Shared by every Mojo extension in the process (one ring, like the table).
-comptime MODEL_RECORDS_DEATHS = _Global[
-    StorageType=RecordsDeathRing, name="MojolearnModelRecordsDeathsV1",
-    init_fn=RecordsDeathRing.__init__,
-]
+comptime MODEL_RECORDS_DEATHS = SharedSlot[RecordsDeathRing, "MojolearnModelRecordsDeathsV2"]
 
 
 def _deaths() raises -> UnsafePointer[RecordsDeathRing, MutAnyOrigin]:

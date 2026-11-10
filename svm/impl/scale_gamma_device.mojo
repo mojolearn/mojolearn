@@ -12,7 +12,7 @@ The Python entry points are in `providers/python/svm_impl_scale_gamma_device_pya
 
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -105,20 +105,43 @@ def scale_gamma_limbs_device(ctx: DeviceContext, x_addr: Int, count: Int, dst_ad
         for k in range(SG_SLOTS):
             dst[k] = 0
         return
-    var nb = _grid_blocks(count)
     var d_x = ctx.enqueue_create_buffer[DType.uint32](count)
     ctx.enqueue_copy(dst_buf=d_x, src_ptr=_U32P(unsafe_from_address=x_addr))
+    _scale_gamma_limbs_run(ctx, Int(d_x.unsafe_ptr()), count, dst_addr)
+    _ = d_x^
+
+
+def scale_gamma_limbs_resident(
+    ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], count: Int, dst_addr: Int
+) raises:
+    """The SG_SLOTS int64 words of the `count` float32 cells ALREADY on the
+    device in `x` (a fit entry's own copy of X, lane a8a: no second upload of
+    X for gamma='scale'), written at `dst_addr`. The same kernels over the
+    same bits as `scale_gamma_limbs_device`: the same words."""
+    var dst = _I64P(unsafe_from_address=dst_addr)
+    if count == 0:
+        for k in range(SG_SLOTS):
+            dst[k] = 0
+        return
+    _scale_gamma_limbs_run(ctx, Int(x.unsafe_ptr()), count, dst_addr)
+
+
+def _scale_gamma_limbs_run(ctx: DeviceContext, x_bits_addr: Int, count: Int, dst_addr: Int) raises:
+    """The two folds over the `count` 32-bit cells at device address
+    `x_bits_addr` and the copy of the SG_SLOTS words to `dst_addr`, then one
+    synchronisation (the words are valid on return)."""
+    var nb = _grid_blocks(count)
     var d_part = ctx.enqueue_create_buffer[DType.int64](nb * SG_SLOTS)
     var d_out = ctx.enqueue_create_buffer[DType.int64](SG_SLOTS)
     ctx.enqueue_function[sg_partial_kernel](
-        d_x.unsafe_ptr(), Int64(count), Int32(nb), d_part.unsafe_ptr(), grid_dim=nb, block_dim=SG_TPB,
+        _U32P(unsafe_from_address=x_bits_addr), Int64(count), Int32(nb), d_part.unsafe_ptr(),
+        grid_dim=nb, block_dim=SG_TPB,
     )
     ctx.enqueue_function[sg_finish_kernel](
         d_part.unsafe_ptr(), Int32(nb), d_out.unsafe_ptr(), grid_dim=SG_SLOTS, block_dim=SG_TPB,
     )
-    ctx.enqueue_copy(dst_ptr=dst, src_buf=d_out)
+    ctx.enqueue_copy(dst_ptr=_I64P(unsafe_from_address=dst_addr), src_buf=d_out)
+    # The scratch must outlive the enqueued work: synchronise before it drops.
     ctx.synchronize()
-    _ = d_x^
     _ = d_part^
     _ = d_out^
-

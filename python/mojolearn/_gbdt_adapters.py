@@ -106,13 +106,14 @@ class _GBDTAdapter(PublicOutputsMixin):
             tags.classifier_tags.multi_class = False
         return tags
 
+    # save / load always refuse (bindings/trees_gbdt_adapter_lifecycle.mojo:
+    # no adapter archive format; pickle keeps the adapter state). They are left
+    # out of the public docs (docs-site/api_exclude.txt), never documented as a caveat.
     def save(self, path):
-        """Not available for this estimator; raises ``NotImplementedError``. Use pickle."""
         return _TREES(self, "trees_public_gbdt_adapter_save", (path,), _TREES_CONTEXT)
 
     @classmethod
     def load(cls, path):
-        """Not available for this estimator; raises ``NotImplementedError``. Use pickle."""
         return _TREES(cls, "trees_public_gbdt_adapter_load", (path,), _TREES_CONTEXT)
 
 
@@ -122,8 +123,7 @@ class GradientBoostingClassifier(_GBDTAdapter):
     Fits :class:`GradientBoosting` with ``loss='Logloss'`` on numeric
     features and keeps the original class labels. Exactly two classes are
     required; the positive class is the larger of the two sorted labels.
-    Supports sample weights in ``fit`` and ``score``, and pickling. ``save``
-    and ``load`` are not available; use pickle.
+    Supports sample weights in ``fit`` and ``score``, and pickling.
 
     Parameters
     ----------
@@ -232,8 +232,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
     Fits :class:`GradientBoosting` with ``loss='RMSE'`` on numeric features.
     Predictions are float32. Supports sample weights in ``fit`` and
     ``score``, and pickling. ``class_weights`` raises
-    ``NotImplementedError``. ``save`` and ``load`` are not available; use
-    pickle.
+    ``NotImplementedError``.
 
     Parameters
     ----------

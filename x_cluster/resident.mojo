@@ -26,13 +26,13 @@ WHAT DOES NOT CHANGE. A resident query runs the very kernels of
 `entries.nearest_entry` / `entries.distances_entry` (`DeviceOps.nearest`,
 `sum_ff` over the distances, `sqdist` then `sqrt`) on the same center bytes
 and the same X bytes, in the same order: the bits are the same."""
-from std.ffi import _Global
 from std.atomic import Atomic, Ordering
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_cluster.device_ops import DeviceOps, x_cluster_ctx
 from x_cluster.post_bodies import FM_VAL
+from core.shared_slot import SharedSlot
 
 comptime XcF32Ptr = MutPointer[Float32, MutUntrackedOrigin]
 comptime XcI32Ptr = MutPointer[Int32, MutUntrackedOrigin]
@@ -72,7 +72,7 @@ struct XcResidentCenters(Movable):
         _ = self.ctx^
 
 
-struct XcCentersRegistry(Movable):
+struct XcCentersRegistry(Defaultable, Movable):
     var entries: Dict[Int, XcResidentCenters]
     var next_id: Int
     # One lock word: queries run with the GIL released (see the module note).
@@ -84,14 +84,7 @@ struct XcCentersRegistry(Movable):
         self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime XC_CENTERS_REGISTRY = _Global[
-    StorageType=XcCentersRegistry,
-    name=(
-        "MojoXClusterResidentCentersIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else
-        "MojoXClusterResidentCentersFast"
-    ),
-    init_fn=XcCentersRegistry.__init__,
-]
+comptime XC_CENTERS_REGISTRY = SharedSlot[XcCentersRegistry, ( "MojolearnXClusterResidentCentersIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXClusterResidentCentersFastV1" )]
 
 
 def _registry() raises -> UnsafePointer[XcCentersRegistry, MutAnyOrigin]:

@@ -64,6 +64,7 @@ from mojolearn import _backend
 from mojolearn.models.parallel_causal_lm import _native_parallel_causal
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn._gpu_witness import visible_gpu_inventory, worker_process_inventory
+from mojolearn.tests import _mamba_block_reference
 vendor = _backend.vendor()
 # Test-only device inventory is outside the complete compiled worker loop.
 inventory = visible_gpu_inventory(vendor) if vendor in ('cuda', 'hip') else worker_process_inventory()
@@ -146,7 +147,7 @@ def block_reference(model, ids, state=None, *, step=False):
     x = x.reshape((b, length, model.d_model))
     for i, block in enumerate(model.blocks):
         layer_state = None if state is None else state.layers[i]
-        x = block._call(x, layer_state, step=step)
+        x = _mamba_block_reference.block_call(block, x, layer_state, step=step)
         if model.kind == 'mamba1' and layer_state is not None and layer_state.profile_id == 1:
             # The retained private block driver only tracks positions for its
             # affine profile. Public model checkpoints track consumed tokens

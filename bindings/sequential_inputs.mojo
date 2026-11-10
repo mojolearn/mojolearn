@@ -10,6 +10,8 @@ from bindings.native_buffer_owner import native_buffer_view
 from bindings.arena_buffer_copy import buffer_copy_to_array
 from bindings.native_array_view import native_array_ndarray_view
 from bindings.py_balanced import py_call, py_type, py_get
+from bindings.cpython_borrowed import borrowed_type_word as p3_type_word, borrowed_item as p3_item
+from bindings.cpython_table import cpython_table
 from core.sequential_inputs_impl import sequence_widen_halves, sequence_narrow_halves
 from gemm.f16_widen import f16_bits_to_f32
 
@@ -189,9 +191,60 @@ def _nested_values(mut mods: NativeModules, value: PythonObject, depth: Int, mut
         dims.append(n)
     elif dims[depth] != n:
         raise Error("input sequences must be rectangular")
-    # cpu-route: nested Python sequences are Python objects; walking them is the Python door's input step.
+    var b = mods.module("builtins")
+    var cls = py_type(value)
+    # Lane p2-labels-lists-arrays: an exact list or tuple is read borrowed
+    # from its C storage. An exact float or bool leaf (and an exact int when
+    # the target is float) is admitted by one class-pointer compare and
+    # appended by PyList_Append: no boxed index, subscript, recursion or
+    # Python append call per element. Every other element (and every element
+    # of a range or a list / tuple subclass, through the element protocol as
+    # before) takes the general admission below, unchanged.
+    var exact = cls is b.list or cls is b.tuple
+    var is_tuple = cls is b.tuple
+    var float_word = Int(b.float._obj_ptr)
+    var bool_word = Int(b.bool._obj_ptr)
+    var int_word = Int(b.int._obj_ptr) if float_target else 0
+    # The one pass over the caller's nested sequence (Python objects a kernel
+    # file cannot read), one element per call as on main: main's recorded
+    # input-step debt (tools/hooks/compute_in_shells_baseline.txt).
     for k in range(n):  # cpu-route: Python objects marshaled one element at a time before the runtime
+        _nested_element(mods, value, k, exact, is_tuple, float_word, bool_word, int_word, depth, dims, values, kind,
+                        size, leaf_depth, context, float_target)
+    _ = value  # keep the container alive through the borrowed reads above
+
+
+def _nested_element(mut mods: NativeModules, value: PythonObject, k: Int, exact: Bool, is_tuple: Bool,
+                    float_word: Int, bool_word: Int, int_word: Int, depth: Int, mut dims: List[Int],
+                    mut values: PythonObject, mut kind: String, mut size: Int, mut leaf_depth: Int,
+                    context: PythonObject, float_target: Bool) raises:
+    """Element k of the sequence `value` (`_nested_values`). An exact list or
+    tuple's element is read borrowed from its C storage; an exact float or
+    bool leaf (and an exact int when the target is float) is admitted by one
+    class-pointer compare and appended by PyList_Append. Any other element,
+    and every element of a range or a list / tuple subclass (the element
+    protocol), takes the general admission."""
+    if not exact:
         _sequence_values(mods, value[k], depth + 1, dims, values, kind, size, leaf_depth, context, float_target)
+        return
+    var raw = p3_item(value, k, is_tuple)
+    var word = p3_type_word(raw)
+    if word == float_word or word == bool_word or word == int_word:
+        if depth + 1 > 8:
+            raise Error("input sequences must have rank at most eight")
+        if leaf_depth >= 0 and leaf_depth != depth + 1:
+            raise Error("input sequences must be rectangular")
+        leaf_depth = depth + 1
+        if word == bool_word:
+            _promote(kind, size, "b", 1)
+        else:
+            _promote(kind, size, "f", 8)
+        if Int(cpython_table()[].PyList_Append(values._obj_ptr, raw)) != 0:
+            ref cpy = Python().cpython()
+            raise cpy.unsafe_get_error()
+        return
+    _sequence_values(mods, PythonObject(from_borrowed=raw), depth + 1, dims, values, kind, size, leaf_depth,
+                     context, float_target)
 
 
 def _fits_int64(value: PythonObject) -> Bool:

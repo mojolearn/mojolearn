@@ -128,11 +128,11 @@ NOT_MEASURED = (
     ("mojolearn.parallel_*", "multi-GPU (explicit devices / worker processes), excluded from the single-GPU "
                              "board (COVERAGE.md)"),
     ("mojolearn.models.Parallel*", "multi-GPU model, excluded from the single-GPU board (COVERAGE.md)"),
-    # CPU host bindings: the CPU is never timed (CLAUDE.md "Never time a CPU or host route")
-    ("mojolearn.*Inference", "CPU host binding (inference); the board never times a CPU route (CLAUDE.md)"),
-    ("mojolearn.LanguageModelHostTrainer", "CPU host binding; the board never times a CPU route (CLAUDE.md)"),
-    ("mojolearn.Host*", "CPU host binding; the board never times a CPU route (CLAUDE.md)"),
-    ("mojolearn.host_*", "CPU host binding; the board never times a CPU route (CLAUDE.md)"),
+    # CPU host bindings: the CPU is never timed (AGENTS.md "Measurement and fairness": our CPU is never raced or timed)
+    ("mojolearn.*Inference", "CPU host binding (inference); the board never times a CPU route (AGENTS.md)"),
+    ("mojolearn.LanguageModelHostTrainer", "CPU host binding; the board never times a CPU route (AGENTS.md)"),
+    ("mojolearn.Host*", "CPU host binding; the board never times a CPU route (AGENTS.md)"),
+    ("mojolearn.host_*", "CPU host binding; the board never times a CPU route (AGENTS.md)"),
     # no peer library implements it
     ("mojolearn.resample.monte_carlo_integrate", "no pinned library has a plain seeded Monte Carlo integrator "
                                                  "(scipy.integrate.qmc_quad is quasi-Monte Carlo); "

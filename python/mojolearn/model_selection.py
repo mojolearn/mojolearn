@@ -15,8 +15,9 @@ In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GP
 
 Behavior to know:
 
-* Fits run serially, one fold at a time. ``n_jobs`` must be ``1`` (or
-  ``None`` where scikit-learn accepts it).
+* Independent fits (each fold, each candidate and fold) run at once on
+  several threads, at most ``n_jobs``; the results are the same for any
+  ``n_jobs``.
 * Splitters yield ``(train, test)`` pairs of int64 row-index arrays.
 * Shuffled splits draw from mojolearn's own counter-based random generator,
   so a given ``random_state`` gives a reproducible split, but not the same
@@ -38,7 +39,6 @@ from ._mode import _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
 # The splitters' random draws (lane/metrics): a module-level import, so the
 # lane selector sees model_selection reach the x_metrics binding (the native
 # owner resolves it through this binding getter).
-from ._expansion_metrics import _binding as _x_metrics_binding
 
 #: The binding the splitters' permutations and the scorers' added metrics run
 #: on (python/mojolearn/_expansion_metrics.py `_BINDING`). Named here because
@@ -408,11 +408,12 @@ def split_descriptor(X, y, *, estimator=None, cv=None, groups=None):
 
 
 def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
-                    n_jobs=1, error_score='raise'):
+                    n_jobs=None, error_score='raise'):
     """Evaluate an estimator by cross-validation and return one score per fold.
 
     For each fold, a fresh clone of ``estimator`` is fit on the training rows
-    and scored on the held-out rows. Folds run one after another. Every fold
+    and scored on the held-out rows. Folds run at once, at most ``n_jobs``
+    of them. Every fold
     is checked before the first fit: each side must be nonempty, have no
     repeated rows, and not overlap the other side. A row may be held out in
     more than one fold.
@@ -447,8 +448,10 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
         Group labels for a splitter that reads them. Passing ``groups`` with
         an integer or default ``cv`` raises ``ValueError``, because the
         default folds would ignore them.
-    n_jobs : int, default 1
-        Only ``1`` is supported; other values raise ``NotImplementedError``.
+    n_jobs : int or None, default None
+        The most fits that run at once. ``None`` uses every core; ``-1``
+        every core, ``-k`` every core but ``k - 1``. The results do not
+        depend on it.
     error_score : 'raise', default 'raise'
         Only ``'raise'`` is supported: an error in a fit or score propagates.
 
@@ -481,33 +484,16 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
 # Restore: git apply experiments/removed/dead_python_loops.patch
 
 
-# ---------------------------------------------------------------------------
-# FAST + Apple cross-val candidates (recovered from
-# lane/apple-fast-resample@50b96e795, lane apple-fast-rec-resample
-# 2026-10-04). Switched by the resample binding's `resample_fast_defines`
-# mask (build-time defines), never by the environment. Off on every other
-# tier and build.
-# ---------------------------------------------------------------------------
-
-
-def _cv_fast_defines():
-    """The resample binding's FAST define mask (binding acquisition; 0 off
-    the FAST tier), read by the native cross-validation owner."""
-    from . import resample as _resample
-    return _resample.fast_defines()
+# TOMBSTONE: _cv_fast_defines, family_msel_fast_defines, family_msel_native, family_msel_xm (dead code: no native owner read the three context entries, and _cv_fast_defines fed only family_msel_fast_defines) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.
+# Restore: git apply experiments/removed/dead_code_p5_20261109.patch
 
 
 # TOMBSTONE: _cv_fast_on, _native_default_cv, _CV_TRUST_FOLDS_BIT (helpers of the deleted _prepare_folds; bindings/msel_cv.mojo msel_fast_on / msel_native_default_cv run them) deleted 2026-11-08 by bddde2ea2e; code recoverable at 41ffcec665.
 # Restore: git apply experiments/removed/dead_python_loops.patch
 
 
-def _fit_score_fold(fitted, X_train, y_train, X_test, y_test, scoring):
-    """Shared serial/worker operation; the caller supplies a fresh clone."""
-    fitted.fit(X_train, y_train)
-    score = fitted.score(X_test, y_test) if scoring is None else scoring(fitted, X_test, y_test)
-    if not isinstance(score, numbers.Real):
-        raise TypeError('scoring must return a real scalar')
-    return float(score)
+# TOMBSTONE: _fit_score_fold (dead code: no caller; bindings/msel_cv.mojo fits and scores each fold natively) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.
+# Restore: git apply experiments/removed/dead_code_p5_20261109.patch
 
 
 # ===========================================================================
@@ -1430,26 +1416,8 @@ class _Scorer:
 _BINARY_PROBA = {'roc_auc', 'average_precision', 'neg_brier_score', 'neg_log_loss', 'top_k_accuracy'}
 
 
-def _proba_column1(pred):
-    """Column 1 of an (n, 2) float32 or float64 buffer as a float32 Array,
-    read on the device (`msel_proba_column`, lane cpu2-l4-modelsel): one
-    kernel takes column 1 straight out of the row-major block and narrows a
-    float64 to nearest even (the `(float)` cast), so the host makes no cast,
-    no transpose and no column copy. None (a Python list from an external
-    estimator, or another shape) hands it to the caller's route."""
-    if isinstance(pred, (list, tuple)):
-        return None
-    try:
-        a = _materialize(pred, 'pred')[0]
-    except (TypeError, ValueError):
-        return None
-    if a.ndim != 2 or a.shape[1] != 2 or a.dtype not in ('<f4', '<f8') or a.shape[0] < 1:
-        return None
-    n = a.shape[0]
-    c = a._as_c()
-    out = empty((n,), '<f4')
-    _native('msel_proba_column')(_addr_ro(c), _MSEL_CODE[c.dtype], n, 2, 1, _addr(out))
-    return out
+# TOMBSTONE: _proba_column1 (dead code: no caller; the native scorer reads column 1 itself) deleted 2026-11-09 by cb99d1b18c; code recoverable at cb99d1b18c^.
+# Restore: git apply experiments/removed/dead_code_p5_20261109.patch
 
 
 def make_scorer(score_func, *, response_method='predict', greater_is_better=True, **kwargs):
@@ -1593,7 +1561,7 @@ def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None, 
 
     Follows scikit-learn's ``cross_validate``. For each fold, a fresh clone
     of ``estimator`` is fit on the training rows and scored on the held-out
-    rows. Folds run one after another.
+    rows. Folds run at once, at most ``n_jobs`` of them.
 
     Parameters
     ----------
@@ -1615,8 +1583,9 @@ def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None, 
         As in ``check_cv``: None means five folds, stratified for a
         classifier.
     n_jobs : int or None, default None
-        Only None or 1 is supported; other values raise
-        ``NotImplementedError``.
+        The most fits that run at once. ``None`` uses every core; ``-1``
+        every core, ``-k`` every core but ``k - 1``. The results do not
+        depend on it.
     return_train_score : bool, default False
         Also score each fold's training rows (``train_<name>``).
     return_estimator : bool, default False
@@ -1674,7 +1643,9 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None, n_jobs=None
         As in ``check_cv``: None means five folds, stratified for a
         classifier.
     n_jobs : int or None, default None
-        Only None or 1 is supported.
+        The most fits that run at once. ``None`` uses every core; ``-1``
+        every core, ``-k`` every core but ``k - 1``. The results do not
+        depend on it.
     method : str, default 'predict'
         Estimator method to call, for example ``'predict_proba'``.
 
@@ -1798,7 +1769,8 @@ class _BaseSearch:
         """Cross-validate every candidate and, with ``refit``, fit the best one.
 
         The folds are drawn once and every candidate is scored on the same
-        folds. Fits run serially.
+        folds. Each candidate and fold is fit at once, at most ``n_jobs``
+        fits together.
 
         Parameters
         ----------
@@ -1873,8 +1845,9 @@ class GridSearchCV(_BaseSearch):
     scoring : str, scorer, list, tuple, set, dict or None, default None
         As in ``cross_validate``. None uses the estimator's ``score``.
     n_jobs : int or None, default None
-        Only None or 1 is supported; other values raise
-        ``NotImplementedError``.
+        The most fits that run at once. ``None`` uses every core; ``-1``
+        every core, ``-k`` every core but ``k - 1``. The results do not
+        depend on it.
     refit : bool or str, default True
         True refits the best candidate on all the data after single-metric
         scoring; False skips refitting. With several metrics, supply the
@@ -1960,7 +1933,9 @@ class RandomizedSearchCV(_BaseSearch):
     scoring : str, scorer, list, tuple, set, dict or None, default None
         As in ``cross_validate``.
     n_jobs : int or None, default None
-        Only None or 1 is supported.
+        The most fits that run at once. ``None`` uses every core; ``-1``
+        every core, ``-k`` every core but ``k - 1``. The results do not
+        depend on it.
     refit : bool or str, default True
         As in ``GridSearchCV``.
     cv : int, mojolearn splitter, list, tuple or None, default None
@@ -2030,7 +2005,9 @@ def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, c
     scoring : str, scorer or None, default None
         As in ``cross_val_score``.
     n_jobs : int or None, default None
-        Only None or 1 is supported.
+        The most fits that run at once. ``None`` uses every core; ``-1``
+        every core, ``-k`` every core but ``k - 1``. The results do not
+        depend on it.
     error_score : 'raise' or float, default nan
         ``'raise'`` propagates a fit error; a number is recorded instead.
 
@@ -2084,7 +2061,9 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
     scoring : str, scorer or None, default None
         As in ``cross_val_score``.
     n_jobs : int or None, default None
-        Only None or 1 is supported; fits run serially.
+        The most fits that run at once. ``None`` uses every core; ``-1``
+        every core, ``-k`` every core but ``k - 1``. The results do not
+        depend on it.
     shuffle : bool, default False
         Shuffle each fold's training rows once before taking the prefixes.
     random_state : int or None, default None
@@ -2145,7 +2124,9 @@ def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutati
     n_permutations : int, default 100
         Number of permutations.
     n_jobs : int or None, default None
-        Accepted for compatibility; fits run serially.
+        The most fits that run at once. ``None`` uses every core; ``-1``
+        every core, ``-k`` every core but ``k - 1``. The results do not
+        depend on it.
     random_state : int or None, default 0
         Seed for the permutations.
     verbose : int, default 0
@@ -2211,7 +2192,7 @@ _native_family_bridge.tables(
         StratifiedShuffleSplit=StratifiedShuffleSplit, PredefinedSplit=PredefinedSplit, _IterableCV=_IterableCV,
         ParameterGrid=ParameterGrid, ParameterSampler=ParameterSampler, GridSearchCV=GridSearchCV,
         RandomizedSearchCV=RandomizedSearchCV, Array=Array),
-    family_msel_native=_native, family_msel_xm=_x_metrics_binding, family_msel_miss=object(),
+    family_msel_miss=object(),
     family_msel_integral=numbers.Integral, family_msel_codes=dict(_MSEL_CODE),
     family_msel_native_code=dict(_ARRAY_CODE), family_msel_reduce_integral=_REDUCE_INTEGRAL,
     family_msel_native_encode=frozenset(_NATIVE_ENCODE),
@@ -2220,8 +2201,7 @@ _native_family_bridge.tables(
     family_msel_splitters=(KFold, StratifiedKFold, GroupKFold, StratifiedGroupKFold, TimeSeriesSplit, LeaveOneOut,
                            LeavePOut, LeaveOneGroupOut, LeavePGroupsOut, RepeatedKFold, RepeatedStratifiedKFold,
                            ShuffleSplit, GroupShuffleSplit, StratifiedShuffleSplit, PredefinedSplit, _IterableCV),
-    family_msel_schema=SPLIT_DESCRIPTOR_SCHEMA, family_msel_arena_io=_arena_io,
-    family_msel_fast_defines=_cv_fast_defines)
+    family_msel_schema=SPLIT_DESCRIPTOR_SCHEMA, family_msel_arena_io=_arena_io)
 
 from ._native_msel_inputs import connect as _connect_msel_inputs  # noqa: E402
 _connect_msel_inputs(_NATIVE_CONTEXT, _RESIDENT_CONTEXT)

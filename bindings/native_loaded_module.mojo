@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # Read canonical import-time module/export connections without import callbacks.
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.ffi import c_int
 from std.python._cpython import ExternalFunction, PyObjectPtr
@@ -250,15 +249,13 @@ struct _AdmittedModules(Defaultable, Movable):
 
 # The named global may be shared by every Mojo extension in the process:
 # bump the name's version whenever _AdmittedModule's layout changes.
-comptime _ADMITTED_MODULES = _Global[
-    StorageType=_AdmittedModules, name="MojolearnAdmittedModuleConnectionsV5",
-    init_fn=_AdmittedModules.__init__,
-]
+comptime _ADMITTED_MODULES = SharedSlot[_AdmittedModules, "MojolearnAdmittedModuleConnectionsV6"]
 
 
 # ------------------------------------------------- shared dictionary watcher
 # Lane ne2-i-j (2026-11-07): CPython 3.10 / 3.11 stamps (no watcher there).
 from bindings.py_version_tags import dict_version_tags, dict_version_tag
+from core.shared_slot import SharedSlot
 # CPython >= 3.12 dictionary watchers (`PyDict_AddWatcher` / `PyDict_Watch`)
 # report every insertion, replacement, deletion, clear, clone and
 # deallocation of a watched dictionary. Each event bumps that dictionary's
@@ -280,10 +277,7 @@ struct SharedDictWatch(Defaultable, Movable):
         self.epochs = Dict[Int, Int]()
 
 
-comptime SHARED_DICT_WATCH = _Global[
-    StorageType=SharedDictWatch, name="MojolearnSharedDictWatchV1",
-    init_fn=SharedDictWatch.__init__,
-]
+comptime SHARED_DICT_WATCH = SharedSlot[SharedDictWatch, "MojolearnSharedDictWatchV2"]
 
 
 def _shared_dict_modified_c(event: Int32, fields: PyObjectPtr, key: PyObjectPtr, value: PyObjectPtr) abi("C") -> Int32:

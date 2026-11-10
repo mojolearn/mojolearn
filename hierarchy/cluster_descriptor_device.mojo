@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native descriptor over the unchanged x_cluster device numerical owner.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -11,6 +10,7 @@ from hierarchy.cluster_descriptor_schema import (
     HIERARCHY_CLUSTER_CAP_FIT, HIERARCHY_CLUSTER_CAP_DEVICE,
     hierarchy_cluster_validate_call,
 )
+from core.shared_slot import SharedSlot
 
 
 def hierarchy_cluster_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
@@ -48,5 +48,4 @@ struct HierarchyClusterDeviceAPI(Defaultable, Movable):
 
 
 # The extension image owns the table and name borrowed by PyCapsule.
-comptime HIERARCHY_CLUSTER_DEVICE_API = _Global[StorageType=HierarchyClusterDeviceAPI,
-    name=("MojolearnHierarchyClusterDeviceAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnHierarchyClusterDeviceAPIFastV2"), init_fn=HierarchyClusterDeviceAPI.__init__]
+comptime HIERARCHY_CLUSTER_DEVICE_API = SharedSlot[HierarchyClusterDeviceAPI, ("MojolearnHierarchyClusterDeviceAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnHierarchyClusterDeviceAPIFastV3")]

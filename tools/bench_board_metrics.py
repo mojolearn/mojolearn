@@ -13,7 +13,7 @@ registered through tools/bench_board_extra.py (which hands `build`, `quality` an
                  (P, Q).sum() (no renormalization, cuML's and ours' definition); sklearn has neither
     cuml-gpu     cuml.metrics.<name> on NVIDIA where cuML 26.8 has the function with the same parameters
                  (CUML below); its inputs go to the device before its clock (cuML's kernel-only clock,
-                 CLAUDE.md OPPONENT CLOCKS); on NVIDIA the CPU arms then do not race
+                 AGENTS.md OPPONENT CLOCKS); on NVIDIA the CPU arms then do not race
                  (bench_board.gpu_opponents_first)
 
 No lane passes None: the parameter check reads None on both sides as a library default, not a matched value

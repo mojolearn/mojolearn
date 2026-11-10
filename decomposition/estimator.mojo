@@ -86,7 +86,7 @@ from std.sys.compile import is_defined
 #: ~50 ms per GB), and the two n x d alias buffers that arm never reads are
 #: 1 float. Copies and allocations only: no bit moves.
 comptime PCA_FAST_POOL = PCA_FAST_GRAM_MMA and not is_defined["MOJOLEARN_PCA_FAST_POOL_OFF"]()
-comptime _PCA_POOL = "MojoEstimatorsPcaFastX"
+comptime _PCA_POOL = "MojolearnEstimatorsPcaFastXV1"
 #: lane/apple-fast-s-linalg (2026-10-04), FAST + Apple only; both the
 #: default since verdicts batch 6 (2026-10-05). TruncatedSVD.fit's `tsvd_explained_host` (every fit, both component
 #: routes) reads the whole X again. Board: tsvd istella 864 ms (TSVD_QFIX),
@@ -158,6 +158,47 @@ def pca_fit_host(
         # the MMA arm of compute_covariance reads neither alias buffer
         pooled = not gram_splitk_applies(n_features, n_features, n_rows)
     var x = pool_take[_PCA_POOL](ctx, big) if pooled else ctx.enqueue_create_buffer[DType.float32](big)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    if _pca_finite_flagged(ctx, x, big, finite_word):
+        if pooled:
+            pool_give[_PCA_POOL](x^)
+        else:
+            _ = x^
+        return 0.0
+    var noise = pca_fit_cov_device_x(
+        ctx, x, components_ptr, mean_ptr, explained_ptr, ratio_ptr, singular_ptr,
+        n_rows, n_features, n_components, pooled,
+    )
+    if pooled:
+        pool_give[_PCA_POOL](x^)
+    else:
+        _ = x^
+    return noise
+
+
+def pca_fit_cov_device_x(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    explained_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ratio_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+    pooled: Bool,
+) raises -> Float64:
+    """The covariance arm of `pca_fit_host` over X already on the device in
+    `x` (n_rows x n_features, C order; the fit's own copy, overwritten).
+    Lane a8d-device-x-decomp-manifold: split out of `pca_fit_host` so a
+    model-selection fold gathered on the device (decomposition/pca_fold.mojo
+    `pca_fit_fold`) runs the same body; the host-address entry uploads and
+    calls it. `pooled`: `x` came from the PCA pool, so the MMA arm reads no
+    alias buffer (the sizes `pca_fit_host` always chose). The same kernels
+    on the same words in the same order: no bit change. The caller keeps
+    `x` (and returns a pooled one to the pool)."""
+    var big = n_rows * n_features
     var alias_n = 1 if pooled else big
     var alias2_n = alias_n
     comptime if PCA_LEAN_SCRATCH:
@@ -170,13 +211,6 @@ def pca_fit_host(
     var xa2 = ctx.enqueue_create_buffer[DType.float32](alias2_n)
     var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
     var cov = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    if _pca_finite_flagged(ctx, x, big, finite_word):
-        if pooled:
-            pool_give[_PCA_POOL](x^)
-        else:
-            _ = x^
-        return 0.0
     var trace = IdentityTrace()
     if trace.enabled:
         trace.header(
@@ -227,10 +261,6 @@ def pca_fit_host(
     ctx.synchronize()
     for i in range(n_features):
         mean_ptr.unsafe_store(i, hmu.unsafe_ptr().unsafe_load(i))
-    if pooled:
-        pool_give[_PCA_POOL](x^)
-    else:
-        _ = x^
     return result.noise_var
 
 
@@ -265,6 +295,32 @@ def pca_fit_full_host(
     therefore diverge there too.
     """
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    if _pca_finite_flagged(ctx, x, n_rows * n_features, finite_word):
+        return 0.0
+    var noise = pca_fit_full_device_x(
+        ctx, x, components_ptr, mean_ptr, explained_ptr, ratio_ptr, singular_ptr,
+        n_rows, n_features, n_components,
+    )
+    _ = x^
+    return noise
+
+
+def pca_fit_full_device_x(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mean_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    explained_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ratio_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    singular_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+) raises -> Float64:
+    """The R-SVD arm of `pca_fit_full_host` over X already on the device in
+    `x` (lane a8d: split out so a fold gathered on the device runs the same
+    body; no bit change)."""
     var scratch = ctx.enqueue_create_buffer[DType.float32](
         pca_full_scratch_cells(n_rows, n_features)
     )
@@ -272,9 +328,6 @@ def pca_fit_full_host(
     var v = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var s = ctx.enqueue_create_buffer[DType.float32](n_features)
     var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    if _pca_finite_flagged(ctx, x, n_rows * n_features, finite_word):
-        return 0.0
     var trace = IdentityTrace()
     if trace.enabled:
         trace.header(
@@ -379,18 +432,23 @@ def tsvd_fit_device(
     n_features: Int,
     n_components: Int,
     finite_word: Int = 0,
+    resident: Bool = False,
 ) raises -> Bool:
     """`tsvd_fit_host`'s body on a caller-owned device buffer `x` of
     n_rows * n_features floats: uploads X into it, and leaves it holding X
     unchanged (the Gram only reads it), so T1 can run the explained tail on
     the same buffer. `finite_word` (lane a7d): as `pca_fit_host`'s; returns
-    True when X was flagged (nothing fit, nothing written)."""
+    True when X was flagged (nothing fit, nothing written). `resident`
+    (lane a8d): `x` already holds X (a model-selection fold gathered and
+    tested on the device, decomposition/pca_fold.mojo `tsvd_fit_fold`):
+    no upload, no test, `x_ptr` unread; the same body after it."""
     var gram = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
     var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    if _pca_finite_flagged(ctx, x, n_rows * n_features, finite_word):
-        return True
+    if not resident:
+        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+        if _pca_finite_flagged(ctx, x, n_rows * n_features, finite_word):
+            return True
     var trace = IdentityTrace()
     if trace.enabled:
         trace.header(

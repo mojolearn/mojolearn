@@ -37,7 +37,7 @@ from bindings.classical_metadata import classical_is_fitted
 from bindings.classical_pandas import classical_admit_value
 from bindings.msel_fixed_owner import fixed_owner_context, fixed_owner_fields, fixed_owner_set_params
 from bindings.scaler_lifecycle_native import _public_result
-from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_accuracy
+from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_score_from_codes
 from bindings.admitted_input import admit_weight_words
 from bindings.x_prep_native_inputs import _values, _rows_fields
 from bindings.arena_cache_release import arena_cache_release_operation
@@ -397,9 +397,17 @@ def _joint_log_proba(model: PythonObject, fields: PythonObject, kind: String, X:
 
 
 def _score(model: PythonObject, fields: PythonObject, kind: String, X: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_Classifier.score`: accuracy of the prediction, scored in the same call."""
-    var prediction = _predict(model, fields, kind, X, context)
-    return PythonObject(classical_accuracy(y, prediction, PythonObject(None), PythonObject(None), context))
+    """`_Classifier.score`: accuracy of the predicted codes, scored in the same
+    call. y is encoded once against `classes_` and compared with the codes
+    (classical_score_from_codes); the predicted labels are never built.
+    Lane p2-labels-lists-arrays: the decode of every row to a Python label
+    and its re-encode in `classical_accuracy` (str / bool classes: one
+    Python object per row each way) are gone."""
+    var pr = ClsProg()
+    var o = _scores(pr, model, fields, kind, X, W_PREDICT, context)
+    var codes = pr.get_i32(o.am, o.n, context)
+    return PythonObject(classical_score_from_codes(y, fields["classes_"], codes, PythonObject(None),
+                                                   PythonObject(None), context))
 
 
 def _decision_function(model: PythonObject, fields: PythonObject, kind: String, X: PythonObject, context: PythonObject) raises -> PythonObject:

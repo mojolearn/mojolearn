@@ -20,7 +20,7 @@ from x_cluster.out import ClusterOut
 from x_cluster.post_bodies import FM_VAL
 from checks.numerics import portable_log64
 from x_cluster.tree_cut import tree_labels
-from x_cluster.spectral_assign import ASSIGN_CLUSTER_QR, ASSIGN_DISCRETIZE, cluster_qr_labels
+from x_cluster.spectral_assign import ASSIGN_CLUSTER_QR, ASSIGN_DISCRETIZE
 
 
 def nearest_entry[O: ClusterOps](mut ops: O, x: List[Float32], c: List[Float32], ip: List[Int]) raises -> ClusterOut:
@@ -564,7 +564,9 @@ def spectral_assign_entry[O: ClusterOps](mut ops: O, x: List[Float32], ip: List[
         raise Error("x_cluster spectral_assign: the embedding is not n x k")
     var out = ClusterOut()
     if ip[2] == ASSIGN_CLUSTER_QR:
-        out.i.append(cluster_qr_labels(x, n, k))
+        # lane m3-linalg-and-housekeeping: float-float on the binding's
+        # column (the device on the GPU binding), was binary64 on the host
+        out.i.append(ops.spectral_cluster_qr(x, n, k))
         out.s.append(0)
     elif ip[2] == ASSIGN_DISCRETIZE:
         var it = 0

@@ -14,6 +14,7 @@ from training.checks.optimizer_contract import OPT_ADAMW, OptimizerConfig
 from training.byte_lm_program import byte_program_fit, byte_program_eval
 from training.byte_lm_host_program import (
     byte_host_program_open, byte_host_program_load, byte_host_program_load_params, byte_host_program_store,
+    byte_host_program_workers,
 )
 
 comptime BYTE_HOST_MAX_LOGITS = 268435456
@@ -99,13 +100,18 @@ def byte_host_train_native(addresses: List[Int], cfg: ByteConfig, scalars: List[
     return Int(bitcast[DType.uint32](loss[0]))
 
 
-def byte_host_loss_native(addresses: List[Int], cfg: ByteConfig) raises -> Int:
+def byte_host_loss_native(addresses: List[Int], cfg: ByteConfig, use_threads: Int, thread_count: Int) raises -> Int:
     """The training forward's mean loss on one batch (addresses = [params,
     ids (batch * (length + 1) int32)]): the trainer's program on a host
-    session, no backward. Returns the loss's bits."""
+    session, no backward. `use_threads` 0 runs every launch on the calling
+    thread; 1 runs on at most `thread_count` threads (0: one per physical
+    core). Same bits either way. Returns the loss's bits."""
     if len(addresses) != 2 or addresses[0] == 0 or addresses[1] == 0:
         raise Error("byte LM host: the loss expects non-null parameters and ids")
+    if use_threads != 0 and use_threads != 1:
+        raise Error("byte LM host: threaded must be 0 or 1")
     var e = byte_host_program_open(cfg, byte_host_eval_optimizer())
+    byte_host_program_workers(e, 1 if use_threads == 0 else thread_count)
     byte_host_program_load_params(e, addresses[0])
     var loss = byte_program_eval(e, addresses[1])
     return Int(bitcast[DType.uint32](loss))

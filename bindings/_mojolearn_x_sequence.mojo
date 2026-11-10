@@ -12,7 +12,6 @@ from std.python._cpython import PyObjectPtr
 from sequence.model_device_dispatch import NATIVE_MODEL_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from providers.python.autograd_python_errors_pyapi import graph_python_error
-from std.ffi import _Global
 from providers.python.autograd_session_public_request_pyapi import ops_session_public_call_py, ops_session_public_connect_py
 from providers.python.autograd_program_public_request_pyapi import ops_program_public_call_py
 from providers.python.autograd_session_public_dispatch_pyapi import NativeSessionPublicAPI
@@ -24,8 +23,8 @@ from providers.python.autograd_owned_program_factory_pyapi import owned_program_
 from providers.python.autograd_session_frontend_pyapi import ops_session_initialize_py
 from autograd.session_lifetime import SessionLifetime
 from providers.python.autograd_session_lifetime_pyapi import ops_session_create_py
-from providers.python.small_mlp_program_pyapi import small_mlp_program_open_py, small_mlp_program_run_py
-from autograd.small_mlp_program import SMALL_MLP_PROGRAM_OPEN
+from providers.python.small_mlp_program_pyapi import small_mlp_program_open_py, small_mlp_program_run_py, small_mlp_sessions_py
+from autograd.small_mlp_program import SMALL_MLP_PROGRAM_OPEN, SMALL_MLP_PROGRAM_SESSIONS
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
@@ -98,6 +97,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from providers.python.sequence_prophet_prep_pyapi import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
 from providers.python.sequence_moe_dev_pyapi import moe_forward_dev_py, moe_forward_dev_alloc_py
+from core.shared_slot import SharedSlot
 
 #: lane neural-io-2: MoEBlock's forward on resident tensors (sequence/moe_dev.mojo):
 #: x, y and the routing outputs stay on the device (2 x 4 T D bytes over PCIe and four
@@ -234,8 +234,7 @@ def mlp_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonO
     return mlp_predict_py(ex, addrs, ip)
 
 
-comptime SESSION_PUBLIC_API = _Global[StorageType=NativeSessionPublicAPI[DeviceExec, OPS_DEVICE],
-    name=("MojolearnSessionPublicOPS_DEVICEAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnSessionPublicOPS_DEVICEAPIFastV2"), init_fn=NativeSessionPublicAPI[DeviceExec, OPS_DEVICE].__init__]
+comptime SESSION_PUBLIC_API = SharedSlot[NativeSessionPublicAPI[DeviceExec, OPS_DEVICE], ("MojolearnSessionPublicOPS_DEVICEAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnSessionPublicOPS_DEVICEAPIFastV3")]
 
 
 def session_public_api_binding() raises -> PythonObject:
@@ -321,6 +320,8 @@ def small_mlp_program_binding(op: PythonObject, addresses: PythonObject, ints: P
     var code = Int(py=op)
     if code == SMALL_MLP_PROGRAM_OPEN:
         return small_mlp_program_open_py[DeviceExec, OPS_DEVICE](DeviceExec(), addresses, ints, floats)
+    if code == SMALL_MLP_PROGRAM_SESSIONS:
+        return small_mlp_sessions_py[DeviceExec, OPS_DEVICE](DeviceExec(), addresses, ints)
     return small_mlp_program_run_py[DeviceExec, OPS_DEVICE](code, addresses, ints)
 
 
@@ -436,8 +437,7 @@ def ops_distributed_close_binding(id: PythonObject) raises -> PythonObject:
     return distributed_close_py[DeviceExec, OPS_DEVICE](id)
 
 
-comptime OWNED_PROGRAM_PUBLIC_API = _Global[StorageType=NativeOwnedProgramPublicAPI,
-    name=("MojolearnOwnedProgramPublicOPS_DEVICEAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnOwnedProgramPublicOPS_DEVICEAPIFastV2"), init_fn=NativeOwnedProgramPublicAPI.__init__]
+comptime OWNED_PROGRAM_PUBLIC_API = SharedSlot[NativeOwnedProgramPublicAPI, ("MojolearnOwnedProgramPublicOPS_DEVICEAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnOwnedProgramPublicOPS_DEVICEAPIFastV3")]
 
 
 def owned_program_public_native_binding(

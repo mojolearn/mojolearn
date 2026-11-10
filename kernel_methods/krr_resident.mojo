@@ -32,7 +32,6 @@ WHAT DOES NOT CHANGE. The upload is `_upload_ptr`, the pointer route's
 `kernel_ridge_predict_ptr_into` runs after its own uploads of the same
 bytes: the same launches in the same order, so the bits are the same.
 """
-from std.ffi import _Global
 from std.atomic import Atomic, Ordering
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -46,6 +45,7 @@ from kernel_methods.estimator import (
     _upload_ptr,
     kernel_ridge_predict_dev,
 )
+from core.shared_slot import SharedSlot
 
 
 struct ResidentKernelRidge(Movable):
@@ -83,7 +83,7 @@ struct ResidentKernelRidge(Movable):
         _ = self.ctx^
 
 
-struct KernelRidgeResidentRegistry(Movable):
+struct KernelRidgeResidentRegistry(Defaultable, Movable):
     var entries: Dict[Int, ResidentKernelRidge]
     var next_id: Int
     # One lock word: prepare and predict run with the GIL released (see the module note).
@@ -95,14 +95,7 @@ struct KernelRidgeResidentRegistry(Movable):
         self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime KRR_RESIDENT_REGISTRY = _Global[
-    StorageType=KernelRidgeResidentRegistry,
-    name=(
-        "MojoKernelRidgeResidentIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-        "MojoKernelRidgeResidentFast"
-    ),
-    init_fn=KernelRidgeResidentRegistry.__init__,
-]
+comptime KRR_RESIDENT_REGISTRY = SharedSlot[KernelRidgeResidentRegistry, ( "MojolearnKernelRidgeResidentIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKernelRidgeResidentFastV1" )]
 
 
 def _krr_registry() raises -> UnsafePointer[KernelRidgeResidentRegistry, MutAnyOrigin]:

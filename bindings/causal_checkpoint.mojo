@@ -10,7 +10,6 @@ from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_se
 from bindings.py_typed_call import py_call_typed
 from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
 from gemm.f16_widen import f16_bits_to_f32
-from std.ffi import _Global
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_instance_item import native_instance_item
 from bindings.native_array_storage import native_array_empty, native_array_zeros
@@ -23,6 +22,7 @@ from bindings.native_class_admission import class_record, class_admit
 from bindings.causal_model_config import model_record_fields, model_dict, model_plain, model_string, model_integer, model_sequence
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from bindings.linalg_ops_lowbit import _lin_from_f16, lin_connected_binding
+from core.shared_slot import SharedSlot
 
 
 struct CheckpointConnection(Defaultable, Movable):
@@ -34,8 +34,7 @@ struct CheckpointConnection(Defaultable, Movable):
         self.entries = PythonObject(None)
 
 
-comptime CHECKPOINT_CONNECTION = _Global[StorageType=CheckpointConnection,
-    name="MojolearnCheckpointConnection", init_fn=CheckpointConnection.__init__]
+comptime CHECKPOINT_CONNECTION = SharedSlot[CheckpointConnection, "MojolearnCheckpointConnectionV1"]
 
 
 def _checkpoint_context() raises -> PythonObject:

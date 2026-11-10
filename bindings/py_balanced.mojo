@@ -11,11 +11,11 @@
 # reference owned by the returned PythonObject. Nothing here adds or removes a
 # reference to compensate for the standard library; when Modular ships the
 # balanced operations, call sites can go back to the ordinary syntax.
-from std.ffi import _Global
 from bindings.native_loaded_module import native_loaded_module
 from bindings.cpython_table import cpython_table
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from core.shared_slot import SharedSlot
 
 
 struct _ExactDictType(Defaultable, Movable):
@@ -26,10 +26,7 @@ struct _ExactDictType(Defaultable, Movable):
         self.address = 0
 
 
-comptime _EXACT_DICT_TYPE = _Global[
-    StorageType=_ExactDictType, name="MojolearnPyBalancedDictTypeV1",
-    init_fn=_ExactDictType.__init__,
-]
+comptime _EXACT_DICT_TYPE = SharedSlot[_ExactDictType, "MojolearnPyBalancedDictTypeV2"]
 
 
 def _is_exact_dict(value: PythonObject) raises -> Bool:

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Typed native matrix/device lifetimes. No Python _M attribute hook or _DevBuf
 # finalizer participates in a manifold operation, including temporary cleanup.
-from std.ffi import _Global, c_int
+from std.ffi import c_int
 from std.python import Python, PythonObject
 from std.python._cpython import ExternalFunction, PyObjectPtr
 from bindings.cpython_table import cpython_table

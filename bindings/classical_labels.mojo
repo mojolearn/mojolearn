@@ -29,7 +29,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.py_attr import py_attr
 from std.python._cpython import PyObjectPtr
 from bindings.py_typed_call import py_call_typed, typed_python_error
-from bindings.native_buffer_owner import native_buffer_view
+from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.classical_arrays import classical_wrap_array, _store_code, _buffer_typestr
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, _pd_fields, _pd_get, classical_admit_value
 from bindings.sequential_admission import _ordinary_torch
@@ -45,8 +45,7 @@ from bindings.label_input_sources import (
     LABELS_LIST_OTHER, LABELS_LIST_BOOL, LABELS_LIST_FLOAT)
 from bindings.str_labels_native import StrTable, _read, _sorted
 from bindings.cpython_table import cpython_table
-from std.ffi import _Global
-from core.shared_slot import shared_slot_check, shared_slot_word
+from core.shared_slot import SharedSlot
 from bindings.kit_call import kit_connect, kit_provider, kit_capabilities, kit_call
 from bindings.labels_native_abi import (
     LABELS_NATIVE_ABI_NAME, LABELS_NATIVE_FACTORY, LABELS_NATIVE_OPERATION_COUNT, LABELS_CAP_DEVICE,
@@ -171,32 +170,28 @@ def labels_need(table: PythonObject, name: String, message: String, kind: String
 # THE NATIVE DEVICE-OR-HOST SELECTOR (lane s1, S3; bindings/labels_native_abi.mojo).
 # The label steps below run on the GPU base binding's device helpers through
 # its `labels_native_api_v1` provider, connected once per process and kept in
-# the named slot `MojolearnLabelsProviderV1`, or, on an install with no GPU
+# the named slot `MojolearnLabelsProviderV2`, or, on an install with no GPU
 # base binding (the label context's `labels_base_binding` is False), on the
 # same host bodies in-process. A context without the label context at all
 # (no `labels_base_binding` key) takes the label input step only
 # (classical_encode_labels).
 
 #: Layout version of `_LabelsProvider` (core/shared_slot.mojo rule).
-comptime _LABELS_PROVIDER_LAYOUT = 1
-comptime _LABELS_PROVIDER_NAME = "MojolearnLabelsProviderV1"
+comptime _LABELS_PROVIDER_LAYOUT = 2
+comptime _LABELS_PROVIDER_NAME = "MojolearnLabelsProviderV2"
 
 
 struct _LabelsProvider(Defaultable, Movable):
-    # first field: the layout word (core/shared_slot.mojo)
-    var layout: Int
     # 0 not connected yet, 1 the device provider, 2 the host column
     var state: Int
     var provider: PythonObject
 
     def __init__(out self):
-        self.layout = shared_slot_word[_LabelsProvider](_LABELS_PROVIDER_LAYOUT)
         self.state = 0
         self.provider = PythonObject(None)
 
 
-comptime _LABELS_PROVIDER = _Global[StorageType=_LabelsProvider, name=_LABELS_PROVIDER_NAME,
-                                    init_fn=_LabelsProvider.__init__]
+comptime _LABELS_PROVIDER = SharedSlot[_LabelsProvider, _LABELS_PROVIDER_NAME, _LABELS_PROVIDER_LAYOUT]
 
 comptime _LABELS_DEVICE = 1
 comptime _LABELS_HOST = 2
@@ -206,7 +201,6 @@ def _labels_route(context: PythonObject) raises -> Int:
     """`_LABELS_DEVICE` or `_LABELS_HOST`: connect the GPU base binding's
     provider on first use (under the GIL, so one connection per process)."""
     var slot = _LABELS_PROVIDER.get_or_create_ptr()
-    shared_slot_check(slot[].layout, shared_slot_word[_LabelsProvider](_LABELS_PROVIDER_LAYOUT), _LABELS_PROVIDER_NAME)
     if slot[].state != 0:
         return slot[].state
     var base = py_get(context, "labels_base_binding")
@@ -353,7 +347,42 @@ def labels_full_f32(count: Int, value: Float64, context: PythonObject) raises ->
 def labels_reshape(array: PythonObject, shape: PythonObject, context: PythonObject) raises -> PythonObject:
     """`array.reshape(shape)` of a fresh C-order Array: the same store under
     a new shape (the Array the Python reshape returned)."""
-    return classical_wrap_array(array._store, shape, String(array.dtype), "C", context)
+    # The store may be an `array.array` (classical_wrap_array) or the
+    # uninitialised bytearray of admitted_family.admitted_array, which has no
+    # `itemsize`: the new Array shares the source's store, typed view and
+    # address, and only the shape, strides and rank are new.
+    var b = native_loaded_module("builtins")
+    var rank = len(shape)
+    var size = 1
+    for k in range(rank):  # driver-loop: over array rank metadata
+        size *= Int(py=shape[k])
+    if size != Int(py=array.size):
+        raise Error("RuntimeError: an array store does not match its shape")
+    var item = Int(py=array.itemsize)
+    var steps = List[Int](length=rank, fill=0)
+    var step = item
+    for k in range(rank):  # driver-loop: over array rank metadata
+        steps[rank - 1 - k] = step
+        step *= Int(py=shape[rank - 1 - k])
+    var strides = Python.list()
+    for k in range(rank):  # driver-loop: over array rank metadata
+        _ = py_call(strides.append, steps[k])
+    var out = native_storage_allocate(context["array_class"])
+    py_setattr(out, "_store", array._store)
+    py_setattr(out, "_base", PythonObject(None))
+    py_setattr(out, "_pin", PythonObject(None))
+    py_setattr(out, "_mv", array._mv)
+    py_setattr(out, "_addr", array._addr)
+    py_setattr(out, "_readonly", PythonObject(False))
+    py_setattr(out, "shape", py_call(b.tuple, shape))
+    py_setattr(out, "dtype", array.dtype)
+    py_setattr(out, "ndim", PythonObject(rank))
+    py_setattr(out, "size", PythonObject(size))
+    py_setattr(out, "nbytes", PythonObject(size * item))
+    py_setattr(out, "itemsize", PythonObject(item))
+    py_setattr(out, "strides", py_call(b.tuple, strides))
+    py_setattr(out, "order", PythonObject("C"))
+    return out
 
 
 def labels_freeze(array: PythonObject) raises:
@@ -1010,19 +1039,21 @@ def labels_decode_labels(var classes: PythonObject, codes: PythonObject, context
             _ = out  # keep the Python object alive through the native call above
             _ = wide_codes  # keep the Python object alive through the native call above
             return out
-    var values = Python.list()
-    var p = _I64P(unsafe_from_address=labels_address(wide_codes))
-    _ = wide_codes  # keep the Python object alive through the native call above
-    for i in range(n):  # cpu-route: str or bool classes decode to Python objects, the explicit label output step
-        var c = Int(p[i])
-        if c >= k or c < -k:
-            # Python's list index rule (negative codes index from the end) and
-            # its exception class: a CPython IndexError raised inside the
-            # subscript below would cross the boundary as a ValueError.
-            raise Error("IndexError: list index out of range")
-        _ = py_call(values.append, classes[c])
-        _ = wide_codes  # keep the Python object alive through the native call above
-    return values
+    # TOMBSTONE: labels_decode_labels per-row Python append loop (removed: one native list fill) deleted 2026-11-09 by lane p2-labels-lists-arrays; code recoverable at e68654a757.
+    # Restore: git apply experiments/removed/P2_LABELS_LISTS_ARRAYS.patch
+    # Classes the gathers cannot carry (str / bool / object, or ints outside
+    # int64): ONE presized list filled in C from the int64 code words
+    # (p3_decode_list). Lane p2-labels-lists-arrays: the per-row Python
+    # append loop (cpu-route) is gone. Python's list index rule holds
+    # (negative codes index from the end); an out-of-range code raises
+    # Python's IndexError, as the subscript did.
+    if code_dtype != "<i4" and code_dtype != "<i8":
+        raise Error("TypeError: mojolearn: label codes must be int32 or int64, not " + code_dtype)
+    var listed = p3_decode_list(classes, labels_address(wide_codes), 8, n)
+    _ = wide_codes  # keep the Python object alive through the native reads above
+    if listed is None:
+        raise Error("IndexError: list index out of range")
+    return listed
 
 
 def labels_argmax_rows(scores: PythonObject, rows: Int, cols: Int, wide: Bool, context: PythonObject) raises -> PythonObject:

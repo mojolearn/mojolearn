@@ -22,6 +22,7 @@ def candidate(monkeypatch):
     monkeypatch.setenv("MOJOLEARN_EXPERIMENT_RESIDENT_SAMPLING_FP32", "1")
     monkeypatch.setenv("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD", "1")
     monkeypatch.setenv("MOJOLEARN_GENERATION_NATIVE_ENGINE", "0")
+    monkeypatch.delenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP", raising=False)
 
 
 @pytest.mark.parametrize("uniform,temperature,top_k,top_p", [

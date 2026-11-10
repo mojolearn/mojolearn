@@ -15,6 +15,7 @@ from bindings.host_array_native import host_archive_typed
 from core.host_archive_impl import host_archive_copy_f32, host_archive_unique_i32, host_archive_mean_f64, host_archive_reorder_f32, host_archive_reorder_bytes, host_archive_copy_words, host_archive_support_bound, host_archive_svc_gather
 from bindings.scaler_lifecycle_native import scaler_archive_build
 from core.host_archive_gbdt import host_archive_gbdt_text
+from core.host_finite_scan import host_finite_status
 
 
 def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: PythonObject) raises -> PythonObject:
@@ -1201,6 +1202,17 @@ def host_archive_radius_refusals(fields: PythonObject, cls_name: String, context
             + "refused; it must be positive and finite")
 
 
+def _archive_index_finite(index: PythonObject, what: String) raises:
+    """Refuse a loaded float32 neighbor index holding a NaN or an infinity:
+    one parallel SIMD scan over its words (core/host_finite_scan.mojo), made
+    once at load so the queries never scan it."""
+    # parallel: host_finite_status splits the words across the host's cores
+    var status = host_finite_status(Int(py=classical_address(index)), Int(py=index.size))
+    _ = index  # keep the Python object alive through the native scan above
+    if status != 0:
+        raise Error(what + " contains NaN or infinity")
+
+
 def host_archive_radius(cls: PythonObject, arrays: PythonObject, path: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     """RadiusNeighbors.load: the object, attributes and refusals (wording
@@ -1233,6 +1245,10 @@ def host_archive_radius(cls: PythonObject, arrays: PythonObject, path: PythonObj
     if Int(py=index.ndim) != 2 or Int(py=index.shape[0]) != ns or Int(py=index.shape[1]) != nf or ns < 1 or nf < 1:
         raise Error(where + " index has shape " + _archive_builtin_repr(index.shape) + ", meta says ("
             + String(ns) + ", " + String(nf) + ")")
+    # Lane a8b-device-x-neighbors-rest: the loaded index is tested finite
+    # ONCE, here (one parallel host scan of the words just read); no radius
+    # query tests the index again.
+    _archive_index_finite(index, where + " index")
     py_setitem(fields, "_index", index)
     py_setitem(fields, "n_samples_fit_", ns)
     py_setitem(fields, "n_features_in_", nf)
@@ -1266,6 +1282,9 @@ def host_archive_neighbors(cls: PythonObject, arrays: PythonObject, kind: Int,
     if n < 1 or nf < 1:
         raise Error("saved neighbor index must be nonempty")
     var index = host_archive_shape(arrays, "index", "<f4", Python.tuple(n, nf), context)
+    # Lane a8b-device-x-neighbors-rest: tested once at load, as a fit tests
+    # it; a query's resident prepare does not test it again.
+    _archive_index_finite(index, "saved neighbor index")
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
     host_archive_mode(arrays, fields, context)

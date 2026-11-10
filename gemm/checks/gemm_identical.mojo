@@ -140,7 +140,7 @@ from std.sys.defines import get_defined_int
 from std.sys.info import is_amd_gpu
 from core.apple_air import simdgroup_load_legacy_air
 from gemm.afn_apple_fast import AFN_GEMM_FP32_MMA, afn_gemm_fp32_into, afn_gemm_fp32_ragged_k_ptr_into
-from std.ffi import _Global, external_call
+from std.ffi import external_call
 from std.time import perf_counter_ns
 
 from gemm.contract import (
@@ -193,6 +193,7 @@ from layout import TileTensor
 from layout.tile_layout import row_major
 from linalg.matmul import matmul
 from linalg.gemv import gemv_gpu
+from core.shared_slot import SharedSlot
 
 
 # ===========================================================================
@@ -4317,8 +4318,8 @@ struct _SplitCells(Defaultable, Movable):
         self.cells = -1
 
 
-comptime _SPLIT_CELLS_NAME = "MojoGemmSplitCellsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmSplitCellsFast"
-comptime GEMM_SPLIT_CELLS = _Global[StorageType=_SplitCells, name=_SPLIT_CELLS_NAME, init_fn=_SplitCells.__init__]
+comptime _SPLIT_CELLS_NAME = "MojolearnGemmSplitCellsIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnGemmSplitCellsFastV1"
+comptime GEMM_SPLIT_CELLS = SharedSlot[_SplitCells, _SPLIT_CELLS_NAME]
 
 
 def gemm_split_cells_cap() -> Int:
@@ -4415,8 +4416,8 @@ struct _TileMinK(Defaultable, Movable):
         self.k = -1
 
 
-comptime _TILE_MIN_K_NAME = "MojoGemmTileMinKIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmTileMinKFast"
-comptime GEMM_TILE_MIN_K = _Global[StorageType=_TileMinK, name=_TILE_MIN_K_NAME, init_fn=_TileMinK.__init__]
+comptime _TILE_MIN_K_NAME = "MojolearnGemmTileMinKIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnGemmTileMinKFastV1"
+comptime GEMM_TILE_MIN_K = SharedSlot[_TileMinK, _TILE_MIN_K_NAME]
 
 
 def gemm_tile_min_k() -> Int:
@@ -4444,8 +4445,8 @@ struct _TileMinBlocks(Defaultable, Movable):
         self.blocks = -1
 
 
-comptime _TILE_MIN_NAME = "MojoGemmTileMinBlocksIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmTileMinBlocksFast"
-comptime GEMM_TILE_MIN_BLOCKS = _Global[StorageType=_TileMinBlocks, name=_TILE_MIN_NAME, init_fn=_TileMinBlocks.__init__]
+comptime _TILE_MIN_NAME = "MojolearnGemmTileMinBlocksIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnGemmTileMinBlocksFastV1"
+comptime GEMM_TILE_MIN_BLOCKS = SharedSlot[_TileMinBlocks, _TILE_MIN_NAME]
 
 
 struct _TileShortK(Defaultable, Movable):
@@ -4455,8 +4456,8 @@ struct _TileShortK(Defaultable, Movable):
         self.k = -1
 
 
-comptime _TILE_SHORT_K_NAME = "MojoGemmTileShortKIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmTileShortKFast"
-comptime GEMM_TILE_SHORT_K = _Global[StorageType=_TileShortK, name=_TILE_SHORT_K_NAME, init_fn=_TileShortK.__init__]
+comptime _TILE_SHORT_K_NAME = "MojolearnGemmTileShortKIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnGemmTileShortKFastV1"
+comptime GEMM_TILE_SHORT_K = SharedSlot[_TileShortK, _TILE_SHORT_K_NAME]
 
 
 def gemm_tile_short_k() -> Int:
@@ -4804,8 +4805,8 @@ struct _FillDevice(Defaultable, Movable):
         self.warp = 0
 
 
-comptime _FILL_DEVICE_NAME = "MojoGemmFillDeviceIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmFillDeviceFast"
-comptime GEMM_FILL_DEVICE = _Global[StorageType=_FillDevice, name=_FILL_DEVICE_NAME, init_fn=_FillDevice.__init__]
+comptime _FILL_DEVICE_NAME = "MojolearnGemmFillDeviceIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnGemmFillDeviceFastV1"
+comptime GEMM_FILL_DEVICE = SharedSlot[_FillDevice, _FILL_DEVICE_NAME]
 
 
 def gemm_fill_note_device(ctx: DeviceContext):

@@ -24,7 +24,7 @@
 # no resident entry for them.
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.admitted_family import admit_family, admit_family_copied, admit_family_meta, admit_family_weights, admitted_array
+from bindings.admitted_family import admit_family, admit_family_copied, admit_family_meta, admit_family_weights, admitted_array, admit_family_fold_meta
 from core.admitted_input import admitted_cast_f32
 from core.cast_in import CAST_KIND_SIGNED
 from core.admitted_convert import admitted_convert_vector
@@ -77,7 +77,8 @@ comptime _DEV636_Y = "mojolearn SVC: y contains a non-finite value (DEVIATION 63
 
 from bindings.fitted_resident_door import fitted_resident_lease
 from bindings.device_rows_door import DoorRowsStore, door_is_device_rows, door_rows_refuse
-from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse
+from bindings.admitted_input import admit_x_unrecorded, admitted_finite_refuse, admit_rows_host_unchecked
+from core.host_finite_scan import host_all_finite_f32_strided
 from providers.python.svc_descriptor_pyapi import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute, svr_execute, svc_descriptor_execute, svc_descriptor_flags, svc_ovo_execute
 from providers.python.compiled_binding_snapshot_pyapi import CompiledBindingSnapshot
 from providers.python.array_metadata_pyapi import ArrayMetadata, array_shape_once, array_metadata_once
@@ -523,17 +524,25 @@ def _pair_select(binding: PythonObject, codes: PythonObject, ci: Int, cj: Int, c
 
 
 def _solve(fields: PythonObject, binding: PythonObject, x_addr: Int, n_rows: Int, n_cols: Int, labels_addr: Int,
-           gamma: Float64, c_rows_addr: Int, context: PythonObject,
-           settings: SvcOperationSettings, native: PythonObject) raises -> PythonObject:
+                gamma: Float64, c_rows_addr: Int, context: PythonObject,
+                settings: SvcOperationSettings, native: PythonObject, fold: DoorRowsStore, scale_gamma: Bool,
+                device_form: Bool) raises -> PythonObject:
     """`SVC._solve`: ONE binary C-SVC solve; (n_support, dual, support, sv,
-    info) with the worst-case buffers uncut. `c_rows_addr` 0 = unweighted."""
+    info) with the worst-case buffers uncut. `c_rows_addr` 0 = unweighted.
+    `device_form` (the GPU binding, lane a8a) calls `svc_fit`'s
+    15-value form: X is the host words at `x_addr` or the fold `fold`
+    gathered on the device, gamma='scale' (`scale_gamma`) is resolved from
+    the fit's device copy, and info's slots 5-7 return X's finite and range
+    words and the gamma solved with. A flagged X is refused here in
+    admit_x's wording ('Input X contains NaN or infinity (SVC).')."""
     var dual = family_array(Python.tuple(PythonObject(n_rows)), "<f4", context)
     var support = family_array(Python.tuple(PythonObject(n_rows)), "<i4", context)
     var sv = family_array(Python.tuple(PythonObject(n_rows * n_cols)), "<f4", context)
-    var info = family_array(Python.tuple(PythonObject(5)), "<f8", context)
+    var info = family_array(Python.tuple(PythonObject(8)), "<f8", context)
     # ORDER MATCHES bindings/_mojolearn_svm.mojo::svc_fit_binding: n_rows,
     # n_features, kernel, gamma, C, tol, max_iter, nochange_steps, degree,
-    # coef0[, the per-row bounds' address]
+    # coef0[, the per-row bounds' address[, the fold's three store ids,
+    # scale_gamma]]
     var n_support = PythonObject(None)
     if native is not None:
         n_support = PythonObject(svc_descriptor_execute(native, 0,
@@ -542,7 +551,13 @@ def _solve(fields: PythonObject, binding: PythonObject, x_addr: Int, n_rows: Int
     else:
         var params = Python.list(n_rows, n_cols, settings.kernel, settings.gamma, settings.c, settings.tol,
             settings.max_iter, settings.nochange_steps, settings.degree, settings.coef0)
-        if c_rows_addr != 0:
+        if device_form:
+            _ = py_call(params.append, PythonObject(c_rows_addr))
+            _ = py_call(params.append, PythonObject(fold.base_id))
+            _ = py_call(params.append, PythonObject(fold.base_rows))
+            _ = py_call(params.append, PythonObject(fold.index_id))
+            _ = py_call(params.append, PythonObject(1 if scale_gamma else 0))
+        elif c_rows_addr != 0:
             _ = py_call(params.append, PythonObject(c_rows_addr))
         n_support = family_call(_entry(binding, "svc_fit", context), PythonObject(x_addr), PythonObject(labels_addr),
             classical_address(dual), classical_address(support), classical_address(sv), classical_address(info), params)
@@ -550,7 +565,75 @@ def _solve(fields: PythonObject, binding: PythonObject, x_addr: Int, n_rows: Int
     _ = support  # keep the Python object alive through the native call above
     _ = dual  # keep the Python object alive through the native call above
     _ = info  # keep the Python object alive through the native call above
+    if device_form:
+        _svm_fit_refuse(Int(svc_read_f64(info, 5)), Int(svc_read_f64(info, 6)), fold, "SVC")
     return Python.tuple(PythonObject(svc_int(n_support)), dual, support, sv, info)
+
+
+def _svm_fit_refuse(finite_word: Int, range_word: Int, fold: DoorRowsStore, est: String) raises:
+    """The refusal of a fit X the device entry flagged (lane a8a), in
+    admit_x's wording: a fold through `door_rows_refuse` (an index out of
+    range or a NaN / infinity), host words through `admitted_finite_refuse`."""
+    if fold.active():
+        door_rows_refuse(finite_word, range_word, est, fold.base_rows)
+    else:
+        admitted_finite_refuse(finite_word, est)
+
+
+def _svm_fit_entry(binding: PythonObject, native: PythonObject) raises -> Bool:
+    """The GPU binding's fit entries take the device-X form (lane a8a): the
+    binding that registers `svc_predict_resident` (a host build and the
+    descriptor route have none; they take host words tested at the door)."""
+    return _resident_entry(binding, native) is not None
+
+
+def _svm_fit_admit(source: PythonObject, est: String, entry: Bool, context: PythonObject,
+                   mut fold: DoorRowsStore) raises -> ArrayMetadata:
+    """The fit X of a kernel SVM (lane a8a). With the device-X entry
+    (`entry`) a model-selection fold stays on the device (admit_x
+    `device_x`: `fold` receives its store ids, the record has no host
+    words) and a host X is admitted untested (the entry tests the words it
+    copies). Otherwise the float32 C-order host words, untested here (the
+    door tests them with `_svm_x_scan` once the route is known)."""
+    fold = DoorRowsStore.none()
+    if entry and door_is_device_rows(source, context):
+        var fx = admit_x_unrecorded(source, est, context, device_x=True, finite=False)
+        if fx.store.active():
+            fold = fx.store
+            return admit_family_fold_meta(fx.rows, fx.cols)
+        return admit_family_meta(fx.array, 2, "X", context, True)
+    return admit_family_meta(source, 2, "X", context, True)
+
+
+def _svm_fit_host_rows(source: PythonObject, context: PythonObject) raises -> ArrayMetadata:
+    """A fold's host rows for a fit route that reads host words (one-vs-one,
+    Platt, kernel='precomputed'), gathered in parallel out of model
+    selection's host base; untested (the door tests them)."""
+    return admit_family_meta(admit_rows_host_unchecked(source, context), 2, "X", context, True)
+
+
+def _svm_x_scan(x_meta: ArrayMetadata, est: String) raises:
+    """The finite test of a fit X whose entry returns no status word (the
+    host column, the descriptor route, the one-vs-one, Platt and
+    precomputed routes): one parallel host pass over the admitted float32
+    words, admit_x's wording (lane a8a)."""
+    var src = x_meta.source
+    if src.rows > 0 and src.cols > 0 and not host_all_finite_f32_strided(src.addr, src.s0, src.s1, src.rows, src.cols):
+        admitted_finite_refuse(1, est)
+
+
+def _svm_device_gamma(fields: PythonObject, n_cols: Int) raises -> Tuple[Float64, Bool]:
+    """`_resolve_gamma` for the device-X entry: 'auto' 1 / n_cols, a float
+    as given, and 'scale' (True) resolved by the entry from its own device
+    copy of X (the same exact limbs, so the same gamma; 1.0 is the
+    placeholder the entry replaces)."""
+    var g = svc_field(fields, "_hp_gamma")
+    if family_isinstance(g, svc_builtins().str):
+        if String(g) == "auto":
+            return (1.0 / Float64(n_cols), False)
+        if String(g) == "scale":
+            return (1.0, True)
+    return (Float64(py=g), False)
 
 
 def _machine(fields: PythonObject, binding: PythonObject, q: PythonObject, dual: PythonObject, sv: PythonObject,
@@ -788,7 +871,8 @@ def _platt(fields: PythonObject, binding: PythonObject, x_meta: ArrayMetadata, c
                     _ = rows_held  # keep the Python object alive through the native call above
                 var cols = Int(py=sub.shape[1])
                 var solved = _solve(fields, binding, _addr(sub), nt, cols, _addr(lab), gamma,
-                                    0 if sub_c is None else _addr(sub_c), context, settings, native)
+                                    0 if sub_c is None else _addr(sub_c), context, settings, native,
+                                    DoorRowsStore.none(), False, False)
                 _ = lab  # keep the Python object alive through the native call above
                 _ = sub_c  # keep the Python object alive through the native call above
                 var q: PythonObject
@@ -895,7 +979,8 @@ def _fit_ovo(fields: PythonObject, binding: PythonObject, x_meta: ArrayMetadata,
                 _ = idx_a  # keep the Python object alive through the native call above
             var sub_c = sel[2]
             var solved = _solve(fields, binding, _addr(sub), m, Int(py=sub.shape[1]), _addr(sel[1]), gamma,
-                                0 if sub_c is None else _addr(sub_c), context, settings, native)
+                                0 if sub_c is None else _addr(sub_c), context, settings, native,
+                                DoorRowsStore.none(), False, False)
             _ = sub_c  # keep the Python object alive through the native call above
             var info = solved[4]
             _ = sub_c  # keep the Python object alive through the native call above
@@ -1004,8 +1089,14 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var binding = args[0]
     var fields = py_fields(model)
     _svm_validate(model, fields, True, context)
-    var x_meta = admit_family_meta(args[1], 2, "X", context, True)
-    py_setitem(fields, PythonObject("input_copied_"), PythonObject(admit_family_copied(x_meta, args[1])))
+    # Lane a8a: the GPU binding's binary fit takes X on the device (a fold
+    # gathered there, host words copied once) and tests it there; every
+    # other route tests the host words here (`_svm_x_scan`). One wording.
+    var entry = _svm_fit_entry(binding, native)
+    var fold = DoorRowsStore.none()
+    var x_meta = _svm_fit_admit(args[1], "SVC", entry, context, fold)
+    py_setitem(fields, PythonObject("input_copied_"),
+               PythonObject(True if fold.active() else admit_family_copied(x_meta, args[1])))
     var x = x_meta.keep
     var y = args[2]
     var parsed = _as_labels(y, context)
@@ -1017,10 +1108,28 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var n_y = Int(py=pair.shape[0]) if labels is None else Int(py=labels.shape[0])
     if n_y != n_rows:
         raise Error("mojolearn SVC: y has " + String(n_y) + " entries, X has " + String(n_rows) + " rows")
-    if String(svc_field(fields, "_hp_kernel")) == "precomputed" and n_cols != n_rows:
+    var precomputed = String(svc_field(fields, "_hp_kernel")) == "precomputed"
+    if precomputed and n_cols != n_rows:
         raise Error("mojolearn SVC: kernel='precomputed' needs the square n x n "
                     + "kernel matrix as X, got " + String(n_rows) + " x " + String(n_cols))
-    var gamma = _resolve_gamma(fields, binding, x_meta, context, native)
+    # The device-X route: one binary machine on a computed kernel. The
+    # one-vs-one pairs and Platt's folds gather host rows of X, and a
+    # precomputed X is gathered by rows and columns: those read host words.
+    var device_x = (entry and labels is not None and not precomputed
+                    and not svc_truthy(svc_field(fields, "_hp_probability")))
+    if fold.active() and not device_x:
+        x_meta = _svm_fit_host_rows(args[1], context)
+        x = x_meta.keep
+        fold = DoorRowsStore.none()
+    var gamma = 1.0
+    var scale_gamma = False
+    if device_x:
+        var resolved = _svm_device_gamma(fields, n_cols)
+        gamma = resolved[0]
+        scale_gamma = resolved[1]
+    else:
+        _svm_x_scan(x_meta, "SVC")
+        gamma = _resolve_gamma(fields, binding, x_meta, context, native)
     var c_rows = _c_rows(binding, svc_float(svc_field(fields, "_hp_C")), n_rows, args[3],
                          py_get(fields, PythonObject("class_weight"), PythonObject(None)), y, "SVC", context, native)
     var settings = _svc_fit_settings(fields, gamma, n_cols, context)
@@ -1034,9 +1143,13 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     if py_contains(fields, PythonObject("_pairs")):
         _ = family_call(fields.pop, PythonObject("_pairs"), PythonObject(None))
     var solved = _solve(fields, binding, x_meta.source.addr, n_rows, n_cols, _addr(labels), gamma,
-                        0 if c_rows is None else _addr(c_rows), context, settings, native)
+                        0 if c_rows is None else _addr(c_rows), context, settings, native, fold, scale_gamma,
+                        device_x)
     _ = labels  # keep the Python object alive through the native call above
     var info = solved[4]
+    if device_x:
+        # the gamma the entry solved with (gamma='scale' from its device copy)
+        gamma = svc_read_f64(info, 7)
     _ = labels  # keep the Python object alive through the native call above
     var label0 = svc_round_f32(svc_read_f64(info, 3))
     var label1 = svc_round_f32(svc_read_f64(info, 4))
@@ -1395,38 +1508,74 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var binding = args[0]
     var fields = py_fields(model)
     _svm_validate(model, fields, False, context)
-    var x_meta = admit_family_meta(args[1], 2, "X", context, True)
-    py_setitem(fields, PythonObject("input_copied_"), PythonObject(admit_family_copied(x_meta, args[1])))
+    # Lane a8a: the GPU binding's fit takes X on the device (a fold gathered
+    # there, host words copied once; never a host List) and tests it there;
+    # every other route tests the host words here. One wording.
+    var entry = _svm_fit_entry(binding, native)
+    var fold = DoorRowsStore.none()
+    var x_meta = _svm_fit_admit(args[1], "SVR", entry, context, fold)
+    py_setitem(fields, PythonObject("input_copied_"),
+               PythonObject(True if fold.active() else admit_family_copied(x_meta, args[1])))
     var x = x_meta.keep
     var n_rows = x_meta.shape[0]
     var n_cols = x_meta.shape[1]
-    # `_as_targets`: no finiteness check here (svr_fit names the index)
+    # `_as_targets`: y refused non-finite here, in scikit-learn's wording.
     var shape = svc_shape_of(args[2], context)
     if len(shape) != 1:
         raise Error("mojolearn SVR: y must be 1-D, got " + String(len(shape)) + "-D shape " + family_repr(shape))
-    var targets = admit_family(args[2], 1, "y", context, False).array
+    var targets = admit_family(args[2], 1, "y", context, False, True,
+                               refusal="Input y contains NaN or infinity (SVR).").array
     if Int(py=targets.shape[0]) != n_rows:
         raise Error("mojolearn SVR: y has " + String(Int(py=targets.shape[0])) + " entries, X has " + String(n_rows) + " rows")
-    if String(svc_field(fields, "_hp_kernel")) == "precomputed" and n_cols != n_rows:
+    var precomputed = String(svc_field(fields, "_hp_kernel")) == "precomputed"
+    if precomputed and n_cols != n_rows:
         raise Error("mojolearn SVR: kernel='precomputed' needs the square n x n "
                     + "kernel matrix as X, got " + String(n_rows) + " x " + String(n_cols))
-    var gamma = _resolve_gamma(fields, binding, x_meta, context, native)
+    var device_x = entry and not precomputed
+    if fold.active() and not device_x:
+        x_meta = _svm_fit_host_rows(args[1], context)
+        x = x_meta.keep
+        fold = DoorRowsStore.none()
+    var gamma = 1.0
+    var scale_gamma = False
+    if device_x:
+        var resolved = _svm_device_gamma(fields, n_cols)
+        gamma = resolved[0]
+        scale_gamma = resolved[1]
+    else:
+        _svm_x_scan(x_meta, "SVR")
+        gamma = _resolve_gamma(fields, binding, x_meta, context, native)
     var c_rows = _c_rows(binding, svc_float(svc_field(fields, "_hp_C")), n_rows, args[3], PythonObject(None),
                          PythonObject(None), "SVR", context, native)
     # WORST-CASE OUTPUT BUFFERS: at most n_rows coefficients (DEVIATION 873)
     var dual = family_array(Python.tuple(PythonObject(n_rows)), "<f4", context)
     var support = family_array(Python.tuple(PythonObject(n_rows)), "<i4", context)
     var sv = family_array(Python.tuple(PythonObject(n_rows * n_cols)), "<f4", context)
-    var info = family_array(Python.tuple(PythonObject(3)), "<f8", context)
+    var info = family_array(Python.tuple(PythonObject(6)), "<f8", context)
     # ORDER MATCHES bindings/_mojolearn_svm.mojo::svr_fit_binding: n_rows,
     # n_features, kernel, gamma, C, epsilon, tol, max_iter,
-    # nochange_steps[, the per-row bounds' address[, degree, coef0]]
+    # nochange_steps[, the per-row bounds' address[, degree, coef0[, the
+    # fold's three store ids, scale_gamma]]]
     var params = Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(_kernel_code(fields, context)),
                              PythonObject(gamma), svc_field(fields, "_hp_C"), svc_field(fields, "_hp_epsilon"),
                              svc_field(fields, "_hp_tol"), svc_field(fields, "_hp_max_iter"),
                              svc_field(fields, "_hp_nochange_steps"))
     var k = String(svc_field(fields, "_hp_kernel"))
-    if c_rows is not None or k == "poly" or k == "sigmoid":
+    if device_x and native is None:
+        # The 16-value device-X form (lane a8a); degree and coef0 are the
+        # constructor values off 'poly' / 'sigmoid', as the short forms pass.
+        _ = py_call(params.append, PythonObject(0) if c_rows is None else classical_address(c_rows))
+        _ = c_rows  # keep the Python object alive through the native call below
+        if k == "poly" or k == "sigmoid":
+            _kernel_tail(fields, params)
+        else:
+            _ = py_call(params.append, PythonObject(3))
+            _ = py_call(params.append, PythonObject(0.0))
+        _ = py_call(params.append, PythonObject(fold.base_id))
+        _ = py_call(params.append, PythonObject(fold.base_rows))
+        _ = py_call(params.append, PythonObject(fold.index_id))
+        _ = py_call(params.append, PythonObject(1 if scale_gamma else 0))
+    elif c_rows is not None or k == "poly" or k == "sigmoid":
         _ = py_call(params.append, PythonObject(0) if c_rows is None else classical_address(c_rows))
         _ = c_rows  # keep the Python object alive through the native call above
         _kernel_tail(fields, params)
@@ -1441,6 +1590,10 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     _ = dual  # keep the Python object alive through the native call above
     _ = info  # keep the Python object alive through the native call above
     _ = c_rows  # keep the Python object alive through the native call above
+    if device_x and native is None:
+        # X's finite and range words and the gamma solved with (lane a8a)
+        _svm_fit_refuse(Int(svc_read_f64(info, 3)), Int(svc_read_f64(info, 4)), fold, "SVR")
+        gamma = svc_read_f64(info, 5)
     py_setitem(fields, PythonObject("n_features_in_"), PythonObject(n_cols))
     py_setitem(fields, PythonObject("n_support_"), PythonObject(n_support))
     _ = info  # keep the Python object alive through the native call above

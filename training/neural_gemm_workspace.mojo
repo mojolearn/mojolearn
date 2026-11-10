@@ -5,12 +5,12 @@ Source-only, default OFF, no validation or measurement in this revision.
 Only scratch is retained, never operands or outputs. Each entry owns its
 device context; the public training tensor operation drains before returning.
 """
-from std.ffi import _Global
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.ctx_key import ctx_cache_key, ctx_cache_slot
 from gemm.experiments.bounded_workspace import BoundedGemmWorkspace
+from core.shared_slot import SharedSlot
 
 comptime IDN_TRAINING_GEMM_WORKSPACE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -29,8 +29,7 @@ struct _TrainingGemmScratch(Defaultable, Movable):
         self.ids = List[Int]()
         self.workspaces = List[BoundedGemmWorkspace]()
 
-comptime _TRAINING_GEMM_SCRATCH = _Global[StorageType=_TrainingGemmScratch,
-    name="MojolearnNI01TrainingGemmScratch", init_fn=_TrainingGemmScratch.__init__]
+comptime _TRAINING_GEMM_SCRATCH = SharedSlot[_TrainingGemmScratch, "MojolearnNI01TrainingGemmScratchV1"]
 
 def training_gemm_cached_into(
     ctx: DeviceContext, mut c: DeviceBuffer[DType.float32],

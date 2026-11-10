@@ -11,6 +11,7 @@ from checks.numerics import ftz, identical_cos, identical_div, identical_exp, id
 from x_cluster.bodies import IDN_BGMM_NK_LEVELS, SplitMix64
 from mixture.nk_order import gmm_nk_fold_levels
 from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
+from x_linear.ff import FF, ff_add, ff_div, ff_mul, ff_neg, ff_sqrt, ff_sub
 
 
 # DEVIATION 5100 (fold order) and 5101 (contraction): squared distance
@@ -415,27 +416,42 @@ def oracle_agglo(
 
 
 # ---------------------------------------------------------------- DEVIATION 5119
-def oracle_jacobi_svd(
-    a: List[Float64], m: Int, mut u: List[Float64], mut sv: List[Float64], mut v: List[Float64],
-    reversed_fold: Bool = False,
-) raises:
-    """`x_cluster/spectral_assign.mojo::jacobi_svd` restated for a full-rank
-    a: one-sided Jacobi on the columns, pairs (p < q) in row order, the three
-    column sums folded rows ascending (descending with `reversed_fold`, the
-    alternative the fixture must separate), every product pinned, zeta =
-    (beta - alpha) / (2 gamma), t = sign(zeta) / (|zeta| + sqrt(1 + zeta^2)),
-    c = 1 / sqrt(1 + t^2), s = c t; stop after a sweep that rotates nothing."""
-    var w = a.copy()
-    v = List[Float64](length=m * m, fill=0)
-    for i in range(m):
-        v[i * m + i] = 1
+# TOMBSTONE: the binary64 `oracle_jacobi_svd` (of x_cluster/spectral_assign.mojo's binary64 `jacobi_svd`) deleted
+# 2026-11-09 by lane m3-linalg-and-housekeeping with its subject (cluster_qr moved to float-float); code recoverable at
+# 0ce88411d3. Restore: git apply experiments/removed/CLUSTER_QR_BINARY64_HOST.patch
 
-    def col(w: List[Float64], m: Int, p: Int, q: Int, rev: Bool) -> Float64:
-        var s = Float64(0)
+
+def oracle_df64_svd(
+    a: List[FF], m: Int, mut u: List[FF], mut sv: List[FF], mut v: List[FF], reversed_fold: Bool = False
+) raises:
+    """x_cluster/spectral_df64.mojo's float-float one-sided Jacobi SVD
+    (`_sd_svd_host`, `sdk_step_kernel`) restated for a full-rank a (m x m,
+    row major): pairs (p < q) in row order, the three column sums folded
+    rows ascending (descending with `reversed_fold`, the alternative the
+    fixture must separate), a rotation skipped when gamma's hi word is 0 or
+    |gamma| <= 2^-44 sqrt(alpha beta), zeta = (beta - alpha) / (2 gamma), t
+    = sign(zeta) / (|zeta| + sqrt(1 + zeta^2)), c = 1 / sqrt(1 + t^2), s =
+    c t; stop after a sweep that rotates nothing (cap 80). u = w / ||w||."""
+    var w = a.copy()
+    var zero = FF(Float32(0), Float32(0))
+    var one = FF(Float32(1), Float32(0))
+    var two = FF(Float32(2), Float32(0))
+    v = List[FF](length=m * m, fill=zero)
+    for i in range(m):
+        v[i * m + i] = one
+
+    def col(w: List[FF], m: Int, p: Int, q: Int, rev: Bool) -> FF:
+        var s = FF(Float32(0), Float32(0))
         for rr in range(m):
             var r = m - 1 - rr if rev else rr
-            s += identical_mul64(w[r * m + p], w[r * m + q])
+            s = ff_add(s, ff_mul(w[r * m + p], w[r * m + q]))
         return s
+
+    def less(a: FF, b: FF) -> Bool:
+        return a.hi < b.hi or (a.hi == b.hi and a.lo < b.lo)
+
+    def absf(x: FF) -> FF:
+        return ff_neg(x) if x.hi < Float32(0) else x
 
     for _sweep in range(80):
         var rotated = False
@@ -444,35 +460,39 @@ def oracle_jacobi_svd(
                 var alpha = col(w, m, p, p, reversed_fold)
                 var beta = col(w, m, q, q, reversed_fold)
                 var gamma = col(w, m, p, q, reversed_fold)
-                if gamma == 0 or abs(gamma) <= Float64(2.220446049250313e-16) * sqrt(identical_mul64(alpha, beta)):
+                var ab = ff_mul(alpha, beta)
+                var root = ff_sqrt(ab) if ab.hi > Float32(0) else FF(Float32(0), Float32(0))
+                var bound = ff_mul(FF(Float32(5.684341886080802e-14), Float32(0)), root)
+                if gamma.hi == Float32(0) or not less(bound, absf(gamma)):
                     continue
                 rotated = True
-                var zeta = (beta - alpha) / (2 * gamma)
-                var t = Float64(1) / (abs(zeta) + sqrt(1 + identical_mul64(zeta, zeta)))
-                if zeta < 0:
-                    t = -t
-                var c = Float64(1) / sqrt(1 + identical_mul64(t, t))
-                var s = identical_mul64(c, t)
+                var zeta = ff_div(ff_sub(beta, alpha), ff_mul(two, gamma))
+                var t = ff_div(one, ff_add(absf(zeta), ff_sqrt(ff_add(one, ff_mul(zeta, zeta)))))
+                if zeta.hi < Float32(0):
+                    t = ff_neg(t)
+                var c = ff_div(one, ff_sqrt(ff_add(one, ff_mul(t, t))))
+                var s = ff_mul(c, t)
                 for r in range(m):
                     var wp = w[r * m + p]
                     var wq = w[r * m + q]
-                    w[r * m + p] = identical_mul64(c, wp) - identical_mul64(s, wq)
-                    w[r * m + q] = identical_mul64(s, wp) + identical_mul64(c, wq)
+                    w[r * m + p] = ff_sub(ff_mul(c, wp), ff_mul(s, wq))
+                    w[r * m + q] = ff_add(ff_mul(s, wp), ff_mul(c, wq))
                     var vp = v[r * m + p]
                     var vq = v[r * m + q]
-                    v[r * m + p] = identical_mul64(c, vp) - identical_mul64(s, vq)
-                    v[r * m + q] = identical_mul64(s, vp) + identical_mul64(c, vq)
+                    v[r * m + p] = ff_sub(ff_mul(c, vp), ff_mul(s, vq))
+                    v[r * m + q] = ff_add(ff_mul(s, vp), ff_mul(c, vq))
         if not rotated:
             break
-    sv = List[Float64](length=m, fill=0)
-    u = List[Float64](length=m * m, fill=0)
+    sv = List[FF](length=m, fill=zero)
+    u = List[FF](length=m * m, fill=zero)
     for j in range(m):
-        var nj = sqrt(col(w, m, j, j, reversed_fold))
-        if nj == 0:
-            raise Error("oracle_jacobi_svd: the fixture must be full rank")
+        var nn = col(w, m, j, j, reversed_fold)
+        if not (nn.hi > Float32(0)):
+            raise Error("oracle_df64_svd: the fixture must be full rank")
+        var nj = ff_sqrt(nn)
         sv[j] = nj
         for r in range(m):
-            u[r * m + j] = w[r * m + j] / nj
+            u[r * m + j] = ff_div(w[r * m + j], nj)
 
 
 def oracle_ap_noise(s_in: List[Float32], seed: UInt64) -> List[Float32]:

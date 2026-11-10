@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn
-"""CANDIDATE WHEELS FOR A MEASUREMENT, NEVER A RELEASE (lane candidate-build, 2026-11-09;
-docs/plans/PRE_0867_MEASUREMENT.md).
+"""A MEASUREMENT BUILD: WHEELS BUILT FROM ONE COMMIT TO MEASURE THEM, NEVER A RELEASE CANDIDATE (lane
+candidate-build, 2026-11-09; docs/plans/PRE_0867_MEASUREMENT.md; AGENTS.md "Fix everything before a release":
+it never touches main, tags or PyPI, and no release happens until everything is fixed and measured clean). The
+subcommand keeps the name `candidate`.
 
     python3 tools/release.py candidate --commit <sha40> [--vendors nvidia,amd] [--defines "-D A=1 -D B=2"]
         [--label NAME] [--base-version 0.8.67] [--ref <pushed tooling branch>] [--dry-run]
@@ -158,7 +160,7 @@ def main(argv=None, release=None):
             # no byte could change: the B set would be the A set under another version
             raise SystemExit(f"candidate: no .mojo or bindings/ file of {a.commit[:12]} names {name}; "
                              "that define changes nothing at this commit")
-        print(f"candidate: {name} is read by {', '.join(readers[:6])}" + (" ..." if len(readers) > 6 else ""))
+        print(f"measurement build: {name} is read by {', '.join(readers[:6])}" + (" ..." if len(readers) > 6 else ""))
     label = a.label or default_label(defines)
     if label and not LABEL_RE.fullmatch(label):
         raise SystemExit("candidate: --label is lower case letters and digits, dot separated (a PEP 440 local "
@@ -198,8 +200,8 @@ def main(argv=None, release=None):
     args.candidate_version, args.candidate_defines, args.candidate_ref = version, defines, a.ref
     r = release.Release(args)
     if r.commit != a.commit:
-        raise SystemExit(f"candidate: the Release resolved {r.commit}, not {a.commit}")
-    print(f"candidate {version} of {a.commit[:12]}" + (f" defines {defines}" if defines else "")
+        raise SystemExit(f"measurement build: the Release resolved {r.commit}, not {a.commit}")
+    print(f"measurement build {version} of {a.commit[:12]}" + (f" defines {defines}" if defines else "")
           + f"; work dir {work}; steps {', '.join(STEPS)} (every other release step is skipped)")
     rc = r.go()
 
@@ -207,16 +209,16 @@ def main(argv=None, release=None):
     moved = [k for k in ("origin_main", "origin_tags_sha256", "local_tags_sha256") if before[k] != after[k]]
     if moved:
         # this path has no push, tag or publish command; a change here is someone else's, and is reported
-        raise SystemExit("candidate: CHANGED during the run: " + ", ".join(f"{k} {before[k]} -> {after[k]}" for k in moved)
-                         + " (the candidate path pushes and tags nothing; check who moved it)")
-    print(f"candidate: origin/main {str(after['origin_main'])[:12]} and {after['origin_tags']} origin / "
+        raise SystemExit("measurement build: CHANGED during the run: " + ", ".join(f"{k} {before[k]} -> {after[k]}" for k in moved)
+                         + " (a measurement build pushes and tags nothing; check who moved it)")
+    print(f"measurement build: origin/main {str(after['origin_main'])[:12]} and {after['origin_tags']} origin / "
           f"{after['local_tags']} local tags unchanged")
     if rc or a.dry_run:
         return rc
     final = work / a.commit[:12] / "linux" / "final"
     finals = r.split_finals()
     if not finals.get("linux") or release.wheel_commit(finals["linux"]) != a.commit:
-        raise SystemExit(f"candidate: no core wheel of {a.commit[:12]} in {final}")
+        raise SystemExit(f"measurement build: no core wheel of {a.commit[:12]} in {final}")
     manifests = {}
     for vendor in vendors:
         wheels = [finals["linux"], finals[vendor]]
@@ -224,13 +226,13 @@ def main(argv=None, release=None):
         for f in manifests[vendor]["files"]:
             payload = f.get("candidate") or {}
             if payload.get("local_version") != version or (payload.get("defines") or "") != defines:
-                raise SystemExit(f"candidate: {f['file']} does not record this candidate's version and defines")
+                raise SystemExit(f"measurement build: {f['file']} does not record this build's version and defines")
     doc = dict(schema="mojolearn.release-candidate.v1", version=version, source_commit=a.commit, defines=defines,
                label=label, wheel_dir=str(final), vendors=vendors, steps=list(STEPS),
                wheels={k: dict(file=w.name, sha256=release.sha256(w)) for k, w in finals.items() if w},
                manifests=manifests, refs_before=before, refs_after=after, made=release.now())
     release.write_json(final / "candidate.json", doc)
-    print(f"candidate: {final}/candidate.json")
+    print(f"measurement build: {final}/candidate.json")
     for vendor in vendors:
         if defines:
             # a B set rides with its A set's stage line (measure_candidate reads this version from candidate.json)

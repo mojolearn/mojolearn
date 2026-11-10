@@ -11,7 +11,7 @@ caller passes, the loss sums), the solver loops the binding's
 `x_decomp_nmf_solve` / `x_decomp_nmf_nndsvd` run (`DecompDev`)."""
 from std.math import sqrt
 
-from x_decomp.cells import F32Ptr
+from x_decomp.cells import F32Ptr, OP_ADD
 from x_decomp.exec_trait import Exec
 from x_decomp.nmf import NmfArgs
 from x_decomp.pca_randomized import RDev, RKit
@@ -47,6 +47,25 @@ def _any_negative[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], m: Int)
     var negated = kit.ew(OP_SCALE, m, scalar=-1.0)
     var flags = kit.ew(OP_GTS, negated, scalar=0.0)
     return kit.total(flags) > 0
+
+
+def _nonfinite_or_negative[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], m: Int) raises -> Int:
+    """X's finite test and `_any_negative` in the one total the negativity
+    count reads anyway (lane a8d-device-x-decomp-manifold): the count of
+    x < 0 plus x * 0, which is 0 for a finite word and NaN for a NaN or an
+    infinity, so the total is NaN exactly when X is not finite (-> 1), else
+    the count (-> 2 when positive, 0 otherwise). Two more cells over X, no
+    host scan and no extra synchronisation."""
+    if kit.r(m) * kit.c(m) == 0:
+        return 0
+    var negated = kit.ew(OP_SCALE, m, scalar=-1.0)
+    var flags = kit.ew(OP_GTS, negated, scalar=0.0)
+    var zeroed = kit.ew(OP_SCALE, m, scalar=0.0)
+    var tagged = kit.ew(OP_ADD, flags, zeroed)
+    var total = kit.total(tagged)
+    if total != total:
+        return 1
+    return 2 if total > 0 else 0
 
 
 def _thin_svd[E: Exec, D: RDev, RES: Bool](
@@ -175,15 +194,27 @@ def _err[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], m: Int, w: Int, 
 
 def nmf_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     x: F32Ptr, n: Int, d: Int, nc: Int, init: Int, w_in: F32Ptr, h_in: F32Ptr, seed: Int, solver: Int,
-    a: NmfArgs, w_out: F32Ptr, h_out: F32Ptr,
+    a: NmfArgs, w_out: F32Ptr, h_out: F32Ptr, finite_word: Int = 0,
 ) raises -> Tuple[Int, Float64]:
     """One NMF operation on x (n x d): `init` NMF_INIT_* (fit_transform,
     H updated, the reconstruction error returned) or NMF_TRANSFORM (H =
-    h_in fixed). W (n x nc) and H (nc x d) written; returns (n_iter_, err)."""
+    h_in fixed). W (n x nc) and H (nc x d) written; returns (n_iter_, err).
+    `finite_word` (lane a8d): when nonzero, the host address of one Int32
+    that receives X's finite status word, taken in the negativity total
+    (`_nonfinite_or_negative`); a flagged X stops the operation there
+    (nothing written, (0, 0.0) returned; the door refuses)."""
     var kit = RKit[E, D, RES]()
     try:
         var m = kit.add(Int(x), -1, n, d)
-        if _any_negative(kit, m):
+        if finite_word != 0:
+            var verdict = _nonfinite_or_negative(kit, m)
+            MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] = Int32(1 if verdict == 1 else 0)
+            if verdict == 1:
+                kit.close()
+                return (0, 0.0)
+            if verdict == 2:
+                raise Error("Negative values in data passed to NMF (input X)")
+        elif _any_negative(kit, m):
             raise Error("Negative values in data passed to NMF (input X)")
         var w: Int
         var h: Int

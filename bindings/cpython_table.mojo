@@ -38,16 +38,16 @@
 # floor and the newest supported interpreter), so loading cannot miss.
 # Version-dependent symbols (PyWeakref_GetRef from 3.13, PyWeakref_GetObject
 # removed in 3.15) are deliberately absent.
-from std.ffi import _Global, c_int
+from std.ffi import c_int
 from std.python import Python
 from std.python._cpython import ExternalFunction, PyObjectPtr
 
-from core.shared_slot import shared_slot_check, shared_slot_word
+from core.shared_slot import SharedSlot
 
 #: Layout version of `CPythonTable` (core/shared_slot.mojo rule; the slot
 #: name carries it too). V8: the layout word.
-comptime _CPYTHON_TABLE_LAYOUT = 8
-comptime _CPYTHON_TABLE_NAME = "MojolearnCPythonTableV8"
+comptime _CPYTHON_TABLE_LAYOUT = 10
+comptime _CPYTHON_TABLE_NAME = "MojolearnCPythonTableV10"
 
 # PyObject *PyImport_GetModuleDict(void)  (borrowed)
 comptime _PyImport_GetModuleDict = ExternalFunction[
@@ -284,11 +284,19 @@ comptime _PyLong_AsLongLongAndOverflow = ExternalFunction[
 # int PyCapsule_IsValid(PyObject *capsule, const char *name)  (name as an address word)
 comptime _PyCapsule_IsValid = ExternalFunction[
     "PyCapsule_IsValid", def(PyObjectPtr, Int) thin abi("C") -> c_int]
+# Added by lane p3-msel-parallel-and-process-pool (2026-11-09) for the native
+# unit threads (bindings/native_unit_threads.mojo): a worker thread the
+# interpreter did not create takes the GIL once on entry and gives it back on
+# exit. PyGILState_STATE is a C enum (int).
+# PyGILState_STATE PyGILState_Ensure(void)
+comptime _PyGILState_Ensure = ExternalFunction[
+    "PyGILState_Ensure", def() thin abi("C") -> c_int]
+# void PyGILState_Release(PyGILState_STATE state)
+comptime _PyGILState_Release = ExternalFunction[
+    "PyGILState_Release", def(c_int) thin abi("C") -> NoneType]
 
 
-struct CPythonTable(Movable):
-    # first field: the layout word every reader checks (core/shared_slot.mojo)
-    var layout: Int
+struct CPythonTable(Defaultable, Movable):
     var PyImport_GetModuleDict: _PyImport_GetModuleDict.type
     var PyDict_GetItem: _PyDict_GetItem.type
     var PyDict_Size: _PyDict_Size.type
@@ -358,11 +366,12 @@ struct CPythonTable(Movable):
     var PyByteArray_AsString: _PyByteArray_AsString.type
     var PyLong_AsLongLongAndOverflow: _PyLong_AsLongLongAndOverflow.type
     var PyCapsule_IsValid: _PyCapsule_IsValid.type
+    var PyGILState_Ensure: _PyGILState_Ensure.type
+    var PyGILState_Release: _PyGILState_Release.type
 
     def __init__(out self):
         # loads symbol addresses only: running twice is harmless (the
         # runtime may, core/shared_slot.mojo first creation)
-        self.layout = shared_slot_word[CPythonTable](_CPYTHON_TABLE_LAYOUT)
         ref cpy = Python().cpython()
         var lib = cpy.lib.borrow()
         self.PyImport_GetModuleDict = _PyImport_GetModuleDict.load(lib)
@@ -434,16 +443,15 @@ struct CPythonTable(Movable):
         self.PyByteArray_AsString = _PyByteArray_AsString.load(lib)
         self.PyLong_AsLongLongAndOverflow = _PyLong_AsLongLongAndOverflow.load(lib)
         self.PyCapsule_IsValid = _PyCapsule_IsValid.load(lib)
+        self.PyGILState_Ensure = _PyGILState_Ensure.load(lib)
+        self.PyGILState_Release = _PyGILState_Release.load(lib)
 
 
 # The named global is shared by every Mojo extension in the process (all of
 # them load the same interpreter library). Bump the name's version and
 # `_CPYTHON_TABLE_LAYOUT` whenever a field is added, removed or reordered; the
 # layout word refuses a table made by a binary that forgot to.
-comptime CPYTHON_TABLE = _Global[
-    StorageType=CPythonTable, name=_CPYTHON_TABLE_NAME,
-    init_fn=CPythonTable.__init__,
-]
+comptime CPYTHON_TABLE = SharedSlot[CPythonTable, _CPYTHON_TABLE_NAME, _CPYTHON_TABLE_LAYOUT]
 
 
 def cpython_table() raises -> UnsafePointer[CPythonTable, MutAnyOrigin]:
@@ -451,5 +459,4 @@ def cpython_table() raises -> UnsafePointer[CPythonTable, MutAnyOrigin]:
     had another layout."""
     # Same typed form as x_cnn/device.mojo `_slots` (compiles on main).
     var table = CPYTHON_TABLE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    shared_slot_check(table[].layout, shared_slot_word[CPythonTable](_CPYTHON_TABLE_LAYOUT), _CPYTHON_TABLE_NAME)
     return table

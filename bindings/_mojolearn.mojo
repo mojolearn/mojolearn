@@ -181,8 +181,12 @@ from bindings.msel_device import (
     msel_free_binding,
     msel_live_binding,
     msel_take_rows_binding,
+    msel_free_bytes_binding,
     pca_transform_fold_binding,
+    pca_fit_fold_binding,
+    tsvd_fit_fold_binding,
     qn_fit_fold_binding,
+    qn_infer_fold_binding,
     kmeans_fit_fold_binding,
     kmeans_predict_fold_binding,
     kmeans_transform_fold_binding,
@@ -200,7 +204,6 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
-from std.ffi import _Global
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
@@ -219,7 +222,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnCoreContextFastV2"
+comptime _DEVCTX_SLOT = "MojolearnCoreContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnCoreContextFastV3"
 
 
 from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform
@@ -232,6 +235,7 @@ from cluster.resident_centers import (
 from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
 from neighbors.impl.multi_gpu import neighbors_device_plan
 from neighbors.resident_index import (
+    knn_fold_ready,
     knn_index_classify,
     knn_index_prepare,
     knn_index_regress,
@@ -248,6 +252,7 @@ from neighbors.estimator import (
     radius_neighbors_fill,
     rbc_knn_search,
 )
+from core.shared_slot import SharedSlot
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -314,10 +319,11 @@ def _dist_triple(dist_params: PythonObject) raises -> Tuple[Int, Float32, Int]:
     """`dist_params` -> `(metric, metric_arg, weights)`, length-checked. A
     fourth value is the host address of the finite status word
     (`_dist_status`)."""
-    if len(dist_params) != 3 and len(dist_params) != 4:
+    if len(dist_params) != 3 and len(dist_params) != 4 and len(dist_params) != 7:
         raise Error(
             "knn: dist_params must hold 3 values (metric, metric_arg,"
-            " weights) and optionally a status address, got " + String(len(dist_params))
+            " weights), optionally a status address, and with it a fold's"
+            " three store words, got " + String(len(dist_params))
         )
     return (
         Int(py=dist_params[0]),
@@ -337,6 +343,36 @@ def _dist_status(dist_params: PythonObject) raises -> Int:
     if address < 0 or address % 4 != 0:
         raise Error("knn: the status address must be a positive int32-aligned address")
     return address
+
+
+def _dist_fold(dist_params: PythonObject) raises -> Tuple[Int, Int, Int]:
+    """The optional fifth to seventh `dist_params` values (lane
+    a8b-device-x-neighbors-rest): a model-selection fold whose rows are the
+    queries, `(base id, base rows, index id)` in model selection's store,
+    gathered on the device by the resident entry (`knn_fold_ready`); the
+    status address then names two int32 words (finite, index range).
+    `(-1, 0, -1)` when absent: the queries are the host words at
+    `queries_addr`."""
+    if len(dist_params) < 7:
+        return (-1, 0, -1)
+    var base = Int(py=dist_params[4])
+    var rows = Int(py=dist_params[5])
+    var index = Int(py=dist_params[6])
+    if base < 0 or rows < 1 or index < 0:
+        raise Error("knn: a fold needs a resident base id, its row count and an index id")
+    if _dist_status(dist_params) == 0:
+        raise Error("knn: a fold needs the status words' address")
+    return (base, rows, index)
+
+
+def knn_fold_ready_binding() raises -> PythonObject:
+    """1 when a resident classify / regress can gather a model-selection
+    fold's queries on the device (neighbors/resident_index.mojo
+    `knn_fold_ready`), else 0: the door then gathers the fold on the host."""
+    var ready: Bool
+    with GILReleased(Python()):
+        ready = knn_fold_ready()
+    return PythonObject(1 if ready else 0)
 
 
 def _refuse_status(dist_params: PythonObject, what: String) raises:
@@ -470,6 +506,8 @@ def knn_search_resident_binding(
     var dt = _dist_triple(dist_params)
     var h = Int(py=handle)
     var status = _dist_status(dist_params)
+    if _dist_fold(dist_params)[0] >= 0:
+        raise Error("knn_search_resident: fold queries are taken by the resident classify / regress entries only")
     var used: Int
     with GILReleased(Python()):
         used = knn_index_search(
@@ -657,11 +695,12 @@ def knn_classify_resident_binding(
     var up = _i32_ptr(Int(py=out_uniq_addr))
     var dt = _dist_triple(dist_params)
     var status = _dist_status(dist_params)
+    var fold = _dist_fold(dist_params)
     var used: Int
     with GILReleased(Python()):
         used = knn_index_classify(
             h, ip, ni, qp, nq, nf, kk, yp, no, n_classes, lp, pp, up,
-            want_proba, qt, dt[0], dt[1], dt[2], status,
+            want_proba, qt, dt[0], dt[1], dt[2], status, fold[0], fold[1], fold[2],
         )
     return PythonObject(used)
 
@@ -695,10 +734,11 @@ def knn_regress_resident_binding(
     var no = Int(py=params[5])
     var dt = _dist_triple(dist_params)
     var status = _dist_status(dist_params)
+    var fold = _dist_fold(dist_params)
     var used: Int
     with GILReleased(Python()):
         used = knn_index_regress(
-            h, ip, ni, qp, nq, nf, kk, yp, no, op, qt, dt[0], dt[1], dt[2], status
+            h, ip, ni, qp, nq, nf, kk, yp, no, op, qt, dt[0], dt[1], dt[2], status, fold[0], fold[1], fold[2]
         )
     return PythonObject(used)
 
@@ -1097,8 +1137,9 @@ def radius_neighbors_count_binding(
     var mtr = Int(py=params[4])
     var marg = Float32(Float64(py=params[5]))
     # Lane a7b-device-x-neighbors: params[6], when present, is the host
-    # address of the int32 finite status word of the uploaded index and
-    # queries (0 = finite; the door refuses otherwise).
+    # address of the int32 finite status word of the uploaded queries (0 =
+    # finite; the door refuses otherwise). The index was tested once at fit
+    # or archive load (lane a8b-device-x-neighbors-rest).
     var status = 0 if len(params) == 6 else Int(py=params[6])
     if status < 0 or status % 4 != 0:
         raise Error("radius_neighbors_count: the status address must be a positive int32-aligned address")
@@ -2229,9 +2270,7 @@ struct LabelsNativeTable(Defaultable, Movable):
 
 # The slot holds THIS module's dispatch pointer: tier-keyed so a FAST and an
 # IDENTICAL build never hand out each other's code (core/shared_slot.mojo).
-comptime LABELS_NATIVE_TABLE = _Global[StorageType=LabelsNativeTable,
-    name=("MojolearnLabelsNativeTableIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV1"),
-    init_fn=LabelsNativeTable.__init__]
+comptime LABELS_NATIVE_TABLE = SharedSlot[LabelsNativeTable, ("MojolearnLabelsNativeTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnLabelsNativeTableFastV2")]
 
 
 def labels_native_api_v1_binding() raises -> PythonObject:
@@ -2254,6 +2293,7 @@ def build__mojolearn() -> PythonObject:
         m.def_function[mojolearn_numeric_mode_binding]("mojolearn_numeric_mode")
         m.def_function[knn_search_binding]("knn_search")
         m.def_function[knn_index_prepare_binding]("knn_index_prepare")
+        m.def_function[knn_fold_ready_binding]("knn_fold_ready")
         m.def_function[knn_index_release_binding]("knn_index_release")
         m.def_function[knn_search_resident_binding]("knn_search_resident")
         m.def_function[knn_classify_neighbors_binding]("knn_classify_neighbors")
@@ -2299,8 +2339,12 @@ def build__mojolearn() -> PythonObject:
         m.def_function[msel_free_binding]("msel_free")
         m.def_function[msel_live_binding]("msel_live")
         m.def_function[msel_take_rows_binding]("msel_take_rows")
+        m.def_function[msel_free_bytes_binding]("msel_free_bytes")
         m.def_function[pca_transform_fold_binding]("pca_transform_fold")
+        m.def_function[pca_fit_fold_binding]("pca_fit_fold")
+        m.def_function[tsvd_fit_fold_binding]("tsvd_fit_fold")
         m.def_function[qn_fit_fold_binding]("qn_fit_fold")
+        m.def_function[qn_infer_fold_binding]("qn_infer_fold")
         m.def_function[kmeans_fit_fold_binding]("kmeans_fit_fold")
         m.def_function[kmeans_predict_fold_binding]("kmeans_predict_fold")
         m.def_function[kmeans_transform_fold_binding]("kmeans_transform_fold")

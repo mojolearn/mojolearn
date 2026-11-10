@@ -2,7 +2,7 @@
 (bindings/array_native.mojo); run only against the integrated native build.
 
 Each operation is held to its retained Python definition
-(`_array._ArrayReference`, never called by the product) on C- and F-order
+(`tests/_array_reference._ArrayReference`, never called by the product) on C- and F-order
 blocks of every dtype, 0-d and empty blocks: the same result (Array bytes,
 layout and dtype; Python scalars by type and bits) or the same refusal (type
 and words). The audit checks that the public call itself runs no Python frame.
@@ -16,7 +16,8 @@ import numpy as np
 import pytest
 
 from mojolearn import _array
-from mojolearn._array import Array, _ArrayReference as R
+from mojolearn._array import Array
+from mojolearn.tests._array_reference import _ArrayReference as R
 from mojolearn._verify_native_runtime import audit_native_call
 
 _RNG = np.random.default_rng(859)
@@ -88,7 +89,7 @@ def test_metadata_and_conversions_match_the_definitions(index):
         same(lambda: a.astype(dtype), lambda: R.astype(a, dtype))
     same(lambda: pickle.loads(pickle.dumps(a)), lambda: pickle.loads(pickle.dumps(a)))
     assert canon(pickle.loads(pickle.dumps(a)))[1:] == canon(a)[1:]
-    same(lambda: a.__reduce__()[1], lambda: R.__reduce__(a)[1])
+    same(lambda: a.__reduce__()[1:], lambda: R.__reduce__(a)[1:])
     same(lambda: np.asarray(a), lambda: R.__array__(a))
     same(lambda: a.__array__(np.float64, None), lambda: R.__array__(a, np.float64, None))
     same(lambda: a.__array__(np.float64, False), lambda: R.__array__(a, np.float64, False))
@@ -155,10 +156,20 @@ def test_public_operations_run_no_python_frame(name):
     clean(a.__eq__, a)
 
 
-def test_length_exception_is_only_the_wrapper_frame():
+def test_protocol_methods_are_c_properties_over_the_native_entry():
+    import functools
     from mojolearn import _runtime_fallbacks
-    assert _runtime_fallbacks._LENGTH_CODE is Array.__len__.__code__
-    assert Array.__len__.__code__.co_names == ('_ARRAY_NATIVE', '_ARRAY_CONTEXT')
+    assert _runtime_fallbacks.FALLBACKS == {}
+    for name, op in (('__len__', 'len'), ('__getitem__', 'getitem'), ('__eq__', 'eq'), ('__ne__', 'ne'),
+                     ('__repr__', 'repr'), ('__bool__', 'bool'), ('__iter__', 'iter'),
+                     ('__reduce__', 'reduce'), ('__setstate__', 'setstate'), ('__buffer__', 'buffer')):
+        bound = vars(Array)[name]
+        assert type(bound) is property and type(bound.fget) is functools.partial
+        assert bound.fget.args == (_array._ARRAY_NATIVE, op, _array._ARRAY_CONTEXT)
+    a = Array.from_list([[1.0, 2.0], [3.0, 4.0]], "<f4")
+    assert len(a) == 2 and a[1, 0] == 3.0 and repr(a).startswith('Array(')
+    with pytest.raises(TypeError):
+        len(Array.from_list(1.0, "<f8"))
 
 
 def test_helpers_are_connected_once():

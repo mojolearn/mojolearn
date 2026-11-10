@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Internal native descriptor interface to the SAME public training primitives.
 # No arithmetic is respelled and no precision, cache or synchronization changes.
-from std.ffi import _Global
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, PRIMITIVE_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from core.hostptr import f32_ptr, i32_ptr
@@ -18,8 +17,9 @@ from training.samba_ops import (
     samba_rms_norm_forward_host, samba_rms_norm_backward_host,
     samba_linear_forward_host, samba_linear_backward_host, samba_head_loss_host,
 )
+from core.shared_slot import SharedSlot
 
-comptime PRIMITIVE_CONTEXT = "MojolearnNeuralTrainingContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTrainingContextFastV2"
+comptime PRIMITIVE_CONTEXT = "MojolearnNeuralTrainingContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTrainingContextFastV3"
 
 
 def native_primitive_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -111,5 +111,4 @@ struct NativePrimitiveAPI(Defaultable, Movable):
         self.entries.append(native_primitive_v1)
 
 
-comptime NATIVE_PRIMITIVE_API = _Global[StorageType=NativePrimitiveAPI,
-    name=("MojolearnNeuralPrimitiveNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNeuralPrimitiveNativeAPIFastV2"), init_fn=NativePrimitiveAPI.__init__]
+comptime NATIVE_PRIMITIVE_API = SharedSlot[NativePrimitiveAPI, ("MojolearnNeuralPrimitiveNativeAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNeuralPrimitiveNativeAPIFastV3")]

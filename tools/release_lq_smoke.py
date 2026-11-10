@@ -46,7 +46,7 @@ import sys
 import time
 from pathlib import Path
 
-# lq moved to ~/mojolearn-ops/lq (CLAUDE.md, 2026-10-22); the old evidence path is the fallback
+# lq moved to ~/mojolearn-ops/lq (AGENTS.md, 2026-10-22); the old evidence path is the fallback
 LQ_DEFAULT = Path(os.environ.get("MOJOLEARN_LQ") or next(
     (str(p) for p in (Path.home() / "mojolearn-ops" / "lq", Path.home() / "mojolearn-evidence" / "lq" / "lq")
      if p.is_file()), str(Path.home() / "mojolearn-ops" / "lq")))

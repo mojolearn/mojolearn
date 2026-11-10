@@ -594,28 +594,8 @@ def _door():
     return _load()
 
 
-def _refuse_wide(rows, cols, who):
-    if rows < cols:
-        raise ValueError(
-            f"mojolearn.linalg.{who}: needs at least as many rows as columns, "
-            f"got {rows} x {cols}. The route for a wide matrix is an LQ "
-            "factorization of the transpose, which this tree does not carry "
-            "(DEVIATION 593). It is REFUSED BY NAME rather than transposed "
-            "for you, because the singular values of the transpose are the "
-            "same and the VECTORS are not."
-        )
-
-
 # TOMBSTONE: MOJOLEARN_QR_FAST_DEV / MOJOLEARN_SVD_FAST_CHOLQR deleted 2026-10-09 on lane/owed-deletions-D1 took their
 # only caller-facing helper, `_fast_apple_kit`; code recoverable at b639a2bd2.
-
-
-def _xd_matrix(a_arr, rows, cols):
-    import array as _array
-    from ._expansion_decomp import _M
-    st = _array.array("f")
-    st.frombytes(a_arr.tobytes())
-    return _M(st, rows, cols)
 
 
 class QRResult(tuple):
@@ -685,24 +665,6 @@ class SVDResult(tuple):
 
 #: x_decomp/tsqr_core.mojo TS_MAX_N: the widest matrix the TSQR takes
 _TS_MAX_N = 512
-
-
-def _tsqr_on(rows, cols, extra=0):
-    """Whether the blocked TSQR serves a rows x (cols + extra) factorization:
-    tall and at most _TS_MAX_N wide."""
-    n = cols + extra
-    return cols >= 1 and n <= _TS_MAX_N and rows >= n
-
-
-def _tsqr_r(b, a_arr, rows, cols, keep):
-    """R (cols x cols, an Array) of the TSQR of a_arr; `keep` holds the
-    factorization in the binding for one `_tsqr_q`."""
-    R = empty((cols, cols), "<f4")
-    # ORDER MATCHES x_decomp/api.mojo tsqr_r_py: (a, b, r_out), params
-    # (m, d, nrhs, keep); b is not read when nrhs is 0
-    b.x_decomp_tsqr_r(addr_ro(a_arr, name="a"), addr_ro(a_arr, name="a"), addr(R, name="r_out"),
-                      [int(rows), int(cols), 0, 1 if keep else 0])
-    return R
 
 
 # TOMBSTONE: MOJOLEARN_TSVD_FAST_CHOLQR3 (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.

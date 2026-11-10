@@ -16,7 +16,7 @@
 #     ("mojolearn.labels.v1") with the operations below over its own device
 #     helpers;
 #   * the label path connects it ONCE per process (kit_connect) and keeps the
-#     provider in the named slot `MojolearnLabelsProviderV1`
+#     provider in the named slot `MojolearnLabelsProviderV2`
 #     (bindings/classical_labels.mojo `_labels_provider`); each step is one
 #     `kit_call`;
 #   * the choice is one test in Mojo: a connected provider runs the step

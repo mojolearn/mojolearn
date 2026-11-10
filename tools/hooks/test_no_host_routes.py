@@ -240,8 +240,58 @@ BLOCKED = [
      "[v * 2 for v in X]"),
     ("Python cpu-route note whose reason is under three words",
      {PY: "def _pz10(text):\n    return [ord(c) for c in text]  # cpu-route: fine"}, "[ord(c) for c in text]"),
+    ("import-time note whose reason is under three words",
+     {PY: "def _pz11(b):\n    return _backend.load_host_module(b)  # import-time: once"}, "load_host_module"),
     ("cpu-route note whose reason is under three words",
      {PY: "def _pz8(arr):\n    return _native(\"nsum_f64\")(arr)  # cpu-route: fine"}, "[py-native-host]"),
+    # 2026-11-09: free-text notes exempt nothing; loop tags are judged
+    ("a glue note no longer exempts a loop",
+     {PY: "def _pz14(params):\n    for k in params:  # glue: copies estimator keyword arguments\n        pass"},
+     "for k in params:"),
+    ("a cpu-route note no longer exempts a comprehension",
+     {PY: "def _pz15(text):\n    return [ord(c) for c in text]  # cpu-route: text decoding before the runtime"},
+     "[ord(c) for c in text]"),
+    ("a cpu-route note no longer exempts a host-module load",
+     {PY: "def _pz27():\n    return load_host_module('x_linear')  # cpu-route: text tokenization before the runtime"},
+     "load_host_module"),
+    ("a cpu-route note no longer exempts a native host helper call",
+     {PY: "def _pz28(arr):\n    return _native(\"nsum_f64\")(arr)  # cpu-route: CPU-only install verification digest"},
+     "[py-native-host]"),
+    ("a Python small-loop note with a variable bound",
+     {PY: "def _pz29(widths, d):\n    return [widths[j] for j in range(d)]  # small-loop(d: feature count): offsets of fitted widths"},
+     "[py-data-loop]"),
+    ("a structure tag on a Python row loop",
+     {PY: "def _pz16(X, n_samples):\n    for i in range(n_samples):  # driver-loop: over model layers\n        pass"},
+     "false driver-loop tag"),
+    ("a structure tag on the line above a Python loop over values",
+     {PY: "def _pz17(values):\n    # driver-loop: over the blocks\n    for v in values:\n        pass"},
+     "for v in values:"),
+    ("a Python while loop", {PY: "def _pz18(stack):\n    while stack:\n        stack.pop()"}, "[py-while-loop]"),
+    ("map(f, ...) with a non-operator callable", {PY: "def _pz19(v):\n    return map(float, v)"}, "[py-iter-call]"),
+    ("list() of an iterable", {PY: "def _pz24(v):\n    return list(v)"}, "[py-iter-call]"),
+    ("dict.fromkeys over labels", {PY: "def _pz20(labels):\n    return dict.fromkeys(labels)"}, "[py-iter-call]"),
+    ("itertools.chain", {PY: "def _pz21(a, b):\n    return itertools.chain(a, b)"}, "[py-iter-call]"),
+    ("zip", {PY: "def _pz22(a, b):\n    return dict(zip(a, b))"}, "[py-iter-call]"),
+    ("enumerate", {PY: "def _pz23(v):\n    return dict(enumerate(v))"}, "[py-iter-call]"),
+    ("scalar arithmetic on numbers (the _FoldCurve.auc formula)",
+     {PY: "def _pz25(s, F, T):\n    return float(s / (2.0 * F * T))"}, "[py-scalar-arith]"),
+    ("an augmented assignment (the _set_meta size)",
+     {PY: "def _pz26(self, n):\n    self.nbytes = n\n    self.nbytes *= 4"}, "[py-scalar-arith]"),
+    ("a Mojo structure tag on a loop over values",
+     {DEV: "def _p30(p: UnsafePointer[Float32], values: List[Int]) raises:\n"
+           "    for v in values:  # driver-loop: over the fields\n        p[v] = 1.0"}, "false driver-loop tag"),
+    ("a Mojo while loop over a data size",
+     {DEV: "def _p31(p: UnsafePointer[Float32], n_rows: Int) raises:\n    var i = 0\n"
+           "    while i < n_rows:\n        p[i] = 0.0\n        i += 1"}, "while i < n_rows:"),
+    ("download, then a host fold over a variable small k (a small-loop note no longer exempts it)",
+     {DEV: "def _q3(ctx: DeviceContext, d: DeviceBuffer[DType.float32], n_features: Int) raises -> Float32:\n"
+           "    var h = download_f32(ctx, d, n_features)\n    var t = Float32(0.0)\n"
+           "    for j in range(n_features):  # small-loop(n_features: feature count): one sum per feature, read once\n"
+           "        t = t + h[j]\n    return t"}, "for j in range(n_features):"),
+    ("a Mojo small-loop note on a runtime bound",
+     {DEV: "def _p32(p: UnsafePointer[Float32], n_classes: Int) raises:\n"
+           "    for c in range(n_classes):  # small-loop(n_classes: class count): one prior per class, set once\n"
+           "        p[c] = p[c] * 2"}, "for c in range(n_classes):"),
     ("duplicating an existing debt line",
      {"cluster/estimator.mojo": "def _p19(groups: Int):\n    host_parallelize(_abs_sum_task, groups)"},
      "host_parallelize(_abs_sum_task, groups)"),
@@ -269,11 +319,6 @@ PASSES = [
      {DEV: "def _q2(ctx: DeviceContext, mut trace: IdentityTrace, d: DeviceBuffer[DType.float32], n: Int) raises:\n"
            "    var h = download_f32(ctx, d, n)\n    if trace.enabled:\n        var t = Float32(0.0)\n"
            "        for i in range(n):\n            t = t + h[i]"}),
-    ("download, then a loop over a small k",
-     {DEV: "def _q3(ctx: DeviceContext, d: DeviceBuffer[DType.float32], n_features: Int) raises -> Float32:\n"
-           "    var h = download_f32(ctx, d, n_features)\n    var t = Float32(0.0)\n"
-           "    for j in range(n_features):  # small-loop(n_features: feature count): one sum per feature, read once\n"
-           "        t = t + h[j]\n    return t"}),
     ("a reviewed small-launch note on a one-block launch over d-sized data",
      {DEV: "def _q4(ctx: DeviceContext, x: UnsafePointer[Float32], n: Int) raises:\n"
            "    ctx.enqueue_function[_fold_kernel](  # small-launch(n: parameter count): an L-BFGS vector phase, never rows\n"
@@ -282,17 +327,23 @@ PASSES = [
      {DEV: "def _q4b(ctx: DeviceContext, x: UnsafePointer[Float32], n_rows: Int, n_cols: Int) raises:\n"
            "    ctx.enqueue_function[_gather_kernel](\n        x, Int32(n_rows), Int32(n_cols),\n"
            "        grid_dim=(n_cols, ceildiv(n_rows, 256), 1), block_dim=(256, 1, 1),\n    )"}),
-    ("a reviewed glue note on an argument loop",
-     {PY: "def _qz1(params):\n    for k in params:  # glue: copies estimator keyword arguments\n        pass"}),
-    ("a reviewed Python small-loop note on a per-feature walk",
-     {PY: "def _qz8(widths, d):\n    return [sum(widths[:j]) for j in range(d)]  # small-loop(d: feature count): offsets of fitted widths"}),
-    ("a reviewed Python cpu-route note on a text input step",
-     {PY: "def _qz9(text):\n    return [ord(c) for c in text]  # cpu-route: text decoding before the runtime"}),
+    ("a structure tag on a Python loop over layers",
+     {PY: "def _qz1(self):\n    for layer in self.layers_:  # driver-loop: over model layers\n        layer.reset()"}),
+    ("a structure tag above a comprehension over the fitted estimators",
+     {PY: "def _qz8(self):\n    # driver-loop: over the fitted estimators\n    return [e.name for e in self.estimators_]"}),
+    ("a Python small-loop note with a constant bound",
+     {PY: "def _qz9(v):\n    return [v for _ in range(4)]  # small-loop(4)"}),
+    ("signs after keywords, string concatenation and star-arguments are not arithmetic",
+     {PY: "def _qz12(name, flag, *args, **kw):\n    if flag:\n        return -1\n"
+          "    f(*args, **kw)\n    return \"x\" + name"}),
     ("a reviewed glue note on an sklearn tag-protocol import",
      {PY: "def _qz10(self):\n    from sklearn.utils import Tags  # glue: sklearn tag protocol, imported only when sklearn asks"}),
-    ("map over a non-arithmetic operator", {PY: "def _qz11(m):\n    return list(map(operator.itemgetter(0), m))"}),
+    ("map over a non-arithmetic operator", {PY: "def _qz11(m):\n    return map(operator.itemgetter(0), m)"}),
     ("scalar min/max and numpy allocation",
-     {PY: "def _qz2(a, b):\n    return np.zeros(min(a, b) + max(a, 1))"}),
+     {PY: "def _qz2(a, b):\n    return np.zeros(min(a, b), max(a, 1))"}),
+    ("a Mojo structure tag on a loop over blocks",
+     {DEV: "def _q11(p: UnsafePointer[Float32], blocks: List[Int]) raises:\n"
+           "    for b in blocks:  # driver-loop: over the blocks\n        p[b] = 1.0"}),
     ("a module-level table and a loop word in a string",
      {PY: "_QZ3 = {k: i for i, k in enumerate(('a', 'b'))}\n"
           "def _qz4():\n    raise ValueError('one value for each in X')"}),
@@ -311,12 +362,12 @@ PASSES = [
     ("a host-column function in a GPU module",
      {DEV: "def _q8_host_oracle(p: UnsafePointer[Float32], n: Int) raises:\n"
            "    for i in range(n):\n        p[i] = p[i] * 2"}),
-    ("a reviewed small-loop note on a host loop over a small bound",
+    ("a driver-loop tag on a host loop over the classes",
      {DEV: "def _q9(p: UnsafePointer[Float32], n_classes: Int) raises:\n"
-           "    for c in range(n_classes):  # small-loop(n_classes: class count): one prior per class, set once\n"
+           "    for c in range(n_classes):  # driver-loop: over the classes, one prior each\n"
            "        p[c] = p[c] * 2"}),
-    ("a reviewed cpu-route note on a native host helper call",
-     {PY: "def _qz5(arr):\n    return _native(\"all_finite_f32\")(arr)  # cpu-route: CPU-only install verification digest"}),
+    ("a reviewed import-time note on a host binding connected once",
+     {PY: "def _qz12(b):\n    return _backend.load_host_module(b)  # import-time: connects the CPU-only binding once"}),
     ("a native helper that walks arguments, not data (_NATIVE_GLUE)",
      {PY: "def _qz6(b, params):\n    return b.x_cnn_conv_shape(params)"}),
     ("a device-backed export of the base binding",
@@ -341,19 +392,22 @@ def test_bf16_metadata_loop_annotations():
          "    for axis in range(len(shape)):{note}\n"
          "        total *= Int(py=shape[axis])\n"
          "    return total\n",
-         "  # small-loop(shape: buffer rank metadata): one extent per axis, never tensor elements"),
+         "  # driver-loop: over the axes of the shape metadata"),
         ("def parse_keywords(keys: PythonObject) raises:\n"
          "    for index in range(len(keys)):{note}\n"
          "        var key = keys[index]\n"
          "        if String(key) != \"out\":\n"
          "            raise Error(\"unknown keyword\")\n",
-         "  # small-loop(keys: API keyword metadata): supported argument names only, never tensor elements"),
+         "  # driver-loop: over the supported keyword names"),
     ]
     for source, note in cases:
         annotated = list(enumerate(source.format(note=note).splitlines(), 1))
         assert nhr._mojo_host_loops(annotated, "bindings/bf16_metadata_fixture.mojo") == []
         unannotated = list(enumerate(source.format(note="").splitlines(), 1))
         assert len(nhr._mojo_host_loops(unannotated, "bindings/bf16_metadata_fixture.mojo")) == 1
+        # 2026-11-09: a small-loop note on a variable bound no longer exempts
+        old_note = list(enumerate(source.format(note="  # small-loop(shape: rank metadata): one per axis").splitlines(), 1))
+        assert len(nhr._mojo_host_loops(old_note, "bindings/bf16_metadata_fixture.mojo")) == 1
 
 
 def test_blocked_classes():
@@ -382,6 +436,17 @@ def test_removed_route_leaves_a_stale_row_until_pruned():
     baseline += "\t".join(["host-exec", "hostexec", "test-fixture", "debt", DEV, "0", route]) + "\n"
     debt = scratch({DEV: "def _audit_debt() raises:\n    " + route,
                     nhr.BASELINE: ("=", baseline)})
+    # the fixture plays main: its debt row is main's own (rows main lacks are
+    # refused, see test_rows_main_lacks_are_refused_...)
+    real_main = nhr._main_sha
+    nhr._main_sha = lambda: debt
+    try:
+        _removed_route_body(debt, route)
+    finally:
+        nhr._main_sha = real_main
+
+
+def _removed_route_body(debt, route):
     rc, err = run_tree(debt)
     assert rc == 0, err
     tip = scratch({DEV: ("-", route)}, base=debt)
@@ -430,10 +495,9 @@ def test_native_host_exports_are_classified_by_code():
         assert name in ex, f"{name} loops on the host and must be a native host helper"
     for name in ("check_indices_i64", "unique_inverse", "cast_f64_to_f32"):
         assert name not in ex, f"{name} runs on the device and is not a native host helper"
-    # lane py-runtime: an export whose only loops carry a reviewed small-loop
-    # note (d-sized binary64 finishes Apple cannot run on the device)
-    for name in ("lm_means_finish", "lm_intercept"):
-        assert name not in ex, f"{name} loops only over a reviewed small bound"
+    # 2026-11-09: a small-loop note on a runtime bound no longer clears an
+    # export (lane py-runtime's lm_means_finish / lm_intercept notes were free
+    # text); their Python call sites are owed py-native-host findings now
 
 
 def test_device_executor_specialization_keeps_host_data_loops_visible():
@@ -492,11 +556,31 @@ def test_owed_findings_are_reported_not_refused():
         with open(bpath, "w", encoding="utf-8") as f:
             f.write(_git("show", f"{ref}:{nhr.BASELINE}") + "\n")
         err = io.StringIO()
+        real = nhr._restrict_to_main
         with contextlib.redirect_stderr(err):
             nhr.prune_baseline(ref, bpath)
+            # the old tree predates the 2026-11-09 loop-tag rules: give their
+            # findings rows (and let them stand) so only owed findings are judged
+            with open(bpath, encoding="utf-8") as f:
+                rows = nhr.load_baseline(f.read())
+            have = nhr.collections.Counter(nhr._key(r) for r in rows)
+            for (rule, path, text, occ), _no in nhr.tree_findings(nhr.Tree(ref)):
+                if rule in nhr._OWED_RULES:
+                    continue
+                if have[(rule, path, text, occ)] > 0:
+                    have[(rule, path, text, occ)] -= 1
+                    continue
+                rows.append(dict(rule=rule, cls=nhr._RULE_CLASS[rule], owner="test", state="owed-tags", path=path,
+                                 occ=occ, text=text, why="older than the rule"))
+            with open(bpath, "w", encoding="utf-8") as f:
+                f.write(nhr.dump_baseline(rows))
             err.truncate(0)
             err.seek(0)
-            rc = nhr.check_tree(ref, baseline_path=bpath)
+            nhr._restrict_to_main = lambda keys, _ref, _quiet=False: (keys, nhr.collections.Counter())
+            try:
+                rc = nhr.check_tree(ref, baseline_path=bpath)
+            finally:
+                nhr._restrict_to_main = real
     out = err.getvalue()
     assert rc == 0, out[-2000:]
     assert "OWED (not baseline debt)" in out and "mojo-host-loop" in out, out[-2000:]
@@ -647,6 +731,102 @@ def test_driver_loop_tag_over_a_downloaded_field_is_refused():
     )
     found = nhr._mojo_host_loops(nhr._code_lines(src, "mojo"), "bindings/drv_fixture3.mojo")
     assert [n for n, _ in found] == [7], found
+
+
+# ------------------------------------------------ loop-tag vocabulary ----
+
+
+def test_vocabulary_judges_the_iterable_first():
+    cases = [
+        (("self.layers_", "layer", "over the layers"), "structure"),
+        (("range(n_classes)", "c", "over the classes"), "structure"),
+        (("range(len(shape))", "axis", ""), "structure"),
+        (("kwargs.items()", "k, v", "over keyword arguments"), "structure"),
+        (("range(value.ndim)", "d", ""), "structure"),
+        (("range(n_samples)", "i", "over the layers"), "data"),
+        (("rows", "r", "over the blocks"), "data"),
+        (("classes_", "c", "over the classes"), "data"),     # class values, not the class count
+        (("range(X.shape[0])", "i", "over the features"), "data"),
+        (("range(len(y))", "i", "over the heads"), "data"),
+        (("y.tolist()", "v", "over the fields"), "data"),
+        (("range(k)", "i", "over the rows"), "data"),        # the loop is silent: the tag text decides
+        (("range(k)", "c", "over the batch's classes"), "structure"),
+        (("range(k)", "i", "over the shapes"), "unknown"),   # could not judge: kept, counted
+    ]
+    for (src, targets, what), want in cases:
+        got = nhr._judge_loop(src, targets, what)[0]
+        assert got == want, (src, targets, what, got)
+    ncs_path = os.path.join(HERE, "no_compute_in_shells.py")
+    assert os.path.exists(ncs_path)
+    sys.path.insert(0, HERE)
+    import no_compute_in_shells as ncs
+    for (src, targets, what), want in cases:
+        assert ncs.judge_loop(src, targets, what)[0] == want, ("shells table out of step", src)
+
+
+def test_python_tags_are_judged_and_counted():
+    src = ("def f(self, values, n_samples):\n"
+           "    for layer in self.layers_:  # driver-loop: over model layers\n"      # 2 accepted (structure)
+           "        pass\n"
+           "    for i in range(k):  # driver-loop: over the shapes\n"              # 4 accepted (could not judge)
+           "        pass\n"
+           "    for v in values:  # driver-loop: over the layers\n"                # 6 false tag
+           "        pass\n"
+           "    # glue: a reviewed free-text note above\n"
+           "    for v in values:\n"                                                 # 9 untagged
+           "        pass\n"
+           "    while n_samples:  # driver-loop: over the stages\n"               # 11 false tag (while)
+           "        pass\n")
+    acc = []
+    found = nhr._py_compute(nhr._code_lines(src, "py"), acc)
+    assert [(r, n) for r, n, _ in found] == [("py-data-loop", 6), ("py-data-loop", 9), ("py-while-loop", 11)], found
+    assert [n for n, _ in acc] == [2, 4], acc
+    assert [nhr._tag_verdict(t)[0] for _, t in acc] == ["structure", "unknown"]
+    why = nhr._why("py-data-loop", PY, nhr._norm(found[0][2]))
+    assert why.startswith("false driver-loop tag"), why
+
+
+def test_scalar_arithmetic_spots():
+    yes = ["x = a + b", "return s / (2.0 * F * T)", "self.size += n", "i = j - 1", "y = x ** 2", "q = a // b",
+           "z = x % m", "v = f(a)[0] * 3"]
+    no = ["return -1", "f(*args, **kw)", "x = -1", "s = \"\" + name", "a = b[-1]", "c = d[1:]",
+          "raise ValueError(\"\" % n)", "x = a if b else -c", "import os.path"]
+    for t in yes:
+        assert nhr._py_arith(t), t
+    for t in no:
+        assert not nhr._py_arith(t), t
+
+
+def test_rows_main_lacks_are_refused_unless_main_or_the_regeneration_tree_carries_them():
+    # a lane adds a new violation of a 2026-11-09 rule together with its own
+    # owed-tags row: main's baseline lacks the row and no tree carries the line
+    line = "    return int(kk * 7)"
+    row = "\t".join(["py-scalar-arith", "py-compute", "lane", "owed-tags", PY, "0", line.strip()])
+    tip = scratch({PY: "def _pz30(kk):\n" + line,
+                   nhr.BASELINE: _git("show", f"HEAD:{nhr.BASELINE}") + "\n" + row})
+    rc, err = run_tree(tip)
+    assert rc == 1 and "not in main's baseline" in err, err[-600:]
+
+
+def test_hook_worker_cap():
+    old = os.environ.pop("MOJOLEARN_HOOK_WORKERS", None)
+    real = nhr.sys.platform
+    try:
+        nhr.sys.platform = "darwin"
+        assert nhr.hook_workers() == 4
+        nhr.sys.platform = "linux"
+        assert nhr.hook_workers() == (os.cpu_count() or 1)
+        for plat in ("darwin", "linux"):
+            nhr.sys.platform = plat
+            os.environ["MOJOLEARN_HOOK_WORKERS"] = "2"
+            assert nhr.hook_workers() == 2
+            os.environ["MOJOLEARN_HOOK_WORKERS"] = "0"
+            assert nhr.hook_workers() == 1
+    finally:
+        nhr.sys.platform = real
+        os.environ.pop("MOJOLEARN_HOOK_WORKERS", None)
+        if old is not None:
+            os.environ["MOJOLEARN_HOOK_WORKERS"] = old
 
 
 # ------------------------------------------------- pre-push ref routing ----

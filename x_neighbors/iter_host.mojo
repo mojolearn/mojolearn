@@ -23,7 +23,7 @@ from x_neighbors.items import (
     pagerank_step_item, cc_step_item, pcs_item, knn_sq_item, nc_stats_item,
 )
 
-from x_neighbors.host_ops import op_knn_impute_cells, X_NEIGHBORS_HOST_SABOTAGE
+from x_neighbors.host_ops import op_knn_impute_cells, X_NEIGHBORS_HOST_SABOTAGE, xn_host_status
 from x_neighbors.host_ops import op_unary as _host_unary, op_p2m_sign_label as _host_sign_label
 from x_neighbors.host_ops import (
     op_absdiff_sum as _host_absdiff_sum, op_lp_clamp as _host_lp_clamp, op_ls_clamp as _host_ls_clamp,
@@ -193,8 +193,12 @@ def op_pcs_resident(
 
 def op_knn_sq_tiled(
     x: Int, y: Int, dist: Int, idx: Int, n: Int, m: Int, d: Int, k: Int, exclude_self: Int,
+    status: Int = 0,
 ) raises:
-    """The CPU column: `knn_sq_item` itself."""
+    """The CPU column: `knn_sq_item` itself (`status`: x's finite status
+    word, `xn_host_status`)."""
+    if not xn_host_status(x, n * d, status):
+        return
     for t in range(n):
         knn_sq_item(t, FP(unsafe_from_address=x), FP(unsafe_from_address=y), FP(unsafe_from_address=dist),
                     IP(unsafe_from_address=idx), n, m, d, k, exclude_self)
@@ -549,9 +553,12 @@ def _nc_stats_chunked(f: Int, x: FP, lab: IP, cent: FP, std: FP, dsc: FP, n: Int
         std.unsafe_store(f, Float32(0))
 
 
-def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int, d: Int, n_classes: Int) raises:
+def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int, d: Int, n_classes: Int,
+                status: Int = 0) raises:
     """nc_stats_item over the features (what the generated op ran); the
     device's chunked fold when XN_NC_IDN_CHUNKED and n > XN_NC_CHUNK_ROWS."""
+    if not xn_host_status(x, n * d, status):
+        return
     var xp = FP(unsafe_from_address=x)
     var lp = IP(unsafe_from_address=lab)
     var kp = FP(unsafe_from_address=nk)

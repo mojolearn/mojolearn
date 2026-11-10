@@ -70,7 +70,6 @@ from experiments.classical_identical_ideas.shared_controls import C06_ROWS_ON
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.sys.compile import is_defined
-from std.ffi import _Global
 from std.time import perf_counter_ns
 from std.atomic import Atomic, Ordering
 from std.os import getenv
@@ -264,8 +263,7 @@ struct _CertifiedReach(Defaultable,Movable):
     var fallback: Int
     def __init__(out self):
         self.calls=0; self.queries=0; self.fallback=0
-comptime _CERTIFIED_REACH = _Global[StorageType=_CertifiedReach,
-    name="MojolearnCertifiedKnnReachV1",init_fn=_CertifiedReach.__init__]
+comptime _CERTIFIED_REACH = SharedSlot[_CertifiedReach, "MojolearnCertifiedKnnReachV2"]
 
 # I15 experiment qualification pending: compile/fixtures do not establish
 # four-column identity or NVIDIA+AMD full-operation speed. Existing promoted
@@ -351,6 +349,7 @@ from neighbors.impl.distance.detail.distance_ops import (
     metric_norm_takes_sqrt,
     metric_uses_norms,
 )
+from core.shared_slot import SharedSlot
 
 
 # DEVIATION 2667 (kernel-matrix row `knn_fused_distance_select_for`): the

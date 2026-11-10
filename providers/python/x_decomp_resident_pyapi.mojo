@@ -74,6 +74,12 @@ def dev_upload_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises 
     return PythonObject(r)
 
 
+# TOMBSTONE: dev_upload_finite_py (named entry x_decomp_dev_upload_finite, lane a8c-device-x-linear-prep-rfe@2141a3451b)
+# folded 2026-11-09 at integration (integ/pre-0867-w5) into the kernel-call op XD_DEV_UPLOAD_FINITE (lane a8d), the
+# same body (x_decomp/resident.mojo dev_upload_finite_run); it never reached main, so no patch: recoverable at
+# lane/a8c-device-x-linear-prep-rfe@2141a3451b.
+
+
 def dev_download_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises -> PythonObject:
     """The device matrix into host floats, after every launch before it."""
     var cnt = Int(py=n)

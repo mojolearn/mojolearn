@@ -20,8 +20,34 @@ from x_ann.ivf_pq_core import pq_len_of
 from x_ann.abi import out_f32_to, out_i32_to
 from x_ann.host.cagra_host import cagra_build_host, cagra_search_host
 from x_ann.host.tsne_host import tsne_fit_host
+from core.host_finite_scan import host_all_finite_f32
 from x_ann.host.ivf_pq_host import X_ANN_HOST_SABOTAGE, ivf_pq_build_host, ivf_pq_search_host, ivf_sq_build_host, ivf_sq_search_host, refine_host, ivf_rabitq_build_host, ivf_rabitq_search_host
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
+from core.host_finite_scan import host_finite_status
+
+
+def _query_status(params: PythonObject, at: Int, queries: Int, n: Int,
+                  other: Int = 0, n_other: Int = 0) raises -> Bool:
+    """The CPU column's answer to a search's optional status word `params[at]`
+    (lane a8b-device-x-neighbors-rest; the GPU binding tests the queries
+    behind their upload): one parallel SIMD scan of the `n` query words,
+    written to the word (0 finite, 1 not); `other` / `n_other`, when given,
+    a second span in the same word (refine's dataset). True when the search
+    may run: no word was asked, or the words are finite (a flagged search is
+    skipped and the door refuses)."""
+    if len(params) <= at:
+        return True
+    var address = p_int(params, at)
+    if address == 0:
+        return True
+    if address < 0 or address % 4 != 0:
+        raise Error("x_ann: the status address must be a positive int32-aligned address")
+    # parallel: host_finite_status splits the words across the host's cores
+    var word = host_finite_status(queries, n)
+    if word == 0 and n_other > 0:
+        word = host_finite_status(other, n_other)
+    MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address).unsafe_store(0, word)
+    return word == 0
 
 
 def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -55,7 +81,7 @@ def ivf_pq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
 def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: centers, offsets, list_indices, codebooks, codes, queries, out_d, out_i, out_n, mask
     (int32 per row, 0 removes the row: the sample filter).
-    params: n, dim, n_lists, pq_dim, pq_bits, m, k, n_probes."""
+    params: n, dim, n_lists, pq_dim, pq_bits, m, k, n_probes[, status] (the queries' finite status word)."""
     var n = p_int(params, 0)
     var dim = p_int(params, 1)
     var n_lists = p_int(params, 2)
@@ -78,6 +104,8 @@ def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
     var oi = ptr_i32(addrs, 7)
     var on = ptr_i32(addrs, 8)
     var mask = ptr_i32(addrs, 9)
+    if not _query_status(params, 8, a_int(addrs, 5), m * dim):
+        return PythonObject(m)
     with GILReleased(Python()):
         ivf_pq_search_host(centers, offsets, list_indices, cb, codes, mask, n_lists, dim, pq_dim, pq_bits,
                            queries, m, k, n_probes, od, oi, on)
@@ -91,7 +119,9 @@ def tsne_fit_binding(addrs: PythonObject, params: PythonObject) raises -> Python
     (lane apple-fast-py2mojo-cluster: mode 1 random, 2 the PCA embedding in y0 scaled,
     x_ann/tsne_init.mojo; 0 or absent y0 as given). release-0845: the factor is params[7] and the
     init tail moved from 7..9 to 8..10. Lane sk-kernels: an optional params[11], n_components
-    (1 or 2, default 2); at 1, y0 and y_out hold n floats (`tsne_init_y0`)."""
+    (1 or 2, default 2); at 1, y0 and y_out hold n floats (`tsne_init_y0`). Lane a8d: an
+    optional params[12] finite flag, as the GPU binding's: the CPU column scans its own copy
+    of X (the parallel host scan) and returns [n, status word]; a flagged X is not fit."""
     var n = p_int(params, 0)
     var d = p_int(params, 1)
     var max_iter = p_int(params, 2)
@@ -109,10 +139,18 @@ def tsne_fit_binding(addrs: PythonObject, params: PythonObject) raises -> Python
     var y0 = tsne_init_y0(
         mode, in_f32(addrs, 1, n * k) if mode != TSNE_INIT_RANDOM else List[Float32](), n, seed, k
     )
+    var test = len(params) > 12 and p_int(params, 12) != 0
+    if test and not host_all_finite_f32(
+            MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(x.unsafe_ptr())), n * d):
+        return Python.list(PythonObject(n), PythonObject(1))
     var y = List[Float32]()
     var kl = Float32(0.0)
     with GILReleased(Python()):
         tsne_fit_host(x, n, d, y0, perplexity, exaggeration, lr, post_factor, max_iter, exploration, y, kl)
+    if test:
+        out_f32(tsne_first_components(y, n, k), addrs, 2)
+        out_f32([kl], addrs, 3)
+        return Python.list(PythonObject(n), PythonObject(0))
     out_f32(tsne_first_components(y, n, k), addrs, 2)
     out_f32([kl], addrs, 3)
     return PythonObject(n)
@@ -136,8 +174,9 @@ def cagra_build_binding(addrs: PythonObject, params: PythonObject) raises -> Pyt
 
 def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: x, graph, queries, out_d, out_i.
-    params: n, d, graph_degree, m, k, itopk_size, search_width, max_iterations, n_seeds[, rs]
-    (rs: 0 the evenly spaced seeds, > 0 random_state's, x_ann/cagra_core.mojo cg_seed_node)."""
+    params: n, d, graph_degree, m, k, itopk_size, search_width, max_iterations, n_seeds[, rs[, status]]
+    (rs: 0 the evenly spaced seeds, > 0 random_state's, x_ann/cagra_core.mojo cg_seed_node;
+    status: the queries' finite status word)."""
     var n = p_int(params, 0)
     var d = p_int(params, 1)
     var deg = p_int(params, 2)
@@ -158,6 +197,8 @@ def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     var q = ptr_f32(addrs, 2)
     var od = ptr_f32(addrs, 3)
     var oi = ptr_i32(addrs, 4)
+    if not _query_status(params, 10, a_int(addrs, 2), m * d):
+        return PythonObject(m)
     with GILReleased(Python()):
         cagra_search_host(x, n, d, g, deg, q, m, k, L, width, max_iter, n_seeds, od, oi, rs)
     return PythonObject(m)
@@ -196,7 +237,7 @@ def ivf_sq_build_binding(addrs: PythonObject, params: PythonObject) raises -> Py
 
 def ivf_sq_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: centers, offsets, list_indices, vmin, delta, codes, mask, queries, out_d, out_i, out_n.
-    params: n, dim, n_lists, m, k, n_probes."""
+    params: n, dim, n_lists, m, k, n_probes[, status] (the queries' finite status word)."""
     var n = p_int(params, 0)
     var dim = p_int(params, 1)
     var n_lists = p_int(params, 2)
@@ -216,6 +257,8 @@ def ivf_sq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
     var od = ptr_f32(addrs, 8)
     var oi = ptr_i32(addrs, 9)
     var on = ptr_i32(addrs, 10)
+    if not _query_status(params, 6, a_int(addrs, 7), m * dim):
+        return PythonObject(m)
     with GILReleased(Python()):
         ivf_sq_search_host(centers, offsets, list_indices, vmin, delta, codes, mask, n_lists, dim, queries, m, k,
                            n_probes, od, oi, on)
@@ -224,8 +267,9 @@ def ivf_sq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
 
 def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: dataset, queries, candidates (int32 m x k0, < 0 = padding), out_d, out_i.
-    params: n, d, m, k0, k[, root] (root 1: the euclidean metric's square
-    roots of the kept distances, lane apple-fast-py2mojo-cluster)."""
+    params: n, d, m, k0, k[, root[, status]] (root 1: the euclidean metric's square
+    roots of the kept distances, lane apple-fast-py2mojo-cluster; status: the
+    dataset's and queries' finite status word)."""
     var n = p_int(params, 0)
     var d = p_int(params, 1)
     var m = p_int(params, 2)
@@ -239,6 +283,8 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
     var cand = ptr_i32(addrs, 2)
     var od = ptr_f32(addrs, 3)
     var oi = ptr_i32(addrs, 4)
+    if not _query_status(params, 6, a_int(addrs, 1), m * d, a_int(addrs, 0), n * d):
+        return PythonObject(m)
     with GILReleased(Python()):
         refine_host(x, n, d, q, m, cand, k0, k, od, oi, root)
     return PythonObject(m)
@@ -272,7 +318,7 @@ def ivf_rabitq_build_binding(addrs: PythonObject, params: PythonObject) raises -
 
 def ivf_rabitq_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: centers, offsets, list_indices, codes, norms, ips, mask, queries, out_d, out_i, out_n.
-    params: n, dim, n_lists, seed, m, k, n_probes."""
+    params: n, dim, n_lists, seed, m, k, n_probes[, status] (the queries' finite status word)."""
     var n = p_int(params, 0)
     var dim = p_int(params, 1)
     var n_lists = p_int(params, 2)
@@ -296,6 +342,8 @@ def ivf_rabitq_search_binding(addrs: PythonObject, params: PythonObject) raises 
     var od = ptr_f32(addrs, 8)
     var oi = ptr_i32(addrs, 9)
     var on = ptr_i32(addrs, 10)
+    if not _query_status(params, 7, a_int(addrs, 7), m * dim):
+        return PythonObject(m)
     with GILReleased(Python()):
         ivf_rabitq_search_host(centers, offsets, list_indices, codes, norms, ips, mask, n_lists, dim, seed,
                                queries, m, k, n_probes, od, oi, on)

@@ -25,7 +25,6 @@ device half `_predict_into` itself runs after its upload, over the same
 words (the regressors already in the filter layout `exog_filter_layout`
 returns): the same kernels read the same bytes, so the bits are the same.
 """
-from std.ffi import _Global
 from std.atomic import Atomic, Ordering
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -34,10 +33,11 @@ from core.neural_context import process_ctx, neural_device_plan
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from arima.exog_layout import exog_filter_layout
 from arima.estimator import arima_predict_device, _order, _refuse_shape
+from core.shared_slot import SharedSlot
 
 # The context slot `_predict_into` uses (arima/estimator.mojo `_DEVCTX_SLOT`):
 # a resident entry and the per-call path share one process context.
-comptime _ARIMA_CTX_SLOT = "MojolearnArimaContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnArimaContextFastV2"
+comptime _ARIMA_CTX_SLOT = "MojolearnArimaContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnArimaContextFastV3"
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 
@@ -107,7 +107,7 @@ struct ResidentArimaFit(Movable):
         _ = self.ctx^
 
 
-struct ArimaResidentRegistry(Movable):
+struct ArimaResidentRegistry(Defaultable, Movable):
     var entries: Dict[Int, ResidentArimaFit]
     var next_id: Int
     # One lock word: queries run with the GIL released (see the module note).
@@ -119,14 +119,7 @@ struct ArimaResidentRegistry(Movable):
         self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime ARIMA_RESIDENT_REGISTRY = _Global[
-    StorageType=ArimaResidentRegistry,
-    name=(
-        "MojoArimaResidentFitIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else
-        "MojoArimaResidentFitFast"
-    ),
-    init_fn=ArimaResidentRegistry.__init__,
-]
+comptime ARIMA_RESIDENT_REGISTRY = SharedSlot[ArimaResidentRegistry, ( "MojolearnArimaResidentFitIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnArimaResidentFitFastV1" )]
 
 
 def _registry() raises -> UnsafePointer[ArimaResidentRegistry, MutAnyOrigin]:

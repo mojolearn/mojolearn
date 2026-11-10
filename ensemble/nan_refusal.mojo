@@ -10,3 +10,11 @@ comptime RF_NAN_REFUSAL = (
     " but partitions right, and the fit would not terminate)"
 )
 """The RandomForest builders' NaN refusal, host and GPU bindings alike."""
+
+comptime RF_NONFINITE_REFUSAL = (
+    "X contains NaN or infinity; the forest has no missing-value arm"
+)
+"""The forest data session's refusal (NaN or infinity), host and GPU
+bindings alike: the text of ensemble/device_finite.mojo
+FOREST_NONFINITE_REFUSAL and of the public doors' TREES_NONFINITE
+(bindings/trees_public_inputs.mojo), which the doors match on."""

@@ -21,7 +21,6 @@ its workers, so with them the driver's Python partition, its local-id maps
 and its global merge run on a CPU-only install exactly as they run on a
 GPU, and the `par-ivf` lane of tools/identity_break.py has a CPU route.
 """
-from std.ffi import _Global
 from std.atomic import Atomic, Ordering
 from std.memory import ArcPointer
 from std.python import Python, PythonObject
@@ -41,6 +40,7 @@ from bindings.ivf_index_arrays import (
 from ivf.host.ivf_host import IvfHostIndex, host_ivf_extend, host_ivf_search
 from ivf.index_arrays_impl import ivf_finalize_distances_host
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from core.shared_slot import SharedSlot
 
 
 def _ivf_host_search_arrays(
@@ -181,7 +181,7 @@ struct HostIvfResident(Movable):
         self.partial_storage = partial_storage
 
 
-struct HostIvfRegistry(Movable):
+struct HostIvfRegistry(Defaultable, Movable):
     # p3-neighbors-cluster: each entry sits behind a reference-counted
     # pointer. A search copies the pointer under the registry's lock word and
     # reads the index with the GIL released; a concurrent prepare (which may
@@ -199,16 +199,12 @@ struct HostIvfRegistry(Movable):
         self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime HOST_IVF_REGISTRY = _Global[
-    StorageType=HostIvfRegistry,
-    name=(
-        # V2: the entry layout changed (p3-neighbors-cluster); a process-wide
-        # global name is shared by every extension that registers it.
-        "MojoIvfFlatHostResidentIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else
-        "MojoIvfFlatHostResidentFastV2"
-    ),
-    init_fn=HostIvfRegistry.__init__,
-]
+# V2 -> V3: the entry layout changed (p3-neighbors-cluster); a process-wide
+# slot name is shared by every extension that registers it.
+comptime HOST_IVF_REGISTRY = SharedSlot[HostIvfRegistry, (
+    "MojolearnIvfFlatHostResidentIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else
+    "MojolearnIvfFlatHostResidentFastV3"
+)]
 
 
 def _host_ivf_registry() raises -> UnsafePointer[HostIvfRegistry, MutAnyOrigin]:

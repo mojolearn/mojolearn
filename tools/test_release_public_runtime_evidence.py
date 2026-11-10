@@ -87,11 +87,10 @@ def retained(tmp_path, monkeypatch):
             if name.startswith('test_public_fit_predict_score_have_no_python_lifecycle_frames['):
                 reports=[]
                 for _ in range(3):
-                    strict = audit_index < 12; audit_index += 1
-                    reports.append(dict(schema='mojolearn.native-runtime-audit.v1',passed=strict,compatibility_qualified=True,
+                    audit_index += 1
+                    reports.append(dict(schema='mojolearn.native-runtime-audit.v1',passed=True,compatibility_qualified=True,
                         exception=None,forbidden_native_calls=[],unresolved_native_calls=[],wrapper_work=[],unobserved_existing_threads=[],
-                        approved_python_fallbacks=[] if strict else [dict(id='array-length-metadata',callee='mojolearn._array.Array.__len__',calls=1)],
-                        python_frames=[] if strict else [dict(function='Array.__len__',file='/fixture/python/mojolearn/_array.py',calls=1)]))
+                        approved_python_fallbacks=[],python_frames=[]))
                 ET.SubElement(ET.SubElement(case,'properties'),'property',name='runtime_qualification',value=json.dumps(reports))
         ET.ElementTree(xml).write(directory/'run/junit.xml',encoding='unicode')
     return dict(root=root, revision=revision, suites=suites, out=tmp_path/'review', build=build)

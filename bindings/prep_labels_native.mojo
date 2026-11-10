@@ -32,6 +32,8 @@ from bindings.prep_encode_native import (
 from bindings.str_labels_native import str_lookup
 from bindings.user_objects_native import _Env, _f32_exact, _indicator
 from bindings.cpython_table import cpython_table
+from bindings.p3_labels_metrics_native import p3_item, p3_type_word, p3_dict_codes
+from core.label_words_impl import label_codes_i32_to_f64
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -380,11 +382,38 @@ def _numeric_label_words(values: PythonObject, mut words: List[Float64], mut all
     all_ints = count_ints
     var n = len(values)
     words.reserve(n)
+    # Lane p2-labels-lists-arrays: an exact list or tuple is read borrowed
+    # from its C storage and an exact int / float converted by
+    # PyFloat_AsDouble (no subscript, no PythonObject per label).
+    var exact = py_type(values) is env.b.list or py_type(values) is env.b.tuple
+    var is_tuple = py_type(values) is env.b.tuple
+    var int_word = Int(int_type._obj_ptr)
+    var float_word = Int(float_type._obj_ptr)
+    ref cpy = Python().cpython()
+    var t = cpython_table()
+    # One pass over the caller's label objects (Python objects a kernel file
+    # cannot read): main's recorded input-step debt
+    # (tools/hooks/compute_in_shells_baseline.txt), its body made native
+    # for exact int / float labels by lane P2.
     for i in range(n):  # cpu-route: Python label objects, the explicit label input step (one pass)
-        var v = values[i]
-        var cls = py_type(v)
         var x: Float64
         var is_int: Bool
+        if exact:
+            var raw = p3_item(values, i, is_tuple)
+            var word = p3_type_word(raw)
+            if word == int_word or word == float_word:
+                x = t[].PyFloat_AsDouble(raw)
+                if x == -1.0:
+                    if t[].PyErr_Occurred():
+                        raise cpy.unsafe_get_error()
+                if x != x or Float64(Float32(x)) != x:
+                    return False
+                words.append(x)
+                if all_ints and word != int_word:
+                    all_ints = False
+                continue
+        var v = values[i]
+        var cls = py_type(v)
         if cls is int_type:
             x = Float64(py=v)
             is_int = True
@@ -448,11 +477,19 @@ def _object_index(classes: PythonObject) raises -> PythonObject:
 
 
 def _object_codes(mut p: EncProg, classes: PythonObject, values: PythonObject, context: PythonObject) raises -> Int:
-    # pr.put_list([index.get(v, -1) for v in values]).
+    # pr.put_list([index.get(v, -1) for v in values]). Lane
+    # p2-labels-lists-arrays: one borrowed read and one C dict probe per
+    # label (p3_dict_codes) into int32 words, widened natively; the Python
+    # `index.get` call per label is gone.
     var index = _object_index(classes)
-    var codes = List[Float64]()
-    for i in range(len(values)):  # cpu-route: non-str object labels, the explicit label input step
-        codes.append(Float64(Int(py=py_call(index.get, values[i], PythonObject(-1)))))
+    var listed = values
+    if py_type(listed) is not _builtins().list and py_type(listed) is not _builtins().tuple:
+        listed = py_call(_builtins().list, values)
+    var n = len(listed)
+    var words = List[Int32](unsafe_uninit_length=n)
+    p3_dict_codes(index, listed, Int(words.unsafe_ptr()), -1)
+    var codes = label_codes_i32_to_f64(Int(words.unsafe_ptr()), n)
+    _ = words^  # keep the code words alive through the widening above
     return p.put_floats(codes, context)
 
 

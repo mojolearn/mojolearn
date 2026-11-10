@@ -39,8 +39,14 @@ from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_
 # Lane x7b: the block step ops' host arm (its imports reach the step-op
 # layouts of autograd/block_step_ops.mojo; no GPU binding imports this file).
 from autograd.block_step_host import (
-    HostStepScratch, host_step_run, host_attn_step_backward, host_block_step_reports,
+    HostStepScratch, host_step_run, host_step_backward, host_block_step_reports,
 )
+# Lane x56d: the generation ops' host arm.
+from autograd.generation_host import lm_pick_host, lm_alive_host
+
+from autograd.lm_head_v2_host import lm_head_v2_host_run
+from autograd.small_mlp_host import small_mlp_host_run
+from autograd.cnn_block_host import cnn_op_host_run
 from sequence.ops import (
     FP,
     Args,
@@ -481,7 +487,7 @@ struct HostExec(Exec, Movable):
         host_step_run(self.steps, code, bufs, counts, ints, fs, y_out, record)
 
     def step_backward(mut self, w: FP, s: FP, q: FP, d_out: FP, d_x: FP, d_w: FP) raises:
-        host_attn_step_backward(self.steps, w, s, q, d_out, d_x, d_w)
+        host_step_backward(self.steps, w, s, q, d_out, d_x, d_w)
 
     def step_reports(mut self, code: Int, w_addr: Int, s_addr: Int, dsts: List[Int]) raises:
         host_block_step_reports(self.steps, code, w_addr, s_addr, dsts)
@@ -494,3 +500,27 @@ struct HostExec(Exec, Movable):
 
     def step_clear(mut self):
         self.steps.clear()
+
+    # Lane x56d: the generation ops' host arm (autograd/generation_host.mojo).
+    def gen_pick(mut self, logits: FP, n_logits: Int, rows: FP, n_rows: Int, ints: List[Int], fs: List[Float32],
+                 ids: FP) raises:
+        lm_pick_host(logits, n_logits, rows, n_rows, ints, fs, ids)
+
+    def gen_alive(mut self, rows: FP, n_rows: Int, b: Int, dst: FP) raises:
+        lm_alive_host(rows, n_rows, b, dst)
+
+    # Lane m2-neural-leftovers: the chunked LM head op's host arm
+    # (autograd/lm_head_v2_host.mojo), reached through the Exec trait.
+    def lm_head_v2_host(mut self, backward: Bool, bufs: List[FP], rows: Int, vocab: Int, width: Int) raises:
+        lm_head_v2_host_run(backward, bufs, rows, vocab, width)
+
+    # Lane r1-restore-measured-winners: the small MLP op's host arm
+    # (autograd/small_mlp_host.mojo), reached through the Exec trait.
+    def small_mlp_host(mut self, backward: Bool, bufs: List[FP], dims: List[Int]) raises:
+        small_mlp_host_run(backward, bufs, dims)
+
+    # Lane r1-restore-measured-winners: the CNN conv block and head ops'
+    # host arm (autograd/cnn_block_host.mojo), reached through the Exec trait.
+    def cnn_op_host(mut self, op: Int, bufs: List[FP], cprm: List[Int32], pprm: List[Int32],
+                    words: List[Int]) raises:
+        cnn_op_host_run(op, bufs, cprm, pprm, words)

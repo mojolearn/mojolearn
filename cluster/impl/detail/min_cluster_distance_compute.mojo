@@ -83,7 +83,6 @@ from cluster.impl.distance.fused_distance_nn.simt_kernel import (
 from neighbors.impl.distance.detail.pairwise_distance_base import (
     launch_config_generator_cores,
 )
-from std.ffi import _Global
 from std.sys.compile import is_defined
 from std.sys.info import has_amd_gpu_accelerator, has_nvidia_gpu_accelerator
 from max.gpu.host import DeviceAttribute
@@ -103,16 +102,14 @@ from max.gpu.host import DeviceAttribute
 comptime KMEANS_LIVE_CORES = not is_defined["MOJOLEARN_KMEANS_LIVE_CORES_OFF"]()
 
 
-struct _LiveCores(Movable):
+struct _LiveCores(Defaultable, Movable):
     var cores: Int
 
     def __init__(out self):
         self.cores = 0
 
 
-comptime _KMEANS_LIVE_CORES_SLOT = _Global[
-    StorageType=_LiveCores, name="MojolearnKmeansFusedGridLiveCores", init_fn=_LiveCores.__init__
-]
+comptime _KMEANS_LIVE_CORES_SLOT = SharedSlot[_LiveCores, "MojolearnKmeansFusedGridLiveCoresV1"]
 
 
 def kmeans_fused_grid_cores(ctx: DeviceContext) -> Int:
@@ -132,6 +129,7 @@ from cluster.impl.distance.unfused_distance_nn import (
     REDUCE_MIN_TPB,
     reduce_min_kernel,
 )
+from core.shared_slot import SharedSlot
 
 
 

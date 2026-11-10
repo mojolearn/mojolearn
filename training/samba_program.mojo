@@ -41,7 +41,8 @@ same kernels on every vendor and in every column, so a version-level change
 at most (identity lane `samba`).
 
 Weights: the caller's flat registry is the truth (`SambaStack.parameters()`
-are writable views of it). The program keeps a `WeightKey` (lane x45c,
+are read-only views of it since lane x56d: callers cannot edit it in place,
+the native operations that write it move the weight epoch). The program keeps a `WeightKey` (lane x45c,
 core/weight_epoch.mojo): the registry address and the weight epoch at its
 load. The per-call doors call `refresh_weights`, which reloads only when the
 key is not current (integ-w4: formerly `load_weights` on every call, the
@@ -74,7 +75,7 @@ from autograd.ops_api import OpsSession
 from autograd.block_step_ops import (
     OPS_M3_STEP, OPS_ATTN_STEP, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
     block_weight_sizes, block_state_sizes, block_offsets, block_guard, block_buffer_view, block_step_words,
-    block_part_floats,
+    block_part_floats, block_step_reports_to_host,
 )
 from training.samba_resident import (
     SAMBA_BLOCK_TENSORS,
@@ -419,6 +420,33 @@ struct SambaStackProgram(Movable, Writable):
                 self.s.ex.download_async(FP(unsafe_from_address=pieces[at + k]), base + offs[k], ssizes[k])
             at += len(ssizes)
         return self.cur.copy()
+
+    def report_count(self) -> Int:
+        """Report addresses `enqueue_reports` takes: four per Mamba-3 layer."""
+        var n = 0
+        for i in range(len(self.codes)):  # driver-loop: over the stack's layers (model structure)
+            if self.codes[i] == OPS_M3_STEP:
+                n += 4
+        return n
+
+    def enqueue_reports(mut self, reports: List[Int]) raises:
+        """The Mamba-3 layers' reports of the last run (h_last, k_last,
+        v_last, theta_last: four addresses per Mamba-3 layer in layer order;
+        a 0 address skips one) into the caller's arrays, enqueued with no
+        wait (the run's `finish` covers them). The step op keeps them in its
+        resident block (autograd/block_step_ops.mojo
+        block_step_reports_to_host), so a run before `finish` can read them."""
+        if len(reports) != self.report_count():
+            raise Error("samba program: expected " + String(self.report_count()) + " report addresses")
+        var ctx = self.s.ex.ctx.copy()
+        var at = 0
+        for i in range(self.n_layers()):  # driver-loop: over the stack's layers (report owners)
+            if self.codes[i] != OPS_M3_STEP:
+                continue
+            var dsts: List[Int] = [reports[at], reports[at + 1], reports[at + 2], reports[at + 3]]
+            block_step_reports_to_host(ctx, self.s.steps, OPS_M3_STEP, Int(self.s.buffer(self.w[i])),
+                                       Int(self.s.buffer(self.st[i])), dsts)
+            at += 4
 
     def export_state(mut self, pieces: List[Int]) raises -> List[Int]:
         """`enqueue_export` behind one wait."""

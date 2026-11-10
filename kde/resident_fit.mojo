@@ -29,7 +29,6 @@ one-shot entry's (`tools/identity_break.py`, the kde lanes, cuda against the
 cpu host route). The context and the buffers are destroyed in DEVIATION
 1946's order, buffers before the context.
 """
-from std.ffi import _Global
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import NUMERIC_FAST
@@ -41,7 +40,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnEstimatorsContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnEstimatorsContextFastV2"
+comptime _DEVCTX_SLOT = "MojolearnEstimatorsContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnEstimatorsContextFastV3"
 
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -63,6 +62,7 @@ from kde.impl.neighbors.kernel_density import (
 from kde.impl.distance.distance_ops import DIST_COSINE_EXPANDED, DIST_L2_EXPANDED
 from core.admitted_finite_status import enqueue_finite_status
 from core.device_zero import enqueue_fill
+from core.shared_slot import SharedSlot
 
 
 def kde_host_rules_needed(metric: Int, finite_tested: Bool) -> Bool:
@@ -189,7 +189,7 @@ struct ResidentKdeFit(Movable):
         _ = self.ctx^
 
 
-struct KdeFitRegistry(Movable):
+struct KdeFitRegistry(Defaultable, Movable):
     var entries: Dict[Int, ResidentKdeFit]
     var next_id: Int
 
@@ -198,14 +198,7 @@ struct KdeFitRegistry(Movable):
         self.next_id = 1
 
 
-comptime KDE_FIT_REGISTRY = _Global[
-    StorageType=KdeFitRegistry,
-    name=(
-        "MojoKdeResidentFitIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-        "MojoKdeResidentFitFast"
-    ),
-    init_fn=KdeFitRegistry.__init__,
-]
+comptime KDE_FIT_REGISTRY = SharedSlot[KdeFitRegistry, ( "MojolearnKdeResidentFitIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnKdeResidentFitFastV1" )]
 
 
 def kde_fit_prepare(

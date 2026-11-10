@@ -8,9 +8,9 @@ queues. The slot keeps a reference for the life of the process. One slot per
 numeric tier, so a FAST and an IDENTICAL .so in one process never share it.
 Moves no bit: the kernels, their launch shapes and their order are unchanged.
 Regression test: python/mojolearn/tests/test_x_ann_repeat.py."""
-from std.ffi import _Global
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.shared_slot import SharedSlot
 
 
 struct _AnnContext(Defaultable, Movable):
@@ -20,8 +20,8 @@ struct _AnnContext(Defaultable, Movable):
         self.ctx = Optional[DeviceContext]()
 
 
-comptime _CTX_NAME = "MojolearnXAnnContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXAnnContextFastV2"
-comptime X_ANN_CONTEXT = _Global[StorageType=_AnnContext, name=_CTX_NAME, init_fn=_AnnContext.__init__]
+comptime _CTX_NAME = "MojolearnXAnnContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnXAnnContextFastV3"
+comptime X_ANN_CONTEXT = SharedSlot[_AnnContext, _CTX_NAME]
 
 
 def x_ann_ctx() raises -> DeviceContext:

@@ -639,14 +639,14 @@ Under `--inputs synthetic` (every smoke run over a tree whose board takes it): 0
 | `neural/ops-session-step/gaussian/shape=small` | NO VERIFY LANE | synthetic (the driver's seeded inputs) | - | nvidia,amd |
 | `neural/program-run/gaussian/shape=small` | NO VERIFY LANE | synthetic (the driver's seeded inputs) | - | nvidia,amd |
 | `neural/rnn-fit/higgs/shape=small` | NO VERIFY LANE | synthetic `higgs/higgs_speed.npz` | gbm-bench/higgs/higgs_speed.npz | nvidia,amd |
-| `neural/samba-decode/bytes/shape=small` | NO VERIFY LANE | synthetic (the driver's seeded inputs) | - | nvidia,amd |
+| `neural/samba-decode/bytes/shape=small` | verify fixture | verify fixture `samba-decode-session` | - | nvidia,amd |
 | `neural/samba-forward/bytes/shape=small` | NO VERIFY LANE | synthetic (the driver's seeded inputs) | - | nvidia,amd |
 | `neural/samba-train-step/bytes/shape=small` | NO VERIFY LANE | synthetic (the driver's seeded inputs) | - | nvidia,amd |
 | `neural/sequential-fit/synthetic/shape=small` | NO VERIFY LANE | synthetic (the driver's seeded inputs) | - | nvidia,amd |
 | `neural/sequential-predict/synthetic/shape=small` | NO VERIFY LANE | synthetic (the driver's seeded inputs) | - | nvidia,amd |
 | `neural/tape-user-model/higgs/shape=small` | NO VERIFY LANE | synthetic `higgs/higgs_speed.npz` | gbm-bench/higgs/higgs_speed.npz | nvidia,amd |
 | `neural/transformer-decode/gaussian/shape=small` | verify fixture | verify fixture `transformer-decode-load-state` (+1) | - | nvidia,amd |
-| `neural/transformer-forward/gaussian/shape=small` | verify fixture | verify fixture `transformer-forward-tape` | - | nvidia,amd |
+| `neural/transformer-forward/gaussian/shape=small` | NO VERIFY LANE | synthetic (the driver's seeded inputs) | - | nvidia,amd |
 | `trees/et/istella/rows=2000` | synthetic file | synthetic `istella/istella_speed.npz` | gbm-bench/istella/istella_speed.npz | nvidia,amd |
 | `trees/et/taxi/rows=2000` | synthetic file | synthetic `taxi/taxi_speed.npz` | gbm-bench/taxi/taxi_speed.npz | nvidia,amd |
 | `trees/gbdt-categorical/taxi/rows=2000` | synthetic file | synthetic `taxi/taxi_speed.npz` | gbm-bench/taxi/taxi_speed.npz | nvidia,amd |

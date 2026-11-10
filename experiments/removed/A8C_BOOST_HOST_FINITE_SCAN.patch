@@ -1,0 +1,291 @@
+diff --git a/bindings/_mojolearn_rf.mojo b/bindings/_mojolearn_rf.mojo
+index 03aa55a9cc..81f6bdc322 100644
+--- a/bindings/_mojolearn_rf.mojo
++++ b/bindings/_mojolearn_rf.mojo
+@@ -44,7 +44,7 @@ from ensemble.ada_rounds import (
+ from xtrees.ops_device import weighted_sample_on
+ from xtrees.ops_device_boost import r2_step_on, samme_step_on
+ from xtrees.dart_device import DART_SESSIONS, _DART_CTX
+-from ensemble.nan_refusal import RF_NAN_REFUSAL, RF_NONFINITE_REFUSAL
++from ensemble.nan_refusal import RF_NAN_REFUSAL
+ 
+ from std.os import abort
+ from ensemble.device_finite import FOREST_DEVICE_FINITE, ForestFiniteScan
+@@ -859,34 +859,24 @@ def rf_data_session_open_binding(
+             )
+     var xp = _f32_ptr(Int(py=x_addr))
+     var made = List[RfDataSession]()
+-    var bad = False
++    var has_nan = False
+     with GILReleased(Python()):
+         var ctx = process_ctx[_DEVCTX_SLOT]()
+         # cpu-gpu-cleanup t-forest: the caller's bytes go to the device as
+-        # they are, the transpose and the finite scan run there. The session
++        # they are, the transpose and the NaN scan run there. The session
+         # keeps no host copy of X (`host_x` 0: the borrow ends with this
+         # call), so a member's OOB pass reads the device plane.
+         var dx = upload_forest_x(ctx, xp, n_rows, n_cols, row_major)
+-        # Lane a8c-device-x-linear-prep-rfe: the scan tests NaN AND infinity
+-        # (ensemble/device_finite.mojo, bits of the exponent), so the boost
+-        # meta-estimators' host scan of X before the open
+-        # (bindings/trees_public_boost.mojo, TREES_NONFINITE) is deleted:
+-        # this one device pass over the upload the session makes anyway is
+-        # the only test. One synchronize, as the NaN scan had.
+-        var scan = ForestFiniteScan(ctx)
+-        scan.enqueue(ctx, dx, n_rows * n_cols)
+-        ctx.synchronize()
+-        bad = scan.hflag.unsafe_ptr().unsafe_load(0) != 0
+-        _ = scan^
+-        if bad:
++        has_nan = device_has_nan_f32(ctx, dx, n_rows * n_cols)
++        if has_nan:
+             _ = dx^
+         else:
+             made.append(
+                 RfDataSession(0, dx^, n_rows, n_cols, 0, share_tables)
+             )
+         _ = ctx^
+-    if bad:
+-        raise Error("rf_data_session_open: " + RF_NONFINITE_REFUSAL)
++    if has_nan:
++        raise Error("rf_data_session_open: " + RF_NAN_REFUSAL)
+     var reg = RF_SESSIONS.get_or_create_ptr()
+     var id = reg[].next_id
+     reg[].next_id += 1
+diff --git a/bindings/_mojolearn_rf_host.mojo b/bindings/_mojolearn_rf_host.mojo
+index 287a0c5a0b..7ebcf8d236 100644
+--- a/bindings/_mojolearn_rf_host.mojo
++++ b/bindings/_mojolearn_rf_host.mojo
+@@ -113,9 +113,9 @@ from bindings.forest_host_groves_binding import (
+     forest_prepare_host_binding,
+     forest_release_host_binding,
+ )
++from ensemble.host_layout import has_nan_f32_threaded
+ from xtrees.dart_host import DART_HOST, DART_HOST_SESSIONS
+-from ensemble.nan_refusal import RF_NONFINITE_REFUSAL
+-from core.host_finite_scan import host_all_finite_f32
++from ensemble.nan_refusal import RF_NAN_REFUSAL
+ from ensemble.host.rf_oracle import (
+     RF_ENTROPY,
+     RF_GAMMA,
+@@ -717,12 +717,8 @@ def rf_data_session_open_binding(
+             " option; an IDENTICAL member draws its own sample"
+         )
+     var x_address = _index(x_addr)
+-    # Lane a8c-device-x-linear-prep-rfe: NaN AND infinity (the GPU binding's
+-    # device scan of its upload), so the boost meta-estimators' own host
+-    # scan before the open is deleted; the host column tests the words it
+-    # reads, once, in parallel SIMD tasks (core/host_finite_scan.mojo).
+-    if not host_all_finite_f32(f32_ptr(x_address), n_rows * n_cols):
+-        raise Error("rf_data_session_open: " + RF_NONFINITE_REFUSAL)
++    if has_nan_f32_threaded(f32_ptr(x_address), n_rows * n_cols):
++        raise Error("rf_data_session_open: " + RF_NAN_REFUSAL)
+     var x = List[Float32]()
+     with GILReleased(Python()):
+         x = _read_x_col_major(x_address, n_rows, n_cols, row_major)
+diff --git a/bindings/trees_public_boost.mojo b/bindings/trees_public_boost.mojo
+index bf4060b2a0..cb85d29bfe 100644
+--- a/bindings/trees_public_boost.mojo
++++ b/bindings/trees_public_boost.mojo
+@@ -22,8 +22,8 @@
+ # float32 once per operation and handed to every member (AdaBoost's members
+ # reuse its one column-major copy, a session's members its one device
+ # copy); DART no longer opens (and uploads X into) a forest data session its
+-# round never reads (the round's own `x_trees_dart_open` holds X and tests
+-# it on the device); RandomTreesEmbedding's `fit_transform`
++# round never reads (the round's own `x_trees_dart_open` holds X; the
++# session's finite scan is kept); RandomTreesEmbedding's `fit_transform`
+ # converts X once for the fit and the transform.
+ from std.math import ceil
+ from std.python import Python, PythonObject
+@@ -36,7 +36,7 @@ from bindings.trees_side_records import trees_side_get, trees_side_put, trees_si
+ from bindings.classical_arrays import classical_wrap_array, _store_code
+ from bindings.trees_public_inputs import (
+     TREES_NONFINITE, TreesLabels, trees_builtins, trees_table, trees_entry, trees_need,
+-    trees_helper, trees_env, trees_reshape, trees_address,
++    trees_helper, trees_env, trees_reshape, trees_address, trees_finite_f32,
+     trees_encode_labels, trees_decode_labels, trees_cast,
+     trees_weighted_rows, trees_call, trees_class_rows_only,
+ )
+@@ -504,32 +504,22 @@ struct Session(Copyable, Movable):
+ # Restore: git apply experiments/removed/MOJOLEARN_IDN_ADA_SESSION_OFF.patch
+ 
+ 
+-def _member_session(member: PythonObject, x: AdmittedX, row_major: Bool, choice: String,
++def _member_session(member: PythonObject, x: AdmittedX, row_major: Bool, x_finite: Bool, choice: String,
+                     context: PythonObject) raises -> Session:
+     """`_trees_member_session`: the data session for the member fits of one
+     ensemble on the forest binding a clone of `member` resolves (handle 0:
+-    the binary has no session entry). It stands in for every member's finite
+-    scan of X: the session open tests the words it uploads (NaN and
+-    infinity, on the device; the host column in its parallel scan) and is
+-    refused with TREES_NONFINITE. `choice` is 'exact' or 'share'
+-    (`_ada_session_choice`)."""
+-    # Lane a8c-device-x-linear-prep-rfe: the host scan of X that came before
+-    # the open (trees_finite_f32, an O(n d) pass the session's own device
+-    # scan repeats) is deleted; `x_finite` went with it. A binary without a
+-    # session entry leaves each member fit to test X (its forest door).
++    the binary has no session entry). It stands in for
++    every member's finite scan of X, so X is scanned here unless the caller
++    already did. `choice` is 'exact' or 'share' (`_ada_session_choice`)."""
+     var mode = _member_mode(member, context)
+     var native = trees_table(context, mode, "_mojolearn_rf")
+     if trees_entry(native, "rf_data_session_open") is None:
+         return Session(native, 0)
++    if not x_finite and not trees_finite_f32(x.address, x.rows * x.cols):
++        raise Error(TREES_NONFINITE)
+     var share = choice == "share" and mode == "fast"
+-    var handle = PythonObject(0)
+-    try:
+-        handle = py_call_typed(trees_entry(native, "rf_data_session_open"), _P(x.address),
++    var handle = py_call_typed(trees_entry(native, "rf_data_session_open"), _P(x.address),
+                                Python.list(_P(x.rows), _P(x.cols), _P(1 if row_major else 0), _P(1 if share else 0)))
+-    except error:
+-        if TREES_NONFINITE in String(error):
+-            raise Error(TREES_NONFINITE)
+-        raise error^
+     return Session(native, Int(py=handle))
+ 
+ 
+@@ -1189,12 +1179,12 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context:
+         var session = Session(PythonObject(None), 0)
+         if dt_best:
+             var cm = _colmajor(xt, x, context)
++            if not trees_finite_f32(cm.address, n * d):
++                raise Error(TREES_NONFINITE)
++            _ = cm  # keep the Python object alive through the native calls above
+             if trees_env("MOJOLEARN_ADABOOST_REENCODE", "") != "1":
+                 encoded = trees_encode_labels(codes, context)
+-            # the session open tests the column-major words it uploads
+-            # (lane a8c: the host scan of cm before it is deleted)
+-            session = _member_session(base, cm, False, _ada_session_choice(fields, xt, context), context)
+-            _ = cm  # keep the Python object alive through the native calls above
++            session = _member_session(base, cm, False, True, _ada_session_choice(fields, xt, context), context)
+             xcm = cm^
+         var is_dt = Bool(py=py_call(trees_builtins().isinstance, base, context["trees_dt_classifier"]))
+         var template = forest_get_params(base, context) if m > 0 else Python.dict()
+@@ -1300,7 +1290,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context:
+                                                                   or Bool(py=crit == PythonObject("mse"))):
+             var native = trees_table(context, _member_mode(base, context), "_mojolearn_rf")
+             if trees_entry(native, "rf_regressor_fit_session_rows_export") is not None:
+-                session = _member_session(base, x, True, _ada_session_choice(fields, xt, context), context)
++                session = _member_session(base, x, True, False, _ada_session_choice(fields, xt, context), context)
+     var loss = Int(py=context["trees_ada_losses"][fields["loss"]])
+     var is_dt = Bool(py=py_call(trees_builtins().isinstance, base, context["trees_dt_regressor"]))
+     var y_array = _as_array(y32, Python.tuple(n), context)
+@@ -1670,11 +1660,17 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedX, y32: Ad
+     py_setitem(fields, "_bag_at", PythonObject(None))
+     var depth_param = fields["max_depth"]
+     var max_depth = PythonObject(None) if depth_param is None or Int(py=_int(depth_param)) <= 0 else _int(depth_param)
+-    # TOMBSTONE: the DART door's host finite scan of X (trees_finite_f32, the scan of the forest data session
+-    # the Python fit opened and the round never read) deleted 2026-11-09 by lane a8c-device-x-linear-prep-rfe:
+-    # `x_trees_dart_open` tests the X it uploads (xtrees/dart_device.mojo; the host column in xtrees/dart_host.mojo)
+-    # and the refusal is mapped to TREES_NONFINITE at the open below. Never reached main as a define: recoverable at
+-    # 0ce88411d3.
++    var bagged = Float64(py=_float(fields["subsample"])) < 1.0 and Int(py=_int(fields["subsample_freq"])) > 0
++    var sampled = Float64(py=_float(fields["colsample_bytree"])) < 1.0
++    if not bagged and not sampled:
++        # The Python fit opened a forest data session here whose X the
++        # round never read (`x_trees_dart_open` holds X): only its finite
++        # scan is kept, on the tier a one-tree regressor would use.
++        var probe_mode = _mode(fields, context)
++        var native = trees_table(context, probe_mode, "_mojolearn_rf")
++        if trees_entry(native, "rf_data_session_open") is not None:
++            if not trees_finite_f32(x.address, n * d):
++                raise Error(TREES_NONFINITE)
+     # `_dart_device`: the round's entries and the leaf-value cap.
+     if trees_entry(xt, "x_trees_dart_open") is None:
+         raise Error("NotImplementedError: mojolearn DART: this binary has no x_trees_dart_* round (a FAST CPU-only install or a "
+@@ -1699,15 +1695,8 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedX, y32: Ad
+     var xgb = 1 if _truthy(fields["xgboost_dart_mode"]) else 0
+     var max_drop = Int(py=_int(fields["max_drop"]))
+     var drop_rate = _float(fields["drop_rate"])
+-    var handle = PythonObject(0)
+-    try:
+-        handle = py_call_typed(_x(xt, "x_trees_dart_open"), _P(x.address), _P(y32.address), _A(inits32),
++    var handle = py_call_typed(_x(xt, "x_trees_dart_open"), _P(x.address), _P(y32.address), _A(inits32),
+                                Python.list(_P(n), _P(d), _P(K), _P(kind), _P(n_iters), _P(node_cap)))
+-    except error:
+-        # the open's device test of X (lane a8c), in the forest's one wording
+-        if TREES_NONFINITE in String(error):
+-            raise Error(TREES_NONFINITE)
+-        raise error^
+     _ = inits32  # keep the Python object alive through the native call above
+     var cache_start = -1
+     var cache = PythonObject(None)
+diff --git a/ensemble/nan_refusal.mojo b/ensemble/nan_refusal.mojo
+index 3414b75d80..798f6f0e65 100644
+--- a/ensemble/nan_refusal.mojo
++++ b/ensemble/nan_refusal.mojo
+@@ -10,11 +10,3 @@ comptime RF_NAN_REFUSAL = (
+     " but partitions right, and the fit would not terminate)"
+ )
+ """The RandomForest builders' NaN refusal, host and GPU bindings alike."""
+-
+-comptime RF_NONFINITE_REFUSAL = (
+-    "X contains NaN or infinity; the forest has no missing-value arm"
+-)
+-"""The forest data session's refusal (NaN or infinity), host and GPU
+-bindings alike: the text of ensemble/device_finite.mojo
+-FOREST_NONFINITE_REFUSAL and of the public doors' TREES_NONFINITE
+-(bindings/trees_public_inputs.mojo), which the doors match on."""
+diff --git a/xtrees/dart_device.mojo b/xtrees/dart_device.mojo
+index 335c3a219e..52c5527828 100644
+--- a/xtrees/dart_device.mojo
++++ b/xtrees/dart_device.mojo
+@@ -50,8 +50,6 @@ from std.sys import has_accelerator
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+ from core.device_zero import enqueue_fill
+-from core.admitted_finite_status import enqueue_finite_status
+-from ensemble.nan_refusal import RF_NONFINITE_REFUSAL
+ from core.neural_context import process_ctx
+ from xtrees.ops import stream_base, draw
+ from xtrees.dart_units import (
+@@ -425,21 +423,8 @@ def dart_open(
+             grid_dim=(_blocks(k * n), 1, 1), block_dim=(TPB, 1, 1),
+         )
+         enqueue_fill[DType.int32](ctx, bad, Int32(0))
+-        # Lane a8c-device-x-linear-prep-rfe: X is tested on the device over
+-        # this upload (NaN or infinity, on bits), read back under the open's
+-        # one synchronize; the DART door's host scan of X before the round
+-        # (bindings/trees_public_boost.mojo, TREES_NONFINITE) is deleted.
+-        var x_status = ctx.enqueue_create_buffer[DType.int32](1)
+-        enqueue_fill[DType.int32](ctx, x_status, Int32(0))
+-        enqueue_finite_status(ctx, x.unsafe_ptr(), n * d, x_status.unsafe_ptr(), 0)
+-        var x_word = ctx.enqueue_create_host_buffer[DType.int32](1)
+-        ctx.enqueue_copy(dst_buf=x_word, src_buf=x_status)
+         ctx.synchronize()
+         _ = inits^
+-        if x_word.unsafe_ptr().unsafe_load(0) != Int32(0):
+-            raise Error("x_trees dart_open: " + RF_NONFINITE_REFUSAL)
+-        _ = x_status^
+-        _ = x_word^
+         var reg = DART_SESSIONS.get_or_create_ptr()
+         var id = reg[].next_id
+         reg[].next_id += 1
+diff --git a/xtrees/dart_host.mojo b/xtrees/dart_host.mojo
+index a90610e91c..87a35999d9 100644
+--- a/xtrees/dart_host.mojo
++++ b/xtrees/dart_host.mojo
+@@ -21,8 +21,6 @@ from xtrees.dart_units import (
+     dart_predict_unit,
+ )
+ from std.memory import bitcast
+-from core.host_finite_scan import host_all_finite_f32
+-from ensemble.nan_refusal import RF_NONFINITE_REFUSAL
+ 
+ #: The host twin exists exactly where the IDENTICAL device round does.
+ comptime DART_HOST = IDN_DART_DEVICE
+@@ -122,11 +120,6 @@ def dart_open(
+     comptime if DART_HOST:
+         if n <= 0 or d <= 0 or k <= 0 or cap_iters <= 0 or node_cap <= 0 or node_cap > 65535:
+             raise Error("x_trees dart_open: needs rows, features, classes, iterations and 1 <= node_cap <= 65535")
+-        # Lane a8c-device-x-linear-prep-rfe: the host column tests the X it
+-        # borrows for the session (the device open's scan of its upload);
+-        # the DART door's own scan before the round is deleted.
+-        if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=x_addr), n * d):
+-            raise Error("x_trees dart_open: " + RF_NONFINITE_REFUSAL)
+         var n_chunks = (n + DART_CHUNK - 1) // DART_CHUNK
+         var reg = DART_HOST_SESSIONS.get_or_create_ptr()
+         var id = reg[].next_id

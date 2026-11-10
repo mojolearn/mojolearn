@@ -3014,7 +3014,7 @@ FAMILIES = (
             "training_host_numeric_mode", "training_host_vendor",
             "training_host_column", "training_host_sabotage",
             "training_numeric_mode", "training_vendor", "optimizer_step",
-            "ce_loss", "mlp_bias_activation", "mlp_relu_backward", "mlp_sum_rows",
+            "ce_loss",
             "accumulate", "accumulation_is_aligned",
             "embedding_forward", "embedding_backward", "rms_norm_forward",
             "rms_norm_backward", "linear_forward", "linear_backward",

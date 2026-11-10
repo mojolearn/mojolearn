@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Stateless preprocessing admits and snapshots its native provider context
 # before lazy NumPy setup, dispatch, metadata access, or numerical execution.
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_attributes import classical_connect_numpy
+from core.shared_slot import SharedSlot
 
 
 def _exact_dict(mapping: PythonObject, b: PythonObject) raises:
@@ -86,10 +86,7 @@ struct _ContextTemplate(Defaultable, Movable):
         self.output = PythonObject(None)
 
 
-comptime _CONTEXT_TEMPLATE = _Global[
-    StorageType=_ContextTemplate, name="MojolearnPrepOperationContextTemplateV1",
-    init_fn=_ContextTemplate.__init__,
-]
+comptime _CONTEXT_TEMPLATE = SharedSlot[_ContextTemplate, "MojolearnPrepOperationContextTemplateV2"]
 
 
 def prep_operation_context(source: PythonObject) raises -> PythonObject:

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # One public preprocessing input snapshot, before dtype conversion or execution.
+from bindings.admitted_finite_wording import admitted_finite_wording
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module, NativeModules
@@ -63,7 +64,7 @@ def prep_finite(snapshot: ArrayMetadata, name: String) raises:
         raise Error("TypeError: preprocessing floating dtype has inconsistent itemsize")
     if not prep_float_finite(snapshot.source, snapshot.shape, snapshot.strides,
                              snapshot.count, snapshot.native_byte_order, snapshot.dtype_number):
-        raise Error("Input X contains NaN or infinity (" + name + ").")
+        raise Error(admitted_finite_wording(name, "X"))
 
 
 def _pandas_block(value: PythonObject, single: Bool, context: PythonObject) raises -> Tuple[ArrayMetadata, Bool]:

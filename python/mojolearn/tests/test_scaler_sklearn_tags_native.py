@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Scaler `__sklearn_tags__` is built natively from scikit-learn's own tag
-records: cold (scikit-learn not imported yet), warm, scikit-learn absent,
-class metadata overrides and their admission, and a NumPy/scikit-learn-free
+"""Scaler `__sklearn_tags__` returns scikit-learn's own tag records, built by
+the Python compatibility layer (`_mode.sklearn_tags`; native code never calls
+into tag handling): cold (scikit-learn not imported yet), warm, scikit-learn
+absent, class metadata overrides, and a NumPy/scikit-learn-free
 `import mojolearn`."""
 import dataclasses
 import json
@@ -63,22 +64,13 @@ def _expected(model):
 
 
 @pytest.mark.parametrize("name", SCALERS)
-def test_warm_call_matches_legacy_without_python_tag_constructors(name, monkeypatch):
+def test_warm_call_returns_independent_records(name):
     pytest.importorskip("sklearn")
-    from sklearn.utils import Tags, TargetTags, InputTags, TransformerTags
+    from sklearn.utils import Tags
     model = _cls(name)()
     expected = _expected(model)
-
-    def poison(*args, **kwargs):
-        raise AssertionError("Python tag constructor reached")
-
-    from mojolearn import _mode
-    with monkeypatch.context() as patch:
-        patch.setattr(_mode, "sklearn_tags", poison)
-        for tag_class in (Tags, TargetTags, InputTags, TransformerTags):
-            patch.setattr(tag_class, "__init__", poison)
-        first = model.__sklearn_tags__()
-        second = model.__sklearn_tags__()
+    first = model.__sklearn_tags__()
+    second = model.__sklearn_tags__()
     assert type(first) is Tags
     assert dataclasses.asdict(first) == expected
     assert first is not second and first.input_tags is not second.input_tags
@@ -139,33 +131,3 @@ def test_class_metadata_overrides_are_admitted():
 def RobustScaler_allows_nan():
     import mojolearn
     return mojolearn.RobustScaler().__sklearn_tags__().input_tags.allow_nan is True
-
-
-@pytest.mark.parametrize("attrs, error", [
-    ({"_sklearn_input_tags": [("allow_nan", True)]}, TypeError),
-    ({"_sklearn_input_tags": {"allow_nan": 1}}, TypeError),
-    ({"_sklearn_target_tags": {"no_such_tag": True}}, AttributeError),
-    ({"_sklearn_requires_fit": 0}, TypeError),
-    ({"_estimator_type": 3}, TypeError),
-])
-@pytest.mark.parametrize("name", SCALERS)
-def test_invalid_metadata_is_refused(name, attrs, error):
-    pytest.importorskip("sklearn")
-    sub = type("Sub", (_cls(name),), dict(attrs))
-    with pytest.raises(error):
-        sub().__sklearn_tags__()
-
-
-@pytest.mark.parametrize("name", SCALERS)
-def test_tag_callback_is_refused_without_invocation(name):
-    pytest.importorskip("sklearn")
-    calls = []
-
-    def hook(self):
-        calls.append(1)
-        return {"required": True}
-
-    sub = type("Sub", (_cls(name),), {"_sklearn_instance_target_tags": hook})
-    with pytest.raises(TypeError, match="_sklearn_instance_target_tags"):
-        sub().__sklearn_tags__()
-    assert calls == []

@@ -121,12 +121,12 @@ class KMeans(NumericModeMixin):
     ----------
     n_clusters : int, default 8
         Number of clusters. Must not exceed the number of rows.
-    init : {'k-means++', 'random', 'array'}, array or callable, default 'k-means++'
+    init : {'k-means++', 'random', 'array'} or array, default 'k-means++'
         How the starting centers are chosen. 'array' takes them from
         `init_centroids`. An array of shape `(n_clusters, n_features)` is used
         directly as the starting centers (`init_centroids` is then ignored).
-        A callable is called as `init(X, n_clusters, random_state)` and must
-        return such an array.
+        A callable is not accepted: compute the starting centers first and
+        pass them as an array.
     n_init : int, default 1
         Number of restarts. Each restart draws different starting centers;
         the one with the lowest final inertia is kept.
@@ -217,9 +217,8 @@ class KMeans(NumericModeMixin):
         self.oversampling_factor = oversampling_factor
         self.numeric_mode = numeric_mode
 
-    # A callable `init` is called once with the fit's rows and its centers
-    # take the 'array' path (bindings/kmeans_native.mojo, scikit-learn's
-    # `init(X, n_clusters, random_state=...)`); an array `init` takes the
+    # A callable `init` is refused before it is called (no Python runs in
+    # the fit: bindings/kmeans_native.mojo); an array `init` takes the
     # 'array' path with `init_centroids` ignored.
     def fit(self, X, y=None, sample_weight=None):
         """Compute the k-means clustering of `X`.

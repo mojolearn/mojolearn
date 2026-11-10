@@ -26,7 +26,7 @@ def connect(context, selection):
         try:
             module = _metrics_impl._get_binding(mode)
             if type(module) is _backend._HostBinding:
-                module = _backend.load_host_module(module._HostBinding__basename)  # cpu-route: import-time connection to the actual CPU metric extension
+                module = _backend.load_host_module(module._HostBinding__basename)  # import-time: import-time connection to the actual CPU metric extension
             if type(module) is not ModuleType:
                 raise TypeError('scorer metrics require a compiled extension module')
             bindings[mode] = module

@@ -2,7 +2,6 @@
 # The CPU inference entries expose the same private operation ABI as the GPU
 # entries. Each path calls the original native host numerical owner; provider
 # admission and lifetime management remain shared and outside this module.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError, PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME, MAMBA_BLOCK_ABI_NAME, TRANSFORMER_BLOCK_ABI_NAME
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -11,6 +10,7 @@ from core.hostptr import copy_f32, f32_ptr, read_f32, read_i32
 from training.host.samba_ops_oracle import host_samba_embedding_forward, host_samba_rms_norm_forward, host_samba_linear_forward
 from transformer.block_options import BLOCK_OPTION_ADDRS, BLOCK_OPTION_PARAMS, BlockOptions
 from transformer.host.transformer_block_host import transformer_host_forward
+from core.shared_slot import SharedSlot
 
 
 def neural_host_primitive_operation(op: Int, a: List[Int], p: List[Int], f: List[Float64]) raises -> Int:
@@ -152,8 +152,7 @@ struct NativeHostPrimitiveAPI(Defaultable, Movable):
         self.entries.append(neural_host_dispatch[0])
 
 
-comptime NATIVE_HOST_PRIMITIVE_API = _Global[StorageType=NativeHostPrimitiveAPI,
-    name=("MojolearnNeuralHostPrimitiveAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNeuralHostPrimitiveAPIFastV2"), init_fn=NativeHostPrimitiveAPI.__init__]
+comptime NATIVE_HOST_PRIMITIVE_API = SharedSlot[NativeHostPrimitiveAPI, ("MojolearnNeuralHostPrimitiveAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNeuralHostPrimitiveAPIFastV3")]
 
 
 struct NativeHostMambaStateAPI(Defaultable, Movable):
@@ -166,8 +165,7 @@ struct NativeHostMambaStateAPI(Defaultable, Movable):
         self.entries.append(neural_host_dispatch[1])
 
 
-comptime NATIVE_HOST_MAMBA_STATE_API = _Global[StorageType=NativeHostMambaStateAPI,
-    name=("MojolearnNeuralHostMambaStateAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNeuralHostMambaStateAPIFastV2"), init_fn=NativeHostMambaStateAPI.__init__]
+comptime NATIVE_HOST_MAMBA_STATE_API = SharedSlot[NativeHostMambaStateAPI, ("MojolearnNeuralHostMambaStateAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNeuralHostMambaStateAPIFastV3")]
 
 
 struct NativeHostTransformerAPI(Defaultable, Movable):
@@ -180,8 +178,7 @@ struct NativeHostTransformerAPI(Defaultable, Movable):
         self.entries.append(neural_host_dispatch[2])
 
 
-comptime NATIVE_HOST_TRANSFORMER_API = _Global[StorageType=NativeHostTransformerAPI,
-    name=("MojolearnNeuralHostTransformerAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNeuralHostTransformerAPIFastV2"), init_fn=NativeHostTransformerAPI.__init__]
+comptime NATIVE_HOST_TRANSFORMER_API = SharedSlot[NativeHostTransformerAPI, ("MojolearnNeuralHostTransformerAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNeuralHostTransformerAPIFastV3")]
 
 
 struct NativeHostMambaBlockAPI(Defaultable, Movable):
@@ -194,5 +191,4 @@ struct NativeHostMambaBlockAPI(Defaultable, Movable):
         self.entries.append(neural_host_dispatch[3])
 
 
-comptime NATIVE_HOST_MAMBA_BLOCK_API = _Global[StorageType=NativeHostMambaBlockAPI,
-    name=("MojolearnNeuralHostMambaBlockAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNeuralHostMambaBlockAPIFastV2"), init_fn=NativeHostMambaBlockAPI.__init__]
+comptime NATIVE_HOST_MAMBA_BLOCK_API = SharedSlot[NativeHostMambaBlockAPI, ("MojolearnNeuralHostMambaBlockAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnNeuralHostMambaBlockAPIFastV3")]

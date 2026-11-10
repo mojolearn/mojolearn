@@ -803,15 +803,12 @@ def _schema_kernel_nodes(kernel: PythonObject, table: PythonObject, nodes: Pytho
 
 
 def _schema_kernel_snapshot(kernel: PythonObject, table: PythonObject, context: PythonObject) raises -> PythonObject:
-    # This list belongs only to archive_schema_save's local context. The
-    # kernel and kernel_ls steps reuse one capture of the same graph/state.
-    var cache = context["archive_kernel_snapshots"]
-    for i in range(len(cache)):  # driver-loop: identity-only lookup among this archive operation's kernels
-        if cache[i][0] is kernel and cache[i][1] is table:
-            return cache[i][2]
+    # One capture per step (lane p5-cpu-route-relabel-and-dead-code, 2026-11-09):
+    # the per-save capture cache needed a whole copy of the shared context on
+    # every save to hold it; a kernel's postfix nodes are a handful, and the
+    # kernel and kernel_ls steps of one save read the same unchanged graph.
     var nodes = Python.list()
     _schema_kernel_nodes(kernel, table, nodes)
-    _ = py_call(cache.append, Python.tuple(kernel, table, nodes))
     return nodes
 
 
@@ -1122,7 +1119,5 @@ def archive_schema_save(model: PythonObject, path: PythonObject, context: Python
     var fields = py_call(native_loaded_module("builtins").dict, admitted)
     _schema_gp_state(fields, steps, context)
     var values = Python.dict()
-    var operation_context = py_call(native_loaded_module("builtins").dict, context)
-    py_setitem(operation_context, "archive_kernel_snapshots", Python.list())
-    _schema_run(model, fields, steps, values, String(cls.__name__), operation_context)
+    _schema_run(model, fields, steps, values, String(cls.__name__), context)
     return classical_archive_write(path, values, context)

@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # Target-specific ownership only; both doors share the same whole-model engine.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from autograd.ops_api import ops_session_open, ops_session_close, ops_session_registry_token, OPS_DEVICE
 from autograd.program_import_request import program_import_request
@@ -11,11 +10,25 @@ from autograd.model_descriptor import MODEL_ABI_NAME, MODEL_FIT_LABELS, NativeMo
 from sequence.neural_model_dispatch import PROGRAM_HOST_RUN, PROGRAM_IMPORT, PROGRAM_DEVICE_RUN, SESSION_OPEN, SESSION_CLOSE, RNN_FIT, RNN_PREDICT, MLP_PREDICT, MODEL_LABELS, MODEL_ARGMAX, NeuralModelRequest, neural_model_execute
 from sequence.neural_model_dispatch import CNN_FIT, CNN_PREDICT, CNN_OPEN
 from sequence.cnn_classifier_program import cnn_fit_program, cnn_open_program, cnn_predict_program
+from autograd.cnn_block_op import CNN_FUSED_OPS
+from x_cnn.device import cnn_ctx
+
 from sequence.perf3_seq_resident import seq_resident_resolve, seq_resident_unpin
 from sequence.model_outputs_device import model_output_device
 from autograd.program_device_execution import program_device_request
 from sequence.exec_device import DeviceExec
 from core.label_cast_device import device_unique_inverse_cast
+from core.shared_slot import SharedSlot
+
+
+def _cnn_exec() raises -> DeviceExec:
+    """The CNN sessions' executor. With the tuned ops (CNN_FUSED_OPS, the
+    default; autograd/cnn_block_op.mojo) it wraps the x_cnn context, so the
+    session's launches and the x_cnn entries the ops call share one in-order
+    queue; `-D MOJOLEARN_CNN_GENERIC_OPS` keeps the shared sequence context."""
+    comptime if CNN_FUSED_OPS:
+        return DeviceExec(cnn_ctx())
+    return DeviceExec()
 
 
 def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
@@ -72,11 +85,11 @@ def model_native_v1(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: In
             var cnn = NeuralModelRequest(op, aa, na, pp, np, ff, nf)
             var written = 0
             if op == CNN_FIT:
-                written = cnn_fit_program[DeviceExec](DeviceExec(), cnn.addresses, cnn.options, cnn.floats)
+                written = cnn_fit_program[DeviceExec](_cnn_exec(), cnn.addresses, cnn.options, cnn.floats)
             elif op == CNN_OPEN:
                 if nf != 0:
                     raise Error("native CNN: the resident open takes no scalar descriptors")
-                written = cnn_open_program[DeviceExec, OPS_DEVICE](DeviceExec(), cnn.addresses, cnn.options)
+                written = cnn_open_program[DeviceExec, OPS_DEVICE](_cnn_exec(), cnn.addresses, cnn.options)
             else:
                 if nf != 0:
                     raise Error("native CNN: predict takes no scalar descriptors")
@@ -138,5 +151,4 @@ struct NativeModelAPI(Defaultable, Movable):
         self.entries.append(model_native_v1)
 
 
-comptime NATIVE_MODEL_API = _Global[StorageType=NativeModelAPI,
-    name=("MojolearnWholeModelDeviceNativeAPIIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnWholeModelDeviceNativeAPIFastV2"), init_fn=NativeModelAPI.__init__]
+comptime NATIVE_MODEL_API = SharedSlot[NativeModelAPI, ("MojolearnWholeModelDeviceNativeAPIIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnWholeModelDeviceNativeAPIFastV3")]

@@ -38,7 +38,11 @@ from max.gpu.sync import barrier
 
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
-from svm.checks.device_select import SEL_TPB, check_finite_device, read_f32, upload_f32
+from svm.checks.device_select import SEL_TPB, read_f32, upload_f32
+from core.device_query_x import DeviceQueryX, QueryFold
+from core.scale_gamma_exact import scale_gamma_from_limbs
+from svm.impl.scale_gamma_device import scale_gamma_limbs_resident
+from svm.impl.scale_gamma_limbs import SG_SLOTS
 from core.device_plan import DevicePlan, plan_for_single
 from svm.multi_gpu import kernel_matrix_dispatch
 from svm.impl.distance.kernel_matrices import (
@@ -161,44 +165,80 @@ def svc_fit(
     return fitted^
 
 
+def svm_fit_device_x(
+    ctx: DeviceContext,
+    x_addr: Int,
+    fold: QueryFold,
+    n_rows: Int,
+    n_cols: Int,
+    mut kp: KernelParams,
+    scale_gamma: Bool,
+) raises -> DeviceQueryX:
+    """The fit X of a kernel SVM on the device (lane a8a): the caller's
+    row-major words at `x_addr` copied once, or the cross-validation fold
+    `fold` gathered out of model selection's resident base (`ctx` is then
+    the fold store's context), with X's two status words read back on the
+    stream (core/device_query_x.mojo; no synchronising scan).
+
+    `scale_gamma`: gamma='scale' is resolved here from this device copy
+    (`scale_gamma_limbs_resident`, the exact integer limbs; the same words
+    as the door's host-address form, so the same gamma) into `kp.gamma`;
+    its drain makes the status words valid, and a flagged X keeps the
+    caller's placeholder gamma (the fit is refused, never solved)."""
+    var qx = DeviceQueryX(ctx, x_addr, n_rows, n_cols, fold)
+    if scale_gamma:
+        var limbs = List[Int64](length=SG_SLOTS, fill=Int64(0))
+        scale_gamma_limbs_resident(ctx, qx.x, n_rows * n_cols, Int(limbs.unsafe_ptr()))
+        if qx.finite_word() == 0 and qx.range_word() == 0:
+            kp.gamma = scale_gamma_from_limbs(limbs, n_rows * n_cols, n_cols)
+    return qx^
+
+
 def svc_fit_borrowed(
     ctx: DeviceContext,
-    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    x_addr: Int,
+    fold: QueryFold,
     labels_host: List[Float32],
     n_rows: Int,
     n_cols: Int,
     param: SvmParameter,
-    kp: KernelParams,
+    mut kp: KernelParams,
     mut card: IdentityTrace,
     mut trace: SmoTrace,
+    mut status: List[Int32],
+    scale_gamma: Bool,
     c_rows: List[Float32] = List[Float32](),
     plan: DevicePlan = plan_for_single(),
 ) raises -> SvmModel:
     """`svc_fit` on the caller's borrowed row-major X (DEVIATION 2665,
-    2026-09-11). The List front copied X into a host List, walked it once
-    for finiteness, then copied it element by element into a pinned host
-    buffer before the device copy. Here X is copied to the device from the
-    address once and checked there (`check_finite_device`: one grid scan,
-    the same predicate, first index and message; no host pass over the
-    cells). The same checks run in the same order, the same bytes reach the
-    device, and everything after the upload is `_svc_fit_staged`, shared with
-    `svc_fit`. The caller keeps the buffer alive and unmodified for the call."""
+    2026-09-11) or a cross-validation fold (lane a8a): X reaches the device
+    once (`svm_fit_device_x`: one copy from the address or the fold's
+    device gather; gamma='scale' resolved from that copy when asked), and
+    its finite and range words come back on the stream with the labels'
+    staging drain. A flagged X is not solved: `status` receives [finite
+    word, range word] (0, 0: finite and in range) and the door refuses a
+    flagged X in admit_x's wording. Everything after the upload is
+    `_svc_fit_staged`, shared with `svc_fit`. The caller keeps the buffer
+    alive and unmodified for the call."""
     if n_cols <= 0:
         raise Error("Parameter n_cols: number of columns cannot be less than one")
     if n_rows <= 0:
         raise Error("Parameter n_rows: number of rows cannot be less than one")
     if len(labels_host) != n_rows:
         raise Error("svc_fit: x / labels sizes do not match n_rows x n_cols")
+    if x_addr == 0 and not fold.active():
+        raise Error("svc_fit: X has a null address")
     check_rung1_scope(param, kp, False)
-    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    check_finite_device(ctx, x, n_rows * n_cols, "X")
+    # TOMBSTONE: check_finite_device on the fit X (synchronising first-non-finite scan, DEVIATION 636 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
+    var qx = svm_fit_device_x(ctx, x_addr, fold, n_rows, n_cols, kp, scale_gamma)
     var model = _svc_label_model(labels_host, n_rows, n_cols, param, kp, card)
+    var status_addr = Int(qx.words.unsafe_ptr())
     var fitted = _svc_fit_staged(
-        ctx, plan, x, labels_host, n_rows, n_cols, param, kp, model^, card, trace,
-        1 << 30, 0, False, 0, Float32(0.0), c_rows,
+        ctx, plan, qx.x, labels_host, n_rows, n_cols, param, kp, model^, card, trace,
+        1 << 30, 0, False, 0, Float32(0.0), c_rows, status_addr,
     )
-    _ = x^
+    status = [qx.finite_word(), qx.range_word()]
+    _ = qx^
     return fitted^
 
 
@@ -247,12 +287,21 @@ def _svc_fit_staged(
     scratch_pad: Int,
     scratch_poison: Float32,
     c_rows: List[Float32] = List[Float32](),
+    status_addr: Int = 0,
 ) raises -> SvmModel:
     """`svcFit` from the uploaded X on: the labels, the one-vs-rest targets,
-    the card's input stages and the solve."""
+    the card's input stages and the solve. `status_addr` nonzero holds X's
+    two status words (a `DeviceQueryX`'s host words, lane a8a), valid after
+    the staging drain below: a flagged X returns the unsolved model."""
     var labels = upload_f32(ctx, labels_host)
     var y = ctx.enqueue_create_buffer[DType.float32](n_rows)
     ctx.synchronize()
+    if status_addr != 0:
+        var words = MutPointer[Int32, MutAnyOrigin](unsafe_from_address=status_addr)
+        if words[0] != 0 or words[1] != 0:
+            _ = labels^
+            _ = y^
+            return model^
     ctx.enqueue_function[ovr_labels_kernel](
         y.unsafe_ptr(), labels.unsafe_ptr(), model.unique_labels[1], Int32(n_rows),
         grid_dim=_grid(n_rows), block_dim=SEL_TPB,

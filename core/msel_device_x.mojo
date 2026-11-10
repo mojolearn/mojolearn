@@ -34,7 +34,6 @@ same order as model selection's own device gather and as the host gather
 on every vendor and on the host column.
 """
 
-from std.ffi import _Global
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -42,39 +41,36 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.msel_device import MselStore, MSEL_STORE_LAYOUT, MSEL_TPB, MSEL_MAX_BLOCKS
 from core.ctx_key import ctx_cache_key
 from core.neural_context import process_ctx
-from core.shared_slot import shared_slot_check, shared_slot_word
+from core.shared_slot import SharedSlot
 
 #: The base binding's process-lifetime context slot (bindings/_mojolearn.mojo
 #: `_DEVCTX_SLOT`) and store name in this build's numeric mode: the base
 #: binding's own msel entries (bindings/msel_device.mojo) use these.
 comptime MSEL_CONTEXT_SLOT = (
-    "MojolearnCoreContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV2"
+    "MojolearnCoreContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV3"
 )
-comptime _MSEL_STORE_NAME_IDN: StaticString = "MojolearnMselStoreIdenticalV2"
-comptime _MSEL_STORE_NAME_OTHER: StaticString = "MojolearnMselStoreFastV2"
-# typed StaticString arms: a conditional of two literals is a String value,
-# which shared_slot_check (StaticString) does not take
+comptime _MSEL_STORE_NAME_IDN: StaticString = "MojolearnMselStoreIdenticalV3"
+comptime _MSEL_STORE_NAME_OTHER: StaticString = "MojolearnMselStoreFastV3"
 comptime MSEL_STORE_NAME: StaticString = _MSEL_STORE_NAME_IDN if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else _MSEL_STORE_NAME_OTHER
 #: The model-selection store (one definition; bindings/msel_device.mojo
 #: imports it). A `_Global` is named process-wide, so every binding module
 #: that names it reads the same store.
-comptime MSEL_STORE = _Global[StorageType=MselStore, name=MSEL_STORE_NAME, init_fn=MselStore.__init__]
+comptime MSEL_STORE = SharedSlot[MselStore, MSEL_STORE_NAME, MSEL_STORE_LAYOUT]
 #: THE store cross-validation folds live in: model selection always connects
 #: the IDENTICAL base binding's msel entries (python/mojolearn/
 #: _native_arena_rows.py `_native('msel_put')`), whatever mode the estimator's
 #: own binding was built in, so a fold reader names the identical store and
 #: context explicitly (in an identical build these are MSEL_STORE and
 #: MSEL_CONTEXT_SLOT themselves).
-comptime MSEL_FOLD_CONTEXT_SLOT = "MojolearnCoreContextIdenticalV2"
-comptime MSEL_FOLD_STORE_NAME = "MojolearnMselStoreIdenticalV2"
-comptime MSEL_FOLD_STORE = _Global[StorageType=MselStore, name=MSEL_FOLD_STORE_NAME, init_fn=MselStore.__init__]
+comptime MSEL_FOLD_CONTEXT_SLOT = "MojolearnCoreContextIdenticalV3"
+comptime MSEL_FOLD_STORE_NAME = "MojolearnMselStoreIdenticalV3"
+comptime MSEL_FOLD_STORE = SharedSlot[MselStore, MSEL_FOLD_STORE_NAME, MSEL_STORE_LAYOUT]
 
 
 def msel_store() raises -> UnsafePointer[MselStore, MutAnyOrigin]:
     """This build's store (`MSEL_STORE`), refused when its creator had
     another layout. Its buffers belong to `msel_store_context()`."""
     var store = MSEL_STORE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    shared_slot_check(store[].layout, shared_slot_word[MselStore](MSEL_STORE_LAYOUT), MSEL_STORE_NAME)
     return store
 
 
@@ -89,7 +85,6 @@ def msel_fold_store() raises -> UnsafePointer[MselStore, MutAnyOrigin]:
     creator had another layout. Its buffers belong to
     `msel_device_x_context()`."""
     var store = MSEL_FOLD_STORE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    shared_slot_check(store[].layout, shared_slot_word[MselStore](MSEL_STORE_LAYOUT), MSEL_FOLD_STORE_NAME)
     return store
 
 comptime MDX_FINITE: Int32 = 0
@@ -101,9 +96,20 @@ comptime _MDX_I32 = MutPointer[Int32, MutAnyOrigin]
 
 
 def msel_device_x_context() raises -> DeviceContext:
-    """The context the fold store's buffers live in: an entry gathering a
-    fold runs on it."""
+    """The context the fold store's buffers live in (the identical base
+    binding's): an identical entry gathering a fold runs on it."""
     return process_ctx[MSEL_FOLD_CONTEXT_SLOT]()
+
+
+def msel_fold_entry_context() raises -> DeviceContext:
+    """The context a fold entry of THIS build runs its kernels on (lane
+    a8d-device-x-decomp-manifold, 2026-11-09): the build's own process
+    context (slot MSEL_CONTEXT_SLOT, the base binding's `_DEVCTX_SLOT`). In an
+    identical build that is the fold store's context itself; in a `fast`
+    build it is the `fast` context, so a `fast` model's fold fit or query
+    runs its `fast` kernels on the `fast` context, never on the identical
+    one. `msel_device_x_f32` orders the cross-context read (see there)."""
+    return process_ctx[MSEL_CONTEXT_SLOT]()
 
 
 def _mdx_grid(total: Int) -> Int:
@@ -149,17 +155,30 @@ def msel_device_x_f32[so: MutOrigin, //](
     resident float32 base `base_id` (`base_rows` x `cols`) into `d_x`
     (at least rows x cols words, C order), with the finite and range flags
     in words `slot` / `slot + 1` of `d_status` (the caller filled them with
-    0). `ctx` must be `msel_device_x_context()`. No synchronisation."""
+    0). `ctx` must be `msel_fold_entry_context()` (the store's context in
+    an identical build). No synchronisation on the entry's own stream."""
     if rows < 1 or cols < 1:
         return
     if len(d_x) < rows * cols:
         raise Error("msel_device_x_f32: destination holds " + String(len(d_x)) + " words, "
                     + String(rows * cols) + " needed")
-    # the store's buffers belong to its own context slot: a reader on any
-    # other context (another binding's slot name) would race the writer's
-    # stream, so it is refused instead (design note hazard 2)
-    if ctx_cache_key(ctx) != ctx_cache_key(msel_device_x_context()):
-        raise Error("msel_device_x_f32: ctx is not the fold store's context (msel_device_x_context())")
+    # the store's buffers belong to its own context slot: a reader on
+    # another context would race the writer's stream (design note hazard 2).
+    # Lane a8d: a `fast` build's fold entry runs on its own `fast` context
+    # (`msel_fold_entry_context()`): the store's stream is drained first, so
+    # every put of the base and the indices is complete before the `fast`
+    # stream reads them, and the entry synchronises its own stream before it
+    # returns (its result download), before model selection can free or
+    # overwrite the slots. Both contexts are on the same device (the plan
+    # root). Any other context is refused.
+    var store_ctx = msel_device_x_context()
+    if ctx_cache_key(ctx) != ctx_cache_key(store_ctx):
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            raise Error("msel_device_x_f32: ctx is not the fold store's context (msel_device_x_context())")
+        else:
+            if ctx_cache_key(ctx) != ctx_cache_key(msel_fold_entry_context()):
+                raise Error("msel_device_x_f32: ctx is neither the fold store's context nor this build's own")
+            store_ctx.synchronize()
     var store = msel_fold_store()
     store[].check(base_id, base_rows * cols * 4)
     store[].check(index_id, rows * 8)

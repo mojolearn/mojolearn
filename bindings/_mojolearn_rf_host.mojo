@@ -61,7 +61,6 @@ differs.
 from core.experiment_guards_trees import TREES_GUARDS_OK
 from ensemble.host.importance import rf_host_importance
 from ensemble.host.oob import rf_host_oob
-from std.ffi import _Global
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
@@ -113,9 +112,9 @@ from bindings.forest_host_groves_binding import (
     forest_prepare_host_binding,
     forest_release_host_binding,
 )
-from ensemble.host_layout import has_nan_f32_threaded
 from xtrees.dart_host import DART_HOST, DART_HOST_SESSIONS
-from ensemble.nan_refusal import RF_NAN_REFUSAL
+from ensemble.nan_refusal import RF_NONFINITE_REFUSAL
+from core.host_finite_scan import host_all_finite_f32
 from ensemble.host.rf_oracle import (
     RF_ENTROPY,
     RF_GAMMA,
@@ -129,17 +128,14 @@ from ensemble.host.rf_oracle import (
     n_sampled_rows_host,
     rf_host_fit,
 )
+from core.shared_slot import SharedSlot
 
 
 comptime N_RF_FIT_PARAMS = 16
 """`bindings/_mojolearn_rf.mojo::N_RF_FIT_PARAMS`, the same 16 slots in the
 same order (that docstring is the contract)."""
 
-comptime RF_HOST_EXPORTS = _Global[
-    StorageType=ForestExportRegistry[RfHostForest],
-    name="MojoRFFitExportHost",
-    init_fn=ForestExportRegistry[RfHostForest].__init__,
-]
+comptime RF_HOST_EXPORTS = SharedSlot[ForestExportRegistry[RfHostForest], "MojolearnRFFitExportHostV1"]
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -687,11 +683,7 @@ def rf_regressor_fit_shard_export_binding(
 # host column computes the bits it computes without a session. The same
 # names, params and refusals as the GPU binding. One thread uses a session at
 # a time.
-comptime RF_HOST_SESSIONS = _Global[
-    StorageType=RfHostSessionRegistry,
-    name="MojoRFDataSessionHost",
-    init_fn=RfHostSessionRegistry.__init__,
-]
+comptime RF_HOST_SESSIONS = SharedSlot[RfHostSessionRegistry, "MojolearnRFDataSessionHostV1"]
 
 
 def rf_data_session_open_binding(
@@ -717,8 +709,12 @@ def rf_data_session_open_binding(
             " option; an IDENTICAL member draws its own sample"
         )
     var x_address = _index(x_addr)
-    if has_nan_f32_threaded(f32_ptr(x_address), n_rows * n_cols):
-        raise Error("rf_data_session_open: " + RF_NAN_REFUSAL)
+    # Lane a8c-device-x-linear-prep-rfe: NaN AND infinity (the GPU binding's
+    # device scan of its upload), so the boost meta-estimators' own host
+    # scan before the open is deleted; the host column tests the words it
+    # reads, once, in parallel SIMD tasks (core/host_finite_scan.mojo).
+    if not host_all_finite_f32(f32_ptr(x_address), n_rows * n_cols):
+        raise Error("rf_data_session_open: " + RF_NONFINITE_REFUSAL)
     var x = List[Float32]()
     with GILReleased(Python()):
         x = _read_x_col_major(x_address, n_rows, n_cols, row_major)

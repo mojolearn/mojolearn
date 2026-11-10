@@ -15,7 +15,6 @@ entry's bits. Cosine keeps DEVIATION 5113: the reference rows are scaled to
 unit rows by the same `cosine_unit_rows` before their one upload, the
 queries before theirs.
 """
-from std.ffi import _Global
 from std.memory import memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
@@ -34,10 +33,11 @@ from dbscan.impl.neighbors.epsilon_neighborhood import (
     DBSCAN_METRIC_L1,
     dbscan_metric_threshold,
 )
+from core.shared_slot import SharedSlot
 
 #: The estimators binding's ONE process-lifetime DeviceContext slot (the
 #: same name `bindings/_mojolearn_estimators.mojo` uses).
-comptime _DEVCTX_SLOT = "MojolearnEstimatorsContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnEstimatorsContextFastV2"
+comptime _DEVCTX_SLOT = "MojolearnEstimatorsContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnEstimatorsContextFastV3"
 
 
 struct ResidentLabeledReference(Movable):
@@ -104,7 +104,7 @@ struct ResidentLabeledReference(Movable):
         _ = self.ctx^
 
 
-struct LabeledReferenceRegistry(Movable):
+struct LabeledReferenceRegistry(Defaultable, Movable):
     var entries: Dict[Int, ResidentLabeledReference]
     var next_id: Int
 
@@ -113,14 +113,7 @@ struct LabeledReferenceRegistry(Movable):
         self.next_id = 1
 
 
-comptime LABELED_REFERENCE_REGISTRY = _Global[
-    StorageType=LabeledReferenceRegistry,
-    name=(
-        "MojoLabeledReferenceIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else
-        "MojoLabeledReferenceFast"
-    ),
-    init_fn=LabeledReferenceRegistry.__init__,
-]
+comptime LABELED_REFERENCE_REGISTRY = SharedSlot[LabeledReferenceRegistry, ( "MojolearnLabeledReferenceIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnLabeledReferenceFastV1" )]
 
 
 def labeled_reference_prepare(

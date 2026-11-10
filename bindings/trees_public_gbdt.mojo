@@ -18,7 +18,6 @@
 # binary fallback keeps the raw scores in the call and widens them for
 # `gbdt_sigmoid_pair` without a Python `astype`; the adapters' margins go
 # from the predict entry to the binary output kernel without a Python step.
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.params_metadata_native import _resolved
@@ -36,6 +35,7 @@ from bindings.trees_public_inputs import (
     trees_cast, trees_decode_labels, trees_call,
 )
 from bindings.admitted_input import AdmittedX, admit_f32, admit_ids, admitted_array, admitted_vector
+from core.shared_slot import SharedSlot
 # TOMBSTONE: trees_f32 / trees_forest_layout / trees_all_finite / TreesMatrix / trees_view / trees_check_rank / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 
@@ -79,7 +79,7 @@ def gbdt_table(fields: PythonObject, context: PythonObject) raises -> PythonObje
     return trees_table(context, gbdt_mode(fields, context), "_mojolearn_gbdt")
 
 
-struct _GbdtBinaryFacts(Movable):
+struct _GbdtBinaryFacts(Defaultable, Movable):
     """Compile-time answers of a loaded GBDT binary (its vendor and numeric
     mode), keyed on the address of the compiled entry that gives them. The
     entries are bound functions a connected binding table holds for the
@@ -94,9 +94,7 @@ struct _GbdtBinaryFacts(Movable):
         self.mode = Dict[Int, String]()
 
 
-comptime _GBDT_BINARY_FACTS = _Global[
-    StorageType=_GbdtBinaryFacts, name="MojoTreesGbdtBinaryFacts", init_fn=_GbdtBinaryFacts.__init__,
-]
+comptime _GBDT_BINARY_FACTS = SharedSlot[_GbdtBinaryFacts, "MojolearnTreesGbdtBinaryFactsV1"]
 
 
 def gbdt_vendor(table: PythonObject) raises -> String:

@@ -14,9 +14,11 @@ from bindings.admitted_input import AdmittedTyped, AdmittedBuf, admitted_dtype_a
 from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer
 from providers.python.neural_descriptor_pyapi import neural_descriptor_entry
 from core.borrowed_buffer import BorrowedBufferLayout
+from core.resample_rows_gather import resample_gather_rows
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from bindings.cpython_table import cpython_table
+from bindings.native_buffer_address import native_buffer_address
 
 
 # _row_dtype_admit moved to bindings/admitted_input.mojo admitted_dtype_admit (lane a6-device-x-family-classical; word for word).
@@ -192,6 +194,27 @@ struct ResampleRows(Movable):
                 _ = item
             _ = indices
             return out
+        for i in range(count):  # driver-loop: refuse an invalid row index before any output is written
+            var row = Int(rows[i])
+            if row < 0 or row >= self.n:
+                raise Error("IndexError: resample returned an invalid row")
+        if self.has_objects:
+            # TOMBSTONE: P1_RESAMPLE_OBJECT_GETITEM (removed: one ndarray __getitem__/__setitem__ per row x element for object and structured arrays) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+            # Restore: experiments/removed/P1_RESAMPLE_OBJECT_GETITEM.patch.
+            # Object, structured-object and StringDType rows (lane
+            # i3-move-data-loops, 2026-11-09): one exact C ndarray.take over a
+            # native index array copies every row, NumPy's own C transfer
+            # taking each object reference (StringDType storage is the source
+            # array's own arena). No per-element call, no Python code, and no
+            # loop over rows here: the per-leaf C-API reference counting P1
+            # wrote in this file (the object-leaf offsets walk and the row x
+            # element x leaf loops) is gone.
+            var index_array = py_call(context["ndarray"], admitted_shape_tuple([count]),
+                                      dtype=py_call(native_numpy_dtype(context), "<i4"))
+            memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(index_array)),
+                src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=indices.addr), count=count * 4)
+            _ = indices
+            return py_call(py_attr(context["ndarray"], "take"), self.source, index_array, 0)
         var out = self.output(count, context)
         # The output's exact native ndarray metadata is read once as well;
         # datetime and zero-width dtypes need no PEP3118 exporter.
@@ -200,7 +223,7 @@ struct ResampleRows(Movable):
         var row_items = 1
         for axis in range(1, rank):  # driver-loop: captured trailing dimensions of one row
             row_items *= self.layout.shape[axis]
-        if not self.has_objects and not self.zero_width and self._rows_contiguous():
+        if not self.zero_width and self._rows_contiguous():
             # lane ne2-b-rounds (N052): every row's items are contiguous in
             # the source, so a row is one memcpy of row_items * itemsize
             # bytes, the rows split across the host's cores
@@ -209,32 +232,11 @@ struct ResampleRows(Movable):
             _ = indices
             _ = self
             return out
-        var coordinates = List[Int](length=rank, fill=0)
-        var out_coordinates = List[Int](length=rank, fill=0)
-        for i in range(count):  # driver-loop: native byte/reference row gathering
-            var row = Int(rows[i])
-            if row < 0 or row >= self.n:
-                raise Error("IndexError: resample returned an invalid row")
-            coordinates[0] = row
-            out_coordinates[0] = i
-            for item in range(0 if self.zero_width else row_items):  # driver-loop: copy every captured trailing element without numeric work
-                if self.has_objects:
-                    # Exact ndarray scalar storage access preserves object and
-                    # structured-dtype reference semantics. The source dtype
-                    # and result dtype are identical: no dtype conversion runs.
-                    var value = py_call(py_attr(context["ndarray"], "__getitem__"), self.source, admitted_shape_tuple(coordinates))
-                    py_call(py_attr(context["ndarray"], "__setitem__"), out, admitted_shape_tuple(out_coordinates), value)
-                else:
-                    memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst + (i * row_items + item) * self.layout.itemsize),
-                        src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=self.layout.item_address(coordinates)), count=self.layout.itemsize)
-                for reverse in range(rank - 1):  # driver-loop: native carry over captured trailing axes
-                    var axis = rank - reverse - 1
-                    coordinates[axis] += 1
-                    out_coordinates[axis] += 1
-                    if coordinates[axis] < self.layout.shape[axis]:
-                        break
-                    coordinates[axis] = 0
-                    out_coordinates[axis] = 0
+        # A strided or indirect source without object references: the
+        # general byte gather, split across the host's cores
+        # (core/resample_rows_gather.mojo). A zero-width item copies nothing.
+        if not self.zero_width:
+            resample_gather_rows(self.layout, rows, count, row_items, dst)
         _ = indices
         _ = self
         return out

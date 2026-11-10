@@ -77,11 +77,13 @@ trait Exec:
     def step_run(mut self, code: Int, bufs: List[FP], counts: List[Int], ints: List[Int], fs: List[Float32],
                  y_out: FP, record: Bool) raises:
         """Run block step op `code` on this executor's arm (`record`: a
-        recorded training run of OPS_ATTN_STEP, its stages kept)."""
+        recorded training run, its stages kept: OPS_ATTN_STEP, and since
+        lane x56d the Mamba steps)."""
         ...
 
     def step_backward(mut self, w: FP, s: FP, q: FP, d_out: FP, d_x: FP, d_w: FP) raises:
-        """The backward of the last recorded OPS_ATTN_STEP over (w, s, q)."""
+        """The backward of the last recorded step run over (w, s, q): an
+        attention or (lane x56d) a Mamba entry."""
         ...
 
     def step_reports(mut self, code: Int, w_addr: Int, s_addr: Int, dsts: List[Int]) raises:
@@ -99,4 +101,43 @@ trait Exec:
 
     def step_clear(mut self):
         """Drop every entry of the arm."""
+        ...
+
+    # Lane x56d-mamba-samba-train-and-host (2026-11-09): the generation ops'
+    # host arm (autograd/generation_host.mojo), reached the same way; a
+    # device session runs the device bodies (autograd/generation_ops.mojo).
+    def gen_pick(mut self, logits: FP, n_logits: Int, rows: FP, n_rows: Int, ints: List[Int], fs: List[Float32],
+                 ids: FP) raises:
+        """OPS_LM_PICK on this executor's arm: each row's pick into `ids`,
+        the rows state updated in place."""
+        ...
+
+    def gen_alive(mut self, rows: FP, n_rows: Int, b: Int, dst: FP) raises:
+        """OPS_LM_ALIVE on this executor's arm: the alive word into dst."""
+        ...
+
+    # Lane m2-neural-leftovers (2026-11-09): the chunked LM head op's host arm
+    # (autograd/lm_head_v2_host.mojo). A device session launches the op's
+    # kernels itself (autograd/lm_head_v2_op.mojo), so DeviceExec refuses it.
+    def lm_head_v2_host(mut self, backward: Bool, bufs: List[FP], rows: Int, vocab: Int, width: Int) raises:
+        """OPS_LM_HEAD_V2's forward (or, `backward`, its VJP) on this
+        executor's host arm; buffer order in lm_head_v2_host_run."""
+        ...
+
+    # Lane r1-restore-measured-winners (2026-11-09): the small MLP op's host
+    # arm (autograd/small_mlp_host.mojo). A device session launches the op's
+    # kernels itself (autograd/small_mlp_op.mojo), so DeviceExec refuses it.
+    def small_mlp_host(mut self, backward: Bool, bufs: List[FP], dims: List[Int]) raises:
+        """OPS_SMALL_MLP's forward (or, `backward`, its VJP) on this
+        executor's host arm; buffer order in small_mlp_host_run."""
+        ...
+
+    # Lane r1-restore-measured-winners (2026-11-09): the CNN conv block and
+    # head ops' host arm (autograd/cnn_block_host.mojo). A device session
+    # calls the x_cnn device entries itself (autograd/cnn_block_op.mojo), so
+    # DeviceExec refuses it.
+    def cnn_op_host(mut self, op: Int, bufs: List[FP], cprm: List[Int32], pprm: List[Int32],
+                    words: List[Int]) raises:
+        """OPS_CNN_CONV_BLOCK / OPS_CNN_LINEAR forward or VJP `op` on this
+        executor's host arm; buffer and word order in cnn_op_host_run."""
         ...

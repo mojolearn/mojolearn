@@ -131,7 +131,7 @@ struct FittedResidentView(Movable):
         _ = self.ctx^
 
 
-struct FittedResidentStore(Movable):
+struct FittedResidentStore(Defaultable, Movable):
     var entries: Dict[Int, FittedResidentEntry]
     var live: Dict[Int, Int]
     var next_lease: Int

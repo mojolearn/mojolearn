@@ -3,7 +3,6 @@
 # NumPy's ndarray C type wraps a native bytearray owner without numerical
 # conversion, copying or a Python helper. Cache classes during Session setup,
 # outside any graph run/fit. No ndarray.ctypes (a Python helper) is invoked.
-from std.ffi import _Global
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
 from bindings.cpython_table import cpython_table
@@ -14,6 +13,7 @@ from std.memory import memcpy
 from sequence.ops import FP
 from autograd.rankn import ShapeN
 from autograd.program_io import HostArray
+from core.shared_slot import SharedSlot
 
 
 struct _ProgramArrays(Defaultable, Movable):
@@ -33,9 +33,7 @@ struct _ProgramArrays(Defaultable, Movable):
         self.admission = PythonObject(None)
 
 
-comptime _PROGRAM_ARRAYS = _Global[
-    StorageType=_ProgramArrays, name="MojolearnProgramArraysV1", init_fn=_ProgramArrays.__init__,
-]
+comptime _PROGRAM_ARRAYS = SharedSlot[_ProgramArrays, "MojolearnProgramArraysV2"]
 
 
 def initialize_program_arrays() raises:

@@ -27,13 +27,13 @@ A/B (runtime, one build serves both arms):
 """
 
 from std.atomic import Atomic, Ordering
-from std.ffi import _Global
 from std.memory import memcpy
 from std.os import getenv
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
+from core.shared_slot import SharedSlot
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -73,7 +73,7 @@ struct _GemmPool(Defaultable, Movable):
         self.stage = Optional[HostBuffer[DType.float32]]()
 
 
-comptime GEMM_POOL = _Global[StorageType=_GemmPool, name="MojoGemmHostPool", init_fn=_GemmPool.__init__]
+comptime GEMM_POOL = SharedSlot[_GemmPool, "MojolearnGemmHostPoolV1"]
 
 
 def _env_flag(name: StringLiteral, default: Bool) -> Bool:

@@ -9,9 +9,9 @@ and its canonical data schedule live here, in Mojo memory. The Python door
 training program with addresses into these buffers; nothing here imports
 Python.
 """
-from std.ffi import _Global
 from std.math import isfinite
 from std.memory import memcpy
+from core.shared_slot import SharedSlot
 
 comptime MLP_TOTAL = 195
 comptime MLP_MAX_STEP = 2147483647
@@ -105,7 +105,7 @@ struct MlpStore(Defaultable, Movable):
         self.next_generation = 1
 
 
-comptime MLP_STORE = _Global[StorageType=MlpStore, name="MojoSmallMlpTrainerStore", init_fn=MlpStore.__init__]
+comptime MLP_STORE = SharedSlot[MlpStore, "MojolearnSmallMlpTrainerStoreV1"]
 
 
 def mlp_store_create(var state: MlpState) raises -> Int:

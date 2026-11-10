@@ -19,6 +19,7 @@ import mojolearn as ml  # noqa: E402
 from mojolearn import Array, _ragged  # noqa: E402
 from mojolearn._verify_native_runtime import audit_native_call  # noqa: E402
 from mojolearn.tests.test_causal_model_native_loading import _poison  # noqa: E402
+from mojolearn.tests import _mamba_block_reference
 
 
 def _weights(shapes, ones=()):
@@ -69,8 +70,8 @@ def _native(monkeypatch, operation, *args, **kwargs):
 def test_mamba3_forward_step_ragged_are_native_and_match_the_retained_driver(monkeypatch):
     block, dm = _block("mamba3")
     x = _tokens(2, 5, dm)
-    expected = np.asarray(block._call(x, None, step=False)).copy()
-    wanted_ragged, _ = _ragged.ragged_forward(lambda xp: block._call(xp, None, step=False),
+    expected = np.asarray(_mamba_block_reference.block_call(block, x, None, step=False)).copy()
+    wanted_ragged, _ = _ragged.ragged_forward(lambda xp: _mamba_block_reference.block_call(block, xp, None, step=False),
                                               Array.from_buffer(x), None, [3, 5], "<f4", "test")
     wanted_ragged = np.asarray(wanted_ragged).copy()
     actual = _native(monkeypatch, block.forward, x)

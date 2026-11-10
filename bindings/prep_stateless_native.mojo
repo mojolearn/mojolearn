@@ -475,7 +475,6 @@ def _select_transform(model: PythonObject, values: PythonObject, context: Python
     var fields = py_fields(model)
     if not py_contains(fields, "n_features_in_"):
         raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
-    var n = Int(py=values[3])
     var d = Int(py=values[4])
     var fitted = fields["n_features_in_"]
     if py_type(fitted) is not native_loaded_module("builtins").int or Int(py=fitted) != d:
@@ -483,10 +482,17 @@ def _select_transform(model: PythonObject, values: PythonObject, context: Python
     var keep = _support_columns(fields["_mask"])
     if len(keep) == 0:
         raise Error("mojolearn: no features were selected")
-    var k = len(keep)
+    return _select_gather(fields, values, _words(keep, context), len(keep), context)
+
+
+def _select_gather(fields: PythonObject, values: PythonObject, columns: PythonObject, k: Int,
+                   context: PythonObject) raises -> PythonObject:
+    """The gather of `_select_transform` with the kept columns given as
+    index words (`_words`): RFE passes the words it stored at fit
+    (`_support_words_`), so a predict reads no support mask."""
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
     var entries = _entries(fields["numeric_mode_"], context)
-    var columns = _words(keep, context)
-    _ = keep  # keep the Python object alive through the native call above
     var ko = n * d
     var out = ko + k
     var host = out + n * k
@@ -495,12 +501,10 @@ def _select_transform(model: PythonObject, values: PythonObject, context: Python
     var program = List[Int32]()
     _stage(program, OP_GATHER_COLS, n * k, 0, n, d, ko, k, out)
     var inputs = Python.list(Python.tuple(0, values), Python.tuple(ko, Python.tuple(0, columns, PythonObject(None), k, 1)))
-    _ = keep  # keep the Python object alive through the native call above
     var arena = xprep_storage(host, context)
     xprep_run(arena, host, 0, PythonObject(None), 0, program^, inputs, entries, context)
     var result = xprep_take(arena[0], out, n, k, context["output_context"])
-    _ = columns^
-    _ = keep  # keep the Python object alive through the native call above
+    _ = columns  # keep the Python object alive through the native call above
     _ = arena^
     return result
 

@@ -137,13 +137,19 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
     # count within its pin (tools/tests/test_no_python_runtime.py; both modes judge the whole tree)
     if git cat-file -e "$local_sha:tools/tests/test_no_python_runtime.py" 2>/dev/null; then
         gate=$(mktemp -d "${TMPDIR:-/tmp}/no-python-runtime.XXXXXX") || exit 4
+        # the door walk (tools/mojo_door_sites.py) reads bindings/ and providers/python/ and the door
+        # baseline; older trees without them archive what they have
+        door_paths=""
+        for p in bindings providers/python tools/mojo_door_sites.py tools/hooks/public_runtime_door_baseline.tsv; do
+            git cat-file -e "$local_sha:$p" 2>/dev/null && door_paths="$door_paths $p"
+        done
         if ! git archive "$local_sha" python/mojolearn packaging/native_only tools/public_runtime_inventory.py \
-                tools/tests/test_no_python_runtime.py experiments/python_audit_20261028 | tar -x -C "$gate"; then
+                tools/tests/test_no_python_runtime.py experiments/python_audit_20261028 $door_paths | tar -x -C "$gate"; then
             rm -rf "$gate"; exit 4
         fi
         python3 "$gate/tools/tests/test_no_python_runtime.py" >"$gate/gate.log" 2>&1
         status=$?
-        grep -E '^no-python-runtime:|^  python/|^  mojolearn\.|Error|unresolved endpoints' "$gate/gate.log" | head -n 30 >&2
+        grep -E '^no-python-runtime:|^  python/|^  mojolearn\.|^  (new|regressed|python-on-path|glue-heavy)|Error|unresolved endpoints' "$gate/gate.log" | head -n 30 >&2
         rm -rf "$gate"
         [ $status -eq 0 ] || { echo "pre-push: REFUSED by the no-Python-in-runtime gate (tools/tests/test_no_python_runtime.py)" >&2; exit 4; }
     fi

@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Host ByteLM uses the same native descriptor transport and ownership interface
 # as GPU models. This table owns four existing model operations and profile readback.
-from std.ffi import _Global
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from training.byte_lm_config import ByteConfig, byte_lm_arithmetic_suffix
 from training.byte_lm_host_execution import byte_host_logits_native, byte_host_next_native, byte_host_loss_native, byte_host_train_native
+from core.shared_slot import SharedSlot
 
 comptime BYTE_HOST_NATIVE_ABI = "mojolearn.training.byte_lm_host.v1"
 comptime BYTE_HOST_NATIVE_OPERATION_COUNT = 5
@@ -42,8 +42,8 @@ def byte_host_operation(op: Int, addresses: List[Int], words: List[Int], scalars
         if len(addresses) != 2:
             raise Error("byte LM host: expected 2 addresses")
         # lane x7b: the trainer's program (one algorithm with the GPU
-        # columns); the thread words choose only the inference forward.
-        return byte_host_loss_native(addresses, cfg)
+        # columns); the thread words cap its host session's task count.
+        return byte_host_loss_native(addresses, cfg, use_threads, thread_count)
     if len(addresses) != 3:
         raise Error("byte LM host: expected 3 addresses")
     var dims: List[Int] = [words[12], words[13]]
@@ -81,5 +81,4 @@ struct ByteHostNativeTable(Defaultable, Movable):
         self.entries.append(byte_host_native_v1)
 
 
-comptime BYTE_HOST_NATIVE_TABLE = _Global[StorageType=ByteHostNativeTable,
-    name=("MojolearnByteHostNativeTableIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnByteHostNativeTableFastV2"), init_fn=ByteHostNativeTable.__init__]
+comptime BYTE_HOST_NATIVE_TABLE = SharedSlot[ByteHostNativeTable, ("MojolearnByteHostNativeTableIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnByteHostNativeTableFastV3")]

@@ -10,7 +10,6 @@ bindings/optimizer_public_host_pyapi.mojo is the door.
 The optimizer's state lives in a host slot here, allocated on the first
 step; there is no device, so there is no resident state and no
 device-parameter step (refused by name)."""
-from std.ffi import _Global
 from std.memory import memcpy
 
 from core.mojolearn_training_host_impl import clip_grad_norm_host_into, optimizer_step_host_into
@@ -19,6 +18,7 @@ from training.optimizer_public_common import (
     F32P, I32P, Flat, GRADS_HOST, PublicStep, PublicStepOut, gather, registry_check, scatter,
     stack_microbatches, step_lr,
 )
+from core.shared_slot import SharedSlot
 
 
 struct HostOptPool(Defaultable, Movable):
@@ -33,7 +33,7 @@ struct HostOptPool(Defaultable, Movable):
         self.held = List[Int]()
 
 
-comptime HOST_OPT_POOL = _Global[StorageType=HostOptPool, name="MojoNeuralTrainingOptPoolHost", init_fn=HostOptPool.__init__]
+comptime HOST_OPT_POOL = SharedSlot[HostOptPool, "MojolearnNeuralTrainingOptPoolHostV1"]
 
 
 def host_slot(h: Int, want: Int) raises -> Int:

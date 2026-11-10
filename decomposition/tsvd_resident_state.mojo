@@ -27,7 +27,6 @@ per-call routes run after their own upload, over a copy of the same bytes:
 the same launches in the same order, so the bits are the same, in both
 numeric tiers.
 """
-from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.fitted_resident_store import (
@@ -38,17 +37,11 @@ from core.fitted_resident_store import (
     fitted_resident_stats,
 )
 from decomposition.estimator import tsvd_transform_dev, inverse_transform_dev
+from core.shared_slot import SharedSlot
 
 # One store per numeric tier (a FAST and an IDENTICAL binding never share
 # device memory), as gaussian_process/gp_resident_store.mojo.
-comptime TSVD_RESIDENT_STORE = _Global[
-    StorageType=FittedResidentStore,
-    name=(
-        "MojoTsvdResidentFittedIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        else "MojoTsvdResidentFittedFast"
-    ),
-    init_fn=FittedResidentStore.__init__,
-]
+comptime TSVD_RESIDENT_STORE = SharedSlot[FittedResidentStore, ( "MojolearnTsvdResidentFittedIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnTsvdResidentFittedFastV1" )]
 
 
 def tsvd_resident_store() raises -> UnsafePointer[FittedResidentStore, MutAnyOrigin]:

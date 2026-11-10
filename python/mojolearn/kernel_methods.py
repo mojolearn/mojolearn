@@ -315,6 +315,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
+    @native_method  # the native archive loader publishes the fitted state: no Python _loader wrapper
     def load(cls, path):
         """Load a model written by `save`.
 
@@ -481,6 +482,7 @@ class Nystroem(_KernelMethodBase):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
+    @native_method  # the native archive loader publishes the fitted state: no Python _loader wrapper
     def load(cls, path):
         """Load a transformer written by `save`.
 
@@ -633,6 +635,7 @@ class RBFSampler(_KernelMethodBase):
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
+    @native_method  # the native archive loader publishes the fitted state: no Python _loader wrapper
     def load(cls, path):
         """Load a sampler written by `save`.
 

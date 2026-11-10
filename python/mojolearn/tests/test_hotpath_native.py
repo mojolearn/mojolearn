@@ -34,6 +34,7 @@ import pytest
 from mojolearn import _array, _buffer, _labels, _metrics_impl as M
 from mojolearn import model_selection as MS
 from mojolearn.tests import _fold_reference as _REF
+from mojolearn.tests import _array_reference
 from mojolearn._array import Array
 
 _HELPERS = (
@@ -115,7 +116,7 @@ def _outcome(fn):
     return result, [(w.category.__name__, str(w.message)) for w in caught]
 
 
-_LABEL_SEAMS = ("_encode_labels_native", "_decode_labels_native")
+_LABEL_SEAMS = ("_encode_labels_native",)
 
 
 @contextlib.contextmanager
@@ -144,11 +145,11 @@ def _python_arm():
         return Array.from_list([fn(v) for v in labels], "<i4")
 
     M._label_map = _label_map_oracle
-    _buffer._REFERENCE = True
+    _array_reference._REFERENCE = True
     try:
         yield
     finally:
-        _buffer._REFERENCE = False
+        _array_reference._REFERENCE = False
         M._label_map = saved_label_map
         for name, real in saved_seams.items():
             setattr(_labels, name, real)
@@ -242,7 +243,7 @@ def test_astype_matches_the_item_setter(src, dst):
                 a = _arr(_values_for(src, max(n, 64), flavor)[:n].copy())
             native = n >= 1 and src != dst  # every non-empty block (lane apple-fast-py2mojo-core)
             _same(lambda: a.astype(dst), ("cast_elements",) if native else (),
-                  group="astype", ref_fn=lambda: _array._ArrayReference.astype(a, dst))
+                  group="astype", ref_fn=lambda: _array_reference._ArrayReference.astype(a, dst))
 
 
 def test_astype_keeps_layout_and_reads_a_readonly_source():
@@ -250,11 +251,11 @@ def test_astype_keeps_layout_and_reads_a_readonly_source():
     a = _arr(block)
     assert a.order == "F"
     _same(lambda: a.astype("<f4"), ("cast_elements",), group="astype",
-          ref_fn=lambda: _array._ArrayReference.astype(a, "<f4"))
+          ref_fn=lambda: _array_reference._ArrayReference.astype(a, "<f4"))
     frozen = _arr(_RNG.integers(0, 9, 5000).astype(np.int64).tobytes())
     assert frozen.dtype == "<u1" and frozen._readonly
     _same(lambda: frozen.astype("<i8"), ("cast_elements",), group="astype",
-          ref_fn=lambda: _array._ArrayReference.astype(frozen, "<i8"))
+          ref_fn=lambda: _array_reference._ArrayReference.astype(frozen, "<i8"))
 
 
 def test_astype_quiets_a_signaling_nan_as_the_item_setter_does():
@@ -271,7 +272,7 @@ def test_astype_quiets_a_signaling_nan_as_the_item_setter_does():
     _same(lambda: a[0:900], ("cast_elements",), group="getitem", ref_fn=ref(slice(0, 900)))
     _same(lambda: a[1:900:2], ("cast_elements",), group="getitem", ref_fn=ref(slice(1, 900, 2)))
     _same(lambda: a.astype("<f8"), ("cast_elements",), group="astype",
-          ref_fn=lambda: _array._ArrayReference.astype(a, "<f8"))
+          ref_fn=lambda: _array_reference._ArrayReference.astype(a, "<f8"))
 
 
 # ------------------------------------------------------------- reductions
@@ -311,9 +312,9 @@ def test_reductions_match_python(what):
         # every non-empty block, the integer sum too (lane apple-fast-py2mojo-core)
         native = a.size >= 1
         _same(lambda: getattr(a, what)(), ("reduce_stat",) if native else (),
-              group="reduce", ref_fn=lambda: getattr(_array._ArrayReference, what)(a))
+              group="reduce", ref_fn=lambda: getattr(_array_reference._ArrayReference, what)(a))
     f = _arr(np.asfortranarray(_RNG.standard_normal((400, 5)).astype(np.float32)))
-    _same(lambda: f.argmax(), ("reduce_stat",), group="reduce", ref_fn=lambda: _array._ArrayReference.argmax(f))
+    _same(lambda: f.argmax(), ("reduce_stat",), group="reduce", ref_fn=lambda: _array_reference._ArrayReference.argmax(f))
 
 
 # --------------------------------------------------------------- equality
@@ -329,21 +330,21 @@ def test_equality_matches_python():
             x[1::13] = -0.0
             y[1::13] = 0.0
         a, b = _arr(x), _arr(y)
-        _same(lambda: a == b, ("equal_elements",), group="equal", ref_fn=lambda: _array._ArrayReference.__eq__(a, b))
-        _same(lambda: a != b, ("equal_elements",), group="equal", ref_fn=lambda: _array._ArrayReference.__ne__(a, b))
-        _same(lambda: a == a, ("equal_elements",), group="equal", ref_fn=lambda: _array._ArrayReference.__eq__(a, a))
+        _same(lambda: a == b, ("equal_elements",), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__eq__(a, b))
+        _same(lambda: a != b, ("equal_elements",), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__ne__(a, b))
+        _same(lambda: a == a, ("equal_elements",), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__eq__(a, a))
         _same(lambda: a[:100] == b[:100], (), group="equal",
-              ref_fn=lambda: _array._ArrayReference.__eq__(_array._ArrayReference.__getitem__(a, slice(None, 100)),
-                                        _array._ArrayReference.__getitem__(b, slice(None, 100))))
-        _same(lambda: a == 1, (), group="equal", ref_fn=lambda: _array._ArrayReference.__eq__(a, 1))
+              ref_fn=lambda: _array_reference._ArrayReference.__eq__(_array_reference._ArrayReference.__getitem__(a, slice(None, 100)),
+                                        _array_reference._ArrayReference.__getitem__(b, slice(None, 100))))
+        _same(lambda: a == 1, (), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__eq__(a, 1))
     a = _arr(_RNG.integers(0, 3, 5000).astype(np.int64))
     b = _arr(_RNG.integers(0, 3, 5000).astype(np.float64))
-    _same(lambda: a == b, (), group="equal", ref_fn=lambda: _array._ArrayReference.__eq__(a, b))  # two dtypes: Python compares exactly
+    _same(lambda: a == b, (), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__eq__(a, b))  # two dtypes: Python compares exactly
     _same(lambda: a == b[:4999], (), group="equal",
-          ref_fn=lambda: _array._ArrayReference.__eq__(a, _array._ArrayReference.__getitem__(b, slice(None, 4999))))  # the shape refusal
+          ref_fn=lambda: _array_reference._ArrayReference.__eq__(a, _array_reference._ArrayReference.__getitem__(b, slice(None, 4999))))  # the shape refusal
     f = _arr(np.asfortranarray(_RNG.integers(0, 3, (300, 9)).astype(np.int32)))
     c = _arr(np.ascontiguousarray(_RNG.integers(0, 3, (300, 9)).astype(np.int32)))
-    _same(lambda: f == c, ("equal_elements",), group="equal", ref_fn=lambda: _array._ArrayReference.__eq__(f, c))
+    _same(lambda: f == c, ("equal_elements",), group="equal", ref_fn=lambda: _array_reference._ArrayReference.__eq__(f, c))
 
 
 # --------------------------------------------------------------- indexing
@@ -366,9 +367,9 @@ def test_getitem_matches_the_per_run_copy():
     for block in blocks:
         a = _arr(block)
         for key in keys:
-            _same(lambda: a[key], (), group="getitem", ref_fn=lambda: _array._ArrayReference.__getitem__(a, key))
+            _same(lambda: a[key], (), group="getitem", ref_fn=lambda: _array_reference._ArrayReference.__getitem__(a, key))
     a = _arr(blocks[1])
-    ref, new = _both(lambda: a[5:650], ("cast_elements",), ref_fn=lambda: _array._ArrayReference.__getitem__(a, slice(5, 650)))
+    ref, new = _both(lambda: a[5:650], ("cast_elements",), ref_fn=lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 650)))
     assert _EXPECT_SABOTAGE or ref == new
 
 
@@ -391,7 +392,7 @@ def test_list_input_matches_the_recursive_flatten(index):
         for ndim in (1, 2, None):
             _same(lambda: convert(value, ndim=ndim, name="X"), (), group="lists")
     _same(lambda: Array.from_list(value, "<f8"), (), group="lists",
-          ref_fn=lambda: _array._ArrayReference.from_list(Array, value, "<f8"))
+          ref_fn=lambda: _array_reference._ArrayReference.from_list(Array, value, "<f8"))
 
 
 def test_big_list_input():
@@ -478,7 +479,7 @@ def test_encode_labels_float_list_takes_the_helper():
     for name in ("floats", "zeros a", "zeros b"):
         y = _label_lists()[name]
         ref = _same(lambda: _labels.encode_labels(y), (), group="labels")  # one native call (N413)
-        assert ref[0][0] == "ok"
+        assert ref[0] == "ok"
     classes, _ = _labels.encode_labels(_label_lists()["zeros b"])
     assert math.copysign(1.0, classes[0]) == -1.0  # the first-seen zero is kept
 
@@ -540,7 +541,7 @@ def test_classification_labels_match(name):
     ref = _same(lambda: M._classification_encoded(y, "y_true"), expect, group="metrics")
     if name in _NATIVE_LABELS and not _EXPECT_SABOTAGE:
         assert isinstance(M._classification_encoded(y, "y_true")[0], M._EncodedLabels), name
-        assert ref[0][0] == "ok"
+        assert ref[0] == "ok"
 
     other = _RNG.integers(-4, 5, 3000)[:len(y)]
 
@@ -778,16 +779,129 @@ def _pinned(module, name, fn, answers=True, ref_fn=None):
     return ref
 
 
+def _flatten_oracle(y):
+    """The former Python `_labels.flatten_labels` (deleted by lane
+    p2-labels-lists-arrays), the reference of the native flatten."""
+    from itertools import chain
+    if hasattr(y, "tolist") and not isinstance(y, (list, tuple)):
+        y = y.tolist()
+    if isinstance(y, (str, bytes)):
+        raise ValueError("mojolearn: y must be a sequence of labels")
+    items = [y]
+    while any(isinstance(item, (list, tuple)) for item in items):
+        items = list(chain.from_iterable(item if isinstance(item, (list, tuple)) else (item,) for item in items))
+    return items
+
+
+# The former Python ORDER RULE of `_labels` (deleted from the package by lane
+# p2-labels-lists-arrays: `sorted_classes` is one native call), kept here as
+# the reference the native answer is held to.
+import numbers as _numbers
+import operator as _operator
+
+
+_ref_PLAIN_NUMBERS = frozenset((int, float, bool))
+_ref_PLAIN_STR = frozenset((str,))
+
+
+def _ref_plain_labels(labels):
+    """'number' or 'str' when EVERY label is exactly a Python int, float or
+    bool, or exactly a str (the type set, read in C); None for anything
+    else, an empty sequence included."""
+    if not labels:
+        return None
+    kinds = set(map(type, labels))
+    if kinds <= _ref_PLAIN_NUMBERS:
+        return "number"
+    if kinds == _ref_PLAIN_STR:
+        return "str"
+    return None
+
+
+def _ref_classes_and_codes(labels):
+    """The ORDER RULE over labels already checked: the FIRST of equal keys
+    is the one `dict.fromkeys` keeps, the classes sort by Python's own
+    comparison, and each label's code is one dict lookup, driven by `map`."""
+    classes = sorted(dict.fromkeys(labels))  # cpu-route: Python label objects (str or Python numbers), the explicit label input step
+    code = {c: i for i, c in enumerate(classes)}  # glue: class index table (classes-sized: distinct classes)
+    return classes, list(map(code.__getitem__, labels))  # cpu-route: Python label objects, the explicit label input step
+
+
+def _ref_sorted_plain_classes(labels, kind):
+    """DEVIATION 3103: `sorted_classes` for labels `_ref_plain_labels` vouched
+    for: one kind (no mixing) of exact Python types, so only a float can be
+    a NaN."""
+    if kind == "number":
+        # `v != v` in C: True only for a NaN float (an int or bool never,
+        # at any size)
+        if any(map(_operator.ne, labels, labels)):  # cpu-route: NaN test of a plain Python label list, the explicit label input step
+            raise ValueError(
+                "mojolearn: y contains a NaN label; NaN is not a class"
+            )
+    return _ref_classes_and_codes(labels)
+
+
+def _ref_kind_of_type(t):
+    """'str', 'number' or None (refused) for one label TYPE: the per-label
+    tests of the ORDER RULE (rules 1 and 2), asked once per distinct type."""
+    if issubclass(t, str):
+        return "str"
+    if issubclass(t, _numbers.Real) or t.__name__ == "bool_":
+        return "number"
+    return None
+
+
+def _ref_first_true(flags):
+    """Index of the first true flag, or None."""
+    try:
+        return _operator.indexOf(flags, True)
+    except ValueError:
+        return None
+
+
+def _ref_check_label_kinds(labels):
+    """Rules 1, 2 and 4 of the ORDER RULE over a list of label objects, with
+    the refusals in walk order: the first label that is neither a number
+    nor a str, or a NaN before it, then a mix of the two kinds."""
+    kinds = {t: _ref_kind_of_type(t) for t in set(map(type, labels))}  # glue: over the distinct label types (types-sized)
+    refused = frozenset(t for t, kind in kinds.items() if kind is None)  # glue: over the distinct label types (types-sized)
+    stop = _ref_first_true(map(refused.__contains__, map(type, labels))) if refused else None
+    head = labels if stop is None else labels[:stop]
+    if _ref_first_true(map(_operator.ne, head, head)) is not None:  # cpu-route: NaN test of Python label objects, the explicit label input step
+        raise ValueError(
+            "mojolearn: y contains a NaN label; NaN is not a class"
+        )
+    if stop is not None:
+        raise ValueError(
+            f"mojolearn: label {labels[stop]!r} is neither a number nor a str"
+        )
+    found = set(kinds.values())
+    if "str" in found and "number" in found:
+        raise ValueError(
+            "mojolearn: y mixes numeric and str labels; encode one kind "
+            "before fitting"
+        )
+
+
 def _general_sorted_classes(y):
     """`sorted_classes` through the general label walk (the kind check and the
-    ORDER RULE), the definition `_sorted_plain_classes` specializes. Since lane
-    migrate-shared-labels the plain seam is always taken (it no longer
-    declines), so declining it would leave `sorted_classes` answering None."""
+    ORDER RULE)."""
     labels = list(y)
     if not labels:
         raise ValueError("mojolearn: y is empty")
-    _labels._check_label_kinds(labels)
-    return _labels._classes_and_codes(labels)
+    _ref_check_label_kinds(labels)
+    return _ref_classes_and_codes(labels)
+
+
+def _agree(new_fn, ref_fn):
+    """The native answer equals the reference's; a reference refusal is a
+    native refusal too (the native walk words some refusals differently)."""
+    new, ref = _outcome(new_fn)[0], _outcome(ref_fn)[0]
+    if ref[0] == "ok":
+        assert new == ref, f"new {new!r:.300} != reference {ref!r:.300}"
+    else:
+        assert new[0] == "refused", f"reference refused {ref!r:.300}, native answered {new!r:.300}"
+    return ref
 
 
 @pytest.mark.parametrize("name", list(_label_lists()))
@@ -799,10 +913,10 @@ def test_plain_label_lists_match_the_label_loop(name):
     # plain types; the NaN test is `v != v`, which holds 2**2000 too
     big = name == "huge ints"
     if isinstance(y, list):
-        _pinned(_labels, "_sorted_plain_classes", lambda: _labels.sorted_classes(y),
-                answers=plain, ref_fn=lambda: _general_sorted_classes(y))
-    _pinned(_labels, "_plain_labels", lambda: _labels.flatten_labels(y),
-            answers=plain or big or name == "tuple")
+        _agree(lambda: _labels.sorted_classes(y), lambda: _general_sorted_classes(y))
+    # flatten_labels is one native call (lane p2-labels-lists-arrays): held
+    # equal to the Python flatten it replaced.
+    _agree(lambda: _labels.flatten_labels(y), lambda: _flatten_oracle(y))
     if plain and name != "nan":
         classes, codes = _labels.sorted_classes(list(y))
         assert all(classes[c] == v for c, v in zip(codes, y))
@@ -811,9 +925,8 @@ def test_plain_label_lists_match_the_label_loop(name):
 def test_first_seen_object_is_kept_by_the_plain_path():
     for y in ([True, 1, 1.0, 0, False, 0.0] * 50, [1.0, 1, True, -0.0, 0, False] * 50,
               [0.0, -0.0] * 99, [-0.0, 0.0] * 99):
-        ref = _pinned(_labels, "_sorted_plain_classes", lambda: _labels.sorted_classes(y),
-                      ref_fn=lambda: _general_sorted_classes(y))
-        assert ref[0][0] == "ok"
+        ref = _agree(lambda: _labels.sorted_classes(y), lambda: _general_sorted_classes(y))
+        assert ref[0] == "ok"
 
 
 @pytest.mark.parametrize("index", range(len(_LISTS)))
@@ -831,9 +944,9 @@ def test_block_copy_is_pinned():
     a = _arr(_RNG.integers(0, 99, (700, 6)).astype(np.int64))
     # The block copy is native now (bindings/array_native.mojo _getitem); its
     # Python definition, the oracle above, keeps its pinned run rule.
-    _pinned(_array, "_block_store", lambda: _array._ArrayReference.__getitem__(a, slice(5, 650)), answers=True)
-    _pinned(_array, "_block_store", lambda: _array._ArrayReference.__getitem__(a, slice(5, 650, 2)), answers=False)
-    _pinned(_array, "_block_store", lambda: _array._ArrayReference.__getitem__(a, slice(5, 20)), answers=False)  # a short run
+    _pinned(_array, "_block_store", lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 650)), answers=True)
+    _pinned(_array, "_block_store", lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 650, 2)), answers=False)
+    _pinned(_array, "_block_store", lambda: _array_reference._ArrayReference.__getitem__(a, slice(5, 20)), answers=False)  # a short run
     block = _RNG.integers(0, 99, (4000, 3)).astype(np.int64)
     _pinned(_buffer, "_same_dtype_store", lambda: _buffer.as_i64_c(block[::2], ndim=2, name="X"),
             answers=True)

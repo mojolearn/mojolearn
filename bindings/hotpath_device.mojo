@@ -164,7 +164,7 @@ comptime _HPDEV_INPUT = not HOTPATH_SABOTAGE
 #: (`bindings/_mojolearn.mojo::_DEVCTX_SLOT`): the same name, so the same
 #: DeviceContext.
 comptime _HPDEV_SLOT = (
-    "MojolearnCoreContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV2"
+    "MojolearnCoreContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnCoreContextFastV3"
 )
 
 #: Largest k x n_folds table the stratified helpers build.

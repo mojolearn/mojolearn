@@ -60,7 +60,7 @@ from std.memory import bitcast
 # on one stream, and every entry still synchronizes before it returns, so no
 # bit moves. This module is compiled into ONE GPU binding, so the slot name
 # (per module and tier) is that binding's own.
-comptime _FAMILY_CTX = "MojolearnKernelMethodsContextIdenticalV2" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnKernelMethodsContextOtherV2"
+comptime _FAMILY_CTX = "MojolearnKernelMethodsContextIdenticalV3" if _CTX_MODE == _CTX_IDENTICAL else "MojolearnKernelMethodsContextOtherV3"
 
 
 def _family_ctx() raises -> DeviceContext:
@@ -894,25 +894,42 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
     sw: List[Float32],
     dual_out: MutPointer[Float32, out_origin],
     mut trace: IdentityTrace,
-    waddr: Int = 0,
-) raises -> Int:
+    waddr: Int,
+    fold: QueryFold,
+    xfit_addr: Int,
+) raises -> Tuple[Int, Int32, Int32]:
     """KRR_IDN_PTR_IN: `kernel_ridge_fit_host` with X and y read from the
-    caller's addresses on the device (`_upload_checked`: shape refused on
-    the host, NaN / infinity on the device, X before y as the list route
-    walks them) and `dual_coef_` copied into `dual_out` (n_samples x
-    n_targets). The same launches in the same order as the list route at
-    its default scheduling and no sabotage; the weighted arm scales on the
-    device (`krr_scale_rows_kernel`, the host loop's line). Returns `info`
-    (0; a failed factorization raises DEVIATION 1662's refusal).
+    caller's addresses on the device and `dual_coef_` copied into
+    `dual_out` (n_samples x n_targets). The same launches in the same order
+    as the list route at its default scheduling and no sabotage; the
+    weighted arm scales on the device (`krr_scale_rows_kernel`, the host
+    loop's line). Returns (info, X's finite word, X's range word): info 0
+    (a failed factorization raises DEVIATION 1662's refusal); a flagged X
+    returns before any kernel launch and the door refuses it in admit_x's
+    wording.
+
+    X (lane a8a) is a `DeviceQueryX` (core/device_query_x.mojo): the host
+    words at `xaddr`, or the cross-validation fold `fold` gathered on the
+    device out of model selection's resident base (`xaddr` 0; the call
+    then runs on the fold store's context). The status words ride back on
+    the stream with the setup drain below: no synchronising scan. y is the
+    door's admitted float32 target, tested finite there, one copy.
+    `xfit_addr` nonzero receives the n_samples x n_features device copy of
+    X (a fold's `X_fit_`: no host gather of the fold).
 
     `waddr` (cpu2-l6-bindings): nonzero is the caller's n float64 sample
     weights; the sqrt factors are formed and refused on the device
     (`_krr_sqrt_weights_dev`) and `sw` must then be empty."""
-    if xaddr == 0 or yaddr == 0:
+    if (xaddr == 0 and not fold.active()) or yaddr == 0:
         raise Error("kernel_ridge_fit: null X or y address")
-    var ctx = _family_ctx()
-    var xa = _upload_checked(ctx, xaddr, n_samples, n_features, "kernel_ridge X")
-    var dy = _upload_checked(ctx, yaddr, n_samples, n_targets, "kernel_ridge y")
+    if n_samples <= 0 or n_features <= 0 or n_targets <= 0:
+        raise Error("kernel_ridge X: need positive dimensions, got " + String(n_samples) + " x "
+                    + String(n_features) + " with " + String(n_targets) + " targets")
+    var ctx = query_context(fold, _family_ctx())
+    # TOMBSTONE: _upload_checked on the fit X and y (synchronising first-non-finite scans, DEVIATION 1686 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
+    var qx = DeviceQueryX(ctx, xaddr, n_samples, n_features, fold)
+    var dy = ctx.enqueue_create_buffer[DType.float32](n_samples * n_targets)
+    ctx.enqueue_copy(dst_buf=dy, src_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=yaddr))
     var precomputed = kp.kernel == KM_KERNEL_PRECOMPUTED
     if precomputed:
         if n_features != n_samples:
@@ -953,7 +970,7 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
     else:
         if weighted:
             dy = _upload(ctx, krr_scale_rows(_download(ctx, dy, n_samples * n_targets), sw_h, n_samples, n_targets))
-    trace.record_device(ctx, "krr.input", xa, n_samples * n_features)
+    trace.record_device(ctx, "krr.input", qx.x, n_samples * n_features)
 
     var dk = ctx.enqueue_create_buffer[DType.float32](n_samples * n_samples)
     var na = ctx.enqueue_create_buffer[DType.float32](n_samples)
@@ -965,15 +982,31 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
         kernel_ridge_workspace_floats(n_samples)
     )
     ctx.synchronize()
+    # The setup drain above made X's status words valid: a flagged X is
+    # refused by the door before any kernel launch reads it.
+    var finite_word = qx.finite_word()
+    var range_word = qx.range_word()
+    if finite_word != 0 or range_word != 0:
+        _ = dsw^
+        _ = qx^
+        _ = dy^
+        _ = dk^
+        _ = na^
+        _ = nb^
+        _ = kws^
+        _ = cws^
+        # DEVIATION 1946: the context dies LAST, after every value built on it.
+        _ = ctx^
+        return (0, finite_word, range_word)
 
     if precomputed:
-        ctx.enqueue_copy(dst_buf=dk, src_buf=xa)
+        ctx.enqueue_copy(dst_buf=dk, src_buf=qx.x)
     else:
         # The kernel-method entry reads the calling thread's device plan once; the
         # svm kernel rows shard over it (svm/multi_gpu.mojo::kernel_matrix_dispatch).
         var km_plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
         km_kernel_matrix(
-            ctx, kp, dk, xa, xa, n_samples, n_samples, n_features,
+            ctx, kp, dk, qx.x, qx.x, n_samples, n_samples, n_features,
             na, nb, kws, KM_EPILOGUE_TPB, KMSAB_NONE, True,
             plan=km_plan,
         )
@@ -1019,6 +1052,9 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
                 dual_out.unsafe_store(i, dual[i])
         else:
             _download_into(ctx, dy, dual_out, n_samples * n_targets)
+    if xfit_addr != 0:
+        # A fold's X_fit_: the device copy of the gathered rows, home once.
+        ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutAnyOrigin](unsafe_from_address=xfit_addr), src_buf=qx.x)
     ctx.synchronize()
     var info = Int(hinfo.unsafe_ptr().unsafe_load(0))
     _ = hinfo^
@@ -1026,7 +1062,7 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
     if info != 0:
         raise Error(_krr_not_pd_message(info, kp.kernel, n_samples))
     _ = dsw^
-    _ = xa^
+    _ = qx^
     _ = dy^
     _ = dk^
     _ = na^
@@ -1035,7 +1071,7 @@ def kernel_ridge_fit_ptr_into[out_origin: MutOrigin, //](
     _ = cws^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
-    return 0
+    return (0, Int32(0), Int32(0))
 
 
 def kernel_ridge_predict_ptr_into[out_origin: MutOrigin, //](

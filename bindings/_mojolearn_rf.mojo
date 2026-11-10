@@ -44,7 +44,7 @@ from ensemble.ada_rounds import (
 from xtrees.ops_device import weighted_sample_on
 from xtrees.ops_device_boost import r2_step_on, samme_step_on
 from xtrees.dart_device import DART_SESSIONS, _DART_CTX
-from ensemble.nan_refusal import RF_NAN_REFUSAL
+from ensemble.nan_refusal import RF_NAN_REFUSAL, RF_NONFINITE_REFUSAL
 
 from std.os import abort
 from ensemble.device_finite import FOREST_DEVICE_FINITE, ForestFiniteScan
@@ -75,7 +75,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnRfContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnRfContextFastV2"
+comptime _DEVCTX_SLOT = "MojolearnRfContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnRfContextFastV3"
 
 
 from ensemble.decisiontree.batched_levelalgo.bins import (
@@ -125,6 +125,7 @@ from ensemble.randomforest import (
     launch_gather_rows_colmajor,
     n_sampled_rows_for,
 )
+from core.shared_slot import SharedSlot
 
 comptime DT = DType.float32
 comptime CLT = DType.int32
@@ -445,7 +446,6 @@ def _forest_out_i32(forest: RandomForestMetaData[DT, CLT]) raises -> PythonObjec
 
 # DEVIATION 2482: both RF label types own the same typed tree list. Moving it
 # into the export registry retains existing native storage without flattening.
-from std.ffi import _Global
 from forest_export_binding import (
     ForestExportRegistry, validate_forest_export_destinations,
     copy_forest_export_leaves, forest_export_py_list_f64,
@@ -453,9 +453,7 @@ from forest_export_binding import (
 )
 from core.mojolearn_rf_impl import rf_export_trees_into, rf_flatten_trees
 comptime RFExportTrees = List[TreeMetaDataNode[DT]]
-comptime RF_EXPORTS = _Global[StorageType=ForestExportRegistry[RFExportTrees],
-    name=("MojoRFFitExportIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoRFFitExportFast"), init_fn=ForestExportRegistry[RFExportTrees].__init__]
+comptime RF_EXPORTS = SharedSlot[ForestExportRegistry[RFExportTrees], ("MojolearnRFFitExportIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFFitExportFastV1")]
 
 
 def _retain_rf_export(var trees: RFExportTrees, notices: Int) raises -> PythonObject:
@@ -831,9 +829,7 @@ struct RfSessionRegistry(Defaultable, Movable):
         raise Error("unknown or closed forest data session handle")
 
 
-comptime RF_SESSIONS = _Global[StorageType=RfSessionRegistry,
-    name=("MojoRFDataSessionIdentical" if GLOBAL_NUMERIC_MODE == 1 else
-          "MojoRFDataSessionFast"), init_fn=RfSessionRegistry.__init__]
+comptime RF_SESSIONS = SharedSlot[RfSessionRegistry, ("MojolearnRFDataSessionIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFDataSessionFastV1")]
 
 
 def rf_data_session_open_binding(
@@ -859,24 +855,34 @@ def rf_data_session_open_binding(
             )
     var xp = _f32_ptr(Int(py=x_addr))
     var made = List[RfDataSession]()
-    var has_nan = False
+    var bad = False
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         # cpu-gpu-cleanup t-forest: the caller's bytes go to the device as
-        # they are, the transpose and the NaN scan run there. The session
+        # they are, the transpose and the finite scan run there. The session
         # keeps no host copy of X (`host_x` 0: the borrow ends with this
         # call), so a member's OOB pass reads the device plane.
         var dx = upload_forest_x(ctx, xp, n_rows, n_cols, row_major)
-        has_nan = device_has_nan_f32(ctx, dx, n_rows * n_cols)
-        if has_nan:
+        # Lane a8c-device-x-linear-prep-rfe: the scan tests NaN AND infinity
+        # (ensemble/device_finite.mojo, bits of the exponent), so the boost
+        # meta-estimators' host scan of X before the open
+        # (bindings/trees_public_boost.mojo, TREES_NONFINITE) is deleted:
+        # this one device pass over the upload the session makes anyway is
+        # the only test. One synchronize, as the NaN scan had.
+        var scan = ForestFiniteScan(ctx)
+        scan.enqueue(ctx, dx, n_rows * n_cols)
+        ctx.synchronize()
+        bad = scan.hflag.unsafe_ptr().unsafe_load(0) != 0
+        _ = scan^
+        if bad:
             _ = dx^
         else:
             made.append(
                 RfDataSession(0, dx^, n_rows, n_cols, 0, share_tables)
             )
         _ = ctx^
-    if has_nan:
-        raise Error("rf_data_session_open: " + RF_NAN_REFUSAL)
+    if bad:
+        raise Error("rf_data_session_open: " + RF_NONFINITE_REFUSAL)
     var reg = RF_SESSIONS.get_or_create_ptr()
     var id = reg[].next_id
     reg[].next_id += 1

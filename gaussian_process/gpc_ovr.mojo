@@ -73,7 +73,7 @@ from gaussian_process.gpc_device_var import (
     gpc_latent_var_launch,
     gpc_scale_rows_kernel,
 )
-from gaussian_process.gpc_newton import gpc_newton_device
+from gaussian_process.gpc_newton import gpc_newton_device_batch
 from gaussian_process.gp_resident_store import gp_resident_store
 from core.fitted_resident_store import fitted_resident_view
 from gemm.checks.gemm_identical import (
@@ -93,6 +93,10 @@ comptime GPC_IDN_OVR = _CTX_MODE == _CTX_IDENTICAL and not (
 # Restore: git apply experiments/removed/N8_GPC_NEWTON_ONE_LOOP.patch
 
 #: `gpc_predict_all_device` output kinds (the binding's `out_kind`)
+#: The device bytes of B factors one batched one-vs-rest Newton loop may
+#: hold (each class keeps its n x n float32 factor): 1 GiB, a memory bound.
+comptime GPC_OVR_BATCH_BYTES = 1 << 30
+
 comptime GPC_ALL_CODES = 1
 comptime GPC_ALL_PROBA = 2
 
@@ -150,6 +154,18 @@ def gpc_targets_kernel(codes: _GI, y: _GP, seen: _GI, k: Int32, n: Int32):
             _ = Atomic[DType.int32].min(seen + 1, Int32(i))
         else:
             _ = Atomic[DType.int32].min(seen, Int32(i))
+
+
+def gpc_one_class_kernel(seen: _GI, g: Int32, n: Int32, bad: _GI):
+    """One thread: the lowest class c of the group whose targets hold one
+    value only (`seen[2c]` or `seen[2c + 1]` still n), else -1."""
+    if _tid() != 0:
+        return
+    for c in range(Int(g)):
+        if seen.unsafe_load(2 * c) >= n or seen.unsafe_load(2 * c + 1) >= n:
+            bad.unsafe_store(0, Int32(c))
+            return
+    bad.unsafe_store(0, Int32(-1))
 
 
 def gpc_mean_codes_kernel(mean: _GP, dst: _GL, n: Int32):
@@ -287,9 +303,14 @@ def gpc_fit_all_device(
     gpc_validate_max_iter(max_iter_predict)
     if codes_addr == 0:
         raise Error("gpc_fit_all: the class codes have a null address")
+    if n_train <= 0 or n_features <= 0:
+        raise Error("gpc_fit_all: X must have at least one row and one feature, got " + String(n_train) + " x "
+                    + String(n_features))
     var n = n_train
     var ctx = _family_ctx()
-    var dx = _gpc_upload_checked(ctx, x_addr, n_train, n_features, String("X"))
+    # TOMBSTONE: the synchronising first-non-finite scan of the fit X (_gpc_upload_checked; DEVIATION 1768 text) removed 2026-11-09 by lane a8a-device-x-fit-svm-gp-krr: the public door admits X once and refuses a non-finite X in scikit-learn's wording before this entry; recoverable at 0ce88411d3 (docs/TOMBSTONES.md).
+    var dx = ctx.enqueue_create_buffer[DType.float32](n_train * n_features)
+    _copy_in(ctx, dx, x_addr, String("X"))
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dk = ctx.enqueue_create_buffer[DType.float32](n * n)
     var dstack = ctx.enqueue_create_buffer[DType.float32](gp_kernel_stack_floats(n, n))
@@ -306,51 +327,78 @@ def gpc_fit_all_device(
 
     var dcodes = ctx.enqueue_create_buffer[DType.int32](n)
     ctx.enqueue_copy(dst_buf=dcodes, src_ptr=_GI(unsafe_from_address=codes_addr))
-    var dy = ctx.enqueue_create_buffer[DType.float32](n)
-    var dseen = ctx.enqueue_create_buffer[DType.int32](2)
-    var hseen = ctx.enqueue_create_host_buffer[DType.int32](2)
-    var db = ctx.enqueue_create_buffer[DType.float32](n * n)
     var dgw = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(n, 1, n))
-    var dpi = ctx.enqueue_create_buffer[DType.float32](n)
-    var dwsr = ctx.enqueue_create_buffer[DType.float32](n)
-    for j in range(n_fits):
+    for j in range(n_fits):  # driver-loop: over the one-vs-rest classes (address checks)
         if y_addrs[j] == 0 or l_addrs[j] == 0 or pi_addrs[j] == 0 or wsr_addrs[j] == 0 or scalar_addrs[j] == 0:
             raise Error("gpc_fit_all: binary fit " + String(j) + " has a null output address")
+    # Lane m3-linalg-and-housekeeping (2026-11-09): the classes' Newton
+    # loops run as ONE batched loop (`gpc_newton_device_batch`: one register
+    # read per GPC_NEWTON_CHECK iterations for the whole group, the targets
+    # and their class check in one read), where each class ran its own loop
+    # and reads after the previous one. Each class keeps its own B factor
+    # (n^2 floats), so a group holds as many classes as GPC_OVR_BATCH_BYTES
+    # of factors allows (a memory bound, the same rule at every n and k).
+    var group = max(1, GPC_OVR_BATCH_BYTES // max(1, n * n * 4))
+    var j0 = 0
+    while j0 < n_fits:  # driver-loop: over groups of one-vs-rest classes, sized by device memory
+        var g = min(group, n_fits - j0)
+        var dys = List[DeviceBuffer[DType.float32]](capacity=g)
+        var dbs = List[DeviceBuffer[DType.float32]](capacity=g)
+        var dpis = List[DeviceBuffer[DType.float32]](capacity=g)
+        var dwsrs = List[DeviceBuffer[DType.float32]](capacity=g)
+        var dseen = ctx.enqueue_create_buffer[DType.int32](2 * g)
+        var dbad = ctx.enqueue_create_buffer[DType.int32](1)
+        var hbad = ctx.enqueue_create_host_buffer[DType.int32](1)
         enqueue_fill(ctx, dseen, Int32(n))
-        ctx.enqueue_function[gpc_targets_kernel](
-            _ip(dcodes), _fp(dy), _ip(dseen), Int32(class_ks[j]), Int32(n),
-            grid_dim=_blocks(n), block_dim=GPC_STEP_TPB,
+        for c in range(g):  # driver-loop: over the group's classes (model structure)
+            var dy = ctx.enqueue_create_buffer[DType.float32](n)
+            ctx.enqueue_function[gpc_targets_kernel](
+                _ip(dcodes), _fp(dy), _ip(dseen) + 2 * c, Int32(class_ks[j0 + c]), Int32(n),
+                grid_dim=_blocks(n), block_dim=GPC_STEP_TPB,
+            )
+            ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=y_addrs[j0 + c]), src_buf=dy)
+            dys.append(dy^)
+            dbs.append(ctx.enqueue_create_buffer[DType.float32](n * n))
+            dpis.append(ctx.enqueue_create_buffer[DType.float32](n))
+            dwsrs.append(ctx.enqueue_create_buffer[DType.float32](n))
+        ctx.enqueue_function[gpc_one_class_kernel](  # small-launch(g: the group's classes): one thread finds the first one-class column
+            _ip(dseen), Int32(g), Int32(n), _ip(dbad), grid_dim=1, block_dim=1,
         )
-        ctx.enqueue_copy(dst_ptr=hseen.unsafe_ptr(), src_buf=dseen)
-        ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=y_addrs[j]), src_buf=dy)
+        ctx.enqueue_copy(dst_ptr=hbad.unsafe_ptr(), src_buf=dbad)
         ctx.synchronize()
-        if Int(hseen.unsafe_ptr().unsafe_load(0)) >= n or Int(hseen.unsafe_ptr().unsafe_load(1)) >= n:
+        var bad = Int(hbad.unsafe_ptr().unsafe_load(0))
+        if bad >= 0:
             raise Error(
                 "gpc_fit_host: a binary Laplace fit requires 2 classes; got 1"
                 " (one-vs-rest class "
-                + String(class_ks[j])
+                + String(class_ks[j0 + bad])
                 + ")"
             )
-        var run = gpc_newton_device(ctx, dk, dy, db, dgw, dpi, dwsr, n, max_iter_predict)
-        ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=l_addrs[j]), src_buf=db)
-        ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=pi_addrs[j]), src_buf=dpi)
-        ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=wsr_addrs[j]), src_buf=dwsr)
+        var runs = gpc_newton_device_batch(ctx, dk, dys, dbs, dgw, dpis, dwsrs, n, max_iter_predict)
+        for c in range(g):  # driver-loop: over the group's classes (model structure)
+            var j = j0 + c
+            ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=l_addrs[j]), src_buf=dbs[c])
+            ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=pi_addrs[j]), src_buf=dpis[c])
+            ctx.enqueue_copy(dst_ptr=_GP(unsafe_from_address=wsr_addrs[j]), src_buf=dwsrs[c])
         ctx.synchronize()
-        # lml, n_iter, nb, in that order; each widens to float64 exactly.
-        var sp = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=scalar_addrs[j])
-        sp.unsafe_store(0, Float64(run.lml))
-        sp.unsafe_store(1, Float64(run.n_iter))
-        sp.unsafe_store(2, Float64(run.nb))
+        for c in range(g):  # driver-loop: over the group's classes (model structure)
+            # lml, n_iter, nb, in that order; each widens to float64 exactly.
+            var sp = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=scalar_addrs[j0 + c])
+            sp.unsafe_store(0, Float64(runs[c].lml))
+            sp.unsafe_store(1, Float64(runs[c].n_iter))
+            sp.unsafe_store(2, Float64(runs[c].nb))
+        _ = dys^
+        _ = dbs^
+        _ = dpis^
+        _ = dwsrs^
+        _ = dseen^
+        _ = dbad^
+        _ = hbad^
+        j0 += g
     ctx.synchronize()
     _ = dk^
     _ = dcodes^
-    _ = dy^
-    _ = dseen^
-    _ = hseen^
-    _ = db^
     _ = dgw^
-    _ = dpi^
-    _ = dwsr^
     # DEVIATION 1946: the context dies LAST.
     _ = ctx^
 

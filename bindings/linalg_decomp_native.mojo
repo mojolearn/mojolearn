@@ -45,7 +45,14 @@ def randomized_svd_call(args: PythonObject, context: PythonObject) raises -> Pyt
     var entries = decomp_entries(args[8], context)
     var transpose_arg = args[5]
     var auto_transpose = Bool(py=py_call(b.isinstance, transpose_arg, b.str)) and String(py=transpose_arg) == "auto"
-    var array = decomp_input(args[0], "M", context)
+    # RSVD_FAST_DEVSCAN (x_decomp/s_linalg_fast.mojo, `x_decomp_s_flags` bit
+    # 1; the FAST + Apple default, rab15: istella 490.1 -> 435.1 ms; deleted
+    # 2026-11-08 by lane a3, restored 2026-11-09 by lane
+    # r1-restore-measured-winners): M's finite test runs on its device copy
+    # inside the one call, not as a host pass over M here.
+    var flag_entry = py_get(entries, "x_decomp_s_flags")
+    var devscan = flag_entry is not None and (Int(py=py_call(flag_entry)) & 1) != 0
+    var array = decomp_input(args[0], "M", context, defer_finite=devscan)
     var rows = Int(py=array.shape[0])
     var cols = Int(py=array.shape[1])
     var normalizer = args[4]
@@ -74,7 +81,7 @@ def randomized_svd_call(args: PythonObject, context: PythonObject) raises -> Pyt
     _ = py_call(entries["x_decomp_randomized_svd"], classical_address(array), classical_address(u),
                 classical_address(s), classical_address(vt),
                 Python.list(rows, cols, kc, oversamples, iterations, Int(auto_iterations), Int(transpose),
-                            Int(Bool(py=args[6])), seed))
+                            Int(Bool(py=args[6])), seed, Int(devscan)))
     _ = array  # keep the Python object alive through the native call above
     return Python.tuple(u, s, vt)
 

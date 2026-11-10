@@ -25,6 +25,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import venv
 from pathlib import Path
 
@@ -52,7 +53,7 @@ def passed(results, wheel):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("wheel")
-    ap.add_argument("--out", required=True, help="a new directory for the venv, log and receipt")
+    ap.add_argument("--out", required=True, help="a new directory for the log and receipt")
     ap.add_argument("--python", default=sys.executable, help="interpreter the venv is made from")
     ap.add_argument("--cpu-threads", type=int, default=3)
     args = ap.parse_args()
@@ -63,7 +64,16 @@ def main():
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)
-    env_dir = out / "venv"
+    # the throwaway venv lives under a temp dir, removed on exit: OUT holds the log and receipt only (2026-11-09,
+    # self-test-macos held a whole venv inside the release's evidence)
+    scratch = Path(tempfile.mkdtemp(prefix="wheel-self-test-venv-"))
+    try:
+        return _run(args, wheel, out, scratch / "venv")
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def _run(args, wheel, out, env_dir):
     if Path(args.python).resolve() == Path(sys.executable).resolve():
         venv.EnvBuilder(with_pip=True, clear=True).create(env_dir)
     else:

@@ -402,7 +402,7 @@ class _Optimizer(NumericModeMixin):
         # a checkpoint beside `exp_avg`); and the host mirrors `_m` / `_v` of
         # `exp_avg` and `exp_avg_sq`, allocated on first need (with the
         # optimizer under MOJOLEARN_OPT_LAZY_MOMENTS=0, the A/B).
-        _buffers._native("optimizer_door_init")(self, params)  # cpu-route: the parameter registry offsets are host metadata built once with the optimizer
+        _buffers._native("optimizer_door_init")(self, params)  # import-time: the parameter registry offsets are host metadata built once with the optimizer
         #: ONE-BASED. The first step of a run is `t = 1`.
         self.t = 0
         self.packed_ = None
@@ -1113,8 +1113,6 @@ def _f32_bits(value):
 #: OneCycleLR step past total_steps + 1
 _LR_ONE_BASED = 4
 _LR_BEYOND = 5
-#: added to a schedule kind: every step on the exact route (`_lr_at_slow`)
-_LR_EXACT_ONLY = 100
 
 
 def _lr_table_wanted():
@@ -1168,8 +1166,6 @@ class _Schedule(_LrTable):
     counter, so `lr_at(1)` is the first step's learning rate."""
 
     kind = ""
-    #: `LrSpec` kind codes (sequence/lr_table.mojo)
-    _KIND_CODE = {"constant": 0, "linear": 1, "cosine": 2}
 
     def __init__(self, peak_lr, warmup_steps=0, total_steps=None, min_lr=0.0):
         return _OPT_NATIVE("schedule_construct", self, (peak_lr, warmup_steps, total_steps, min_lr), None, _OPT_CONTEXT)
@@ -1183,23 +1179,6 @@ class _Schedule(_LrTable):
 
     def _lr_spec(self):
         return _OPT_NATIVE("schedule_spec", self, (), None, _OPT_CONTEXT)
-
-    def _exact_params(self):
-        return ([self._KIND_CODE[self.kind], self.warmup_steps,
-                 -1 if self.total_steps is None else self.total_steps],
-                [float(self.peak_lr), float(self.min_lr)])  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
-
-    def _lr_at_slow(self, t):
-        """The exact route of one ONE-BASED step, in Mojo big rationals
-        (`lr_schedule_exact`, sequence/lr_exact.mojo)."""
-        t = int(t)
-        if t < 1:
-            raise ValueError(
-                "mojolearn schedule: step t is ONE-BASED, got %d" % t)
-        ip, fp = self._exact_params()
-        st, v = _lr_native("lr_schedule_exact")(ip + [t], fp)  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
-        _lr_status(st)
-        return float(v)
 
 
 class ConstantLR(_Schedule):

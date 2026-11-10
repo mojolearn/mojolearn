@@ -71,7 +71,7 @@ def kmeans_fit_fold(
 ) raises -> KMeansFoldFit:
     """The unit-weight fit of fold rows `index_id` of the resident base
     `base_id` (`base_rows` x `n_features`). `ctx` is
-    `msel_device_x_context()`. The status words are read before the fit
+    `msel_fold_entry_context()`. The status words are read before the fit
     (the scale plan synchronises there anyway): a flagged fold is not fit
     and the door refuses."""
     var x = ctx.enqueue_create_buffer[DType.float32](n_samples * n_features)

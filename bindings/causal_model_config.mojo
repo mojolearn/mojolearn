@@ -3,7 +3,6 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from std.ffi import _Global
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
@@ -12,6 +11,7 @@ from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.native_instance_item import native_instance_item
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.native_class_admission import class_record, class_admit
+from core.shared_slot import SharedSlot
 
 
 comptime _RECORD_FIELDS_SLOT = "causal_model_record_fields"
@@ -24,8 +24,7 @@ struct ModelConfigConnection(Defaultable, Movable):
         self.context = PythonObject(None)
 
 
-comptime MODEL_CONFIG_CONNECTION = _Global[StorageType=ModelConfigConnection,
-    name="MojolearnModelConfigConnection", init_fn=ModelConfigConnection.__init__]
+comptime MODEL_CONFIG_CONNECTION = SharedSlot[ModelConfigConnection, "MojolearnModelConfigConnectionV1"]
 
 
 def model_string(mut mods: NativeModules, value: PythonObject) raises -> String:

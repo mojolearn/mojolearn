@@ -67,7 +67,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
-comptime _DEVCTX_SLOT = "MojolearnEstimatorsContextIdenticalV2" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnEstimatorsContextFastV2"
+comptime _DEVCTX_SLOT = "MojolearnEstimatorsContextIdenticalV3" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojolearnEstimatorsContextFastV3"
 
 
 from core.labeled_reference_predict import labeled_reference_predict
@@ -881,7 +881,9 @@ def pca_fit_randomized_binding(
     (1: iterated_power='auto'), whiten, the Philox seed mod 2^32.
     With an output address (0: none) X is projected. Returns the noise
     variance."""
-    if len(params) != 8:
+    # Lane a8d: an optional ninth value, the finite flag: 1 asks for X's
+    # finite status word (returned as [noise, word]; a flagged X is not fit).
+    if len(params) != 8 and len(params) != 9:
         raise Error("pca_fit_randomized: params must contain rows, features, components, oversamples, iterations, auto, whiten, seed")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=components_addr))
@@ -899,12 +901,18 @@ def pca_fit_randomized_binding(
     var auto = Int(py=params[5]) != 0
     var whiten = Int(py=params[6]) != 0
     var s = Int(py=params[7])
+    var test = len(params) == 9 and Int(py=params[8]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     var noise = Float64(0.0)
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         noise = pca_randomized_owned(
-            ctx, xp, cp, mp, ep, rp, sp, nr, nf, nc, oversamples, iterations, auto, s, op, oa != 0, whiten
+            ctx, xp, cp, mp, ep, rp, sp, nr, nf, nc, oversamples, iterations, auto, s, op, oa != 0, whiten,
+            word_addr,
         )
+    if test:
+        return Python.list(PythonObject(noise), PythonObject(Int(word[0])))
     return PythonObject(noise)
 
 
@@ -1318,18 +1326,21 @@ def qn_decision_function_binding(
     OPTIONAL 4th, n_classes: absent or below 3 is the binary shape (out is
     n_rows floats, the contract every 3-field caller has), `n_classes > 2`
     the softmax shape (out is `n_rows * n_classes` floats, row-major)."""
-    if len(params) != 3 and len(params) != 4:
-        raise Error("qn_decision_function: params must contain n_rows, n_features, fit_intercept and an optional n_classes")
+    # lane a8c: an optional 5th, the host address of the deferred finite
+    # status word of X (glm/qn_infer.mojo qn_x_status; n_classes then given)
+    if len(params) < 3 or len(params) > 5:
+        raise Error("qn_decision_function: params must contain n_rows, n_features, fit_intercept, an optional n_classes and an optional status address")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=coef_addr))
     var op = _f32_ptr(Int(py=out_addr))
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var fi = Int(py=params[2]) != 0
-    var nc = Int(py=params[3]) if len(params) == 4 else 1
+    var nc = Int(py=params[3]) if len(params) >= 4 else 1
+    var status = Int(py=params[4]) if len(params) == 5 else 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        qn_decision_function_host(ctx, xp, cp, op, nr, nf, fi, nc)
+        qn_decision_function_host(ctx, xp, cp, op, nr, nf, fi, nc, status)
         ctx.synchronize()
     return PythonObject(0)
 
@@ -1351,8 +1362,10 @@ def qn_proba_binding(
     # decision to the link (was: download into a host List, upload again),
     # and the log of predict_log_proba runs in the same session. One upload
     # of X and coef_, one download of the output.
-    if len(params) != 4 and len(params) != 5:
-        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes and an optional log flag")
+    # lane a8c: an optional 6th, the deferred finite status word's host
+    # address (the log flag then given)
+    if len(params) < 4 or len(params) > 6:
+        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes, an optional log flag and an optional status address")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=coef_addr))
     var op = _f64_ptr(Int(py=out_addr))
@@ -1360,12 +1373,13 @@ def qn_proba_binding(
     var nf = Int(py=params[1])
     var fi = Int(py=params[2]) != 0
     var nc = Int(py=params[3])
-    var log_out = len(params) == 5 and Int(py=params[4]) != 0
+    var log_out = len(params) >= 5 and Int(py=params[4]) != 0
+    var status = Int(py=params[5]) if len(params) == 6 else 0
     var nt = nc if nc > 2 else 1
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         var d_scores = ctx.enqueue_create_buffer[DType.float32](max(nr * nt, 1))
-        qn_decision_function_device(ctx, xp, cp, d_scores, nr, nf, fi, nt)
+        qn_decision_function_device(ctx, xp, cp, d_scores, nr, nf, fi, nt, status)
         qn_link_from_device(ctx, d_scores, op, nr, nt, log_out)
         _ = d_scores^
         _ = ctx^
@@ -1379,11 +1393,13 @@ def qn_predict_binary_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """Binary `qn_predict`: int64 0/1 codes under strict score > 0."""
-    if len(params) != 3:
-        raise Error("qn_predict_binary: params must contain n_rows, n_features, fit_intercept")
+    # lane a8c: an optional 4th, the deferred finite status word's host address
+    if len(params) != 3 and len(params) != 4:
+        raise Error("qn_predict_binary: params must contain n_rows, n_features, fit_intercept and an optional status address")
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var fi = Int(py=params[2]) != 0
+    var status = Int(py=params[3]) if len(params) == 4 else 0
     var op = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=out_addr))
     # Every PythonObject is read BEFORE the GIL is released: `Int(py=...)`
     # calls into the interpreter (the host binding's copy of this entry
@@ -1392,7 +1408,7 @@ def qn_predict_binary_binding(
     var cp = _f32_ptr(Int(py=coef_addr))
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        qn_predict_binary_host(ctx, xp, cp, op, nr, nf, fi)
+        qn_predict_binary_host(ctx, xp, cp, op, nr, nf, fi, status)
         ctx.synchronize()
     return PythonObject(0)
 
@@ -1406,18 +1422,20 @@ def qn_predict_multiclass_binding(
     """Multiclass `qn_predict` (lane fam2-linear): int64 class codes, the
     row argmax of the softmax decision function taken on the device (first
     maximum wins). params: n_rows, n_features, fit_intercept, n_classes."""
-    if len(params) != 4:
-        raise Error("qn_predict_multiclass: params must contain n_rows, n_features, fit_intercept, n_classes")
+    # lane a8c: an optional 5th, the deferred finite status word's host address
+    if len(params) != 4 and len(params) != 5:
+        raise Error("qn_predict_multiclass: params must contain n_rows, n_features, fit_intercept, n_classes and an optional status address")
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var fi = Int(py=params[2]) != 0
     var nc = Int(py=params[3])
+    var status = Int(py=params[4]) if len(params) == 5 else 0
     var op = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=out_addr))
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=coef_addr))
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        qn_predict_multiclass_host(ctx, xp, cp, op, nr, nf, fi, nc)
+        qn_predict_multiclass_host(ctx, xp, cp, op, nr, nf, fi, nc, status)
         ctx.synchronize()
     return PythonObject(0)
 

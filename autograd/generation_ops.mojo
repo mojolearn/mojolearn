@@ -37,7 +37,15 @@ no row stays active or a row failed. ALIVE returns the alive word as a (1, 1)
 float: the decode loop's condition, so the loop stops on the device and a
 chunk of iterations needs no host read in between.
 
-Device only: a host session refuses these codes. Not differentiable.
+A host session (lane x56d-mamba-samba-train-and-host, 2026-11-09) runs the
+same two codes through the host executor's arm (`Exec.gen_pick`,
+`Exec.gen_alive`: autograd/generation_host.mojo, a host module no GPU
+binding imports): the same rule (the
+order key, the lowest index on a tie, the first non-finite token, the one
+FP32 sampler `sampling_pick_f32` at (seed, row, position), the row-order
+commit), the rows' picks in parallel over host tasks, the commit in row
+order. So the CPU column's `CausalLM.generate` is the same `Program.decode`
+as the GPUs'. Not differentiable.
 """
 from std.memory import bitcast, stack_allocation
 from std.gpu import block_idx, thread_idx

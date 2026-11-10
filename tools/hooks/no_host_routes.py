@@ -34,6 +34,10 @@ Modes:
         Diff mode on a unified diff (no scope: every path is GPU code).
 Exit 1 with one line per finding, 0 when clean, 2 on usage errors.
 
+Parsing and scanning are split over worker processes: MOJOLEARN_HOOK_WORKERS=N
+sets their number (any platform); unset, it is 4 on macOS and the core count
+elsewhere.
+
 Which files count as GPU code is decided by imports, not by file names:
   * Mojo: every module that a GPU binding (the entry file of a non-host
     bindings/build_*.sh, or bindings/build.sh) reaches through its imports,
@@ -50,7 +54,13 @@ replacement of _IN_FLIGHT) pre-authorize the lines one open PR adds, and only
 for a tree that contains that PR head; once that code is in a tree that
 carries the baseline the row must become `debt` (--prune-baseline does it).
 Nothing in this tool adds a row: the baseline was written once, from the
-Oct 2 2026 audit, and every later change can only delete rows.
+Oct 2 2026 audit, and every later change can only delete rows. On 2026-11-09,
+when the loop tags started to be judged (the LOOP-TAG VOCABULARY), the findings
+of the rules that stopped trusting free-text notes were written once more, as
+`owed-tags` rows, from the integration tree _REGEN_ANCHOR. A row main's
+baseline lacks holds only for a finding main's tree (or, for a tree that
+contains it, _REGEN_ANCHOR's tree) carries, so a branch can never grandfather
+a finding of its own.
 """
 import collections
 import os
@@ -84,7 +94,7 @@ _runtime_fallbacks.py
 _forest_host.py _gbdt_host.py _byte_lm_host.py _byte_lm_trainer_host.py
 _classical_host.py _serialize.py
 neural_inference.py _causal_lm_fixtures.py
-_bpe_trainer.py _tokenizer_synthetic.py
+_tokenizer_synthetic.py _verify_model.py
 """.split())
 # The bounded verifier modules above prepare test fixtures, compare outputs and
 # inject test faults. They are not product runtime implementations. Exact names
@@ -92,8 +102,10 @@ _bpe_trainer.py _tokenizer_synthetic.py
 # neural_inference.py: the public CPU inference product.
 # _causal_lm_fixtures.py: verification fixtures (_verify_causal_lm and tests only).
 # _serialize.py: model save/load (no fit, transform or predict).
-# _bpe_trainer.py: the BPE trainer's verification oracle (refused as a run-time route).
-# _tokenizer_synthetic.py: tokenizer fixtures for the gates and the identity lane.
+# _tokenizer_synthetic.py: tokenizer fixtures for the gates and the identity lane,
+#   and the GPT-2 byte-to-unicode table the verifier and identity tools spell with.
+# _verify_model.py: the `verify-model` command's report (verification, not a fit,
+#   transform or predict; the BPE trainer oracle moved to tests/_bpe_trainer.py).
 # _runtime_fallbacks.py: verifier-only exception descriptions and code identities;
 # no product caller imports it (enforced by test_runtime_fallback_scope.py).
 # The actual Array.__len__ product callback remains in scope and is reported.
@@ -185,6 +197,7 @@ _RULE_CLASS.update({"host-call": "host-import", "serial-launch": "serial-gpu", "
                     "py-data-loop": "py-compute", "py-np-compute": "py-compute",
                     "py-reduce": "py-compute", "py-array-method": "py-compute",
                     "py-fsum": "py-compute", "py-map-arith": "py-compute",
+                    "py-while-loop": "py-compute", "py-iter-call": "py-compute", "py-scalar-arith": "py-compute",
                     "py-native-host": "native-host", "mojo-host-loop": "host-loop"})
 _RULE_WHY = {r[0]: r[4] for r in _LINE_RULES}
 _RULE_WHY.update({
@@ -196,7 +209,13 @@ _RULE_WHY.update({
     "one-block-n": "a one-block launch (grid_dim=(1, 1, 1)) over a runtime size",
     "block-per-n": "one block per class / output / problem (a small grid) walking a runtime size",
     "serial-launch": "a one-block or one-thread launch over a runtime size",
-    "py-data-loop": "a Python loop or comprehension at runtime (glue only: mark a scalar or argument loop `# glue: <reason>`)",
+    "py-data-loop": "a Python loop or comprehension at runtime (only a model-structure loop tagged "
+                    "`# driver-loop: over <what>` or a constant-bound `# small-loop(<CONST>)` holds; "
+                    "`# glue:` and `# cpu-route:` notes exempt nothing)",
+    "py-while-loop": "a Python while loop at runtime (move it into Mojo; only a true driver-loop tag holds)",
+    "py-iter-call": "Python iteration inside a call at runtime (map(f, ...), list(<iterable>), dict.fromkeys, "
+                    "itertools.chain, zip, enumerate)",
+    "py-scalar-arith": "binary arithmetic on numbers at runtime in GPU-path Python (every computed number comes from Mojo)",
     "py-np-compute": "numpy compute at runtime in GPU-path Python (move it into Mojo)",
     "py-reduce": "sorted()/sum()/min()/max() over a sequence at runtime in GPU-path Python",
     "py-array-method": "an array reduction or sort method at runtime in GPU-path Python",
@@ -227,14 +246,19 @@ byte_lm_parallel_ownership byte_lm_session_info byte_lm_step_glue_arm gbdt_model
 gbdt_resident_info gp_theta_params iforest_resident_release x_cnn_conv_shape
 x_cnn_pool_shape forest_export forest_export_legacy
 """.split())
-# A GPU-path Python line that runs on an explicit CPU-only route (a
-# CPU-only install, file I/O, a user callable) says so:
-#     # cpu-route: <reason of 3+ words>
-_CPU_ROUTE = re.compile(r"#\s*cpu-route:\s*(\S+\s+){2,}\S+")
-# A host Mojo loop over a size that is d- or k-sized, never rows, says so on
-# the `for` line, naming the bound (as small-launch does for launches):
-#     # small-loop(<bound>: <what it counts>): <why it is bounded>
-_SMALL_LOOP = re.compile(r"#\s*small-loop\(\s*([^:()]+?)\s*:\s*([^()]+?)\s*\)\s*:\s*(\S+\s+){2,}\S+")
+# A Python line that connects a native binding or entry ONCE at import (a
+# host binding's module, a compiled entry it keeps) says so, so that
+# `# cpu-route:` means only a real Python-driven CPU path (lane
+# p5-cpu-route-relabel-and-dead-code, 2026-11-09). It exempts ONLY the
+# host-module rule (a binding connection, never compute); the def-body
+# checks below judge the line by its code:
+#     # import-time: <reason of 3+ words>
+_IMPORT_TIME = re.compile(r"#\s*import-time:\s*(\S+\s+){2,}\S+")
+# 2026-11-09: the `# cpu-route:` note and the free-text `# small-loop(<bound>:
+# <what>): <why>` note no longer exempt a line (AGENTS.md: cpu-route tags are
+# debt, never exemptions). A small-loop note holds only for a constant bound
+# (_small_bound_ok); its bound is the text before `:` or `)`.
+_SMALL_LOOP_ANY = re.compile(r"#\s*small-loop\(\s*([^:()]*?)\s*(?::[^()]*)?\)")
 # THE DRIVER-LOOP RULE (Andrew, 2026-10-17; docs/plans/GPU_PATH_HOST_LOOPS.md).
 # A host loop on the GPU path that walks model or launch structure (features,
 # columns, words, classes, layers, leaves, depth, trees, iterations, configs,
@@ -242,18 +266,174 @@ _SMALL_LOOP = re.compile(r"#\s*small-loop\(\s*([^:()]+?)\s*:\s*([^()]+?)\s*\)\s*
 #     # driver-loop: over <what it walks>
 # The tag is checked, not trusted: its range must name no data dimension
 # (_DRIVER_DENY, or the length of a buffer a d2h copy filled) and its body must
-# index no downloaded buffer (_downloaded_names). A tag that fails either is a
+# index no downloaded buffer (_downloaded_names), and (2026-11-09) the loop
+# must walk structure by the LOOP-TAG VOCABULARY below. A tag that fails is a
 # `mojo-host-loop` finding ("false driver-loop tag"). Accepted tags are a count
-# in the --tree summary (class `driver-loop`), never debt and never baseline
-# rows. The older `# small-loop(<bound>: ...)` note keeps working on the for
-# line; new Mojo loops use the driver-loop tag (readback reductions and data
-# loops are defects to fix, never tagged).
+# in the --tree summary (class `driver-loop`, with the "could not judge" ones
+# counted apart), never debt and never baseline rows. Readback reductions and
+# data loops are defects to fix, never tagged. `while` loops are judged the
+# same way (their condition is the source).
 _DRIVER_TAG = re.compile(r"#\s*driver-loop:\s*over\s+\S")
 # data dimensions a driver loop may never run over (extend as cases appear)
 _DRIVER_DENY = re.compile(
     r"(?<!\w)(n|rows|n_rows|n_samples|samples|elements|n_elements|tokens|n_tokens|nnz|n_nnz|count|numel"
     r"|n_elems|n_obs|n_points|n_queries|n_q|\w+_rows|\w+_samples|\w+_elements|\w+_tokens|\w+_nnz)(?!\w)"
     r"|\blen\(\s*(x|y|X|Y)\s*\)")
+
+# ------------------------------------------------- loop-tag vocabulary ----
+# THE LOOP-TAG VOCABULARY (2026-11-09). A `# driver-loop: over <what>` tag
+# claims that a loop walks model structure, never data
+# (docs/plans/GPU_PATH_HOST_LOOPS.md). The checker judges the claim from the
+# loop: first its source (the `for x in <expr>` iterable, the `range(<expr>)`
+# bound, the `while` condition), then, when the source says nothing, its loop
+# variables, then the tag text. Every identifier is split into lower-case
+# words (on `_`, digits and case changes):
+#   _V_DATA_PATTERNS   spellings that are data by themselves
+#   _V_DATA_NAMES      whole identifiers, or first words, that name the data (X, y)
+#   _V_DATA_WORDS      a word that names data: rows, samples, labels, values, ...
+#   _V_VALUE_WORDS     a COUNT of these is structure (`range(n_classes)`), the
+#                   sequence itself is data (`for c in classes_`)
+#   _V_STRUCTURE_WORDS a word that names model structure: layers, blocks, heads, ...
+#   _V_COUNT_WORDS     a first word that makes the identifier a count of the rest
+# Before the words are read, a dict view (`.keys()`, `.values()`, `.items()`)
+# is judged by its receiver and an attribute chain by its last name.
+# In the loop's source or variables a data word anywhere makes it data; else a
+# structure word makes it structure. In the tag text a structure word wins and
+# a data word refutes the tag only alone. Otherwise the verdict is "unknown": the tag is kept, as
+# before, and counted as "could not judge". This table is the one place to
+# extend; tools/hooks/no_compute_in_shells.py carries the same table (each hook is
+# installed as one self-contained file), keep the two in step.
+_V_DATA_PATTERNS = re.compile(r"\.shape\s*\[\s*0\s*\]|\.tolist\b|\blen\(\s*[XxYy]\w*\s*\)|\bn_samples\b|\bnnz\b"
+                           r"|\bdownload\w*|\breadback\w*")
+_V_DATA_NAMES = frozenset("x y".split())
+_V_DATA_WORDS = frozenset("""
+row rows sample samples label labels value values val vals element elements elem elems token tokens
+tok toks record records nnz obs observation observations point points query queries pixel pixels
+datum data text texts document documents doc docs sentence sentences char chars byte bytes batch
+batches chunk chunks numel target targets instance instances example examples
+""".split())
+_V_VALUE_WORDS = frozenset("class classes category categories unique uniques".split())
+_V_STRUCTURE_WORDS = frozenset("""
+layer layers block blocks head heads estimator estimators member members fold folds split splits
+candidate candidates device devices gpu gpus rank ranks shard shards field fields param params
+parameter parameters stage stages tree trees feature features column columns col cols dim dims
+dimension dimensions axis axes ndim shape output outputs component components iteration iterations
+iter iters epoch epochs step steps level levels depth leaf leaves arg args argument arguments kwarg
+kwargs key keys name names option options config configs worker workers kernel kernels launch
+launches pass passes round rounds model models module modules child children attr attrs attribute
+attributes slot slots spec specs plan plans op ops phase phases kind kinds dtype dtypes metric
+metrics handle handles span spans bin bins expert experts context contexts stream streams
+""".split())
+_V_COUNT_WORDS = frozenset("n num nb count total".split())
+
+
+def _words(ident):
+    """Lower-case words of one identifier: `n_samplesIn2` -> [n, samples, in]."""
+    out = []
+    for part in re.split(r"[_\d]+", ident):
+        out.extend(w.lower() for w in re.findall(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+", part))
+    return out
+
+
+def _judge_text(text, tag_text=False):
+    """("data" | "structure" | "unknown", the deciding word) for one text.
+    tag_text: the words of a tag's <what>, where a value word (classes) is a
+    count, so structure."""
+    if not text or not text.strip():
+        return "unknown", ""
+    m = _V_DATA_PATTERNS.search(text)
+    if m:
+        return "data", m.group(0)
+    # a dict view walks its receiver (`kwargs.items()` walks kwargs); an
+    # attribute chain is judged by its last name (`value.ndim` is a rank)
+    text = re.sub(r"\.(?:keys|values|items)\(\s*\)", "", text)
+    text = re.sub(r"(?<![\w.])(?:[A-Za-z_]\w*(?:\[\])?\.)+(?=[A-Za-z_])", "", text)
+    struct = ""
+    data = ""
+    for ident in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", text):
+        words = _words(ident)
+        if not words:
+            continue
+        if ident == "n" or ident.lower() in _V_DATA_NAMES or (words[0] in _V_DATA_NAMES and ident[:1] in "XxYy"
+                                                             and len(words) > 1 and not tag_text):
+            if not tag_text:
+                return "data", ident
+            data = data or ident
+            continue
+        if words[0] in _V_COUNT_WORDS and len(words) > 1:
+            rest = words[1:]
+            if any(w in _V_DATA_WORDS for w in rest):
+                if not tag_text:
+                    return "data", ident
+                data = data or ident
+                continue
+            if not struct and any(w in _V_STRUCTURE_WORDS or w in _V_VALUE_WORDS for w in rest):
+                struct = ident
+            continue
+        if any(w in _V_DATA_WORDS for w in words) or (not tag_text and any(w in _V_VALUE_WORDS for w in words)):
+            if not tag_text:
+                return "data", ident
+            data = data or ident
+            continue
+        if not struct and any(w in _V_STRUCTURE_WORDS or (tag_text and w in _V_VALUE_WORDS) for w in words):
+            struct = ident
+    # in a tag's own text a structure word wins ("the batch's classes"): the
+    # text refutes the tag only when it names data and no structure
+    if struct:
+        return "structure", struct
+    return ("data", data) if data else ("unknown", "")
+
+
+def _judge_loop(source, targets="", what=""):
+    """The verdict on a tagged loop: its source, else its loop variables, else
+    the tag text decides (see the vocabulary above)."""
+    for text, tag in ((source, False), (targets, False), (what, True)):
+        v = _judge_text(text, tag)
+        if v[0] != "unknown":
+            return v
+    return "unknown", ""
+
+
+# A `# small-loop(<bound>...)` note holds only when its bound is a literal or a
+# named constant (UPPER_CASE) that the loop line uses (2026-11-09): a loop over
+# a variable size is a driver loop, judged by the vocabulary above, or a defect.
+_CONST_BOUND = re.compile(r"[\d_]+|[A-Z][A-Z0-9_]*")
+
+
+def _small_bound_ok(bound, code):
+    bound = (bound or "").strip()
+    return bool(_CONST_BOUND.fullmatch(bound)) and re.search(
+        r"(?<!\w)" + re.escape(bound) + r"(?!\w)", code) is not None
+
+
+# the loop tags a comment-only line may carry for the loop line right below it
+_TAG_ABOVE = re.compile(r"#\s*(driver-loop:\s*over\s+\S|small-loop\()")
+_DRIVER_WHAT = re.compile(r"#\s*driver-loop:\s*over\s+(.*)$")
+
+
+def _loop_source(code):
+    """(source, loop variables) of a loop: the `for x in <expr>` iterable (or a
+    comprehension's first one), else the `while` condition, else the code."""
+    m = re.match(r"\s*(?:async\s+)?for\s+(.+?)\s+in\s+(.+?):?\s*$", code)
+    if m:
+        return m.group(2), m.group(1)
+    m = re.match(r"\s*while\b\s*(.*?):?\s*$", code)
+    if m:
+        return m.group(1), ""
+    m = re.search(r"\bfor\s+([\w\s,()*]+?)\s+in\s+(.+?)(?=\s+(?:for|if)\b|[\]})]|$)", code)
+    if m:
+        return m.group(2), m.group(1)
+    return code, ""
+
+
+def _tag_verdict(t):
+    """("data" | "structure" | "unknown", word) of the driver-loop tag on line t
+    (its loop source first, then its loop variables, then the tag text)."""
+    w = _DRIVER_WHAT.search(t)
+    code = t.split("#", 1)[0]
+    source, targets = _loop_source(code)
+    return _judge_loop(source, targets, w.group(1) if w else "")
+
 
 # --------------------------------------------------------------- git io ----
 
@@ -318,7 +498,7 @@ def _code_lines(text, lang):
     """[(line_no, code_text)] with comments and docstrings blanked."""
     out = []
     in_doc = None
-    tag = None  # a Mojo `# driver-loop:` line waiting for its `for` line
+    tag = None  # a `# driver-loop:` / `# small-loop(` line waiting for its loop line
     for no, raw in enumerate(text.splitlines(), 1):
         line = raw
         if in_doc:
@@ -340,12 +520,16 @@ def _code_lines(text, lang):
                 break
             line = line[:m.start()] + line[k + 3:]
         s = line.lstrip()
-        if lang == "mojo" and s.startswith("#") and _DRIVER_TAG.match(s):
+        # a loop tag on a comment-only line serves the code line right below
+        # it (a Mojo `for`/`while`, or any Python line: a comprehension's line
+        # is its loop line); any other line in between drops it
+        if s.startswith("#") and _TAG_ABOVE.match(s):
             tag = s.strip()
             continue
         if not s or s.startswith("#") or s.startswith("//"):
+            tag = None
             continue
-        if tag is not None and s.startswith("for ") and not _DRIVER_TAG.search(line):
+        if tag is not None and (lang == "py" or re.match(r"(for|while)\b", s)) and not _TAG_ABOVE.search(line):
             line = line.rstrip() + "  " + tag
         tag = None
         out.append((no, line.rstrip()))
@@ -455,6 +639,13 @@ class Tree:
 
         def lines(paths, lang):
             got = _read_blobs([shas[p] for p in paths if p not in overlay])
+            # parse the uncached files across all cores (forked workers share
+            # the blob cache, so only the sha travels)
+            todo = sorted({shas[p] for p in paths if p not in overlay and (shas[p], lang) not in _LINES_CACHE})
+            for sha, v, imps in _pool_map(None, _parse_blob, [(sha, lang) for sha in todo]):
+                _LINES_CACHE[(sha, lang)] = v
+                if imps is not None:
+                    _LINES_CACHE[("imps", sha)] = imps
             res = {}
             for p in paths:
                 if p in overlay:
@@ -511,6 +702,10 @@ class Tree:
         self.lines.update(lines(py, "py"))
         self.gpu_py = set(py)
         self.host_funcs = {}
+        todo = sorted(p for p in self.gpu_mojo
+                      if self._sha.get(p) is not None and ("hf", p, self._sha.get(p)) not in _LINES_CACHE)
+        for p, v in zip(todo, _pool_map(self, "_host_functions", todo)):
+            _LINES_CACHE[("hf", p, self._sha[p])] = v
         for p in self.gpu_mojo:
             k = ("hf", p, self._sha.get(p))
             if self._sha.get(p) is None or k not in _LINES_CACHE:
@@ -659,53 +854,61 @@ class Tree:
             return self._host_exports
         out = {}
         impl = set()
-        for p in sorted(self.gpu_mojo):
-            if "def_function" not in "".join(t for _, t in self.lines.get(p, [])):
-                continue
-            txt = " ".join(t for _, t in self.lines.get(p, []))
-            for m in self._REGISTER.finditer(txt):
-                q, g = self._resolve_fn(p, m.group(1))
-                if q is None:
-                    continue
-                fns = self._closure(q, g)
-                bodies = [self._top_bodies(a).get(b, [])[1:] for a, b in fns]
-                if any(self._ON_DEVICE.search(t) for body in bodies for _, t in body):
-                    continue
-                dev_structs = self.device_structs()
-                if any(m2.group(1) in dev_structs for body in bodies for _, t in body
-                       for m2 in self._DOWNCAST.finditer(t)):
-                    continue
-                loops = False
-                for body in bodies:
-                    for _, t in body:
-                        lm = self._LOOP.match(t)
-                        if lm and (lm.group(1) is None or _runtime_bound(lm.group(1))):
-                            # a reviewed d- or k-sized loop (the mojo-host-loop
-                            # rule's own `small-loop` note, its bound in the
-                            # range) is not CPU work over data
-                            sm = _SMALL_LOOP.search(t)
-                            if sm and lm.group(1) is not None and \
-                                    re.search(r"\b" + re.escape(sm.group(1)) + r"\b", lm.group(1)):
-                                continue
-                            loops = True
-                            break
-                    if loops:
-                        break
-                if loops:
-                    out[m.group(2)] = (q, g)
-                    impl |= fns
-        self._host_exports = out
+        files = [p for p in sorted(self.gpu_mojo)
+                 if "def_function" in "".join(t for _, t in self.lines.get(p, []))]
+        self.device_structs()
         # a function imported under a host-column alias (`f as host_f`: the
         # host fallback of a device export, its _OFF arm) is the host column,
         # with everything it calls
-        for (p, alias), (src, name) in sorted(self.sym_src.items()):
-            if name and src in self.gpu_mojo and _HOST_COLUMN_FN.search(alias) \
-                    and name in self._top_bodies(src):
-                impl |= self._closure(src, name)
+        aliased = sorted({(src, name) for (p, alias), (src, name) in self.sym_src.items()
+                          if name and src in self.gpu_mojo and _HOST_COLUMN_FN.search(alias)})
+        # each registering module and each aliased function is one unit
+        units = [("x", p) for p in files] + [("a", sn) for sn in aliased]
+        for items, fns in _pool_map(self, "_export_unit", units):
+            for name, qg in items:
+                out[name] = qg
+            impl |= fns
+        self._host_exports = out
         # functions that only serve a host export: their loops are charged
         # at the Python call site, once
         self._export_impl = impl
         return out
+
+    def _export_unit(self, unit):
+        """([(export name, (module, function))], functions reached) of one
+        host_exports unit: a registering module, or a host-column alias."""
+        kind, it = unit
+        if kind == "x":
+            _p, items, fns = self._exports_of(it)
+            return items, fns
+        src, name = it
+        return [], (self._closure(src, name) if name in self._top_bodies(src) else set())
+
+    def _exports_of(self, p):
+        """(p, [(export name, (module, function))], functions they reach) of
+        the host exports registered in module p (see host_exports)."""
+        items, impl = [], set()
+        txt = " ".join(t for _, t in self.lines.get(p, []))
+        for m in self._REGISTER.finditer(txt):
+            q, g = self._resolve_fn(p, m.group(1))
+            if q is None:
+                continue
+            fns = self._closure(q, g)
+            bodies = [self._top_bodies(a).get(b, [])[1:] for a, b in fns]
+            if any(self._ON_DEVICE.search(t) for body in bodies for _, t in body):
+                continue
+            dev_structs = self.device_structs()
+            if any(m2.group(1) in dev_structs for body in bodies for _, t in body
+                   for m2 in self._DOWNCAST.finditer(t)):
+                continue
+            # 2026-11-09: a `small-loop` note on a runtime bound no longer
+            # clears the export (a note holds only for a constant bound, which
+            # is not runtime)
+            if any(lm and (lm.group(1) is None or _runtime_bound(lm.group(1)))
+                   for body in bodies for lm in (self._LOOP.match(t) for _, t in body)):
+                items.append((m.group(2), (q, g)))
+                impl |= fns
+        return p, items, impl
 
     def export_impl(self):
         self.host_exports()
@@ -951,10 +1154,116 @@ _PREFILTER = re.compile(r"host|HOST|Host|parallel|MOJOLEARN_|_MIN|np\.|sklearn|r
                         r"|multiprocessing|threading")
 _SCAN_CACHE = {}
 
+# ------------------------------------------------------------ parallel ----
+# Independent files are split across every core (Andrew, 2026-11-05: a serial
+# loop over independent units is a defect). The workers are forked, so they
+# share the parent's Tree and blob cache; each returns plain results. Where
+# fork is unavailable the same work runs in the parent.
+_POOL_TREE = None
 
-def scan_file(tree, path, with_driver=False):
+
+def hook_workers():
+    """Worker processes for the parallel scan: MOJOLEARN_HOOK_WORKERS=N when set
+    (any platform, at least 1), else 4 on macOS (the hooks run on a shared,
+    often loaded laptop) and os.cpu_count() elsewhere (rented hosts and CI)."""
+    env = os.environ.get("MOJOLEARN_HOOK_WORKERS", "").strip()
+    if env:
+        try:
+            return max(1, int(env))
+        except ValueError:
+            pass
+    return 4 if sys.platform == "darwin" else (os.cpu_count() or 1)
+
+
+def _pool_call(arg):
+    method, chunk = arg
+    f = getattr(_POOL_TREE, method) if not callable(method) else (lambda it: method(_POOL_TREE, it))
+    _FALSE_TAG_WHY.clear()  # only what this chunk adds travels back
+    res = [f(it) for it in chunk]
+    return res, dict(_FALSE_TAG_WHY)
+
+
+def _pool_map(tree, method, items):
+    """[method(tree, item)] for each item, in item order, across all cores.
+    method: a Tree method name or a function f(tree, item)."""
+    global _POOL_TREE
+    items = list(items)
+    workers = min(hook_workers(), len(items) // 4)
+    if workers > 1:
+        import multiprocessing
+        _POOL_TREE = tree
+        try:
+            ctx = multiprocessing.get_context("fork")
+            # a few chunks per worker balance uneven files; each chunk sends
+            # its results back in one message
+            n = workers * 4
+            chunks = [items[i::n] for i in range(n)]
+            # freeze the parent's objects so the workers' collector never
+            # touches (and copies) the shared pages, and stop the workers as
+            # soon as their results are in
+            import gc
+            gc.freeze()
+            pool = ctx.Pool(workers, initializer=gc.disable)
+            try:
+                got = pool.map(_pool_call, [(method, c) for c in chunks], chunksize=1)
+            finally:
+                pool.terminate()
+                gc.unfreeze()
+            for _r, why in got:
+                _FALSE_TAG_WHY.update(why)
+            res = [None] * len(items)
+            for i, (r, _w) in enumerate(got):
+                res[i::n] = r
+            return res
+        except (OSError, ValueError, AttributeError):
+            pass
+        finally:
+            _POOL_TREE = None
+    f = (lambda it: getattr(tree, method)(it)) if not callable(method) else (lambda it: method(tree, it))
+    return [f(it) for it in items]
+
+
+def _parse_blob(_tree, item):
+    """(sha, code lines, imports or None) of one blob: one worker's unit."""
+    sha, lang = item
+    v = _code_lines(_BLOB_CACHE.get(sha, ""), lang)
+    return sha, v, (_imports(v) if lang == "mojo" else None)
+
+
+def _scan_one(tree, path):
+    return path, scan_file(tree, path, with_driver=True)
+
+
+def _scan_all(tree, paths):
+    """Scan every path of tree once, across all cores; results live on tree."""
+    done = tree.__dict__.setdefault("_scanned", {})
+    need = [p for p in paths if p not in done]
+    if not need:
+        return
+    if hasattr(tree, "host_exports"):
+        tree.host_exports()  # once, before the fork: every worker shares it
+    keys = {}
+    todo = []
+    for p in need:
+        ck = scan_file(tree, p, key_only=True)
+        if ck is not None and ck in _SCAN_CACHE:
+            done[p] = _SCAN_CACHE[ck]
+            continue
+        keys[p] = ck
+        todo.append(p)
+    for p, r in _pool_map(tree, _scan_one, todo):
+        done[p] = r
+        if keys[p] is not None:
+            _SCAN_CACHE[keys[p]] = r
+
+
+def scan_file(tree, path, with_driver=False, key_only=False):
     """[(rule, line_no, code_text)] for one scoped file; with_driver: also the
-    accepted driver-loop tags, as (findings, [(line_no, text)])."""
+    accepted driver-loop tags, as (findings, [(line_no, text)]). key_only:
+    only the scan cache key (None for an uncommitted file)."""
+    hit = None if key_only else getattr(tree, "__dict__", {}).get("_scanned", {}).get(path)
+    if hit is not None:
+        return hit if with_driver else hit[0]
     lang = "py" if path.endswith(".py") else "mojo"
     lines = tree.lines.get(path, [])
     out = []
@@ -984,6 +1293,8 @@ def scan_file(tree, path, with_driver=False):
     ck = (path, sha, frozenset(host_thread_names), frozenset(host_syms),
           tuple(sorted((k, tuple(v)) for k, v in import_of.items())), frozenset(local_host),
           native, impl)
+    if key_only:
+        return ck if sha is not None else None
     if sha is not None and ck in _SCAN_CACHE:
         res, acc = _SCAN_CACHE[ck]
         return (res, acc) if with_driver else res
@@ -1016,11 +1327,11 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
             return
         if rule == "host-import" and dm_def.match(t):
             return
-        # lane debt-host-misc (2026-10-21): Python that loads a host binding
-        # for an explicit CPU-only input step before the runtime (text
-        # tokenization, file handling) says so on the line, as CLAUDE.md asks:
-        # `# cpu-route: <reason of 3+ words>`. Mojo lines never qualify.
-        if rule == "host-module" and lang == "py" and _CPU_ROUTE.search(t):
+        # 2026-11-09: a `# cpu-route:` note on a host-module load exempts
+        # nothing any more (AGENTS.md: cpu-route tags are debt to remove). A
+        # load that connects a binding once at import says `# import-time:`
+        # (lane p5-cpu-route-relabel-and-dead-code).
+        if rule == "host-module" and lang == "py" and _IMPORT_TIME.search(t):
             return
         # lane py-runtime round 3: sklearn's own interface (the tags it asks
         # an estimator for) imports sklearn only when sklearn calls in; a
@@ -1058,7 +1369,7 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
             if not flagged[no] & {"host-threads", "host-import", "host-exec"}:
                 add("host-call", no, t)
     if lang != "mojo":
-        for rule, no, t in _py_compute(lines):
+        for rule, no, t in _py_compute(lines, accepted):
             add(rule, no, t)
         for no, t in _py_native_host(lines, native):
             add("py-native-host", no, t)
@@ -1211,7 +1522,68 @@ def _one_arg(s):
     return n == 0
 
 
-def _py_compute(lines):
+# 2026-11-09: `# glue:` and `# cpu-route:` notes exempt nothing here any more
+# (AGENTS.md: cpu-route tags are debt, never exemptions). A Python loop holds
+# only with a loop tag on its line or on the comment-only line above, and the
+# tag is checked: `# driver-loop: over <what>` must walk model structure (the
+# LOOP-TAG VOCABULARY), `# small-loop(<bound>...)` needs a constant bound the
+# line uses. Also seen now: `while` loops (py-while-loop), iteration inside one
+# call (py-iter-call: map(f, ...) with a non-operator callable, list(<iterable>),
+# dict.fromkeys, itertools.chain, zip, enumerate) and binary arithmetic on
+# numbers (py-scalar-arith).
+_PY_WHILE = re.compile(r"^\s*while\b")
+_PY_ITER_CALL = re.compile(
+    r"(?<![\w.])map\(\s*(?!operator\.)[^\s)]"
+    r"|(?<![\w.])list\(\s*[^\s)]"
+    r"|\.fromkeys\s*\("
+    r"|\bitertools\.chain\b|(?<![\w.])chain(?:\.from_iterable)?\s*\("
+    r"|(?<![\w.])(zip|enumerate)\s*\(")
+# a binary arithmetic operator between two operands (strings are blanked
+# first, so `"a" + b` is not arithmetic), or an augmented assignment
+_PY_ARITH = re.compile(r"(?<=[\w)\]])\s*(\*\*|//|[-+*/%])(?![=*/])\s*(?=[\w(.]|\[(?!\s*\]))"
+                       r"|(?<=[\w)\]])\s*(\*\*|//|[-+*/%])=")
+_PY_NOT_ARITH = re.compile(r"^\s*(@|class\s|import\s|from\s+\S+\s+import\b|raise\b|assert\b)")
+
+
+def _py_arith(code):
+    """True when the code line does binary arithmetic on numbers."""
+    if _PY_NOT_ARITH.match(code):
+        return False
+    c = re.sub(r"\b\d+(?:\.\d*)?[eE][-+]?\d+\b", "1", code)  # 1e-6 is one number
+    c = re.sub(r"->\s*[\w\[\], .]+", "", c)  # a return annotation
+    for m in _PY_ARITH.finditer(c):
+        before = c[:m.start()].rstrip()
+        # `*args`/`**kw` and keyword unpacking start an argument, not arithmetic
+        if m.group(1) in ("*", "**") and before.endswith((",", "(")):
+            continue
+        # a sign or an unpacking after a keyword (`return -1`, `x if c else -y`)
+        if re.search(r"(?<![\w.])(return|yield|in|not|and|or|if|else|elif|is|await|lambda|print)$", before):
+            continue
+        return True
+    return False
+
+
+def _py_tag(t, code, accepted=None, no=0):
+    """None when line t carries a loop tag that holds (the tag is counted in
+    accepted), else the reason the loop is a finding."""
+    if _DRIVER_TAG.search(t):
+        verdict, word = _tag_verdict(t)
+        if verdict == "data":
+            return f"false driver-loop tag: the loop walks data (`{word}`), not model structure"
+        if accepted is not None:
+            accepted.append((no, t))
+        return None
+    sm = _SMALL_LOOP_ANY.search(t)
+    if sm:
+        if _small_bound_ok(sm.group(1), code):
+            if accepted is not None:
+                accepted.append((no, t))
+            return None
+        return "small-loop note without a constant bound the line uses"
+    return ""
+
+
+def _py_compute(lines, accepted=None):
     out = []
     def_ind = []  # indents of enclosing defs
     for no, t in lines:
@@ -1222,16 +1594,20 @@ def _py_compute(lines):
         if re.match(r"(async\s+)?def\s", st):
             def_ind.append(ind)
             continue
-        if not def_ind or _GLUE.search(t) or _CPU_ROUTE.search(t):
+        if not def_ind:
             continue
         code = _PY_STR.sub('""', t.split("  #", 1)[0] if "  #" in t else t)
-        # a reviewed d- or k-sized walk names its bound, and the bound must
-        # appear in the line's code (as the Mojo small-loop note requires)
-        sm = _SMALL_LOOP.search(t)
-        if sm and re.search(r"\b" + re.escape(sm.group(1)) + r"\b", code):
-            continue
-        if _PY_FOR.search(code):
-            out.append(("py-data-loop", no, t))
+        is_for = bool(_PY_FOR.search(code))
+        if is_for or _PY_WHILE.match(code):
+            why = _py_tag(t, code, accepted, no)
+            if why is not None:
+                out.append(("py-data-loop" if is_for else "py-while-loop", no, t))
+                if why:
+                    _FALSE_TAG_WHY[("", _norm(t))] = why
+        elif _PY_ITER_CALL.search(code):
+            why = _py_tag(t, code, accepted, no)
+            if why is not None:
+                out.append(("py-iter-call", no, t))
         for m in _NP_CALL.finditer(code):
             if m.group(1).split(".")[0] not in _NP_GLUE:
                 out.append(("py-np-compute", no, t))
@@ -1246,6 +1622,8 @@ def _py_compute(lines):
             out.append(("py-fsum", no, t))
         if _PY_MAP_ARITH.search(code):
             out.append(("py-map-arith", no, t))
+        if _py_arith(code):
+            out.append(("py-scalar-arith", no, t))
     return out
 
 
@@ -1273,7 +1651,7 @@ def _py_native_host(lines, names):
         if re.match(r"(async\s+)?def\s", st):
             def_ind.append(ind)
             continue
-        if not def_ind or _GLUE.search(t) or _CPU_ROUTE.search(t):
+        if not def_ind:
             continue
         code = t.split("  #", 1)[0] if "  #" in t else t
         if attr.search(_PY_STR.sub('""', code)) or lit.search(code):
@@ -1443,11 +1821,15 @@ def _downloaded_names(lines, topidx):
     return local, fields
 
 
-def _driver_tag_reason(rng, inner, local, fields):
+def _driver_tag_reason(rng, inner, local, fields, line=""):
     """None when a tagged loop is a driver loop, else why the tag is false."""
     dm = _DRIVER_DENY.search(rng)
     if dm:
         return f"its range names the data size `{dm.group(0)}`"
+    if line:
+        verdict, word = _tag_verdict(line)
+        if verdict == "data":
+            return f"it walks data (`{word}`), not model structure"
     for n in sorted(local):
         if re.search(r"\blen\(\s*" + re.escape(n) + r"\s*\)", rng):
             return f"its range is the length of the downloaded buffer `{n}`"
@@ -1525,13 +1907,14 @@ def _mojo_host_loops(lines, path, impl=frozenset(), skip=frozenset(), accepted=N
             ifs.append((ind, bool(_DEBUG_IF.match(t))))
             continue
         o = owner[k]
-        if o is None or skipdef.get(o) or not t.lstrip().startswith("for "):
+        is_while = t.lstrip().startswith("while ")
+        if o is None or skipdef.get(o) or not (t.lstrip().startswith("for ") or is_while):
             continue
         if no in skip or any(d for _, d in ifs) or lines[k - 1][1].strip().startswith("@parameter"):
             continue
         if _DRIVER_TAG.search(t):
             code = t.split("#", 1)[0]
-            dr = re.match(r"\s*for\s+.+?\s+in\s+(.*):\s*$", code)
+            dr = re.match(r"\s*for\s+.+?\s+in\s+(.*):\s*$", code) or re.match(r"\s*while\s+(.*?):?\s*$", code)
             rng = dr.group(1) if dr else code
             inner = []
             for _, t2 in lines[k + 1:]:
@@ -1540,7 +1923,7 @@ def _mojo_host_loops(lines, path, impl=frozenset(), skip=frozenset(), accepted=N
                 inner.append(t2)
             if dl is None:
                 dl = _downloaded_names(lines, topidx)
-            why = _driver_tag_reason(rng, inner, dl[0].get(topidx[k], set()), dl[1])
+            why = _driver_tag_reason(rng, inner, dl[0].get(topidx[k], set()), dl[1], t)
             if why is None:
                 if accepted is not None:
                     accepted.append((no, t))
@@ -1548,18 +1931,35 @@ def _mojo_host_loops(lines, path, impl=frozenset(), skip=frozenset(), accepted=N
                 _FALSE_TAG_WHY[(path, _norm(t))] = why
                 out.append((no, t))
             continue
+        code = t.split("#", 1)[0]
+        if is_while:
+            # an untagged `while` over a data size whose body stores or appends
+            # (2026-11-09; `while` loops were invisible before)
+            cond = re.match(r"\s*while\s+(.*?):?\s*$", code)
+            cond = cond.group(1) if cond else ""
+            if not (_DRIVER_DENY.search(cond) or _judge_text(cond)[0] == "data"):
+                continue
+            inner = []
+            for _, t2 in lines[k + 1:]:
+                if len(t2) - len(t2.lstrip()) <= ind:
+                    break
+                inner.append(t2)
+            if any(_DRIVES_DEVICE.search(x) for x in inner):
+                continue
+            if any(re.search(r"\]\s*=[^=]|\.append\(|\bstore\w*\s*[\[(]", x) for x in inner):
+                out.append((no, t))
+                until = ind
+            continue
         # the owner's rule counts rows, features, classes and members alike:
         # any runtime bound is data-sized; a walk over a List is too
-        code = t.split("#", 1)[0]
         rm = re.match(r"\s*for\s+(\w+)\s+in\s+range\(\s*(.*)\)\s*:", code) or \
             re.match(r"\s*for\s+(\w+)\s+in\s+()([\w.\[\]]+)\s*:", code)
         if not rm or (rm.group(2) and not _runtime_bound(rm.group(2))):
             continue
         if not rm.group(2) and not re.search(r"\[\]|\w$", rm.group(3)):
             continue
-        sm = _SMALL_LOOP.search(t)
-        if sm and re.search(r"\b" + re.escape(sm.group(1)) + r"\b", rm.group(2)):
-            continue
+        # 2026-11-09: the `small-loop` note no longer clears a runtime bound
+        # (it holds only for a constant bound, which never reaches this line)
         var = rm.group(1)
         # the body touches data with the loop variable (an index, a load or a
         # store at it, an append), and drives no device work (a loop that
@@ -1589,7 +1989,9 @@ def _norm(t):
 def tree_findings(tree, paths=None):
     """[(key, line_no)] where key = (rule, path, normalized text, occurrence)."""
     res = []
-    for p in (paths if paths is not None else tree.scoped()):
+    ps = list(paths if paths is not None else tree.scoped())
+    _scan_all(tree, ps)
+    for p in ps:
         seen = collections.Counter()
         for rule, no, t in sorted(scan_file(tree, p), key=lambda x: (x[1], x[0])):
             n = _norm(t)
@@ -1598,14 +2000,20 @@ def tree_findings(tree, paths=None):
             res.append(((rule, p, n, occ), no))
     return res
 
-def tree_driver_loops(tree, paths=None):
-    """Counter {path: accepted driver-loop tags}."""
+def tree_driver_loops(tree, paths=None, verdicts=None):
+    """Counter {path: accepted loop tags} (Mojo and Python). verdicts, a
+    Counter, receives them by verdict: structure, unknown (could not judge),
+    small-loop (a constant bound)."""
     c = collections.Counter()
-    for p in (paths if paths is not None else tree.scoped()):
-        if p.endswith(".mojo"):
-            _, acc = scan_file(tree, p, with_driver=True)
-            if acc:
-                c[p] += len(acc)
+    ps = list(paths if paths is not None else tree.scoped())
+    _scan_all(tree, ps)
+    for p in ps:
+        _, acc = scan_file(tree, p, with_driver=True)
+        if acc:
+            c[p] += len(acc)
+            if verdicts is not None:
+                for _no, t in acc:
+                    verdicts["small-loop" if not _DRIVER_TAG.search(t) else _tag_verdict(t)[0]] += 1
     return c
 
 
@@ -1614,6 +2022,9 @@ def _why(rule, path, text):
     w = _FALSE_TAG_WHY.get((path, text))
     if rule == "mojo-host-loop" and w:
         return f"false driver-loop tag: {w}"
+    w = _FALSE_TAG_WHY.get(("", text))
+    if rule in ("py-data-loop", "py-while-loop") and w:
+        return w
     return _RULE_WHY.get(rule, "")
 
 # ------------------------------------------------------------- baseline ----
@@ -1626,7 +2037,11 @@ _HDR = "rule\tclass\towner\tstate\tpath\tocc\ttext"
 # `owed-py` is the same for the Python glue-only rules (Oct 3): hooks
 # installed before them know `owed` but not these rules, so they skip only a
 # state they do not know.
-_DEBT_STATES = ("debt", "owed", "owed2", "owed-py")
+# `owed-tags` is the same for the rules of 2026-11-09 (judged loop tags, no
+# free-text exemptions, while loops, iteration inside calls, scalar
+# arithmetic): main's findings of them were written once, from main's tree, and
+# hooks installed before them skip the state.
+_DEBT_STATES = ("debt", "owed", "owed2", "owed-py", "owed-tags")
 # rules added after the baseline was first written; a baseline with no row of
 # one predates it (see check_tree)
 _LATE_RULES = ("d2h-host-work", "one-block-n", "block-per-n", "py-data-loop", "py-np-compute", "py-reduce",
@@ -1667,7 +2082,9 @@ def dump_baseline(rows):
             "# state debt = on main; inflight = pre-authorized lines of an open PR; owed = debt of a rule\n"
             "# newer than the installed hooks (they skip it); owed-py = the same for the Python\n"
             "# glue-only rules (py-data-loop, py-np-compute, py-reduce, py-array-method, py-fsum,\n"
-            "# py-map-arith).\n"
+            "# py-map-arith); owed-tags = the same for the 2026-11-09 loop-tag rules (py-while-loop,\n"
+            "# py-iter-call, py-scalar-arith, and lines a glue/cpu-route/small-loop note no longer exempts).\n"
+            "# A row main's baseline lacks holds only for a finding main's own tree carries.\n"
             "# A `# why: ...` line gives the reason the next row stays (required for d2h-host-work).\n")
     return head + _HDR + "\n" + "".join(
         (f"# why: {r['why']}\n" if r.get("why") else "")
@@ -1727,9 +2144,16 @@ def check_tree(ref, baseline_path=None, overlay=None, quiet=False, branch=False)
     rows = load_baseline(btext)
     tree = Tree(ref, overlay)
     found = tree_findings(tree)
+    if not overlay:
+        tip = _git("rev-parse", ref + "^{commit}")
+        if tip.returncode == 0:
+            _FINDINGS_CACHE.setdefault(tip.stdout.strip(), collections.Counter(k for k, _ in found))
     owed_found = [(k, no) for k, no in found if k[0] in _OWED_RULES]
     found = [(k, no) for k, no in found if k[0] not in _OWED_RULES]
     debt_keys = collections.Counter(_key(r) for r in rows if r["state"] in _DEBT_STATES)
+    grown_refused = collections.Counter()
+    if own:
+        debt_keys, grown_refused = _restrict_to_main(debt_keys, ref, quiet)
     infl_keys = collections.Counter(_key(r) for r in rows if _inflight_ok(r["state"], ref))
     allowed_extra = collections.Counter()
     # a rule newer than the tree's baseline (no row of it, so the baseline was
@@ -1743,7 +2167,7 @@ def check_tree(ref, baseline_path=None, overlay=None, quiet=False, branch=False)
         if mb.returncode != 0:
             mb = _git("merge-base", "origin/main", ref)
         if mb.returncode == 0:
-            base_found = [(k, no) for k, no in tree_findings(Tree(mb.stdout.strip()))
+            base_found = [(k, 0) for k in _findings_at(mb.stdout.strip()).elements()
                           if k[0] not in _OWED_RULES]
             base_debt = collections.Counter(_key(r) for r in rows if r["state"] in _DEBT_STATES)
             for k, _ in base_found:
@@ -1768,7 +2192,7 @@ def check_tree(ref, baseline_path=None, overlay=None, quiet=False, branch=False)
         at_main = (own and mb.returncode == 0 and tip.returncode == 0
                    and tip.stdout.strip() == mb.stdout.strip())
         if mb.returncode == 0 and not at_main:
-            allowed_extra = collections.Counter(k for k, _ in tree_findings(Tree(mb.stdout.strip()))
+            allowed_extra = collections.Counter(k for k in _findings_at(mb.stdout.strip()).elements()
                                                 if not own or k[0] in late)
     found_keys = collections.Counter(k for k, _ in found)
     new, matched_infl = [], []
@@ -1792,14 +2216,16 @@ def check_tree(ref, baseline_path=None, overlay=None, quiet=False, branch=False)
         else:
             new_owed.append((k, no))
     new += new_owed
-    bad = bool(new or stale or (own and matched_infl))
+    bad = bool(new or stale or (own and matched_infl) or grown_refused)
     if not quiet:
         summary(rows)
         owed_summary(owed)
-        drv = tree_driver_loops(tree)
+        verdicts = collections.Counter()
+        drv = tree_driver_loops(tree, verdicts=verdicts)
         if drv:
             print(f"no-host-routes driver-loop (allowed, not debt): {sum(drv.values())} tagged host loops over "
-                  "model structure; top files: "
+                  f"model structure ({verdicts['structure']} judged structure, {verdicts['unknown']} could not "
+                  f"be judged and are kept, {verdicts['small-loop']} constant-bound small-loop notes); top files: "
                   + ", ".join(f"{k} {v}" for k, v in drv.most_common(8)), file=sys.stderr)
     if new:
         print(f"no-host-routes: REFUSED. {len(new)} finding(s) of CPU work in GPU code "
@@ -1815,6 +2241,11 @@ def check_tree(ref, baseline_path=None, overlay=None, quiet=False, branch=False)
             print(f"  {p}: [{rule}] #{occ}: {n[:110]}", file=sys.stderr)
         if len(stale) > 40:
             print(f"  ... {len(stale) - 40} more", file=sys.stderr)
+    if grown_refused:
+        print(f"no-host-routes: REFUSED. {sum(grown_refused.values())} baseline row(s) are not in main's "
+              "baseline and main's tree does not carry them (the baseline only shrinks):", file=sys.stderr)
+        for (rule, p, n, occ), _c in sorted(grown_refused.items())[:40]:
+            print(f"  {p}: [{rule}] #{occ}: {n[:110]}", file=sys.stderr)
     if own and matched_infl:
         print(f"no-host-routes: REFUSED. {len(matched_infl)} in-flight row(s) are now in the "
               "tree: mark them debt (`--prune-baseline`):", file=sys.stderr)
@@ -1823,23 +2254,83 @@ def check_tree(ref, baseline_path=None, overlay=None, quiet=False, branch=False)
     return 1 if bad else 0
 
 
+def _main_sha():
+    for m in ("refs/remotes/origin/main", "origin/main"):
+        r = _git("rev-parse", "--verify", "--quiet", m + "^{commit}")
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    return None
+
+
+# The tree the 2026-11-09 baseline was regenerated from (the integration head
+# the loop-tag rules were written on). Its findings were debt before the rules
+# could see them; a tree that contains it may carry them until main does.
+_REGEN_ANCHOR = "e68654a7579a3abeef7a97c63ca1a001a7de8a8f"
+
+
+def _restrict_to_main(debt_keys, ref, quiet=False):
+    """(debt keys that hold, keys refused): the baseline only shrinks. A row
+    main's baseline (and the ref's baseline where it left main) lacks holds only for a finding main's own tree carries
+    under this checker, or the regeneration anchor's tree when ref contains
+    the anchor (debt that a stricter rule made visible); a finding a branch
+    adds never does."""
+    main = _main_sha()
+    if main is None:
+        return debt_keys, collections.Counter()
+    r = _git("show", f"{main}:{BASELINE}")
+    if r.returncode != 0:
+        return debt_keys, collections.Counter()
+    main_keys = collections.Counter(_key(x) for x in load_baseline(r.stdout) if x["state"] in _DEBT_STATES)
+    # rows the ref already had where it left main (an old tree judged later,
+    # after main fixed them) are its own history, not growth
+    mb = _git("merge-base", main, ref)
+    if mb.returncode == 0 and mb.stdout.strip() and mb.stdout.strip() != main:
+        r2 = _git("show", f"{mb.stdout.strip()}:{BASELINE}")
+        if r2.returncode == 0:
+            main_keys |= collections.Counter(_key(x) for x in load_baseline(r2.stdout)
+                                             if x["state"] in _DEBT_STATES)
+    grown = debt_keys - main_keys
+    if not grown:
+        return debt_keys, collections.Counter()
+    tip = _git("rev-parse", ref + "^{commit}").stdout.strip()
+    on_main = grown if tip == main else _findings_at(main)
+    refused = grown - on_main
+    if refused and _git("merge-base", "--is-ancestor", _REGEN_ANCHOR, ref).returncode == 0:
+        refused = refused - _findings_at(_REGEN_ANCHOR)
+    if not quiet and grown - refused:
+        print(f"no-host-routes: {sum((grown - refused).values())} baseline row(s) main's baseline lacks hold "
+              "because main's tree carries the finding", file=sys.stderr)
+    return debt_keys - refused, refused
+
+
+_FINDINGS_CACHE = {}
+
+
+def _findings_at(sha):
+    """Counter of the finding keys (owed rules included) of a commit."""
+    if sha not in _FINDINGS_CACHE:
+        _FINDINGS_CACHE[sha] = collections.Counter(k for k, _ in tree_findings(Tree(sha)))
+    return _FINDINGS_CACHE[sha]
+
+
 _OWED_CACHE = {}
 
 
 def _owed_findings(sha):
     if sha not in _OWED_CACHE:
         _OWED_CACHE[sha] = collections.Counter(
-            k for k, _ in tree_findings(Tree(sha)) if k[0] in _OWED_RULES)
+            {k: c for k, c in _findings_at(sha).items() if k[0] in _OWED_RULES})
     return _OWED_CACHE[sha]
 
 
 def owed_allowance(ref):
     """Owed findings a tree may carry: those already in its merge-base with the
-    owed anchor and in its merge-base with main (the larger count of each).
+    owed anchor, with the 2026-11-09 regeneration tree (_REGEN_ANCHOR: loops
+    the judged tags made visible) and with main (the larger count of each).
     Everything else of an owed rule is new CPU work and is refused."""
     allowed = collections.Counter()
     bases = set()
-    for other in (_OWED_ANCHOR, "refs/remotes/origin/main", "origin/main"):
+    for other in (_OWED_ANCHOR, _REGEN_ANCHOR, "refs/remotes/origin/main", "origin/main"):
         mb = _git("merge-base", other, ref)
         if mb.returncode == 0 and mb.stdout.strip():
             bases.add(mb.stdout.strip())

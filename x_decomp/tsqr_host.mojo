@@ -17,7 +17,6 @@ THE FACTORED STATE. `ts_factor_host(..., keep=True)` keeps the factored
 matrix, the panels' T factors, the tree tiles and the tree's tau in ONE
 process slot until `ts_apply_host` (or `ts_free_host`) uses it; a new factor
 replaces it."""
-from std.ffi import _Global
 from std.memory import memcpy
 
 from checks.numerics import ftz, identical_div, identical_sqrt
@@ -44,6 +43,7 @@ from x_decomp.tsqr_core import (
     ts_scale,
     ts_tree_fold,
 )
+from core.shared_slot import SharedSlot
 
 comptime _TT = TS_NB * TS_NB
 
@@ -69,7 +69,7 @@ struct _TsHost(Defaultable, Movable):
         self.live = False
 
 
-comptime TS_HOST_STATE = _Global[StorageType=_TsHost, name="MojoXDecompTsqrHost", init_fn=_TsHost.__init__]
+comptime TS_HOST_STATE = SharedSlot[_TsHost, "MojolearnXDecompTsqrHostV1"]
 
 
 def ts_free_host() raises:

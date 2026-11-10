@@ -47,7 +47,8 @@ from bindings.neighbors_knn_native import knn_door
 from core.host_finite_scan import host_finite_status
 from core.admitted_input import admitted_cast_f32
 from core.cast_in import CAST_KIND_FLOAT
-from bindings.admitted_input import admitted_finite_refuse, admitted_finite_wording
+from bindings.admitted_input import admitted_finite_refuse
+from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.p3nc_fitted_freeze import fitted_freeze
 
 

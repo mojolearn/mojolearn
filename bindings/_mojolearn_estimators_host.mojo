@@ -605,7 +605,9 @@ def pca_fit_randomized_binding(
     the GPU binding's contract. params: n_rows, n_features, n_components,
     n_oversamples, power iterations, auto (1: iterated_power='auto'),
     whiten, the Philox seed mod 2^32. Returns the noise variance."""
-    if len(params) != 8:
+    # Lane a8d: an optional ninth value, the finite flag: 1 asks for X's
+    # finite status word (returned as [noise, word]; a flagged X is not fit).
+    if len(params) != 8 and len(params) != 9:
         raise Error("pca_fit_randomized: params must contain rows, features, components, oversamples, iterations, auto, whiten, seed")
     var x_address = Int(py=x_addr)
     var cp = f32_ptr(Int(py=components_addr))
@@ -623,11 +625,17 @@ def pca_fit_randomized_binding(
     var auto = Int(py=params[5]) != 0
     var whiten = Int(py=params[6]) != 0
     var s = Int(py=params[7])
+    var test = len(params) == 9 and Int(py=params[8]) != 0
+    var word = List[Int32](length=1, fill=Int32(0))
+    var word_addr = Int(word.unsafe_ptr()) if test else 0
     var noise = Float64(0.0)
     with GILReleased(Python()):
         noise = pca_randomized_owned_host_run(
-            x_address, cp, mp, ep, rp, sp, nr, nf, nc, oversamples, iterations, auto, s, op, oa != 0, whiten
+            x_address, cp, mp, ep, rp, sp, nr, nf, nc, oversamples, iterations, auto, s, op, oa != 0, whiten,
+            word_addr,
         )
+    if test:
+        return Python.list(PythonObject(noise), PythonObject(Int(word[0])))
     return PythonObject(noise)
 
 
@@ -1205,18 +1213,24 @@ def qn_decision_function_binding(
     absent or below 3 is the binary shape; `n_classes > 2` the softmax
     shape by `host_qn_decision_multi`, `w` the column-major `C x dims`
     block and out `n_rows * n_classes` floats row-major. Returns 0."""
-    if len(params) != 3 and len(params) != 4:
-        raise Error("qn_decision_function: params must contain n_rows, n_features, fit_intercept and an optional n_classes")
+    # lane a8c: an optional 5th, the host address of the deferred finite
+    # status word of X (the GPU binding's contract): the host column tests
+    # the words it reads (core/host_finite_scan.mojo, parallel SIMD tasks)
+    if len(params) < 3 or len(params) > 5:
+        raise Error("qn_decision_function: params must contain n_rows, n_features, fit_intercept, an optional n_classes and an optional status address")
     var x_address = _index(x_addr)
     var w_address = _index(coef_addr)
     var op = f32_ptr(_index(out_addr))
     var nr = _index(params[0])
     var nf = _index(params[1])
     var fi = _index(params[2]) != 0
-    var nc = _index(params[3]) if len(params) == 4 else 1
+    var nc = _index(params[3]) if len(params) >= 4 else 1
+    var status = _index(params[4]) if len(params) == 5 else 0
     with GILReleased(Python()):
         _positive(nr, "n_rows")
         _positive(nf, "n_features")
+        if status != 0:
+            i32_ptr(status)[0] = host_finite_status(x_address, nr * nf)
         # DEVIATION 2920: X read in place, the rows split across the host
         # thread policy, the scores written straight to `out`.
         if nc > 2:
@@ -1246,9 +1260,11 @@ def qn_proba_binding(
     words, `predict_log_proba`) instead of `p`. Returns 0."""
     # ne2-g-linear (N361): the GPU binding's contract; log_proba in the same
     # call (was qn_proba then a py2mojo_rows crossing over the output).
-    if len(params) != 4 and len(params) != 5:
-        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes and an optional log flag")
-    var log_out = len(params) == 5 and _index(params[4]) != 0
+    # lane a8c: an optional 6th, the deferred finite status word's address
+    if len(params) < 4 or len(params) > 6:
+        raise Error("qn_proba: params must contain n_rows, n_features, fit_intercept, n_classes, an optional log flag and an optional status address")
+    var log_out = len(params) >= 5 and _index(params[4]) != 0
+    var status = _index(params[5]) if len(params) == 6 else 0
     var x_address = _index(x_addr)
     var w_address = _index(coef_addr)
     var op = f64_ptr(_index(out_addr))
@@ -1262,6 +1278,8 @@ def qn_proba_binding(
     with GILReleased(Python()):
         _positive(nr, "n_rows")
         _positive(nf, "n_features")
+        if status != 0:
+            i32_ptr(status)[0] = host_finite_status(x_address, nr * nf)
         if nt > 2:
             host_qn_decision_multi_into(
                 f32_ptr(x_address), f32_ptr(w_address), sp, nr, nf, nt, fi,
@@ -1288,11 +1306,13 @@ def qn_predict_binary_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """Host binary `qn_predict`, the GPU binding's address contract."""
-    if len(params) != 3:
-        raise Error("qn_predict_binary: params must contain n_rows, n_features, fit_intercept")
+    # lane a8c: an optional 4th, the deferred finite status word's address
+    if len(params) != 3 and len(params) != 4:
+        raise Error("qn_predict_binary: params must contain n_rows, n_features, fit_intercept and an optional status address")
     var nr = _index(params[0])
     var nf = _index(params[1])
     var fi = _index(params[2]) != 0
+    var status = _index(params[3]) if len(params) == 4 else 0
     var op = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_index(out_addr))
     # Every PythonObject is read BEFORE the GIL is released. `_index` calls
     # into the interpreter, and calling it inside GILReleased (as this entry
@@ -1303,6 +1323,8 @@ def qn_predict_binary_binding(
     with GILReleased(Python()):
         _positive(nr, "n_rows")
         _positive(nf, "n_features")
+        if status != 0:
+            i32_ptr(status)[0] = host_finite_status(Int(xp), nr * nf)
         host_qn_predict_binary_into(
             xp, wp, op, nr, nf, fi, host_predict_task_count(nr),
         )

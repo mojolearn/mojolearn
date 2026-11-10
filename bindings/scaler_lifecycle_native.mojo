@@ -21,7 +21,8 @@ from bindings.classical_archive_read import classical_archive_read, _archive_exa
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.classical_pandas import native_pandas_exact, classical_admit_value
-from bindings.scaler_tags_native import scaler_tags
+# TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
+# Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
 from bindings.prep_entry_cache import prep_mode_checked
 from bindings.sequential_inputs import sequential_input
 from bindings.sequential_admission import _ordinary_torch
@@ -707,8 +708,6 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                 _ = py_call(fields.clear)
                 _ = scaler_initialize(model,values)
             result = model
-        elif op == "tags":
-            result = scaler_tags(model,context,Python.tuple("float32"))
         elif op == "is_fitted":
             result = PythonObject(_fitted(py_fields(model)))
         elif op == "transform":

@@ -27,7 +27,7 @@ from bindings.py_attr import py_attr
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_wrap_array, _store_code
-from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end, admitted_scope_open, admitted_hold, admitted_is_held
+from bindings.admitted_registry import admitted_scope_begin, admitted_scope_end, admitted_scope_open, admitted_hold, admitted_hold_rows_of, admitted_is_held
 from bindings.trees_public_inputs import (
     TreesLabels, trees_builtins, trees_table, trees_entry, trees_helper,
     trees_reshape, trees_address, trees_itemsize,
@@ -55,9 +55,17 @@ from bindings.prep_native_estimator import (
     prep_estimator_plan, prep_native_context, prep_native_split, prep_entry_call,
 )
 from bindings.classical_labels import _label_list, classical_score_from_codes
+from bindings.p3_labels_metrics_native import p3_interleave_columns
 from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.classical_pandas import native_pandas_exact
 from bindings.native_buffer_owner import native_buffer_view
+from bindings.native_unit_threads import (
+    native_unit_threads_run, native_unit_gil_enter, native_unit_gil_leave, native_unit_jobs, NativeUnitFailure,
+    native_unit_gate, native_unit_gate_enter, native_unit_gate_leave, native_unit_device_workers,
+)
+from core.host_parallel import host_fp_env, host_fp_env_set
+from std.python._cpython import GILReleased
+from std.ffi import c_int, external_call
 from bindings.native_array_storage import native_array_from_values
 from bindings.msel_inputs import msel_admit, msel_input_count
 from bindings.trees_meta_admission import meta_admit_configuration
@@ -909,10 +917,12 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
         var Xte = _gather(xt, trees_address(x_view), n, d, te_view, cols_view, context)
         _ = Xa  # keep the Python object alive through the native call above
         if admitted_is_held(Xa):
-            # Rows of a held (finite) X are finite: the fold's members read
-            # the fold matrices as admitted too.
-            admitted_hold(Xtr, trees_address(Xtr), Int(py=tr_view.shape[0]), d)
-            admitted_hold(Xte, trees_address(Xte), Int(py=te_view.shape[0]), d)
+            # Rows of a held X carry its verdict (finite rows of a finite X;
+            # rows of an X an outer cross-validation held with its finite
+            # test deferred stay deferred and linked to it, lane s2): the
+            # fold's members read the fold matrices as admitted too.
+            admitted_hold_rows_of(Xa, Xtr, trees_address(Xtr), Int(py=tr_view.shape[0]), d)
+            admitted_hold_rows_of(Xa, Xte, trees_address(Xte), Int(py=te_view.shape[0]), d)
         for i in range(len(active.ests)):  # driver-loop: over members
             var e = _clone(active.ests[i], context)
             _fit_member(e, Xtr, y_tr, w_tr, context)
@@ -1375,22 +1385,25 @@ def _multioutput_assemble(model: PythonObject, Xa: PythonObject, codes: PythonOb
     for j in range(len(lists)):  # driver-loop: over members (each column's first label)
         if len(lists[j]) > 0 and not Bool(py=py_call(b.isinstance, lists[j][0], b.int)):
             ints = False
-    var zipped = py_call(b.list, py_call(b.map, b.list, _call_kw(b.zip, py_call(b.tuple, lists), Python.dict())))  # cpu-route: label objects (str/mixed) no Array holds
     # Pack exact int/float/bool label objects (bool classes) into one numeric
     # store as before. Any other label object (str, mixed) cannot live in a
-    # numeric Array: native_array_from_values refuses it, which made every
-    # string-label multi-output predict raise. Those outputs are returned as
-    # the per-row label lists (one list of m labels per row), the same label
-    # objects the single-output classifiers return for str classes.
-    var flat = Python.list()
-    for i in range(len(zipped)):  # driver-loop: completed output labels
-        _ = py_call(flat.extend, zipped[i])
+    # numeric Array: native_array_from_values refuses it. Those outputs are
+    # returned as the per-row label lists (one list of m labels per row), the
+    # same label objects the single-output classifiers return for str classes.
+    # Lane p2-labels-lists-arrays: the row-major labels are filled in C
+    # (p3_interleave_columns: one slice assignment per column); the extend
+    # per row is gone. The per-row label lists are built only when the
+    # numeric store refuses the labels, by C zip/map over the columns: one
+    # new list per row is Python object output a kernel file cannot build,
+    # main's recorded debt (tools/hooks/compute_in_shells_baseline.txt).
+    var flat = p3_interleave_columns(lists, n)
     var store = PythonObject(None)
     try:
         store = native_array_from_values("q" if ints else "d", flat)
     except:
+        var zipped = py_call(b.list, py_call(b.map, b.list, _call_kw(b.zip, py_call(b.tuple, lists), Python.dict())))  # cpu-route: label objects (str/mixed) no Array holds
         return zipped
-    return classical_wrap_array(store, Python.tuple(len(zipped), len(cols)), "<i8" if ints else "<f8", "C", context)
+    return classical_wrap_array(store, Python.tuple(n, len(cols)), "<i8" if ints else "<f8", "C", context)
 
 
 def _multioutput_classifier_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1672,7 +1685,7 @@ def _calibrated_validate(model: PythonObject, context: PythonObject) raises:
     var method = _attr(model, "method", PythonObject("sigmoid"))
     if not py_contains(Python.tuple("sigmoid", "isotonic"), method):
         raise Error("method must be 'sigmoid' or 'isotonic'")
-    _refuse_jobs(model, False, "the folds fit one after another.")
+    _ = native_unit_jobs(_attr(model, "n_jobs", PythonObject(None)), "CalibratedClassifierCV")
     var ensemble = _attr(model, "ensemble", PythonObject(True))
     if not py_contains(Python.tuple(True, False), ensemble):
         _refuse("ensemble=" + _repr(ensemble), "True or False.")
@@ -1802,6 +1815,132 @@ def _calibrated_probs(model: PythonObject, xt: PythonObject, e: PythonObject, ca
     return acc
 
 
+struct _CalUnits(Movable):
+    """CalibratedClassifierCV's folds as units: fold f's member clone, fit,
+    test scores and (ensemble) calibrators, written to `results[f]`. Every
+    field is read and written with the GIL held."""
+    var model: PythonObject
+    var xt: PythonObject
+    var base: PythonObject
+    var Xa: PythonObject
+    var splits: PythonObject
+    var codes: PythonObject
+    var cols: PythonObject
+    var n: Int
+    var d: Int
+    var ensemble: Bool
+    var context: PythonObject
+    var n_units: Int
+    var next: Int
+    var stop: Bool
+    var results: PythonObject
+    var failure: NativeUnitFailure
+    var fp_env: UInt64
+    # The x_trees gathers, scores and calibrators of a unit run one unit at
+    # a time (they share the owner's `xt` program state and can release the
+    # GIL inside); only the member fits overlap.
+    var gate: List[Int64]
+
+    def __init__(out self, model: PythonObject, xt: PythonObject, base: PythonObject, Xa: PythonObject,
+                 splits: PythonObject, codes: PythonObject, cols: PythonObject, n: Int, d: Int, ensemble: Bool,
+                 context: PythonObject) raises:
+        self.model = model
+        self.xt = xt
+        self.base = base
+        self.Xa = Xa
+        self.splits = splits
+        self.codes = codes
+        self.cols = cols
+        self.n = n
+        self.d = d
+        self.ensemble = ensemble
+        self.context = context
+        self.n_units = len(splits)
+        self.next = 0
+        self.stop = False
+        self.results = Python.list()
+        for _ in range(self.n_units):  # driver-loop: over the cv folds (result slots)
+            _ = py_call(self.results.append, PythonObject(None))
+        self.failure = NativeUnitFailure()
+        self.fp_env = host_fp_env()
+        self.gate = native_unit_gate()
+
+    def _enter(mut self):
+        native_unit_gate_enter(self.gate)
+
+    def unit(mut self, f: Int) raises:
+        var tr = self.splits[f][0]
+        var te = self.splits[f][1]
+        var e = _clone(self.base, self.context)
+        self._enter()
+        var xtr = PythonObject(None)
+        var ytr = PythonObject(None)
+        try:
+            xtr = _gather(self.xt, trees_address(self.Xa), self.n, self.d, tr, self.cols, self.context)
+            ytr = _gather_codes(self.xt, self.codes, tr, self.context)
+        finally:
+            native_unit_gate_leave(self.gate)
+        _fit_member(e, xtr, ytr, PythonObject(None), self.context)
+        self._enter()
+        try:
+            var Xte = _gather(self.xt, trees_address(self.Xa), self.n, self.d, te, self.cols, self.context)
+            var scores = _cal_scores(self.model, self.xt, e, Xte, self.context)
+            if self.ensemble:
+                var cals = _fit_calibrators(self.model, self.xt, scores,
+                                            _gather_codes(self.xt, self.codes, te, self.context), self.context)
+                py_setitem(self.results, PythonObject(f), Python.tuple(e, cals))
+            else:
+                py_setitem(self.results, PythonObject(f), scores)
+        finally:
+            native_unit_gate_leave(self.gate)
+        _ = self.Xa  # keep the Python object alive through the native calls above
+
+    def drain(mut self):
+        while True:  # driver-loop: over the cv folds, pulled in order under the GIL
+            if self.stop or self.next >= self.n_units:
+                return
+            var u = self.next
+            self.next += 1
+            try:
+                self.unit(u)
+            except error:
+                self.stop = True
+                self.failure.record(u, error)
+
+
+def _cal_units_thread(arg: Int) abi("C") -> Int:
+    try:
+        var state = native_unit_gil_enter()
+        var run = MutPointer[_CalUnits, MutUntrackedOrigin](unsafe_from_address=arg)
+        var saved = host_fp_env()
+        host_fp_env_set(run[].fp_env)
+        run[].drain()
+        host_fp_env_set(saved)
+        native_unit_gil_leave(state)
+    except:
+        pass
+    return 0
+
+
+def _cal_units_run(mut units: _CalUnits, jobs: Int) raises:
+    """Fold 0 alone on the calling thread (lazy process state is created
+    single-threaded), the rest on min(jobs, folds - 1) threads; one at a time
+    when the member fits run on a GPU (`native_unit_device_workers`)."""
+    var workers = native_unit_device_workers(min(jobs, units.n_units - 1), units.context)
+    if units.n_units > 1 and workers > 1:
+        units.next = 1
+        try:
+            units.unit(0)
+        except error:
+            units.stop = True
+            units.failure.record(0, error)
+        if not units.stop:
+            native_unit_threads_run(_cal_units_thread, Int(UnsafePointer(to=units)), workers)
+    else:
+        units.drain()
+    units.failure.reraise()
+
+
 def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
     _calibrated_validate(model, context)
     var xt = _xt(py_fields(model), context)
@@ -1823,35 +1962,23 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     var cols = _arange(xt, d, context)
     var pairs = Python.list()
     _set(model, "calibrated_classifiers_", pairs)
+    # Lane p3-msel-parallel-and-process-pool: the folds are independent
+    # units (_CalUnits) on n_jobs threads; each writes its own slot, so the
+    # pairs and the out-of-fold scores keep the fold order. REMOVED: the two
+    # serial fold loops and the n_jobs refusal. Same member fits, gathers and
+    # calibrators per fold: no bits change.
+    var jobs = native_unit_jobs(_attr(model, "n_jobs", PythonObject(None)), "CalibratedClassifierCV")
+    var units = _CalUnits(model, xt, base, Xa, splits, labels.codes, cols, n, d, ensemble, context)
+    _cal_units_run(units, jobs)
     if ensemble:
-        for f in range(len(splits)):  # driver-loop: over the cv folds
-            var tr = splits[f][0]
-            var te = splits[f][1]
-            var e = _clone(base, context)
-            _fit_member(e, _gather(xt, trees_address(Xa), n, d, tr, cols, context),
-                        _gather_codes(xt, labels.codes, tr, context), PythonObject(None), context)
-            _ = Xa  # keep the Python object alive through the native call above
-            var Xte = _gather(xt, trees_address(Xa), n, d, te, cols, context)
-            _ = Xa  # keep the Python object alive through the native call above
-            var cals = _fit_calibrators(model, xt, _cal_scores(model, xt, e, Xte, context),
-                                        _gather_codes(xt, labels.codes, te, context), context)
-            _ = Xa  # keep the Python object alive through the native call above
-            _ = py_call(pairs.append, Python.tuple(e, cals))
+        for f in range(len(splits)):  # driver-loop: over the cv folds (results only)
+            _ = py_call(pairs.append, units.results[f])
     else:
         var c = 1 if k == 2 else k
         var S = _zeros(n * c, context)
-        for f in range(len(splits)):  # driver-loop: over the cv folds
-            var tr = splits[f][0]
-            var te = splits[f][1]
-            var e = _clone(base, context)
-            _fit_member(e, _gather(xt, trees_address(Xa), n, d, tr, cols, context),
-                        _gather_codes(xt, labels.codes, tr, context), PythonObject(None), context)
-            _ = Xa  # keep the Python object alive through the native call above
-            var Xte = _gather(xt, trees_address(Xa), n, d, te, cols, context)
-            _ = Xa  # keep the Python object alive through the native call above
-            var blk = admit_f32(_cal_scores(model, xt, e, Xte, context), 2, "scores", context, finite=False)
-            _ = Xa  # keep the Python object alive through the native call above
-            _ = _place(xt, S, n, c, blk, te, 0)
+        for f in range(len(splits)):  # driver-loop: over the cv folds (placing each fold's scores)
+            var blk = admit_f32(units.results[f], 2, "scores", context, finite=False)
+            _ = _place(xt, S, n, c, blk, splits[f][1], 0)
             _ = blk^
         var e = _clone(base, context)
         _fit_member(e, Xa, labels.codes, PythonObject(None), context)

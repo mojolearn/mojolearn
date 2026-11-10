@@ -55,8 +55,7 @@ is about.
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from cholesky.checks.potrf import CHOL_ELEM_TPB, CHOL_PANEL_TPB
-from cholesky.checks.trsm import CHOL_SOLVE_TPB
+from cholesky.checks.potrf import CHOL_ELEM_TPB
 from core.identity_trace import (
     IdentityTrace,
     first_divergence,
@@ -138,7 +137,6 @@ from mixture.checks.gmm_sabotage import (
 )
 from mixture.checks.mstep import (
     gmm_chol_dwork_floats,
-    gmm_chol_workspace_floats,
     gmm_m_step,
     gmm_mstep_gemm_workspace_floats,
     gmm_mstep_scratch_floats,
@@ -1584,7 +1582,7 @@ def check_iteration_count_is_identical() raises:
     var p2 = _params_for(which2)
     var m3 = gaussian_mixture_fit(
         x2, n2, d2, p2, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-        CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB, GMM_SAB_NONE,
+        CHOL_ELEM_TPB, GMM_SAB_NONE,
         "gmm", card,
     )
     var card_lines = read_trace_lines(card)
@@ -1650,7 +1648,7 @@ def check_collapse_is_identical() raises:
     try:
         var _m = gaussian_mixture_fit(
             x, n, d, params, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-            CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB, GMM_SAB_NONE,
+            CHOL_ELEM_TPB, GMM_SAB_NONE,
             "gmm", a_path,
         )
     except e:
@@ -1658,7 +1656,7 @@ def check_collapse_is_identical() raises:
     try:
         var _m = gaussian_mixture_fit(
             x, n, d, params, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-            CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB, GMM_SAB_NONE,
+            CHOL_ELEM_TPB, GMM_SAB_NONE,
             "gmm", b_path,
         )
     except e:
@@ -1762,8 +1760,8 @@ def check_launch_invariance() raises:
     Four arms:
 
       (a) a whole fit at two SCHEDULING configurations -- `elem_tpb` 256/64,
-          `row_tpb` 128/32, `comp_tpb` 32/8, `solve_tpb` 256/8, `panel_tpb`
-          128/32 -- with the iteration count and every parameter cell
+          `row_tpb` 128/32, `comp_tpb` 32/8, `chol_elem_tpb` 256/64 (the
+          Cholesky's own launch widths left with `potrf_lower`, 2026-11-09) -- with the iteration count and every parameter cell
           compared;
       (b) an E-step at 0 and 37 floats of POISONED padding on every buffer;
       (c) ONE POINT SCORED ALONE against the same point inside the batch,
@@ -1790,11 +1788,11 @@ def check_launch_invariance() raises:
         var params = _params_for(which)
 
         var a = gaussian_mixture_fit(
-            x, n, d, params, 256, 128, 32, 256, 128, 256, GMM_SAB_NONE,
+            x, n, d, params, 256, 128, 32, 256, GMM_SAB_NONE,
             "gmm",
         )
         var b = gaussian_mixture_fit(
-            x, n, d, params, 64, 32, 8, 8, 32, 64, GMM_SAB_NONE, "gmm"
+            x, n, d, params, 64, 32, 8, 64, GMM_SAB_NONE, "gmm"
         )
         var diff = _models_agree(a, b)
         if diff == -1:
@@ -1965,12 +1963,12 @@ def check_card_is_emitted() raises:
 
     var m1 = gaussian_mixture_fit(
         x, n, d, params, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-        CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB, GMM_SAB_NONE,
+        CHOL_ELEM_TPB, GMM_SAB_NONE,
         "gmm", a_path,
     )
     var m2 = gaussian_mixture_fit(
         x, n, d, params, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-        CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB, GMM_SAB_NONE,
+        CHOL_ELEM_TPB, GMM_SAB_NONE,
         "gmm", b_path,
     )
 
@@ -2086,7 +2084,7 @@ def check_gmm_sabotages() raises:
             var base = gaussian_mixture_fit(x, n, d, params)
             var run = gaussian_mixture_fit(
                 x, n, d, params, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-                CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB, sab, "gmm",
+                CHOL_ELEM_TPB, sab, "gmm",
             )
             if _models_agree(base, run) != 0:
                 moved_on = which
@@ -2212,7 +2210,7 @@ def check_gmm_sabotages() raises:
             var base = gaussian_mixture_fit(x, n, d, params)
             var run = gaussian_mixture_fit(
                 x, n, d, params, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-                CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB, sab, "gmm",
+                CHOL_ELEM_TPB, sab, "gmm",
             )
             if base.n_iter != run.n_iter or base.converged != run.converged:
                 moved_on2 = which
@@ -2342,7 +2340,7 @@ def check_gmm_sabotages() raises:
             var base = gaussian_mixture_fit(x, n, d, params)
             var run = gaussian_mixture_fit(
                 x, n, d, params, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-                CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB, sab, "gmm",
+                CHOL_ELEM_TPB, sab, "gmm",
             )
             if _models_agree(base, run) != 0:
                 moved3 = which
@@ -2506,7 +2504,7 @@ def check_gmm_sabotages() raises:
     try:
         var _m = gaussian_mixture_fit(
             cx, cn, cd, cp, GMM_ELEM_TPB, GMM_ROW_TPB, GMM_COMP_TPB,
-            CHOL_SOLVE_TPB, CHOL_PANEL_TPB, CHOL_ELEM_TPB,
+            CHOL_ELEM_TPB,
             GMM_SAB_COLLAPSE_RESET, "gmm",
         )
     except e:

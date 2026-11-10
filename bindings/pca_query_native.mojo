@@ -2,7 +2,7 @@
 # Native PCA transform/inverse_transform envelope: admitted private state,
 # captured inputs, existing native execution, and the finished owned ndarray.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_contains, py_get, py_type
+from bindings.py_balanced import py_call, py_contains, py_get, py_type
 from bindings.device_rows_door import door_rows_refuse
 from bindings.admitted_input import admitted_finite_refuse
 from bindings.py_typed_call import py_call_typed
@@ -36,7 +36,14 @@ def pca_query_operation(model: PythonObject, source: PythonObject, inverse: Bool
     # the identical base binding that holds the fold store); without it (the
     # host column) the door gets the host rows.
     var fold_entry = py_get(context, "pca_transform_fold")
-    var fold_ok = (not inverse and not whiten and fold_entry is not None
+    # Lane a8d: only an identical model takes it (the entry is the identical
+    # base binding's, on the identical context); a `fast` model's fold is
+    # gathered on the host and its own `fast` binding uploads it on the
+    # `fast` context, as QN's door does (bindings/qn_native.mojo).
+    var mode = py_get(fields, "numeric_mode")
+    var identical = (mode is not None and py_type(mode) is py_type(PythonObject(""))
+                     and String(py_call(py_call(mode.strip).lower)) == "identical")
+    var fold_ok = (not inverse and not whiten and fold_entry is not None and identical
                    and py_type(fold_entry) is py_type(entries["pca_transform"]))
     # The plain transform's entry tests a borrowed X on the device after its
     # upload and returns the finite word (lane a6, defer_finite): no host

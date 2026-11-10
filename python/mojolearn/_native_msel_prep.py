@@ -210,6 +210,32 @@ def connect(context, register, registry):
             methods['score'] = ('score', (arg(0),))
         add(cls, xdecomp._DECOMP_CALL, xdecomp._DECOMP_CONTEXT, methods)
 
+    # Lane a8d: NMF, SparsePCA, OPTICS and the manifold family's fixed owner
+    # ABIs (they were pending migration), the same recipes as their public
+    # methods pass. NMF.fit's keyword dictionary is empty (no W / H).
+    from . import _spectral_impl as spectral
+    add(xdecomp.NMF, xdecomp._DECOMP_CALL, xdecomp._DECOMP_CONTEXT, {
+        'fit': ('fit', (arg(0), constant({}))),
+        'transform': ('transform', (arg(0),)),
+    })
+    add(xdecomp.SparsePCA, xdecomp._DL_CALL, xdecomp._DL_CONTEXT, {
+        'fit': ('spca_fit', (arg(0),)),
+        'transform': ('spca_transform', (arg(0),)),
+    })
+    add(xcluster.OPTICS, xcluster._NATIVE, xcluster._NATIVE_CONTEXT, {
+        'fit': ('family_cfa_optics_fit', (native, arg(0), arg(1))),
+    })
+    for cls, prefix, query in ((xdecomp.Isomap, 'iso', True), (xdecomp.LocallyLinearEmbedding, 'lle', True),  # glue: fixed ABI metadata connected once during package import
+                               (xdecomp.MDS, 'mds', False)):
+        fit_args = (native, native, arg(0), constant(None), arg(1)) if prefix == 'mds' else (native, native, arg(0), arg(1))
+        methods = {'fit': ('family_mani_' + prefix + '_fit', fit_args)}
+        if query:
+            methods['transform'] = ('family_mani_' + prefix + '_transform', (native, native, arg(0)))
+        add(cls, xdecomp._NATIVE, xdecomp._NATIVE_CONTEXT, methods)
+    add(spectral.SpectralEmbedding, spectral._NATIVE, spectral._NATIVE_CONTEXT, {
+        'fit': ('family_cfb_se_fit', (arg(0), arg(1))),
+    })
+
     for name in ('VotingClassifier', 'VotingRegressor', 'StackingClassifier', 'StackingRegressor',  # glue: fixed meta-estimator ABIs at import
                  'MultiOutputRegressor', 'MultiOutputClassifier', 'OneVsRestClassifier', 'CalibratedClassifierCV'):  # glue: exact meta-estimator ABIs at import
         methods = {
@@ -326,6 +352,7 @@ def _connect_device_rows(registry):
     # Lane a7a: GaussianProcessClassifier opts in (its door admits X through
     # admit_x; predict / predict_proba gather a fold on the device).
     from . import cluster, mixture, _expansion_cluster as xcluster, _expansion_decomp as xdecomp
+    from . import _spectral_impl as spectral
     for cls in (linear_model.LinearRegression, linear_model.Ridge, prep.MaxAbsScaler, prep.RobustScaler,  # glue: fixed ABI metadata connected once during package import
                 decomposition.PCA, svm.SVC, svm.SVR, linear_svm.LinearSVC, linear_svm.LinearSVR,
                 gp.GaussianProcessRegressor, gpc.GaussianProcessClassifier, km.KernelRidge,
@@ -334,7 +361,12 @@ def _connect_device_rows(registry):
                 cluster.KMeans, xcluster.MiniBatchKMeans, xcluster.BisectingKMeans, xcluster.MeanShift,
                 xcluster.AffinityPropagation, xcluster.BayesianGaussianMixture, mixture.GaussianMixture,
                 decomposition.TruncatedSVD, xdecomp.IncrementalPCA, xdecomp.FactorAnalysis,
-                xdecomp.LatentDirichletAllocation, xdecomp.FastICA) + xl:
+                xdecomp.LatentDirichletAllocation, xdecomp.FastICA,
+                # Lane a8d: through their admissions (decomp_admit,
+                # admit_family / admit_family_meta), which gather a fold's
+                # rows out of the host base and test them in the gather.
+                xdecomp.NMF, xdecomp.SparsePCA, xcluster.OPTICS, xdecomp.Isomap,
+                xdecomp.LocallyLinearEmbedding, xdecomp.MDS, spectral.SpectralEmbedding) + xl:
         if cls in registry:
             registry[cls]['device_rows'] = True
 

@@ -30,6 +30,9 @@ def _graph_module():
     here = os.path.dirname(os.path.abspath(__file__))
     spec = importlib.util.spec_from_file_location("nhr_rebuild_fence", os.path.join(here, "no_host_routes.py"))
     mod = importlib.util.module_from_spec(spec)
+    # registered by name before it runs: no_host_routes' worker pool pickles
+    # its module-level functions by reference, so the module must be importable
+    sys.modules[spec.name] = mod
     spec.loader.exec_module(mod)
     return mod
 

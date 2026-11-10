@@ -46,7 +46,6 @@ import operator
 import os
 
 from . import _backend
-from . import _bpe_trainer
 from . import _tokenizer_synthetic
 from ._buffer import addr, addr_ro
 
@@ -135,7 +134,7 @@ def _ro(buf, name):
 
 
 def _binding():
-    return _Entries(_backend.load_host_module(_EXTENSION))  # cpu-route: tokenizer host binding module loaded once by load_host_module (text input step)
+    return _Entries(_backend.load_host_module(_EXTENSION))  # import-time: tokenizer host binding module loaded once by load_host_module (text input step)
 
 
 #: The fast tier's Apple GPU tokenizer (`tokenizer/fast/`, built by
@@ -164,22 +163,6 @@ def _fast_binding(*, connect_all=False):
                           "MOJOLEARN_NUMERIC_MODE=fast bash bindings/build_tokenizer_fast.sh")
     train, encode, _batch, _filter, _livebuf, max_vocab = module.bpe_fast_flags()
     return module, bool(train), bool(encode), int(max_vocab)
-
-
-def _byte_to_char():
-    """The GPT-2 format's byte-to-unicode spelling (`tokenizer/impl/
-    byte_unicode.mojo` builds the same table): the printable Latin-1 runs
-    are fixed points and the other 68 bytes take U+0100 upward in byte
-    order."""
-    fixed = set(range(0x21, 0x7F)) | set(range(0xA1, 0xAD)) | set(range(0xAE, 0x100))
-    out, extra = {}, 256
-    for b in range(256):  # cpu-route: verification fixture text: the byte table the tests and identity tools compare, not a runtime route
-        if b in fixed:
-            out[b] = chr(b)
-        else:
-            out[b] = chr(extra)
-            extra += 1
-    return out
 
 
 # `encode` and `decode` for byte-level BPE in the GPT-2 format.
@@ -576,7 +559,7 @@ class TrainedBpeVocabulary:
 # THE TRAINER is the Mojo one, `tokenizer/train/bpe_train.mojo`, through
 # the tokenizer host binding (`bpe_train`). `backend` is kept for its
 # old spellings: "auto" and "mojo" both name it. The pure Python
-# reference `_bpe_trainer.train` is a VERIFICATION oracle only
+# reference `tests/_bpe_trainer.train` is a VERIFICATION oracle only
 # (lane/pyglue-text-io, 2026-10-03: Python is glue at run time), held to
 # the Mojo trainer's bytes by `pixi run check-bpe-trainer` and the
 # tokenizer surface test; `backend="python"` is refused by name.

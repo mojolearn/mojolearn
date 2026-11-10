@@ -13,8 +13,7 @@ what a slot holds is exactly the bytes the host gave it).
 EACH BINDING OWNS ITS OWN STORE, next to its own DeviceContext, because a
 device buffer belongs to the context that made it:
 
-    comptime MY_STORE = _Global[StorageType=DeviceStore, name="MojoMyStore<Tier>",
-                                init_fn=DeviceStore.__init__]
+    comptime MY_STORE = SharedSlot[DeviceStore, "MojolearnMyStore<Tier>V1"]
     var s = MY_STORE.get_or_create_ptr()
     var id = s[].put(my_ctx(), host_addr, n_words)
 

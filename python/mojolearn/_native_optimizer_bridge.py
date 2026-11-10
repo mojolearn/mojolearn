@@ -58,12 +58,18 @@ def connect(training):
                     raise TypeError(f"optimizer requires compiled {name}")
                 cells[name] = entry
             cells["module"] = binding
+            try:  # glue: mlp_inference_sessions runs the x_sequence binding's small-MLP program (op SESSIONS)
+                program = getattr(_backend.binding("_mojolearn_x_sequence", mode), "small_mlp_program")
+                if isinstance(program, BuiltinFunctionType):
+                    cells["small_mlp_program"] = program
+            except (ImportError, AttributeError, ValueError, RuntimeError, NotImplementedError):
+                pass  # glue: refused by name at the call (training_extra_native._entry)
             bindings[mode] = cells
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
             bindings[mode] = type(error).__name__ + ": " + str(error)
             if mode not in metadata_bindings:
                 metadata_bindings[mode] = bindings[mode]
-    init = _buffer._native("optimizer_door_init")  # cpu-route: native parameter registry metadata only
+    init = _buffer._native("optimizer_door_init")  # import-time: native parameter registry metadata only
     if not isinstance(init, BuiltinFunctionType):
         raise TypeError("optimizer requires compiled optimizer_door_init")
     _numeric_profile.default_profile("training")  # glue: initialize the package's numeric-profile connection
@@ -72,7 +78,7 @@ def connect(training):
     input_context["native_module_type"] = ModuleType
     schedule_entries = {}
     for name in ("lr_schedule_at", "lr_schedule_series"):  # glue: retain native scalar schedule entries at import
-        entry = training._lr_native(name)  # cpu-route: compiled exact learning-rate scalar ABI, never a training/data kernel
+        entry = training._lr_native(name)  # import-time: compiled exact learning-rate scalar ABI, never a training/data kernel
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError(f"schedule requires compiled {name}")
         schedule_entries[name] = entry
@@ -264,7 +270,7 @@ def connect_embedding(training, embedding_cls, archive_context):
     # glue: connect the optional host lookup ABI once, including host_model.
     # Unavailable installs retain a refusal string instead of a runtime loader.
     try:
-        host_module = _backend.load_host_module("_mojolearn_embedding_infer_host")  # cpu-route: import-time connection for explicitly selected CPU-only host_model lookup
+        host_module = _backend.load_host_module("_mojolearn_embedding_infer_host")  # import-time: import-time connection for explicitly selected CPU-only host_model lookup
         context["embedding_host_binding"] = {"module": host_module, **{
             name: getattr(host_module, name) for name in names  # glue: fixed host ABI connection at import
             if isinstance(getattr(host_module, name, None), BuiltinFunctionType)

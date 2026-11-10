@@ -39,6 +39,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 from pathlib import Path
 
@@ -141,6 +142,7 @@ class Run:
         self.a, self.popen, self.run = args, popen, run
         self.out = Path(args.out).resolve()
         self.lock = threading.Lock()
+        self.scratch = None  # the throwaway venv's temp dir (install), removed by main
 
     def say(self, msg):
         with self.lock:
@@ -156,9 +158,16 @@ class Run:
             if expected.get(name) != got:
                 raise SystemExit("identity_wheel_record: %s is %s, not the release's %s" % (name, got, expected.get(name)))
             lines.append("%s %s" % (name, got))
-        venv = Path(self.a.venv or self.out / "venv")
-        if venv.exists():
-            shutil.rmtree(venv)
+        # A throwaway venv lives under a temp dir and goes when the run ends (Run.main); the evidence folder holds
+        # logs and records only (2026-11-09: the release's identity-wheels folders held 6.4 GB of venvs). --venv
+        # names a caller-owned venv instead, which the caller removes.
+        if self.a.venv:
+            venv = Path(self.a.venv)
+            if venv.exists():
+                shutil.rmtree(venv)
+        else:
+            self.scratch = Path(tempfile.mkdtemp(prefix="identity-wheels-venv-"))
+            venv = self.scratch / "venv"
         self.run([self.a.python, "-m", "venv", str(venv)], check=True)
         py = venv / "bin" / "python"
         self.run([str(py), "-m", "pip", "install", "-q", "--no-cache-dir", *[str(w) for w in self.a.wheel]], check=True)
@@ -172,7 +181,7 @@ class Run:
         return py, listed
 
     def env(self, py, listed, device, column, extra=None):
-        env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "LANES", "SHARD", "ONLY_CHANGED", "FULL")}
+        env = {k: v for k, v in os.environ.items() if k not in ("PYTHONPATH", "LANES", "SHARD", "ONLY_CHANGED", "FULL", "REUSE")}
         env.update(RECORD_FROM_INSTALLED="1", PYTHON=str(py), INSTALLED_WHEELS=str(listed), REPEATS="1",
                    SCOPE="all", CPU_THREADS=str(CPU_THREADS))
         var = COLUMNS[column][1]
@@ -212,7 +221,7 @@ class Run:
         out = self.out / lab / "select"
         out.mkdir(parents=True, exist_ok=True)
         p = self.run(["bash", str(RECORDER), lab, str(out)], cwd=str(ROOT), capture_output=True, text=True,
-                     env=self.env(py, listed, 0 if COLUMNS[column][1] else None, column, dict(SELECT_ONLY="1")))
+                     env=self.env(py, listed, 0 if COLUMNS[column][1] else None, column, dict(SELECT_ONLY="1", REUSE="1")))
         (out / "select.log").write_text((p.stdout or "") + (p.stderr or ""))
         if p.returncode != 0:
             raise RuntimeError("selection for %s exited %s (%s)" % (lab, p.returncode, out / "select.log"))
@@ -226,6 +235,13 @@ class Run:
         return m.group(1).split(","), int(reused.group(1)) if reused else None
 
     def main(self):
+        try:
+            return self._main()
+        finally:
+            if self.scratch is not None:
+                shutil.rmtree(self.scratch, ignore_errors=True)
+
+    def _main(self):
         self.out.mkdir(parents=True, exist_ok=True)
         columns = [c for c in self.a.columns.split(",") if c]
         if not columns or len(set(columns)) != len(columns):

@@ -92,6 +92,7 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.admitted_call import AdmittedCall, admitted_input_dense, ADMITTED_ITEM_F32
+from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays import (
     classical_wrap_array, _store_code, classical_input, classical_kind, classical_address, classical_cast_kind,
@@ -104,7 +105,10 @@ from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.native_array_storage import native_scratch_bytes, native_array_zeros, native_array_from_values, native_array_from_bytes
 from bindings.py_attr import py_attr
-from bindings.admitted_registry import admitted_held_index, admitted_held_address, admitted_held_rows, admitted_held_cols
+from bindings.admitted_registry import (
+    admitted_held_index, admitted_held_address, admitted_held_rows, admitted_held_cols, admitted_held_finite,
+)
+from bindings.admitted_meta_scope import admitted_held_verify
 from bindings.device_rows_door import door_is_device_rows, DoorRows, DoorRowsStore, door_rows_store
 from core.admitted_input import admitted_check_f32, admitted_check_weights_f32, admitted_cast_f32
 from core.admitted_ids import admitted_ids_i64, admitted_ids_i32
@@ -334,9 +338,15 @@ def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject
     # bindings/admitted_registry.mojo) is the array its members read as it
     # is: no view, no check, no scan, in this form too (lane a1b: the
     # array-form doors, classical_host_f32's callers among them, skipped
-    # the registry and re-checked every member's X).
-    if ndim == 2 and order == "C" and not as_array and admitted_held_index(source) >= 0:
-        return source
+    # the registry and re-checked every member's X). A row held with its
+    # finite test deferred (lane s2) is returned as is to a door that tests
+    # in its kernel entry (defer_finite) or accepts NaN (finite=False); any
+    # other door gets the one host verdict (admitted_held_verify) and, when
+    # it fails, admits the matrix below as an unknown one (its refusal).
+    if ndim == 2 and order == "C" and not as_array:
+        var held_row = admitted_held_index(source)
+        if held_row >= 0 and (not finite or defer_finite or admitted_held_verify(held_row)):
+            return source
     var b = native_loaded_module("builtins")
     var prepared = source
     if not admitted:
@@ -680,10 +690,18 @@ def _admitted_x(source: PythonObject, est: String, context: PythonObject, admitt
         # A matrix the running operation already admitted (a meta-estimator
         # holds it for its members: bindings/admitted_registry.mojo) is
         # returned as it is: no view, no check, no scan.
+        # A row held with its finite test deferred (lane s2) is handed to a
+        # deferring door untested (`finite` False: its kernel entry tests
+        # the words it uploads, as for any borrowed X), to a NaN-accepting
+        # door as is, and to any other door after the one host verdict;
+        # a failed verdict admits it below as an unknown matrix.
         var held = admitted_held_index(source)
         if held >= 0:
-            return AdmittedX(source, source, admitted_held_address(held), admitted_held_rows(held),
-                             admitted_held_cols(held), 2, True)
+            var tested = admitted_held_finite(held)
+            if tested or not finite or defer_finite or admitted_held_verify(held):
+                return AdmittedX(source, source, admitted_held_address(held), admitted_held_rows(held),
+                                 admitted_held_cols(held), 2, True,
+                                 tested or not (finite and defer_finite) or admitted_held_finite(held))
     if door_is_device_rows(source, context):
         if order != "C" or as_array:
             # The gather writes C-order fresh storage; an F-order or Array
@@ -748,13 +766,6 @@ def admit_x(mut call: AdmittedCall, source: PythonObject, est: String, context: 
     x.position = call.add_input(admitted_input_dense(position, source, x.array, x.address if x.c_order else 0,
                                                      x.rows, x.cols, ADMITTED_ITEM_F32, False))
     return x^
-
-
-def admitted_finite_wording(est: String, name: String = "X") -> String:
-    """scikit-learn's wording of the non-finite refusal, the ONE text every
-    door raises (admitted_finite_refuse, and a family door's cast verdict
-    through `admit_family_meta(..., refusal=...)`)."""
-    return "Input " + name + " contains NaN or infinity (" + est + ")."
 
 
 def admitted_finite_refuse(status: Int, est: String, name: String = "X") raises:

@@ -13,9 +13,9 @@ and leaves one marker word `SEQ_RESIDENT_ON_EXEC` in place of the three. A
 host executor ignores the three words. Host-only code: no GPU import here,
 so the CPU dispatch and the bindings can import it.
 """
-from std.ffi import _Global
 from std.atomic import Atomic, Ordering
 from core.records_death_ring import records_dead_keys_since
+from core.shared_slot import SharedSlot
 
 #: the marker left by the device dispatch: params is already this
 #: executor's device memory, read-only; no allocation, no upload.
@@ -29,9 +29,7 @@ struct _SeqResidentTokens(Defaultable, Movable):
         self.next = 1
 
 
-comptime _SEQ_RESIDENT_TOKENS = _Global[
-    StorageType=_SeqResidentTokens, name="MojoXSequenceResidentTokens", init_fn=_SeqResidentTokens.__init__
-]
+comptime _SEQ_RESIDENT_TOKENS = SharedSlot[_SeqResidentTokens, "MojolearnXSequenceResidentTokensV1"]
 
 
 def seq_resident_token() raises -> Int:
@@ -87,9 +85,7 @@ struct _SeqDeadOwners(Defaultable, Movable):
         self.seen = 0
 
 
-comptime _SEQ_DEAD_OWNERS = _Global[
-    StorageType=_SeqDeadOwners, name="MojoXSequenceResidentDeadOwnersV3", init_fn=_SeqDeadOwners.__init__
-]
+comptime _SEQ_DEAD_OWNERS = SharedSlot[_SeqDeadOwners, "MojolearnXSequenceResidentDeadOwnersV4"]
 
 
 def _dead_lock(dead: UnsafePointer[_SeqDeadOwners, MutAnyOrigin]):

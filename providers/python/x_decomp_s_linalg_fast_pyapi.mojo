@@ -72,6 +72,8 @@ def dev_lu_solve_py(
 
 # TOMBSTONE: MOJOLEARN_RSVD_FAST_DEVSCAN (its door dev_upload_scan_py, x_decomp_dev_upload_scan) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
 # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
+# Restored 2026-11-09 by lane r1-restore-measured-winners as behaviour, not as this entry: the define is back and its
+# device test runs inside randomized_svd's one call through resident.mojo dev_upload_finite_run (the one upload-finite body).
 
 
 def dev_orth_ws_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:

@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native corpus records, passive metadata capture and int32 array ownership."""
 from std.python import Python, PythonObject
-from std.ffi import _Global
 from bindings.native_loaded_module import native_loaded_module
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -11,6 +10,7 @@ from bindings.native_buffer_address import native_buffer_address
 from bindings.lm_corpus_files import corpus_files_initialize
 from bindings.lm_corpus_scalars import corpus_numeric_base
 from providers.python.borrowed_buffer_pyapi import admit_native_buffer_exporter, connect_native_mmap_exporter
+from core.shared_slot import SharedSlot
 
 
 struct CorpusConnection(Defaultable, Movable):
@@ -20,8 +20,7 @@ struct CorpusConnection(Defaultable, Movable):
         self.context = PythonObject(None)
 
 
-comptime CORPUS_CONNECTION = _Global[StorageType=CorpusConnection,
-    name="MojolearnCorpusPublicConnection", init_fn=CorpusConnection.__init__]
+comptime CORPUS_CONNECTION = SharedSlot[CorpusConnection, "MojolearnCorpusPublicConnectionV1"]
 
 
 def corpus_context() raises -> PythonObject:

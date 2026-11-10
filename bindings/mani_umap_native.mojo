@@ -15,6 +15,7 @@ from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_meta
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem, py_contains, py_type
+from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.pca_exact import pca_copied
@@ -29,7 +30,10 @@ from bindings.spectral_umap_routes import spectral_umap_route, spectral_umap_ent
 from core.host_finite_scan import host_all_finite_f32
 from core.mani_impl import mani_same_words
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL, CAST_KIND_FLOAT
-from std.builtin.sort import sort
+from bindings.label_input_sources import labels_list_scalar_kind, LABELS_LIST_INT, LABELS_LIST_FLOAT, LABELS_LIST_BOOL
+from bindings.p3_labels_metrics_native import p3_text_codes, P3_TEXT_OK
+from bindings.label_list_words import label_list_store, label_store_address
+from core.label_words_impl import label_words_f64, label_words_i64, label_dense_codes, label_codes_i32_to_f32
 from bindings.mani_kit import (
     MKit, mk_from_snapshot, mk_r, mk_c, mk_n, mk_rows, mk_t, mk_take_cols, mk_col_range, mk_out2, mk_store,
     mk_store_ptr, mk_at, OP_SUB, OP_SCALE, OP_ADDS, OP_DIV, OP_MUL, OP_ABS, OP_ADD,
@@ -186,30 +190,11 @@ def _umap_initial(settings: ManifoldSettings, x: ArrayMetadata, n: Int, nc: Int,
     return Optional(a^)
 
 
-def _umap_label_i64(addr: Int, kind: Int, item: Int) -> Int64:
-    # One integer or bool label word of a CastIn kind (signed, unsigned < 8
-    # bytes, bool) widened exactly.
-    if kind == CAST_KIND_SIGNED:
-        if item == 1:
-            return Int64(MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=addr)[0])
-        if item == 2:
-            return Int64(MutPointer[Int16, MutUntrackedOrigin](unsafe_from_address=addr)[0])
-        if item == 4:
-            return Int64(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=addr)[0])
-        return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)[0]
-    if kind == CAST_KIND_BOOL:
-        return Int64(1) if MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)[0] != 0 else Int64(0)
-    if item == 1:
-        return Int64(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)[0])
-    if item == 2:
-        return Int64(MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=addr)[0])
-    return Int64(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=addr)[0])
-
-
-def _umap_label_f64(addr: Int, item: Int) -> Float64:
-    if item == 4:
-        return Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)[0])
-    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr)[0]
+# Lane i3-move-data-loops (2026-11-09): the label-word reads, the dense
+# coding and the code widening run in core/label_words_impl.mojo (the loops
+# P3 wrote here moved word for word, split across the host's cores); an exact
+# list or tuple is unpacked by one array.array construction
+# (bindings/label_list_words.mojo). This file keeps the unpack and the pack.
 
 
 def _umap_native_codes(y: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
@@ -233,67 +218,69 @@ def _umap_native_codes(y: PythonObject, n: Int, context: PythonObject) raises ->
         return PythonObject(None)
     if not is_float and kind != CAST_KIND_SIGNED and kind != CAST_KIND_BOOL and not (kind == CAST_KIND_UNSIGNED and item < 8):
         return PythonObject(None)
+    if is_float:
+        var words = List[Float64]()
+        var ok = label_words_f64(base, stride, item, n, words)
+        _ = meta.keep  # keep the source alive through the reads above
+        if not ok:
+            return PythonObject(None)
+        return _umap_codes(words, context)
+    var ints = label_words_i64(base, stride, kind, item, n)
+    _ = meta.keep  # keep the source alive through the reads above
+    return _umap_codes(ints, context)
+
+
+def _umap_codes[dt: DType, //](words: List[Scalar[dt]], context: PythonObject) raises -> PythonObject:
+    """(codes Array, codes address): labels other than -1 numbered 0.. in
+    ascending value order, -1 kept as -1 (`label_dense_codes`)."""
+    var n = len(words)
     var t = family_array(Python.tuple(n), "<f4", context)
     var tp = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(t)))
-    if is_float:
-        var words = List[Float64](capacity=n)
-        for i in range(n):  # cpu-route: categorical y codes from the native label words
-            var v = _umap_label_f64(base + i * stride, item)
-            if v != v:
-                _ = meta.keep
-                return PythonObject(None)
-            words.append(v)
-        var order = List[Float64](capacity=n)
-        for i in range(n):  # cpu-route: categorical y codes from the native label words
-            if words[i] != -1.0:
-                order.append(words[i])
-        sort(order)
-        var classes = List[Float64](capacity=len(order))
-        for i in range(len(order)):  # cpu-route: categorical y codes from the native label words
-            if len(classes) == 0 or classes[len(classes) - 1] != order[i]:
-                classes.append(order[i])
-        for i in range(n):  # cpu-route: categorical y codes from the native label words
-            if words[i] == -1.0:
-                tp[i] = Float32(-1.0)
-                continue
-            var lo = 0
-            var hi = len(classes) - 1
-            while lo < hi:  # cpu-route: binary search of one label among the sorted classes
-                var mid = (lo + hi) // 2
-                if classes[mid] < words[i]:
-                    lo = mid + 1
-                else:
-                    hi = mid
-            tp[i] = Float32(Float64(lo))
-    else:
-        var words = List[Int64](capacity=n)
-        for i in range(n):  # cpu-route: categorical y codes from the native label words
-            words.append(_umap_label_i64(base + i * stride, kind, item))
-        var order = List[Int64](capacity=n)
-        for i in range(n):  # cpu-route: categorical y codes from the native label words
-            if words[i] != -1:
-                order.append(words[i])
-        sort(order)
-        var classes = List[Int64](capacity=len(order))
-        for i in range(len(order)):  # cpu-route: categorical y codes from the native label words
-            if len(classes) == 0 or classes[len(classes) - 1] != order[i]:
-                classes.append(order[i])
-        for i in range(n):  # cpu-route: categorical y codes from the native label words
-            if words[i] == -1:
-                tp[i] = Float32(-1.0)
-                continue
-            var lo = 0
-            var hi = len(classes) - 1
-            while lo < hi:  # cpu-route: binary search of one label among the sorted classes
-                var mid = (lo + hi) // 2
-                if classes[mid] < words[i]:
-                    lo = mid + 1
-                else:
-                    hi = mid
-            tp[i] = Float32(Float64(lo))
-    _ = meta.keep  # keep the source alive through the reads above
+    label_dense_codes(words, tp)
     _ = t  # keep the Python object alive through the native writes above
     return Python.tuple(t, PythonObject(Int(tp)))
+
+
+def _umap_list_codes(y: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
+    """(codes Array, codes address) of an exact list or tuple of n labels
+    that are all exact ints, all exact bools, all exact floats (no NaN) or
+    all exact strs: the codes the (type, value) object order gives one-type
+    labels (one type, so the value order; -1 is unknown for numbers and never
+    equals a str). Numbers are unpacked by one array.array construction
+    (`label_list_store`), strs coded from their UTF-8 bytes. None for
+    anything else (the object path then decides, with its refusals)."""
+    var b = native_loaded_module("builtins")
+    if (py_type(y) is not b.list and py_type(y) is not b.tuple) or len(y) != n or n == 0:
+        return PythonObject(None)
+    var kind = labels_list_scalar_kind(y)
+    var is_tuple = py_type(y) is b.tuple
+    if kind == LABELS_LIST_FLOAT:
+        var store = label_list_store(y, "d")
+        if store is None:
+            return PythonObject(None)
+        var words = List[Float64]()
+        var ok = label_words_f64(label_store_address(store), 8, 8, n, words)
+        _ = store  # keep the unpacked words alive through the reads above
+        if not ok:
+            return PythonObject(None)
+        return _umap_codes(words, context)
+    if kind == LABELS_LIST_INT or kind == LABELS_LIST_BOOL:
+        var store = label_list_store(y, "q")
+        if store is None:
+            return PythonObject(None)  # an int outside int64: the object path keeps it
+        var ints = label_words_i64(label_store_address(store), 8, CAST_KIND_SIGNED, 8, n)
+        _ = store  # keep the unpacked words alive through the reads above
+        return _umap_codes(ints, context)
+    var listed = y if not is_tuple else py_call(b.list, y)
+    var text = p3_text_codes(listed, False)
+    if text.status != P3_TEXT_OK:
+        return PythonObject(None)
+    var out = family_array(Python.tuple(n), "<f4", context)
+    var op = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out)))
+    label_codes_i32_to_f32(text.codes, op)
+    _ = out  # keep the Python object alive through the native writes above
+    _ = listed
+    return Python.tuple(out, PythonObject(Int(op)))
 
 
 def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
@@ -320,18 +307,35 @@ def _umap_target(settings: ManifoldSettings, y: PythonObject, n: Int, context: P
             var fast = _umap_native_codes(y, n, context)
             if fast is not None:
                 return Python.tuple(PythonObject(1), PythonObject(1), fast[0], tk_kept, PythonObject(w), fast[0], fast[1])
+        # Lane p2-labels-lists-arrays: an exact list / tuple of one exact
+        # scalar type or of exact strs is coded from its C storage
+        # (_umap_list_codes); the object path below runs only for anything else.
+        var listed = _umap_list_codes(y, n, context)
+        if listed is not None:
+            return Python.tuple(PythonObject(1), PythonObject(1), listed[0], tk_kept, PythonObject(w), listed[0], listed[1])
+        # P1: only an exact list, tuple or NumPy array is read (ndarray.tolist
+        # and list() are C code), and every label must be an exact int,
+        # float, str or bool, refused before any comparison or hash: the
+        # set, sort and equality below then run no Python method of a
+        # caller's object (the former hasattr/tolist on any object and the
+        # (type name, value) sort over arbitrary labels are removed).
+        var y_cls = py_type(y)
         var vals: PythonObject
-        if Bool(py=py_call(b.hasattr, y, PythonObject("tolist"))):
-            vals = family_call(py_call(b.getattr, y, PythonObject("tolist")))
-        else:
+        if y_cls is py_get(context, "ndarray"):
+            vals = py_call(py_attr(py_get(context, "ndarray"), "tolist"), y)
+        elif y_cls is b.list or y_cls is b.tuple:
             vals = py_call(b.list, y)
+        else:
+            raise Error("TypeError: UMAP categorical y must be a list, tuple or NumPy array of labels")
         var count = Int(py=py_call(b.len, vals))
         var nested = False
-        var seq_types = Python.tuple(b.list, b.tuple)
         for i in range(count):  # cpu-route: categorical y label objects ordered by (type, value)
-            if Bool(py=py_call(b.isinstance, vals[i], seq_types)):
+            var label_cls = py_type(vals[i])
+            if label_cls is b.list or label_cls is b.tuple:
                 nested = True
                 break
+            if label_cls is not b.int and label_cls is not b.float and label_cls is not b.str and label_cls is not b.bool:
+                raise Error("TypeError: UMAP categorical y labels must be int, float, str or bool values")
         if count != n or nested:
             raise Error("UMAP categorical y must be one label per row")
         var unknown = PythonObject(-1)

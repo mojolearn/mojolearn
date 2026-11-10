@@ -227,8 +227,6 @@ from autograd.kernels.mamba3_proj import ANY_BWD3_SABOTAGE
 # (autograd/rules_mamba.mojo), which launches the hand kernels in the hand order.
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_MAMBA_OFF (hand Mamba-1/2 prefill backward glue, superseded by the tape) deleted 2026-10-19 by 47582a7fb; code recoverable at 47582a7fb^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MAMBA_OFF.patch
-from autograd.rules_mamba import mamba1_tape_backward, mamba2_tape_backward
-from autograd.rules_mamba3 import mamba3_tape_backward, mamba3_tape_backward_on
 from autograd.kernels.mamba1_prefill import Mamba1PrefillGradients
 from autograd.kernels.mamba2_prefill import Mamba2PrefillGradients
 from autograd.kernels.mamba1_proj import ANY_BWD_SABOTAGE as M1_ANY_BWD_SABOTAGE
@@ -241,7 +239,7 @@ from mamba.native_state_dispatch import NATIVE_MAMBA_STATE_API, mamba_state_oper
 from mamba.impl.mamba_block_program import mamba_block_call_abi
 from mamba.native_block_dispatch import NATIVE_MAMBA_BLOCK_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
-from providers.python.causal_lm_program_pyapi import CausalProgramOwner, causal_lm_program_read_py
+from providers.python.causal_lm_program_pyapi import causal_program_owner_type, causal_lm_program_read_py
 
 from mamba.impl.mamba_shell_impl import (
     _f32_ptr,
@@ -1682,7 +1680,7 @@ def build__mojolearn_mamba() -> PythonObject:
         m.def_function[mamba3_session_load_state_binding]("mamba3_session_load_state")
         m.def_function[mamba3_session_close_binding]("mamba3_session_close")
         # Lane x45c: CausalLM.generate as one Program.decode (the decode program).
-        _ = m.add_type[CausalProgramOwner]("_CausalProgramOwner")
+        causal_program_owner_type(m)  # one Python type per interpreter (the mamba binding registers it too)
         m.def_function[causal_lm_program_read_py]("causal_lm_program_read_v1")
         return m.finalize()
     except e:

@@ -39,7 +39,6 @@ Two owners:
 Same kernels, same launch order and same bytes as the resident session
 bodies the op lifted. No arithmetic here.
 """
-from std.ffi import _Global
 from std.atomic import Atomic, Ordering
 from core.weight_epoch import weight_epoch
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -53,12 +52,13 @@ from autograd.ops_api import OpsSession
 from autograd.block_step_ops import (
     OPS_M1_STEP, OPS_M2_STEP, OPS_M3_STEP, BLOCK_PART_WEIGHTS, BLOCK_PART_STATE, BLOCK_PART_WORDS,
     block_weight_sizes, block_state_sizes, block_int_words, block_step_words, block_step_reports_to_host,
-    block_buffer_view, block_part_floats,
+    block_buffer_view, block_part_floats, block_offsets, block_guard, mamba_step_train_run, mamba_step_backward,
 )
+from core.shared_slot import SharedSlot
 
 # The process-lifetime DeviceContext of the Mamba bindings (the name
 # mamba/impl/mamba_shell_impl.mojo has used since the neural lane).
-comptime _NEURAL_CTX = "MojolearnNeuralMambaContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralMambaContextFastV2"
+comptime _NEURAL_CTX = "MojolearnNeuralMambaContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralMambaContextFastV3"
 
 
 def mamba_step_code(kind: Int) raises -> Int:
@@ -181,6 +181,13 @@ struct MambaBlockProgram(Movable):
                           _pieces(weights, wsizes, "mamba weights", False), List[Int]())
         self.epoch = now
         self.w_addrs = weights.copy()
+
+    # TOMBSTONE: reload_weights (lane x56d-mamba-samba-train-and-host@f046806502: the backward door rewrote the weights
+    # into the cached program on every call because its addresses did not come through the weight-freezing door) removed
+    # 2026-11-09 at integration (integ/pre-0867-w5): the backward door's Mamba weights now pass
+    # generation_weight_address (bindings/neural_block_public.mojo _neural_backward_prepared), so the backward call uses
+    # refresh_weights' address + epoch key like the forward. Never reached main: no patch; recoverable at
+    # lane/x56d-mamba-samba-train-and-host@f046806502.
 
     def export_weights(mut self, dsts: List[Int]) raises:
         """The parameter into the caller's arrays (piece order), one wait."""
@@ -367,7 +374,7 @@ struct MambaBlockProgram(Movable):
 comptime MAMBA_PROGRAM_CACHE_BYTES = 1 << 30
 
 
-struct MambaProgramCache(Movable):
+struct MambaProgramCache(Defaultable, Movable):
     var programs: List[Int]
     var tick: Int
     # One lock word: the doors run with the GIL released.
@@ -379,11 +386,7 @@ struct MambaProgramCache(Movable):
         self.lock = List[Int64](length=1, fill=Int64(0))
 
 
-comptime MAMBA_PROGRAM_CACHE = _Global[
-    StorageType=MambaProgramCache,
-    name=("MojoMambaProgramCacheIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoMambaProgramCacheFast"),
-    init_fn=MambaProgramCache.__init__,
-]
+comptime MAMBA_PROGRAM_CACHE = SharedSlot[MambaProgramCache, ("MojolearnMambaProgramCacheIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnMambaProgramCacheFastV1")]
 
 comptime _ProgramPtr = UnsafePointer[MambaBlockProgram, MutUntrackedOrigin]
 
@@ -542,6 +545,109 @@ def mamba_block_call(
         raise error
     _release(p, cached, False)
     return out^
+
+
+def mamba_program_backward(mut p: MambaBlockProgram, px: Int, pdy: Int, l: Int, grads: List[Int]) raises:
+    """The zero-state VJP of L tokens per row (lane x56d): the block step
+    op's recorded run (the zero-state prefill with its stages kept) and
+    its rule over those stages (`mamba_step_backward`, the body
+    StepOpRules runs for a recorded step in a training program), so the
+    forward runs once. x (B, L, d_model) at px, d(block output) at pdy;
+    grads[0] receives d_x, grads[1:] the weight gradients in piece order
+    (a 0 address skips one). One wait. Afterwards the state tensor holds
+    the post-prefill state (the per-call door loads the caller's state
+    before every forward anyway) and the kept stages are freed."""
+    if l < 1:
+        raise Error("mamba: L must be positive")
+    if px == 0 or pdy == 0:
+        raise Error("mamba backward: null x or grad_output address")
+    var wsizes = block_weight_sizes(p.code, p.ints)
+    if len(grads) != 1 + len(wsizes):
+        raise Error("mamba backward: expected " + String(1 + len(wsizes)) + " gradient addresses, got "
+                    + String(len(grads)))
+    if grads[0] == 0:
+        raise Error("mamba backward: null grad_x address")
+    var n = p.b * l * p.dm
+    var x = p._x_for(px, n)
+    var bufs: List[FP] = [p.s.buffer(x), p.s.buffer(p.w), p.s.buffer(p.st)]
+    var counts: List[Int] = [n, block_part_floats(p.code, p.ints, BLOCK_PART_WEIGHTS),
+                             block_part_floats(p.code, p.ints, BLOCK_PART_STATE)]
+    if p.q != 0:
+        bufs.append(p.s.buffer(p.q))
+        counts.append(block_int_words(p.code))
+    var nwt = counts[1]
+    var y = p.s.ex.alloc(n)
+    var dy = p.s.ex.alloc(n)
+    var dx = p.s.ex.alloc(n)
+    var dw = p.s.ex.alloc(nwt)
+    try:
+        p.s.ex.upload(dy, FP(unsafe_from_address=pdy), n)
+        var dw_view = block_buffer_view(p.s.ex, dw, nwt)
+        dw_view.enqueue_fill(Float32(0))
+        var ints = p.ints.copy()
+        var fs = p.fs.copy()
+        _ = mamba_step_train_run(p.s.ex, p.s.steps, p.code, bufs, counts, ints, fs, y)
+        mamba_step_backward(p.s.ex, p.s.steps, p.code, bufs[1], bufs[2], dy, dx, dw)
+        p.s.ex.download_async(FP(unsafe_from_address=grads[0]), dx, n)
+        var at = block_offsets(wsizes, block_guard(p.code))
+        for i in range(len(wsizes)):  # driver-loop: over the block's weight pieces (model structure)
+            if grads[1 + i] != 0 and wsizes[i] > 0:
+                p.s.ex.download_async(FP(unsafe_from_address=grads[1 + i]), dw + at[i], wsizes[i])
+        p.s.ex.sync()
+    finally:
+        p.s.steps.drop_training(Int(bufs[1]))
+        p.s.ex.free(y)
+        p.s.ex.free(dy)
+        p.s.ex.free(dx)
+        p.s.ex.free(dw)
+
+
+def mamba_block_backward_call(
+    code: Int, weights: List[Int], px: Int, pdy: Int, grads: List[Int], b: Int, l: Int, dm: Int,
+    fs: List[Float32],
+) raises:
+    """One per-call zero-state block VJP on host arrays (the public
+    `mamba{1,2,3}_backward` door, lane x56d): the cached program of these
+    weights (refreshed by address + weight epoch, `refresh_weights`: an
+    unchanged weight is not uploaded again), the step op's recorded
+    run and its rule (`mamba_program_backward`), d_x and the weight
+    gradients into the caller's arrays, one wait. Replaces the per-call
+    weight upload and forward recompute of `mamba{1,2,3}_tape_backward`."""
+    var claimed = _claim(code, b, dm, fs, weights)
+    var p = claimed[0]
+    var cached = claimed[1]
+    try:
+        p[].refresh_weights(weights)
+        mamba_program_backward(p[], px, pdy, l, grads)
+        p[].finish()
+    except error:
+        _release(p, cached, True)
+        raise error
+    _release(p, cached, False)
+
+
+def mamba_block_backward_call_abi(kind: Int, a: List[Int], b: Int, l: Int, dm: Int, dt_lo: Float32,
+                                  dt_hi: Float32) raises:
+    """`mamba_block_backward_call` over the backward ABI's one address list
+    (the order every `mamba{1,2,3}_backward` docstring gives): x, the
+    block's weights (ten for Mamba-1, nine otherwise), grad_output, grad_x,
+    then one gradient per weight in the same order."""
+    var code = mamba_step_code(kind)
+    var nw = 10 if kind == 1 else 9
+    if len(a) != 1 + nw + 2 + nw:
+        raise Error("mamba" + String(kind) + " backward: expected " + String(3 + 2 * nw) + " addresses, got "
+                    + String(len(a)))
+    var weights = List[Int](capacity=nw)
+    for i in range(nw):  # small-loop(nw: the block's weight addresses): address list, no data
+        weights.append(a[1 + i])
+    var grads = List[Int](capacity=1 + nw)
+    for i in range(1 + nw):  # small-loop(1 + nw: grad_x and the weight gradients): address list, no data
+        grads.append(a[2 + nw + i])
+    var fs = List[Float32]()
+    if kind == 2:
+        fs.append(dt_lo)
+        fs.append(dt_hi)
+    mamba_block_backward_call(code, weights, a[0], a[1 + nw], grads, b, l, dm, fs)
 
 
 def mamba_block_cache_clear() raises:

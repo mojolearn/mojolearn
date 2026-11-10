@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # PolynomialCountSketch public fit/transform envelope. One X snapshot feeds
 # finite/width checks and both fit_transform stages; target owners survive it.
+from bindings.admitted_finite_wording import admitted_finite_wording
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.native_loaded_module import NativeModules, native_loaded_module, _loaded_fields
@@ -86,7 +87,7 @@ def _pcs_check_finite(source: PythonObject, snapshot: ArrayMetadata,
         # host cores over the captured strides (lane a2-admit-family; the
         # typed exponent test below ran serially per word). Same refusal.
         if not host_all_finite_f32_strided(data.addr, data.s0, data.s1, data.rows, data.cols):
-            raise Error("Input X contains NaN or infinity (PolynomialCountSketch).")
+            raise Error(admitted_finite_wording("PolynomialCountSketch"))
         return
     if snapshot.native_byte_order and data.itemsize == 8:
         # float32 / float64 in native order: one typed exponent test per
@@ -98,14 +99,14 @@ def _pcs_check_finite(source: PythonObject, snapshot: ArrayMetadata,
                 var at = data.addr + row * data.s0 + column * data.s1
                 var bits = UInt64(MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=at)[0]) if data.itemsize == 4 else MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=at)[0]
                 if (bits & mask) == mask:
-                    raise Error("Input X contains NaN or infinity (PolynomialCountSketch).")
+                    raise Error(admitted_finite_wording("PolynomialCountSketch"))
         return
     var code = String("e") if data.itemsize == 2 else String("f") if data.itemsize == 4 else String("d")
     var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=data.addr)
     for row in range(data.rows):  # driver-loop: finite check over the captured pre-cast input
         for column in range(data.cols):
             if native_scalar_real(bytes, row * data.s0 + column * data.s1, code, data.itemsize, True).special != 0:
-                raise Error("Input X contains NaN or infinity (PolynomialCountSketch).")
+                raise Error(admitted_finite_wording("PolynomialCountSketch"))
 
 
 comptime _PCS_CLASS_SLOT = "pcs_public_ancestry_v1"

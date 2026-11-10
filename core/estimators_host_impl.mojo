@@ -230,17 +230,20 @@ def pca_fit_owned_host_run(
 def pca_randomized_owned_host_run(
     x_address: Int, cp: _F32P, mp: _F32P, ep: _F32P, rp: _F32P, sp: _F32P,
     nr: Int, nf: Int, nc: Int, oversamples: Int, iterations: Int, auto_iterations: Bool, seed: Int,
-    op: _F32P, project: Bool, whiten: Bool,
+    op: _F32P, project: Bool, whiten: Bool, finite_word: Int = 0,
 ) raises -> Float64:
     """`PCA(svd_solver='randomized').fit` / `fit_transform` on the host: the
     decomp lane's randomized driver on the host executor, then with
-    `project` X's projection at `op`. Returns the noise variance."""
+    `project` X's projection at `op`. Returns the noise variance.
+    `finite_word` (lane a8d): as `pca_randomized_fit_run`'s."""
     var noise = pca_randomized_fit_run[HostExec, NoRDev, False](
         F32Ptr(unsafe_from_address=x_address), F32Ptr(unsafe_from_address=Int(cp)),
         F32Ptr(unsafe_from_address=Int(mp)), F32Ptr(unsafe_from_address=Int(ep)),
         F32Ptr(unsafe_from_address=Int(rp)), F32Ptr(unsafe_from_address=Int(sp)),
-        nr, nf, nc, oversamples, iterations, auto_iterations, seed,
+        nr, nf, nc, oversamples, iterations, auto_iterations, seed, finite_word,
     )
+    if finite_word != 0 and MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=finite_word)[] != 0:
+        return 0.0
     if project:
         pca_project_host_run(x_address, mp, cp, sp, op, nr, nf, nc, whiten)
     return noise

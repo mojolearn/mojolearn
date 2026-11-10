@@ -14,7 +14,7 @@
 # slots (classical_wrap_array), and the only callables invoked are compiled
 # entry points connected at import (python/mojolearn/_native_trees_bridge.py)
 # and C builtins.
-from std.ffi import _Global, c_int
+from std.ffi import c_int
 from std.math import isfinite
 from std.memory import bitcast
 from std.os import getenv
@@ -84,6 +84,7 @@ def trees_forest_x(source: PythonObject, name: String, context: PythonObject) ra
     return x^
 from bindings.label_input_sources import labels_storage_source
 from bindings.perf3_label_doors_text import labels_all_exact_str
+from core.shared_slot import SharedSlot
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -262,8 +263,7 @@ struct _DecodeTables(Defaultable, Movable):
         self.next = 0
 
 
-comptime _DECODE = _Global[StorageType=_DecodeTables, name="MojolearnTreesDecodeTablesV1",
-                           init_fn=_DecodeTables.__init__]
+comptime _DECODE = SharedSlot[_DecodeTables, "MojolearnTreesDecodeTablesV2"]
 
 
 def _decode_slot(owner: PythonObject, classes: PythonObject) raises -> Int:

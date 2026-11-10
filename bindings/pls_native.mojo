@@ -136,6 +136,13 @@ def _pls_require_fitted(fields: PythonObject, operation: String, context: Python
 
 def _pls_input(source: PythonObject, name: String, context: PythonObject, ndim: Int = 2, public_name: String = "",
                public_target: Bool = False, sparse_allowed: Bool = True) raises -> ArrayMetadata:
+    var deferred = False
+    return _pls_input_deferred(source, name, context, ndim, public_name, public_target, sparse_allowed, False,
+                               deferred)
+
+
+def _pls_input_deferred(source: PythonObject, name: String, context: PythonObject, ndim: Int, public_name: String,
+                        public_target: Bool, sparse_allowed: Bool, defer: Bool, mut deferred: Bool) raises -> ArrayMetadata:
     """A PLS operand through the one admission (bindings/admitted_input.mojo):
     the public X by admit_x_unrecorded (scikit-learn's refusals and wording),
     a target or fitted operand of rank `ndim` (-1: 1-D or 2-D) by admit_f32;
@@ -151,8 +158,17 @@ def _pls_input(source: PythonObject, name: String, context: PythonObject, ndim: 
             raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (" + public_name + " takes dense X only.)")
         value = host_sparse_dense(source, format, context)
     var array = PythonObject(None)
+    deferred = False
     if public_name != "" and not public_target:
-        array = admit_x_unrecorded(value, public_name, context).array
+        # TOMBSTONE: A8C_PLS_PUBLIC_X_HOST_SCAN (removed: superseded by the kit upload's device test) deleted 2026-11-09 by 197546da0d; code recoverable at 197546da0d^.
+        # Restore: git apply experiments/removed/A8C_PLS_PUBLIC_X_HOST_SCAN.patch
+        # Lane a8c-device-x-linear-prep-rfe: with `defer` (the operation's
+        # kit tests its upload, DecompKit.defers_finite) a borrowed X takes
+        # no host pass here; `deferred` tells the caller to add it through
+        # DecompKit.input_tested. A cast X is tested in its cast pass.
+        var admitted = admit_x_unrecorded(value, public_name, context, defer_finite=defer)
+        deferred = not admitted.finite
+        array = admitted.array
     else:
         var view = classical_view(value, context, name)
         if classical_kind(view, context) == "c":
@@ -181,6 +197,31 @@ def _pls_input(source: PythonObject, name: String, context: PythonObject, ndim: 
 def _matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
     var input = _pls_input(source, name, context)
     return kit.input_snapshot(input, input.shape[0], input.shape[1])
+
+
+def _captured(mut kit: DecompKit, captured: ArrayMetadata, deferred: Bool, est: String) raises -> Int:
+    """The public X the door admitted (`pls_public_operation`) as a kit
+    matrix: through `input_tested` (the upload tests it on the device) when
+    the door deferred its finite test, else `input_snapshot`."""
+    if deferred:
+        if not kit.defers_finite():
+            raise Error("RuntimeError: mojolearn " + est + ": X was admitted untested but this binding has no tested upload")
+        return kit.input_tested(captured, captured.shape[0], captured.shape[1], est)
+    return kit.input_snapshot(captured, captured.shape[0], captured.shape[1])
+
+
+def _pls_defers(fields: PythonObject, fitting: Bool, context: PythonObject) -> Bool:
+    """Whether the operation's kit tests X on its upload (the x_decomp GPU
+    binding's kernel-call op XD_DEV_UPLOAD_FINITE, lane a8c): then the door admits a
+    borrowed X with no host pass. False when the entries cannot be resolved
+    here; the kit then raises its own refusal as before."""
+    try:
+        var mode = fields["numeric_mode"] if fitting else py_get(fields, "numeric_mode_")
+        var entries = decomp_entries(mode, context)
+        return py_get(entries, "x_decomp_dev_ew") is not None and py_get(entries, "x_decomp_module") is not None
+    except error:
+        _ = error^
+        return False
 
 
 def _row(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
@@ -280,9 +321,10 @@ def _pls_store(fields: PythonObject, state: PythonObject, key: String, value: Py
 
 def _pls_fit(model: PythonObject, x_source: PythonObject, y_source: PythonObject, mut kit: DecompKit,
              context: PythonObject, fields: PythonObject, state: PythonObject,
-             captured_x: Optional[ArrayMetadata] = None, captured_y: Optional[ArrayMetadata] = None) raises -> Tuple[Int, Int]:
+             captured_x: Optional[ArrayMetadata] = None, captured_y: Optional[ArrayMetadata] = None,
+             x_deferred: Bool = False) raises -> Tuple[Int, Int]:
     # `_PLS.fit` reads the captured settings and publishes into separate state.
-    var x = kit.input_snapshot(captured_x.value(), captured_x.value().shape[0], captured_x.value().shape[1]) if captured_x else _matrix(kit, x_source, "X", context)
+    var x = _captured(kit, captured_x.value(), x_deferred, String(fields["_pls_name"])) if captured_x else _matrix(kit, x_source, "X", context)
     var target = _target(kit, y_source, context, captured_y)
     var ym = target[0]
     if ym < 0:
@@ -447,7 +489,7 @@ def _score_binding(fields: PythonObject, context: PythonObject) raises -> Python
 
 def pls_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject,
                   fields: PythonObject, state: PythonObject, captured_x: Optional[ArrayMetadata] = None,
-                  captured_y: Optional[ArrayMetadata] = None) raises -> PythonObject:
+                  captured_y: Optional[ArrayMetadata] = None, x_deferred: Bool = False) raises -> PythonObject:
     if operation == "fit" or operation == "fit_transform":
         # args: (X, y, Y); y wins over Y, as PLSRegression.fit chose.
         var y = args[1] if args[1] is not None else args[2]
@@ -461,7 +503,7 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
         _pls_store(fields, state, "numeric_mode_", mode)
         var kit = DecompKit(decomp_entries(mode, context), context["output_context"])
         try:
-            var held = _pls_fit(model, args[0], y, kit, context, fields, state, captured_x, captured_y)
+            var held = _pls_fit(model, args[0], y, kit, context, fields, state, captured_x, captured_y, x_deferred)
             if operation == "fit":
                 return model
             # transform(X, y): the X and Y the fit converted and uploaded.
@@ -480,7 +522,8 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
                         + "(family_mcls_r2); this install does not carry it")
         var binding = _score_binding(fields, owner[1])
         var truth = admit_f32(args[1], -1, "y", context, finite=False)
-        var prediction = pls_operation(model, "predict", Python.tuple(args[0]), context, fields, state, captured_x)
+        var prediction = pls_operation(model, "predict", Python.tuple(args[0]), context, fields, state, captured_x,
+                                       None, x_deferred)
         var mode = py_get(fields, "numeric_mode")
         var r2 = metrics_cls_operation(PythonObject(None), "family_mcls_r2",
                          Python.tuple(binding, truth.array, prediction, args[2], PythonObject("uniform_average"),
@@ -495,11 +538,11 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
         if operation == "transform":
             # args: (X, y, Y)
             var y = args[1] if args[1] is not None else args[2]
-            var x = kit.input_snapshot(captured_x.value(), captured_x.value().shape[0], captured_x.value().shape[1]) if captured_x else _matrix(kit, args[0], "X", context)
+            var x = _captured(kit, captured_x.value(), x_deferred, String(fields["_pls_name"])) if captured_x else _matrix(kit, args[0], "X", context)
             var target = _target(kit, y, context)
             return _transform(kit, x, target[0], fields, context)
         if operation == "inverse_transform":
-            var z = kit.input_snapshot(captured_x.value(), captured_x.value().shape[0], captured_x.value().shape[1]) if captured_x else _matrix(kit, args[0], "X", context)
+            var z = _captured(kit, captured_x.value(), x_deferred, String(fields["_pls_name"])) if captured_x else _matrix(kit, args[0], "X", context)
             var xr = _rebuild(kit, z, "x_loadings_", "_x_std", "_x_mean", fields, context)
             var y = args[1] if args[1] is not None else args[2]
             if y is None:
@@ -508,7 +551,7 @@ def pls_operation(model: PythonObject, operation: String, args: PythonObject, co
             var yr = _rebuild(kit, w, "y_loadings_", "_y_std", "_y_mean", fields, context)
             return Python.tuple(kit.publish(xr), kit.publish(yr))
         if operation == "predict":
-            var x = kit.input_snapshot(captured_x.value(), captured_x.value().shape[0], captured_x.value().shape[1]) if captured_x else _matrix(kit, args[0], "X", context)
+            var x = _captured(kit, captured_x.value(), x_deferred, String(fields["_pls_name"])) if captured_x else _matrix(kit, args[0], "X", context)
             var mean = _fitted_row(kit, fields["_x_mean"], "_x_mean", context)
             var centered = kit.ew(XD_SUB, x, mean)
             var coef = _fitted_matrix(kit, fields["coef_"], "coef_", context)
@@ -535,7 +578,11 @@ def pls_public_operation(model: PythonObject, operation: String, args: PythonObj
     var fitting = operation == "fit" or operation == "fit_transform"
     var name = String(fields["_pls_name"])
     var sparse = Bool(py=fields["_pls_regression"])
-    var x = _pls_input(args[0], "X", context, 2, name, False, sparse)
+    # Lane a8c: the X of an operation whose kit tests its upload is admitted
+    # with no host pass (`x_deferred`; DecompKit.input_tested refuses it).
+    var x_deferred = False
+    var x = _pls_input_deferred(args[0], "X", context, 2, name, False, sparse,
+                                _pls_defers(fields, fitting, context), x_deferred)
     var y = Optional[ArrayMetadata]()
     if fitting:
         var target = args[1] if args[1] is not None else args[2]
@@ -560,12 +607,12 @@ def pls_public_operation(model: PythonObject, operation: String, args: PythonObj
         var depth = Int(py=depth_value)
         py_setitem(state, "_mojolearn_fitting", PythonObject(depth + 1))
         try:
-            result = pls_operation(model, operation, args, context, fields, state, x.copy(), y)
+            result = pls_operation(model, operation, args, context, fields, state, x.copy(), y, x_deferred)
         except error:
             # _sk_validate.reraise annotated failed one-row/one-feature fits.
             var message = String(error)
             var device_fault = message.find("device_context") >= 0 or message.find("CUDA") >= 0 or message.find("HIP") >= 0 or message.find("hipError") >= 0 or message.find("Metal") >= 0 or message.find("MTL") >= 0
-            if not device_fault and not message.startswith("TypeError:") and not message.startswith("RuntimeError:") and not message.startswith("NotImplementedError:") and not message.startswith("ImportError:") and message != PYTHON_ERROR_PENDING:
+            if not device_fault and not message.startswith("TypeError:") and not message.startswith("RuntimeError:") and not message.startswith("NotImplementedError:") and not message.startswith("ImportError:") and message != PYTHON_ERROR_PENDING and not message.startswith("Input X contains NaN or infinity"):
                 if x.shape[0] == 1:
                     raise Error(name + " cannot be fit on n_samples=1: " + message)
                 if x.shape[1] == 1:
@@ -584,7 +631,7 @@ def pls_public_operation(model: PythonObject, operation: String, args: PythonObj
         if operation == "fit":
             return result
     else:
-        result = pls_operation(model, operation, args, context, fields, state, x.copy())
+        result = pls_operation(model, operation, args, context, fields, state, x.copy(), None, x_deferred)
     return parallel_public_result(result, operation, PythonObject("regressor"), context)
 
 

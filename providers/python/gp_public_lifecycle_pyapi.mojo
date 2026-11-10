@@ -2,6 +2,7 @@
 # Whole public GP lifecycle previously supplied by _mode's Python decorators.
 # The public sentinel distinguishes this owner from existing native archive,
 # parallel and model-selection callers that already prepare their arguments.
+from bindings.admitted_finite_wording import admitted_finite_wording
 from std.math import isfinite, floor
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_f64
@@ -167,7 +168,7 @@ def _gp_classifier_target(source: PythonObject, rows: Int, name: String, context
         if py_type(item) is b.float:
             var number = Float64(py=item)
             if not isfinite(number):
-                raise Error("Input y contains NaN or infinity (" + name + ").")
+                raise Error(admitted_finite_wording(name, "y"))
             if floor(number) != number:
                 raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
         py_setitem(flat, i, item)

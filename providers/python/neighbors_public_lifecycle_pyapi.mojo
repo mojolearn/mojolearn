@@ -5,7 +5,8 @@
 from std.math import isfinite, floor
 from std.python import Python, PythonObject
 from bindings.admitted_family import admit_family_meta, admit_family_owned
-from bindings.admitted_input import admitted_finite_wording
+from bindings.admitted_finite_wording import admitted_finite_wording
+from bindings.device_rows_door import door_is_device_rows, door_rows_store
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.mode_metadata_native import _fields, _fitted
@@ -123,7 +124,7 @@ def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, req
     if stored is not None:
         var refusal = labels_float_storage(stored, context, classifier)
         if refusal == LABELS_FLOAT_NONFINITE:
-            raise Error("Input y contains NaN or infinity (" + name + ").")
+            raise Error(admitted_finite_wording(name, "y"))
         if refusal == LABELS_FLOAT_CONTINUOUS:
             raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
         if refusal == LABELS_FLOAT_OK:
@@ -133,7 +134,7 @@ def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, req
     # walk's verdicts; the walk returns such a list unchanged.
     var verdict = p3nc_float_list_verdict(source, classifier)
     if verdict == P3NC_REAL_NONFINITE:
-        raise Error("Input y contains NaN or infinity (" + name + ").")
+        raise Error(admitted_finite_wording(name, "y"))
     if verdict == P3NC_REAL_CONTINUOUS:
         raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
     if verdict == P3NC_REAL_OK:
@@ -147,7 +148,7 @@ def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, req
         if metric_is_real(flat[i], context) and not metric_is_integral(flat[i], context):
             var number = metric_float(flat[i], context)
             if not isfinite(number):
-                raise Error("Input y contains NaN or infinity (" + name + ").")
+                raise Error(admitted_finite_wording(name, "y"))
             if classifier and floor(number) != number:
                 raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
     if (not multioutput and len(shape) == 2 and shape[1] == 1 and py_type(source) is not b.list
@@ -155,6 +156,14 @@ def _target(source: PythonObject, rows: Int, name: String, classifier: Bool, req
         classical_warn_column(context)
         return flat
     return source
+
+
+def _knn_fold_operation(operation: String) -> Bool:
+    """The k-NN query operations model selection calls on a fold (the
+    classifier's and regressor's predict / predict_proba / score)."""
+    return (operation == "family_xn_knn_clf_predict" or operation == "family_xn_knn_clf_predict_proba"
+            or operation == "family_xn_knn_clf_score" or operation == "family_xn_knn_reg_predict"
+            or operation == "family_xn_knn_reg_score")
 
 
 def neighbors_public_begin(model: PythonObject, operation: String, args: PythonObject,
@@ -191,7 +200,32 @@ def neighbors_public_begin(model: PythonObject, operation: String, args: PythonO
     # one parallel host scan on the CPU column: bindings/neighbors_knn_native.mojo
     # `knn_admit_x`), so this admission defers it: no host pass over a
     # float32 X here. A cast X is still refused from the cast's verdict.
-    var defer = operation.startswith("family_xn_knn_")
+    # Lane a8b-device-x-neighbors-rest: LocalOutlierFactor and
+    # NearestCentroid too; their owners pass a status slot to the first
+    # x_neighbors op that uploads X (bindings/neighbors_local_native.mojo).
+    var defer = (operation.startswith("family_xn_knn_") or operation.startswith("family_xn_loc_lof_")
+                 or operation.startswith("family_xn_loc_nc_"))
+    # Lane a8b-device-x-neighbors-rest: a model-selection fold reaching a
+    # k-NN classifier / regressor query stays resident: no host gather here.
+    # The owner hands its store ids to the resident entry, which gathers the
+    # rows on the device and tests them in the same pass
+    # (bindings/neighbors_knn_native.mojo `_knn_fold`); where it cannot (a
+    # `fast` build, a plan on another device, a host binding, a metric that
+    # reads host query words) the owner gathers the fold on the host itself.
+    if not fitting and _knn_fold_operation(operation) and door_is_device_rows(source, context):
+        var store = door_rows_store(source, context)
+        if store.active():
+            if Int(py=depth) == 0:
+                var fold_width = py_get(fields, "n_features_in_")
+                if fold_width is not None:
+                    host_inference_scalar(fold_width, context)
+                    classical_check_width(store.row_words, Int(py=fold_width), name)
+                estimator_feature_check(model, fields, source, context)
+            var fold_values = Python.list()
+            for i in range(len(args)):  # small-loop(fixed operation argument envelope)
+                _ = py_call(fold_values.append, args[i])
+            return NeighborPublicCall(fold_values, fields, source, method, fitting, estimator_outside(),
+                                      Int(py=depth), store.rows, store.row_words)
     var snapshot = admit_family_meta(source, 2, "X", context, True, finite=scan,
                                      refusal=admitted_finite_wording(name, "X"), defer_finite=defer)
     var rows = snapshot.shape[0]

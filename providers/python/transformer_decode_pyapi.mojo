@@ -7,7 +7,6 @@ from bindings.native_loaded_module import native_loaded_module
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from std.os import getenv
-from std.ffi import _Global
 from std.memory import memcpy
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type, py_contains
@@ -24,7 +23,7 @@ from core.hostptr import f32_ptr
 from transformer.block_options import BlockOptions
 from bindings.cpython_table import cpython_table
 from bindings.native_model_records import records_stampable, model_generation, ContentRecord, content_value, content_same
-from std.ffi import _Global
+from core.shared_slot import SharedSlot
 
 
 struct TransformerDecodeHandle(Movable, Writable):
@@ -124,8 +123,7 @@ struct TransformerDecodeWords(Defaultable, Movable):
 
 
 # Bump the name's version whenever TransformerDecodeWords' layout changes.
-comptime _TRANSFORMER_DECODE_WORDS = _Global[StorageType=TransformerDecodeWords,
-    name="MojolearnTransformerDecodeWordsV1", init_fn=TransformerDecodeWords.__init__]
+comptime _TRANSFORMER_DECODE_WORDS = SharedSlot[TransformerDecodeWords, "MojolearnTransformerDecodeWordsV2"]
 
 
 def _transformer_decode_words(entries: PythonObject, prefix: String, mut vendor: String, mut mode: Int) raises:
@@ -203,10 +201,7 @@ struct _TransformerDecodeBindings(Defaultable, Movable):
         self.binding = PythonObject(None)
 
 
-comptime _TRANSFORMER_DECODE_BINDINGS = _Global[
-    StorageType=_TransformerDecodeBindings, name="MojolearnTransformerDecodeBindingsV1",
-    init_fn=_TransformerDecodeBindings.__init__,
-]
+comptime _TRANSFORMER_DECODE_BINDINGS = SharedSlot[_TransformerDecodeBindings, "MojolearnTransformerDecodeBindingsV2"]
 
 
 def _transformer_decode_default_mode(module: PythonObject, context: PythonObject) raises -> PythonObject:

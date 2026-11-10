@@ -21,7 +21,7 @@ from std.memory import memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
 from bindings.causal_lm_construct import _model_block, _model_profile, _model_bindings, _model_f32, _model_shape, model_recurrent_weights_check
-from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, causal_layer_allocate_fields, causal_layer_run_fields, _addr, _native_function, causal_transformer_admin, _native_has_entry, _native_entry_fields, _standalone_record_fields, causal_prepared_layer
+from bindings.causal_lm_public import causal_lm_admit_binding, causal_layer_allocate, causal_layer_run, causal_layer_allocate_fields, causal_layer_run_fields, _addr, _weight_addr, _native_function, causal_transformer_admin, _native_has_entry, _native_entry_fields, _standalone_record_fields, causal_prepared_layer
 from core.hostptr import f32_ptr
 from core.host_helpers_impl import all_finite_f32
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
@@ -638,8 +638,9 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
     var e = owner.plan.downcast_value_ptr[NativeBlockPlan]()[].entries
     # TOMBSTONE: MOJOLEARN_TRANSFORMER_LEGACY_SETUP / MOJOLEARN_TRANSFORMER_SESSION_FRESH (runtime switches, SUPERSEDED by the block session) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
     # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch
-    # A binding with the session entries always runs on the block's session.
-    var reuse = transformer and py_contains(e, "forward_session")
+    # restored 2026-11-09 by lane r1-restore-measured-winners (the switches came back with the fresh prefill arm;
+    # default unchanged: the block's session).
+    var reuse = transformer and py_contains(e, "forward_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
     var lock = py_get(fields, "_runtime_lock") if transformer else PythonObject(None)
     var lock_lease = OperationLockLease(lock)
     var locked = transformer and (reuse or fields["_native_session"] is not None or fields["_int15"] is not None)
@@ -652,7 +653,7 @@ def _neural_plain(mut mods: NativeModules, owner: NativeBlockExecution, x: Pytho
             py_setitem(fields, "_native_session", PythonObject(None))
             py_setitem(fields, "_session_binding", PythonObject(None))
         if transformer and supplied_state is None and not step and fields["_int15"] is None:
-            var fresh_session = reuse and py_contains(e, "transformer_session_forward_fresh")
+            var fresh_session = reuse and py_contains(e, "transformer_session_forward_fresh") and String(getenv("MOJOLEARN_TRANSFORMER_SESSION_FRESH")) != "0"
             if fresh_session or py_contains(e, "transformer_forward_fresh"):
                 var y = generation_array([b, l, d])
                 var keep = List[PythonObject]()
@@ -1168,7 +1169,13 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
     var gradients = bi.list()
     _ = py_call(gradients.append, generation_array([b, l, d]))
     for i in range(len(weights)):  # driver-loop: over parameter buffers and their shapes
-        _ = py_call(addresses.append, _addr(weights[i], keep))
+        # Integration (integ/pre-0867-w5, lane x56d): a Mamba block's weights
+        # go through the binding's one weight door (generation_weight_address:
+        # frozen read-only, the weight epoch bumped on a new or copied
+        # weight), so the cached block program keys them by address + epoch
+        # (core/weight_epoch.mojo) and an unchanged weight is NOT re-uploaded
+        # per backward call. The transformer route keeps its own session key.
+        _ = py_call(addresses.append, _addr(weights[i], keep) if transformer else _weight_addr(weights[i], keep))
         var shape = List[Int]()
         var weight_shape = weights[i].shape  # read once, not once per axis
         for j in range(len(weight_shape)):  # driver-loop: over tensor shape metadata
@@ -1186,7 +1193,7 @@ def _neural_backward_prepared(mut mods: NativeModules, block: PythonObject, inpu
         lock_lease.acquire()
         mods.released()
         try:
-            var session = _native_has_entry(mods, entries, "transformer_session_backward")
+            var session = _native_has_entry(mods, entries, "transformer_session_backward") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
             if session:
                 if fields["_native_session"] is not None and fields["_session_binding"] is not entries.canonical:
                     causal_transformer_admin(mods, fields["_session_binding"], fields["_native_session"], 13)

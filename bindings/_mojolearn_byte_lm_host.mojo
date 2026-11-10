@@ -246,20 +246,21 @@ def byte_lm_host_train_step_binding(addresses: PythonObject, shape: PythonObject
 def byte_lm_host_loss_binding(addresses: PythonObject, shape: PythonObject,
                               threaded: PythonObject, threads: PythonObject) raises -> PythonObject:
     """Loss for addresses [params f32 (n_total), ids i32 (batch * (length + 1))]:
-    the trainer's training forward on the host. Returns the mean loss's
-    IEEE-754 bits."""
+    the trainer's training forward on the host, on one thread (`threaded`
+    0) or at most `threads` threads (0: one per physical core). Returns the
+    mean loss's IEEE-754 bits."""
     # lane x7b: the loss is the trainer's program on a host session (the
-    # GPU columns' algorithm); `threaded` / `threads` are still checked for
-    # the callers' signature and choose nothing here.
+    # GPU columns' algorithm); `threaded` / `threads` cap the session's task
+    # count (lane m2-neural-leftovers: they had been accepted and ignored).
     var cfg = _host_config(shape)
     if len(addresses) != 2:
         raise Error("byte LM host: expected 2 addresses")
     var use_threads = _index(threaded)
     if use_threads != 0 and use_threads != 1:
         raise Error("byte LM host: threaded must be 0 or 1")
-    _ = _thread_count(threads)
+    var thread_count = _thread_count(threads)
     var addresses_native: List[Int] = [_index(addresses[0]), _index(addresses[1])]
-    return PythonObject(byte_host_loss_native(addresses_native, cfg))
+    return PythonObject(byte_host_loss_native(addresses_native, cfg, use_threads, thread_count))
 
 
 # ===========================================================================

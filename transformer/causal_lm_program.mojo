@@ -56,7 +56,7 @@ from autograd.program_control import control_prepare, control_run
 from autograd.program_io import ProgramInput
 from autograd.program_loop import LOOP_CHECK_AUTO
 
-comptime _CTX = "MojolearnNeuralTransformerContextIdenticalV2" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTransformerContextFastV2"
+comptime _CTX = "MojolearnNeuralTransformerContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTransformerContextFastV3"
 
 
 def _pieces(addrs: List[Int], sizes: List[Int], what: String) raises -> List[CastIn]:

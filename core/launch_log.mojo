@@ -36,8 +36,8 @@ on the enqueue path and quiet_window would rightly refuse to certify
 one.
 """
 
-from std.ffi import _Global
 from std.os import getenv
+from core.shared_slot import SharedSlot
 
 
 struct _LaunchLogState(Defaultable, Movable):
@@ -62,11 +62,7 @@ struct _LaunchLogState(Defaultable, Movable):
         self.last_ns = 0
 
 
-comptime _LAUNCH_LOG = _Global[
-    StorageType=_LaunchLogState,
-    name="RFLaunchLog",
-    init_fn=_LaunchLogState.__init__,
-]
+comptime _LAUNCH_LOG = SharedSlot[_LaunchLogState, "MojolearnRFLaunchLogV1"]
 
 
 def log_launch(name: StringSlice) raises:

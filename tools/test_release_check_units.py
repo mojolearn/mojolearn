@@ -125,14 +125,16 @@ def _runner(tmp_path, monkeypatch, torch_in_venv=True, has_vision=False):
             (out / "results.json").write_text(json.dumps(dict(status="PASSED")))
         return type("P", (), dict(returncode=0))()
 
-    def fake_gate(vendor, base_python, out, installs, env=None, launch=None):
+    def fake_gate(vendor, base_python, out, installs, env=None, launch=None, venv=None):
         calls.append(("adapter_gate.run", [vendor]))
-        py = pathlib.Path(AG.venv_python(pathlib.Path(out) / "venv"))
+        py = pathlib.Path(AG.venv_python(venv))
         py.parent.mkdir(parents=True, exist_ok=True)
         py.write_text("")
         return dict(ok=True, status="PASSED")
     monkeypatch.setattr(AG, "run", fake_gate)
-    venv_py = AG.venv_python(tmp_path / "units" / "adapters" / "venv")
+    # the adapters venv is a scratch venv outside the evidence folder (adapter_gate.scratch_venv)
+    monkeypatch.setattr(AG, "scratch_venv", lambda: tmp_path / "scratch" / "venv")
+    venv_py = AG.venv_python(tmp_path / "scratch" / "venv")
     monkeypatch.setattr(AS, "has_module", lambda python, module: str(python) == venv_py and (
         module == "torch" and torch_in_venv or module == "torchvision" and has_vision))
     monkeypatch.setattr(AS, "ensure_torchvision", lambda python, log: calls.append(("ensure_torchvision", [python])))

@@ -216,10 +216,9 @@ from gemm.experiments.neural_switches import ROLE_HEAD
 from gemm.contract import OP_NT
 from transformer.impl.llama.modeling_llama import llama_rms_norm
 from std.math import isfinite
-# lane afn-attn (2026-10-03): MOJOLEARN_AFN_ATTN_ARENA, FAST + Apple only
-# (AFN_ATTN_ARENA is False on every other build, so these are never called).
-from core.device_arena import arena_begin, arena_end, arena_release
-from transformer.impl.llama.afn_apple_fast import AFN_ATTN_ARENA, afn_flash_call_count
+# TOMBSTONE: MOJOLEARN_AFN_ATTN_ARENA (removed: dead; no caller built TransformerWorkspace after lanes x45c and x6) with TransformerWorkspace and _workspace_key deleted 2026-11-09 by lane/m2-neural-leftovers; code recoverable at 0ce88411d3.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_ARENA.patch
+from transformer.impl.llama.afn_apple_fast import afn_flash_call_count
 
 from transformer.experiments.profile import transformer_arithmetic_profile, transformer_arithmetic_profile_changed
 from transformer.session_native_dispatch import TRANSFORMER_NATIVE_API, transformer_session_forward_native
@@ -239,8 +238,6 @@ from transformer.transformer_binding_impl import (
     _tail_of,
     _check_base_addrs,
     _lean_for_w,
-    _workspace_key,
-    TransformerWorkspace,
     TransformerSession,
     _session_retain_cap_bytes,
     _transformer_run_session,
@@ -525,7 +522,7 @@ def transformer_session_forward_binding(
 
 
 from transformer.native_block_dispatch import NATIVE_TRANSFORMER_BLOCK_API
-from providers.python.causal_lm_program_pyapi import CausalProgramOwner, causal_lm_program_read_py
+from providers.python.causal_lm_program_pyapi import causal_program_owner_type, causal_lm_program_read_py
 
 
 
@@ -622,12 +619,64 @@ def _transformer_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
 
 # TOMBSTONE: MOJOLEARN_TRANSFORMER_FRESH_PREFILL / MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (the device per-call transformer_forward_fresh entry, SUPERSEDED by the session's transformer_session_forward_fresh, reached only under MOJOLEARN_TRANSFORMER_SESSION_FRESH=0 or MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1) deleted 2026-11-09 by lane x4-transformer-on-executor; code recoverable at f59d913b0b.
 # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_FRESH_PREFILL.patch
+# restored 2026-11-09 by lane r1-restore-measured-winners: the per-call entry and its two defines are live again
+# with their pre-x4 export rule (NVIDIA IDENTICAL by default, -D MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL opts out,
+# -D MOJOLEARN_TRANSFORMER_FRESH_PREFILL opts in elsewhere); the block session prefill stays the default route.
+def transformer_forward_fresh_binding(
+    addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """Stateless prefill: original zero device cache, only y is returned.
+
+    Eleven pointers: x, nine weights, y. Eight scalars: B, L, d_model,
+    n_heads, n_kv_heads, head_dim, intermediate, window. Capacity remains
+    L (or a window-sized ring), exactly as Python allocate_state(B, L).
+    The zero sentinel cache pointers never reach a transfer in this arm.
+
+    lane/block-options: or 11 + 11 pointers and 8 + 17 scalars, the two
+    option tails appended (this file's tail section, word for word). The
+    gate_proj.weight pointer (slot 7) is 0 under an ungated MLP.
+    """
+    var what = String("transformer_forward_fresh")
+    var raw = _read_addrs_tail(addrs, 11, what)
+    var p = _read_params(params, 8, what)
+    var opts = BlockOptions.from_params(p, 8)
+    # Into `transformer_forward`'s 13 + 11 layout: x, nine weights, the
+    # two absent cache slots, y, then the tail.
+    var a = List[Int]()
+    for i in range(10):  # small-loop(10: fixed buffer-address list of this entry): argument words, not data
+        a.append(raw[i])
+    a.append(0)
+    a.append(0)
+    a.append(raw[10])
+    for i in range(BLOCK_OPTION_ADDRS):  # small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
+        a.append(raw[11 + i])
+    _check_base_addrs(a, [0, 1, 2, 3, 4, 5, 6, 8, 9], what)
+    _ = a  # keep the Python object alive through the native call above
+    if a[12] == 0:
+        raise Error("transformer_forward_fresh: null output address")
+    var b = p[0]
+    var l = p[1]
+    var dm = p[2]
+    var nh = p[3]
+    var nkv = p[4]
+    var hd = p[5]
+    var it = p[6]
+    var window = p[7]
+    if b <= 0 or l <= 0:
+        raise Error("transformer_forward_fresh: B and L must be positive")
+    var out_len = 0
+    with GILReleased(Python()):
+        out_len = _transformer_run[True](a, b, l, dm, nh, nkv, hd, it, l, 0, window, opts)
+    return PythonObject(out_len)
+
+
 # Lane ne3-c-blocks-embedding (row N114): a VERIFICATION AND LEGACY entry on
 # this GPU binding. TransformerBlock decodes and prefills through
 # `transformer_session_forward` (weights, cache and RoPE retained by the
-# block's session); this per-call entry, which uploads the nine weights and
-# both caches per call, is reached only by direct callers of the extension
-# (lane x4 removed MOJOLEARN_TRANSFORMER_LEGACY_SETUP, its A arm). CPU host bindings export their own host entry.
+# block's session) whenever the binding exports it; this per-call entry,
+# which uploads the nine weights and both caches per call, is reached only
+# under MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1 (the A arm) and by direct callers
+# of the extension. CPU host bindings export their own host entry.
 def transformer_forward_binding(
     addrs: PythonObject,
     params: PythonObject,
@@ -725,9 +774,10 @@ def transformer_forward_binding(
 # Lane ne3-c-blocks-embedding (row N114): a VERIFICATION AND LEGACY entry on
 # this GPU binding. TransformerBlock decodes and prefills through
 # `transformer_session_forward` (weights, cache and RoPE retained by the
-# block's session); this per-call entry, which uploads the nine weights and
-# both caches per call, is reached only by direct callers of the extension
-# (lane x4 removed MOJOLEARN_TRANSFORMER_LEGACY_SETUP, its A arm). CPU host bindings export their own host entry.
+# block's session) whenever the binding exports it; this per-call entry,
+# which uploads the nine weights and both caches per call, is reached only
+# under MOJOLEARN_TRANSFORMER_LEGACY_SETUP=1 (the A arm) and by direct callers
+# of the extension. CPU host bindings export their own host entry.
 def transformer_decode_step_binding(
     addrs: PythonObject,
     params: PythonObject,
@@ -1483,6 +1533,11 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[transformer_session_backward_binding]("transformer_session_backward")
         # lane/lowbit-blocks: numeric_profile="fixed15_v1".
         m.def_function[transformer_session_forward_int15_binding]("transformer_session_forward_int15")
+        # NVIDIA's full public A/B gate admits discarded-cache prefill.
+        # Apple retains its prior default until separately priced; the explicit
+        # force flag remains available for its completed arithmetic gate.
+        comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and (is_defined["MOJOLEARN_TRANSFORMER_FRESH_PREFILL"]() or (TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"]())):
+            m.def_function[transformer_forward_fresh_binding]("transformer_forward_fresh")
         m.def_function[transformer_decode_step_binding](
             "transformer_decode_step"
         )
@@ -1515,7 +1570,7 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[causal_lm_session_forward_binding]("causal_lm_session_forward")
         m.def_function[causal_lm_session_close_binding]("causal_lm_session_close")
         # Lane x45c: CausalLM.generate as one Program.decode (the decode program).
-        _ = m.add_type[CausalProgramOwner]("_CausalProgramOwner")
+        causal_program_owner_type(m)  # one Python type per interpreter (the mamba binding registers it too)
         m.def_function[causal_lm_program_read_py]("causal_lm_program_read_v1")
         return m.finalize()
     except e:

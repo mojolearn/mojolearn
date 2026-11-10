@@ -23,7 +23,7 @@ any request and retained as namespaces of compiled entries; workers never
 call the Python binding loader. Neighbor and IVF requests dispatch to the
 native handlers in parallel_neighbor_worker; no estimator callback is stored.
 """
-from std.ffi import _Global, external_call
+from std.ffi import external_call
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -62,6 +62,7 @@ from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
 from bindings.trees_public_inputs import trees_encode_labels
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols
 from core.hotpath_impl import cast_elements, HP_I32, HP_I64, HP_U32
+from core.shared_slot import SharedSlot
 
 comptime _CHILD = "mojolearn._native_parallel_shard_worker"
 
@@ -73,10 +74,7 @@ struct ParallelShardBoundary(Defaultable, Movable):
         self.tables = PythonObject(None)
 
 
-comptime PARALLEL_SHARD_BOUNDARY = _Global[
-    StorageType=ParallelShardBoundary, name="MojoParallelShardOwner",
-    init_fn=ParallelShardBoundary.__init__,
-]
+comptime PARALLEL_SHARD_BOUNDARY = SharedSlot[ParallelShardBoundary, "MojolearnParallelShardOwnerV1"]
 
 
 def _t(name: String) raises -> PythonObject:

@@ -36,7 +36,6 @@ hand DEVICE words between threads are `dev_barrier` (Apple's
 `air.wg.barrier(3, 1)`; `barrier()` there orders threadgroup memory only).
 """
 from std.atomic import Atomic
-from std.ffi import _Global
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
@@ -76,6 +75,7 @@ from x_decomp.tsqr_core import (
     ts_reflector,
     ts_scale,
 )
+from core.shared_slot import SharedSlot
 
 comptime _SH = UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED]
 comptime _TT = TS_NB * TS_NB
@@ -965,7 +965,7 @@ struct _TsDev(Defaultable, Movable):
         self.n = 0
 
 
-comptime TS_DEV_STATE = _Global[StorageType=_TsDev, name="MojoXDecompTsqrDevice", init_fn=_TsDev.__init__]
+comptime TS_DEV_STATE = SharedSlot[_TsDev, "MojolearnXDecompTsqrDeviceV1"]
 
 
 def ts_free_device() raises:

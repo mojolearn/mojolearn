@@ -17,7 +17,7 @@ Inputs
 
 Outputs (in --out): grid-decisions.json and GRID_DECISIONS.md.
 
-Rules (CLAUDE.md "Measurement process" and "Experiments"):
+Rules (AGENTS.md "Measurement process" and "Experiments"):
   * a cell counts only with a timing verdict, NVIDIA == AMD identity MATCH and quality not WORSE;
   * an algorithm is FASTER for an arm when no workload is SLOWER and at least one is FASTER, NEUTRAL when
     every measured workload is NO_VERDICT, SLOWER when any workload is SLOWER;
@@ -34,7 +34,7 @@ Rules (CLAUDE.md "Measurement process" and "Experiments"):
   * per algorithm, the recommended configuration is the measured FASTER configuration (single, cross or
     all-on) with identity MATCH, quality not WORSE and the smallest combined ratio.
 
---mode fast (Apple FAST grid, tools/six_lane_grid.py --mode fast --vendor apple; CLAUDE.md "FAST mode needs no
+--mode fast (Apple FAST grid, tools/six_lane_grid.py --mode fast --vendor apple; AGENTS.md "`fast` needs no
 identical anything"): the matrix and outputs default to experiments/six_lane_integration/grid-fast/; identity is
 NOT_REQUIRED on every cell (no --identity input, no identity hold); one vendor votes (apple, the M3): its own
 per-vendor verdict when the verdict file carries one, else the case verdict, and only its ratio enters the combined

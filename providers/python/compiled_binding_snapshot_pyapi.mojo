@@ -2,9 +2,9 @@
 # Operation-local metadata, not another execution provider. The existing common
 # provider owns dispatch/module lifetime; this immutable-by-convention admission
 # record carries its freshly read scalar metadata through one public operation.
-from std.ffi import _Global
 from std.python import PythonObject
 from providers.python.neural_descriptor_pyapi import NeuralDescriptorProvider
+from core.shared_slot import SharedSlot
 
 
 struct CompiledBindingSnapshot(Movable, Writable):
@@ -57,8 +57,7 @@ struct CompiledBindingSnapshots(Defaultable, Movable):
 
 # The named global may be shared by every Mojo extension in the process:
 # bump the name's version whenever CompiledBindingSnapshots' layout changes.
-comptime COMPILED_BINDING_SNAPSHOTS = _Global[StorageType=CompiledBindingSnapshots,
-    name="MojolearnCompiledBindingSnapshotsV1", init_fn=CompiledBindingSnapshots.__init__]
+comptime COMPILED_BINDING_SNAPSHOTS = SharedSlot[CompiledBindingSnapshots, "MojolearnCompiledBindingSnapshotsV2"]
 
 
 def compiled_binding_retained(module: PythonObject, factory: PythonObject, abi: String) raises -> PythonObject:

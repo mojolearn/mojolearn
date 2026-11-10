@@ -15,14 +15,15 @@ POOL: a freed buffer is kept and handed to the next request that fits
 DeviceContext runs its work in order, so a buffer reused by a later launch
 is written only after every earlier launch that read it. Free capacity past
 POOL_KEEP_BYTES is released after a sync."""
-from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
+from core.admitted_finite_status import enqueue_finite_status
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
+from core.admitted_finite_status import enqueue_finite_status
 
 from x_decomp.cells import F32Ptr, I32Ptr, LARS_ROW_EXTRA, OP_SCALE, OP_SELECT, ew_cell, rand_cell
 from core.philox import philox4x32_10
@@ -73,6 +74,7 @@ from x_decomp.device import (
 from x_decomp.qr_bounded import QRB_CELLS
 from x_decomp.jacobi_par import PJ_TPB, sym_from_triangle_kernel
 from decomposition.linalg_types import _validate_shape
+from core.shared_slot import SharedSlot
 
 comptime POOL_KEEP_BYTES = 1 << 30
 comptime POOL_CLASSES = 40
@@ -116,7 +118,7 @@ struct _Pool(Defaultable, Movable):
         self.free_count = 0
 
 
-comptime X_DECOMP_POOL = _Global[StorageType=_Pool, name="MojoXDecompPool", init_fn=_Pool.__init__]
+comptime X_DECOMP_POOL = SharedSlot[_Pool, "MojolearnXDecompPoolV1"]
 
 
 def pool_alloc(n: Int) raises -> Int:
@@ -201,6 +203,33 @@ def dev_upload_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
     _up_into(ctx, p[].bufs[i], src, cnt)
     ctx.synchronize()
     return cnt
+
+
+def dev_upload_finite_run(i: Int, src: F32Ptr, cnt: Int) raises -> Int:
+    """`dev_upload_run` with the finite test of the uploaded words on the
+    device (core/admitted_finite_status.mojo, NaN or infinity on bits), read
+    back at the upload's own synchronisation: 0 when every word is finite,
+    1 otherwise. No host scan of `src`; the words are copied, never
+    converted, so no bit changes. The ONE upload-finite body, reached only
+    through the kernel-call op XD_DEV_UPLOAD_FINITE (lane a8d's op; lane
+    a8c's duplicate named entry x_decomp_dev_upload_finite was folded into
+    it at integration, integ/pre-0867-w5). Callers: the manifold kit's
+    resident upload and DecompKit.input_tested (PLS with a deferred X)."""
+    var p = X_DECOMP_POOL.get_or_create_ptr()
+    var dp = _ptr(i, cnt)
+    var ctx = xd_ctx()
+    _up_into(ctx, p[].bufs[i], src, cnt)
+    var status = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill[DType.int32](ctx, status, Int32(0))
+    if cnt > 0:
+        enqueue_finite_status(ctx, dp, cnt, status.unsafe_ptr(), 0)
+    var word = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=word.unsafe_ptr(), src_buf=status)
+    ctx.synchronize()
+    var flagged = Int(word.unsafe_ptr()[0])
+    _ = word^
+    _ = status^
+    return flagged
 
 
 def dev_download_run(i: Int, dst: F32Ptr, cnt: Int) raises -> Int:
@@ -942,7 +971,7 @@ struct _GrpStage(Defaultable, Movable):
         self.host = Optional[HostBuffer[DType.int32]]()
 
 
-comptime GRP_STAGE = _Global[StorageType=_GrpStage, name="MojoXDecompGrpFusedStage", init_fn=_GrpStage.__init__]
+comptime GRP_STAGE = SharedSlot[_GrpStage, "MojolearnXDecompGrpFusedStageV1"]
 
 
 def grp_fit_fused_run(
@@ -972,7 +1001,7 @@ def grp_fit_fused_run(
         st[].part = ctx.enqueue_create_buffer[DType.int32](513)
         st[].host = ctx.enqueue_create_host_buffer[DType.int32](1)
     var blocks = _scan_blocks(cnt) if cnt > 0 else 0
-    var buf = pool_take["MojoXDecompCls2Scan"](ctx, max(cnt, 1))
+    var buf = pool_take["MojolearnXDecompCls2ScanV1"](ctx, max(cnt, 1))
     if cnt > 0:
         ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, cnt), src_ptr=src)
         ctx.enqueue_function[nonfinite_partial_kernel](
@@ -1005,7 +1034,7 @@ def grp_fit_fused_run(
     ctx.synchronize()
     if cnt > 0:
         best = st[].host.value().unsafe_ptr()[0]
-    pool_give["MojoXDecompCls2Scan"](buf^)
+    pool_give["MojolearnXDecompCls2ScanV1"](buf^)
     return -1 if best == NONFINITE_NONE else Int(best)
 
 

@@ -47,7 +47,7 @@ Candidates (docs/apple-fast/notes/neural-attn.md has the launch profile):
 - ALL: every candidate at once.
 """
 
-from std.ffi import external_call, _Global
+from std.ffi import external_call
 from std.gpu import block_idx, thread_idx
 from std.gpu.primitives.warp import shuffle_xor
 from std.math import exp, sqrt
@@ -61,6 +61,7 @@ from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.apple_air import simdgroup_load_legacy_air
 from core.step_phase import step_count_launch
+from core.shared_slot import SharedSlot
 
 # ---------------------------------------------------------------------------
 # The guard and the defines. Every candidate is FAST + Apple + its define
@@ -112,10 +113,8 @@ comptime AFN_ATTN_FUSE_PRE = AFN_ATTN_ON and (
 comptime AFN_ATTN_FUSE_MLP = AFN_ATTN_ON and (
     AFN_ATTN_ALL or is_defined["MOJOLEARN_AFN_ATTN_FUSE_MLP"]()
 )
-# A07: not tested in this campaign; standalone transformer binding allocation arm.
-comptime AFN_ATTN_ARENA = AFN_ATTN_ON and (
-    AFN_ATTN_ALL or is_defined["MOJOLEARN_AFN_ATTN_ARENA"]()
-)
+# TOMBSTONE: MOJOLEARN_AFN_ATTN_ARENA (removed: dead; no caller built TransformerWorkspace after lanes x45c and x6) with TransformerWorkspace and _workspace_key deleted 2026-11-09 by lane/m2-neural-leftovers; code recoverable at 0ce88411d3.
+# Restore: git apply experiments/removed/MOJOLEARN_AFN_ATTN_ARENA.patch
 #: Any candidate that changes the block forward's launches.
 comptime AFN_ATTN_ANY = (
     AFN_ATTN_NORM_SG or AFN_ATTN_ROPE_CACHE or AFN_ATTN_FLASH
@@ -838,7 +837,7 @@ struct FlashCallerAudit(Defaultable, Movable):
         self.calls = 0
         self.grouped_calls = 0
 
-comptime FLASH_AUDIT = _Global[StorageType=FlashCallerAudit, name="AppleFlashCallerAudit", init_fn=FlashCallerAudit.__init__]
+comptime FLASH_AUDIT = SharedSlot[FlashCallerAudit, "MojolearnAppleFlashCallerAuditV1"]
 # MEASURED M3 FAST; candidate remains OFF. Broader workload coverage pending.
 # Scored FAST quality: 3/3 metrics within the existing bands; PASS.
 # F07/default M3 2026-10-06: 3 retained public-caller timings;
