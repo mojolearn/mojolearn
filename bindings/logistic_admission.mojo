@@ -40,8 +40,7 @@ def logistic_storage(model: PythonObject, context: PythonObject) raises -> Pytho
     return py_call(layout["fields_get"], model, py_type(model))
 
 
-def logistic_fields(model: PythonObject, context: PythonObject, copy_state: Bool = True,
-                    configure: Bool = False) raises -> PythonObject:
+def logistic_fields(model: PythonObject, context: PythonObject, configure: Bool = False) raises -> PythonObject:
     var fields = logistic_storage(model, context)
     var names = context["lr_parameters"]
     for i in range(len(names)):  # driver-loop: fixed constructor parameter values before comparisons/conversion
@@ -53,10 +52,6 @@ def logistic_fields(model: PythonObject, context: PythonObject, copy_state: Bool
         if py_contains(fields, names[i]):
             var value = classifier_label_list(fields[names[i]], context) if String(names[i]) == "classes_" else fields[names[i]]
             classical_admit_value(value, context)
-    if copy_state:
-        fields = py_call(py_type(Python.dict()), fields)
-        if py_contains(fields, "classes_"):
-            py_setitem(fields, "classes_", classifier_label_list(fields["classes_"], context))
     return fields
 
 
@@ -98,7 +93,7 @@ def logistic_initialize(model: PythonObject, args: PythonObject, context: Python
 
 
 def logistic_get_params(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = logistic_fields(model, context, True, True)
+    var fields = logistic_fields(model, context, True)
     var out = Python.dict()
     var names = context["lr_sorted_parameters"]
     for i in range(len(names)):  # driver-loop: ParamsMixin's sorted parameter names
