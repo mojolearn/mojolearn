@@ -4,15 +4,15 @@
   "files": 616,
   "test_definitions": 4127,
   "file_decisions": {
-    "needs-semantic-review": 589,
+    "needs-semantic-review": 588,
     "retain-python-boundary": 10,
     "retain-tooling": 2,
     "review-module-gate": 1,
-    "split-migrated": 2,
+    "split-migrated": 3,
     "split-needed": 9,
     "split-partial": 3
   },
-  "reviewed_files": 27,
+  "reviewed_files": 28,
   "not_a_gate": true,
   "limitations": [
     "Definitions are source functions, not parametrized execution cases.",
@@ -62,6 +62,13 @@
       "additional_native_int8_fixtures_per_executor": 5,
       "source_review_only": true,
       "runtime_status": "Orchestrator compile and run owed; see int8-linalg-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_oob_exact_sum.py",
+      "decision": "split-migrated",
+      "native_fixtures_per_executor": 10,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see oob-exact-sum-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [

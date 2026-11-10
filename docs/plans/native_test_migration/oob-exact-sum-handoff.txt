@@ -1,0 +1,42 @@
+Mojolearn native OOB exact-sum checks, 2026-11-10
+
+Scope and coverage
+  Five original target fixtures x covered/uncovered = 10 fixtures for each
+  typed host/device entry in xtrees/oob.mojo. Inputs are unchanged:
+  [1], [-1], [2^60,1,-2^60], [2,-2,0], and 65 ones.
+  Check all prediction words, sum/centered-square/residual-square/mean words,
+  all four status flags, and unchanged accumulators/counts/target words.
+  Independent closed-form expected binary64 words replace Python math.fsum.
+  In the cancellation fixture, exact sum is one, rounded mean is 1/3, and
+  separately rounded squared deviations sum to 2^121. Expected encodings
+  do not call the product's limb sum or soft-float helpers. No tolerance,
+  reference hashes or vendor-specific expectations.
+
+Parallel plan
+  CPU: 10 owned input/output fixture sets through host_parallelize.
+  GPU: existing parallel row/limb kernels; ordered calls because the typed
+  product entry obtains the process-wide xtrees.ops_device context and owns
+  its stream/temporary allocations. No concurrency/scaling claim or new
+  runner. Native lists own every borrowed pointer through the final reads.
+
+Python removal and retained boundary
+  test_oob_exact_sum.py now has two tiny covered/uncovered pointer-list ABI
+  cases. Literal output sentinels check pointer order/result writes and
+  source-buffer ownership. Removed math.fsum, centered/residual arithmetic
+  and the ten-case numerical matrix from Python. All numerical cases live
+  directly in Mojo; genuine Python pointer-list packaging remains in Python.
+
+Orchestrator commands (source review only; lane does not run)
+  bash tools/compile_slot.sh pixi run check-native-oob-cpu
+  bash tools/compile_slot.sh pixi run check-native-oob-gpu
+  Compile-only:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/oob_exact_sum_cpu.mojo -o "$HOME/mojolearn-evidence/native-oob-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/oob_exact_sum_gpu.mojo -o "$HOME/mojolearn-evidence/native-oob-gpu"
+  Apply standard target flags for NVIDIA/AMD builds.
+  Retained Python binding: _mojolearn_x_trees (identical).
+  MOJOLEARN_NUMERIC_MODE=identical python3 -m pytest mojolearn/tests/test_oob_exact_sum.py
+
+Status
+  CPU/GPU compile/run are RUN OWED to root; no identity or timing queued.
+  Product/kernel/arithmetic/defaults unchanged. A/B define: none (test-only).
+  Inventory now 28 reviewed files and 588 explicitly pending semantic review.
