@@ -8,13 +8,15 @@ struct KMeansResidentState(Movable):
     var owner: Int
     var centers: Int
     var binding: Int
+    var connection: Int
     var clusters: Int
     var features: Int
     var handle: Int
     var driver: KMeansNativeDriver
 
-    def matches(self, owner: Int, centers: Int, binding: Int, clusters: Int, features: Int) -> Bool:
-        return self.handle >= 0 and self.owner == owner and self.centers == centers and self.binding == binding and self.clusters == clusters and self.features == features
+    def matches(self, owner: Int, centers: Int, binding: Int, connection: Int,
+                clusters: Int, features: Int) -> Bool:
+        return self.handle >= 0 and self.owner == owner and self.centers == centers and self.binding == binding and self.connection == connection and self.clusters == clusters and self.features == features
 
     def take_handle(mut self) -> Int:
         var handle = self.handle

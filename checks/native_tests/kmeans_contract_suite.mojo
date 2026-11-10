@@ -91,17 +91,18 @@ def _fixture(unit: Int) raises:
         driver.release(83)
     elif unit < 20:
         var variant = unit - 12
-        var state = KMeansResidentState(101, 103, 107, 37, 31, 83, driver.copy())
+        var state = KMeansResidentState(101, 103, 107, 5, 37, 31, 83, driver.copy())
         if variant < 6:
             var matches = state.matches(109 if variant == 1 else 101,
-                109 if variant == 2 else 103, 109 if variant == 3 else 107,
+                109 if variant == 2 else 103, 109 if variant == 3 else 107, 5,
                 41 if variant == 4 else 37, 41 if variant == 5 else 31)
             _require(matches == (variant == 0), "resident ownership/buffer/provider/shape identity")
         elif variant == 6:
             _require(state.take_handle() == 83 and state.take_handle() == -1,
                 "resident release transfers the handle exactly once")
-            _require(not state.matches(101, 103, 107, 37, 31), "retired owner cannot hit")
+            _require(not state.matches(101, 103, 107, 5, 37, 31), "retired owner cannot hit")
         else:
+            _require(not state.matches(101, 103, 107, 6, 37, 31), "a different admitted provider cannot reuse the handle")
             _require(state.driver.metadata(0) == 1 and state.driver.prepare(13, 37, 31) == 83,
                 "resident owner retains native provider dispatch")
     else:
