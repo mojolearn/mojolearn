@@ -1,0 +1,54 @@
+# KMeans native requests and resident owner
+
+Production commit `3a5b05c487` replaces KMeans' internal Python parameter lists,
+compiled callable dispatch and resident handle dictionary/tuple with typed Mojo
+requests, results, capability metadata and a native resident owner.
+
+The six-operation descriptor is exported as `kmeans_native_api_v1` by the existing
+GPU base binding and CPU core binding. The family boundary admits the exact
+factory, pins its module/capsule and releases the GIL around RUN. The native
+request code and owner state import no Python support. Python references in the
+owner boundary only pin the compiled provider and public centroid storage.
+
+Numerical route preservation:
+
+| Operation | Existing implementation retained |
+| --- | --- |
+| GPU fit | `cluster/estimator.mojo::kmeans_fit`, same options and synchronization |
+| GPU fit-transform | The same fit with `transform_out`; one X upload remains |
+| Predict/transform | Existing dense operations, same metric and finite status |
+| Cached centers | `cluster/resident_centers.mojo`, same prepare/query/release registry |
+| DeviceRows folds | `cluster/kmeans_fold.mojo`, same fold context, IDs and status words |
+| CPU | `core/core_host_impl.mojo` over the existing host oracle; original finite scan and two-step fit-transform |
+
+No tuned kernel, experiment default, data-sized loop, numerical allocation or
+copy was changed. Legacy exported entries remain available for direct callers;
+the public KMeans owner no longer calls them through Python. Optional-entry
+probing and its process-global Python record list are removed; typed provider
+capabilities decide the same available routes.
+
+`_resident_holder` now contains a native owner or `None`. Its Mojo state stores
+the model/centroid/provider identities, shape, native handle and driver. Only
+freezable Arrays cache their centers, as before. Writable caller ndarrays keep
+the per-query upload so in-place changes remain visible. Each query retains its
+owner through RUN; replacing/refitting the model retires the old owner, whose
+native destructor releases after the last query drops it. No Python release
+callable or KMeans finalizer registration remains.
+
+Copy/pickle still omit `_resident_holder`, and restored models obtain their own
+resident copy on the next query. Exact dictionary copy/update at that boundary
+now uses the CPython API and refuses mapping callbacks before invoking them.
+
+The suite manifest is
+`docs/plans/native_test_migration/kmeans-native-suites.json`: 26 native wire/owner
+fixtures, 6 actual CPU fixtures, 9 actual GPU fixtures and 7 Python boundary
+cases. All native suites expose `run_checks` plus thin standalone mains. The CPU
+kernel suite requires `MOJOLEARN_COLUMN_CPU=1`. CPU fixtures use host workers;
+GPU cases run in order over the shared context.
+
+No compilation or test execution occurred in the lane. The orchestrator owns
+the combined compile and any installed runtime execution. NVIDIA/AMD timing and
+cross-vendor identity remain unmeasured; there is no speed or bits claim and no
+new A/B define. Existing public KMeans tests stay intact. This is the KMeans
+execution/ownership migration; shared public input, lifecycle and option
+admission continue to use their existing boundary helpers.
