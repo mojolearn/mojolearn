@@ -106,6 +106,14 @@ Compatibility metadata wrappers for other families share the new native plan;
 those families are not claimed as otherwise migrated. Python sequence
 preparation is owned by the root integration lane and remains unaccepted here.
 
+Output allocation now uses `core/native_array_layout.mojo` for element counts,
+byte counts, strides and storage codes. Typed pilot/pandas callers pass native
+dimensions directly; boundary helpers pack public shape/stride tuples once.
+Python list stride staging, repeated shape boxing/unboxing and the array store's
+`buffer_info()` dispatch were removed. Zero-filled versus uninitialized storage
+choices remain the same. Sequence migration has returned to this lane and is
+still in progress; its existing boundary tests are retained.
+
 No arithmetic, fold order or tuned-kernel change is intended. No development
 identity run is requested. No speed result is claimed. End-to-end NVIDIA/AMD
 measurement of the affected Ridge and LinearRegression recipes remains owed;

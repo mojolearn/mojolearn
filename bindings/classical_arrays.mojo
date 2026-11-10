@@ -19,10 +19,13 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setattr
 from core.cast_in import cast_in_kind, NPY_HALF, NPY_FLOAT, NPY_DOUBLE
 from bindings.classical_warnings import classical_warn_column
 from bindings.sequential_admission import sequential_admit_value, _ordinary_torch
-from bindings.sequential_arrays import sequential_array, sequential_address
+from bindings.sequential_arrays import sequential_array, sequential_array_native, sequential_address
 from bindings.sequential_inputs import sequential_input, sequential_sequence
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, classical_admit_value
+from bindings.native_buffer_address import native_buffer_address
+from core.native_array_layout import NativeArrayLayout, native_matrix_shape, native_array_code as _store_code, native_array_itemsize
+from providers.python.array_layout_boundary import native_shape_unpack, native_shape_pack
 
 
 def classical_numpy(context: PythonObject) raises -> Bool:
@@ -65,82 +68,53 @@ def classical_address(value: PythonObject) raises -> PythonObject:
     return sequential_address(value)
 
 
-def _store_code(typestr: String) raises -> String:
-    """The `array.array` code that stores an Array dtype."""
-    if typestr == "<f4":
-        return "f"
-    if typestr == "<f8":
-        return "d"
-    if typestr == "<i8":
-        return "q"
-    if typestr == "<i4":
-        return "i"
-    if typestr == "<u4":
-        return "I"
-    if typestr == "<u1":
-        return "B"
-    if typestr == "<i1":
-        return "b"
-    if typestr == "<f2" or typestr == "<u2":
-        return "H"
-    raise Error("TypeError: " + typestr + " is not an Array dtype")
-
-
 def classical_wrap_array(store: PythonObject, shape: PythonObject, typestr: String, order: String,
                          context: PythonObject) raises -> PythonObject:
     """A mojolearn Array owning `store`, an `array.array` of the dtype's store
     code laid out in `order`. Assembled from its slots, so no Python runs."""
-    var b = native_loaded_module("builtins")
-    var item = Int(py=store.itemsize)
-    var rank = len(shape)
-    var size = 1
-    for k in range(rank):  # driver-loop: over array rank metadata
-        size *= Int(py=shape[k])
-    if size != len(store):
+    var layout = NativeArrayLayout(native_shape_unpack(shape), Int(py=store.itemsize), order)
+    return classical_wrap_layout(store, layout, typestr, context)
+
+
+def classical_wrap_layout(store: PythonObject, layout: NativeArrayLayout, typestr: String,
+    context: PythonObject) raises -> PythonObject:
+    if layout.count != len(store):
         raise Error("RuntimeError: an array store does not match its shape")
-    var steps = List[Int](length=rank, fill=0)
-    var step = item
-    for k in range(rank):  # driver-loop: over array rank metadata
-        var axis = rank - 1 - k if order == "C" else k
-        steps[axis] = step
-        step *= Int(py=shape[axis])
-    var strides = Python.list()
-    for k in range(rank):  # driver-loop: over array rank metadata
-        py_call(strides.append, steps[k])
     var array = native_storage_allocate(context["array_class"])
     py_setattr(array, "_store", store)
     py_setattr(array, "_base", PythonObject(None))
     py_setattr(array, "_pin", PythonObject(None))
     py_setattr(array, "_mv", native_buffer_view(store))
-    py_setattr(array, "_addr", py_call(store.buffer_info)[0])
+    py_setattr(array, "_addr", PythonObject(native_buffer_address(store)))
     py_setattr(array, "_readonly", PythonObject(False))
-    py_setattr(array, "shape", py_call(py_type(Python.tuple()), shape))
+    py_setattr(array, "shape", native_shape_pack(layout.shape))
     py_setattr(array, "dtype", PythonObject(typestr))
-    py_setattr(array, "ndim", PythonObject(rank))
-    py_setattr(array, "size", PythonObject(size))
-    py_setattr(array, "nbytes", PythonObject(size * item))
-    py_setattr(array, "itemsize", PythonObject(item))
-    py_setattr(array, "strides", py_call(py_type(Python.tuple()), strides))
-    py_setattr(array, "order", PythonObject(order))
+    py_setattr(array, "ndim", PythonObject(len(layout.shape)))
+    py_setattr(array, "size", PythonObject(layout.count))
+    py_setattr(array, "nbytes", PythonObject(layout.nbytes))
+    py_setattr(array, "itemsize", PythonObject(layout.itemsize))
+    py_setattr(array, "strides", native_shape_pack(layout.strides))
+    py_setattr(array, "order", PythonObject(layout.order))
     return array
 
 
 def classical_typed(shape: PythonObject, typestr: String, context: PythonObject) raises -> PythonObject:
     """A zero-filled C-order array of `shape` holding "<f4", "<f8" or "<i8"."""
+    return classical_typed_native(native_shape_unpack(shape), typestr, context)
+
+
+def classical_typed_native(shape: List[Int], typestr: String, context: PythonObject) raises -> PythonObject:
     if classical_numpy(context):
         var key = String("float32") if typestr == "<f4" else (String("float64") if typestr == "<f8" else String("int64"))
-        return sequential_array(shape, context[PythonObject(key)], context)
-    var b = native_loaded_module("builtins")
-    var count = 1
-    for k in range(len(shape)):  # driver-loop: over array rank metadata
-        count *= Int(py=shape[k])
-    var width = 4 if typestr == "<f4" else 8
-    var store = native_array_zeros(String(_store_code(typestr)), count)
-    return classical_wrap_array(store, shape, typestr, "C", context)
+        return sequential_array_native(shape, context[PythonObject(key)], context)
+    var width = native_array_itemsize(typestr)
+    var layout = NativeArrayLayout(shape.copy(), width)
+    var store = native_array_zeros(String(_store_code(typestr)), layout.count)
+    return classical_wrap_layout(store, layout, typestr, context)
 
 
 def classical_array(rows: Int, cols: Int, context: PythonObject, wide: Bool = False) raises -> PythonObject:
-    return classical_typed(Python.tuple(rows) if cols == 0 else Python.tuple(rows, cols),
+    return classical_typed_native(native_matrix_shape(rows, cols),
                            "<f8" if wide else "<f4", context)
 
 
