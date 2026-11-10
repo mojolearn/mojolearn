@@ -95,9 +95,9 @@ SCHEMA = "mojolearn.binding-identity.v2"
 #: whole-file sha256. A record in it is upgraded only by reproducing it
 #: exactly from the release's own commit (previous_identities).
 SCHEMA_V1 = "mojolearn.binding-identity.v1"
-#: v3 includes declared Python build helpers in the filtered source archive.
-#: Recompute old facts rather than reusing a cached missing-helper result.
-FACTS_SCHEMA = "mojolearn.release-tree-facts.v3"
+#: v4 includes the archive Unicode generator and its separate input digest.
+#: Recompute old facts rather than reusing a cached missing-generator result.
+FACTS_SCHEMA = "mojolearn.release-tree-facts.v4"
 #: The builder view of the runtime closure: every list kept whole.
 RUNTIME_VIEW = ""
 PLAN_SCHEMA = "mojolearn.release-reuse-plan.v1"
@@ -554,7 +554,8 @@ def wanted(name):
     return (name.endswith((".mojo", ".mojopkg")) or name.startswith(("bindings/", "tokenizer/", "packaging/"))
             or (name.startswith("tools/") and name.endswith(".sh"))
             or name in LINUX_BUILDERS + MACOS_BUILDERS
-            or name in ("pixi.toml", "pixi.lock", "python/setup.py"))
+            or name in ("pixi.toml", "pixi.lock", "python/setup.py",
+                        "tools/gen_archive_unicode.py", "tools/generated_sources.py"))
 
 
 def extract_tree(commit, dest, root=ROOT):
@@ -608,10 +609,11 @@ def image_pins(tree):
 
 def dir_digest(tree, rel):
     base = Path(tree) / rel
-    if not base.is_dir():
+    if not base.exists():
         return None
     h = hashlib.sha256()
-    for p in sorted(base.rglob("*")):
+    paths = [base] if base.is_file() else sorted(base.rglob("*"))
+    for p in paths:
         if p.is_file():
             h.update(p.relative_to(tree).as_posix().encode() + b"\0" + sha256(p).encode() + b"\n")
     return h.hexdigest()
@@ -642,7 +644,9 @@ def tree_facts(tree):
         views[rel][RUNTIME_VIEW] = builder_view(rel, data, None)
     return dict(closures=closures, builders=files, builder_views=views, image=image_pins(tree),
                 toolchain={LINUX: toolchain(tree, LINUX), MACOS: toolchain(tree, MACOS)},
-                generators=dir_digest(tree, GENERATORS), portable_math=dir_digest(tree, PORTABLE_MATH))
+                generators=dir_digest(tree, GENERATORS), portable_math=dir_digest(tree, PORTABLE_MATH),
+                generated_inputs={"core/archive_unicode_names_generated.mojo":
+                                  dir_digest(tree, "tools/gen_archive_unicode.py")})
 
 
 def facts_for_commit(commit, cache_dir, root=ROOT):
@@ -703,6 +707,11 @@ def identity(b, facts, host_toolchain=None, schema=SCHEMA):
                  generators=facts["generators"] if any(s.startswith("tokenizer/") for s in closure["sources"]) else None,
                  toolchain=facts["toolchain"][b.target], flags=b.flags(),
                  builders=builder_ids)
+    if ("core/native_archive_unicode_names.mojo" in closure["sources"]
+            or "core/archive_unicode_names_generated.mojo" in closure["sources"]):
+        ident["generated_inputs"] = {
+            "core/archive_unicode_names_generated.mojo":
+            facts.get("generated_inputs", {}).get("core/archive_unicode_names_generated.mojo")}
     if schema != SCHEMA_V1:
         ident["builder_rule"] = BUILDER_RULE
     if b.target == LINUX:

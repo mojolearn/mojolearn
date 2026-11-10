@@ -94,6 +94,7 @@ import uuid
 
 import bincache
 import build_process
+import generated_sources as gs
 import merged_bindings as merged
 import release_limits
 
@@ -112,7 +113,8 @@ MANIFEST = "bindings/development_groups.json"
 # rebuilt 79 of 79 groups on the L4, the M4 and the AMD box).
 RECIPE_SCHEMA = "mojolearn.development-recipe.v1"
 # bindings/compile_jobs.sh is sourced by merged_build.sh and decides its `-j` when MOJOLEARN_COMPILE_JOBS is unset.
-BUILD_INPUTS = ("bindings/merged_build.sh", "bindings/build_defines.sh", "bindings/compile_jobs.sh")
+BUILD_INPUTS = ("bindings/merged_build.sh", "bindings/build_defines.sh", "bindings/compile_jobs.sh",
+                "tools/generated_sources.py")
 # Non-group runtime artifacts. python/mojolearn/_portable_math.py loads the
 # repository-owned host math library from a fixed path in every set; release
 # packaging builds it with packaging/portable_math/stage.py. It is a C build
@@ -252,6 +254,13 @@ class SourceGraph:
             files.update(p.resolve() for p in (self.repo / "tokenizer/tools").rglob("*")
                          if p.is_file() and generator_input(p))
             files.add(self.repo / "tokenizer/impl/unicode_class.mojo")
+        relative = {str(p.relative_to(self.repo)) for p in files}
+        for generated, inputs in gs.GENERATED.items():
+            if generated in relative or any(name in relative for name in inputs):
+                source = self.repo / gs.GENERATOR_DIRS[generated]
+                paths = [source] if source.is_file() else source.rglob("*")
+                files.update(p.resolve() for p in paths if p.is_file() and generator_input(p))
+                files.update(self.repo / name for name in inputs)
         hashes = {str(p.relative_to(self.repo)): bincache.sha256_file(p) for p in sorted(files)}
         return {"scope": scope, "files": hashes, "unresolved": unresolved}
 
@@ -1762,6 +1771,7 @@ def main(argv=None):
     evidence = args.evidence or (Path.home() / "mojolearn-evidence/development-builds" /
         (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + str(os.getpid())))
     report = {"schema": SCHEMA, "state": "planning", "results": [], "release_qualified": False,
+              "compile_attempts": 0,
               "source_commit": bincache.first_line(["git", "-C", str(REPO), "rev-parse", "HEAD"])}
     futures = []
     try:
@@ -1784,14 +1794,12 @@ def main(argv=None):
                 cache / "locks" / (digest(str(REPO)) + ".lock"), limits["lock_seconds"]):
             # Generate before computing keys, never after deciding a cache hit.
             # This also preserves the generator's pin/refusal semantics.
-            if "host" in modes:
+            if gs.available_sources(REPO):
                 generator_limits = dict(resource_budget(1, 1, None), **limits)
                 env[GUARD_ENV] = json.dumps(generator_limits)
                 report["generator_limits"] = generator_limits
-                code = run_logged(["sh", "tokenizer/tools/gen_unicode_table.sh"], REPO, env,
-                                  evidence / "generate-unicode.log")
-                if code:
-                    raise BuildError(f"Unicode generator exited {code}; see {evidence / 'generate-unicode.log'}")
+            report["generated_sources"] = gs.prepare_sources(
+                REPO, evidence / "generated-sources", env=env, runner=run_logged)
             if layout == "release":
                 return release_build(args, modes, env, cache, mac_cache, evidence, limits, report, cap, futures)
             plan = make_plan(REPO, cache, modes, env, args.group)

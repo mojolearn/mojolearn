@@ -535,7 +535,9 @@ ALWAYS_KEYED_ENV = ("MOJOLEARN_BUILD_PIXI_ENV",)
 #: table as tools/generated_sources.py GENERATED/GENERATOR_DIRS (a test holds
 #: them equal); repeated here so this file stays stdlib-only on a box overlay.
 GENERATED_SOURCES = {"tokenizer/impl/unicode_table_generated.mojo":
-                     ("tokenizer/tools", "tokenizer/impl/unicode_class.mojo")}
+                     ("tokenizer/tools", "tokenizer/impl/unicode_class.mojo"),
+                     "core/archive_unicode_names_generated.mojo":
+                     ("tools/gen_archive_unicode.py", "core/native_archive_unicode_names.mojo")}
 _DIR_REF_RE = re.compile(r"\)\"?/([\w.-]+\.(?:sh|py))\b")
 _VAR_RE = re.compile(r"MOJOLEARN_(?:[A-Za-z0-9_]|\$\{?[A-Za-z_]\w*\}?|\$\([^)]*\))*")
 _GENERATOR_SKIP = (".pyc", ".pyo", ".swp", ".swo", ".tmp", ".orig", ".rej", "~")
@@ -689,7 +691,9 @@ def generator_inputs(repo, generated):
     out = {}
     for rel in sorted(generated):
         directory, pin = GENERATED_SOURCES[rel]
-        for p in sorted((repo / directory).rglob("*")):
+        source = repo / directory
+        paths = [source] if source.is_file() else sorted(source.rglob("*"))
+        for p in paths:
             if (p.is_file() and "__pycache__" not in p.parts and not p.name.startswith(".")
                     and not p.name.endswith(_GENERATOR_SKIP)):
                 out[_rel(p, repo)] = sha256_file(p)
@@ -724,7 +728,7 @@ def executed_inputs(repo, script, merged=False):
         seen.add(f)
         text = f.read_text(errors="replace")
         texts.append(text)
-        if f in skip or any(d in f.parents for d in gen_dirs):
+        if f in skip or f in gen_dirs or any(d in f.parents for d in gen_dirs):
             continue
         rel = _rel(f, repo)
         files[rel] = sha256_bytes(executable_text(text).encode()) if f.suffix == ".sh" else sha256_file(f)
@@ -2123,6 +2127,16 @@ def cmd_build(argv, environ=None):
         if me not in only:
             print("BINCACHE skipped %s (not in this shard)" % me)
             return 0
+    source_root = Path(script).resolve().parent.parent
+    if (source_root / "core/native_archive_unicode_names.mojo").is_file():
+        # A cache hit skips the compiler script, so prepare generated inputs
+        # before cache admission too. The shared preparer reuses exact verified
+        # bytes, serializes writers per output and retains complete evidence.
+        prepared = subprocess.call([sys.executable, str(source_root / "tools/generated_sources.py"),
+                                    "prepare", "--repo", str(source_root)],
+                                   cwd=source_root, env=environ)
+        if prepared:
+            return prepared
     if environ.get("MOJOLEARN_BUILD_DEFINES", "").strip():
         environ, kept = scope_build_defines(Path(script).resolve().parent.parent, script, args, environ)
         print("BINCACHE defines for %s: %s" % (os.path.basename(script) + " " + " ".join(args),
