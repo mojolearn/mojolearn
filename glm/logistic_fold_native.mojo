@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Typed resident-fold QN calls using the existing model-selection store."""
-from core.hostptr import f32_ptr
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.logistic_native_api import (
     LOGISTIC_FOLD_ABI, QN_FOLD_COUNT, QN_NATIVE_FIT, QN_NATIVE_DECISION,
     QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
-    QnFoldStore, QnFitRequest, QnQueryRequest,
+    QnFoldStore, QnFitRequest, QnQueryRequest, qn_fold_f32_ptr,
 )
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -15,10 +14,10 @@ from glm.qn_fold import qn_fit_fold, qn_infer_fold
 
 
 def logistic_fold_fit(store: QnFoldStore, r: QnFitRequest, words: Int) raises -> Int:
-    var yp = f32_ptr(r.y)
-    var wp = f32_ptr(r.coefficients)
-    var ip = f32_ptr(r.info)
-    var sw = f32_ptr(r.weights) if r.weights != 0 else yp
+    var yp = qn_fold_f32_ptr(r.y)
+    var wp = qn_fold_f32_ptr(r.coefficients)
+    var ip = qn_fold_f32_ptr(r.info)
+    var sw = qn_fold_f32_ptr(r.weights) if r.weights != 0 else yp
     var status = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=words)
     var ctx = msel_fold_entry_context()
     return qn_fit_fold(ctx, store.base, store.base_rows, store.indices,
@@ -29,7 +28,7 @@ def logistic_fold_fit(store: QnFoldStore, r: QnFitRequest, words: Int) raises ->
 
 
 def logistic_fold_query(operation: Int, store: QnFoldStore, r: QnQueryRequest, words: Int) raises:
-    var cp = f32_ptr(r.coefficients)
+    var cp = qn_fold_f32_ptr(r.coefficients)
     if r.dst <= 0 or r.dst % 4 != 0:
         raise Error("qn_infer_fold: the output address must be positive and aligned")
     var mode = 0
