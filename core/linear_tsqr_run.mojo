@@ -1,46 +1,70 @@
 # SPDX-License-Identifier: Apache-2.0
-# Native owner of LinearRegression's existing small-R TSQR/SVD launch sequence.
-# The numerical entries and all rank/route choices match _Kit/_svd_tall. No
-# new solver or performance default is introduced. Matrix descriptors are
-# native structs; PythonObjects only own admitted host buffers and C entries.
-from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+"""Typed owner of LinearRegression's existing TSQR/SVD operation sequence.
+
+Host storage has native owners and reference-counted views. Device storage
+uses the existing pool and an allocation ledger, including on exceptions.
+The numeric operations and selected kernels are unchanged.
+"""
 from std.memory import memcpy
-from bindings.classical_arrays import classical_array, classical_word, classical_address
+from core.hostptr import f32_ptr
+from core.native_descriptor_abi import NativeDescriptorCall
+from core.native_descriptor_call import native_descriptor_call
 from core.classical_tsqr_impl import tsqr_fill_constant, tsqr_fill_indices, tsqr_copy_columns, tsqr_fill_eye
+from x_decomp.descriptor_schema import (
+    XD_CAPABILITIES, XD_CAP_RESIDENT, XD_EW, XD_GEMM, XD_COLSUM, XD_ROWSUM, XD_MOVE,
+    XD_DEV_ALLOC, XD_DEV_FREE, XD_DEV_UPLOAD, XD_DEV_DOWNLOAD, XD_DEV_EW, XD_DEV_GEMM,
+    XD_DEV_COLSUM, XD_DEV_ROWSUM, XD_DEV_MOVE, XD_ORDER, XD_DEV_REDUCE, XD_DEV_ORDER,
+    XD_SVD, XD_DEV_SVD, XD_RANK, XD_ORTH_DIAG, XD_DEV_ORTH_DIAG, XD_GEQRF, XD_ORGQR,
+)
 
 
-struct ClassicalMatrix(Movable, Copyable):
-    var host: PythonObject
+struct LinearHostStorage(Movable):
+    var words: List[Float32]
+    var address: Int
+    var references: Int
+
+    def __init__(out self, var words: List[Float32], borrowed: Int = 0):
+        self.address = borrowed if borrowed else Int(words.unsafe_ptr())
+        self.words = words^
+        self.references = 0
+
+
+struct LinearMatrix(Copyable, Movable):
+    var host: Int
     var device: Int
     var rows: Int
     var cols: Int
 
-    def __init__(out self, host: PythonObject, device: Int, rows: Int, cols: Int):
+    def __init__(out self, host: Int, device: Int, rows: Int, cols: Int):
         self.host = host
         self.device = device
         self.rows = rows
         self.cols = cols
 
 
-struct ClassicalKit(Movable):
-    var entries: PythonObject
-    var context: PythonObject
-    var matrices: List[ClassicalMatrix]
+struct LinearKit(Movable):
+    var entry: NativeDescriptorCall
+    var matrices: List[LinearMatrix]
+    var storage: List[LinearHostStorage]
     var allocations: List[Int]
     var resident: Bool
-    # One shared 1 x 1 zero operand for every `ew` with an unused operand
-    # (read only by the kernels): allocated, and on a resident binding
-    # uploaded, once per solve instead of once per elementwise op.
     var zero: Int
 
-    def __init__(out self, entries: PythonObject, context: PythonObject) raises:
-        self.entries = entries
-        self.context = context
-        self.matrices = List[ClassicalMatrix]()
+    def __init__(out self, entry: NativeDescriptorCall) raises:
+        self.entry = entry
+        self.matrices = List[LinearMatrix]()
+        self.storage = List[LinearHostStorage]()
         self.allocations = List[Int]()
-        self.resident = py_get(entries, "x_decomp_dev_ew") is not None
+        self.resident = (native_descriptor_call(entry, XD_CAPABILITIES, [], [], []) & XD_CAP_RESIDENT) != 0
         self.zero = -1
+
+    def call(self, operation: Int, addresses: List[Int], ints: List[Int], floats: List[Float64]) raises -> Int:
+        return native_descriptor_call(self.entry, operation, addresses, ints, floats)
+
+    def prefixed(self, var prefix: List[Int], values: List[Int]) -> List[Int]:
+        for i in range(len(values)):  # driver-loop: over fixed primitive metadata slots
+            prefix.append(values[i])
+        return prefix^
 
     def shared_zero(mut self) raises -> Int:
         if self.zero < 0:
@@ -48,74 +72,94 @@ struct ClassicalKit(Movable):
         return self.zero
 
     def close(mut self) raises:
-        # Cleanup owns every successful allocation before the first upload.
-        # Views may share an id, so only the allocation ledger frees buffers.
-        # driver-loop: over native matrix allocation handles
-        for i in range(len(self.allocations) - 1, -1, -1):
-            _ = py_call(self.entries["x_decomp_dev_free"], self.allocations[i])
-        self.allocations.clear()
+        var failure = String("")
+        while len(self.allocations):  # driver-loop: over owned native allocation handles
+            var handle = self.allocations.pop()
+            try:
+                _ = self.call(XD_DEV_FREE, [], [handle], [])
+            except problem:
+                if failure.byte_length() == 0:
+                    failure = String(problem)
+        if failure.byte_length() != 0:
+            raise Error(failure)
 
-    def add(mut self, host: PythonObject, rows: Int, cols: Int, device: Int = -1) -> Int:
+    def add(mut self, host: Int, rows: Int, cols: Int, device: Int = -1) -> Int:
+        if host >= 0:
+            self.storage[host].references += 1
         var result = len(self.matrices)
-        self.matrices.append(ClassicalMatrix(host, device, rows, cols))
+        self.matrices.append(LinearMatrix(host, device, rows, cols))
         return result
 
-    def zeros(mut self, rows: Int, cols: Int) raises -> Int:
-        # One spare word gives empty matrices the same safe pointer as _M._one.
-        var host = classical_array(max(rows * cols, 1), 0, self.context)
+    def borrowed(mut self, address: Int, rows: Int, cols: Int) -> Int:
+        var host = len(self.storage)
+        self.storage.append(LinearHostStorage(List[Float32](), address))
+        return self.add(host, rows, cols)
+
+    def allocate_host(mut self, cells: Int) -> Int:
+        var result = len(self.storage)
+        self.storage.append(LinearHostStorage(List[Float32](length=max(cells, 1), fill=0.0)))
+        return result
+
+    def release_host(mut self, index: Int):
+        var slot = self.matrices[index].host
+        if slot >= 0:
+            self.storage[slot].references -= 1
+            if self.storage[slot].references == 0:
+                self.storage[slot].words = List[Float32]()
+                self.storage[slot].address = 0
+            self.matrices[index].host = -1
+
+    def zeros(mut self, rows: Int, cols: Int) -> Int:
+        var host = self.allocate_host(rows * cols)
         return self.add(host, rows, cols)
 
     def device_output(mut self, rows: Int, cols: Int) raises -> Int:
-        var handle = Int(py=py_call(self.entries["x_decomp_dev_alloc"], max(rows * cols, 1)))
+        var handle = self.call(XD_DEV_ALLOC, [], [max(rows * cols, 1)], [])
         self.allocations.append(handle)
-        return self.add(PythonObject(None), rows, cols, handle)
+        return self.add(-1, rows, cols, handle)
 
-    def host(mut self, index: Int) raises -> PythonObject:
-        if self.matrices[index].host is None:
-            var rows = self.matrices[index].rows
-            var cols = self.matrices[index].cols
-            var result = classical_array(max(rows * cols, 1), 0, self.context)
-            if rows * cols:
-                _ = py_call(self.entries["x_decomp_dev_download"], self.matrices[index].device,
-                        classical_address(result), rows * cols)
-            self.matrices[index].host = result
+    def host(mut self, index: Int) raises -> Int:
+        if self.matrices[index].host < 0:
+            var cells = self.matrices[index].rows * self.matrices[index].cols
+            var slot = self.allocate_host(cells)
+            var address = self.storage[slot].address
+            if cells:
+                _ = self.call(XD_DEV_DOWNLOAD, [address], [self.matrices[index].device, cells], [])
+            self.matrices[index].host = slot
+            self.storage[slot].references = 1
             self.matrices[index].device = -1
-        return self.matrices[index].host
+        return self.storage[self.matrices[index].host].address
 
-    def address(mut self, index: Int) raises -> PythonObject:
-        var owner = self.host(index)
-        var result = classical_address(owner)
-        _ = owner^
-        return result
+    def address(mut self, index: Int) raises -> Int:
+        return self.host(index)
 
     def device(mut self, index: Int) raises -> Int:
         if self.matrices[index].device < 0:
-            var n = self.matrices[index].rows * self.matrices[index].cols
-            var owner = self.host(index)
-            var handle = Int(py=py_call(self.entries["x_decomp_dev_alloc"], max(n, 1)))
+            var cells = self.matrices[index].rows * self.matrices[index].cols
+            var address = self.host(index)
+            var handle = self.call(XD_DEV_ALLOC, [], [max(cells, 1)], [])
             self.allocations.append(handle)
-            if n:
-                _ = py_call(self.entries["x_decomp_dev_upload"], handle, classical_address(owner), n)
+            if cells:
+                _ = self.call(XD_DEV_UPLOAD, [address], [handle, cells], [])
             self.matrices[index].device = handle
-            self.matrices[index].host = PythonObject(None)
-            _ = owner^
+            self.release_host(index)
         return self.matrices[index].device
 
     def constant(mut self, value: Float32, rows: Int = 1, cols: Int = 1) raises -> Int:
-        var out = self.zeros(rows, cols)
-        var owner = self.host(out)
-        var data = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(owner)))
-        tsqr_fill_constant(data, rows * cols, value)
-        _ = owner^
-        return out
+        var result = self.zeros(rows, cols)
+        tsqr_fill_constant(f32_ptr(self.host(result)), rows * cols, value)
+        return result
 
     def indices(mut self, start: Int, stop: Int) raises -> Int:
-        var out = self.zeros(stop - start, 1)
-        var owner = self.host(out)
-        var data = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(owner)))
-        tsqr_fill_indices(data, start, stop)
-        _ = owner^
-        return out
+        var result = self.zeros(stop - start, 1)
+        tsqr_fill_indices(f32_ptr(self.host(result)), start, stop)
+        return result
+
+    def write_result(mut self, index: Int, address: Int, count: Int) raises:
+        if self.matrices[index].device >= 0:
+            _ = self.call(XD_DEV_DOWNLOAD, [address], [self.matrices[index].device, count], [])
+        else:
+            memcpy(dest=f32_ptr(address), src=f32_ptr(self.host(index)), count=count)
 
     def broadcast(self, a: Int, b: Int) raises -> Int:
         if self.matrices[a].rows == self.matrices[b].rows and self.matrices[a].cols == self.matrices[b].cols:
@@ -139,15 +183,15 @@ struct ClassicalKit(Movable):
         var cm = 3 if c < 0 else self.broadcast(a, ic)
         var rows = self.matrices[a].rows
         var cols = self.matrices[a].cols
-        var params = Python.list(op, rows * cols, cols,
+        var params: List[Int] = [op, rows * cols, cols,
             self.matrices[ib].rows * self.matrices[ib].cols, bm,
-            self.matrices[ic].rows * self.matrices[ic].cols, cm)
+            self.matrices[ic].rows * self.matrices[ic].cols, cm]
         if rows * cols and self.resident:
             var out = self.device_output(rows, cols)
             var da = self.device(a)
             var db = self.device(ib)
             var dc = self.device(ic)
-            _ = py_call(self.entries["x_decomp_dev_ew"], da, db, dc, self.matrices[out].device, params, PythonObject(scalar))
+            _ = self.call(XD_DEV_EW, [], self.prefixed([da, db, dc, self.matrices[out].device], params), [scalar])
             return out
         var out = self.zeros(rows, cols)
         if rows * cols:
@@ -155,7 +199,7 @@ struct ClassicalKit(Movable):
             var ab = self.address(ib)
             var ac = self.address(ic)
             var ao = self.address(out)
-            _ = py_call(self.entries["x_decomp_ew"], aa, ab, ac, ao, params, PythonObject(scalar))
+            _ = self.call(XD_EW, [aa, ab, ac, ao], params, [scalar])
         return out
 
     def mm(mut self, a: Int, b: Int, ta: Bool = False, tb: Bool = False) raises -> Int:
@@ -165,19 +209,19 @@ struct ClassicalKit(Movable):
         var n = self.matrices[b].rows if tb else self.matrices[b].cols
         if k != k2:
             raise Error("classical TSQR: invalid internal matrix product")
-        var params = Python.list(m, k, n, Int(ta), Int(tb))
+        var params: List[Int] = [m, k, n, Int(ta), Int(tb)]
         if m * n and m * k and k * n and self.resident:
             var out = self.device_output(m, n)
             var da = self.device(a)
             var db = self.device(b)
-            _ = py_call(self.entries["x_decomp_dev_gemm"], da, db, self.matrices[out].device, params)
+            _ = self.call(XD_DEV_GEMM, [], self.prefixed([da, db, self.matrices[out].device], params), [])
             return out
         var out = self.zeros(m, n)
         if m * n:
             var aa = self.address(a)
             var ab = self.address(b)
             var ao = self.address(out)
-            _ = py_call(self.entries["x_decomp_gemm"], aa, ab, ao, params)
+            _ = self.call(XD_GEMM, [aa, ab, ao], params, [])
         return out
 
     def sum(mut self, a: Int, columns: Bool) raises -> Int:
@@ -185,47 +229,47 @@ struct ClassicalKit(Movable):
         var cols = self.matrices[a].cols
         var nr = 1 if columns else rows
         var nc = cols if columns else 1
-        var name = "colsum" if columns else "rowsum"
+        var op = XD_COLSUM if columns else XD_ROWSUM
+        var dev_op = XD_DEV_COLSUM if columns else XD_DEV_ROWSUM
         if rows * cols and self.resident:
             var out = self.device_output(nr, nc)
             var da = self.device(a)
-            _ = py_call(self.entries["x_decomp_dev_" + name], da, self.matrices[out].device, Python.list(rows, cols))
+            _ = self.call(dev_op, [], [da, self.matrices[out].device, rows, cols], [])
             return out
         var out = self.zeros(nr, nc)
         var aa = self.address(a)
         var ao = self.address(out)
-        _ = py_call(self.entries["x_decomp_" + name], aa, ao, Python.list(rows, cols))
+        _ = self.call(op, [aa, ao], [rows, cols], [])
         return out
 
     def total(mut self, a: Int) raises -> Float64:
         var rows = self.sum(a, False)
         var total = self.sum(rows, True)
         var owner = self.host(total)
-        var value = classical_word(owner)
-        _ = owner^
+        var value = Float64(f32_ptr(owner)[])
         return value
 
-    def move(mut self, a: Int, idx: Int, rows: Int, cols: Int, params: PythonObject,
+    def move(mut self, a: Int, idx: Int, rows: Int, cols: Int, params: List[Int],
              resident: Bool) raises -> Int:
         if rows * cols and resident:
             var out = self.device_output(rows, cols)
             var da = self.device(a)
             var di = self.device(idx)
-            _ = py_call(self.entries["x_decomp_dev_move"], da, di, self.matrices[out].device, params)
+            _ = self.call(XD_DEV_MOVE, [], self.prefixed([da, di, self.matrices[out].device], params), [])
             return out
         var out = self.zeros(rows, cols)
         if rows * cols:
             var aa = self.address(a)
             var ai = self.address(idx)
             var ao = self.address(out)
-            _ = py_call(self.entries["x_decomp_move"], aa, ai, ao, params)
+            _ = self.call(XD_MOVE, [aa, ai, ao], params, [])
         return out
 
     def take_rows(mut self, a: Int, idx: Int) raises -> Int:
         var rows = self.matrices[idx].rows * self.matrices[idx].cols
         var cols = self.matrices[a].cols
-        return self.move(a, idx, rows, cols, Python.list(0, rows * cols, cols, 0, 0, 1, 0,
-            self.matrices[a].rows * cols, rows * cols, rows), self.resident)
+        return self.move(a, idx, rows, cols, [0, rows * cols, cols, 0, 0, 1, 0,
+            self.matrices[a].rows * cols, rows * cols, rows], self.resident)
 
     def columns(mut self, a: Int, start: Int, stop: Int) raises -> Int:
         var rows = self.matrices[a].rows
@@ -234,16 +278,14 @@ struct ClassicalKit(Movable):
         # _M.take_cols only uses resident gather if A is already resident.
         if self.matrices[a].device >= 0 and width:
             var idx = self.indices(start, stop)
-            return self.move(a, idx, rows, width, Python.list(4, rows * width, width, cols, 0, 0, 0,
-                rows * cols, rows * width, width), True)
+            return self.move(a, idx, rows, width, [4, rows * width, width, cols, 0, 0, 0,
+                rows * cols, rows * width, width], True)
         var out = self.zeros(rows, width)
         var source = self.host(a)
         var result = self.host(out)
-        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source)))
-        var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result)))
+        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=source)
+        var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=result)
         tsqr_copy_columns(src, dst, rows, cols, start, width)
-        _ = source^
-        _ = result^
         return out
 
     def transpose(mut self, a: Int) raises -> Int:
@@ -254,22 +296,21 @@ struct ClassicalKit(Movable):
             var handle = self.matrices[a].device
             return self.add(host, cols, rows, handle)
         var one = self.zeros(1, 1)
-        return self.move(a, one, cols, rows, Python.list(1, rows * cols, rows, cols, 0, 0, 0,
-            rows * cols, rows * cols, 1), self.resident)
+        return self.move(a, one, cols, rows, [1, rows * cols, rows, cols, 0, 0, 0,
+            rows * cols, rows * cols, 1], self.resident)
 
     def strided(mut self, a: Int, count: Int, stride: Int, offset: Int = 0) raises -> Int:
         var idx = self.constant(Float32(offset))
         var actual_stride = offset + 1 if count == 1 else stride
-        return self.move(a, idx, 1, count, Python.list(4, count, 1, actual_stride, 0, 0, 0,
-            self.matrices[a].rows * self.matrices[a].cols, count, 1), self.resident)
+        return self.move(a, idx, 1, count, [4, count, 1, actual_stride, 0, 0, 0,
+            self.matrices[a].rows * self.matrices[a].cols, count, 1], self.resident)
 
     def word(mut self, a: Int) raises -> Float64:
         var index = a
         if self.matrices[a].device >= 0 and self.matrices[a].rows * self.matrices[a].cols > 1:
             index = self.strided(a, 1, 1)
         var owner = self.host(index)
-        var value = classical_word(owner)
-        _ = owner^
+        var value = Float64(f32_ptr(owner)[])
         return value
 
     def order(mut self, a: Int) raises -> Int:
@@ -278,20 +319,19 @@ struct ClassicalKit(Movable):
             # The same device max/NaN check and stable radix order as _Kit.
             var maximum = self.device_output(1, 1)
             var da = self.device(a)
-            _ = py_call(self.entries["x_decomp_dev_reduce"], da, self.matrices[maximum].device, Python.list(n, 1))
+            _ = self.call(XD_DEV_REDUCE, [], [da, self.matrices[maximum].device, n, 1], [])
             var v = self.word(maximum)
             if v != v:
                 raise Error("x_decomp: a NaN has no order (refused)")
             var out = self.device_output(n, 1)
             var count = self.device_output(1, 1)
-            _ = py_call(self.entries["x_decomp_dev_order_f"], da, da, self.matrices[out].device,
-                                                    self.matrices[count].device, Python.list(n, 0, 0))
+            _ = self.call(XD_DEV_ORDER, [], [da, da, self.matrices[out].device, self.matrices[count].device, n, 0, 0], [])
             return out
         var out = self.zeros(n, 1)
         if n:
             var aa = self.address(a)
             var ao = self.address(out)
-            _ = py_call(self.entries["x_decomp_order_f"], aa, n, ao)
+            _ = self.call(XD_ORDER, [aa, ao], [n], [])
         return out
 
     def signs(mut self, a: Int) raises -> Int:
@@ -306,11 +346,9 @@ struct ClassicalKit(Movable):
         var out = self.zeros(rows, cols)
         var source = self.host(a)
         var result = self.host(out)
-        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source)))
-        var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result)))
+        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=source)
+        var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=result)
         memcpy(dest=dst, src=src, count=rows * cols)
-        _ = source^
-        _ = result^
         return out
 
     def svd(mut self, a: Int) raises -> Tuple[Int, Int, Int]:
@@ -320,12 +358,12 @@ struct ClassicalKit(Movable):
         var v = self.zeros(n, n)
         var sa = self.address(s)
         var va = self.address(v)
-        if self.resident and py_get(self.entries, "x_decomp_dev_svd") is not None:
+        if self.resident:
             var da = self.device(a)
-            _ = py_call(self.entries["x_decomp_dev_svd"], da, sa, va, Python.list(m, n))
+            _ = self.call(XD_DEV_SVD, [sa, va], [da, m, n], [])
         else:
             var aa = self.address(a)
-            _ = py_call(self.entries["x_decomp_svd"], aa, sa, va, Python.list(m, n))
+            _ = self.call(XD_SVD, [aa, sa, va], [m, n], [])
         var negated = self.ew(14, s, scalar=-1.0)
         var order = self.order(negated)
         var st = self.transpose(s)
@@ -334,7 +372,7 @@ struct ClassicalKit(Movable):
         var vt = self.transpose(v)
         vt = self.take_rows(vt, order)
         sa = self.address(s)
-        var rank = Int(py=py_call(self.entries["x_decomp_rank_above"], sa, Python.list(n), PythonObject(0.00000095367431640625)))
+        var rank = self.call(XD_RANK, [sa], [n], [0.00000095367431640625])
         var av = self.mm(a, vt, tb=True)
         var used_av = av
         var used_s = s
@@ -349,11 +387,11 @@ struct ClassicalKit(Movable):
             if self.resident and m * n:
                 q = self.device_output(m, n)
                 var du = self.device(ug)
-                _ = py_call(self.entries["x_decomp_dev_orth_diag"], du, self.matrices[q].device, dia, Python.list(m, n))
+                _ = self.call(XD_DEV_ORTH_DIAG, [dia], [du, self.matrices[q].device, m, n], [])
             else:
                 q = self.copy_host(ug)
                 var qa = self.address(q)
-                _ = py_call(self.entries["x_decomp_orth_diag"], qa, dia, Python.list(m, n))
+                _ = self.call(XD_ORTH_DIAG, [qa, dia], [m, n], [])
             var absolute = self.ew(13, diag)
             var zero = self.zeros(1, 1)
             var nonpositive = self.ew(34, absolute, zero)
@@ -364,18 +402,17 @@ struct ClassicalKit(Movable):
         if rank == 0:
             var eye = self.zeros(m, n)
             var owner = self.host(eye)
-            var data = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(owner)))
+            var data = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=owner)
             tsqr_fill_eye(data, m, n)
-            _ = owner^
             return (eye, s, vt)
         var h = self.copy_host(ug)
         var tau = self.zeros(1, min(m, rank))
         var ha = self.address(h)
         var ta = self.address(tau)
-        _ = py_call(self.entries["x_decomp_geqrf"], ha, ta, Python.list(m, rank))
+        _ = self.call(XD_GEQRF, [ha, ta], [m, rank], [])
         var qc = self.zeros(m, n)
         var qa = self.address(qc)
-        _ = py_call(self.entries["x_decomp_orgqr"], ha, ta, qa, Python.list(m, rank, min(m, rank), n))
+        _ = self.call(XD_ORGQR, [ha, ta, qa], [m, rank, min(m, rank), n], [])
         var diagonal = self.strided(h, rank, rank + 1)
         var sign = self.signs(diagonal)
         if n > rank:
@@ -386,30 +423,30 @@ struct ClassicalKit(Movable):
             for part in range(2):
                 var source = sign if part == 0 else remaining
                 var count = self.matrices[source].cols
-                var params = Python.list(2, count, count, n, offset, 0, 0, count, n, 1)
+                var params: List[Int] = [2, count, count, n, offset, 0, 0, count, n, 1]
                 var one = self.zeros(1, 1)
                 if self.resident:
                     var ds = self.device(source)
                     var di = self.device(one)
-                    _ = py_call(self.entries["x_decomp_dev_move"], ds, di, self.matrices[joined].device, params)
+                    _ = self.call(XD_DEV_MOVE, [], self.prefixed([ds, di, self.matrices[joined].device], params), [])
                 else:
                     var aa = self.address(source)
                     var ai = self.address(one)
                     var ao = self.address(joined)
-                    _ = py_call(self.entries["x_decomp_move"], aa, ai, ao, params)
+                    _ = self.call(XD_MOVE, [aa, ai, ao], params, [])
                 offset += count
             sign = joined
         var u = self.ew(2, qc, sign)
         return (u, s, vt)
 
 
-def classical_tsqr_solve(ra: PythonObject, rows: Int, cols: Int,
-                         entries: PythonObject, context: PythonObject) raises -> PythonObject:
-    var kit = ClassicalKit(entries, context)
+
+def linear_tsqr_solve(ra: Int, cols: Int, coef: Int, entry: NativeDescriptorCall) raises:
+    var kit = LinearKit(entry)
     try:
         # R_aug is host output from the existing one-upload TSQR factor entry.
         # Its first cols rows and two column slices match the old _M copies.
-        var top = kit.add(ra, cols, cols + 1)
+        var top = kit.borrowed(ra, cols, cols + 1)
         var r = kit.columns(top, 0, cols)
         var c = kit.columns(top, cols, cols + 1)
         var squared = kit.ew(8, r)
@@ -435,8 +472,6 @@ def classical_tsqr_solve(ra: PythonObject, rows: Int, cols: Int,
         var x = kit.mm(vt, weighted, ta=True)
         var st = kit.transpose(scale)
         x = kit.ew(2, x, st)
-        var result = kit.host(x)
-        # The final matrix is cols x 1, already a flat native ndarray buffer.
-        return result
+        kit.write_result(x, coef, cols)
     finally:
         kit.close()
