@@ -67,3 +67,18 @@ entry calls or its persistent Python config/state fields. Those are next.
 Additional direct build roots are `_mojolearn_training` and its host peer.
 Compilation and focused public optimizer/state/ownership checks remain owed to
 root. No native optimizer update function or measured kernel was edited.
+
+## Typed optimizer descriptor producer
+
+The training images now export `optimizer_native_api_v1` using the existing
+native descriptor ABI. `OptimizerNativeDriver` sends typed `PublicStep`, clip,
+accumulation and resident-transfer values to the same host/GPU operations.
+Writable requests/results remain heap-owned and pinned until the native call
+returns; each call owns its scratch, including its error sink. No Python
+objects cross this interface. Native open/close use the existing slot pools.
+
+This producer batch is incremental: public routing activation follows in a
+separate batch, so no old dispatch is removed yet. It adds no kernel switch,
+changes no optimizer equations, and makes no performance claim. Root must
+compile both training binding groups and run native descriptor refusal,
+state/ownership and public optimizer checks after activation.

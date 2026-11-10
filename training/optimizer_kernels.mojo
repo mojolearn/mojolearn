@@ -7,6 +7,14 @@ trait OptKernels:
     """The typed kernel entries behind the door, one binding's set."""
 
     @staticmethod
+    def open(count: Int) raises -> Int:
+        ...
+
+    @staticmethod
+    def close(handle: Int) raises -> Int:
+        ...
+
+    @staticmethod
     def is_host() -> Bool:
         ...
 

@@ -5,13 +5,23 @@ from core.neural_context import neural_ctx
 from training.optimizer_kernels import OptKernels
 from training.optimizer_public_common import PublicStep, PublicStepOut
 from training.optimizer_public import (
-    public_step, public_io, public_clip, public_accumulate, resident_download, resident_upload,
+    public_step, public_io, public_clip, public_accumulate, resident_download, resident_upload, resident_open, resident_close,
 )
 
 comptime _NEURAL_CTX = "MojolearnNeuralTrainingContextIdenticalV3" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnNeuralTrainingContextFastV3"
 
 
 struct GpuOptKernels(OptKernels):
+    @staticmethod
+    def open(count: Int) raises -> Int:
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        return resident_open(ctx, count)
+
+    @staticmethod
+    def close(handle: Int) raises -> Int:
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        return resident_close(ctx, handle)
+
     @staticmethod
     def is_host() -> Bool:
         return False
