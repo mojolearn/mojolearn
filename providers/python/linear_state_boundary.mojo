@@ -42,7 +42,9 @@ def linear_state_publish(model: PythonObject, coefficients: PythonObject, means:
     state.coef_count = features
     state.features = features
     state.intercept = intercept
-    state.mean = Int(py=classical_address(means))
+    # Loaded archives restore coefficients/intercept without a training mean
+    # buffer. None stays an owner-boundary sentinel; native state uses null.
+    state.mean = 0 if means is None else Int(py=classical_address(means))
     state.ymean = ymean
     state.has_coef = True
     state.fitted = True
