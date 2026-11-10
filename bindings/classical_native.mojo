@@ -30,6 +30,9 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.classical_caller import classical_caller_outside
 from bindings.native_loaded_module import native_loaded_module, NativeModules
 from bindings.admitted_call import AdmittedCall
+from core.linear_fit_types import LF_MODE, LF_VENDOR
+from core.linear_metadata import linear_mode_name, linear_vendor_code, linear_vendor_name
+from providers.python.linear_execution_boundary import linear_execution_word
 
 
 def classical_entries(mut call: AdmittedCall, model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -46,15 +49,7 @@ def classical_entries(mut call: AdmittedCall, model: PythonObject, context: Pyth
     var b = call.builtins()
     if py_type(mode) is not b.str:
         raise Error("numeric_mode must be fast, identical or None")
-    # `mode.strip().lower()` in native string operations, once: no Python
-    # method lookups or calls. ASCII whitespace and case are handled here; a
-    # word that is not then exactly "identical" or "fast" takes Python's
-    # Unicode-aware strip/lower (same refusal, same accepted spellings).
-    var mode_name = String(String(String(mode).strip()).lower())
-    if mode_name != "identical" and mode_name != "fast":
-        mode_name = String(mode.strip().lower())
-    if mode_name != "identical" and mode_name != "fast":
-        raise Error("numeric_mode must be fast, identical or None")
+    var mode_name = linear_mode_name(String(mode))
     mode = PythonObject(mode_name)
     var entries = context["classical_bindings"][mode]
     if py_type(entries) is b.str:
@@ -71,9 +66,9 @@ def classical_entries(mut call: AdmittedCall, model: PythonObject, context: Pyth
         if seen is not None and seen[0] is entries and seen[1] is vendor:
             call.remember_binding("classical", mode_name, True, entries)
             return entries
-    if String(entries["estimators_vendor"]()) != String(vendor):
+    if linear_execution_word(entries, LF_VENDOR) != linear_vendor_code(String(vendor)):
         raise Error("RuntimeError: classical native vendor differs from selected execution")
-    if Int(py=entries["estimators_numeric_mode"]()) != (1 if mode_name == "identical" else 0):
+    if linear_execution_word(entries, LF_MODE) != (1 if mode_name == "identical" else 0):
         raise Error("RuntimeError: classical native mode differs from selected execution")
     if verdicts is None:
         verdicts = Python.dict()
@@ -280,9 +275,9 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         elif operation == "score" or operation == "score_public":
             result = classical_linear_score(model, args, entries, context)
         elif operation == "numeric_mode_used":
-            result = PythonObject("identical" if Int(py=entries["estimators_numeric_mode"]()) == 1 else "fast")
+            result = PythonObject("identical" if linear_execution_word(entries, LF_MODE) == 1 else "fast")
         elif operation == "vendor_used":
-            result = entries["estimators_vendor"]()
+            result = PythonObject(linear_vendor_name(linear_execution_word(entries, LF_VENDOR)))
         else:
             raise Error("unknown private classical operation")
         return result.steal_data()

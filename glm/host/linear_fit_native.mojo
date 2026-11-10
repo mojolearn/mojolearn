@@ -4,7 +4,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.estimators_host_impl import _positive, ridge_fit_host_run, ols_fit_host_run
 from core.hostptr import f32_ptr, f64_ptr
 from core.linear_fit_types import (
-    LINEAR_FIT_ABI, LF_FLAGS, LF_MODE, LF_GRAM, LF_RIDGE_RESIDENT, LF_PREP,
+    LINEAR_FIT_ABI, LF_FLAGS, LF_MODE, LF_VENDOR, LF_GRAM, LF_RIDGE_RESIDENT, LF_PREP,
     LF_RIDGE, LF_OLS, LF_OLS_RESIDENT, LF_HAS_GRAM, LF_PAIRED_MEANS, linear_fit_check_spans,
 )
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
@@ -25,6 +25,8 @@ def linear_fit_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
             value = Int(LINEAR_GRAM_SOLVE) * LF_HAS_GRAM + Int(C02_LINEAR_PAIR) * LF_PAIRED_MEANS
         elif operation == LF_MODE:
             value = GLOBAL_NUMERIC_MODE
+        elif operation == LF_VENDOR:
+            value = 0
         else:
             var a = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)
             var p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)

@@ -6,6 +6,8 @@ from std.python import PythonObject
 from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_type, py_get
 from bindings.sequential_description import sequential_fields
+from core.linear_fit_types import LF_MODE, LF_VENDOR
+from providers.python.linear_execution_boundary import linear_execution_word
 
 
 def classical_host_entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -21,6 +23,6 @@ def classical_host_entries(model: PythonObject, context: PythonObject) raises ->
     var entries = context["classical_bindings"][helper_mode]
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
-    if String(entries["estimators_vendor"]()) != "cpu" or Int(py=entries["estimators_numeric_mode"]()) != 1:
+    if linear_execution_word(entries, LF_VENDOR) != 0 or linear_execution_word(entries, LF_MODE) != 1:
         raise Error("RuntimeError: the explicit host model requires its CPU identical binding")
     return entries

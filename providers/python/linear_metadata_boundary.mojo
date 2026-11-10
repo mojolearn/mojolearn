@@ -141,20 +141,24 @@ def classical_set_params(model: PythonObject, params: PythonObject, ridge: Bool,
     return model
 
 
-def classical_is_fitted(model: PythonObject) raises -> PythonObject:
+def linear_fitted_unpack(model: PythonObject) raises -> Bool:
     var fields = sequential_fields(model)
     var state = LinearModelState()
     state.fitted = Bool(py=py_get(fields, "_mojolearn_fitted", False))
     if linear_state_is_fitted(state, False):
-        return PythonObject(True)
+        return True
     state.fitting = Bool(py=py_get(fields, "_mojolearn_fitting", False))
     if linear_state_is_fitted(state, False):
-        return PythonObject(True)
+        return True
     var pairs = _linear_dict_items(fields)
     var native_str = native_loaded_module("builtins").str
     for k in range(len(pairs[0])):  # driver-loop: unpack public attribute names for native fitted-state decisions
         var key = pairs[0][k]
         if py_type(key) is native_str and pairs[1][k] is not None:
             if linear_state_is_fitted(state, linear_public_fitted_key(String(key))):
-                return PythonObject(True)
-    return PythonObject(False)
+                return True
+    return False
+
+
+def classical_is_fitted(model: PythonObject) raises -> PythonObject:
+    return PythonObject(linear_fitted_unpack(model))

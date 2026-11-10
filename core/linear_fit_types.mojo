@@ -10,7 +10,8 @@ comptime LF_RIDGE = 4
 comptime LF_OLS = 5
 comptime LF_OLS_RESIDENT = 6
 comptime LF_MODE = 7
-comptime LINEAR_FIT_OPERATION_COUNT = 8
+comptime LF_VENDOR = 8
+comptime LINEAR_FIT_OPERATION_COUNT = 9
 comptime LF_HAS_GRAM = 1
 comptime LF_HAS_RIDGE_RESIDENT = 2
 comptime LF_PAIRED_MEANS = 4
@@ -55,7 +56,7 @@ def linear_fit_check_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     var addresses = 0
     var ints = 0
     var floats = 0
-    if operation == LF_FLAGS or operation == LF_MODE:
+    if operation == LF_FLAGS or operation == LF_MODE or operation == LF_VENDOR:
         pass
     elif operation == LF_GRAM or operation == LF_RIDGE_RESIDENT or operation == LF_OLS_RESIDENT:
         addresses = 5

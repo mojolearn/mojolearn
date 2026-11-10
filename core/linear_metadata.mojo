@@ -2,6 +2,64 @@
 """Native constructor/parameter names and fitted-state metadata decisions."""
 
 
+def _linear_mode_space(point: Int) -> Bool:
+    # The whitespace accepted by CPython str.strip, including its four
+    # information-separator controls. No Unicode lower-case mapping outside
+    # ASCII maps to a letter in either supported mode word.
+    return (9 <= point <= 13 or 28 <= point <= 32 or point == 0x85 or
+        point == 0xA0 or point == 0x1680 or 0x2000 <= point <= 0x200A or
+        point == 0x2028 or point == 0x2029 or point == 0x202F or
+        point == 0x205F or point == 0x3000)
+
+
+def linear_mode_name(source: String) raises -> String:
+    var word = String()
+    var started = False
+    var ended = False
+    for codepoint in source.codepoints():  # driver-loop: over public numeric-mode text
+        var point = Int(codepoint)
+        if _linear_mode_space(point):
+            ended = started
+            continue
+        if ended or point >= 128:
+            raise Error("numeric_mode must be fast, identical or None")
+        started = True
+        if 65 <= point <= 90:
+            point += 32
+        word += String(chr(point))
+    if word != "identical" and word != "fast":
+        raise Error("numeric_mode must be fast, identical or None")
+    return word^
+
+
+def linear_vendor_code(name: String) -> Int:
+    if name == "cpu":
+        return 0
+    if name == "metal":
+        return 1
+    if name == "cuda":
+        return 2
+    if name == "hip":
+        return 3
+    if name == "none":
+        return 4
+    return -1
+
+
+def linear_vendor_name(code: Int) raises -> String:
+    if code == 0:
+        return "cpu"
+    if code == 1:
+        return "metal"
+    if code == 2:
+        return "cuda"
+    if code == 3:
+        return "hip"
+    if code == 4:
+        return "none"
+    raise Error("linear metadata: unknown compiled vendor")
+
+
 def linear_parameter_names(ridge: Bool) -> List[String]:
     if ridge:
         return ["alpha", "fit_intercept", "normalize", "numeric_mode", "solver"]

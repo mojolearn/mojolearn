@@ -21,6 +21,11 @@ Root owns compilation and measurement. The lane has run no builds or tests.
 - Constructor, get/set params and fitted-state metadata: native parameter names,
   validation and key decisions in `core/linear_metadata.mojo`. Explicit boundary
   code transfers exact external parameter owners using CPython dictionary APIs.
+- Mode normalization and connected-provider mode/vendor checks use native
+  metadata. Unicode whitespace spellings retain the prior accepted behavior
+  without calling Python string methods. Public mode/vendor reads use the same
+  descriptor table, and fitted admission no longer boxes a Boolean only to
+  immediately unbox it.
 - Save/hash: the separate archive lane's native writer/hash batch is incorporated;
   public dispatch uses its native byte ownership and serialization. Archive read
   completion remains with that lane. The complete pilot is not yet accepted.
@@ -88,6 +93,18 @@ values; the existing gather is unchanged. Exact exporter adapters still require
 final call-graph review, and none of these changes is proof from an import scan. Public attribute and
 exception-class operations are Python protocol admission/packing, and remain
 subject to exact-type/hook refusal review. Archive read remains outstanding.
+The pandas exporter now transfers block descriptors into
+`core/pandas_input_plan.mojo`: block dimensions, dtype promotion, placements,
+nullable-mask validation and scatter decisions use Mojo values. Numeric rows
+still use the existing parallel scatter kernels, now with the GIL released and
+each source owner pinned. Exact object cells require GIL-held C-API decoding;
+they write through a native conversion/finite-policy writer directly into the
+final result, preserving the previous conversion order without a staging copy.
+This decoding cannot be parallelized under the supported GIL contract. Old
+Python owner/placement lists and duplicate metadata rereads were removed.
+Compatibility metadata wrappers for other families share the new native plan;
+those families are not claimed as otherwise migrated. Python sequence
+preparation is owned by the root integration lane and remains unaccepted here.
 
 No arithmetic, fold order or tuned-kernel change is intended. No development
 identity run is requested. No speed result is claimed. End-to-end NVIDIA/AMD

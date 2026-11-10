@@ -1,20 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
-# Native ingestion of ordinary pandas storage, without DataFrame.__array__,
-# manager properties, extension conversion methods or any Python callbacks.
-# A caller imports pandas; runtime admission only reads its loaded modules.
-from std.memory import bitcast
-from bindings.native_loaded_module import native_loaded_module
+"""UNPACK/PACK for ordinary pandas storage and exact object scalar owners.
+
+The caller imports pandas; admission reads its loaded native storage classes
+without DataFrame.__array__, manager properties or extension callbacks. Typed
+shape/dtype/placement/preparation decisions live in core.pandas_input_plan.
+"""
+from bindings.native_loaded_module import native_loaded_module, native_namespace_string_keys
 from std.python import Python, PythonObject
 from bindings.device_rows_door import door_is_device_rows
 from bindings.native_buffer_owner import native_buffer_view
-from core.cast_in import cast_in_kind, cast_w64_bits, f64_to_f32_bits
-from core.classical_pandas_impl import pd_raw_at, _pd_double, pd_mask_check, pd_scatter_numeric
-from bindings.sequential_inputs import _promote
+from core.cast_in import cast_in_kind
+from core.classical_pandas_impl import pd_raw_at, _pd_double
+from core.pandas_input_plan import PandasBlock, PandasInputPlan, PandasObjectWriter, pandas_block_count, pandas_nullable_check, pandas_positions_slice, pandas_positions_array
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_admission import _one_of, sequential_admit_value, _SequentialValueTypes, _sequential_admit_value, _cached_value_types, _native_one_of
 from bindings.native_loaded_module import NativeModules
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.cpython_table import cpython_table
 from bindings.p3_labels_metrics_native import p3_type_word, p3_item
 
@@ -239,10 +241,8 @@ def _pd_fields(value: PythonObject) raises -> PythonObject:
             var fields = py_call(descriptor.__get__, value)
             if py_type(fields) is not b.dict:
                 raise Error("TypeError: pandas storage must use its native instance dictionary")
-            var keys = py_call(b.list, fields.keys())
-            for j in range(len(keys)):  # driver-loop: over stored field names before any keyed lookup
-                if py_type(keys[j]) is not b.str:
-                    raise Error("TypeError: pandas stored field names must be exact native strings")
+            if not native_namespace_string_keys(fields._obj_ptr, b.str):
+                raise Error("TypeError: pandas stored field names must be exact native strings")
             return fields
     raise Error("TypeError: pandas storage has no native dictionary descriptor")
 
@@ -265,7 +265,7 @@ def _pd_raw(value: PythonObject, offset: Int) raises -> UInt64:
     return pd_raw_at(base, offset, size, native)
 
 
-def _pd_object_bits(value: PythonObject, context: PythonObject) raises -> UInt32:
+def _pd_object_number(value: PythonObject, context: PythonObject) raises -> Float64:
     var b = native_loaded_module("builtins")
     var cls = py_type(value)
     var number = Float64(0.0)
@@ -283,14 +283,14 @@ def _pd_object_bits(value: PythonObject, context: PythonObject) raises -> UInt32
         _ = view^
     else:
         raise Error("TypeError: pandas object storage must contain native numeric scalars without Python conversion hooks")
-    return f64_to_f32_bits(bitcast[DType.uint64](number))
+    return number
 
 
-def _pd_cell_bits(raw: PyObjectPtr, int_word: Int, float_word: Int, bool_word: Int,
-                  context: PythonObject) raises -> UInt32:
-    """`_pd_object_bits` of one borrowed object-block cell: exact int, float
+def _pd_cell_number(raw: PyObjectPtr, int_word: Int, float_word: Int, bool_word: Int,
+                  context: PythonObject) raises -> Float64:
+    """`_pd_object_number` of one borrowed object-block cell: exact int, float
     and bool through PyFloat_AsDouble (the value `Float64(py=v)` read),
-    anything else through `_pd_object_bits` (same refusal)."""
+    anything else through `_pd_object_number` (same refusal)."""
     ref cpy = Python().cpython()
     if not raw:
         raise Error("TypeError: pandas object storage must contain native numeric scalars without Python conversion hooks")
@@ -300,14 +300,13 @@ def _pd_cell_bits(raw: PyObjectPtr, int_word: Int, float_word: Int, bool_word: I
         if number == -1.0:
             if cpython_table()[].PyErr_Occurred():
                 raise cpy.unsafe_get_error()
-        return f64_to_f32_bits(bitcast[DType.uint64](number))
-    return _pd_object_bits(PythonObject(from_borrowed=raw), context)
+        return number
+    return _pd_object_number(PythonObject(from_borrowed=raw), context)
 
 
-def _pd_values(values: PythonObject, series: Bool, context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
+def _pd_values_native(values: PythonObject, series: Bool, context: PythonObject) raises -> Tuple[PythonObject, Bool]:
     if py_type(values) is context["ndarray"]:
-        return Python.tuple(values, False)
+        return (values, False)
     var cls = py_type(values)
     if cls is not _pd_class("pandas.core.arrays.integer", "IntegerArray") and cls is not _pd_class("pandas.core.arrays.floating", "FloatingArray") and cls is not _pd_class("pandas.core.arrays.boolean", "BooleanArray"):
         raise Error("TypeError: pandas input requires ordinary numeric storage without extension callbacks")
@@ -316,17 +315,35 @@ def _pd_values(values: PythonObject, series: Bool, context: PythonObject) raises
     var mask = py_get(fields, "_mask")
     if py_type(data) is not context["ndarray"] or py_type(mask) is not context["ndarray"]:
         raise Error("TypeError: pandas nullable storage requires exact native arrays")
-    if Int(py=data.ndim) != 1 or Int(py=mask.ndim) != 1 or Int(py=data.size) != Int(py=mask.size) or Int(py=mask.dtype.num) != 0:
-        raise Error("TypeError: pandas nullable storage metadata differs")
+    var data_rank = Int(py=data.ndim)
+    var mask_rank = Int(py=mask.ndim)
+    var data_size = Int(py=data.size)
     var rows = Int(py=mask.size)
-    var stride = Int(py=mask.strides[0])
-    pd_mask_check(Int(py=sequential_address(mask)), rows, stride, Int(py=mask.dtype.itemsize), Bool(py=mask.dtype.isnative))
+    var mask_type = Int(py=mask.dtype.num)
+    var stride = Int(py=mask.strides[0]) if mask_rank == 1 else 0
+    var address = Int(py=sequential_address(mask))
+    var itemsize = Int(py=mask.dtype.itemsize)
+    var native = Bool(py=mask.dtype.isnative)
+    try:
+        with GILReleased(Python()):
+            pandas_nullable_check(data_rank, mask_rank, data_size, rows, mask_type,
+                address, stride, itemsize, native)
+    finally:
+        _ = data
+        _ = mask
+        _ = values
     # DataFrame.to_numpy's default nullable blocks form object storage; Series
     # with no missing values exports its underlying numeric storage instead.
-    return Python.tuple(data, not series)
+    return (data, not series)
 
 
-def _pd_locations(block: PythonObject, context: PythonObject) raises -> PythonObject:
+def _pd_values(values: PythonObject, series: Bool, context: PythonObject) raises -> PythonObject:
+    # Compatibility packing for callers outside the typed linear ingress.
+    var pair = _pd_values_native(values, series, context)
+    return Python.tuple(pair[0], pair[1])
+
+
+def _pd_locations_native(block: PythonObject, context: PythonObject) raises -> List[Int]:
     var b = native_loaded_module("builtins")
     var location = _pd_get("pandas._libs.internals", "Block", "_mgr_locs", block)
     if py_type(location) is not _pd_class("pandas._libs.internals", "BlockPlacement"):
@@ -335,16 +352,33 @@ def _pd_locations(block: PythonObject, context: PythonObject) raises -> PythonOb
     if py_type(indexer) is b.slice:
         if py_type(indexer.start) is not b.int or py_type(indexer.stop) is not b.int or (indexer.step is not None and py_type(indexer.step) is not b.int):
             raise Error("TypeError: pandas block placement slice is not native")
-        return py_call(b.range, indexer.start, indexer.stop, 1 if indexer.step is None else Int(py=indexer.step))
-    if py_type(indexer) is not context["ndarray"] or Int(py=indexer.ndim) != 1 or String(indexer.dtype.kind) != "i":
+        return pandas_positions_slice(Int(py=indexer.start), Int(py=indexer.stop),
+            1 if indexer.step is None else Int(py=indexer.step))
+    if py_type(indexer) is not context["ndarray"]:
         raise Error("TypeError: pandas block placement requires native integer storage")
-    var result = Python.list()
-    var size = Int(py=indexer.dtype.itemsize)
-    var kind = cast_in_kind(Int(py=indexer.dtype.num), size, "pandas placement")
-    var stride = Int(py=indexer.strides[0])
-    for k in range(Int(py=indexer.size)):  # driver-loop: over block column positions
-        py_call(result.append, PythonObject(Int(bitcast[DType.int64](cast_w64_bits(_pd_raw(indexer, k * stride), kind, size)))))
-    return result
+    var rank = Int(py=indexer.ndim)
+    var result = pandas_positions_array(rank, String(indexer.dtype.kind), Int(py=indexer.size),
+        Int(py=sequential_address(indexer)), Int(py=indexer.dtype.itemsize), Int(py=indexer.dtype.num),
+        Int(py=indexer.strides[0]) if rank == 1 else 0, Bool(py=indexer.dtype.isnative))
+    _ = indexer
+    _ = location
+    _ = block
+    return result^
+
+
+def _pd_locations(block: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Other family's unpackers still request the public metadata container.
+    # Native planning and position reads have one implementation.
+    var positions = _pd_locations_native(block, context)
+    ref cpy = Python().cpython()
+    var raw = cpy.PyList_New(len(positions))
+    if not raw:
+        raise cpy.unsafe_get_error()
+    var result = PythonObject(from_owned=raw)
+    for k in range(len(positions)):  # driver-loop: pack external column placement metadata
+        var position = PythonObject(positions[k])
+        _ = cpy.PyList_SetItem(raw, k, cpy.Py_NewRef(position._obj_ptr))
+    return result^
 
 
 def native_pandas_f32(value: PythonObject, context: PythonObject, strict_f32: Bool = False, allow_nonfinite: Bool = False,
@@ -369,17 +403,13 @@ def native_pandas_f32(value: PythonObject, context: PythonObject, strict_f32: Bo
         if py_type(manager) is not _pd_class("pandas.core.internals.managers", "BlockManager"):
             raise Error("TypeError: pandas DataFrame requires native block storage")
         blocks = _pd_get("pandas._libs.internals", "BlockManager", "blocks", manager)
-    if py_type(blocks) is not b.tuple or len(blocks) == 0 or (series and len(blocks) != 1):
+    if py_type(blocks) is not b.tuple:
         raise Error("pandas input is empty or has invalid block metadata")
-    var owned = Python.list()
-    var placements = Python.list()
-    var rows = -1
-    var cols = 0
-    var common_kind = String()
-    var common_size = 0
-    var objects = False
-    var booleans = False
-    var numbers = False
+    pandas_block_count(len(blocks), series)
+    # Python owners are only lifetime pins. Dtype, dimensions, placements and
+    # preparation state are native values consumed by the shared plan.
+    var owned = List[PythonObject]()
+    var plan = PandasInputPlan(allow_nonfinite)
     # The four admitted block classes, read once per conversion (they were
     # read per block; p3-labels-metrics).
     var numpy_block = _pd_class("pandas.core.internals.blocks", "NumpyBlock")
@@ -391,75 +421,48 @@ def native_pandas_f32(value: PythonObject, context: PythonObject, strict_f32: Bo
         var cls = py_type(block)
         if cls is not numpy_block and cls is not numeric_block and cls is not object_block and cls is not extension_block:
             raise Error("TypeError: pandas requires ordinary native blocks without subclass hooks")
-        var pair = _pd_values(_pd_get("pandas._libs.internals", "Block", "values", block), series, context)
+        var pair = _pd_values_native(_pd_get("pandas._libs.internals", "Block", "values", block), series, context)
         var data = pair[0]
         var rank = Int(py=data.ndim)
-        if rank != 1 and rank != 2:
-            raise Error("pandas numeric block rank must be one or two")
-        var nrows = Int(py=data.shape[rank - 1])
-        var ncols = 1 if rank == 1 else Int(py=data.shape[0])
-        if nrows < 1 or ncols < 1 or (rows >= 0 and nrows != rows) or (series and rank != 1):
-            raise Error("pandas numeric block dimensions differ or are empty")
-        rows = nrows
-        var positions = py_call(b.range, 1) if series else _pd_locations(block, context)
-        if len(positions) != ncols:
-            raise Error("pandas block column positions differ from numeric storage")
-        cols += ncols
-        py_call(owned.append, data)
-        py_call(placements.append, positions)
-        var kind = String(data.dtype.kind)
-        if kind == "O" or Bool(py=pair[1]):
-            objects = True
-        if kind != "O":
-            if kind == "c":
-                raise Error("Complex data not supported")
-            _promote(common_kind, common_size, kind, Int(py=data.dtype.itemsize))
-            booleans = booleans or kind == "b"
-            numbers = numbers or kind != "b"
-    if strict_f32 and (objects or booleans or common_kind != "f" or common_size != 4):
-        raise Error("TypeError: Scaler input must have dtype float32")
-    # pandas deliberately uses object promotion for bool mixed with numbers.
-    var double_round = objects or (booleans and numbers) or (common_kind == "f" and common_size == 8)
-    if double_round and refuse_double.byte_length() > 0:
-        raise Error(refuse_double)
-    var result = sequential_array(Python.tuple(rows) if series else Python.tuple(rows, cols), context["float32"], context)
-    var output = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(result)))
+        var shape = List[Int](capacity=rank)
+        var strides = List[Int](capacity=rank)
+        for axis in range(rank):  # driver-loop: unpack exact ndarray rank metadata once
+            shape.append(Int(py=data.shape[axis]))
+            strides.append(Int(py=data.strides[axis]))
+        var dtype = String(data.dtype.kind)
+        var descriptor = PandasBlock(Int(py=sequential_address(data)), shape^, strides^,
+            Int(py=data.dtype.itemsize), Int(py=data.dtype.num), dtype,
+            Bool(py=data.dtype.isnative), series, plan.rows)
+        var positions = List[Int](length=1, fill=0) if series else _pd_locations_native(block, context)
+        plan.add_block(descriptor^, positions^, dtype, pair[1])
+        owned.append(data)
+    plan.finish(strict_f32, refuse_double)
+    var result = sequential_array(Python.tuple(plan.rows) if series else Python.tuple(plan.rows, plan.cols), context["float32"], context)
+    var output = Int(py=sequential_address(result))
     var int_word = Int(b.int._obj_ptr)
     var float_word = Int(b.float._obj_ptr)
     var bool_word = Int(b.bool._obj_ptr)
-    var seen = List[Bool](length=cols, fill=False)
-    for k in range(len(owned)):  # driver-loop: over admitted native block owners
-        var data = owned[k]
-        var positions = placements[k]
-        var rank = Int(py=data.ndim)
-        var size = Int(py=data.dtype.itemsize)
-        var object_dtype = String(data.dtype.kind) == "O"
-        var kind = 0 if object_dtype else cast_in_kind(Int(py=data.dtype.num), size, "pandas input")
-        var row_stride = Int(py=data.strides[rank - 1])
-        var col_stride = 0 if rank == 1 else Int(py=data.strides[0])
-        for col in range(len(positions)):  # driver-loop: over pandas block columns, one typed column scatter each
-            var dest = Int(py=positions[col])
-            if dest < 0 or dest >= cols or seen[dest]:
-                raise Error("pandas block column positions overlap or exceed the matrix")
-            seen[dest] = True
-            if object_dtype:
-                # cpu-route: pandas object-dtype cells are Python objects. p3-labels-metrics: each
-                # cell's PyObject pointer is read from the object block's storage (no boxed index
-                # or index tuple per cell); exact int, float and bool convert by PyFloat_AsDouble
-                # (their C slot, as `float(v)` ran it); NumPy scalars keep their buffer read.
-                var cells = Int(py=sequential_address(data))
-                var cell_col = col * col_stride if rank == 2 else 0
-                for row in range(rows):  # cpu-route: Python objects marshaled one element at a time before the runtime
-                    var raw = MutPointer[PyObjectPtr, MutUntrackedOrigin](unsafe_from_address=cells + row * row_stride + cell_col)[0]
-                    var bits = _pd_cell_bits(raw, int_word, float_word, bool_word, context)
-                    if not allow_nonfinite and (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
-                        raise Error("Input contains NaN or infinity")
-                    output[row * cols + dest] = bitcast[DType.float32](bits)
+    try:
+        for k in range(len(plan.blocks)):  # driver-loop: over admitted pandas blocks; numeric rows run in parallel
+            var descriptor = plan.blocks[k].copy()
+            if descriptor.objects:
+                for col in range(descriptor.cols):  # driver-loop: over object-block column metadata
+                    var dest = plan.column(k, col)
+                    var writer = PandasObjectWriter(descriptor, col, output, plan.cols, dest, allow_nonfinite)
+                    # Exact Python object scalar decoding must hold the GIL;
+                    # it cannot run concurrently under the supported contract.
+                    # The native writer converts directly into the final output
+                    # and owns the finite policy: no temporary numeric copy.
+                    for row in range(plan.rows):  # cpu-route: exact object cells cross UNPACK under the GIL
+                        var raw = MutPointer[PyObjectPtr, MutUntrackedOrigin](unsafe_from_address=writer.object_address(row))[0]
+                        writer.put(row, _pd_cell_number(raw, int_word, float_word, bool_word, context))
             else:
-                pd_scatter_numeric(Int(py=sequential_address(data)), size, Bool(py=data.dtype.isnative), kind,
-                                   row_stride, col_stride, col, dest, rows, cols, double_round, output, allow_nonfinite)
-        _ = data^
-    _ = owned^
-    _ = placements^
-    _ = manager^
-    return result
+                with GILReleased(Python()):
+                    plan.numeric_block(k, output)
+    finally:
+        _ = owned
+        _ = manager
+        _ = blocks
+        _ = value
+        _ = result
+    return result^
