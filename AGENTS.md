@@ -436,8 +436,14 @@ them for you.
 - Mojo frees a local at its last named use. A device buffer, ring or list that a view, a pointer or a
   queued launch still reads must be named again after that use (keep it alive past the final copy),
   or the later read hits freed storage.
-- Compile-green is not a gate. A packed wheel must import and pass the light smoke on the Mac before
-  it is merged to main, built for measurement or sent to a box.
+- Development integration merges require compilation of the affected code (Andrew, 2026-11-10).
+  Do not add packed-wheel import or smoke gates to that merge. Report native correctness tests,
+  installed runtime tests, measurements and release identity separately; compilation proves none of them.
+- Compile repairs from the native migration (2026-11-10): `Copyable` alone does not allow an implicit
+  copy; use `.copy()` for borrowed descriptors. Construct floating Boolean fixtures with `1.0 if
+  condition else 0.0`. Copy a string slice into a temporary before assigning it back to the source.
+- Mojo 1.0's custom `sort` comparator is a local `@parameter` closure, passed with `cmp_fn` over a
+  mutable `Span`; a top-level thin function does not satisfy its capturing comparator signature.
 
 ## Logs and context
 
