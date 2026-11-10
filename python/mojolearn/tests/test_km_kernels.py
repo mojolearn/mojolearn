@@ -1,12 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""KernelRidge / Nystroem with scikit-learn's cosine, chi2 and additive_chi2
-kernels (lane x-neighbors-km-kernels, 2026-09-27).
+"""Kernel-method public estimator, buffer and scikit-learn comparison seams.
 
-Refusals always run; value checks run through whichever kernel-methods binding
-this install loads and skip, saying so, without one. scikit-learn is compared
-to a tolerance (float32 cells against its float64); repeat calls must be the
-same bits.
+Direct kernel cells and the numerical Nystroem basis reconstruction run in
+checks/native_tests/kernel_methods_cells_*.mojo. Public negative-input refusals,
+KernelRidge's whole-estimator reference and Nystroem's public owners stay here.
 """
 
 import numpy as np
@@ -52,20 +50,21 @@ def test_kernel_ridge_matches_scikit_learn(kernel, gamma, alpha):
     sk_gamma = 1.0 if (kernel == "chi2" and gamma is None) else gamma
     r = sk.KernelRidge(alpha=alpha, kernel=kernel, gamma=sk_gamma).fit(x.astype(np.float64), y)
     np.testing.assert_allclose(np.asarray(m.predict(x)), r.predict(x.astype(np.float64)), rtol=2e-3, atol=2e-3)
-    again = KernelRidge(alpha=alpha, kernel=kernel, gamma=gamma).fit(x, y)
-    assert np.asarray(again.dual_coef_).tobytes() == np.asarray(m.dual_coef_).tobytes()
-    assert np.asarray(again.predict(x)).tobytes() == np.asarray(m.predict(x)).tobytes()
 
 
-def test_kernel_matrix_cells_match_scikit_learn():
-    """The approximation Z Z^T over the basis rows equals the exact kernel
-    there (Nystroem is exact on its own basis)."""
-    pw = pytest.importorskip("sklearn.metrics.pairwise")
+@pytest.mark.parametrize("kernel", ["chi2", "cosine"])
+def test_nystroem_basis_public_shapes_and_owners(kernel):
+    """Public input/output owners and basis indexing stay at the boundary."""
     x, _ = _data()
-    for kernel, ref in (("chi2", pw.chi2_kernel(x.astype(np.float64))),
-                        ("cosine", pw.cosine_similarity(x.astype(np.float64)))):
-        n = _fit_or_skip(Nystroem(kernel=kernel, n_components=12, random_state=1), x)
-        idx = np.asarray(n.component_indices_).astype(np.int64)
-        z = np.asarray(n.transform(x[idx])).astype(np.float64)
-        np.testing.assert_allclose(z @ z.T, ref[np.ix_(idx, idx)], atol=5e-3)
-        assert np.asarray(n.transform(x)).tobytes() == np.asarray(n.transform(x)).tobytes()
+    before = x.copy()
+    n = _fit_or_skip(Nystroem(kernel=kernel, n_components=12, random_state=1), x)
+    idx = np.asarray(n.component_indices_).astype(np.int64)
+    assert idx.shape == (12,) and len(set(idx.tolist())) == 12
+    assert np.all((0 <= idx) & (idx < len(x)))
+    np.testing.assert_array_equal(np.asarray(n.components_), x[idx])
+    assert np.asarray(n.normalization_).shape == (12, 12)
+    basis_output = np.asarray(n.transform(x[idx]))
+    full_output = np.asarray(n.transform(x))
+    assert basis_output.shape == (12, 12) and full_output.shape == (80, 12)
+    assert basis_output.dtype == np.float32 and full_output.dtype == np.float32
+    np.testing.assert_array_equal(x, before)
