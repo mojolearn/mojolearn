@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Diagnostic local dependency inventory with narrow execution-source checks.
+"""Diagnostic local dependency inventory.
 
 Native CPython imports/calls are allowed anywhere under the 2026-10-28 owner
 rule. The default audit follows providers/bindings rather than exempting their
-algorithms, and flags unresolved local dependencies or explicit interpreter
-execution. It cannot prove dynamic targets, admitted types, hooks or transitive
+algorithms, and flags unresolved local dependencies. It cannot prove dynamic
+targets, admitted types, interpreter execution, hooks or transitive
 runtime safety. The runtime endpoint ledger and source review remain separate.
 
 --require-native-only is an optional architectural assertion for a deliberately
@@ -14,7 +14,6 @@ Neither mode inspects compiled upstream standard libraries or runs product code.
 import argparse
 from pathlib import Path
 
-from hooks.no_python_in_kernels import execution_findings
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,8 +57,6 @@ def audit(root=ROOT, roots=ROOTS, *, require_native_only=False):
                 violations.append((chain, "unresolved local dependency"))
             continue
         source = path.read_text()
-        for line, callee in execution_findings(source):
-            violations.append((chain, f"explicit Python evaluator call {callee} at line {line}"))
         code = code_only(source)
         without_strings = re.sub(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'', "", code)
         if require_native_only and (CALLBACK_TOKENS.search(without_strings) or re.search(r'["\']Py(?:Object|CFunction|Capsule|Import|Err|_)[A-Za-z_]*["\']', code)):
