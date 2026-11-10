@@ -117,7 +117,7 @@ from core.admitted_f32_plan import (
     admitted_target_plan, admitted_target_shape, admitted_weight_shape, admitted_weights_run,
 )
 from core.admitted_ids import admitted_ids_i64, admitted_ids_i32
-from core.admitted_rows_gather import admitted_gather_rows_f32, ARG_NONFINITE, ARG_OUT_OF_RANGE
+from core.admitted_rows_plan import admitted_rows_base, admitted_rows_indices, admitted_rows_shape, admitted_rows_store, admitted_rows_run
 from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.reflection import reflect
@@ -641,36 +641,34 @@ def _admitted_rows(source: PythonObject, est: String, context: PythonObject, dev
     # Restore: experiments/removed/A5_DOOR_ROWS_HOST.patch.
     var door = DoorRows(source, context)
     var base = _classical_view_storage(door.base, context, "X")
-    if Int(py=base.ndim) != 2 or not classical_is_f32(base, context) or not classical_c_order(base, context):
-        raise Error("TypeError: DeviceRows requires a float32 C-order 2-D base")
+    admitted_rows_base(Int(py=base.ndim), classical_is_f32(base, context), classical_c_order(base, context))
     var indices = _classical_view_storage(door.indices, context, "indices")
-    if (Int(py=indices.ndim) != 1 or classical_kind(indices, context) != "i" or Int(py=indices.itemsize) != 8
-            or not classical_c_order(indices, context)):
-        raise Error("TypeError: DeviceRows requires C-contiguous int64 row indices")
+    admitted_rows_indices(Int(py=indices.ndim), classical_kind(indices, context),
+        Int(py=indices.itemsize), classical_c_order(indices, context))
     var base_rows = Int(py=base.shape[0])
     var columns = Int(py=base.shape[1])
     var rows = door.rows
-    if rows == 0:
-        raise Error("Found array with 0 sample(s) (shape=(0, " + String(columns) + ")) while a minimum of 1 is required by " + est + ".")
-    if columns == 0:
-        raise Error("Found array with 0 feature(s) (shape=(" + String(rows) + ", 0)) while a minimum of 1 is required by " + est + ".")
+    admitted_rows_shape(rows, columns, est)
     var array = PythonObject(None)
     var address = 0
     var tested = False
     var store = DoorRowsStore.none()
     if device_x:
         store = door_rows_store(source, context)
-        if store.active() and (store.rows != rows or store.row_words != columns or store.base_rows != base_rows):
-            raise Error("TypeError: DeviceRows store entries differ from the fold's base and indices")
+        admitted_rows_store(store.active(), store.rows, store.row_words, store.base_rows, rows, columns, base_rows)
     if not store.active():
         array = admitted_storage_f32(rows, columns, context)
         address = Int(py=classical_address(array))
-        var status = admitted_gather_rows_f32(Int(py=classical_address(base)), base_rows, columns,
-                                              Int(py=classical_address(indices)), rows, address)
-        if status == ARG_OUT_OF_RANGE:
-            raise Error("IndexError: DeviceRows row index out of range for a base of " + String(base_rows) + " rows")
-        if status == ARG_NONFINITE and finite:
-            raise Error("Input X contains NaN or infinity (" + est + ").")
+        var base_address = Int(py=classical_address(base))
+        var indices_address = Int(py=classical_address(indices))
+        try:
+            with GILReleased(Python()):
+                admitted_rows_run(base_address, base_rows, columns, indices_address, rows, address, finite, est)
+        finally:
+            _ = base
+            _ = indices
+            _ = array
+            _ = door
         tested = finite
     var x = AdmittedX(array, source, address, rows, columns, 2, False, tested)
     x.store = store
