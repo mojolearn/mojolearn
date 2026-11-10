@@ -63,7 +63,7 @@ def _narrow_bits(value: Float64) -> UInt32:
 def _planted() -> List[Float64]:
     # Exact binary64 words of the former Python fixture, including signed
     # zeros/NaNs, subnormal inputs, binary32 underflow and finite overflow.
-    var words = List[UInt64](
+    var words: List[UInt64] = [
         0x0, 0x8000000000000000, 0x3FF0000000000000, 0xBFF0000000000000,
         0x4004000000000000, 0x01A56E1FC2F8F359, 0x81A56E1FC2F8F359, 0x1,
         0x3696D601AD376AB9, 0x369FF868BF4D956A, 0x380B38FB9DAA78E4,
@@ -72,11 +72,12 @@ def _planted() -> List[Float64]:
         0xFFF0000000000000, 0x7FF8000000000000, 0xFFF8000000000000,
         0x3FB999999999999A, 0x3FC999999999999A, 0x3FD3333333333333,
         0x3FD5555555555555, 0x400921FB54442D18, 0x4005BF0A8B145769,
-    )
+    ]
     var values = List[Float64]()
     for word in words:
         values.append(bitcast[DType.float64](word))
-    for mantissa in List[UInt32](0x800001, 0x800003, 0x800005, 0xFFFFFD, 0xFFFFFF):
+    var mantissas: List[UInt32] = [0x800001, 0x800003, 0x800005, 0xFFFFFD, 0xFFFFFF]
+    for mantissa in mantissas:
         var low = Float64(bitcast[DType.float32](mantissa))
         var high = Float64(bitcast[DType.float32](mantissa + 1))
         var midpoint = (low + high) / Float64(2)
@@ -85,12 +86,12 @@ def _planted() -> List[Float64]:
     return values^
 
 
-def _fixture(case: Int) -> Tuple[Int, List[Float64]]:
+def _fixture(fixture_id: Int) -> Tuple[Int, List[Float64]]:
     var planted = _planted()
-    if case < 24:
-        var sizes = List[Int](1, 2, 3, 7, 16, 33, 64, 129)
-        var n = sizes[case // 3]
-        var seed = (case % 3) * 1000 + n
+    if fixture_id < 24:
+        var sizes: List[Int] = [1, 2, 3, 7, 16, 33, 64, 129]
+        var n = sizes[fixture_id // 3]
+        var seed = (fixture_id % 3) * 1000 + n
         var values = List[Float64]()
         var state = UInt64(seed + 1)
         for i in range(n * n):
@@ -104,26 +105,26 @@ def _fixture(case: Int) -> Tuple[Int, List[Float64]]:
                 values.append(Float64(Int((word >> 12) % 200001) - 100000) / Float64(10000))
         return n, values^
     var n = len(planted)
-    if case == 25:
+    if fixture_id == 25:
         n = 10
-    elif case == 26:
+    elif fixture_id == 26:
         n = 5
-    elif case == 27:
+    elif fixture_id == 27:
         n = 3
-    elif case == 28:
+    elif fixture_id == 28:
         n = 4
     var values = List[Float64](length=n * n, fill=Float64(0))
-    if case == 24:
+    if fixture_id == 24:
         for i in range(n):
             values[i] = planted[i]
             values[i * n + i] = planted[i]
-    elif case == 25:
+    elif fixture_id == 25:
         for i in range(n):
             values[i * n + i] = planted[26 + i]
-    elif case == 27:
+    elif fixture_id == 27:
         for i in range(len(values)):
             values[i] = bitcast[DType.float64](UInt64(0x8000000000000000))
-    elif case == 28:
+    elif fixture_id == 28:
         for i in range(len(values)):
             values[i] = Float64(1)
     return n, values^
@@ -172,7 +173,7 @@ def _check(mut source: List[Float64], n: Int, ties: Bool, arm: Int) raises:
 
 
 def _capacity(arm: Int) raises:
-    var source = List[Float64](1, 0, 2, 3)
+    var source: List[Float64] = [1, 0, 2, 3]
     var rows = List[Int32](length=3, fill=Int32(-777))
     var cols = rows.copy()
     var values = List[Float32](length=3, fill=Float32(77))
@@ -207,18 +208,18 @@ def main() raises:
     var failed = List[Int](length=60, fill=0)
     var fp = failed.unsafe_ptr()
     def task(unit: Int) {imm fp}:
-        var case = unit // 2
+        var fixture_id = unit // 2
         var arm = unit % 2
         try:
-            if case == 29:
+            if fixture_id == 29:
                 _capacity(arm)
             else:
-                var fixture = _fixture(case)
+                var fixture = _fixture(fixture_id)
                 var n = fixture[0]
                 var values = fixture[1].copy()
-                _check(values, n, case == 25, arm)
+                _check(values, n, fixture_id == 25, arm)
         except error:
-            print("FAIL nonzero_scan case", case, "arm", arm, String(error))
+            print("FAIL nonzero_scan fixture_id", fixture_id, "arm", arm, String(error))
             fp.unsafe_store(unit, 1)
     host_parallelize(task, 60)
     var failures = 0
