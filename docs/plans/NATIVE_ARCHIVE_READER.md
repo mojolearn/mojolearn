@@ -4,9 +4,10 @@ Writer/hash execution and the generic archive reader now use native format
 implementations in this source branch. Public loading still requires the
 orchestrator's affected-group compile/runtime qualification and codec wheel
 dependency qualification. Ridge/OLS schema checks and loaded scalar state now
-use `core/native_archive_linear.mojo`; other saved-model families still have
-their own schema work, so this is not a claim that every public load operation
-is Python-free.
+use `core/native_archive_linear.mojo`. Direct MinMaxScaler save/load uses
+`core/native_archive_minmax.mojo`; other saved-model families and the generic
+host archive dispatch still have schema work, so this is not a claim that
+every public load operation is Python-free.
 
 `core/native_archive_codec.mojo` uses public C APIs and owns each decoder's state
 and result bytes. A single compressed stream is dependent; independent members
@@ -100,6 +101,20 @@ at the boundary. Display-order failure selection retains the first exception
 even when a later graph node was admitted earlier. Thirty-four direct native
 fixtures cover this graph contract, including deep names and file recursion;
 the existing public exception/protocol tests remain unchanged.
+
+The MinMaxScaler native plan preserves class-layout admission, ancestry,
+schema/refusal order, signed counts, clip metadata and unmodified Float32/64
+bits. Save owns metadata as Mojo bytes and borrows the five current public
+statistic buffers. Load publishes each writable C-order statistic with one
+payload copy, removing the intermediate Python result map and duplicate array
+copy. The old dedicated map builder and temporary Python metadata arrays are
+deleted. The shared endpoint admission now returns a native pair; its existing
+Python-pair wrapper remains for unchanged lifecycle callers. Fifty-four direct
+Mojo fixtures cover schema/refusals, native metadata bytes and borrowed views;
+one Python seam checks ownership after input close, writable arrays and save
+readback. The separate generic `host_archive_minmax` map path is unchanged and
+remains migration work. Affected development owner: `runtime_prep`; its source
+closure also changes through `minmax_metadata.mojo`. No estimator kernel changes.
 
 Remaining work is codec wheel dependency qualification and affected public
 boundary tests. Existing API/protocol/exception and file ownership tests remain
