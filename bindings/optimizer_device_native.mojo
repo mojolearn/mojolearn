@@ -14,6 +14,7 @@ from bindings.optimizer_public_words import optimizer_python_error
 from bindings.native_buffer_owner import native_storage_allocate
 from training.optimizer_input_plan import optimizer_contiguous_address
 from training.optimizer_native_api import OptimizerNativeDriver
+from training.optimizer_device_handle import OptimizerDeviceHandle
 from training.optimizer_device_storage_plan import (
     optimizer_device_extent, optimizer_device_count as shape_count, optimizer_device_reshape, optimizer_device_upload,
     optimizer_device_output,
@@ -70,22 +71,20 @@ def device_new(binding: PythonObject, handle: PythonObject, dims: List[Int], bas
 struct DeviceHandleLease(Movable):
     # Only native values own the unpublished allocation. The boundary's global
     # descriptor connection pins its extension image; no Python release call.
-    var driver: OptimizerNativeDriver
-    var handle: Int
-    var owned: Bool
+    var control: OptimizerDeviceHandle
 
     def __init__(out self, driver: OptimizerNativeDriver, handle: Int):
-        self.driver = driver.copy()
-        self.handle = handle
-        self.owned = True
+        self.control = OptimizerDeviceHandle(driver, handle)
 
     def __del__(deinit self):
-        if self.owned:
+        if self.control.owned:
             try:
                 with GILReleased(Python()):
-                    _ = self.driver.free_device(self.handle)
+                    self.control.release()
             except:
-                pass  # retain the existing best-effort failure cleanup
+                # Preserve the existing one-attempt best-effort cleanup; the
+                # native field destructor must not make a second attempt.
+                _ = self.control.detach()
 
 
 def device_adopt(result: PythonObject, binding: PythonObject, handle: Int,
@@ -95,7 +94,7 @@ def device_adopt(result: PythonObject, binding: PythonObject, handle: Int,
     # Until the final field is published only the native lease owns the handle.
     py_setitem(fields, "h", PythonObject(handle))
     py_setitem(fields, "_b", binding)
-    lease.owned = False
+    _ = lease.control.detach()
     return result
 
 

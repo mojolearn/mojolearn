@@ -3,6 +3,13 @@
 from bindings.tensor_view import TensorView, base_format
 
 
+def optimizer_device_transfer_span(address: Int, count: Int) raises:
+    if count < 0 or count > 9223372036854775807 // 4:
+        raise Error("ValueError: training device transfer count is out of range")
+    if count > 0 and (address <= 0 or address > 9223372036854775807 - (count * 4 - 1)):
+        raise Error("ValueError: training device transfer requires complete native storage")
+
+
 def optimizer_device_extent(value: Int) raises -> Int:
     if value < 0:
         raise Error("ValueError: training device shape dimensions must be nonnegative")
