@@ -4,15 +4,15 @@
   "files": 616,
   "test_definitions": 4126,
   "file_decisions": {
-    "needs-semantic-review": 587,
+    "needs-semantic-review": 585,
     "retain-python-boundary": 13,
     "split-partial": 1,
+    "split-migrated": 8,
     "review-module-gate": 1,
-    "split-migrated": 6,
     "retain-tooling": 2,
     "split-needed": 6
   },
-  "reviewed_files": 29,
+  "reviewed_files": 31,
   "not_a_gate": true,
   "limitations": [
     "Definitions are source functions, not parametrized execution cases.",
@@ -135,6 +135,19 @@
       ],
       "handoff": "docs/plans/native_test_migration/sequence-input-plan-handoff.txt",
       "source_review_only": true
+    },
+    {
+      "paths": [
+        "python/mojolearn/tests/test_classical_native_owner.py",
+        "python/mojolearn/tests/test_classical_ols_native_owner.py"
+      ],
+      "change": "Move Ridge/OLS numerical oracles to 23 direct native fit/predict/score fixtures per CPU/GPU descriptor family; retain ten real Python boundary definitions and all original public input parametrizations.",
+      "native_checks": [
+        "checks/native_tests/linear_owner_cpu.mojo",
+        "checks/native_tests/linear_owner_gpu.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/linear-owner-handoff.txt",
+      "source_review_only": true
     }
   ],
   "additional_semantic_reviews": [
@@ -221,6 +234,22 @@
       "status": "compile and runtime passed unmodified",
       "evidence": "~/mojolearn-evidence/integ-finish-20261110/rankn-{math,graph,conv}-{cpu,gpu}-{build,run}.log and result.json",
       "note": "Reported by orchestrator; not executed by this lane; no timing or identity claim."
+    },
+    {
+      "reported_by": "root",
+      "checks": [
+        "native_array_layout",
+        "lowbit_weights_gpu",
+        "lowbit_weights_cpu",
+        "sequence_input_plan"
+      ],
+      "statuses": {
+        "native_array_layout": "45 fixtures compiled and passed",
+        "lowbit_weights_gpu": "3 fixtures compiled and passed",
+        "lowbit_weights_cpu": "3 quantizer row0 failures; root owns lifetime investigation/repair",
+        "sequence_input_plan": "producer self-aliasing String slice compile failure; root owns repair"
+      },
+      "note": "No lane rerun; preserved failures remain pending. Linear tests pin integer-address owners after final use."
     }
   ]
 }
