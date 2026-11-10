@@ -13,6 +13,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
 from bindings.optimizer_admission import opt_guards, opt_owner, opt_owner_mode, opt_value, opt_scalar, opt_schedule, opt_exact
 from bindings.optimizer_public_door import (
+    OPT_DOOR,
     door_ready, owner_kind, refuse_kwargs, OptimizerRegistryPrepared, optimizer_prepare_registry, optimizer_publish_registry, new_array, TensorView, tensor_view,
     door_step, door_io, optimizer_io, optimizer_pack_io, optimizer_load_buffers, optimizer_export_state, door_state, door_state_set, door_zero, door_clip, door_accumulate,
 )
@@ -243,6 +244,7 @@ def optimizer_set_params(owner: PythonObject, updates: PythonObject, context: Py
     var fields = py_fields(owner)
     var kind = owner_kind(owner)
     var table = cpython_table()
+    var door = OPT_DOOR.get_or_create_ptr()
     var position = List[Int](length=1, fill=0)
     var pair = List[PyObjectPtr](length=2, fill=PyObjectPtr())
     # Exact dictionary iteration is UNPACK; no callbacks or Python key list.
@@ -287,15 +289,15 @@ def optimizer_set_params(owner: PythonObject, updates: PythonObject, context: Py
         raise failure^
     var saved = PythonObject(from_owned=saved_pointer)
     var lease = OptimizerOwnerLease(owner)
-    table[].PyDict_Clear(fields._obj_ptr)
+    door[].dict_clear(fields._obj_ptr)
     try:
         _ = optimizer_initialize(owner, registry, config, mode, schedule, resident, context)
         var replacement = OptimizerOwnerLease(owner)
         optimizer_owner_close(lease.value, owner)
         _ = replacement
     except error:
-        table[].PyDict_Clear(fields._obj_ptr)
-        if table[].PyDict_Update(fields._obj_ptr, saved._obj_ptr) != 0:
+        door[].dict_clear(fields._obj_ptr)
+        if door[].dict_update(fields._obj_ptr, saved._obj_ptr) != 0:
             var failure = stash_python_error()
             raise failure^
         raise error^

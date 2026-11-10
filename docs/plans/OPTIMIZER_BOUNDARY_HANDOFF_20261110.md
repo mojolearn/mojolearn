@@ -471,3 +471,25 @@ runtime tests and performance measurement; no lane build/test/timing ran. The
 new busy refusal is limited to simultaneous mutation of one native owner and
 prevents use-after-release across GIL-released operations; it is not a worker or
 kernel serialization policy. No A/B define or cross-device identity claim.
+
+## Final owner-cache and obsolete device cleanup
+
+The existing OptDoor cache now owns the native PyDict_Clear and PyDict_Update
+function pointers used by optimizer publication and rollback. Exact dictionary
+admission, retained rollback owners and Python exception propagation are
+unchanged. Its slot name advances from V2 to V3 for the additional fields.
+The shared cpython_table.mojo is byte-identical to main 6b13ddfeae: its layout
+was already V10 in that baseline and no associated shared layout bump existed.
+This removes an optimizer-only change from every unrelated binding's closure.
+
+Removed six unreachable Python device helpers, the obsolete _DEV_ENTRIES tuple,
+four unused class _KIND mirrors and four unused buffer helper imports. Existing
+compiled device exports and tuned kernels remain. Python boundary tests no
+longer poison deleted helpers; the CPU export test keeps an independent expected
+GPU-only export set instead of importing a retired product dispatch table.
+
+Affected compilation remains the training binding closure and its host variant;
+root's closure controller determines the complete dependent group set. Compilation,
+installed optimizer/device/copy/lifecycle boundary tests and GPU performance
+measurement remain owed. The lane performed source inspection and diff checks
+only; no tests, compiles, boxes, identity runs or A/B define were used.

@@ -230,11 +230,6 @@ comptime _PyDict_GetItemWithError = ExternalFunction[
 # double PyFloat_AsDouble(PyObject *o)  (-1.0 with an error set on failure)
 comptime _PyFloat_AsDouble = ExternalFunction[
     "PyFloat_AsDouble", def(PyObjectPtr) thin abi("C") -> Float64]
-# Boundary publication/rollback of admitted exact dictionaries.
-comptime _PyDict_Clear = ExternalFunction[
-    "PyDict_Clear", def(PyObjectPtr) thin abi("C") -> NoneType]
-comptime _PyDict_Update = ExternalFunction[
-    "PyDict_Update", def(PyObjectPtr, PyObjectPtr) thin abi("C") -> c_int]
 # PyObject *PyDict_Copy(PyObject *p)  (new)
 comptime _PyDict_Copy = ExternalFunction[
     "PyDict_Copy", def(PyObjectPtr) thin abi("C") -> PyObjectPtr]
@@ -357,8 +352,6 @@ struct CPythonTable(Defaultable, Movable):
     var PyObject_IsTrue: _PyObject_IsTrue.type
     var PyDict_GetItemWithError: _PyDict_GetItemWithError.type
     var PyFloat_AsDouble: _PyFloat_AsDouble.type
-    var PyDict_Clear: _PyDict_Clear.type
-    var PyDict_Update: _PyDict_Update.type
     var PyDict_Copy: _PyDict_Copy.type
     var PyModule_GetDict: _PyModule_GetDict.type
     var PyObject_GetIter: _PyObject_GetIter.type
@@ -436,8 +429,6 @@ struct CPythonTable(Defaultable, Movable):
         self.PyObject_IsTrue = _PyObject_IsTrue.load(lib)
         self.PyDict_GetItemWithError = _PyDict_GetItemWithError.load(lib)
         self.PyFloat_AsDouble = _PyFloat_AsDouble.load(lib)
-        self.PyDict_Clear = _PyDict_Clear.load(lib)
-        self.PyDict_Update = _PyDict_Update.load(lib)
         self.PyDict_Copy = _PyDict_Copy.load(lib)
         self.PyModule_GetDict = _PyModule_GetDict.load(lib)
         self.PyObject_GetIter = _PyObject_GetIter.load(lib)

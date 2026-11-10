@@ -6,7 +6,7 @@ from bindings.cpython_table import cpython_table
 from bindings.py_balanced import py_fields, py_get, py_setitem, py_type
 from bindings.optimizer_admission import opt_owner, opt_value
 from bindings.optimizer_owner_boundary import OptimizerOwner, OptimizerOwnerLease, optimizer_owner_new, optimizer_owner_retained, optimizer_owner_close, optimizer_owner_admit_replacement
-from bindings.optimizer_public_door import owner_kind
+from bindings.optimizer_public_door import OPT_DOOR, owner_kind
 from bindings.optimizer_public_words import stash_python_error
 from bindings.optimizer_scalar_boundary import optimizer_truth
 from training.optimizer_owner_control import optimizer_restored_pristine
@@ -29,6 +29,7 @@ def optimizer_restore_state(owner: PythonObject, state: PythonObject, context: P
     var fields = py_fields(owner)
     optimizer_owner_admit_replacement(owner, fields, context)
     var table = cpython_table()
+    var door = OPT_DOOR.get_or_create_ptr()
     var saved_pointer = table[].PyDict_Copy(fields._obj_ptr)
     if not saved_pointer:
         var failure = stash_python_error()
@@ -41,7 +42,7 @@ def optimizer_restore_state(owner: PythonObject, state: PythonObject, context: P
         _ = optimizer_owner_retained(old, owner)
         old.downcast_value_ptr[OptimizerOwner]()[].control.begin()
     try:
-        table[].PyDict_Clear(fields._obj_ptr)
+        door[].dict_clear(fields._obj_ptr)
         var position = List[Int](length=1, fill=0)
         var pair = List[PyObjectPtr](length=2, fill=PyObjectPtr())
         while table[].PyDict_Next(state._obj_ptr, Int(position.unsafe_ptr()),
@@ -54,8 +55,8 @@ def optimizer_restore_state(owner: PythonObject, state: PythonObject, context: P
         if old is not None:
             optimizer_owner_close(old, owner)
     except error:
-        table[].PyDict_Clear(fields._obj_ptr)
-        if table[].PyDict_Update(fields._obj_ptr, saved._obj_ptr) != 0:
+        door[].dict_clear(fields._obj_ptr)
+        if door[].dict_update(fields._obj_ptr, saved._obj_ptr) != 0:
             if old is not None:
                 old.downcast_value_ptr[OptimizerOwner]()[].control.finish()
             var failure = stash_python_error()
