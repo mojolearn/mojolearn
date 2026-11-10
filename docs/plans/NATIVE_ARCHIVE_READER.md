@@ -122,10 +122,12 @@ that final allocation. Every slot is initialized even when its decode fails,
 so error unwinding can safely destroy the whole list. A worker keeps its first
 logical error; the caller scans worker summaries in chunk order. The removed
 per-cell error array and serial error scan are no longer proportional overhead
-on large text payloads. Numeric members retain their early-return path. Nine
+on large text payloads. Numeric members retain their early-return path. Ten
 direct native fixtures cover C/F Unicode and byte cells, embedded NULs,
 supplementary code points, empty/zero-width input, input-owner release, and
-multiple errors whose serialized and logical orders differ.
+multiple errors whose serialized and logical orders differ. Final owner-size
+overflow is refused before allocation, including zero-width text arrays whose
+declared count cannot be bounded by payload bytes.
 
 This uses the supported uninitialized List allocation and pointer
 `unsafe_write` placement API, which must initialize rather than assign over

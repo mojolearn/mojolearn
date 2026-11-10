@@ -17,6 +17,19 @@ def _word(mut raw: List[UInt8], at: Int, value: UInt32):
 
 
 def _fixture(unit: Int) raises:
+    if unit == 9:
+        # Zero-width NPY text has no payload bound on its declared count.
+        # Refuse an overflowing final owner allocation before touching memory.
+        var huge = NativeArchiveDecoded()
+        huge.layout.kind = 2
+        huge.layout.count = 9223372036854775807
+        var failure = String("")
+        try:
+            native_archive_text_cells(huge)
+        except problem:
+            failure = String(problem)
+        _require(failure == "MemoryError: archive text cell count exceeds native storage" and len(huge.texts) == 0, "text owner allocation overflow is refused before initialization")
+        return
     var rows = 32
     var cols = 257
     var count = rows * cols
@@ -110,7 +123,7 @@ def _fixture(unit: Int) raises:
 
 
 def main() raises:
-    comptime FIXTURES = 9
+    comptime FIXTURES = 10
     var failed = List[Int](length=FIXTURES, fill=0)
     var failures_ptr = failed.unsafe_ptr()
     def task(unit: Int) {imm failures_ptr}:
