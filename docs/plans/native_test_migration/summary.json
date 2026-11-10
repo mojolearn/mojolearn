@@ -4,15 +4,15 @@
   "files": 616,
   "test_definitions": 4126,
   "file_decisions": {
-    "needs-semantic-review": 574,
+    "needs-semantic-review": 573,
     "retain-python-boundary": 22,
     "split-partial": 1,
     "split-migrated": 10,
     "review-module-gate": 1,
     "retain-tooling": 2,
-    "split-needed": 6
+    "split-needed": 7
   },
-  "reviewed_files": 42,
+  "reviewed_files": 43,
   "not_a_gate": true,
   "limitations": [
     "Definitions are source functions, not parametrized execution cases.",
@@ -269,6 +269,11 @@
       "path": "python/mojolearn/tests/test_x_sequence_optim.py",
       "decision": "split-needed",
       "reason": "Six independent NumPy numerical oracle definitions are eligible: two configs each RMSprop/Adagrad/Lion/Adamax/NAdam plus Adafactor matrix/vector recurrence. Preserve current tolerances and float64 equations in direct typed native checks before deleting drivers; migration pending."
+    },
+    {
+      "path": "python/mojolearn/tests/test_optim_maximize_seam.py",
+      "decision": "split-needed",
+      "reason": "Signed-zero maximize relation and gradient mutation math are eligible for typed native PublicStep checks: four optimizer settings, clipping on/off, two fixtures, three steps plus independent sign-bit/separation oracle. Existing Python driver is registered in tools/identity_lanes/neural.checks with sabotage patch, so replace driver and final-verifier registration together after native coverage exists; keep Python non-bool admission. No identity run or deletion yet."
     }
   ],
   "integration_reported_results": [
