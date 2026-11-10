@@ -756,12 +756,6 @@ def test_vocabulary_judges_the_iterable_first():
     for (src, targets, what), want in cases:
         got = nhr._judge_loop(src, targets, what)[0]
         assert got == want, (src, targets, what, got)
-    ncs_path = os.path.join(HERE, "no_compute_in_shells.py")
-    assert os.path.exists(ncs_path)
-    sys.path.insert(0, HERE)
-    import no_compute_in_shells as ncs
-    for (src, targets, what), want in cases:
-        assert ncs.judge_loop(src, targets, what)[0] == want, ("shells table out of step", src)
 
 
 def test_python_tags_are_judged_and_counted():

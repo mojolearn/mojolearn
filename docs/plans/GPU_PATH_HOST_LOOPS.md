@@ -43,7 +43,7 @@ baseline only shrinks.
 
 Since 2026-11-09 the tag is judged against the loop, in Mojo and in Python, for
 `for` and `while` alike: the LOOP-TAG VOCABULARY at the top of
-`no_host_routes.py` and `no_compute_in_shells.py` reads the iterable (or
+`no_host_routes.py` reads the iterable (or
 `range` bound, or `while` condition), then the loop variables, then the tag
 text. A data word (rows, samples, labels, values, tokens, `X`, `y`,
 `.shape[0]`, ...) makes the tag false; a structure word (layers, blocks,

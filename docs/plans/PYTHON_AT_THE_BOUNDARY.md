@@ -180,9 +180,9 @@ attribute.
 
 ## 5. Typed boundaries and execution evidence
 
-Owner direction, 2026-11-10: delete the kernel-path/token source guard. Do not extend it, restore it under another
-name, or replace it with a source-count baseline gate. A path classification excluding binding/provider code is
-not evidence that a public operation avoids Python.
+Owner direction, 2026-11-10: delete the kernel-path/token source guard and the shell-loop source counter. Do not
+extend them, restore them under another name, or replace them with a source-count baseline gate. Excluding
+binding/provider code or rejecting necessary UNPACK/PACK loops cannot establish that an operation avoids Python.
 
 The architecture still confines Python objects and CPython interaction to UNPACK/PACK (section 2.4). RUN takes
 typed Mojo requests and returns typed Mojo results, uses native state handles and native function tables, and

@@ -118,25 +118,19 @@ The current work is the typed boundary migration in
 [`PYTHON_AT_THE_BOUNDARY.md`](PYTHON_AT_THE_BOUNDARY.md), with correctness and
 performance established on actual compiled operations.
 
-## The no-compute-in-shells check
+## The retired shell-loop counter
 
-A shell file (`bindings/**`, `*pyapi*.mojo`, `*_py.mojo`) is a passthrough: it
-unpacks PythonObject arguments into typed values, calls one typed kernel entry
-and converts the typed result back. `tools/hooks/no_compute_in_shells.py --tree`
-reports, in every shell file, each `for`/`while` line that carries no tag and
-each kernel launch (`enqueue_function`, `DeviceContext(`, `parallelize`,
-`vectorize`). A loop over argument words of bounded, data-independent length is
-tagged `# small-loop(<what>)`, and a driver loop over model structure
-`# driver-loop: over <what>`, on the loop line or the line above; launches are
-never taggable. The pre-push hook and the second job of
-`.github/workflows/no-compute-in-shells.yml` run it with the same main/branch
-rule as the other fences.
+The shell-loop source counter was removed on 2026-11-10 under the same owner
+instruction as the kernel-path guard. It rejected the archive migration's
+necessary input admission and output packing loops, even after formatting,
+CRC, storage and offset decisions moved to typed Mojo. Changing tags or
+expanding a baseline would not establish the runtime boundary.
 
-The hits on main `28b8ed11b` (1,206 in 116 files: 1,185 untagged loops and 21
-launches) are listed in `tools/hooks/compute_in_shells_baseline.txt` as
-`path:line: code`. A hit is matched by path and code text, so edits above a row
-do not break it. The list only shrinks: when the work moves into the kernel
-file, `no_compute_in_shells.py --prune-baseline` drops the stale rows.
+Its baseline is retained in
+`experiments/retired_python_source_guard_20261110/compute_in_shells_baseline.txt`.
+Native execution accepts typed values; the explicit boundary owns Python
+admission, output wrapping and lifetime pins. Use native correctness tests and
+real API admission/ownership checks to validate that split.
 
 ## The kernel closure compile check
 

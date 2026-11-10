@@ -9,8 +9,7 @@
       ],
       "source_inputs": {
         "checker": [
-          "tools/public_runtime_inventory.py",
-          "tools/hooks/no_compute_in_shells.py"
+          "tools/public_runtime_inventory.py"
         ]
       },
       "configuration": [

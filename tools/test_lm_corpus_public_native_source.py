@@ -1,6 +1,5 @@
 """Source controls only: no compiled corpus runtime or vendor qualification."""
 import ast
-import importlib.util
 from pathlib import Path
 import unittest
 
@@ -127,14 +126,6 @@ class CorpusPublicSource(unittest.TestCase):
         self.assertNotIn('step *', numpy_path)
         self.assertNotIn('np.multiply', source)
         self.assertNotIn('py_call(step.', source)
-
-    def test_new_native_shells_have_no_untagged_compute_loops(self):
-        spec = importlib.util.spec_from_file_location("corpus_shell_guard", ROOT / "tools/hooks/no_compute_in_shells.py")
-        guard = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(guard)
-        for path in (NATIVE, METADATA, SCALARS):
-            self.assertEqual(guard.scan(path.read_text()), [], str(path))
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -28,10 +28,7 @@ cp "$here/rebuild_fence.py" "$hooks/rebuild_fence.py"
 chmod +x "$hooks/rebuild_fence.py"
 # Owner 2026-11-10: retire the misleading Python source guard, including
 # its previously installed copy in the shared hooks directory.
-rm -f "$hooks/no_python_in_kernels.py"
-# the no-compute-in-shells check (2026-10-21): a shell .mojo file loops over no data and launches nothing
-cp "$here/no_compute_in_shells.py" "$hooks/no_compute_in_shells.py"
-chmod +x "$hooks/no_compute_in_shells.py"
+rm -f "$hooks/no_python_in_kernels.py" "$hooks/no_compute_in_shells.py"
 # the no-runtime-import_module check (2026-11-06): no new Python.import_module on a bindings/providers call path
 cp "$here/no_runtime_import_module.py" "$hooks/no_runtime_import_module.py"
 chmod +x "$hooks/no_runtime_import_module.py"

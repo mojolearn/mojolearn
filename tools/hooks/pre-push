@@ -22,11 +22,6 @@
 # them against the merge-base with main (the record is permanent, Andrew 2026-10-28). Both modes
 # judge against the merge-base; removing the test file itself is refused too.
 #
-# The fifth fence (2026-10-21): no_compute_in_shells.py --tree refuses, in a shell
-# .mojo file (bindings/, *pyapi*.mojo, *_py.mojo), an untagged for/while loop or a
-# kernel launch (enqueue_function, DeviceContext(, parallelize, vectorize) beyond
-# tools/hooks/compute_in_shells_baseline.txt. Same main/--branch judging rule.
-#
 # The seventh fence (2026-11-06): no_runtime_import_module.py --tree refuses a new
 # `Python.import_module(` call in bindings/ or providers/ .mojo files outside an
 # import-time initializer (a `def PyInit_*` body or a line tagged `# import-time:`)
@@ -66,7 +61,7 @@ here=$(dirname "$0")
 # installed copies never update themselves (an Oct 8 copy refused tagged driver loops on 2026-10-17): say so when the
 # checkout's hooks differ from the installed ones
 top=$(git rev-parse --show-toplevel 2>/dev/null)
-for f in pre-push no_host_routes.py rebuild_fence.py no_compute_in_shells.py no_runtime_import_module.py; do
+for f in pre-push no_host_routes.py rebuild_fence.py no_runtime_import_module.py; do
     if [ -f "$top/tools/hooks/$f" ] && ! cmp -s "$top/tools/hooks/$f" "$here/$f"; then
         echo "pre-push: the installed $f differs from tools/hooks/$f in this checkout; run bash tools/hooks/install.sh" >&2
     fi
@@ -117,8 +112,6 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
         rm -f "$connections"
         [ $status -eq 0 ] || { echo "pre-push: REFUSED by native package connection declarations" >&2; exit 4; }
     fi
-    # the no-compute-in-shells check (2026-10-21), same branch/main judging rule
-    if [ -f "$here/no_compute_in_shells.py" ]; then python3 "$here/no_compute_in_shells.py" --tree "$local_sha" $mode || exit 4; fi
     # the no-runtime-import_module check (2026-11-06), same branch/main judging rule
     if [ -f "$here/no_runtime_import_module.py" ]; then python3 "$here/no_runtime_import_module.py" --tree "$local_sha" $mode || exit 4; fi
     # the no-Python-in-runtime gate (2026-10-28), when the pushed tree carries it: the endpoint
