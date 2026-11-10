@@ -95,7 +95,7 @@ from bindings.admitted_call import AdmittedCall, admitted_input_dense, ADMITTED_
 from bindings.admitted_finite_wording import admitted_finite_wording
 from bindings.py_balanced import py_call, py_type
 from bindings.classical_arrays import (
-    classical_wrap_array, _store_code, classical_input, classical_kind, classical_address, classical_cast_kind,
+    classical_wrap_array, classical_wrap_layout, _store_code, classical_input, classical_kind, classical_address, classical_cast_kind,
     classical_is_array, classical_is_f32, classical_c_order, classical_numpy, classical_dtype_str,
 )
 from bindings.native_buffer_owner import native_buffer_view
@@ -133,6 +133,8 @@ from providers.python.borrowed_buffer_pyapi import AdmittedBorrowedBuffer, admit
 from providers.python.array_metadata_pyapi import array_owner_once
 from core.admitted_convert import admitted_convert
 from core.cast_in import CAST_KIND_UNSIGNED, CAST_KIND_SIGNED, CAST_KIND_FLOAT, CAST_KIND_BOOL
+from core.native_array_layout import NativeArrayLayout, native_matrix_shape, native_array_itemsize as _array_itemsize
+from providers.python.array_layout_boundary import native_shape_unpack, native_shape_pack
 
 comptime RESHAPE_HINT = "Reshape your data either using array.reshape(-1, 1) if your data has a single feature or array.reshape(1, -1) if it contains a single sample."
 
@@ -223,19 +225,6 @@ def admitted_words(array: PythonObject, address: Int, rows: Int, cols: Int, c_or
     return x^
 
 
-def _array_itemsize(typestr: String) raises -> Int:
-    """The item width of an Array dtype (refuses any other typestr)."""
-    if typestr == "<f8" or typestr == "<i8":
-        return 8
-    if typestr == "<f4" or typestr == "<i4" or typestr == "<u4":
-        return 4
-    if typestr == "<f2" or typestr == "<u2":
-        return 2
-    if typestr == "<u1" or typestr == "<i1":
-        return 1
-    raise Error("TypeError: " + typestr + " is not an Array dtype")
-
-
 def admitted_array(shape: PythonObject, typestr: String, context: PythonObject, order: String = "C") raises -> PythonObject:
     """A new ZERO-FILLED mojolearn Array of `shape` (a tuple of native ints)
     and any Array dtype, assembled from its slots; never an ndarray. THE
@@ -246,11 +235,8 @@ def admitted_array(shape: PythonObject, typestr: String, context: PythonObject, 
     # (native_array_zeros), the same zero bytes as before.
     # TOMBSTONE: labels_empty / labels_vector / trees_empty (bindings/classical_labels.mojo) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
     # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
-    var count = 1
-    for k in range(len(shape)):  # driver-loop: over array rank metadata
-        count *= Int(py=shape[k])
-    _ = _array_itemsize(typestr)  # refuses a non-Array dtype
-    return classical_wrap_array(native_array_zeros(_store_code(typestr), count), shape, typestr, order, context)
+    var layout = NativeArrayLayout(native_shape_unpack(shape), _array_itemsize(typestr), order)
+    return classical_wrap_layout(native_array_zeros(_store_code(typestr), layout.count), layout, typestr, context)
 
 
 def admitted_vector(count: Int, typestr: String, context: PythonObject) raises -> PythonObject:
@@ -272,7 +258,7 @@ def admitted_storage_f32(rows: Int, cols: Int, context: PythonObject, order: Str
     constructor, so that install keeps the zero-filled store)."""
     # REGRESSIONS F3 / C3: the zero fill of a destination the cast then
     # overwrote in full was a second pass over X.
-    return admitted_storage(Python.tuple(rows) if cols == 0 else Python.tuple(rows, cols), "<f4", context,
+    return admitted_storage_native(native_matrix_shape(rows, cols), "<f4", context,
                             order, as_array)
 
 
@@ -301,17 +287,21 @@ def admitted_storage(shape: PythonObject, typestr: String, context: PythonObject
     installed (a door whose result must never be an ndarray)."""
     # The zero-fill-then-overwrite sites that move here are listed by owning
     # lane in ~/mojolearn-evidence/a5-zero-fill-sites.md.
+    return admitted_storage_native(native_shape_unpack(shape), typestr, context, order, as_array)
+
+
+def admitted_storage_native(shape: List[Int], typestr: String, context: PythonObject,
+    order: String = "C", as_array: Bool = False) raises -> PythonObject:
     if order != "C" and order != "F":
         raise Error("ValueError: admitted storage order must be 'C' or 'F', not " + order)
     if as_array or not classical_numpy(context):
-        return admitted_array(shape, typestr, context, order)
+        var layout = NativeArrayLayout(shape.copy(), _array_itemsize(typestr), order)
+        return classical_wrap_layout(native_array_zeros(_store_code(typestr), layout.count), layout, typestr, context)
     var key = _admitted_storage_key(typestr)
-    var count = 1
-    for k in range(len(shape)):  # driver-loop: over array rank metadata
-        count *= Int(py=shape[k])
     var width = 4 if typestr == "<f4" else 8
-    var storage = native_scratch_bytes(count * width)
-    return py_call(context["ndarray"], shape, dtype=context[PythonObject(key)], buffer=storage, order=PythonObject(order))
+    var layout = NativeArrayLayout(shape.copy(), width, order)
+    var storage = native_scratch_bytes(layout.nbytes)
+    return py_call(context["ndarray"], native_shape_pack(layout.shape), dtype=context[PythonObject(key)], buffer=storage, order=PythonObject(order))
 
 
 def admit_x(source: PythonObject, ndim: Int, name: String, context: PythonObject, column_target: Bool = False,
@@ -999,14 +989,10 @@ def admitted_zeros(shape: List[Int], typestr: String, context: PythonObject) rai
     """A new zero-filled C-order Array of any Array dtype. Array stores have
     no uninitialised constructor (admitted_storage keeps the same zeros
     without NumPy), so the one fill pass stays."""
-    var count = 1
-    for i in range(len(shape)):  # driver-loop: over shape words
-        count *= shape[i]
-    _ = admitted_width(typestr)  # its refusal for a dtype no Array holds
-    var out = classical_wrap_array(native_array_zeros(_store_code(typestr), count), admitted_shape_tuple(shape),
-                                   typestr, "C", context)
-    var addr = Int(py=classical_address(out))
-    return AdmittedBuf(out, addr, shape.copy())
+    var layout = NativeArrayLayout(shape.copy(), admitted_width(typestr))
+    var array = classical_wrap_layout(native_array_zeros(_store_code(typestr), layout.count), layout, typestr, context)
+    var addr = Int(py=classical_address(array))
+    return AdmittedBuf(array, addr, shape.copy())
 
 
 def _typed_kind(v: TensorView, mut item: Int) raises -> Int:

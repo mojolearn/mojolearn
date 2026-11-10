@@ -12,7 +12,8 @@ from bindings.native_buffer_owner import native_buffer_view
 from core.cast_in import cast_in_kind
 from core.classical_pandas_impl import pd_raw_at, _pd_double
 from core.pandas_input_plan import PandasBlock, PandasInputPlan, PandasObjectWriter, pandas_block_count, pandas_nullable_check, pandas_positions_slice, pandas_positions_array
-from bindings.sequential_arrays import sequential_array, sequential_address
+from bindings.sequential_arrays import sequential_array_native, sequential_address
+from core.native_array_layout import native_matrix_shape
 from bindings.sequential_admission import _one_of, sequential_admit_value, _SequentialValueTypes, _sequential_admit_value, _cached_value_types, _native_one_of
 from bindings.native_loaded_module import NativeModules
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
@@ -437,7 +438,7 @@ def native_pandas_f32(value: PythonObject, context: PythonObject, strict_f32: Bo
         plan.add_block(descriptor^, positions^, dtype, pair[1])
         owned.append(data)
     plan.finish(strict_f32, refuse_double)
-    var result = sequential_array(Python.tuple(plan.rows) if series else Python.tuple(plan.rows, plan.cols), context["float32"], context)
+    var result = sequential_array_native(native_matrix_shape(plan.rows, 0 if series else plan.cols), context["float32"], context)
     var output = Int(py=sequential_address(result))
     var int_word = Int(b.int._obj_ptr)
     var float_word = Int(b.float._obj_ptr)
