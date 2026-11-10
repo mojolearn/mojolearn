@@ -6,6 +6,7 @@ from checks.native_tests.bf16_conversion_cases import (
     BF16_UNITS, input_word, expected_narrow, expected_widen, require,
 )
 from core.host_parallel import host_parallelize
+from core.hostptr import f32_ptr, u16_ptr
 from decomposition.linalg_host_impl import to_bf16_host_run, from_bf16_host_run
 
 
@@ -18,8 +19,8 @@ def check_unit(unit: Int) raises:
         var widened = List[Float32](length=count, fill=0)
         for j in range(count):
             source[j] = bitcast[DType.float32](input_word(start + j))
-        to_bf16_host_run(narrowed.unsafe_ptr(), Int(source.unsafe_ptr()), count)
-        from_bf16_host_run(widened.unsafe_ptr(), Int(narrowed.unsafe_ptr()), count)
+        to_bf16_host_run(u16_ptr(Int(narrowed.unsafe_ptr())), Int(source.unsafe_ptr()), count)
+        from_bf16_host_run(f32_ptr(Int(widened.unsafe_ptr())), Int(narrowed.unsafe_ptr()), count)
         for j in range(count):
             var expected = expected_narrow(input_word(start + j))
             require(narrowed[j] == expected, "host BF16 narrowing word " + String(start + j))
@@ -33,7 +34,7 @@ def check_unit(unit: Int) raises:
         var widened = List[Float32](length=BF16_CHUNK, fill=0)
         for j in range(BF16_CHUNK):
             source[j] = UInt16(start + j)
-        from_bf16_host_run(widened.unsafe_ptr(), Int(source.unsafe_ptr()), BF16_CHUNK)
+        from_bf16_host_run(f32_ptr(Int(widened.unsafe_ptr())), Int(source.unsafe_ptr()), BF16_CHUNK)
         for j in range(BF16_CHUNK):
             require(bitcast[DType.uint32](widened[j]) == expected_widen(UInt16(start + j)), "host raw BF16 widening word " + String(start + j))
         _ = source
