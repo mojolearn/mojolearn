@@ -332,8 +332,8 @@ class KMeans(NumericModeMixin):
     # The fitted centroids live on the device after the first query, under
     # `_resident_holder` (bindings/kmeans_native.mojo `_kmeans_resident`).
     # A pickle or a deepcopy carries no device handle; the copy uploads its
-    # own at its first query. No Python `__del__`: dropping an instance
-    # releases the handle through the native finalizer connected below.
+    # own at its first query. The Mojo resident owner releases its native
+    # handle after the last query drops its reference.
     def __getstate__(self):
         return _NATIVE(self, "family_kmeans_getstate", (), _NATIVE_CONTEXT)
 
@@ -428,12 +428,6 @@ _native_archive_bridge.register(KMeans, _KMEANS_FORMAT, (
     ("f8", "reals", (("float", "inertia_"), ("float", "sum_scale_"), ("float", "weight_scale_"),
                      ("float", "tol"), ("float", "oversampling_factor"))),
 ), host_archive_kmeans_metrics=dict(_METRIC_NAMES), host_archive_kmeans_starts=dict(_INIT_NAMES))
-
-
-# Dropping a fitted instance releases its resident centroids through the
-# minting binding's `kmeans_centers_release` (bindings/host_archive_lifetime.mojo
-# "entry" plans); the handle lives in `_resident_holder["index"]`.
-_native_archive_bridge.lifetime(KMeans, "kmeans_centers_release", "_resident_holder")
 
 
 __all__ = ["KMeans"]
