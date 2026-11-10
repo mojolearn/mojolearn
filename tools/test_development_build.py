@@ -626,7 +626,7 @@ def test_main_passes_measured_guard_budget_and_retains_compile_attempt_count(rep
     report = json.loads((evidence / "result.json").read_text())
     assert len(seen) == report["plan"]["counts"]["build_selected"] == report["compile_attempts"]
     assert report["jobs"] == 2
-    assert all(value["rss_bytes"] == 30 * 2 ** 30 and value["min_available_bytes"] == 20 * 2 ** 30
+    assert all(value["rss_bytes"] == 45 * 2 ** 30 and value["min_available_bytes"] == 20 * 2 ** 30
                and value["seconds"] == 321 and value["stall_seconds"] == 12
                and value["lock_seconds"] == 9 for value in seen)
     assert all(result["exit_code"] == 124 for result in report["results"])
