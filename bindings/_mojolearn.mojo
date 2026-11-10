@@ -200,8 +200,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 
 from core.native_descriptor_abi import NativeDescriptorCall
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
-from core.labels_native_api import LABELS_NATIVE_ABI_NAME, LabelsPrepareRequest, LabelsArgmaxRequest, LabelsGatherRequest, LabelsRatioRequest
+from core.labels_native_api import LABELS_NATIVE_ABI_NAME, LabelsArgmaxRequest, LabelsGatherRequest, LabelsRatioRequest
 from core.labels_native_device import LabelsDeviceKernels, labels_device_native_v2 as labels_native_entry
+from core.labels_admission import labels_argmax_shape, labels_gather_shape, labels_ratio_shape
+from bindings.labels_legacy_boundary import labels_legacy_unique, labels_legacy_prepare, labels_legacy_address
 
 from checks.vendor import COMPILED_VENDOR
 
@@ -1670,7 +1672,16 @@ def encode_labels_u8_binding(
 
 def _gather_u64_device(name: String, table_addr: PythonObject, n_table: PythonObject,
     codes_addr: PythonObject, n: PythonObject, dst_addr: PythonObject) raises -> PythonObject:
-    var request = LabelsGatherRequest(Int(py=table_addr), Int(py=codes_addr), Int(py=dst_addr), Int(py=n_table), Int(py=n))
+    var count = Int(py=n)
+    var classes = Int(py=n_table)
+    labels_gather_shape(name, count, classes)
+    if count == 0:
+        return PythonObject(0)
+    var message = name + ": null buffer address"
+    var table = labels_legacy_address(table_addr, message)
+    var codes = labels_legacy_address(codes_addr, message)
+    var dst = labels_legacy_address(dst_addr, message)
+    var request = LabelsGatherRequest(table, codes, dst, classes, count)
     var kind = 1 if name == "gather_i64" else 2
     with GILReleased(Python()):
         LabelsDeviceKernels.gather(kind, request)
@@ -1679,7 +1690,16 @@ def _gather_u64_device(name: String, table_addr: PythonObject, n_table: PythonOb
 
 def class_ratio_f64_binding(counts_addr: PythonObject, k: PythonObject, n: PythonObject,
     mode: PythonObject, out_addr: PythonObject) raises -> PythonObject:
-    var request = LabelsRatioRequest(Int(py=counts_addr), Int(py=out_addr), Int(py=k), Int(py=n), Int(py=mode))
+    var classes = Int(py=k)
+    var count = Int(py=n)
+    var native_mode = Int(py=mode)
+    if classes <= 0:
+        return PythonObject(0)
+    labels_ratio_shape(classes, count, native_mode)
+    var message = String("class_ratio_f64: null buffer address")
+    var counts = labels_legacy_address(counts_addr, message)
+    var dst = labels_legacy_address(out_addr, message)
+    var request = LabelsRatioRequest(counts, dst, classes, count, native_mode)
     var result = 0
     with GILReleased(Python()):
         result = LabelsDeviceKernels.ratio(request)
@@ -1706,7 +1726,15 @@ def gather_f64_binding(
 
 def _argmax_rows_device(name: String, wide: Bool, scores_addr: PythonObject,
     n_rows: PythonObject, n_cols: PythonObject, dst_addr: PythonObject) raises -> PythonObject:
-    var request = LabelsArgmaxRequest(Int(py=scores_addr), Int(py=dst_addr), Int(py=n_rows), Int(py=n_cols))
+    var rows = Int(py=n_rows)
+    var cols = Int(py=n_cols)
+    labels_argmax_shape(name, rows, cols)
+    if rows == 0:
+        return PythonObject(0)
+    var message = name + ": null buffer address"
+    var scores = labels_legacy_address(scores_addr, message)
+    var dst = labels_legacy_address(dst_addr, message)
+    var request = LabelsArgmaxRequest(scores, dst, rows, cols)
     with GILReleased(Python()):
         LabelsDeviceKernels.argmax(wide, request)
     return PythonObject(0)
@@ -1910,15 +1938,7 @@ def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -
 
 def unique_inverse_binding(src_addr: PythonObject, n: PythonObject, kind: PythonObject,
     classes_addr: PythonObject, codes_addr: PythonObject) raises -> PythonObject:
-    var count = Int(py=n)
-    var native_kind = Int(py=kind)
-    var source = Int(py=src_addr)
-    var classes = Int(py=classes_addr)
-    var codes = Int(py=codes_addr)
-    var result = 0
-    with GILReleased(Python()):
-        result = LabelsDeviceKernels.unique(source, count, native_kind, classes, codes)
-    return PythonObject(result)
+    return labels_legacy_unique[LabelsDeviceKernels](src_addr, n, kind, classes_addr, codes_addr)
 
 
 # ===========================================================================
@@ -1951,12 +1971,8 @@ def unique_inverse_binding(src_addr: PythonObject, n: PythonObject, kind: Python
 def prepare_targets_binding(y_addr: PythonObject, y_code: PythonObject, n: PythonObject,
     classes_addr: PythonObject, codes_addr: PythonObject, w_addr: PythonObject,
     w_code: PythonObject, w_flags: PythonObject) raises -> PythonObject:
-    var request = LabelsPrepareRequest(Int(py=y_addr), Int(py=classes_addr), Int(py=codes_addr),
-        Int(py=w_addr), Int(py=y_code), Int(py=n), Int(py=w_code), Int(py=w_flags))
-    var result = 0
-    with GILReleased(Python()):
-        result = LabelsDeviceKernels.prepare(request)
-    return PythonObject(result)
+    return labels_legacy_prepare[LabelsDeviceKernels](y_addr, y_code, n,
+        classes_addr, codes_addr, w_addr, w_code, w_flags)
 
 
 # ===========================================================================
