@@ -34,7 +34,8 @@ def integer_index(unit: Int) raises:
     var output = List[Int32](length=count + 2, fill=-77)
     score_key_codes(index, keys, Int(output.unsafe_ptr()) + 4)
     var kp = keys.unsafe_ptr()
-    var rp = index.sorted_rows.unsafe_ptr()
+    # The index owner remains live through the synchronous check join below.
+    var rp = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=Int(index.sorted_rows.unsafe_ptr()))
     var op = output.unsafe_ptr()
     var failures = List[Int](length=tasks, fill=0)
     var fp = failures.unsafe_ptr()
