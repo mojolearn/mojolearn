@@ -75,20 +75,16 @@ def test_mlp_native_table_retains_numeric_labels_outputs_and_refit(monkeypatch, 
     assert not seen
 
 
-def test_recurrent_builtin_schedule_does_not_call_packed_schedule_entries(monkeypatch):
-    from mojolearn._training_impl import _OPT_CONTEXT
+def test_recurrent_builtin_schedule_stays_native_with_packed_entries_poisoned(monkeypatch):
     from mojolearn import StepLR
 
     schedule = StepLR(0.01, step_size=2, gamma=0.5)
     expected = np.asarray(schedule.lr_values(4)).copy()
     seen = poison_packed_entries(monkeypatch)
 
-    def forbidden(*args, **kwargs):
-        seen.append(True)
-        raise AssertionError('schedule reentered a packed CPython engine')
-
-    for name in ('lr_schedule_series', 'lr_schedule_at'):
-        monkeypatch.setitem(_OPT_CONTEXT['schedule_entries'], name, forbidden)
+    # The retired schedule_entries context dictionary has no product consumer.
+    # Poison the connected packed engines and audit the real public schedule
+    # calls plus its use during RNN training, without recreating obsolete glue.
     actual = audit_native_call(schedule.lr_values, 4).assert_native()
     assert np.asarray(actual).tobytes() == expected.tobytes()
     assert audit_native_call(schedule.lr_at, 1).assert_native() == float(expected[0])

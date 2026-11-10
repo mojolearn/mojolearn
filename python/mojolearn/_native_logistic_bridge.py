@@ -2,10 +2,8 @@
 """Import-time connection of LogisticRegression's native owner
 (bindings/logistic_native.mojo) and its fixed ABI."""
 
-_ESTIMATOR_ENTRIES = ("estimators_vendor", "estimators_numeric_mode", "qn_fit", "qn_decision_function",
-                      "qn_sigmoid", "qn_softmax")
-_OPTIONAL_ENTRIES = ("qn_predict_binary", "qn_predict_multiclass", "py2mojo_rows", "py2mojo_linear_flags", "qn_proba")
-_X_TREES_ENTRIES = ("x_trees_code_counts", "x_trees_class_rows", "x_trees_mul_f32")
+_ESTIMATOR_ENTRIES = ("logistic_native_api_v1",)
+_X_TREES_ENTRIES = ("label_weights_native_api_v1",)
 
 
 def _refusal(error):
@@ -26,6 +24,14 @@ def connect():
 
     context = _state_context()
     context.update(label_context())
+    # glue: reuse native warning delivery for NumPy scalar configuration
+    # arithmetic; this captures metadata only and does not call its hooks.
+    from ._native_classical_warnings import connect_warnings
+    warning = connect_warnings()
+    warning.update(warning_filename=__file__, warning_lineno=1,
+                   warning_module=__name__, warning_source_line="")
+    context.update(sequence_array_warnings=warning,
+                   module_type=context["native_module_type"])
     estimators = {}
     x_trees = {}
     selected = _backend.default_mode()
@@ -33,10 +39,8 @@ def connect():
         try:
             module = _backend.binding("_mojolearn_estimators", mode)
             entries = {}
-            for name in _ESTIMATOR_ENTRIES + _OPTIONAL_ENTRIES:  # glue: fixed native exports
+            for name in _ESTIMATOR_ENTRIES:  # glue: fixed native exports
                 entry = getattr(module, name, None)
-                if entry is None and name in _OPTIONAL_ENTRIES:
-                    continue
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError(f"LogisticRegression requires compiled {name}")
                 entries[name] = entry
@@ -56,8 +60,8 @@ def connect():
     call = _binding()._module.logistic_native_call
     if not isinstance(call, BuiltinFunctionType):
         raise TypeError("LogisticRegression requires a compiled logistic_native_call")
-    context.update(lr_bindings=estimators, lr_x_trees=x_trees, lr_host_contexts={}, qn_fit_fold=_fold_entry('qn_fit_fold'),
-                   qn_infer_fold=_fold_entry('qn_infer_fold'))
+    context.update(lr_bindings=estimators, lr_x_trees=x_trees, lr_host_contexts={},
+                   logistic_fold_native_api_v1=_fold_entry('logistic_fold_native_api_v1'))
     return call, context
 
 
@@ -72,12 +76,9 @@ def connect_host(cls, context, estimators_host, host_predict, host_context):
     try:
         if isinstance(estimators_host, Exception):
             raise estimators_host
-        # An inference-only host binary exports no qn_fit: the entries it
-        # lacks are refused by name where an operation needs them.
-        for name in _ESTIMATOR_ENTRIES + _OPTIONAL_ENTRIES:  # glue: fixed native exports
+        # The descriptor owns all numerical dispatch and native capabilities.
+        for name in _ESTIMATOR_ENTRIES:  # glue: fixed native exports
             entry = getattr(estimators_host, name, None)
-            if entry is None and name != "estimators_numeric_mode":
-                continue
             if not isinstance(entry, BuiltinFunctionType):
                 raise TypeError(f"{cls.__name__} requires compiled {name}")
             entries[name] = entry

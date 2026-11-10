@@ -1,0 +1,49 @@
+{
+  "purpose": "Root consolidated native suite handoff; no source guard",
+  "producer_dependencies": {
+    "model_state": "27a0b43246",
+    "label_weights": "831ed1cba0",
+    "label_context": "19b940",
+    "config": "4cf077436c"
+  },
+  "suites": [
+    {
+      "module": "checks.native_tests.logistic_model_state_suite",
+      "entry": "run_checks",
+      "fixtures": 22,
+      "target": "host-native PACK",
+      "defines": []
+    },
+    {
+      "module": "checks.native_tests.logistic_label_weights_cpu_suite",
+      "entry": "run_checks",
+      "fixtures": 8,
+      "target": "CPU",
+      "defines": [
+        "MOJOLEARN_COLUMN_CPU=1"
+      ]
+    },
+    {
+      "module": "checks.native_tests.logistic_label_weights_gpu_suite",
+      "entry": "run_checks",
+      "fixtures": 8,
+      "target": "normal GPU target",
+      "defines": []
+    },
+    {
+      "module": "checks.native_tests.logistic_config_suite",
+      "entry": "run_checks",
+      "fixtures": 54,
+      "target": "host-native scalar configuration",
+      "defines": []
+    }
+  ],
+  "status": "source reviewed; compile and runtime owed to root",
+  "not_a_gate": true,
+  "python_boundary": {
+    "path": "python/mojolearn/tests/test_logistic_scalar_native_boundary.py",
+    "definitions": 5,
+    "parametrized_cases": 35,
+    "status": "installed runtime owed"
+  }
+}

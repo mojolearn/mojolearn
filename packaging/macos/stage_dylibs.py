@@ -35,12 +35,16 @@ install_name_tool rewrites a load command, and an unsigned dylib is killed on
 load on Apple silicon rather than merely warned about.
 """
 
+import argparse
 from concurrent.futures import ThreadPoolExecutor
 import os
 import pathlib
 import shutil
 import subprocess
 import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from native_library_sources import library_source, file_sha
 
 # zlib, bzip2 and liblzma use macOS /usr/lib ABIs. Zstd is not a system
 # library: native archive decoding opens @rpath/libzstd.1.dylib explicitly.
@@ -67,30 +71,30 @@ def rpath_deps(path):
     return deps
 
 
-def closure(root, env_lib, dynamic=()):
+def closure(root, env_lib, dynamic=(), codec_lib=None, sources=None):
     """Declared dlopen roots and @rpath dependencies, by parallel frontiers."""
+    codec_lib = env_lib if codec_lib is None else codec_lib
+    selected = {} if sources is None else sources
     queue = list(root) if isinstance(root, (list, tuple)) else [root]
     seen, order = set(), []
     for dep in dynamic:
-        if not (env_lib / dep).is_file():
-            raise SystemExit(f"stage_dylibs: native archive codec {dep} is missing from {env_lib}")
+        source = library_source(dep, env_lib, env_lib, codec_lib, selected, "native archive codec")
         if dep not in seen:
             seen.add(dep)
             order.append(dep)
-            queue.append(env_lib / dep)
+            queue.append(source)
     while queue:
         frontier, queue = queue, []
         with ThreadPoolExecutor(max_workers=workers(len(frontier))) as pool:
             results = list(pool.map(rpath_deps, frontier))
         for cur, dependencies in zip(frontier, results):
             for dep in dependencies:
+                preferred = codec_lib if pathlib.Path(cur).parent == codec_lib else env_lib
+                candidate = library_source(dep, preferred, env_lib, codec_lib, selected)
                 if dep in seen:
                     continue
                 seen.add(dep)
                 order.append(dep)
-                candidate = env_lib / dep
-                if not candidate.exists():
-                    raise SystemExit(f"ERROR: {dep} is required by {pathlib.Path(cur).name} but is not in {env_lib}")
                 queue.append(candidate)
     return order
 
@@ -188,8 +192,16 @@ def main():
     # So: the closure is the UNION over all of them, and `verify_closed` runs
     # for EACH, because a union that satisfies one extension and not another
     # is still a broken wheel.
-    exts = [pathlib.Path(a) for a in sys.argv[1:-1]]
-    env_lib = pathlib.Path(sys.argv[-1])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--codec-lib", type=pathlib.Path,
+                        help="pinned packaging environment library directory")
+    parser.add_argument("paths", nargs="+", help="extensions followed by compiler environment lib")
+    args = parser.parse_args()
+    if len(args.paths) < 2:
+        parser.error("provide at least one extension and the compiler environment lib directory")
+    exts = [pathlib.Path(path) for path in args.paths[:-1]]
+    env_lib = pathlib.Path(args.paths[-1]).resolve()
+    codec_lib = args.codec_lib.resolve() if args.codec_lib else env_lib
     # The package directory is the FIRST extension's directory. Every other
     # extension sits there or exactly one directory below it (the
     # `identical/` numeric-mode set, 2026-08-23); anything else is refused,
@@ -215,9 +227,10 @@ def main():
         shutil.rmtree(dylibs)
     dylibs.mkdir(parents=True)
 
-    needed = closure(exts, env_lib, ARCHIVE_CODEC_LIBRARIES)
+    library_sources = {}
+    needed = closure(exts, env_lib, ARCHIVE_CODEC_LIBRARIES, codec_lib, library_sources)
     def stage_library(name):
-        shutil.copy2(env_lib / name, dylibs / name)
+        shutil.copy2(library_sources[name], dylibs / name)
         add_rpath(dylibs / name, "@loader_path")
         # Signing happens after all load-command edits below.
     with ThreadPoolExecutor(max_workers=workers(len(needed))) as pool:
@@ -250,6 +263,8 @@ def main():
         for d in dropped:
             print("   ", d)
 
+    for name in ARCHIVE_CODEC_LIBRARIES:
+        print(f"  native archive input: {name} sha256={file_sha(library_sources[name])} source={library_sources[name].resolve()}")
     print(f"  staged {len(needed)}: {', '.join(needed)}")
     for ext in exts:
         print(f"  for {ext.relative_to(root)}:")

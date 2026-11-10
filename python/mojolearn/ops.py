@@ -1285,12 +1285,6 @@ class Session:
         """
         return _SESSION_CALL(self, "optimizer", (kind, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma))
 
-    def _kind_of(self, optimizer):
-        optimizer = _int(optimizer, "optimizer", 1)
-        if optimizer not in self._opt_kind:
-            raise ValueError(f"{optimizer} is not an optimizer of this session")
-        return optimizer, self._opt_kind[optimizer]
-
     def step(self, optimizer, params):
         """Update the parameters in place from the last :meth:`backward`.
 

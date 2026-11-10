@@ -23,12 +23,9 @@ def connect(training):
                    for cls in guarded)  # glue: snapshot native record and array layouts
     bindings = {}
     metadata_bindings = {}
-    entries = ("optimizer_door_step", "optimizer_door_io", "optimizer_door_state",
-               "optimizer_door_state_set", "optimizer_door_load_state", "optimizer_door_zero",
-               "optimizer_door_clip", "optimizer_door_accumulate", "training_numeric_mode",
-               "train_dev_free", "train_dev_alloc", "train_dev_put", "train_dev_get",
+    entries = ("optimizer_native_api_v1", "training_numeric_mode",
                "linear_forward", "linear_backward", "linear_forward_dev", "linear_backward_dev",
-               "rms_norm_forward", "rms_norm_backward", "embedding_forward", "embedding_backward", "ce_loss", "ce_loss_dev", "accumulation_is_aligned", "optimizer_resident_download", "optimizer_resident_upload",
+               "rms_norm_forward", "rms_norm_backward", "embedding_forward", "embedding_backward", "ce_loss", "ce_loss_dev", "optimizer_resident_download", "optimizer_resident_upload",
                "chunked_lm_head_v2_loss", "chunked_lm_head_v2_train", "mlp_sessions_rows", "mlp_sessions",
                "residual_dropout", "residual_dropout_backward")
     optional_entries = ("linear_forward_dev", "linear_backward_dev", "ce_loss_dev", "chunked_lm_head_v2_loss",
@@ -51,7 +48,7 @@ def connect(training):
                 try:
                     entry = getattr(binding, name)
                 except (ImportError, AttributeError, NotImplementedError):
-                    if name.startswith("train_dev_") or name in optional_entries:
+                    if name in optional_entries:
                         continue
                     raise
                 if not isinstance(entry, BuiltinFunctionType):
@@ -69,21 +66,12 @@ def connect(training):
             bindings[mode] = type(error).__name__ + ": " + str(error)
             if mode not in metadata_bindings:
                 metadata_bindings[mode] = bindings[mode]
-    init = _buffer._native("optimizer_door_init")  # import-time: native parameter registry metadata only
-    if not isinstance(init, BuiltinFunctionType):
-        raise TypeError("optimizer requires compiled optimizer_door_init")
     _numeric_profile.default_profile("training")  # glue: initialize the package's numeric-profile connection
     _backend.default_mode()  # glue: initialize metadata's shared default before public native calls
     input_context = _numpy_free_context()
     input_context["native_module_type"] = ModuleType
-    schedule_entries = {}
-    for name in ("lr_schedule_at", "lr_schedule_series"):  # glue: retain native scalar schedule entries at import
-        entry = training._lr_native(name)  # import-time: compiled exact learning-rate scalar ABI, never a training/data kernel
-        if not isinstance(entry, BuiltinFunctionType):
-            raise TypeError(f"schedule requires compiled {name}")
-        schedule_entries[name] = entry
     context = {
-        "schedule_entries": schedule_entries, "owners": owners, "schedules": schedules, "device_class": training.TrainDeviceArray,
+        "owners": owners, "schedules": schedules, "device_class": training.TrainDeviceArray,
         "array_class": Array, "array_type": array.array,
         "buffer_types": (bytes, bytearray, array.array, mmap.mmap), "mapping_types": (dict, OrderedDict),
         # Fixed native identities; mutable builtins names cannot admit hooks.
@@ -91,8 +79,9 @@ def connect(training):
         "scalar_types": (type(None), bool, int, float, complex, str, bytes),
         "module_type": ModuleType, "modules": sys.modules,
         "type_flags": vars(type)["__flags__"].__get__, "type_mro": vars(type)["__mro__"].__get__,
+        "type_name": vars(type)["__name__"].__get__,
         "numpy_names": ("ndarray", "bool_", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "longlong", "ulonglong", "float16", "float32", "float64", "longdouble"),
-        "guards": guards, "bindings": bindings, "init": init,
+        "guards": guards, "bindings": bindings,
         "training_metadata_bindings": metadata_bindings,
         "training_metadata_types": (str, int, BuiltinFunctionType, tuple),
         "training_metadata_strip": str.strip, "training_metadata_lower": str.lower,

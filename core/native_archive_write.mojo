@@ -11,7 +11,7 @@ from std.ffi import OwnedDLHandle, c_uint
 from std.memory import bitcast
 from std.sys.info import CompilationTarget
 from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
+from core.native_archive_copy import archive_copy_bytes
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 
@@ -109,26 +109,8 @@ struct NativeArchiveMember(Movable):
         if contiguous or self.size == 0:
             return
         var storage = List[UInt8](length=self.size, fill=0)
-        var dst = storage.unsafe_ptr()
-        var dimensions = self.shape.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-        var strides = self.strides.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-        var rank = len(self.shape)
-        var width = self.width
-        var source = self.source
-        var count = self.size // width
-        var tasks = host_predict_task_count_work(count, self.size)
-        var chunk = host_predict_chunk(count, tasks)
-        def gather(unit: Int) {imm dst, imm dimensions, imm strides, imm rank, imm width, imm source, imm count, imm chunk}:
-            for i in range(unit * chunk, min(count, (unit + 1) * chunk)):
-                var index = i
-                var offset = 0
-                for axis in range(rank - 1, -1, -1):
-                    offset += (index % dimensions[axis]) * strides[axis]
-                    index //= dimensions[axis]
-                var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source + offset)
-                for byte in range(width):
-                    dst[i * width + byte] = src[byte]
-        host_parallelize(gather, tasks)
+        archive_copy_bytes(self.source, self.shape, self.strides, self.size // self.width,
+                           self.width, Int(storage.unsafe_ptr()))
         self.source = Int(storage.unsafe_ptr())
         self.owned = storage^
         _ = self.shape

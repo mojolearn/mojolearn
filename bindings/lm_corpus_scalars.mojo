@@ -14,51 +14,10 @@ https://numpy.org/doc/2.3/release/2.2.0-notes.html#nep-50-promotion-state-option
 """
 from std.python import Python, PythonObject
 from std.math import isfinite
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get
 from bindings.native_loaded_module import native_loaded_module
-from bindings.native_numpy_metadata import native_numpy_module_fields
+from bindings.native_scalar_promotion import native_scalar_weak_promotion
 from bindings.neural_block_admission import neural_native_scalar
-
-
-def _numpy_weak_promotion(context: PythonObject) raises -> Bool:
-    var bi = native_loaded_module("builtins")
-    var admission = context["admission_context"]
-    var numpy = py_get(admission["modules"], "numpy")
-    var fields = native_numpy_module_fields(numpy)
-    var version = py_get(fields, "__version__")
-    if py_type(version) is not bi.str:
-        raise Error("TypeError: corpus requires native NumPy version metadata")
-    var parts = py_call(version.split, ".", 2)
-    if len(parts) < 2:
-        raise Error("TypeError: corpus requires native NumPy version metadata")
-    var major = Int(py=py_call(bi.int, parts[0]))
-    var minor = Int(py=py_call(bi.int, parts[1]))
-    if major > 2 or (major == 2 and minor >= 2):
-        return True
-    var owner = py_get(admission["modules"], "numpy._core._multiarray_umath")
-    if owner is None:
-        owner = py_get(admission["modules"], "numpy.core._multiarray_umath")
-    var native_fields = native_numpy_module_fields(owner)
-    var getter = py_get(native_fields, "_get_promotion_state")
-    if py_type(getter) is not py_type(bi.len):
-        raise Error("TypeError: corpus NumPy promotion requires its native state getter")
-    if getter.__self__ is not owner or String(getter.__name__) != "_get_promotion_state":
-        raise Error("TypeError: corpus NumPy promotion getter belongs to a different native entry")
-    var retained = py_get(admission, "corpus_promotion_getter")
-    if retained is not None and retained is not getter:
-        raise Error("TypeError: corpus NumPy promotion getter was replaced")
-    py_setitem(admission, "corpus_promotion_getter", getter)
-    # The documented native getter only reads the enum and creates a string.
-    # Capture it once per public ids operation, including weak_and_warn state;
-    # the completed arithmetic does not invoke Python warning handlers.
-    var mode = py_call(getter)
-    if py_type(mode) is not bi.str:
-        raise Error("TypeError: corpus NumPy promotion state requires a native string")
-    if String(mode) == "legacy":
-        return False
-    if String(mode) == "weak" or String(mode) == "weak_and_warn":
-        return True
-    raise Error("ValueError: corpus NumPy promotion state is unsupported")
 
 
 def _integer_base(step: PythonObject, batch: Int, length: Int,
@@ -138,7 +97,7 @@ def corpus_numeric_base(step: PythonObject, batch: Int, length: Int, context: Py
                 width = size
     if kind < 0:
         raise Error("TypeError: corpus step_index requires an admitted NumPy numeric scalar")
-    var weak = _numpy_weak_promotion(context)
+    var weak = native_scalar_weak_promotion(context["admission_context"], "corpus")
     if kind == 2:
         return _floating_base(step, batch, length, width if weak else 8)
     if kind == 0 and width == 8 and not weak:

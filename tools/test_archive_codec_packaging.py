@@ -80,3 +80,51 @@ def test_staged_closure_requires_codec_bytes_even_when_build_environment_has_the
         check()
     present(staged, module.ARCHIVE_CODEC_LIBRARIES[-1:])
     check()
+
+
+def test_packaging_environment_supplies_only_missing_codec_roots(platform_stager, tmp_path, monkeypatch):
+    family, module = platform_stager
+    sdk, package = tmp_path / 'sdk', tmp_path / 'pkg'
+    roots = module.ARCHIVE_CODEC_LIBRARIES
+    present(sdk, roots[:-1])
+    present(package, roots)
+    dependency_reader(family, module, monkeypatch, {})
+    sources = {}
+    module.closure([tmp_path / 'extension.so'], sdk, roots, package, sources)
+    assert sources[roots[-1]] == package / roots[-1]
+    assert all(sources[name] == sdk / name for name in roots[:-1])
+    # An unused supplemental copy cannot make the chosen SDK ABI ambiguous.
+    present(sdk, roots)
+    for name in roots:
+        (package / name).write_bytes(b'different unused supplemental bytes')
+    sources.clear()
+    module.closure([tmp_path / 'extension.so'], sdk, roots, package, sources)
+    assert all(sources[name] == sdk / name for name in roots)
+
+
+def test_actual_shared_dependency_conflict_is_refused(platform_stager, tmp_path, monkeypatch):
+    family, module = platform_stager
+    suffix = '.so.1' if family == 'linux' else '.dylib'
+    sdk_name, pkg_name, shared = ('libsdk' + suffix, 'libpkg' + suffix, 'libshared' + suffix)
+    sdk, package = tmp_path / 'sdk', tmp_path / 'pkg'
+    present(sdk, [*module.ARCHIVE_CODEC_LIBRARIES, sdk_name, shared])
+    present(package, [pkg_name, shared])
+    (package / shared).write_bytes(b'conflicting dependency bytes')
+    dependency_reader(family, module, monkeypatch, {
+        'extension.so': [sdk_name, pkg_name], sdk_name: [shared], pkg_name: [shared],
+    })
+    with pytest.raises(SystemExit, match='conflicting native library'):
+        module.closure([tmp_path / 'extension.so'], sdk, module.ARCHIVE_CODEC_LIBRARIES, package)
+    (package / shared).write_bytes((sdk / shared).read_bytes())
+    sources = {}
+    module.closure([tmp_path / 'extension.so'], sdk, module.ARCHIVE_CODEC_LIBRARIES, package, sources)
+    assert sources[shared] == sdk / shared
+
+
+def test_library_source_helper_changes_identity_only_when_present():
+    import release_reuse as reuse
+    helper = 'packaging/native_library_sources.py'
+    old = {'builders': {}, 'builder_views': {}}
+    assert reuse.builder_digests(old, [helper], reuse.RUNTIME_VIEW) == {}
+    new = {'builders': {helper: 'source'}, 'builder_views': {helper: {reuse.RUNTIME_VIEW: 'view'}}}
+    assert reuse.builder_digests(new, [helper], reuse.RUNTIME_VIEW) == {helper: 'view'}

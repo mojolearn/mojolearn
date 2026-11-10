@@ -13,6 +13,7 @@ from bindings.causal_lm_construct import _model_f32, _model_shape
 from bindings.causal_lm_public import _native_function
 from bindings.py_balanced import py_call, py_setitem, py_setattr
 from bindings.native_model_records import bump_model_generation
+from bindings.optimizer_owner_boundary import OptimizerOwnerLease, optimizer_owner_new
 
 
 def samba_load_weights(model: PythonObject, weights: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -155,13 +156,11 @@ def samba_construct(model: PythonObject, args: PythonObject, context: PythonObje
     py_setitem(fields, "max_norm", PythonObject(None) if args[8] is None else py_call(bi.float, args[8]))
     var optimizer = py_call(bi.object.__new__, context["optimizer_class"])
     var opt = samba_fields(optimizer)
-    py_setitem(opt, "_where", "AdamW")
-    py_setitem(opt, "_res", PythonObject(None))
-    py_setitem(opt, "_res_binding", PythonObject(None))
-    py_setitem(opt, "_host_fresh", True)
     py_setitem(opt, "_resident_wanted", PythonObject(None))
     var lazy = getenv("MOJOLEARN_OPT_LAZY_MOMENTS", "1") != "0"
-    py_setitem(opt, "_pristine", lazy)
+    var owner = optimizer_owner_new(optimizer, 2, lazy)
+    var publication = OptimizerOwnerLease(optimizer, owner)
+    py_setitem(opt, "_native_optimizer_owner", owner)
     py_setitem(opt, "_m", PythonObject(None) if lazy else generation_array([n]))
     py_setitem(opt, "_v", PythonObject(None) if lazy else generation_array([n]))
     py_setitem(opt, "params", params)
@@ -187,4 +186,5 @@ def samba_construct(model: PythonObject, args: PythonObject, context: PythonObje
     py_setitem(fields, "optimizer", optimizer)
     samba_build_blocks(model, context)
     py_setitem(fields, "last_", PythonObject(None))
+    _ = publication
     return PythonObject(None)

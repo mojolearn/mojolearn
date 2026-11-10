@@ -808,7 +808,7 @@ for so in $ALL_SOS; do
 done
 # shellcheck disable=SC2086
 MOJOLEARN_STAGE_SKIP="$STAGE_SKIP" pixi run -e pkg python "$here/packaging/macos/stage_dylibs.py" \
-    $ALL_SOS "$ENV_LIB"
+    $ALL_SOS "$ENV_LIB" --codec-lib "$here/.pixi/envs/pkg/lib"
 pixi run -e pkg python "$here/packaging/portable_math/stage.py" "$PKG/.dylibs" \
     --receipt "$here/portable-math-build.json"
 # THE GATE ON REUSE: every reused binding still carries the plan's sha256

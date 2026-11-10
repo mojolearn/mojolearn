@@ -14,7 +14,7 @@ from bindings.sequential_inputs import sequential_sequence_f32
 from bindings.linalg_ops_buffers import lin_is_f32, lin_dtype_name
 from bindings.admitted_input import AdmittedBuf, AdmittedTyped, admitted_typed_c, admitted_zeros, admitted_shape_tuple
 from bindings.linalg_ops_lowbit import lin_connected_binding, lin_lowbit, lin_call, lin_ints
-from bindings.optimizer_public_door import base_format, shape_text
+from bindings.tensor_view import base_format, shape_text
 
 
 

@@ -1,19 +1,239 @@
 {
-  "schema": "mojolearn.native-test-migration-inventory.v1",
-  "source_commit": "fb8acd7edaff8a1b6cec994c76f4aeff7da8db80",
-  "files": 616,
-  "test_definitions": 4126,
+  "additional_semantic_reviews": [
+    "test_neural_dtype_diagnostics.py",
+    "test_ops_rankn.py",
+    "test_sequence_dtype_alias_native.py",
+    "test_sequence_scalar_cast_status.py",
+    "test_sequence_temporal_cast_contract.py",
+    {
+      "path": "python/mojolearn/tests/test_cpu_kernel_variants.py",
+      "decision": "retain-python-boundary",
+      "reason": "All four definitions exercise Python registry, package, saved model and degree transport/refusal contracts. No raw GPU kernel test hidden by the filename."
+    },
+    {
+      "path": "python/mojolearn/tests/test_neural_block_native.py",
+      "decision": "split-needed",
+      "reason": "Forward/step/ragged equivalence uses retained test drivers with independent kernel arguments across six loaded model families. Moving that oracle needs a typed block fixture; retain real checkpoint loading, Python weight dictionaries/options, public construction/state/buffers, poisoned callbacks and lengths admission. No backward check exists in this file."
+    },
+    {
+      "path": "python/mojolearn/tests/test_samba_state_native.py",
+      "decision": "split-needed",
+      "reason": "Five definitions are Python checkpoint schema/registry, alias ownership, public snapshot/restore, corrupted-field admission and RNG serialization contracts. The apply case contains an independent generic optimizer/schedule recipe suitable for future direct typed-state checks while preserving public dictionary immutability and poisoned callback assertions."
+    },
+    {
+      "path": "python/mojolearn/tests/test_transformer_state_refusals.py",
+      "decision": "retain-python-boundary",
+      "reason": "All four cases mutate public Python state fields, check named exception precedence and preservation of previously published KV bytes, restore fields and resume. Replacing these with typed-state-only fixtures would lose boundary admission/publication atomicity coverage."
+    },
+    {
+      "path": "python/mojolearn/tests/test_optimizer_native_array_ownership.py",
+      "decision": "retain-python-boundary",
+      "reason": "All eight definitions require actual Python builtin replacements, fresh-interpreter connected storage ownership, ndarray/memoryview publication, owner destruction or device output pins. Small numerical sentinels check that published owned buffers remain valid; retain these boundary tests."
+    },
+    {
+      "path": "python/mojolearn/tests/test_optimizer_native_config_order.py",
+      "decision": "retain-python-boundary",
+      "reason": "Actual replaced builtins.sorted callback refusal, Python config insertion order/object identity, set_params return identity and publication atomicity; retain Python seam."
+    },
+    {
+      "path": "python/mojolearn/tests/test_optimizer_native_container_admission.py",
+      "decision": "retain-python-boundary",
+      "reason": "Five definitions mutate actual Python list/dict/set/bytearray/memoryview exports, inject hostile hooks and distinguish exact refusal precedence from clean native calls. Byte comparisons detect state publication during refused operations, not a standalone optimizer oracle."
+    },
+    {
+      "path": "python/mojolearn/tests/test_optimizer_native_scalar_constructors.py",
+      "decision": "retain-python-boundary",
+      "reason": "Three definitions poison actual Python float/int/bool constructors and test refusal plus clean resume, scalar/config packing and consumed device outputs. Paired state comparisons prove refusal atomicity and public packing, so typed arithmetic alone cannot replace them."
+    },
+    {
+      "path": "python/mojolearn/tests/test_optimizer_public_native.py",
+      "decision": "retain-python-boundary",
+      "reason": "Fifteen definitions audit actual public calls across NumPy/array.array/Mojolearn buffers, schedules, dict schemas, owner pins, error classes, callbacks and get/set_params publication. Typed state/math checks supplement these; retain interface comparisons and precise Python lifecycle/admission assertions."
+    },
+    {
+      "path": "python/mojolearn/tests/test_sequence_optimizer_public_native.py",
+      "decision": "retain-python-boundary",
+      "reason": "Ten definitions audit actual public sequence constructors, tuple/state property identity, mixed/strided Python buffers, checkpoint schemas/broadcast, hostile hooks, device owners/finalizers and direct int64 conversion publication. Retain Python seams; pure numerical recipes live separately in test_x_sequence_optim.py."
+    },
+    {
+      "path": "python/mojolearn/tests/test_x_sequence_optim.py",
+      "decision": "split-needed",
+      "reason": "Six independent NumPy numerical oracle definitions are eligible: two configs each RMSprop/Adagrad/Lion/Adamax/NAdam plus Adafactor matrix/vector recurrence. Preserve current tolerances and float64 equations in direct typed native checks before deleting drivers; migration pending."
+    },
+    {
+      "path": "python/mojolearn/tests/test_logistic_multiclass_surface.py",
+      "decision": "split-needed",
+      "reason": "Reviewed: full600x4/3-class/max_iter100 numerical accuracy, first-max, probability normalization and independent Float64 softmax;64x4/max_iter5 zero-weight tie and200x4/binary/max_iter50 strict threshold are native candidates. Preserve public classes/shapes/dtypes, writable _w replacement, L1/elasticnet exception type, save/load+host adapter and string labels. Original input arrays recorded byte-for-byte in native fixtures; typed producer API pending."
+    },
+    {
+      "path": "python/mojolearn/tests/test_logistic_native_predict.py",
+      "decision": "retain-python-boundary",
+      "reason": "Both definitions test real Python-boundary behavior: predict must not call patched decision_function; labels retain actual float/object Python output types. Add independent native score/threshold cases without deleting these callback/decode seams. Replace any score-derived expected labels with literal independently calculated labels in the coordinated native batch."
+    },
+    {
+      "path": "python/mojolearn/tests/test_host_logistic_native.py",
+      "decision": "split-needed",
+      "reason": "Reviewed all27 definitions. Most are actual host archive/load, buffer-format conversion, class-container/scalar/writable-state decode, lifetime, refused protocols/callbacks, nested warnings/score and no-NumPy process contracts. Frozen _legacy_host_inference.logistic calls the same compiled kernels; it is orchestration parity, not an independent numerical oracle. No-intercept weight layout and tie/extreme/zero-probability math are eligible future typed native cases; retain their public writable-state/admission aspects and all real format/owner seams."
+    },
+    {
+      "path": "python/mojolearn/tests/test_native_cv_logistic.py",
+      "decision": "retain-python-boundary",
+      "reason": "Reviewed six definitions: public constructor/get_params/set_params, actual native-call audit, mutable fitted weights, wrong-width exception, CV/search estimator reconstruction, user callback/metaclass hash refusal and explicit host binding choice. These are Python/model-selection integration boundaries, not pure QN kernel tests; retain them while independent fit/query math moves to native suites."
+    }
+  ],
   "file_decisions": {
-    "needs-semantic-review": 582,
-    "retain-python-boundary": 15,
-    "split-partial": 1,
-    "split-migrated": 8,
+    "needs-semantic-review": 565,
+    "retain-python-boundary": 23,
+    "split-partial": 2,
+    "split-migrated": 16,
+    "split-needed": 7,
     "review-module-gate": 1,
-    "retain-tooling": 2,
-    "split-needed": 7
+    "retain-tooling": 2
   },
-  "reviewed_files": 34,
-  "not_a_gate": true,
+  "files": 616,
+  "integration_reported_results": [
+    {
+      "batch": "nonzero",
+      "native_pairs_passed": 60,
+      "source_status": "Root applied syntax fixes."
+    },
+    {
+      "batch": "byte-config",
+      "native_fixtures_passed": 25
+    },
+    {
+      "batch": "ops-session-gpu",
+      "native_fixtures_passed": 28,
+      "source_status": "Root applied borrowed-pointer origin fixes."
+    },
+    {
+      "batch": "bf16-conversion-gpu",
+      "narrow_roundtrip_words_passed": 264105,
+      "raw_widen_words_passed": 65536
+    },
+    {
+      "batch": "rankn-views",
+      "cpu_fixtures_passed": 17,
+      "gpu_fixtures_passed": 17,
+      "source_status": "Passed unmodified."
+    },
+    {
+      "batch": "int8-linalg",
+      "cpu_shapes_passed": 5,
+      "gpu_shapes_passed": 5,
+      "source_status": "Passed unmodified."
+    },
+    {
+      "batch": "bf16-linalg",
+      "cpu_fixtures_passed": 9,
+      "gpu_fixtures_passed": 9,
+      "source_status": "Passed unmodified."
+    },
+    {
+      "batch": "oob-exact-sum",
+      "cpu_fixtures_passed": 10,
+      "gpu_fixtures_passed": 10,
+      "source_status": "Root explicitly typed conditional Int32 fill (e0157cb5eb). No product changes."
+    },
+    {
+      "reported_by": "root",
+      "checks": [
+        "rankn_math_cpu",
+        "rankn_math_gpu",
+        "rankn_graph_cpu",
+        "rankn_graph_gpu",
+        "rankn_conv_cpu",
+        "rankn_conv_gpu"
+      ],
+      "status": "compile and runtime passed unmodified",
+      "evidence": "~/mojolearn-evidence/integ-finish-20261110/rankn-{math,graph,conv}-{cpu,gpu}-{build,run}.log and result.json",
+      "note": "Reported by orchestrator; not executed by this lane; no timing or identity claim."
+    },
+    {
+      "reported_by": "root",
+      "checks": [
+        "native_array_layout",
+        "lowbit_weights_gpu",
+        "lowbit_weights_cpu",
+        "sequence_input_plan"
+      ],
+      "statuses": {
+        "native_array_layout": "45 fixtures compiled and passed",
+        "lowbit_weights_gpu": "3 fixtures compiled and passed",
+        "lowbit_weights_cpu": "3 quantizer row0 failures; root owns lifetime investigation/repair",
+        "sequence_input_plan": "producer self-aliasing String slice compile failure; root owns repair"
+      },
+      "note": "No lane rerun; preserved failures remain pending. Linear tests pin integer-address owners after final use."
+    },
+    {
+      "reported_by": "root; accepted-results artifact inspected",
+      "runtime_scope": "local Mac CPU and Apple GPU native executables; not installed wheels or cross-vendor identity",
+      "source_artifact": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/bundled-repair-native-accepted-results.json",
+      "complete_passed_suites": [
+        {
+          "name": "optimizer_owner_cpu",
+          "fixtures": 22,
+          "source_commit": "b2933d8a09aa0fa6ec2197e1d071332e1736e808",
+          "evidence": "bundled-repair2-native-cpu-result.json"
+        },
+        {
+          "name": "prophet_state_cpu",
+          "fixtures": 6,
+          "source_commit": "b2933d8a09aa0fa6ec2197e1d071332e1736e808",
+          "evidence": "bundled-repair2-native-cpu-result.json"
+        },
+        {
+          "name": "arima_state_cpu",
+          "fixtures": 8,
+          "source_commit": "b2933d8a09aa0fa6ec2197e1d071332e1736e808",
+          "evidence": "bundled-repair2-native-cpu-result.json"
+        },
+        {
+          "name": "optimizer_device_cpu",
+          "fixtures": 52,
+          "source_commit": "b2933d8a09aa0fa6ec2197e1d071332e1736e808",
+          "evidence": "bundled-repair2-native-cpu-result.json"
+        },
+        {
+          "name": "optimizer_descriptor_cpu",
+          "fixtures": 25,
+          "source_commit": "d277f02e4913cf496000d2aa7b6f34830505cfeb",
+          "evidence": "bundled-repair3-native-cpu-result.json"
+        },
+        {
+          "name": "arima_state_gpu",
+          "fixtures": 8,
+          "source_commit": "b2933d8a09aa0fa6ec2197e1d071332e1736e808",
+          "evidence": "bundled-repair2-native-gpu-result.json"
+        },
+        {
+          "name": "prophet_state_gpu",
+          "fixtures": 6,
+          "source_commit": "b2933d8a09aa0fa6ec2197e1d071332e1736e808",
+          "evidence": "bundled-repair2-native-gpu-result.json"
+        },
+        {
+          "name": "optimizer_device_gpu",
+          "fixtures": 57,
+          "source_commit": "b2933d8a09aa0fa6ec2197e1d071332e1736e808",
+          "evidence": "bundled-repair2-native-gpu-result.json"
+        },
+        {
+          "name": "optimizer_owner_gpu",
+          "fixtures": 22,
+          "source_commit": "b2933d8a09aa0fa6ec2197e1d071332e1736e808",
+          "evidence": "bundled-repair2-native-gpu-result.json"
+        },
+        {
+          "name": "optimizer_descriptor_gpu",
+          "fixtures": 25,
+          "source_commit": "d277f02e4913cf496000d2aa7b6f34830505cfeb",
+          "evidence": "bundled-repair3-native-gpu-result.json"
+        }
+      ],
+      "note": "No lane rerun. Earlier descriptor invalid-op11 failures and compiler capture failures remain preserved in root raw evidence; accepted descriptor suites use repaired count sentinel at d277f02e. Logistic source fixtures are separate and not yet compiled."
+    }
+  ],
   "limitations": [
     "Definitions are source functions, not parametrized execution cases.",
     "File names and native in a name do not establish migration suitability.",
@@ -21,6 +241,7 @@
     "Module-style gates with no pytest definitions are not zero coverage.",
     "No tests or compiles were executed to prepare this inventory."
   ],
+  "not_a_gate": true,
   "post_snapshot_changes": [
     {
       "path": "python/mojolearn/tests/test_ops_session_coverage.py",
@@ -157,108 +378,318 @@
       ],
       "handoff": "docs/plans/native_test_migration/optimizer-state-input-handoff.txt",
       "source_review_only": true
-    }
-  ],
-  "additional_semantic_reviews": [
-    "test_neural_dtype_diagnostics.py",
-    "test_ops_rankn.py",
-    "test_sequence_dtype_alias_native.py",
-    "test_sequence_scalar_cast_status.py",
-    "test_sequence_temporal_cast_contract.py",
-    {
-      "path": "python/mojolearn/tests/test_cpu_kernel_variants.py",
-      "decision": "retain-python-boundary",
-      "reason": "All four definitions exercise Python registry, package, saved model and degree transport/refusal contracts. No raw GPU kernel test hidden by the filename."
     },
     {
-      "path": "python/mojolearn/tests/test_neural_block_native.py",
-      "decision": "split-needed",
-      "reason": "Forward/step/ragged equivalence uses retained test drivers with independent kernel arguments across six loaded model families. Moving that oracle needs a typed block fixture; retain real checkpoint loading, Python weight dictionaries/options, public construction/state/buffers, poisoned callbacks and lengths admission. No backward check exists in this file."
-    },
-    {
-      "path": "python/mojolearn/tests/test_samba_state_native.py",
-      "decision": "split-needed",
-      "reason": "Five definitions are Python checkpoint schema/registry, alias ownership, public snapshot/restore, corrupted-field admission and RNG serialization contracts. The apply case contains an independent generic optimizer/schedule recipe suitable for future direct typed-state checks while preserving public dictionary immutability and poisoned callback assertions."
-    },
-    {
-      "path": "python/mojolearn/tests/test_transformer_state_refusals.py",
-      "decision": "retain-python-boundary",
-      "reason": "All four cases mutate public Python state fields, check named exception precedence and preservation of previously published KV bytes, restore fields and resume. Replacing these with typed-state-only fixtures would lose boundary admission/publication atomicity coverage."
-    }
-  ],
-  "integration_reported_results": [
-    {
-      "batch": "nonzero",
-      "native_pairs_passed": 60,
-      "source_status": "Root applied syntax fixes."
-    },
-    {
-      "batch": "byte-config",
-      "native_fixtures_passed": 25
-    },
-    {
-      "batch": "ops-session-gpu",
-      "native_fixtures_passed": 28,
-      "source_status": "Root applied borrowed-pointer origin fixes."
-    },
-    {
-      "batch": "bf16-conversion-gpu",
-      "narrow_roundtrip_words_passed": 264105,
-      "raw_widen_words_passed": 65536
-    },
-    {
-      "batch": "rankn-views",
-      "cpu_fixtures_passed": 17,
-      "gpu_fixtures_passed": 17,
-      "source_status": "Passed unmodified."
-    },
-    {
-      "batch": "int8-linalg",
-      "cpu_shapes_passed": 5,
-      "gpu_shapes_passed": 5,
-      "source_status": "Passed unmodified."
-    },
-    {
-      "batch": "bf16-linalg",
-      "cpu_fixtures_passed": 9,
-      "gpu_fixtures_passed": 9,
-      "source_status": "Passed unmodified."
-    },
-    {
-      "batch": "oob-exact-sum",
-      "cpu_fixtures_passed": 10,
-      "gpu_fixtures_passed": 10,
-      "source_status": "Root explicitly typed conditional Int32 fill (e0157cb5eb). No product changes."
-    },
-    {
-      "reported_by": "root",
-      "checks": [
-        "rankn_math_cpu",
-        "rankn_math_gpu",
-        "rankn_graph_cpu",
-        "rankn_graph_gpu",
-        "rankn_conv_cpu",
-        "rankn_conv_gpu"
+      "path": "python/mojolearn/tests/test_ops_optimizer.py",
+      "change": "Replace Python numerical training/comparison/schedule/resume/reset loops and private Sequential drivers with 10 native fixtures per CPU/GPU; preserve five real Python API boundary definitions. Add independent Float64 optimizer/MLP/state oracle alongside original exact orchestration and resume assertions.",
+      "native_checks": [
+        "checks/native_tests/ops_optimizer_cpu.mojo",
+        "checks/native_tests/ops_optimizer_gpu.mojo"
       ],
-      "status": "compile and runtime passed unmodified",
-      "evidence": "~/mojolearn-evidence/integ-finish-20261110/rankn-{math,graph,conv}-{cpu,gpu}-{build,run}.log and result.json",
-      "note": "Reported by orchestrator; not executed by this lane; no timing or identity claim."
+      "handoff": "docs/plans/native_test_migration/ops-optimizer-handoff.txt",
+      "source_review_only": true
     },
     {
-      "reported_by": "root",
-      "checks": [
-        "native_array_layout",
-        "lowbit_weights_gpu",
-        "lowbit_weights_cpu",
-        "sequence_input_plan"
+      "paths": [
+        "packaging/adapters/test_adapters.py",
+        "python/mojolearn/tests/test_framework_version_metadata.py"
       ],
-      "statuses": {
-        "native_array_layout": "45 fixtures compiled and passed",
-        "lowbit_weights_gpu": "3 fixtures compiled and passed",
-        "lowbit_weights_cpu": "3 quantizer row0 failures; root owns lifetime investigation/repair",
-        "sequence_input_plan": "producer self-aliasing String slice compile failure; root owns repair"
+      "change": "Repair inert adapter test collection by reading shipping literal metadata without executing compiled bridge setup. Move former series literals to existing real Unicode boundary test; replace its split/join expectation with independent literals. Preserve pin, manifest and staging tooling.",
+      "handoff": "docs/plans/native_test_migration/adapter-collection-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "path": "python/mojolearn/tests/test_x_sequence_optim.py",
+      "change": "Move five elementwise optimizer families, two settings each, to 10 typed OptConfig/opt_step CPU/GPU fixtures with independent Float64 equations and original tolerances; retain thin public options/state packing tests. Adafactor numerical test remains pending.",
+      "native_checks": [
+        "checks/native_tests/sequence_optimizer_cpu.mojo",
+        "checks/native_tests/sequence_optimizer_gpu.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/sequence-optimizer-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "path": "python/mojolearn/tests/test_x_sequence_optim.py",
+      "change": "Complete Adafactor Float64 oracle migration: matrix5x4/vector3, six steps, original settings/tolerances. Direct per-call CPU2/GPU2 plus resident GPU2 parameter/moment checks; keep thin public options/publication. No NumPy optimizer equation driver remains in this file.",
+      "native_checks": [
+        "checks/native_tests/adafactor_cpu.mojo",
+        "checks/native_tests/adafactor_gpu.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/adafactor-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "path": "autograd/optimizer_requests.mojo",
+      "producer_dependency": "e0af392644",
+      "change": "Supplement canonical OpsOptimizerRequest/StateValue/RestoreRequest paths with closed-form two-step SGD dampening, Adam and AdamW cases, typed checkpoint continuation/ownership and14 packed code/config/restore adapter metadata fixtures. Retain existing packed-interface numerical and Python boundary coverage.",
+      "native_checks": [
+        "checks/native_tests/ops_optimizer_requests_cpu.mojo",
+        "checks/native_tests/ops_optimizer_requests_gpu.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/ops-optimizer-requests-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "path": "python/mojolearn/tests/test_optim_maximize_seam.py",
+      "producer_dependency": "e8aaef8d52",
+      "change": "Supplement existing final-verifier driver with16 direct native maximize fixtures per CPU/GPU through extracted OptKernels/PublicStep. Exact four configs, clipping/seed-label/step/shape matrix; independent XOR oracle and signed-zero nonvacuity; source guards and automatic resident ownership. Python driver/registration deliberately unchanged and migration still owed.",
+      "native_checks": [
+        "checks/native_tests/optimizer_maximize_cpu.mojo",
+        "checks/native_tests/optimizer_maximize_gpu.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/optimizer-maximize-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "path": "python/mojolearn/tests/test_x_sequence_sched.py",
+      "change": "Move original40-step Float64 schedule equations/tolerances to25 native host metadata fixtures, including scalar/bulk/sliced/forced-exact requests, literal warmup/tail values, bounds and typed PublicStep rate resolution. Keep actual Python result/constructor/optimizer-assignment seams; precision-seam verifier unchanged.",
+      "native_checks": [
+        "checks/native_tests/lr_schedule_check.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/lr-schedule-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "path": "python/mojolearn/tests/test_tsa_resident_state.py",
+      "change": "Move Holt-Winters numerical per-call/resident comparisons to native CPU20 intervals and GPU4 owners x5 intervals, plus independent exact dyadic state expectations, warmup NaNs, source snapshot mutation and lifecycle checks. Keep actual Python fit/publication/finalizer; ARIMA/Theta/Prophet numerical migration remains pending. Correct stale finite-scan inventory after reading already integrated native migration.",
+      "native_checks": [
+        "checks/native_tests/holtwinters_state_cpu.mojo",
+        "checks/native_tests/holtwinters_state_gpu.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/holtwinters-state-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "path": "checks/native_tests/optimizer_descriptor_cases.mojo",
+      "decision": "new-native-producer-contract-coverage",
+      "native_fixtures_per_executor": 25,
+      "executors": [
+        "optimizer_host_v1",
+        "optimizer_gpu_v1"
+      ],
+      "removed_python_definitions": 0,
+      "retained_boundary_files": [
+        "test_optimizer_native_lifecycle.py",
+        "test_optimizer_native_array_ownership.py",
+        "test_optimizer_native_step_errors.py"
+      ],
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see optimizer-descriptor-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_tsa_resident_state.py",
+      "decision": "split-partial",
+      "native_family": "Theta fitted state and changed horizons",
+      "native_fixtures_per_executor": 8,
+      "executors": [
+        "HostExec",
+        "DeviceExec"
+      ],
+      "removed_python_definitions": 0,
+      "removed_python_numerical_work": "Fresh duplicate public Theta fit, NumPy full-fit/tail word comparisons; retained actual cached object/publication ownership seam.",
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see theta-state-handoff.txt."
+    },
+    {
+      "path": "training/checks/optimizer_state_input_check.mojo",
+      "decision": "native-parallel-refusal-contract",
+      "native_fixtures": 39,
+      "added_fixtures": 4,
+      "production_dependency": "bee32a8a30",
+      "source_review_only": true,
+      "runtime_status": "Root compile/run owed; permits correct later private scratch writes without weakening public publication checks."
+    },
+    {
+      "path": "training/checks/optimizer_state_plan_check.mojo",
+      "decision": "native-state-span-regression",
+      "native_fixtures": 32,
+      "python_boundary_path": "python/mojolearn/tests/test_optimizer_native_moment_assignment.py",
+      "python_boundary_cases": 20,
+      "production_dependencies": [
+        "dbb3631cea",
+        "bee32a8a30"
+      ],
+      "source_review_only": true,
+      "runtime_status": "Root compile/run owed; see optimizer-state-plan-handoff.txt."
+    },
+    {
+      "path": "training/checks/optimizer_input_copy_check.mojo",
+      "decision": "native-strided-copy-regression",
+      "native_fixtures": 16,
+      "large_output_cells_per_fixture": 265189,
+      "large_fixtures": 2,
+      "production_dependency": "0b35406ae6",
+      "source_review_only": true,
+      "runtime_status": "Root combined compile/run owed; see optimizer-input-copy-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_tsa_resident_state.py",
+      "decision": "arima-numerical-and-state-migration",
+      "native_fixtures_per_target": 8,
+      "queries_per_fixture": 4,
+      "full_mle_fit_cases": 2,
+      "independent_closed_form_states": 6,
+      "remaining_python_tests": 5,
+      "remaining_numerical_family": "Prophet",
+      "source_review_only": true,
+      "runtime_status": "Root combined compile/run owed; see arima-state-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_tsa_resident_state.py",
+      "decision": "prophet-numerical-and-state-migration",
+      "native_fixtures_per_target": 6,
+      "full_default_fit_cases": 1,
+      "independent_closed_form_states": 5,
+      "full_fit_settings": {
+        "n": 120,
+        "first_predict": 130,
+        "max_iter": 2000,
+        "changepoints": 25,
+        "changepoint_range": 0.8,
+        "weekly_order": 3,
+        "seasonality_prior": 10,
+        "changepoint_prior": 0.05
       },
-      "note": "No lane rerun; preserved failures remain pending. Linear tests pin integer-address owners after final use."
+      "remaining_python_tests": 5,
+      "remaining_numerical_family": null,
+      "source_review_only": true,
+      "runtime_status": "Root combined compile/run owed; see prophet-state-handoff.txt."
+    },
+    {
+      "path": "checks/native_tests/optimizer_device_cases.mojo",
+      "decision": "typed-device-descriptor-storage-ownership-contracts",
+      "native_cpu_fixtures": 52,
+      "native_gpu_fixtures": 57,
+      "producer_dependencies": [
+        "679a558c69",
+        "c3bea14b71"
+      ],
+      "python_tests_removed": 0,
+      "source_review_only": true,
+      "runtime_status": "Root consolidated compile/run owed; see optimizer-device-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_optimizer_native_lifecycle.py",
+      "decision": "native-owner-control-state-migration",
+      "native_fixtures_per_target": 22,
+      "parallel_pure_control_fixtures": 18,
+      "ordered_real_handle_fixtures": 4,
+      "public_python_definitions": 4,
+      "public_parametrized_cases": 10,
+      "producer_dependency": "7ded28ac82",
+      "source_review_only": true,
+      "runtime_status": "Root consolidated compile/run owed; see optimizer-owner-handoff.txt."
+    },
+    {
+      "paths": [
+        "python/mojolearn/tests/test_samba_construct_native.py",
+        "python/mojolearn/tests/test_samba_step_native.py"
+      ],
+      "decision": "split-needed",
+      "change": "Real Samba integration assertions follow typed optimizer owner state. No numerical fixture removed or reduced; recipe migration remains pending.",
+      "test_definitions": 9,
+      "parametrized_cases": 24,
+      "source_review_only": true,
+      "runtime_status": "Root installed Python execution owed after producer Samba owner repair; see samba-owner-consumer-handoff.txt."
+    },
+    {
+      "paths": [
+        "python/mojolearn/tests/test_logistic_multiclass_surface.py",
+        "python/mojolearn/tests/test_logistic_native_predict.py"
+      ],
+      "decision": "split-partial",
+      "native_fixtures_per_executor": 4,
+      "executors": [
+        "QnHostKernels through qn_host_native_v1",
+        "QnDeviceKernels through qn_device_native_v1"
+      ],
+      "producer_dependency": "71c1b26f53",
+      "source_review_only": true,
+      "runtime_status": "Root compile/native run and retained installed Python boundary execution owed; see logistic-numeric-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_svc_probability.py",
+      "decision": "split-migrated",
+      "python_numerical_definitions_removed": 3,
+      "python_boundary_definitions_retained": 4,
+      "python_boundary_parametrized_cases": 5,
+      "native_fixtures_per_executor": 3,
+      "executors": [
+        "svm.host.svc_proba and svm.impl.svc_rows",
+        "svm.impl.svc_epilogue and svm.impl.svc_rows on device"
+      ],
+      "source_review_only": true,
+      "runtime_status": "Root compile/native runtime and retained installed Python checks owed; see svc-probability-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_pca_whitening_surface.py",
+      "decision": "split-migrated",
+      "python_numerical_definitions_removed": 3,
+      "python_boundary_definitions_retained": 4,
+      "python_boundary_parametrized_cases": 7,
+      "native_fixtures_per_executor": 3,
+      "executors": [
+        "core.estimators_host_impl PCA fit/whiten RUN",
+        "decomposition.estimator PCA fit/whiten/inverse device routines"
+      ],
+      "source_review_only": true,
+      "runtime_status": "Root compile/native runtime and retained installed Python checks owed; see pca-whitening-handoff.txt."
+    },
+    {
+      "sources": [
+        "checks/native_tests/logistic_model_state_suite.mojo",
+        "checks/native_tests/logistic_label_weights_cases.mojo"
+      ],
+      "decision": "new-typed-native-contract-coverage",
+      "native_model_state_fixtures": 22,
+      "native_label_weight_fixtures_per_executor": 8,
+      "dependencies": [
+        "27a0b43246",
+        "831ed1cba0",
+        "19b940"
+      ],
+      "python_tests_removed": 0,
+      "source_review_only": true,
+      "runtime_status": "Root compile/run owed; CPU weight suite requires MOJOLEARN_COLUMN_CPU=1; see logistic-state-weights-handoff.txt."
+    },
+    {
+      "sources": [
+        "checks/native_tests/logistic_config_suite.mojo",
+        "python/mojolearn/tests/test_logistic_scalar_native_boundary.py"
+      ],
+      "decision": "new-typed-native-contract-and-python-boundary-coverage",
+      "native_config_fixtures": 54,
+      "python_boundary_definitions": 5,
+      "python_boundary_parametrized_cases": 35,
+      "producer_dependency": "4cf077436c",
+      "python_tests_removed": 0,
+      "source_review_only": true,
+      "runtime_status": "Root native compile/run and installed Python boundary execution owed; see logistic-config-handoff.txt."
+    },
+    {
+      "kind": "orchestrator-accepted-native-results",
+      "source_commit": "281ffea7f07c18b945701733bf54dcb9697245d0",
+      "evidence": "/Users/andrewhendel/mojolearn-evidence/python-mojo-migration-20261110/native-wave4-accepted-results.json",
+      "scope": "Local CPU and Apple GPU native executables only; not installed-wheel, performance or cross-vendor identity.",
+      "accepted": {
+        "cpu_fixtures": 128,
+        "gpu_fixtures": 10,
+        "total_fixtures": 138
+      },
+      "suite_counts": {
+        "fixed_span_contracts_cpu": 118,
+        "logistic_numeric_cpu": 4,
+        "logistic_numeric_gpu": 4,
+        "svc_probability_cpu": 3,
+        "svc_probability_gpu": 3,
+        "pca_whitening_cpu": 3,
+        "pca_whitening_gpu": 3
+      },
+      "repair": "Root replaced two mixed Int32/Int SVC permutation comparisons with one typed expected index; assertions unchanged. Original R1 failure retained."
     }
-  ]
+  ],
+  "reviewed_files": 51,
+  "schema": "mojolearn.native-test-migration-inventory.v1",
+  "source_commit": "fb8acd7edaff8a1b6cec994c76f4aeff7da8db80",
+  "test_definitions": 4126
 }

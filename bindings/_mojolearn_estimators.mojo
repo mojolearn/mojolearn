@@ -8,6 +8,12 @@ from glm.linear_fit_device import LINEAR_FIT_DEVICE_API
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from glm.linear_predict_device import LINEAR_PREDICT_DEVICE_API, linear_predict_device
 from core.linear_boundary_types import LinearPredictRequest
+from core.logistic_native_api import (
+    QnFitRequest, QnQueryRequest, QnLinkRequest, QN_NATIVE_DECISION,
+    QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
+    QN_NATIVE_SIGMOID, QN_NATIVE_SOFTMAX,
+)
+from glm.logistic_native_device import QnDeviceKernels, LOGISTIC_DEVICE_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
 from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
@@ -81,11 +87,6 @@ from decomposition.tsvd_resident_state import (
 from glm.estimator import (
     ols_fit_host,
     ols_fit_resident_host,
-    qn_decision_function_device,
-    qn_decision_function_host,
-    qn_fit_host,
-    qn_predict_binary_host,
-    qn_predict_multiclass_host,
     qn_fit_ovr_host,
     QN_OVR_ONE_UPLOAD,
     QN_DEV_ARGMAX,
@@ -103,9 +104,6 @@ from decomposition.impl.pca_owner import pca_fit_owned, pca_randomized_owned
 from glm.impl.ridge_multi import MULTIOUT_RIDGE, ridge_fit_multi_host, ridge_predict_multi_host
 from core.estimators_impl import (
     pca_whiten_overlap_check,
-    qn_link_from_device,
-    qn_sigmoid_device,
-    qn_softmax_device,
 )
 
 
@@ -953,6 +951,11 @@ def linear_fit_native_api_v1_binding() raises -> PythonObject:
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
+def logistic_native_api_v1_binding() raises -> PythonObject:
+    var api = LOGISTIC_DEVICE_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
 def linear_predict_native_api_v1_binding() raises -> PythonObject:
     var api = LINEAR_PREDICT_DEVICE_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
@@ -1223,15 +1226,12 @@ def qn_fit_binding(
         raise Error("qn_fit: has_sample_weight = 1 needs the 16th field, the sample_weight address")
     var swp = _f32_ptr(Int(py=params[15])) if has_sw else yp
     var status = Int(py=params[16]) if len(params) == 17 else 0
+    var request = QnFitRequest(Int(xp), Int(yp), Int(wp), Int(ip), Int(swp) if has_sw else 0, status,
+        nr, nf, nc, max_iter, ls_max, mem, fit_intercept, normalized, loss,
+        l1, l2, grad_tol, change_tol, svr_eps)
     var iters = 0
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        iters = qn_fit_host(
-            ctx, xp, yp, wp, ip, nr, nf, nc, l1, l2, grad_tol, change_tol,
-            max_iter, ls_max, mem, fit_intercept, normalized, has_sw, swp,
-            loss, svr_eps, status,
-        )
-        ctx.synchronize()
+        iters = QnDeviceKernels.fit(request)
     return PythonObject(iters)
 
 
@@ -1305,10 +1305,9 @@ def qn_decision_function_binding(
     var fi = Int(py=params[2]) != 0
     var nc = Int(py=params[3]) if len(params) >= 4 else 1
     var status = Int(py=params[4]) if len(params) == 5 else 0
+    var request = QnQueryRequest(Int(xp), Int(cp), Int(op), status, nr, nf, nc, fi, False)
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        qn_decision_function_host(ctx, xp, cp, op, nr, nf, fi, nc, status)
-        ctx.synchronize()
+        QnDeviceKernels.query(QN_NATIVE_DECISION, request)
     return PythonObject(0)
 
 
@@ -1342,14 +1341,9 @@ def qn_proba_binding(
     var nc = Int(py=params[3])
     var log_out = len(params) >= 5 and Int(py=params[4]) != 0
     var status = Int(py=params[5]) if len(params) == 6 else 0
-    var nt = nc if nc > 2 else 1
+    var request = QnQueryRequest(Int(xp), Int(cp), Int(op), status, nr, nf, nc, fi, log_out)
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var d_scores = ctx.enqueue_create_buffer[DType.float32](max(nr * nt, 1))
-        qn_decision_function_device(ctx, xp, cp, d_scores, nr, nf, fi, nt, status)
-        qn_link_from_device(ctx, d_scores, op, nr, nt, log_out)
-        _ = d_scores^
-        _ = ctx^
+        QnDeviceKernels.query(QN_NATIVE_PROBA, request)
     return PythonObject(0)
 
 
@@ -1373,10 +1367,9 @@ def qn_predict_binary_binding(
     # crashed with SIGSEGV doing it inside GILReleased).
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=coef_addr))
+    var request = QnQueryRequest(Int(xp), Int(cp), Int(op), status, nr, nf, 1, fi, False)
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        qn_predict_binary_host(ctx, xp, cp, op, nr, nf, fi, status)
-        ctx.synchronize()
+        QnDeviceKernels.query(QN_NATIVE_BINARY, request)
     return PythonObject(0)
 
 
@@ -1400,10 +1393,9 @@ def qn_predict_multiclass_binding(
     var op = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=out_addr))
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=coef_addr))
+    var request = QnQueryRequest(Int(xp), Int(cp), Int(op), status, nr, nf, nc, fi, False)
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        qn_predict_multiclass_host(ctx, xp, cp, op, nr, nf, fi, nc, status)
-        ctx.synchronize()
+        QnDeviceKernels.query(QN_NATIVE_MULTICLASS, request)
     return PythonObject(0)
 
 
@@ -1421,12 +1413,9 @@ def qn_sigmoid_binding(
     var sp = _f32_ptr(Int(py=scores_addr))
     var op = _f64_ptr(Int(py=out_addr))
     var nr = Int(py=params[0])
-    if nr <= 0:
-        return PythonObject(0)
+    var request = QnLinkRequest(Int(sp), Int(op), nr, 2)
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        qn_sigmoid_device(ctx, sp, op, nr)
-        _ = ctx^
+        QnDeviceKernels.link(QN_NATIVE_SIGMOID, request)
     return PythonObject(0)
 
 
@@ -1445,14 +1434,9 @@ def qn_softmax_binding(
     var op = _f64_ptr(Int(py=out_addr))
     var nr = Int(py=params[0])
     var nc = Int(py=params[1])
-    if nc < 3:
-        raise Error("qn_softmax: n_classes must be at least 3; the binary link is qn_sigmoid")
-    if nr <= 0:
-        return PythonObject(0)
+    var request = QnLinkRequest(Int(sp), Int(op), nr, nc)
     with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        qn_softmax_device(ctx, sp, op, nr, nc)
-        _ = ctx^
+        QnDeviceKernels.link(QN_NATIVE_SOFTMAX, request)
     return PythonObject(0)
 
 
@@ -1721,6 +1705,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
         m.def_function[lm_ols_prep_binding]("lm_ols_prep")
         m.def_function[linear_predict_native_api_v1_binding]("linear_predict_native_api_v1")
+        m.def_function[logistic_native_api_v1_binding]("logistic_native_api_v1")
         m.def_function[linear_fit_native_api_v1_binding]("linear_fit_native_api_v1")
         m.def_function[ols_predict_binding]("ols_predict")
         m.def_function[qn_proba_binding]("qn_proba")

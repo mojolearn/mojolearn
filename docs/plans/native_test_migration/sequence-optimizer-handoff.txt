@@ -1,0 +1,51 @@
+Mojolearn native elementwise sequence optimizer migration, 2026-11-10
+
+10 fixtures per CPU/GPU through sequence.recurrent OptConfig/OptState/opt_step
+  RMSprop: default lr .01 alpha .99 eps1e-8; lr .003 centered, momentum .7,
+    weight_decay .01.
+  Adagrad: default lr .01 eps1e-10; lr .05 lr_decay .1 weight_decay .01,
+    initial_accumulator_value .1.
+  Lion: lr .01 default betas .9/.99; lr .003 betas .95/.98 decay .1.
+  Adamax: default lr .002 betas .9/.999 eps1e-8; lr .01 betas .8/.99 decay .05.
+  NAdam: default lr .002 betas .9/.999 eps1e-8 momentum_decay .004;
+    lr .01 weight_decay .05, decoupled_weight_decay=True momentum_decay .01.
+  All keep six steps and the original 4x3 parameter extent. Native fixed dyadic
+  positive/negative/zero gradients replace RNG fixture preparation. Parameters
+  and all three state planes are compared to independently written Float64
+  equations; only operation ids/config inputs are shared with product code.
+  Reference uses std.math sqrt/pow, no product strict arithmetic helper.
+  Original parameter rtol=2e-5, atol=2e-6 is unchanged; additional moment/state
+  checks use the same bounds. No old expected hash or same-function oracle.
+
+Python and remaining work
+  test_x_sequence_optim.py retains all six named definitions. Five elementwise
+  tests now exercise the original two public option configurations, one public
+  step and checkpoint dictionary/step-count/array metadata publication. Their
+  NumPy reference functions, repeated arithmetic driver and __main__ serial
+  test loop are removed. Adafactor matrix/vector equations remain unchanged
+  and explicitly pending; they are a different factored algorithm/entry.
+  The separately reviewed public sequence optimizer tests remain because
+  their mutable hooks, tuple identity, owner pins, strided buffers and admitted
+  dtype/publication behavior require the actual Python boundary.
+
+Parallel plan and orchestrator commands
+  CPU fixtures are independent host_parallelize units; oracle cells use the
+  same pool. Six optimizer updates per fixture depend on preceding state.
+  GPU fixtures submit in order for existing DeviceExec sequence_ctx/pool;
+  kernels and oracle cells remain parallel. No concurrent-GPU-session claim.
+  One owned executor allocation contains params/gradient/three state buffers;
+  sync before download completion/free, and host Lists retained through final
+  pointer uses. No Python runtime imports, callback or object in native tests.
+  Existing tasks, no new build/load scheme:
+    bash tools/compile_slot.sh pixi run check-native-sequence-optimizer-cpu
+    bash tools/compile_slot.sh pixi run check-native-sequence-optimizer-gpu
+  Compile-only, with normal target/compiler flags:
+    bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/sequence_optimizer_cpu.mojo -o "$HOME/mojolearn-evidence/sequence-optimizer-cpu"
+    bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/sequence_optimizer_gpu.mojo -o "$HOME/mojolearn-evidence/sequence-optimizer-gpu"
+  Run each exact binary. Public boundary group _mojolearn_x_sequence;
+  pytest python/mojolearn/tests/test_x_sequence_optim.py on installed artifacts.
+
+Status
+  Lane source/AST/TOML/diff checks only; compile/runtime owed to root. Frozen
+  batch has no product edits or in-progress producer API dependency. No box
+  job, timing, identity or A/B define. Product/kernel arithmetic unchanged.

@@ -1,6 +1,6 @@
 Mojolearn native optimizer checkpoint input checks, 2026-11-10
 
-35 direct core.optimizer_state_impl.optimizer_state_cast fixtures
+39 direct core.optimizer_state_impl.optimizer_state_cast fixtures
   13 initialized-flag conversions: truncation toward zero, both signed-int32
   endpoints and admissible adjacent fractions, overflow and NaN/infinity
   refusals. Expected words and named refusal categories are literal.
@@ -9,15 +9,16 @@ Mojolearn native optimizer checkpoint input checks, 2026-11-10
   9 typed spans: signed/unsigned/boolean/half inputs, forward/reversed/zero
   stride, big-endian signed values and int64/uint64 double-rounding boundaries.
   One middle-of-span refusal checks the permitted private scratch prefix and
-  untouched failing/tail cells; this is not public publication atomicity.
-  One zero-length no-op, with no storage required.
+  untouched invalid cell; later private cells may be unwritten or correct.
+  This is not public publication atomicity.
+  One zero-length input with a valid sentinel output, unchanged.
   Input words and output guards checked; native owners retained after the
   final raw-address use. No Python objects, imports, callbacks or arithmetic.
 
 Parallelism and scope
   Uses training/checks and the existing pixi/check convention. Independent
-  fixtures run through host_parallelize; each small ordered conversion span
-  retains its existing prefix/refusal behavior. Product code is unchanged.
+  fixtures run through host_parallelize. Earliest-input refusal is preserved
+  while independent private scratch chunks may complete. No product edits here.
   This is supplementary typed-state coverage, not a claimed deletion of the
   real Python checkpoint dict/error-class/owner-pin/publication assertions.
   Native OpsSession optimizer math/checkpoint migration is a separate batch.
@@ -35,3 +36,14 @@ Status
   Source/diff review only; compile/run owed to root. No product/kernel edits,
   box jobs, timing or identity. A/B: none. Nothing deleted in this batch;
   Python boundary assertions still exercise behavior unavailable to raw spans.
+
+Parallel conversion follow-up (dependency bee32a8a30)
+  Four added 262147-cell fixtures combine early/later NaN and overflow in
+  forward/reversed spans. The earliest logical input index must choose the
+  exact native refusal regardless of task completion order. All source words,
+  invalid output cells and guards remain unchanged. Other valid private cells
+  must be either unwritten or correctly converted. The valid prefix is checked.
+  Input/output audit chunks use the existing native worker policy; no fixed
+  thread cap or serial scan over the large span. Root's accepted empty-input
+  valid-sentinel fix92648 is propagated. Public publication/rollback tests are
+  unchanged. RUN OWED; no lane build/test.

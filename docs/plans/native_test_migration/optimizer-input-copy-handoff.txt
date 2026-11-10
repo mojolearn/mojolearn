@@ -1,0 +1,48 @@
+Mojolearn native optimizer stride-copy contracts, 2026-11-10
+
+Frozen production dependency: 0b35406ae6, training.optimizer_input_plan.
+Direct check: training/checks/optimizer_input_copy_check.mojo, 16 fixtures.
+No production files edited or dependency cherry-picked into this lane.
+
+Coverage
+  14 small literal-order fixtures: contiguous C borrowing; F order; negative
+  inner and outer strides; zero inner/outer broadcast strides; rank3 permutation;
+  rank3 singleton with row padding; scalar and empty borrowed/copied paths;
+  unaligned positive-inner memcpy spans and unaligned general-stride loads.
+  Exact physical index orders are literal lists, independent of producer carry.
+  Both signed zeros and positive/negative quiet NaN payloads are compared by
+  raw UInt32 words. Source bytes and surrounding byte guards are unchanged.
+  Contiguous return must be the exact source address with no added owner.
+  Strided return must be disjoint and backed by exactly one appended native
+  List[Float32] of the documented extent. A pre-existing guarded output owner
+  stays untouched. A second gather adds exactly one distinct owner without
+  invalidating the first output; source mutation changes borrowed data and
+  cannot change retained copied data.
+  Two large 509x521 matrices =265189 output cells have three padding words per
+  row and outer source guards. Forward inner spans and reversed inner/outer
+  strides are checked against the independent affine row/column address
+  equation. Existing worker policy determines tasks; whenever tasks>1, the
+  chosen chunk boundary must split a row. Every output and padding/source word
+  is checked in parallel, then all input data is overwritten and retained
+  output is checked again. Output-owner extent, first/last cells and the
+  pre-existing owner guards are checked without reading outside allocations.
+
+Parallel plan
+  Independent fixtures use host_parallelize. Large preparation/comparison/
+  mutation spans use the same established native worker policy with per-worker
+  error summaries; no large serial verification scan or fixed worker cap.
+  Reported workers are policy task counts, not a measured busy-core claim.
+  One-worker execution remains meaningful correctness but does not prove
+  concurrent boundary traversal. No time, throughput or identity claim.
+
+Root combined-build task and commands (RUN OWED)
+  bash tools/compile_slot.sh pixi run check-native-optimizer-input-copy
+  Compile-only:
+  bash tools/compile_slot.sh pixi run mojo build -I . training/checks/optimizer_input_copy_check.mojo -o "$HOME/mojolearn-evidence/native-optimizer-input-copy"
+  Run exact binary; expected16 native host fixtures. The same helper prepares
+  host buffers for CPU/GPU optimizer execution; this test launches no GPU.
+  Existing real Python gradient-admission/owner-pin tests remain untouched.
+
+Source/TOML/JSON/diff review only; no lane compile/test. No algorithm change,
+new loader, runtime Python import/object/callback, timing, identity or box.
+Nothing removed: this is focused coverage for new production traversal.

@@ -22,6 +22,8 @@ from bindings.causal_lm_construct import _model_f32, _model_shape, _model_block,
 from bindings.causal_lm_public import _native_function
 from bindings.p3_samba_caps import samba_caps, SAMBA_CAP_MODE, SAMBA_CAP_VENDOR
 from bindings.samba_config_native import samba_config_dict, samba_config_from_dict, samba_registry, samba_block_shapes
+from bindings.optimizer_owner_boundary import OptimizerOwner, OptimizerOwnerLease, optimizer_owner_new
+from bindings.samba_optimizer_boundary import samba_optimizer_transfer
 
 
 def samba_fields(value: PythonObject) raises -> PythonObject:
@@ -188,6 +190,8 @@ def samba_snapshot(model: PythonObject, copy_arrays: Bool, context: PythonObject
     var fields = samba_fields(model)
     var entries = samba_entries(context, fields["numeric_mode"])
     var opt = samba_fields(fields["optimizer"])
+    var lease = OptimizerOwnerLease(fields["optimizer"])
+    var owner = lease.value.downcast_value_ptr[OptimizerOwner]()
     var n = Int(py=fields["n_total"])
     if opt["_m"] is None:
         py_setitem(opt, "_m", generation_array([n]))
@@ -197,8 +201,8 @@ def samba_snapshot(model: PythonObject, copy_arrays: Bool, context: PythonObject
     var v = _model_f32(opt["_v"], "exp_avg_sq", context["neural"])
     _model_shape(m, [n], "exp_avg")
     _model_shape(v, [n], "exp_avg_sq")
-    if opt["_res"] is not None and not Bool(py=opt["_host_fresh"]):
-        _ = py_call(_native_function(entries, "optimizer_resident_download"), opt["_res"], m._addr, v._addr, n)
+    if owner[].control.handle >= 0 and not owner[].control.host_fresh:
+        samba_optimizer_transfer(owner[], Int(py=m._addr), Int(py=v._addr), n, False)
         # A caller may assign writable foreign buffers to the public moment
         # properties. Keep those aliases and write native download bytes back.
         if m is not opt["_m"]:
@@ -207,9 +211,9 @@ def samba_snapshot(model: PythonObject, copy_arrays: Bool, context: PythonObject
         if v is not opt["_v"]:
             var v_view = samba_moment_view(opt["_v"], context)
             py_setitem(v_view, py_call(bi.slice, PythonObject(None)), v._mv)
-        py_setitem(opt, "_host_fresh", True)
+        owner[].control.host_fresh = True
     var flags = _model_native_buffer(opt["buf_initialized"], "i", context["neural"])
-    py_setitem(opt, "_pristine", False)
+    owner[].control.pristine = False
     var result = bi.dict()
     py_setitem(result, "schema", "mojolearn.samba-stack-state.v1")
     py_setitem(result, "profile", "mojolearn.samba-stack.fp32.v1")
@@ -238,6 +242,7 @@ def samba_snapshot(model: PythonObject, copy_arrays: Bool, context: PythonObject
     py_setitem(rng, "seed", generator["seed"])
     py_setitem(rng, "counter", generator["counter"])
     py_setitem(result, "rng", rng)
+    _ = lease
     return result
 
 
@@ -306,19 +311,23 @@ def _samba_publish_checked(model: PythonObject, checked: PythonObject, context: 
     if Bool(py=opt["accumulation_steps"] != oc["accumulation_steps"]):
         raise Error("Samba: saved accumulation_steps differs from this stack")
     var schedule = samba_schedule_from_state(checked["schedule"], context)
+    var lease = OptimizerOwnerLease(fields["optimizer"])
+    var owner = lease.value.downcast_value_ptr[OptimizerOwner]()
     var flat = fields["flat"]
     var source = checked["parameters"]
     if flat is not source:
         var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=flat._addr))
         var src = Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=Int(py=source._addr))
         memcpy(dest=dst, src=src, count=Int(py=flat.nbytes))
-    py_setitem(opt, "_m", checked["exp_avg"])
-    py_setitem(opt, "_v", checked["exp_avg_sq"])
-    py_setitem(opt, "_host_fresh", True)
-    py_setitem(opt, "_pristine", False)
-    if opt["_res"] is not None:
-        var entries = samba_entries(context, fields["numeric_mode"])
-        _ = py_call(_native_function(entries, "optimizer_resident_upload"), opt["_res"], opt["_m"]._addr, opt["_v"]._addr, fields["n_total"])
+    var first = checked["exp_avg"]
+    var second = checked["exp_avg_sq"]
+    if owner[].control.handle >= 0:
+        samba_optimizer_transfer(owner[], Int(py=first._addr), Int(py=second._addr), Int(py=fields["n_total"]), True)
+    # Publish moment owners only after upload succeeds, as public AdamW does.
+    py_setitem(opt, "_m", first)
+    py_setitem(opt, "_v", second)
+    owner[].control.host_fresh = True
+    owner[].control.pristine = False
     py_setitem(opt, "buf_initialized", checked["buf_initialized"])
     py_setitem(opt, "t", checked["t"])
     py_setitem(opt, "lr", oc["lr"])
@@ -330,6 +339,9 @@ def _samba_publish_checked(model: PythonObject, checked: PythonObject, context: 
     var generator = samba_fields(fields["generator"])
     py_setitem(generator, "seed", checked["rng"]["seed"])
     py_setitem(generator, "counter", checked["rng"]["counter"])
+    _ = first
+    _ = second
+    _ = lease
     return model
 
 
@@ -416,12 +428,8 @@ def samba_from_state(state: PythonObject, context: PythonObject) raises -> Pytho
     py_setattr(model, "max_norm", checked["optimizer"]["max_norm"])
     var optimizer = py_call(bi.object.__new__, context["optimizer_class"])
     var opt = samba_fields(optimizer)
-    py_setitem(opt, "_where", "AdamW")
-    py_setitem(opt, "_res", PythonObject(None))
-    py_setitem(opt, "_res_binding", PythonObject(None))
-    py_setitem(opt, "_host_fresh", True)
     py_setitem(opt, "_resident_wanted", PythonObject(None))
-    py_setitem(opt, "_pristine", False)
+    py_setitem(opt, "_native_optimizer_owner", optimizer_owner_new(optimizer, 2, False))
     py_setitem(opt, "params", params)
     py_setitem(opt, "n_total", model.n_total)
     py_setitem(opt, "accumulation_steps", checked["optimizer"]["accumulation_steps"])

@@ -54,6 +54,12 @@ from glm.host.linear_fit_native import LINEAR_FIT_HOST_API
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from glm.host.linear_predict_native import LINEAR_PREDICT_HOST_API, linear_predict_host
 from core.linear_boundary_types import LinearPredictRequest
+from core.logistic_native_api import (
+    QnFitRequest, QnQueryRequest, QnLinkRequest, QN_NATIVE_DECISION,
+    QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
+    QN_NATIVE_SIGMOID, QN_NATIVE_SOFTMAX,
+)
+from glm.host.logistic_native_host import QnHostKernels, LOGISTIC_HOST_API
 from providers.python.neural_descriptor_pyapi import neural_descriptor_capsule
 from experiments.classical_identical_ideas.shared_controls import C02_LINEAR_PAIR
 # SPDX-License-Identifier: Apache-2.0
@@ -87,12 +93,6 @@ from core.classical_host_predict import (
     host_pca_transform_into,
     host_pca_whiten_inverse_transform_into,
     host_pca_whiten_transform_into,
-    host_qn_decision_into,
-    host_qn_decision_multi_into,
-    host_qn_predict_binary_into,
-    host_rows_log_inplace,
-    host_qn_sigmoid_into,
-    host_qn_softmax_into,
     host_tsvd_transform_into,
 )
 from core.labeled_reference_host_predict import (
@@ -158,7 +158,6 @@ from core.estimators_host_impl import (
     pca_randomized_owned_host_run,
     pca_whiten_check_host,
     pca_whiten_host_run,
-    qn_fit_host_run,
     rbf_sampler_transform_host_run,
     ridge_fit_host_run,
     standard_transform_host_run,
@@ -832,22 +831,13 @@ def qn_fit_binding(
     if has_sw and len(params) < 16:
         raise Error("qn_fit: has_sample_weight = 1 needs the 16th field, the sample_weight address")
     var sw_address = _index(params[15]) if has_sw else 0
-    # The 17th field (lane a7c): the deferred finite status word of X, tested
-    # here on the CPU column by the parallel SIMD scan (the GPU entry tests
-    # its upload); a non-finite X fits nothing and the door refuses.
     var status = _index(params[16]) if len(params) == 17 else 0
-    if status != 0:
-        var word = host_finite_status(x_address, _index(params[0]) * _index(params[1]))
-        i32_ptr(status)[0] = word
-        if word != 0:
-            return PythonObject(0)
+    var request = QnFitRequest(x_address, y_address, Int(wp), Int(ip), sw_address, status,
+        nr, nf, nc, max_iter, ls_max, mem, fit_intercept, normalized, loss,
+        l1, l2, grad_tol, change_tol, svr_eps)
     var iters = 0
     with GILReleased(Python()):
-        iters = qn_fit_host_run(
-            x_address, y_address, wp, ip, nr, nf, nc, l1, l2, grad_tol,
-            change_tol, max_iter, ls_max, mem, fit_intercept, normalized,
-            has_sw, loss, sw_address, svr_eps,
-        )
+        iters = QnHostKernels.fit(request)
     return PythonObject(iters)
 
 
@@ -966,6 +956,11 @@ def _dbscan_fit_run(
 
 def linear_fit_native_api_v1_binding() raises -> PythonObject:
     var api = LINEAR_FIT_HOST_API.get_or_create_ptr()
+    return neural_descriptor_capsule(api[].name, api[].entries)
+
+
+def logistic_native_api_v1_binding() raises -> PythonObject:
+    var api = LOGISTIC_HOST_API.get_or_create_ptr()
     return neural_descriptor_capsule(api[].name, api[].entries)
 
 
@@ -1210,23 +1205,9 @@ def qn_decision_function_binding(
     var fi = _index(params[2]) != 0
     var nc = _index(params[3]) if len(params) >= 4 else 1
     var status = _index(params[4]) if len(params) == 5 else 0
+    var request = QnQueryRequest(x_address, w_address, Int(op), status, nr, nf, nc, fi, False)
     with GILReleased(Python()):
-        _positive(nr, "n_rows")
-        _positive(nf, "n_features")
-        if status != 0:
-            i32_ptr(status)[0] = host_finite_status(x_address, nr * nf)
-        # DEVIATION 2920: X read in place, the rows split across the host
-        # thread policy, the scores written straight to `out`.
-        if nc > 2:
-            host_qn_decision_multi_into(
-                f32_ptr(x_address), f32_ptr(w_address), op, nr, nf, nc, fi,
-                host_predict_task_count(nr),
-            )
-        else:
-            host_qn_decision_into(
-                f32_ptr(x_address), f32_ptr(w_address), op, nr, nf, fi,
-                host_predict_task_count(nr),
-            )
+        QnHostKernels.query(QN_NATIVE_DECISION, request)
     return PythonObject(0)
 
 
@@ -1256,30 +1237,9 @@ def qn_proba_binding(
     var nf = _index(params[1])
     var fi = _index(params[2]) != 0
     var nc = _index(params[3])
-    var nt = nc if nc > 2 else 1
-    var scores = List[Float32](length=max(nr * nt, 1), fill=0)
-    var sp = f32_ptr(Int(scores.unsafe_ptr()))
+    var request = QnQueryRequest(x_address, w_address, Int(op), status, nr, nf, nc, fi, log_out)
     with GILReleased(Python()):
-        _positive(nr, "n_rows")
-        _positive(nf, "n_features")
-        if status != 0:
-            i32_ptr(status)[0] = host_finite_status(x_address, nr * nf)
-        if nt > 2:
-            host_qn_decision_multi_into(
-                f32_ptr(x_address), f32_ptr(w_address), sp, nr, nf, nt, fi,
-                host_predict_task_count(nr),
-            )
-            host_qn_softmax_into(sp, op, nr, nt, host_predict_task_count(nr))
-        else:
-            host_qn_decision_into(
-                f32_ptr(x_address), f32_ptr(w_address), sp, nr, nf, fi,
-                host_predict_task_count(nr),
-            )
-            host_qn_sigmoid_into(sp, op, nr, host_predict_task_count(nr))
-        if log_out:
-            var n_out = nr * (nt if nt > 2 else 2)
-            host_rows_log_inplace(op, n_out, host_predict_task_count(n_out))
-    _ = scores^
+        QnHostKernels.query(QN_NATIVE_PROBA, request)
     return PythonObject(0)
 
 
@@ -1304,14 +1264,9 @@ def qn_predict_binary_binding(
     # PyObject_GetAttrString on the first binary logistic fixture.
     var xp = f32_ptr(_index(x_addr))
     var wp = f32_ptr(_index(coef_addr))
+    var request = QnQueryRequest(Int(xp), Int(wp), Int(op), status, nr, nf, 1, fi, False)
     with GILReleased(Python()):
-        _positive(nr, "n_rows")
-        _positive(nf, "n_features")
-        if status != 0:
-            i32_ptr(status)[0] = host_finite_status(Int(xp), nr * nf)
-        host_qn_predict_binary_into(
-            xp, wp, op, nr, nf, fi, host_predict_task_count(nr),
-        )
+        QnHostKernels.query(QN_NATIVE_BINARY, request)
     return PythonObject(0)
 
 
@@ -1330,13 +1285,9 @@ def qn_softmax_binding(
     var op = f64_ptr(_index(out_addr))
     var nr = _index(params[0])
     var nc = _index(params[1])
-    if nc < 3:
-        raise Error("qn_softmax: n_classes must be at least 3; the binary link is qn_sigmoid")
+    var request = QnLinkRequest(s_address, Int(op), nr, nc)
     with GILReleased(Python()):
-        _positive(nr, "n_rows")
-        host_qn_softmax_into(
-            f32_ptr(s_address), op, nr, nc, host_predict_task_count(nr)
-        )
+        QnHostKernels.link(QN_NATIVE_SOFTMAX, request)
     return PythonObject(0)
 
 
@@ -1352,11 +1303,9 @@ def qn_sigmoid_binding(
     var s_address = _index(scores_addr)
     var op = f64_ptr(_index(out_addr))
     var nr = _index(params[0])
+    var request = QnLinkRequest(s_address, Int(op), nr, 2)
     with GILReleased(Python()):
-        _positive(nr, "n_rows")
-        host_qn_sigmoid_into(
-            f32_ptr(s_address), op, nr, host_predict_task_count(nr)
-        )
+        QnHostKernels.link(QN_NATIVE_SIGMOID, request)
     return PythonObject(0)
 
 
@@ -1644,6 +1593,7 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         module.def_function[qn_fit_binding]("qn_fit")
         module.def_function[linear_predict_native_api_v1_binding]("linear_predict_native_api_v1")
+        module.def_function[logistic_native_api_v1_binding]("logistic_native_api_v1")
         module.def_function[linear_fit_native_api_v1_binding]("linear_fit_native_api_v1")
         module.def_function[ols_predict_binding]("ols_predict")
         module.def_function[qn_proba_binding]("qn_proba")

@@ -8,7 +8,8 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.mode_metadata_native import _fields, _class_fields
-from bindings.optimizer_public_door import py_ints, same_shape
+from training.optimizer_input_plan import same_shape
+from providers.python.array_layout_boundary import native_shape_pack
 from bindings.optimizer_device_native import device_shape, shape_count
 from bindings.optimizer_admission import opt_scalar
 from bindings.sequence_optimizer_native import seq_binding
@@ -337,7 +338,7 @@ def sequence_layer_norm(operation: String, owner: PythonObject, values: PythonOb
             scaler_fill(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(weight))), d, Float32(1))
         if with_bias:
             bias = _array(shape, context)
-        py_setitem(fields, "normalized_shape", py_ints(shape))
+        py_setitem(fields, "normalized_shape", native_shape_pack(shape))
         py_setitem(fields, "_D", d)
         py_setitem(fields, "eps", Float64(py=values[1]))
         py_setitem(fields, "elementwise_affine", affine)

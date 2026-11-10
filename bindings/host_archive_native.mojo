@@ -9,11 +9,19 @@ from std.math import isfinite
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_setattr
 from bindings.trees_public_iforest import iforest_validate
 from bindings.sequential_description import sequential_fields
-from bindings.classical_archive_read import classical_archive_read, classical_archive_build, _archive_exact as _raw_archive_exact, _archive_string, _archive_read_repr, _archive_builtin_repr
-from bindings.classical_arrays import classical_i64, classical_f64, classical_wrap_array, classical_array, classical_address
+from bindings.classical_archive_read import _archive_read_input, _archive_exact as _raw_archive_exact, _archive_string, _archive_read_repr, _archive_builtin_repr
+from bindings.classical_archive import _archive_class_name_unpack
+from bindings.classical_archive_output import archive_events_pack, archive_members_pack
+from bindings.classical_archive_linear import archive_print_mode_unpack, archive_class_names_unpack, archive_linear_pack
+from bindings.minmax_archive_native import minmax_archive_decoded
+from core.native_archive_read import NativeArchiveDecoded, native_archive_read_status
+from core.native_archive_linear import native_archive_string, native_archive_ancestry_matches, native_linear_archive_plan
+from bindings.classical_arrays import classical_numpy, classical_i64, classical_f64, classical_wrap_array, classical_array, classical_address
 from bindings.host_array_native import host_archive_typed
 from core.host_archive_impl import host_archive_copy_f32, host_archive_unique_i32, host_archive_mean_f64, host_archive_reorder_f32, host_archive_reorder_bytes, host_archive_copy_words, host_archive_support_bound, host_archive_svc_gather
-from bindings.scaler_lifecycle_native import scaler_archive_build
+from bindings.standard_archive_native import standard_archive_decoded
+from bindings.cholesky_archive_native import cholesky_archive_pack
+from core.native_archive_cholesky import native_cholesky_archive_plan, native_cholesky_archive_error
 from core.host_archive_gbdt import host_archive_gbdt_text
 from core.host_finite_scan import host_finite_status
 
@@ -94,6 +102,29 @@ def host_archive_object(cls: PythonObject, arrays: PythonObject, context: Python
     if not known:
         raise Error("model archive estimator does not match its connected class")
     return host_archive_allocate(cls, context)
+
+
+def host_archive_class_decoded(cls: PythonObject, members: List[NativeArchiveDecoded],
+                                context: PythonObject, print_mode: Int) raises -> List[String]:
+    # Preserve generic admission before schema metadata, without allocating the
+    # former throwaway probe instance. Only the final fitted owner is created.
+    var native_type = py_type(py_type(PythonObject("")))
+    if py_type(cls) is not native_type:
+        raise Error("TypeError: native archive classes require an ordinary native class layout")
+    var ancestry = archive_class_names_unpack(cls)
+    var numpy = classical_numpy(context)
+    var saved = native_archive_string(members, "estimator", numpy, print_mode)
+    if not native_archive_ancestry_matches(saved, ancestry):
+        raise Error("model archive estimator does not match its connected class")
+    host_archive_check_layout(cls, context)
+    return ancestry^
+
+
+def host_archive_linear_decoded(cls: PythonObject, members: List[NativeArchiveDecoded],
+                                 ridge: Bool, context: PythonObject, print_mode: Int) raises -> PythonObject:
+    var ancestry = host_archive_class_decoded(cls, members, context, print_mode)
+    var plan = native_linear_archive_plan(members, ancestry, ridge, classical_numpy(context), print_mode)
+    return archive_linear_pack(cls, plan, members, ridge, context)
 
 
 def host_archive_mode(arrays: PythonObject, fields: PythonObject, context: PythonObject) raises:
@@ -313,63 +344,19 @@ def host_archive_kernel(cls: PythonObject, arrays: PythonObject, kind: Int, path
     return model
 
 
-def host_archive_minmax(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta", "<i8", 3, context, True)
-    var bounds = host_archive_count(arrays, "feature_range", "<f8", 2, context, True)
-    var d = classical_i64(meta, 0)
-    var mode = _archive_string(arrays, "numeric_mode", context)
-    if String(mode) != "identical" and String(mode) != "fast":
-        raise Error("invalid saved numeric_mode")
-    var model = host_archive_object(cls, arrays, context)
-    var fields = sequential_fields(model)
-    var low = classical_f64(bounds, 0)
-    var high = classical_f64(bounds, 1)
-    py_setitem(fields, "feature_range", Python.tuple(low, high))
-    py_setitem(fields, "feature_range_", Python.tuple(low, high))
-    py_setitem(fields, "clip", classical_i64(meta, 2) != 0)
-    py_setitem(fields, "clip_", classical_i64(meta, 2) != 0)
-    py_setitem(fields, "copy", True)
-    py_setitem(fields, "numeric_mode", PythonObject(None))
-    py_setitem(fields, "numeric_mode_", mode)
-    py_setitem(fields, "n_features_in_", d)
-    py_setitem(fields, "n_samples_seen_", classical_i64(meta, 1))
-    var names = Python.tuple("data_min", "data_max", "data_range", "scale", "min")
-    for i in range(len(names)):  # driver-loop: five saved scaler statistics
-        var name = String(names[i])
-        py_setitem(fields, name + "_", host_archive_shape(arrays, name, "<f4", Python.tuple(d), context))
-    return model
-
-
-def host_archive_cholesky(cls: PythonObject, arrays: PythonObject, path: PythonObject,
-                          context: PythonObject) raises -> PythonObject:
-    # The refusals keep Cholesky.load's wording and order: numeric_mode,
-    # the three field vectors' dtypes, their sizes, then the factor.
-    var b = native_loaded_module("builtins")
+def host_archive_cholesky_decoded(cls: PythonObject, members: List[NativeArchiveDecoded],
+                                   path: PythonObject, context: PythonObject, print_mode: Int) raises -> PythonObject:
     var where = host_archive_where(path, context)
-    var model = host_archive_object(cls, arrays, context)
-    var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
-    var meta = _archive_exact(arrays, "meta", "<i8", context)
-    var scalars = _archive_exact(arrays, "scalars", "<f8", context)
-    var jp = _archive_exact(arrays, "jitter_param", "<f8", context)
-    if Int(py=meta.size) != 3 or Int(py=scalars.size) != 2 or Int(py=jp.size) != 1:
-        raise Error(where + " holds meta " + String(Int(py=meta.size)) + ", scalars " + String(Int(py=scalars.size))
-                    + " and jitter_param " + String(Int(py=jp.size)) + " fields; 3, 2 and 1 are needed")
-    var n = classical_i64(meta, 0)
-    var factor = _archive_exact(arrays, "L", "<f4", context)
-    var got = py_call(b.tuple, factor.shape)
-    if n < 1 or not Bool(py=got == Python.tuple(n, n)):
-        raise Error(where + " L has shape " + _archive_builtin_repr(got) + ", the factor is "
-                    + String(n) + " x " + String(n))
-    var jitter = classical_f64(jp, 0)
-    py_setitem(fields, "jitter", PythonObject(None) if jitter == -1.0 else PythonObject(jitter))
-    py_setitem(fields, "n_", n)
-    py_setitem(fields, "L_", factor)
-    py_setitem(fields, "info_", classical_i64(meta, 1))
-    py_setitem(fields, "nb_", classical_i64(meta, 2))
-    py_setitem(fields, "_logdet", classical_f64(scalars, 0))
-    py_setitem(fields, "jitter_", classical_f64(scalars, 1))
-    return model
+    _ = host_archive_class_decoded(cls, members, context, print_mode)
+    var plan = native_cholesky_archive_plan(members, classical_numpy(context), print_mode)
+    if plan.failure:
+        var quoted = String("")
+        if plan.failure == 1:
+            # Output formatting of an exact admitted scalar is a PACK step;
+            # the native plan already selected this mode refusal and its order.
+            quoted = _archive_builtin_repr(PythonObject(plan.mode))
+        raise Error(native_cholesky_archive_error(plan, where, quoted))
+    return cholesky_archive_pack(cls, plan, members, context)
 
 
 def host_archive_embedding(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -2660,8 +2647,8 @@ def host_archive_public_gbdt(cls: PythonObject, arrays: PythonObject, path: Pyth
     return model
 
 
-def host_archive_public_owner(path: PythonObject, arrays: PythonObject, cls: PythonObject,
-                              context: PythonObject) raises -> PythonObject:
+def host_archive_public_owner(path: PythonObject, members: List[NativeArchiveDecoded], cls: PythonObject,
+                              context: PythonObject, numpy: Bool, print_mode: Int) raises -> PythonObject:
     """`Class.load(path)` of a public estimator: the format tag and the
     saving estimator are checked with the refusals `_serialize.read_npz` and
     `linear_model._check_saved_by` gave, and the nearest connected ancestor
@@ -2677,7 +2664,7 @@ def host_archive_public_owner(path: PythonObject, arrays: PythonObject, cls: Pyt
             owner = mro[i]
             break
     if owner is None:
-        raise Error("TypeError: " + String(cls.__name__) + " has no connected saved format")
+        raise Error("TypeError: " + _archive_class_name_unpack(cls) + " has no connected saved format")
     var native_hooks = py_get(context, "host_archive_native_loader_hooks")
     if native_hooks is not None and py_contains(native_hooks, owner):
         # These native loaders publish the vetted package hook's state in
@@ -2692,19 +2679,21 @@ def host_archive_public_owner(path: PythonObject, arrays: PythonObject, cls: Pyt
         if current is not admitted[0]:
             raise Error("TypeError: native archive loading refuses replaced after-fit hooks")
     var accepted = connected[owner]
-    var tag = PythonObject("")
-    if py_contains(arrays, "format"):
-        tag = _archive_string(arrays, "format", context)
+    var tag = String("")
+    for i in range(len(members)):  # unpack: optional format member metadata
+        if members[i].name == "format":
+            tag = native_archive_string(members, "format", numpy, print_mode)
+            break
     if not py_contains(accepted[0], tag):
         raise Error("mojolearn: " + _archive_read_repr(path, context) + " holds model format "
-                    + _archive_builtin_repr(tag) + ", this loader reads " + _archive_builtin_repr(accepted[1]))
-    var saved = _archive_string(arrays, "estimator", context)
+                    + _archive_builtin_repr(PythonObject(tag)) + ", this loader reads " + _archive_builtin_repr(accepted[1]))
+    var saved = native_archive_string(members, "estimator", numpy, print_mode)
     var known = False
     for i in range(len(mro)):  # driver-loop: loading class ancestry names
-        known = known or Bool(py=mro[i].__name__ == saved)
+        known = known or _archive_class_name_unpack(mro[i]) == saved
     if not known:
         raise Error("mojolearn: " + _archive_read_repr(path, context) + " was saved by "
-                    + String(saved) + ", not " + String(cls.__name__))
+                    + saved + ", not " + _archive_class_name_unpack(cls))
     return owner
 
 
@@ -2713,36 +2702,68 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     return host_archive_build(path, context, PythonObject(None), classical_only)
 
 
-def host_archive_build(path: PythonObject, context: PythonObject,
-                       requested_class: PythonObject, classical_only: Bool = False) raises -> PythonObject:
-    # Read the archive once and select its native schema from the fixed
-    # import-time registry. No class constructor or load method is invoked.
-    var arrays = classical_archive_read(path, context)
+struct HostArchivePacked(Movable):
+    # Boundary owners only: the requested/connected public classes and final
+    # PACK result. The public class retains hook identity across the boundary;
+    # no probe instance or decoded payload owner enters this envelope.
+    var cls: PythonObject
+    var public_owner: PythonObject
+    var value: PythonObject
+    var fmt: String
+    var estimator: String
+
+    def __init__(out self):
+        self.cls = PythonObject(None)
+        self.public_owner = PythonObject(None)
+        self.value = PythonObject(None)
+        self.fmt = ""
+        self.estimator = ""
+
+
+def host_archive_unpack(path: PythonObject, context: PythonObject,
+                        requested_class: PythonObject, classical_only: Bool) raises -> HostArchivePacked:
+    # Keep source and decoded members through final PACK, then release them
+    # before any legacy builder runs. This avoids retaining both compressed
+    # native payloads and published arrays during those unchanged builders.
+    var admitted = _archive_read_input(path, context)
+    try:
+        var members = native_archive_read_status(admitted.span,
+            Int(py=context["archive_python_minor"]), Int(py=context["archive_python_micro"]))
+        archive_events_pack(members, context)
+        return host_archive_select_pack(path, context, requested_class, classical_only, members)
+    finally:
+        admitted.close()
+
+
+def host_archive_select_pack(path: PythonObject, context: PythonObject, requested_class: PythonObject,
+                              classical_only: Bool, members: List[NativeArchiveDecoded]) raises -> HostArchivePacked:
+    var numpy = classical_numpy(context)
+    var print_mode = archive_print_mode_unpack(members, context)
     # A public class's own `load` (the context _native_archive_bridge
     # connects) keys the schema on the class, not on the saved name: a
     # subclass loads its base's file, as the Python loaders did.
     var public_owner = PythonObject(None)
     if requested_class is not None and py_get(context, "archive_class_formats") is not None:
-        public_owner = host_archive_public_owner(path, arrays, requested_class, context)
-    var fmt = String(_archive_string(arrays, "format", context))
+        public_owner = host_archive_public_owner(path, members, requested_class, context, numpy, print_mode)
+    var fmt = native_archive_string(members, "format", numpy, print_mode)
     if classical_only and not py_contains(context["host_archive_classical_formats"], fmt):
         raise Error("model archive format does not name a classical host model")
-    var estimator = _archive_string(arrays, "estimator", context)
+    var estimator = native_archive_string(members, "estimator", numpy, print_mode)
     if public_owner is not None:
-        estimator = public_owner.__name__
+        estimator = _archive_class_name_unpack(public_owner)
     # Historical explicit CPU saves used their Host* class name. Admit only
     # these exact aliases within their matching unchanged archive schemas.
-    if fmt == "mojolearn-kde-1" and String(estimator) == "HostKernelDensity":
-        estimator = PythonObject("KernelDensity")
-    elif fmt == "mojolearn-iforest-1" and String(estimator) == "HostIsolationForest":
-        estimator = PythonObject("IsolationForest")
+    if fmt == "mojolearn-kde-1" and estimator == "HostKernelDensity":
+        estimator = "KernelDensity"
+    elif fmt == "mojolearn-iforest-1" and estimator == "HostIsolationForest":
+        estimator = "IsolationForest"
     var formats = context["host_archive_formats"]
     var classes = py_get(formats, fmt)
     if classes is None:
         raise Error("native host archive builder has no supported schema for " + fmt)
     var cls = py_get(classes, estimator)
     if cls is None:
-        raise Error("mojolearn: " + String(py_call(native_loaded_module("builtins").repr, path)) + " was saved by " + String(estimator) + ", which " + fmt + " does not hold")
+        raise Error("mojolearn: " + String(py_call(native_loaded_module("builtins").repr, path)) + " was saved by " + estimator + ", which " + fmt + " does not hold")
     if public_owner is not None:
         cls = requested_class
     elif requested_class is not None:
@@ -2756,23 +2777,44 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         if not matched:
             raise Error("model archive was saved by a different estimator")
         cls = requested_class
+    var result = HostArchivePacked()
+    result.cls = cls
+    result.public_owner = public_owner
+    result.fmt = fmt
+    result.estimator = estimator
+    if fmt == "mojolearn-scaler-1" and estimator == "MinMaxScaler":
+        result.value = minmax_archive_decoded(cls, members, context, print_mode)
+    elif fmt == "mojolearn-linear-1":
+        result.value = host_archive_linear_decoded(cls, members, estimator == "Ridge", context, print_mode)
+    elif fmt == "mojolearn-scaler-1" and estimator == "StandardScaler":
+        result.value = standard_archive_decoded(cls, members, context, print_mode)
+    elif fmt == "mojolearn-cholesky-1":
+        result.value = host_archive_cholesky_decoded(cls, members, path, context, print_mode)
+    else:
+        # Families awaiting typed schema migration retain their original PACK;
+        # decode warnings/errors were already emitted exactly once above.
+        result.value = archive_members_pack(members, context, False)
+    return result^
+
+
+def host_archive_build(path: PythonObject, context: PythonObject,
+                       requested_class: PythonObject, classical_only: Bool = False) raises -> PythonObject:
+    var decoded = host_archive_unpack(path, context, requested_class, classical_only)
+    var cls = decoded.cls
+    var public_owner = decoded.public_owner
+    var fmt = decoded.fmt
+    var estimator = decoded.estimator
+    var arrays = decoded.value
     var model = PythonObject(None)
-    if fmt == "mojolearn-linear-1":
-        # Admit the class layout before the existing linear builder allocates.
-        var probe = host_archive_object(cls, arrays, context)
-        model = classical_archive_build(cls, arrays, path, String(estimator) == "Ridge", context)
+    if ((fmt == "mojolearn-scaler-1" and (estimator == "MinMaxScaler" or estimator == "StandardScaler"))
+            or fmt == "mojolearn-linear-1" or fmt == "mojolearn-cholesky-1"):
+        model = decoded.value
     elif fmt == "mojolearn-pca-1" or fmt == "mojolearn-tsvd-1":
         model = host_archive_decomposition(cls, arrays, fmt == "mojolearn-pca-1", path, context)
     elif fmt == "mojolearn-cd-1":
-        model = host_archive_cd(cls, arrays, String(estimator) == "Lasso", path, context)
+        model = host_archive_cd(cls, arrays, estimator == "Lasso", path, context)
     elif fmt == "mojolearn-kernel-ridge-1" or fmt == "mojolearn-nystroem-1" or fmt == "mojolearn-rbf-sampler-1":
         model = host_archive_kernel(cls, arrays, 0 if fmt == "mojolearn-kernel-ridge-1" else (1 if fmt == "mojolearn-nystroem-1" else 2), path, context)
-    elif fmt == "mojolearn-scaler-1" and String(estimator) == "MinMaxScaler":
-        model = host_archive_minmax(cls, arrays, context)
-    elif fmt == "mojolearn-scaler-1" and String(estimator) == "StandardScaler":
-        model = scaler_archive_build(cls, arrays, path, context)
-    elif fmt == "mojolearn-cholesky-1":
-        model = host_archive_cholesky(cls, arrays, path, context)
     elif fmt == "mojolearn-embedding-1":
         model = host_archive_embedding(cls, arrays, context)
     elif fmt == "mojolearn-kmeans-1":
@@ -2798,7 +2840,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-radius-1":
         model = host_archive_radius(cls, arrays, path, context)
     elif fmt == "mojolearn-knn-1":
-        model = host_archive_neighbors(cls, arrays, 0 if String(estimator) == "NearestNeighbors" else (1 if String(estimator) == "KNeighborsClassifier" else 2), context)
+        model = host_archive_neighbors(cls, arrays, 0 if estimator == "NearestNeighbors" else (1 if estimator == "KNeighborsClassifier" else 2), context)
         # Native equivalent of the original loader's _mojolearn_after_fit:
         # a newly restored CPU neighbor model owns an empty query holder. A
         # public class's own `load` also set `used_query_tile_ = None`.
@@ -2834,7 +2876,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif py_contains(context["host_archive_forest_formats"], fmt):
         model = host_archive_forest(cls, arrays, fmt, context)
     else:
-        raise Error("native host archive schema has not been implemented: " + fmt + "/" + String(estimator))
+        raise Error("native host archive schema has not been implemented: " + fmt + "/" + estimator)
     if py_contains(context["host_archive_fitted_estimators"], estimator):
         py_setitem(sequential_fields(model), "_mojolearn_fitted", True)
     if requested_class is None:

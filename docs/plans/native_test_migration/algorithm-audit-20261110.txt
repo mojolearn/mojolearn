@@ -1,0 +1,116 @@
+Mojolearn independent migration source audit, 2026-11-10
+Snapshot: 8c5264994be08de642d527eaa7235c80e400e944
+Reviewer lane: lane/mojo-native-tests-20261110
+
+Conclusion and limits
+  No substituted numerical algorithm, changed tuned GPU arithmetic, or dropped
+  public feature was found in the reviewed linear/TSQR/archive/MinMax paths.
+  This is source evidence, not a performance result or full-codebase clearance.
+  Two throughput/copy gaps and one test compile defect are recorded below.
+  No compile, test, timing, cross-vendor identity or release was launched.
+
+Findings handed to owners
+  1. core/native_archive_read.mojo:47–48,70–72: serial setup of one native
+     text-cell owner per element, followed by a serial scan of every error
+     String, surrounds parallel decoding. This scales with string-array size,
+     not just fixed checkpoint schema metadata. Numeric payloads bypass it.
+     Archive owner confirmed the source debt and owns safe allocation/worker
+     error-summary repair. No measured speed regression asserted.
+  2. core/linear_tsqr_run.mojo:158–162,475: the CPU result path copies the
+     final host coefficient vector into caller-owned output. The prior
+     bindings/classical_tsqr.mojo at a209b57325^:438–440 returned its owned
+     final Array directly. GPU output downloads directly into caller storage,
+     with no added host bounce. This adds a CPU vector copy under the typed
+     caller-buffer contract; TSQR routing limits cols to 511. Producer informed
+     to assess final CPU elementwise output directly into caller storage.
+     This is a bounded source cost, not a measured regression or a reason to
+     weaken ownership. No product edits made by this audit lane.
+  3. checks/native_tests/archive_minmax.mojo:93: expected NaN literal
+     0x7FF8000000000000042 exceeds UInt64. Archive owner confirmed the typo
+     and is fixing it to the intended 0x7FF8000000000042. This is a fixture
+     compile defect, not evidence of a changed NaN conversion or algorithm.
+
+Linear/TSQR trace
+  core/linear_fit_run.mojo:29–49 retains weighted/one-feature Ridge through
+  x_linear's weighted descriptor; the former concatenated target/weight
+  workspace remains a native owned buffer with the same cells and parameters.
+  Lines63–84 retain Gram -> resident -> general-preparation/Ridge precedence.
+  core/linear_ols_run.mojo:19–22,38–86 retains resident, one-upload centered
+  TSQR and general weighted/prepared routes, including the same width and
+  tall-matrix support boundary. Native vendor/mode admission is explicit.
+  glm/linear_fit_device.mojo dispatches the pre-existing estimator/Gram/prep
+  functions; its route flags retain the prior controls. Prediction passes the
+  same request spans/wide flag to the existing endpoint.
+  Compared 1914c3c566^ with the audit snapshot across glm/x_linear/x_decomp/
+  x_metrics: changed files are descriptor/route metadata adapters plus
+  x_decomp/tsqr_host.mojo. Existing estimator, solve, decomposition, GPU TSQR
+  and metrics arithmetic implementations are unchanged in that comparison.
+  1f77d9291a's tsqr_host diff changes scratch ownership and parallel row
+  packing. Panel, block, combine-level kernels and tree order are unchanged.
+  keep=False no longer frees or replaces the retained keep=True singleton.
+  core/linear_tsqr_run.mojo:354–475 preserves SVD ordering, rank cutoff,
+  rank-deficient QR recovery, zero-rank basis, scaling and pseudoinverse ops
+  from bindings/classical_tsqr.mojo at a209b57325^:316–440.
+  Inherited host work remains: lm_intercept's exact host reduction and the
+  rank-deficient TSQR copy_host/host staging path already existed before this
+  migration. They are not new shortcuts and are not claimed GPU-only.
+  core/linear_score_run.mojo:63–65 predicts directly into the metric arena,
+  removing the prior separate prediction staging; target copy and native
+  metric program remain. No score equation was replaced in reviewed code.
+
+Archive/MinMax trace
+  core/native_archive_read.mojo:76–114 borrows stored payloads, owns only
+  decompressed bytes, verifies CRC, and parses members with host_parallelize.
+  core/native_archive_span.mojo:5–8 proves payload.copy() is two metadata
+  words, not a hidden payload duplication. NativeMinMax statistic views copy
+  that span and shape metadata, then publish one writable output allocation.
+  bindings/classical_archive_output.mojo:50–75 copies once into the actual
+  published ndarray/Array owner; GIL-bound Python object packing remains at
+  the boundary. Native writer signed-stride gather is chunk-parallel
+  (core/native_archive_write.mojo:119–131); members/hash work is parallel at
+  268–284. Ordered compressed streams use their existing native codec APIs.
+  core/native_archive_minmax.mojo:60–80 preserves three metadata words, two
+  endpoints, all five statistic vectors, raw Float64/signed/NaN words and
+  saved-mode/class admission. Its scalar tuple migration in minmax_metadata
+  changes representation only; endpoint conversion/admission is retained.
+  Unsupported dtype/codec policies remain explicit, rather than loading
+  objects through Python or silently substituting another numeric format.
+
+Numerical evidence source audit
+  linear_owner_cases.mojo:96–156 has independent Float64 weighted equations
+  and partial-pivot solve, not product-fit output as oracle. Ridge tolerances
+  3e-4/3e-5 and OLS 5e-4/3e-4 match the prior Python files. Rank-deficient/wide
+  and score closed forms remain. Theta's full-fit/tail parity is explicitly
+  labeled parity and supplemented by independent exact closed forms, not
+  presented as an independent reference by itself. No old hashes were changed.
+
+Companion fixture repairs
+  Root's maximize scalar-type fix 8c5264994b and accepted empty-state sentinel
+  repair 92648 were propagated unchanged. Commit 6b4e1153bc permits correct
+  later private scratch writes for bee32a8a30 while keeping source/guards,
+  invalid-cell and earliest-error checks; four large forward/reversed fixtures
+  extend the suite to 39. Real public no-publication-on-error tests remain.
+  The poisoned public optimizer entry test now targets the connected native
+  factory key, removing its dependence on the deleted legacy dispatch key.
+
+Evidence
+  ~/mojolearn-evidence/integ-finish-20261110/algorithm-audit-8c5264994b/
+    contains the exact reviewed native source snapshots.
+  algorithm-audit-tsqr.diff, algorithm-audit-ridge.diff,
+  algorithm-audit-linear-kernel-paths.txt and algorithm-audit-changed-files.tsv
+    retain source comparison evidence. No runtime pass is implied.
+
+Resolution after snapshot
+  Root e05d26af2a removes finding 2: the final CPU elementwise operation writes
+  directly into caller coefficient storage, retaining the same opcode/formula;
+  GPU output retains its original operation and direct download. No new test
+  is added just to mirror this plumbing; existing linear owner fixtures cover
+  the result and run with the consolidated bundle. Compilation/runtime owed.
+
+Archive repair source review
+  Owner 98d003df3a resolves finding 1: final native text owners are allocated
+  uninitialized, and workers placement-initialize every assigned cell, including
+  empty cells after decode errors. Ordered worker-local first-error summaries
+  replace the per-cell serial scan. Native decode formulas and numeric early
+  return remain unchanged. Nine direct native fixtures accompany the repair;
+  root owns compilation/runtime. Owner 21ae6d801f fixes finding 3's NaN literal.

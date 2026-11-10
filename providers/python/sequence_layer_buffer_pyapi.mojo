@@ -6,7 +6,7 @@ from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_admission import opt_value
-from bindings.optimizer_public_door import py_ints
+from providers.python.array_layout_boundary import native_shape_pack
 from bindings.optimizer_device_native import device_shape, shape_count
 from bindings.sequence_optimizer_native import seq_binding
 from bindings.classical_arrays import classical_input, classical_typed, classical_address
@@ -24,7 +24,7 @@ def _array(shape: List[Int], context: PythonObject, wide: Bool = False) raises -
     _ = shape_count(shape)
     var input = context["input_context"]
     classical_connect_numpy(input)
-    return classical_typed(py_ints(shape), "<i8" if wide else "<f4", input)
+    return classical_typed(native_shape_pack(shape), "<i8" if wide else "<f4", input)
 
 
 struct SequenceFloatBuffer(Movable):

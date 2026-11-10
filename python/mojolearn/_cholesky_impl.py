@@ -221,22 +221,9 @@ class Cholesky(NumericModeMixin):
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
 
-# The 0.8.55 writer's members and refusals, in its order: the fit check, the
-# numeric mode, the factor's dtype and shape, then the field vectors. The
-# saved estimator is always "Cholesky"; -1.0 in jitter_param means "the
-# profile's ridge" (None), the fitted ridge is in `scalars` either way.
-_native_archive_bridge.register(Cholesky, _CHOLESKY_FORMAT, (
-    ("need", "L_", "RuntimeError", "mojolearn Cholesky: call fit before save"),
-    ("format", "format", _CHOLESKY_FORMAT),
-    ("format", "estimator", "Cholesky"),
-    ("mode", "numeric_mode", "mojolearn Cholesky: "),
-    ("check_array", "L_", "<f4", (("int", "n_"), ("int", "n_")), "ValueError",
-     "mojolearn Cholesky: L_ must be float32 {want}, got {dtype} {shape}"),
-    ("array", "L", "L_"),
-    ("i8", "meta", (("int", "n_"), ("int", "info_"), ("int", "nb_"))),
-    ("f8", "scalars", (("float", "_logdet"), ("float", "jitter_"))),
-    ("f8", "jitter_param", (("none_real", "jitter", -1.0),)),
-))
+# The fixed Cholesky archive family is implemented by typed native plans.
+# Its estimator name remains "Cholesky" and jitter_param=-1 means None.
+_native_archive_bridge.register(Cholesky, _CHOLESKY_FORMAT, "native_cholesky")
 
 
 __all__ = ["Cholesky"]

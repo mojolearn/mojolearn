@@ -612,6 +612,34 @@ def test_public_load_error_preserves_path_graph_aliases_and_cycles(tmp_path, kin
 
 
 @pytest.mark.parametrize("kind", ["fileio", "buffered"])
+@pytest.mark.parametrize("scalar_first", [True, False])
+@pytest.mark.skipif(not hasattr(sys, "set_int_max_str_digits"), reason="interpreter has no native integer repr digit limit")
+def test_public_load_error_preserves_scalar_exception_before_or_after_file_cycle(tmp_path, kind, scalar_first):
+    # This is a C-API exception ownership seam: native graph tests cover the
+    # display order, while this checks restoration of the actual Python error.
+    raw = _input(tmp_path, _payload(estimator="Bogus"), "fileio")
+    value = raw if kind == "fileio" else io.BufferedReader(raw)
+    old_limit = sys.get_int_max_str_digits()
+    large = 1 << 3000
+    name = [PurePosixPath("//a/./b"), large, value] if scalar_first else [PurePosixPath("//a/./b"), value, large]
+    raw.name = name
+    try:
+        sys.set_int_max_str_digits(640)
+        error_type = ValueError if scalar_first else RuntimeError
+        with pytest.raises(error_type) as expected:
+            repr(value)
+        audit = audit_native_call(HostLinearRegression.load, value)
+        _refused(audit, error_type)
+        assert str(audit.exception) == str(expected.value)
+        assert raw.name is name
+    finally:
+        sys.set_int_max_str_digits(old_limit)
+        raw.name = "restored"
+        value.close()
+        name.clear()
+
+
+@pytest.mark.parametrize("kind", ["fileio", "buffered"])
 @pytest.mark.parametrize("depth", [64, 256])
 def test_public_load_error_formats_deep_supported_path_names(tmp_path, kind, depth):
     raw = _input(tmp_path, _payload(estimator="Bogus"), "fileio")
