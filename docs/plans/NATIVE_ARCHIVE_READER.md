@@ -116,6 +116,23 @@ readback. The separate generic `host_archive_minmax` map path is unchanged and
 remains migration work. Affected development owner: `runtime_prep`; its source
 closure also changes through `minmax_metadata.mojo`. No estimator kernel changes.
 
+Text-cell storage is now allocated once without a serial construction pass.
+Each host worker constructs and moves its assigned owning cells directly into
+that final allocation. Every slot is initialized even when its decode fails,
+so error unwinding can safely destroy the whole list. A worker keeps its first
+logical error; the caller scans worker summaries in chunk order. The removed
+per-cell error array and serial error scan are no longer proportional overhead
+on large text payloads. Numeric members retain their early-return path. Nine
+direct native fixtures cover C/F Unicode and byte cells, embedded NULs,
+supplementary code points, empty/zero-width input, input-owner release, and
+multiple errors whose serialized and logical orders differ.
+
+This uses the supported uninitialized List allocation and pointer
+`unsafe_write` placement API, which must initialize rather than assign over
+owning elements: [Mojo List source](https://github.com/modular/modular/blob/main/mojo/stdlib/std/collections/list.mojo)
+and [Mojo 1.0 pointer API migration](https://github.com/modular/modular/blob/main/Mojo/docs/site/releases/v1.0.0.md).
+Compilation and runtime coverage remain pending with the orchestrator.
+
 Remaining work is codec wheel dependency qualification and affected public
 boundary tests. Existing API/protocol/exception and file ownership tests remain
 in place. The old Python-object ZIP,
