@@ -58,7 +58,8 @@ struct SequenceBufferFormat(Copyable, Movable):
             if first == "@" or first == "=" or first == "<" or first == ">" or first == "!":
                 if first == "<" or first == ">" or first == "!":
                     self.prefix = ">" if first == "!" else first
-                format = String(format[byte=1:])
+                var scalar_format = String(format[byte=1:])
+                format = scalar_format^
         self.kind = String()
         if format == "?":
             self.kind = "b"
