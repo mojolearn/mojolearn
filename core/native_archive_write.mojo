@@ -16,12 +16,12 @@ from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 
 struct ArchiveLibraries(Defaultable, Movable):
-    var zlib: OwnedDLHandle
+    var zlib: Optional[OwnedDLHandle]
     var lock: List[Int64]
     var ready: Bool
 
     def __init__(out self):
-        self.zlib = OwnedDLHandle()
+        self.zlib = None
         self.lock = List[Int64](length=1, fill=0)
         self.ready = False
 
@@ -38,9 +38,10 @@ def archive_zlib() raises -> Int:
             var name = String("libz.so.1")
             comptime if CompilationTarget.is_macos():
                 name = "/usr/lib/libz.1.dylib"
-            slot[].zlib = OwnedDLHandle(name, flags=2)
-            if not slot[].zlib.check_symbol("crc32"):
+            var library = OwnedDLHandle(name, flags=2)
+            if not library.check_symbol("crc32"):
                 raise Error("native archive: system zlib does not export crc32")
+            slot[].zlib = library^
             slot[].ready = True
     finally:
         shared_slot_unlock(lock)
@@ -54,7 +55,7 @@ def archive_crc32(library: Int, seed: UInt32, address: Int, count: Int) raises -
     # crc32 takes uInt lengths even on LP64. Never truncate a wide buffer.
     while at < count:
         var size = min(count - at, 0xFFFFFFFF)
-        value = slot[].zlib.get_function[UInt64]("crc32")(
+        value = slot[].zlib.value().get_function[UInt64]("crc32")(
             value, MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address + at), c_uint(size))
         at += size
     return UInt32(value)
@@ -109,8 +110,8 @@ struct NativeArchiveMember(Movable):
             return
         var storage = List[UInt8](length=self.size, fill=0)
         var dst = storage.unsafe_ptr()
-        var dimensions = self.shape.unsafe_ptr()
-        var strides = self.strides.unsafe_ptr()
+        var dimensions = self.shape.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+        var strides = self.strides.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
         var rank = len(self.shape)
         var width = self.width
         var source = self.source
@@ -317,7 +318,7 @@ def archive_central(record: NativeZipRecord) -> List[UInt8]:
     archive_uint(bytes, UInt64(record.size), 4)
     archive_uint(bytes, UInt64(record.size), 4)
     archive_uint(bytes, UInt64(len(record.filename)), 2)
-    archive_uint(bytes, 12 if wide else 0, 2)
+    archive_uint(bytes, UInt64(12 if wide else 0), 2)
     archive_uint(bytes, 0, 2)
     archive_uint(bytes, 0, 2)
     archive_uint(bytes, 0, 2)
