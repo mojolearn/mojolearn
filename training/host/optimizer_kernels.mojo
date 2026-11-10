@@ -3,11 +3,19 @@
 from training.optimizer_kernels import OptKernels
 from training.optimizer_public_common import PublicStep, PublicStepOut
 from training.host.optimizer_public_host import (
-    public_step_host, public_clip_host, public_accumulate_host, host_download, host_upload,
+    public_step_host, public_clip_host, public_accumulate_host, host_download, host_upload, host_open, host_close,
 )
 
 
 struct HostOptKernels(OptKernels):
+    @staticmethod
+    def open(count: Int) raises -> Int:
+        return host_open(count)
+
+    @staticmethod
+    def close(handle: Int) raises -> Int:
+        return host_close(handle)
+
     @staticmethod
     def is_host() -> Bool:
         return True
