@@ -37,5 +37,3 @@ def test_guard_rejects_direct_cpython_c_call_without_python_import(tmp_path):
     (tmp_path / 'core/native.mojo').write_text('from std.ffi import external_call\nexternal_call["PyObject_Call", Int](a, b, c)\n')
     _, _, failures = check(tmp_path, require_native_only=True)
     assert any(reason == 'Python/CPython helper token in native code' for _, reason in failures)
-
-
