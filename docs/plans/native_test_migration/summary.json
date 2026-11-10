@@ -6,11 +6,11 @@
   "file_decisions": {
     "needs-semantic-review": 572,
     "retain-python-boundary": 22,
-    "split-partial": 1,
-    "split-migrated": 11,
+    "split-partial": 2,
+    "split-migrated": 12,
     "review-module-gate": 1,
     "retain-tooling": 2,
-    "split-needed": 7
+    "split-needed": 5
   },
   "reviewed_files": 44,
   "not_a_gate": true,
@@ -226,6 +226,16 @@
         "checks/native_tests/lr_schedule_check.mojo"
       ],
       "handoff": "docs/plans/native_test_migration/lr-schedule-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "path": "python/mojolearn/tests/test_tsa_resident_state.py",
+      "change": "Move Holt-Winters numerical per-call/resident comparisons to native CPU20 intervals and GPU4 owners x5 intervals, plus independent exact dyadic state expectations, warmup NaNs, source snapshot mutation and lifecycle checks. Keep actual Python fit/publication/finalizer; ARIMA/Theta/Prophet numerical migration remains pending. Correct stale finite-scan inventory after reading already integrated native migration.",
+      "native_checks": [
+        "checks/native_tests/holtwinters_state_cpu.mojo",
+        "checks/native_tests/holtwinters_state_gpu.mojo"
+      ],
+      "handoff": "docs/plans/native_test_migration/holtwinters-state-handoff.txt",
       "source_review_only": true
     }
   ],

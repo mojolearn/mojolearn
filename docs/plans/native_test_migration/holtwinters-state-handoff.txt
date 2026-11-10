@@ -1,0 +1,57 @@
+Mojolearn native Holt-Winters fitted-state migration, 2026-11-10
+
+Coverage
+  CPU20 independent queries =2 shapes x2 seasonal modes x5 intervals.
+  GPU4 retained owners x5 intervals, each tested through resident and per-call
+  paths. Original48 observations/4 series/period4 and spans10:40,40:56,50:60,
+  forecast7 are preserved; added warmup0:11,41 observations/7 series/period6,
+  and multiplicative mode. Native packed state has independent dyadic level,
+  trend and seasonal formulas; expected Float64 equations are exact in f32
+  for these bounds, with no product numerical helper as oracle. Warmup NaNs
+  have the documented canonical word. All output cells and sentinel bounds
+  are checked, plus exact resident/per-call agreement.
+
+State and ownership
+  CPU calls hw_predict_in_sample_ptr and hw_forecast_from_state_ptr directly,
+  retains original component words and checks no input writes. GPU calls
+  holtwinters_predict_ptr/forecast_ptr and holtwinters_resident_prepare/query/
+  release/count. After prepare, mutate the source span: retained predictions
+  must still match the original independent state. Five changing intervals
+  share one owner and must not allocate another slot. Double release restores
+  the prior count; stale-handle query refuses without writing output. Native
+  component/output owners remain live through every final raw pointer use.
+  These are query/state checks, not an added fitting-algorithm oracle.
+
+Parallelism
+  CPU intervals run via host_parallelize; input and oracle cells use the
+  same native pool. GPU owner/query submission is ordered for existing shared
+  context ownership, with parallel kernels/oracle cells. No claim of GPU
+  concurrent-query safety, device identity, speed or measured busy cores.
+
+Python retained and remaining migration
+  test_tsa_resident_state.py retains five definitions. Holt-Winters now checks
+  actual Python fit, horizon-specific result shape/dtype, lazy resident slot
+  count and public finalizer. Its deep-copied per-call twin and NumPy numerical
+  comparison are removed. The shared twin helper stays for untouched ARIMA
+  cases. ARIMA/exogenous ARIMA, Theta and Prophet numerical portions remain
+  pending. Existing Python readonly fitted-array, refit and finalizer seams
+  are not claimed replaceable by native handle tests.
+  Also correct the finite-scan inventory: its integrated source already moved
+  the large position sweep to finite_scan.mojo; remaining three definitions
+  test actual Python admission/refusal/equivalent-layout publication. This
+  artifact correction claims no new run.
+
+Root commands; lane has not compiled/run
+  bash tools/compile_slot.sh pixi run check-native-holtwinters-state-cpu
+  bash tools/compile_slot.sh pixi run check-native-holtwinters-state-gpu
+  Compile-only, existing normal settings/target:
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/holtwinters_state_cpu.mojo -o "$HOME/mojolearn-evidence/holtwinters-state-cpu"
+  bash tools/compile_slot.sh pixi run mojo build -I . checks/native_tests/holtwinters_state_gpu.mojo -o "$HOME/mojolearn-evidence/holtwinters-state-gpu"
+  Run each exact binary. Public family _mojolearn_tsa / _mojolearn_tsa_host:
+  pytest python/mojolearn/tests/test_tsa_resident_state.py on installed artifacts.
+  CPU builds have no resident GPU entries and retain their explicit skips.
+
+Status
+  Source/AST/TOML/JSON/diff review only; root compilation/runtime owed. No
+  product/kernel changes, new loader/build scheme, timing, identity, A/B,
+  rented box or release. Native inference APIs already exist in lane base.

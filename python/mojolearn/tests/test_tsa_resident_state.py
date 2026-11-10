@@ -73,19 +73,20 @@ def test_arima_exog_resident_matches_per_call():
     np.testing.assert_array_equal(got.view(np.uint32), np.asarray(twin.forecast(5, future)).view(np.uint32))
 
 
-def test_holtwinters_resident_one_call_matches_per_call():
+def test_holtwinters_resident_public_outputs_and_lifetime():
     count = _count("_mojolearn_tsa", "holtwinters_resident_count")
     y = (np.sin(np.arange(4 * 48) * 0.5).reshape(4, 48) + 3.0).astype(np.float32)
     before = count()
     model = ml.ExponentialSmoothing(y, seasonal="add", seasonal_periods=4, ts_num=4).fit()
-    twin = _per_call_twin(model, ("_comps",))
+    # Numerical per-call/resident words and independent state equations moved
+    # to holtwinters_state_{cpu,gpu}.mojo. Keep the actual public fitted owner,
+    # horizon-dependent result packing, lazy resident slot and finalizer here.
     spans = [(10, 40), (40, 56), (50, 60)]
     for start, end in spans:
         got = np.asarray(model.predict(start, end))
-        want = np.asarray(twin.predict(start, end))
-        np.testing.assert_array_equal(got.view(np.uint32), want.view(np.uint32))
+        assert got.shape == (4, end - start) and got.dtype == np.float32
     got = np.asarray(model.forecast(7))
-    np.testing.assert_array_equal(got.view(np.uint32), np.asarray(twin.forecast(7)).view(np.uint32))
+    assert got.shape == (4, 7) and got.dtype == np.float32
     assert count() == before + 1
     del model
     gc.collect()
