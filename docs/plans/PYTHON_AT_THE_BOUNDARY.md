@@ -162,10 +162,10 @@ attribute.
 
 ## 4. What cannot leave Python, and how it is confined
 
-1. **The public classes and the scikit-learn protocol.** `__init__` storing parameters, `get_params`, `set_params`,
-   `clone`, `__repr__`, `__sklearn_tags__` (the 2026-10-24 exception: tag helpers may run in Python in the
-   compatibility layer). These are pure Python on the Python side and make no native call. Native code never calls
-   into them: audit A item 10 (`classical_tags.mojo:22`, `scaler_tags_native.mojo:23`) is a violation lane P1 removes.
+1. **The public Python API.** Python exposes the public classes and hands each operation to one native call.
+   Parameter storage and validation, `get_params`, `set_params`, Mojolearn-owned cloning and representation work
+   belong in Mojo, with Python objects confined to UNPACK/PACK. Only `__sklearn_tags__` and its tag-only helpers
+   may execute Python metadata code (the 2026-10-24 exception). Native product operations must never call them.
 2. **User-supplied Python objects.** A callable `init`, a custom scorer, a custom estimator inside a pipeline or a
    search. UNPACK refuses them before any hook runs and names the native alternative. One exception exists in code
    today, KMeans callable `init` (`kmeans_native.mojo:244-262`); lane P1 turns it into a refusal.
@@ -177,23 +177,20 @@ attribute.
 4. **Strings.** Estimator names, option strings and string labels arrive as Python `str`. UNPACK converts each once.
 5. **Import-time wiring.** Connecting the modules at import stays Python, runs once, and is tagged as such (lane P5).
 
-## 5. Enforcement with no blind spots
+## 5. Typed boundaries and execution evidence
 
-One rule, checked on file paths and tokens, with no comments consulted:
+Owner direction, 2026-11-10: delete the kernel-path/token source guard. Do not extend it, restore it under another
+name, or replace it with a source-count baseline gate. A path classification excluding binding/provider code is
+not evidence that a public operation avoids Python.
 
-> `PythonObject`, `Python.`, `py_call`, `py_get`, `py_type`, `py_fields`, `native_loaded_module`, `PyObject`,
-> `from python import`, and any import of a boundary module, may appear only in a boundary file (section 2.4).
+The architecture still confines Python objects and CPython interaction to UNPACK/PACK (section 2.4). RUN takes
+typed Mojo requests and returns typed Mojo results, uses native state handles and native function tables, and
+imports no Python support. Complete the actual call paths rather than declaring files compliant by name or tag.
 
-- Tool: extend `tools/no_python_in_kernels.py` (lane P4 is restoring its kernel rule now) with the path table.
-- Migration: a baseline file lists the files that violate it today (the 825). A push fails if a file not on the list
-  violates the rule, or if a listed file's violation count rises. A family's migration removes its files from the
-  list. The list can only shrink; the check prints its length.
-- This replaces, family by family, the tag-based checks (`# driver-loop`, `# glue`, `# cpu-route`): a RUN file has no
-  Python object to loop over, so there is nothing for a tag to excuse. The loop checks stay for boundary files, where
-  the rule becomes "no loop over data in UNPACK or PACK except the one typed flatten".
-- The honest inventory lane P4 is building reports, per public method, the number of Python object operations between
-  entry and return. After migration that number is a small constant per method, independent of data size, and the
-  check can assert an upper bound.
+Track the remaining migration work in an inventory with its scope stated. Source counts describe work remaining;
+they do not prove runtime correctness, callback freedom or speed. Move kernel and native-state correctness tests
+to Mojo, retain Python tests of the Python API boundary, and audit executed public calls for Python callbacks.
+Measure the affected operations on NVIDIA and AMD before claiming that removing object-layer work improved speed.
 
 ## 6. The pilot
 
@@ -237,8 +234,8 @@ Gate before any second family starts:
 
 1. Compile green on the Mac and the NVIDIA / AMD cross-compile.
 2. Import, the Ridge and LinearRegression test files, and the light smoke pass on the Mac.
-3. Same bits: the `ridge` / `ols` identity lanes' digests equal the base's on the Mac (the kernels are unchanged, so
-   a difference is a bug). This is a development check on one machine, not the release verification.
+3. Focused correctness and lifetime tests of the compiled pilot. No identity runs or old-version digest matching
+   during development: cross-vendor identity is recorded once after the final source freeze, before release.
 4. Measured on NVIDIA and AMD against the base: ols and ridge fit and predict on the board rows, and the call
    overhead on a 16-row fit and a single-row predict (where the object-layer cost is the whole time). The pilot is
    kept only if nothing is slower.
@@ -263,8 +260,10 @@ Waves 1 to 6 touch disjoint files and can run as parallel lanes once `core/bound
 `core/state_registry.mojo` and `core/entry_table.mojo` are frozen by the pilot. Each wave is compiled, smoked and
 tested before it merges; no wave merges on compile alone.
 
-Honest total: the pilot is days. The rollout is on the order of 840 files and several weeks of lane, compile and test
-rounds. It should not start until the current tree imports and passes its tests.
+The design spans roughly 840 files; the pilot and rollout need successive implementation, compile, test and
+measurement rounds. Owner starting order, 2026-11-10: compile the current integration branch and merge it into main
+if compilation succeeds, without holding that merge for import or smoke tests; then begin this full migration.
+That starting instruction does not turn compilation into runtime correctness or performance evidence.
 
 ## 8. Risks, and what would make me stop
 
@@ -280,7 +279,8 @@ rounds. It should not start until the current tree imports and passes its tests.
    guard; the pilot's tests must include use-after-release and pickle round trips.
 4. **Public behaviour.** Error types and messages must not change; the pilot diffs them against the base's tests.
    Fitted attributes become read-only views. Parameter validation order may shift between type and value errors.
-5. **Bits.** None expected: the kernels and their arguments are the same. A digest difference on the pilot is a bug.
+5. **Bits.** Matching an older version's output is not a requirement. Preserve algorithm correctness and quality;
+   the final frozen release must agree across the supported GPU vendors and the required CPU reference column.
 6. **Scope creep.** This design does not move any algorithm, does not touch a tuned kernel and does not change the
    executor. A lane that finds itself editing a kernel has left the design.
 
@@ -291,10 +291,9 @@ is one family behind one merge) and the finding is written up.
 ## 9. Open questions for Andrew
 
 1. **Pilot family.** Ridge and LinearRegression first, then LogisticRegression. Recommendation: yes.
-2. **Does the rollout gate 0.8.67?** The pilot and the worst callbacks (lanes P1 to P3) can be in 0.8.67. The full
-   rollout is weeks. Recommendation: 0.8.67 ships the regression fixes once the tree is stable and measured, with the
-   pilot in it as proof; the rollout is the next program. This is a change to "no release while work is open", so it
-   is yours to decide.
+2. **The full rollout gates 0.8.67.** Decided by Andrew on 2026-11-09 and reaffirmed on 2026-11-10: complete the
+   Python-object to Mojo-value migration and the applicable test migration before release. Do not defer the full
+   rollout to a later release or propose a release date.
 3. **`mojolearn.Array`.** Keep it as a thin Python class over a native storage handle, with every method one native
    call and no Mojo code reading `_store`. Recommendation: yes.
 4. **List and string inputs.** Accept them with one typed flatten in UNPACK, or refuse lists and require arrays.
