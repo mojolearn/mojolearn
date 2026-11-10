@@ -1,164 +1,26 @@
-"""DEVIATION 2489: the Mojo nonzero scan behind `_spectral_impl._coo_triples`
-against the pure-Python loop it replaced, on raw bytes, never on values.
+# SPDX-License-Identifier: Apache-2.0
+"""Python admission/return/refusal checks for native dense-to-COO scans.
 
-The oracle is the Python loop that used to live in `_coo_triples`
-(DEVIATION 2373), kept HERE and nowhere else: the package has no Python
-fallback for a native helper (removed 2026-09-10). Both must produce
-identical int32 row bytes, int32 column bytes and float32 value bytes,
-including the scan order. Values are planted so that every branch of the
-nonzero test is exercised: exact zeros, -0.0 (a zero), NaN (NOT a zero),
-subnormals, values that are nonzero in float64 but narrow to 0.0f (kept as
-an explicit zero, as np.nonzero on the source dtype kept them), float32
-rounding ties chosen so round-to-nearest-even and round-half-away
-disagree, and overflow to inf.
+The arithmetic matrix, IEEE edge cases, scan order and integer RNE oracle
+live in checks/native_tests/nonzero_scan.mojo. This file checks the Python
+boundary only: exact sparse inputs, refusal before Python callbacks, buffer
+shapes/dtypes, and error translation from the native functions.
 """
 import array
-import math
-import random
-import struct
 
 import pytest
 
-from mojolearn import _buffer
-from mojolearn._array import Array
-from mojolearn._buffer import as_f64_c
+from mojolearn import Array, _buffer
 from mojolearn._spectral_impl import _coo_triples
 
 
-def _oracle(A):
-    """The retired DEVIATION 2373 loop, verbatim: the definition of the
-    answer, only slow."""
-    dense, _ = as_f64_c(A, ndim=2, name="X")
-    r_idx, c_idx, values = [], [], []
-    for r, row in enumerate(dense.tolist()):
-        for c, v in enumerate(row):
-            if v != 0.0:
-                r_idx.append(r)
-                c_idx.append(c)
-                values.append(v)
-    return (Array.from_list(r_idx, "<i4"), Array.from_list(c_idx, "<i4"),
-            Array.from_list(values, "<f4"), dense.shape[0])
-
-
-def _f32_ties():
-    """float64 values exactly halfway between two adjacent float32s, whose
-    two candidate roundings differ in the last bit's parity."""
-    out = []
-    for m in (0x800001, 0x800003, 0x800005, 0xFFFFFD, 0xFFFFFF):
-        lo = struct.unpack("<f", struct.pack("<I", m))[0]
-        hi = struct.unpack("<f", struct.pack("<I", m + 1))[0]
-        out.append((lo + hi) / 2.0)  # exact in float64
-        out.append(-(lo + hi) / 2.0)
-    return out
-
-
-def _planted_values():
-    vals = [
-        0.0, -0.0, 1.0, -1.0, 2.5, 1e-300, -1e-300,  # 1e-300 -> 0.0f, kept
-        5e-324, 1e-45, 1.4e-45, 1e-38, 1.1754943508222875e-38,  # subnormal f32
-        3.4028234663852886e38, 3.5e38, -3.5e38, 1e300,  # FLT_MAX, overflow
-        float("inf"), -float("inf"), float("nan"), -float("nan"),
-        0.1, 0.2, 0.3, 1.0 / 3.0, math.pi, math.e,
-    ]
-    vals += _f32_ties()
-    return vals
-
-
-def _matrix(n, seed, zero_fraction=0.6):
-    rng = random.Random(seed)
-    planted = _planted_values()
-    rows = []
-    for r in range(n):
-        row = []
-        for c in range(n):
-            u = rng.random()
-            if u < zero_fraction:
-                row.append(0.0 if rng.random() < 0.9 else -0.0)
-            elif u < zero_fraction + 0.2:
-                row.append(rng.choice(planted))
-            else:
-                row.append(rng.uniform(-10.0, 10.0))
-        rows.append(row)
-    return rows
-
-
-def _as_bytes(triple):
-    rows, cols, vals, n = triple
-    assert rows.dtype == "<i4" and cols.dtype == "<i4" and vals.dtype == "<f4"
-    assert rows.shape == cols.shape == vals.shape
-    # `bytes(array)` reads the buffer protocol, which a pure-Python Array
-    # exports on 3.12+ only; on 3.10 and 3.11 `bytes()` iterates the Python
-    # scalars instead and fails on the first float. `tobytes()` is the raw
-    # store on every supported Python (measured 2026-09-23, 26 cells red on
-    # 3.10 and 3.11 for this line alone).
-    return rows.tobytes(), cols.tobytes(), vals.tobytes(), n
-
-
-def _run_both(monkeypatch, A):
-    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
-
-
-@pytest.mark.parametrize("n", [1, 2, 3, 7, 16, 33, 64, 129])
-@pytest.mark.parametrize("seed", [0, 1, 2])
-def test_dense_scan_bytes_match_python_loop(monkeypatch, n, seed):
-    A = _matrix(n, seed * 1000 + n)
-    ref, got, _ = _run_both(monkeypatch, A)
-    assert got == ref
-    # The Python arm on its own is a real assertion too: the planted NaNs
-    # must be present and the -0.0s absent.
-    rows, cols, vals, size = ref
-    assert size == n
-    flat = [v for row in A for v in row]
-    expect_nnz = sum(1 for v in flat if v != 0.0)
-    assert len(rows) == 4 * expect_nnz
-
-
-def test_every_planted_value_in_one_row(monkeypatch):
-    planted = _planted_values()
-    n = len(planted)
-    A = [[0.0] * n for _ in range(n)]
-    for i, v in enumerate(planted):
-        A[i][i] = v          # diagonal carries each planted value once
-        A[0][i] = v          # row 0 carries them all in order
-    ref, got, _ = _run_both(monkeypatch, A)
-    assert got == ref
-    rows, cols, vals, _ = ref
-    r = array.array("i"); r.frombytes(rows)
-    c = array.array("i"); c.frombytes(cols)
-    v = array.array("f"); v.frombytes(vals)
-    # Scan order is row-major: row 0 first, then the diagonal from row 1.
-    first_row_count = sum(1 for x in planted if x != 0.0)
-    assert list(r[:first_row_count]) == [0] * first_row_count
-    assert all(rr <= r[i + 1] for i, rr in enumerate(r[:-1]))
-    # 1e-300 narrowed to +0.0f is KEPT; -0.0 and 0.0 are dropped.
-    kept = [struct.pack("<f", x) for x in v]
-    assert struct.pack("<f", 0.0) in kept
-    assert struct.pack("<f", -0.0) not in kept or any(x == -1e-300 for x in planted)
-    # NaN kept with a NaN payload (any), infinities kept.
-    assert any(math.isnan(x) for x in v)
-    assert any(math.isinf(x) and x > 0 for x in v)
-
-
-def test_ties_round_to_even_not_away(monkeypatch):
-    ties = _f32_ties()
-    n = len(ties)
-    A = [[0.0] * n for _ in range(n)]
-    for i, t in enumerate(ties):
-        A[i][i] = t
-    ref, got, _ = _run_both(monkeypatch, A)
-    assert got == ref
-    v = array.array("f"); v.frombytes(ref[2])
-    for t, x in zip(ties, v):
-        # round-half-away would land on the odd neighbor; RNE on the even
-        assert struct.unpack("<I", struct.pack("<f", x))[0] & 1 == 0
-        assert abs(x - t) <= abs(struct.unpack("<f", struct.pack("<f", t))[0] - t)
-
-
-def test_all_zero_and_all_nonzero(monkeypatch):
-    for A in ([[0.0] * 5 for _ in range(5)], [[-0.0] * 3 for _ in range(3)],
-              [[1.0] * 4 for _ in range(4)]):
-        ref, got, _ = _run_both(monkeypatch, A)
-        assert got == ref
+def test_dense_boundary_returns_native_typed_buffers():
+    rows, cols, values, n = _coo_triples([[0.0, 2.5], [-1.0, -0.0]])
+    assert n == 2
+    assert rows.dtype == cols.dtype == "<i4" and values.dtype == "<f4"
+    assert rows.shape == cols.shape == values.shape == (2,)
+    assert rows.tolist() == [0, 1] and cols.tolist() == [1, 0]
+    assert values.tolist() == [2.5, -1.0]
 
 
 def test_sparse_input_refuses_python_protocol_without_imports_or_callbacks(monkeypatch):
