@@ -3,10 +3,13 @@
 views (reshape, flatten, squeeze, unsqueeze, permute, transpose), sums,
 means and max over axis sets, NumPy broadcasting, the batched product,
 concat / split / take, softmax along an axis, conv2d and the 2-D pools, and
-their gradients in a recording session. Small, odd, non-board shapes. Every
-case checks values against NumPy (exactly for copies and single roundings,
-with a tolerance for sums), runs twice for the same digest, and prints
-RANKN_DIGEST lines to diff across CPU, Metal, NVIDIA and AMD."""
+their gradients in a recording session. Small, odd, non-board shapes.
+
+Views, axis reductions and first-maximum gradients are checked directly in
+checks/native_tests/rankn_views_cases.mojo; Python keeps their public shape,
+dtype and buffer-packing seams. The remaining numerical cases below still
+use NumPy references and the legacy repeated-digest helper pending migration.
+"""
 import hashlib
 
 import numpy as np
@@ -83,14 +86,14 @@ def _views_run():
     return out
 
 
-def test_views():
-    X = np.arange(105, dtype=np.float32).reshape(3, 5, 7) * 0.25 - 4.0
-    r, f, u, q, p, t, tm, pr = _twice("views", _views_run)
-    assert np.array_equal(r, X.reshape(15, 7)) and np.array_equal(f, X.reshape(3, 35))
-    assert np.array_equal(u, X[:, None]) and np.array_equal(q, X)
-    assert np.array_equal(p, X.transpose(2, 0, 1)) and np.array_equal(t, X.transpose(2, 1, 0))
-    assert np.array_equal(tm, X.transpose(0, 2, 1))
-    assert np.array_equal(pr, X.transpose(2, 0, 1).reshape(21, 5))
+def test_view_methods_pack_expected_shapes_and_dtypes():
+    results = _views_run()
+    shapes = [(15, 7), (3, 35), (3, 1, 5, 7), (3, 5, 7),
+              (7, 3, 5), (7, 5, 3), (3, 7, 5), (21, 5)]
+    for value, shape in zip(results, shapes):
+        assert value.dtype == np.float32 and value.shape == shape
+    # A tiny public dispatch/packing sentinel for permute followed by reshape.
+    assert results[-1][0, 1] == -2.25
 
 
 def test_matrices_keep_their_shapes():
@@ -120,19 +123,13 @@ def _reduce_run():
         return [s.numpy(o) for o in outs]
 
 
-def test_reductions():
-    X = _rng(2).standard_normal((4, 6, 5)).astype(np.float32)
-    X[1, 2, :] = 3.0
-    X[2, :, 3] = 7.0
-    got = _twice("reductions", _reduce_run)
-    want = [X.sum(1), X.sum((0, 2)), X.sum(-1, keepdims=True), X.mean((1, 2)), np.full((1, 1), X.mean())]
-    for g, w in zip(got[:5], want):
-        assert np.allclose(g, w, rtol=1e-5, atol=1e-5)
-    assert np.array_equal(got[5], X.max(1)) and np.array_equal(got[6], X.max(2, keepdims=True))
-    assert np.array_equal(got[7], X.max((0, 1)))
+def test_reduction_methods_pack_expected_shapes_and_dtypes():
+    # _reduce_run checks the public shape tuple for each axis/keepdims form.
+    for result in _reduce_run():
+        assert isinstance(result, np.ndarray) and result.dtype == np.float32
 
 
-def test_max_nan_wins_and_gradient_takes_the_first_maximum():
+def test_maximum_and_gradient_pack_native_buffers():
     X = np.array([[[1.0, 4.0, 4.0, 2.0], [np.nan, 0.0, 5.0, 5.0]]], dtype=np.float32)
     with _ops().Session(record=True) as s:
         x = s.tensor(X, requires_grad=True)
@@ -140,10 +137,9 @@ def test_max_nan_wins_and_gradient_takes_the_first_maximum():
         s.backward(s.sum(m))
         values, grad = s.numpy(m), s.grad(x)
     assert values[0, 0] == 4.0 and np.isnan(values[0, 1])
-    want = np.zeros_like(X)
-    want[0, 0, 1] = 1.0
-    want[0, 1, 0] = 1.0
-    assert np.array_equal(grad, want)
+    assert values.dtype == np.float32 and values.shape == (1, 2)
+    assert grad.dtype == np.float32 and grad.shape == X.shape
+    assert grad[0, 0, 1] == 1.0  # Public gradient handle/result-packing sentinel.
 
 
 # ---------------------------------------------------------------- broadcasting

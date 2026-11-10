@@ -9,8 +9,8 @@
     "retain-tooling": 2,
     "review-module-gate": 1,
     "split-migrated": 2,
-    "split-needed": 11,
-    "split-partial": 2
+    "split-needed": 10,
+    "split-partial": 3
   },
   "reviewed_files": 27,
   "not_a_gate": true,
@@ -48,6 +48,13 @@
       "native_raw_widen_words": 65536,
       "source_review_only": true,
       "runtime_status": "Orchestrator compile and run owed; see bf16-conversion-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "decision": "split-partial",
+      "native_fixtures_per_executor": 17,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see rankn-views-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [
