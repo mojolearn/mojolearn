@@ -133,6 +133,10 @@ def _sequence_capture(mut mods: NativeModules, source: PythonObject, context: Py
     var float_word = Int(b.float._obj_ptr)
     var int_word = Int(b.int._obj_ptr)
     var bool_word = Int(b.bool._obj_ptr)
+    var string_type = b.str
+    var bytes_type = b.bytes
+    var complex_type = b.complex
+    var none_type = py_type(PythonObject(None))
     var capture = SequenceBoundaryCapture()
     var stack = List[SequenceBoundaryFrame]()
     var current = source
@@ -147,6 +151,8 @@ def _sequence_capture(mut mods: NativeModules, source: PythonObject, context: Py
         elif word == bool_word or word == int_word or word == float_word:
             _sequence_scalar_capture(capture.plan, current._obj_ptr, depth,
                 3 if word == bool_word else (2 if word == float_word else 1), float_target)
+        elif cls is string_type or cls is bytes_type or cls is complex_type or cls is none_type:
+            raise Error("TypeError: inputs must contain numeric scalars")
         elif numpy and (cls is context["ndarray"] or _one_of(cls, scalar_types)):
             _sequence_array_capture(capture, current, depth)
         elif numpy and cls is context["array_class"]:
