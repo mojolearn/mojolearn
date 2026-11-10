@@ -11,9 +11,14 @@ from bindings.training_extra_native import training_chunked_lm_head, training_ml
 from bindings.samba_head_native import training_samba_head_loss
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
+from bindings.optimizer_public_words import optimizer_python_error
 from bindings.optimizer_admission import opt_guards, opt_owner, opt_owner_mode, opt_value, opt_scalar, opt_schedule, opt_exact
-from bindings.optimizer_public_door import door_ready, refuse_kwargs, new_array, TensorView, tensor_view, resident_entry
+from bindings.optimizer_public_door import (
+    door_ready, refuse_kwargs, new_array, TensorView, tensor_view, resident_entry,
+    door_step, door_io, door_state, door_state_set, door_load_state, door_zero, door_clip, door_accumulate,
+)
+from bindings.optimizer_descriptor_boundary import optimizer_provider_entries, optimizer_native_mode
+from core.linear_metadata import linear_mode_name
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_cast_kind
 from core.optimizer_state_impl import optimizer_state_cast
@@ -28,65 +33,26 @@ from bindings.training_embedding_native import training_embedding_operation
 from bindings.training_cross_entropy_native import training_cross_entropy
 from bindings.training_metadata_native import training_metadata
 from bindings.native_model_records import bump_model_generation
-from core.shared_slot import SharedSlot
 
 
 def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
     var selected = mode
     if selected is None:
         selected = context["backend"]["_DEFAULT_MODE"]
-    if py_type(selected) is not b.str:
+    if py_type(selected) is not context["scalar_types"][5]:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
-    var word = String(selected)
-    if word != "fast" and word != "identical":
-        # Only a spelled variant (" Fast ") pays the two Python string calls.
-        selected = py_call(py_call(selected.strip).lower)
-        word = String(selected)
-    if word != "fast" and word != "identical":
+    var word = String()
+    try:
+        word = linear_mode_name(String(selected))
+    except:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     var entries = context["bindings"][PythonObject(word)]
-    if py_type(entries) is b.str:
+    if py_type(entries) is context["scalar_types"][5]:
         raise Error("ImportError: " + String(entries))
-    # The binary's mode word is fixed per compiled entry: check it once per
-    # entries table and entry object, not with a binding crossing per call.
-    var g = OPT_MODE_CHECKED.get_or_create_ptr()
-    if g[].table is None:
-        g[].table = Python.dict()
-    var key = PythonObject(Int(entries._obj_ptr))
-    var entry = entries["training_numeric_mode"]
-    var checked = py_get(g[].table, key)
-    if checked is None or checked[0] is not entry or String(checked[1]) != word:
-        if Int(py=py_call_typed(entry)) != (1 if word == "identical" else 0):
-            raise Error("ImportError: optimizer binary numeric mode disagrees with the requested mode")
-        py_setitem(g[].table, key, Python.tuple(entry, PythonObject(word)))
+    var provider = optimizer_provider_entries(entries)
+    if optimizer_native_mode(provider) != (1 if word == "identical" else 0):
+        raise Error("ImportError: optimizer binary numeric mode disagrees with the requested mode")
     return entries
-
-
-struct OptModeChecked(Defaultable, Movable):
-    # {address of a connected entries dict: (its training_numeric_mode entry, mode word)}
-    # The entries dicts live in the import-time context for the process.
-    var table: PythonObject
-
-    def __init__(out self):
-        self.table = PythonObject(None)
-
-
-comptime OPT_MODE_CHECKED = SharedSlot[OptModeChecked, "MojolearnP3OptimizerModeCheckedV2"]
-
-
-def optimizer_step_entry(entry: PythonObject, arguments: PythonObject, context: PythonObject) raises -> PythonObject:
-    if py_type(entry) is not context["device_finalizer_types"][2]:
-        raise Error("TypeError: optimizer step requires its connected compiled entry")
-    # The inner compiled door has already assigned the public exception
-    # category. Preserve its CPython exception triple across this second
-    # native boundary instead of flattening it to an untyped Mojo Error.
-    ref cpy = Python().cpython()
-    var result = cpy.PyObject_Call(entry._obj_ptr, arguments._obj_ptr, PyObjectPtr())
-    if not result:
-        var failure = stash_python_error()
-        raise failure^
-    return PythonObject(from_owned=result)
 
 
 def optimizer_betas(source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -339,9 +305,11 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         return training_mlp_sessions(values, entries)
     if operation == "binding":
         return entries["module"]
+    var provider = optimizer_provider_entries(entries)
+    var module = entries["module"]
     if operation == "raw_io":
         opt_value(values, context)
-        return py_call_typed(entries["optimizer_door_io"], owner, values[0], values[1], values[2], values[3])
+        return door_io(module, provider, owner, Int(py=values[0]), values[1], String(py=values[2]), Int(py=values[3]))
     if operation == "param_device":
         var fields = py_fields(owner)
         if not Bool(py=py_get(fields, "_p_dev", False)):
@@ -359,15 +327,18 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         var result = device_new(PythonObject(None), PythonObject(None), view.shape, PythonObject(None), context)
         var release = device_release_entry(native, context)
         var binding = entries["module"]
-        var handle = py_call_typed(entries["optimizer_door_io"], owner, 5, PythonObject(None), "params", j)
+        var handle = door_io(module, provider, owner, 5, PythonObject(None), "params", j)
         return device_adopt(result, binding, handle, release)
     if operation == "step":
-        return optimizer_step_entry(entries["optimizer_door_step"], Python.tuple(owner, values[0], values[1], values[2], values[3]), context)
+        opt_scalar(values[2], context)
+        return door_step(module, provider, owner, values[0], values[1], Int(py=values[2]), values[3])
     if operation == "state":
-        return py_call_typed(entries["optimizer_door_state"], owner, values[0])
+        opt_scalar(values[0], context)
+        return door_state(module, provider, owner, Int(py=values[0]))
     if operation == "state_set":
+        opt_scalar(values[0], context)
         opt_value(values[1], context)
-        return py_call_typed(entries["optimizer_door_state_set"], owner, values[0], values[1])
+        return door_state_set(module, provider, owner, Int(py=values[0]), values[1])
     if operation == "load":
         var state = values[0]
         opt_value(state, context)
@@ -378,9 +349,9 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         var m = optimizer_state_array(state["exp_avg"], False, context)
         var v = optimizer_state_array(state["exp_avg_sq"], False, context)
         var initialized = optimizer_state_array(state["buf_initialized"], True, context)
-        return py_call_typed(entries["optimizer_door_load_state"], owner, t, m, True, v, True, initialized, True)
+        return door_load_state(module, provider, owner, t, m, PythonObject(True), v, PythonObject(True), initialized, PythonObject(True))
     if operation == "zero":
-        return py_call_typed(entries["optimizer_door_zero"], owner, values[0])
+        return door_zero(owner, values[0])
     if operation == "resident":
         var fields = py_fields(owner)
         return PythonObject(py_get(fields, "_res") is not None and not Bool(py=py_get(fields, "_res_host", False)))
@@ -393,7 +364,9 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
             tensors = fields["params"]
         if op == 2 and not Bool(py=py_get(fields, "_p_dev", False)):
             return fields["params"]
-        var result = py_call_typed(entries["optimizer_door_io"], owner, op, tensors, values[2], values[3])
+        opt_scalar(values[2], context)
+        opt_scalar(values[3], context)
+        var result = door_io(module, provider, owner, op, tensors, String(py=values[2]), Int(py=values[3]))
         if op == 0:
             return py_call(context["scalar_types"][1], result)
         if op == 1 or op == 3:
@@ -403,9 +376,9 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
             return tensors
         return result
     if operation == "clip":
-        return py_call_typed(entries["optimizer_door_clip"], values[0], values[1], values[2], values[3], values[4])
+        return door_clip(provider, values[0], values[1], values[2], values[3], values[4])
     if operation == "accumulate":
-        return py_call_typed(entries["optimizer_door_accumulate"], values[0], values[1])
+        return door_accumulate(provider, values[0], values[1])
     if operation == "aligned":
         opt_scalar(values, context)
         return py_call(context["scalar_types"][1], py_call_typed(entries["accumulation_is_aligned"], Python.list(py_call(context["scalar_types"][2], values[0]), py_call(context["scalar_types"][2], values[1]))))

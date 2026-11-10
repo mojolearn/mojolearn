@@ -82,3 +82,29 @@ separate batch, so no old dispatch is removed yet. It adds no kernel switch,
 changes no optimizer equations, and makes no performance claim. Root must
 compile both training binding groups and run native descriptor refusal,
 state/ownership and public optimizer checks after activation.
+
+## Public typed descriptor activation
+
+Public step, resident IO, clipping, accumulation and state transfers now enter
+shared UNPACK/PACK functions directly, then use `OptimizerNativeDriver` for
+RUN. Legacy compiled exports call those same boundary functions. Removed:
+router calls through compiled Python optimizer entries; the intermediate step
+argument tuple and exception relay; the Python mode-check dictionary; runtime
+Python mode strip/lower calls; and foreign-owner state transfer calls through
+Python entry objects. The import-time bridge now retains the single optimizer
+descriptor factory instead of the redundant per-operation entry table.
+
+The explicit descriptor boundary keeps admitted provider/image pins and caches
+native host/mode metadata while holding the GIL. Native work receives only the
+function pointer, typed fields and native buffers. Host registry transfers
+retain their existing GIL discipline, GPU work releases it, and each descriptor
+request owns its heap result/error storage. Public arrays and rebound fields
+remain admitted on every operation. Exception prefixes cross the native error
+sink unchanged and are translated once at the outer Python boundary.
+
+Still incomplete: constructor/get/set-params preparation, public persistent
+state snapshots, some boundary helpers' Python staging containers, resident
+finalization and allocation-failure cleanup. Those must migrate before calling
+the public optimizer family complete. No update kernel changed. Root owes
+both training/core closure compilation, focused public mutation/ownership/error
+checks and native descriptor tests; end-to-end GPU measurement remains owed.

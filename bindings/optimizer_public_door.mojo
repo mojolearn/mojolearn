@@ -23,7 +23,7 @@ What the door does is argument conversion only:
 
 The kernels are training/optimizer_public.mojo (the GPU binding),
 training/host/optimizer_public_host.mojo (a CPU-only install) and
-training/optimizer_public_common.mojo (shared, no device code); `OptKernels`
+training/optimizer_public_common.mojo (shared, no device code); `OptimizerNativeDriver`
 names the entries a binding provides. Ownership (docs/MODULAR_ASKS.md):
 every Python call and attribute or item assignment goes through
 bindings/py_balanced.mojo, so no caller object is retained."""
@@ -47,7 +47,7 @@ from training.optimizer_public_common import (
     registry_offsets, zero_tensors,
 )
 from core.shared_slot import SharedSlot
-from training.optimizer_kernels import OptKernels
+from bindings.optimizer_descriptor_boundary import optimizer_provider, optimizer_driver
 
 comptime IP = MutPointer[Int, MutUntrackedOrigin]
 comptime BP = MutPointer[UInt8, MutUntrackedOrigin]
@@ -750,8 +750,8 @@ def door_init(opt: PythonObject, params: PythonObject) raises -> PythonObject:
     return PythonObject(n_total)
 
 
-def door_step[K: OptKernels](
-    module: PythonObject, opt: PythonObject, grads: PythonObject, max_norm: PythonObject, op: Int,
+def door_step(
+    module: PythonObject, provider: PythonObject, opt: PythonObject, grads: PythonObject, max_norm: PythonObject, op: Int,
     tokens: PythonObject,
 ) raises -> PythonObject:
     """`step` (op 0), `step_device` (op 1) and `step_accumulated` (op 2;
@@ -893,8 +893,11 @@ def door_step[K: OptKernels](
     req.g_dev = truth(getattr_or(opt, "_g_dev", PythonObject(False)))
     req.device_op = op == OP_STEP_DEVICE
     var out = PublicStepOut(0, -1, False, False, Float32(0), Float32(0), Float32(0), -1, False)
+    var driver = optimizer_driver(provider)
+    var has_sched = req.has_sched
     with GILReleased(Python()):
-        out = K.step(req)
+        out = driver.step(req^)
+    _ = provider
     _ = keep^
     # the assignments of the native result
     set_field(opt, "t", PythonObject(out.t))
@@ -910,7 +913,7 @@ def door_step[K: OptKernels](
         set_field(opt, "clip_coef_", PythonObject(None))
     var lr = PythonObject(Float64(out.lr))
     set_field(opt, "lr_", lr)
-    if req.has_sched:
+    if has_sched:
         set_field(opt, "lr", lr)
     if out.packed >= 0:
         set_field(opt, "packed_", PythonObject(out.packed != 0))
@@ -918,8 +921,8 @@ def door_step[K: OptKernels](
     return total
 
 
-def door_io[K: OptKernels](
-    module: PythonObject, opt: PythonObject, op_code: Int, tensors: PythonObject, name: String, tensor: Int
+def door_io(
+    module: PythonObject, provider: PythonObject, opt: PythonObject, op_code: Int, tensors: PythonObject, name: String, tensor: Int
 ) raises -> PythonObject:
     """`_io`: the device transfers of `params_to_device`, `params_to_host`,
     `grads_to_device`, `grads_to_host`, `param_device` and the query.
@@ -947,11 +950,13 @@ def door_io[K: OptKernels](
     req.offsets = read_addr(fields["offsets"], "offsets")
     _state_into(opt, req)
     var r = (-1, 0)
-    if K.is_host():
-        r = K.io(req, op_code, tensor)
+    var driver = optimizer_driver(provider)
+    if driver.host:
+        r = driver.io(req^, op_code, tensor)
     else:
         with GILReleased(Python()):
-            r = K.io(req, op_code, tensor)
+            r = driver.io(req^, op_code, tensor)
+    _ = provider
     try:
         keep_slot(opt, r[0], module, False)
         # A device allocation's handle stays an integer through publication.
@@ -991,7 +996,7 @@ def resident_entry(owner: PythonObject, name: String) raises -> PythonObject:
     return entry
 
 
-def _sync_host[K: OptKernels](module: PythonObject, opt: PythonObject) raises:
+def _sync_host(module: PythonObject, provider: PythonObject, opt: PythonObject) raises:
     """`_download`: the slot's state into the mirrors, when they are stale,
     through the module that owns the slot."""
     if py_fields(opt)["_res"] is None or truth(py_fields(opt)["_host_fresh"]):
@@ -1002,32 +1007,32 @@ def _sync_host[K: OptKernels](module: PythonObject, opt: PythonObject) raises:
     var v = write_addr(py_fields(opt)["_v"], "exp_avg_sq")
     var n = Int(py=py_fields(opt)["n_total"])
     var owner = py_fields(opt)["_res_binding"]
-    if owner is module:
-        if K.is_host():
-            _ = K.download(h, m, v, n)
-        else:
-            with GILReleased(Python()):
-                _ = K.download(h, m, v, n)
+    var connection = provider if owner is module else optimizer_provider(owner)
+    var driver = optimizer_driver(connection)
+    if driver.host:
+        _ = driver.download(h, m, v, n)
     else:
-        _ = py_call(resident_entry(owner, "optimizer_resident_download"), PythonObject(h), PythonObject(m), PythonObject(v), PythonObject(n))
+        with GILReleased(Python()):
+            _ = driver.download(h, m, v, n)
+    _ = connection
     set_field(opt, "_host_fresh", PythonObject(True))
 
 
-def _upload[K: OptKernels](module: PythonObject, opt: PythonObject, m: Int, v: Int) raises:
+def _upload(module: PythonObject, provider: PythonObject, opt: PythonObject, m: Int, v: Int) raises:
     """`_upload_one`: assigned moments into the slot (0 leaves that moment)."""
     if py_fields(opt)["_res"] is None:
         return
     var h = Int(py=py_fields(opt)["_res"])
     var n = Int(py=py_fields(opt)["n_total"])
     var owner = py_fields(opt)["_res_binding"]
-    if owner is module:
-        if K.is_host():
-            _ = K.upload(h, m, v, n)
-        else:
-            with GILReleased(Python()):
-                _ = K.upload(h, m, v, n)
+    var connection = provider if owner is module else optimizer_provider(owner)
+    var driver = optimizer_driver(connection)
+    if driver.host:
+        _ = driver.upload(h, m, v, n)
     else:
-        _ = py_call(resident_entry(owner, "optimizer_resident_upload"), PythonObject(h), PythonObject(m), PythonObject(v), PythonObject(n))
+        with GILReleased(Python()):
+            _ = driver.upload(h, m, v, n)
+    _ = connection
 
 
 def copy_array(source: PythonObject) raises -> PythonObject:
@@ -1039,12 +1044,12 @@ def copy_array(source: PythonObject) raises -> PythonObject:
     return result
 
 
-def door_state[K: OptKernels](module: PythonObject, opt: PythonObject, which: Int) raises -> PythonObject:
+def door_state(module: PythonObject, provider: PythonObject, opt: PythonObject, which: Int) raises -> PythonObject:
     """`state_dict()` (which 0) and the `exp_avg` / `exp_avg_sq` readings
     (1 / 2): the slot's state downloaded once per stale read."""
     door_ready()
     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
-    _sync_host[K](module, opt)
+    _sync_host(module, provider, opt)
     set_field(opt, "_pristine", PythonObject(False))
     host_moments(opt)
     if which == STATE_EXP_AVG:
@@ -1059,7 +1064,7 @@ def door_state[K: OptKernels](module: PythonObject, opt: PythonObject, which: In
     return out
 
 
-def door_state_set[K: OptKernels](module: PythonObject, opt: PythonObject, which: Int, value: PythonObject) raises -> PythonObject:
+def door_state_set(module: PythonObject, provider: PythonObject, opt: PythonObject, which: Int, value: PythonObject) raises -> PythonObject:
     """`exp_avg = value` (which 1) and `exp_avg_sq = value` (2)."""
     door_ready()
     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
@@ -1069,14 +1074,14 @@ def door_state_set[K: OptKernels](module: PythonObject, opt: PythonObject, which
     set_field(opt, "_pristine", PythonObject(False))
     var a = 0 if value is None else write_addr(value, name)
     if which == STATE_EXP_AVG:
-        _upload[K](module, opt, a, 0)
+        _upload(module, provider, opt, a, 0)
     else:
-        _upload[K](module, opt, 0, a)
+        _upload(module, provider, opt, 0, a)
     return PythonObject(None)
 
 
-def door_load_state[K: OptKernels](
-    module: PythonObject, opt: PythonObject, t: PythonObject, ea: PythonObject, c1: PythonObject,
+def door_load_state(
+    module: PythonObject, provider: PythonObject, opt: PythonObject, t: PythonObject, ea: PythonObject, c1: PythonObject,
     es: PythonObject, c2: PythonObject, bi: PythonObject, c3: PythonObject,
 ) raises -> PythonObject:
     """`load_state_dict` after the conversion of the state's arrays
@@ -1104,7 +1109,7 @@ def door_load_state[K: OptKernels](
     set_field(opt, "_m", m)
     set_field(opt, "_v", v)
     set_field(opt, "_pristine", PythonObject(False))
-    _upload[K](module, opt, write_addr(m, "exp_avg"), write_addr(v, "exp_avg_sq"))
+    _upload(module, provider, opt, write_addr(m, "exp_avg"), write_addr(v, "exp_avg_sq"))
     set_field(opt, "_host_fresh", PythonObject(True))
     set_field(opt, "buf_initialized", bi if truth(c3) else copy_array(bi))
     set_field(opt, "t", t)
@@ -1126,8 +1131,8 @@ comptime _NONFINITE_REFUSAL = (
 )
 
 
-def door_clip[K: OptKernels](
-    grads: PythonObject, max_norm: PythonObject, norm_type: PythonObject, error_if_nonfinite: PythonObject,
+def door_clip(
+    provider: PythonObject, grads: PythonObject, max_norm: PythonObject, norm_type: PythonObject, error_if_nonfinite: PythonObject,
     kwargs: PythonObject,
 ) raises -> PythonObject:
     """`clip_grad_norm_`: the refusals, the tensors, the in-place scale.
@@ -1154,12 +1159,15 @@ def door_clip[K: OptKernels](
     var nbytes = List[Int]()
     _addrs_of(views, addrs, nbytes)
     var r = (Float32(0), Float32(0))
+    var driver = optimizer_driver(provider)
+    var maximum = Float32(mn)
     with GILReleased(Python()):
-        r = K.clip(addrs, nbytes, Float32(mn))
+        r = driver.clip(addrs^, nbytes^, maximum)
+    _ = provider
     return PythonObject(Float64(r[0]))
 
 
-def door_accumulate[K: OptKernels](microbatch_grads: PythonObject, tokens: PythonObject) raises -> PythonObject:
+def door_accumulate(provider: PythonObject, microbatch_grads: PythonObject, tokens: PythonObject) raises -> PythonObject:
     """`accumulate_grads`: the microbatches checked, made contiguous where
     strided, combined by the clause 9.2 tree into new arrays."""
     door_ready()
@@ -1210,8 +1218,10 @@ def door_accumulate[K: OptKernels](microbatch_grads: PythonObject, tokens: Pytho
         out_addrs.append(Int(py=a._addr))
         nbytes.append(probes[0][k].nbytes)
     var a_count = len(parts)
+    var driver = optimizer_driver(provider)
     with GILReleased(Python()):
-        _ = K.accumulate(in_addrs, nbytes, out_addrs, a_count, t_tokens)
+        _ = driver.accumulate(in_addrs^, nbytes^, out_addrs^, a_count, t_tokens)
+    _ = provider
     _ = keep^
     if single:
         return result[0]
@@ -1229,20 +1239,24 @@ def entry_args(packed: PyObjectPtr, count: Int, name: String) raises -> PythonOb
     return args
 
 
-def entry_step[K: OptKernels](py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
+def entry_step(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
     """optimizer_step(opt, grads, max_norm, op, tokens)."""
     try:
         var a = entry_args(packed, 5, "optimizer_step_public")
-        return door_step[K](PythonObject(from_borrowed=py_self), a[0], a[1], a[2], Int(py=a[3]), a[4]).steal_data()
+        var module = PythonObject(from_borrowed=py_self)
+        var provider = optimizer_provider(module)
+        return door_step(module, provider, a[0], a[1], a[2], Int(py=a[3]), a[4]).steal_data()
     except error:
         return optimizer_python_error(error)
 
 
-def entry_io[K: OptKernels](py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
+def entry_io(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
     """optimizer_io(opt, op, tensors, name, tensor)."""
     try:
         var a = entry_args(packed, 5, "optimizer_io")
-        return door_io[K](PythonObject(from_borrowed=py_self), a[0], Int(py=a[1]), a[2], String(py=a[3]),
+        var module = PythonObject(from_borrowed=py_self)
+        var provider = optimizer_provider(module)
+        return door_io(module, provider, a[0], Int(py=a[1]), a[2], String(py=a[3]),
                           Int(py=a[4])).steal_data()
     except error:
         return optimizer_python_error(error)
@@ -1257,48 +1271,58 @@ def entry_zero(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> PyObjectPt
         return optimizer_python_error(error)
 
 
-def entry_state[K: OptKernels](py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
+def entry_state(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
     """optimizer_state(opt, which)."""
     try:
         var a = entry_args(packed, 2, "optimizer_state")
-        return door_state[K](PythonObject(from_borrowed=py_self), a[0], Int(py=a[1])).steal_data()
+        var module = PythonObject(from_borrowed=py_self)
+        var provider = optimizer_provider(module)
+        return door_state(module, provider, a[0], Int(py=a[1])).steal_data()
     except error:
         return optimizer_python_error(error)
 
 
-def entry_state_set[K: OptKernels](py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
+def entry_state_set(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
     """optimizer_state_set(opt, which, value)."""
     try:
         var a = entry_args(packed, 3, "optimizer_state_set")
-        return door_state_set[K](PythonObject(from_borrowed=py_self), a[0], Int(py=a[1]), a[2]).steal_data()
+        var module = PythonObject(from_borrowed=py_self)
+        var provider = optimizer_provider(module)
+        return door_state_set(module, provider, a[0], Int(py=a[1]), a[2]).steal_data()
     except error:
         return optimizer_python_error(error)
 
 
-def entry_load_state[K: OptKernels](py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
+def entry_load_state(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
     """optimizer_load_state(opt, t, exp_avg, copied, exp_avg_sq, copied, buf_initialized, copied)."""
     try:
         var a = entry_args(packed, 8, "optimizer_load_state")
-        return door_load_state[K](PythonObject(from_borrowed=py_self), a[0], a[1], a[2], a[3], a[4], a[5], a[6],
+        var module = PythonObject(from_borrowed=py_self)
+        var provider = optimizer_provider(module)
+        return door_load_state(module, provider, a[0], a[1], a[2], a[3], a[4], a[5], a[6],
                                   a[7]).steal_data()
     except error:
         return optimizer_python_error(error)
 
 
-def entry_clip[K: OptKernels](py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
+def entry_clip(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
     """optimizer_clip(grads, max_norm, norm_type, error_if_nonfinite, kwargs)."""
     try:
         var a = entry_args(packed, 5, "optimizer_clip")
-        return door_clip[K](a[0], a[1], a[2], a[3], a[4]).steal_data()
+        var module = PythonObject(from_borrowed=py_self)
+        var provider = optimizer_provider(module)
+        return door_clip(provider, a[0], a[1], a[2], a[3], a[4]).steal_data()
     except error:
         return optimizer_python_error(error)
 
 
-def entry_accumulate[K: OptKernels](py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
+def entry_accumulate(py_self: PyObjectPtr, packed: PyObjectPtr) -> PyObjectPtr:
     """optimizer_accumulate(microbatch_grads, tokens)."""
     try:
         var a = entry_args(packed, 2, "optimizer_accumulate")
-        return door_accumulate[K](a[0], a[1]).steal_data()
+        var module = PythonObject(from_borrowed=py_self)
+        var provider = optimizer_provider(module)
+        return door_accumulate(provider, a[0], a[1]).steal_data()
     except error:
         return optimizer_python_error(error)
 
