@@ -238,7 +238,7 @@ def _zero_grad[E: Exec & Movable & Deinitable](mut s: OpsSession[E]) raises:
     var x = _upload(s, data[0], OPT_N, OPT_D)
     var targets = List[Float32](length=OPT_N * OPT_H, fill=0)
     var targetp = targets.unsafe_ptr()
-    var yp = data[1].unsafe_ptr()
+    var yp = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(data[1].unsafe_ptr()))
     def target_task(row: Int) {imm targetp, imm yp}:
         for col in range(OPT_H):
             targetp.unsafe_store(row * OPT_H + col, yp.unsafe_load(row))
@@ -261,8 +261,8 @@ def _zero_grad[E: Exec & Movable & Deinitable](mut s: OpsSession[E]) raises:
     s.gradient_into(w, f32_ptr(Int(again.unsafe_ptr())))
     var expected_values = List[Float64](length=OPT_D * OPT_H, fill=0)
     var ep = expected_values.unsafe_ptr()
-    var xp = data[0].unsafe_ptr()
-    var pp = data[2].unsafe_ptr()
+    var xp = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(data[0].unsafe_ptr()))
+    var pp = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(data[2].unsafe_ptr()))
     def gradient_task(i: Int) {imm ep, imm xp, imm yp, imm pp}:
         var column = i // OPT_H
         var h = i % OPT_H
