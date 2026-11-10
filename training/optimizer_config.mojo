@@ -31,3 +31,23 @@ def optimizer_parameter_names(kind: Int) -> List[String]:
     if kind == 0:
         return ["accumulation_steps", "dampening", "lr", "lr_schedule", "maximize", "momentum", "nesterov", "numeric_mode", "params", "resident", "weight_decay"]
     return ["accumulation_steps", "betas", "eps", "lr", "lr_schedule", "maximize", "numeric_mode", "params", "resident", "weight_decay"]
+
+
+def optimizer_parameter_update(kind: Int, key: String) raises:
+    var separator = key.find("__")
+    var head = String(key[byte=0:separator]) if separator >= 0 else String(key)
+    var names = optimizer_parameter_names(kind)
+    var found = False
+    for i in range(len(names)):  # driver-loop: fixed public constructor parameter names
+        if names[i] == head:
+            found = True
+            break
+    if not found:
+        raise Error("ValueError: invalid optimizer parameter '" + head + "'")
+    if separator >= 0:
+        raise Error("TypeError: optimizer nested Python set_params hooks cannot execute; pass a complete native schedule or buffer configuration")
+
+
+def optimizer_profile_available(available: Bool) raises:
+    if not available:
+        raise Error("NotImplementedError: the selected numeric profile is unavailable for optimizer training")

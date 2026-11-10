@@ -139,3 +139,22 @@ Transactional `set_params` still stages its old dictionary/envelope and will
 be migrated next. Public field/schedule owner pins remain necessary at PACK.
 Root owes constructor/get-params/error checks and native config validation;
 this lane has not compiled or run tests.
+
+## Typed parameter replacement
+
+`set_params` now validates native parameter names, decodes a typed constructor
+configuration and shares the same publication function as construction.
+Removed: the internal Python configuration dictionary, reconstructed argument
+tuple, Python keyword/owner-field lists, bound string partition, and bound
+clear/update calls. Exact admitted dictionaries are unpacked through cached
+CPython iteration. The existing CPython table gained only Clear/Update for
+publication and rollback; no new symbol loader or runtime import was added.
+
+A shallow Python dictionary remains solely as a boundary rollback owner for
+public attributes, buffers and the old extension pin while replacement is
+published. Algorithm decisions use the native configuration. Failed replacement
+restores those fields; successful replacement closes the old slot natively.
+This preserves writable/rebound public attributes and custom-field clearing.
+Registry/checkpoint preparation and persistent state planning still remain.
+Root owes get/set-params mutation/rollback/refusal checks and affected closure
+compilation. No lane tests or compilation were run.

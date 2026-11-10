@@ -11,7 +11,7 @@ from bindings.training_extra_native import training_chunked_lm_head, training_ml
 from bindings.samba_head_native import training_samba_head_loss
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
-from bindings.optimizer_public_words import optimizer_python_error
+from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
 from bindings.optimizer_admission import opt_guards, opt_owner, opt_owner_mode, opt_value, opt_scalar, opt_schedule, opt_exact
 from bindings.optimizer_public_door import (
     door_ready, door_init, refuse_kwargs, new_array, TensorView, tensor_view,
@@ -19,7 +19,8 @@ from bindings.optimizer_public_door import (
 )
 from bindings.optimizer_descriptor_boundary import optimizer_provider_entries, optimizer_native_mode, optimizer_close_slot
 from core.linear_metadata import linear_mode_name
-from training.optimizer_config import OptimizerConstructorConfig, optimizer_parameter_names
+from training.optimizer_config import OptimizerConstructorConfig, optimizer_parameter_names, optimizer_parameter_update, optimizer_profile_available
+from bindings.cpython_table import cpython_table
 from bindings.optimizer_scalar_boundary import optimizer_float, optimizer_integer, optimizer_truth
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_cast_kind
@@ -83,41 +84,42 @@ def optimizer_betas(source: PythonObject, context: PythonObject) raises -> Tuple
     return (first, second)
 
 
-def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    # values: params, kind, lr, betas, eps, weight_decay, momentum,
-    # dampening, nesterov, schedule, accumulation_steps, maximize, resident, kwargs.
-    var fields = py_fields(owner)
-    var kind = optimizer_integer(values[1], context)
-    var where = String("SGD") if kind == 0 else (String("Adam") if kind == 1 else String("AdamW"))
-    opt_schedule(values[9], context)
-    for i in [2, 4, 5, 6, 7, 8, 10, 11, 12]:  # driver-loop: over scalar constructor configuration words
-        opt_scalar(values[i], context)
-    opt_value(values[0], context)
-    opt_value(values[13], context)
-    refuse_kwargs(values[13], where)
+def optimizer_profile(context: PythonObject) raises:
     # the process default, resolved as `_numeric_profile.require_training`
     # resolves it: a recorded default, else the environment, else fp32_v1
     var profile = py_get(context["profile_defaults"], "training")
     if profile is None:
         var env = String(getenv("MOJOLEARN_NUMERIC_PROFILE", "")).strip()
         profile = PythonObject(String(env) if env.byte_length() > 0 else String("fp32_v1"))
-    if not Bool(py=context["profiles"][profile]["training"]):
-        raise Error("NotImplementedError: the selected numeric profile is unavailable for optimizer training")
-    var accumulation = optimizer_integer(values[10], context)
-    if py_type(values[11]) is not context["scalar_types"][1]:
+    opt_scalar(profile, context)
+    optimizer_profile_available(optimizer_truth(context["profiles"][profile]["training"], context))
+
+
+def optimizer_configuration(kind: Int, lr: PythonObject, betas_value: PythonObject, eps: PythonObject,
+    weight_decay: PythonObject, momentum: PythonObject, dampening: PythonObject, nesterov: PythonObject,
+    accumulation_value: PythonObject, maximize: PythonObject, context: PythonObject) raises -> OptimizerConstructorConfig:
+    var accumulation = optimizer_integer(accumulation_value, context)
+    if py_type(maximize) is not context["scalar_types"][1]:
+        var where = String("SGD") if kind == 0 else (String("Adam") if kind == 1 else String("AdamW"))
         raise Error("TypeError: mojolearn." + where + ": maximize must be a bool")
     var betas = (Float64(0.9), Float64(0.999))
     if kind != 0:
-        betas = optimizer_betas(values[3], context)
+        betas = optimizer_betas(betas_value, context)
     var config = OptimizerConstructorConfig(kind, accumulation,
-        optimizer_float(values[2], context), betas[0], betas[1],
-        Float64(1e-8) if kind == 0 else optimizer_float(values[4], context),
-        optimizer_float(values[5], context),
-        optimizer_float(values[6], context) if kind == 0 else Float64(0),
-        optimizer_float(values[7], context) if kind == 0 else Float64(0),
-        optimizer_truth(values[8], context) if kind == 0 else False,
-        values[11] is PythonObject(True))
+        optimizer_float(lr, context), betas[0], betas[1],
+        Float64(1e-8) if kind == 0 else optimizer_float(eps, context),
+        optimizer_float(weight_decay, context),
+        optimizer_float(momentum, context) if kind == 0 else Float64(0),
+        optimizer_float(dampening, context) if kind == 0 else Float64(0),
+        optimizer_truth(nesterov, context) if kind == 0 else False,
+        maximize is PythonObject(True))
     config.validate()
+    return config
+
+
+def optimizer_initialize(owner: PythonObject, params: PythonObject, config: OptimizerConstructorConfig,
+    mode: PythonObject, schedule: PythonObject, resident: PythonObject, context: PythonObject) raises -> PythonObject:
+    var fields = py_fields(owner)
     # PACK publishes public scalar mirrors only after typed configuration
     # validation. Params/schedule/mode/resident retain their boundary owners.
     py_setitem(fields, "_where", PythonObject(config.name()))
@@ -127,10 +129,10 @@ def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonO
     py_setitem(fields, "_res_binding", PythonObject(None))
     py_setitem(fields, "_res_host", PythonObject(False))
     py_setitem(fields, "_host_fresh", PythonObject(True))
-    py_setitem(fields, "_resident_wanted", values[12])
-    py_setitem(fields, "lr_schedule", values[9])
+    py_setitem(fields, "_resident_wanted", resident)
+    py_setitem(fields, "lr_schedule", schedule)
     py_setitem(fields, "accumulation_steps", PythonObject(config.accumulation))
-    _ = door_init(owner, values[0])
+    _ = door_init(owner, params)
     py_setitem(fields, "t", PythonObject(0))
     for name in ["packed_", "total_norm_", "clip_coef_"]:  # driver-loop: over three optional result words
         py_setitem(fields, PythonObject(name), PythonObject(None))
@@ -145,6 +147,23 @@ def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonO
         py_setitem(fields, "betas", Python.tuple(config.beta1, config.beta2))
         py_setitem(fields, "eps", PythonObject(config.eps))
     return PythonObject(None)
+
+
+def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    # values: params, kind, lr, betas, eps, weight_decay, momentum,
+    # dampening, nesterov, schedule, accumulation_steps, maximize, resident, kwargs.
+    var kind = optimizer_integer(values[1], context)
+    var where = String("SGD") if kind == 0 else (String("Adam") if kind == 1 else String("AdamW"))
+    opt_schedule(values[9], context)
+    for i in [2, 4, 5, 6, 7, 8, 10, 11, 12]:  # driver-loop: over scalar constructor configuration words
+        opt_scalar(values[i], context)
+    opt_value(values[0], context)
+    opt_value(values[13], context)
+    refuse_kwargs(values[13], where)
+    optimizer_profile(context)
+    var config = optimizer_configuration(kind, values[2], values[3], values[4], values[5], values[6],
+        values[7], values[8], values[10], values[11], context)
+    return optimizer_initialize(owner, values[0], config, mode, values[9], values[12], context)
 
 
 def optimizer_state_array(source: PythonObject, integer: Bool, context: PythonObject) raises -> PythonObject:
@@ -179,62 +198,86 @@ def optimizer_params(owner: PythonObject, context: PythonObject) raises -> Pytho
     return result
 
 
+def optimizer_parameter_value(updates: PythonObject, fields: PythonObject, name: String) raises -> PythonObject:
+    if py_contains(updates, PythonObject(name)):
+        return updates[PythonObject(name)]
+    return fields["_resident_wanted"] if name == "resident" else fields[PythonObject(name)]
+
+
 def optimizer_set_params(owner: PythonObject, updates: PythonObject, context: PythonObject) raises -> PythonObject:
-    # Generation word (bindings/native_model_records.mojo, lane ne1-e-records):
-    # every stamped record of this object misses from here on.
     _ = bump_model_generation(owner)
-    var b = native_loaded_module("builtins")
-    if py_type(updates) is not b.dict:
+    if py_type(updates) is not context["container_types"][2]:
         raise Error("TypeError: optimizer parameter updates require native keyword arguments")
     if len(updates) == 0:
         return owner
-    var config = optimizer_params(owner, context)
-    var keys = py_call(context["container_types"][0], updates)
-    for i in range(len(keys)):  # driver-loop: over public parameter updates
-        var key = keys[i]
-        if py_type(key) is not b.str:
-            raise Error("TypeError: optimizer parameter names must be native strings")
-        if String(key) == "lr_schedule":
-            opt_schedule(updates[key], context)
-        else:
-            opt_value(updates[key], context)
-        var pieces = py_call(key.partition, "__")
-        if not py_contains(config, pieces[0]):
-            raise Error("ValueError: invalid optimizer parameter '" + String(pieces[0]) + "'")
-        if len(pieces[1]) != 0:
-            raise Error("TypeError: optimizer nested Python set_params hooks cannot execute; pass a complete native schedule or buffer configuration")
-        py_setitem(config, key, updates[key])
     var fields = py_fields(owner)
-    var field_names = py_call(context["container_types"][0], fields)
-    for i in range(len(field_names)):  # driver-loop: over retained owner fields before replacement
-        var name = String(field_names[i])
+    var kind = optimizer_integer(fields["_KIND"], context)
+    var table = cpython_table()
+    var position = List[Int](length=1, fill=0)
+    var pair = List[PyObjectPtr](length=2, fill=PyObjectPtr())
+    # Exact dictionary iteration is UNPACK; no callbacks or Python key list.
+    while table[].PyDict_Next(updates._obj_ptr, Int(position.unsafe_ptr()),
+            Int(pair.unsafe_ptr()), Int(pair.unsafe_ptr() + 1)):  # driver-loop: external keyword arguments
+        var key = PythonObject(from_borrowed=pair[0])
+        var value = PythonObject(from_borrowed=pair[1])
+        if py_type(key) is not context["scalar_types"][5]:
+            raise Error("TypeError: optimizer parameter names must be native strings")
+        var name = String(key)
         if name == "lr_schedule":
-            opt_schedule(fields[field_names[i]], context)
+            opt_schedule(value, context)
+        else:
+            opt_value(value, context)
+        optimizer_parameter_update(kind, name)
+    position[0] = 0
+    while table[].PyDict_Next(fields._obj_ptr, Int(position.unsafe_ptr()),
+            Int(pair.unsafe_ptr()), Int(pair.unsafe_ptr() + 1)):  # driver-loop: public fields retained for rollback
+        var key = PythonObject(from_borrowed=pair[0])
+        var value = PythonObject(from_borrowed=pair[1])
+        if py_type(key) is not context["scalar_types"][5]:
+            raise Error("TypeError: optimizer metadata requires native string keys")
+        var name = String(key)
+        if name == "lr_schedule":
+            opt_schedule(value, context)
         elif name == "_res_binding":
-            if fields[field_names[i]] is not None and py_type(fields[field_names[i]]) is not context["module_type"]:
+            if value is not None and py_type(value) is not context["module_type"]:
                 raise Error("TypeError: optimizer resident state requires a native binding owner")
         else:
-            opt_value(fields[field_names[i]], context)
-    var saved = py_call(b.dict, fields)
-    var kind = Int(py=fields["_KIND"])
-    var args = Python.tuple(config["params"], kind, config["lr"],
-        Python.tuple(0.9, 0.999) if kind == 0 else config["betas"],
-        PythonObject(1e-8) if kind == 0 else config["eps"], config["weight_decay"],
-        config["momentum"] if kind == 0 else PythonObject(0.0),
-        config["dampening"] if kind == 0 else PythonObject(0.0),
-        config["nesterov"] if kind == 0 else PythonObject(False),
-        config["lr_schedule"], config["accumulation_steps"], config["maximize"], config["resident"], Python.dict())
-    # Rebuild on the existing exact owner, retaining the old state dictionary
-    # until all validation succeeds. A temporary Python optimizer object would
-    # invoke its Python __del__ on decref inside this native operation.
-    _ = py_call(fields.clear)
+            opt_value(value, context)
+    _ = position
+    _ = pair
+    var params = optimizer_parameter_value(updates, fields, "params")
+    var mode = optimizer_parameter_value(updates, fields, "numeric_mode")
+    var schedule = optimizer_parameter_value(updates, fields, "lr_schedule")
+    var resident = optimizer_parameter_value(updates, fields, "resident")
+    opt_scalar(resident, context)
+    optimizer_profile(context)
+    var config = optimizer_configuration(kind,
+        optimizer_parameter_value(updates, fields, "lr"),
+        PythonObject(None) if kind == 0 else optimizer_parameter_value(updates, fields, "betas"),
+        PythonObject(None) if kind == 0 else optimizer_parameter_value(updates, fields, "eps"),
+        optimizer_parameter_value(updates, fields, "weight_decay"),
+        optimizer_parameter_value(updates, fields, "momentum") if kind == 0 else PythonObject(None),
+        optimizer_parameter_value(updates, fields, "dampening") if kind == 0 else PythonObject(None),
+        optimizer_parameter_value(updates, fields, "nesterov") if kind == 0 else PythonObject(None),
+        optimizer_parameter_value(updates, fields, "accumulation_steps"),
+        optimizer_parameter_value(updates, fields, "maximize"), context)
+    # This retained dictionary is a PACK rollback owner, never algorithm
+    # configuration. No temporary Python optimizer object/finalizer is made.
+    var saved_pointer = table[].PyDict_Copy(fields._obj_ptr)
+    if not saved_pointer:
+        var failure = stash_python_error()
+        raise failure^
+    var saved = PythonObject(from_owned=saved_pointer)
+    table[].PyDict_Clear(fields._obj_ptr)
     try:
-        _ = optimizer_construct(owner, args, config["numeric_mode"], context)
+        _ = optimizer_initialize(owner, params, config, mode, schedule, resident, context)
         if py_get(saved, "_res") is not None and py_get(saved, "_res_binding") is not None:
             optimizer_close_slot(saved["_res_binding"], Int(py=saved["_res"]))
     except error:
-        _ = py_call(fields.clear)
-        _ = py_call(fields.update, saved)
+        table[].PyDict_Clear(fields._obj_ptr)
+        if table[].PyDict_Update(fields._obj_ptr, saved._obj_ptr) != 0:
+            var failure = stash_python_error()
+            raise failure^
         raise error^
     return owner
 
