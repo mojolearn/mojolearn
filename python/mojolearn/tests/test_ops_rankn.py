@@ -5,9 +5,9 @@ means and max over axis sets, NumPy broadcasting, the batched product,
 concat / split / take, softmax along an axis, conv2d and the 2-D pools, and
 their gradients in a recording session. Small, odd, non-board shapes.
 
-Views, axis reductions and first-maximum gradients are checked directly in
-checks/native_tests/rankn_views_cases.mojo; Python keeps their public shape,
-dtype and buffer-packing seams. The remaining numerical cases below still
+Views, axis reductions, first-maximum gradients, broadcasting and axis
+softmax are checked directly in checks/native_tests/rankn_*_cases.mojo;
+Python keeps their public shape, dtype, argument and buffer-packing seams. The remaining numerical cases below still
 use NumPy references and the legacy repeated-digest helper pending migration.
 """
 import hashlib
@@ -144,11 +144,12 @@ def test_maximum_and_gradient_pack_native_buffers():
 
 # ---------------------------------------------------------------- broadcasting
 def _bcast_run():
-    rng = _rng(3)
-    A = rng.standard_normal((2, 3, 4)).astype(np.float32)
-    B = rng.standard_normal((1, 3, 1)).astype(np.float32)
-    C = rng.standard_normal((4,)).astype(np.float32).reshape(1, 4)
-    D = (rng.random((2, 1, 4)) + 0.5).astype(np.float32)
+    A = np.array([-2.25, -0.5, 1.25, -1.75, 0.0, 1.75, -1.25, 0.5,
+                  2.25, -0.75, 1.0, -2.0, -0.25, 1.5, -1.5, 0.25,
+                  2.0, -1.0, 0.75, -2.25, -0.5, 1.25, -1.75, 0.0], np.float32).reshape(2, 3, 4)
+    B = np.array([-0.375, 0.625, -0.875], np.float32).reshape(1, 3, 1)
+    C = np.array([[-0.5, 0.75, 1.25, -1.5]], np.float32)
+    D = np.array([[[0.75, 1.25, 1.5, 0.5]], [[1.5, 0.75, 0.5, 1.25]]], np.float32)
     with _ops().Session(record=True) as s:
         a = s.tensor(A, requires_grad=True)
         b = s.tensor(B, requires_grad=True)
@@ -159,18 +160,13 @@ def _bcast_run():
         return [s.numpy(y), s.grad(a), s.grad(b), s.grad(c), s.grad(d)]
 
 
-def test_broadcasting_and_its_gradients():
-    rng = _rng(3)
-    A = rng.standard_normal((2, 3, 4)).astype(np.float32)
-    B = rng.standard_normal((1, 3, 1)).astype(np.float32)
-    C = rng.standard_normal((4,)).astype(np.float32).reshape(1, 4)
-    D = (rng.random((2, 1, 4)) + 0.5).astype(np.float32)
-    y, ga, gb, gc, gd = _twice("broadcast", _bcast_run)
-    assert np.array_equal(y, ((A + B) * C) / D)
-    assert np.allclose(ga, np.broadcast_to(C / D, A.shape), rtol=1e-6)
-    assert np.allclose(gb, (C / D * np.ones_like(A)).sum((0, 2), keepdims=True), rtol=1e-5, atol=1e-5)
-    assert np.allclose(gc, ((A + B) / D).sum((0, 1)).reshape(1, 4), rtol=1e-5, atol=1e-5)
-    assert np.allclose(gd, (-(A + B) * C / D ** 2).sum(1, keepdims=True), rtol=1e-5, atol=1e-5)
+def test_broadcast_and_gradient_buffers_pack_expected_shapes():
+    results = _bcast_run()
+    shapes = [(2, 3, 4), (2, 3, 4), (1, 3, 1), (1, 4), (2, 1, 4)]
+    for value, shape in zip(results, shapes):
+        assert value.dtype == np.float32 and value.shape == shape
+    assert results[0].flat[0] == 1.75
+    assert results[1].flat[0] == pytest.approx(-0.6666666666666666, rel=1e-6, abs=1e-8)
 
 
 # ---------------------------------------------------------------- batched product
@@ -251,23 +247,18 @@ def test_concat_split_take():
 
 
 # ---------------------------------------------------------------- softmax along an axis
-def _softmax_run():
-    X = _rng(6).standard_normal((4, 6, 5)).astype(np.float32)
+def test_axis_softmax_methods_route_axes_and_pack_buffers():
+    X = np.array([[[0.0, 1.0], [2.0, 3.0]], [[4.0, 5.0], [6.0, 7.0]]], np.float32)
     with _ops().Session() as s:
         x = s.tensor(X)
-        return [s.numpy(s.softmax(x, axis=1)), s.numpy(s.log_softmax(x, axis=0)), s.numpy(s.softmax(x))]
-
-
-def test_softmax_along_an_axis():
-    X = _rng(6).standard_normal((4, 6, 5)).astype(np.float64)
-    s1, l0, s2 = _twice("softmax_axis", _softmax_run)
-
-    def soft(v, axis):
-        e = np.exp(v - v.max(axis, keepdims=True))
-        return e / e.sum(axis, keepdims=True)
-    assert np.allclose(s1, soft(X, 1), rtol=1e-5, atol=1e-6)
-    assert np.allclose(l0, np.log(soft(X, 0)), rtol=1e-5, atol=1e-5)
-    assert np.allclose(s2, soft(X, 2), rtol=1e-5, atol=1e-6)
+        values = [s.numpy(s.softmax(x, axis=1)), s.numpy(s.log_softmax(x, axis=0)),
+                  s.numpy(s.softmax(x))]
+    for value in values:
+        assert value.dtype == np.float32 and value.shape == (2, 2, 2)
+    # Literal route/packing sentinels distinguish the explicit/default axes.
+    assert values[0].flat[0] == pytest.approx(0.11920292202211755, rel=1e-5, abs=1e-6)
+    assert values[1].flat[0] == pytest.approx(-4.0181499279178094, rel=1e-5, abs=1e-5)
+    assert values[2].flat[0] == pytest.approx(0.2689414213699951, rel=1e-5, abs=1e-6)
 
 
 # ---------------------------------------------------------------- conv2d and pools

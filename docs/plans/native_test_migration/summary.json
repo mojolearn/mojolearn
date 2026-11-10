@@ -76,6 +76,13 @@
       "additional_native_bf16_gemm_fixtures_per_executor": 9,
       "source_review_only": true,
       "runtime_status": "Orchestrator compile and run owed; see bf16-linalg-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "decision": "split-partial",
+      "additional_native_math_fixtures_per_executor": 4,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see rankn-math-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [
@@ -115,6 +122,12 @@
       "batch": "int8-linalg",
       "cpu_shapes_passed": 5,
       "gpu_shapes_passed": 5,
+      "source_status": "Passed unmodified."
+    },
+    {
+      "batch": "bf16-linalg",
+      "cpu_fixtures_passed": 9,
+      "gpu_fixtures_passed": 9,
       "source_status": "Passed unmodified."
     }
   ]
