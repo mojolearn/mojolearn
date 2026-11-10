@@ -223,14 +223,14 @@ def host_logistic_inference(model: PythonObject, fields: PythonObject, labels: P
     var out = PythonObject(None)
     var indices = List[Int]()
     if operation == "host_infer_predict" and targets == 1:
-        var codes = host_archive_typed(Python.tuple(rows), "<i8", context["output_context"])
+        # The native decoder already consumes machine-word codes. The QN
+        # ABI writes int64, the same word on every supported LP64 target;
+        # write directly into that owned native list instead of allocating
+        # a Python Array and copying each completed code into the list.
+        indices = List[Int](length=rows, fill=0)
         logistic_run_query(context["host_inference_entries"], QN_NATIVE_BINARY,
             QnQueryRequest(Int(py=classical_address(x)), Int(py=classical_address(weights)),
-                Int(py=classical_address(codes)), 0, rows, features, 1, intercept, False))
-        var values = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(codes)))
-        for i in range(rows):  # driver-loop: native completed class-code publication
-            indices.append(Int(values[i]))
-        _ = codes^
+                Int(indices.unsafe_ptr()), 0, rows, features, 1, intercept, False))
     elif operation == "host_infer_predict_proba" or operation == "host_infer_predict_log_proba":
         # Decision and link in one native call (no Python scores array).
         var probabilities = host_archive_typed(Python.tuple(rows, count), "<f8", context["output_context"])
