@@ -8,7 +8,7 @@ def source(path):
     return (ROOT / path).read_text()
 
 
-def test_native_dependency_closure_has_no_explicit_evaluation_or_missing_source():
+def test_native_dependency_closure_has_no_missing_source():
     seen, problems = audit()
     assert "transformer.transformer_binding_impl" in seen
     assert not problems, problems
@@ -43,15 +43,6 @@ def test_default_dependency_inventory_allows_native_capi_in_providers(tmp_path):
     seen, problems = audit(tmp_path, ("entry",))
     assert "providers.execution" in seen
     assert not problems, problems
-
-
-def test_default_inventory_checks_provider_execution_instead_of_exempting_folder(tmp_path):
-    (tmp_path / "providers").mkdir()
-    (tmp_path / "entry.mojo").write_text("from providers.algorithm import run\n")
-    (tmp_path / "providers" / "algorithm.mojo").write_text(
-        'from std.python import Python as P\ndef run():\n    return P.evaluate("1+2")\n')
-    _, problems = audit(tmp_path, ("entry",))
-    assert problems == [(("entry", "providers.algorithm"), "explicit Python evaluator call P.evaluate at line 3")]
 
 
 def test_connection_copies_table_once_and_retains_both_owners():

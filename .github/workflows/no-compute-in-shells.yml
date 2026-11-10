@@ -1,0 +1,74 @@
+name: No compute in shell code
+
+# The Python source guard was retired by owner instruction on 2026-11-10.
+# This workflow retains the independent shell-computation check.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number to check (posts the status on its head)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  statuses: write
+
+concurrency:
+  group: no-compute-in-shells-${{ github.event.pull_request.number || inputs.pr || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  no-compute-in-shells:
+    name: no-compute-in-shells
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: No compute in shell code beyond the shrinking baseline
+        env:
+          PR: ${{ inputs.pr }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          tip=$(git rev-parse HEAD)
+          if [ -n "$PR" ]; then
+            git fetch -q origin "+refs/pull/$PR/head:refs/remotes/pr/$PR"
+            tip=$(git rev-parse "refs/remotes/pr/$PR")
+          fi
+          # main's checker judges every branch, including one that edits it;
+          # until the checker reaches main, the tip's copy runs
+          if git cat-file -e origin/main:tools/hooks/no_compute_in_shells.py 2>/dev/null; then
+            git show origin/main:tools/hooks/no_compute_in_shells.py > "$RUNNER_TEMP/no_compute_in_shells.py"
+          else
+            git show "$tip:tools/hooks/no_compute_in_shells.py" > "$RUNNER_TEMP/no_compute_in_shells.py"
+          fi
+          state=success
+          python3 "$RUNNER_TEMP/no_compute_in_shells.py" --tree "$tip" 2> ncis.log || state=failure
+          cat ncis.log >&2
+          { echo '### no-compute-in-shells'; echo '```'; cat ncis.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$PR" ]; then
+            gh api "repos/$REPO/statuses/$tip" -f state=$state -f context=no-compute-in-shells \
+              -f description="no loops or launches in shell .mojo files beyond the baseline" \
+              -f target_url="$GITHUB_SERVER_URL/$REPO/actions/runs/$GITHUB_RUN_ID" >/dev/null
+          fi
+          [ $state = success ]
+      - name: Checker tests
+        if: ${{ inputs.pr == '' }}
+        env:
+          GIT_AUTHOR_NAME: ci
+          GIT_AUTHOR_EMAIL: ci@localhost
+          GIT_COMMITTER_NAME: ci
+          GIT_COMMITTER_EMAIL: ci@localhost
+        run: |
+          if [ -f tools/hooks/test_no_compute_in_shells.py ]; then
+            python3 -u tools/hooks/test_no_compute_in_shells.py
+          fi

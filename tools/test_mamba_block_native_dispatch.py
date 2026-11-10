@@ -8,7 +8,7 @@ PUBLIC = (ROOT / 'bindings/neural_block_public.mojo').read_text()
 PREFILL = (ROOT / 'bindings/neural_prefill_native.mojo').read_text()
 
 
-def test_native_closure_has_no_python_or_provider_backedge():
+def test_native_dependencies_resolve():
     _, failures = audit(ROOT, ('mamba.native_block_dispatch',))
     assert not failures, failures
     assert 'PythonObject' not in NATIVE
