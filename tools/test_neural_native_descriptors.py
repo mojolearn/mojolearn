@@ -7,7 +7,7 @@ def read(name):
     return (ROOT / name).read_text()
 
 
-def test_native_closure_includes_shared_numerical_owners_without_cpython():
+def test_native_dependencies_resolve_and_include_shared_numerical_owners():
     seen, failures = audit()
     assert {'training.samba_ops', 'mamba.impl.mamba_shell_impl', 'core.native_descriptor_call'} <= seen
     assert not failures, failures

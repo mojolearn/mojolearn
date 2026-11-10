@@ -286,6 +286,10 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 - Audit the actual public operation and its transitive callees. Checker baseline entries, including `cpu-route`
   tags, are debt to remove, never exemptions; an empty baseline is not proof. The no-host-routes push hook enforces
   the rule.
+- **The Python source guard is retired (Andrew, 2026-11-10).** Remove the kernel-path/token guard and its
+  invocation from push and CI. Do not restore it under another name or replace it with a source-count gate.
+  Its excluded binding/provider layers contained the Python dependence, so a zero finding count never proved a
+  Python-free operation. Complete the typed Mojo boundary migration and retain actual runtime correctness checks.
 
 ### Wait for Mojo and Modular
 

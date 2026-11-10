@@ -9,7 +9,7 @@ def text(path):
     return (ROOT / path).read_text()
 
 
-def test_native_engine_transitive_closure_has_no_provider_or_python():
+def test_native_engine_transitive_dependencies_resolve():
     _, problems = audit(ROOT, ('transformer.native_generation_engine',))
     assert not problems, problems
 

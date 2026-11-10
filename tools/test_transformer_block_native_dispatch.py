@@ -8,7 +8,7 @@ PROVIDER = (ROOT / 'providers/python/neural_descriptor_pyapi.mojo').read_text()
 PUBLIC = (ROOT / 'bindings/neural_block_public.mojo').read_text()
 
 
-def test_native_block_closure_has_no_cpython_provider_edge():
+def test_native_block_dependencies_resolve():
     _, problems = audit(ROOT, ('transformer.native_block_dispatch',))
     assert not problems, problems
     assert 'PythonObject' not in NATIVE

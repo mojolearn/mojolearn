@@ -4,7 +4,7 @@ from check_generation_native_boundary import audit
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_engine_endpoint_closure_has_no_python_or_provider_dependency():
+def test_engine_endpoint_dependencies_resolve():
     _, failures = audit(ROOT, ('core.native_execution',))
     assert not failures, failures
 
