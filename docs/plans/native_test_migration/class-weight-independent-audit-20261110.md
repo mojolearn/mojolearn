@@ -1,7 +1,8 @@
 # Independent class-weight migration source audit
 
 Reviewed shared migration `26205a7311` and `2bb9064243`, followed by the
-SVC/tree consolidation `68adcb6199` and admission repair `94d1704364`.
+SVC/tree consolidation `68adcb6199` and admission repairs `94d1704364`
+and `9dc30204ff`. The final reviewed product source is `9dc30204ff`.
 This is source review only. No compiler, product test, timing, installed
 loading or identity run was executed in this lane.
 
@@ -24,9 +25,13 @@ loading or identity run was executed in this lane.
 3. **The first tree repair narrowed native mapping support.** Its exact
    builtin-dictionary requirement also rejected exact `OrderedDict` and
    `defaultdict`, previously admitted by the tree context and constructor
-   validation. The producing lane owns preservation of these native mapping
-   types while refusing subclasses and callback-bearing keys. This follow-up
-   remains pending in this recorded source.
+   validation. Repair `9dc30204ff` preserves the exact native mapping types
+   in the existing context, while refusing subclasses and callback-bearing
+   keys. Native dictionary lookup retains missing-class default 1.0 and
+   does not invoke a defaultdict factory.
+
+No remaining concrete source defect was identified in this reviewed scope.
+Compilation and runtime behavior remain unproved by this audit.
 
 ## Admission and mixed numeric semantics
 
