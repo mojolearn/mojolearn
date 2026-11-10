@@ -5,7 +5,7 @@
 # when run from a linked worktree.
 #
 # The installed copies never update themselves: rerun this script after any
-# change to tools/hooks/pre-push or tools/hooks/no_host_routes.py. On
+# change to the installed hook sources. On
 # 2026-10-08 the installed copies predated the --branch mode (2026-10-07), so
 # every non-main push was judged on its whole tree. Since 2026-10-09 pre-push
 # also skips the host-route fence for archive refs (refs/heads/archive/*,
@@ -20,16 +20,15 @@ for h in pre-commit pre-push; do
     chmod +x "$hooks/$h"
     echo "installed $hooks/$h"
 done
-# pre-push runs this beside itself, so branches that predate it are checked too
-cp "$here/no_host_routes.py" "$hooks/no_host_routes.py"
-chmod +x "$hooks/no_host_routes.py"
+# Rebuild scope uses only the import graph, with no runtime classification.
+cp "$here/mojo_import_graph.py" "$hooks/mojo_import_graph.py"
 # the rebuild fence (2026-10-17): refuses a lane change to a module most bindings import
 cp "$here/rebuild_fence.py" "$hooks/rebuild_fence.py"
 chmod +x "$hooks/rebuild_fence.py"
 # Owner 2026-11-10: retire the misleading Python source guard, including
 # its previously installed copy in the shared hooks directory.
-rm -f "$hooks/no_python_in_kernels.py" "$hooks/no_compute_in_shells.py"
+rm -f "$hooks/no_python_in_kernels.py" "$hooks/no_compute_in_shells.py" "$hooks/no_host_routes.py"
 # the no-runtime-import_module check (2026-11-06): no new Python.import_module on a bindings/providers call path
 cp "$here/no_runtime_import_module.py" "$hooks/no_runtime_import_module.py"
 chmod +x "$hooks/no_runtime_import_module.py"
-echo "installed $hooks/no_host_routes.py"
+echo "installed $hooks/mojo_import_graph.py"

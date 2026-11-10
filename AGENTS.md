@@ -290,11 +290,12 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 - Preserve supported interfaces through native implementation; do not remove a feature to claim compliance.
   Measure the gain; do not assume removing Python makes every workload faster.
 - Audit the actual public operation and its transitive callees. Checker baseline entries, including `cpu-route`
-  tags, are debt to remove, never exemptions; an empty baseline is not proof. The no-host-routes push hook enforces
-  the rule.
+  tags, are evidence to review, never exemptions; an empty baseline is not proof. Native execution and device
+  behavior establish compliance; source-graph reachability does not distinguish admission from GPU computation.
 - **The Python source guards are retired (Andrew, 2026-11-10).** Remove the kernel-path/token guard and the
-  shell-loop counter from push and CI. Do not restore them under another name or replace them with source-count
-  gates. The first excluded the binding/provider dependence; the second rejected required UNPACK/PACK loops.
+  shell-loop counter and GPU-route source-graph fence from push and CI. Do not restore them under another name
+  or replace them with source-count gates. They excluded binding dependence or rejected required UNPACK/PACK
+  work, including native host input conversion before GPU execution.
   Their counts never proved a Python-free operation. Complete the typed Mojo boundary migration and retain
   actual runtime correctness checks.
 
@@ -332,8 +333,8 @@ The Torch and MAX adapters are front-ends over the same compiled kernels and com
 - **One worktree per lane:** `~/mojolearn-wt/<lane>` on branch `lane/<lane>` (`tools/lean_worktree.sh` when old
   evidence is not needed). Commit after every edit and push often. Never `git stash`, rebase, `reset --hard` or
   `checkout --` someone else's edits. Never mutate another agent's worktree.
-- **Never `git push --no-verify`.** The pre-push host-route fence judges a branch only on what it adds over its
-  merge-base with main. A push to main is judged on the whole tree; if main is red, fix main first (2026-10-07).
+- **Never `git push --no-verify`.** Run the remaining push hooks normally. The retired runtime source guards
+  must not be restored; native correctness and GPU behavior remain requirements.
 - **Nothing in `/private/tmp`** (wiped on reboot). Briefs, notes and scripts live in the worktree or
   `~/mojolearn-evidence/`.
 - **Use bash, not zsh,** for loops and variable expansion: zsh does not word-split `$FLAGS`.

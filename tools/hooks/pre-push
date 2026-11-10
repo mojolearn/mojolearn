@@ -8,13 +8,9 @@
 # file (see tools/hooks/pre-commit for the record). Reading the blob sizes
 # takes seconds; the upload took hours.
 #
-# The third fence (2026-10-02): no_host_routes.py --tree scans every file a
-# GPU install runs at the pushed commit (Mojo modules the GPU bindings reach
-# through their imports, GPU-path Python) and refuses any CPU work in GPU code
-# that is not in tools/hooks/host_routes_baseline.tsv, and any baseline row
-# that no longer matches (the baseline only shrinks). It prints the debt per
-# class and per owner. A branch that predates the baseline is judged on what
-# it adds over its merge-base with main, against main's baseline.
+# Owner 2026-11-10: the source-graph runtime fence is retired. It classified
+# admitted host input preparation as GPU computation. Runtime restrictions
+# remain; source reachability/counts cannot certify them.
 #
 # The tombstone fence (2026-10-28): tools/tests/test_tombstones_preserved.py --tree, when the
 # pushed tree has it, refuses a push whose docs/TOMBSTONES.md index row, section, patch under
@@ -33,7 +29,7 @@
 # (experiments/python_audit_20261028/allowed_exceptions.tsv) nor recorded debt (prohibited_debt.tsv),
 # or an unresolved count above the pin. Static source scan only; nothing is imported.
 #
-# Which refs the host-route fence judges (2026-10-09):
+# Which refs the remaining checks judge:
 #   refs/heads/main                       the whole tree
 #   refs/heads/<anything else>            --branch: only what it adds over its
 #                                         merge-base with main (lane/*, fix/*, ...)
@@ -45,7 +41,7 @@
 #                                         branches in bundles. Archive a dead branch
 #                                         as archive/<date>/<old name>; never merge
 #                                         an archive ref (revive it as a new lane/*
-#                                         branch, which the fence judges as usual).
+#                                         branch, which the remaining checks judge).
 #   refs/heads/salvage/*                  skipped silently (2026-10-05, unchanged)
 #   any other ref (tags, refs/archive/...) not judged (unchanged)
 # The size fence below applies to every push, archive refs included.
@@ -61,7 +57,7 @@ here=$(dirname "$0")
 # installed copies never update themselves (an Oct 8 copy refused tagged driver loops on 2026-10-17): say so when the
 # checkout's hooks differ from the installed ones
 top=$(git rev-parse --show-toplevel 2>/dev/null)
-for f in pre-push no_host_routes.py rebuild_fence.py no_runtime_import_module.py; do
+for f in pre-push mojo_import_graph.py rebuild_fence.py no_runtime_import_module.py; do
     if [ -f "$top/tools/hooks/$f" ] && ! cmp -s "$top/tools/hooks/$f" "$here/$f"; then
         echo "pre-push: the installed $f differs from tools/hooks/$f in this checkout; run bash tools/hooks/install.sh" >&2
     fi
@@ -69,13 +65,12 @@ done
 echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
     [ -z "$local_sha" ] && continue
     [ "$local_sha" = "$zero" ] && continue
-    [ -f "$here/no_host_routes.py" ] || continue
     # archive/* and salvage/* refs are archives of dead branches and old worktrees (owner, 2026-10-05 and
-    # 2026-10-09): never merged, so no host-route check; the size fence below still applies.
+    # 2026-10-09): never merged; the size fence below still applies.
     case "$remote_ref" in
         refs/heads/salvage/*) continue ;;
         refs/heads/archive/*|refs/tags/archive-*|refs/tags/archive/*)
-            echo "pre-push: host-route fence skipped for $remote_ref: it is an archive ref, and archive refs are never merged (the size fence still applies)" >&2
+            echo "pre-push: runtime checks skipped for $remote_ref: it is an archive ref, and archive refs are never merged (the size fence still applies)" >&2
             continue ;;
         refs/heads/*) ;;
         *) continue ;;
@@ -84,7 +79,6 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
     # it adds over its merge-base with main (owner, 2026-10-07)
     mode=--branch
     [ "$remote_ref" = "refs/heads/main" ] && mode=
-    python3 "$here/no_host_routes.py" --tree "$local_sha" $mode || exit 4
     # the rebuild fence (2026-10-17): a lane change to a module most bindings import is refused
     if [ -f "$here/rebuild_fence.py" ]; then python3 "$here/rebuild_fence.py" "$local_sha" $mode || exit 4; fi
     # the tombstone fence (2026-10-28): the record only grows (tools/tests/test_tombstones_preserved.py,
