@@ -233,15 +233,16 @@ after, one UNPACK (3 buffer reads, 3 scalars), one RUN, one PACK.
 What is deleted with the pilot: the Python-dict parameter reads, `classical_ridge_parameters`' Python comparisons,
 the `entries[...]` calls and their `Python.list` packing for this door, the Python-array scratch allocations.
 
-Gate before any second family starts:
+Pilot evidence, recorded separately from development merge approval:
 
 1. Compile green on the Mac and the NVIDIA / AMD cross-compile.
-2. Import, the Ridge and LinearRegression test files, and the light smoke pass on the Mac.
+2. The Ridge and LinearRegression tests and focused public import/runtime checks on the Mac.
 3. Focused correctness and lifetime tests of the compiled pilot. No identity runs or old-version digest matching
    during development: cross-vendor identity is recorded once after the final source freeze, before release.
 4. Measured on NVIDIA and AMD against the base: ols and ridge fit and predict on the board rows, and the call
    overhead on a 16-row fit and a single-row predict (where the object-layer cost is the whole time). The pilot is
-   kept only if nothing is slower.
+   accepted for release only if nothing is slower. These measurements do not gate writing subsequent migration
+   batches; completed code is collected and compiled together under the 2026-11-10 development merge rule below.
 
 ## 7. Rollout after the pilot
 

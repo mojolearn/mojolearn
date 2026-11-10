@@ -35,7 +35,7 @@ def test_moment_assignment_refuses_before_publishing_or_uploading(name, resident
     before = _snapshot(owner)
     assert before == _snapshot(control)
     old_first, old_second = owner.exp_avg, owner.exp_avg_sq
-    field_state = (owner._m, owner._v, owner._res, owner._pristine, owner._host_fresh, owner.t)
+    field_state = (owner._m, owner._v, owner._native_optimizer_owner, owner.t, bool(owner.resident_))
     parameter_bytes = parameter.tobytes()
     candidate = np.ones(0 if bad_kind == "empty" else 1 if bad_kind == "undersized" else 8,
                         dtype="f8" if bad_kind == "dtype" else "f4")
@@ -48,7 +48,8 @@ def test_moment_assignment_refuses_before_publishing_or_uploading(name, resident
     for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):
         assert not audit.report()[key], audit.report()
     assert owner._m is field_state[0] and owner._v is field_state[1]
-    assert (owner._res, owner._pristine, owner._host_fresh, owner.t) == field_state[2:]
+    assert owner._native_optimizer_owner is field_state[2]
+    assert (owner.t, bool(owner.resident_)) == field_state[3:]
     assert owner.exp_avg is old_first and owner.exp_avg_sq is old_second
     assert _snapshot(owner) == before
     assert parameter.tobytes() == parameter_bytes and candidate.tobytes() == candidate_bytes
