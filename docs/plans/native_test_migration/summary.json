@@ -8,9 +8,9 @@
     "retain-python-boundary": 10,
     "retain-tooling": 2,
     "review-module-gate": 1,
-    "split-migrated": 4,
+    "split-migrated": 5,
     "split-needed": 9,
-    "split-partial": 2
+    "split-partial": 1
   },
   "reviewed_files": 28,
   "not_a_gate": true,
@@ -90,6 +90,13 @@
       "additional_native_graph_fixtures_per_executor": 2,
       "source_review_only": true,
       "runtime_status": "Orchestrator compile and run owed; see rankn-graph-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_ops_rankn.py",
+      "decision": "split-migrated",
+      "additional_native_conv_fixtures_per_executor": 2,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see rankn-conv-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [

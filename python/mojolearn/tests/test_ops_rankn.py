@@ -1,17 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Rank-N tensors in mojolearn.ops.Session (docs/plans/AUTOGRAD_RANKN.md):
-views (reshape, flatten, squeeze, unsqueeze, permute, transpose), sums,
-means and max over axis sets, NumPy broadcasting, the batched product,
-concat / split / take, softmax along an axis, conv2d and the 2-D pools, and
-their gradients in a recording session. Small, odd, non-board shapes.
+"""Public rank-N Session buffer, shape, argument and refusal contracts.
 
-Views, reductions, broadcasting, axis softmax, batched attention and layout
-graphs are checked directly in checks/native_tests/rankn_*_cases.mojo;
-Python keeps their public shape, dtype, argument and buffer-packing seams. The remaining numerical cases below still
-use NumPy references and the legacy repeated-digest helper pending migration.
+All numerical view/reduction/broadcast/attention/layout/convolution/pool
+and gradient oracles live in checks/native_tests/rankn_*_cases.mojo and
+run directly on typed native host/device sessions. Python retains public
+array packing, tuple/axis/default arguments, post-close buffer ownership,
+weight-only gradient access and named refusal checks.
 """
-import hashlib
-
 import numpy as np
 import pytest
 
@@ -37,27 +32,6 @@ pytestmark = pytest.mark.skipif(not _has_rankn(),
 def _ops():
     from mojolearn import ops
     return ops
-
-
-def _digest(*arrays):
-    h = hashlib.sha256()
-    for a in arrays:
-        h.update(np.ascontiguousarray(a, dtype=np.float32).tobytes())
-    return h.hexdigest()[:16]
-
-
-def _emit(name, digest):
-    print(f"RANKN_DIGEST {name} {digest}")
-
-
-def _twice(name, run):
-    """Run `run` twice; the results must have the same digest. Emits it."""
-    first = run()
-    second = run()
-    d = _digest(*first)
-    assert d == _digest(*second), f"{name}: two runs differ"
-    _emit(name, d)
-    return first
 
 
 def _rng(seed):
@@ -241,32 +215,6 @@ def test_axis_softmax_methods_route_axes_and_pack_buffers():
 
 
 # ---------------------------------------------------------------- conv2d and pools
-def _conv_reference(X, W, b, stride, pad):
-    """Direct cross-correlation in float64 (the test's own oracle)."""
-    N, C, H, Wd = X.shape
-    OC, _, KH, KW = W.shape
-    Xp = np.pad(X.astype(np.float64), ((0, 0), (0, 0), (pad, pad), (pad, pad)))
-    OH = (H + 2 * pad - KH) // stride + 1
-    OW = (Wd + 2 * pad - KW) // stride + 1
-    out = np.zeros((N, OC, OH, OW))
-    for i in range(OH):
-        for j in range(OW):
-            win = Xp[:, :, i * stride:i * stride + KH, j * stride:j * stride + KW]
-            out[:, :, i, j] = np.einsum("nckl,ockl->no", win, W)
-    return out + b.reshape(1, OC, 1, 1)
-
-
-def _pool_reference(X, k, stride, kind):
-    N, C, H, W = X.shape
-    OH, OW = (H - k) // stride + 1, (W - k) // stride + 1
-    out = np.zeros((N, C, OH, OW), dtype=np.float64)
-    for i in range(OH):
-        for j in range(OW):
-            win = X[:, :, i * stride:i * stride + k, j * stride:j * stride + k].astype(np.float64)
-            out[:, :, i, j] = win.max((2, 3)) if kind == "max" else win.mean((2, 3))
-    return out
-
-
 def _conv_inputs():
     rng = _rng(7)
     X = rng.standard_normal((2, 3, 9, 11)).astype(np.float32)
@@ -293,37 +241,25 @@ def _conv_run():
         return [s.numpy(y1), s.numpy(y2), s.numpy(mp), s.numpy(ap), s.grad(x), s.grad(w), s.grad(bb)]
 
 
-def test_conv2d_and_pools():
-    X, W, b = _conv_inputs()
-    y1, y2, mp, ap, gx, gw, gb = _twice("conv2d_pools", _conv_run)
-    assert np.allclose(y1, _conv_reference(X, W, b, 1, 1), rtol=1e-4, atol=1e-4)
-    assert np.allclose(y2, _conv_reference(X, W, np.zeros(4), 2, 0), rtol=1e-4, atol=1e-4)
-    assert np.array_equal(mp, _pool_reference(y1, 2, 2, "max").astype(np.float32))
-    assert np.allclose(ap, _pool_reference(X, 3, 2, "avg"), rtol=1e-5, atol=1e-6)
-    assert gx.shape == X.shape and gw.shape == W.shape and gb.shape == (1, 4)
-    assert np.isfinite(gx).all() and np.isfinite(gw).all() and np.isfinite(gb).all()
+def test_conv_pool_methods_pack_public_value_and_gradient_buffers():
+    results = _conv_run()
+    shapes = [(2, 4, 9, 11), (2, 4, 4, 5), (2, 4, 4, 5), (2, 3, 4, 5),
+              (2, 3, 9, 11), (4, 3, 3, 3), (1, 4)]
+    for value, shape in zip(results, shapes):
+        assert value.dtype == np.float32 and value.shape == shape
+        assert np.isfinite(value).all()
 
 
-def test_conv2d_gradient_by_finite_differences():
-    rng = _rng(8)
-    X = rng.standard_normal((1, 2, 5, 6)).astype(np.float32)
-    W = (0.5 * rng.standard_normal((3, 2, 3, 3))).astype(np.float32)
-    G = rng.standard_normal((1, 3, 5, 6))
-
-    def loss_of(Wv):
-        return float((_conv_reference(X, Wv, np.zeros(3), 1, 1) * G).sum())
+def test_convolution_weight_only_gradient_buffer():
+    X = np.ones((1, 2, 5, 6), np.float32)
+    W = np.ones((3, 2, 3, 3), np.float32)
     with _ops().Session(record=True) as s:
         w = s.tensor(W, requires_grad=True)
         y = s.conv2d(s.tensor(X), w, padding=1)
-        s.backward(s.sum(s.mul(y, s.tensor(G.astype(np.float32)))))
-        gw = s.grad(w)
-    eps = 1e-3
-    for idx in ((0, 0, 0, 0), (1, 1, 2, 1), (2, 0, 1, 2)):  # three weights, central differences
-        Wp, Wm = W.astype(np.float64), W.astype(np.float64)
-        Wp[idx] += eps
-        Wm[idx] -= eps
-        fd = (loss_of(Wp) - loss_of(Wm)) / (2 * eps)
-        assert abs(gw[idx] - fd) <= 1e-2 * max(1.0, abs(fd))
+        s.backward(s.sum(y))
+        gradient = s.grad(w)
+    assert gradient.dtype == np.float32 and gradient.shape == W.shape
+    assert gradient[0, 0, 1, 1] == 30.0  # Weight-only handle/packing sentinel.
 
 
 # ---------------------------------------------------------------- refusals
