@@ -12,7 +12,7 @@ def read(path):
 def body(source, name):
     return re.search(rf'^def {name}\(.*?(?=^def |\Z)', source, re.M | re.S).group()
 
-def test_native_owner_has_no_provider_or_python_dependency():
+def test_native_owner_dependencies_resolve():
     _, errors = audit(ROOT, ('kernel_methods.native_descriptor_dispatch', 'kernel_methods.descriptor_schema'))
     assert not errors, errors
     source = read('kernel_methods/native_descriptor_dispatch.mojo')

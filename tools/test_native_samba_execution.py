@@ -4,7 +4,7 @@ from check_generation_native_boundary import audit
 ROOT=Path(__file__).resolve().parents[1]
 
 
-def test_native_execution_and_extended_primitive_closures_are_python_free():
+def test_native_execution_and_extended_primitive_dependencies_resolve():
     _, failures=audit(ROOT,('training.native_samba_execution','training.native_primitive_dispatch'))
     assert not failures, failures
 
