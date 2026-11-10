@@ -6,9 +6,9 @@
   "file_decisions": {
     "needs-semantic-review": 567,
     "retain-python-boundary": 23,
-    "split-partial": 1,
+    "split-partial": 2,
     "split-migrated": 14,
-    "split-needed": 8,
+    "split-needed": 7,
     "review-module-gate": 1,
     "retain-tooling": 2
   },
@@ -370,6 +370,21 @@
       "parametrized_cases": 24,
       "source_review_only": true,
       "runtime_status": "Root installed Python execution owed after producer Samba owner repair; see samba-owner-consumer-handoff.txt."
+    },
+    {
+      "paths": [
+        "python/mojolearn/tests/test_logistic_multiclass_surface.py",
+        "python/mojolearn/tests/test_logistic_native_predict.py"
+      ],
+      "decision": "split-partial",
+      "native_fixtures_per_executor": 4,
+      "executors": [
+        "QnHostKernels through qn_host_native_v1",
+        "QnDeviceKernels through qn_device_native_v1"
+      ],
+      "producer_dependency": "71c1b26f53",
+      "source_review_only": true,
+      "runtime_status": "Root compile/native run and retained installed Python boundary execution owed; see logistic-numeric-handoff.txt."
     }
   ],
   "additional_semantic_reviews": [
