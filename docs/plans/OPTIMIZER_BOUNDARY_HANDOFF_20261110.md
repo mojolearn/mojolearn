@@ -158,3 +158,27 @@ This preserves writable/rebound public attributes and custom-field clearing.
 Registry/checkpoint preparation and persistent state planning still remain.
 Root owes get/set-params mutation/rollback/refusal checks and affected closure
 compilation. No lane tests or compilation were run.
+
+## Native tensor plans and boundary owner vectors
+
+Parameter/microbatch staging now uses native vectors. Python lists are created
+only for the public `params` and accumulated-gradient results. Removed: private
+Python list construction/append calls, an unused sequence adapter, redundant
+subclass/isinstance paths after exact type admission, and Python mixed-precision
+message lookup from the tensor plan. Layout, dtype, gradient shape/count and
+microbatch-shape decisions now operate on native `TensorView` values in
+`training/optimizer_input_plan.mojo` (its shared TensorView module has no Python
+imports). The existing update kernels and reduction order are unchanged.
+
+UNPACK retains both exact object/storage pins and the existing buffer exports
+through native execution. Each Py_buffer lease reuses its admission allocation
+and captures the existing cached release function; native RUN receives neither
+Python owners nor leases. Error unwinding releases them after the GIL scope
+returns. Array storage memoryviews are retained from the same slot admission,
+without rereading or copying the buffer. This also prevents ordinary exporter
+resize while native code still borrows its storage.
+
+Remaining: strided preparation still calls PyBuffer_ToContiguous; registry and
+checkpoint/output planning plus persistent optimizer state still need migration.
+No family-complete or performance claim is made. Root owes compilation, direct
+layout/owner fixtures and public mutation/concurrency/refusal checks.
