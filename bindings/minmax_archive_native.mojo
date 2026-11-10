@@ -1,110 +1,131 @@
 # SPDX-License-Identifier: Apache-2.0
-# Existing MinMaxScaler NPZ schema, decoded and published through native slots.
-from std.memory import memcpy
+"""MinMaxScaler archive UNPACK/PACK over typed native members and plans."""
 from std.python import Python, PythonObject
-from bindings.native_loaded_module import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem, py_contains
-from bindings.classical_arrays import classical_address, classical_typed, classical_i64, classical_f64, classical_is_array, classical_c_order
+from bindings.classical_arrays import classical_is_array, classical_c_order, classical_numpy
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_archive import classical_archive_write
-from bindings.classical_archive_read import classical_archive_read, _archive_string, _archive_exact
-from bindings.minmax_metadata import _flag, minmax_range_pair
+from bindings.classical_archive import (
+    _archive_unpack_member, _archive_class_name_unpack,
+    _archive_open, _archive_methods, _archive_pack_members, _archive_file_call,
+)
+from bindings.classical_archive_read import _archive_read_input
+from bindings.classical_archive_output import archive_events_pack, archive_numeric_pack
+from bindings.classical_archive_linear import archive_print_mode_unpack
+from bindings.native_buffer_owner import native_storage_allocate
+from bindings.minmax_metadata import _flag, minmax_range_values
+from core.native_archive_write import NativeArchiveMember
+from core.native_archive_read import NativeArchiveDecoded, native_archive_read_status
+from core.native_archive_minmax import (
+    NativeMinMaxArchiveClass, NativeMinMaxArchivePlan, native_minmax_statistic_names,
+    native_minmax_archive_plan, native_minmax_saved_statistic,
+    native_minmax_archive_members, native_minmax_statistic_view,
+)
 
-alias F32P = MutPointer[Float32, MutUntrackedOrigin]
-alias F64P = MutPointer[Float64, MutUntrackedOrigin]
-alias I64P = MutPointer[Int64, MutUntrackedOrigin]
+
+def _minmax_archive_class_unpack(cls: PythonObject, context: PythonObject) raises -> NativeMinMaxArchiveClass:
+    var result = NativeMinMaxArchiveClass()
+    var native_type = py_type(py_type(PythonObject("")))
+    if py_type(cls) is not native_type:
+        result.layout_error = 1
+        return result^
+    var type_fields = native_type.__dict__
+    var mro = py_call(type_fields["__mro__"].__get__, cls)
+    var descriptor_type = py_type(context["archive_memoryview_type"].obj)
+    var dictionary = False
+    for i in range(len(mro)):  # unpack: exact native class namespace metadata
+        var fields = py_call(type_fields["__dict__"].__get__, mro[i])
+        if py_contains(fields, "__del__"):
+            result.layout_error = 2
+            return result^
+        if not dictionary and py_contains(fields, "__dict__"):
+            if py_type(fields["__dict__"]) is not descriptor_type:
+                result.layout_error = 3
+                return result^
+            dictionary = True
+        result.names.append(_archive_class_name_unpack(mro[i]))
+    if not dictionary:
+        result.layout_error = 4
+    return result^
 
 
 def minmax_archive_save(model: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
-    if py_get(fields,"numeric_mode_") is None or py_get(fields,"scale_") is None:
+    if py_get(fields, "numeric_mode_") is None or py_get(fields, "scale_") is None:
         raise Error("RuntimeError: this estimator is not fitted yet")
-    var b = native_loaded_module("builtins")
-    if py_type(fields["n_features_in_"]) is not b.int or py_type(fields["n_samples_seen_"]) is not b.int:
+    var integers = py_type(PythonObject(0))
+    if py_type(fields["n_features_in_"]) is not integers or py_type(fields["n_samples_seen_"]) is not integers:
         raise Error("TypeError: MinMaxScaler dimensions and counts must remain native integers")
-    var d = Int(py=fields["n_features_in_"])
-    var meta = classical_typed(Python.tuple(3),"<i8",context["output_context"])
-    var mp = I64P(unsafe_from_address=Int(py=classical_address(meta)))
-    mp[0] = Int64(d)
-    mp[1] = Int64(py=fields["n_samples_seen_"])
-    mp[2] = Int64(_flag(fields["clip_"],"clip_",context))
-    var endpoints = minmax_range_pair(fields["feature_range_"],context)
-    var bounds = classical_typed(Python.tuple(2),"<f8",context["output_context"])
-    var bp = F64P(unsafe_from_address=Int(py=classical_address(bounds)))
-    bp[0] = Float64(py=endpoints[0])
-    bp[1] = Float64(py=endpoints[1])
-    var arrays = Python.dict(format="mojolearn-scaler-1",estimator=py_type(model).__name__,numeric_mode=fields["numeric_mode_"],meta=meta,feature_range=bounds)
-    var names = Python.tuple("data_min","data_max","data_range","scale","min")
-    for k in range(5):  # small-loop(stats: the five saved extrema statistic fields)
-        var value = fields[names[k]+"_"]
-        classical_admit_value(value,context)
-        if not classical_is_array(value,context) or String(value.dtype) != "<f4" or Int(py=value.ndim) != 1 or Int(py=value.size) != d or not classical_c_order(value,context):
+    var features = Int(py=fields["n_features_in_"])
+    var samples = Int64(py=fields["n_samples_seen_"])
+    var clip = _flag(fields["clip_"], "clip_", context)
+    var endpoints = minmax_range_values(fields["feature_range_"], context)
+    var names = native_minmax_statistic_names()
+    var values = List[PythonObject]()
+    for name in names:  # unpack: five public statistic buffers, in refusal order
+        var value = fields[PythonObject(name + "_")]
+        classical_admit_value(value, context)
+        if not classical_is_array(value, context):
             raise Error("MinMaxScaler saved statistics must remain contiguous Float32 feature vectors")
-        py_setitem(arrays,names[k],value)
-    return classical_archive_write(path,arrays,context)
+        native_minmax_saved_statistic(String(value.dtype), Int(py=value.ndim), Int(py=value.size),
+                                     features, classical_c_order(value, context))
+        values.append(value)
+    # Preserve the existing file-open boundary after saved-state admission.
+    # Mode storage and member buffers are unpacked only after that open.
+    var opened = _archive_open(path, context)
+    var file = opened[0]
+    var methods = _archive_methods(file, context)
+    var pins = List[PythonObject]()
+    var members = List[NativeArchiveMember]()
+    try:
+        var statistics = List[NativeArchiveMember]()
+        for i in range(len(names)):  # unpack: native descriptors and borrowed owner pins
+            statistics.append(_archive_unpack_member(names[i], values[i], context, pins))
+        var mode = _archive_unpack_member("numeric_mode", fields["numeric_mode_"], context, pins)
+        members = native_minmax_archive_members(statistics^, mode^, _archive_class_name_unpack(py_type(model)),
+            features, samples, clip, endpoints[0], endpoints[1])
+        _archive_pack_members(file, methods, members)
+    finally:
+        if Bool(py=opened[1]):
+            _ = _archive_file_call(methods["close"], file)
+        _ = values
+        _ = pins
+        _ = members
+    return path
 
 
-def minmax_archive_build(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = native_loaded_module("builtins")
-    if String(_archive_string(arrays,"format",context)) != "mojolearn-scaler-1":
-        raise Error("model archive format does not match mojolearn-scaler-1")
-    if py_type(cls) is not b.type:
-        raise Error("TypeError: native scaler archives require an ordinary native class layout")
-    var saved = _archive_string(arrays,"estimator",context)
-    var mro = py_call(b.type.__dict__["__mro__"].__get__,cls)
-    var known = False
-    var dictionary = False
-    for k in range(len(mro)):  # driver-loop: native saved estimator ancestry names
-        var class_fields = py_call(b.type.__dict__["__dict__"].__get__,mro[k])
-        if py_contains(class_fields,"__del__"):
-            raise Error("TypeError: Python finalizer hooks cannot execute while loading a native scaler")
-        if not dictionary and py_contains(class_fields,"__dict__"):
-            if py_type(class_fields["__dict__"]) is not py_type(b.memoryview.obj):
-                raise Error("TypeError: native scaler archives require a native instance dictionary")
-            dictionary = True
-        known = known or Bool(py=mro[k].__name__ == saved)
-    if not dictionary:
-        raise Error("TypeError: native scaler archives require an instance dictionary")
-    if not known:
-        raise Error("model estimator does not match loading class")
-    var meta = _archive_exact(arrays,"meta","<i8",context)
-    if Int(py=meta.size) != 3 or Int(py=meta.ndim) != 1:
-        raise Error("MinMaxScaler meta must hold three fields")
-    var bounds = _archive_exact(arrays,"feature_range","<f8",context)
-    if Int(py=bounds.size) != 2 or Int(py=bounds.ndim) != 1:
-        raise Error("MinMaxScaler feature_range must hold two values")
-    var mode = _archive_string(arrays,"numeric_mode",context)
-    if String(mode) != "identical" and String(mode) != "fast":
-        raise Error("invalid saved numeric_mode")
-    var output_context = py_get(context,"output_context",context)
-    var d = classical_i64(meta,0)
-    var lower = classical_f64(bounds,0)
-    var upper = classical_f64(bounds,1)
-    var clip = classical_i64(meta,2) != 0
-    var model = py_call(b.object.__new__,cls)
+def _minmax_archive_pack(cls: PythonObject, plan: NativeMinMaxArchivePlan,
+                         members: List[NativeArchiveDecoded], context: PythonObject) raises -> PythonObject:
+    var model = native_storage_allocate(cls)
     var fields = py_fields(model)
-    py_setitem(fields,"copy",True)
-    py_setitem(fields,"numeric_mode",PythonObject(None))
-    py_setitem(fields,"clip",clip)
-    py_setitem(fields,"feature_range",Python.tuple(lower,upper))
-    var names = Python.tuple("data_min","data_max","data_range","scale","min")
-    for k in range(5):  # small-loop(stats: exact saved feature vectors)
-        var stored = _archive_exact(arrays,String(names[k]),"<f4",context)
-        if Int(py=stored.ndim) != 1 or Int(py=stored.size) != d:
-            raise Error("MinMaxScaler saved statistic does not match n_features_in_")
-        var value = classical_typed(Python.tuple(d),"<f4",output_context)
-        memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(value))),src=F32P(unsafe_from_address=Int(py=classical_address(stored))),count=d)
-        py_setitem(fields,names[k]+"_",value)
-        _ = stored^
-    py_setitem(fields,"n_features_in_",d)
-    py_setitem(fields,"n_samples_seen_",classical_i64(meta,1))
-    py_setitem(fields,"numeric_mode_",mode)
-    py_setitem(fields,"feature_range_",Python.tuple(lower,upper))
-    py_setitem(fields,"clip_",clip)
-    _ = meta^
-    _ = bounds^
+    py_setitem(fields, "copy", True)
+    py_setitem(fields, "numeric_mode", PythonObject(None))
+    py_setitem(fields, "clip", plan.clip)
+    py_setitem(fields, "feature_range", Python.tuple(plan.lower, plan.upper))
+    var output_context = py_get(context, "output_context", context)
+    var names = native_minmax_statistic_names()
+    for i in range(len(names)):  # pack: fixed public statistic owners, under the GIL
+        var view = native_minmax_statistic_view(members[plan.statistics[i]])
+        var value = archive_numeric_pack(view, output_context)
+        py_setitem(fields, PythonObject(names[i] + "_"), value)
+    py_setitem(fields, "n_features_in_", plan.features)
+    py_setitem(fields, "n_samples_seen_", plan.samples)
+    py_setitem(fields, "numeric_mode_", PythonObject(plan.mode))
+    py_setitem(fields, "feature_range_", Python.tuple(plan.lower, plan.upper))
+    py_setitem(fields, "clip_", plan.clip)
+    _ = members
     return model
 
 
 def minmax_archive_load(cls: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
-    return minmax_archive_build(cls,classical_archive_read(path,context),context)
+    var admitted = _archive_read_input(path, context)
+    var minor = Int(py=context["archive_python_minor"])
+    var micro = Int(py=context["archive_python_micro"])
+    try:
+        var members = native_archive_read_status(admitted.span, minor, micro)
+        archive_events_pack(members, context)
+        var metadata = _minmax_archive_class_unpack(cls, context)
+        var plan = native_minmax_archive_plan(members, metadata, classical_numpy(context),
+                                              archive_print_mode_unpack(members, context))
+        return _minmax_archive_pack(cls, plan, members, context)
+    finally:
+        admitted.close()
