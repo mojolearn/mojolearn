@@ -24,11 +24,12 @@ from std.atomic import Atomic, Ordering
 from std.ffi import c_int, c_size_t, external_call
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
+from std.sys.compile import is_defined
 from std.sys.info import num_physical_cores
 
 from bindings.cpython_table import cpython_table
 from bindings.native_loaded_module import native_loaded_module
-from bindings.py_balanced import py_type
+from bindings.py_balanced import py_get, py_type
 from bindings.optimizer_public_words import stash_python_error, PYTHON_ERROR_PENDING, _restore_python_error
 
 #: The thread entry: `void *(*)(void *)` with the argument and result as
@@ -42,6 +43,38 @@ comptime _ATTR_WORDS = 16
 #: estimators, tree builders); a macOS secondary thread gets 512 KiB by
 #: default, the main thread 8 MiB. Reserved address space, not resident.
 comptime _UNIT_THREAD_STACK_BYTES = 64 << 20
+
+
+#: Units whose member fits run on a GPU run ONE AT A TIME (orchestrator
+#: decision, integration w6, 2026-11-09). On the Mac (Metal) two units fitting
+#: at once crash in Metal command-buffer completion (MTLResourceList
+#: releaseAllObjectsAndReset / useResource; cross_val_score and
+#: CalibratedClassifierCV with n_jobs >= 2 or None, GaussianNB, LinearSVC,
+#: LogisticRegression members): the member fits share the process-wide
+#: device context (core/neural_context.mojo `process_ctx`), and the owners'
+#: caches are not thread-safe. The device kernels are themselves parallel, so
+#: one unit at a time still fills the GPU. Host-only units (a CPU-only install,
+#: the host column: context vendor "cpu") keep the parallel units.
+#: -D MOJOLEARN_MSEL_UNITS_GPU_PARALLEL keeps the parallel-GPU arm compiled,
+#: default off: it awaits a thread-safety lane (per-thread contexts, cache
+#: audit) and then an NVIDIA + AMD A/B (RUN OWED: GridSearchCV /
+#: cross_validate / CalibratedClassifierCV rows of paper_compare, arm on vs off).
+comptime NATIVE_UNITS_GPU_PARALLEL = is_defined["MOJOLEARN_MSEL_UNITS_GPU_PARALLEL"]()
+
+
+def native_unit_device_workers(workers: Int, context: PythonObject) -> Int:
+    """`workers`, or 1 when the units' member fits run on a GPU: the vendor the
+    process resolved (context "vendor": "metal", "cuda", "hip"; "cpu" on a
+    CPU-only install or the host column). An unknown vendor counts as a GPU."""
+    comptime if NATIVE_UNITS_GPU_PARALLEL:
+        return workers
+    try:
+        var vendor = py_get(context, PythonObject("vendor"), PythonObject(None))
+        if vendor is not None and String(py=vendor) == "cpu":
+            return workers
+    except:
+        pass
+    return min(workers, 1)
 
 
 def native_unit_cores() -> Int:

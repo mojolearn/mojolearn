@@ -617,6 +617,7 @@ in the tables after the sections.
 
 | [`x_decomp_dev_upload_finite` (lane a8c named entry, `dev_upload_finite_py`)](#integration-w5-duplicate-upload-finite-entry-and-mamba-backward-weight-reload-2026-11-09) | Decomp (PLS deferred X) | removed (duplicate of the kernel-call op `XD_DEV_UPLOAD_FINITE`; never reached main) | 2026-11-09 | lane only |
 | [`MambaBlockProgram.reload_weights` (lane x56d per-call weight rewrite in the backward door)](#integration-w5-duplicate-upload-finite-entry-and-mamba-backward-weight-reload-2026-11-09) | Neural (Mamba-1/2/3 backward) | removed (superseded: `refresh_weights` address + weight-epoch key; never reached main) | 2026-11-09 | lane only |
+| [`MOJOLEARN_MSEL_UNITS_SERIAL` (compile-time switch: every CV / CalibratedClassifierCV unit on the calling thread)](#integration-w6-gpu-units-one-at-a-time-2026-11-09) | Model selection (cross_validate, cross_val_score, searches, curves; CalibratedClassifierCV folds) | removed (redundant: the run-time rule runs GPU units one at a time; never reached main) | 2026-11-09 | lane only |
 | [`P1_RESAMPLE_OBJECT_GETITEM` (per-element `ndarray.__getitem__`/`__setitem__` in row resampling)](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Resample (object / structured rows) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_RESAMPLE_OBJECT_GETITEM.patch](../experiments/removed/P1_RESAMPLE_OBJECT_GETITEM.patch) |
 | [`P1_KMEANS_CALLABLE_INIT` (`_kmeans_callable_init`: user `init(X, k, random_state=...)` + `numpy.asarray` / `RandomState`)](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Cluster (KMeans.fit) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_KMEANS_CALLABLE_INIT.patch](../experiments/removed/P1_KMEANS_CALLABLE_INIT.patch) |
 | [`P1_SPECTRAL_TOCOO` (`_tocoo` and the caller's `tocoo()` / `toarray()`)](#lane-p1-python-callbacks-removed-from-native-operations-2026-11-09) | Spectral (precomputed / sparse input) | removed (Python code on a product path; native or a refusal instead; not an experiment) | 2026-11-09 | [P1_SPECTRAL_TOCOO.patch](../experiments/removed/P1_SPECTRAL_TOCOO.patch) |
@@ -5675,6 +5676,25 @@ RUN OWED: mlp-infer sessions, par-mlp train and lm-train-step (chunked) ms on NV
   `experiments/removed/MOJOLEARN_AFN_ATTN_ARENA.patch` (the reverse of the lane's change to the code files; `git apply`
   restores them).
 
+
+<a id="integration-w6-gpu-units-one-at-a-time-2026-11-09"></a>
+
+## Integration w6: GPU units one at a time (2026-11-09)
+
+Integration branch `integ/pre-0867-w3` (wave 6, compile-fix lane integ-w6, orchestrator decision).
+
+- `MOJOLEARN_MSEL_UNITS_SERIAL` (lane p3, `lane/p3-msel-parallel-and-process-pool@9d7f5a2af9`, `bindings/msel_cv.mojo`
+  `msel_unit_workers`): the old form behind a switch, every CV unit on the calling thread, kept until an NVIDIA / AMD A/B
+  of units on vs off. On the Mac the parallel units crashed in Metal command-buffer completion (`cross_val_score`,
+  `CalibratedClassifierCV` with `n_jobs` >= 2 or None): the member fits share the process-wide device context
+  (`core/neural_context.mojo`) and the owners' caches are not thread-safe. The run-time rule
+  `native_unit_device_workers` (`bindings/native_unit_threads.mojo`) now runs units whose member fits run on a GPU (context
+  vendor metal, cuda or hip) one at a time and keeps the parallel units on a CPU-only install or the host column. That is
+  this switch's form on every GPU, and the CPU is never timed, so the switch decided nothing: retired. The parallel-GPU arm
+  stays compiled behind `-D MOJOLEARN_MSEL_UNITS_GPU_PARALLEL` (default off; awaits a thread-safety lane, then the A/B).
+  Verdict: retired (redundant), not measured. Bits: none (same fits, same order of results).
+- Never reached main: no patch; code recoverable at the lane sha above. The define is refused by
+  `core/six_lane_experiment_guards.mojo`.
 
 <a id="integration-w5-duplicate-upload-finite-entry-and-mamba-backward-weight-reload-2026-11-09"></a>
 

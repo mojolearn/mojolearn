@@ -20,7 +20,7 @@ from bindings.cpython_table import cpython_table
 from bindings.optimizer_public_words import stash_python_error
 from bindings.native_unit_threads import (
     native_unit_threads_run, native_unit_gil_enter, native_unit_gil_leave, native_unit_cores, NativeUnitFailure,
-    native_unit_gate, native_unit_gate_enter, native_unit_gate_leave,
+    native_unit_gate, native_unit_gate_enter, native_unit_gate_leave, native_unit_device_workers,
 )
 from core.host_parallel import host_fp_env, host_fp_env_set
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
@@ -607,11 +607,10 @@ def msel_cross_validate_run(estimator: PythonObject, y: PythonObject, mut rows: 
 # run) and the n_jobs refusal `msel_require_serial` (n_jobs is the thread
 # bound now, `msel_unit_jobs`).
 
-#: Old form behind a switch until the A/B is measured (CLAUDE.md "remove what
-#: a change made unnecessary"): -D MOJOLEARN_MSEL_UNITS_SERIAL=1 runs every
-#: unit on the calling thread, whatever n_jobs says. RUN OWED: GridSearchCV /
-#: cross_validate rows of paper_compare on NVIDIA and AMD, units on vs off.
-comptime MSEL_UNITS_SERIAL = is_defined["MOJOLEARN_MSEL_UNITS_SERIAL"]()
+# TOMBSTONE: MOJOLEARN_MSEL_UNITS_SERIAL (retired: redundant) deleted 2026-11-09 by integ-w6 (integ/pre-0867-w3); code recoverable at lane/p3-msel-parallel-and-process-pool@9d7f5a2af9.
+# Restore: none (never reached main); the run-time rule native_unit_device_workers
+# (bindings/native_unit_threads.mojo) runs GPU units one at a time, which is this
+# switch's form on NVIDIA, AMD and Apple; the CPU is never timed.
 
 #: Fraction of the device's free bytes the concurrent units may claim, by
 #: the bytes the first unit kept (measured, below): half, because what a fit
@@ -644,10 +643,10 @@ def msel_unit_jobs(n_jobs: PythonObject, error_score: PythonObject, caller: Stri
     return k
 
 
-def msel_unit_workers(jobs: Int, units: Int) -> Int:
-    comptime if MSEL_UNITS_SERIAL:
-        return 1
-    return max(min(jobs, units), 1)
+def msel_unit_workers(jobs: Int, units: Int, context: PythonObject) -> Int:
+    """min(n_jobs bound, units), and one when the units fit on a GPU
+    (`native_unit_device_workers`)."""
+    return native_unit_device_workers(max(min(jobs, units), 1), context)
 
 
 def _msel_device_free(rows: MselFoldRows, context: PythonObject) -> Int:
@@ -887,7 +886,7 @@ def msel_cv_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
     on min(jobs, units, free bytes / MSEL_UNITS_FREE_DIVISOR / kept bytes)
     threads."""
     var run = MselUnitRun(base, candidates, y, rows, scoring, return_train, return_estimator, error_score, method, context)
-    var workers = msel_unit_workers(jobs, run.n_units)
+    var workers = msel_unit_workers(jobs, run.n_units, context)
     if workers <= 1 or run.n_units <= 1:
         run.drain()
         run.reraise()

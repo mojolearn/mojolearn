@@ -61,7 +61,7 @@ from bindings.classical_pandas import native_pandas_exact
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_unit_threads import (
     native_unit_threads_run, native_unit_gil_enter, native_unit_gil_leave, native_unit_jobs, NativeUnitFailure,
-    native_unit_gate, native_unit_gate_enter, native_unit_gate_leave,
+    native_unit_gate, native_unit_gate_enter, native_unit_gate_leave, native_unit_device_workers,
 )
 from core.host_parallel import host_fp_env, host_fp_env_set
 from std.python._cpython import GILReleased
@@ -1924,8 +1924,9 @@ def _cal_units_thread(arg: Int) abi("C") -> Int:
 
 def _cal_units_run(mut units: _CalUnits, jobs: Int) raises:
     """Fold 0 alone on the calling thread (lazy process state is created
-    single-threaded), the rest on min(jobs, folds - 1) threads."""
-    var workers = min(jobs, units.n_units - 1)
+    single-threaded), the rest on min(jobs, folds - 1) threads; one at a time
+    when the member fits run on a GPU (`native_unit_device_workers`)."""
+    var workers = native_unit_device_workers(min(jobs, units.n_units - 1), units.context)
     if units.n_units > 1 and workers > 1:
         units.next = 1
         try:
