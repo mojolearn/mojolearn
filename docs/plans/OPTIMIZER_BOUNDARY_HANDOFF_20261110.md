@@ -422,3 +422,52 @@ public device transfer/view/failure-cleanup/lifetime tests. No lane compile/test
 or timing has run. Numerical kernels and rounding are unchanged; performance
 remains unmeasured. Optimizer private control mirrors on the Python owner are a
 separate remaining migration, not hidden by this device boundary completion.
+
+## Native optimizer owner control
+
+`training/optimizer_owner_control.mojo` owns resident handle/driver, host-fresh,
+pristine, parameter-device and gradient-device flags, kind and operation-busy
+state as Mojo values. The old `_res`, `_res_binding`, `_res_host`, `_host_fresh`,
+`_pristine`, `_p_dev`, `_g_dev`, `_where` and `_KIND` instance mirrors are removed.
+The documented parameter/configuration/result fields and exposed params,
+offsets, initialized and moment buffers remain ordinary mutable API fields.
+
+`bindings/optimizer_owner_boundary.mojo` allocates one native value behind a
+Python lifetime wrapper. It contains the typed control and one descriptor
+provider pin, not Python algorithm state. That provider retains the compiled
+image/capsule/factory until native close returns. An operation lease pins the
+wrapper across GIL release and marks the native control busy; another mutating
+operation on the same owner refuses instead of racing its resident slot.
+Different owners remain independent. Close requests execute without Python and
+control changes publish after the GIL is reacquired. Explicit failed close
+retains the record and provider for retry; final destruction remains best effort.
+Construction and replacement hold their new native control busy through field
+publication and old-slot release. No kernels or tensor arithmetic changed.
+
+Copy/pickle is preserved through one-call `__getstate__` / `__setstate__`
+boundaries. Export synchronizes the owner's existing moment/parameter storage
+when needed and packs public fields without native process-local handles.
+Restore creates a new native control and lazily opens its own resident slot.
+Materialized moment buffers are authoritative: restored control cannot mark them
+pristine merely because the original live slot retained its initial flag.
+Shallow copies keep public buffer aliases; deep copies and pickle use the public
+Array serialization protocol. Legacy host control fields are admitted only as
+external serialized input and discarded, never kept as duplicate runtime state.
+Parameter reconstruction and state_dict/load_state_dict retain their interfaces.
+
+Native APIs for fixtures: OptimizerOwnerControl(identity, kind, pristine),
+.begin()/.finish(), .attach(handle, driver), .resident(), .close_request() with
+its typed request .run(), .finish_close() and .close(). A failed native close
+leaves the original handle/driver intact. `optimizer_restored_pristine` takes
+three Bool words. Actual Python buffer/module/provider owners exist only in the
+boundary wrappers and API fields. Removed: private Python control mirrors,
+module-based close helper, duplicate field-admission loops and dead imports.
+
+Twenty-four public copy/pickle/parameter-reconstruction/legacy-host-restore cases
+are added in test_optimizer_native_owner_copy.py. The tests lane owns replacing
+private `_res` fabrication tests with actual native-owner/lifetime checks, plus
+direct native control coverage as root assigns. Root owes compilation, those
+runtime tests and performance measurement; no lane build/test/timing ran. The
+new busy refusal is limited to simultaneous mutation of one native owner and
+prevents use-after-release across GIL-released operations; it is not a worker or
+kernel serialization policy. No A/B define or cross-device identity claim.

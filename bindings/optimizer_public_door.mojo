@@ -33,6 +33,9 @@ from bindings.cpython_table import cpython_table
 from std.python._cpython import ExternalFunction, GILReleased, PyObjectPtr
 from bindings.admitted_input import admitted_storage_native
 from training.optimizer_config import optimizer_keyword_refusal
+from training.optimizer_owner_control import OptimizerOwnerControl
+from training.optimizer_native_api import OptimizerNativeDriver
+from bindings.optimizer_owner_boundary import OptimizerOwner, OptimizerOwnerLease, optimizer_owner_new, optimizer_owner_idle
 from training.optimizer_state_plan import (
     OptimizerStateSnapshot, optimizer_state_span, optimizer_checkpoint_spans,
     optimizer_state_download_needed, optimizer_host_moment_plan, OptimizerRegistryPlan, optimizer_registry_plan,
@@ -446,13 +449,12 @@ def state_address(value: PythonObject, count: Int, name: String, mut pins: Optim
     return optimizer_state_span(view, count, name)
 
 
-def _state_into(opt: PythonObject, mut req: PublicStep, mut pins: OptimizerInputOwners) raises:
+def _state_into(opt: PythonObject, control: OptimizerOwnerControl, mut req: PublicStep, mut pins: OptimizerInputOwners) raises:
     var fields = py_fields(opt)
-    var res = fields["_res"]
     var first = fields["_m"]
     var second = fields["_v"]
-    var state = OptimizerStateSnapshot(-1 if res is None else Int(py=res),
-        _resident_word(fields["_resident_wanted"]), truth(fields["_pristine"]),
+    var state = OptimizerStateSnapshot(control.handle,
+        _resident_word(fields["_resident_wanted"]), control.pristine,
         0 if first is None else state_address(first, req.n_total, "exp_avg", pins),
         0 if second is None else state_address(second, req.n_total, "exp_avg_sq", pins))
     state.apply(req)
@@ -470,20 +472,15 @@ def host_moments(opt: PythonObject) raises:
         set_field(opt, "_v", new_array([n], "<f4"))
 
 
-def keep_slot(opt: PythonObject, handle: Int, module: PythonObject, on_host: Bool) raises:
-    """`_keep_slot`: record a slot the native call opened, with the extension
-    module that owns it (its finalizer closes the slot through it)."""
-    if py_fields(opt)["_res"] is None and handle >= 0:
-        set_field(opt, "_res", PythonObject(handle))
-        set_field(opt, "_res_binding", module)
-        set_field(opt, "_res_host", PythonObject(on_host))
+def keep_slot(mut record: OptimizerOwner, handle: Int, provider: PythonObject,
+    driver: OptimizerNativeDriver):
+    record.attach(handle, driver, provider)
 
 
-def _hyper(opt: PythonObject, maximize: Bool, max_norm: Float64) raises -> OptHyper:
+def _hyper(opt: PythonObject, kind: Int, maximize: Bool, max_norm: Float64) raises -> OptHyper:
     """`_config()` of SGD (kind 0) and Adam / AdamW, as the step's floats."""
     # The instance dictionary is fetched once; set_field writes the same dict.
     var fields = py_fields(opt)
-    var kind = owner_kind(opt)
     if kind == 0:
         return OptHyper(
             kind, 1 if truth(fields["nesterov"]) else 0, maximize, as_float(fields["lr"]), 0.9, 0.999, 1e-8,
@@ -569,7 +566,6 @@ def optimizer_publish_registry(owner: PythonObject, registry: OptimizerRegistryP
     py_setitem(fields, "n_total", PythonObject(registry.plan.count))
     py_setitem(fields, "_m", registry.first)
     py_setitem(fields, "_v", registry.second)
-    py_setitem(fields, "_pristine", PythonObject(not registry.plan.eager))
     py_setitem(fields, "buf_initialized", registry.initialized)
 
 
@@ -577,8 +573,15 @@ def door_init(opt: PythonObject, params: PythonObject) raises -> PythonObject:
     """Legacy registry export using the same native preparation and publication."""
     door_ready()
     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
-    var registry = optimizer_prepare_registry(params, String(py=py_fields(opt)["_where"]))
+    var kind = owner_kind(opt)
+    var name = String("SGD") if kind == 0 else (String("Adam") if kind == 1 else String("AdamW"))
+    var registry = optimizer_prepare_registry(params, name)
+    optimizer_owner_idle(opt)
+    var owner_state = optimizer_owner_new(opt, owner_kind(opt), not registry.plan.eager)
+    var construction = OptimizerOwnerLease(opt, owner_state)
+    set_field(opt, "_native_optimizer_owner", owner_state)
     optimizer_publish_registry(opt, registry)
+    _ = construction
     return PythonObject(registry.plan.count)
 
 
@@ -595,13 +598,15 @@ def door_step(
     # Host parameters are admitted one by one by tensor_view below, before
     # any read; only device-resident parameters need the list walk here.
     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context, True)
+    var lease = OptimizerOwnerLease(opt)
+    var record = lease.value.downcast_value_ptr[OptimizerOwner]()
     # The instance dictionary is fetched once; set_field writes the same dict.
     var fields = py_fields(opt)
     var d = OPT_DOOR.get_or_create_ptr()
-    var owhere = String(py=fields["_where"])
+    var owhere = record[].control.name()
     var where = String("step") if op == OP_STEP else (
         String("step_device") if op == OP_STEP_DEVICE else String("step_accumulated"))
-    var p_dev = truth(getattr_or(opt, "_p_dev", PythonObject(False)))
+    var p_dev = record[].control.parameters_device
     if p_dev:
         opt_value(fields["params"], d[].context)
     var parts = List[PythonObject]()
@@ -718,14 +723,14 @@ def door_step(
     var maximize = truth(getattr_or(opt, "maximize", PythonObject(False)))
     req.j = j
     req.t = Int(py=fields["t"])
-    req.hyper = _hyper(opt, maximize, mn)
+    req.hyper = _hyper(opt, record[].control.kind, maximize, mn)
     req.n_total = n_total
     req.offsets = read_addr(fields["offsets"], "offsets", buffer_pins)
     req.init = write_addr(fields["buf_initialized"], "buf_initialized", buffer_pins)
     req.tokens = t_tokens
-    _state_into(opt, req, buffer_pins)
+    _state_into(opt, record[].control, req, buffer_pins)
     req.p_dev = p_dev
-    req.g_dev = truth(getattr_or(opt, "_g_dev", PythonObject(False)))
+    req.g_dev = record[].control.gradients_device
     req.device_op = op == OP_STEP_DEVICE
     var out = PublicStepOut(0, -1, False, False, Float32(0), Float32(0), Float32(0), -1, False)
     var driver = optimizer_driver(provider)
@@ -737,8 +742,8 @@ def door_step(
     _ = keep^
     # the assignments of the native result
     set_field(opt, "t", PythonObject(out.t))
-    keep_slot(opt, out.handle, module, not out.on_device)
-    set_field(opt, "_host_fresh", PythonObject(fields["_res"] is None))
+    keep_slot(record[], out.handle, provider, driver)
+    record[].control.host_fresh = record[].control.handle < 0
     var total = PythonObject(None)
     if out.clip_ran:
         total = PythonObject(Float64(out.total_norm))
@@ -753,22 +758,28 @@ def door_step(
         set_field(opt, "lr", lr)
     if out.packed >= 0:
         set_field(opt, "packed_", PythonObject(out.packed != 0))
-    set_field(opt, "_g_dev", PythonObject(out.g_dev))
+    record[].control.gradients_device = out.g_dev
+    _ = lease
     return total
 
 
-def optimizer_io(
-    module: PythonObject, provider: PythonObject, opt: PythonObject, op_code: Int, tensors: PythonObject, name: String, tensor: Int
-) raises -> Int:
-    """`_io`: the device transfers of `params_to_device`, `params_to_host`,
-    `grads_to_device`, `grads_to_host`, `param_device` and the query.
-    Returns the result word."""
+def optimizer_io(module: PythonObject, provider: PythonObject, opt: PythonObject,
+    op_code: Int, tensors: PythonObject, name: String, tensor: Int) raises -> Int:
     door_ready()
-    var buffer_pins = OptimizerInputOwners()
     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
+    var lease = OptimizerOwnerLease(opt)
+    var record = lease.value.downcast_value_ptr[OptimizerOwner]()
+    var value = _optimizer_io_admitted(module, provider, opt, op_code, tensors, name, tensor, record[])
+    _ = lease
+    return value
+
+
+def _optimizer_io_admitted(module: PythonObject, provider: PythonObject, opt: PythonObject,
+    op_code: Int, tensors: PythonObject, name: String, tensor: Int, mut record: OptimizerOwner) raises -> Int:
+    var buffer_pins = OptimizerInputOwners()
     # The instance dictionary is fetched once; set_field writes the same dict.
     var fields = py_fields(opt)
-    var owhere = String(py=fields["_where"])
+    var owhere = record.control.name()
     var j = len(fields["params"])
     var n_total = Int(py=fields["n_total"])
     var req = PublicStep()
@@ -785,7 +796,7 @@ def optimizer_io(
     req.j = j
     req.n_total = n_total
     req.offsets = read_addr(fields["offsets"], "offsets", buffer_pins)
-    _state_into(opt, req, buffer_pins)
+    _state_into(opt, record.control, req, buffer_pins)
     var r = (-1, 0)
     var driver = optimizer_driver(provider)
     if driver.host:
@@ -796,7 +807,7 @@ def optimizer_io(
     _ = provider
     _ = buffer_pins
     try:
-        keep_slot(opt, r[0], module, False)
+        keep_slot(record, r[0], provider, driver)
         # A device allocation's handle stays an integer through publication.
         # The caller has prepared its owner before asking for this allocation.
         return r[1]
@@ -836,7 +847,8 @@ def door_zero(opt: PythonObject, grads: PythonObject) raises -> PythonObject:
     door_ready()
     var buffer_pins = OptimizerInputOwners()
     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
-    var owhere = String(py=py_fields(opt)["_where"])
+    var lease = OptimizerOwnerLease(opt)
+    var owhere = lease.value.downcast_value_ptr[OptimizerOwner]()[].control.name()
     var views = List[TensorView]()
     _ = as_seq_views(grads, "grads", owhere, views, buffer_pins)
     check_views(views, "grads", owhere, True)
@@ -845,16 +857,16 @@ def door_zero(opt: PythonObject, grads: PythonObject) raises -> PythonObject:
     _addrs_of(views, addrs, nbytes)
     zero_tensors(addrs, nbytes)
     _ = buffer_pins
+    _ = lease
     return PythonObject(None)
 
 
-def _sync_host(module: PythonObject, provider: PythonObject, opt: PythonObject) raises:
+def _sync_host(opt: PythonObject, mut record: OptimizerOwner) raises:
     """`_download`: the slot's state into the mirrors, when they are stale,
     through the module that owns the slot."""
     var fields = py_fields(opt)
-    var slot = fields["_res"]
-    var handle = -1 if slot is None else Int(py=slot)
-    if not optimizer_state_download_needed(handle, truth(fields["_host_fresh"])):
+    var handle = record.control.handle
+    if not optimizer_state_download_needed(handle, record.control.host_fresh):
         return
     host_moments(opt)
     var buffer_pins = OptimizerInputOwners()
@@ -862,34 +874,25 @@ def _sync_host(module: PythonObject, provider: PythonObject, opt: PythonObject) 
     var n = Int(py=fields["n_total"])
     var m = state_address(fields["_m"], n, "exp_avg", buffer_pins)
     var v = state_address(fields["_v"], n, "exp_avg_sq", buffer_pins)
-    var owner = py_fields(opt)["_res_binding"]
-    var connection = provider if owner is module else optimizer_provider(owner)
-    var driver = optimizer_driver(connection)
+    var driver = record.control.driver.value().copy()
     if driver.host:
         _ = driver.download(h, m, v, n)
     else:
         with GILReleased(Python()):
             _ = driver.download(h, m, v, n)
-    _ = connection
     _ = buffer_pins
-    set_field(opt, "_host_fresh", PythonObject(True))
+    record.control.host_fresh = True
 
 
-def _upload(module: PythonObject, provider: PythonObject, opt: PythonObject, m: Int, v: Int) raises:
-    """`_upload_one`: assigned moments into the slot (0 leaves that moment)."""
-    if py_fields(opt)["_res"] is None:
+def _upload(record: OptimizerOwner, m: Int, v: Int, n: Int) raises:
+    if record.control.handle < 0:
         return
-    var h = Int(py=py_fields(opt)["_res"])
-    var n = Int(py=py_fields(opt)["n_total"])
-    var owner = py_fields(opt)["_res_binding"]
-    var connection = provider if owner is module else optimizer_provider(owner)
-    var driver = optimizer_driver(connection)
+    var driver = record.control.driver.value().copy()
     if driver.host:
-        _ = driver.upload(h, m, v, n)
+        _ = driver.upload(record.control.handle, m, v, n)
     else:
         with GILReleased(Python()):
-            _ = driver.upload(h, m, v, n)
-    _ = connection
+            _ = driver.upload(record.control.handle, m, v, n)
 
 
 def copy_array(source: PythonObject) raises -> PythonObject:
@@ -906,37 +909,74 @@ def door_state(module: PythonObject, provider: PythonObject, opt: PythonObject, 
     (1 / 2): the slot's state downloaded once per stale read."""
     door_ready()
     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
-    _sync_host(module, provider, opt)
-    set_field(opt, "_pristine", PythonObject(False))
+    var lease = OptimizerOwnerLease(opt)
+    var record = lease.value.downcast_value_ptr[OptimizerOwner]()
+    _sync_host(opt, record[])
+    record[].control.pristine = False
     host_moments(opt)
     if which == STATE_EXP_AVG:
+        _ = lease
         return py_fields(opt)["_m"]
     if which == STATE_EXP_AVG_SQ:
+        _ = lease
         return py_fields(opt)["_v"]
     var out = Python.dict()
     py_setitem(out, PythonObject("t"), PythonObject(Int(py=py_fields(opt)["t"])))
     py_setitem(out, PythonObject("exp_avg"), copy_array(py_fields(opt)["_m"]))
     py_setitem(out, PythonObject("exp_avg_sq"), copy_array(py_fields(opt)["_v"]))
     py_setitem(out, PythonObject("buf_initialized"), copy_array(py_fields(opt)["buf_initialized"]))
+    _ = lease
     return out
+
+
+def optimizer_export_state(opt: PythonObject) raises -> PythonObject:
+    """PACK copy/pickle state with host buffers and no process-local handle.
+
+    The owner lease spans synchronization and field capture. A restored copy
+    opens its own native slot lazily; public buffers keep ordinary Python
+    shallow/deep-copy behavior outside this operation.
+    """
+    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
+    var lease = OptimizerOwnerLease(opt)
+    var record = lease.value.downcast_value_ptr[OptimizerOwner]()
+    _sync_host(opt, record[])
+    var fields = py_fields(opt)
+    if record[].control.parameters_device:
+        _ = _optimizer_io_admitted(PythonObject(None), record[].provider, opt, 2, fields["params"], "params", 0, record[])
+    var result = Python.dict()
+    var table = cpython_table()
+    var position = List[Int](length=1, fill=0)
+    var pair = List[PyObjectPtr](length=2, fill=PyObjectPtr())
+    while table[].PyDict_Next(fields._obj_ptr, Int(position.unsafe_ptr()),
+            Int(pair.unsafe_ptr()), Int(pair.unsafe_ptr() + 1)):  # driver-loop: PACK public serialized fields
+        var key = PythonObject(from_borrowed=pair[0])
+        if String(key) != "_native_optimizer_owner":
+            py_setitem(result, key, PythonObject(from_borrowed=pair[1]))
+    py_setitem(result, "_native_optimizer_pristine", PythonObject(record[].control.serialized_pristine(
+        fields["_m"] is not None, fields["_v"] is not None)))
+    _ = lease
+    return result
 
 
 def door_state_set(module: PythonObject, provider: PythonObject, opt: PythonObject, which: Int, value: PythonObject) raises -> PythonObject:
     """`exp_avg = value` (which 1) and `exp_avg_sq = value` (2)."""
     door_ready()
     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
+    var lease = OptimizerOwnerLease(opt)
+    var record = lease.value.downcast_value_ptr[OptimizerOwner]()
     opt_value(value, OPT_DOOR.get_or_create_ptr()[].context)
     var name = String("exp_avg") if which == STATE_EXP_AVG else String("exp_avg_sq")
     var buffer_pins = OptimizerInputOwners()
     var count = Int(py=py_fields(opt)["n_total"])
     var a = 0 if value is None else state_address(value, count, name, buffer_pins)
     if which == STATE_EXP_AVG:
-        _upload(module, provider, opt, a, 0)
+        _upload(record[], a, 0, count)
     else:
-        _upload(module, provider, opt, 0, a)
+        _upload(record[], 0, a, count)
     set_field(opt, String("_m") if which == STATE_EXP_AVG else String("_v"), value)
-    set_field(opt, "_pristine", PythonObject(False))
+    record[].control.pristine = False
     _ = buffer_pins
+    _ = lease
     return PythonObject(None)
 
 
@@ -970,8 +1010,10 @@ def optimizer_load_buffers(module: PythonObject, provider: PythonObject, opt: Py
     their own external UNPACK wrapper above.
     """
     # Both callers admit the current owner immediately before this boundary.
+    var lease = OptimizerOwnerLease(opt)
+    var record = lease.value.downcast_value_ptr[OptimizerOwner]()
     var n_total = Int(py=py_fields(opt)["n_total"])
-    var owhere = String(py=py_fields(opt)["_where"])
+    var owhere = record[].control.name()
     var buffer_pins = OptimizerInputOwners()
     var first_view = TensorView()
     var second_view = TensorView()
@@ -981,10 +1023,11 @@ def optimizer_load_buffers(module: PythonObject, provider: PythonObject, opt: Py
     optimizer_checkpoint_spans(first_view, second_view, init_view, n_total, len(py_fields(opt)["params"]), owhere)
     set_field(opt, "_m", m)
     set_field(opt, "_v", v)
-    set_field(opt, "_pristine", PythonObject(False))
-    _upload(module, provider, opt, first_view.addr, second_view.addr)
+    record[].control.pristine = False
+    _upload(record[], first_view.addr, second_view.addr, n_total)
     _ = buffer_pins
-    set_field(opt, "_host_fresh", PythonObject(True))
+    record[].control.host_fresh = True
+    _ = lease
 
 
 comptime _NORM_TYPE_REFUSAL = (
