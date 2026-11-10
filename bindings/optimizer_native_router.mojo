@@ -19,6 +19,7 @@ from bindings.optimizer_public_door import (
 )
 from bindings.optimizer_descriptor_boundary import optimizer_provider_entries, optimizer_native_mode, optimizer_close_slot
 from core.linear_metadata import linear_mode_name
+from training.checks.optimizer_contract import microbatch_split_is_identical
 from training.optimizer_config import OptimizerConstructorConfig, optimizer_parameter_names, optimizer_parameter_update, optimizer_profile_available
 from bindings.cpython_table import cpython_table
 from bindings.optimizer_scalar_boundary import optimizer_float, optimizer_integer, optimizer_truth
@@ -364,7 +365,7 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         if not Bool(py=py_get(fields, "_p_dev", False)):
             raise Error("RuntimeError: optimizer.param_device: call params_to_device() first")
         opt_scalar(values[0], context)
-        var j = Int(py=py_call(context["scalar_types"][2], values[0]))
+        var j = optimizer_integer(values[0], context)
         var params = fields["params"]
         if j < 0:
             j += len(params)
@@ -394,7 +395,7 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         if not opt_exact(py_type(state), context["mapping_types"]):
             raise Error("TypeError: optimizer checkpoint must be a native dictionary")
         opt_scalar(state["t"], context)
-        var t = py_call(context["scalar_types"][2], state["t"])
+        var t = PythonObject(optimizer_integer(state["t"], context))
         var m = optimizer_state_array(state["exp_avg"], False, context)
         var v = optimizer_state_array(state["exp_avg_sq"], False, context)
         var initialized = optimizer_state_array(state["buf_initialized"], True, context)
@@ -417,7 +418,7 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         opt_scalar(values[3], context)
         var result = door_io(module, provider, owner, op, tensors, String(py=values[2]), Int(py=values[3]))
         if op == 0:
-            return py_call(context["scalar_types"][1], result)
+            return PythonObject(optimizer_truth(result, context))
         if op == 1 or op == 3:
             py_setitem(fields, "_p_dev" if op == 1 else "_g_dev", PythonObject(True))
             return owner
@@ -430,7 +431,7 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         return door_accumulate(provider, values[0], values[1])
     if operation == "aligned":
         opt_scalar(values, context)
-        return py_call(context["scalar_types"][1], py_call_typed(entries["accumulation_is_aligned"], Python.list(py_call(context["scalar_types"][2], values[0]), py_call(context["scalar_types"][2], values[1]))))
+        return PythonObject(microbatch_split_is_identical(optimizer_integer(values[0], context), optimizer_integer(values[1], context)))
     raise Error("TypeError: unknown optimizer native operation")
 
 

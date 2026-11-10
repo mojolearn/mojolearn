@@ -51,3 +51,47 @@ def optimizer_parameter_update(kind: Int, key: String) raises:
 def optimizer_profile_available(available: Bool) raises:
     if not available:
         raise Error("NotImplementedError: the selected numeric profile is unavailable for optimizer training")
+
+
+def optimizer_keyword_refusal(key: String, where: String) raises:
+    """The fixed public keyword policy, independent of Python module dictionaries."""
+    if key == "dropout":
+        raise Error("NotImplementedError: mojolearn." + where + ": " + "dropout is not an OPTIMIZER option. It is an op on this surface: `Generator(seed).dropout(x, p)` draws its mask from the position-keyed Philox stream in core/philox_neural.mojo (a pure function of seed, stream id and element index, never of the launch geometry) and `Generator.dropout_backward(dy, key)` replays it. Stochastic depth and any other sampling stay uncovered.")
+    if key == "distributed" or key == "world_size" or key == "rank":
+        raise Error("NotImplementedError: mojolearn." + where + ": " + "DISTRIBUTED TRAINING IS NOT COVERED. Nothing here is aware of a second process or a second device: there is no all-reduce, no gradient bucket and no rank. A cross-device gradient sum is another reduction and would need its own contract clause, its own fixture and its own sabotage before it could carry the identity claim the single-device path carries.")
+    if key == "amsgrad":
+        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "the profile EXCLUDES amsgrad and the exclusion is load bearing: `max(v_max, v)` would create the profile's first -0.0 vs +0.0 selection hazard, where the order of a compare decides which of two equal-comparing values survives (optimizer contract 8c, and clip_coefficient's docstring in training/checks/optimizer_oracle.mojo)" + " (python/mojolearn/_training_impl.py)")
+    if key == "foreach":
+        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "an EXECUTION knob. Adam here is ONE launch over the whole flat buffer and SGD is one launch per tensor, because SGD carries a per-tensor flag; the choice is the profile's and not the caller's (training/checks/optimizer.mojo::identical_optimizer_step)" + " (python/mojolearn/_training_impl.py)")
+    if key == "fused":
+        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "an EXECUTION knob, and in torch it is a different arithmetic as well" + " (python/mojolearn/_training_impl.py)")
+    if key == "capturable":
+        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "CUDA-graph capture; nothing on this surface captures, and the step synchronizes before it returns (training/checks/optimizer.mojo::identical_optimizer_step)" + " (python/mojolearn/_training_impl.py)")
+    if key == "differentiable":
+        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "there is no autograd in this library, which is also why `step` takes the gradients as an argument" + " (python/mojolearn/_training_impl.py)")
+    if key == "params_groups":
+        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "one `OptimizerConfig` per optimizer. Two parameter groups would be two calls with two registries and two clips, and two clips do not equal one: the clip coefficient is a function of every gradient in ITS registry (optimizer contract 3.5)" + " (python/mojolearn/_training_impl.py)")
+    if key == "param_groups":
+        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "one `OptimizerConfig` per optimizer; see `params_groups`" + " (python/mojolearn/_training_impl.py)")
+    if key == "weight":
+        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "a per-class weight vector is REFUSED BY NAME (loss contract section 11): a weighted mean's denominator is a SUM OF FLOATS and would need a fold, a clause, a fixture and a sabotage of its own, where `count` today is an INTEGER and therefore exact, order-free and vendor-free (contract 5.5, `ce_count` in training/checks/loss_oracle.mojo)" + " (python/mojolearn/_training_impl.py)")
+    if key == "size_average":
+        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "torch's own deprecated alias for `reduction`. Refused rather than translated, because translating it silently reproduces the ambiguity torch deprecated it for" + " (python/mojolearn/_training_impl.py)")
+    if key == "reduce":
+        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "torch's own deprecated alias for `reduction`; see `size_average`" + " (python/mojolearn/_training_impl.py)")
+    if key == "dropout":
+        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + null + " (python/mojolearn/_training_impl.py)")
+    if key == "device":
+        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "the device is chosen by the binary that loaded, and its accelerator API is readable with `vendor_used()` (python/mojolearn/_backend.py)" + " (python/mojolearn/_training_impl.py)")
+    if key == "dtype":
+        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + "float32 only. MIXED PRECISION IS NOT COVERED and a non-float32 array is refused by name rather than cast" + " (python/mojolearn/_training_impl.py)")
+    if key == "distributed":
+        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + null + " (python/mojolearn/_training_impl.py)")
+    if key == "world_size":
+        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + null + " (python/mojolearn/_training_impl.py)")
+    if key == "rank":
+        raise Error("TypeError: mojolearn." + where + ": " + key + "= is REFUSED BY NAME -- " + null + " (python/mojolearn/_training_impl.py)")
+    raise Error("TypeError: mojolearn." + where + ": unexpected keyword " + key + "=. This surface takes only "
+        + "the parameters in its WHAT IS HONORED table; an unknown keyword is refused rather than "
+        + "ignored, because a keyword that is accepted and does nothing is a caller who believes "
+        + "something about their run that is not true (python/mojolearn/_training_impl.py)")
