@@ -274,6 +274,12 @@ class _Optimizer(NumericModeMixin):
     _KIND = None
 
 
+    def __getstate__(self):
+        return _OPT_NATIVE("export_owner", self, (), None, _OPT_CONTEXT)
+
+    def __setstate__(self, state):
+        return _OPT_NATIVE("restore_owner", self, (state,), None, _OPT_CONTEXT)
+
     # -- the state: a native slot, mirrored on the host on access -----------
     @property
     def exp_avg(self):

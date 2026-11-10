@@ -197,7 +197,7 @@ def opt_owner(owner: PythonObject, context: PythonObject, defer_params: Bool) ra
     when the parameters are device-resident). Each tensor is admitted once
     per step instead of twice."""
     var fields = _opt_owner_keys(owner, context)
-    for name in ["_where", "_KIND", "_res", "_res_host", "_resident_wanted", "_host_fresh", "_pristine", "_p_dev", "_g_dev", "n_total", "t", "numeric_mode", "lr", "momentum", "dampening", "weight_decay", "nesterov", "maximize", "betas", "eps", "accumulation_steps"]:  # driver-loop: over fixed optimizer scalar configuration/state
+    for name in ["_resident_wanted", "n_total", "t", "numeric_mode", "lr", "momentum", "dampening", "weight_decay", "nesterov", "maximize", "betas", "eps", "accumulation_steps"]:  # driver-loop: over fixed optimizer scalar configuration/state
         opt_scalar(py_get(fields, PythonObject(name)), context)
     opt_schedule(py_get(fields, "lr_schedule"), context)
     var params = py_get(fields, "params")
