@@ -59,10 +59,6 @@ struct NativeZipPosition(Copyable, Movable):
     var name: String
 
 
-def _zip_position_less(lhs: NativeZipPosition, rhs: NativeZipPosition) -> Bool:
-    return lhs.offset < rhs.offset or (lhs.offset == rhs.offset and lhs.name < rhs.name)
-
-
 def native_zip_entry(central: ArchiveSpan, at: Int, concat: Int, library: Int) raises -> NativeZipEntry:
     if central.uint(at, 4) != 0x02014B50 or central.size - at < 46:
         raise Error("malformed ZIP central directory")
@@ -217,7 +213,10 @@ def native_zip_directory(raw: ArchiveSpan) raises -> NativeZipDirectory:
         final_entry[name] = i
         positions.append(NativeZipPosition(result.entries[i].offset, name))
     var ordered = Span(unsafe_ptr=positions.unsafe_ptr(), length=len(positions))
-    sort[T=NativeZipPosition, cmp_fn=_zip_position_less](ordered)
+    @parameter
+    def position_less(lhs: NativeZipPosition, rhs: NativeZipPosition) -> Bool:
+        return lhs.offset < rhs.offset or (lhs.offset == rhs.offset and lhs.name < rhs.name)
+    sort[cmp_fn=position_less](ordered)
     var limit = central_start
     for i in range(count - 1, -1, -1):
         var selected = final_entry[positions[i].name]
