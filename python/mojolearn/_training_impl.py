@@ -1931,3 +1931,6 @@ def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode=
 from ._native_optimizer_bridge import connect as _connect_native_optimizer
 import sys as _optimizer_sys
 _OPT_NATIVE, _OPT_CONTEXT = _connect_native_optimizer(_optimizer_sys.modules[__name__])
+
+from ._native_loaded_modules import connect_module as _connect_native_training_module
+_connect_native_training_module(__name__, _optimizer_sys.modules[__name__], ('_OPT_CONTEXT',))  # glue: publish the completed optimizer boundary connection at import
