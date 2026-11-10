@@ -23,6 +23,8 @@ from core.logistic_native_api import (
     QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
 )
 from core.logistic_config import LogisticPromotion
+from core.logistic_model_state import LogisticFitLayout, logistic_target_count, logistic_fit_target_count
+from bindings.logistic_state_boundary import logistic_parameters_pack
 from core.linear_metadata import linear_mode_name
 from bindings.logistic_config_boundary import (
     logistic_scalar_text, logistic_integer, logistic_validate_configuration,
@@ -231,9 +233,7 @@ def logistic_fit(model: PythonObject, source_x: PythonObject, source_y: PythonOb
     if labels.n != rows:
         raise Error("mojolearn LogisticRegression X and y lengths differ")
     var n_classes = len(labels.classes)
-    if n_classes < 2:
-        raise Error("mojolearn LogisticRegression: y has one class")
-    var n_targets = 1 if n_classes == 2 else n_classes
+    var n_targets = logistic_fit_target_count(n_classes)
     var loss = QN_LOSS_LOGISTIC if n_targets == 1 else QN_LOSS_SOFTMAX
     # The dense codes as float32 (codes < 2**24: exact), `codes.astype('<f4')`.
     var y_enc = admitted_vector(rows, "<f4", context)
@@ -253,8 +253,8 @@ def logistic_fit(model: PythonObject, source_x: PythonObject, source_y: PythonOb
     var sw = _row_weights(model, fields, sample_weight, fields["class_weight"], labels, rows, context)
     var entries = _entries(model, fields, context)
     var intercept = Bool(py=fields["fit_intercept"])
-    var n_param = cols + (1 if intercept else 0)
-    var w = admitted_vector(n_param * n_targets, "<f4", context)
+    var layout = LogisticFitLayout(cols, n_targets, intercept)
+    var w = admitted_vector(layout.weights, "<f4", context)
     var info = admitted_vector(2, "<f4", context)
     var tol = fields["tol"]
     var has_sw = sw.address != 0
@@ -283,26 +283,18 @@ def logistic_fit(model: PythonObject, source_x: PythonObject, source_y: PythonOb
     _ = info  # keep the Python object alive through the native call above
     _ = w  # keep the Python object alive through the native call above
     _ = sw  # keep the Python object alive through the native call above
+    # Keep the new weight buffer private while native PACK releases the GIL.
+    # Preserve the old failed-allocation state (_w was published before the
+    # public coefficient allocations) without exposing an in-progress copy.
+    var public_parameters: Tuple[PythonObject, PythonObject]
+    try:
+        public_parameters = logistic_parameters_pack(w, layout, context)
+    except error:
+        py_setitem(fields, "_w", w)
+        raise error^
     py_setitem(fields, "_w", w)
-    # `_coef_from_w`: one target, the first `cols` words and the last; C
-    # targets, cuML's column-major block w[c + C*j], the bias at j == cols.
-    var source = _F32P(unsafe_from_address=labels_address(w))
-    _ = w  # keep the Python object alive through the native call above
-    var coef = admitted_array(Python.tuple(n_targets, cols), "<f4", context)
-    var inter = admitted_vector(n_targets, "<f4", context)
-    var cp = _F32P(unsafe_from_address=labels_address(coef))
-    _ = coef  # keep the Python object alive through the native call above
-    var ip = _F32P(unsafe_from_address=labels_address(inter))
-    _ = inter  # keep the Python object alive through the native call above
-    for c in range(n_targets):  # driver-loop: over the fitted coefficient block (model structure)
-        for j in range(cols):  # driver-loop: over the fitted coefficients of one target
-            cp[c * cols + j] = source[c + n_targets * j]
-            _ = coef  # keep the Python object alive through the native call above
-            _ = w  # keep the Python object alive through the native call above
-        if intercept:
-            ip[c] = source[c + n_targets * cols]
-            _ = inter  # keep the Python object alive through the native call above
-            _ = w  # keep the Python object alive through the native call above
+    var coef = public_parameters[0]
+    var inter = public_parameters[1]
     py_setitem(fields, "coef_", coef)
     py_setitem(fields, "intercept_", inter)
     var iterations = admitted_vector(1, "<i8", context)
@@ -337,7 +329,7 @@ def _n_targets(model: PythonObject, fields: PythonObject) raises -> Int:
     if classes is None:
         raise Error("AttributeError: '" + _name(model) + "' object has no attribute 'classes_'")
     var k = len(classes)
-    return 1 if k == 2 else k
+    return logistic_target_count(k)
 
 
 def _fitted_w(model: PythonObject, fields: PythonObject) raises -> PythonObject:

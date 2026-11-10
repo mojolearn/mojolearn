@@ -69,6 +69,18 @@ its connected host owner through a compiled Python entry. Those transitive paths
 are not claimed complete. Metadata/get_params/set_params, ownership and admitted
 buffer preparation must also receive the final end-to-end review.
 
+The fitted coefficient output layout is now typed in
+`core.logistic_model_state`: target count, checked word counts and QN-column to
+public-row mapping. `bindings.logistic_state_boundary` retains the input/output
+owners and uses the existing native allocator with native shape lists. The
+old nested coefficient-copy loops in the public door are removed. Independent
+raw-word copies use the existing parallel host work policy and one initial
+coordinate calculation per worker; kernels, downloads, output allocation count,
+public writable coefficient arrays and private `_w` semantics are unchanged.
+The fresh `_w` stays private through GIL-released PACK; publication happens
+after the join, with the previous failed-allocation `_w` state retained on the
+error path. This output-layout step does not complete fitted-query snapshots.
+
 Root owes the affected estimator GPU/host, base GPU and classical/tokenizer owner
 closures, all dependent groups selected by the development controller, direct
 native requests plus public LogisticRegression/host/DeviceRows tests, and later
