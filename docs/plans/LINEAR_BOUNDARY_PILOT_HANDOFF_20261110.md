@@ -21,6 +21,11 @@ Root owns compilation and measurement. The lane has run no builds or tests.
 - Constructor, get/set params and fitted-state metadata: native parameter names,
   validation and key decisions in `core/linear_metadata.mojo`. Explicit boundary
   code transfers exact external parameter owners using CPython dictionary APIs.
+- Mode normalization and connected-provider mode/vendor checks use native
+  metadata. Unicode whitespace spellings retain the prior accepted behavior
+  without calling Python string methods. Public mode/vendor reads use the same
+  descriptor table, and fitted admission no longer boxes a Boolean only to
+  immediately unbox it.
 - Save/hash: the separate archive lane's native writer/hash batch is incorporated;
   public dispatch uses its native byte ownership and serialization. Archive read
   completion remains with that lane. The complete pilot is not yet accepted.
@@ -88,6 +93,9 @@ values; the existing gather is unchanged. Exact exporter adapters still require
 final call-graph review, and none of these changes is proof from an import scan. Public attribute and
 exception-class operations are Python protocol admission/packing, and remain
 subject to exact-type/hook refusal review. Archive read remains outstanding.
+The pandas exporter still combines boundary object decoding with block dtype,
+shape and placement planning; those decisions are the next typed ingress work.
+Python sequence preparation likewise remains under transitive review.
 
 No arithmetic, fold order or tuned-kernel change is intended. No development
 identity run is requested. No speed result is claimed. End-to-end NVIDIA/AMD
