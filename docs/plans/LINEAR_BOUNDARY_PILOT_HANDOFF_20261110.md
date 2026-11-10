@@ -93,9 +93,18 @@ values; the existing gather is unchanged. Exact exporter adapters still require
 final call-graph review, and none of these changes is proof from an import scan. Public attribute and
 exception-class operations are Python protocol admission/packing, and remain
 subject to exact-type/hook refusal review. Archive read remains outstanding.
-The pandas exporter still combines boundary object decoding with block dtype,
-shape and placement planning; those decisions are the next typed ingress work.
-Python sequence preparation likewise remains under transitive review.
+The pandas exporter now transfers block descriptors into
+`core/pandas_input_plan.mojo`: block dimensions, dtype promotion, placements,
+nullable-mask validation and scatter decisions use Mojo values. Numeric rows
+still use the existing parallel scatter kernels, now with the GIL released and
+each source owner pinned. Exact object cells require GIL-held C-API decoding;
+they write through a native conversion/finite-policy writer directly into the
+final result, preserving the previous conversion order without a staging copy.
+This decoding cannot be parallelized under the supported GIL contract. Old
+Python owner/placement lists and duplicate metadata rereads were removed.
+Compatibility metadata wrappers for other families share the new native plan;
+those families are not claimed as otherwise migrated. Python sequence
+preparation is owned by the root integration lane and remains unaccepted here.
 
 No arithmetic, fold order or tuned-kernel change is intended. No development
 identity run is requested. No speed result is claimed. End-to-end NVIDIA/AMD
