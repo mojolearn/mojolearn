@@ -1,15 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
-# Existing deterministic ZIP_STORED/NPY checkpoint writer. Format arithmetic,
-# member order and file lifecycle are Mojo; CRC/UTF32/buffer/file entries are
-# connected native C APIs. Python zipfile, numpy.savez and _serialize never run.
+# Archive UNPACK/PACK: admit existing native buffers/files and retain owners.
+# Format bytes, CRCs, member metadata and strided storage live in native Mojo.
+from std.builtin.sort import sort
 from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
-from bindings.classical_arrays import classical_input, classical_is_array, classical_typed, classical_dtype_str, classical_c_bytes, classical_address
+from bindings.py_balanced import py_call, py_type, py_get, py_contains
+from bindings.classical_arrays import classical_input, classical_is_array, classical_dtype_str, classical_c_bytes, classical_numpy
 from bindings.classical_pandas import classical_admit_value
+from bindings.sequential_admission import sequential_admit_value
+from bindings.sequential_inputs import sequential_input
 from bindings.native_buffer_owner import native_buffer_view
-from bindings.archive_unicode_native import archive_utf32_encode
+from bindings.archive_unicode_native import _archive_unicode_failure
+from bindings.cpython_table import cpython_table
+from core.sha256 import sha256_hex, sha256_hex_addr
+from core.native_archive_write import (
+    NativeArchiveMember, archive_contiguous_strides, archive_unicode,
+    archive_linear_members, archive_prepare, archive_local, archive_central, archive_footer,
+)
 from bindings.native_buffer_address import native_buffer_address
 from bindings.sequential_description import sequential_fields
 from core.host_archive_impl import host_archive_reorder_bytes
@@ -32,18 +40,6 @@ def _archive_file_call(entry: PythonObject, *args: PythonObject) raises -> Pytho
         var failure = stash_python_error()
         raise failure^
     return PythonObject(from_owned=result)
-
-
-def _archive_uint(bytes: PythonObject, value: UInt64, width: Int) raises:
-    for k in range(width):  # driver-loop: over a fixed archive header integer's bytes
-        py_call(bytes.append, Int((value >> UInt64(8 * k)) & UInt64(255)))
-
-
-def _archive_header(values: PythonObject, context: PythonObject) raises -> PythonObject:
-    var out = py_call(context["archive_bytearray_type"])
-    for i in range(len(values)):  # driver-loop: over ZIP header metadata fields
-        _archive_uint(out, UInt64(py=values[i][0]), Int(py=values[i][1]))
-    return out
 
 
 def _archive_methods(file: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -188,74 +184,155 @@ def _archive_str_list(value: PythonObject) raises -> Bool:
     return True
 
 
-def _archive_npy(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var shape = PythonObject(None)
-    var raw = PythonObject(None)
-    var descr = String()
-    if py_type(value) is py_type(PythonObject("")):
-        var width = max(len(value), 1)
-        descr = "<U" + String(width)
-        shape = Python.tuple(1)
-        raw = archive_utf32_encode(value, context)
-        if len(value) == 0:
-            raw = py_call(context["archive_bytes_type"], 4)
-    elif _archive_str_list(value):
-        # A flat list of str (the str class labels `_labels.classes_member`
-        # saves): one `<U{widest}` vector, each label UTF-32 and
-        # zero-padded to the widest, as `_serialize._describe_list` wrote it.
-        var count = len(value)
-        var width = 1
-        for i in range(count):  # driver-loop: over the distinct str class labels of one model
-            width = max(width, len(value[i]))
-        descr = "<U" + String(width)
-        shape = Python.tuple(count)
-        var joined = py_call(context["archive_bytearray_type"])
-        for i in range(count):  # driver-loop: over the distinct str class labels of one model
-            var item = value[i]
-            _ = py_call(joined.extend, archive_utf32_encode(item, context))
-            _ = py_call(joined.extend, py_call(context["archive_bytes_type"], 4 * (width - len(item))))
-        raw = py_call(context["archive_bytes_type"], joined)
-    else:
-        classical_admit_value(value, context)
-        var array = value if classical_is_array(value, context) or py_type(value) is py_get(context, "ndarray") else classical_input(value, context)
-        if classical_is_array(array, context):
-            var parts = _archive_array(array, context)
-            descr = String(parts[0])
-            shape = parts[1]
-            raw = parts[2]
-        else:
-            descr = classical_dtype_str(array, context)
-            shape = array.shape if Int(py=array.ndim) else Python.tuple(1)
-            raw = py_call(context["archive_bytes_type"]) if Int(py=array.nbytes) == 0 else classical_c_bytes(array, "model field", context)
-        # raw retains the actual exporter, including a borrowed contiguous
-        # ndarray; no pointer outlives the owner passed to the native write.
-        _ = array^
+def _archive_unpack_unicode(value: PythonObject, context: PythonObject) raises -> List[UInt32]:
+    # Admission reads native Unicode storage; it never invokes a str subclass
+    # method or creates Python byte containers for serialized metadata.
     ref cpy = Python().cpython()
-    var dtype_text = PythonObject(descr)
-    var repr_dtype = cpy.lib.get_function[PyObjectPtr]("PyObject_Repr")(dtype_text._obj_ptr)
-    if not repr_dtype:
+    var count = cpy.lib.get_function[Int]("PyUnicode_GetLength")(value._obj_ptr)
+    if count < 0:
         raise cpy.unsafe_get_error()
-    var dtype_word = PythonObject(from_owned=repr_dtype)
-    var repr_shape = cpy.lib.get_function[PyObjectPtr]("PyObject_Repr")(shape._obj_ptr)
-    if not repr_shape:
+    var words = List[UInt32](capacity=count)
+    var api = cpython_table()
+    for i in range(count):  # unpack: admitted native Unicode input words
+        var word = api[].PyUnicode_ReadChar(value._obj_ptr, i)
+        if word >= 0xD800 and word <= 0xDFFF:
+            _archive_unicode_failure(value, "utf-32-le", i, i + 1, "surrogates not allowed", context, True)
+        words.append(word)
+    return words^
+
+
+def _archive_unpack_member(name: String, value: PythonObject, context: PythonObject,
+                           mut pins: List[PythonObject]) raises -> NativeArchiveMember:
+    if py_type(value) is py_type(PythonObject("")) or _archive_str_list(value):
+        var strings = List[List[UInt32]]()
+        if py_type(value) is py_type(PythonObject("")):
+            strings.append(_archive_unpack_unicode(value, context))
+        else:
+            for i in range(len(value)):  # unpack: admitted flat string-label inputs
+                strings.append(_archive_unpack_unicode(value[i], context))
+        return archive_unicode(name, strings)
+    classical_admit_value(value, context)
+    var array = value if classical_is_array(value, context) or py_type(value) is py_get(context, "ndarray") else classical_input(value, context)
+    pins.append(array)
+    var shape = List[Int]()
+    var strides = List[Int]()
+    var dtype = String("")
+    var width = 0
+    var size = 0
+    var address = 0
+    if classical_is_array(array, context):
+        var slots = context["array_fields"]
+        var cls = context["array_class"]
+        var dimensions = py_call(slots["shape"], array, cls)
+        var format = py_call(slots["dtype"], array, cls)
+        var order = py_call(slots["order"], array, cls)
+        var view = py_call(slots["_mv"], array, cls)
+        if py_type(dimensions) is not py_type(Python.tuple()) or py_type(format) is not py_type(PythonObject("")) or py_type(order) is not py_type(PythonObject("")):
+            raise Error("TypeError: checkpoint Array metadata requires native shape, dtype and order storage")
+        if py_type(view) is not context["archive_memoryview_type"]:
+            raise Error("TypeError: checkpoint Array storage requires a native memoryview")
+        classical_admit_value(view, context)
+        dtype = String(format)
+        if dtype == "<f8" or dtype == "<i8":
+            width = 8
+        elif dtype == "<f4" or dtype == "<i4" or dtype == "<u4":
+            width = 4
+        elif dtype == "<f2" or dtype == "<u2":
+            width = 2
+        elif dtype == "<u1" or dtype == "<i1":
+            width = 1
+        else:
+            raise Error("TypeError: checkpoint Array dtype is not native numeric storage")
+        if String(order) != "C" and String(order) != "F":
+            raise Error("TypeError: checkpoint Array order must be C or F")
+        var count = 1
+        for i in range(len(dimensions)):  # unpack: checked native Array dimensions
+            if py_type(dimensions[i]) is not py_type(PythonObject(0)) or Int(py=dimensions[i]) < 0:
+                raise Error("TypeError: checkpoint Array dimensions require nonnegative native integers")
+            var dimension = Int(py=dimensions[i])
+            if dimension > 0 and count > 9223372036854775807 // dimension:
+                raise Error("OverflowError: checkpoint Array shape exceeds native storage")
+            count *= dimension
+            shape.append(dimension)
+        size = Int(py=view.nbytes)
+        if count > 9223372036854775807 // width or count * width != size:
+            raise Error("ValueError: checkpoint Array storage does not match its shape")
+        if not len(shape):
+            shape.append(1)
+        strides = archive_contiguous_strides(shape, width, String(order) == "F")
+        pins.append(view)
+        if size:
+            address = native_buffer_address(view)
+        if dtype == "<u1":
+            dtype = "|u1"
+    else:
+        # A retained memoryview pins the exact admitted ndarray's export.
+        # Copy shape/strides from Py_buffer rather than creating Python
+        # intermediate arrays or calling ndarray.tobytes for non-C layouts.
+        var view = native_buffer_view(array)
+        pins.append(view)
+        dtype = classical_dtype_str(array, context)
+        var exported = List[Int](length=10, fill=0)
+        var raw = exported.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+        ref cpy = Python().cpython()
+        if cpython_table()[].PyObject_GetBuffer(view._obj_ptr, raw, Int32(24)) != 0:
+            raise cpy.unsafe_get_error()
+        try:
+            address = exported[0]
+            size = exported[2]
+            width = exported[3]
+            var rank = Int(UInt64(exported[4]) >> 32)
+            var dims = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=exported[6])
+            var steps = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=exported[7])
+            for i in range(rank):  # unpack: the admitted buffer's native layout metadata
+                shape.append(dims[i])
+                strides.append(steps[i])
+            if rank == 0:
+                shape.append(1)
+                strides.append(width)
+        finally:
+            cpython_table()[].PyBuffer_Release(raw)
+            _ = exported
+        _ = view
+    _ = array
+    return NativeArchiveMember(name, dtype, shape^, strides^, address, size, width, List[UInt8]())
+
+
+def _archive_pack_bytes(file: PythonObject, methods: PythonObject, address: Int, size: Int) raises:
+    # A temporary read-only view is an output boundary object, not an
+    # internal byte owner. The caller retains native storage until write
+    # returns; all admitted file entries consume it synchronously in C.
+    ref cpy = Python().cpython()
+    var pointer = cpy.lib.get_function[PyObjectPtr]("PyMemoryView_FromMemory")(
+        MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address), size, Int32(0x100))
+    if not pointer:
         raise cpy.unsafe_get_error()
-    var shape_word = PythonObject(from_owned=repr_shape)
-    var text = "{'descr': " + String(dtype_word) + ", 'fortran_order': False, 'shape': " + String(shape_word) + ", }"
-    var body = py_call(PythonObject(text).encode, "latin1")
-    var padding = 64 - ((10 + len(body) + 1) % 64)
-    var length = len(body) + padding + 1
-    if length >= 65536:
-        raise Error("npy header too long for format 1.0")
-    var header = py_call(context["archive_bytearray_type"])
-    py_call(header.append, 147)
-    py_call(header.extend, py_call(PythonObject("NUMPY").encode, "ascii"))
-    py_call(header.append, 1)
-    py_call(header.append, 0)
-    _archive_uint(header, UInt64(length), 2)
-    py_call(header.extend, body)
-    py_call(header.extend, py_call(PythonObject(" ").encode, "ascii") * padding)
-    py_call(header.append, 10)
-    return Python.tuple(header, raw)
+    var view = PythonObject(from_owned=pointer)
+    _ = _archive_file_call(methods["write"], file, view)
+    _ = view
+
+
+def _archive_pack_members(file: PythonObject, methods: PythonObject,
+                          mut members: List[NativeArchiveMember]) raises:
+    var records = archive_prepare(members)
+    for i in range(len(records)):  # pack: dependent stream position and writes, in archive order
+        var offset = Int(py=_archive_file_call(methods["tell"], file))
+        var header = archive_local(records[i], offset)
+        _archive_pack_bytes(file, methods, Int(header.unsafe_ptr()), len(header))
+        _archive_pack_bytes(file, methods, members[i].source, members[i].size)
+        _ = header
+    var directory = Int(py=_archive_file_call(methods["tell"], file))
+    for i in range(len(records)):  # pack: ordered central directory output
+        var header = archive_central(records[i])
+        _archive_pack_bytes(file, methods, Int(header.unsafe_ptr()), len(header))
+        _ = header
+    var end = Int(py=_archive_file_call(methods["tell"], file))
+    var footer = archive_footer(len(records), directory, end)
+    _archive_pack_bytes(file, methods, Int(footer.unsafe_ptr()), len(footer))
+    _ = _archive_file_call(methods["flush"], file)
+    _ = footer
+    _ = records
+    _ = members
 
 
 def classical_archive_write(path: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -263,81 +340,26 @@ def classical_archive_write(path: PythonObject, values: PythonObject, context: P
     var file = opened[0]
     var methods = _archive_methods(file, context)
     var close = Bool(py=opened[1])
+    var pins = List[PythonObject]()
+    var members = List[NativeArchiveMember]()
     try:
         if py_type(values) is not py_type(Python.dict()):
             raise Error("TypeError: checkpoint members require a native dictionary")
-        var names = py_call(py_type(Python.list()), values.keys())
-        for i in range(len(names)):  # driver-loop: admit all member names before native comparisons
-            if py_type(names[i]) is not py_type(PythonObject("")):
+        var keys = py_call(py_type(Python.list()), values.keys())
+        var names = List[String]()
+        for i in range(len(keys)):  # unpack: native member names from an admitted dict
+            if py_type(keys[i]) is not py_type(PythonObject("")):
                 raise Error("TypeError: checkpoint member names must be native strings")
-        _ = py_call(names.sort)
-        var records = Python.list()
-        var crc32 = context["archive_crc32"]
-        for k in range(len(names)):  # driver-loop: over sorted deterministic NPZ member names
-            var name = names[k]
-            var filename = py_call((name + ".npy").encode, "ascii")
-            var encoded = _archive_npy(values[name], context)
-            var header = encoded[0]
-            var payload = encoded[1]
-            var size = len(header) + len(payload)
-            # The incumbent streaming writer opens members without force_zip64
-            # and refuses a member above zipfile.ZIP64_LIMIT on closing it.
-            if size > 2147483647:
-                raise Error("RuntimeError: File size too large, try using force_zip64")
-            var crc = py_call(crc32, payload, py_call(crc32, header))
-            var offset = Int(py=_archive_file_call(methods["tell"], file))
-            var local = _archive_header(Python.list(
-                Python.tuple(0x04034B50, 4), Python.tuple(20, 2), Python.tuple(0, 2), Python.tuple(0, 2),
-                Python.tuple(0, 2), Python.tuple(33, 2), Python.tuple(crc, 4), Python.tuple(size, 4),
-                Python.tuple(size, 4), Python.tuple(len(filename), 2), Python.tuple(0, 2)), context)
-            _ = _archive_file_call(methods["write"], file, local)
-            _ = _archive_file_call(methods["write"], file, filename)
-            _ = _archive_file_call(methods["write"], file, header)
-            _ = _archive_file_call(methods["write"], file, payload)
-            py_call(records.append, Python.tuple(filename, size, crc, offset))
-            _ = encoded^
-        var directory = Int(py=_archive_file_call(methods["tell"], file))
-        for k in range(len(records)):  # driver-loop: over NPZ central-directory member records
-            var record = records[k]
-            var offset = Int(py=record[3])
-            var zip64 = offset > 2147483647
-            var extra = py_call(context["archive_bytearray_type"])
-            if zip64:
-                _archive_uint(extra, 1, 2)
-                _archive_uint(extra, 8, 2)
-                _archive_uint(extra, UInt64(offset), 8)
-            var version = 45 if zip64 else 20
-            var central = _archive_header(Python.list(
-                Python.tuple(0x02014B50, 4), Python.tuple((3 << 8) | version, 2), Python.tuple(version, 2),
-                Python.tuple(0, 2), Python.tuple(0, 2), Python.tuple(0, 2), Python.tuple(33, 2),
-                Python.tuple(record[2], 4), Python.tuple(record[1], 4), Python.tuple(record[1], 4),
-                Python.tuple(len(record[0]), 2), Python.tuple(len(extra), 2), Python.tuple(0, 2),
-                Python.tuple(0, 2), Python.tuple(0, 2), Python.tuple(0o644 << 16, 4),
-                Python.tuple(0xFFFFFFFF if zip64 else offset, 4)), context)
-            _ = _archive_file_call(methods["write"], file, central)
-            _ = _archive_file_call(methods["write"], file, record[0])
-            if len(extra):
-                _ = _archive_file_call(methods["write"], file, extra)
-        var end = Int(py=_archive_file_call(methods["tell"], file))
-        var directory_size = end - directory
-        var count = len(records)
-        if count > 65535 or directory > 2147483647 or directory_size > 2147483647:
-            var wide = _archive_header(Python.list(
-                Python.tuple(0x06064B50, 4), Python.tuple(44, 8), Python.tuple(45, 2), Python.tuple(45, 2),
-                Python.tuple(0, 4), Python.tuple(0, 4), Python.tuple(count, 8), Python.tuple(count, 8),
-                Python.tuple(directory_size, 8), Python.tuple(directory, 8)), context)
-            var locator = _archive_header(Python.list(Python.tuple(0x07064B50, 4), Python.tuple(0, 4),
-                                                     Python.tuple(end, 8), Python.tuple(1, 4)), context)
-            _ = _archive_file_call(methods["write"], file, wide)
-            _ = _archive_file_call(methods["write"], file, locator)
-        var footer = _archive_header(Python.list(Python.tuple(0x06054B50, 4), Python.tuple(0, 2), Python.tuple(0, 2),
-            Python.tuple(min(count, 65535), 2), Python.tuple(min(count, 65535), 2),
-            Python.tuple(min(directory_size, 0xFFFFFFFF), 4), Python.tuple(min(directory, 0xFFFFFFFF), 4), Python.tuple(0, 2)), context)
-        _ = _archive_file_call(methods["write"], file, footer)
-        _ = _archive_file_call(methods["flush"], file)
+            names.append(String(keys[i]))
+        sort(names)
+        for name in names:  # unpack: each admitted model field and its lifetime pins
+            members.append(_archive_unpack_member(name, values[PythonObject(name)], context, pins))
+        _archive_pack_members(file, methods, members)
     finally:
         if close:
             _ = _archive_file_call(methods["close"], file)
+        _ = pins
+        _ = members
     return path
 
 
@@ -346,32 +368,59 @@ def classical_archive_save(model: PythonObject, path: PythonObject, ridge: Bool,
     var fields = sequential_fields(model)
     if not py_contains(fields, "coef_"):
         raise Error("RuntimeError: this estimator is not fitted yet")
-    var bi = native_loaded_module("builtins")
     var mode = py_get(fields, "numeric_mode")
     if mode is None or not Bool(py=mode):
         mode = context["backend_fields"]["_DEFAULT_MODE"]
-    if py_type(mode) is not bi.str:
+    if py_type(mode) is not py_type(PythonObject("")):
         raise Error("cannot save invalid numeric_mode")
+    # Exact-str C methods are input normalization at UNPACK, preserving the
+    # existing Unicode whitespace/case behavior of the public mode option.
     mode = mode.strip().lower()
-    if String(mode) != "fast" and String(mode) != "identical":
+    var selected = String(mode)
+    if selected != "fast" and selected != "identical":
         raise Error("cannot save invalid numeric_mode")
-    var bias = classical_typed(Python.tuple(1), "<f8", context)
-    var bias_ptr = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(bias)))
-    bias_ptr[0] = Float64(py=fields["intercept_"])
-    var meta = classical_typed(Python.tuple(2), "<i8", context)
-    var meta_ptr = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(meta)))
-    meta_ptr[0] = Int64(Int(py=fields["n_features_in_"]))
-    meta_ptr[1] = 1 if Bool(py=fields["fit_intercept"]) else 0
-    var values = Python.dict()
-    py_setitem(values, "format", "mojolearn-linear-1")
-    py_setitem(values, "estimator", py_type(model).__name__)
-    py_setitem(values, "numeric_mode", mode)
-    py_setitem(values, "coef", fields["coef_"])
-    py_setitem(values, "intercept", bias)
-    py_setitem(values, "meta", meta)
-    if ridge:
-        var alpha = classical_typed(Python.tuple(1), "<f8", context)
-        var ptr = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(alpha)))
-        ptr[0] = Float64(py=fields["alpha"])
-        py_setitem(values, "alpha", alpha)
-    return classical_archive_write(path, values, context)
+    var pins = List[PythonObject]()
+    # Every save reads the current writable/rebound public coefficient field.
+    var coef = _archive_unpack_member("coef", fields["coef_"], context, pins)
+    var alpha = Float64(py=fields["alpha"]) if ridge else Float64(0)
+    var members = archive_linear_members(coef^, String(py_type(model).__name__), selected,
+        Int(py=fields["n_features_in_"]), Float64(py=fields["intercept_"]), Bool(py=fields["fit_intercept"]), ridge, alpha)
+    var opened = _archive_open(path, context)
+    var file = opened[0]
+    var methods = _archive_methods(file, context)
+    try:
+        _archive_pack_members(file, methods, members)
+    finally:
+        if Bool(py=opened[1]):
+            _ = _archive_file_call(methods["close"], file)
+        _ = pins
+        _ = members
+    return path
+
+
+def classical_archive_hash(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var fields = sequential_fields(model)
+    if not py_contains(fields, "coef_"):
+        raise Error("AttributeError: host linear model has no coef_")
+    var value = fields["coef_"]
+    if value is None:
+        return PythonObject(sha256_hex(List[UInt8]()))
+    sequential_admit_value(value, context)
+    var pins = List[PythonObject]()
+    var result = String("")
+    if classical_numpy(context):
+        var array = sequential_input(value, context)
+        var member = _archive_unpack_member("coef", array, context, pins)
+        member.prepare()
+        result = sha256_hex_addr(member.source, member.size)
+        _ = member
+        _ = array
+    else:
+        # Preserve the existing NumPy-free C-order Array admission/refusal.
+        var array = classical_input(value, context, "coef_")
+        var raw = classical_c_bytes(array, "coef_", context)
+        result = sha256_hex_addr(native_buffer_address(raw), len(raw))
+        _ = raw
+        _ = array
+    _ = pins
+    return PythonObject(result)
