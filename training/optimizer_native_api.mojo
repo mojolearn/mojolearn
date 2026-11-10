@@ -5,6 +5,7 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_call, native_descriptor_report
 from training.optimizer_kernels import OptKernels
 from training.optimizer_public_common import PublicStep, PublicStepOut
+from training.optimizer_device_storage_plan import optimizer_device_transfer_span
 
 comptime OPTIMIZER_NATIVE_ABI = "mojolearn.optimizer.native.v1"
 comptime OPT_NATIVE_STEP = 0
@@ -129,8 +130,10 @@ def optimizer_native_dispatch[K: OptKernels](operation: Int, aa: Int, na: Int, p
             if operation == OPT_NATIVE_ALLOCATE_DEVICE:
                 value = K.allocate_device(p[0])
             elif operation == OPT_NATIVE_UPLOAD_DEVICE:
+                optimizer_device_transfer_span(p[1], p[2])
                 value = K.upload_device(p[0], p[1], p[2])
             else:
+                optimizer_device_transfer_span(p[1], p[2])
                 value = K.download_device(p[0], p[1], p[2])
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value
         return 0
