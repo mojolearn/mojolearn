@@ -1058,6 +1058,14 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
         ranges.append(0)
         ranges.append(0)
     var state = shard_state(fields, b.frozenset(Python.list("_resident", "_resident_holder")), context)
+    # Lanes a7b / a8b keep a borrowed float32 C-order X as the fitted rows
+    # (`_index` is then the caller's NumPy array), which the worker codec does
+    # not carry: the workers got no `_index` and refused "call fit before
+    # kneighbors". Send a native copy of the rows; the key below holds the
+    # estimator's own object, so the copy is made only when the state is sent.
+    var index_object = PythonObject(None)
+    if index is not None and py_contains(fields, PythonObject("_index")) and not py_contains(state, PythonObject("_index")):
+        index_object = index
     var devices = pool["devices"]
     var workers = len(devices)
     var name = py_type(model).__name__
@@ -1076,6 +1084,9 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     _ = py_call(key.append, model)
     _ = py_call(key.append, name)
     prepared_key_fields(mods, key, state, List[String]())
+    if index_object is not None:
+        _ = py_call(key.append, "_index")
+        _ = py_call(key.append, index_object)
     py_setitem(state, "numeric_mode", "identical")
     # The resident claim and the token counter live in the native prepared
     # registry, weakly keyed by the driver object (outside its `__dict__`;
@@ -1100,6 +1111,8 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
         # scheme): an in-place write raises; replacing the attribute or a
         # refit is noticed and re-sent. No per-call content hash.
         _freeze_carried(state, context, 0)
+        if index_object is not None:
+            py_setitem(state, "_index", shard_rows(index_object, 0, Int(py=index_object.shape[0]), context))
         var stores = b.list()
         for i in range(workers):  # driver-loop: one snapshot request per worker
             _ = py_call(stores.append, _native_request("query_state", Python.tuple(token, name, state)))
