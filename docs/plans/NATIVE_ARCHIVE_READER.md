@@ -188,6 +188,53 @@ installed code. The new suite can be imported by the existing aggregate CPU
 runner. This lane has run neither compilation nor runtime tests; wheel codec
 qualification and any performance measurements remain separate obligations.
 
+Cholesky save and generic/public load now use
+`core/native_archive_cholesky.mojo`. Save captures only its eight public field
+pins, admits them in the prior order, and creates native integer/float metadata
+bytes; it no longer copies an instance dictionary or builds a member map or
+Python scalar arrays. Its old schema-step tuple is replaced by the import-time
+`native_cholesky` family connection. Subclasses retain the saved estimator name
+`Cholesky`; missing fields, scalar admission, false/default and normalized modes,
+factor dtype/shape checks and failed-factor saves retain their public behavior.
+The discarded full factor copy formerly made only to check dtype/shape is gone.
+
+Load retains generic class/hook admission, then native mode, dtype, joint-count
+and factor-shape decisions in their former order. Final state includes the
+original info/block values, NaN/signed-zero words and exact minus-one/None jitter
+sentinel. C-order factors use the existing one-copy output pack. F-order factors
+are gathered directly into their final writable C-order owner with the GIL
+released and both owners pinned. The former intermediate Python factor and
+serial reorder on this route are removed. The gather is extracted from the
+already-parallel `NativeArchiveMember.prepare` implementation, retaining its
+partition policy and byte operations for the writer too; no solver kernel or
+numerical algorithm changes. Legacy families still using the shared serial
+host reorder are unchanged and remain migration work.
+
+Fifty-four native fixtures are importable as
+`checks.native_tests.archive_cholesky_suite.run_checks`. Independent raw-word
+oracles assemble UInt64 values from bytes (never the bounded address parser),
+covering signed integers and NaN payloads. Coverage also includes accepted
+metadata ranks, optional jitter, every refusal stage, empty save/invalid load,
+member ownership/order, C/F/negative/padded strides at four widths, empty copies,
+and a 257-by-263 gather with parallel initialization and independent checking.
+Fourteen Python boundary cases cover public/explicit/generic loaders, both
+saved orders, writable independent factor owners after input release, read-only
+rebound F/negative-stride buffers, scalar state admissions, normalized mode,
+unchanged serialized bytes, exception quoting and refused conversion hooks.
+Existing Cholesky numerical and public archive tests remain unchanged.
+
+Root's public-owner lifetime repair `10e615c641` is adopted in this lane as
+`013491f906`: the final generic envelope retains its admitted public class pin
+for hook and public iforest/forest/GBDT selection. It creates no probe instance.
+Affected primary owners for Cholesky are `runtime_classical` and `runtime_trees`;
+shared archive output/writer changes also invalidate their normal consumers.
+Commands: `bash tools/compile_slot.sh pixi run check-native-archive-cholesky`
+and installed `python -m pytest -n auto
+python/mojolearn/tests/test_cholesky_archive_native.py
+python/mojolearn/tests/test_host_archive_native.py`. The existing native writer
+suite also covers the extracted gather. No compilation, runtime or performance
+result is claimed by this lane for this batch; the orchestrator owns those runs.
+
 Text-cell storage is now allocated once without a serial construction pass.
 Each host worker constructs and moves its assigned owning cells directly into
 that final allocation. Every slot is initialized even when its decode fails,

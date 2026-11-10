@@ -59,6 +59,7 @@ check-native-archive-path = "mojo run -I . checks/native_tests/archive_path.mojo
 check-native-archive-repr = "mojo run -I . checks/native_tests/archive_repr.mojo"
 check-native-archive-minmax = "python3 tools/gen_archive_unicode.py && mojo run -I . checks/native_tests/archive_minmax.mojo"
 check-native-archive-standard = "python3 tools/gen_archive_unicode.py && mojo run -I . checks/native_tests/archive_standard.mojo"
+check-native-archive-cholesky = "python3 tools/gen_archive_unicode.py && mojo run -I . checks/native_tests/archive_cholesky.mojo"
 check-native-archive-unicode = "python3 tools/gen_archive_unicode.py && mojo run -I . checks/native_tests/archive_unicode_names.mojo"
 # Queued split-GEMM workspace growth/reuse, oracle bits and no-wait budget.
 check-gemm-workspace = "mojo run -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -I . gemm/checks/gemm_workspace_check.mojo"
