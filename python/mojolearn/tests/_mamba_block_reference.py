@@ -418,11 +418,15 @@ def mamba3_call(self, x, state, step):
 
 
 def block_call(block, x, state, step):
-    """The retained driver of `block` (a Mamba block, or any block with its own `_call`)."""
+    """The retained driver of `block` (a Mamba or Transformer block, or any block with its own `_call`)."""
     if isinstance(block, Mamba1Block):
         return mamba1_call(block, x, state, step)
     if isinstance(block, Mamba2Block):
         return mamba2_call(block, x, state, step)
     if isinstance(block, Mamba3Block):
         return mamba3_call(block, x, state, step)
+    from mojolearn.tests._transformer_block_reference import transformer_call
+    from mojolearn._transformer_impl import TransformerBlock
+    if isinstance(block, TransformerBlock):
+        return transformer_call(block, x, state, step)
     return block._call(x, state, step)

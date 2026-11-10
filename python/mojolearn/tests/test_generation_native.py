@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 from mojolearn import Array
+from mojolearn.tests import _mamba_block_reference
 from mojolearn._causal_lm_fixtures import (
     family_fixture, _llama_config, _llama_tensors, _write_checkpoint,
 )
@@ -42,7 +43,7 @@ def block_reference(model, ids, state=None):
     x = model._prims.embedding(model._embed, ids.reshape((b * l,)))
     x = x.reshape((b, l, model.d_model))
     for i, blk in enumerate(model.blocks):
-        x = blk._call(x, None if state is None else state.layers[i], step=False)
+        x = _mamba_block_reference.block_call(blk, x, None if state is None else state.layers[i], step=False)
     x = x.reshape((b * l, model.d_model))
     if model._norm is not None:
         x = model._prims.rms_norm(x, model._norm, model.norm_eps)
