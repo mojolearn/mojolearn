@@ -1412,7 +1412,10 @@ def compile_release_group(row, repo, cache, env, evidence, toolchain=None, launc
                 result["command"] = row["command"]
             if execution.is_file():
                 result["execution"] = json.loads(execution.read_text())
-                if compiled:
+                # A resource limit can kill the cache child before it writes
+                # its provenance verdict. Retain that measured lower bound
+                # or every retry gets the same insufficient memory ceiling.
+                if compiled or code != 0:
                     record_peak(cache, row, result["execution"], row["compile_jobs"])
                     result["peak_rss_bytes"] = result["execution"].get("peak_rss_bytes")
                 if code and result["execution"].get("reason"):

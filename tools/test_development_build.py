@@ -61,6 +61,7 @@ def repo(tmp_path, monkeypatch):
     monkeypatch.setattr(dev, "c_toolchain_facts", lambda *_: C_FACTS)
     monkeypatch.setattr(dev.build_process, "cancelled", lambda: False)
     monkeypatch.setattr(dev, "available_resources", lambda: (16, 100 * 2 ** 30))
+    monkeypatch.setattr(dev, "physical_memory", lambda: 128 * 2 ** 30)
     return root
 
 
@@ -736,6 +737,9 @@ def test_development_shell_executes_the_fingerprinted_compiler(repo, tmp_path):
         # 095db6a93 dropped tools/*.py from dev.BUILD_INPUTS, so the synthetic repo has no tools/ directory
         (repo / relative).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(SOURCE_REPO / relative, repo / relative)
+    # This assembly fixture does not exercise Unicode generation. Supply its
+    # already-generated input, as a normal compiler checkout does.
+    write(repo, "tokenizer/impl/unicode_table_generated.mojo", "# synthetic generated table\n")
     compiler = write(repo, ".pixi/envs/default/bin/mojo", "#!/bin/sh\nexit 99\n")
     compiler.chmod(0o755)
     bin_dir = tmp_path / "bin"
@@ -960,12 +964,12 @@ def test_packing_respects_the_memory_budget_and_the_slot_count():
 
 
 def test_a_group_larger_than_the_budget_runs_alone_or_is_refused():
-    # The 16 GiB Mac: tokenizer host needs ~14 GiB, 80% of available is 10.
-    assert dev.next_launches([14 * GIB, GIB], [], 10 * GIB, 8, int(12.8 * GIB)) == [0]
+    # A group above the available budget but below the machine ceiling runs alone.
+    assert dev.next_launches([11 * GIB, GIB], [], 10 * GIB, 8, int(12.8 * GIB)) == [0]
     # While it runs nothing fits beside it.
-    assert dev.next_launches([GIB], [14 * GIB], 10 * GIB, 8, int(12.8 * GIB)) == []
+    assert dev.next_launches([GIB], [11 * GIB], 10 * GIB, 8, int(12.8 * GIB)) == []
     with pytest.raises(dev.BuildError, match="cannot fit.*--memory-per-job-gib"):
-        dev.next_launches([20 * GIB], [], 10 * GIB, 8, int(12.8 * GIB))
+        dev.next_launches([14 * GIB], [], 10 * GIB, 8, int(12.8 * GIB))
 
 
 def test_biggest_recorded_need_starts_first():
@@ -1059,7 +1063,8 @@ def test_main_packs_groups_keys_their_threads_and_reuses_them(repo, tmp_path, mo
     # All start on the first tick and share the 16 cores: threads sum to the cores.
     assert sum(int(jobs) for _, jobs, _ in seen) == 16
     assert {int(jobs) for _, jobs, _ in seen} <= {16 // groups, 16 // groups + 1}
-    assert all(limits["rss_bytes"] == 12 * GIB and limits["min_available_bytes"] == 20 * GIB
+    # Packing reserves 12 GiB; the runaway guard allows its documented 50% headroom.
+    assert all(limits["rss_bytes"] == 18 * GIB and limits["min_available_bytes"] == 20 * GIB
                for _, _, limits in seen)
     assert all(r["workers_at_launch"] in (16 // groups, 16 // groups + 1) and r["peak_rss_bytes"] == GIB
                and r["queue_wait_seconds"] >= 0 and r["compile_seconds"] >= 0 for r in report["results"])
@@ -1427,6 +1432,29 @@ def test_compile_release_group_requires_the_plan_key_and_counts_only_compiles(ma
     moved = dict(row, key="0" * 64)
     failed = dev.compile_release_group(moved, mac, tmp_path / "cache", {}, evidence)
     assert failed["exit_code"] == 1 and "keyed this group" in failed["reason"]
+
+
+def test_limited_release_group_retains_peak_without_cache_provenance(mac, tmp_path, monkeypatch):
+    value = release_plan(mac, tmp_path)
+    row = next(r for r in value["groups"] if r["mode"] == "host")
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    cache = tmp_path / "cache"
+    observed = 5 * GIB
+
+    def limited_child(command, cwd, env, log):
+        Path(log).with_suffix(".log.execution.json").write_text(json.dumps({
+            "status": "rss-limit", "exit_code": 124,
+            "peak_rss_bytes": observed, "reason": "measured RSS exceeded reservation",
+        }))
+        return 124
+
+    monkeypatch.setattr(dev, "run_logged", limited_child)
+    failed = dev.compile_release_group(row, mac, cache, {}, evidence)
+    assert failed["state"] == "failed" and failed["exit_code"] == 124
+    assert failed["bincache_outcome"] == ""
+    assert failed["peak_rss_bytes"] == observed
+    assert dev.recorded_need(cache, row["mode"], row["stem"]) == int(observed * dev.PEAK_HEADROOM["limited"])
 
 
 def test_main_release_layout_compiles_once_into_the_one_mac_cache_and_the_release_keys_hit(
