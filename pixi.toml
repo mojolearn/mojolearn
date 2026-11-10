@@ -73,6 +73,8 @@ check-native-array-layout = "mojo run -I . checks/native_tests/native_array_layo
 check-native-lowbit-weights-cpu = "mojo run -I . checks/native_tests/lowbit_weights_cpu.mojo"
 check-native-lowbit-weights-gpu = "mojo run -I . checks/native_tests/lowbit_weights_gpu.mojo"
 check-native-sequence-plan = "mojo run -I . checks/native_tests/sequence_input_plan_check.mojo"
+check-native-archive-codec = "mojo run -I . checks/native_tests/archive_codec.mojo"
+check-native-archive-parser = "python3 tools/gen_archive_unicode.py && mojo run -I . checks/native_tests/archive_parser.mojo"
 check-native-archive-unicode = "python3 tools/gen_archive_unicode.py && mojo run -I . checks/native_tests/archive_unicode_names.mojo"
 check-native-archive-codec = "mojo run -I . checks/native_tests/archive_codec.mojo"
 # Queued split-GEMM workspace growth/reuse, oracle bits and no-wait budget.

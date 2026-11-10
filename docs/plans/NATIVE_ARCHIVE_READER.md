@@ -41,10 +41,21 @@ time; Zstandard fixtures directly encode the published raw/RLE block format.
 The executable itself uses no Python. Zstandard library absence is a dependency
 failure, not a skipped/passed fixture.
 
-Before reader activation, complete native ZIP/ZIP64 and NPY parsing, Unicode
-UTF-8/UTF-32/escape/name handling, typed linear schema/state construction, and
-boundary error-class translation. Preserve supported interpreter Unicode name
-sets using versioned generated data and public APIs; internal CPython capsules
-and runtime Python decoding are prohibited. Existing API/protocol/exception and
-file ownership tests remain in place. No legacy reader code is deleted until its
-replacement covers these interfaces.
+The next primitives are in `core/native_archive_zip.mojo` (ZIP/ZIP64 metadata,
+duplicate-name precedence and overlap checks), `native_archive_npy.mojo` (NPY
+v1/v2/v3 grammar, dtype and layout), `native_archive_unicode.mojo` (strict
+UTF-8/UTF-32 and literal escapes), and `native_archive_cp437.mojo` (fixed native
+filename mapping). These are exercised by 94 parallel parser fixtures, with
+hand-authored NPY bytes and fixed independent stdlib ZIP fixture bytes.
+
+Name/decimal lookup is supplied by the separate versioned native Unicode data
+module; its generation/provenance and interpreter patch profiles are documented
+in `ARCHIVE_UNICODE_PROVENANCE_20261110.md`. Literal decode returns native warning
+metadata without calling warning hooks. Boundary warning delivery and exact
+exception translation still need integration before activation.
+
+Before reader activation, complete native file-buffer admission, decoded-member
+ownership/packing, typed linear schema/state construction, codec wheel dependency
+qualification, and boundary warning/error behavior. Existing API/protocol/
+exception and file ownership tests remain in place. No legacy reader code is
+deleted until its replacement covers these interfaces.
