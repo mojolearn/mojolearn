@@ -180,16 +180,27 @@ def _state_context():
     context.update(connect_warnings())
     context.update(_classical_doors(_binding))
     archive_types = (io.BytesIO, io.FileIO, io.BufferedReader, io.BufferedWriter, io.BufferedRandom)
+    archive_mmap = context["owner_mmap_class"]
+    if (type(archive_mmap) is not type or archive_mmap.__flags__ & 512
+            or archive_mmap.__module__ != "mmap" or archive_mmap.__name__ != "mmap"
+            or not isinstance(archive_mmap.__new__, BuiltinFunctionType)
+            or not isinstance(archive_mmap.__init__, WrapperDescriptorType)):
+        raise TypeError("classical archives require the native mmap owner")
     if not isinstance(io.open, BuiltinFunctionType):
         raise TypeError("classical archives require native binary file opening")
     archive_methods = []
     for cls in archive_types:  # glue: cache exact native file descriptors at ABI connection
         methods = {}
-        for name in ("read", "write", "seek", "tell", "flush", "close"):  # glue: validate native descriptor origin once
+        for name in ("read", "readinto", "readable", "fileno", "write", "seek", "tell", "flush", "close"):  # glue: validate native descriptor origin once
             entry = getattr(cls, name)
             if not isinstance(entry, (MethodDescriptorType, WrapperDescriptorType)):
                 raise TypeError(f"classical archives require native {cls.__name__}.{name}")
             methods[name] = entry
+        if cls is io.BytesIO:
+            entry = cls.getbuffer
+            if not isinstance(entry, MethodDescriptorType):
+                raise TypeError("classical archives require native BytesIO.getbuffer")
+            methods["getbuffer"] = entry
         archive_methods.append(methods)
     codec_entries = (zlib.crc32, zlib.decompress, unicodedata.lookup, _codecs.utf_32_le_encode, _codecs.utf_32_le_decode,
                      _codecs.unicode_escape_decode)
@@ -215,6 +226,7 @@ def _state_context():
                 or not isinstance(zstd_class.__init__, WrapperDescriptorType)):
             raise TypeError("classical archives require a native Zstandard byte decompressor")
     context.update(archive_file_types=archive_types, archive_file_methods=tuple(archive_methods),
+                   archive_python_minor=sys.version_info.minor, archive_python_micro=sys.version_info.micro,
                    archive_open=io.open, archive_bytes_type=bytes, archive_bytearray_type=bytearray,
                    archive_memoryview_type=memoryview, archive_attribute_error=AttributeError,
                    archive_path_types=PATH_TYPES,
