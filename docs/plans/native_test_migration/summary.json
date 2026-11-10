@@ -1,0 +1,45 @@
+{
+  "schema": "mojolearn.native-test-migration-inventory.v1",
+  "source_commit": "fb8acd7edaff8a1b6cec994c76f4aeff7da8db80",
+  "files": 616,
+  "test_definitions": 4127,
+  "file_decisions": {
+    "needs-semantic-review": 594,
+    "retain-python-boundary": 5,
+    "split-needed": 11,
+    "review-module-gate": 1,
+    "split-migrated": 2,
+    "retain-tooling": 2,
+    "split-partial": 1
+  },
+  "reviewed_files": 22,
+  "not_a_gate": true,
+  "limitations": [
+    "Definitions are source functions, not parametrized execution cases.",
+    "File names and native in a name do not establish migration suitability.",
+    "Unreviewed rows are explicit; this inventory does not claim a complete semantic classification.",
+    "Module-style gates with no pytest definitions are not zero coverage.",
+    "No tests or compiles were executed to prepare this inventory."
+  ],
+  "post_snapshot_changes": [
+    {
+      "path": "python/mojolearn/tests/test_ops_session_coverage.py",
+      "decision": "split-migrated",
+      "native_fixtures_per_executor": 28,
+      "executors": [
+        "HostExec",
+        "DeviceExec"
+      ],
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see ops-session-handoff.txt."
+    },
+    {
+      "path": "python/mojolearn/tests/test_byte_lm_runtime_shape.py",
+      "decision": "split-partial",
+      "removed_python_definitions": 1,
+      "native_fixtures": 25,
+      "source_review_only": true,
+      "runtime_status": "Orchestrator compile and run owed; see byte-config-handoff.txt."
+    }
+  ]
+}
