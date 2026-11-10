@@ -9,7 +9,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setatt
 from bindings.py_typed_call import py_call_typed
 from bindings.mode_metadata_native import _fields, _class_fields
 from bindings.optimizer_admission import opt_scalar, opt_value
-from bindings.optimizer_public_door import py_ints, same_shape
+from training.optimizer_input_plan import same_shape
 from bindings.optimizer_device_native import device_shape, shape_count
 from bindings.sequence_optimizer_native import seq_binding
 from bindings.sequence_device_native import seq_device_make
