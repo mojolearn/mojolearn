@@ -4,15 +4,15 @@
   "files": 616,
   "test_definitions": 4126,
   "file_decisions": {
-    "needs-semantic-review": 582,
-    "retain-python-boundary": 15,
+    "needs-semantic-review": 581,
+    "retain-python-boundary": 16,
     "split-partial": 1,
     "split-migrated": 9,
     "review-module-gate": 1,
     "retain-tooling": 2,
     "split-needed": 6
   },
-  "reviewed_files": 34,
+  "reviewed_files": 35,
   "not_a_gate": true,
   "limitations": [
     "Definitions are source functions, not parametrized execution cases.",
@@ -166,6 +166,15 @@
         "checks/native_tests/ops_optimizer_gpu.mojo"
       ],
       "handoff": "docs/plans/native_test_migration/ops-optimizer-handoff.txt",
+      "source_review_only": true
+    },
+    {
+      "paths": [
+        "packaging/adapters/test_adapters.py",
+        "python/mojolearn/tests/test_framework_version_metadata.py"
+      ],
+      "change": "Repair inert adapter test collection by reading shipping literal metadata without executing compiled bridge setup. Move former series literals to existing real Unicode boundary test; replace its split/join expectation with independent literals. Preserve pin, manifest and staging tooling.",
+      "handoff": "docs/plans/native_test_migration/adapter-collection-handoff.txt",
       "source_review_only": true
     }
   ],
