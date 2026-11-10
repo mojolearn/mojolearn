@@ -188,7 +188,7 @@ def _gather(unit: Int) raises:
     var message = String()
     if kind == 0:
         var table: List[Int32] = [7, -9, 3]
-        var codes: List[Int32] = [2, 3 if bad else 0, 1]
+        var codes: List[Int32] = [2, Int32(3 if bad else 0), 1]
         var dst = List[Int32](length=3, fill=-99)
         try:
             driver.gather(0, LabelsGatherRequest(Int(table.unsafe_ptr()), Int(codes.unsafe_ptr()), Int(dst.unsafe_ptr()), 3, 3))
@@ -202,7 +202,7 @@ def _gather(unit: Int) raises:
         _ = codes^
         return
     var table: List[UInt64] = [0x8000000000000000, 0x7FF8000000000042, 0xFFFFFFFFFFFFFFFF]
-    var codes: List[Int64] = [2, 3 if bad else 0, 1]
+    var codes: List[Int64] = [2, Int64(3 if bad else 0), 1]
     var dst = List[UInt64](length=3, fill=0xDEADBEEF)
     try:
         driver.gather(kind, LabelsGatherRequest(Int(table.unsafe_ptr()), Int(codes.unsafe_ptr()), Int(dst.unsafe_ptr()), 3, 3))
@@ -232,7 +232,7 @@ def _argmax[dt: DType](unit: Int) raises:
         source[5] = 0
     var dst = List[Int64](length=2, fill=-1)
     driver.argmax(dt == DType.float64, LabelsArgmaxRequest(Int(source.unsafe_ptr()), Int(dst.unsafe_ptr()), 2, 3))
-    _require(dst[0] == (1 if unit == 0 else 0) and dst[1] == 0, "first max wins, including first NaN")
+    _require(dst[0] == Int64(1 if unit == 0 else 0) and dst[1] == 0, "first max wins, including first NaN")
     _ = source^
 
 
@@ -273,7 +273,7 @@ def _fsum(unit: Int) raises:
     var status = labels_host_fsum(0 if unit == 2 else Int(source.unsafe_ptr()), 0 if unit == 2 else 3, Int(dst.unsafe_ptr()))
     _require(status == (1 if unit == 1 else 0), "exact fsum refusal status")
     if unit != 1:
-        _require(dst[0] == (0 if unit == 2 else 1), "exact cancellation/empty fsum")
+        _require(dst[0] == (0.0 if unit == 2 else 1.0), "exact cancellation/empty fsum")
     _ = source^
 
 
